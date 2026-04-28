@@ -1,3 +1,4 @@
+use super::varint::decode_varint_string as decode_varint;
 use super::QuicFrame;
 use super::QuicFrameType;
 use alloc::{
@@ -5,10 +6,6 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-
-fn decode_varint(data: &[u8]) -> Result<(u64, usize), String> {
-    edgerun_encoding::quic_varint::decode_varint(data).map_err(|e| format!("{e}"))
-}
 
 pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
     if data.is_empty() {

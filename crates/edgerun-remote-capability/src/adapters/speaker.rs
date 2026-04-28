@@ -4,12 +4,14 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
+use edgerun_encoding::byteorder::{read_i64_le, read_u16_le, read_u32_le};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_speaker::{
     AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerOutputLevel,
     SpeakerSampleFormat,
 };
 
+use crate::adapters::common::{decode_byte_field, encode_byte_field};
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 /// Binary-encode speaker playback request.
@@ -26,8 +28,7 @@ pub fn encode_speaker_playback_request(request: &AudioPlaybackRequest) -> Vec<u8
     out.extend_from_slice(&format.to_le_bytes());
     out.extend_from_slice(&request.software_gain_percent.unwrap_or(0).to_le_bytes());
     out.push(request.target_output_level_percent.unwrap_or(255));
-    out.extend_from_slice(&(request.audio_bytes.len() as u32).to_le_bytes());
-    out.extend_from_slice(&request.audio_bytes);
+    encode_byte_field(&request.audio_bytes, &mut out);
     out
 }
 
@@ -40,24 +41,15 @@ pub fn decode_speaker_playback_request(
             "remote speaker playback request payload too short",
         ));
     }
-    let duration_ms = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-    let sample_rate_hz = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-    let channels = u16::from_le_bytes(bytes[8..10].try_into().unwrap());
-    let raw_format = u32::from_le_bytes(bytes[10..14].try_into().unwrap());
-    let raw_gain = u16::from_le_bytes(bytes[14..16].try_into().unwrap());
+    let duration_ms = read_u32_le(bytes, 0);
+    let sample_rate_hz = read_u32_le(bytes, 4);
+    let channels = read_u16_le(bytes, 8);
+    let raw_format = read_u32_le(bytes, 10);
+    let raw_gain = read_u16_le(bytes, 14);
     let raw_level = bytes[16];
-    let audio_len_offset = 17;
-    if bytes.len() < audio_len_offset + 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote speaker playback request missing audio length",
-        ));
-    }
-    let audio_len = u32::from_le_bytes(
-        bytes[audio_len_offset..audio_len_offset + 4]
-            .try_into()
-            .unwrap(),
-    ) as usize;
-    if bytes.len() != audio_len_offset + 4 + audio_len {
+    let mut cursor = 17;
+    let audio_bytes = decode_byte_field(bytes, &mut cursor)?;
+    if bytes.len() != cursor {
         return Err(CapabilityError::InvalidRequest(
             "remote speaker playback request length does not match encoded byte count",
         ));
@@ -77,7 +69,7 @@ pub fn decode_speaker_playback_request(
         sample_rate_hz,
         channels,
         format,
-        audio_bytes: bytes[audio_len_offset + 4..].to_vec(),
+        audio_bytes,
         software_gain_percent: if raw_gain == 0 { None } else { Some(raw_gain) },
         target_output_level_percent: if raw_level == 255 {
             None
@@ -120,8 +112,8 @@ pub fn decode_speaker_output_level(bytes: &[u8]) -> Result<SpeakerOutputLevel, C
     };
     Ok(SpeakerOutputLevel {
         current_percent: bytes[0],
-        min_raw_value: i64::from_le_bytes(bytes[1..9].try_into().unwrap()),
-        max_raw_value: i64::from_le_bytes(bytes[9..17].try_into().unwrap()),
+        min_raw_value: read_i64_le(bytes, 1),
+        max_raw_value: read_i64_le(bytes, 9),
         muted,
     })
 }
@@ -146,9 +138,9 @@ pub fn decode_speaker_playback_result(
         ));
     }
     Ok(AudioPlaybackResult {
-        bytes_written: u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize,
-        sample_rate_hz: u32::from_le_bytes(bytes[4..8].try_into().unwrap()),
-        channels: u16::from_le_bytes(bytes[8..10].try_into().unwrap()),
+        bytes_written: read_u32_le(bytes, 0) as usize,
+        sample_rate_hz: read_u32_le(bytes, 4),
+        channels: read_u16_le(bytes, 8),
         finished: bytes[10] != 0,
     })
 }

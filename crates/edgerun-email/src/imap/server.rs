@@ -1068,51 +1068,7 @@ fn name_matches_pattern(name: &str, _reference: &str, pattern: &str) -> bool {
 }
 
 pub fn format_envelope_imap(env: &Envelope) -> String {
-    let date = format_string_or_nil_imap(&env.date);
-    let subject = format_string_or_nil_imap(&env.subject);
-    let from = format_address_list_imap(&env.from);
-    let sender = format_address_list_opt_imap(&env.sender);
-    let reply_to = format_address_list_opt_imap(&env.reply_to);
-    let to = format_address_list_imap(&env.to);
-    let cc = format_address_list_imap(&env.cc);
-    let bcc = format_address_list_imap(&env.bcc);
-    let in_reply_to = format_string_or_nil_imap(&env.in_reply_to);
-    let message_id = format_string_or_nil_imap(&env.message_id);
-
-    format!(
-        "({} {} {} {} {} {} {} {} {} {})",
-        date, subject, from, sender, reply_to, to, cc, bcc, in_reply_to, message_id
-    )
-}
-
-fn format_string_or_nil_imap(s: &Option<String>) -> String {
-    match s {
-        Some(s) if !s.is_empty() => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
-        _ => "NIL".to_string(),
-    }
-}
-
-fn format_address_list_imap(addrs: &[Address]) -> String {
-    if addrs.is_empty() {
-        return "NIL".to_string();
-    }
-    let parts: Vec<String> = addrs.iter().map(format_address_imap).collect();
-    format!("({})", parts.join(" "))
-}
-
-fn format_address_list_opt_imap(addr: &Option<Address>) -> String {
-    match addr {
-        Some(a) => format!("({})", format_address_imap(a)),
-        None => "NIL".to_string(),
-    }
-}
-
-fn format_address_imap(addr: &Address) -> String {
-    let name = format_string_or_nil_imap(&addr.name);
-    let adl = format_string_or_nil_imap(&addr.adl);
-    let mailbox = format_string_or_nil_imap(&addr.mailbox);
-    let host = format_string_or_nil_imap(&addr.host);
-    format!("({} {} {} {})", name, adl, mailbox, host)
+    env.format_imap()
 }
 
 pub fn format_internal_date(t: SystemTime) -> String {

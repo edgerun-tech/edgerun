@@ -496,6 +496,43 @@ pub fn parse_bool_flag(text: Option<String>) -> Option<bool> {
     })
 }
 
+/// Parsed display mode fields from sysfs DRM/GPU mode lines.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SysfsDisplayMode {
+    pub width: u32,
+    pub height: u32,
+    pub refresh_millihz: u32,
+}
+
+/// Parse a sysfs display mode line such as `1920x1080`, `1920x1080@60`,
+/// `1920x1080i@60`, or `3840x2160@60Hz`.
+#[must_use]
+pub fn parse_display_mode_line(line: &str) -> Option<SysfsDisplayMode> {
+    let mut parts = line.split('x');
+    let width = parts.next()?.trim().parse().ok()?;
+    let rest = parts.next()?;
+    let mut rest_parts = rest.split(['i', 'p', '@']);
+    let height: u32 = rest_parts.next()?.trim().parse().ok()?;
+    let refresh = line
+        .split('@')
+        .nth(1)
+        .and_then(|value| {
+            value
+                .trim_end_matches('H')
+                .trim_end_matches('z')
+                .parse::<f32>()
+                .ok()
+        })
+        .map(|hz| (hz * 1000.0) as u32)
+        .unwrap_or(60_000);
+
+    Some(SysfsDisplayMode {
+        width,
+        height,
+        refresh_millihz: refresh,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Uevent parsing
 // ---------------------------------------------------------------------------
@@ -885,6 +922,52 @@ mod tests {
     #[test]
     fn parse_bool_flag_none_on_none_input() {
         assert_eq!(parse_bool_flag(None), None);
+    }
+
+    // ----- parse_display_mode_line -----
+
+    #[test]
+    fn parse_display_mode_line_with_refresh() {
+        assert_eq!(
+            parse_display_mode_line("1920x1080@60"),
+            Some(SysfsDisplayMode {
+                width: 1920,
+                height: 1080,
+                refresh_millihz: 60_000,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_display_mode_line_without_refresh_defaults_to_60hz() {
+        assert_eq!(
+            parse_display_mode_line("1920x1080"),
+            Some(SysfsDisplayMode {
+                width: 1920,
+                height: 1080,
+                refresh_millihz: 60_000,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_display_mode_line_accepts_suffixes() {
+        assert_eq!(
+            parse_display_mode_line("3840x2160i@60Hz"),
+            Some(SysfsDisplayMode {
+                width: 3840,
+                height: 2160,
+                refresh_millihz: 60_000,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_display_mode_line_rejects_invalid_input() {
+        assert_eq!(parse_display_mode_line(""), None);
+        assert_eq!(parse_display_mode_line("invalid"), None);
+        assert_eq!(parse_display_mode_line("1920"), None);
+        assert_eq!(parse_display_mode_line("axb@60"), None);
     }
 
     // ----- parse_uevent_map -----

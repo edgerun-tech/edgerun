@@ -1,3 +1,6 @@
+mod common;
+
+use common::{decode_hex, encode_hex, parse_u32, parse_u64};
 use edgerun_virtual_disk::{BlockClient, BlockError};
 use std::env;
 
@@ -95,27 +98,6 @@ fn run_command<T: std::io::Read + std::io::Write>(
     }
 
     Ok(())
-}
-
-fn parse_u32(value: &str, field: &str) -> Result<u32, BlockError> {
-    value
-        .parse::<u32>()
-        .map_err(|err| BlockError::ProtocolError(format!("invalid {field}: {err}")))
-}
-
-fn parse_u64(value: &str, field: &str) -> Result<u64, BlockError> {
-    value
-        .parse::<u64>()
-        .map_err(|err| BlockError::ProtocolError(format!("invalid {field}: {err}")))
-}
-
-fn encode_hex(bytes: &[u8]) -> String {
-    edgerun_encoding::hex::bytes_to_hex(bytes)
-}
-
-fn decode_hex(input: &str) -> Result<Vec<u8>, BlockError> {
-    edgerun_encoding::hex::hex_to_bytes(input)
-        .map_err(|err| BlockError::ProtocolError(format!("invalid hex: {err}")))
 }
 
 fn print_usage(program: &str) {

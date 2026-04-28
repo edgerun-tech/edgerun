@@ -4,8 +4,8 @@ use core::fmt::{self, Write};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 pub use edgerun_log::{
-    Level, clear_format_logger, clear_logger, debug, enabled, error, info, level,
-    set_format_logger, set_level, trace, warn,
+    clear_format_logger, clear_logger, debug, enabled, error, info, level, set_format_logger,
+    set_level, trace, warn, Level,
 };
 
 static SERIAL_LOGGER_INSTALLED: AtomicBool = AtomicBool::new(false);

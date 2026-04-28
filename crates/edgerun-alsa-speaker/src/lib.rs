@@ -491,8 +491,7 @@ fn control_device_path(card_index: u32) -> PathBuf {
 }
 
 fn trim_cstr(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).trim().to_string()
+    edgerun_encoding::cstring::decode_c_string_lossy_trimmed(bytes)
 }
 
 fn control_score(name: &str, is_switch: bool) -> i32 {

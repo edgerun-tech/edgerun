@@ -14,6 +14,7 @@ use super::record::{
     decode_domain_name, encode_domain_name, encode_domain_name_compressed, DnsRecordData,
     DnsRecordType,
 };
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -134,8 +135,8 @@ impl DnsHeader {
             ));
         }
 
-        let id = u16::from_be_bytes([data[0], data[1]]);
-        let flags = u16::from_be_bytes([data[2], data[3]]);
+        let id = read_u16_be(data, 0);
+        let flags = read_u16_be(data, 2);
 
         let is_response = (flags & 0x8000) != 0;
         let opcode_val = ((flags >> 11) & 0x0F) as u8;
@@ -147,10 +148,10 @@ impl DnsHeader {
         let response_code =
             DnsResponseCode::from_u8((flags & 0x0F) as u8).unwrap_or(DnsResponseCode::ServFail);
 
-        let question_count = u16::from_be_bytes([data[4], data[5]]);
-        let answer_count = u16::from_be_bytes([data[6], data[7]]);
-        let authority_count = u16::from_be_bytes([data[8], data[9]]);
-        let additional_count = u16::from_be_bytes([data[10], data[11]]);
+        let question_count = read_u16_be(data, 4);
+        let answer_count = read_u16_be(data, 6);
+        let authority_count = read_u16_be(data, 8);
+        let additional_count = read_u16_be(data, 10);
 
         Ok(Self {
             id,
@@ -322,8 +323,8 @@ impl DnsQuestion {
             ));
         }
 
-        let qtype_val = u16::from_be_bytes([data[rr_start], data[rr_start + 1]]);
-        let qclass = u16::from_be_bytes([data[rr_start + 2], data[rr_start + 3]]);
+        let qtype_val = read_u16_be(data, rr_start);
+        let qclass = read_u16_be(data, rr_start + 2);
 
         let qtype = DnsRecordType::from_u16(qtype_val).unwrap_or(DnsRecordType::A);
 
@@ -800,15 +801,10 @@ impl DnsRecord {
             ));
         }
 
-        let rtype_val = u16::from_be_bytes([data[rr_start], data[rr_start + 1]]);
-        let rclass = u16::from_be_bytes([data[rr_start + 2], data[rr_start + 3]]);
-        let ttl = u32::from_be_bytes([
-            data[rr_start + 4],
-            data[rr_start + 5],
-            data[rr_start + 6],
-            data[rr_start + 7],
-        ]);
-        let rdlength = u16::from_be_bytes([data[rr_start + 8], data[rr_start + 9]]) as usize;
+        let rtype_val = read_u16_be(data, rr_start);
+        let rclass = read_u16_be(data, rr_start + 2);
+        let ttl = read_u32_be(data, rr_start + 4);
+        let rdlength = read_u16_be(data, rr_start + 8) as usize;
         let rdata_start = rr_start + 10;
 
         if rdata_start + rdlength > data.len() {

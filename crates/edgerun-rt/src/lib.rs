@@ -127,7 +127,10 @@ pub use async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFut
 #[cfg(target_os = "none")]
 pub mod bare_async_net;
 #[cfg(target_os = "none")]
-pub use bare_async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture};
+pub use bare_async_net::{
+    install_bare_net_driver, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, BareNetDriver,
+    ConnectFuture,
+};
 
 pub mod ipv4;
 pub use ipv4::{Ipv4Addr, Ipv4Header, IP_DEFAULT_TTL, IP_VERSION};

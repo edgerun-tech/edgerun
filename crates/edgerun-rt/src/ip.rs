@@ -111,7 +111,7 @@ impl TcpHeader {
             dst_port: u16::from_be_bytes([data[2], data[3]]),
             seq: u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
             ack: u32::from_be_bytes([data[8], data[9], data[10], data[11]]),
-            flags: data[12],
+            flags: data[13],
             window: u16::from_be_bytes([data[14], data[15]]),
             checksum: u16::from_be_bytes([data[16], data[17]]),
             urgent: u16::from_be_bytes([data[18], data[19]]),
@@ -123,8 +123,8 @@ impl TcpHeader {
         data[2..4].copy_from_slice(&self.dst_port.to_be_bytes());
         data[4..8].copy_from_slice(&self.seq.to_be_bytes());
         data[8..12].copy_from_slice(&self.ack.to_be_bytes());
-        data[12] = self.flags;
-        data[13] = 0;
+        data[12] = 5 << 4;
+        data[13] = self.flags;
         data[14..16].copy_from_slice(&self.window.to_be_bytes());
         data[16..18].copy_from_slice(&self.checksum.to_be_bytes());
         data[18..20].copy_from_slice(&self.urgent.to_be_bytes());

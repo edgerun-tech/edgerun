@@ -3,7 +3,7 @@
 extern crate alloc;
 
 use super::ip::{
-    ETH_TYPE_IPV4, IP_PROTO_TCP, IpAddr, IpStack, TCP_FLAG_ACK, TCP_FLAG_PSH, TcpHeader,
+    IpAddr, IpStack, TcpHeader, ETH_TYPE_IPV4, IP_PROTO_TCP, TCP_FLAG_ACK, TCP_FLAG_PSH,
 };
 use super::udp::SocketAddr;
 

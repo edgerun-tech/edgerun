@@ -13,6 +13,7 @@ use core::fmt::Write as _;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{Err, Ok};
 use core::writeln;
+use edgerun_encoding::kv::{format_hex_u16, format_hex_u32, format_hex_u8};
 #[cfg(target_os = "none")]
 use edgerun_linux_pci::path::PathBuf;
 #[cfg(not(target_os = "none"))]
@@ -388,18 +389,6 @@ fn render_section_header(out: &mut String, name: &str, count: usize, error: Opti
             writeln!(out, "{name}: {count} items").unwrap();
         }
     }
-}
-
-fn format_hex_u8(value: Option<u8>) -> String {
-    edgerun_encoding::kv::format_hex_u8(value)
-}
-
-fn format_hex_u16(value: Option<u16>) -> String {
-    edgerun_encoding::kv::format_hex_u16(value)
-}
-
-fn format_hex_u32(value: Option<u32>) -> String {
-    edgerun_encoding::kv::format_hex_u32(value)
 }
 
 impl MachineReport {

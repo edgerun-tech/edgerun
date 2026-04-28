@@ -4,6 +4,7 @@ pub mod parse;
 
 use alloc::format;
 use alloc::vec::Vec;
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
 
 use crate::constants::*;
 use crate::types::*;
@@ -24,7 +25,7 @@ pub fn read_u16(bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u16, Tp
     if bytes.len().saturating_sub(*cursor) < 2 {
         return Err(TpmError::Protocol(format!("missing u16 field {label}")));
     }
-    let out = u16::from_be_bytes([bytes[*cursor], bytes[*cursor + 1]]);
+    let out = read_u16_be(bytes, *cursor);
     *cursor += 2;
     Ok(out)
 }
@@ -34,12 +35,7 @@ pub fn read_u32(bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u32, Tp
     if bytes.len().saturating_sub(*cursor) < 4 {
         return Err(TpmError::Protocol(format!("missing u32 field {label}")));
     }
-    let out = u32::from_be_bytes([
-        bytes[*cursor],
-        bytes[*cursor + 1],
-        bytes[*cursor + 2],
-        bytes[*cursor + 3],
-    ]);
+    let out = read_u32_be(bytes, *cursor);
     *cursor += 4;
     Ok(out)
 }

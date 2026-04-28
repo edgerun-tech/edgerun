@@ -5,7 +5,7 @@
 //! assurance level (software, hardware-backed, or attested runtime).
 
 use edgerun_core::protocol::{canonical_bytes, ProtocolRecord};
-use edgerun_core::util::system_time_to_prost;
+use edgerun_core::util::{now_unix_millis_i64, system_time_to_prost};
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::common::ObjectKind;
 use edgerun_proto::edgerun::v0::trust::AssuranceClaim;
@@ -96,10 +96,7 @@ pub fn verify_assurance_claim(claim: &AssuranceClaim) -> Result<(), &'static str
     let Some(ref attester) = claim.attester else {
         return Err("no_attester");
     };
-    let now_ms = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or(std::time::Duration::ZERO)
-        .as_millis() as i64;
+    let now_ms = now_unix_millis_i64();
     let validation = edgerun_core::validators_proto::validate_assurance_claim(claim, now_ms, &[]);
     if validation.verdict != edgerun_core::result::Verdict::Accept {
         return Err(match validation.reason_code {

@@ -16,23 +16,7 @@ use edgerun_core::accounting::{
     PerformanceCertificate, WorkAccounting, WorkPriority, WorkStatus, WorkloadClass,
 };
 use edgerun_core::fixed_point::FixedPoint16;
-
-/// Monotonically increasing timestamp source.
-/// Returns microseconds since Unix epoch.
-fn now_us() -> u64 {
-    #[cfg(not(target_os = "none"))]
-    {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("system time before UNIX epoch")
-            .as_micros() as u64
-    }
-
-    #[cfg(target_os = "none")]
-    {
-        0
-    }
-}
+use edgerun_core::util::now_unix_micros_u64 as now_us;
 
 impl Clone for WorkMeter {
     fn clone(&self) -> Self {

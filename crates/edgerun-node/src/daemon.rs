@@ -2,9 +2,8 @@ use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use edgerun_core::util::system_time_to_prost;
+use edgerun_core::util::now_prost_timestamp;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh_daemon::MeshDaemon;
 use edgerun_rt::CancellationToken;
@@ -510,7 +509,7 @@ pub async fn cmd_run(
             prev_event_hash: None,
             event_type: EventType::NodeGenesis as i32,
             event_version: 1,
-            recorded_at: Some(system_time_to_prost(SystemTime::now())),
+            recorded_at: Some(now_prost_timestamp()),
             effective_at: None,
             payload_object: Some(payload_object_ref),
             related_events: vec![],

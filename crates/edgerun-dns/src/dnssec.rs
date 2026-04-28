@@ -15,6 +15,7 @@ use alloc::{
     vec::Vec,
 };
 use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
+use edgerun_encoding::byteorder::read_u16_be;
 
 use super::message::DnsRecord;
 use super::record::{DnsRecordData, DnsRecordType};
@@ -80,7 +81,7 @@ pub fn compute_key_tag(dnskey: &DnsRecord) -> u16 {
             let key_bytes = public_key;
             let len = key_bytes.len();
             if len >= 3 {
-                return u16::from_be_bytes([key_bytes[len - 3], key_bytes[len - 2]]);
+                return read_u16_be(key_bytes, len - 3);
             }
             return 0;
         }

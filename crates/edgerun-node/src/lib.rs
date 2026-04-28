@@ -30,6 +30,7 @@ use edgerun_capability_policy::SimplePolicyEngine;
 use edgerun_core::command::{validate_command, CommandValidationContext};
 use edgerun_core::protocol::{CommandEnvelope, EventEnvelope, EventType};
 use edgerun_core::result::Verdict;
+use edgerun_core::util::now_unix_millis_i64 as now_ms;
 use edgerun_core::value::Value;
 use edgerun_hardware_signing::NodeID;
 use edgerun_storage::core::EventLog;
@@ -349,21 +350,6 @@ impl<L: EventLog> Node<L> {
         self.stream_writer
             .append(EventType::CommandCommitted as i32, 1, now_ms())?;
         Ok(())
-    }
-}
-
-fn now_ms() -> i64 {
-    #[cfg(not(target_os = "none"))]
-    {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64
-    }
-
-    #[cfg(target_os = "none")]
-    {
-        0
     }
 }
 
@@ -872,11 +858,7 @@ trust_nodes: []
             command_type: 7,
             command_version: 1,
             issued_at: Some(prost_types::Timestamp {
-                seconds: (std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as i64)
-                    / 1000,
+                seconds: edgerun_core::util::now_unix_secs_i64(),
                 nanos: 0,
             }),
             not_before: None,

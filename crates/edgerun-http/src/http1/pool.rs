@@ -654,9 +654,13 @@ impl ConnectionPool {
                 {
                     Ok(tls) => tls,
                     Err(first_err) => {
-                        let stream =
-                            Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port)
-                                .await?;
+                        let stream = Self::resolve_and_connect_static(
+                            connect_timeout,
+                            dns_timeout,
+                            host,
+                            port,
+                        )
+                        .await?;
                         AsyncTlsStream::client_tls12(stream, host).await.map_err(|second_err| {
                             Error::ProtocolError(format!(
                                 "TLS handshake failed: {first_err}; TLS 1.2 fallback failed: {second_err}"

@@ -56,9 +56,16 @@ pub fn validate_stream_append(
             empty_map(),
         );
     }
-    if edgerun_proto::edgerun::v0::stream::EventType::from_i32(candidate.event_type).is_none_or(
-        |event_type| event_type == edgerun_proto::edgerun::v0::stream::EventType::Unspecified,
-    ) {
+    let Some(event_type) =
+        edgerun_proto::edgerun::v0::stream::EventType::from_i32(candidate.event_type)
+    else {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("invalid event_type".into()),
+            empty_map(),
+        );
+    };
+    if event_type == edgerun_proto::edgerun::v0::stream::EventType::Unspecified {
         return reject(
             ReasonCode::StructuralInvalid,
             Value::String("invalid event_type".into()),
@@ -72,12 +79,15 @@ pub fn validate_stream_append(
             empty_map(),
         );
     }
-    if candidate.recorded_at.is_none() {
+    let Some(recorded_at) = &candidate.recorded_at else {
         return reject(
             ReasonCode::StructuralInvalid,
             Value::String("missing recorded_at".into()),
             empty_map(),
         );
+    };
+    if let Some(result) = validate_timestamp_shape(recorded_at, "EventEnvelope recorded_at") {
+        return result;
     }
     if let Some(result) = validate_optional_object_ref(
         candidate.payload_object.as_ref(),
@@ -133,6 +143,20 @@ pub fn validate_stream_append(
     }
 
     let is_genesis = candidate.seq == 0;
+    if is_genesis && event_type != edgerun_proto::edgerun::v0::stream::EventType::NodeGenesis {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("seq 0 event must be EVENT_TYPE_NODE_GENESIS".into()),
+            empty_map(),
+        );
+    }
+    if !is_genesis && event_type == edgerun_proto::edgerun::v0::stream::EventType::NodeGenesis {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("EVENT_TYPE_NODE_GENESIS is only valid at seq 0".into()),
+            empty_map(),
+        );
+    }
 
     if is_genesis {
         if candidate.prev_event_hash.is_some() {
@@ -492,9 +516,15 @@ pub fn validate_action_lifecycle_payload(payload: &ActionLifecyclePayload) -> Va
             empty_map(),
         );
     }
-    if edgerun_proto::edgerun::v0::stream::ActionStatus::from_i32(payload.status).is_none_or(
-        |status| status == edgerun_proto::edgerun::v0::stream::ActionStatus::Unspecified,
-    ) {
+    let Some(status) = edgerun_proto::edgerun::v0::stream::ActionStatus::from_i32(payload.status)
+    else {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("ActionLifecyclePayload status is invalid".into()),
+            empty_map(),
+        );
+    };
+    if status == edgerun_proto::edgerun::v0::stream::ActionStatus::Unspecified {
         return reject(
             ReasonCode::StructuralInvalid,
             Value::String("ActionLifecyclePayload status is invalid".into()),
@@ -520,6 +550,24 @@ pub fn validate_action_lifecycle_payload(payload: &ActionLifecyclePayload) -> Va
         validate_optional_object_ref(payload.action_metadata.as_ref(), "action_metadata")
     {
         return result;
+    }
+    if status == edgerun_proto::edgerun::v0::stream::ActionStatus::Completed
+        && payload.result_object.is_none()
+    {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("ActionLifecyclePayload completed status requires result_object".into()),
+            empty_map(),
+        );
+    }
+    if status == edgerun_proto::edgerun::v0::stream::ActionStatus::Failed
+        && payload.error_object.is_none()
+    {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("ActionLifecyclePayload failed status requires error_object".into()),
+            empty_map(),
+        );
     }
 
     let mut derived = std::collections::BTreeMap::new();
@@ -554,6 +602,13 @@ pub fn validate_secret_put_payload(payload: &SecretPutPayload) -> ValidationResu
         validate_required_string(&payload.secret_blob_id, "SecretPutPayload secret_blob_id")
     {
         return result;
+    }
+    if !is_even_hex(&payload.secret_blob_id) {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("SecretPutPayload secret_blob_id must be even-length hex".into()),
+            empty_map(),
+        );
     }
 
     let mut derived = std::collections::BTreeMap::new();
@@ -653,6 +708,10 @@ fn validate_required_string(value: &str, label: &str) -> Option<ValidationResult
     None
 }
 
+fn is_even_hex(value: &str) -> bool {
+    !value.is_empty() && value.len() % 2 == 0 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 fn validate_command_ref(
     command: Option<&crate::protocol::CommandRef>,
     label: &str,
@@ -678,12 +737,8 @@ fn validate_command_ref(
             empty_map(),
         ));
     };
-    if command_hash.value.len() != 32 {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String(format!("{label} command_hash must be 32 bytes")),
-            empty_map(),
-        ));
+    if let Some(result) = validate_sha256_digest(command_hash, &format!("{label} command_hash")) {
+        return Some(result);
     }
     None
 }
@@ -772,6 +827,29 @@ fn validate_required_object_ref(
     None
 }
 
+fn validate_sha256_digest(
+    digest: &crate::protocol::Digest,
+    label: &str,
+) -> Option<ValidationResult> {
+    if digest.algorithm
+        != edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256 as i32
+    {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{label} algorithm is not SHA-256")),
+            empty_map(),
+        ));
+    }
+    if digest.value.len() != 32 {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{label} must be 32 bytes")),
+            empty_map(),
+        ));
+    }
+    None
+}
+
 fn validate_event_ref(event: &crate::protocol::EventRef, label: &str) -> Option<ValidationResult> {
     if event.stream_id.is_empty() {
         return Some(reject(
@@ -787,12 +865,8 @@ fn validate_event_ref(event: &crate::protocol::EventRef, label: &str) -> Option<
             empty_map(),
         ));
     };
-    if event_hash.value.len() != 32 {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String(format!("{label} event_hash must be 32 bytes")),
-            empty_map(),
-        ));
+    if let Some(result) = validate_sha256_digest(event_hash, &format!("{label} event_hash")) {
+        return Some(result);
     }
     None
 }
@@ -815,12 +889,10 @@ fn validate_delegation_ref(
             empty_map(),
         ));
     };
-    if delegation_hash.value.len() != 32 {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String(format!("{label} delegation_hash must be 32 bytes")),
-            empty_map(),
-        ));
+    if let Some(result) =
+        validate_sha256_digest(delegation_hash, &format!("{label} delegation_hash"))
+    {
+        return Some(result);
     }
     None
 }
@@ -843,12 +915,10 @@ fn validate_revocation_ref(
             empty_map(),
         ));
     };
-    if revocation_hash.value.len() != 32 {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String(format!("{label} revocation_hash must be 32 bytes")),
-            empty_map(),
-        ));
+    if let Some(result) =
+        validate_sha256_digest(revocation_hash, &format!("{label} revocation_hash"))
+    {
+        return Some(result);
     }
     None
 }
@@ -897,6 +967,14 @@ fn validate_reachability_hint(
         ));
     }
     if let (Some(valid_after), Some(valid_until)) = (&hint.valid_after, &hint.valid_until) {
+        if let Some(result) = validate_timestamp_shape(valid_after, &format!("{label} valid_after"))
+        {
+            return Some(result);
+        }
+        if let Some(result) = validate_timestamp_shape(valid_until, &format!("{label} valid_until"))
+        {
+            return Some(result);
+        }
         if timestamp_ms(valid_after) > timestamp_ms(valid_until) {
             return Some(reject(
                 ReasonCode::TimeInvalid,
@@ -1000,6 +1078,9 @@ pub fn validate_delegation_chain(
                 empty_map(),
             );
         };
+        if let Some(result) = validate_timestamp_shape(issued_at, "delegation issued_at") {
+            return result;
+        }
         if now_ms < timestamp_ms(issued_at) {
             return defer(
                 ReasonCode::TimeInvalid,
@@ -1052,8 +1133,10 @@ pub fn validate_delegation_chain(
 
         // Check timing: expires_at
         if let Some(ref expires_at) = delegation.expires_at {
-            let expires_ms = expires_at.seconds * 1000 + (expires_at.nanos as i64) / 1_000_000;
-            if now_ms > expires_ms {
+            if let Some(result) = validate_timestamp_shape(expires_at, "delegation expires_at") {
+                return result;
+            }
+            if now_ms > timestamp_ms(expires_at) {
                 return reject(
                     ReasonCode::TimeInvalid,
                     Value::String("delegation has expired".into()),
@@ -1064,8 +1147,10 @@ pub fn validate_delegation_chain(
 
         // Check timing: not_before
         if let Some(ref not_before) = delegation.not_before {
-            let not_before_ms = not_before.seconds * 1000 + (not_before.nanos as i64) / 1_000_000;
-            if now_ms < not_before_ms {
+            if let Some(result) = validate_timestamp_shape(not_before, "delegation not_before") {
+                return result;
+            }
+            if now_ms < timestamp_ms(not_before) {
                 return defer(
                     ReasonCode::TimeInvalid,
                     Value::String("delegation not yet valid".into()),
@@ -1098,6 +1183,15 @@ pub fn validate_delegation_chain(
                     empty_map(),
                 );
             };
+            if parent_cap.delegation_policy
+                == edgerun_proto::edgerun::v0::trust::DelegationPolicy::NonDelegable as i32
+            {
+                return reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("parent delegation is non-delegable".into()),
+                    empty_map(),
+                );
+            }
             let parent_actions: std::collections::HashSet<&String> =
                 parent_cap.actions.iter().collect();
             for action in &child_cap.actions {
@@ -1111,6 +1205,27 @@ pub fn validate_delegation_chain(
                         empty_map(),
                     );
                 }
+            }
+            let Some(parent_scope) = &parent_cap.scope else {
+                return reject(
+                    ReasonCode::StructuralInvalid,
+                    Value::String("parent has no scope".into()),
+                    empty_map(),
+                );
+            };
+            let Some(child_scope) = &child_cap.scope else {
+                return reject(
+                    ReasonCode::StructuralInvalid,
+                    Value::String("child has no scope".into()),
+                    empty_map(),
+                );
+            };
+            if !scope_descriptor_allows(parent_scope, child_scope) {
+                return reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("attenuation violated: child expands scope".into()),
+                    empty_map(),
+                );
             }
         }
     }
@@ -1211,12 +1326,29 @@ fn validate_constraint_set(constraints: &ConstraintSet) -> Option<ValidationResu
     }
     if let (Some(not_before), Some(expires_at)) = (&constraints.not_before, &constraints.expires_at)
     {
+        if let Some(result) = validate_timestamp_shape(not_before, "ConstraintSet not_before") {
+            return Some(result);
+        }
+        if let Some(result) = validate_timestamp_shape(expires_at, "ConstraintSet expires_at") {
+            return Some(result);
+        }
         if timestamp_ms(not_before) > timestamp_ms(expires_at) {
             return Some(reject(
                 ReasonCode::TimeInvalid,
                 Value::String("ConstraintSet time window is inverted".into()),
                 empty_map(),
             ));
+        }
+    } else {
+        if let Some(not_before) = &constraints.not_before {
+            if let Some(result) = validate_timestamp_shape(not_before, "ConstraintSet not_before") {
+                return Some(result);
+            }
+        }
+        if let Some(expires_at) = &constraints.expires_at {
+            if let Some(result) = validate_timestamp_shape(expires_at, "ConstraintSet expires_at") {
+                return Some(result);
+            }
         }
     }
     if constraints.max_uses == Some(0) {
@@ -1241,7 +1373,7 @@ fn validate_constraint_set(constraints: &ConstraintSet) -> Option<ValidationResu
                 empty_map(),
             ));
         };
-        if per.seconds < 0 || per.nanos < 0 || (per.seconds == 0 && per.nanos == 0) {
+        if !is_valid_non_negative_duration(per) || (per.seconds == 0 && per.nanos == 0) {
             return Some(reject(
                 ReasonCode::TimeInvalid,
                 Value::String("ConstraintSet rate_limit period must be positive".into()),
@@ -1380,12 +1512,37 @@ fn validate_scope_descriptor(scope: &ScopeDescriptor, label: &str) -> Option<Val
         if let (Some(not_before), Some(expires_at)) =
             (&time_bounds.not_before, &time_bounds.expires_at)
         {
+            if let Some(result) =
+                validate_timestamp_shape(not_before, &format!("{label} time_bounds not_before"))
+            {
+                return Some(result);
+            }
+            if let Some(result) =
+                validate_timestamp_shape(expires_at, &format!("{label} time_bounds expires_at"))
+            {
+                return Some(result);
+            }
             if timestamp_ms(not_before) > timestamp_ms(expires_at) {
                 return Some(reject(
                     ReasonCode::TimeInvalid,
                     Value::String(format!("{label} time_bounds are inverted")),
                     empty_map(),
                 ));
+            }
+        } else {
+            if let Some(not_before) = &time_bounds.not_before {
+                if let Some(result) =
+                    validate_timestamp_shape(not_before, &format!("{label} time_bounds not_before"))
+                {
+                    return Some(result);
+                }
+            }
+            if let Some(expires_at) = &time_bounds.expires_at {
+                if let Some(result) =
+                    validate_timestamp_shape(expires_at, &format!("{label} time_bounds expires_at"))
+                {
+                    return Some(result);
+                }
             }
         }
     }
@@ -1395,6 +1552,82 @@ fn validate_scope_descriptor(scope: &ScopeDescriptor, label: &str) -> Option<Val
         return Some(result);
     }
     None
+}
+
+fn scope_descriptor_allows(parent: &ScopeDescriptor, child: &ScopeDescriptor) -> bool {
+    let parent_kind = edgerun_proto::edgerun::v0::trust::ScopeKind::from_i32(parent.scope_kind);
+    let child_kind = edgerun_proto::edgerun::v0::trust::ScopeKind::from_i32(child.scope_kind);
+    if parent_kind == Some(edgerun_proto::edgerun::v0::trust::ScopeKind::GlobalWithConstraints) {
+        return time_window_allows(parent.time_bounds.as_ref(), child.time_bounds.as_ref());
+    }
+    if parent_kind != child_kind {
+        return false;
+    }
+
+    node_targets_allow(&parent.target_nodes, &child.target_nodes)
+        && stream_targets_allow(&parent.target_streams, &child.target_streams)
+        && scalar_targets_allow(&parent.target_object_kinds, &child.target_object_kinds)
+        && scalar_targets_allow(&parent.target_view_types, &child.target_view_types)
+        && scalar_targets_allow(&parent.target_domains, &child.target_domains)
+        && time_window_allows(parent.time_bounds.as_ref(), child.time_bounds.as_ref())
+}
+
+fn node_targets_allow(
+    parent: &[crate::protocol::NodeRef],
+    child: &[crate::protocol::NodeRef],
+) -> bool {
+    parent.is_empty()
+        || child.iter().all(|needle| {
+            parent
+                .iter()
+                .any(|haystack| haystack.node_id == needle.node_id)
+        })
+}
+
+fn stream_targets_allow(
+    parent: &[crate::protocol::StreamRef],
+    child: &[crate::protocol::StreamRef],
+) -> bool {
+    parent.is_empty()
+        || child.iter().all(|needle| {
+            parent
+                .iter()
+                .any(|haystack| haystack.stream_id == needle.stream_id)
+        })
+}
+
+fn scalar_targets_allow<T: Eq>(parent: &[T], child: &[T]) -> bool {
+    parent.is_empty() || child.iter().all(|needle| parent.contains(needle))
+}
+
+fn time_window_allows(
+    parent: Option<&crate::protocol::TimeWindow>,
+    child: Option<&crate::protocol::TimeWindow>,
+) -> bool {
+    let Some(parent) = parent else {
+        return true;
+    };
+    let Some(child) = child else {
+        return parent.not_before.is_none() && parent.expires_at.is_none();
+    };
+
+    if let Some(parent_not_before) = &parent.not_before {
+        let Some(child_not_before) = &child.not_before else {
+            return false;
+        };
+        if timestamp_ms(child_not_before) < timestamp_ms(parent_not_before) {
+            return false;
+        }
+    }
+    if let Some(parent_expires_at) = &parent.expires_at {
+        let Some(child_expires_at) = &child.expires_at else {
+            return false;
+        };
+        if timestamp_ms(child_expires_at) > timestamp_ms(parent_expires_at) {
+            return false;
+        }
+    }
+    true
 }
 
 fn verify_delegation_signature(delegation: &DelegationRecord) -> bool {
@@ -1489,12 +1722,15 @@ pub fn validate_snapshot(
             empty_map(),
         );
     }
-    if snapshot.produced_at.is_none() {
+    let Some(produced_at) = &snapshot.produced_at else {
         return reject(
             ReasonCode::StructuralInvalid,
             Value::String("missing produced_at".into()),
             empty_map(),
         );
+    };
+    if let Some(result) = validate_timestamp_shape(produced_at, "snapshot produced_at") {
+        return result;
     }
     let Some(scope) = &snapshot.scope else {
         return reject(
@@ -1519,9 +1755,10 @@ pub fn validate_snapshot(
     }
 
     let Some(payload_object) = &snapshot.payload_object else {
-        return defer(
-            ReasonCode::MissingDependency,
-            Value::String("snapshot payload object not available".into()),
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("snapshot missing payload_object".into()),
+            empty_map(),
         );
     };
     if payload_object.object_id.is_empty() {
@@ -1570,12 +1807,8 @@ pub fn validate_snapshot(
         }
     }
     if let Some(supersedes) = &snapshot.supersedes {
-        if supersedes.snapshot_id.is_empty() {
-            return reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("snapshot supersedes snapshot_id is empty".into()),
-                empty_map(),
-            );
+        if let Some(result) = validate_snapshot_ref(supersedes, "snapshot supersedes") {
+            return result;
         }
     }
     if let Some(result) =
@@ -1621,12 +1854,8 @@ fn validate_head_ref(head: &crate::protocol::HeadRef, label: &str) -> Option<Val
             empty_map(),
         ));
     };
-    if event_hash.value.len() != 32 {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String(format!("{label} event_hash must be 32 bytes")),
-            empty_map(),
-        ));
+    if let Some(result) = validate_sha256_digest(event_hash, &format!("{label} event_hash")) {
+        return Some(result);
     }
     None
 }
@@ -1651,6 +1880,27 @@ fn validate_checkpoint_ref(
         if let Some(result) = validate_head_ref(head, label) {
             return Some(result);
         }
+    }
+    None
+}
+
+fn validate_snapshot_ref(
+    snapshot: &crate::protocol::SnapshotRef,
+    label: &str,
+) -> Option<ValidationResult> {
+    if snapshot.snapshot_id.is_empty() {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{label} snapshot_id is empty")),
+            empty_map(),
+        ));
+    }
+    if snapshot.object_id.as_ref().is_some_and(|id| id.is_empty()) {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{label} object_id is empty")),
+            empty_map(),
+        ));
     }
     None
 }
@@ -1757,12 +2007,10 @@ pub fn validate_object_retrieval(
                 empty_map(),
             );
         };
-        if canonical_digest.value.len() != 32 {
-            return reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("descriptor canonical_digest must be 32 bytes".into()),
-                empty_map(),
-            );
+        if let Some(result) =
+            validate_sha256_digest(canonical_digest, "descriptor canonical_digest")
+        {
+            return result;
         }
         if let Some(producer) = &descriptor.producer {
             if let Some(result) = validate_identity_ref(Some(producer), "descriptor producer") {
@@ -1848,6 +2096,15 @@ pub fn validate_object_retrieval(
                 empty_map(),
             );
         };
+        if representation_digest.algorithm
+            != edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256 as i32
+        {
+            return reject(
+                ReasonCode::RepresentationInvalid,
+                Value::String("representation digest algorithm is not SHA-256".into()),
+                empty_map(),
+            );
+        }
         if representation_digest.value.len() != 32 {
             return reject(
                 ReasonCode::RepresentationInvalid,
@@ -1997,11 +2254,17 @@ pub fn validate_object_retrieval(
                 empty_map(),
             );
         }
-        let total_size: u64 = manifest
-            .chunk_entries
-            .iter()
-            .map(|entry| entry.length)
-            .sum();
+        let mut total_size = 0u64;
+        for entry in &manifest.chunk_entries {
+            let Some(next_total) = total_size.checked_add(entry.length) else {
+                return reject(
+                    ReasonCode::RepresentationInvalid,
+                    Value::String("manifest chunk sizes overflow".into()),
+                    empty_map(),
+                );
+            };
+            total_size = next_total;
+        }
         if manifest.total_stored_size != total_size {
             return reject(
                 ReasonCode::RepresentationInvalid,
@@ -2009,6 +2272,7 @@ pub fn validate_object_retrieval(
                 empty_map(),
             );
         }
+        let mut expected_offset = 0u64;
         for entry in &manifest.chunk_entries {
             let Some(digest) = &entry.chunk_digest else {
                 return reject(
@@ -2017,6 +2281,16 @@ pub fn validate_object_retrieval(
                     empty_map(),
                 );
             };
+            if digest.algorithm
+                != edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256
+                    as i32
+            {
+                return reject(
+                    ReasonCode::RepresentationInvalid,
+                    Value::String("chunk entry digest algorithm is not SHA-256".into()),
+                    empty_map(),
+                );
+            }
             if digest.value.len() != 32 {
                 return reject(
                     ReasonCode::RepresentationInvalid,
@@ -2047,6 +2321,16 @@ pub fn validate_object_retrieval(
                     empty_map(),
                 );
             }
+            if entry.offset != expected_offset {
+                return reject(
+                    ReasonCode::RepresentationInvalid,
+                    Value::String(
+                        "chunk entry offsets do not preserve reconstruction order".into(),
+                    ),
+                    empty_map(),
+                );
+            }
+            expected_offset += entry.length;
         }
 
         if let Some(header) = header {
@@ -2160,12 +2444,33 @@ pub fn validate_query_request_signature(query: &QueryRequest) -> ValidationResul
         if let (Some(not_before), Some(expires_at)) =
             (&time_window.not_before, &time_window.expires_at)
         {
+            if let Some(result) = validate_timestamp_shape(not_before, "QueryRequest not_before") {
+                return result;
+            }
+            if let Some(result) = validate_timestamp_shape(expires_at, "QueryRequest expires_at") {
+                return result;
+            }
             if timestamp_ms(not_before) > timestamp_ms(expires_at) {
                 return reject(
                     ReasonCode::TimeInvalid,
                     Value::String("QueryRequest time_window is inverted".into()),
                     empty_map(),
                 );
+            }
+        } else {
+            if let Some(not_before) = &time_window.not_before {
+                if let Some(result) =
+                    validate_timestamp_shape(not_before, "QueryRequest not_before")
+                {
+                    return result;
+                }
+            }
+            if let Some(expires_at) = &time_window.expires_at {
+                if let Some(result) =
+                    validate_timestamp_shape(expires_at, "QueryRequest expires_at")
+                {
+                    return result;
+                }
             }
         }
     }
@@ -2192,14 +2497,16 @@ pub fn validate_query_request_signature(query: &QueryRequest) -> ValidationResul
                 empty_map(),
             );
         }
-        if cost_limit.max_wall_time.as_ref().is_some_and(|duration| {
-            duration.seconds < 0 || (duration.seconds == 0 && duration.nanos <= 0)
-        }) {
-            return reject(
-                ReasonCode::TimeInvalid,
-                Value::String("QueryRequest max_wall_time must be positive".into()),
-                empty_map(),
-            );
+        if let Some(duration) = cost_limit.max_wall_time.as_ref() {
+            if !is_valid_non_negative_duration(duration)
+                || (duration.seconds == 0 && duration.nanos == 0)
+            {
+                return reject(
+                    ReasonCode::TimeInvalid,
+                    Value::String("QueryRequest max_wall_time must be positive".into()),
+                    empty_map(),
+                );
+            }
         }
     }
     for proof_class in &query.required_proof_classes {
@@ -2360,12 +2667,15 @@ pub fn validate_query_result_fragment(
             empty_map(),
         );
     }
-    if fragment.answered_at.is_none() {
+    let Some(answered_at) = &fragment.answered_at else {
         return reject(
             ReasonCode::StructuralInvalid,
             Value::String("QueryResultFragment missing answered_at".into()),
             empty_map(),
         );
+    };
+    if let Some(result) = validate_timestamp_shape(answered_at, "QueryResultFragment answered_at") {
+        return result;
     }
 
     let Some(completeness) =
@@ -2389,13 +2699,20 @@ pub fn validate_query_result_fragment(
         || !fragment.event_refs.is_empty()
         || !fragment.object_refs.is_empty()
         || !fragment.proof_objects.is_empty()
-        || fragment.bundled_result_object.is_some()
-        || fragment.result_metadata.is_some();
+        || fragment.bundled_result_object.is_some();
     if completeness == edgerun_proto::edgerun::v0::access::ResultCompleteness::Denied {
         if fragment.omission_reason.is_empty() {
             return reject(
                 ReasonCode::StructuralInvalid,
                 Value::String("denied QueryResultFragment missing omission_reason".into()),
+                empty_map(),
+            );
+        }
+    } else if completeness == edgerun_proto::edgerun::v0::access::ResultCompleteness::MetadataOnly {
+        if fragment.result_metadata.is_none() {
+            return reject(
+                ReasonCode::StructuralInvalid,
+                Value::String("metadata-only QueryResultFragment missing result_metadata".into()),
                 empty_map(),
             );
         }
@@ -2407,12 +2724,10 @@ pub fn validate_query_result_fragment(
         );
     }
     for snapshot_ref in &fragment.snapshot_refs {
-        if snapshot_ref.snapshot_id.is_empty() {
-            return reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("QueryResultFragment snapshot_ref snapshot_id is empty".into()),
-                empty_map(),
-            );
+        if let Some(result) =
+            validate_snapshot_ref(snapshot_ref, "QueryResultFragment snapshot_ref")
+        {
+            return result;
         }
     }
     for event_ref in &fragment.event_refs {
@@ -2752,6 +3067,13 @@ pub fn validate_session_accept(
             empty_map(),
         );
     }
+    if accept_msg.echoed_session_nonce.is_empty() {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("SessionAccept missing echoed session nonce".into()),
+            empty_map(),
+        );
+    }
     if accept_msg.echoed_session_nonce != expected_nonce {
         return reject(
             ReasonCode::CryptoInvalid,
@@ -2927,6 +3249,9 @@ pub fn validate_relay_envelope(
     }
 
     if let Some(store_until) = &envelope.store_until {
+        if let Some(result) = validate_timestamp_shape(store_until, "RelayEnvelope store_until") {
+            return result;
+        }
         if now_ms > timestamp_ms(store_until) {
             return reject(
                 ReasonCode::TimeInvalid,
@@ -3048,6 +3373,9 @@ pub fn validate_assurance_claim(
             empty_map(),
         );
     };
+    if let Some(result) = validate_timestamp_shape(issued_at, "AssuranceClaim issued_at") {
+        return result;
+    }
     let issued_ms = timestamp_ms(issued_at);
     if now_ms < issued_ms {
         return defer(
@@ -3056,6 +3384,9 @@ pub fn validate_assurance_claim(
         );
     }
     if let Some(expires_at) = &claim.expires_at {
+        if let Some(result) = validate_timestamp_shape(expires_at, "AssuranceClaim expires_at") {
+            return result;
+        }
         if now_ms > timestamp_ms(expires_at) {
             return reject(
                 ReasonCode::TimeInvalid,
@@ -3183,14 +3514,14 @@ pub fn validate_assurance_claim_satisfies_requirement(
         );
     };
     if let Some(max_age) = &requirement.max_evidence_age {
-        let max_age_ms = max_age.seconds.saturating_mul(1000) + (max_age.nanos as i64) / 1_000_000;
-        if max_age_ms < 0 {
+        if !is_valid_non_negative_duration(max_age) {
             return reject(
                 ReasonCode::StructuralInvalid,
-                Value::String("AssuranceRequirement max_evidence_age is negative".into()),
+                Value::String("AssuranceRequirement max_evidence_age is invalid".into()),
                 empty_map(),
             );
         }
+        let max_age_ms = max_age.seconds.saturating_mul(1000) + (max_age.nanos as i64) / 1_000_000;
         let age_ms = now_ms.saturating_sub(timestamp_ms(issued_at));
         if age_ms > max_age_ms {
             let mut derived = std::collections::BTreeMap::new();
@@ -3262,6 +3593,9 @@ pub fn validate_revocation_record(
             empty_map(),
         );
     };
+    if let Some(result) = validate_timestamp_shape(issued_at, "RevocationRecord issued_at") {
+        return result;
+    }
     if now_ms < timestamp_ms(issued_at) {
         return defer(
             ReasonCode::TimeInvalid,
@@ -3269,6 +3603,11 @@ pub fn validate_revocation_record(
         );
     }
     if let Some(effective_at) = &revocation.effective_at {
+        if let Some(result) =
+            validate_timestamp_shape(effective_at, "RevocationRecord effective_at")
+        {
+            return result;
+        }
         if now_ms < timestamp_ms(effective_at) {
             return defer(
                 ReasonCode::TimeInvalid,
@@ -3277,9 +3616,16 @@ pub fn validate_revocation_record(
         }
     }
 
-    if edgerun_proto::edgerun::v0::trust::RevocationKind::from_i32(revocation.revocation_kind)
-        .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::trust::RevocationKind::Unspecified)
-    {
+    let Some(revocation_kind) =
+        edgerun_proto::edgerun::v0::trust::RevocationKind::from_i32(revocation.revocation_kind)
+    else {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("RevocationRecord has invalid revocation kind".into()),
+            empty_map(),
+        );
+    };
+    if revocation_kind == edgerun_proto::edgerun::v0::trust::RevocationKind::Unspecified {
         return reject(
             ReasonCode::StructuralInvalid,
             Value::String("RevocationRecord has invalid revocation kind".into()),
@@ -3322,6 +3668,13 @@ pub fn validate_revocation_record(
                 return result;
             }
         }
+    }
+    if !revocation_kind_matches_target(revocation_kind, target) {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            Value::String("RevocationRecord revocation_kind does not match target family".into()),
+            empty_map(),
+        );
     }
     if revocation.scope_override.is_some()
         && !matches!(
@@ -3374,8 +3727,53 @@ pub fn validate_revocation_record(
     accept(Value::Map(derived), empty_map())
 }
 
+fn revocation_kind_matches_target(
+    kind: edgerun_proto::edgerun::v0::trust::RevocationKind,
+    target: &edgerun_proto::edgerun::v0::trust::revocation_record::Target,
+) -> bool {
+    match kind {
+        edgerun_proto::edgerun::v0::trust::RevocationKind::Delegation => matches!(
+            target,
+            edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetDelegation(_)
+        ),
+        edgerun_proto::edgerun::v0::trust::RevocationKind::ControllerInstallation => matches!(
+            target,
+            edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetNode(_)
+        ),
+        edgerun_proto::edgerun::v0::trust::RevocationKind::IdentityTrust => matches!(
+            target,
+            edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(_)
+        ),
+        edgerun_proto::edgerun::v0::trust::RevocationKind::AssuranceClaim
+        | edgerun_proto::edgerun::v0::trust::RevocationKind::SnapshotTrust
+        | edgerun_proto::edgerun::v0::trust::RevocationKind::RepresentationAccess => matches!(
+            target,
+            edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetObject(_)
+        ),
+        edgerun_proto::edgerun::v0::trust::RevocationKind::Unspecified => false,
+    }
+}
+
 fn timestamp_ms(timestamp: &prost_types::Timestamp) -> i64 {
     timestamp.seconds * 1000 + (timestamp.nanos as i64) / 1_000_000
+}
+
+fn validate_timestamp_shape(
+    timestamp: &prost_types::Timestamp,
+    label: &str,
+) -> Option<ValidationResult> {
+    if !(0..1_000_000_000).contains(&timestamp.nanos) {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!("{label} nanos is out of range")),
+            empty_map(),
+        ));
+    }
+    None
+}
+
+fn is_valid_non_negative_duration(duration: &prost_types::Duration) -> bool {
+    duration.seconds >= 0 && (0..1_000_000_000).contains(&duration.nanos)
 }
 
 fn verify_session_signature(
@@ -3452,7 +3850,11 @@ mod tests {
             stream_id: b"test-stream".to_vec(),
             seq,
             prev_event_hash: prev_hash,
-            event_type: EventType::NodeGenesis as i32,
+            event_type: if seq == 0 {
+                EventType::NodeGenesis as i32
+            } else {
+                EventType::CommandSent as i32
+            },
             event_version: 1,
             recorded_at: Some(prost_types::Timestamp {
                 seconds: 1_700_000_000,
@@ -3644,6 +4046,20 @@ mod tests {
     }
 
     #[test]
+    fn stream_append_rejects_invalid_recorded_at_timestamp() {
+        let mut genesis = make_genesis_event();
+        genesis.recorded_at = Some(prost_types::Timestamp {
+            seconds: 1_700_000_000,
+            nanos: 1_000_000_000,
+        });
+
+        let result = validate_stream_append(&genesis, None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn stream_append_rejects_genesis_with_prev_hash() {
         let mut genesis = make_genesis_event();
         genesis.prev_event_hash = Some(crate::protocol::Digest {
@@ -3651,6 +4067,29 @@ mod tests {
             value: vec![1; 32],
         });
         let result = validate_stream_append(&genesis, None, None);
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn stream_append_rejects_non_genesis_type_at_seq_zero() {
+        let mut genesis = make_genesis_event();
+        genesis.event_type = EventType::CommandSent as i32;
+
+        let result = validate_stream_append(&genesis, None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn stream_append_rejects_node_genesis_after_seq_zero() {
+        let genesis = make_genesis_event();
+        let mut event = make_event(1, Some(compute_event_hash(&genesis)));
+        event.event_type = EventType::NodeGenesis as i32;
+
+        let result = validate_stream_append(&event, Some(&genesis), None);
+
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
     }
@@ -3842,7 +4281,7 @@ mod tests {
             key: "api-token".into(),
             label: "API token".into(),
             attributes: std::collections::BTreeMap::new(),
-            secret_blob_id: "blob-1".into(),
+            secret_blob_id: "0123456789abcdef".into(),
         }
     }
 
@@ -3985,6 +4424,28 @@ mod tests {
     }
 
     #[test]
+    fn secret_put_payload_non_hex_blob_id_is_rejected() {
+        let mut payload = valid_secret_put_payload();
+        payload.secret_blob_id = "blob-1".into();
+
+        let result = validate_secret_put_payload(&payload);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn secret_put_payload_odd_length_blob_id_is_rejected() {
+        let mut payload = valid_secret_put_payload();
+        payload.secret_blob_id = "abc".into();
+
+        let result = validate_secret_put_payload(&payload);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn secret_delete_payload_empty_key_is_rejected() {
         let mut payload = valid_secret_delete_payload();
         payload.key.clear();
@@ -4086,6 +4547,56 @@ mod tests {
     }
 
     #[test]
+    fn action_lifecycle_payload_completed_requires_result_object() {
+        let mut payload = valid_action_lifecycle_payload();
+        payload.status = edgerun_proto::edgerun::v0::stream::ActionStatus::Completed as i32;
+
+        let result = validate_action_lifecycle_payload(&payload);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn action_lifecycle_payload_completed_with_result_is_accepted() {
+        let mut payload = valid_action_lifecycle_payload();
+        payload.status = edgerun_proto::edgerun::v0::stream::ActionStatus::Completed as i32;
+        payload.result_object = Some(ObjectRef {
+            object_id: b"result-object".to_vec(),
+            object_kind: None,
+        });
+
+        let result = validate_action_lifecycle_payload(&payload);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
+    }
+
+    #[test]
+    fn action_lifecycle_payload_failed_requires_error_object() {
+        let mut payload = valid_action_lifecycle_payload();
+        payload.status = edgerun_proto::edgerun::v0::stream::ActionStatus::Failed as i32;
+
+        let result = validate_action_lifecycle_payload(&payload);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn action_lifecycle_payload_failed_with_error_is_accepted() {
+        let mut payload = valid_action_lifecycle_payload();
+        payload.status = edgerun_proto::edgerun::v0::stream::ActionStatus::Failed as i32;
+        payload.error_object = Some(ObjectRef {
+            object_id: b"error-object".to_vec(),
+            object_kind: None,
+        });
+
+        let result = validate_action_lifecycle_payload(&payload);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
+    }
+
+    #[test]
     fn delegation_chain_valid_single() {
         let signing_key =
             edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
@@ -4147,6 +4658,60 @@ mod tests {
     }
 
     #[test]
+    fn delegation_chain_non_delegable_parent_rejects_child() {
+        let root_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mid_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut parent = valid_delegation(b"root".to_vec(), b"mid".to_vec(), &["query"]);
+        parent.capability.as_mut().unwrap().delegation_policy =
+            edgerun_proto::edgerun::v0::trust::DelegationPolicy::NonDelegable as i32;
+        sign_delegation(&mut parent, &root_key);
+        let mut child = valid_delegation(b"mid".to_vec(), b"user".to_vec(), &["query"]);
+        sign_delegation(&mut child, &mid_key);
+
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_scope_expansion_is_rejected() {
+        let root_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mid_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut parent = valid_delegation(b"root".to_vec(), b"mid".to_vec(), &["query"]);
+        sign_delegation(&mut parent, &root_key);
+        let mut child = valid_delegation(b"mid".to_vec(), b"user".to_vec(), &["query"]);
+        child
+            .capability
+            .as_mut()
+            .unwrap()
+            .scope
+            .as_mut()
+            .unwrap()
+            .target_nodes = vec![NodeRef {
+            node_id: b"node-b".to_vec(),
+        }];
+        sign_delegation(&mut child, &mid_key);
+
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
     fn delegation_missing_capability_is_rejected() {
         let signing_key =
             edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
@@ -4170,6 +4735,27 @@ mod tests {
             edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let mut deleg = valid_delegation(b"root".to_vec(), b"user".to_vec(), &["query"]);
         deleg.issued_at = None;
+        sign_delegation(&mut deleg, &signing_key);
+
+        let result = validate_delegation_chain(
+            &[deleg],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn delegation_invalid_issued_at_timestamp_is_rejected() {
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut deleg = valid_delegation(b"root".to_vec(), b"user".to_vec(), &["query"]);
+        deleg.issued_at = Some(prost_types::Timestamp {
+            seconds: 1_700_000_000,
+            nanos: 1_000_000_000,
+        });
         sign_delegation(&mut deleg, &signing_key);
 
         let result = validate_delegation_chain(
@@ -4336,6 +4922,41 @@ mod tests {
     }
 
     #[test]
+    fn delegation_constraint_invalid_time_shape_is_rejected() {
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut deleg = valid_delegation(b"root".to_vec(), b"user".to_vec(), &["query"]);
+        deleg.capability.as_mut().unwrap().constraints = Some(ConstraintSet {
+            constraint_version: 1,
+            not_before: Some(prost_types::Timestamp {
+                seconds: 10,
+                nanos: -1,
+            }),
+            expires_at: None,
+            max_uses: None,
+            rate_limit: None,
+            requires_local_session: None,
+            requires_user_presence: None,
+            requires_transport_classes: vec![],
+            requires_location_classes: vec![],
+            export_policy: 0,
+            execution_class_limits: vec![],
+            storage_class_limits: vec![],
+            constraint_metadata: None,
+        });
+        sign_delegation(&mut deleg, &signing_key);
+
+        let result = validate_delegation_chain(
+            &[deleg],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn delegation_constraint_zero_rate_limit_is_rejected() {
         let signing_key =
             edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
@@ -4371,6 +4992,44 @@ mod tests {
 
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn delegation_constraint_invalid_rate_limit_duration_is_rejected() {
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut deleg = valid_delegation(b"root".to_vec(), b"user".to_vec(), &["query"]);
+        deleg.capability.as_mut().unwrap().constraints = Some(ConstraintSet {
+            constraint_version: 1,
+            not_before: None,
+            expires_at: None,
+            max_uses: None,
+            rate_limit: Some(crate::protocol::RateLimit {
+                max_operations: 1,
+                per: Some(prost_types::Duration {
+                    seconds: 1,
+                    nanos: 1_000_000_000,
+                }),
+            }),
+            requires_local_session: None,
+            requires_user_presence: None,
+            requires_transport_classes: vec![],
+            requires_location_classes: vec![],
+            export_policy: 0,
+            execution_class_limits: vec![],
+            storage_class_limits: vec![],
+            constraint_metadata: None,
+        });
+        sign_delegation(&mut deleg, &signing_key);
+
+        let result = validate_delegation_chain(
+            &[deleg],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
     }
 
     #[test]
@@ -4547,6 +5206,37 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_missing_payload_object_rejected() {
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut snapshot = valid_snapshot_for_tests(b"trusted".to_vec());
+        snapshot.payload_object = None;
+        sign_snapshot(&mut snapshot, &signing_key);
+
+        let result = validate_snapshot(&snapshot, &[b"trusted".to_vec()]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn snapshot_empty_payload_object_rejected() {
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut snapshot = valid_snapshot_for_tests(b"trusted".to_vec());
+        snapshot.payload_object = Some(ObjectRef {
+            object_id: vec![],
+            object_kind: None,
+        });
+        sign_snapshot(&mut snapshot, &signing_key);
+
+        let result = validate_snapshot(&snapshot, &[b"trusted".to_vec()]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn snapshot_supersedes_missing_snapshot_id_rejected() {
         let signing_key =
             edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
@@ -4554,6 +5244,23 @@ mod tests {
         snapshot.supersedes = Some(crate::protocol::SnapshotRef {
             snapshot_id: vec![],
             object_id: None,
+        });
+        sign_snapshot(&mut snapshot, &signing_key);
+
+        let result = validate_snapshot(&snapshot, &[b"trusted".to_vec()]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn snapshot_supersedes_empty_object_id_rejected() {
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut snapshot = valid_snapshot_for_tests(b"trusted".to_vec());
+        snapshot.supersedes = Some(crate::protocol::SnapshotRef {
+            snapshot_id: b"previous-snapshot".to_vec(),
+            object_id: Some(vec![]),
         });
         sign_snapshot(&mut snapshot, &signing_key);
 
@@ -4741,6 +5448,31 @@ mod tests {
     }
 
     #[test]
+    fn object_retrieval_rejects_descriptor_digest_without_sha256_algorithm() {
+        let descriptor = LogicalObjectDescriptor {
+            descriptor_version: 1,
+            object_id: vec![0x22; 32],
+            object_kind: edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
+            object_schema_version: 1,
+            canonicalization_id: "raw-bytes-v0".into(),
+            canonical_digest: Some(Digest {
+                algorithm: 0,
+                value: vec![0x33; 32],
+            }),
+            canonical_size: 10,
+            created_at: None,
+            producer: None,
+            describes_object: None,
+            object_metadata: None,
+        };
+
+        let result = validate_object_retrieval(Some(&descriptor), None, None, None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn object_retrieval_rejects_descriptor_empty_metadata_ref() {
         let descriptor = LogicalObjectDescriptor {
             descriptor_version: 1,
@@ -4794,6 +5526,41 @@ mod tests {
 
         let result = validate_object_retrieval(None, Some(&header), None, None, None);
 
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::RepresentationInvalid));
+    }
+
+    #[test]
+    fn object_retrieval_rejects_representation_digest_without_sha256_algorithm() {
+        let mut header = StoredRepresentationHeader {
+            header_version: 1,
+            representation_id: vec![0x11; 32],
+            object: Some(ObjectRef {
+                object_id: vec![0x22; 32],
+                object_kind: Some(1),
+            }),
+            representation_digest: Some(Digest {
+                algorithm: 0,
+                value: vec![0x33; 32],
+            }),
+            plaintext_size: None,
+            stored_size: 10,
+            encryption_scheme: String::new(),
+            compression_scheme: String::new(),
+            chunking_mode: edgerun_proto::edgerun::v0::object::ChunkingMode::None as i32,
+            chunk_manifest_object: None,
+            access_package_object: None,
+            created_at: None,
+            representation_metadata: None,
+        };
+
+        let result = validate_object_retrieval(None, Some(&header), None, None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::RepresentationInvalid));
+
+        header.representation_digest.as_mut().unwrap().algorithm = 99;
+        let result = validate_object_retrieval(None, Some(&header), None, None, None);
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::RepresentationInvalid));
     }
@@ -4908,9 +5675,62 @@ mod tests {
     }
 
     #[test]
+    fn object_retrieval_rejects_chunk_digest_without_sha256_algorithm() {
+        let (header, mut manifest) = valid_manifest_header_and_manifest();
+        manifest.chunk_entries[0]
+            .chunk_digest
+            .as_mut()
+            .unwrap()
+            .algorithm = 0;
+
+        let result = validate_object_retrieval(None, Some(&header), Some(&manifest), None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::RepresentationInvalid));
+    }
+
+    #[test]
     fn object_retrieval_rejects_noncontiguous_chunk_indexes() {
         let (header, mut manifest) = valid_manifest_header_and_manifest();
         manifest.chunk_entries[0].index = 1;
+
+        let result = validate_object_retrieval(None, Some(&header), Some(&manifest), None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::RepresentationInvalid));
+    }
+
+    #[test]
+    fn object_retrieval_rejects_gapped_chunk_offsets() {
+        let (mut header, mut manifest) = valid_manifest_header_and_manifest();
+        header.stored_size = 15;
+        manifest.chunk_count = 2;
+        manifest.total_stored_size = 15;
+        manifest.chunk_entries[0].length = 10;
+        let mut second = manifest.chunk_entries[0].clone();
+        second.index = 1;
+        second.offset = 11;
+        second.length = 5;
+        manifest.chunk_entries.push(second);
+
+        let result = validate_object_retrieval(None, Some(&header), Some(&manifest), None, None);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::RepresentationInvalid));
+    }
+
+    #[test]
+    fn object_retrieval_rejects_overlapping_chunk_offsets() {
+        let (mut header, mut manifest) = valid_manifest_header_and_manifest();
+        header.stored_size = 15;
+        manifest.chunk_count = 2;
+        manifest.total_stored_size = 15;
+        manifest.chunk_entries[0].length = 10;
+        let mut second = manifest.chunk_entries[0].clone();
+        second.index = 1;
+        second.offset = 9;
+        second.length = 5;
+        manifest.chunk_entries.push(second);
 
         let result = validate_object_retrieval(None, Some(&header), Some(&manifest), None, None);
 
@@ -5209,6 +6029,25 @@ mod tests {
     }
 
     #[test]
+    fn query_request_invalid_time_window_shape_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut query = signed_query_request(&key);
+        query.time_window = Some(TimeWindow {
+            not_before: Some(prost_types::Timestamp {
+                seconds: 10,
+                nanos: -1,
+            }),
+            expires_at: None,
+        });
+        sign_query_request(&mut query, &key);
+
+        let result = validate_query_request_signature(&query);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn query_request_empty_checkpoint_base_is_rejected() {
         let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let mut query = signed_query_request(&key);
@@ -5333,6 +6172,27 @@ mod tests {
         assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
     }
 
+    #[test]
+    fn query_request_invalid_wall_time_duration_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut query = signed_query_request(&key);
+        query.cost_limit = Some(CostLimit {
+            max_results: None,
+            max_total_bytes: None,
+            max_wall_time: Some(prost_types::Duration {
+                seconds: 1,
+                nanos: 1_000_000_000,
+            }),
+            max_federated_responders: None,
+        });
+        sign_query_request(&mut query, &key);
+
+        let result = validate_query_request_signature(&query);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
     fn signed_query_result_fragment(
         key: &edgerun_crypto::p256::ecdsa::SigningKey,
     ) -> QueryResultFragment {
@@ -5394,10 +6254,120 @@ mod tests {
     }
 
     #[test]
+    fn query_result_fragment_invalid_answered_at_timestamp_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[44u8; 32].into()).unwrap();
+        let mut fragment = signed_query_result_fragment(&key);
+        fragment.answered_at = Some(prost_types::Timestamp {
+            seconds: 1_700_000_000,
+            nanos: -1,
+        });
+        let canonical =
+            canonical_bytes(&ProtocolRecord::QueryResultFragment(fragment.clone()), true);
+        fragment.signature = Some(crate::protocol::Signature {
+            algorithm: 1,
+            value: crate::crypto::sign_canonical_record(
+                &key,
+                crate::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT,
+                &canonical,
+            )
+            .unwrap(),
+        });
+
+        let result = validate_query_result_fragment(&fragment, Some(b"query-1"), &[]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn query_result_fragment_without_backing_is_rejected() {
         let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[44u8; 32].into()).unwrap();
         let mut fragment = signed_query_result_fragment(&key);
         fragment.object_refs.clear();
+        let canonical =
+            canonical_bytes(&ProtocolRecord::QueryResultFragment(fragment.clone()), true);
+        fragment.signature = Some(crate::protocol::Signature {
+            algorithm: 1,
+            value: crate::crypto::sign_canonical_record(
+                &key,
+                crate::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT,
+                &canonical,
+            )
+            .unwrap(),
+        });
+
+        let result = validate_query_result_fragment(&fragment, Some(b"query-1"), &[]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn query_result_fragment_metadata_only_is_not_backing() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[44u8; 32].into()).unwrap();
+        let mut fragment = signed_query_result_fragment(&key);
+        fragment.object_refs.clear();
+        fragment.result_metadata = Some(ObjectRef {
+            object_id: b"metadata-object".to_vec(),
+            object_kind: None,
+        });
+        let canonical =
+            canonical_bytes(&ProtocolRecord::QueryResultFragment(fragment.clone()), true);
+        fragment.signature = Some(crate::protocol::Signature {
+            algorithm: 1,
+            value: crate::crypto::sign_canonical_record(
+                &key,
+                crate::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT,
+                &canonical,
+            )
+            .unwrap(),
+        });
+
+        let result = validate_query_result_fragment(&fragment, Some(b"query-1"), &[]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn query_result_fragment_metadata_only_with_metadata_is_accepted() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[44u8; 32].into()).unwrap();
+        let mut fragment = signed_query_result_fragment(&key);
+        fragment.object_refs.clear();
+        fragment.completeness =
+            edgerun_proto::edgerun::v0::access::ResultCompleteness::MetadataOnly as i32;
+        fragment.result_metadata = Some(ObjectRef {
+            object_id: b"metadata-object".to_vec(),
+            object_kind: None,
+        });
+        let canonical =
+            canonical_bytes(&ProtocolRecord::QueryResultFragment(fragment.clone()), true);
+        fragment.signature = Some(crate::protocol::Signature {
+            algorithm: 1,
+            value: crate::crypto::sign_canonical_record(
+                &key,
+                crate::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT,
+                &canonical,
+            )
+            .unwrap(),
+        });
+
+        let result = validate_query_result_fragment(&fragment, Some(b"query-1"), &[]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
+        assert_eq!(
+            result.derived.as_map().unwrap().get("advisory_only"),
+            Some(&Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn query_result_fragment_metadata_only_requires_metadata() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[44u8; 32].into()).unwrap();
+        let mut fragment = signed_query_result_fragment(&key);
+        fragment.object_refs.clear();
+        fragment.completeness =
+            edgerun_proto::edgerun::v0::access::ResultCompleteness::MetadataOnly as i32;
         let canonical =
             canonical_bytes(&ProtocolRecord::QueryResultFragment(fragment.clone()), true);
         fragment.signature = Some(crate::protocol::Signature {
@@ -5467,6 +6437,22 @@ mod tests {
         fragment.snapshot_refs.push(SnapshotRef {
             snapshot_id: vec![],
             object_id: None,
+        });
+
+        let result = validate_query_result_fragment(&fragment, Some(b"query-1"), &[]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn query_result_fragment_snapshot_ref_empty_object_id_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[44u8; 32].into()).unwrap();
+        let mut fragment = signed_query_result_fragment(&key);
+        fragment.object_refs.clear();
+        fragment.snapshot_refs.push(SnapshotRef {
+            snapshot_id: b"snapshot-1".to_vec(),
+            object_id: Some(vec![]),
         });
 
         let result = validate_query_result_fragment(&fragment, Some(b"query-1"), &[]);
@@ -5711,6 +6697,19 @@ mod tests {
 
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::CryptoInvalid));
+    }
+
+    #[test]
+    fn session_accept_empty_nonce_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut accept_msg = signed_session_accept(&key);
+        accept_msg.echoed_session_nonce.clear();
+        accept_msg.signature = None;
+
+        let result = validate_session_accept(&accept_msg, b"", &[1]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
     }
 
     #[test]
@@ -6062,6 +7061,22 @@ mod tests {
     }
 
     #[test]
+    fn assurance_claim_invalid_issued_at_timestamp_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut claim = signed_assurance_claim(&key);
+        claim.issued_at = Some(prost_types::Timestamp {
+            seconds: 1_700_000_000,
+            nanos: 1_000_000_000,
+        });
+        sign_assurance_claim(&mut claim, &key);
+
+        let result = validate_assurance_claim(&claim, 1_710_000_000_000, &[]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn assurance_claim_bad_signature_is_rejected() {
         let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let mut claim = signed_assurance_claim(&key);
@@ -6191,6 +7206,46 @@ mod tests {
 
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
+    #[test]
+    fn assurance_claim_requirement_rejects_negative_nanos_max_age() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let claim = signed_assurance_claim(&key);
+        let requirement = assurance_requirement_for_claim(
+            &claim,
+            edgerun_proto::edgerun::v0::common::AssuranceClass::HardwareBacked,
+            Some(prost_types::Duration {
+                seconds: 0,
+                nanos: -1,
+            }),
+        );
+
+        let result =
+            validate_assurance_claim_satisfies_requirement(&claim, &requirement, 1_700_000_000_000);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn assurance_claim_requirement_rejects_out_of_range_max_age_nanos() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let claim = signed_assurance_claim(&key);
+        let requirement = assurance_requirement_for_claim(
+            &claim,
+            edgerun_proto::edgerun::v0::common::AssuranceClass::HardwareBacked,
+            Some(prost_types::Duration {
+                seconds: 1,
+                nanos: 1_000_000_000,
+            }),
+        );
+
+        let result =
+            validate_assurance_claim_satisfies_requirement(&claim, &requirement, 1_700_000_000_000);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
     }
 
     #[test]
@@ -6384,6 +7439,49 @@ mod tests {
 
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn revocation_kind_must_match_target_family() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut revocation = signed_revocation_record(&key);
+        revocation.target = Some(
+            edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(
+                IdentityRef {
+                    identity_id: b"user-a".to_vec(),
+                    identity_kind: Some(1),
+                    key_hint: None,
+                },
+            ),
+        );
+        sign_revocation_record(&mut revocation, &key);
+
+        let result = validate_revocation_record(&revocation, 1_710_000_000_000, &[]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn identity_trust_revocation_accepts_identity_target() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut revocation = signed_revocation_record(&key);
+        revocation.revocation_kind =
+            edgerun_proto::edgerun::v0::trust::RevocationKind::IdentityTrust as i32;
+        revocation.target = Some(
+            edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(
+                IdentityRef {
+                    identity_id: b"user-a".to_vec(),
+                    identity_kind: Some(1),
+                    key_hint: None,
+                },
+            ),
+        );
+        sign_revocation_record(&mut revocation, &key);
+
+        let result = validate_revocation_record(&revocation, 1_710_000_000_000, &[]);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
     }
 
     #[test]

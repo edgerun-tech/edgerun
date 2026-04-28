@@ -20,7 +20,9 @@ use super::manifest::{ImageManifest, SingleManifest};
 use super::oci_spec::generate_oci_spec;
 use super::urlencoding;
 #[cfg(feature = "edgefs")]
-use crate::image_apply::{apply_bare_image_layer_blobs_sha256, BareImageApplyReport};
+use crate::image_apply::{
+    apply_bare_image_layer_blob_sha256, validate_bare_image_layer_set, BareImageApplyReport,
+};
 #[cfg(feature = "edgefs")]
 use edgerun_edgefs::EdgeFs;
 #[cfg(feature = "edgefs")]
@@ -90,6 +92,7 @@ pub struct RegistryClient {
     auth: RegistryAuth,
     token: Option<String>,
     bytes_downloaded: u64,
+    insecure_http: bool,
 }
 
 #[cfg(feature = "edgefs")]
@@ -107,7 +110,14 @@ impl RegistryClient {
             auth: RegistryAuth::Anonymous,
             token: None,
             bytes_downloaded: 0,
+            insecure_http: false,
         }
+    }
+
+    /// Use plain HTTP for registries explicitly trusted by the caller.
+    pub fn insecure_http(mut self) -> Self {
+        self.insecure_http = true;
+        self
     }
 
     /// Total bytes downloaded by this client since creation.
@@ -134,6 +144,7 @@ impl RegistryClient {
             auth,
             token: None,
             bytes_downloaded: 0,
+            insecure_http: false,
         })
     }
 
@@ -152,17 +163,23 @@ impl RegistryClient {
             },
             token: None,
             bytes_downloaded: 0,
+            insecure_http: false,
         }
     }
 
-    /// Perform an HTTPS GET request with auth handling.
+    fn registry_url(&self, registry: &str, path: &str) -> String {
+        let scheme = if self.insecure_http { "http" } else { "https" };
+        format!("{}://{}{}", scheme, registry, path)
+    }
+
+    /// Perform a GET request with auth handling.
     async fn authenticated_get(
         &mut self,
         registry: &str,
         path: &str,
         extra_headers: &[(&str, &str)],
     ) -> Result<Vec<u8>, RegistryError> {
-        let url = format!("https://{}{}", registry, path);
+        let url = self.registry_url(registry, path);
         let mut builder = Request::builder()
             .method(edgerun_http::Method::GET)
             .uri(&url);
@@ -227,7 +244,7 @@ impl RegistryClient {
         body: &[u8],
         extra_headers: &[(&str, &str)],
     ) -> Result<Vec<u8>, RegistryError> {
-        let url = format!("https://{}{}", registry, path);
+        let url = self.registry_url(registry, path);
         let result = self.do_put(&url, body, extra_headers).await?;
         if result.status().as_u16() == 401 {
             let www_auth = result
@@ -281,7 +298,7 @@ impl RegistryClient {
         body: &[u8],
         extra_headers: &[(&str, &str)],
     ) -> Result<Vec<u8>, RegistryError> {
-        let url = format!("https://{}{}", registry, path);
+        let url = self.registry_url(registry, path);
         let result = self.do_post(&url, body, extra_headers).await?;
         if result.status().as_u16() == 401 {
             let www_auth = result
@@ -415,7 +432,7 @@ impl RegistryClient {
     }
 
     async fn do_get_raw(&mut self, registry: &str, path: &str) -> Result<Response, RegistryError> {
-        let url = format!("https://{}{}", registry, path);
+        let url = self.registry_url(registry, path);
         let mut builder = Request::builder()
             .method(edgerun_http::Method::GET)
             .uri(&url);
@@ -533,17 +550,26 @@ impl RegistryClient {
         fs: &mut EdgeFs<S>,
     ) -> Result<EdgeFsImagePullReport, RegistryError> {
         let plan = self.fetch_bare_image_plan(image, rootfs).await?;
-        let mut layer_blobs = Vec::with_capacity(plan.layers.len());
-        for layer in &plan.layers {
-            layer_blobs.push(
-                self.fetch_blob(&image.registry, &image.repository, &layer.digest)
-                    .await?,
-            );
+        validate_bare_image_layer_set(&plan)
+            .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+
+        let mut layer_reports = Vec::with_capacity(plan.layers.len());
+        let mut entries_applied = 0usize;
+        for (index, layer) in plan.layers.iter().enumerate() {
+            let blob = self
+                .fetch_blob(&image.registry, &image.repository, &layer.digest)
+                .await?;
+            let (report, entries) = apply_bare_image_layer_blob_sha256(&plan, index, &blob, fs)
+                .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+            entries_applied = entries_applied.saturating_add(entries);
+            layer_reports.push(report);
         }
 
-        let apply =
-            apply_bare_image_layer_blobs_sha256(&plan, layer_blobs.iter().map(Vec::as_slice), fs)
-                .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+        let apply = BareImageApplyReport {
+            layers_applied: layer_reports.len(),
+            entries_applied,
+            layer_reports,
+        };
 
         Ok(EdgeFsImagePullReport {
             plan,

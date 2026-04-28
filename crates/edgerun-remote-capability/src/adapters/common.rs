@@ -30,6 +30,31 @@ pub(super) fn decode_optional_string_field(
         .map_err(|_| CapabilityError::InvalidRequest("remote optional string field decode failed"))
 }
 
+pub(super) fn encode_string_vec(values: &[String], out: &mut Vec<u8>) {
+    edgerun_encoding::string_field::encode_string_vec_u32(values, out)
+        .expect("string vector encode failed");
+}
+
+pub(super) fn decode_string_vec(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<Vec<String>, CapabilityError> {
+    edgerun_encoding::string_field::decode_string_vec_u32(bytes, cursor)
+        .map_err(|_| CapabilityError::InvalidRequest("remote string vector decode failed"))
+}
+
+pub(super) fn encode_byte_field(value: &[u8], out: &mut Vec<u8>) {
+    edgerun_encoding::string_field::encode_bytes_u32(value, out).expect("byte field encode failed");
+}
+
+pub(super) fn decode_byte_field(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<Vec<u8>, CapabilityError> {
+    edgerun_encoding::string_field::decode_bytes_u32(bytes, cursor)
+        .map_err(|_| CapabilityError::InvalidRequest("remote byte field decode failed"))
+}
+
 pub(super) fn stream_oriented_error(
     invocation: &CapabilityInvocation,
     label: &str,

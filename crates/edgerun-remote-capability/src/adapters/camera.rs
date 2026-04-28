@@ -8,10 +8,11 @@ use edgerun_camera_biometrics::{
     PairedCameraBiometricReader, PairedCameraFrame,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_encoding::byteorder::read_u32_le;
 use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
-use crate::adapters::common::stream_oriented_error;
+use crate::adapters::common::{decode_byte_field, encode_byte_field, stream_oriented_error};
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 fn map_camera_error(err: CameraBiometricError) -> CapabilityError {
@@ -56,8 +57,7 @@ fn encode_camera_frame(frame: &CameraFrame) -> Vec<u8> {
     out.extend_from_slice(&frame.height.to_le_bytes());
     out.extend_from_slice(&frame.stride.to_le_bytes());
     out.extend_from_slice(&camera_pixel_format_to_u32(frame.format).to_le_bytes());
-    out.extend_from_slice(&(frame.bytes.len() as u32).to_le_bytes());
-    out.extend_from_slice(&frame.bytes);
+    encode_byte_field(&frame.bytes, &mut out);
     out
 }
 
@@ -67,26 +67,21 @@ fn decode_camera_frame(bytes: &[u8]) -> Result<(CameraFrame, usize), CapabilityE
             "remote camera frame payload too short",
         ));
     }
-    let width = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-    let height = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-    let stride = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
-    let format =
-        camera_pixel_format_from_u32(u32::from_le_bytes(bytes[12..16].try_into().unwrap()))?;
-    let len = u32::from_le_bytes(bytes[16..20].try_into().unwrap()) as usize;
-    if bytes.len() < 20 + len {
-        return Err(CapabilityError::InvalidRequest(
-            "remote camera frame byte count exceeds payload length",
-        ));
-    }
+    let width = read_u32_le(bytes, 0);
+    let height = read_u32_le(bytes, 4);
+    let stride = read_u32_le(bytes, 8);
+    let format = camera_pixel_format_from_u32(read_u32_le(bytes, 12))?;
+    let mut cursor = 16;
+    let frame_bytes = decode_byte_field(bytes, &mut cursor)?;
     Ok((
         CameraFrame {
             width,
             height,
             stride,
             format,
-            bytes: bytes[20..20 + len].to_vec(),
+            bytes: frame_bytes,
         },
-        20 + len,
+        cursor,
     ))
 }
 
@@ -168,13 +163,13 @@ pub fn decode_camera_capture(bytes: &[u8]) -> Result<CameraCapture, CapabilityEr
                 "remote camera face bounds payload too short",
             ));
         }
-        let x = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        let x = read_u32_le(bytes, cursor);
         cursor += 4;
-        let y = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        let y = read_u32_le(bytes, cursor);
         cursor += 4;
-        let width = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        let width = read_u32_le(bytes, cursor);
         cursor += 4;
-        let height = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        let height = read_u32_le(bytes, cursor);
         cursor += 4;
         Some(FaceBounds {
             x,

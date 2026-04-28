@@ -2,7 +2,6 @@
 
 use crate::prelude::*;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 
 #[cfg(all(feature = "std", not(target_os = "none")))]
 use std::path::PathBuf;
@@ -63,72 +62,11 @@ pub fn load_registry_auth(path: &std::path::Path) -> std::io::Result<RegistryAut
 
 /// Decode a base64-encoded basic auth string ("user:pass").
 pub fn decode_basic_auth(auth: &str) -> Option<(String, String)> {
-    let decoded = decode_base64_standard(auth)?;
+    let compact: String = auth.chars().filter(|c| !c.is_ascii_whitespace()).collect();
+    let decoded = edgerun_encoding::base64::standard_decode(&compact).ok()?;
     let s = String::from_utf8(decoded).ok()?;
     let (username, password) = s.split_once(':')?;
     Some((username.to_string(), password.to_string()))
-}
-
-fn decode_base64_standard(input: &str) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity(input.len() * 3 / 4);
-    let mut quad = [0u8; 4];
-    let mut quad_len = 0;
-
-    for byte in input.bytes().filter(|b| !b.is_ascii_whitespace()) {
-        quad[quad_len] = byte;
-        quad_len += 1;
-        if quad_len == 4 {
-            decode_base64_quad(&quad, &mut out)?;
-            quad_len = 0;
-        }
-    }
-
-    if quad_len != 0 {
-        if quad_len == 1 {
-            return None;
-        }
-        for slot in &mut quad[quad_len..] {
-            *slot = b'=';
-        }
-        decode_base64_quad(&quad, &mut out)?;
-    }
-
-    Some(out)
-}
-
-fn decode_base64_quad(quad: &[u8; 4], out: &mut Vec<u8>) -> Option<()> {
-    let pad = quad.iter().rev().take_while(|&&b| b == b'=').count();
-    if pad > 2 || quad[..4 - pad].contains(&b'=') {
-        return None;
-    }
-
-    let mut value = 0u32;
-    for &byte in quad {
-        value <<= 6;
-        if byte != b'=' {
-            value |= decode_base64_char(byte)? as u32;
-        }
-    }
-
-    out.push((value >> 16) as u8);
-    if pad < 2 {
-        out.push((value >> 8) as u8);
-    }
-    if pad == 0 {
-        out.push(value as u8);
-    }
-    Some(())
-}
-
-fn decode_base64_char(byte: u8) -> Option<u8> {
-    match byte {
-        b'A'..=b'Z' => Some(byte - b'A'),
-        b'a'..=b'z' => Some(byte - b'a' + 26),
-        b'0'..=b'9' => Some(byte - b'0' + 52),
-        b'+' => Some(62),
-        b'/' => Some(63),
-        _ => None,
-    }
 }
 
 /// Parse a WWW-Authenticate Bearer challenge header.

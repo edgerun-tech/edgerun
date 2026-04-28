@@ -787,8 +787,7 @@ fn parse_usb_language_ids(bytes: &[u8]) -> Result<Vec<u16>, GoodixFingerprintErr
 }
 
 fn fixed_c_string(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).to_string()
+    edgerun_encoding::cstring::decode_c_string_lossy(bytes)
 }
 
 fn hex_string(bytes: &[u8]) -> String {

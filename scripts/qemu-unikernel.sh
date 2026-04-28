@@ -24,10 +24,22 @@ qemu_console_log="${QEMU_CONSOLE_LOG:-/tmp/edgerun-qemu-virtio-console.log}"
 qemu_disk_img="${QEMU_DISK_IMG:-/tmp/edgerun-qemu-virtio-blk.img}"
 qemu_disk_size="${QEMU_DISK_SIZE:-64M}"
 qemu_disk_layout="${QEMU_DISK_LAYOUT:-empty}"
+qemu_http_smoke="${QEMU_HTTP_SMOKE:-0}"
+qemu_oci_pull_smoke="${QEMU_OCI_PULL_SMOKE:-0}"
 qemu_boot_config="${QEMU_BOOT_CONFIG:-image=registry.local/edge/test:latest
-edgefs=partition
+edgefs=format-data-partition
 rootfs_path=/apps/test
 }"
+if [[ "$qemu_http_smoke" != "0" ]]; then
+    qemu_boot_config="${qemu_boot_config}http_smoke=http://10.0.2.2:${QEMU_HTTP_SMOKE_PORT:-18080}/edgerun-smoke
+"
+fi
+if [[ "$qemu_oci_pull_smoke" != "0" ]]; then
+    qemu_boot_config="${qemu_boot_config}image=10.0.2.2:${QEMU_OCI_PULL_SMOKE_PORT:-18080}/edge/test:latest
+oci_pull=true
+registry_insecure_http=true
+"
+fi
 
 create_qemu_disk_image() {
     local image="$1"
@@ -46,6 +58,21 @@ create_qemu_disk_image() {
         fat-boot)
             printf '\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x08\x00\x00\x00\xf8\x01\x00' |
                 dd of="$image" bs=1 seek=446 conv=notrunc status=none
+            printf '\x55\xaa' | dd of="$image" bs=1 seek=510 conv=notrunc status=none
+            mkfs.fat --invariant --offset=2048 -F 16 -r 16 -n EDGERUN "$image" 64512
+            local cfg_dir
+            cfg_dir="$(mktemp -d)"
+            printf '%s' "$qemu_boot_config" >"$cfg_dir/boot.cfg"
+            mmd -i "$image@@1048576" ::/edgerun
+            mcopy -i "$image@@1048576" "$cfg_dir/boot.cfg" ::/edgerun/
+            rm -f "$cfg_dir/boot.cfg"
+            rmdir "$cfg_dir"
+            ;;
+        fat-edgefs-boot)
+            printf '\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x08\x00\x00\x00\xfc\x00\x00' |
+                dd of="$image" bs=1 seek=446 conv=notrunc status=none
+            printf '\x00\x00\x00\x00\x83\x00\x00\x00\x00\x08\x01\x00\x00\xf0\x00\x00' |
+                dd of="$image" bs=1 seek=462 conv=notrunc status=none
             printf '\x55\xaa' | dd of="$image" bs=1 seek=510 conv=notrunc status=none
             mkfs.fat --invariant --offset=2048 -F 16 -r 16 -n EDGERUN "$image" 64512
             local cfg_dir

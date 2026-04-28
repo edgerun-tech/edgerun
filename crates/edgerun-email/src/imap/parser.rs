@@ -287,55 +287,7 @@ pub fn format_search(ids: &[u32]) -> String {
 
 /// Format an ENVELOPE response.
 pub fn format_envelope(envelope: &crate::imap::types::Envelope) -> String {
-    let date = format_string_or_nil(&envelope.date);
-    let subject = format_string_or_nil(&envelope.subject);
-    let from = format_address_list(&envelope.from);
-    let sender = format_address_list_opt(&envelope.sender);
-    let reply_to = format_address_list_opt(&envelope.reply_to);
-    let to = format_address_list(&envelope.to);
-    let cc = format_address_list(&envelope.cc);
-    let bcc = format_address_list(&envelope.bcc);
-    let in_reply_to = format_string_or_nil(&envelope.in_reply_to);
-    let message_id = format_string_or_nil(&envelope.message_id);
-
-    format_untagged(&format!(
-        "ENVELOPE {} {} {} {} {} {} {} {} {} {}",
-        date, subject, from, sender, reply_to, to, cc, bcc, in_reply_to, message_id,
-    ))
-}
-
-// ===========================================================================
-// Helpers
-// ===========================================================================
-
-fn format_string_or_nil(s: &Option<String>) -> String {
-    match s {
-        Some(s) if !s.is_empty() => format!("\"{}\"", s.replace('"', "\\\"")),
-        _ => "NIL".to_string(),
-    }
-}
-
-fn format_address_list(addrs: &[crate::imap::types::Address]) -> String {
-    if addrs.is_empty() {
-        return "NIL".to_string();
-    }
-    let parts: Vec<String> = addrs.iter().map(format_address).collect();
-    format!("({})", parts.join(" "))
-}
-
-fn format_address_list_opt(addr: &Option<crate::imap::types::Address>) -> String {
-    match addr {
-        Some(a) => format!("({})", format_address(a)),
-        None => "NIL".to_string(),
-    }
-}
-
-fn format_address(addr: &crate::imap::types::Address) -> String {
-    let name = format_string_or_nil(&addr.name);
-    let adl = format_string_or_nil(&addr.adl);
-    let mailbox = format_string_or_nil(&addr.mailbox);
-    let host = format_string_or_nil(&addr.host);
-    format!("({} {} {} {})", name, adl, mailbox, host)
+    format_untagged(&format!("ENVELOPE {}", envelope.format_imap()))
 }
 
 #[cfg(test)]

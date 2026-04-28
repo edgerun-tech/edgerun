@@ -11,6 +11,9 @@ use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::{command_hash, validate_command, CommandValidationContext};
 use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
 use edgerun_core::result::Verdict;
+use edgerun_core::util::{
+    now_prost_timestamp, now_unix_micros_u64, now_unix_millis_i64, now_unix_secs_i64,
+};
 use edgerun_core::validators_proto::{
     validate_control_change_command, validate_delegation_chain, validate_revocation_record,
 };
@@ -27,7 +30,6 @@ use edgerun_proto::edgerun::v0::trust::{
 use edgerun_storage::NodeStore;
 use prost::Message;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
 // Controller state
@@ -183,10 +185,7 @@ pub fn dispatch_command(
     rate_limiter: &super::workload_policy::RateLimiter,
     running_workloads: &std::sync::Arc<super::running_workloads::RunningWorkloads>,
 ) -> CommandDispatchResult {
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(std::time::Duration::ZERO)
-        .as_millis() as i64;
+    let now_ms = now_unix_millis_i64();
 
     let local_node_id = signer.node_id().0;
 
@@ -1359,10 +1358,7 @@ fn workload_thread_body(
     use edgerun_core::accounting::{WorkPriority, WorkStatus};
 
     let start_monotonic = std::time::Instant::now();
-    let start_time_us = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or(std::time::Duration::ZERO)
-        .as_micros() as u64;
+    let start_time_us = now_unix_micros_u64();
 
     // Await container exit (blocking). The container will be killed
     // if terminate() was called — the RunningContainer::kill() path
@@ -1777,10 +1773,7 @@ const MAX_CERT_AGE_US: u64 = 24 * 60 * 60 * 1_000_000; // 24 hours
 fn check_cert_freshness_impl(
     cert: &edgerun_core::accounting::PerformanceCertificate,
 ) -> Result<(), String> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or(std::time::Duration::ZERO)
-        .as_micros() as u64;
+    let now = now_unix_micros_u64();
     let age = now.saturating_sub(cert.benchmark_completed_us);
     if age > MAX_CERT_AGE_US {
         return Err(format!(
@@ -1859,10 +1852,7 @@ fn dispatch_create_delegation(
     controllers: &mut ControllerSet,
     delegation: &ProtoDelegationRecord,
 ) -> CommandDispatchResult {
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(std::time::Duration::ZERO)
-        .as_millis() as i64;
+    let now_ms = now_unix_millis_i64();
     let validation = validate_delegation_chain(
         &[delegation.clone()],
         now_ms,
@@ -2034,10 +2024,7 @@ fn dispatch_create_revocation(
         .map(|i| edgerun_core::util::bytes_to_hex(&i.identity_id))
         .unwrap_or_default();
 
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(std::time::Duration::ZERO)
-        .as_millis() as i64;
+    let now_ms = now_unix_millis_i64();
     let trusted_issuers = controllers.to_vec();
     let validation = validate_revocation_record(revocation, now_ms, &trusted_issuers);
     if validation.verdict != Verdict::Accept {
@@ -2268,7 +2255,7 @@ pub(crate) fn append_signed_event(
             }),
         event_type: event_type as i32,
         event_version,
-        recorded_at: Some(edgerun_core::util::system_time_to_prost(SystemTime::now())),
+        recorded_at: Some(now_prost_timestamp()),
         effective_at: None,
         payload_object,
         related_events,
@@ -3501,10 +3488,7 @@ mod tests {
 
         append_genesis(&mut store, &node_id);
 
-        let now_secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now_secs = now_unix_secs_i64();
 
         // Build a structurally valid but unsigned delegation record.
         let delegation = DelegationRecord {
@@ -3572,10 +3556,7 @@ mod tests {
 
         append_genesis(&mut store, &node_id);
 
-        let now_secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now_secs = now_unix_secs_i64();
         let mut delegation = DelegationRecord {
             record_version: 1,
             delegation_id: vec![1, 2, 3, 4],
@@ -3711,10 +3692,7 @@ mod tests {
 
         append_genesis(&mut store, &node_id);
 
-        let now_secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now_secs = now_unix_secs_i64();
         let mut revocation = RevocationRecord {
             record_version: 1,
             revocation_id: vec![10, 20, 30],

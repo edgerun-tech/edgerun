@@ -2,6 +2,7 @@ use crate::prelude::v1::*;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ptr::read_volatile;
+use edgerun_encoding::byteorder::{try_read_u16_le, try_read_u32_le, try_read_u64_le};
 
 use crate::types::TpmError;
 
@@ -213,38 +214,18 @@ fn checksum(bytes: &[u8]) -> u8 {
 }
 
 fn read_le_u16(bytes: &[u8], offset: usize) -> Result<u16, TpmError> {
-    if bytes.len().saturating_sub(offset) < 2 {
-        return Err(TpmError::Protocol("ACPI u16 exceeds buffer".into()));
-    }
-    Ok(u16::from_le_bytes([bytes[offset], bytes[offset + 1]]))
+    try_read_u16_le(bytes, offset)
+        .ok_or_else(|| TpmError::Protocol("ACPI u16 exceeds buffer".into()))
 }
 
 fn read_le_u32(bytes: &[u8], offset: usize) -> Result<u32, TpmError> {
-    if bytes.len().saturating_sub(offset) < 4 {
-        return Err(TpmError::Protocol("ACPI u32 exceeds buffer".into()));
-    }
-    Ok(u32::from_le_bytes([
-        bytes[offset],
-        bytes[offset + 1],
-        bytes[offset + 2],
-        bytes[offset + 3],
-    ]))
+    try_read_u32_le(bytes, offset)
+        .ok_or_else(|| TpmError::Protocol("ACPI u32 exceeds buffer".into()))
 }
 
 fn read_le_u64(bytes: &[u8], offset: usize) -> Result<u64, TpmError> {
-    if bytes.len().saturating_sub(offset) < 8 {
-        return Err(TpmError::Protocol("ACPI u64 exceeds buffer".into()));
-    }
-    Ok(u64::from_le_bytes([
-        bytes[offset],
-        bytes[offset + 1],
-        bytes[offset + 2],
-        bytes[offset + 3],
-        bytes[offset + 4],
-        bytes[offset + 5],
-        bytes[offset + 6],
-        bytes[offset + 7],
-    ]))
+    try_read_u64_le(bytes, offset)
+        .ok_or_else(|| TpmError::Protocol("ACPI u64 exceeds buffer".into()))
 }
 
 #[cfg(test)]

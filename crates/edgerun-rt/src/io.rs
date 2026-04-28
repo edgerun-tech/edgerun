@@ -37,7 +37,7 @@ pub type Result<T> = core::result::Result<T, IoError>;
 
 pub trait AsyncRead {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8])
-    -> Poll<Result<usize>>;
+        -> Poll<Result<usize>>;
 }
 
 pub trait AsyncWrite {

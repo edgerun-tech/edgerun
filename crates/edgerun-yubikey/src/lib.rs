@@ -1015,21 +1015,7 @@ fn parse_apdu_response(bytes: &[u8]) -> Result<YubiKeyApduResponse, YubiKeyError
 }
 
 fn parse_pcsc_multi_string(bytes: &[u8]) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut start = 0usize;
-    while start < bytes.len() {
-        let end = bytes[start..]
-            .iter()
-            .position(|b| *b == 0)
-            .map(|i| start + i)
-            .unwrap_or(bytes.len());
-        if end == start {
-            break;
-        }
-        out.push(String::from_utf8_lossy(&bytes[start..end]).to_string());
-        start = end + 1;
-    }
-    out
+    edgerun_encoding::cstring::decode_c_multi_string_lossy_until_empty(bytes)
 }
 
 fn parse_yubikey_version(bytes: &[u8]) -> Result<[u8; 3], YubiKeyError> {

@@ -1,6 +1,4 @@
-use std::time::SystemTime;
-
-use edgerun_core::util::system_time_to_prost;
+use edgerun_core::util::now_prost_timestamp;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_storage::NodeStore;
 
@@ -339,7 +337,7 @@ pub fn execute_query(
             identity_kind: Some(2), // NODE
             key_hint: Some(responder_node_id.0.to_vec()),
         }),
-        answered_at: Some(system_time_to_prost(SystemTime::now())),
+        answered_at: Some(now_prost_timestamp()),
         completeness,
         snapshot_refs,
         event_refs,
@@ -592,7 +590,7 @@ pub fn build_query_denial(
             identity_kind: Some(2),
             key_hint: Some(responder_node_id.0.to_vec()),
         }),
-        answered_at: Some(system_time_to_prost(SystemTime::now())),
+        answered_at: Some(now_prost_timestamp()),
         completeness: ResultCompleteness::Denied as i32,
         snapshot_refs: vec![],
         event_refs: vec![],
@@ -623,7 +621,7 @@ fn build_signed_query_denial(
             identity_kind: Some(2),
             key_hint: Some(responder_node_id.0.to_vec()),
         }),
-        answered_at: Some(system_time_to_prost(SystemTime::now())),
+        answered_at: Some(now_prost_timestamp()),
         completeness: ResultCompleteness::Denied as i32,
         snapshot_refs: vec![],
         event_refs: vec![],

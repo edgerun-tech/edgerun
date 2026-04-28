@@ -4,6 +4,7 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
+use edgerun_encoding::byteorder::{read_i16_le, read_i64_le, read_u32_le};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 use edgerun_wifi::{
@@ -101,7 +102,7 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
         ));
     }
     let mut cursor = 0usize;
-    let count = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
+    let count = read_u32_le(bytes, cursor) as usize;
     cursor += 4;
     let mut observations = Vec::with_capacity(count);
     for _ in 0..count {
@@ -120,7 +121,7 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
                     "remote wifi signal payload too short",
                 ));
             }
-            let v = i16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
+            let v = read_i16_le(bytes, cursor);
             cursor += 2;
             Some(v)
         } else {
@@ -139,7 +140,7 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
                     "remote wifi frequency payload too short",
                 ));
             }
-            let v = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+            let v = read_u32_le(bytes, cursor);
             cursor += 4;
             Some(v)
         } else {
@@ -162,7 +163,7 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
             }
         };
         cursor += 1;
-        let observed_at_unix_ms = i64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
+        let observed_at_unix_ms = read_i64_le(bytes, cursor);
         cursor += 8;
         observations.push(WifiNetworkObservation {
             interface_name,

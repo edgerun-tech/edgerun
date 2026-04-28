@@ -1,6 +1,7 @@
 use crate::prelude::v1::*;
 use alloc::format;
 use alloc::vec::Vec;
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
 
 use crate::constants::*;
 use crate::types::*;
@@ -23,9 +24,9 @@ pub fn parse_response_header(bytes: &[u8]) -> Result<TpmResponseHeader, TpmError
         ));
     }
     Ok(TpmResponseHeader {
-        tag: u16::from_be_bytes([bytes[0], bytes[1]]),
-        size: u32::from_be_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]),
-        response_code: u32::from_be_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]),
+        tag: read_u16_be(bytes, 0),
+        size: read_u32_be(bytes, 2),
+        response_code: read_u32_be(bytes, 6),
     })
 }
 
@@ -50,8 +51,7 @@ pub fn parse_sign_response(response: &[u8]) -> Result<TpmParsedSignature, TpmErr
     let header = ensure_success_response(response)?;
     let mut cursor = 10usize;
     let parameter_bytes = if header.tag == TPM_ST_SESSIONS && response.len() >= 14 {
-        let parameter_size =
-            u32::from_be_bytes([response[10], response[11], response[12], response[13]]) as usize;
+        let parameter_size = read_u32_be(response, 10) as usize;
         if 14 + parameter_size <= response.len() {
             cursor = 14;
             &response[..14 + parameter_size]

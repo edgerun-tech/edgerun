@@ -10,6 +10,7 @@ use alloc::{
     vec::Vec,
 };
 use core::fmt;
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
 
 // ---------------------------------------------------------------------------
 // Record type constants (RFC 1035 + extensions)
@@ -748,7 +749,7 @@ impl DnsRecordData {
                 if data.len() < 3 {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let priority = u16::from_be_bytes([data[0], data[1]]);
+                let priority = read_u16_be(data, 0);
                 let exchange = decode_domain_name(data, 2, offset_map)?;
                 Ok(Self::MX { priority, exchange })
             }
@@ -769,32 +770,11 @@ impl DnsRecordData {
                 if pos + 20 > data.len() {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let serial =
-                    u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
-                let refresh = u32::from_be_bytes([
-                    data[pos + 4],
-                    data[pos + 5],
-                    data[pos + 6],
-                    data[pos + 7],
-                ]);
-                let retry = u32::from_be_bytes([
-                    data[pos + 8],
-                    data[pos + 9],
-                    data[pos + 10],
-                    data[pos + 11],
-                ]);
-                let expire = u32::from_be_bytes([
-                    data[pos + 12],
-                    data[pos + 13],
-                    data[pos + 14],
-                    data[pos + 15],
-                ]);
-                let minimum = u32::from_be_bytes([
-                    data[pos + 16],
-                    data[pos + 17],
-                    data[pos + 18],
-                    data[pos + 19],
-                ]);
+                let serial = read_u32_be(data, pos);
+                let refresh = read_u32_be(data, pos + 4);
+                let retry = read_u32_be(data, pos + 8);
+                let expire = read_u32_be(data, pos + 12);
+                let minimum = read_u32_be(data, pos + 16);
                 Ok(Self::SOA {
                     mname,
                     rname,
@@ -809,9 +789,9 @@ impl DnsRecordData {
                 if data.len() < 8 {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let priority = u16::from_be_bytes([data[0], data[1]]);
-                let weight = u16::from_be_bytes([data[2], data[3]]);
-                let port = u16::from_be_bytes([data[4], data[5]]);
+                let priority = read_u16_be(data, 0);
+                let weight = read_u16_be(data, 2);
+                let port = read_u16_be(data, 4);
                 let target = decode_domain_name(data, 6, offset_map)?;
                 Ok(Self::SRV {
                     priority,
@@ -824,8 +804,8 @@ impl DnsRecordData {
                 if data.len() < 4 {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let order = u16::from_be_bytes([data[0], data[1]]);
-                let preference = u16::from_be_bytes([data[2], data[3]]);
+                let order = read_u16_be(data, 0);
+                let preference = read_u16_be(data, 2);
                 let mut pos = 4;
                 // Character strings: length byte + data
                 let parse_charstr = |d: &[u8], p: &mut usize| -> String {
@@ -883,7 +863,7 @@ impl DnsRecordData {
                 if data.len() < 2 {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let priority = u16::from_be_bytes([data[0], data[1]]);
+                let priority = read_u16_be(data, 0);
                 let target = decode_domain_name(data, 2, offset_map)?;
                 let target_len = domain_name_wire_len(data, 2);
                 let params = data[2 + target_len..].to_vec();
@@ -897,7 +877,7 @@ impl DnsRecordData {
                 if data.len() < 4 {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let key_tag = u16::from_be_bytes([data[0], data[1]]);
+                let key_tag = read_u16_be(data, 0);
                 let algorithm = data[2];
                 let digest_type = data[3];
                 Ok(Self::DS {
@@ -911,7 +891,7 @@ impl DnsRecordData {
                 if data.len() < 4 {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let flags = u16::from_be_bytes([data[0], data[1]]);
+                let flags = read_u16_be(data, 0);
                 let protocol = data[2];
                 let algorithm = data[3];
                 Ok(Self::DNSKEY {
@@ -925,13 +905,13 @@ impl DnsRecordData {
                 if data.len() < 18 {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let type_covered = u16::from_be_bytes([data[0], data[1]]);
+                let type_covered = read_u16_be(data, 0);
                 let algorithm = data[2];
                 let labels = data[3];
-                let original_ttl = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
-                let expiration = u32::from_be_bytes([data[8], data[9], data[10], data[11]]);
-                let inception = u32::from_be_bytes([data[12], data[13], data[14], data[15]]);
-                let key_tag = u16::from_be_bytes([data[16], data[17]]);
+                let original_ttl = read_u32_be(data, 4);
+                let expiration = read_u32_be(data, 8);
+                let inception = read_u32_be(data, 12);
+                let key_tag = read_u16_be(data, 16);
                 // Signer name starts at offset 18, followed by signature
                 let signer_name = decode_domain_name(data, 18, offset_map)?;
                 let signer_len = domain_name_wire_len(data, 18);
@@ -965,7 +945,7 @@ impl DnsRecordData {
                 }
                 let hash_algorithm = data[0];
                 let flags = data[1];
-                let iterations = u16::from_be_bytes([data[2], data[3]]);
+                let iterations = read_u16_be(data, 2);
                 let salt_len = data[4] as usize;
                 let salt_start = 5;
                 let salt_end = salt_start + salt_len;
@@ -1001,7 +981,7 @@ impl DnsRecordData {
                 }
                 let ext_rcode = data[0];
                 let version = data[1];
-                let flags = u16::from_be_bytes([data[2], data[3]]);
+                let flags = read_u16_be(data, 2);
                 let options = data[4..].to_vec();
                 Ok(Self::OPT {
                     ext_rcode,
@@ -1028,25 +1008,20 @@ impl DnsRecordData {
                     if pos + 10 > data.len() {
                         return Ok(Self::Raw(data.to_vec()));
                     }
-                    let time_hi = u32::from_be_bytes([
-                        data[pos],
-                        data[pos + 1],
-                        data[pos + 2],
-                        data[pos + 3],
-                    ]);
-                    let time_lo = u16::from_be_bytes([data[pos + 4], data[pos + 5]]);
+                    let time_hi = read_u32_be(data, pos);
+                    let time_lo = read_u16_be(data, pos + 4);
                     let time_signed = ((time_hi as u64) << 16) | (time_lo as u64);
-                    let fudge = u16::from_be_bytes([data[pos + 6], data[pos + 7]]);
-                    let mac_size = u16::from_be_bytes([data[pos + 8], data[pos + 9]]);
+                    let fudge = read_u16_be(data, pos + 6);
+                    let mac_size = read_u16_be(data, pos + 8);
                     pos += 10;
                     if pos + mac_size as usize + 6 > data.len() {
                         return Ok(Self::Raw(data.to_vec()));
                     }
                     let mac = data[pos..pos + mac_size as usize].to_vec();
                     pos += mac_size as usize;
-                    let orig_id = u16::from_be_bytes([data[pos], data[pos + 1]]);
-                    let error = u16::from_be_bytes([data[pos + 2], data[pos + 3]]);
-                    let other_len = u16::from_be_bytes([data[pos + 4], data[pos + 5]]);
+                    let orig_id = read_u16_be(data, pos);
+                    let error = read_u16_be(data, pos + 2);
+                    let other_len = read_u16_be(data, pos + 4);
                     pos += 6;
                     let other_data = if other_len > 0 && pos + other_len as usize <= data.len() {
                         data[pos..pos + other_len as usize].to_vec()
@@ -1105,16 +1080,16 @@ impl DnsRecordData {
                     size: data[1] as u32,
                     horiz_pre: data[2] as u32,
                     vert_pre: data[3] as u32,
-                    latitude: u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
-                    longitude: u32::from_be_bytes([data[8], data[9], data[10], data[11]]),
-                    altitude: u32::from_be_bytes([data[12], data[13], data[14], data[15]]),
+                    latitude: read_u32_be(data, 4),
+                    longitude: read_u32_be(data, 8),
+                    altitude: read_u32_be(data, 12),
                 })
             }
             DnsRecordType::AFSDB => {
                 if data.len() < 4 {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let subtype = u16::from_be_bytes([data[0], data[1]]);
+                let subtype = read_u16_be(data, 0);
                 let hostname = decode_domain_name(data, 2, offset_map)?;
                 Ok(Self::AFSDB { subtype, hostname })
             }
@@ -1122,8 +1097,8 @@ impl DnsRecordData {
                 if data.len() < 4 {
                     return Ok(Self::Raw(data.to_vec()));
                 }
-                let priority = u16::from_be_bytes([data[0], data[1]]);
-                let weight = u16::from_be_bytes([data[2], data[3]]);
+                let priority = read_u16_be(data, 0);
+                let weight = read_u16_be(data, 2);
                 let target = String::from_utf8_lossy(&data[4..]).to_string();
                 Ok(Self::URI {
                     priority,

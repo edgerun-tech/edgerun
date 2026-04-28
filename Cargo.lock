@@ -291,6 +291,7 @@ name = "edgerun-alsa-speaker"
 version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
+ "edgerun-encoding",
  "edgerun-linux-sysfs",
  "edgerun-speaker",
 ]
@@ -1312,6 +1313,7 @@ name = "edgerun-tpm"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-encoding",
 ]
 
 [[package]]
@@ -1331,6 +1333,7 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-dhcp",
  "edgerun-edgefs",
+ "edgerun-http",
  "edgerun-oci",
  "edgerun-platform",
  "edgerun-rt",

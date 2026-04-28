@@ -1,3 +1,6 @@
+mod common;
+
+use common::{parse_u32, parse_u64};
 use edgerun_virtual_disk::{
     BlockBackend, BlockDeviceInfo, BlockError, FileBlockBackend, MemoryBlockBackend,
     TcpBlockServer, UnixBlockServer,
@@ -109,18 +112,6 @@ fn serve_backend<B: BlockBackend>(
             Ok(())
         }
     }
-}
-
-fn parse_u32(value: &str, field: &str) -> Result<u32, BlockError> {
-    value
-        .parse::<u32>()
-        .map_err(|err| BlockError::ProtocolError(format!("invalid {field}: {err}")))
-}
-
-fn parse_u64(value: &str, field: &str) -> Result<u64, BlockError> {
-    value
-        .parse::<u64>()
-        .map_err(|err| BlockError::ProtocolError(format!("invalid {field}: {err}")))
 }
 
 fn print_usage(program: &str) {

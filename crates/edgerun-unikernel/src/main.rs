@@ -5,6 +5,7 @@
 
 extern crate alloc;
 extern crate edgerun_dhcp;
+extern crate edgerun_http;
 extern crate edgerun_oci;
 extern crate edgerun_platform;
 extern crate edgerun_rt as rt;
@@ -20,6 +21,7 @@ use rt::{block_on, crc32, IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket};
 
 use core::future::Future;
 use core::pin::Pin;
+use core::sync::atomic::{AtomicPtr, Ordering};
 use core::task::{Context, Poll};
 
 #[cfg(all(target_arch = "x86_64", target_os = "none"))]
@@ -212,6 +214,37 @@ mod oci_image_boot {
         }
     }
 
+    pub fn image_boot_error_label(error: &OciImageBootError) -> &'static str {
+        match error {
+            OciImageBootError::InvalidImageRef(_) => "invalid image ref",
+            OciImageBootError::Registry(RegistryError::HttpStatus(_)) => "registry http status",
+            OciImageBootError::Registry(RegistryError::HttpError(_)) => "registry http error",
+            OciImageBootError::Registry(RegistryError::AuthError(_)) => "registry auth error",
+            OciImageBootError::Registry(RegistryError::ManifestNotFound(_)) => {
+                "registry manifest not found"
+            }
+            OciImageBootError::Registry(RegistryError::NoManifests) => "registry no manifests",
+            OciImageBootError::Registry(RegistryError::DigestMismatch { .. }) => {
+                "registry digest mismatch"
+            }
+            OciImageBootError::Registry(RegistryError::ParseError(_)) => "registry parse error",
+            OciImageBootError::Elf(_) => "elf error",
+        }
+    }
+
+    pub fn image_boot_error_detail(error: &OciImageBootError) -> Option<&str> {
+        match error {
+            OciImageBootError::InvalidImageRef(detail) => Some(detail.as_str()),
+            OciImageBootError::Registry(RegistryError::HttpError(detail)) => Some(detail.as_str()),
+            OciImageBootError::Registry(RegistryError::AuthError(detail)) => Some(detail.as_str()),
+            OciImageBootError::Registry(RegistryError::ManifestNotFound(detail)) => {
+                Some(detail.as_str())
+            }
+            OciImageBootError::Registry(RegistryError::ParseError(detail)) => Some(detail.as_str()),
+            _ => None,
+        }
+    }
+
     impl From<DiskBootError> for OciDiskImageBootError {
         fn from(error: DiskBootError) -> Self {
             Self::Disk(error)
@@ -228,11 +261,15 @@ mod oci_image_boot {
         fs: &mut EdgeFs<S>,
         image_ref: &str,
         rootfs_path: &str,
+        registry_insecure_http: bool,
     ) -> Result<edgerun_oci::EdgeFsImagePullReport, OciImageBootError> {
         let image: ImageRef = image_ref
             .parse()
             .map_err(OciImageBootError::InvalidImageRef)?;
         let mut client = RegistryClient::new();
+        if registry_insecure_http {
+            client = client.insecure_http();
+        }
         client
             .pull_into_edgefs(&image, rootfs_path, fs)
             .await
@@ -243,7 +280,15 @@ mod oci_image_boot {
         fs: &mut EdgeFs<S>,
         config: &BootConfig,
     ) -> Result<edgerun_oci::EdgeFsImagePullReport, OciImageBootError> {
-        unsafe { pull_image_into_edgefs(fs, &config.image, &config.rootfs_path).await }
+        unsafe {
+            pull_image_into_edgefs(
+                fs,
+                &config.image,
+                &config.rootfs_path,
+                config.registry_insecure_http,
+            )
+            .await
+        }
     }
 
     pub async unsafe fn pull_configured_disk_image<S: BlockStorage>(
@@ -303,7 +348,7 @@ mod oci_image_boot {
         stack: &mut [u8],
         load_bias: OciElfLoadBias,
     ) -> Result<core::convert::Infallible, OciImageBootError> {
-        let report = unsafe { pull_image_into_edgefs(fs, image_ref, rootfs_path).await? };
+        let report = unsafe { pull_image_into_edgefs(fs, image_ref, rootfs_path, false).await? };
         unsafe {
             launch_pulled_edgefs(
                 fs, &report, scratch, stack_base, stack_top, stack, load_bias,
@@ -372,6 +417,7 @@ mod boot_config {
     pub enum EdgeFsBootTarget {
         ExistingPartition,
         FormatFirstPartition,
+        FormatDataPartition,
         FormatWholeDisk,
     }
 
@@ -380,6 +426,9 @@ mod boot_config {
         pub image: String,
         pub edgefs: EdgeFsBootTarget,
         pub rootfs_path: String,
+        pub http_smoke: Option<String>,
+        pub oci_pull: bool,
+        pub registry_insecure_http: bool,
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -415,6 +464,9 @@ mod boot_config {
             let mut image = None;
             let mut edgefs = EdgeFsBootTarget::ExistingPartition;
             let mut rootfs_path = "/".to_string();
+            let mut http_smoke = None;
+            let mut oci_pull = false;
+            let mut registry_insecure_http = false;
 
             for (index, raw_line) in text.lines().enumerate() {
                 let line_no = index + 1;
@@ -439,6 +491,11 @@ mod boot_config {
                     "image" | "oci_image" | "ref" => image = Some(value.to_string()),
                     "edgefs" => edgefs = parse_edgefs_target(value)?,
                     "rootfs" | "rootfs_path" => rootfs_path = parse_rootfs_path(value)?,
+                    "http_smoke" | "http_smoke_url" => http_smoke = Some(value.to_string()),
+                    "oci_pull" | "pull_image" => oci_pull = parse_bool(value, line_no)?,
+                    "registry_insecure_http" | "plain_http_registry" => {
+                        registry_insecure_http = parse_bool(value, line_no)?
+                    }
                     other => return Err(BootConfigError::UnknownKey(other.to_string())),
                 }
             }
@@ -448,7 +505,18 @@ mod boot_config {
                 image,
                 edgefs,
                 rootfs_path,
+                http_smoke,
+                oci_pull,
+                registry_insecure_http,
             })
+        }
+    }
+
+    fn parse_bool(value: &str, line_no: usize) -> Result<bool, BootConfigError> {
+        match value {
+            "1" | "true" | "yes" | "on" => Ok(true),
+            "0" | "false" | "no" | "off" => Ok(false),
+            _ => Err(BootConfigError::InvalidLine(line_no)),
         }
     }
 
@@ -460,6 +528,12 @@ mod boot_config {
             "format-partition" | "format_partition" | "first-partition" | "first_partition" => {
                 Ok(EdgeFsBootTarget::FormatFirstPartition)
             }
+            "format-data-partition"
+            | "format_data_partition"
+            | "data-partition"
+            | "data_partition"
+            | "first-data-partition"
+            | "first_data_partition" => Ok(EdgeFsBootTarget::FormatDataPartition),
             "whole-disk" | "whole_disk" | "format-whole-disk" | "format_whole_disk" => {
                 Ok(EdgeFsBootTarget::FormatWholeDisk)
             }
@@ -496,6 +570,9 @@ mod boot_config {
             assert_eq!(config.image, "registry.local/app:latest");
             assert_eq!(config.edgefs, EdgeFsBootTarget::ExistingPartition);
             assert_eq!(config.rootfs_path, "/");
+            assert_eq!(config.http_smoke, None);
+            assert!(!config.oci_pull);
+            assert!(!config.registry_insecure_http);
         }
 
         #[test]
@@ -507,6 +584,39 @@ mod boot_config {
             assert_eq!(config.image, "example.com/ns/app:v1");
             assert_eq!(config.edgefs, EdgeFsBootTarget::FormatWholeDisk);
             assert_eq!(config.rootfs_path, "/apps/app");
+        }
+
+        #[test]
+        fn parses_data_partition_target() {
+            let config =
+                BootConfig::parse(b"image=registry.local/app:v1\nedgefs=format-data-partition\n")
+                    .unwrap();
+
+            assert_eq!(config.edgefs, EdgeFsBootTarget::FormatDataPartition);
+        }
+
+        #[test]
+        fn parses_http_smoke_url() {
+            let config = BootConfig::parse(
+                b"image=registry.local/app:v1\nhttp_smoke=http://10.0.2.2:18080/edgerun-smoke\n",
+            )
+            .unwrap();
+
+            assert_eq!(
+                config.http_smoke.as_deref(),
+                Some("http://10.0.2.2:18080/edgerun-smoke")
+            );
+        }
+
+        #[test]
+        fn parses_oci_pull_options() {
+            let config = BootConfig::parse(
+                b"image=10.0.2.2:18080/edge/app:v1\noci_pull=true\nregistry_insecure_http=yes\n",
+            )
+            .unwrap();
+
+            assert!(config.oci_pull);
+            assert!(config.registry_insecure_http);
         }
     }
 }
@@ -930,6 +1040,10 @@ mod disk_boot {
             EdgeFsBootTarget::FormatFirstPartition => {
                 format_first_partition_as_edgefs(device, key, fs_id).map(OpenedEdgeFs::Partition)
             }
+            EdgeFsBootTarget::FormatDataPartition => {
+                format_first_data_partition_as_edgefs(device, key, fs_id)
+                    .map(OpenedEdgeFs::Partition)
+            }
             EdgeFsBootTarget::FormatWholeDisk => {
                 format_whole_disk_edgefs(device, key, fs_id).map(OpenedEdgeFs::WholeDisk)
             }
@@ -957,6 +1071,28 @@ mod disk_boot {
             return Err(DiskBootError::NoPartition);
         };
         format_partition_as_edgefs(scan_device, first, key, fs_id)
+    }
+
+    pub fn format_first_data_partition_as_edgefs<S: BlockStorage>(
+        device: S,
+        key: [u8; 32],
+        fs_id: [u8; 16],
+    ) -> Result<EdgeFs<PartitionBlockDevice<S>>, DiskBootError> {
+        let mut scan_device = device;
+        let (_, probes) = scan_partition_filesystems(&mut scan_device)?;
+        let Some(first) = probes.iter().find(|probe| {
+            !matches!(
+                probe.filesystem.kind,
+                FileSystemKind::Fat12
+                    | FileSystemKind::Fat16
+                    | FileSystemKind::Fat32
+                    | FileSystemKind::ExFat
+                    | FileSystemKind::Iso9660
+            )
+        }) else {
+            return Err(DiskBootError::NoPartition);
+        };
+        format_partition_as_edgefs(scan_device, &first.partition, key, fs_id)
     }
 
     pub fn format_whole_disk_edgefs<S: BlockStorage>(
@@ -1004,6 +1140,145 @@ struct NetPump<'net, 'stack> {
     logged_arp: bool,
     logged_icmp: bool,
 }
+
+async fn run_http_smoke(url: &str) {
+    let client = edgerun_http::HttpClient::new()
+        .version(edgerun_http::HttpVersion::Http1)
+        .with_connect_timeout(edgerun_http::runtime::time::Duration::from_secs(3))
+        .with_read_timeout(edgerun_http::runtime::time::Duration::from_secs(3));
+    match client.get(url).await {
+        Ok(response) if response.status().as_u16() == 200 => {
+            rt::log::log(1, "Bare HTTP smoke GET ok")
+        }
+        Ok(_) => rt::log::log(1, "Bare HTTP smoke GET bad status"),
+        Err(_) => rt::log::log(1, "Bare HTTP smoke GET failed"),
+    }
+}
+
+#[cfg(target_os = "none")]
+async fn run_configured_oci_pull(config: &boot_config::BootConfig) {
+    if !config.oci_pull {
+        return;
+    }
+
+    rt::log::log(1, "Bare OCI pull into EdgeFS start");
+    let Some(mut block) = edgerun_virtio::find_virtio_blk() else {
+        rt::log::log(1, "Bare OCI pull no VirtIO block device");
+        return;
+    };
+    if !block.init() {
+        rt::log::log(1, "Bare OCI pull VirtIO block init failed");
+        return;
+    }
+
+    let mut storage = disk_boot::RtBlockDeviceStorage::new(block);
+    let edgefs_key = [0x42u8; 32];
+    let edgefs_fs_id = [0x24u8; 16];
+    match disk_boot::open_configured_edgefs(&mut storage, config, edgefs_key, edgefs_fs_id) {
+        Ok(disk_boot::OpenedEdgeFs::Partition(mut fs)) => {
+            match unsafe { oci_image_boot::pull_configured_image_into_edgefs(&mut fs, config).await }
+            {
+                Ok(_) => rt::log::log(1, "Bare OCI pull into EdgeFS ok"),
+                Err(error) => {
+                    rt::log::log(1, "Bare OCI pull into EdgeFS failed");
+                    rt::log::log(1, oci_image_boot::image_boot_error_label(&error));
+                    if let Some(detail) = oci_image_boot::image_boot_error_detail(&error) {
+                        rt::log::log(1, detail);
+                    }
+                }
+            }
+        }
+        Ok(disk_boot::OpenedEdgeFs::WholeDisk(mut fs)) => {
+            match unsafe { oci_image_boot::pull_configured_image_into_edgefs(&mut fs, config).await }
+            {
+                Ok(_) => rt::log::log(1, "Bare OCI pull into EdgeFS ok"),
+                Err(error) => {
+                    rt::log::log(1, "Bare OCI pull into EdgeFS failed");
+                    rt::log::log(1, oci_image_boot::image_boot_error_label(&error));
+                    if let Some(detail) = oci_image_boot::image_boot_error_detail(&error) {
+                        rt::log::log(1, detail);
+                    }
+                }
+            }
+        }
+        Err(_) => rt::log::log(1, "Bare OCI pull EdgeFS open failed"),
+    }
+}
+
+#[cfg(target_os = "none")]
+struct KernelBareNetDriver {
+    net: AtomicPtr<edgerun_virtio::VirtNet>,
+    stack: AtomicPtr<IpStack>,
+}
+
+#[cfg(target_os = "none")]
+unsafe impl Sync for KernelBareNetDriver {}
+
+#[cfg(target_os = "none")]
+impl KernelBareNetDriver {
+    const fn empty() -> Self {
+        Self {
+            net: AtomicPtr::new(core::ptr::null_mut()),
+            stack: AtomicPtr::new(core::ptr::null_mut()),
+        }
+    }
+
+    fn install(&self, net: *mut edgerun_virtio::VirtNet, stack: *mut IpStack) {
+        self.net.store(net, Ordering::Release);
+        self.stack.store(stack, Ordering::Release);
+    }
+
+    fn net(&self) -> *mut edgerun_virtio::VirtNet {
+        self.net.load(Ordering::Acquire)
+    }
+
+    fn stack(&self) -> *mut IpStack {
+        self.stack.load(Ordering::Acquire)
+    }
+}
+
+#[cfg(target_os = "none")]
+impl rt::BareNetDriver for KernelBareNetDriver {
+    fn local_ipv4(&self) -> [u8; 4] {
+        unsafe { *(*self.stack()).ip.as_bytes() }
+    }
+
+    fn gateway_ipv4(&self) -> [u8; 4] {
+        unsafe { *(*self.stack()).gateway.as_bytes() }
+    }
+
+    fn local_mac(&self) -> [u8; 6] {
+        unsafe { (*self.stack()).mac }
+    }
+
+    fn lookup_arp(&self, ipv4: [u8; 4]) -> Option<[u8; 6]> {
+        unsafe { (*self.stack()).arp.lookup(IpAddr::from_slice(&ipv4)) }
+    }
+
+    fn send_frame(&self, frame: &[u8]) -> bool {
+        unsafe { (*self.net()).send(frame) }
+    }
+
+    fn recv_frame(&self, out: &mut [u8]) -> Option<usize> {
+        let len = unsafe { (*self.net()).recv(out)? };
+        if let Some(ParsedPacket::Arp { header, .. }) =
+            Network::new(unsafe { &mut *self.stack() }).recv(&out[..len])
+        {
+            if header.oper == ARP_OP_REQUEST
+                && header.tpa == unsafe { *(*self.stack()).ip.as_bytes() }
+            {
+                let mut network = Network::new(unsafe { &mut *self.stack() });
+                if let Some(reply) = network.send_arp_reply(&header) {
+                    let _ = unsafe { (*self.net()).send(reply) };
+                }
+            }
+        }
+        Some(len)
+    }
+}
+
+#[cfg(target_os = "none")]
+static BARE_NET_DRIVER: KernelBareNetDriver = KernelBareNetDriver::empty();
 
 fn poll_network(
     net: &mut edgerun_virtio::VirtNet,
@@ -1247,6 +1522,7 @@ static MULTIBOOT_HEADER: [u32; 8] = [
 pub unsafe extern "C" fn kernel_main() -> ! {
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel");
+    let mut active_boot_config = None;
 
     edgerun_crypto::rng::register_random_source(fill_bare_random_source);
 
@@ -1338,7 +1614,11 @@ pub unsafe extern "C" fn kernel_main() -> ! {
                 match edgerun_storage::detect_partitions(&mut storage) {
                     Ok(table) if !table.partitions.is_empty() => {
                         rt::log::log(1, "VirtIO block partition table detected");
+                        let mut handled_boot_config = false;
                         for partition in &table.partitions {
+                            if handled_boot_config {
+                                break;
+                            }
                             let mut partition_boot_sector = [0u8; 512];
                             match edgerun_storage::BlockStorage::read_sector(
                                 &mut storage,
@@ -1369,6 +1649,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
                                         }
                                     }
                                     rt::log::log(1, "VirtIO opening FAT boot partition");
+                                    let mut boot_config = None;
                                     match edgerun_storage::FatReadOnly::open(partition_storage) {
                                         Ok(mut fat) => {
                                             rt::log::log(1, "VirtIO FAT boot partition open ok");
@@ -1390,10 +1671,15 @@ pub unsafe extern "C" fn kernel_main() -> ! {
                                                         "VirtIO FAT boot config bytes read ok",
                                                     );
                                                     match boot_config::BootConfig::parse(&bytes) {
-                                                        Ok(_) => rt::log::log(
-                                                            1,
-                                                            "VirtIO FAT boot config read ok",
-                                                        ),
+                                                        Ok(config) => {
+                                                            rt::log::log(
+                                                                1,
+                                                                "VirtIO FAT boot config read ok",
+                                                            );
+                                                            active_boot_config =
+                                                                Some(config.clone());
+                                                            boot_config = Some(config);
+                                                        }
                                                         Err(_) => rt::log::log(
                                                             1,
                                                             "VirtIO FAT boot config parse failed",
@@ -1407,6 +1693,25 @@ pub unsafe extern "C" fn kernel_main() -> ! {
                                             }
                                         }
                                         Err(_) => rt::log::log(1, "VirtIO partition is not FAT"),
+                                    }
+                                    if let Some(config) = boot_config.as_ref() {
+                                        let edgefs_key = [0x42u8; 32];
+                                        let edgefs_fs_id = [0x24u8; 16];
+                                        match disk_boot::open_configured_edgefs(
+                                            &mut storage,
+                                            config,
+                                            edgefs_key,
+                                            edgefs_fs_id,
+                                        ) {
+                                            Ok(_) => {
+                                                rt::log::log(1, "VirtIO EdgeFS boot target open ok")
+                                            }
+                                            Err(_) => rt::log::log(
+                                                1,
+                                                "VirtIO EdgeFS boot target open failed",
+                                            ),
+                                        }
+                                        handled_boot_config = true;
                                     }
                                 }
                                 Err(_) => rt::log::log(1, "VirtIO partition read failed"),
@@ -1573,6 +1878,19 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     } else {
         rt::log::log(1, "Using static fallback IP");
         stack.ip = IpAddr::new(192, 168, 1, 12);
+    }
+
+    BARE_NET_DRIVER.install(&mut net as *mut _, &mut stack as *mut _);
+    rt::install_bare_net_driver(&BARE_NET_DRIVER);
+    rt::log::log(1, "Bare async TCP driver installed");
+    if let Some(url) = active_boot_config
+        .as_ref()
+        .and_then(|config| config.http_smoke.as_deref())
+    {
+        block_on(run_http_smoke(url));
+    }
+    if let Some(config) = active_boot_config.as_ref() {
+        block_on(run_configured_oci_pull(config));
     }
 
     let mut network = Network::new(&mut stack);

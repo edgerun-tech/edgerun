@@ -13,8 +13,8 @@ pub mod base64;
 pub mod buf;
 pub mod byteorder;
 pub mod chunked;
-pub mod cstring;
 pub mod crc32;
+pub mod cstring;
 pub mod frame;
 pub mod hex;
 #[cfg(feature = "hpack")]

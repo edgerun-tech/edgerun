@@ -5,6 +5,7 @@
 
 use edgerun_core::crypto::sha256;
 use edgerun_core::protocol::ProtocolRecord;
+use edgerun_core::util::now_prost_timestamp;
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
 use edgerun_proto::edgerun::v0::{
@@ -12,7 +13,6 @@ use edgerun_proto::edgerun::v0::{
     network::{SessionAccept, SessionHello},
 };
 use prost::Message;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Supported protocol versions.
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -244,13 +244,7 @@ pub fn decode_accept(bytes: &[u8]) -> Result<SessionAccept, prost::DecodeError> 
 
 /// Get current timestamp as protobuf Timestamp.
 pub fn now_timestamp() -> prost_types::Timestamp {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(std::time::Duration::ZERO);
-    prost_types::Timestamp {
-        seconds: now.as_secs() as i64,
-        nanos: now.subsec_nanos() as i32,
-    }
+    now_prost_timestamp()
 }
 
 #[cfg(test)]

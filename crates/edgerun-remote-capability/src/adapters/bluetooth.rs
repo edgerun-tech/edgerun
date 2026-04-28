@@ -7,12 +7,14 @@ use edgerun_bluetooth::{
     BluetoothScanner, BluetoothTransportKind,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_encoding::byteorder::{read_i16_le, read_i64_le, read_u16_le, read_u32_le};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::{
-    decode_optional_string_field, decode_string_field, encode_optional_string_field,
-    encode_string_field, stream_oriented_error,
+    decode_byte_field, decode_optional_string_field, decode_string_field, decode_string_vec,
+    encode_byte_field, encode_optional_string_field, encode_string_field, encode_string_vec,
+    stream_oriented_error,
 };
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
@@ -126,28 +128,6 @@ fn bluetooth_link_kind_from_u8(v: u8) -> Result<BluetoothLinkKind, CapabilityErr
     })
 }
 
-fn encode_string_vec(values: &[String], out: &mut Vec<u8>) {
-    out.extend_from_slice(&(values.len() as u32).to_le_bytes());
-    for value in values {
-        encode_string_field(value, out);
-    }
-}
-
-fn decode_string_vec(bytes: &[u8], cursor: &mut usize) -> Result<Vec<String>, CapabilityError> {
-    if bytes.len() < *cursor + 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote string vector length missing",
-        ));
-    }
-    let count = u32::from_le_bytes(bytes[*cursor..*cursor + 4].try_into().unwrap()) as usize;
-    *cursor += 4;
-    let mut values = Vec::with_capacity(count);
-    for _ in 0..count {
-        values.push(decode_string_field(bytes, cursor)?);
-    }
-    Ok(values)
-}
-
 fn encode_profiles_vec(values: &[BluetoothProfile], out: &mut Vec<u8>) {
     out.extend_from_slice(&(values.len() as u32).to_le_bytes());
     for value in values {
@@ -164,7 +144,7 @@ fn decode_profiles_vec(
             "remote bluetooth profile count missing",
         ));
     }
-    let count = u32::from_le_bytes(bytes[*cursor..*cursor + 4].try_into().unwrap()) as usize;
+    let count = read_u32_le(bytes, *cursor) as usize;
     *cursor += 4;
     if bytes.len() < *cursor + count {
         return Err(CapabilityError::InvalidRequest(
@@ -200,8 +180,7 @@ pub fn encode_bluetooth_scan_result(scan: &BluetoothScanResult) -> Vec<u8> {
         if let Some(class) = observation.classic_device_class {
             out.extend_from_slice(&class.to_le_bytes());
         }
-        out.extend_from_slice(&(observation.advertisement_data.len() as u32).to_le_bytes());
-        out.extend_from_slice(&observation.advertisement_data);
+        encode_byte_field(&observation.advertisement_data, &mut out);
         out.extend_from_slice(&observation.captured_at_unix_ms.to_le_bytes());
     }
     out
@@ -214,7 +193,7 @@ pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult,
         ));
     }
     let mut cursor = 0usize;
-    let count = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
+    let count = read_u32_le(bytes, cursor) as usize;
     cursor += 4;
     let mut observations = Vec::with_capacity(count);
     for _ in 0..count {
@@ -228,7 +207,7 @@ pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult,
         cursor += 1;
         let address_kind = bluetooth_address_kind_from_u8(bytes[cursor])?;
         cursor += 1;
-        let rssi_dbm = i16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
+        let rssi_dbm = read_i16_le(bytes, cursor);
         cursor += 2;
         if bytes.len() < cursor + 1 {
             return Err(CapabilityError::InvalidRequest(
@@ -243,7 +222,7 @@ pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult,
                     "remote bluetooth tx power payload too short",
                 ));
             }
-            let v = i16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
+            let v = read_i16_le(bytes, cursor);
             cursor += 2;
             Some(v)
         } else {
@@ -265,27 +244,19 @@ pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult,
                     "remote bluetooth classic class payload too short",
                 ));
             }
-            let v = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+            let v = read_u32_le(bytes, cursor);
             cursor += 4;
             Some(v)
         } else {
             None
         };
-        if bytes.len() < cursor + 4 {
-            return Err(CapabilityError::InvalidRequest(
-                "remote bluetooth advertisement length missing",
-            ));
-        }
-        let adv_len = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
-        cursor += 4;
-        if bytes.len() < cursor + adv_len + 8 {
+        let advertisement_data = decode_byte_field(bytes, &mut cursor)?;
+        if bytes.len() < cursor + 8 {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth advertisement payload too short",
             ));
         }
-        let advertisement_data = bytes[cursor..cursor + adv_len].to_vec();
-        cursor += adv_len;
-        let captured_at_unix_ms = i64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
+        let captured_at_unix_ms = read_i64_le(bytes, cursor);
         cursor += 8;
         observations.push(BluetoothBeaconObservation {
             device_id,
@@ -345,7 +316,7 @@ pub fn decode_bluetooth_connections(
         ));
     }
     let mut cursor = 0usize;
-    let count = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
+    let count = read_u32_le(bytes, cursor) as usize;
     cursor += 4;
     let mut out = Vec::with_capacity(count);
     for _ in 0..count {
@@ -363,7 +334,7 @@ pub fn decode_bluetooth_connections(
         cursor += 1;
         let outbound = bytes[cursor] != 0;
         cursor += 1;
-        let state = u16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
+        let state = read_u16_le(bytes, cursor);
         cursor += 2;
         let local_name = decode_optional_string_field(bytes, &mut cursor)?;
         let service_uuids = decode_string_vec(bytes, &mut cursor)?;

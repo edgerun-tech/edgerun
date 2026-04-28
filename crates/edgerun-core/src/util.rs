@@ -33,6 +33,70 @@ pub fn system_time_to_prost(time: std::time::SystemTime) -> prost_types::Timesta
     }
 }
 
+/// Current Unix time in seconds.
+pub fn now_unix_secs_i64() -> i64 {
+    #[cfg(not(target_os = "none"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        0
+    }
+}
+
+/// Current Unix time in milliseconds.
+pub fn now_unix_millis_i64() -> i64 {
+    #[cfg(not(target_os = "none"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        0
+    }
+}
+
+/// Current Unix time in microseconds.
+pub fn now_unix_micros_u64() -> u64 {
+    #[cfg(not(target_os = "none"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros() as u64
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        0
+    }
+}
+
+/// Current Unix time as a protobuf timestamp.
+pub fn now_prost_timestamp() -> prost_types::Timestamp {
+    #[cfg(not(target_os = "none"))]
+    {
+        system_time_to_prost(std::time::SystemTime::now())
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        prost_types::Timestamp {
+            seconds: 0,
+            nanos: 0,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Hex encoding/decoding — delegates to edgerun-encoding
 // ---------------------------------------------------------------------------

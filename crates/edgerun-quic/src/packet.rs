@@ -7,6 +7,9 @@ use alloc::{
     vec,
     vec::Vec,
 };
+use edgerun_encoding::quic_varint::{
+    decode_varint as quic_decode_varint, encode_varint as quic_encode_varint,
+};
 
 /// QUIC packet types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -200,12 +203,12 @@ impl QuicPacket {
 
                 if self.header.packet_type == PacketType::Initial {
                     // Token length as varint
-                    self.encode_varint(self.header.token.len() as u64, &mut output);
+                    quic_encode_varint(self.header.token.len() as u64, &mut output);
                     output.extend_from_slice(&self.header.token);
                 }
 
                 // QUIC long-header length includes packet number bytes.
-                self.encode_varint((pn_length + payload_len) as u64, &mut output);
+                quic_encode_varint((pn_length + payload_len) as u64, &mut output);
 
                 let pn_bytes = self.header.packet_number.to_be_bytes();
                 output.extend_from_slice(&pn_bytes[8 - pn_length..]);
@@ -287,7 +290,7 @@ impl QuicPacket {
         let mut token = Vec::new();
         if packet_type == PacketType::Initial {
             let (token_len, bytes_read) =
-                Self::decode_varint(&data[pos..]).map_err(|e| e.to_string())?;
+                quic_decode_varint(&data[pos..]).map_err(|e| e.to_string())?;
             let token_len = token_len as usize;
             pos += bytes_read;
             if pos + token_len > data.len() {
@@ -299,7 +302,7 @@ impl QuicPacket {
 
         // Payload length
         let (payload_len, bytes_read) =
-            Self::decode_varint(&data[pos..]).map_err(|e| e.to_string())?;
+            quic_decode_varint(&data[pos..]).map_err(|e| e.to_string())?;
         pos += bytes_read;
 
         let pn_length = get_packet_number_length(data[0]);
@@ -387,17 +390,6 @@ impl QuicPacket {
             data.len(),
         ))
     }
-
-    /// Encode variable-length integer
-    fn encode_varint(&self, value: u64, output: &mut Vec<u8>) {
-        edgerun_encoding::quic_varint::encode_varint(value, output)
-    }
-
-    /// Decode variable-length integer
-    fn decode_varint(data: &[u8]) -> Result<(u64, usize), std::io::Error> {
-        edgerun_encoding::quic_varint::decode_varint(data)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, format!("{e}")))
-    }
 }
 
 /// Get packet number length from first byte (RFC 9000 bits 0-1 encode length - 1).
@@ -440,11 +432,11 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
 
     if packet_type == PacketType::Initial {
         let (token_len, consumed) =
-            decode_varint_public(&data[pos..]).ok_or("Invalid token length")?;
+            quic_decode_varint(&data[pos..]).map_err(|_| "Invalid token length")?;
         pos += consumed + token_len as usize;
     }
 
-    let (_, consumed) = decode_varint_public(&data[pos..]).ok_or("Invalid length varint")?;
+    let (_, consumed) = quic_decode_varint(&data[pos..]).map_err(|_| "Invalid length varint")?;
     pos += consumed;
 
     let pn_length = get_packet_number_length(first_byte);
@@ -455,10 +447,6 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
     }
 
     Ok(pos)
-}
-
-fn decode_varint_public(data: &[u8]) -> Option<(u64, usize)> {
-    edgerun_encoding::quic_varint::decode_varint(data).ok()
 }
 
 #[cfg(test)]
@@ -488,15 +476,15 @@ mod tests {
         let mut output = Vec::new();
         let pkt = QuicPacket::one_rtt(vec![0u8; 8], 0, vec![]);
 
-        pkt.encode_varint(0, &mut output);
+        quic_encode_varint(0, &mut output);
         assert_eq!(output, vec![0]);
 
         output.clear();
-        pkt.encode_varint(63, &mut output);
+        quic_encode_varint(63, &mut output);
         assert_eq!(output, vec![63]);
 
         output.clear();
-        pkt.encode_varint(64, &mut output);
+        quic_encode_varint(64, &mut output);
         assert_eq!(output, vec![0x40, 64]);
     }
 

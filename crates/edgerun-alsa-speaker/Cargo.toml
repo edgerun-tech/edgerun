@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-encoding = { path = "../edgerun-encoding" }
 edgerun-speaker = { path = "../edgerun-speaker" }
 
 [dev-dependencies]

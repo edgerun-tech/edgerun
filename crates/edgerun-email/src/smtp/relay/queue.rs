@@ -10,7 +10,12 @@ use std::io::{self, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 
+use super::now_secs;
 use crate::rt::{spawn_blocking, RwLock};
+use edgerun_encoding::string_field::{
+    decode_bytes_u64, decode_string_field_u64, encode_bytes_u64, encode_string_field_u64,
+    StringFieldError,
+};
 
 // ===========================================================================
 // Record Types
@@ -111,32 +116,36 @@ impl RecipientStatusType {
 // ===========================================================================
 
 fn write_str(w: &mut Vec<u8>, s: &str) {
-    let bytes = s.as_bytes();
-    w.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
-    w.extend_from_slice(bytes);
+    encode_string_field_u64(s, w).expect("u64 string length prefix cannot overflow on this target");
 }
 
 fn read_str(r: &mut Cursor<&[u8]>) -> io::Result<String> {
-    let mut len_buf = [0u8; 8];
-    r.read_exact(&mut len_buf)?;
-    let len = u64::from_le_bytes(len_buf) as usize;
-    let mut buf = vec![0u8; len];
-    r.read_exact(&mut buf)?;
-    String::from_utf8(buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    let mut cursor = r.position() as usize;
+    let value =
+        decode_string_field_u64(r.get_ref(), &mut cursor).map_err(map_string_field_error)?;
+    r.set_position(cursor as u64);
+    Ok(value)
 }
 
 fn write_vec_u8(w: &mut Vec<u8>, v: &[u8]) {
-    w.extend_from_slice(&(v.len() as u64).to_le_bytes());
-    w.extend_from_slice(v);
+    encode_bytes_u64(v, w).expect("u64 byte length prefix cannot overflow on this target");
 }
 
 fn read_vec_u8(r: &mut Cursor<&[u8]>) -> io::Result<Vec<u8>> {
-    let mut len_buf = [0u8; 8];
-    r.read_exact(&mut len_buf)?;
-    let len = u64::from_le_bytes(len_buf) as usize;
-    let mut buf = vec![0u8; len];
-    r.read_exact(&mut buf)?;
-    Ok(buf)
+    let mut cursor = r.position() as usize;
+    let value = decode_bytes_u64(r.get_ref(), &mut cursor).map_err(map_string_field_error)?;
+    r.set_position(cursor as u64);
+    Ok(value)
+}
+
+fn map_string_field_error(error: StringFieldError) -> io::Error {
+    let kind = match error {
+        StringFieldError::InvalidUtf8 => io::ErrorKind::InvalidData,
+        StringFieldError::TruncatedInput | StringFieldError::LengthExceedsInput => {
+            io::ErrorKind::UnexpectedEof
+        }
+    };
+    io::Error::new(kind, error)
 }
 
 fn write_i64(w: &mut Vec<u8>, v: i64) {
@@ -741,13 +750,6 @@ fn read_send_log_entry(r: &mut Cursor<&[u8]>) -> io::Result<SendLogEntry> {
         error,
         remote_mta,
     })
-}
-
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]
