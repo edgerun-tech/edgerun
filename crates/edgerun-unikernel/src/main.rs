@@ -38,207 +38,89 @@ struct EspAppDesc {
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn render_initial_ui() {
-    render_debug_pattern(None);
-}
+const UI_HTML: &str = r#"
+<main class="remote">
+  <section class="status">
+    <div class="label">TCL AC</div>
+    <div class="temp">24</div>
+    <div class="mode">Cool - Auto fan</div>
+  </section>
+  <section class="controls">
+    <button class="power">Power</button>
+    <button>Mode</button>
+    <button>Fan</button>
+    <button>Swing</button>
+  </section>
+</main>
+"#;
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn render_debug_pattern(touch: Option<(u16, u16)>) {
+const UI_CSS: &str = r#"
+main { display: block; width: 320px; min-height: 480px; background-color: #f8fafc; color: #101828; padding: 18px; }
+.status { display: block; background-color: #0f766e; color: white; border-radius: 16px; padding: 18px; margin-bottom: 16px; }
+.label { display: block; font-size: 16px; margin-bottom: 8px; }
+.temp { display: block; font-size: 72px; line-height: 1.0; margin-bottom: 8px; }
+.mode { display: block; font-size: 18px; }
+.controls { display: flex; flex-wrap: wrap; }
+button { display: block; width: 132px; height: 74px; margin-right: 8px; margin-bottom: 10px; background-color: #e2e8f0; color: #0f172a; border-radius: 10px; padding: 18px; font-size: 18px; }
+.power { background-color: #dc2626; color: white; }
+"#;
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn render_initial_ui() {
+    use edgerun_layout::UiRenderCommand;
+    use edgerun_layout::{render_html, RenderOptions};
+
+    let ui = render_html(UI_HTML, UI_CSS, RenderOptions::new(320, 480));
     unsafe {
         edgerun_platform::esp32s3::Jc3248w535Display::draw_rgb565_with(320, 480, |x, y| {
-            if let Some((tx, ty)) = touch {
-                let x0 = tx.saturating_sub(5);
-                let y0 = ty.saturating_sub(5);
-                let x1 = tx.saturating_add(5).min(319);
-                let y1 = ty.saturating_add(5).min(479);
-                if x >= x0 && x <= x1 && y >= y0 && y <= y1 {
-                    return rgb565(255, 0, 0);
+            let mut color = 0xffff;
+            for command in &ui.commands {
+                match command {
+                    UiRenderCommand::FillRect {
+                        x: rx,
+                        y: ry,
+                        w,
+                        h,
+                        color: fill,
+                    } => {
+                        if (x as u32) >= *rx
+                            && (x as u32) < rx.saturating_add(*w)
+                            && (y as u32) >= *ry
+                            && (y as u32) < ry.saturating_add(*h)
+                            && fill.a != 0
+                        {
+                            color = rgb565(fill.r, fill.g, fill.b);
+                        }
+                    }
+                    UiRenderCommand::RoundedRect {
+                        x: rx,
+                        y: ry,
+                        w,
+                        h,
+                        color: fill,
+                        ..
+                    } => {
+                        if (x as u32) >= *rx
+                            && (x as u32) < rx.saturating_add(*w)
+                            && (y as u32) >= *ry
+                            && (y as u32) < ry.saturating_add(*h)
+                            && fill.a != 0
+                        {
+                            color = rgb565(fill.r, fill.g, fill.b);
+                        }
+                    }
+                    _ => {}
                 }
             }
-            debug_pixel(x, y)
+            color
         });
     }
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn debug_pixel(x: u16, y: u16) -> u16 {
-    let mut color = rgb565(248, 250, 252);
-
-    if x % 40 == 0 || y % 40 == 0 {
-        color = rgb565(210, 214, 220);
-    }
-    if x == 0 || x == 319 || y == 0 || y == 479 || x == 159 || x == 160 || y == 239 || y == 240 {
-        color = rgb565(0, 0, 0);
-    }
-
-    if y < 58 {
-        color = rgb565(17, 24, 39);
-    } else if y < 116 {
-        color = color_bar(x);
-    } else if (128..160).contains(&y) {
-        color = gray_ramp(x);
-    } else if (168..200).contains(&y) {
-        color = rgb565(ramp(x), 0, 0);
-    } else if (208..240).contains(&y) {
-        color = rgb565(0, ramp(x), 0);
-    } else if (248..280).contains(&y) {
-        color = rgb565(0, 0, ramp(x));
-    } else if in_rect(x, y, 12, 294, 143, 64) {
-        color = rgb565(220, 38, 38);
-    } else if in_rect(x, y, 165, 294, 143, 64) {
-        color = rgb565(37, 99, 235);
-    } else if in_rect(x, y, 12, 368, 143, 64) {
-        color = rgb565(17, 24, 39);
-    } else if in_rect(x, y, 165, 368, 143, 64) {
-        color = rgb565(250, 204, 21);
-    } else if y >= 452 {
-        color = rgb565(17, 24, 39);
-    }
-
-    if box_border(x, y, 12, 294, 143, 64)
-        || box_border(x, y, 165, 294, 143, 64)
-        || box_border(x, y, 12, 368, 143, 64)
-        || box_border(x, y, 165, 368, 143, 64)
-        || ramp_border(x, y, 128)
-        || ramp_border(x, y, 168)
-        || ramp_border(x, y, 208)
-        || ramp_border(x, y, 248)
-    {
-        color = rgb565(17, 24, 39);
-    }
-
-    if text_pixel(x, y, 12, 12, "EDGERUN", 2) || text_pixel(x, y, 12, 34, "RGB565 TOUCH TEXT", 1)
-    {
-        color = rgb565(255, 255, 255);
-    }
-    if text_pixel(x, y, 20, 138, "GRAY", 1)
-        || text_pixel(x, y, 20, 178, "RED", 1)
-        || text_pixel(x, y, 20, 218, "GREEN", 1)
-        || text_pixel(x, y, 20, 258, "BLUE", 1)
-        || text_pixel(x, y, 67, 318, "A1", 2)
-        || text_pixel(x, y, 220, 318, "B2", 2)
-        || text_pixel(x, y, 67, 392, "C3", 2)
-        || text_pixel(x, y, 8, 462, "0,0", 1)
-        || text_pixel(x, y, 124, 462, "160,240", 1)
-        || text_pixel(x, y, 260, 462, "319,479", 1)
-    {
-        color = rgb565(255, 255, 255);
-    }
-    if text_pixel(x, y, 220, 392, "D4", 2) {
-        color = rgb565(17, 24, 39);
-    }
-
-    color
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn in_rect(x: u16, y: u16, rx: u16, ry: u16, w: u16, h: u16) -> bool {
-    x >= rx && x < rx + w && y >= ry && y < ry + h
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn box_border(x: u16, y: u16, rx: u16, ry: u16, w: u16, h: u16) -> bool {
-    in_rect(x, y, rx, ry, w, h)
-        && (x < rx + 2 || x >= rx + w - 2 || y < ry + 2 || y >= ry + h - 2)
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn ramp_border(x: u16, y: u16, top: u16) -> bool {
-    in_rect(x, y, 12, top, 296, 32)
-        && (x == 12 || x == 307 || y == top || y == top + 31)
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn color_bar(x: u16) -> u16 {
-    match x / 40 {
-        0 => rgb565(255, 255, 255),
-        1 => rgb565(255, 0, 0),
-        2 => rgb565(0, 255, 0),
-        3 => rgb565(0, 0, 255),
-        4 => rgb565(0, 255, 255),
-        5 => rgb565(255, 0, 255),
-        6 => rgb565(255, 255, 0),
-        _ => rgb565(0, 0, 0),
-    }
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn ramp(x: u16) -> u8 {
-    if x <= 12 {
-        0
-    } else if x >= 307 {
-        255
-    } else {
-        (((x - 12) as u32 * 255) / 295) as u8
-    }
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn gray_ramp(x: u16) -> u16 {
-    let v = ramp(x);
-    rgb565(v, v, v)
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn rgb565(r: u8, g: u8, b: u8) -> u16 {
     (((r as u16) & 0xf8) << 8) | (((g as u16) & 0xfc) << 3) | (b as u16 >> 3)
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn text_pixel(x: u16, y: u16, tx: u16, ty: u16, text: &str, scale: u16) -> bool {
-    if y < ty {
-        return false;
-    }
-    let local_y = y - ty;
-    let row = local_y / scale;
-    if row >= 7 || x < tx {
-        return false;
-    }
-
-    let mut cursor = tx;
-    for byte in text.bytes() {
-        let char_w = 6 * scale;
-        if x >= cursor && x < cursor + 5 * scale {
-            let col = (x - cursor) / scale;
-            let bits = glyph_bits(byte, row as usize);
-            return (bits & (1 << (4 - col))) != 0;
-        }
-        cursor = cursor.saturating_add(char_w);
-    }
-    false
-}
-
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn glyph_bits(byte: u8, row: usize) -> u8 {
-    let glyph = match byte {
-        b'A' => [0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11],
-        b'B' => [0x1e, 0x11, 0x11, 0x1e, 0x11, 0x11, 0x1e],
-        b'C' => [0x0f, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0f],
-        b'D' => [0x1e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1e],
-        b'E' => [0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f],
-        b'G' => [0x0f, 0x10, 0x10, 0x13, 0x11, 0x11, 0x0f],
-        b'H' => [0x11, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11],
-        b'I' => [0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x1f],
-        b'N' => [0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11],
-        b'O' => [0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e],
-        b'R' => [0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11],
-        b'T' => [0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
-        b'U' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e],
-        b'X' => [0x11, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x11],
-        b'Y' => [0x11, 0x11, 0x0a, 0x04, 0x04, 0x04, 0x04],
-        b'0' => [0x0e, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0e],
-        b'1' => [0x04, 0x0c, 0x04, 0x04, 0x04, 0x04, 0x0e],
-        b'2' => [0x0e, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1f],
-        b'3' => [0x1e, 0x01, 0x01, 0x0e, 0x01, 0x01, 0x1e],
-        b'4' => [0x02, 0x06, 0x0a, 0x12, 0x1f, 0x02, 0x02],
-        b'5' => [0x1f, 0x10, 0x10, 0x1e, 0x01, 0x01, 0x1e],
-        b'6' => [0x0e, 0x10, 0x10, 0x1e, 0x11, 0x11, 0x0e],
-        b'9' => [0x0e, 0x11, 0x11, 0x0f, 0x01, 0x01, 0x0e],
-        b',' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x08],
-        b' ' => [0x00; 7],
-        _ => [0x1f, 0x01, 0x02, 0x04, 0x00, 0x04, 0x00],
-    };
-    glyph[row]
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
@@ -1424,14 +1306,7 @@ core::arch::global_asm!(
 
     .global _start
 _start:
-    movi a1, 0x3f
-    slli a1, a1, 8
-    movi a2, 0xcc
-    or a1, a1, a2
-    slli a1, a1, 8
-    movi a2, 0x80
-    or a1, a1, a2
-    slli a1, a1, 8
+    j 3f
 
     l32r a5, .Lsystem_perip_clk_en1_ptr
     l32i a6, a5, 0
@@ -1476,6 +1351,7 @@ _start:
     addi a6, a6, -1
     bnez a6, 4b
 
+    l32r a1, .Lstack_ptr
     l32r a2, .Lbss_start_ptr
     l32r a3, .Lbss_end_ptr
     sub a3, a3, a2
@@ -1487,6 +1363,22 @@ _start:
     addi a3, a3, -1
     j 1b
 2:
+    l32r a5, .Lusb_ep1_ptr
+    l32r a7, .Lusb_ep1_conf_ptr
+    movi a6, 69
+    s32i a6, a5, 0
+    movi a6, 67
+    s32i a6, a5, 0
+    movi a6, 10
+    s32i a6, a5, 0
+    l32i a6, a7, 0
+    movi a8, 1
+    or a6, a6, a8
+    s32i a6, a7, 0
+    movi a6, 100
+5:
+    addi a6, a6, -1
+    bnez a6, 5b
     call8 kernel_main
 3:
     waiti 0
@@ -2006,6 +1898,8 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         edgerun_platform::arch::xtensa::esp32s3_disable_watchdogs();
         edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_init();
     }
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM0\n");
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM1\n");
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel on Xtensa");
     rt::log::init_serial_logger();
@@ -2015,10 +1909,12 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         edgerun_platform::esp32s3::Jc3248w535Display::init();
         edgerun_platform::esp32s3::Jc3248w535Touch::init();
     }
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM2\n");
     rt::log::info!("JC3248W535 display init complete");
-    rt::log::info!("Rendering display debug pattern");
+    rt::log::info!("Rendering HTML UI");
     render_initial_ui();
-    rt::log::info!("Display debug pattern rendered");
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
+    rt::log::info!("HTML UI rendered");
     rt::log::info!("JC3248W535 touch polling enabled");
 
     let mut last_touch: Option<(u16, u16)> = None;
@@ -2027,7 +1923,9 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             if let Some(point) = edgerun_platform::esp32s3::Jc3248w535Touch::read_point() {
                 let touch = (point.x, point.y);
                 if last_touch != Some(touch) {
-                    render_debug_pattern(Some(touch));
+                    edgerun_platform::esp32s3::Jc3248w535Display::fill_with_dot_rgb565(
+                        point.x, point.y, 4, 0xffff, 0xf800,
+                    );
                     rt::log::info!("Touch point x={} y={}", point.x, point.y);
                     last_touch = Some(touch);
                 }

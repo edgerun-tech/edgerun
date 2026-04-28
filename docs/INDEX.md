@@ -95,8 +95,8 @@ These files are large upstream/reference snapshots or generated-source inputs.
 | Protocol draft length | 3298 lines |
 | `.proto` files under `proto/edgerun/v0` | 44 |
 | Files under `proto/` including README/generated notes | 47 |
-| First-level directories under `crates/` | 109 |
+| First-level directories under `crates/` | 113 |
 | Crate manifests under `crates/` | 109 |
 | `cargo metadata --no-deps` packages/members | 109 |
 | Root `Cargo.toml` textual member entries | 109 |
-| Known inventory quirks | None currently known |
+| Known inventory quirks | `edgerun-css`, `edgerun-ecmascript`, `edgerun-html`, and `edgerun-net` are directories without crate manifests |
