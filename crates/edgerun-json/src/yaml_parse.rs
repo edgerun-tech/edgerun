@@ -63,15 +63,11 @@ fn parse_yaml_lines(lines: &[&str], _indent: usize) -> Result<(JsonValue, usize)
             if value_str.is_empty() {
                 i += 1;
                 let (nested, new_i) = parse_yaml_lines(lines, 2)?;
-                let mut map = Map::new();
-                map.insert(key.to_owned(), nested);
-                values.push(JsonValue::Object(map));
+                values.push(JsonValue::object_from_iter([(key.to_owned(), nested)]));
                 i = new_i;
             } else {
                 let value = parse_yaml_simple(value_str)?;
-                let mut map = Map::new();
-                map.insert(key.to_owned(), value);
-                values.push(JsonValue::Object(map));
+                values.push(JsonValue::object_from_iter([(key.to_owned(), value)]));
                 i += 1;
             }
         } else {
@@ -93,9 +89,9 @@ fn parse_yaml_lines(lines: &[&str], _indent: usize) -> Result<(JsonValue, usize)
     }
 
     if result_map.is_empty() && !values.is_empty() {
-        Ok((JsonValue::Array(values), i))
+        Ok((JsonValue::array(values), i))
     } else {
-        Ok((JsonValue::Object(result_map), i))
+        Ok((result_map.into(), i))
     }
 }
 
@@ -116,14 +112,10 @@ fn parse_yaml_item(item: &str) -> Result<JsonValue, YamlError> {
 
         if value_str.is_empty() {
             let (nested, _) = parse_yaml_lines(&[trimmed], 2)?;
-            let mut map = Map::new();
-            map.insert(key.to_owned(), nested);
-            Ok(JsonValue::Object(map))
+            Ok(JsonValue::object_from_iter([(key.to_owned(), nested)]))
         } else {
             let value = parse_yaml_simple(value_str)?;
-            let mut map = Map::new();
-            map.insert(key.to_owned(), value);
-            Ok(JsonValue::Object(map))
+            Ok(JsonValue::object_from_iter([(key.to_owned(), value)]))
         }
     } else {
         parse_yaml_simple(trimmed)

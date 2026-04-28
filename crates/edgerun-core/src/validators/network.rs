@@ -222,7 +222,7 @@ pub fn validate_network_case(
         if !target.is_empty() && target != string_value(local_state, "local_node", "") {
             return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
         }
-        if !network_object_ref_is_valid(hello.get("hello_metadata")) {
+        if !object_ref_is_valid(hello.get("hello_metadata")) {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if has_empty_string_item(get_seq(hello, "supported_transport_features"))
@@ -291,7 +291,7 @@ pub fn validate_network_case(
         if string_value(accept_msg, "responder", "").is_empty() {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
-        if !network_object_ref_is_valid(accept_msg.get("accept_metadata")) {
+        if !object_ref_is_valid(accept_msg.get("accept_metadata")) {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if has_empty_string_item(get_seq(accept_msg, "selected_transport_features"))
@@ -363,8 +363,8 @@ pub fn validate_network_case(
         {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
-        if !network_object_ref_is_valid(route.get("route_metadata"))
-            || !network_object_ref_is_valid(route.get("metric_hint_object"))
+        if !object_ref_is_valid(route.get("route_metadata"))
+            || !object_ref_is_valid(route.get("metric_hint_object"))
         {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
@@ -449,8 +449,8 @@ pub fn validate_network_case(
         if has_payload_object == has_inline_payload {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
-        if !network_object_ref_is_valid(relay.get("relay_metadata"))
-            || !network_object_ref_is_valid(relay.get("payload_object"))
+        if !object_ref_is_valid(relay.get("relay_metadata"))
+            || !object_ref_is_valid(relay.get("payload_object"))
         {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
@@ -489,18 +489,6 @@ pub fn validate_network_case(
         );
     }
     reject(ReasonCode::StructuralInvalid, empty_map(), empty_map())
-}
-
-fn network_object_ref_is_valid(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) => true,
-        Some(Value::String(object_id)) => !object_id.is_empty(),
-        Some(Value::Map(map)) => map
-            .get("object_id")
-            .and_then(Value::as_str)
-            .is_some_and(|object_id| !object_id.is_empty()),
-        Some(_) => false,
-    }
 }
 
 fn has_empty_string_item(items: Option<&[Value]>) -> bool {

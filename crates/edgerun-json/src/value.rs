@@ -964,6 +964,12 @@ where
     }
 }
 
+impl From<Map> for JsonValue {
+    fn from(value: Map) -> Self {
+        Self::Object(value)
+    }
+}
+
 #[cfg(all(feature = "std", not(target_os = "none")))]
 impl<K, V> From<std::collections::HashMap<K, V>> for JsonValue
 where

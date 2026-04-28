@@ -304,18 +304,6 @@ pub fn validate_object_case(
     reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map())
 }
 
-fn object_ref_is_valid(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) => true,
-        Some(Value::String(object_id)) => !object_id.is_empty(),
-        Some(Value::Map(map)) => map
-            .get("object_id")
-            .and_then(Value::as_str)
-            .is_some_and(|object_id| !object_id.is_empty()),
-        Some(_) => false,
-    }
-}
-
 fn digest_value_is_present(value: Option<&Value>) -> bool {
     match value {
         Some(Value::String(digest)) => !digest.is_empty(),

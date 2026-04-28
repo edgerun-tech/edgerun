@@ -150,15 +150,3 @@ fn delegation_link_is_structural(link: &BTreeMap<String, Value>) -> bool {
             .iter()
             .all(|action| matches!(action, Value::String(action) if !action.is_empty()))
 }
-
-fn object_ref_is_valid(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) => true,
-        Some(Value::String(object_id)) => !object_id.is_empty(),
-        Some(Value::Map(map)) => map
-            .get("object_id")
-            .and_then(Value::as_str)
-            .is_some_and(|object_id| !object_id.is_empty()),
-        Some(_) => false,
-    }
-}

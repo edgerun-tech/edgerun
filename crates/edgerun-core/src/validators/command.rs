@@ -199,22 +199,16 @@ pub fn validate_command_case(
     )
 }
 
-fn validate_object_ref(object: &BTreeMap<String, Value>) -> Option<ValidationResult> {
-    if string_value(object, "object_id", "").is_empty() {
+fn validate_command_nested_refs(command: &BTreeMap<String, Value>) -> Option<ValidationResult> {
+    if command
+        .get("payload_object")
+        .is_some_and(|value| !object_ref_value_is_valid(value))
+    {
         return Some(reject(
             ReasonCode::StructuralInvalid,
             empty_map(),
             empty_map(),
         ));
-    }
-    None
-}
-
-fn validate_command_nested_refs(command: &BTreeMap<String, Value>) -> Option<ValidationResult> {
-    if let Some(payload_object) = get_map(command, "payload_object") {
-        if let Some(result) = validate_object_ref(payload_object) {
-            return Some(result);
-        }
     }
     if command
         .get("inline_payload")
@@ -227,10 +221,15 @@ fn validate_command_nested_refs(command: &BTreeMap<String, Value>) -> Option<Val
             empty_map(),
         ));
     }
-    if let Some(metadata) = get_map(command, "command_metadata") {
-        if let Some(result) = validate_object_ref(metadata) {
-            return Some(result);
-        }
+    if command
+        .get("command_metadata")
+        .is_some_and(|value| !object_ref_value_is_valid(value))
+    {
+        return Some(reject(
+            ReasonCode::StructuralInvalid,
+            empty_map(),
+            empty_map(),
+        ));
     }
     if let Some(assurance) = get_map(command, "requested_assurance") {
         if let Some(attesters) = get_seq(assurance, "acceptable_attesters") {
@@ -267,10 +266,15 @@ fn validate_command_nested_refs(command: &BTreeMap<String, Value>) -> Option<Val
                 empty_map(),
             ));
         }
-        if let Some(metadata) = get_map(assurance, "assurance_metadata") {
-            if let Some(result) = validate_object_ref(metadata) {
-                return Some(result);
-            }
+        if assurance
+            .get("assurance_metadata")
+            .is_some_and(|value| !object_ref_value_is_valid(value))
+        {
+            return Some(reject(
+                ReasonCode::StructuralInvalid,
+                empty_map(),
+                empty_map(),
+            ));
         }
     }
     None

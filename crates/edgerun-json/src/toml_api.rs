@@ -381,7 +381,7 @@ pub fn toml_to_json(value: TomlValue) -> JsonValue {
             for (k, v) in table {
                 obj.push_field(k, toml_to_json(v));
             }
-            JsonValue::Object(obj)
+            obj.into()
         }
     }
 }

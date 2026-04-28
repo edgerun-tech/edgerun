@@ -31,12 +31,10 @@ impl BorrowedJsonValue<'_> {
             Self::Number(n) => JsonValue::Number(n),
             Self::String(s) => JsonValue::String(s.into_owned()),
             Self::Array(v) => {
-                JsonValue::Array(v.into_iter().map(BorrowedJsonValue::into_owned).collect())
+                JsonValue::array_from_iter(v.into_iter().map(BorrowedJsonValue::into_owned))
             }
-            Self::Object(e) => JsonValue::Object(
-                e.into_iter()
-                    .map(|(k, v)| (k.into_owned(), v.into_owned()))
-                    .collect(),
+            Self::Object(e) => JsonValue::object_from_iter(
+                e.into_iter().map(|(k, v)| (k.into_owned(), v.into_owned())),
             ),
         }
     }

@@ -141,18 +141,6 @@ fn snapshot_refs_are_valid(snap: &BTreeMap<String, Value>) -> bool {
         && supersedes_are_valid(snap.get("supersedes"))
 }
 
-fn object_ref_is_valid(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) => true,
-        Some(Value::String(id)) => !id.is_empty(),
-        Some(Value::Map(map)) => map
-            .get("object_id")
-            .and_then(Value::as_str)
-            .is_some_and(|id| !id.is_empty()),
-        Some(_) => false,
-    }
-}
-
 fn supersedes_are_valid(value: Option<&Value>) -> bool {
     match value {
         None | Some(Value::Null) => true,

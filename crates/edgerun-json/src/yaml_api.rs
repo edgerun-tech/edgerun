@@ -546,7 +546,7 @@ pub fn yaml_to_json(value: YamlValue) -> JsonValue {
             for (k, v) in map {
                 obj.push_field(k, yaml_to_json(v));
             }
-            JsonValue::Object(obj)
+            obj.into()
         }
         YamlValue::Tagged(tagged) => yaml_to_json(*tagged.value),
     }

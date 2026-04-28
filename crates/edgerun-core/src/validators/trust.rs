@@ -21,8 +21,8 @@ pub fn validate_trust_case(
         let attester = string_value(claim, "attester", "");
         if attester.is_empty()
             || assurance_rank(&string_value(claim, "assurance_class", "")) == 0
-            || !trust_object_ref_is_valid(claim.get("evidence_object"))
-            || !trust_object_ref_is_valid(claim.get("assurance_metadata"))
+            || !object_ref_is_valid(claim.get("evidence_object"))
+            || !object_ref_is_valid(claim.get("assurance_metadata"))
         {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
@@ -97,7 +97,7 @@ pub fn validate_trust_case(
     if let Some(revocation) = get_map(semantic_input, "revocation_record") {
         let issuer = string_value(revocation, "issuer", "");
         if issuer.is_empty()
-            || !trust_object_ref_is_valid(revocation.get("revocation_metadata"))
+            || !object_ref_is_valid(revocation.get("revocation_metadata"))
             || revocation
                 .get("replacement_id")
                 .and_then(Value::as_str)
@@ -254,16 +254,4 @@ pub fn validate_trust_case(
         );
     }
     reject(ReasonCode::StructuralInvalid, empty_map(), empty_map())
-}
-
-fn trust_object_ref_is_valid(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) => true,
-        Some(Value::String(object_id)) => !object_id.is_empty(),
-        Some(Value::Map(map)) => map
-            .get("object_id")
-            .and_then(Value::as_str)
-            .is_some_and(|object_id| !object_id.is_empty()),
-        Some(_) => false,
-    }
 }

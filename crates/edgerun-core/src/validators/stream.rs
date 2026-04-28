@@ -174,22 +174,6 @@ fn event_refs_are_valid(event: &BTreeMap<String, Value>) -> bool {
         && ref_list_is_valid(get_seq(event, "related_events"), event_ref_value_is_valid)
 }
 
-fn object_ref_is_valid(value: Option<&Value>) -> bool {
-    value.is_none_or(object_ref_value_is_valid)
-}
-
-fn object_ref_value_is_valid(value: &Value) -> bool {
-    match value {
-        Value::Null => true,
-        Value::String(object_id) => !object_id.is_empty(),
-        Value::Map(map) => map
-            .get("object_id")
-            .and_then(Value::as_str)
-            .is_some_and(|object_id| !object_id.is_empty()),
-        _ => false,
-    }
-}
-
 fn event_ref_value_is_valid(value: &Value) -> bool {
     let Value::Map(map) = value else {
         return false;

@@ -25,7 +25,7 @@ pub enum TomlError {
 pub fn from_toml_str(s: &str) -> Result<JsonValue, TomlError> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
-        return Ok(JsonValue::Object(Map::new()));
+        return Ok(JsonValue::empty_object());
     }
     parse_toml_value(trimmed)
 }
@@ -45,7 +45,7 @@ pub fn parse_toml_value(s: &str) -> Result<JsonValue, TomlError> {
             if let Some(table_name) = current_table.take() {
                 if let Some(section) = current_section.take() {
                     if !section.is_empty() {
-                        result.insert(table_name, JsonValue::Object(section));
+                        result.insert(table_name, section.into());
                     }
                 }
             }
@@ -80,12 +80,12 @@ pub fn parse_toml_value(s: &str) -> Result<JsonValue, TomlError> {
     if let Some(table_name) = current_table {
         if let Some(section) = current_section {
             if !section.is_empty() {
-                result.insert(table_name, JsonValue::Object(section));
+                result.insert(table_name, section.into());
             }
         }
     }
 
-    Ok(JsonValue::Object(result))
+    Ok(result.into())
 }
 
 fn parse_toml_value_simple(s: &str) -> Result<JsonValue, TomlError> {
@@ -112,7 +112,7 @@ fn parse_toml_value_simple(s: &str) -> Result<JsonValue, TomlError> {
         for item in items {
             arr.push(parse_toml_value_simple(item.trim())?);
         }
-        return Ok(JsonValue::Array(arr));
+        return Ok(arr.into());
     }
 
     if s == "true" {

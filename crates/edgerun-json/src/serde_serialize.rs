@@ -95,9 +95,7 @@ impl SerdeSerializer for JsonValueSerializer {
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, serde_error::Error> {
-        Ok(JsonValue::Array(
-            v.iter().copied().map(JsonValue::from).collect(),
-        ))
+        Ok(JsonValue::array_from_iter(v.iter().copied()))
     }
 
     fn serialize_none(self) -> Result<Self::Ok, serde_error::Error> {
@@ -149,9 +147,10 @@ impl SerdeSerializer for JsonValueSerializer {
     where
         T: ?Sized + Serialize,
     {
-        let mut map = Map::new();
-        map.insert(variant.to_string(), value.serialize(JsonValueSerializer)?);
-        Ok(JsonValue::Object(map))
+        Ok(JsonValue::object_from_iter([(
+            variant.to_string(),
+            value.serialize(JsonValueSerializer)?,
+        )]))
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
@@ -233,7 +232,7 @@ impl SerializeSeq for JsonArraySerializer {
     }
 
     fn end(self) -> Result<Self::Ok, serde_error::Error> {
-        Ok(JsonValue::Array(self.items))
+        Ok(self.items.into())
     }
 }
 
@@ -287,9 +286,10 @@ impl SerializeTupleVariant for JsonTupleVariantSerializer {
     }
 
     fn end(self) -> Result<Self::Ok, serde_error::Error> {
-        let mut map = Map::new();
-        map.insert(self.variant, JsonValue::Array(self.items));
-        Ok(JsonValue::Object(map))
+        Ok(JsonValue::object_from_iter([(
+            self.variant,
+            JsonValue::from(self.items),
+        )]))
     }
 }
 
@@ -324,7 +324,7 @@ impl SerializeMap for JsonObjectSerializer {
     }
 
     fn end(self) -> Result<Self::Ok, serde_error::Error> {
-        Ok(JsonValue::Object(self.map))
+        Ok(self.map.into())
     }
 }
 
@@ -342,7 +342,7 @@ impl SerializeStruct for JsonObjectSerializer {
     }
 
     fn end(self) -> Result<Self::Ok, serde_error::Error> {
-        Ok(JsonValue::Object(self.map))
+        Ok(self.map.into())
     }
 }
 
@@ -367,9 +367,10 @@ impl SerializeStructVariant for JsonStructVariantSerializer {
     }
 
     fn end(self) -> Result<Self::Ok, serde_error::Error> {
-        let mut outer = Map::new();
-        outer.insert(self.variant, JsonValue::Object(self.map));
-        Ok(JsonValue::Object(outer))
+        Ok(JsonValue::object_from_iter([(
+            self.variant,
+            JsonValue::from(self.map),
+        )]))
     }
 }
 

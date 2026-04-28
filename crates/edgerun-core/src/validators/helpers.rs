@@ -51,6 +51,20 @@ pub fn version_field_error(m: &BTreeMap<String, Value>, key: &str) -> Option<Rea
         None
     }
 }
+pub fn object_ref_is_valid(value: Option<&Value>) -> bool {
+    value.is_none_or(object_ref_value_is_valid)
+}
+pub fn object_ref_value_is_valid(value: &Value) -> bool {
+    match value {
+        Value::Null => true,
+        Value::String(object_id) => !object_id.is_empty(),
+        Value::Map(map) => map
+            .get("object_id")
+            .and_then(Value::as_str)
+            .is_some_and(|object_id| !object_id.is_empty()),
+        _ => false,
+    }
+}
 pub fn set_from_list(v: Option<&Value>) -> BTreeSet<String> {
     v.and_then(Value::as_seq)
         .map(|arr| {
