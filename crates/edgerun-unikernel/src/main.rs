@@ -313,6 +313,7 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
             b"wifi29" | b"wifi29\n" => write_wifi_debug_step(frame.seq, 29),
             b"wifi30" | b"wifi30\n" => write_wifi_debug_step(frame.seq, 30),
             b"wifi31" | b"wifi31\n" => write_wifi_debug_step(frame.seq, 31),
+            b"wifi32" | b"wifi32\n" => write_wifi_debug_step(frame.seq, 32),
             b"wifich1" | b"wifich1\n" => write_wifi_debug_step(frame.seq, 23),
             b"wifich6" | b"wifich6\n" => write_wifi_debug_step(frame.seq, 24),
             b"wifich11" | b"wifich11\n" => write_wifi_debug_step(frame.seq, 25),
@@ -375,7 +376,7 @@ fn write_wifi_phy_fun_slots(seq: u16) {
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn write_wifi_mmio_regs(seq: u16) {
     display_console_log("ctl wifimmio");
-    let mut buf = [0u8; 512];
+    let mut buf = [0u8; 640];
     let mut len = 0;
     append_wifi_mmio_regs(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
@@ -391,7 +392,7 @@ fn write_wifi_tx_regs(seq: u16) {
 
 fn write_wifi_rx_scratch_regs(seq: u16) {
     display_console_log("ctl wifirx");
-    let mut buf = [0u8; 256];
+    let mut buf = [0u8; 384];
     let mut len = 0;
     append_wifi_rx_scratch_regs(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
@@ -530,6 +531,12 @@ fn append_wifi_mmio_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.ctrl_33114);
     append_bytes(out, len, b" c118=0x");
     append_hex_u32(out, len, regs.ctrl_33118);
+    append_bytes(out, len, b" sn=0x");
+    append_hex_u32(out, len, regs.sniffer_ctrl);
+    append_bytes(out, len, b" sm0=0x");
+    append_hex_u32(out, len, regs.sniffer_misc0);
+    append_bytes(out, len, b" sm1=0x");
+    append_hex_u32(out, len, regs.sniffer_misc1);
     append_bytes(out, len, b" coex=0x");
     append_hex_u32(out, len, regs.coex_ctrl);
     append_bytes(out, len, b" pti=0x");
@@ -580,7 +587,19 @@ fn append_wifi_rx_scratch_regs(out: &mut [u8], len: &mut usize) {
     let regs = edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::debug_rx_scratch_regs();
     append_bytes(out, len, b"wifi rx base=0x");
     append_hex_u32(out, len, regs.base);
-    for word in regs.words {
+    append_bytes(out, len, b" next=0x");
+    append_hex_u32(out, len, regs.next);
+    append_bytes(out, len, b" last=0x");
+    append_hex_u32(out, len, regs.last);
+    append_bytes(out, len, b" reload=0x");
+    append_hex_u32(out, len, regs.reload);
+    append_bytes(out, len, b" desc");
+    for word in regs.desc_words {
+        append_bytes(out, len, b" ");
+        append_hex_u32(out, len, word);
+    }
+    append_bytes(out, len, b" buf");
+    for word in regs.buffer_words {
         append_bytes(out, len, b" ");
         append_hex_u32(out, len, word);
     }
@@ -3530,6 +3549,8 @@ static MULTIBOOT_HEADER: [u32; 8] = [
 pub unsafe extern "C" fn kernel_main() -> ! {
     unsafe {
         edgerun_platform::arch::xtensa::esp32s3_disable_watchdogs();
+        #[cfg(all(feature = "esp32s3-wifi-mmio", not(feature = "esp32s3-wifi-blob")))]
+        edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::quiesce_after_soft_reset();
         edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_init();
     }
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM0\n");

@@ -69,10 +69,10 @@ impl<const N: usize> Receiver<N> {
         while let Some(byte) = read_raw_byte() {
             if byte == FLAG {
                 if self.in_frame && self.len > 0 {
-                    let frame = decode_owned(&self.buf[..self.len])?;
+                    let frame = decode_owned(&self.buf[..self.len]);
                     self.len = 0;
                     self.escaped = false;
-                    return Ok(Some(frame));
+                    return frame.map(Some);
                 }
                 self.in_frame = true;
                 self.len = 0;
@@ -396,14 +396,35 @@ mod tests {
         assert_eq!(frame.payload(), payload);
     }
 
+    #[test]
+    fn receiver_recovers_after_bad_frame() {
+        let mut rx = Receiver::<64>::new();
+        for &byte in &[FLAG, 0, 1, 0, 0, 0, b'x', 0, 0, FLAG] {
+            let _ = rx.push_for_test(byte);
+        }
+
+        let payload = b"ok";
+        let mut encoded = [0u8; 64];
+        let len = encode_for_test(CHANNEL_CONTROL, 4, payload, &mut encoded);
+        let mut frame = None;
+        for &byte in &encoded[..len] {
+            frame = rx.push_for_test(byte).unwrap().or(frame);
+        }
+
+        let frame = frame.unwrap();
+        assert_eq!(frame.channel, CHANNEL_CONTROL);
+        assert_eq!(frame.seq, 4);
+        assert_eq!(frame.payload(), payload);
+    }
+
     impl<const N: usize> Receiver<N> {
         fn push_for_test(&mut self, byte: u8) -> Result<Option<ReceivedFrame<N>>, DecodeError> {
             if byte == FLAG {
                 if self.in_frame && self.len > 0 {
-                    let frame = decode_owned(&self.buf[..self.len])?;
+                    let frame = decode_owned(&self.buf[..self.len]);
                     self.len = 0;
                     self.escaped = false;
-                    return Ok(Some(frame));
+                    return frame.map(Some);
                 }
                 self.in_frame = true;
                 self.len = 0;
