@@ -296,7 +296,7 @@ where
             digest: layer.digest.clone(),
         });
         extract_layer(&blob_path, &cached_layer, layer.media_type.as_deref())?;
-        std::fs::write(&cache_marker, &layer.digest).map_err(RegistryError::IoError)?;
+        write_layer_cache_marker(&cache_marker, &layer.digest)?;
         progress(PullProgress::LayerExtracted {
             index,
             total: total_layers,
@@ -365,6 +365,10 @@ fn layer_cache_complete(marker: &Path, digest: &str) -> bool {
     std::fs::read_to_string(marker)
         .map(|value| value.trim() == digest)
         .unwrap_or(false)
+}
+
+fn write_layer_cache_marker(marker: &Path, digest: &str) -> Result<(), RegistryError> {
+    atomic_write(marker, digest.as_bytes())
 }
 
 async fn download_blob(
@@ -449,6 +453,20 @@ mod tests {
 
         std::fs::write(&marker, "sha256:layer\n").unwrap();
         assert!(layer_cache_complete(&marker, "sha256:layer"));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_layer_cache_marker_is_read_as_complete() {
+        let root = tmp_root();
+        let marker = root.join("sha256_layer.complete");
+        let digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+
+        write_layer_cache_marker(&marker, digest).unwrap();
+
+        assert!(layer_cache_complete(&marker, digest));
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), digest);
 
         let _ = std::fs::remove_dir_all(root);
     }

@@ -375,6 +375,9 @@ impl HttpClient {
         if !request.uri().is_https() {
             return self.execute_http2_or_http1(request).await;
         }
+        if self.is_h3_fallback_disabled(request) {
+            return self.execute_http2_or_http1(request).await;
+        }
 
         let h3_client = self.clone().version(HttpVersion::Http3);
         let h3_request = request.clone();
@@ -418,9 +421,13 @@ impl HttpClient {
                     }
                     Ok(Err(err)) => {
                         timing_log_http3_fallback(request, &err);
+                        self.disable_h3_fallback_for(request);
                         h3_done = true;
                     }
-                    Err(std::sync::mpsc::TryRecvError::Disconnected) => h3_done = true,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        self.disable_h3_fallback_for(request);
+                        h3_done = true;
+                    }
                     Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 }
             }
@@ -439,6 +446,7 @@ impl HttpClient {
             }
             BestRace::Tcp(response) => {
                 timing_log_best_winner(request, "tcp");
+                self.disable_h3_fallback_for(request);
                 Ok(response)
             }
             BestRace::TcpFailed(err) => Err(err),
@@ -482,6 +490,29 @@ impl HttpClient {
 
     #[cfg(not(feature = "tls"))]
     fn disable_h2_fallback_for(&self, _request: &Request) {}
+
+    #[cfg(feature = "http3")]
+    fn is_h3_fallback_disabled(&self, request: &Request) -> bool {
+        let Some(key) = Self::h2_fallback_key(request) else {
+            return false;
+        };
+        self.inner.h3_fallback_disabled_hosts.lock().contains(&key)
+    }
+
+    #[cfg(not(feature = "http3"))]
+    fn is_h3_fallback_disabled(&self, _request: &Request) -> bool {
+        true
+    }
+
+    #[cfg(feature = "http3")]
+    fn disable_h3_fallback_for(&self, request: &Request) {
+        if let Some(key) = Self::h2_fallback_key(request) {
+            self.inner.h3_fallback_disabled_hosts.lock().insert(key);
+        }
+    }
+
+    #[cfg(not(feature = "http3"))]
+    fn disable_h3_fallback_for(&self, _request: &Request) {}
 
     /// Execute an HTTP/1.1 request and pass response body chunks to `on_chunk`.
     ///
