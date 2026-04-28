@@ -363,10 +363,10 @@ impl Jc3248w535Display {
         set_backlight(false);
 
         spi2_init();
-        delay_ms(10);
+        delay_ms(120);
 
-        tx_cmd(0x11, &[]);
-        delay_ms(100);
+        tx_cmd(0x01, &[]);
+        delay_ms(150);
         tx_cmd(0x36, &[0x00]);
         tx_cmd(0x3A, &[0x55]);
 
@@ -377,14 +377,10 @@ impl Jc3248w535Display {
             }
         }
 
-        set_backlight(true);
-        tx_cmd(0x29, &[]);
-        delay_ms(500);
-        tx_cmd(0x28, &[]);
-        delay_ms(1000);
         tx_cmd(0x29, &[]);
         delay_ms(200);
-        Self::fill_rgb565(0xffff);
+        Self::fill_rows_rgb565(0xf800);
+        set_backlight(true);
     }
 
     /// Fill the full 320x480 panel with one RGB565 color.
@@ -419,6 +415,37 @@ impl Jc3248w535Display {
             let keep_cs = remaining > len;
             spi2_write(&chunk[..len], true, keep_cs);
             remaining -= len;
+        }
+    }
+
+    /// Fill the panel using the vendor QSPI row protocol.
+    pub unsafe fn fill_rows_rgb565(color: u16) {
+        tx_cmd(
+            0x2A,
+            &[
+                0x00,
+                0x00,
+                ((LCD_WIDTH - 1) >> 8) as u8,
+                (LCD_WIDTH - 1) as u8,
+            ],
+        );
+
+        let hi = (color >> 8) as u8;
+        let lo = color as u8;
+        let mut row = [0u8; LCD_WIDTH as usize * 2];
+        let mut offset = 0usize;
+        while offset < row.len() {
+            row[offset] = hi;
+            row[offset + 1] = lo;
+            offset += 2;
+        }
+
+        let mut y = 0u16;
+        while y < LCD_HEIGHT {
+            let cmd = if y == 0 { 0x2C } else { 0x3C };
+            tx_command_word(cmd, LCD_OPCODE_WRITE_COLOR, false, true);
+            spi2_write(&row, true, false);
+            y += 1;
         }
     }
 

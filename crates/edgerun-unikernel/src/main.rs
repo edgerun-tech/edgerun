@@ -68,52 +68,21 @@ button { display: block; width: 132px; height: 74px; margin-right: 8px; margin-b
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn render_initial_ui() {
-    use edgerun_layout::UiRenderCommand;
-    use edgerun_layout::{render_html, RenderOptions};
+    render_debug_pattern(None);
+}
 
-    let ui = render_html(UI_HTML, UI_CSS, RenderOptions::new(320, 480));
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn render_debug_pattern(touch: Option<(u16, u16)>) {
     unsafe {
         edgerun_platform::esp32s3::Jc3248w535Display::draw_rgb565_with(320, 480, |x, y| {
-            let mut color = 0xffff;
-            for command in &ui.commands {
-                match command {
-                    UiRenderCommand::FillRect {
-                        x: rx,
-                        y: ry,
-                        w,
-                        h,
-                        color: fill,
-                    } => {
-                        if (x as u32) >= *rx
-                            && (x as u32) < rx.saturating_add(*w)
-                            && (y as u32) >= *ry
-                            && (y as u32) < ry.saturating_add(*h)
-                            && fill.a != 0
-                        {
-                            color = rgb565(fill.r, fill.g, fill.b);
-                        }
-                    }
-                    UiRenderCommand::RoundedRect {
-                        x: rx,
-                        y: ry,
-                        w,
-                        h,
-                        color: fill,
-                        ..
-                    } => {
-                        if (x as u32) >= *rx
-                            && (x as u32) < rx.saturating_add(*w)
-                            && (y as u32) >= *ry
-                            && (y as u32) < ry.saturating_add(*h)
-                            && fill.a != 0
-                        {
-                            color = rgb565(fill.r, fill.g, fill.b);
-                        }
-                    }
-                    _ => {}
+            if let Some((tx, ty)) = touch {
+                let dx = x.abs_diff(tx);
+                let dy = y.abs_diff(ty);
+                if dx <= 5 && dy <= 5 {
+                    return 0xf800;
                 }
             }
-            color
+            debug_pixel(x, y)
         });
     }
 }
@@ -121,6 +90,61 @@ fn render_initial_ui() {
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn rgb565(r: u8, g: u8, b: u8) -> u16 {
     (((r as u16) & 0xf8) << 8) | (((g as u16) & 0xfc) << 3) | (b as u16 >> 3)
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn debug_pixel(x: u16, y: u16) -> u16 {
+    if x == 0 || y == 0 || x == 319 || y == 479 || x == 159 || y == 239 {
+        return 0x0000;
+    }
+
+    if y < 80 {
+        return match x / 40 {
+            0 => 0xf800,
+            1 => 0x07e0,
+            2 => 0x001f,
+            3 => 0xffe0,
+            4 => 0xf81f,
+            5 => 0x07ff,
+            6 => 0xffff,
+            _ => 0x0000,
+        };
+    }
+
+    if y < 160 {
+        return rgb565(
+            (x as u32 * 255 / 319) as u8,
+            32,
+            255u8.saturating_sub((x as u32 * 255 / 319) as u8),
+        );
+    }
+
+    if y < 240 {
+        return rgb565(32, (x as u32 * 255 / 319) as u8, 32);
+    }
+
+    if y < 320 {
+        let shade = (((x / 16) + (y / 16)) & 1) as u8;
+        return if shade == 0 { 0xffff } else { 0x8410 };
+    }
+
+    if y < 400 {
+        return rgb565(
+            (y as u32 * 255 / 479) as u8,
+            (x as u32 * 255 / 319) as u8,
+            96,
+        );
+    }
+
+    if x < 80 {
+        0x001f
+    } else if x < 160 {
+        0x07e0
+    } else if x < 240 {
+        0xf800
+    } else {
+        0xffff
+    }
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
@@ -1306,8 +1330,6 @@ core::arch::global_asm!(
 
     .global _start
 _start:
-    j 3f
-
     l32r a5, .Lsystem_perip_clk_en1_ptr
     l32i a6, a5, 0
     movi a7, 1
@@ -1911,10 +1933,10 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     }
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM2\n");
     rt::log::info!("JC3248W535 display init complete");
-    rt::log::info!("Rendering HTML UI");
+    rt::log::info!("Rendering display diagnostic pattern");
     render_initial_ui();
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
-    rt::log::info!("HTML UI rendered");
+    rt::log::info!("Display diagnostic pattern rendered");
     rt::log::info!("JC3248W535 touch polling enabled");
 
     let mut last_touch: Option<(u16, u16)> = None;
@@ -1923,9 +1945,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             if let Some(point) = edgerun_platform::esp32s3::Jc3248w535Touch::read_point() {
                 let touch = (point.x, point.y);
                 if last_touch != Some(touch) {
-                    edgerun_platform::esp32s3::Jc3248w535Display::fill_with_dot_rgb565(
-                        point.x, point.y, 4, 0xffff, 0xf800,
-                    );
+                    render_debug_pattern(Some(touch));
                     rt::log::info!("Touch point x={} y={}", point.x, point.y);
                     last_touch = Some(touch);
                 }

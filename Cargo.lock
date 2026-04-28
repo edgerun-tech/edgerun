@@ -50,12 +50,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
 name = "anyhow"
 version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -439,21 +433,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-color"
-version = "0.1.0"
-
-[[package]]
-name = "edgerun-computed-styles"
-version = "0.1.0"
-dependencies = [
- "edgerun-css",
- "edgerun-css-cascade",
- "edgerun-css-value-parser",
- "edgerun-html-render",
- "edgerun-media-eval",
-]
-
-[[package]]
 name = "edgerun-config"
 version = "0.1.1"
 dependencies = [
@@ -493,32 +472,6 @@ dependencies = [
  "sha2",
  "signature",
  "x25519-dalek",
-]
-
-[[package]]
-name = "edgerun-css"
-version = "0.1.0"
-dependencies = [
- "prost",
- "prost-types",
-]
-
-[[package]]
-name = "edgerun-css-cascade"
-version = "0.1.0"
-dependencies = [
- "edgerun-css",
- "edgerun-css-value-parser",
- "prost",
- "prost-types",
-]
-
-[[package]]
-name = "edgerun-css-value-parser"
-version = "0.1.0"
-dependencies = [
- "edgerun-color",
- "libm",
 ]
 
 [[package]]
@@ -700,14 +653,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-font-loader"
-version = "0.1.0"
-dependencies = [
- "fontdue",
- "libm",
-]
-
-[[package]]
 name = "edgerun-glob"
 version = "0.1.1"
 
@@ -745,10 +690,6 @@ dependencies = [
  "edgerun-log",
  "rustc-serialize",
 ]
-
-[[package]]
-name = "edgerun-html-render"
-version = "0.1.0"
 
 [[package]]
 name = "edgerun-http"
@@ -789,19 +730,6 @@ version = "0.1.0"
 [[package]]
 name = "edgerun-json"
 version = "0.1.1"
-
-[[package]]
-name = "edgerun-layout"
-version = "0.1.0"
-dependencies = [
- "edgerun-color",
- "edgerun-computed-styles",
- "edgerun-css",
- "edgerun-css-cascade",
- "edgerun-css-value-parser",
- "edgerun-html-render",
- "edgerun-rasterizer",
-]
 
 [[package]]
 name = "edgerun-linux-cec"
@@ -943,21 +871,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-bluetooth-gatt",
  "edgerun-encoding",
-]
-
-[[package]]
-name = "edgerun-media-eval"
-version = "0.1.0"
-dependencies = [
- "edgerun-media-queries",
-]
-
-[[package]]
-name = "edgerun-media-queries"
-version = "0.1.0"
-dependencies = [
- "prost",
- "prost-types",
 ]
 
 [[package]]
@@ -1219,14 +1132,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-rasterizer"
-version = "0.1.0"
-dependencies = [
- "edgerun-font-loader",
- "libm",
-]
-
-[[package]]
 name = "edgerun-regex"
 version = "0.1.1"
 
@@ -1420,7 +1325,6 @@ dependencies = [
  "edgerun-dhcp",
  "edgerun-edgefs",
  "edgerun-http",
- "edgerun-layout",
  "edgerun-oci",
  "edgerun-platform",
  "edgerun-rt",
@@ -1528,12 +1432,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "equivalent"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
-
-[[package]]
 name = "ff"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1548,22 +1446,6 @@ name = "fiat-crypto"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
-
-[[package]]
-name = "foldhash"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
-
-[[package]]
-name = "fontdue"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e57e16b3fe8ff4364c0661fdaac543fb38b29ea9bc9c2f45612d90adf931d2b"
-dependencies = [
- "hashbrown",
- "ttf-parser",
-]
 
 [[package]]
 name = "generic-array"
@@ -1595,17 +1477,6 @@ dependencies = [
  "ff",
  "rand_core",
  "subtle",
-]
-
-[[package]]
-name = "hashbrown"
-version = "0.15.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
-dependencies = [
- "allocator-api2",
- "equivalent",
- "foldhash",
 ]
 
 [[package]]
@@ -2153,12 +2024,6 @@ dependencies = [
  "quote",
  "syn",
 ]
-
-[[package]]
-name = "ttf-parser"
-version = "0.21.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c591d83f69777866b9126b24c6dd9a18351f177e49d625920d19f989fd31cf8"
 
 [[package]]
 name = "typenum"
