@@ -1,9 +1,9 @@
 use crate::error::{GattError, GattResult};
 use crate::prelude::v1::*;
 use crate::{
-    AttProtocol, GattAddressKind, GattCharacteristic, GattClient, GattConnectionState,
-    GattDescriptor, GattEventCallback, GattEventKind, GattProperty, GattService, GattUuid,
-    L2capSocket, UUID_CLIENT_CHARACTERISTIC_CONFIGURATION, format_gatt_uuid, parse_gatt_uuid,
+    format_gatt_uuid, parse_gatt_uuid, AttProtocol, GattAddressKind, GattCharacteristic,
+    GattClient, GattConnectionState, GattDescriptor, GattEventCallback, GattEventKind,
+    GattProperty, GattService, GattUuid, L2capSocket, UUID_CLIENT_CHARACTERISTIC_CONFIGURATION,
 };
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
 use std::collections::HashMap;

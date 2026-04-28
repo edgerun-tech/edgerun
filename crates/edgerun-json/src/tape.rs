@@ -307,6 +307,16 @@ impl<'a> TapeValue<'a> {
         self.get(key).and_then(|value| value.as_str())
     }
 
+    pub fn optional_str(&self, key: &str) -> Result<Option<&'a str>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                value.as_str().ok_or_else(|| {
+                    JsonValueError::WrongType(format!("field `{key}` expected string"))
+                })
+            })
+            .transpose()
+    }
+
     pub fn required_str(&self, key: &str) -> Result<&'a str, JsonValueError> {
         self.required(key)?
             .as_str()
@@ -314,8 +324,32 @@ impl<'a> TapeValue<'a> {
     }
 
     #[must_use]
+    pub fn get_string(&self, key: &str) -> Option<String> {
+        self.get_str(key).map(ToOwned::to_owned)
+    }
+
+    pub fn optional_string(&self, key: &str) -> Result<Option<String>, JsonValueError> {
+        self.optional_str(key)
+            .map(|value| value.map(ToOwned::to_owned))
+    }
+
+    pub fn required_string(&self, key: &str) -> Result<String, JsonValueError> {
+        self.required_str(key).map(ToOwned::to_owned)
+    }
+
+    #[must_use]
     pub fn get_bool(&self, key: &str) -> Option<bool> {
         self.get(key).and_then(|value| value.as_bool())
+    }
+
+    pub fn optional_bool(&self, key: &str) -> Result<Option<bool>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                value.as_bool().ok_or_else(|| {
+                    JsonValueError::WrongType(format!("field `{key}` expected boolean"))
+                })
+            })
+            .transpose()
     }
 
     pub fn required_bool(&self, key: &str) -> Result<bool, JsonValueError> {
@@ -329,6 +363,16 @@ impl<'a> TapeValue<'a> {
         self.get(key).and_then(|value| value.as_i64())
     }
 
+    pub fn optional_i64(&self, key: &str) -> Result<Option<i64>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                value
+                    .as_i64()
+                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i64")))
+            })
+            .transpose()
+    }
+
     pub fn required_i64(&self, key: &str) -> Result<i64, JsonValueError> {
         self.required(key)?
             .as_i64()
@@ -338,6 +382,16 @@ impl<'a> TapeValue<'a> {
     #[must_use]
     pub fn get_i32(&self, key: &str) -> Option<i32> {
         self.get(key).and_then(|value| value.as_i32())
+    }
+
+    pub fn optional_i32(&self, key: &str) -> Result<Option<i32>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                value
+                    .as_i32()
+                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i32")))
+            })
+            .transpose()
     }
 
     pub fn required_i32(&self, key: &str) -> Result<i32, JsonValueError> {
@@ -351,6 +405,16 @@ impl<'a> TapeValue<'a> {
         self.get(key).and_then(|value| value.as_u64())
     }
 
+    pub fn optional_u64(&self, key: &str) -> Result<Option<u64>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                value
+                    .as_u64()
+                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u64")))
+            })
+            .transpose()
+    }
+
     pub fn required_u64(&self, key: &str) -> Result<u64, JsonValueError> {
         self.required(key)?
             .as_u64()
@@ -360,6 +424,16 @@ impl<'a> TapeValue<'a> {
     #[must_use]
     pub fn get_u32(&self, key: &str) -> Option<u32> {
         self.get(key).and_then(|value| value.as_u32())
+    }
+
+    pub fn optional_u32(&self, key: &str) -> Result<Option<u32>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                value
+                    .as_u32()
+                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u32")))
+            })
+            .transpose()
     }
 
     pub fn required_u32(&self, key: &str) -> Result<u32, JsonValueError> {
@@ -373,6 +447,16 @@ impl<'a> TapeValue<'a> {
         self.get(key).and_then(|value| value.as_usize())
     }
 
+    pub fn optional_usize(&self, key: &str) -> Result<Option<usize>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                value.as_usize().ok_or_else(|| {
+                    JsonValueError::WrongType(format!("field `{key}` expected usize"))
+                })
+            })
+            .transpose()
+    }
+
     pub fn required_usize(&self, key: &str) -> Result<usize, JsonValueError> {
         self.required(key)?
             .as_usize()
@@ -382,6 +466,16 @@ impl<'a> TapeValue<'a> {
     #[must_use]
     pub fn get_f64(&self, key: &str) -> Option<f64> {
         self.get(key).and_then(|value| value.as_f64())
+    }
+
+    pub fn optional_f64(&self, key: &str) -> Result<Option<f64>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                value
+                    .as_f64()
+                    .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected f64")))
+            })
+            .transpose()
     }
 
     pub fn required_f64(&self, key: &str) -> Result<f64, JsonValueError> {
@@ -720,11 +814,11 @@ impl CompiledRowSchema {
 #[cfg(test)]
 mod tests {
     use crate::{parse_json_tape, TapeTokenKind};
-    use alloc::{vec, vec::Vec};
+    use alloc::{string::String, vec, vec::Vec};
 
     #[test]
     fn tape_value_scalar_accessors() {
-        let input = r#"{"t":true,"f":false,"i":-7,"u":42,"float":1.5}"#;
+        let input = r#"{"s":"edge","t":true,"f":false,"i":-7,"u":42,"float":1.5}"#;
         let tape = parse_json_tape(input).unwrap();
         let root = tape.root(input).unwrap();
 
@@ -734,7 +828,21 @@ mod tests {
         assert_eq!(root.get("u").unwrap().as_u64(), Some(42));
         assert_eq!(root.get("float").unwrap().as_i64(), None);
         assert_eq!(root.get("float").unwrap().as_u64(), None);
+        assert_eq!(root.get_string("s"), Some(String::from("edge")));
+        assert_eq!(
+            root.optional_string("s").unwrap(),
+            Some(String::from("edge"))
+        );
+        assert_eq!(root.optional_string("missing").unwrap(), None);
+        assert!(root.optional_string("u").is_err());
         assert_eq!(root.get_f64("float"), Some(1.5));
+        assert_eq!(root.optional_bool("t").unwrap(), Some(true));
+        assert_eq!(root.optional_i64("i").unwrap(), Some(-7));
+        assert_eq!(root.optional_i32("i").unwrap(), Some(-7));
+        assert_eq!(root.optional_u64("u").unwrap(), Some(42));
+        assert_eq!(root.optional_u32("u").unwrap(), Some(42));
+        assert_eq!(root.optional_usize("u").unwrap(), Some(42));
+        assert_eq!(root.optional_f64("float").unwrap(), Some(1.5));
         assert_eq!(root.required_bool("t").unwrap(), true);
         assert_eq!(root.required_i64("i").unwrap(), -7);
         assert_eq!(root.required_u64("u").unwrap(), 42);

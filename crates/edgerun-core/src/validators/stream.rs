@@ -37,7 +37,8 @@ pub fn validate_stream_append_case(
         if event.contains_key("prev_ref") {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
-    } else if get_map(event, "prev_ref").is_none_or(|prev| event_ref_hash(prev).is_empty()) {
+    } else if get_map(event, "prev_ref").is_none_or(|prev| event_hash_alias_value(prev).is_empty())
+    {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     }
     let writer = string_value(local_state, "stream_writer_identity", "");
@@ -178,25 +179,9 @@ fn event_ref_value_is_valid(value: &Value) -> bool {
     let Value::Map(map) = value else {
         return false;
     };
-    !string_value(map, "stream_id", "").is_empty() && !event_ref_hash(map).is_empty()
+    !string_value(map, "stream_id", "").is_empty() && !event_hash_alias_value(map).is_empty()
 }
 
 fn ref_list_is_valid(items: Option<&[Value]>, item_valid: fn(&Value) -> bool) -> bool {
     items.unwrap_or(&[]).iter().all(|item| item_valid(item))
-}
-
-fn event_ref_hash(map: &BTreeMap<String, Value>) -> String {
-    for key in [
-        "event_hash_hex",
-        "event_hash_fixture",
-        "event_hash",
-        "hash_hex",
-        "hash_fixture",
-    ] {
-        let value = string_value(map, key, "");
-        if !value.is_empty() {
-            return value;
-        }
-    }
-    String::new()
 }

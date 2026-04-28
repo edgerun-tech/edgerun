@@ -159,7 +159,7 @@ fn supersedes_are_valid(value: Option<&Value>) -> bool {
 fn base_head_is_valid(base: &BTreeMap<String, Value>) -> bool {
     !string_value(base, "stream_id", "").is_empty()
         && number_value(base, "seq", -1) >= 0
-        && !base_head_hash(base).is_empty()
+        && !event_hash_alias_value(base).is_empty()
 }
 
 fn base_checkpoint_is_valid(checkpoint: &BTreeMap<String, Value>) -> bool {
@@ -192,20 +192,4 @@ fn first_base_head<'a>(
                     .and_then(Value::as_map)
             })
     })
-}
-
-fn base_head_hash(base: &BTreeMap<String, Value>) -> String {
-    for key in [
-        "event_hash_hex",
-        "event_hash_fixture",
-        "event_hash",
-        "hash_hex",
-        "hash_fixture",
-    ] {
-        let value = string_value(base, key, "");
-        if !value.is_empty() {
-            return value;
-        }
-    }
-    String::new()
 }

@@ -607,11 +607,9 @@ mod tests {
         assert_eq!(parsed.payload, encrypted);
 
         let mut wrong_decryptor = PacketProtection::new(&keys);
-        assert!(
-            wrong_decryptor
-                .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
-                .is_err()
-        );
+        assert!(wrong_decryptor
+            .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
+            .is_err());
 
         let mut decryptor = PacketProtection::new(&keys);
         let plaintext = decryptor
@@ -689,11 +687,9 @@ mod tests {
         assert_eq!(parsed.header_to_bytes_aad(), aad);
 
         let mut wrong_decryptor = PacketProtection::new(&keys);
-        assert!(
-            wrong_decryptor
-                .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
-                .is_err()
-        );
+        assert!(wrong_decryptor
+            .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
+            .is_err());
 
         let mut decryptor = PacketProtection::new(&keys);
         let plaintext = decryptor

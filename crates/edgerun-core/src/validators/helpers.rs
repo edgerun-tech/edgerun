@@ -65,6 +65,21 @@ pub fn object_ref_value_is_valid(value: &Value) -> bool {
         _ => false,
     }
 }
+pub fn event_hash_alias_value(map: &BTreeMap<String, Value>) -> String {
+    for key in [
+        "event_hash_hex",
+        "event_hash_fixture",
+        "event_hash",
+        "hash_hex",
+        "hash_fixture",
+    ] {
+        let value = string_value(map, key, "");
+        if !value.is_empty() {
+            return value;
+        }
+    }
+    String::new()
+}
 pub fn set_from_list(v: Option<&Value>) -> BTreeSet<String> {
     v.and_then(Value::as_seq)
         .map(|arr| {

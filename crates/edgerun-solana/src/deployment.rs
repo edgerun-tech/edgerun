@@ -6,7 +6,7 @@ use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
 use edgerun_http::HttpClient;
-use edgerun_json::{JsonValue, json};
+use edgerun_json::{json, JsonValue};
 use std::sync::Arc;
 
 use crate::deployment_program_id;

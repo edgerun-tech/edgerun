@@ -212,8 +212,8 @@ pub use hci::{HciConnection, HciConnectionPool, LeConnParams};
 pub use linux::{AttProtocol, L2capSocket};
 
 use edgerun_capabilities::{
-    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
-    CapabilityProvider, CapabilityRole, capability_descriptor,
+    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
+    CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
 use edgerun_encoding::byteorder::{read_u16_le, read_u32_le};
 

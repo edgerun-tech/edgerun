@@ -33,8 +33,8 @@ use crate::cipher::NamedGroup;
 use crate::handshake::{ClientHelloBuilder, ServerHello};
 use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::prf::{
-    Hasher, Tls13KeySchedule, client_app_write_keys, client_write_keys, hmac_sha256, hmac_sha384,
-    server_app_write_keys, server_write_keys,
+    client_app_write_keys, client_write_keys, hmac_sha256, hmac_sha384, server_app_write_keys,
+    server_write_keys, Hasher, Tls13KeySchedule,
 };
 use crate::record::RecordCipher;
 use crate::server::client_hello::ClientHello;

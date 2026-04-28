@@ -640,7 +640,9 @@ impl AttProtocol {
             return if n > 1 {
                 Err(GattError::att_error_code(buf[1]))
             } else {
-                Err(GattError::ParseError("invalid prepare write response".into()))
+                Err(GattError::ParseError(
+                    "invalid prepare write response".into(),
+                ))
             };
         }
         let response_handle = read_u16_le(&buf, 1);
@@ -665,7 +667,9 @@ impl AttProtocol {
         } else if n > 1 {
             Err(GattError::att_error_code(buf[1]))
         } else {
-            Err(GattError::ParseError("invalid execute write response".into()))
+            Err(GattError::ParseError(
+                "invalid execute write response".into(),
+            ))
         }
     }
 

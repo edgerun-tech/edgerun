@@ -7,9 +7,9 @@
 //!
 //! All messages after ServerHello are encrypted.
 
+use crate::cipher::NamedGroup;
 use crate::Result;
 use crate::TlsError;
-use crate::cipher::NamedGroup;
 use alloc::{
     format,
     string::{String, ToString},
@@ -209,7 +209,7 @@ impl ClientHelloBuilder {
             // PSK identities list
             let identities_start = psk_ext.len();
             psk_ext.extend_from_slice(&[0u8; 2]); // identities length placeholder
-            // Identity entry
+                                                  // Identity entry
             psk_ext.extend_from_slice(&(ticket.len() as u16).to_be_bytes());
             psk_ext.extend_from_slice(ticket);
             psk_ext.extend_from_slice(&obfuscated_age.to_be_bytes());
@@ -221,7 +221,7 @@ impl ClientHelloBuilder {
             // PSK binders list
             let binders_start = psk_ext.len();
             psk_ext.extend_from_slice(&[0u8; 2]); // binders length placeholder
-            // Placeholder binder (1 byte len + zeros) — real binder requires HMAC of truncated CH
+                                                  // Placeholder binder (1 byte len + zeros) — real binder requires HMAC of truncated CH
             let binder_len = 32; // SHA-256 output
             psk_ext.push(binder_len as u8);
             psk_ext.extend_from_slice(&vec![0u8; binder_len]);

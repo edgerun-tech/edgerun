@@ -6,12 +6,12 @@ use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
 use edgerun_http::HttpClient;
-use edgerun_json::{JsonValue, json};
+use edgerun_json::{json, JsonValue};
 use std::sync::Arc;
 
 use crate::error::SolanaError;
 use crate::provider_registry_program_id;
-use crate::types::{Provider, ProviderStatus, collateral};
+use crate::types::{collateral, Provider, ProviderStatus};
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[allow(dead_code)]
