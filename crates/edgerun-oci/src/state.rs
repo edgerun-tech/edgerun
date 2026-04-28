@@ -5,6 +5,7 @@
 //! When running rootless: `$XDG_RUNTIME_DIR/edgerun-oci/<id>/` or `$HOME/.local/state/edgerun-oci/<id>/`
 
 use crate::prelude::*;
+use crate::util::StringResultExt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -141,7 +142,7 @@ pub fn load_state(id: &str) -> io::Result<ContainerState> {
 }
 
 pub fn load_state_from_str(data: &str) -> Result<ContainerState, String> {
-    let value = edgerun_json::parse_json(data).map_err(|error| error.to_string())?;
+    let value = edgerun_json::parse_json(data).string_err()?;
     state_from_json_value(&value)
 }
 
@@ -197,25 +198,20 @@ fn state_from_json_value(value: &JsonValue) -> Result<ContainerState, String> {
         })
         .transpose()?;
     Ok(ContainerState {
-        oci_version: object
-            .required_str("ociVersion")
-            .map_err(|e| e.to_string())?
-            .to_string(),
-        id: object
-            .required_str("id")
-            .map_err(|e| e.to_string())?
-            .to_string(),
-        status: object
-            .required_str("status")
-            .map_err(|e| e.to_string())?
-            .to_string(),
+        oci_version: required_object_string(object, "ociVersion")?,
+        id: required_object_string(object, "id")?,
+        status: required_object_string(object, "status")?,
         pid,
-        bundle: object
-            .required_str("bundle")
-            .map_err(|e| e.to_string())?
-            .to_string(),
+        bundle: required_object_string(object, "bundle")?,
         annotations,
     })
+}
+
+fn required_object_string(object: &Map, key: &str) -> Result<String, String> {
+    object
+        .required_str(key)
+        .map(ToString::to_string)
+        .string_err()
 }
 
 /// Delete container state directory and all contents.

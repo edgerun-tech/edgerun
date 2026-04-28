@@ -6,6 +6,7 @@ use crate::rootfs_access::{
     OciDeviceId, OciRootfs, OciRootfsEntry, OciRootfsEntryKind, OciRootfsError,
 };
 use crate::tar_layer::{OciWhiteout, TarEntry, TarEntryKind, TarLayerSink};
+use crate::util::StringResultExt;
 use edgerun_edgefs::{DeviceId, EdgeFs, EntryKind, EntryRef, FileMeta};
 use edgerun_storage::BlockStorage;
 
@@ -171,7 +172,7 @@ fn apply_entry_to_edgefs<S: BlockStorage>(
         | TarEntryKind::GnuLongName
         | TarEntryKind::GnuLongLink => Ok(()),
     }
-    .map_err(|error| error.to_string())
+    .string_err()
 }
 
 fn apply_whiteout_to_edgefs<S: BlockStorage>(
@@ -182,7 +183,7 @@ fn apply_whiteout_to_edgefs<S: BlockStorage>(
         OciWhiteout::RemovePath(path) => fs.remove_path(path),
         OciWhiteout::OpaqueDirectory(path) => fs.remove_children(path),
     }
-    .map_err(|error| error.to_string())
+    .string_err()
 }
 
 fn device_id(entry: &TarEntry) -> Result<DeviceId, String> {
