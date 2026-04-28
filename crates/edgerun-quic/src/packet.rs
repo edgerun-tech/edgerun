@@ -297,6 +297,9 @@ impl QuicPacket {
             PacketType::from_byte(data[0]).ok_or_else(|| "Invalid packet type".to_string())?;
 
         let version = read_u32_be(data, 1);
+        if version == 0 {
+            return Err("Version Negotiation packets are not parsed as typed packets".to_string());
+        }
 
         let mut pos = 5;
 
@@ -694,6 +697,18 @@ mod tests {
 
         assert!(QuicPacket::from_bytes(&bytes).is_err());
         assert!(get_long_header_payload_offset(&bytes).is_err());
+    }
+
+    #[test]
+    fn test_rejects_version_negotiation_as_typed_packet() {
+        let bytes = vec![
+            0xc0, 0, 0, 0, 0, // first byte + version 0
+            4, 1, 2, 3, 4, // dcid
+            4, 5, 6, 7, 8, // scid
+            0, 0, 0, 1, // supported version
+        ];
+
+        assert!(QuicPacket::from_bytes(&bytes).is_err());
     }
 
     #[test]
