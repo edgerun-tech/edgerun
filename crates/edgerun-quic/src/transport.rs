@@ -778,6 +778,47 @@ mod tests {
     }
 
     #[test]
+    fn test_expand_packet_number_does_not_mutate_receive_state() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 0xff));
+        assert_eq!(
+            transport.expand_packet_number(PacketNumberSpace::ApplicationData, 0, 1),
+            0x100
+        );
+
+        let ack = transport
+            .generate_ack_frame(PacketNumberSpace::ApplicationData)
+            .expect("ack frame");
+        match ack {
+            QuicFrame::Ack {
+                largest_acknowledged,
+                first_ack_range,
+                ..
+            } => {
+                assert_eq!(largest_acknowledged, 0xff);
+                assert_eq!(first_ack_range, 0);
+            }
+            _ => panic!("expected ACK frame"),
+        }
+    }
+
+    #[test]
+    fn test_expand_packet_number_allows_out_of_order_packets() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 0x101));
+        assert_eq!(
+            transport.expand_packet_number(PacketNumberSpace::ApplicationData, 0x100, 2),
+            0x100
+        );
+    }
+
+    #[test]
     fn test_ack_generation_tracks_out_of_order_packets() {
         let local = ConnectionId::random();
         let remote = ConnectionId::random();

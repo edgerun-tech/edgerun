@@ -265,6 +265,58 @@ fn test_recv_path_records_received_packets_and_processes_ack() {
         .should_send_ack(PacketNumberSpace::ApplicationData));
 }
 
+#[test]
+fn test_recv_path_expands_truncated_packet_number_before_ack_tracking() {
+    let mut conn = QuicConnection::dummy();
+    conn.established = true;
+    assert!(conn
+        .transport
+        .record_received_packet(PacketNumberSpace::ApplicationData, 0xff));
+
+    let frame = QuicFrame::Stream {
+        stream_id: 0,
+        offset: 0,
+        fin: true,
+        data: b"wrapped".to_vec(),
+    };
+    let packet = QuicPacket {
+        header: crate::http3::quic::packet::QuicPacketHeader {
+            packet_type: PacketType::OneRtt,
+            version: 0,
+            dst_cid: conn.transport.local_cid.as_bytes().to_vec(),
+            src_cid: Vec::new(),
+            token: Vec::new(),
+            pn_length: 1,
+            packet_number: 0,
+            key_phase: false,
+            payload_length: 0,
+        },
+        payload: frame.to_bytes(),
+    };
+    conn.inject_packet(packet.to_bytes());
+
+    let stream = conn.recv_from_buffer().expect("receive packet");
+    assert_eq!(stream, Some((0, b"wrapped".to_vec(), true)));
+
+    let ack = conn
+        .transport
+        .generate_ack_frame(PacketNumberSpace::ApplicationData)
+        .expect("ack frame");
+    match ack {
+        QuicFrame::Ack {
+            largest_acknowledged,
+            first_ack_range,
+            ack_ranges,
+            ..
+        } => {
+            assert_eq!(largest_acknowledged, 0x100);
+            assert_eq!(first_ack_range, 1);
+            assert!(ack_ranges.is_empty());
+        }
+        _ => panic!("expected ACK frame"),
+    }
+}
+
 /// Test server-side `accept_stream()` + QPACK request decoding.
 ///
 /// Simulates: client sends request → server accepts stream → decodes request.

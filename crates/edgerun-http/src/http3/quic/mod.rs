@@ -872,10 +872,8 @@ impl QuicConnection {
                     };
 
                     self.transport.update_activity();
-                    self.transport.record_received_packet(
-                        PacketNumberSpace::ApplicationData,
-                        packet_number,
-                    );
+                    self.transport
+                        .record_received_packet(PacketNumberSpace::ApplicationData, packet_number);
 
                     // Parse frames from the decrypted payload
                     if let Some(stream_data) = self.parse_stream_frames(&plaintext) {
