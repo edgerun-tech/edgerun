@@ -2,7 +2,13 @@
 
 #![no_std]
 #![cfg_attr(target_arch = "xtensa", feature(asm_experimental_arch))]
+#![cfg_attr(
+    all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-wifi-blob"),
+    feature(c_variadic)
+)]
 
+#[cfg(target_os = "none")]
+extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
@@ -24,6 +30,12 @@ pub mod esp32s3_wifi_blob;
     feature = "esp32s3-wifi-blob"
 ))]
 mod esp32s3_wifi_blob_stubs;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+mod esp32s3_wifi_blob_init;
 pub mod irq;
 pub mod timer;
 pub mod tls;

@@ -767,17 +767,38 @@ impl ConnectionPool {
                 );
                 let tls_started = Instant::now();
                 let (tls, used_tls12_fallback) = if prefer_tls12 {
-                    let tls = AsyncTlsStream::client_tls12(stream, host)
-                        .await
-                        .map_err(|err| {
-                            Error::ProtocolError(format!("TLS 1.2 handshake failed: {err}"))
-                        })?;
-                    timing_log_elapsed(
-                        "http1.tls12_first",
-                        host.to_string(),
-                        tls_started.elapsed(),
-                    );
-                    (tls, false)
+                    match AsyncTlsStream::client_tls12(stream, host).await {
+                        Ok(tls) => {
+                            timing_log_elapsed(
+                                "http1.tls12_first",
+                                host.to_string(),
+                                tls_started.elapsed(),
+                            );
+                            (tls, false)
+                        }
+                        Err(first_err) => {
+                            let stream = Self::resolve_and_connect_static(
+                                connect_timeout,
+                                dns_timeout,
+                                host,
+                                port,
+                            )
+                            .await?;
+                            let tls = AsyncTlsStream::client(stream, host, &[], Some(session_cache))
+                                .await
+                                .map_err(|second_err| {
+                                    Error::ProtocolError(format!(
+                                        "TLS 1.2 handshake failed: {first_err}; TLS 1.3 fallback failed: {second_err}"
+                                    ))
+                                })?;
+                            timing_log_elapsed(
+                                "http1.tls13_after_tls12",
+                                host.to_string(),
+                                tls_started.elapsed(),
+                            );
+                            (tls, false)
+                        }
+                    }
                 } else {
                     match AsyncTlsStream::client(stream, host, &[], Some(session_cache)).await {
                         Ok(tls) => {

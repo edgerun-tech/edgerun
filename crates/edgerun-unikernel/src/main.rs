@@ -264,6 +264,22 @@ fn poll_serial_control(
                     b"ok repaint\n",
                 );
             }
+            b"wifi" | b"wifi\n" | b"wifi start" | b"wifi start\n" => {
+                display_console_log("ctl wifi start");
+                if try_start_esp32s3_wifi_ap() {
+                    rt::serial_mux::write_with_seq(
+                        rt::serial_mux::CHANNEL_CONTROL,
+                        frame.seq,
+                        b"ok wifi-start\n",
+                    );
+                } else {
+                    rt::serial_mux::write_with_seq(
+                        rt::serial_mux::CHANNEL_CONTROL,
+                        frame.seq,
+                        b"err wifi-start\n",
+                    );
+                }
+            }
             _ => {
                 display_console_log("ctl unknown");
                 rt::serial_mux::write_with_seq(
@@ -382,7 +398,7 @@ static ESP32S3_WIFI_AP: Esp32s3WifiApCell = Esp32s3WifiApCell::new();
     feature = "esp32s3-wifi-blob"
 ))]
 #[inline(never)]
-fn try_start_esp32s3_wifi_ap() {
+fn try_start_esp32s3_wifi_ap() -> bool {
     use edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio;
     use edgerun_wifi::ieee80211::{MacAddr, OpenApConfig};
 
@@ -395,7 +411,7 @@ fn try_start_esp32s3_wifi_ap() {
         Ok(config) => config,
         Err(_) => {
             rt::log::log(3, "ESP32-S3 WiFi AP config failed");
-            return;
+            return false;
         }
     };
 
@@ -403,14 +419,29 @@ fn try_start_esp32s3_wifi_ap() {
         ESP32S3_WIFI_AP.init(Esp32s3WifiAp::new(EspressifPromiscRadio::new(), config))
     };
     match ap.start() {
-        Ok(()) => rt::log::log(1, "ESP32-S3 WiFi AP start queued"),
-        Err(_) => match EspressifPromiscRadio::last_start_status() {
-            13289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: channel not initialized"),
-            14289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: filter not initialized"),
-            15289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: callback not initialized"),
-            16289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: promiscuous not initialized"),
-            _ => rt::log::log(3, "ESP32-S3 WiFi AP start failed"),
-        },
+        Ok(()) => {
+            rt::log::log(1, "ESP32-S3 WiFi AP start queued");
+            true
+        }
+        Err(_) => {
+            match EspressifPromiscRadio::last_start_status() {
+                13289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: channel not initialized"),
+                14289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: filter not initialized"),
+                15289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: callback not initialized"),
+                16289 => {
+                    rt::log::log(3, "ESP32-S3 WiFi AP start failed: promiscuous not initialized")
+                }
+                27289 => {
+                    rt::log::log(3, "ESP32-S3 WiFi AP start failed: set mode not initialized")
+                }
+                37289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: start not initialized"),
+                15000..=24999 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: init stage"),
+                25000..=34999 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: mode stage"),
+                35000..=44999 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: start stage"),
+                _ => rt::log::log(3, "ESP32-S3 WiFi AP start failed"),
+            }
+            false
+        }
     }
 }
 
@@ -419,7 +450,10 @@ fn try_start_esp32s3_wifi_ap() {
     target_os = "none",
     feature = "esp32s3-wifi-blob"
 )))]
-fn try_start_esp32s3_wifi_ap() {}
+fn try_start_esp32s3_wifi_ap() -> bool {
+    rt::log::log(3, "ESP32-S3 WiFi AP blob feature disabled");
+    false
+}
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
 fn render_html_ui(touch: Option<(u16, u16)>) {
@@ -2793,7 +2827,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     render_initial_ui();
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
     rt::log::log(1, "Display UI rendered");
-    try_start_esp32s3_wifi_ap();
+    rt::log::log(1, "ESP32-S3 WiFi AP command ready");
     rt::log::log(1, "JC3248W535 touch polling enabled");
 
     let mut last_touch: Option<(u16, u16)> = None;

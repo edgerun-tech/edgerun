@@ -145,6 +145,11 @@ impl Esp32s3WifiRadio for EspressifPromiscRadio {
             filter_mask: WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA,
         };
         unsafe {
+            let status = crate::esp32s3_wifi_blob_init::ensure_started_ap();
+            if status != ESP_OK {
+                LAST_START_STATUS.store(5000 + status, Ordering::Relaxed);
+                return false;
+            }
             let status = esp_wifi_set_channel(config.channel, WIFI_SECOND_CHAN_NONE);
             if status != ESP_OK {
                 LAST_START_STATUS.store(1000 + status, Ordering::Relaxed);
