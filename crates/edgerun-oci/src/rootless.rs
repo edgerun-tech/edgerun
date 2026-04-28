@@ -144,13 +144,51 @@ pub fn resolve_cgroup_delegation_path() -> io::Result<String> {
     for line in cgroup_content.lines() {
         if let Some(path) = line.strip_prefix("0::") {
             if !path.is_empty() {
-                return Ok(path.trim_start_matches('/').to_string());
+                return Ok(normalize_cgroup_path(path)?);
             }
         }
     }
 
     // No cgroup v2 delegation found
     Ok(String::new())
+}
+
+fn normalize_cgroup_path(path: &str) -> io::Result<String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+    if trimmed.contains('\0') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cgroup path contains an invalid null byte",
+        ));
+    }
+
+    let mut parts: Vec<&str> = Vec::new();
+    for part in trimmed.split('/') {
+        if part.is_empty() {
+            continue;
+        }
+        if part == "." || part == ".." {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cgroup path contains illegal path traversal segment",
+            ));
+        }
+        if !part
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "cgroup path may only contain letters, digits, '-', '_' and '.'",
+            ));
+        }
+        parts.push(part);
+    }
+
+    Ok(parts.join("/"))
 }
 
 /// Resolve the full cgroup path for a container's cgroupPath.
@@ -163,12 +201,13 @@ pub fn resolve_container_cgroup_path(
     rootless: bool,
     container_cgroup_path: &str,
 ) -> io::Result<String> {
+    let normalized = normalize_cgroup_path(container_cgroup_path)?;
     if !rootless {
         // Root mode: use the cgroup path as-is, default to /edgerun
-        if container_cgroup_path.is_empty() {
+        if normalized.is_empty() {
             return Ok("/edgerun".into());
         }
-        return Ok(container_cgroup_path.to_string());
+        return Ok(format!("/{}", normalized));
     }
 
     // Rootless mode: resolve delegation path and append container's path
@@ -180,10 +219,10 @@ pub fn resolve_container_cgroup_path(
         ));
     }
 
-    let container_path = if container_cgroup_path.is_empty() {
+    let container_path = if normalized.is_empty() {
         "edgerun".to_string()
     } else {
-        container_cgroup_path.trim_start_matches('/').to_string()
+        normalized
     };
 
     Ok(format!("{}/{}", delegated, container_path))

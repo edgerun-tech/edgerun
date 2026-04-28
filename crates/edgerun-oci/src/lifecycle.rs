@@ -44,6 +44,37 @@ fn get_hooks(spec: &OciSpec) -> crate::spec::OciHooks {
         .unwrap_or_default()
 }
 
+fn validate_container_id(value: &str) -> io::Result<()> {
+    if value.is_empty() || value.len() > 255 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID must be between 1 and 255 characters",
+        ));
+    }
+    let Some(first) = value.chars().next() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID cannot be empty",
+        ));
+    };
+    if !first.is_ascii_alphanumeric() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID must start with an alphanumeric character",
+        ));
+    }
+    if !value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container ID may contain only letters, digits, '-', '_' and '.'",
+        ));
+    }
+    Ok(())
+}
+
 // ===========================================================================
 // Step 1: prestart hooks
 // ===========================================================================
@@ -301,7 +332,7 @@ pub fn setup_spec_cgroups(pid: u32, spec: &OciSpec) {
                 "/dev/kmsg",
                 format!("edgerun: cgroup resolution failed: {}", e),
             );
-            raw_cgroup_path.to_string()
+            "/edgerun".to_string()
         });
     setup_container_cgroups(pid, resources, &cgroup_path);
 }
@@ -476,7 +507,7 @@ fn delete_container_internal(
 fn container_cgroup_dir(cgroup_path: &str) -> PathBuf {
     let raw = if cgroup_path.is_empty() { "/edgerun" } else { cgroup_path };
     let resolved = if crate::state::is_rootless_mode() {
-        crate::rootless::resolve_container_cgroup_path(true, raw).unwrap_or_else(|_| raw.to_string())
+        crate::rootless::resolve_container_cgroup_path(true, raw).unwrap_or_else(|_| "/edgerun".to_string())
     } else {
         raw.to_string()
     };
@@ -506,14 +537,19 @@ fn make_state(spec: &OciSpec, container_id: &str, status: &str, pid: u32) -> Con
 // High-level convenience functions (used by container.rs)
 // ===========================================================================
 
-/// Run a container from a spec (blocking). Extracts ID from spec annotations or uses "default".
+/// Run a container from a spec (blocking). Requires `org.edgerun.container.id` annotation.
 pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
-    let container_id = spec
+    let Some(container_id) = spec
         .annotations
         .as_ref()
         .and_then(|a| a.get("org.edgerun.container.id"))
-        .cloned()
-        .unwrap_or_else(|| "default".to_string());
+        .cloned() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container spec is missing required org.edgerun.container.id annotation",
+        ));
+    };
+    validate_container_id(&container_id)?;
     run_spec_with_id(spec, &container_id)
 }
 
@@ -527,19 +563,25 @@ pub fn run_spec_with_id(
     child.wait()
 }
 
-/// Start a container from a spec (non-blocking).
+/// Start a container from a spec (non-blocking). Requires `org.edgerun.container.id` annotation.
 pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
-    let container_id = spec
+    let Some(container_id) = spec
         .annotations
         .as_ref()
         .and_then(|a| a.get("org.edgerun.container.id"))
-        .cloned()
-        .unwrap_or_else(|| "default".to_string());
+        .cloned() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "container spec is missing required org.edgerun.container.id annotation",
+        ));
+    };
+    validate_container_id(&container_id)?;
     start_spec_with_id(spec, &container_id)
 }
 
 /// Start a container from an OCI spec with explicit ID (non-blocking).
 pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<RunningContainer> {
+    validate_container_id(container_id)?;
     // Step 1: prestart hooks
     run_prestart_hooks(spec, container_id)?;
 

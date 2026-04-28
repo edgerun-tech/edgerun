@@ -207,9 +207,7 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
             if let Some(ref linux) = spec.linux {
                 let raw_cgroup = linux.cgroups_path.as_deref().unwrap_or("");
                 let rootless = crate::state::is_rootless_mode();
-                let cgroup_path =
-                    crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup)
-                        .unwrap_or_else(|_| raw_cgroup.to_string());
+                let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, raw_cgroup)?;
                 crate::lifecycle::run_poststop_and_cleanup(
                     &container_id,
                     state.pid.unwrap_or(0),
