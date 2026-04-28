@@ -4,7 +4,7 @@ use crate::prelude::*;
 use std::fs;
 use std::io;
 
-use crate::state::load_state;
+use crate::state::{load_state, save_state, state_root_dir, ContainerState};
 
 pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     if let Some(ref root) = opts.root {
@@ -14,6 +14,10 @@ pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> 
                 "--root path is not valid UTF-8",
             )
         })?);
+    }
+
+    if container_id_arg(args).is_none() {
+        return list_containers(args);
     }
 
     let id = crate::cli::require_container_id(args)?;
@@ -80,6 +84,100 @@ pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> 
     }
 
     Ok(())
+}
+
+fn container_id_arg(args: &[String]) -> Option<&str> {
+    let mut skip_next = false;
+    for arg in args {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        match arg.as_str() {
+            "--all" | "-a" => {}
+            "--format" | "-f" => skip_next = true,
+            _ if !arg.starts_with('-') => return Some(arg.as_str()),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn list_containers(args: &[String]) -> io::Result<()> {
+    let all = args.iter().any(|arg| arg == "-a" || arg == "--all");
+    let json = args
+        .iter()
+        .any(|arg| arg == "--format=json" || arg == "json");
+    let mut states = Vec::new();
+    let root = state_root_dir();
+    if let Ok(entries) = fs::read_dir(root) {
+        for entry in entries.flatten() {
+            let path = entry.path().join("state.json");
+            let Ok(data) = fs::read_to_string(path) else {
+                continue;
+            };
+            let Ok(mut state) = edgerun_json::from_str::<ContainerState>(&data) else {
+                continue;
+            };
+            if let Some(pid) = state.pid {
+                if state.status == "running" && !crate::cli::is_process_alive(pid) {
+                    state.status = "stopped".to_string();
+                    let _ = save_state(&state, &state.id);
+                }
+            }
+            if all || state.status == "running" {
+                states.push(state);
+            }
+        }
+    }
+    states.sort_by(|a, b| a.id.cmp(&b.id));
+
+    if json {
+        print_containers_json(&states);
+    } else {
+        print_containers_table(&states);
+    }
+    Ok(())
+}
+
+fn print_containers_table(states: &[ContainerState]) {
+    println!(
+        "{:<28} {:<10} {:<10} BUNDLE",
+        "CONTAINER ID", "STATUS", "PID"
+    );
+    println!("{:-<80}", "");
+    for state in states {
+        let pid = state
+            .pid
+            .map(|pid| pid.to_string())
+            .unwrap_or_else(|| "-".to_string());
+        println!(
+            "{:<28} {:<10} {:<10} {}",
+            state.id, state.status, pid, state.bundle
+        );
+    }
+}
+
+fn print_containers_json(states: &[ContainerState]) {
+    let mut entries = Vec::new();
+    for state in states {
+        let pid = state
+            .pid
+            .map(|pid| pid.to_string())
+            .unwrap_or_else(|| "null".to_string());
+        entries.push(format!(
+            "{{\"id\":{},\"status\":{},\"pid\":{},\"bundle\":{}}}",
+            json_string(&state.id),
+            json_string(&state.status),
+            pid,
+            json_string(&state.bundle)
+        ));
+    }
+    println!("[{}]", entries.join(","));
+}
+
+fn json_string(value: &str) -> String {
+    edgerun_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
 /// Find all PIDs that are descendants of the given init PID.

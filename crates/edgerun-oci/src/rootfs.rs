@@ -12,7 +12,7 @@ use std::io;
 use std::os::raw::c_int;
 use std::os::raw::c_ulong;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use crate::json::{OciLinuxDevice, OciMount, OciRoot};
 use crate::syscalls::{
@@ -30,6 +30,8 @@ fn mount_flags_from_opts(opts: Option<&[String]>) -> c_ulong {
         for opt in opts {
             match opt.as_str() {
                 "ro" => flags |= ms::RDONLY,
+                "rw" => {}
+                "rbind" => flags |= ms::BIND | ms::REC,
                 "nosuid" => flags |= ms::NOSUID,
                 "nodev" => flags |= ms::NODEV,
                 "noexec" => flags |= ms::NOEXEC,
@@ -46,6 +48,121 @@ fn mount_flags_from_opts(opts: Option<&[String]>) -> c_ulong {
         }
     }
     flags
+}
+
+fn is_bind_mount(mount: &OciMount) -> bool {
+    mount.mount_type.as_deref() == Some("bind")
+        || mount
+            .options
+            .as_deref()
+            .is_some_and(|opts| opts.iter().any(|opt| opt == "bind" || opt == "rbind"))
+}
+
+fn destination_under_rootfs(rootfs: &Path, destination: &str) -> io::Result<PathBuf> {
+    let dest = Path::new(destination);
+    let mut relative = PathBuf::new();
+    for component in dest.components() {
+        match component {
+            Component::RootDir | Component::CurDir => {}
+            Component::Normal(part) => relative.push(part),
+            Component::ParentDir => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("mount destination escapes rootfs: {destination}"),
+                ))
+            }
+            Component::Prefix(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unsupported mount destination: {destination}"),
+                ))
+            }
+        }
+    }
+    Ok(rootfs.join(relative))
+}
+
+fn setup_bind_mount_before_pivot(rootfs: &Path, mount: &OciMount) -> io::Result<()> {
+    let source = mount
+        .source
+        .as_deref()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "bind mount requires source"))?;
+    let source_path = Path::new(source);
+    if !source_path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("bind mount source must be absolute: {source}"),
+        ));
+    }
+    if !source_path.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("bind mount source not found: {source}"),
+        ));
+    }
+
+    let dest = destination_under_rootfs(rootfs, &mount.destination)?;
+    if source_path.is_dir() {
+        fs::create_dir_all(&dest)?;
+    } else {
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        if !dest.exists() {
+            fs::File::create(&dest)?;
+        }
+    }
+
+    let target = dest.to_str().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "bind mount destination path is not valid UTF-8",
+        )
+    })?;
+    let flags = mount_flags_from_opts(mount.options.as_deref());
+    let recursive = flags & ms::REC != 0;
+    let initial_flags = if recursive {
+        ms::BIND | ms::REC
+    } else {
+        ms::BIND
+    };
+    do_mount(source, target, "bind", initial_flags, "")?;
+    if flags & ms::RDONLY != 0 {
+        let readonly_flags = (flags
+            & !(ms::REC | ms::SHARED | ms::SLAVE | ms::PRIVATE | ms::UNBINDABLE))
+            | ms::BIND
+            | ms::REMOUNT
+            | ms::RDONLY;
+        remount_bind_readonly(target, readonly_flags)?;
+    }
+    Ok(())
+}
+
+fn remount_bind_readonly(target: &str, flags: c_ulong) -> io::Result<()> {
+    let target_str = target;
+    let target =
+        CString::new(target_str).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let ret = unsafe {
+        libc::mount(
+            std::ptr::null(),
+            target.as_ptr(),
+            std::ptr::null(),
+            flags,
+            std::ptr::null(),
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        let remount_error = io::Error::last_os_error();
+        let attr = MountAttr {
+            attr_set: mount_attr::RDONLY,
+            attr_clr: 0,
+            propagation: 0,
+            userns_fd: 0,
+        };
+        do_mount_setattr(libc::AT_FDCWD, target_str, &attr, 0).map_err(|_| remount_error)
+    }
 }
 
 fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
@@ -713,6 +830,22 @@ fn setup_rootfs_inner(
     let old_root = rootfs.join(".oci-old-root");
     fs::create_dir_all(&old_root)?;
 
+    if let Some(spec_mounts) = mounts {
+        for mount in spec_mounts.iter().filter(|mount| is_bind_mount(mount)) {
+            setup_bind_mount_before_pivot(rootfs, mount).map_err(|error| {
+                io::Error::new(
+                    error.kind(),
+                    format!(
+                        "bind mount {} -> {} failed before pivot: {}",
+                        mount.source.as_deref().unwrap_or(""),
+                        mount.destination,
+                        error
+                    ),
+                )
+            })?;
+        }
+    }
+
     // pivot_root requires CWD to be under new_root, so chdir to rootfs first
     std::env::set_current_dir(rootfs)?;
 
@@ -845,6 +978,9 @@ fn setup_rootfs_inner(
     // Additional mounts from spec
     if let Some(spec_mounts) = mounts {
         for m in spec_mounts {
+            if is_bind_mount(m) {
+                continue;
+            }
             // Make certain filesystem types best-effort (mqueue, hugetlbfs, etc.)
             let is_optional = matches!(m.mount_type.as_deref(), Some("mqueue") | Some("hugetlbfs"));
             if is_optional {

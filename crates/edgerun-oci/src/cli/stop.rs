@@ -32,7 +32,7 @@ pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         return Ok(());
     }
 
-    signal(pid, libc::SIGTERM)?;
+    signal_tree(pid, libc::SIGTERM);
     let deadline = Instant::now() + Duration::from_secs(timeout);
     while Instant::now() < deadline {
         if !is_process_alive(pid) {
@@ -44,7 +44,7 @@ pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
     }
 
     if is_process_alive(pid) {
-        signal(pid, libc::SIGKILL)?;
+        signal_tree(pid, libc::SIGKILL);
     }
     state.status = "stopped".to_string();
     save_state(&state, id)
@@ -99,4 +99,57 @@ fn signal(pid: u32, signal: libc::c_int) -> io::Result<()> {
     } else {
         Err(error)
     }
+}
+
+fn signal_tree(root_pid: u32, signal_number: libc::c_int) {
+    let mut pids = descendants(root_pid);
+    pids.push(root_pid);
+    pids.sort_unstable();
+    pids.dedup();
+    for pid in pids.into_iter().rev() {
+        let _ = signal(pid, signal_number);
+    }
+}
+
+fn descendants(root_pid: u32) -> Vec<u32> {
+    let mut out = Vec::new();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            break;
+        };
+        for entry in entries.flatten() {
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            let Ok(pid) = name.parse::<u32>() else {
+                continue;
+            };
+            if pid == root_pid || out.contains(&pid) {
+                continue;
+            }
+            let status = format!("/proc/{pid}/status");
+            let Ok(content) = std::fs::read_to_string(status) else {
+                continue;
+            };
+            let Some(ppid) = parent_pid(&content) else {
+                continue;
+            };
+            if ppid == root_pid || out.contains(&ppid) {
+                out.push(pid);
+                changed = true;
+            }
+        }
+    }
+    out
+}
+
+fn parent_pid(status: &str) -> Option<u32> {
+    for line in status.lines() {
+        if let Some(rest) = line.strip_prefix("PPid:") {
+            return rest.trim().parse().ok();
+        }
+    }
+    None
 }

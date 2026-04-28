@@ -926,7 +926,6 @@ impl RegistryClient {
         std::fs::create_dir_all(store_path)?;
 
         let rootfs = bundle_path.join("rootfs");
-        std::fs::create_dir_all(&rootfs)?;
 
         let cache_dir = store_path.join("cache");
         std::fs::create_dir_all(&cache_dir)?;
@@ -1003,6 +1002,10 @@ impl RegistryClient {
         progress(PullProgress::BuildingRootfs {
             path: rootfs.clone(),
         });
+        if rootfs.exists() {
+            std::fs::remove_dir_all(&rootfs).map_err(RegistryError::IoError)?;
+        }
+        std::fs::create_dir_all(&rootfs).map_err(RegistryError::IoError)?;
         build_rootfs(&layer_dirs, &rootfs)?;
 
         let config_json = generate_oci_spec(&image_config, rootfs.to_str().unwrap_or("/"));

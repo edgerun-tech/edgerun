@@ -55,16 +55,16 @@ pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     }
 }
 
-fn print_pull_progress(event: PullProgress) {
+pub(crate) fn print_pull_progress(event: PullProgress) {
     match event {
         PullProgress::Resolving { image } => {
-            println!("  -> resolving {image}");
+            eprintln!("  -> resolving {image}");
         }
         PullProgress::ManifestResolved {
             layers,
             config_digest,
         } => {
-            println!(
+            eprintln!(
                 "  ok manifest: {} layer{}, config {}",
                 layers,
                 if layers == 1 { "" } else { "s" },
@@ -72,17 +72,17 @@ fn print_pull_progress(event: PullProgress) {
             );
         }
         PullProgress::FetchingConfig { digest } => {
-            println!("  -> config {}", short_digest(&digest));
+            eprintln!("  -> config {}", short_digest(&digest));
         }
         PullProgress::ConfigFetched { bytes } => {
-            println!("  ok config: {}", format_bytes(bytes));
+            eprintln!("  ok config: {}", format_bytes(bytes));
         }
         PullProgress::LayerCached {
             index,
             total,
             digest,
         } => {
-            println!(
+            eprintln!(
                 "  ok layer {index}/{total}: {} already cached",
                 short_digest(&digest)
             );
@@ -93,7 +93,7 @@ fn print_pull_progress(event: PullProgress) {
             digest,
             size,
         } => {
-            println!(
+            eprintln!(
                 "  -> layer {index}/{total}: {} ({})",
                 short_digest(&digest),
                 format_bytes(size)
@@ -105,18 +105,18 @@ fn print_pull_progress(event: PullProgress) {
             digest,
             bytes,
         } => {
-            println!(
+            eprintln!(
                 "  ok layer {index}/{total}: {} downloaded",
                 format_bytes(bytes)
             );
-            println!("     {}", short_digest(&digest));
+            eprintln!("     {}", short_digest(&digest));
         }
         PullProgress::LayerExtracting {
             index,
             total,
             digest,
         } => {
-            println!(
+            eprintln!(
                 "  -> layer {index}/{total}: extracting {}",
                 short_digest(&digest)
             );
@@ -126,22 +126,22 @@ fn print_pull_progress(event: PullProgress) {
             total,
             digest,
         } => {
-            println!(
+            eprintln!(
                 "  ok layer {index}/{total}: extracted {}",
                 short_digest(&digest)
             );
         }
         PullProgress::ApplyingWhiteouts { layers } => {
-            println!(
+            eprintln!(
                 "  -> applying whiteouts across {layers} layer{}",
                 if layers == 1 { "" } else { "s" }
             );
         }
         PullProgress::BuildingRootfs { path } => {
-            println!("  -> building rootfs at {}", path.display());
+            eprintln!("  -> building rootfs at {}", path.display());
         }
         PullProgress::WritingConfig { path } => {
-            println!("  -> writing {}", path.display());
+            eprintln!("  -> writing {}", path.display());
         }
     }
 }

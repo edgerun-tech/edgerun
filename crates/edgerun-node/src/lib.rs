@@ -244,14 +244,28 @@ impl<L: EventLog> Node<L> {
             .iter()
             .filter_map(|s| edgerun_core::util::hex_to_bytes(s).ok())
             .collect();
+        let delegation_use_counts: HashMap<Vec<u8>, u64> = HashMap::new();
+        let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
 
         let ctx = CommandValidationContext {
             local_node_id: &self.identity.0,
             replay_cache: &self.processed_commands,
             revoked_delegation_ids: &self.revoked_delegation_ids,
+            delegation_use_counts: &delegation_use_counts,
+            delegation_rate_events_ms: &delegation_rate_events_ms,
             now_ms: now_ms(),
             trusted_root_ids: &trusted_root_ids,
             local_assurance_class: 0, // Unknown — simple config path doesn't track signer type
+            accepted_assurance_claims: &[],
+            has_local_session: false,
+            has_user_presence: false,
+            transport_class: None,
+            location_classes: &[],
+            target_stream_id: None,
+            target_view_type: None,
+            target_domain: None,
+            execution_class: None,
+            storage_class: None,
         };
 
         let result = validate_command(command, &ctx);

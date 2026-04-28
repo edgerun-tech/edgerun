@@ -30,7 +30,8 @@ use crate::hooks::{
 use crate::json::{OciHook, OciLinuxResources, OciSpec};
 use crate::process::{setup_container_child, setup_container_child_rootless, ContainerConfig};
 use crate::state::{
-    container_state_dir, fifo_path, is_root, save_state, ContainerState as StateContainerState,
+    container_state_dir, fifo_path, is_root, save_runtime_spec, save_state,
+    ContainerState as StateContainerState,
 };
 
 /// Extract hooks from an OCI spec, returning a default-empty set if absent.
@@ -469,7 +470,8 @@ pub fn save_created_state(
         bundle: bundle_path.to_string(),
         annotations: spec.annotations.clone(),
     };
-    save_state(&state, container_id)
+    save_state(&state, container_id)?;
+    save_runtime_spec(spec, container_id)
 }
 
 // ===========================================================================

@@ -36,6 +36,7 @@ fn main() {
         "start" => cli::cmd_start(&opts, &cmd_args),
         "stop" => cli::cmd_stop(&opts, &cmd_args),
         "state" => cli::cmd_state(&opts, &cmd_args),
+        "inspect" => cli::cmd_inspect(&opts, &cmd_args),
         "kill" => cli::cmd_kill(&opts, &cmd_args),
         "logs" => cli::cmd_logs(&opts, &cmd_args),
         "delete" => cli::cmd_delete(&opts, &cmd_args),
@@ -53,6 +54,8 @@ fn main() {
         // Registry
         "pull" => cli::cmd_pull(&opts, &cmd_args),
         "push" => cli::cmd_push(&opts, &cmd_args),
+        "images" => cli::cmd_images(&opts, &cmd_args),
+        "rmi" => cli::cmd_rmi(&opts, &cmd_args),
         "run" => cli::cmd_run(&opts, &cmd_args),
         "registry" => dispatch_registry_command(&opts, &cmd_args),
         _ => {
@@ -100,6 +103,7 @@ fn is_container_command(command: &str) -> bool {
             | "resume"
             | "update"
             | "state"
+            | "inspect"
             | "ps"
             | "logs"
             | "events"

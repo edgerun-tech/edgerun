@@ -75,6 +75,12 @@ fn state_dir_base() -> std::borrow::Cow<'static, str> {
     }
 }
 
+/// Return the current container state root directory.
+pub fn state_root_dir() -> PathBuf {
+    let base = state_dir_base();
+    PathBuf::from(base.as_ref())
+}
+
 /// Container state matching the OCI runtime spec JSON format.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ContainerState {
@@ -100,6 +106,11 @@ pub fn state_file_path(id: &str) -> PathBuf {
     container_state_dir(id).join("state.json")
 }
 
+/// Return the path to the effective runtime spec captured for this container.
+pub fn runtime_spec_path(id: &str) -> PathBuf {
+    container_state_dir(id).join("runtime-config.json")
+}
+
 /// Return the path to the start FIFO file.
 pub fn fifo_path(id: &str) -> PathBuf {
     container_state_dir(id).join("start.fifo")
@@ -112,6 +123,16 @@ pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
     let json = edgerun_json::to_string_pretty(state)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     fs::write(state_file_path(id), json)?;
+    Ok(())
+}
+
+/// Save the effective runtime OCI spec used to create the container.
+pub fn save_runtime_spec(spec: &crate::json::OciSpec, id: &str) -> io::Result<()> {
+    let dir = container_state_dir(id);
+    fs::create_dir_all(&dir)?;
+    let json = edgerun_json::to_string_pretty(spec)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    fs::write(runtime_spec_path(id), json)?;
     Ok(())
 }
 

@@ -7,7 +7,7 @@ use edgerun_rt::{AsyncReadExt, AsyncWriteExt, CancellationToken};
 use prost::Message;
 
 use crate::session::{self, SessionState};
-use crate::tcp_server::{SessionContext, TCP_MAX_FRAME_SIZE, encode_tcp_frame};
+use crate::tcp_server::{encode_tcp_frame, SessionContext, TCP_MAX_FRAME_SIZE};
 use crate::types::StoreRequest;
 
 /// Periodically attempts to reconnect to unreachable peers.

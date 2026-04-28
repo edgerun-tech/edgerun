@@ -24,10 +24,11 @@
 use crate::prelude::v1::*;
 
 use crate::protocol::{
-    canonical_bytes, CapabilityDescriptor, CommandEnvelope, CommandType, DelegationRecord, Digest,
-    IdentityRef, ObjectRef, ProtocolRecord,
+    canonical_bytes, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor, CommandEnvelope,
+    CommandType, DelegationRecord, Digest, IdentityRef, ObjectRef, ProtocolRecord,
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
+use crate::validators_proto::validate_assurance_claim_satisfies_requirement;
 use crate::value::Value;
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,10 @@ pub struct CommandValidationContext<'a> {
     pub replay_cache: &'a crate::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
     /// Known revocation IDs (delegations that have been revoked).
     pub revoked_delegation_ids: &'a crate::collections::HashSet<Vec<u8>>,
+    /// Local use counts keyed by delegation_id.
+    pub delegation_use_counts: &'a crate::collections::HashMap<Vec<u8>, u64>,
+    /// Local command timestamps in milliseconds keyed by delegation_id for rate-limit checks.
+    pub delegation_rate_events_ms: &'a crate::collections::HashMap<Vec<u8>, Vec<i64>>,
     /// Current time as unix timestamp millis (for timing checks).
     pub now_ms: i64,
     /// Trusted root identity IDs. If empty, direct authority is accepted.
@@ -50,6 +55,26 @@ pub struct CommandValidationContext<'a> {
     /// Local node's assurance capability (ASSURANCE_CLASS_SOFTWARE=1, HARDWARE_BACKED=2, ATTESTED_RUNTIME=3).
     /// If 0, no assurance capability is reported (software-only, no attestation).
     pub local_assurance_class: i32,
+    /// Locally accepted assurance claims available for satisfying claim-level requirements.
+    pub accepted_assurance_claims: &'a [AssuranceClaim],
+    /// Whether the command arrived over a local authenticated session.
+    pub has_local_session: bool,
+    /// Whether fresh user presence was established for this command.
+    pub has_user_presence: bool,
+    /// Transport class used to deliver this command, if known.
+    pub transport_class: Option<i32>,
+    /// Location classes known for this command/session.
+    pub location_classes: &'a [&'a str],
+    /// Stream targeted by this command, if applicable.
+    pub target_stream_id: Option<&'a [u8]>,
+    /// View type targeted by this command, if applicable.
+    pub target_view_type: Option<&'a str>,
+    /// Domain targeted by this command, if applicable.
+    pub target_domain: Option<&'a str>,
+    /// Execution class selected for this command, if applicable.
+    pub execution_class: Option<i32>,
+    /// Storage class selected for this command, if applicable.
+    pub storage_class: Option<i32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -711,9 +736,83 @@ fn required_capability_for_command(command_type: i32) -> Option<(i32, &'static s
     }
 }
 
+fn assurance_requirement_needs_claim(requirement: &AssuranceRequirement) -> bool {
+    !requirement.acceptable_attesters.is_empty() || requirement.max_evidence_age.is_some()
+}
+
+fn assurance_claim_subject_matches_local_node(
+    claim: &AssuranceClaim,
+    ctx: &CommandValidationContext<'_>,
+) -> bool {
+    matches!(
+        &claim.subject,
+        Some(edgerun_proto::edgerun::v0::trust::assurance_claim::Subject::SubjectNode(node))
+            if node.node_id == ctx.local_node_id.as_slice()
+    )
+}
+
+fn local_assurance_satisfies_requirement(
+    requirement: &AssuranceRequirement,
+    ctx: &CommandValidationContext<'_>,
+    failure_code: ReasonCode,
+) -> Result<(), ValidationResult> {
+    use edgerun_proto::edgerun::v0::common::AssuranceClass;
+
+    if AssuranceClass::from_i32(ctx.local_assurance_class).is_none() {
+        return Err(reject(
+            ReasonCode::StructuralInvalid,
+            Value::String(format!(
+                "invalid local assurance class: {}",
+                ctx.local_assurance_class
+            )),
+            empty_map(),
+        ));
+    }
+
+    if !assurance_requirement_needs_claim(requirement) {
+        if ctx.local_assurance_class >= requirement.required_class {
+            return Ok(());
+        }
+    }
+
+    let mut first_failure = None;
+    for claim in ctx.accepted_assurance_claims {
+        if !assurance_claim_subject_matches_local_node(claim, ctx) {
+            continue;
+        }
+        let result = validate_assurance_claim_satisfies_requirement(claim, requirement, ctx.now_ms);
+        if result.verdict == crate::result::Verdict::Accept {
+            return Ok(());
+        }
+        if first_failure.is_none() {
+            first_failure = Some(result);
+        }
+    }
+
+    if let Some(result) = first_failure {
+        return Err(result);
+    }
+
+    let mut derived = std::collections::BTreeMap::new();
+    derived.insert(
+        "required_class".into(),
+        Value::Int(requirement.required_class as i64),
+    );
+    derived.insert(
+        "local_class".into(),
+        Value::Int(ctx.local_assurance_class as i64),
+    );
+    Err(reject(
+        failure_code,
+        Value::Map(derived),
+        Value::String("no accepted assurance claim satisfies requirement".into()),
+    ))
+}
+
 fn validate_effective_capability_for_command(
     command: &CommandEnvelope,
     capability: &CapabilityDescriptor,
+    ctx: &CommandValidationContext<'_>,
 ) -> Result<(), ValidationResult> {
     let Some((required_kind, required_action)) =
         required_capability_for_command(command.command_type)
@@ -777,6 +876,230 @@ fn validate_effective_capability_for_command(
             Value::String("delegation scope does not include command target_node".into()),
             empty_map(),
         ));
+    }
+    if !scope.target_object_kinds.is_empty() {
+        let Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::PayloadObject(
+            payload_object,
+        )) = &command.payload
+        else {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(
+                    "delegation scope restricts object kinds but command has no payload_object"
+                        .into(),
+                ),
+                empty_map(),
+            ));
+        };
+        let Some(payload_object_kind) = payload_object.object_kind else {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(
+                    "delegation scope restricts object kinds but payload_object has no object_kind"
+                        .into(),
+                ),
+                empty_map(),
+            ));
+        };
+        if !scope.target_object_kinds.contains(&payload_object_kind) {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String("delegation scope does not include payload_object kind".into()),
+                empty_map(),
+            ));
+        }
+    }
+    if !scope.target_streams.is_empty() {
+        let Some(target_stream_id) = ctx.target_stream_id else {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(
+                    "delegation scope restricts streams but command has no target_stream".into(),
+                ),
+                empty_map(),
+            ));
+        };
+        if !scope
+            .target_streams
+            .iter()
+            .any(|target| target.stream_id == target_stream_id)
+        {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String("delegation scope does not include command target_stream".into()),
+                empty_map(),
+            ));
+        }
+    }
+    if !scope.target_view_types.is_empty() {
+        let Some(target_view_type) = ctx.target_view_type else {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(
+                    "delegation scope restricts view types but command has no target_view_type"
+                        .into(),
+                ),
+                empty_map(),
+            ));
+        };
+        if !scope
+            .target_view_types
+            .iter()
+            .any(|view_type| view_type == target_view_type)
+        {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String("delegation scope does not include command target_view_type".into()),
+                empty_map(),
+            ));
+        }
+    }
+    if !scope.target_domains.is_empty() {
+        let Some(target_domain) = ctx.target_domain else {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String(
+                    "delegation scope restricts domains but command has no target_domain".into(),
+                ),
+                empty_map(),
+            ));
+        };
+        if !scope
+            .target_domains
+            .iter()
+            .any(|domain| domain == target_domain)
+        {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String("delegation scope does not include command target_domain".into()),
+                empty_map(),
+            ));
+        }
+    }
+    if let Some(time_bounds) = &scope.time_bounds {
+        if let Some(not_before) = &time_bounds.not_before {
+            let not_before_ms = timestamp_millis(not_before);
+            if ctx.now_ms < not_before_ms {
+                return Err(defer(
+                    ReasonCode::TimeInvalid,
+                    Value::String("delegation scope time_bounds not yet valid".into()),
+                ));
+            }
+        }
+        if let Some(expires_at) = &time_bounds.expires_at {
+            let expires_ms = timestamp_millis(expires_at);
+            if ctx.now_ms > expires_ms {
+                return Err(reject(
+                    ReasonCode::TimeInvalid,
+                    Value::String("delegation scope time_bounds expired".into()),
+                    empty_map(),
+                ));
+            }
+        }
+    }
+    if let Some(constraints) = &capability.constraints {
+        if let Some(not_before) = &constraints.not_before {
+            let not_before_ms = timestamp_millis(not_before);
+            if ctx.now_ms < not_before_ms {
+                return Err(defer(
+                    ReasonCode::TimeInvalid,
+                    Value::String("delegation constraints not yet valid".into()),
+                ));
+            }
+        }
+        if let Some(expires_at) = &constraints.expires_at {
+            let expires_ms = timestamp_millis(expires_at);
+            if ctx.now_ms > expires_ms {
+                return Err(reject(
+                    ReasonCode::TimeInvalid,
+                    Value::String("delegation constraints expired".into()),
+                    empty_map(),
+                ));
+            }
+        }
+        if constraints.requires_local_session == Some(true) && !ctx.has_local_session {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String("delegation constraints require local session".into()),
+                empty_map(),
+            ));
+        }
+        if constraints.requires_user_presence == Some(true) && !ctx.has_user_presence {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String("delegation constraints require user presence".into()),
+                empty_map(),
+            ));
+        }
+        if !constraints.requires_transport_classes.is_empty() {
+            let Some(transport_class) = ctx.transport_class else {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("delegation constraints require known transport class".into()),
+                    empty_map(),
+                ));
+            };
+            if !constraints
+                .requires_transport_classes
+                .contains(&transport_class)
+            {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("transport class does not satisfy delegation constraints".into()),
+                    empty_map(),
+                ));
+            }
+        }
+        if !constraints.requires_location_classes.is_empty()
+            && !constraints
+                .requires_location_classes
+                .iter()
+                .any(|required| ctx.location_classes.contains(&required.as_str()))
+        {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String("location class does not satisfy delegation constraints".into()),
+                empty_map(),
+            ));
+        }
+        if !constraints.execution_class_limits.is_empty() {
+            let Some(execution_class) = ctx.execution_class else {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("delegation constraints require known execution class".into()),
+                    empty_map(),
+                ));
+            };
+            if !constraints
+                .execution_class_limits
+                .contains(&execution_class)
+            {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("execution class does not satisfy delegation constraints".into()),
+                    empty_map(),
+                ));
+            }
+        }
+        if !constraints.storage_class_limits.is_empty() {
+            let Some(storage_class) = ctx.storage_class else {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("delegation constraints require known storage class".into()),
+                    empty_map(),
+                ));
+            };
+            if !constraints.storage_class_limits.contains(&storage_class) {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String("storage class does not satisfy delegation constraints".into()),
+                    empty_map(),
+                ));
+            }
+        }
+    }
+    if let Some(assurance) = &capability.minimum_assurance {
+        local_assurance_satisfies_requirement(assurance, ctx, ReasonCode::AssuranceInsufficient)?;
     }
 
     Ok(())
@@ -1155,31 +1478,10 @@ pub fn validate_command(
         };
 
         if required_class != AssuranceClass::Unspecified {
-            let Some(_local_class) = AssuranceClass::from_i32(ctx.local_assurance_class) else {
-                return reject(
-                    ReasonCode::StructuralInvalid,
-                    Value::String(format!(
-                        "invalid local assurance class: {}",
-                        ctx.local_assurance_class
-                    )),
-                    empty_map(),
-                );
-            };
-
-            let required_class = req.required_class;
-            if ctx.local_assurance_class < required_class {
-                let mut derived_map = std::collections::BTreeMap::new();
-                derived_map.insert("required_class".into(), Value::Int(required_class as i64));
-                derived_map.insert(
-                    "local_class".into(),
-                    Value::Int(ctx.local_assurance_class as i64),
-                );
-                let derived = Value::Map(derived_map);
-                return reject(
-                    ReasonCode::AuthorityDenied,
-                    derived,
-                    Value::String("node cannot satisfy requested assurance requirement".into()),
-                );
+            if let Err(result) =
+                local_assurance_satisfies_requirement(req, ctx, ReasonCode::AuthorityDenied)
+            {
+                return result;
             }
         }
     }
@@ -1200,7 +1502,7 @@ pub fn validate_command(
                     );
                 };
                 if let Err(reason) =
-                    validate_effective_capability_for_command(command, leaf_capability)
+                    validate_effective_capability_for_command(command, leaf_capability, ctx)
                 {
                     return reason;
                 }
@@ -1331,6 +1633,67 @@ fn validate_delegation_chain(
                 )),
                 empty_map(),
             ));
+        }
+        if let Some(max_uses) = delegation
+            .capability
+            .as_ref()
+            .and_then(|capability| capability.constraints.as_ref())
+            .and_then(|constraints| constraints.max_uses)
+        {
+            let local_uses = ctx
+                .delegation_use_counts
+                .get(&delegation.delegation_id)
+                .copied()
+                .unwrap_or(0);
+            if local_uses >= max_uses {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String(format!(
+                        "delegation max_uses exhausted for delegation {}",
+                        crate::util::bytes_to_hex(&delegation.delegation_id)
+                    )),
+                    empty_map(),
+                ));
+            }
+        }
+        if let Some(rate_limit) = delegation
+            .capability
+            .as_ref()
+            .and_then(|capability| capability.constraints.as_ref())
+            .and_then(|constraints| constraints.rate_limit.as_ref())
+        {
+            let Some(period_ms) = rate_limit.per.as_ref().and_then(duration_millis) else {
+                return Err(reject(
+                    ReasonCode::StructuralInvalid,
+                    Value::String("delegation rate_limit period is invalid".into()),
+                    empty_map(),
+                ));
+            };
+            let window_start_ms = if period_ms > i64::MAX as i128 {
+                i64::MIN
+            } else {
+                ctx.now_ms.saturating_sub(period_ms as i64)
+            };
+            let operations_in_window = ctx
+                .delegation_rate_events_ms
+                .get(&delegation.delegation_id)
+                .map(|events| {
+                    events
+                        .iter()
+                        .filter(|event_ms| **event_ms > window_start_ms && **event_ms <= ctx.now_ms)
+                        .count() as u64
+                })
+                .unwrap_or(0);
+            if operations_in_window >= rate_limit.max_operations {
+                return Err(reject(
+                    ReasonCode::AuthorityDenied,
+                    Value::String(format!(
+                        "delegation rate_limit exhausted for delegation {}",
+                        crate::util::bytes_to_hex(&delegation.delegation_id)
+                    )),
+                    empty_map(),
+                ));
+            }
         }
 
         // Check timing: expires_at
@@ -1597,9 +1960,7 @@ fn attenuate_scope(
                 empty_map(),
             ));
         }
-        return Ok(());
-    }
-    if parent_kind != child_kind {
+    } else if parent_kind != child_kind {
         return Err(reject(
             ReasonCode::AuthorityDenied,
             Value::String(format!(
@@ -2313,12 +2674,14 @@ mod tests {
     use super::*;
     use crate::collections::{HashMap, HashSet};
     use crate::protocol::{
-        CapabilityDescriptor, CommandEnvelope, DelegationRecord, IdentityRef, NodeRef, ObjectRef,
+        AssuranceClaim, AssuranceRequirement, CapabilityDescriptor, CommandEnvelope,
+        DelegationRecord, IdentityRef, NodeRef, ObjectRef, StreamRef,
     };
     use crate::result::Verdict;
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_proto::edgerun::v0::common::{
-        AssuranceClass, Signature as ProtoSignature, TimeWindow, TransportClass,
+        AssuranceClass, ExecutionClass, ObjectKind, RateLimit, Signature as ProtoSignature,
+        StorageClass, TimeWindow, TransportClass,
     };
     use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
     use edgerun_proto::edgerun::v0::trust::{CapabilityKind, DelegationPolicy, ScopeKind};
@@ -2378,6 +2741,59 @@ mod tests {
         });
     }
 
+    fn sign_assurance_claim(key: &SigningKey, claim: &mut AssuranceClaim) {
+        claim.signature = None;
+        if let Some(attester) = &mut claim.attester {
+            attester.key_hint = Some(key_hint_for(key));
+        }
+        let record = ProtocolRecord::AssuranceClaim(claim.clone());
+        let canonical = canonical_bytes(&record, true);
+        let sig = crate::crypto::sign_canonical_record(
+            key,
+            crate::crypto::SIG_DOMAIN_ASSURANCE_CLAIM,
+            &canonical,
+        )
+        .unwrap();
+        claim.signature = Some(ProtoSignature {
+            algorithm: 1,
+            value: sig,
+        });
+    }
+
+    fn signed_assurance_claim_for_node(
+        key: &SigningKey,
+        subject_node_id: Vec<u8>,
+    ) -> AssuranceClaim {
+        let attester_id = key_hint_for(key);
+        let mut claim = AssuranceClaim {
+            claim_version: 1,
+            subject: Some(
+                edgerun_proto::edgerun::v0::trust::assurance_claim::Subject::SubjectNode(NodeRef {
+                    node_id: subject_node_id,
+                }),
+            ),
+            assurance_class: AssuranceClass::HardwareBacked as i32,
+            attester: Some(IdentityRef {
+                identity_id: attester_id.clone(),
+                identity_kind: Some(1),
+                key_hint: Some(attester_id),
+            }),
+            issued_at: Some(prost_types::Timestamp {
+                seconds: 1_699_999_980,
+                nanos: 0,
+            }),
+            expires_at: Some(prost_types::Timestamp {
+                seconds: 1_800_000_000,
+                nanos: 0,
+            }),
+            evidence_object: None,
+            claim_note: "test assurance".into(),
+            signature: None,
+        };
+        sign_assurance_claim(key, &mut claim);
+        claim
+    }
+
     fn key_hint_for(key: &SigningKey) -> Vec<u8> {
         let encoded = key.verifying_key().to_encoded_point(false);
         encoded.as_bytes()[1..65].to_vec()
@@ -2421,14 +2837,31 @@ mod tests {
             std::sync::LazyLock::new(HashMap::new);
         static EMPTY_REVOKED: std::sync::LazyLock<HashSet<Vec<u8>>> =
             std::sync::LazyLock::new(HashSet::new);
+        static EMPTY_DELEGATION_USES: std::sync::LazyLock<HashMap<Vec<u8>, u64>> =
+            std::sync::LazyLock::new(HashMap::new);
+        static EMPTY_DELEGATION_RATE_EVENTS: std::sync::LazyLock<HashMap<Vec<u8>, Vec<i64>>> =
+            std::sync::LazyLock::new(HashMap::new);
         static EMPTY_ROOTS: [Vec<u8>; 0] = [];
+        static EMPTY_LOCATION_CLASSES: [&str; 0] = [];
         CommandValidationContext {
             local_node_id: &LOCAL_NODE_ID,
             replay_cache: &*EMPTY_CACHE,
             revoked_delegation_ids: &*EMPTY_REVOKED,
+            delegation_use_counts: &*EMPTY_DELEGATION_USES,
+            delegation_rate_events_ms: &*EMPTY_DELEGATION_RATE_EVENTS,
             now_ms: 1_700_000_000_000,
             trusted_root_ids: &EMPTY_ROOTS,
             local_assurance_class: 2, // HARDWARE_BACKED for tests
+            accepted_assurance_claims: &[],
+            has_local_session: false,
+            has_user_presence: false,
+            transport_class: None,
+            location_classes: &EMPTY_LOCATION_CLASSES,
+            target_stream_id: None,
+            target_view_type: None,
+            target_domain: None,
+            execution_class: None,
+            storage_class: None,
         }
     }
 
@@ -3188,6 +3621,730 @@ mod tests {
     }
 
     #[test]
+    fn delegation_chain_leaf_scope_must_include_payload_object_kind() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut scope = valid_global_scope();
+        scope.target_object_kinds = vec![ObjectKind::Snapshot as i32];
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(scope),
+                constraints: None,
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.payload = Some(Payload::PayloadObject(ObjectRef {
+            object_id: b"payload-1".to_vec(),
+            object_kind: Some(ObjectKind::Payload as i32),
+        }));
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_leaf_scope_must_include_target_stream() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut scope = valid_global_scope();
+        scope.target_streams = vec![StreamRef {
+            stream_id: b"stream-a".to_vec(),
+        }];
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(scope),
+                constraints: None,
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.target_stream_id = Some(b"stream-b");
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_leaf_scope_must_include_target_domain() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut scope = valid_global_scope();
+        scope.target_domains = vec!["secrets".into()];
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(scope),
+                constraints: None,
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.target_domain = Some("metrics");
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_leaf_scope_must_include_target_view_type() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut scope = valid_global_scope();
+        scope.target_view_types = vec!["status".into()];
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(scope),
+                constraints: None,
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.target_view_type = Some("timeline");
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_leaf_scope_time_bounds_defer_when_not_yet_valid() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut scope = valid_global_scope();
+        scope.time_bounds = Some(TimeWindow {
+            not_before: Some(prost_types::Timestamp {
+                seconds: 1_700_001_000,
+                nanos: 0,
+            }),
+            expires_at: None,
+        });
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(scope),
+                constraints: None,
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Defer);
+        assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
+    #[test]
+    fn delegation_chain_leaf_constraints_expired_rejected() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut constraints = valid_constraint_set();
+        constraints.expires_at = Some(prost_types::Timestamp {
+            seconds: 1_699_999_000,
+            nanos: 0,
+        });
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(valid_global_scope()),
+                constraints: Some(constraints),
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
+    #[test]
+    fn delegation_chain_leaf_constraints_require_local_session() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut constraints = valid_constraint_set();
+        constraints.requires_local_session = Some(true);
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(valid_global_scope()),
+                constraints: Some(constraints),
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_max_uses_exhausted_rejected() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut constraints = valid_constraint_set();
+        constraints.max_uses = Some(1);
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(valid_global_scope()),
+                constraints: Some(constraints),
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut delegation_use_counts = HashMap::new();
+        delegation_use_counts.insert(b"deleg-1".to_vec(), 1);
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.delegation_use_counts = &delegation_use_counts;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_rate_limit_exhausted_rejected() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut constraints = valid_constraint_set();
+        constraints.rate_limit = Some(RateLimit {
+            max_operations: 2,
+            per: Some(prost_types::Duration {
+                seconds: 60,
+                nanos: 0,
+            }),
+        });
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(valid_global_scope()),
+                constraints: Some(constraints),
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut delegation_rate_events_ms = HashMap::new();
+        delegation_rate_events_ms.insert(
+            b"deleg-1".to_vec(),
+            vec![1_699_999_950_000, 1_699_999_990_000],
+        );
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.delegation_rate_events_ms = &delegation_rate_events_ms;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_leaf_execution_class_limit_must_match_context() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut constraints = valid_constraint_set();
+        constraints.execution_class_limits = vec![ExecutionClass::LocalOnly as i32];
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(valid_global_scope()),
+                constraints: Some(constraints),
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.execution_class = Some(ExecutionClass::Public as i32);
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_leaf_storage_class_limit_must_match_context() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut constraints = valid_constraint_set();
+        constraints.storage_class_limits = vec![StorageClass::Hot as i32];
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(valid_global_scope()),
+                constraints: Some(constraints),
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.storage_class = Some(StorageClass::Archive as i32);
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_leaf_assurance_must_be_satisfied_locally() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+
+        let mut delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(valid_global_scope()),
+                constraints: None,
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: Some(crate::protocol::AssuranceRequirement {
+                    assurance_version: 1,
+                    required_class: AssuranceClass::AttestedRuntime as i32,
+                    acceptable_attesters: vec![],
+                    max_evidence_age: None,
+                    assurance_metadata: None,
+                }),
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut delegation, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![delegation];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.local_assurance_class = AssuranceClass::HardwareBacked as i32;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AssuranceInsufficient));
+    }
+
+    #[test]
     fn delegation_chain_capability_kind_expansion_rejected() {
         let key = test_signing_key();
         let node_id = key_hint_for(&key);
@@ -3374,6 +4531,100 @@ mod tests {
         }];
         let mut child_scope = valid_global_scope();
         child_scope.scope_kind = ScopeKind::Stream as i32;
+
+        let mut parent = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-1".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"root".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: b"mid".to_vec(),
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(parent_scope),
+                constraints: None,
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut parent, &node_id);
+
+        let mut child = DelegationRecord {
+            record_version: 1,
+            delegation_id: b"deleg-2".to_vec(),
+            issuer: Some(IdentityRef {
+                identity_id: b"mid".to_vec(),
+                identity_kind: None,
+                key_hint: Some(node_id.clone()),
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: vec![7, 8, 9],
+                identity_kind: None,
+                key_hint: None,
+            }),
+            issued_at: Some(valid_delegation_issued_at()),
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: CapabilityKind::Query as i32,
+                actions: vec!["query".into()],
+                scope: Some(child_scope),
+                constraints: None,
+                delegation_policy: DelegationPolicy::DelegableWithAttenuation as i32,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: None,
+        };
+        sign_test_delegation(&key, &mut child, &node_id);
+
+        let mut cmd = make_unsigned_command();
+        cmd.delegation_chain = vec![parent, child];
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(node_id),
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_global_parent_domain_constraint_must_attenuate() {
+        let key = test_signing_key();
+        let node_id = key_hint_for(&key);
+        let mut parent_scope = valid_global_scope();
+        parent_scope.scope_kind = ScopeKind::GlobalWithConstraints as i32;
+        parent_scope.target_domains = vec!["secrets".into()];
+        let mut child_scope = valid_global_scope();
+        child_scope.scope_kind = ScopeKind::Domain as i32;
+        child_scope.target_domains = vec!["metrics".into()];
 
         let mut parent = DelegationRecord {
             record_version: 1,
@@ -4748,6 +5999,96 @@ mod tests {
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn command_requested_assurance_max_age_requires_claim_evidence() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: Some(prost_types::Duration {
+                seconds: 60,
+                nanos: 0,
+            }),
+            assurance_metadata: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.local_assurance_class = AssuranceClass::HardwareBacked as i32;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn command_requested_assurance_rejects_claim_for_other_node() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: Some(prost_types::Duration {
+                seconds: 60,
+                nanos: 0,
+            }),
+            assurance_metadata: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let claims = [signed_assurance_claim_for_node(&key, vec![0x42; 64])];
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.local_assurance_class = AssuranceClass::HardwareBacked as i32;
+        ctx.accepted_assurance_claims = &claims;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn command_requested_assurance_accepts_matching_node_claim() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: Some(prost_types::Duration {
+                seconds: 60,
+                nanos: 0,
+            }),
+            assurance_metadata: None,
+        });
+        sign_command(&key, &mut cmd);
+
+        let claims = [signed_assurance_claim_for_node(&key, TEST_NODE_ID.to_vec())];
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.local_assurance_class = AssuranceClass::Unspecified as i32;
+        ctx.accepted_assurance_claims = &claims;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Accept);
     }
 
     #[test]

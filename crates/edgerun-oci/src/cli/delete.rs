@@ -30,7 +30,10 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     let (pid, bundle, _cgroup_path) = if let Some(ref s) = state {
         let p = s.pid.unwrap_or(0);
         let b = s.bundle.clone();
-        let st = s.status.clone();
+        let mut st = s.status.clone();
+        if p > 0 && st == "running" && !is_process_alive(p) {
+            st = "stopped".to_string();
+        }
 
         // OCI spec: delete MUST generate an error if container is not stopped
         // unless --force is used

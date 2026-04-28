@@ -227,13 +227,27 @@ pub fn dispatch_command(
     }
 
     // Build validation context for full validate_command
+    let delegation_use_counts: HashMap<Vec<u8>, u64> = HashMap::new();
+    let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
     let ctx = CommandValidationContext {
         local_node_id: &local_node_id,
         replay_cache,
         revoked_delegation_ids: revoked_delegations,
+        delegation_use_counts: &delegation_use_counts,
+        delegation_rate_events_ms: &delegation_rate_events_ms,
         now_ms,
         trusted_root_ids,
         local_assurance_class,
+        accepted_assurance_claims: &[],
+        has_local_session: false,
+        has_user_presence: false,
+        transport_class: None,
+        location_classes: &[],
+        target_stream_id: None,
+        target_view_type: None,
+        target_domain: None,
+        execution_class: None,
+        storage_class: None,
     };
 
     // Run full validation (replay, timing, delegation chain, cryptographic signatures)

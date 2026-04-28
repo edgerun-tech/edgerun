@@ -7,6 +7,8 @@ mod delete;
 mod events;
 mod exec;
 mod features;
+mod images;
+mod inspect;
 mod kill;
 mod logs;
 mod pause;
@@ -23,6 +25,7 @@ mod pull;
 mod push;
 mod registry_login;
 mod registry_logout;
+mod rmi;
 mod run;
 
 pub use checkpoint::cmd_checkpoint;
@@ -31,6 +34,8 @@ pub use delete::cmd_delete;
 pub use events::cmd_events;
 pub use exec::cmd_exec;
 pub use features::cmd_features;
+pub use images::cmd_images;
+pub use inspect::cmd_inspect;
 pub use kill::cmd_kill;
 pub use logs::cmd_logs;
 pub use pause::cmd_pause;
@@ -47,6 +52,7 @@ pub use pull::cmd_pull;
 pub use push::cmd_push;
 pub use registry_login::cmd_login;
 pub use registry_logout::cmd_logout;
+pub use rmi::cmd_rmi;
 pub use run::cmd_run;
 
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -193,6 +199,7 @@ pub fn print_usage() {
     eprintln!("  start <container-id>      Start a created container");
     eprintln!("  stop <container-id>       Stop a running container");
     eprintln!("  state <container-id>      Output state of a container");
+    eprintln!("  inspect <container-id>    Output state and config details");
     eprintln!("  kill <container-id>       Send signal to container");
     eprintln!("  logs <container-id>       Print container stdout/stderr logs");
     eprintln!("  delete <container-id>     Delete container resources");
@@ -209,11 +216,27 @@ pub fn print_usage() {
     eprintln!("  spec                      Generate a default config.json");
     eprintln!();
     eprintln!("Registry commands:");
+    eprintln!("  images                    List local images");
+    eprintln!("  rmi <image>               Remove a local image");
     eprintln!("  pull <image>              Pull an image from a registry");
     eprintln!("  push <image>              Push an image to a registry");
     eprintln!("  run <image> [cmd...]      Pull (if needed), create, start, and wait");
     eprintln!("  registry login <reg>      Login to a registry (biometric auth)");
     eprintln!("  registry logout <reg>     Logout from a registry");
+    eprintln!();
+    eprintln!("Run options:");
+    eprintln!("  --rm                      Remove container state after exit");
+    eprintln!("  -d, --detach              Run in background");
+    eprintln!("  --name <name>             Assign container ID");
+    eprintln!("  -e, --env KEY=VALUE       Add environment variable");
+    eprintln!("  --env-file <path>         Read environment variables from file");
+    eprintln!("  -u, --user USER[:GROUP]   Run as numeric ID or image user/group name");
+    eprintln!("  -w, --workdir <path>      Set working directory");
+    eprintln!("  -v host:ctr[:ro|rw]       Bind mount a host path");
+    eprintln!("  --pull <policy>           Image pull policy: missing, always, or never");
+    eprintln!("  --hostname <name>         Set container hostname");
+    eprintln!("  --dns <addr>              Write resolver nameserver");
+    eprintln!("  --add-host host:ip        Add /etc/hosts entry");
     eprintln!();
     eprintln!("Registry options:");
     eprintln!("  --images-dir <path>       Image storage directory");
@@ -263,9 +286,20 @@ pub fn parse_delete_args(args: &[String]) -> (bool, Option<&str>) {
     (force, id)
 }
 
-/// Check if a process is alive by sending signal 0.
+/// Check if a process is alive and not already a zombie.
 pub fn is_process_alive(pid: u32) -> bool {
-    unsafe { libc::kill(pid as std::os::raw::c_int, 0) == 0 }
+    if unsafe { libc::kill(pid as std::os::raw::c_int, 0) != 0 } {
+        return false;
+    }
+    let status_path = format!("/proc/{pid}/status");
+    if let Ok(status) = std::fs::read_to_string(status_path) {
+        for line in status.lines() {
+            if let Some(rest) = line.strip_prefix("State:") {
+                return !rest.trim_start().starts_with('Z');
+            }
+        }
+    }
+    true
 }
 
 /// Extract container ID from command args, returning an error if missing.

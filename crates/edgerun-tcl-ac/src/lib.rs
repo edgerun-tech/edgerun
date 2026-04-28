@@ -207,6 +207,12 @@ impl TclAcClient {
         *self.connected.write().unwrap() = true;
         *self.socket.write().unwrap() = Some(socket);
 
+        if let Ok(mut proto) = self.create_protocol() {
+            if let Ok(mtu) = proto.exchange_mtu(512) {
+                *self.mtu.write().unwrap() = mtu;
+            }
+        }
+
         self.discover_tcl_service()?;
         self.enable_indications()?;
         if *self.encrypted.read().unwrap() {
@@ -571,9 +577,24 @@ impl TclAcClient {
         };
 
         let mut proto = self.create_protocol_gatt()?;
-        proto
-            .write_value(write_handle, payload, true)
-            .map_err(Into::into)
+        let max_write = proto.mtu().saturating_sub(3) as usize;
+        if payload.len() <= max_write {
+            return proto
+                .write_value(write_handle, payload, true)
+                .map_err(Into::into);
+        }
+
+        let chunk_len = max_write;
+        if chunk_len == 0 {
+            return Err(CapabilityError::Provider(
+                "invalid ATT MTU for split write".into(),
+            ));
+        }
+        for chunk in payload.chunks(chunk_len) {
+            proto.write_value(write_handle, chunk, true)?;
+            sleep_ms(10);
+        }
+        Ok(())
     }
 
     fn wait_for_raw_value(&self, timeout_ms: i32) -> Result<Vec<u8>, CapabilityError> {
@@ -721,11 +742,77 @@ impl TclAcClient {
         }
     }
 
+    pub fn provision_wifi_with_commission_responses(
+        &self,
+        ssid: &str,
+        password: &str,
+        bind_code: &str,
+        server_host: Option<&str>,
+        server_host_v2: Option<&str>,
+        tenant_id: Option<&str>,
+        new_product_key: Option<&str>,
+        timeout_ms: i32,
+    ) -> Result<Vec<String>, CapabilityError> {
+        let payload = self.build_legacy_provision_payload_with_hosts(
+            ssid,
+            password,
+            bind_code,
+            server_host,
+            server_host_v2,
+            tenant_id,
+            new_product_key,
+        );
+        self.send_raw_command(payload.as_bytes())?;
+
+        let start = now_ms();
+        let mut responses = Vec::new();
+        loop {
+            let elapsed = now_ms().saturating_sub(start);
+            if elapsed >= timeout_ms as u64 {
+                return Ok(responses);
+            }
+            let remaining = (timeout_ms as u64 - elapsed).min(5_000) as i32;
+            match self.wait_for_raw_value(remaining) {
+                Ok(response) => responses.push(
+                    String::from_utf8(response)
+                        .map_err(|e| CapabilityError::Provider(format!("invalid UTF-8: {}", e)))?,
+                ),
+                Err(CapabilityError::Provider(msg))
+                    if msg == "timed out waiting for indication" =>
+                {
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     fn build_legacy_provision_payload(
         &self,
         ssid: &str,
         password: &str,
         bind_code: &str,
+        tenant_id: Option<&str>,
+        new_product_key: Option<&str>,
+    ) -> String {
+        self.build_legacy_provision_payload_with_hosts(
+            ssid,
+            password,
+            bind_code,
+            Some("prod-center.aws.tcljd.com"),
+            Some("prod-center.aws.tcljd.com"),
+            tenant_id,
+            new_product_key,
+        )
+    }
+
+    fn build_legacy_provision_payload_with_hosts(
+        &self,
+        ssid: &str,
+        password: &str,
+        bind_code: &str,
+        server_host: Option<&str>,
+        server_host_v2: Option<&str>,
         tenant_id: Option<&str>,
         new_product_key: Option<&str>,
     ) -> String {
@@ -735,13 +822,24 @@ impl TclAcClient {
         push_json_field(&mut params, "ssid", ssid);
         push_json_field(&mut params, "password", password);
         params.push(format!("\"timestamp\":{}", now_ms() / 1000));
-        params.push("\"timezone\":0".to_string());
-        push_json_field(&mut params, "timearea", "UTC");
+        params.push("\"timezone\":7".to_string());
+        push_json_field(&mut params, "timearea", "Asia/Bangkok");
         params.push("\"serverPort\":443".to_string());
         push_json_field(&mut params, "cloudType", "AWS");
         push_json_field(&mut params, "caType", "release");
+        if let Some(value) = server_host.filter(|s| !s.is_empty()) {
+            push_json_field(&mut params, "serverHost", normalize_commission_host(value));
+        }
+        if let Some(value) = server_host_v2.filter(|s| !s.is_empty()) {
+            push_json_field(
+                &mut params,
+                "serverHostV2",
+                normalize_commission_host(value),
+            );
+        }
         if let Some(value) = tenant_id.filter(|s| !s.is_empty()) {
             push_json_field(&mut params, "tenantId", value);
+            push_json_field(&mut params, "stationId", value);
         }
         if let Some(value) = new_product_key.filter(|s| !s.is_empty()) {
             push_json_field(&mut params, "newProductKey", value);
@@ -904,6 +1002,14 @@ impl TclAcClient {
     pub fn characteristic_handle(&self) -> Option<u16> {
         *self.write_char_handle.read().unwrap()
     }
+
+    pub fn negotiated_mtu(&self) -> u16 {
+        *self.mtu.read().unwrap()
+    }
+
+    pub fn uses_legacy_provisioning(&self) -> bool {
+        !*self.encrypted.read().unwrap()
+    }
 }
 
 fn uuid_matches(raw: &[u8], expected: &str) -> bool {
@@ -914,6 +1020,14 @@ fn uuid_matches(raw: &[u8], expected: &str) -> bool {
 
 fn push_json_field(fields: &mut Vec<String>, key: &str, value: &str) {
     fields.push(format!("\"{}\":\"{}\"", key, json_escape(value)));
+}
+
+fn normalize_commission_host(value: &str) -> &str {
+    let value = value
+        .strip_prefix("https://")
+        .or_else(|| value.strip_prefix("http://"))
+        .unwrap_or(value);
+    value.strip_suffix(":443").unwrap_or(value)
 }
 
 fn json_escape(value: &str) -> String {

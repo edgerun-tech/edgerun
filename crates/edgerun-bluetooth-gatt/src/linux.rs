@@ -203,6 +203,11 @@ impl L2capSocket {
 
         if rc < 0 {
             let err = io::Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EINPROGRESS) {
+                self.wait_for_connect(10_000)?;
+                self.state = L2capChannelState::Open;
+                return Ok(());
+            }
             self.state = L2capChannelState::Closed;
             return Err(GattError::from(err));
         }
@@ -255,6 +260,9 @@ impl L2capSocket {
 
         if rc < 0 {
             let err = io::Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EINPROGRESS) {
+                return self.wait_for_connect(10_000);
+            }
             match err.kind() {
                 io::ErrorKind::ConnectionRefused => Err(GattError::ConnectionRefused(
                     "device may not be in range or may reject connection".to_string(),
@@ -410,6 +418,40 @@ impl L2capSocket {
                 Ok(())
             }
         }
+    }
+
+    fn wait_for_connect(&self, timeout_ms: i32) -> GattResult<()> {
+        let mut pollfd = PollFd {
+            fd: self.fd,
+            events: 0x0004,
+            revents: 0,
+        };
+        let poll_rc = unsafe { poll(&mut pollfd, 1, timeout_ms) };
+        if poll_rc < 0 {
+            return Err(GattError::PollFailed("connect poll failed".to_string()));
+        }
+        if poll_rc == 0 {
+            return Err(GattError::Timeout(timeout_ms as u32));
+        }
+
+        let mut so_error: i32 = 0;
+        let mut len = size_of::<i32>() as libc::socklen_t;
+        let rc = unsafe {
+            libc::getsockopt(
+                self.fd,
+                libc::SOL_SOCKET,
+                libc::SO_ERROR,
+                (&mut so_error as *mut i32).cast(),
+                &mut len,
+            )
+        };
+        if rc < 0 {
+            return Err(GattError::from(io::Error::last_os_error()));
+        }
+        if so_error != 0 {
+            return Err(GattError::from(io::Error::from_raw_os_error(so_error)));
+        }
+        Ok(())
     }
 }
 
@@ -590,13 +632,41 @@ impl AttProtocol {
         req.extend_from_slice(&handle.to_le_bytes());
         req.extend_from_slice(&offset.to_le_bytes());
         req.extend_from_slice(data);
-        self.socket.send_data(&req, 1000)
+        self.socket.send_data(&req, 1000)?;
+
+        let mut buf = vec![0u8; self.mtu as usize];
+        let n = self.socket.recv_data(&mut buf, 2000)?;
+        if n < 5 || buf[0] != 0x17 {
+            return if n > 1 {
+                Err(GattError::att_error_code(buf[1]))
+            } else {
+                Err(GattError::ParseError("invalid prepare write response".into()))
+            };
+        }
+        let response_handle = read_u16_le(&buf, 1);
+        let response_offset = read_u16_le(&buf, 3);
+        if response_handle != handle || response_offset != offset {
+            return Err(GattError::ParseError(
+                "prepare write response handle/offset mismatch".into(),
+            ));
+        }
+        Ok(())
     }
 
     pub fn execute_write(&mut self, commit: bool) -> GattResult<()> {
         let flag = if commit { 0x01 } else { 0x00 };
         let req = vec![0x18, flag];
-        self.socket.send_data(&req, 1000)
+        self.socket.send_data(&req, 1000)?;
+
+        let mut buf = vec![0u8; self.mtu as usize];
+        let n = self.socket.recv_data(&mut buf, 2000)?;
+        if n > 0 && buf[0] == 0x19 {
+            Ok(())
+        } else if n > 1 {
+            Err(GattError::att_error_code(buf[1]))
+        } else {
+            Err(GattError::ParseError("invalid execute write response".into()))
+        }
     }
 
     pub fn handle_notification(&self, data: &[u8]) -> Option<(u16, Vec<u8>)> {
