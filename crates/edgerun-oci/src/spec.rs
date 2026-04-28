@@ -2,7 +2,7 @@
 
 use crate::prelude::*;
 use crate::util::StringResultExt;
-use edgerun_json::{FromJson, JsonValue, JsonValueError, Map, ToJson};
+use edgerun_json::{FromJson, JsonValue, JsonValueError, ToJson};
 
 use alloc::collections::BTreeMap;
 use alloc::format;
@@ -473,378 +473,316 @@ pub struct OciMount {
     pub gid_mappings: Option<Vec<OciIdMapping>>,
 }
 
-fn object(value: JsonValue, name: &str) -> Result<Map, JsonValueError> {
-    match value {
-        JsonValue::Object(object) => Ok(object),
-        other => Err(JsonValueError::WrongType(format!(
-            "{name} must be an object, found {other:?}"
-        ))),
-    }
-}
-
-fn take_optional<T: FromJson>(object: &mut Map, key: &str) -> Result<Option<T>, JsonValueError> {
-    object
-        .remove(key)
-        .map(|value| match value {
-            JsonValue::Null => Ok(None),
-            value => T::from_json(value).map(Some),
-        })
-        .transpose()
-        .map(Option::flatten)
-}
-
-fn take_optional_any<T: FromJson>(
-    object: &mut Map,
-    keys: &[&str],
-) -> Result<Option<T>, JsonValueError> {
-    for key in keys {
-        if object.contains_key(key) {
-            return take_optional(object, key);
+edgerun_json::impl_json_struct! {
+    OciSpec {
+        required { version: "ociVersion" => String }
+        optional {
+            platform: "platform" => OciPlatform,
+            process: "process" => OciProcess,
+            root: "root" => OciRoot,
+            hostname: "hostname" => String,
+            domainname: "domainname" => String,
+            linux: "linux" => OciLinux,
+            mounts: "mounts" => Vec<OciMount>,
+            annotations: "annotations" => BTreeMap<String, String>,
         }
     }
-    Ok(None)
 }
 
-fn take_required<T: FromJson>(object: &mut Map, key: &str) -> Result<T, JsonValueError> {
-    let value = object
-        .remove(key)
-        .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))?;
-    T::from_json(value)
-}
-
-macro_rules! impl_to_json {
-    ($($ty:ty => $func:ident),* $(,)?) => {
-        $(
-            impl ToJson for $ty {
-                fn to_json(&self) -> JsonValue {
-                    $func(self)
-                }
-            }
-        )*
-    };
-}
-
-impl FromJson for OciSpec {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "OCI spec")?;
-        Ok(Self {
-            version: take_required(&mut object, "ociVersion")?,
-            platform: take_optional(&mut object, "platform")?,
-            process: take_optional(&mut object, "process")?,
-            root: take_optional(&mut object, "root")?,
-            hostname: take_optional(&mut object, "hostname")?,
-            domainname: take_optional(&mut object, "domainname")?,
-            linux: take_optional(&mut object, "linux")?,
-            mounts: take_optional(&mut object, "mounts")?,
-            annotations: take_optional(&mut object, "annotations")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciPlatform {
+        required {}
+        optional {
+            os: "os" => String,
+            arch: "arch" => String,
+            os_version: "os.version" => String,
+            os_features: "os.features" => Vec<String>,
+        }
     }
 }
 
-impl FromJson for OciPlatform {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "platform")?;
-        Ok(Self {
-            os: take_optional(&mut object, "os")?,
-            arch: take_optional(&mut object, "arch")?,
-            os_version: take_optional(&mut object, "os.version")?,
-            os_features: take_optional(&mut object, "os.features")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciProcess {
+        required {}
+        optional {
+            terminal: "terminal" => bool,
+            user: "user" => OciUser,
+            console_size: "consoleSize" => OciBox,
+            args: "args" => Vec<String>,
+            env: "env" => Vec<String>,
+            cwd: "cwd" => String,
+            capabilities: "capabilities" => OciCapabilities,
+            rlimits: "rlimits" => Vec<OciRlimit>,
+            no_new_privileges: "noNewPrivileges" => bool,
+            oom_score_adj: "oomScoreAdj" => i64,
+            apparmor_profile: "apparmorProfile" => String,
+            selinux_label: "selinuxLabel" => String,
+            scheduler: "scheduler" => OciScheduler,
+            io_priority: "ioPriority" => OciIoPriority,
+        }
     }
 }
 
-impl FromJson for OciProcess {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "process")?;
-        Ok(Self {
-            terminal: take_optional(&mut object, "terminal")?,
-            user: take_optional(&mut object, "user")?,
-            console_size: take_optional(&mut object, "consoleSize")?,
-            args: take_optional(&mut object, "args")?,
-            env: take_optional(&mut object, "env")?,
-            cwd: take_optional(&mut object, "cwd")?,
-            capabilities: take_optional(&mut object, "capabilities")?,
-            rlimits: take_optional(&mut object, "rlimits")?,
-            no_new_privileges: take_optional(&mut object, "noNewPrivileges")?,
-            oom_score_adj: take_optional(&mut object, "oomScoreAdj")?,
-            apparmor_profile: take_optional(&mut object, "apparmorProfile")?,
-            selinux_label: take_optional(&mut object, "selinuxLabel")?,
-            scheduler: take_optional(&mut object, "scheduler")?,
-            io_priority: take_optional(&mut object, "ioPriority")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciBox {
+        required {
+            width: "width" => u64,
+            height: "height" => u64,
+        }
+        optional {}
     }
 }
 
-impl FromJson for OciBox {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "box")?;
-        Ok(Self {
-            width: take_required(&mut object, "width")?,
-            height: take_required(&mut object, "height")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciUser {
+        required {}
+        optional {
+            uid: "uid" => u32,
+            gid: "gid" => u32,
+            additional_gids: "additionalGids" => Vec<u32>,
+            umask: "umask" => u32,
+        }
     }
 }
 
-impl FromJson for OciUser {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "user")?;
-        Ok(Self {
-            uid: take_optional(&mut object, "uid")?,
-            gid: take_optional(&mut object, "gid")?,
-            additional_gids: take_optional(&mut object, "additionalGids")?,
-            umask: take_optional(&mut object, "umask")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciCapabilities {
+        required {}
+        optional {
+            bounding: "bounding" => Vec<String>,
+            effective: "effective" => Vec<String>,
+            inheritable: "inheritable" => Vec<String>,
+            permitted: "permitted" => Vec<String>,
+            ambient: "ambient" => Vec<String>,
+        }
     }
 }
 
-impl FromJson for OciCapabilities {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "capabilities")?;
-        Ok(Self {
-            bounding: take_optional(&mut object, "bounding")?,
-            effective: take_optional(&mut object, "effective")?,
-            inheritable: take_optional(&mut object, "inheritable")?,
-            permitted: take_optional(&mut object, "permitted")?,
-            ambient: take_optional(&mut object, "ambient")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciRlimit {
+        required {
+            ns_type: "type" => String,
+            hard: "hard" => u64,
+            soft: "soft" => u64,
+        }
+        optional {}
     }
 }
 
-impl FromJson for OciRlimit {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "rlimit")?;
-        Ok(Self {
-            ns_type: take_required(&mut object, "type")?,
-            hard: take_required(&mut object, "hard")?,
-            soft: take_required(&mut object, "soft")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciRoot {
+        required { path: "path" => String }
+        optional { readonly: "readonly" => bool }
     }
 }
 
-impl FromJson for OciRoot {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "root")?;
-        Ok(Self {
-            path: take_required(&mut object, "path")?,
-            readonly: take_optional(&mut object, "readonly")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciScheduler {
+        required { policy: "policy" => String }
+        optional {
+            nice: "nice" => i32,
+            priority: "priority" => i32,
+            deadline: "deadline" => OciSchedDeadline,
+        }
     }
 }
 
-impl FromJson for OciScheduler {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "scheduler")?;
-        Ok(Self {
-            policy: take_required(&mut object, "policy")?,
-            nice: take_optional(&mut object, "nice")?,
-            priority: take_optional(&mut object, "priority")?,
-            deadline: take_optional(&mut object, "deadline")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciSchedDeadline {
+        required {}
+        optional {
+            runtime_ns: "runtime" => u64,
+            period_ns: "period" => u64,
+            deadline_ns: "deadline" => u64,
+        }
     }
 }
 
-impl FromJson for OciSchedDeadline {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "scheduler deadline")?;
-        Ok(Self {
-            runtime_ns: take_optional(&mut object, "runtime")?,
-            period_ns: take_optional(&mut object, "period")?,
-            deadline_ns: take_optional(&mut object, "deadline")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciIoPriority {
+        required { class: "class" => u32 }
+        optional { priority: "priority" => u32 }
     }
 }
 
-impl FromJson for OciIoPriority {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "ioPriority")?;
-        Ok(Self {
-            class: take_required(&mut object, "class")?,
-            priority: take_optional(&mut object, "priority")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinux {
+        required {}
+        optional {
+            uid_mappings: "uidMappings" => Vec<OciIdMapping>,
+            gid_mappings: "gidMappings" => Vec<OciIdMapping>,
+            resources: "resources" => OciLinuxResources,
+            cgroups_path: "cgroupsPath" => String,
+            namespaces: "namespaces" => Vec<OciNamespace>,
+            devices: "devices" => Vec<OciLinuxDevice>,
+            masked_paths: "maskedPaths" => Vec<String>,
+            readonly_paths: "readonlyPaths" => Vec<String>,
+            mount_label: "mountLabel" => String,
+            rootfs_propagation: "rootfsPropagation" => String,
+            sysctl: "sysctl" => BTreeMap<String, String>,
+            hooks: "hooks" => OciHooks,
+            seccomp: "seccomp" => OciLinuxSeccomp,
+            intel_rdt: "intelRdt" => OciLinuxIntelRdt,
+        }
     }
 }
 
-impl FromJson for OciLinux {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "linux")?;
-        Ok(Self {
-            uid_mappings: take_optional(&mut object, "uidMappings")?,
-            gid_mappings: take_optional(&mut object, "gidMappings")?,
-            resources: take_optional(&mut object, "resources")?,
-            cgroups_path: take_optional(&mut object, "cgroupsPath")?,
-            namespaces: take_optional(&mut object, "namespaces")?,
-            devices: take_optional(&mut object, "devices")?,
-            masked_paths: take_optional(&mut object, "maskedPaths")?,
-            readonly_paths: take_optional(&mut object, "readonlyPaths")?,
-            mount_label: take_optional(&mut object, "mountLabel")?,
-            rootfs_propagation: take_optional(&mut object, "rootfsPropagation")?,
-            sysctl: take_optional(&mut object, "sysctl")?,
-            hooks: take_optional(&mut object, "hooks")?,
-            seccomp: take_optional(&mut object, "seccomp")?,
-            intel_rdt: take_optional(&mut object, "intelRdt")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciHooks {
+        required {}
+        optional {
+            prestart: "prestart" => Vec<OciHook>,
+            create_runtime: "createRuntime" => Vec<OciHook>,
+            create_container: "createContainer" => Vec<OciHook>,
+            start_container: "startContainer" => Vec<OciHook>,
+            poststart: "poststart" => Vec<OciHook>,
+            poststop: "poststop" => Vec<OciHook>,
+        }
     }
 }
 
-impl FromJson for OciHooks {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "hooks")?;
-        Ok(Self {
-            prestart: take_optional(&mut object, "prestart")?,
-            create_runtime: take_optional(&mut object, "createRuntime")?,
-            create_container: take_optional(&mut object, "createContainer")?,
-            start_container: take_optional(&mut object, "startContainer")?,
-            poststart: take_optional(&mut object, "poststart")?,
-            poststop: take_optional(&mut object, "poststop")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciHook {
+        required { path: "path" => String }
+        optional {
+            args: "args" => Vec<String>,
+            env: "env" => Vec<String>,
+            timeout: "timeout" => u64,
+        }
     }
 }
 
-impl FromJson for OciHook {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "hook")?;
-        Ok(Self {
-            path: take_required(&mut object, "path")?,
-            args: take_optional(&mut object, "args")?,
-            env: take_optional(&mut object, "env")?,
-            timeout: take_optional(&mut object, "timeout")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciIdMapping {
+        required {
+            container_id: "containerID" => u32,
+            host_id: "hostID" => u32,
+            size: "size" => u32,
+        }
+        optional {}
     }
 }
 
-impl FromJson for OciIdMapping {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "id mapping")?;
-        Ok(Self {
-            container_id: take_required(&mut object, "containerID")?,
-            host_id: take_required(&mut object, "hostID")?,
-            size: take_required(&mut object, "size")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciNamespace {
+        required { ns_type: "type" => String }
+        optional { path: "path" => String }
     }
 }
 
-impl FromJson for OciNamespace {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "namespace")?;
-        Ok(Self {
-            ns_type: take_required(&mut object, "type")?,
-            path: take_optional(&mut object, "path")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxDevice {
+        required {
+            ns_type: "type" => String,
+            path: "path" => String,
+        }
+        optional {
+            file_mode: "fileMode" => u32,
+            uid: "uid" => u32,
+            gid: "gid" => u32,
+            major: "major" => i64,
+            minor: "minor" => i64,
+        }
     }
 }
 
-impl FromJson for OciLinuxDevice {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "linux device")?;
-        Ok(Self {
-            ns_type: take_required(&mut object, "type")?,
-            path: take_required(&mut object, "path")?,
-            file_mode: take_optional(&mut object, "fileMode")?,
-            uid: take_optional(&mut object, "uid")?,
-            gid: take_optional(&mut object, "gid")?,
-            major: take_optional(&mut object, "major")?,
-            minor: take_optional(&mut object, "minor")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxCpu {
+        required {}
+        optional {
+            shares: "shares" => u64,
+            quota: "quota" => i64,
+            period: "period" => u64,
+            realtime_runtime: "realtimeRuntime" => i64,
+            realtime_period: "realtimePeriod" => u64,
+            cpus: "cpus" => String,
+            mems: "mems" => String,
+            idle: "idle" => i64,
+            burst: "burst" => i64,
+        }
     }
 }
 
-impl FromJson for OciLinuxCpu {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "linux cpu")?;
-        Ok(Self {
-            shares: take_optional(&mut object, "shares")?,
-            quota: take_optional(&mut object, "quota")?,
-            period: take_optional(&mut object, "period")?,
-            realtime_runtime: take_optional(&mut object, "realtimeRuntime")?,
-            realtime_period: take_optional(&mut object, "realtimePeriod")?,
-            cpus: take_optional(&mut object, "cpus")?,
-            mems: take_optional(&mut object, "mems")?,
-            idle: take_optional(&mut object, "idle")?,
-            burst: take_optional(&mut object, "burst")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxBlockIO {
+        required {}
+        optional {
+            weight: "weight" => u16,
+            leaf_weight: "leafWeight" => u16,
+            weight_device: "weightDevice" => Vec<OciLinuxWeightDevice>,
+            leaf_weight_device: "leafWeightDevice" => Vec<OciLinuxWeightDevice>,
+            throttle_read_bps_device: "throttleReadBpsDevice" => Vec<OciLinuxThrottleDevice>,
+            throttle_write_bps_device: "throttleWriteBpsDevice" => Vec<OciLinuxThrottleDevice>,
+            throttle_read_iops_device: "throttleReadIOPSDevice" => Vec<OciLinuxThrottleDevice>,
+            throttle_write_iops_device: "throttleWriteIOPSDevice" => Vec<OciLinuxThrottleDevice>,
+        }
     }
 }
 
-impl FromJson for OciLinuxBlockIO {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "blockIO")?;
-        Ok(Self {
-            weight: take_optional(&mut object, "weight")?,
-            leaf_weight: take_optional(&mut object, "leafWeight")?,
-            weight_device: take_optional(&mut object, "weightDevice")?,
-            leaf_weight_device: take_optional(&mut object, "leafWeightDevice")?,
-            throttle_read_bps_device: take_optional(&mut object, "throttleReadBpsDevice")?,
-            throttle_write_bps_device: take_optional(&mut object, "throttleWriteBpsDevice")?,
-            throttle_read_iops_device: take_optional(&mut object, "throttleReadIOPSDevice")?,
-            throttle_write_iops_device: take_optional(&mut object, "throttleWriteIOPSDevice")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxWeightDevice {
+        required {
+            major: "major" => i64,
+            minor: "minor" => i64,
+        }
+        optional {
+            weight: "weight" => u16,
+            leaf_weight: "leafWeight" => u16,
+        }
     }
 }
 
-impl FromJson for OciLinuxWeightDevice {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "weight device")?;
-        Ok(Self {
-            major: take_required(&mut object, "major")?,
-            minor: take_required(&mut object, "minor")?,
-            weight: take_optional(&mut object, "weight")?,
-            leaf_weight: take_optional(&mut object, "leafWeight")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxThrottleDevice {
+        required {
+            major: "major" => i64,
+            minor: "minor" => i64,
+            rate: "rate" => u64,
+        }
+        optional {}
     }
 }
 
-impl FromJson for OciLinuxThrottleDevice {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "throttle device")?;
-        Ok(Self {
-            major: take_required(&mut object, "major")?,
-            minor: take_required(&mut object, "minor")?,
-            rate: take_required(&mut object, "rate")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxHugepageLimit {
+        required {
+            pagesize: "pagesize" => String,
+            limit: "limit" => u64,
+        }
+        optional { rsvd: "rsvd" => bool }
     }
 }
 
-impl FromJson for OciLinuxHugepageLimit {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "hugepage limit")?;
-        Ok(Self {
-            pagesize: take_required(&mut object, "pagesize")?,
-            limit: take_required(&mut object, "limit")?,
-            rsvd: take_optional(&mut object, "rsvd")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxNetwork {
+        required {}
+        optional {
+            class_id: "classID" => u32,
+            priorities: "priorities" => Vec<OciLinuxNetworkPriority>,
+        }
     }
 }
 
-impl FromJson for OciLinuxNetwork {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "network")?;
-        Ok(Self {
-            class_id: take_optional(&mut object, "classID")?,
-            priorities: take_optional(&mut object, "priorities")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxNetworkPriority {
+        required {
+            name: "name" => String,
+            priority: "priority" => u32,
+        }
+        optional {}
     }
 }
 
-impl FromJson for OciLinuxNetworkPriority {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "network priority")?;
-        Ok(Self {
-            name: take_required(&mut object, "name")?,
-            priority: take_required(&mut object, "priority")?,
-        })
-    }
-}
-
-impl FromJson for OciLinuxIntelRdt {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "intelRdt")?;
-        Ok(Self {
-            l3_cache_schema: take_optional(&mut object, "l3CacheSchema")?,
-            mem_bw_schema: take_optional(&mut object, "memBwSchema")?,
-            clos_id: take_optional(&mut object, "closID")?,
-            enable_monitoring: take_optional(&mut object, "enableMonitoring")?,
-            schemata: take_optional(&mut object, "schemata")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxIntelRdt {
+        required {}
+        optional {
+            l3_cache_schema: "l3CacheSchema" => String,
+            mem_bw_schema: "memBwSchema" => String,
+            clos_id: "closID" => String,
+            enable_monitoring: "enableMonitoring" => bool,
+            schemata: "schemata" => String,
+        }
     }
 }
 
@@ -855,765 +793,113 @@ impl FromJson for OciSeccompAction {
     }
 }
 
-impl FromJson for OciLinuxSeccomp {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "seccomp")?;
-        Ok(Self {
-            default_action: take_optional(&mut object, "defaultAction")?,
-            default_errno_ret: take_optional(&mut object, "defaultErrnoRet")?,
-            architectures: take_optional(&mut object, "architectures")?,
-            listener_path: take_optional(&mut object, "listenerPath")?,
-            listener_metadata: take_optional(&mut object, "listenerMetadata")?,
-            syscalls: take_optional(&mut object, "syscalls")?,
-        })
+impl ToJson for OciSeccompAction {
+    fn to_json(&self) -> JsonValue {
+        let value: String = self.clone().into();
+        value.to_json()
     }
 }
 
-impl FromJson for OciSeccompSyscallEntry {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "seccomp syscall")?;
-        Ok(Self {
-            names: take_optional(&mut object, "names")?,
-            action: take_optional(&mut object, "action")?,
-            errno_ret: take_optional(&mut object, "errnoRet")?,
-            args: take_optional(&mut object, "args")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxSeccomp {
+        required {}
+        optional {
+            default_action: "defaultAction" => OciSeccompAction,
+            default_errno_ret: "defaultErrnoRet" => u32,
+            architectures: "architectures" => Vec<String>,
+            listener_path: "listenerPath" => String,
+            listener_metadata: "listenerMetadata" => String,
+            syscalls: "syscalls" => Vec<OciSeccompSyscallEntry>,
+        }
     }
 }
 
-impl FromJson for OciSeccompArg {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "seccomp arg")?;
-        Ok(Self {
-            index: take_required(&mut object, "index")?,
-            value: take_required(&mut object, "value")?,
-            value_two: take_required(&mut object, "valueTwo")?,
-            op: take_required(&mut object, "op")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciSeccompSyscallEntry {
+        required {}
+        optional {
+            names: "names" => Vec<String>,
+            action: "action" => OciSeccompAction,
+            errno_ret: "errnoRet" => u32,
+            args: "args" => Vec<OciSeccompArg>,
+        }
     }
 }
 
-impl FromJson for OciLinuxResources {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "resources")?;
-        Ok(Self {
-            devices: take_optional(&mut object, "devices")?,
-            memory: take_optional(&mut object, "memory")?,
-            cpu: take_optional(&mut object, "cpu")?,
-            pids: take_optional(&mut object, "pids")?,
-            block_io: take_optional(&mut object, "blockIO")?,
-            hugepage_limits: take_optional_any(
-                &mut object,
-                &["hugepageLimits", "hugepage_limits"],
-            )?,
-            network: take_optional(&mut object, "network")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciSeccompArg {
+        required {
+            index: "index" => u32,
+            value: "value" => u64,
+            value_two: "valueTwo" => u64,
+            op: "op" => String,
+        }
+        optional {}
     }
 }
 
-impl FromJson for OciLinuxDeviceCgroup {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "device cgroup")?;
-        Ok(Self {
-            ns_type: take_required(&mut object, "type")?,
-            major: take_optional(&mut object, "major")?,
-            minor: take_optional(&mut object, "minor")?,
-            access: take_optional(&mut object, "access")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxResources {
+        required {}
+        optional {
+            devices: "devices" => Vec<OciLinuxDeviceCgroup>,
+            memory: "memory" => OciLinuxMemory,
+            cpu: "cpu" => OciLinuxCpu,
+            pids: "pids" => OciLinuxPids,
+            block_io: "blockIO" => OciLinuxBlockIO,
+            hugepage_limits: ["hugepageLimits", "hugepage_limits"] => Vec<OciLinuxHugepageLimit>,
+            network: "network" => OciLinuxNetwork,
+        }
     }
 }
 
-impl FromJson for OciLinuxPids {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "pids")?;
-        Ok(Self {
-            limit: take_required(&mut object, "limit")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxDeviceCgroup {
+        required { ns_type: "type" => String }
+        optional {
+            major: "major" => i64,
+            minor: "minor" => i64,
+            access: "access" => String,
+        }
     }
 }
 
-impl FromJson for OciLinuxMemory {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "memory")?;
-        Ok(Self {
-            limit: take_optional(&mut object, "limit")?,
-            reservation: take_optional(&mut object, "reservation")?,
-            swap: take_optional(&mut object, "swap")?,
-            kernel: take_optional(&mut object, "kernel")?,
-            kernel_tcp: take_optional(&mut object, "kernelTCP")?,
-            check_before_update: take_optional(&mut object, "checkBeforeUpdate")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxPids {
+        required { limit: "limit" => i64 }
+        optional {}
     }
 }
 
-impl FromJson for OciMount {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "mount")?;
-        Ok(Self {
-            destination: take_required(&mut object, "destination")?,
-            mount_type: take_optional(&mut object, "type")?,
-            source: take_optional(&mut object, "source")?,
-            options: take_optional(&mut object, "options")?,
-            label: take_optional(&mut object, "label")?,
-            recursive: take_optional(&mut object, "recursive")?,
-            uid_mappings: take_optional(&mut object, "uidMappings")?,
-            gid_mappings: take_optional(&mut object, "gidMappings")?,
-        })
+edgerun_json::impl_json_struct! {
+    OciLinuxMemory {
+        required {}
+        optional {
+            limit: "limit" => i64,
+            reservation: "reservation" => i64,
+            swap: "swap" => i64,
+            kernel: "kernel" => i64,
+            kernel_tcp: "kernelTCP" => i64,
+            check_before_update: "checkBeforeUpdate" => bool,
+        }
     }
 }
 
-fn oci_spec_to_value(spec: &OciSpec) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("ociVersion", spec.version.clone());
-    object.push_opt_field("platform", spec.platform.as_ref().map(platform_to_value));
-    object.push_opt_field("process", spec.process.as_ref().map(process_to_value));
-    object.push_opt_field("root", spec.root.as_ref().map(root_to_value));
-    object.push_opt_field("hostname", spec.hostname.as_deref());
-    object.push_opt_field("domainname", spec.domainname.as_deref());
-    object.push_opt_field("linux", spec.linux.as_ref().map(linux_to_value));
-    object.push_opt_field(
-        "mounts",
-        spec.mounts.as_ref().map(array_to_value(mount_to_value)),
-    );
-    object.push_opt_field(
-        "annotations",
-        spec.annotations.as_ref().map(string_map_to_value),
-    );
-    object.into()
-}
-
-fn platform_to_value(platform: &OciPlatform) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("os", platform.os.as_deref());
-    object.push_opt_field("arch", platform.arch.as_deref());
-    object.push_opt_field("os.version", platform.os_version.as_deref());
-    object.push_opt_field(
-        "os.features",
-        platform.os_features.as_ref().map(strings_to_value),
-    );
-    object.into()
-}
-
-fn process_to_value(process: &OciProcess) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("terminal", process.terminal);
-    object.push_opt_field("user", process.user.as_ref().map(user_to_value));
-    object.push_opt_field(
-        "consoleSize",
-        process.console_size.as_ref().map(box_to_value),
-    );
-    object.push_opt_field("args", process.args.as_ref().map(strings_to_value));
-    object.push_opt_field("env", process.env.as_ref().map(strings_to_value));
-    object.push_opt_field("cwd", process.cwd.as_deref());
-    object.push_opt_field(
-        "capabilities",
-        process.capabilities.as_ref().map(capabilities_to_value),
-    );
-    object.push_opt_field(
-        "rlimits",
-        process
-            .rlimits
-            .as_ref()
-            .map(array_to_value(rlimit_to_value)),
-    );
-    object.push_opt_field("noNewPrivileges", process.no_new_privileges);
-    object.push_opt_field("oomScoreAdj", process.oom_score_adj);
-    object.push_opt_field("apparmorProfile", process.apparmor_profile.as_deref());
-    object.push_opt_field("selinuxLabel", process.selinux_label.as_deref());
-    object.push_opt_field(
-        "scheduler",
-        process.scheduler.as_ref().map(scheduler_to_value),
-    );
-    object.push_opt_field(
-        "ioPriority",
-        process.io_priority.as_ref().map(io_priority_to_value),
-    );
-    object.into()
-}
-
-fn box_to_value(value: &OciBox) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("width", value.width);
-    object.push_field("height", value.height);
-    object.into()
-}
-
-fn user_to_value(user: &OciUser) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("uid", user.uid);
-    object.push_opt_field("gid", user.gid);
-    object.push_opt_field(
-        "additionalGids",
-        user.additional_gids
-            .as_ref()
-            .map(array_to_value(|value| *value)),
-    );
-    object.push_opt_field("umask", user.umask);
-    object.into()
-}
-
-fn capabilities_to_value(caps: &OciCapabilities) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("bounding", caps.bounding.as_ref().map(strings_to_value));
-    object.push_opt_field("effective", caps.effective.as_ref().map(strings_to_value));
-    object.push_opt_field(
-        "inheritable",
-        caps.inheritable.as_ref().map(strings_to_value),
-    );
-    object.push_opt_field("permitted", caps.permitted.as_ref().map(strings_to_value));
-    object.push_opt_field("ambient", caps.ambient.as_ref().map(strings_to_value));
-    object.into()
-}
-
-fn rlimit_to_value(rlimit: &OciRlimit) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("type", rlimit.ns_type.clone());
-    object.push_field("hard", rlimit.hard);
-    object.push_field("soft", rlimit.soft);
-    object.into()
-}
-
-fn scheduler_to_value(scheduler: &OciScheduler) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("policy", scheduler.policy.clone());
-    object.push_opt_field("nice", scheduler.nice);
-    object.push_opt_field("priority", scheduler.priority);
-    object.push_opt_field(
-        "deadline",
-        scheduler.deadline.as_ref().map(sched_deadline_to_value),
-    );
-    object.into()
-}
-
-fn sched_deadline_to_value(deadline: &OciSchedDeadline) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("runtime", deadline.runtime_ns);
-    object.push_opt_field("period", deadline.period_ns);
-    object.push_opt_field("deadline", deadline.deadline_ns);
-    object.into()
-}
-
-fn io_priority_to_value(ioprio: &OciIoPriority) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("class", ioprio.class);
-    object.push_opt_field("priority", ioprio.priority);
-    object.into()
-}
-
-fn root_to_value(root: &OciRoot) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("path", root.path.clone());
-    object.push_opt_field("readonly", root.readonly);
-    object.into()
-}
-
-fn linux_to_value(linux: &OciLinux) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field(
-        "uidMappings",
-        linux
-            .uid_mappings
-            .as_ref()
-            .map(array_to_value(id_mapping_to_value)),
-    );
-    object.push_opt_field(
-        "gidMappings",
-        linux
-            .gid_mappings
-            .as_ref()
-            .map(array_to_value(id_mapping_to_value)),
-    );
-    object.push_opt_field(
-        "resources",
-        linux.resources.as_ref().map(resources_to_value),
-    );
-    object.push_opt_field("cgroupsPath", linux.cgroups_path.as_deref());
-    object.push_opt_field(
-        "namespaces",
-        linux
-            .namespaces
-            .as_ref()
-            .map(array_to_value(namespace_to_value)),
-    );
-    object.push_opt_field(
-        "devices",
-        linux.devices.as_ref().map(array_to_value(device_to_value)),
-    );
-    object.push_opt_field(
-        "maskedPaths",
-        linux.masked_paths.as_ref().map(strings_to_value),
-    );
-    object.push_opt_field(
-        "readonlyPaths",
-        linux.readonly_paths.as_ref().map(strings_to_value),
-    );
-    object.push_opt_field("mountLabel", linux.mount_label.as_deref());
-    object.push_opt_field("rootfsPropagation", linux.rootfs_propagation.as_deref());
-    object.push_opt_field("sysctl", linux.sysctl.as_ref().map(string_map_to_value));
-    object.push_opt_field("hooks", linux.hooks.as_ref().map(hooks_to_value));
-    object.push_opt_field("seccomp", linux.seccomp.as_ref().map(seccomp_to_value));
-    object.push_opt_field("intelRdt", linux.intel_rdt.as_ref().map(intel_rdt_to_value));
-    object.into()
-}
-
-fn hooks_to_value(hooks: &OciHooks) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field(
-        "prestart",
-        hooks.prestart.as_ref().map(array_to_value(hook_to_value)),
-    );
-    object.push_opt_field(
-        "createRuntime",
-        hooks
-            .create_runtime
-            .as_ref()
-            .map(array_to_value(hook_to_value)),
-    );
-    object.push_opt_field(
-        "createContainer",
-        hooks
-            .create_container
-            .as_ref()
-            .map(array_to_value(hook_to_value)),
-    );
-    object.push_opt_field(
-        "startContainer",
-        hooks
-            .start_container
-            .as_ref()
-            .map(array_to_value(hook_to_value)),
-    );
-    object.push_opt_field(
-        "poststart",
-        hooks.poststart.as_ref().map(array_to_value(hook_to_value)),
-    );
-    object.push_opt_field(
-        "poststop",
-        hooks.poststop.as_ref().map(array_to_value(hook_to_value)),
-    );
-    object.into()
-}
-
-fn hook_to_value(hook: &OciHook) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("path", hook.path.clone());
-    object.push_opt_field("args", hook.args.as_ref().map(strings_to_value));
-    object.push_opt_field("env", hook.env.as_ref().map(strings_to_value));
-    object.push_opt_field("timeout", hook.timeout);
-    object.into()
-}
-
-fn id_mapping_to_value(mapping: &OciIdMapping) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("containerID", mapping.container_id);
-    object.push_field("hostID", mapping.host_id);
-    object.push_field("size", mapping.size);
-    object.into()
-}
-
-fn namespace_to_value(namespace: &OciNamespace) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("type", namespace.ns_type.clone());
-    object.push_opt_field("path", namespace.path.as_deref());
-    object.into()
-}
-
-fn device_to_value(device: &OciLinuxDevice) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("type", device.ns_type.clone());
-    object.push_field("path", device.path.clone());
-    object.push_opt_field("fileMode", device.file_mode);
-    object.push_opt_field("uid", device.uid);
-    object.push_opt_field("gid", device.gid);
-    object.push_opt_field("major", device.major);
-    object.push_opt_field("minor", device.minor);
-    object.into()
-}
-
-fn resources_to_value(resources: &OciLinuxResources) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field(
-        "devices",
-        resources
-            .devices
-            .as_ref()
-            .map(array_to_value(device_cgroup_to_value)),
-    );
-    object.push_opt_field("memory", resources.memory.as_ref().map(memory_to_value));
-    object.push_opt_field("cpu", resources.cpu.as_ref().map(cpu_to_value));
-    object.push_opt_field("pids", resources.pids.as_ref().map(pids_to_value));
-    object.push_opt_field(
-        "blockIO",
-        resources.block_io.as_ref().map(block_io_to_value),
-    );
-    object.push_opt_field(
-        "hugepageLimits",
-        resources
-            .hugepage_limits
-            .as_ref()
-            .map(array_to_value(hugepage_limit_to_value)),
-    );
-    object.push_opt_field("network", resources.network.as_ref().map(network_to_value));
-    object.into()
-}
-
-fn device_cgroup_to_value(device: &OciLinuxDeviceCgroup) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("type", device.ns_type.clone());
-    object.push_opt_field("major", device.major);
-    object.push_opt_field("minor", device.minor);
-    object.push_opt_field("access", device.access.as_deref());
-    object.into()
-}
-
-fn memory_to_value(memory: &OciLinuxMemory) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("limit", memory.limit);
-    object.push_opt_field("reservation", memory.reservation);
-    object.push_opt_field("swap", memory.swap);
-    object.push_opt_field("kernel", memory.kernel);
-    object.push_opt_field("kernelTCP", memory.kernel_tcp);
-    object.push_opt_field("checkBeforeUpdate", memory.check_before_update);
-    object.into()
-}
-
-fn cpu_to_value(cpu: &OciLinuxCpu) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("shares", cpu.shares);
-    object.push_opt_field("quota", cpu.quota);
-    object.push_opt_field("period", cpu.period);
-    object.push_opt_field("realtimeRuntime", cpu.realtime_runtime);
-    object.push_opt_field("realtimePeriod", cpu.realtime_period);
-    object.push_opt_field("cpus", cpu.cpus.as_deref());
-    object.push_opt_field("mems", cpu.mems.as_deref());
-    object.push_opt_field("idle", cpu.idle);
-    object.push_opt_field("burst", cpu.burst);
-    object.into()
-}
-
-fn pids_to_value(pids: &OciLinuxPids) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("limit", pids.limit);
-    object.into()
-}
-
-fn block_io_to_value(block_io: &OciLinuxBlockIO) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("weight", block_io.weight);
-    object.push_opt_field("leafWeight", block_io.leaf_weight);
-    object.push_opt_field(
-        "weightDevice",
-        block_io
-            .weight_device
-            .as_ref()
-            .map(array_to_value(weight_device_to_value)),
-    );
-    object.push_opt_field(
-        "leafWeightDevice",
-        block_io
-            .leaf_weight_device
-            .as_ref()
-            .map(array_to_value(weight_device_to_value)),
-    );
-    object.push_opt_field(
-        "throttleReadBpsDevice",
-        block_io
-            .throttle_read_bps_device
-            .as_ref()
-            .map(array_to_value(throttle_device_to_value)),
-    );
-    object.push_opt_field(
-        "throttleWriteBpsDevice",
-        block_io
-            .throttle_write_bps_device
-            .as_ref()
-            .map(array_to_value(throttle_device_to_value)),
-    );
-    object.push_opt_field(
-        "throttleReadIOPSDevice",
-        block_io
-            .throttle_read_iops_device
-            .as_ref()
-            .map(array_to_value(throttle_device_to_value)),
-    );
-    object.push_opt_field(
-        "throttleWriteIOPSDevice",
-        block_io
-            .throttle_write_iops_device
-            .as_ref()
-            .map(array_to_value(throttle_device_to_value)),
-    );
-    object.into()
-}
-
-fn weight_device_to_value(device: &OciLinuxWeightDevice) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("major", device.major);
-    object.push_field("minor", device.minor);
-    object.push_opt_field("weight", device.weight);
-    object.push_opt_field("leafWeight", device.leaf_weight);
-    object.into()
-}
-
-fn throttle_device_to_value(device: &OciLinuxThrottleDevice) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("major", device.major);
-    object.push_field("minor", device.minor);
-    object.push_field("rate", device.rate);
-    object.into()
-}
-
-fn hugepage_limit_to_value(limit: &OciLinuxHugepageLimit) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("pagesize", limit.pagesize.clone());
-    object.push_field("limit", limit.limit);
-    object.push_opt_field("rsvd", limit.rsvd);
-    object.into()
-}
-
-fn network_to_value(network: &OciLinuxNetwork) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("classID", network.class_id);
-    object.push_opt_field(
-        "priorities",
-        network
-            .priorities
-            .as_ref()
-            .map(array_to_value(network_priority_to_value)),
-    );
-    object.into()
-}
-
-fn network_priority_to_value(priority: &OciLinuxNetworkPriority) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("name", priority.name.clone());
-    object.push_field("priority", priority.priority);
-    object.into()
-}
-
-fn intel_rdt_to_value(rdt: &OciLinuxIntelRdt) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("l3CacheSchema", rdt.l3_cache_schema.as_deref());
-    object.push_opt_field("memBwSchema", rdt.mem_bw_schema.as_deref());
-    object.push_opt_field("closID", rdt.clos_id.as_deref());
-    object.push_opt_field("enableMonitoring", rdt.enable_monitoring);
-    object.push_opt_field("schemata", rdt.schemata.as_deref());
-    object.into()
-}
-
-fn seccomp_to_value(seccomp: &OciLinuxSeccomp) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field(
-        "defaultAction",
-        seccomp.default_action.as_ref().map(seccomp_action_to_value),
-    );
-    object.push_opt_field("defaultErrnoRet", seccomp.default_errno_ret);
-    object.push_opt_field(
-        "architectures",
-        seccomp.architectures.as_ref().map(strings_to_value),
-    );
-    object.push_opt_field("listenerPath", seccomp.listener_path.as_deref());
-    object.push_opt_field("listenerMetadata", seccomp.listener_metadata.as_deref());
-    object.push_opt_field(
-        "syscalls",
-        seccomp
-            .syscalls
-            .as_ref()
-            .map(array_to_value(seccomp_syscall_to_value)),
-    );
-    object.into()
-}
-
-fn seccomp_action_to_value(action: &OciSeccompAction) -> edgerun_json::JsonValue {
-    let value: String = action.clone().into();
-    value.into()
-}
-
-fn seccomp_syscall_to_value(syscall: &OciSeccompSyscallEntry) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_opt_field("names", syscall.names.as_ref().map(strings_to_value));
-    object.push_opt_field(
-        "action",
-        syscall.action.as_ref().map(seccomp_action_to_value),
-    );
-    object.push_opt_field("errnoRet", syscall.errno_ret);
-    object.push_opt_field(
-        "args",
-        syscall
-            .args
-            .as_ref()
-            .map(array_to_value(seccomp_arg_to_value)),
-    );
-    object.into()
-}
-
-fn seccomp_arg_to_value(arg: &OciSeccompArg) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("index", arg.index);
-    object.push_field("value", arg.value);
-    object.push_field("valueTwo", arg.value_two);
-    object.push_field("op", arg.op.clone());
-    object.into()
-}
-
-fn mount_to_value(mount: &OciMount) -> edgerun_json::JsonValue {
-    let mut object = edgerun_json::Map::new();
-    object.push_field("destination", mount.destination.clone());
-    object.push_opt_field("type", mount.mount_type.as_deref());
-    object.push_opt_field("source", mount.source.as_deref());
-    object.push_opt_field("options", mount.options.as_ref().map(strings_to_value));
-    object.push_opt_field("label", mount.label.as_deref());
-    object.push_opt_field("recursive", mount.recursive);
-    object.push_opt_field(
-        "uidMappings",
-        mount
-            .uid_mappings
-            .as_ref()
-            .map(array_to_value(id_mapping_to_value)),
-    );
-    object.push_opt_field(
-        "gidMappings",
-        mount
-            .gid_mappings
-            .as_ref()
-            .map(array_to_value(id_mapping_to_value)),
-    );
-    object.into()
-}
-
-impl_to_json! {
-    OciSpec => oci_spec_to_value,
-    OciPlatform => platform_to_value,
-    OciProcess => process_to_value,
-    OciBox => box_to_value,
-    OciUser => user_to_value,
-    OciCapabilities => capabilities_to_value,
-    OciRlimit => rlimit_to_value,
-    OciScheduler => scheduler_to_value,
-    OciSchedDeadline => sched_deadline_to_value,
-    OciIoPriority => io_priority_to_value,
-    OciRoot => root_to_value,
-    OciLinux => linux_to_value,
-    OciHooks => hooks_to_value,
-    OciHook => hook_to_value,
-    OciIdMapping => id_mapping_to_value,
-    OciNamespace => namespace_to_value,
-    OciLinuxDevice => device_to_value,
-    OciLinuxResources => resources_to_value,
-    OciLinuxDeviceCgroup => device_cgroup_to_value,
-    OciLinuxMemory => memory_to_value,
-    OciLinuxCpu => cpu_to_value,
-    OciLinuxPids => pids_to_value,
-    OciLinuxBlockIO => block_io_to_value,
-    OciLinuxWeightDevice => weight_device_to_value,
-    OciLinuxThrottleDevice => throttle_device_to_value,
-    OciLinuxHugepageLimit => hugepage_limit_to_value,
-    OciLinuxNetwork => network_to_value,
-    OciLinuxNetworkPriority => network_priority_to_value,
-    OciLinuxIntelRdt => intel_rdt_to_value,
-    OciLinuxSeccomp => seccomp_to_value,
-    OciSeccompAction => seccomp_action_to_value,
-    OciSeccompSyscallEntry => seccomp_syscall_to_value,
-    OciSeccompArg => seccomp_arg_to_value,
-    OciMount => mount_to_value,
-}
-
-fn strings_to_value(values: &Vec<String>) -> edgerun_json::JsonValue {
-    edgerun_json::JsonValue::array_from_iter(values.iter())
-}
-
-fn string_map_to_value(values: &BTreeMap<String, String>) -> edgerun_json::JsonValue {
-    edgerun_json::Map::from_iter(
-        values
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str())),
-    )
-    .into()
-}
-
-fn array_to_value<T, V>(
-    mut to_value: impl FnMut(&T) -> V,
-) -> impl FnMut(&Vec<T>) -> edgerun_json::JsonValue
-where
-    V: Into<edgerun_json::JsonValue>,
-{
-    move |values| edgerun_json::JsonValue::array_from_iter(values.iter().map(&mut to_value))
+edgerun_json::impl_json_struct! {
+    OciMount {
+        required { destination: "destination" => String }
+        optional {
+            mount_type: "type" => String,
+            source: "source" => String,
+            options: "options" => Vec<String>,
+            label: "label" => String,
+            recursive: "recursive" => bool,
+            uid_mappings: "uidMappings" => Vec<OciIdMapping>,
+            gid_mappings: "gidMappings" => Vec<OciIdMapping>,
+        }
+    }
 }
 
 #[cfg(all(test, not(target_os = "none")))]
-mod edgerun_json_tests {
-    use super::*;
-
-    #[test]
-    fn parse_minimal_oci_spec_with_edgerun_json() {
-        let json =
-            r#"{"ociVersion":"1.0.2","root":{"path":"rootfs"},"process":{"args":["/bin/sh"]}}"#;
-
-        let spec = parse_oci_spec(json.as_bytes()).unwrap();
-
-        assert_eq!(spec.version, "1.0.2");
-        assert_eq!(spec.root.unwrap().path, "rootfs");
-        assert_eq!(spec.process.unwrap().args.unwrap(), vec!["/bin/sh"]);
-    }
-
-    #[test]
-    fn parse_runtime_fields_with_edgerun_json() {
-        let json = r#"{
-            "ociVersion": "1.0.2",
-            "hostname": "edgerun",
-            "process": {
-                "terminal": true,
-                "args": ["/init", "--boot"],
-                "env": ["PATH=/bin", "TERM=xterm"],
-                "cwd": "/",
-                "user": { "uid": 1000, "gid": 1000, "additionalGids": [10, 11] },
-                "capabilities": { "bounding": ["CAP_CHOWN"], "effective": ["CAP_CHOWN"] },
-                "rlimits": [{ "type": "RLIMIT_NOFILE", "hard": 1024, "soft": 512 }],
-                "noNewPrivileges": true
-            },
-            "root": { "path": "/rootfs", "readonly": true },
-            "mounts": [{ "destination": "/proc", "type": "proc", "source": "proc", "options": ["nosuid"] }],
-            "linux": {
-                "namespaces": [{ "type": "mount" }, { "type": "pid" }],
-                "uidMappings": [{ "containerID": 0, "hostID": 100000, "size": 65536 }],
-                "maskedPaths": ["/proc/kcore"],
-                "readonlyPaths": ["/proc/sys"],
-                "sysctl": { "net.ipv4.ip_forward": "1" },
-                "resources": {
-                    "memory": { "limit": 1048576 },
-                    "cpu": { "shares": 1024, "cpus": "0" },
-                    "pids": { "limit": 64 },
-                    "devices": [{ "type": "c", "major": 1, "minor": 3, "access": "rwm" }]
-                }
-            }
-        }"#;
-
-        let spec = parse_oci_spec(json.as_bytes()).unwrap();
-        let process = spec.process.unwrap();
-        assert_eq!(process.terminal, Some(true));
-        assert_eq!(process.user.unwrap().uid, Some(1000));
-        assert_eq!(process.rlimits.unwrap()[0].soft, 512);
-
-        let linux = spec.linux.unwrap();
-        assert_eq!(linux.namespaces.unwrap()[1].ns_type, "pid");
-        assert_eq!(linux.uid_mappings.unwrap()[0].host_id, 100000);
-        assert_eq!(
-            linux.sysctl.unwrap().get("net.ipv4.ip_forward"),
-            Some(&"1".into())
-        );
-        let resources = linux.resources.unwrap();
-        assert_eq!(resources.memory.unwrap().limit, Some(1048576));
-        assert_eq!(resources.cpu.unwrap().cpus, Some("0".into()));
-        assert_eq!(resources.pids.unwrap().limit, 64);
-        assert_eq!(resources.devices.unwrap()[0].access, Some("rwm".into()));
-
-        let mounts = spec.mounts.unwrap();
-        assert_eq!(mounts[0].destination, "/proc");
-        assert_eq!(mounts[0].options.as_ref().unwrap()[0], "nosuid");
-    }
-
-    #[test]
-    fn parse_oci_spec_with_edgerun_json_rejects_missing_version() {
-        assert!(parse_oci_spec(br#"{"root":{"path":"rootfs"}}"#).is_err());
-    }
-}
+#[path = "../tests/unit_src/src/spec_edgerun_json_tests.rs"]
+mod edgerun_json_tests;

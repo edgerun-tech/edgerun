@@ -199,10 +199,12 @@ pub mod prelude {
 
 use crate::prelude::v1::*;
 
+mod att;
 pub mod async_ext;
 pub mod client;
 pub mod error;
 pub mod hci;
+mod l2cap;
 pub mod linux;
 
 pub use async_ext::{AsyncAttProtocol, AsyncL2capSocket};

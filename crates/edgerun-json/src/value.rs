@@ -432,6 +432,16 @@ impl JsonValue {
         }
     }
 
+    pub fn into_object(self, name: &str) -> Result<Map, JsonValueError> {
+        match self {
+            Self::Object(entries) => Ok(entries),
+            other => Err(JsonValueError::WrongType(format!(
+                "{name} must be an object, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+
     pub fn as_object_mut(&mut self) -> Option<&mut Map> {
         match self {
             Self::Object(entries) => Some(entries),

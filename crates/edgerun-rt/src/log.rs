@@ -71,16 +71,22 @@ fn serial_write_str(s: &str) {
     const USB_EP1_CONF_DATA_FREE: u32 = 1 << 1;
 
     for chunk in s.as_bytes().chunks(64) {
+        let mut usb_bytes = 0;
         for &byte in chunk {
             unsafe {
-                while core::ptr::read_volatile(USB_EP1_CONF) & USB_EP1_CONF_DATA_FREE == 0 {}
-                core::ptr::write_volatile(USB_EP1, byte as u32);
+                if core::ptr::read_volatile(USB_EP1_CONF) & USB_EP1_CONF_DATA_FREE != 0 {
+                    core::ptr::write_volatile(USB_EP1, byte as u32);
+                    usb_bytes += 1;
+                }
                 while ((core::ptr::read_volatile(UART0_STATUS) >> 16) & 0x03ff) >= UART_FIFO_LEN {}
                 core::ptr::write_volatile(UART0_FIFO, byte as u32);
             }
         }
-        unsafe {
-            core::ptr::write_volatile(USB_EP1_CONF, USB_EP1_CONF_WR_DONE);
+        if usb_bytes != 0 {
+            unsafe {
+                let ep1_conf = core::ptr::read_volatile(USB_EP1_CONF);
+                core::ptr::write_volatile(USB_EP1_CONF, ep1_conf | USB_EP1_CONF_WR_DONE);
+            }
         }
     }
 }

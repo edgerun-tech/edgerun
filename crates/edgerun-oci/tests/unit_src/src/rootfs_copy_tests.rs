@@ -1,0 +1,52 @@
+use super::*;
+
+fn test_dir(name: &str) -> PathBuf {
+    let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!(
+        "edgerun-oci-rootfs-copy-{name}-{:x}-{n:x}",
+        std::process::id()
+    ))
+}
+
+#[test]
+fn merge_layer_dirs_replaces_file_entries() {
+    let root = test_dir("file-replace");
+    let layer1 = root.join("layer1");
+    let layer2 = root.join("layer2");
+    let dest = root.join("dest");
+    fs::create_dir_all(&layer1).unwrap();
+    fs::create_dir_all(&layer2).unwrap();
+    fs::write(layer1.join("config"), b"first").unwrap();
+    fs::write(layer2.join("config"), b"second").unwrap();
+
+    merge_layer_dirs(&[layer1, layer2], &dest).unwrap();
+
+    assert_eq!(fs::read(dest.join("config")).unwrap(), b"second");
+    let temp_entries = fs::read_dir(&dest)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with(".tmp."))
+        .count();
+    assert_eq!(temp_entries, 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn merge_layer_dirs_replaces_file_with_symlink() {
+    let root = test_dir("symlink-replace");
+    let layer1 = root.join("layer1");
+    let layer2 = root.join("layer2");
+    let dest = root.join("dest");
+    fs::create_dir_all(&layer1).unwrap();
+    fs::create_dir_all(&layer2).unwrap();
+    fs::write(layer1.join("config"), b"first").unwrap();
+    symlink("target-config", layer2.join("config")).unwrap();
+
+    merge_layer_dirs(&[layer1, layer2], &dest).unwrap();
+
+    assert_eq!(
+        fs::read_link(dest.join("config")).unwrap(),
+        PathBuf::from("target-config")
+    );
+    let _ = fs::remove_dir_all(root);
+}

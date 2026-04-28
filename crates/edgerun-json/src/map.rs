@@ -9,6 +9,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::value::JsonValueError;
+use crate::FromJson;
 use crate::JsonValue;
 use core::ops::{Deref, DerefMut};
 
@@ -207,6 +208,44 @@ impl Map {
             .iter()
             .position(|(candidate, _)| candidate == key)
             .map(|index| self.0.remove(index).1)
+    }
+
+    pub fn take_required<T: FromJson>(&mut self, key: &str) -> Result<T, JsonValueError> {
+        let value = self
+            .remove(key)
+            .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))?;
+        T::from_json(value)
+    }
+
+    pub fn take_required_any<T: FromJson>(&mut self, keys: &[&str]) -> Result<T, JsonValueError> {
+        for key in keys {
+            if self.contains_key(key) {
+                return self.take_required(key);
+            }
+        }
+        let key = keys.first().copied().unwrap_or("<unknown>");
+        Err(JsonValueError::WrongType(format!(
+            "missing required field `{key}`"
+        )))
+    }
+
+    pub fn take_optional<T: FromJson>(&mut self, key: &str) -> Result<Option<T>, JsonValueError> {
+        match self.remove(key) {
+            Some(JsonValue::Null) | None => Ok(None),
+            Some(value) => T::from_json(value).map(Some),
+        }
+    }
+
+    pub fn take_optional_any<T: FromJson>(
+        &mut self,
+        keys: &[&str],
+    ) -> Result<Option<T>, JsonValueError> {
+        for key in keys {
+            if self.contains_key(key) {
+                return self.take_optional(key);
+            }
+        }
+        Ok(None)
     }
 
     pub fn append(&mut self, other: &mut Self) {

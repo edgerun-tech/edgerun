@@ -91,148 +91,103 @@ pub fn parse_single_manifest(data: &[u8]) -> Result<SingleManifest, String> {
     from_json_slice(data).string_err()
 }
 
-fn object(value: JsonValue, name: &str) -> Result<Map, JsonValueError> {
-    match value {
-        JsonValue::Object(object) => Ok(object),
-        other => Err(JsonValueError::WrongType(format!(
-            "{name} must be an object, found {other:?}"
-        ))),
-    }
-}
-
-fn take_optional<T: FromJson>(object: &mut Map, key: &str) -> Result<Option<T>, JsonValueError> {
-    object
-        .remove(key)
-        .map(|value| match value {
-            JsonValue::Null => Ok(None),
-            value => T::from_json(value).map(Some),
-        })
-        .transpose()
-        .map(Option::flatten)
-}
-
-fn take_optional_any<T: FromJson>(
-    object: &mut Map,
-    keys: &[&str],
-) -> Result<Option<T>, JsonValueError> {
-    for key in keys {
-        if object.contains_key(key) {
-            return take_optional(object, key);
-        }
-    }
-    Ok(None)
-}
-
-fn take_required<T: FromJson>(object: &mut Map, key: &str) -> Result<T, JsonValueError> {
-    let value = object
-        .remove(key)
-        .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))?;
-    T::from_json(value)
-}
-
 impl FromJson for ImageConfig {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "image config")?;
+        let mut object = value.into_object("image config")?;
         Ok(Self {
-            architecture: take_optional(&mut object, "architecture")?,
-            os: take_optional(&mut object, "os")?,
-            config: take_optional(&mut object, "config")?,
-            rootfs: take_optional(&mut object, "rootfs")?,
-            history: take_optional(&mut object, "history")?,
+            architecture: object.take_optional("architecture")?,
+            os: object.take_optional("os")?,
+            config: object.take_optional("config")?,
+            rootfs: object.take_optional("rootfs")?,
+            history: object.take_optional("history")?,
         })
     }
 }
 
 impl FromJson for ImageConfigInner {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "image config.config")?;
+        let mut object = value.into_object("image config.config")?;
         Ok(Self {
-            user: take_optional_any(&mut object, &["User", "user"])?,
-            env: take_optional_any(&mut object, &["Env", "env"])?,
-            entrypoint: take_optional_any(&mut object, &["Entrypoint", "entrypoint"])?,
-            cmd: take_optional_any(&mut object, &["Cmd", "cmd"])?,
-            working_dir: take_optional_any(
-                &mut object,
-                &["WorkingDir", "workingDir", "working_dir"],
-            )?,
-            exposed_ports: take_optional_any(&mut object, &["ExposedPorts", "exposedPorts"])?,
-            volumes: take_optional_any(&mut object, &["Volumes", "volumes"])?,
-            labels: take_optional_any(&mut object, &["Labels", "labels"])?,
-            stop_signal: take_optional_any(
-                &mut object,
-                &["StopSignal", "stopSignal", "stop_signal"],
-            )?,
+            user: object.take_optional_any(&["User", "user"])?,
+            env: object.take_optional_any(&["Env", "env"])?,
+            entrypoint: object.take_optional_any(&["Entrypoint", "entrypoint"])?,
+            cmd: object.take_optional_any(&["Cmd", "cmd"])?,
+            working_dir: object.take_optional_any(&["WorkingDir", "workingDir", "working_dir"])?,
+            exposed_ports: object.take_optional_any(&["ExposedPorts", "exposedPorts"])?,
+            volumes: object.take_optional_any(&["Volumes", "volumes"])?,
+            labels: object.take_optional_any(&["Labels", "labels"])?,
+            stop_signal: object.take_optional_any(&["StopSignal", "stopSignal", "stop_signal"])?,
         })
     }
 }
 
 impl FromJson for RootFs {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "rootfs")?;
+        let mut object = value.into_object("rootfs")?;
         Ok(Self {
-            r#type: take_required(&mut object, "type")?,
-            diff_ids: take_required(&mut object, "diff_ids")?,
+            r#type: object.take_required("type")?,
+            diff_ids: object.take_required("diff_ids")?,
         })
     }
 }
 
 impl FromJson for HistoryEntry {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "history entry")?;
+        let mut object = value.into_object("history entry")?;
         Ok(Self {
-            created: take_optional(&mut object, "created")?,
-            created_by: take_optional(&mut object, "created_by")?,
-            comment: take_optional(&mut object, "comment")?,
-            empty_layer: take_optional(&mut object, "empty_layer")?,
+            created: object.take_optional("created")?,
+            created_by: object.take_optional("created_by")?,
+            comment: object.take_optional("comment")?,
+            empty_layer: object.take_optional("empty_layer")?,
         })
     }
 }
 
 impl FromJson for ImageIndex {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "image index")?;
+        let mut object = value.into_object("image index")?;
         Ok(Self {
-            media_type: take_optional(&mut object, "mediaType")?,
-            manifests: take_required(&mut object, "manifests")?,
+            media_type: object.take_optional("mediaType")?,
+            manifests: object.take_required("manifests")?,
         })
     }
 }
 
 impl FromJson for super::manifest::ManifestDescriptor {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "manifest descriptor")?;
+        let mut object = value.into_object("manifest descriptor")?;
         Ok(Self {
-            media_type: take_optional(&mut object, "mediaType")?,
-            digest: take_required(&mut object, "digest")?,
-            size: take_required(&mut object, "size")?,
-            platform: take_optional(&mut object, "platform")?,
+            media_type: object.take_optional("mediaType")?,
+            digest: object.take_required("digest")?,
+            size: object.take_required("size")?,
+            platform: object.take_optional("platform")?,
         })
     }
 }
 
 impl FromJson for super::manifest::PlatformDescriptor {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "platform")?;
+        let mut object = value.into_object("platform")?;
         Ok(Self {
-            architecture: take_optional(&mut object, "architecture")?,
-            os: take_optional(&mut object, "os")?,
+            architecture: object.take_optional("architecture")?,
+            os: object.take_optional("os")?,
         })
     }
 }
 
 impl FromJson for SingleManifest {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "single manifest")?;
+        let mut object = value.into_object("single manifest")?;
         Ok(Self {
             config_digest: take_config_digest(&mut object)?,
-            layers: take_required(&mut object, "layers")?,
+            layers: object.take_required("layers")?,
         })
     }
 }
 
 fn take_config_digest(object: &mut Map) -> Result<String, JsonValueError> {
     match object.remove("config") {
-        Some(JsonValue::Object(mut object)) => take_required(&mut object, "digest"),
+        Some(JsonValue::Object(mut object)) => object.take_required("digest"),
         Some(JsonValue::String(value)) => Ok(value),
         Some(other) => Err(JsonValueError::WrongType(format!(
             "manifest config must be an object or string, found {other:?}"
@@ -245,96 +200,15 @@ fn take_config_digest(object: &mut Map) -> Result<String, JsonValueError> {
 
 impl FromJson for super::manifest::LayerDescriptor {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = object(value, "layer descriptor")?;
+        let mut object = value.into_object("layer descriptor")?;
         Ok(Self {
-            media_type: take_optional(&mut object, "mediaType")?,
-            digest: take_required(&mut object, "digest")?,
-            size: take_required(&mut object, "size")?,
+            media_type: object.take_optional("mediaType")?,
+            digest: object.take_required("digest")?,
+            size: object.take_required("size")?,
         })
     }
 }
 
 #[cfg(all(test, not(target_os = "none")))]
-mod json_feature_tests {
-    use super::*;
-
-    #[test]
-    fn parses_image_config_with_edgerun_json() {
-        let config = parse_image_config(
-            br#"{
-                "architecture":"amd64",
-                "os":"linux",
-                "config":{
-                    "User":"1000:1001",
-                    "Env":["PATH=/bin","A=B"],
-                    "Entrypoint":["/init"],
-                    "Cmd":["--serve"],
-                    "WorkingDir":"/app",
-                    "Volumes":{"/data":{}},
-                    "Labels":{"org.opencontainers.image.title":"demo"},
-                    "StopSignal":"SIGTERM"
-                },
-                "rootfs":{"type":"layers","diff_ids":["sha256:a"]},
-                "history":[{"created_by":"test","empty_layer":true}]
-            }"#,
-        )
-        .unwrap();
-
-        assert_eq!(config.architecture.as_deref(), Some("amd64"));
-        let inner = config.config.unwrap();
-        assert_eq!(inner.user.as_deref(), Some("1000:1001"));
-        assert_eq!(inner.entrypoint.unwrap(), vec!["/init"]);
-        assert_eq!(inner.cmd.unwrap(), vec!["--serve"]);
-        assert!(inner.volumes.unwrap().contains_key("/data"));
-        assert_eq!(config.rootfs.unwrap().diff_ids, vec!["sha256:a"]);
-        assert_eq!(config.history.unwrap()[0].empty_layer, Some(true));
-    }
-
-    #[test]
-    fn parses_single_manifest_descriptor_config_with_edgerun_json() {
-        let manifest = parse_single_manifest(
-            br#"{
-                "schemaVersion":2,
-                "config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"sha256:cfg","size":42},
-                "layers":[{"mediaType":"application/vnd.oci.image.layer.v1.tar","digest":"sha256:layer","size":7}]
-            }"#,
-        )
-        .unwrap();
-
-        assert_eq!(manifest.config_digest, "sha256:cfg");
-        assert_eq!(manifest.layers[0].digest, "sha256:layer");
-    }
-
-    #[test]
-    fn parses_image_index_with_edgerun_json() {
-        let manifest = parse_manifest(
-            br#"{
-                "schemaVersion":2,
-                "mediaType":"application/vnd.oci.image.index.v1+json",
-                "manifests":[{
-                    "mediaType":"application/vnd.oci.image.manifest.v1+json",
-                    "digest":"sha256:m",
-                    "size":10,
-                    "platform":{"architecture":"amd64","os":"linux"}
-                }]
-            }"#,
-        )
-        .unwrap();
-
-        match manifest {
-            ImageManifest::Index(index) => {
-                assert_eq!(index.manifests[0].digest, "sha256:m");
-                assert_eq!(
-                    index.manifests[0]
-                        .platform
-                        .as_ref()
-                        .unwrap()
-                        .architecture
-                        .as_deref(),
-                    Some("amd64")
-                );
-            }
-            ImageManifest::Single(_) => panic!("expected image index"),
-        }
-    }
-}
+#[path = "../../tests/unit_src/src/registry/config_json_feature_tests.rs"]
+mod json_feature_tests;

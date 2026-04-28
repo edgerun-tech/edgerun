@@ -178,9 +178,8 @@ where
 /// ```
 /// use edgerun_json::{from_str, JsonValue};
 ///
-/// let value: JsonValue = from_str(r#"{"name":"Alice"}"#)?;
+/// let value: JsonValue = from_str(r#"{"name":"Alice"}"#).unwrap();
 /// assert_eq!(value["name"].as_str(), Some("Alice"));
-/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn from_str(input: &str) -> Result<JsonValue, JsonParseError> {
     parse_json(input)
@@ -213,8 +212,7 @@ pub fn from_reader<R: Read>(mut reader: R) -> Result<JsonValue, JsonParseError> 
 /// use edgerun_json::{json, to_string};
 ///
 /// let value = json!({"name": "Alice", "age": 30});
-/// assert_eq!(to_string(&value)?, r#"{"name":"Alice","age":30}"#);
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// assert_eq!(to_string(&value).unwrap(), r#"{"name":"Alice","age":30}"#);
 /// ```
 pub fn to_string(value: &JsonValue) -> Result<String, JsonError> {
     value.to_json_string()

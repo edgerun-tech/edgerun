@@ -105,6 +105,7 @@ pub mod syscalls;
 pub mod userns;
 
 #[cfg(all(feature = "std", not(target_os = "none")))]
+#[path = "../cli/mod.rs"]
 pub mod cli;
 
 pub use bare_rootfs::{BareRootfs, BareRootfsEntry, BareRootfsEntryKind};

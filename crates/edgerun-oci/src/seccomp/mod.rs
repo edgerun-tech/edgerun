@@ -34,6 +34,7 @@ use std::os::raw::c_void;
 pub use syscall::syscall_nr;
 
 #[cfg(all(test, not(target_os = "none")))]
+#[path = "../../tests/unit_src/seccomp/tests.rs"]
 mod tests;
 
 /// Requires prctl(PR_SET_NO_NEW_PRIVS, 1) first.

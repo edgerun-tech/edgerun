@@ -116,21 +116,42 @@ pub fn __json_error_message(message: &str) -> alloc::string::String {
 
 #[macro_export]
 macro_rules! impl_json_struct {
+    (@canonical_key [$first:expr $(, $rest:expr)* $(,)?]) => {
+        $first
+    };
+    (@canonical_key $key:expr) => {
+        $key
+    };
+    (@take_required $object:ident, [$($key:expr),+ $(,)?] => $ty:ty) => {
+        $object.take_required_any::<$ty>(&[$($key),+])
+    };
+    (@take_required $object:ident, $key:expr => $ty:ty) => {
+        $object.take_required::<$ty>($key)
+    };
+    (@take_optional $object:ident, [$($key:expr),+ $(,)?] => $ty:ty) => {
+        $object.take_optional_any::<$ty>(&[$($key),+])
+    };
+    (@take_optional $object:ident, $key:expr => $ty:ty) => {
+        $object.take_optional::<$ty>($key)
+    };
     (
         $ty:ty {
-            required { $($required_field:ident : $required_key:expr => $required_ty:ty),* $(,)? }
-            optional { $($optional_field:ident : $optional_key:expr => $optional_ty:ty),* $(,)? }
+            required { $($required_field:ident : $required_key:tt => $required_ty:ty),* $(,)? }
+            optional { $($optional_field:ident : $optional_key:tt => $optional_ty:ty),* $(,)? }
         }
     ) => {
         impl $crate::ToJson for $ty {
             fn to_json(&self) -> $crate::JsonValue {
                 let mut object = $crate::Map::new();
                 $(
-                    object.push_field($required_key, $crate::ToJson::to_json(&self.$required_field));
+                    object.push_field(
+                        $crate::impl_json_struct!(@canonical_key $required_key),
+                        $crate::ToJson::to_json(&self.$required_field),
+                    );
                 )*
                 $(
                     object.push_opt_field(
-                        $optional_key,
+                        $crate::impl_json_struct!(@canonical_key $optional_key),
                         self.$optional_field
                             .as_ref()
                             .map($crate::ToJson::to_json),
@@ -142,33 +163,17 @@ macro_rules! impl_json_struct {
 
         impl $crate::FromJson for $ty {
             fn from_json(value: $crate::JsonValue) -> core::result::Result<Self, $crate::JsonValueError> {
-                let mut object = match value {
-                    $crate::JsonValue::Object(object) => object,
-                    other => {
-                        let _ = other;
-                        return Err($crate::JsonValueError::WrongType(
-                            $crate::__json_error_message("expected JSON object")
-                        ));
-                    }
-                };
+                let mut object = value.into_object(core::any::type_name::<$ty>())?;
                 Ok(Self {
                     $(
-                        $required_field: <$required_ty as $crate::FromJson>::from_json(
-                            object.remove($required_key).ok_or_else(|| {
-                                $crate::JsonValueError::WrongType(
-                                    $crate::__json_error_message("missing required JSON field")
-                                )
-                            })?
+                        $required_field: $crate::impl_json_struct!(
+                            @take_required object, $required_key => $required_ty
                         )?,
                     )*
                     $(
-                        $optional_field: object
-                            .remove($optional_key)
-                            .and_then(|value| match value {
-                                $crate::JsonValue::Null => None,
-                                other => Some(<$optional_ty as $crate::FromJson>::from_json(other)),
-                            })
-                            .transpose()?,
+                        $optional_field: $crate::impl_json_struct!(
+                            @take_optional object, $optional_key => $optional_ty
+                        )?,
                     )*
                 })
             }

@@ -1205,9 +1205,41 @@ core::arch::global_asm!(
     .word _bss_end
 .Luart0_fifo_ptr:
     .word 0x60000000
+.Lusb_ep1_ptr:
+    .word 0x60038000
+.Lusb_ep1_conf_ptr:
+    .word 0x60038004
+.Lusb_conf0_ptr:
+    .word 0x60038018
+.Lsystem_perip_clk_en1_ptr:
+    .word 0x600c001c
+.Lsystem_perip_rst_en1_ptr:
+    .word 0x600c0024
+.Lusb_conf0_default:
+    .word 0x4200
 
     .global _start
 _start:
+    entry a1, 0
+
+    l32r a5, .Lsystem_perip_clk_en1_ptr
+    l32i a6, a5, 0
+    movi a7, 1
+    slli a7, a7, 10
+    or a6, a6, a7
+    s32i a6, a5, 0
+    l32r a5, .Lsystem_perip_rst_en1_ptr
+    l32i a6, a5, 0
+    movi a7, 1
+    slli a7, a7, 10
+    movi a8, -1
+    xor a7, a7, a8
+    and a6, a6, a7
+    s32i a6, a5, 0
+    l32r a5, .Lusb_conf0_ptr
+    l32r a6, .Lusb_conf0_default
+    s32i a6, a5, 0
+
     l32r a5, .Luart0_fifo_ptr
     movi a6, 69
     s32i a6, a5, 0
@@ -1215,6 +1247,23 @@ _start:
     s32i a6, a5, 0
     movi a6, 10
     s32i a6, a5, 0
+
+    l32r a5, .Lusb_ep1_ptr
+    l32r a7, .Lusb_ep1_conf_ptr
+    movi a6, 69
+    s32i a6, a5, 0
+    movi a6, 85
+    s32i a6, a5, 0
+    movi a6, 10
+    s32i a6, a5, 0
+    l32i a6, a7, 0
+    movi a8, 1
+    or a6, a6, a8
+    s32i a6, a7, 0
+    movi a6, 100
+4:
+    addi a6, a6, -1
+    bnez a6, 4b
 
     l32r a1, .Lstack_ptr
     l32r a2, .Lbss_start_ptr
@@ -1228,7 +1277,7 @@ _start:
     addi a3, a3, -1
     j 1b
 2:
-    j kernel_main
+    call8 kernel_main
 3:
     waiti 0
     j 3b
@@ -1739,11 +1788,73 @@ static MULTIBOOT_HEADER: [u32; 8] = [
 #[no_mangle]
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 pub unsafe extern "C" fn kernel_main() -> ! {
-    rt::timer::set_now(0);
-    rt::log::log(1, "Starting edgerun unikernel on Xtensa");
-    loop {
-        core::arch::asm!("waiti 0");
+    unsafe {
+        xtensa_disable_watchdogs();
+        let mut i = 0;
+        while i < 1_000_000 {
+            core::arch::asm!("nop");
+            i += 1;
+        }
+        xtensa_usb_serial_write_rust_banner();
     }
+
+    loop {
+        unsafe {
+            xtensa_usb_serial_write_byte(b'.');
+        }
+        let mut i = 0;
+        while i < 10_000_000 {
+            core::arch::asm!("nop");
+            i += 1;
+        }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn xtensa_usb_serial_write_byte(byte: u8) {
+    const USB_EP1: *mut u32 = 0x6003_8000 as *mut u32;
+    const USB_EP1_CONF: *mut u32 = 0x6003_8004 as *mut u32;
+
+    core::ptr::write_volatile(USB_EP1, byte as u32);
+    let ep1_conf = core::ptr::read_volatile(USB_EP1_CONF);
+    core::ptr::write_volatile(USB_EP1_CONF, ep1_conf | 1);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn xtensa_usb_serial_write_rust_banner() {
+    const USB_EP1: *mut u32 = 0x6003_8000 as *mut u32;
+    const USB_EP1_CONF: *mut u32 = 0x6003_8004 as *mut u32;
+
+    core::ptr::write_volatile(USB_EP1, b'R' as u32);
+    core::ptr::write_volatile(USB_EP1, b'U' as u32);
+    core::ptr::write_volatile(USB_EP1, b'S' as u32);
+    core::ptr::write_volatile(USB_EP1, b'T' as u32);
+    core::ptr::write_volatile(USB_EP1, b'\n' as u32);
+    let ep1_conf = core::ptr::read_volatile(USB_EP1_CONF);
+    core::ptr::write_volatile(USB_EP1_CONF, ep1_conf | 1);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn xtensa_disable_watchdogs() {
+    const WDT_WKEY: u32 = 0x50D8_3AA1;
+    const TIMG0_WDT_CONFIG0: *mut u32 = (0x6001_F000 + 0x48) as *mut u32;
+    const TIMG0_WDT_WPROTECT: *mut u32 = (0x6001_F000 + 0x64) as *mut u32;
+    const TIMG1_WDT_CONFIG0: *mut u32 = (0x6002_0000 + 0x48) as *mut u32;
+    const TIMG1_WDT_WPROTECT: *mut u32 = (0x6002_0000 + 0x64) as *mut u32;
+    const RTC_WDT_CONFIG0: *mut u32 = (0x6000_8000 + 0x98) as *mut u32;
+    const RTC_WDT_WPROTECT: *mut u32 = (0x6000_8000 + 0xb0) as *mut u32;
+
+    core::ptr::write_volatile(TIMG0_WDT_WPROTECT, WDT_WKEY);
+    core::ptr::write_volatile(TIMG0_WDT_CONFIG0, 0);
+    core::ptr::write_volatile(TIMG0_WDT_WPROTECT, 0);
+
+    core::ptr::write_volatile(TIMG1_WDT_WPROTECT, WDT_WKEY);
+    core::ptr::write_volatile(TIMG1_WDT_CONFIG0, 0);
+    core::ptr::write_volatile(TIMG1_WDT_WPROTECT, 0);
+
+    core::ptr::write_volatile(RTC_WDT_WPROTECT, WDT_WKEY);
+    core::ptr::write_volatile(RTC_WDT_CONFIG0, 0);
+    core::ptr::write_volatile(RTC_WDT_WPROTECT, 0);
 }
 
 #[no_mangle]
