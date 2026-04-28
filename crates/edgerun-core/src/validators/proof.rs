@@ -17,7 +17,8 @@ use crate::result::{accept, defer, empty_map, reject, ReasonCode, ValidationResu
 use crate::value::{mapping, ystr, Value};
 use edgerun_proto::edgerun::v0::access::{
     AggregateSummaryProof, EventSetProof, FederatedAggregateDescriptor, ObjectAssertionProof,
-    ProofBundle, ProofPayloadType, SnapshotSetProof, TrustPolicyProof,
+    ProofBundle, ProofPayloadType, ResultFragmentProof, SnapshotSetProof, StreamHeadsProof,
+    TrustPolicyProof,
 };
 
 /// Structural validation result for a proof object.
@@ -95,6 +96,44 @@ fn validate_event_ref(
     None
 }
 
+fn validate_head_ref(
+    head: &edgerun_proto::edgerun::v0::common::HeadRef,
+) -> Option<ProofStructuralResult> {
+    if head.stream_id.is_empty() {
+        return Some(ProofStructuralResult::Invalid {
+            reason: "StreamHeadsProof head_ref missing stream_id",
+        });
+    }
+    let Some(event_hash) = &head.event_hash else {
+        return Some(ProofStructuralResult::Invalid {
+            reason: "StreamHeadsProof head_ref missing event_hash",
+        });
+    };
+    if event_hash.algorithm
+        != edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256 as i32
+    {
+        return Some(ProofStructuralResult::Invalid {
+            reason: "StreamHeadsProof head_ref event_hash algorithm is not SHA-256",
+        });
+    }
+    if event_hash.value.len() != 32 {
+        return Some(ProofStructuralResult::Invalid {
+            reason: "StreamHeadsProof head_ref event_hash must be 32 bytes",
+        });
+    }
+    None
+}
+
+fn validate_source_query_id(
+    source_query_id: &[u8],
+    reason: &'static str,
+) -> Option<ProofStructuralResult> {
+    if source_query_id.is_empty() {
+        return Some(ProofStructuralResult::Invalid { reason });
+    }
+    None
+}
+
 fn validate_timestamp_shape(
     timestamp: &prost_types::Timestamp,
     reason: &'static str,
@@ -109,10 +148,37 @@ fn validate_timestamp_shape(
     None
 }
 
+/// Validates the structural integrity of a StreamHeadsProof.
+pub fn validate_stream_heads_proof(proof: &StreamHeadsProof) -> ProofStructuralResult {
+    if let Some(result) = validate_source_query_id(
+        &proof.source_query_id,
+        "StreamHeadsProof missing source_query_id",
+    ) {
+        return result;
+    }
+    if proof.heads.is_empty() {
+        return ProofStructuralResult::Invalid {
+            reason: "StreamHeadsProof has empty asserted set",
+        };
+    }
+    for head in &proof.heads {
+        if let Some(result) = validate_head_ref(head) {
+            return result;
+        }
+    }
+    ProofStructuralResult::Valid
+}
+
 /// Validates the structural integrity of a SnapshotSetProof.
 ///
 /// §8.1: SnapshotSetProof with empty asserted set is structurally invalid.
 pub fn validate_snapshot_set_proof(proof: &SnapshotSetProof) -> ProofStructuralResult {
+    if let Some(result) = validate_source_query_id(
+        &proof.source_query_id,
+        "SnapshotSetProof missing source_query_id",
+    ) {
+        return result;
+    }
     if proof.snapshots.is_empty() {
         return ProofStructuralResult::Invalid {
             reason: "SnapshotSetProof has empty asserted set",
@@ -137,6 +203,12 @@ pub fn validate_snapshot_set_proof(proof: &SnapshotSetProof) -> ProofStructuralR
 ///
 /// §8.1: EventSetProof with empty asserted set is structurally invalid.
 pub fn validate_event_set_proof(proof: &EventSetProof) -> ProofStructuralResult {
+    if let Some(result) = validate_source_query_id(
+        &proof.source_query_id,
+        "EventSetProof missing source_query_id",
+    ) {
+        return result;
+    }
     if proof.events.is_empty() {
         return ProofStructuralResult::Invalid {
             reason: "EventSetProof has empty asserted set",
@@ -161,6 +233,12 @@ pub fn validate_event_set_proof(proof: &EventSetProof) -> ProofStructuralResult 
 ///
 /// §8.1: ObjectAssertionProof without object_ref is structurally invalid.
 pub fn validate_object_assertion_proof(proof: &ObjectAssertionProof) -> ProofStructuralResult {
+    if let Some(result) = validate_source_query_id(
+        &proof.source_query_id,
+        "ObjectAssertionProof missing source_query_id",
+    ) {
+        return result;
+    }
     let Some(object_ref) = &proof.object_ref else {
         return ProofStructuralResult::Invalid {
             reason: "ObjectAssertionProof missing object_ref",
@@ -183,12 +261,33 @@ pub fn validate_object_assertion_proof(proof: &ObjectAssertionProof) -> ProofStr
     ProofStructuralResult::Valid
 }
 
+/// Validates the structural integrity of a ResultFragmentProof wrapper.
+pub fn validate_result_fragment_proof(proof: &ResultFragmentProof) -> ProofStructuralResult {
+    let Some(fragment) = &proof.fragment else {
+        return ProofStructuralResult::Invalid {
+            reason: "ResultFragmentProof missing fragment",
+        };
+    };
+    if fragment.query_id.is_empty() {
+        return ProofStructuralResult::Invalid {
+            reason: "ResultFragmentProof fragment missing query_id",
+        };
+    }
+    ProofStructuralResult::Valid
+}
+
 /// Validates the structural integrity of an AggregateSummaryProof.
 ///
 /// §8.1: AggregateSummaryProof with overlapping included and excluded
 /// responders is structurally invalid.
 pub fn validate_aggregate_summary_proof(proof: &AggregateSummaryProof) -> ProofStructuralResult {
     use std::collections::HashSet;
+    if let Some(result) = validate_source_query_id(
+        &proof.source_query_id,
+        "AggregateSummaryProof missing source_query_id",
+    ) {
+        return result;
+    }
     for responder in proof
         .included_responders
         .iter()
@@ -235,6 +334,12 @@ pub fn validate_aggregate_summary_proof(proof: &AggregateSummaryProof) -> ProofS
 /// §8.1: TrustPolicyProof MUST carry at least one of policy_object
 /// or assignments_object.
 pub fn validate_trust_policy_proof(proof: &TrustPolicyProof) -> ProofStructuralResult {
+    if let Some(result) = validate_source_query_id(
+        &proof.source_query_id,
+        "TrustPolicyProof missing source_query_id",
+    ) {
+        return result;
+    }
     if proof.policy_object.is_none() && proof.assignments_object.is_none() {
         return ProofStructuralResult::Invalid {
             reason: "TrustPolicyProof missing both policy_object and assignments_object",
@@ -502,8 +607,80 @@ pub fn validate_federated_aggregate_descriptor(
 mod tests {
     use super::*;
     use edgerun_proto::edgerun::v0::common::{
-        EventRef, IdentityKind, IdentityRef, ObjectKind, ObjectRef, SnapshotRef,
+        EventRef, HeadRef, IdentityKind, IdentityRef, ObjectKind, ObjectRef, SnapshotRef,
     };
+
+    #[test]
+    fn stream_heads_proof_nonempty_is_valid() {
+        let proof = StreamHeadsProof {
+            source_query_id: vec![1],
+            heads: vec![HeadRef {
+                stream_id: vec![2],
+                seq: 3,
+                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                    algorithm: 1,
+                    value: vec![4; 32],
+                }),
+            }],
+        };
+        assert_eq!(
+            validate_stream_heads_proof(&proof),
+            ProofStructuralResult::Valid
+        );
+    }
+
+    #[test]
+    fn stream_heads_proof_empty_source_query_id_is_invalid() {
+        let proof = StreamHeadsProof {
+            source_query_id: vec![],
+            heads: vec![HeadRef {
+                stream_id: vec![2],
+                seq: 3,
+                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                    algorithm: 1,
+                    value: vec![4; 32],
+                }),
+            }],
+        };
+        assert_eq!(
+            validate_stream_heads_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "StreamHeadsProof missing source_query_id"
+            }
+        );
+    }
+
+    #[test]
+    fn stream_heads_proof_empty_is_invalid() {
+        let proof = StreamHeadsProof {
+            source_query_id: vec![1],
+            heads: vec![],
+        };
+        assert_eq!(
+            validate_stream_heads_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "StreamHeadsProof has empty asserted set"
+            }
+        );
+    }
+
+    #[test]
+    fn stream_heads_proof_missing_event_hash_is_invalid() {
+        let proof = StreamHeadsProof {
+            source_query_id: vec![1],
+            heads: vec![HeadRef {
+                stream_id: vec![2],
+                seq: 3,
+                event_hash: None,
+            }],
+        };
+        assert_eq!(
+            validate_stream_heads_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "StreamHeadsProof head_ref missing event_hash"
+            }
+        );
+    }
 
     #[test]
     fn snapshot_set_proof_empty_is_invalid() {
@@ -515,6 +692,23 @@ mod tests {
             validate_snapshot_set_proof(&proof),
             ProofStructuralResult::Invalid {
                 reason: "SnapshotSetProof has empty asserted set"
+            }
+        );
+    }
+
+    #[test]
+    fn snapshot_set_proof_empty_source_query_id_is_invalid() {
+        let proof = SnapshotSetProof {
+            source_query_id: vec![],
+            snapshots: vec![SnapshotRef {
+                snapshot_id: vec![1],
+                object_id: None,
+            }],
+        };
+        assert_eq!(
+            validate_snapshot_set_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "SnapshotSetProof missing source_query_id"
             }
         );
     }
@@ -545,6 +739,28 @@ mod tests {
             validate_event_set_proof(&proof),
             ProofStructuralResult::Invalid {
                 reason: "EventSetProof has empty asserted set"
+            }
+        );
+    }
+
+    #[test]
+    fn event_set_proof_empty_source_query_id_is_invalid() {
+        let proof = EventSetProof {
+            source_query_id: vec![],
+            events: vec![EventRef {
+                stream_id: vec![1],
+                seq: 1,
+                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                    algorithm: 1,
+                    value: vec![2; 32],
+                }),
+            }],
+            related_objects: vec![],
+        };
+        assert_eq!(
+            validate_event_set_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "EventSetProof missing source_query_id"
             }
         );
     }
@@ -711,6 +927,25 @@ mod tests {
     }
 
     #[test]
+    fn object_assertion_proof_empty_source_query_id_is_invalid() {
+        let proof = ObjectAssertionProof {
+            source_query_id: vec![],
+            object_ref: Some(ObjectRef {
+                object_id: vec![1],
+                object_kind: None,
+            }),
+            exists: true,
+            bundled_result_object: None,
+        };
+        assert_eq!(
+            validate_object_assertion_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "ObjectAssertionProof missing source_query_id"
+            }
+        );
+    }
+
+    #[test]
     fn object_assertion_proof_with_ref_is_valid() {
         let proof = ObjectAssertionProof {
             source_query_id: vec![1],
@@ -764,6 +999,86 @@ mod tests {
             validate_aggregate_summary_proof(&proof),
             ProofStructuralResult::Invalid {
                 reason: "AggregateSummaryProof has overlapping included/excluded responders"
+            }
+        );
+    }
+
+    #[test]
+    fn result_fragment_proof_missing_fragment_is_invalid() {
+        let proof = ResultFragmentProof { fragment: None };
+        assert_eq!(
+            validate_result_fragment_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "ResultFragmentProof missing fragment"
+            }
+        );
+    }
+
+    #[test]
+    fn result_fragment_proof_empty_query_id_is_invalid() {
+        let proof = ResultFragmentProof {
+            fragment: Some(edgerun_proto::edgerun::v0::access::QueryResultFragment {
+                fragment_version: 1,
+                query_id: vec![],
+                responder: None,
+                answered_at: None,
+                completeness: 0,
+                snapshot_refs: vec![],
+                event_refs: vec![],
+                object_refs: vec![],
+                proof_objects: vec![],
+                omission_reason: String::new(),
+                bundled_result_object: None,
+                result_metadata: None,
+                signature: None,
+            }),
+        };
+        assert_eq!(
+            validate_result_fragment_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "ResultFragmentProof fragment missing query_id"
+            }
+        );
+    }
+
+    #[test]
+    fn result_fragment_proof_with_query_id_is_valid() {
+        let proof = ResultFragmentProof {
+            fragment: Some(edgerun_proto::edgerun::v0::access::QueryResultFragment {
+                fragment_version: 1,
+                query_id: vec![1],
+                responder: None,
+                answered_at: None,
+                completeness: 0,
+                snapshot_refs: vec![],
+                event_refs: vec![],
+                object_refs: vec![],
+                proof_objects: vec![],
+                omission_reason: String::new(),
+                bundled_result_object: None,
+                result_metadata: None,
+                signature: None,
+            }),
+        };
+        assert_eq!(
+            validate_result_fragment_proof(&proof),
+            ProofStructuralResult::Valid
+        );
+    }
+
+    #[test]
+    fn aggregate_summary_empty_source_query_id_is_invalid() {
+        let proof = AggregateSummaryProof {
+            source_query_id: vec![],
+            included_responders: vec![],
+            excluded_responders: vec![],
+            total_trust_score: 0,
+            trust_policy_object: None,
+        };
+        assert_eq!(
+            validate_aggregate_summary_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "AggregateSummaryProof missing source_query_id"
             }
         );
     }
@@ -844,6 +1159,24 @@ mod tests {
             validate_trust_policy_proof(&proof),
             ProofStructuralResult::Invalid {
                 reason: "TrustPolicyProof missing both policy_object and assignments_object"
+            }
+        );
+    }
+
+    #[test]
+    fn trust_policy_proof_empty_source_query_id_is_invalid() {
+        let proof = TrustPolicyProof {
+            source_query_id: vec![],
+            policy_object: Some(ObjectRef {
+                object_id: vec![1],
+                object_kind: None,
+            }),
+            assignments_object: None,
+        };
+        assert_eq!(
+            validate_trust_policy_proof(&proof),
+            ProofStructuralResult::Invalid {
+                reason: "TrustPolicyProof missing source_query_id"
             }
         );
     }

@@ -30,8 +30,8 @@ pub use object::validate_object_case;
 pub use proof::{
     validate_aggregate_summary_proof, validate_event_set_proof,
     validate_federated_aggregate_descriptor, validate_object_assertion_proof,
-    validate_proof_bundle, validate_snapshot_set_proof, validate_trust_policy_proof,
-    ProofStructuralResult,
+    validate_proof_bundle, validate_result_fragment_proof, validate_snapshot_set_proof,
+    validate_stream_heads_proof, validate_trust_policy_proof, ProofStructuralResult,
 };
 pub use query::validate_query_case;
 pub use snapshot::validate_snapshot_case;
