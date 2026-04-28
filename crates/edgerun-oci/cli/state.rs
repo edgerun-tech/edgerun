@@ -10,7 +10,8 @@ use crate::state::load_state;
 pub fn cmd_state(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    let id = crate::cli::require_container_id(args)?;
+    let id = crate::cli::parse_container_id_args(args, "state")?;
+    let id = id.as_str();
 
     let state = load_state(id)?;
 

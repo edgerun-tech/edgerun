@@ -9,7 +9,8 @@ use crate::state::{container_state_dir, load_state, save_state, ContainerState};
 pub fn cmd_inspect(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    let id = crate::cli::require_container_id(args)?;
+    let id = crate::cli::parse_container_id_args(args, "inspect")?;
+    let id = id.as_str();
     let mut state = load_state(id)?;
     refresh_state(id, &mut state);
     let spec = crate::cli::load_runtime_or_bundle_spec(&state.id, &state.bundle);

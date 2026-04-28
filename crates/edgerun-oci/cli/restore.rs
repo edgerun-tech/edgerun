@@ -7,72 +7,32 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
+use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::state::{save_state, ContainerState as StateContainerState};
+use edgerun_clap::{Arg, Command};
 
 pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    let mut id = None;
-    let mut image_path = None;
-    let mut work_path = None;
-    let mut bundle_path = None;
-
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--image-path" => {
-                if i + 1 < args.len() {
-                    image_path = Some(PathBuf::from(&args[i + 1]));
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            s if s.starts_with("--image-path=") => {
-                image_path = Some(PathBuf::from(&s["--image-path=".len()..]));
-                i += 1;
-            }
-            "--work-path" => {
-                if i + 1 < args.len() {
-                    work_path = Some(PathBuf::from(&args[i + 1]));
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            s if s.starts_with("--work-path=") => {
-                work_path = Some(PathBuf::from(&s["--work-path=".len()..]));
-                i += 1;
-            }
-            "--bundle" => {
-                if i + 1 < args.len() {
-                    bundle_path = Some(PathBuf::from(&args[i + 1]));
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            s if s.starts_with("--bundle=") => {
-                bundle_path = Some(PathBuf::from(&s["--bundle=".len()..]));
-                i += 1;
-            }
-            s if s.starts_with('-') => {
-                i += 1;
-            }
-            _ => {
-                if id.is_none() {
-                    id = Some(args[i].clone());
-                }
-                i += 1;
-            }
-        }
+    const USAGE: &str =
+        "Usage: ert restore --image-path DIR [--work-path DIR] [--bundle DIR] <container-id>";
+    let matches = parse_cli_args(
+        Command::new("restore")
+            .arg(Arg::new("image-path").long("image-path"))
+            .arg(Arg::new("work-path").long("work-path"))
+            .arg(Arg::new("bundle").long("bundle")),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
     }
 
-    let id =
-        id.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
-
-    let image_path = image_path
+    let id = required_positional(&matches, 0, "container ID required")?.to_string();
+    let image_path = matches
+        .get_one::<PathBuf>("image-path")
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "--image-path is required"))?;
+    let bundle_path = matches.get_one::<PathBuf>("bundle");
 
     let bundle_path = bundle_path.unwrap_or_else(|| PathBuf::from("/var/lib/edgerun/bundle"));
 

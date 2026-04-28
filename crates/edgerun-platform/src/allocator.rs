@@ -3,7 +3,14 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(target_arch = "xtensa")]
+const HEAP_MIN_START: usize = 0;
+#[cfg(not(target_arch = "xtensa"))]
 const HEAP_MIN_START: usize = 0x200000;
+
+#[cfg(target_arch = "xtensa")]
+const HEAP_END: usize = 0x3fcc_8000;
+#[cfg(not(target_arch = "xtensa"))]
 const HEAP_END: usize = 0x1000000;
 
 static HEAP_FREE: AtomicUsize = AtomicUsize::new(0);

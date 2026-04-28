@@ -3,56 +3,26 @@
 use crate::prelude::*;
 use std::io::{self, Write};
 
-use crate::cli::GlobalOpts;
+use crate::cli::{invalid_input, parse_cli_args, required_positional, GlobalOpts};
 use crate::SecretClient;
+use edgerun_clap::{Arg, Command};
 
 pub fn cmd_login(_opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
-    if args.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Usage: ert registry login <registry> [-u username] [-p password]",
-        ));
+    const USAGE: &str = "Usage: ert registry login <registry> [-u username] [-p password]";
+    let matches = parse_cli_args(
+        Command::new("registry login")
+            .arg(Arg::new("username").short('u').long("username"))
+            .arg(Arg::new("password").short('p').long("password")),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
     }
 
-    let registry = &args[0];
-
-    let mut username: Option<String> = None;
-    let mut password: Option<String> = None;
-
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "-u" | "--username" => {
-                if i + 1 < args.len() {
-                    username = Some(args[i + 1].clone());
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "-u requires a value",
-                    ));
-                }
-            }
-            "-p" | "--password" => {
-                if i + 1 < args.len() {
-                    password = Some(args[i + 1].clone());
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "-p requires a value",
-                    ));
-                }
-            }
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("unknown flag: {}", args[i]),
-                ));
-            }
-        }
-    }
-
+    let registry = required_positional(&matches, 0, USAGE)?;
+    let username = matches.get_one::<String>("username");
+    let password = matches.get_one::<String>("password");
     let (user, pass) = if let (Some(u), Some(p)) = (username, password) {
         (u, p)
     } else {

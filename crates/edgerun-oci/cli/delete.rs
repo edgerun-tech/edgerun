@@ -15,9 +15,10 @@ use crate::state::{delete_state, fifo_path, load_state};
 pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    let (force, id) = parse_delete_args(args);
+    let (force, id) = parse_delete_args(args)?;
     let id =
         id.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
+    let id = id.as_str();
 
     let state = load_state(id).ok();
     let (pid, bundle, _cgroup_path) = if let Some(ref s) = state {

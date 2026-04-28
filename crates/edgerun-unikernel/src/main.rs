@@ -38,6 +38,92 @@ struct EspAppDesc {
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const UI_HTML: &str = r#"
+<main class="remote">
+  <section class="status">
+    <div class="label">TCL AC</div>
+    <div class="temp">24</div>
+    <div class="mode">Cool - Auto fan</div>
+  </section>
+  <section class="controls">
+    <button class="power">Power</button>
+    <button>Mode</button>
+    <button>Fan</button>
+    <button>Swing</button>
+  </section>
+</main>
+"#;
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const UI_CSS: &str = r#"
+main { display: block; width: 320px; min-height: 480px; background-color: #f8fafc; color: #101828; padding: 18px; }
+.status { display: block; background-color: #0f766e; color: white; border-radius: 16px; padding: 18px; margin-bottom: 16px; }
+.label { display: block; font-size: 16px; margin-bottom: 8px; }
+.temp { display: block; font-size: 72px; line-height: 1.0; margin-bottom: 8px; }
+.mode { display: block; font-size: 18px; }
+.controls { display: flex; flex-wrap: wrap; }
+button { display: block; width: 132px; height: 74px; margin-right: 8px; margin-bottom: 10px; background-color: #e2e8f0; color: #0f172a; border-radius: 10px; padding: 18px; font-size: 18px; }
+.power { background-color: #dc2626; color: white; }
+"#;
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn render_initial_ui() {
+    use edgerun_layout::UiRenderCommand;
+    use edgerun_layout::{render_html, RenderOptions};
+
+    let ui = render_html(UI_HTML, UI_CSS, RenderOptions::new(320, 480));
+    unsafe {
+        edgerun_platform::esp32s3::Jc3248w535Display::draw_rgb565_with(320, 480, |x, y| {
+            let mut color = 0xffff;
+            for command in &ui.commands {
+                match command {
+                    UiRenderCommand::FillRect {
+                        x: rx,
+                        y: ry,
+                        w,
+                        h,
+                        color: fill,
+                    } => {
+                        if (x as u32) >= *rx
+                            && (x as u32) < rx.saturating_add(*w)
+                            && (y as u32) >= *ry
+                            && (y as u32) < ry.saturating_add(*h)
+                            && fill.a != 0
+                        {
+                            color = rgb565(fill.r, fill.g, fill.b);
+                        }
+                    }
+                    UiRenderCommand::RoundedRect {
+                        x: rx,
+                        y: ry,
+                        w,
+                        h,
+                        color: fill,
+                        ..
+                    } => {
+                        if (x as u32) >= *rx
+                            && (x as u32) < rx.saturating_add(*w)
+                            && (y as u32) >= *ry
+                            && (y as u32) < ry.saturating_add(*h)
+                            && fill.a != 0
+                        {
+                            color = rgb565(fill.r, fill.g, fill.b);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            color
+        });
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn rgb565(r: u8, g: u8, b: u8) -> u16 {
+    (((r as u16) & 0xf8) << 8) | (((g as u16) & 0xfc) << 3) | (b as u16 >> 3)
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 const fn fixed_cstr<const N: usize>(bytes: &[u8]) -> [u8; N] {
     let mut out = [0u8; N];
     let mut i = 0;
@@ -1277,6 +1363,22 @@ _start:
     addi a3, a3, -1
     j 1b
 2:
+    l32r a5, .Lusb_ep1_ptr
+    l32r a7, .Lusb_ep1_conf_ptr
+    movi a6, 69
+    s32i a6, a5, 0
+    movi a6, 67
+    s32i a6, a5, 0
+    movi a6, 10
+    s32i a6, a5, 0
+    l32i a6, a7, 0
+    movi a8, 1
+    or a6, a6, a8
+    s32i a6, a7, 0
+    movi a6, 100
+5:
+    addi a6, a6, -1
+    bnez a6, 5b
     call8 kernel_main
 3:
     waiti 0
@@ -1796,6 +1898,8 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         edgerun_platform::arch::xtensa::esp32s3_disable_watchdogs();
         edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_init();
     }
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM0\n");
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM1\n");
     rt::timer::set_now(0);
     rt::log::log(1, "Starting edgerun unikernel on Xtensa");
     rt::log::init_serial_logger();
@@ -1803,16 +1907,36 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     rt::log::info!("Initializing JC3248W535 display");
     unsafe {
         edgerun_platform::esp32s3::Jc3248w535Display::init();
+        edgerun_platform::esp32s3::Jc3248w535Touch::init();
     }
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM2\n");
     rt::log::info!("JC3248W535 display init complete");
+    rt::log::info!("Rendering HTML UI");
+    render_initial_ui();
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
+    rt::log::info!("HTML UI rendered");
+    rt::log::info!("JC3248W535 touch polling enabled");
 
+    let mut last_touch: Option<(u16, u16)> = None;
     loop {
+        unsafe {
+            if let Some(point) = edgerun_platform::esp32s3::Jc3248w535Touch::read_point() {
+                let touch = (point.x, point.y);
+                if last_touch != Some(touch) {
+                    edgerun_platform::esp32s3::Jc3248w535Display::fill_with_dot_rgb565(
+                        point.x, point.y, 4, 0xffff, 0xf800,
+                    );
+                    rt::log::info!("Touch point x={} y={}", point.x, point.y);
+                    last_touch = Some(touch);
+                }
+            }
+        }
+
         let mut i = 0;
-        while i < 50_000_000 {
+        while i < 1_000_000 {
             core::arch::asm!("nop");
             i += 1;
         }
-        rt::log::info!("Xtensa idle heartbeat");
     }
 }
 

@@ -12,8 +12,11 @@ use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 
 use crate::cli::user::{resolve_user, validate_user_spec};
+use crate::cli::{parse_cli_args, split_cli_prefix, EXEC_VALUE_OPTIONS};
 use crate::syscalls::{do_setns, ns};
 use crate::userns::{do_setgid, do_setuid};
+use edgerun_clap::cli::Action;
+use edgerun_clap::{Arg, Command};
 
 /// Relay I/O between the host terminal and a container PTY.
 ///
@@ -646,95 +649,100 @@ struct ExecArgs {
 }
 
 fn parse_exec_args(args: &[String]) -> io::Result<ExecArgs> {
-    let mut result = ExecArgs::default();
-    let mut i = 0;
+    const USAGE: &str = "Usage: ert exec [options] <container-id> [cmd...]";
+    let (prefix, id, exec_args) = split_cli_prefix(args, EXEC_VALUE_OPTIONS);
+    let matches = parse_cli_args(
+        Command::new("exec")
+            .arg(Arg::new("cwd").long("cwd"))
+            .arg(
+                Arg::new("env")
+                    .short('e')
+                    .long("env")
+                    .action(Action::Append),
+            )
+            .arg(Arg::new("user").short('u').long("user"))
+            .arg(
+                Arg::new("terminal")
+                    .short('t')
+                    .long("terminal")
+                    .action(Action::StoreTrue),
+            )
+            .arg(Arg::new("process").short('p').long("process"))
+            .arg(Arg::new("process-json").long("process-json")),
+        &prefix,
+        USAGE,
+    )?;
+    let id =
+        id.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
 
-    while i < args.len() {
-        match args[i].as_str() {
-            "--cwd" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--cwd requires a value",
-                    ));
-                }
-                result.cwd = Some(args[i].clone());
-            }
-            "--env" | "-e" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--env requires a value",
-                    ));
-                }
-                if let Some((k, v)) = args[i].split_once('=') {
-                    result.extra_env.push((k.into(), v.into()));
-                }
-            }
-            "--user" | "-u" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--user requires a value",
-                    ));
-                }
-                result.user = Some(validate_user_spec(&args[i])?);
-            }
-            "--terminal" | "-t" => {
-                result.terminal = true;
-            }
-            "--process" | "-p" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--process requires a path",
-                    ));
-                }
-                result.process_json_path = Some(args[i].clone());
-            }
-            "--process-json" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--process-json requires a value",
-                    ));
-                }
-                result.process_json = Some(args[i].clone());
-            }
-            "--" => {
-                i += 1;
-                result.exec_args = args[i..].to_vec();
-                break;
-            }
-            s if !s.starts_with('-') => {
-                if result.id.is_empty() {
-                    result.id = args[i].clone();
-                } else {
-                    result.exec_args = args[i..].to_vec();
-                    break;
-                }
-            }
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("unknown exec flag: {}", args[i]),
-                ));
+    let mut result = ExecArgs {
+        id,
+        cwd: matches.get_one::<String>("cwd"),
+        user: matches
+            .get_one::<String>("user")
+            .map(|user| validate_user_spec(&user))
+            .transpose()?,
+        terminal: matches.get_flag("terminal"),
+        process_json_path: matches.get_one::<String>("process"),
+        process_json: matches.get_one::<String>("process-json"),
+        exec_args,
+        ..Default::default()
+    };
+
+    if let Some(env) = matches.get_many::<String>("env") {
+        for entry in env {
+            if let Some((key, value)) = entry.split_once('=') {
+                result.extra_env.push((key.into(), value.into()));
             }
         }
-        i += 1;
-    }
-
-    if result.id.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "container ID required",
-        ));
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn parses_exec_options_with_command_tail() {
+        let parsed = parse_exec_args(&args(&[
+            "--cwd",
+            "/work",
+            "-e",
+            "A=1",
+            "--env=B=2",
+            "-t",
+            "container-a",
+            "sh",
+            "-lc",
+            "echo ok",
+        ]))
+        .unwrap();
+
+        assert_eq!(parsed.id, "container-a");
+        assert_eq!(parsed.cwd.as_deref(), Some("/work"));
+        assert_eq!(
+            parsed.extra_env,
+            vec![
+                ("A".to_string(), "1".to_string()),
+                ("B".to_string(), "2".to_string())
+            ]
+        );
+        assert!(parsed.terminal);
+        assert_eq!(parsed.exec_args, args(&["sh", "-lc", "echo ok"]));
+    }
+
+    #[test]
+    fn exec_stops_parsing_after_container_id() {
+        let parsed =
+            parse_exec_args(&args(&["container-a", "--not-an-exec-flag", "value"])).unwrap();
+
+        assert_eq!(parsed.id, "container-a");
+        assert_eq!(parsed.exec_args, args(&["--not-an-exec-flag", "value"]));
+    }
 }

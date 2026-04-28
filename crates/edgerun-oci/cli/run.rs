@@ -14,7 +14,8 @@ use std::path::{Path, PathBuf};
 use crate::cli::pull::print_pull_progress;
 use crate::cli::user::{resolve_user, validate_user_spec};
 use crate::cli::{
-    default_images_dir, default_store_dir, resolve_registry_auth, write_all_fd, GlobalOpts,
+    default_images_dir, default_store_dir, parse_cli_args, resolve_registry_auth, split_cli_prefix,
+    write_all_fd, GlobalOpts, RUN_VALUE_OPTIONS,
 };
 use crate::lifecycle::{
     fork_container_child_with_terminal_socket, run_create_runtime_hooks, run_prestart_hooks,
@@ -28,6 +29,8 @@ use crate::state::{delete_state, load_state};
 use crate::ImageRef;
 use crate::RegistryAuth;
 use crate::RegistryClient;
+use edgerun_clap::cli::Action;
+use edgerun_clap::{Arg, Command};
 
 struct RunOpts {
     rm: bool,
@@ -440,265 +443,127 @@ fn drain_fd_to_stdout(fd: i32, buffer: &mut [u8]) {
 }
 
 fn parse_run_args(args: &[String]) -> io::Result<(RunOpts, String, Vec<String>)> {
-    if args.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Usage: ert run [options] <image> [cmd...]",
-        ));
-    }
-
+    const USAGE: &str = "Usage: ert run [options] <image> [cmd...]";
+    let (prefix, image, cmd_args) = split_cli_prefix(args, RUN_VALUE_OPTIONS);
+    let matches = parse_cli_args(
+        Command::new("run")
+            .arg(Arg::new("rm").long("rm").action(Action::StoreTrue))
+            .arg(
+                Arg::new("detach")
+                    .short('d')
+                    .long("detach")
+                    .action(Action::StoreTrue),
+            )
+            .arg(
+                Arg::new("privileged")
+                    .long("privileged")
+                    .action(Action::StoreTrue),
+            )
+            .arg(Arg::new("it").long("it").action(Action::StoreTrue))
+            .arg(Arg::new("ti").long("ti").action(Action::StoreTrue))
+            .arg(
+                Arg::new("tty")
+                    .short('t')
+                    .long("tty")
+                    .action(Action::StoreTrue),
+            )
+            .arg(
+                Arg::new("interactive")
+                    .short('i')
+                    .long("interactive")
+                    .action(Action::StoreTrue),
+            )
+            .arg(
+                Arg::new("volume")
+                    .short('v')
+                    .long("volume")
+                    .action(Action::Append),
+            )
+            .arg(Arg::new("mount").long("mount").action(Action::Append))
+            .arg(Arg::new("name").long("name"))
+            .arg(
+                Arg::new("env")
+                    .short('e')
+                    .long("env")
+                    .action(Action::Append),
+            )
+            .arg(Arg::new("env-file").long("env-file").action(Action::Append))
+            .arg(Arg::new("workdir").short('w').long("workdir"))
+            .arg(Arg::new("user").short('u').long("user"))
+            .arg(Arg::new("entrypoint").long("entrypoint"))
+            .arg(Arg::new("pull").long("pull"))
+            .arg(Arg::new("hostname").short('h').long("hostname"))
+            .arg(Arg::new("dns").long("dns").action(Action::Append))
+            .arg(Arg::new("add-host").long("add-host").action(Action::Append))
+            .arg(Arg::new("images-dir").long("images-dir"))
+            .arg(Arg::new("store").long("store")),
+        &prefix,
+        USAGE,
+    )?;
     let mut opts = RunOpts {
-        rm: false,
-        detach: false,
-        name: None,
+        rm: matches.get_flag("rm"),
+        detach: matches.get_flag("detach"),
+        name: matches.get_one::<String>("name"),
         env: Vec::new(),
         env_files: Vec::new(),
-        user: None,
-        workdir: None,
-        entrypoint: None,
-        hostname: None,
+        user: matches
+            .get_one::<String>("user")
+            .map(|user| validate_user_spec(&user))
+            .transpose()?,
+        workdir: matches.get_one::<String>("workdir"),
+        entrypoint: matches.get_one::<String>("entrypoint"),
+        hostname: matches
+            .get_one::<String>("hostname")
+            .map(|hostname| validate_hostname(&hostname))
+            .transpose()?,
         dns: Vec::new(),
         add_hosts: Vec::new(),
-        privileged: false,
-        interactive: false,
-        tty: false,
+        privileged: matches.get_flag("privileged"),
+        interactive: matches.get_flag("interactive")
+            || matches.get_flag("it")
+            || matches.get_flag("ti"),
+        tty: matches.get_flag("tty") || matches.get_flag("it") || matches.get_flag("ti"),
         mounts: Vec::new(),
-        pull_policy: PullPolicy::Missing,
-        images_dir: default_images_dir(),
-        store_path: default_store_dir(),
+        pull_policy: matches
+            .get_one::<String>("pull")
+            .map(|pull| parse_pull_policy(&pull))
+            .transpose()?
+            .unwrap_or(PullPolicy::Missing),
+        images_dir: matches
+            .get_one::<PathBuf>("images-dir")
+            .unwrap_or_else(default_images_dir),
+        store_path: matches
+            .get_one::<PathBuf>("store")
+            .unwrap_or_else(default_store_dir),
     };
 
-    let mut image: Option<String> = None;
-    let mut cmd_args = Vec::new();
-    let mut past_image = false;
-    let mut i = 0;
-
-    while i < args.len() {
-        let arg = &args[i];
-        if past_image {
-            cmd_args.push(arg.clone());
-            i += 1;
-            continue;
+    if let Some(volumes) = matches.get_many::<String>("volume") {
+        for volume in volumes {
+            opts.mounts.push(parse_volume_mount(&volume)?);
         }
-
-        match arg.as_str() {
-            "--rm" => opts.rm = true,
-            "-d" | "--detach" => opts.detach = true,
-            "--privileged" => opts.privileged = true,
-            "-it" | "-ti" => {
-                opts.interactive = true;
-                opts.tty = true;
-            }
-            "-t" | "--tty" => opts.tty = true,
-            "-i" | "--interactive" => opts.interactive = true,
-            "-v" | "--volume" => {
-                if i + 1 < args.len() {
-                    opts.mounts.push(parse_volume_mount(&args[i + 1])?);
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "-v requires host:container[:options]",
-                    ));
-                }
-                continue;
-            }
-            "--mount" => {
-                if i + 1 < args.len() {
-                    opts.mounts.push(parse_mount_arg(&args[i + 1])?);
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--mount requires type=bind,source=...,target=...",
-                    ));
-                }
-                continue;
-            }
-            "--name" => {
-                if i + 1 < args.len() {
-                    opts.name = Some(args[i + 1].clone());
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--name requires a value",
-                    ));
-                }
-                continue;
-            }
-            "-e" | "--env" => {
-                if i + 1 < args.len() {
-                    opts.env.push(parse_env_assignment(&args[i + 1])?);
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "-e requires a value",
-                    ));
-                }
-                continue;
-            }
-            "--env-file" => {
-                if i + 1 < args.len() {
-                    opts.env_files.push(PathBuf::from(&args[i + 1]));
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--env-file requires a path",
-                    ));
-                }
-                continue;
-            }
-            "-w" | "--workdir" => {
-                if i + 1 < args.len() {
-                    opts.workdir = Some(args[i + 1].clone());
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "-w requires a value",
-                    ));
-                }
-                continue;
-            }
-            "-u" | "--user" => {
-                if i + 1 < args.len() {
-                    opts.user = Some(validate_user_spec(&args[i + 1])?);
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--user requires user[:group]",
-                    ));
-                }
-                continue;
-            }
-            "--entrypoint" => {
-                if i + 1 < args.len() {
-                    opts.entrypoint = Some(args[i + 1].clone());
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--entrypoint requires a value",
-                    ));
-                }
-                continue;
-            }
-            "--pull" => {
-                if i + 1 < args.len() {
-                    opts.pull_policy = parse_pull_policy(&args[i + 1])?;
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--pull requires always, missing, or never",
-                    ));
-                }
-                continue;
-            }
-            "--hostname" | "-h" => {
-                if i + 1 < args.len() {
-                    opts.hostname = Some(validate_hostname(&args[i + 1])?);
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--hostname requires a value",
-                    ));
-                }
-                continue;
-            }
-            "--dns" => {
-                if i + 1 < args.len() {
-                    opts.dns.push(validate_dns_server(&args[i + 1])?);
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--dns requires an address",
-                    ));
-                }
-                continue;
-            }
-            "--add-host" => {
-                if i + 1 < args.len() {
-                    opts.add_hosts.push(parse_add_host(&args[i + 1])?);
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--add-host requires host:ip",
-                    ));
-                }
-                continue;
-            }
-            "--images-dir" => {
-                if i + 1 < args.len() {
-                    opts.images_dir = PathBuf::from(&args[i + 1]);
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--images-dir requires a path",
-                    ));
-                }
-                continue;
-            }
-            "--store" => {
-                if i + 1 < args.len() {
-                    opts.store_path = PathBuf::from(&args[i + 1]);
-                    i += 2;
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--store requires a path",
-                    ));
-                }
-                continue;
-            }
-            arg if arg.starts_with("--mount=") => {
-                opts.mounts.push(parse_mount_arg(&arg["--mount=".len()..])?);
-            }
-            arg if arg.starts_with("--hostname=") => {
-                opts.hostname = Some(validate_hostname(&arg["--hostname=".len()..])?);
-            }
-            arg if arg.starts_with("--dns=") => {
-                opts.dns.push(validate_dns_server(&arg["--dns=".len()..])?);
-            }
-            arg if arg.starts_with("--add-host=") => {
-                opts.add_hosts
-                    .push(parse_add_host(&arg["--add-host=".len()..])?);
-            }
-            arg if arg.starts_with("--env-file=") => {
-                opts.env_files
-                    .push(PathBuf::from(&arg["--env-file=".len()..]));
-            }
-            arg if arg.starts_with("--user=") => {
-                opts.user = Some(validate_user_spec(&arg["--user=".len()..])?);
-            }
-            arg if arg.starts_with("--pull=") => {
-                opts.pull_policy = parse_pull_policy(&arg["--pull=".len()..])?;
-            }
-            "--" => {
-                past_image = true;
-                i += 1;
-                continue;
-            }
-            _ if arg.starts_with('-') => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("unknown flag: {}", arg),
-                ));
-            }
-            _ => {
-                image = Some(arg.clone());
-                past_image = true;
-            }
+    }
+    if let Some(mounts) = matches.get_many::<String>("mount") {
+        for mount in mounts {
+            opts.mounts.push(parse_mount_arg(&mount)?);
         }
-        i += 1;
+    }
+    if let Some(env) = matches.get_many::<String>("env") {
+        for entry in env {
+            opts.env.push(parse_env_assignment(&entry)?);
+        }
+    }
+    if let Some(env_files) = matches.get_many::<PathBuf>("env-file") {
+        opts.env_files = env_files;
+    }
+    if let Some(dns) = matches.get_many::<String>("dns") {
+        for server in dns {
+            opts.dns.push(validate_dns_server(&server)?);
+        }
+    }
+    if let Some(add_hosts) = matches.get_many::<String>("add-host") {
+        for host in add_hosts {
+            opts.add_hosts.push(parse_add_host(&host)?);
+        }
     }
 
     let image =

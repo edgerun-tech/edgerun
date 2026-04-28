@@ -199,8 +199,8 @@ pub mod prelude {
 
 use crate::prelude::v1::*;
 
-mod att;
 pub mod async_ext;
+mod att;
 pub mod client;
 pub mod error;
 pub mod hci;

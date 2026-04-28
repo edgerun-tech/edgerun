@@ -4,13 +4,16 @@ use crate::prelude::*;
 use std::fs;
 use std::io::{self, Write};
 
+use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::state::load_state;
+use edgerun_clap::{Arg, Command};
 use edgerun_json::{JsonValue, Map};
 
 pub fn cmd_events(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    let id = crate::cli::require_container_id(args)?;
+    let parsed = parse_events_args(args)?;
+    let id = parsed.id.as_str();
 
     let state = load_state(id)?;
     let pid = state
@@ -36,13 +39,7 @@ pub fn cmd_events(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     let cgroup_dir =
         std::path::Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
 
-    // Check if --interval is specified for streaming
-    let interval_ms: u64 = if let Some(idx) = args.iter().position(|a| a == "--interval") {
-        args.get(idx + 1)
-            .and_then(|s| parse_interval(s))
-            .unwrap_or(1000)
-    } else {
-        // No interval: just output once and exit
+    let Some(interval_ms) = parsed.interval_ms else {
         let stats = read_cgroup_stats(&cgroup_dir, pid)?;
         println!("{}", stats);
         return Ok(());
@@ -74,16 +71,62 @@ pub fn cmd_events(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
     Ok(())
 }
 
+#[derive(Debug)]
+struct EventsArgs {
+    id: String,
+    interval_ms: Option<u64>,
+}
+
+fn parse_events_args(args: &[String]) -> io::Result<EventsArgs> {
+    const USAGE: &str = "Usage: ert events [--interval N] <container-id>";
+    let matches = parse_cli_args(
+        Command::new("events").arg(Arg::new("interval").long("interval")),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
+    }
+    let id = required_positional(&matches, 0, "container ID required")?.to_string();
+    let interval_ms = matches
+        .get_one::<String>("interval")
+        .map(|interval| {
+            parse_interval(&interval)
+                .ok_or_else(|| invalid_input(format!("invalid interval: {interval}")))
+        })
+        .transpose()?;
+    Ok(EventsArgs { id, interval_ms })
+}
+
 fn parse_interval(s: &str) -> Option<u64> {
-    if s.ends_with('s') {
+    if s.ends_with("ms") {
+        s.trim_end_matches("ms").parse::<u64>().ok()
+    } else if s.ends_with('s') {
         s.trim_end_matches('s')
             .parse::<u64>()
             .ok()
             .map(|v| v * 1000)
-    } else if s.ends_with("ms") {
-        s.trim_end_matches("ms").parse::<u64>().ok()
     } else {
         s.parse::<u64>().ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn parses_events_args() {
+        let parsed = parse_events_args(&args(&["--interval", "250ms", "container-a"])).unwrap();
+
+        assert_eq!(parsed.id, "container-a");
+        assert_eq!(parsed.interval_ms, Some(250));
+        assert!(parse_events_args(&args(&["container-a", "extra"])).is_err());
+        assert!(parse_events_args(&args(&["--interval", "bad", "container-a"])).is_err());
     }
 }
 

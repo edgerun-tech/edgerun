@@ -8,17 +8,18 @@ use std::os::unix::io::AsRawFd;
 
 use crate::cli::exec::{enter_container_root, join_container_namespaces, open_exec_root};
 use crate::cli::process_tree;
+use crate::cli::{invalid_input, parse_cli_args};
 use crate::state::{load_state, save_state, state_root_dir, ContainerState};
+use edgerun_clap::cli::Action;
+use edgerun_clap::{Arg, Command};
 
 pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    if container_id_arg(args).is_none() {
-        return list_containers(args);
-    }
-
-    let id = container_id_arg(args)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
+    let parsed = parse_ps_args(args)?;
+    let Some(id) = parsed.container_id.as_deref() else {
+        return list_containers(parsed.all, parsed.json);
+    };
 
     let state = load_state(id)?;
     let pid = state
@@ -34,44 +35,59 @@ pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> 
 
     let spec = crate::cli::load_runtime_or_bundle_spec(&state.id, &state.bundle);
     let (root_fd, root_path) = open_exec_root(pid, spec.as_ref())?;
-    let json = args
-        .iter()
-        .any(|arg| arg == "--format=json" || arg == "json");
     if !root_path.join("proc/self").exists() {
         let processes = read_host_process_tree(pid);
-        if json {
+        if parsed.json {
             print_processes_json(&processes);
         } else {
             print_processes_table(&processes);
         }
         return Ok(());
     }
-    print_container_processes(pid, root_fd.as_raw_fd(), json)
+    print_container_processes(pid, root_fd.as_raw_fd(), parsed.json)
 }
 
-fn container_id_arg(args: &[String]) -> Option<&str> {
-    let mut skip_next = false;
-    for arg in args {
-        if skip_next {
-            skip_next = false;
-            continue;
-        }
-        match arg.as_str() {
-            "--all" | "-a" => {}
-            "--format" | "-f" => skip_next = true,
-            arg if arg.starts_with("--format=") => {}
-            _ if !arg.starts_with('-') => return Some(arg.as_str()),
-            _ => {}
+#[derive(Debug)]
+struct PsArgs {
+    all: bool,
+    json: bool,
+    container_id: Option<String>,
+}
+
+fn parse_ps_args(args: &[String]) -> io::Result<PsArgs> {
+    const USAGE: &str = "Usage: ert ps [-a] [--format json] [container-id]";
+    let matches = parse_cli_args(
+        Command::new("ps")
+            .arg(
+                Arg::new("all")
+                    .short('a')
+                    .long("all")
+                    .action(Action::StoreTrue),
+            )
+            .arg(Arg::new("format").short('f').long("format")),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
+    }
+
+    let format = matches.get_one::<String>("format");
+    let json = format.as_deref() == Some("json");
+    if let Some(format) = format {
+        if format != "json" {
+            return Err(invalid_input("ps only supports --format json"));
         }
     }
-    None
+
+    Ok(PsArgs {
+        all: matches.get_flag("all"),
+        json,
+        container_id: matches.get_positional(0).map(str::to_string),
+    })
 }
 
-fn list_containers(args: &[String]) -> io::Result<()> {
-    let all = args.iter().any(|arg| arg == "-a" || arg == "--all");
-    let json = args
-        .iter()
-        .any(|arg| arg == "--format=json" || arg == "json");
+fn list_containers(all: bool, json: bool) -> io::Result<()> {
     let mut states = Vec::new();
     let root = state_root_dir();
     if let Ok(entries) = fs::read_dir(root) {

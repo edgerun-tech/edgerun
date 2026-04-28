@@ -18,7 +18,12 @@ const GPIO_OUT_W1TC: *mut u32 = (GPIO_BASE + 0x0c) as *mut u32;
 const GPIO_OUT1_W1TS: *mut u32 = (GPIO_BASE + 0x14) as *mut u32;
 const GPIO_OUT1_W1TC: *mut u32 = (GPIO_BASE + 0x18) as *mut u32;
 const GPIO_ENABLE_W1TS: *mut u32 = (GPIO_BASE + 0x24) as *mut u32;
+const GPIO_ENABLE_W1TC: *mut u32 = (GPIO_BASE + 0x28) as *mut u32;
 const GPIO_ENABLE1_W1TS: *mut u32 = (GPIO_BASE + 0x30) as *mut u32;
+const GPIO_ENABLE1_W1TC: *mut u32 = (GPIO_BASE + 0x34) as *mut u32;
+const GPIO_IN: *const u32 = (GPIO_BASE + 0x3c) as *const u32;
+const GPIO_IN1: *const u32 = (GPIO_BASE + 0x40) as *const u32;
+const GPIO_PIN_BASE: usize = GPIO_BASE + 0x74;
 const GPIO_FUNC_IN_SEL_CFG: usize = GPIO_BASE + 0x154;
 const GPIO_FUNC_OUT_SEL_CFG: usize = GPIO_BASE + 0x554;
 
@@ -43,16 +48,21 @@ const SPI_CLK_GATE: *mut u32 = (SPI2_BASE + 0xe8) as *mut u32;
 
 const MCU_SEL_S: u32 = 12;
 const MCU_SEL_M: u32 = 0x7 << MCU_SEL_S;
+const FUN_PD: u32 = 1 << 7;
+const FUN_PU: u32 = 1 << 8;
 const FUN_DRV_S: u32 = 10;
 const FUN_DRV_M: u32 = 0x3 << FUN_DRV_S;
 const FUN_IE: u32 = 1 << 9;
 const GPIO_FUNC: u32 = 1;
 const DRIVE_3: u32 = 3;
+const GPIO_PIN_PAD_DRIVER: u32 = 1 << 2;
 
 const LCD_WIDTH: u16 = 320;
 const LCD_HEIGHT: u16 = 480;
 
 const PIN_BL: u8 = 1;
+const PIN_TOUCH_SDA: u8 = 4;
+const PIN_TOUCH_SCL: u8 = 8;
 const PIN_DATA0: u8 = 21;
 const PIN_DATA3: u8 = 39;
 const PIN_DATA2: u8 = 40;
@@ -85,6 +95,19 @@ const FSPIWP_OUT: u32 = 105;
 const FSPIWP_IN: u32 = 105;
 const FSPICS0_OUT: u32 = 110;
 const FSPICS0_IN: u32 = 110;
+
+const TOUCH_ADDR: u8 = 0x3b;
+const TOUCH_READ_CMD: &[u8] = &[
+    0xb5, 0xab, 0xa5, 0x5a, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TouchPoint {
+    pub x: u16,
+    pub y: u16,
+    pub count: u8,
+    pub gesture: u8,
+}
 
 #[derive(Clone, Copy)]
 struct InitCommand {
@@ -398,6 +421,177 @@ impl Jc3248w535Display {
             remaining -= len;
         }
     }
+
+    /// Fill the panel and embed a small square marker in the streamed frame.
+    pub unsafe fn fill_with_dot_rgb565(
+        dot_x: u16,
+        dot_y: u16,
+        radius: u16,
+        background: u16,
+        dot: u16,
+    ) {
+        if dot_x >= LCD_WIDTH || dot_y >= LCD_HEIGHT {
+            return;
+        }
+
+        let x = dot_origin(dot_x, radius, LCD_WIDTH);
+        let y = dot_origin(dot_y, radius, LCD_HEIGHT);
+        let x_end = min_u16(LCD_WIDTH - 1, x.saturating_add(radius * 2));
+        let y_end = min_u16(LCD_HEIGHT - 1, y.saturating_add(radius * 2));
+
+        tx_cmd(
+            0x2A,
+            &[
+                0x00,
+                0x00,
+                ((LCD_WIDTH - 1) >> 8) as u8,
+                (LCD_WIDTH - 1) as u8,
+            ],
+        );
+        tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
+
+        let mut chunk = [0u8; 64];
+        let total_pixels = LCD_WIDTH as usize * LCD_HEIGHT as usize;
+        let mut pixel = 0usize;
+
+        while pixel < total_pixels {
+            let mut offset = 0;
+            while offset < chunk.len() && pixel < total_pixels {
+                let px = (pixel % LCD_WIDTH as usize) as u16;
+                let py = (pixel / LCD_WIDTH as usize) as u16;
+                let color = if px >= x && px <= x_end && py >= y && py <= y_end {
+                    dot
+                } else {
+                    background
+                };
+                chunk[offset] = (color >> 8) as u8;
+                chunk[offset + 1] = color as u8;
+                offset += 2;
+                pixel += 1;
+            }
+            spi2_write(&chunk[..offset], true, pixel < total_pixels);
+        }
+    }
+
+    /// Stream a full-screen BGRA8888 framebuffer to the panel as RGB565.
+    pub unsafe fn draw_bgra8888(width: u16, height: u16, pixels: &[u8], stride: usize) {
+        if width != LCD_WIDTH || height != LCD_HEIGHT || stride < width as usize * 4 {
+            return;
+        }
+
+        tx_cmd(
+            0x2A,
+            &[
+                0x00,
+                0x00,
+                ((LCD_WIDTH - 1) >> 8) as u8,
+                (LCD_WIDTH - 1) as u8,
+            ],
+        );
+        tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
+
+        let mut chunk = [0u8; 64];
+        let mut py = 0usize;
+        while py < height as usize {
+            let row = py * stride;
+            let mut px = 0usize;
+            while px < width as usize {
+                let mut offset = 0usize;
+                while offset < chunk.len() && px < width as usize {
+                    let src = row + px * 4;
+                    if src + 2 >= pixels.len() {
+                        return;
+                    }
+                    let b = pixels[src];
+                    let g = pixels[src + 1];
+                    let r = pixels[src + 2];
+                    let rgb565 =
+                        (((r as u16) & 0xf8) << 8) | (((g as u16) & 0xfc) << 3) | (b as u16 >> 3);
+                    chunk[offset] = (rgb565 >> 8) as u8;
+                    chunk[offset + 1] = rgb565 as u8;
+                    offset += 2;
+                    px += 1;
+                }
+                let keep_cs = py + 1 < height as usize || px < width as usize;
+                spi2_write(&chunk[..offset], true, keep_cs);
+            }
+            py += 1;
+        }
+    }
+
+    /// Stream a generated full-screen RGB565 frame without allocating a framebuffer.
+    pub unsafe fn draw_rgb565_with<F>(width: u16, height: u16, mut pixel_rgb565: F)
+    where
+        F: FnMut(u16, u16) -> u16,
+    {
+        if width != LCD_WIDTH || height != LCD_HEIGHT {
+            return;
+        }
+
+        tx_cmd(
+            0x2A,
+            &[
+                0x00,
+                0x00,
+                ((LCD_WIDTH - 1) >> 8) as u8,
+                (LCD_WIDTH - 1) as u8,
+            ],
+        );
+        tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
+
+        let mut chunk = [0u8; 64];
+        let mut py = 0u16;
+        while py < height {
+            let mut px = 0u16;
+            while px < width {
+                let mut offset = 0usize;
+                while offset < chunk.len() && px < width {
+                    let color = pixel_rgb565(px, py);
+                    chunk[offset] = (color >> 8) as u8;
+                    chunk[offset + 1] = color as u8;
+                    offset += 2;
+                    px += 1;
+                }
+                let keep_cs = py + 1 < height || px < width;
+                spi2_write(&chunk[..offset], true, keep_cs);
+            }
+            py += 1;
+        }
+    }
+}
+
+pub struct Jc3248w535Touch;
+
+impl Jc3248w535Touch {
+    pub unsafe fn init() {
+        i2c_gpio_init();
+        i2c_stop();
+    }
+
+    pub unsafe fn read_point() -> Option<TouchPoint> {
+        let mut raw = [0u8; 8];
+        if !i2c_write_read(TOUCH_ADDR, TOUCH_READ_CMD, &mut raw) {
+            return None;
+        }
+
+        let count = raw[1];
+        if count == 0 {
+            return None;
+        }
+
+        let x = (((raw[2] & 0x0f) as u16) << 8) | raw[3] as u16;
+        let y = (((raw[4] & 0x0f) as u16) << 8) | raw[5] as u16;
+        if x >= LCD_WIDTH || y >= LCD_HEIGHT {
+            return None;
+        }
+
+        Some(TouchPoint {
+            x,
+            y,
+            count,
+            gesture: raw[0],
+        })
+    }
 }
 
 /// Enable or disable the display backlight GPIO.
@@ -433,7 +627,10 @@ unsafe fn spi2_init() {
     route_spi_pin(PIN_DATA2, FSPIWP_OUT, FSPIWP_IN);
     route_spi_pin(PIN_DATA3, FSPIHD_OUT, FSPIHD_IN);
 
-    write_volatile(SPI_CLK_GATE, SPI_CLK_EN | SPI_MST_CLK_ACTIVE | SPI_MST_CLK_SEL);
+    write_volatile(
+        SPI_CLK_GATE,
+        SPI_CLK_EN | SPI_MST_CLK_ACTIVE | SPI_MST_CLK_SEL,
+    );
     write_volatile(SPI_SLAVE, 0);
     write_volatile(SPI_DMA_CONF, 0);
     write_volatile(SPI_DMA_INT_CLR, u32::MAX);
@@ -457,7 +654,11 @@ unsafe fn spi2_write(data: &[u8], quad: bool, keep_cs: bool) {
     while written < data.len() {
         let remaining = data.len() - written;
         let len = if remaining < 64 { remaining } else { 64 };
-        spi2_write_chunk(&data[written..written + len], quad, keep_cs || remaining > len);
+        spi2_write_chunk(
+            &data[written..written + len],
+            quad,
+            keep_cs || remaining > len,
+        );
         written += len;
     }
 }
@@ -525,6 +726,20 @@ unsafe fn configure_matrix_pin(pin: u8) {
     }
 }
 
+unsafe fn configure_open_drain_input(pin: u8) {
+    if let Some(mux) = io_mux_reg(pin) {
+        let mut val = read_volatile(mux);
+        val &= !(MCU_SEL_M | FUN_DRV_M | FUN_PD);
+        val |= (GPIO_FUNC << MCU_SEL_S) | (DRIVE_3 << FUN_DRV_S) | FUN_IE | FUN_PU;
+        write_volatile(mux, val);
+    }
+
+    let pin_reg = (GPIO_PIN_BASE + pin as usize * 4) as *mut u32;
+    write_volatile(pin_reg, read_volatile(pin_reg) | GPIO_PIN_PAD_DRIVER);
+    set_pin(pin, false);
+    gpio_input(pin);
+}
+
 unsafe fn configure_output(pin: u8) {
     if let Some(mux) = io_mux_reg(pin) {
         let mut val = read_volatile(mux);
@@ -540,6 +755,22 @@ unsafe fn configure_output(pin: u8) {
     }
 }
 
+unsafe fn gpio_output(pin: u8) {
+    if pin < 32 {
+        write_volatile(GPIO_ENABLE_W1TS, 1u32 << pin);
+    } else {
+        write_volatile(GPIO_ENABLE1_W1TS, 1u32 << (pin - 32));
+    }
+}
+
+unsafe fn gpio_input(pin: u8) {
+    if pin < 32 {
+        write_volatile(GPIO_ENABLE_W1TC, 1u32 << pin);
+    } else {
+        write_volatile(GPIO_ENABLE1_W1TC, 1u32 << (pin - 32));
+    }
+}
+
 unsafe fn set_pin(pin: u8, high: bool) {
     let (set, clear, bit) = if pin < 32 {
         (GPIO_OUT_W1TS, GPIO_OUT_W1TC, 1u32 << pin)
@@ -547,6 +778,172 @@ unsafe fn set_pin(pin: u8, high: bool) {
         (GPIO_OUT1_W1TS, GPIO_OUT1_W1TC, 1u32 << (pin - 32))
     };
     write_volatile(if high { set } else { clear }, bit);
+}
+
+unsafe fn read_pin(pin: u8) -> bool {
+    if pin < 32 {
+        (read_volatile(GPIO_IN) & (1u32 << pin)) != 0
+    } else {
+        (read_volatile(GPIO_IN1) & (1u32 << (pin - 32))) != 0
+    }
+}
+
+unsafe fn i2c_gpio_init() {
+    configure_open_drain_input(PIN_TOUCH_SDA);
+    configure_open_drain_input(PIN_TOUCH_SCL);
+    i2c_sda_release();
+    i2c_scl_release();
+}
+
+unsafe fn i2c_write_read(addr: u8, write: &[u8], read: &mut [u8]) -> bool {
+    i2c_start();
+    if !i2c_write_byte(addr << 1) {
+        i2c_stop();
+        return false;
+    }
+    for byte in write {
+        if !i2c_write_byte(*byte) {
+            i2c_stop();
+            return false;
+        }
+    }
+
+    i2c_start();
+    if !i2c_write_byte((addr << 1) | 1) {
+        i2c_stop();
+        return false;
+    }
+
+    let mut index = 0;
+    while index < read.len() {
+        read[index] = i2c_read_byte(index + 1 != read.len());
+        index += 1;
+    }
+    i2c_stop();
+    true
+}
+
+unsafe fn i2c_start() {
+    i2c_sda_release();
+    i2c_scl_release();
+    i2c_delay();
+    i2c_sda_low();
+    i2c_delay();
+    i2c_scl_low();
+    i2c_delay();
+}
+
+unsafe fn i2c_stop() {
+    i2c_sda_low();
+    i2c_delay();
+    i2c_scl_release();
+    i2c_delay();
+    i2c_sda_release();
+    i2c_delay();
+}
+
+unsafe fn i2c_write_byte(byte: u8) -> bool {
+    let mut bit = 0;
+    while bit < 8 {
+        if (byte & (0x80 >> bit)) != 0 {
+            i2c_sda_release();
+        } else {
+            i2c_sda_low();
+        }
+        i2c_delay();
+        i2c_scl_release();
+        i2c_delay();
+        i2c_scl_low();
+        i2c_delay();
+        bit += 1;
+    }
+
+    i2c_sda_release();
+    i2c_delay();
+    i2c_scl_release();
+    i2c_delay();
+    let ack = !read_pin(PIN_TOUCH_SDA);
+    i2c_scl_low();
+    i2c_delay();
+    ack
+}
+
+unsafe fn i2c_read_byte(ack: bool) -> u8 {
+    let mut byte = 0u8;
+    i2c_sda_release();
+    let mut bit = 0;
+    while bit < 8 {
+        i2c_delay();
+        i2c_scl_release();
+        i2c_delay();
+        byte <<= 1;
+        if read_pin(PIN_TOUCH_SDA) {
+            byte |= 1;
+        }
+        i2c_scl_low();
+        i2c_delay();
+        bit += 1;
+    }
+
+    if ack {
+        i2c_sda_low();
+    } else {
+        i2c_sda_release();
+    }
+    i2c_delay();
+    i2c_scl_release();
+    i2c_delay();
+    i2c_scl_low();
+    i2c_sda_release();
+    i2c_delay();
+    byte
+}
+
+unsafe fn i2c_sda_low() {
+    set_pin(PIN_TOUCH_SDA, false);
+    gpio_output(PIN_TOUCH_SDA);
+}
+
+unsafe fn i2c_sda_release() {
+    gpio_input(PIN_TOUCH_SDA);
+}
+
+unsafe fn i2c_scl_low() {
+    set_pin(PIN_TOUCH_SCL, false);
+    gpio_output(PIN_TOUCH_SCL);
+}
+
+unsafe fn i2c_scl_release() {
+    gpio_input(PIN_TOUCH_SCL);
+    let mut timeout = 0;
+    while !read_pin(PIN_TOUCH_SCL) && timeout < 10_000 {
+        timeout += 1;
+    }
+}
+
+fn min_u16(a: u16, b: u16) -> u16 {
+    if a < b {
+        a
+    } else {
+        b
+    }
+}
+
+fn dot_origin(coord: u16, radius: u16, limit: u16) -> u16 {
+    if coord < radius {
+        0
+    } else if coord.saturating_add(radius) >= limit {
+        limit - radius * 2 - 1
+    } else {
+        coord - radius
+    }
+}
+
+pub fn touch_dot_origin(x: u16, y: u16, radius: u16) -> (u16, u16) {
+    (
+        dot_origin(x, radius, LCD_WIDTH),
+        dot_origin(y, radius, LCD_HEIGHT),
+    )
 }
 
 fn io_mux_reg(pin: u8) -> Option<*mut u32> {
@@ -578,5 +975,13 @@ unsafe fn delay_ms(ms: u32) {
             inner += 1;
         }
         outer += 1;
+    }
+}
+
+unsafe fn i2c_delay() {
+    let mut inner = 0;
+    while inner < 80 {
+        core::arch::asm!("nop");
+        inner += 1;
     }
 }

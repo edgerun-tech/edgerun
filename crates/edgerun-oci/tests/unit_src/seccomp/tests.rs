@@ -96,7 +96,7 @@ fn build_seccomp_prog_with_spec_rules() {
             },
         ]),
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     assert!(prog.len() >= 16);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len > 5, "should have BPF instructions, got {}", len);
@@ -112,7 +112,7 @@ fn build_seccomp_prog_empty_spec_uses_fallback() {
         listener_metadata: None,
         syscalls: None,
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     // Should still generate a valid program even with empty rules
     assert!(prog.len() >= 16);
 }
@@ -137,7 +137,7 @@ fn build_seccomp_prog_with_arg_filters() {
             }]),
         }]),
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     assert!(prog.len() >= 16);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len >= 8, "should have many BPF instructions, got {}", len);
@@ -163,7 +163,7 @@ fn build_seccomp_prog_with_ne_arg_filter() {
             }]),
         }]),
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len >= 5, "should have BPF instructions, got {}", len);
 }
@@ -220,7 +220,7 @@ fn bpf_lt_uses_jge() {
             }]),
         }]),
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len >= 8, "should have multiple instructions");
 
@@ -278,7 +278,7 @@ fn bpf_gt_uses_jgt() {
             }]),
         }]),
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len >= 8);
 
@@ -334,7 +334,7 @@ fn bpf_ge_uses_jge() {
             }]),
         }]),
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len >= 8);
 
@@ -390,7 +390,7 @@ fn bpf_le_uses_jgt() {
             }]),
         }]),
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len >= 8);
 
@@ -446,7 +446,7 @@ fn bpf_masked_eq_uses_and_then_jeq() {
             }]),
         }]),
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len >= 8);
 
@@ -602,7 +602,7 @@ fn build_seccomp_prog_with_log_action() {
         default_action: Some(OciSeccompAction::Log),
         ..Default::default()
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len >= 4);
 }
@@ -618,7 +618,7 @@ fn build_seccomp_prog_with_trace_action() {
         }]),
         ..Default::default()
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(len >= 5);
 }
@@ -637,7 +637,7 @@ fn build_seccomp_prog_multiple_syscall_names() {
             ..Default::default()
         }]),
     };
-    let (_, prog) = build_seccomp_prog(&spec);
+    let (_insn_bytes, prog) = build_seccomp_prog(&spec);
     let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
     assert!(
         len >= 8,
@@ -650,7 +650,7 @@ fn build_seccomp_prog_multiple_syscall_names() {
 fn seccomp_bpf_prog_has_valid_sock_fprog_format() {
     // Verify that each call produces a valid sock_fprog struct:
     // [u16 len][padding][u64 pointer]
-    let (_, prog) = seccomp_bpf_prog();
+    let (_insn_bytes, prog) = seccomp_bpf_prog();
     assert_eq!(prog.len(), 16);
     let len = u16::from_le_bytes([prog[0], prog[1]]);
     assert!(len > 0);

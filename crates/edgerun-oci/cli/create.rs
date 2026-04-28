@@ -16,7 +16,8 @@ use crate::spec::{parse_oci_spec, OciSpec};
 
 pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let bundle = opts.bundle.as_deref().unwrap_or(Path::new("."));
-    let id = crate::cli::require_container_id(args)?;
+    let id = crate::cli::parse_container_id_args(args, "create")?;
+    let id = id.as_str();
 
     crate::cli::apply_global_opts(opts)?;
 

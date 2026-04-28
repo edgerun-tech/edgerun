@@ -7,8 +7,10 @@ use crate::prelude::*;
 use std::fs;
 use std::io;
 
+use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::spec::OciSpec;
 use crate::state::load_state;
+use edgerun_clap::{Arg, Command};
 
 /// Parsed update options from CLI flags.
 #[derive(Debug, Default)]
@@ -40,17 +42,9 @@ struct UpdateOpts {
 pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    if args.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "container ID required",
-        ));
-    }
+    let (id, update_opts) = parse_update_args(args)?;
 
-    let id = &args[0];
-    let update_opts = parse_update_flag(&args[1..])?;
-
-    let state = load_state(id)?;
+    let state = load_state(&id)?;
     let pid = state
         .pid
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container has no PID"))?;
@@ -200,165 +194,63 @@ fn update_spec_config(_config_path: &std::path::Path, _opts: &UpdateOpts) -> io:
     Ok(())
 }
 
-fn parse_update_flag(args: &[String]) -> io::Result<UpdateOpts> {
-    let mut opts = UpdateOpts::default();
-    let mut i = 0;
+fn parse_update_args(args: &[String]) -> io::Result<(String, UpdateOpts)> {
+    const USAGE: &str = "Usage: ert update <container-id> [resource flags]";
+    let matches = parse_cli_args(
+        Command::new("update")
+            .arg(Arg::new("memory").short('m').long("memory"))
+            .arg(Arg::new("memory-swap").long("memory-swap"))
+            .arg(Arg::new("cpu-shares").short('c').long("cpu-shares"))
+            .arg(Arg::new("cpu-quota").long("cpu-quota"))
+            .arg(Arg::new("cpu-period").long("cpu-period"))
+            .arg(Arg::new("cpu-rt-runtime").long("cpu-rt-runtime"))
+            .arg(Arg::new("cpu-rt-period").long("cpu-rt-period"))
+            .arg(Arg::new("cpuset-cpus").long("cpuset-cpus"))
+            .arg(Arg::new("cpuset-mems").long("cpuset-mems"))
+            .arg(Arg::new("pids-limit").long("pids-limit"))
+            .arg(Arg::new("blkio-weight").long("blkio-weight")),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
+    }
 
-    while i < args.len() {
-        match args[i].as_str() {
-            "--memory" | "-m" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--memory requires a value",
-                    ));
-                }
-                opts.memory = Some(parse_memory_arg(&args[i])?);
-            }
-            "--memory-swap" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--memory-swap requires a value",
-                    ));
-                }
-                opts.memory_swap = Some(parse_memory_arg(&args[i])?);
-            }
-            "--cpu-shares" | "-c" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--cpu-shares requires a value",
-                    ));
-                }
-                opts.cpu_shares = Some(args[i].parse().map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("invalid cpu-shares value: {}", args[i]),
-                    )
-                })?);
-            }
-            "--cpu-quota" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--cpu-quota requires a value",
-                    ));
-                }
-                opts.cpu_quota = Some(args[i].parse().map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("invalid cpu-quota value: {}", args[i]),
-                    )
-                })?);
-            }
-            "--cpu-period" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--cpu-period requires a value",
-                    ));
-                }
-                opts.cpu_period = Some(args[i].parse().map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("invalid cpu-period value: {}", args[i]),
-                    )
-                })?);
-            }
-            "--cpu-rt-runtime" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--cpu-rt-runtime requires a value",
-                    ));
-                }
-                opts.cpu_rt_runtime = Some(args[i].parse().map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("invalid cpu-rt-runtime value: {}", args[i]),
-                    )
-                })?);
-            }
-            "--cpu-rt-period" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--cpu-rt-period requires a value",
-                    ));
-                }
-                opts.cpu_rt_period = Some(args[i].parse().map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("invalid cpu-rt-period value: {}", args[i]),
-                    )
-                })?);
-            }
-            "--cpuset-cpus" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--cpuset-cpus requires a value",
-                    ));
-                }
-                opts.cpuset_cpus = Some(args[i].clone());
-            }
-            "--cpuset-mems" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--cpuset-mems requires a value",
-                    ));
-                }
-                opts.cpuset_mems = Some(args[i].clone());
-            }
-            "--pids-limit" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--pids-limit requires a value",
-                    ));
-                }
-                opts.pids_limit = Some(args[i].parse().map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("invalid pids-limit value: {}", args[i]),
-                    )
-                })?);
-            }
-            "--blkio-weight" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--blkio-weight requires a value",
-                    ));
-                }
-                opts.blkio_weight = Some(args[i].parse().map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("invalid blkio-weight value: {}", args[i]),
-                    )
-                })?);
-            }
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("unknown update flag: {}", args[i]),
-                ));
-            }
-        }
-        i += 1;
+    let id = required_positional(&matches, 0, "container ID required")?.to_string();
+    let mut opts = UpdateOpts::default();
+
+    if let Some(memory) = matches.get_one::<String>("memory") {
+        opts.memory = Some(parse_memory_arg(&memory)?);
+    }
+    if let Some(memory_swap) = matches.get_one::<String>("memory-swap") {
+        opts.memory_swap = Some(parse_memory_arg(&memory_swap)?);
+    }
+    if let Some(cpu_shares) = matches.get_one::<String>("cpu-shares") {
+        opts.cpu_shares = Some(parse_u64_arg("cpu-shares", &cpu_shares)?);
+    }
+    if let Some(cpu_quota) = matches.get_one::<String>("cpu-quota") {
+        opts.cpu_quota = Some(parse_i64_arg("cpu-quota", &cpu_quota)?);
+    }
+    if let Some(cpu_period) = matches.get_one::<String>("cpu-period") {
+        opts.cpu_period = Some(parse_u64_arg("cpu-period", &cpu_period)?);
+    }
+    if let Some(cpu_rt_runtime) = matches.get_one::<String>("cpu-rt-runtime") {
+        opts.cpu_rt_runtime = Some(parse_u64_arg("cpu-rt-runtime", &cpu_rt_runtime)?);
+    }
+    if let Some(cpu_rt_period) = matches.get_one::<String>("cpu-rt-period") {
+        opts.cpu_rt_period = Some(parse_u64_arg("cpu-rt-period", &cpu_rt_period)?);
+    }
+    if let Some(cpuset_cpus) = matches.get_one::<String>("cpuset-cpus") {
+        opts.cpuset_cpus = Some(cpuset_cpus);
+    }
+    if let Some(cpuset_mems) = matches.get_one::<String>("cpuset-mems") {
+        opts.cpuset_mems = Some(cpuset_mems);
+    }
+    if let Some(pids_limit) = matches.get_one::<String>("pids-limit") {
+        opts.pids_limit = Some(parse_i64_arg("pids-limit", &pids_limit)?);
+    }
+    if let Some(blkio_weight) = matches.get_one::<String>("blkio-weight") {
+        opts.blkio_weight = Some(parse_u64_arg("blkio-weight", &blkio_weight)?);
     }
 
     if opts.memory.is_none()
@@ -379,7 +271,25 @@ fn parse_update_flag(args: &[String]) -> io::Result<UpdateOpts> {
         ));
     }
 
-    Ok(opts)
+    Ok((id, opts))
+}
+
+fn parse_i64_arg(name: &str, value: &str) -> io::Result<i64> {
+    value.parse().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid {name} value: {value}"),
+        )
+    })
+}
+
+fn parse_u64_arg(name: &str, value: &str) -> io::Result<u64> {
+    value.parse().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid {name} value: {value}"),
+        )
+    })
 }
 
 /// Parse a memory argument like "512m", "1g", "1048576" into bytes.

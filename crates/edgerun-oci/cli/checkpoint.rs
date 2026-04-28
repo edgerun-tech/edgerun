@@ -7,66 +7,42 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
+use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::state::{load_state, save_state};
+use edgerun_clap::cli::Action;
+use edgerun_clap::{Arg, Command};
 
 pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    let mut id = None;
-    let mut image_path = None;
-    let mut work_path = None;
-    let mut leave_running = false;
-    let mut need_pre_dump = false;
-
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--image-path" => {
-                if i + 1 < args.len() {
-                    image_path = Some(PathBuf::from(&args[i + 1]));
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            s if s.starts_with("--image-path=") => {
-                image_path = Some(PathBuf::from(&s["--image-path=".len()..]));
-                i += 1;
-            }
-            "--work-path" => {
-                if i + 1 < args.len() {
-                    work_path = Some(PathBuf::from(&args[i + 1]));
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            s if s.starts_with("--work-path=") => {
-                work_path = Some(PathBuf::from(&s["--work-path=".len()..]));
-                i += 1;
-            }
-            "--leave-running" => {
-                leave_running = true;
-                i += 1;
-            }
-            "--pre-dump" => {
-                need_pre_dump = true;
-                i += 1;
-            }
-            s if s.starts_with('-') => {
-                i += 1;
-            }
-            _ => {
-                if id.is_none() {
-                    id = Some(args[i].clone());
-                }
-                i += 1;
-            }
-        }
+    const USAGE: &str =
+        "Usage: ert checkpoint [--image-path DIR] [--work-path DIR] [--leave-running] [--pre-dump] <container-id>";
+    let matches = parse_cli_args(
+        Command::new("checkpoint")
+            .arg(Arg::new("image-path").long("image-path"))
+            .arg(Arg::new("work-path").long("work-path"))
+            .arg(
+                Arg::new("leave-running")
+                    .long("leave-running")
+                    .action(Action::StoreTrue),
+            )
+            .arg(
+                Arg::new("pre-dump")
+                    .long("pre-dump")
+                    .action(Action::StoreTrue),
+            ),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
     }
 
-    let id =
-        id.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container ID required"))?;
+    let id = required_positional(&matches, 0, "container ID required")?.to_string();
+    let image_path = matches.get_one::<PathBuf>("image-path");
+    let work_path = matches.get_one::<PathBuf>("work-path");
+    let leave_running = matches.get_flag("leave-running");
+    let need_pre_dump = matches.get_flag("pre-dump");
 
     let image_path =
         image_path.unwrap_or_else(|| PathBuf::from(format!("/var/lib/edgerun/checkpoint/{}", id)));

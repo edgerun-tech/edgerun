@@ -433,6 +433,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-color"
+version = "0.1.0"
+
+[[package]]
+name = "edgerun-computed-styles"
+version = "0.1.0"
+dependencies = [
+ "edgerun-css",
+ "edgerun-css-cascade",
+ "edgerun-css-value-parser",
+ "edgerun-html-render",
+ "edgerun-media-eval",
+]
+
+[[package]]
 name = "edgerun-config"
 version = "0.1.1"
 dependencies = [
@@ -472,6 +487,32 @@ dependencies = [
  "sha2",
  "signature",
  "x25519-dalek",
+]
+
+[[package]]
+name = "edgerun-css"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-css-cascade"
+version = "0.1.0"
+dependencies = [
+ "edgerun-css",
+ "edgerun-css-value-parser",
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-css-value-parser"
+version = "0.1.0"
+dependencies = [
+ "edgerun-color",
+ "libm",
 ]
 
 [[package]]
@@ -692,6 +733,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-html-render"
+version = "0.1.0"
+
+[[package]]
 name = "edgerun-http"
 version = "0.1.1"
 dependencies = [
@@ -730,6 +775,19 @@ version = "0.1.0"
 [[package]]
 name = "edgerun-json"
 version = "0.1.1"
+
+[[package]]
+name = "edgerun-layout"
+version = "0.1.0"
+dependencies = [
+ "edgerun-color",
+ "edgerun-computed-styles",
+ "edgerun-css",
+ "edgerun-css-cascade",
+ "edgerun-css-value-parser",
+ "edgerun-html-render",
+ "edgerun-rasterizer",
+]
 
 [[package]]
 name = "edgerun-linux-cec"
@@ -871,6 +929,21 @@ version = "0.1.1"
 dependencies = [
  "edgerun-bluetooth-gatt",
  "edgerun-encoding",
+]
+
+[[package]]
+name = "edgerun-media-eval"
+version = "0.1.0"
+dependencies = [
+ "edgerun-media-queries",
+]
+
+[[package]]
+name = "edgerun-media-queries"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
 ]
 
 [[package]]
@@ -1132,6 +1205,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-rasterizer"
+version = "0.1.0"
+dependencies = [
+ "libm",
+]
+
+[[package]]
 name = "edgerun-regex"
 version = "0.1.1"
 
@@ -1325,6 +1405,7 @@ dependencies = [
  "edgerun-dhcp",
  "edgerun-edgefs",
  "edgerun-http",
+ "edgerun-layout",
  "edgerun-oci",
  "edgerun-platform",
  "edgerun-rt",

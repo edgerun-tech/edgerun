@@ -286,23 +286,92 @@ pub(crate) fn invalid_input(message: impl Into<String>) -> io::Error {
 pub(crate) fn parse_cli_args(
     command: edgerun_clap::Command,
     args: &[String],
-    usage: &'static str,
+    usage: &str,
 ) -> io::Result<edgerun_clap::ArgMatches> {
     let matches = command.get_matches_from_iter(args.iter().map(String::as_str));
     if let Some(arg) = matches.unknown_args().first() {
         return Err(invalid_input(format!("{usage}: unknown option {arg}")));
     }
+    if let Some(arg) = matches.missing_value_args().first() {
+        return Err(invalid_input(format!("{usage}: {arg} requires a value")));
+    }
     Ok(matches)
 }
+
+pub const RUN_VALUE_OPTIONS: &[&str] = &[
+    "-v",
+    "--volume",
+    "--mount",
+    "--name",
+    "-e",
+    "--env",
+    "--env-file",
+    "-w",
+    "--workdir",
+    "-u",
+    "--user",
+    "--entrypoint",
+    "--pull",
+    "-h",
+    "--hostname",
+    "--dns",
+    "--add-host",
+    "--images-dir",
+    "--store",
+];
+
+pub(crate) const EXEC_VALUE_OPTIONS: &[&str] = &[
+    "--cwd",
+    "--env",
+    "-e",
+    "--user",
+    "-u",
+    "--process",
+    "-p",
+    "--process-json",
+];
 
 pub(crate) fn required_positional<'a>(
     matches: &'a edgerun_clap::ArgMatches,
     index: usize,
-    usage: &'static str,
+    usage: &str,
 ) -> io::Result<&'a str> {
     matches
         .get_positional(index)
         .ok_or_else(|| invalid_input(usage))
+}
+
+pub fn split_cli_prefix(
+    args: &[String],
+    value_options: &[&str],
+) -> (Vec<String>, Option<String>, Vec<String>) {
+    let mut prefix = Vec::new();
+    let mut i = 0usize;
+    while i < args.len() {
+        let arg = args[i].as_str();
+        if arg == "--" {
+            return (prefix, None, args[i + 1..].to_vec());
+        }
+        if !arg.starts_with('-') || arg == "-" {
+            return (prefix, Some(args[i].clone()), args[i + 1..].to_vec());
+        }
+        prefix.push(args[i].clone());
+        if option_takes_value(arg, value_options) {
+            if let Some(value) = args.get(i + 1) {
+                if !value.starts_with('-') {
+                    prefix.push(value.clone());
+                    i += 1;
+                }
+            }
+        }
+        i += 1;
+    }
+    (prefix, None, Vec::new())
+}
+
+fn option_takes_value(arg: &str, value_options: &[&str]) -> bool {
+    let name = arg.split_once('=').map_or(arg, |(name, _)| name);
+    value_options.iter().any(|option| *option == name) && !arg.contains('=')
 }
 
 fn command_spec(command: &str) -> Option<&'static CommandSpec> {
@@ -327,11 +396,11 @@ pub fn first_command(args: &[String]) -> Option<&str> {
     let mut i = 0usize;
     while i < args.len() {
         let arg = args[i].as_str();
-        if global_option_takes_value(arg) {
-            i = i.saturating_add(2);
+        if let Some(consumed) = global_option_consumed(arg) {
+            i = i.saturating_add(consumed);
             continue;
         }
-        if global_option_inline_value(arg) || arg.starts_with('-') {
+        if arg.starts_with('-') {
             i += 1;
             continue;
         }
@@ -364,30 +433,6 @@ fn dispatch_registry_command(opts: &GlobalOpts, cmd_args: &[String]) -> io::Resu
     }
 }
 
-fn global_option_takes_value(arg: &str) -> bool {
-    matches!(arg, "--bundle" | "--pid-file" | "--root")
-}
-
-fn global_option_inline_value(arg: &str) -> bool {
-    arg.starts_with("--bundle=") || arg.starts_with("--pid-file=") || arg.starts_with("--root=")
-}
-
-fn global_option_value<'a>(arg: &'a str, next: Option<&'a String>) -> Option<Option<&'a str>> {
-    if global_option_takes_value(arg) {
-        return Some(next.map(String::as_str));
-    }
-    if let Some(value) = arg.strip_prefix("--bundle=") {
-        return Some(Some(value));
-    }
-    if let Some(value) = arg.strip_prefix("--pid-file=") {
-        return Some(Some(value));
-    }
-    if let Some(value) = arg.strip_prefix("--root=") {
-        return Some(Some(value));
-    }
-    None
-}
-
 /// Parse global options and identify the command from raw arguments.
 pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> {
     if args.is_empty() {
@@ -395,74 +440,94 @@ pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> 
     }
 
     let mut opts = GlobalOpts::default();
-    let mut cmd_idx = None;
-    let mut i = 0;
-    let mut found_command = false;
+    let mut command = None;
+    let mut command_args = Vec::new();
+    let mut i = 0usize;
 
     while i < args.len() {
         let arg = args[i].as_str();
-        match arg {
-            "--bundle" | "--pid-file" | "--root" => {
-                if let Some(value) = args.get(i + 1) {
-                    match arg {
-                        "--bundle" => opts.bundle = Some(std::path::PathBuf::from(value)),
-                        "--pid-file" => opts.pid_file = Some(std::path::PathBuf::from(value)),
-                        "--root" => opts.root = Some(std::path::PathBuf::from(value)),
-                        _ => {}
-                    }
-                    i += 2;
-                    continue;
-                }
-                i += 1;
-            }
-            s if s.starts_with("--bundle=") => {
-                opts.bundle = Some(std::path::PathBuf::from(&s["--bundle=".len()..]));
-                i += 1;
-            }
-            s if s.starts_with("--pid-file=") => {
-                opts.pid_file = Some(std::path::PathBuf::from(&s["--pid-file=".len()..]));
-                i += 1;
-            }
-            s if s.starts_with("--root=") => {
-                opts.root = Some(std::path::PathBuf::from(&s["--root=".len()..]));
-                i += 1;
-            }
-            "--help" | "-h" => {
-                print_usage();
-                std::process::exit(0);
-            }
-            _ => {
-                if !args[i].starts_with('-') && !found_command {
-                    cmd_idx = Some(i);
-                    found_command = true;
-                    i += 1;
-                } else {
-                    i += 1;
-                }
-            }
+        if let Some(consumed) = parse_global_option_at(args, i, &mut opts) {
+            i = i.saturating_add(consumed);
+            continue;
         }
-    }
-
-    let cmd_idx = cmd_idx?;
-    let command = args[cmd_idx].clone();
-
-    let mut command_args = Vec::new();
-    let mut j = cmd_idx + 1;
-    while j < args.len() {
-        let arg = args[j].as_str();
-        if let Some(value) = global_option_value(arg, args.get(j + 1)) {
-            j += if value.is_some() && global_option_takes_value(arg) {
-                2
-            } else {
-                1
-            };
+        if matches!(arg, "--help" | "-h") {
+            print_usage();
+            std::process::exit(0);
+        }
+        if command.is_none() {
+            if !arg.starts_with('-') {
+                command = Some(args[i].clone());
+            }
         } else {
-            command_args.push(args[j].clone());
-            j += 1;
+            command_args.push(args[i].clone());
+        }
+        i += 1;
+    }
+
+    Some((opts, command?, command_args))
+}
+
+fn global_option_consumed(arg: &str) -> Option<usize> {
+    match arg {
+        "--bundle" | "--pid-file" | "--root" => Some(2),
+        _ if global_option_inline_kind(arg).is_some() => Some(1),
+        _ => None,
+    }
+}
+
+fn parse_global_option_at(args: &[String], index: usize, opts: &mut GlobalOpts) -> Option<usize> {
+    let arg = args.get(index)?;
+    if let Some(kind) = GlobalOption::from_name(arg) {
+        if let Some(value) = args.get(index + 1) {
+            kind.apply(opts, value);
+            return Some(2);
+        }
+        return Some(1);
+    }
+    if let Some((kind, value)) = global_option_inline_kind(arg) {
+        kind.apply(opts, value);
+        return Some(1);
+    }
+    None
+}
+
+fn global_option_inline_kind(arg: &str) -> Option<(GlobalOption, &str)> {
+    if let Some(value) = arg.strip_prefix("--bundle=") {
+        return Some((GlobalOption::Bundle, value));
+    }
+    if let Some(value) = arg.strip_prefix("--pid-file=") {
+        return Some((GlobalOption::PidFile, value));
+    }
+    if let Some(value) = arg.strip_prefix("--root=") {
+        return Some((GlobalOption::Root, value));
+    }
+    None
+}
+
+#[derive(Clone, Copy)]
+enum GlobalOption {
+    Bundle,
+    PidFile,
+    Root,
+}
+
+impl GlobalOption {
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "--bundle" => Some(Self::Bundle),
+            "--pid-file" => Some(Self::PidFile),
+            "--root" => Some(Self::Root),
+            _ => None,
         }
     }
 
-    Some((opts, command, command_args))
+    fn apply(self, opts: &mut GlobalOpts, value: impl AsRef<std::path::Path>) {
+        match self {
+            Self::Bundle => opts.bundle = Some(value.as_ref().to_path_buf()),
+            Self::PidFile => opts.pid_file = Some(value.as_ref().to_path_buf()),
+            Self::Root => opts.root = Some(value.as_ref().to_path_buf()),
+        }
+    }
 }
 
 pub fn print_usage() {
@@ -528,36 +593,38 @@ pub fn print_usage() {
     eprintln!("                             $XDG_RUNTIME_DIR/edgerun-oci rootless)");
 }
 
-/// Extract the first positional argument (container ID) from command args.
-pub fn get_container_id(args: &[String]) -> Option<&str> {
-    args.first().map(|s| s.as_str())
-}
-
 /// Extract a signal string from command args (for kill command).
-pub fn parse_kill_args(args: &[String]) -> (Option<&str>, &str) {
-    if args.is_empty() {
-        return (None, "");
+pub fn parse_kill_args(args: &[String]) -> io::Result<(Option<String>, String)> {
+    const USAGE: &str = "Usage: ert kill <container-id> [signal]";
+    let matches = parse_cli_args(edgerun_clap::Command::new("kill"), args, USAGE)?;
+    if matches.positional_count() > 2 {
+        return Err(invalid_input(USAGE));
     }
-    let container_id = &args[0];
-    let signal = args.get(1).map(|s| s.as_str());
-    (signal, container_id.as_str())
+    let container_id = required_positional(&matches, 0, "container ID required")?.to_string();
+    let signal = matches.get_positional(1).map(str::to_string);
+    Ok((signal, container_id))
 }
 
 /// Extract delete command options (--force flag and container ID).
-pub fn parse_delete_args(args: &[String]) -> (bool, Option<&str>) {
-    let mut force = false;
-    let mut id = None;
-    for arg in args {
-        match arg.as_str() {
-            "--force" => force = true,
-            _ => {
-                if id.is_none() {
-                    id = Some(arg.as_str());
-                }
-            }
-        }
+pub fn parse_delete_args(args: &[String]) -> io::Result<(bool, Option<String>)> {
+    const USAGE: &str = "Usage: ert delete [--force] <container-id>";
+    let matches = parse_cli_args(
+        edgerun_clap::Command::new("delete").arg(
+            edgerun_clap::Arg::new("force")
+                .short('f')
+                .long("force")
+                .action(edgerun_clap::cli::Action::StoreTrue),
+        ),
+        args,
+        USAGE,
+    )?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(USAGE));
     }
-    (force, id)
+    Ok((
+        matches.get_flag("force"),
+        matches.get_positional(0).map(str::to_string),
+    ))
 }
 
 /// Check if a process is alive and not already a zombie.
@@ -566,10 +633,13 @@ pub fn is_process_alive(pid: u32) -> bool {
 }
 
 /// Extract container ID from command args, returning an error if missing.
-pub fn require_container_id(args: &[String]) -> std::io::Result<&str> {
-    args.first().map(|s| s.as_str()).ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "container ID required")
-    })
+pub fn parse_container_id_args(args: &[String], command: &'static str) -> io::Result<String> {
+    let usage = format!("Usage: ert {command} <container-id>");
+    let matches = parse_cli_args(edgerun_clap::Command::new(command), args, &usage)?;
+    if matches.positional_count() > 1 {
+        return Err(invalid_input(usage.clone()));
+    }
+    required_positional(&matches, 0, "container ID required").map(str::to_string)
 }
 
 /// Resolve registry authentication via secret service.
@@ -664,5 +734,15 @@ mod tests {
     fn dispatch_unknown_command_reports_not_found() {
         let err = dispatch_command(&GlobalOpts::default(), "nope", &[]).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn container_id_parser_rejects_extra_args_and_unknown_options() {
+        assert_eq!(
+            parse_container_id_args(&args(&["abc"]), "state").unwrap(),
+            "abc"
+        );
+        assert!(parse_container_id_args(&args(&["abc", "extra"]), "state").is_err());
+        assert!(parse_container_id_args(&args(&["--bad", "abc"]), "state").is_err());
     }
 }

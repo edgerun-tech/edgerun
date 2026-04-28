@@ -15,18 +15,10 @@ use crate::state::load_state;
 pub fn cmd_kill(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    let (sig_str, id) = parse_kill_args(args);
-    let id = if id.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "container ID required",
-        ));
-    } else {
-        id
-    };
-    let sig_str = sig_str.unwrap_or("TERM");
+    let (sig_str, id) = parse_kill_args(args)?;
+    let sig_str = sig_str.as_deref().unwrap_or("TERM");
 
-    let state = load_state(id)?;
+    let state = load_state(&id)?;
     let pid = state
         .pid
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container has no PID"))?;

@@ -4,6 +4,7 @@ use std::os::raw::c_char;
 
 use edgerun_oci::cli::{
     dispatch_command, first_command, is_container_command, parse_args, print_usage,
+    split_cli_prefix, RUN_VALUE_OPTIONS,
 };
 
 fn main() {
@@ -311,31 +312,30 @@ fn become_rootless(args: &[String]) -> Option<i32> {
 }
 
 fn cleanup_rootless_run_rm(args: &[String]) {
-    if first_command(args) != Some("run") {
+    let Some((opts, command, cmd_args)) = parse_args(args) else {
+        return;
+    };
+
+    if command != "run" {
         return;
     }
 
-    let mut root = root_from_args(args).unwrap_or_else(default_rootless_state_dir);
-    let mut saw_run = false;
+    let mut root = opts.root.unwrap_or_else(default_rootless_state_dir);
+    let (prefix, _, _) = split_cli_prefix(&cmd_args, RUN_VALUE_OPTIONS);
     let mut rm = false;
     let mut name = None::<String>;
     let mut i = 0usize;
-    while i < args.len() {
-        let arg = args[i].as_str();
-        if !saw_run {
-            if arg == "run" {
-                saw_run = true;
-            }
-            i += 1;
-            continue;
-        }
+    while i < prefix.len() {
+        let arg = prefix[i].as_str();
         match arg {
             "--rm" => {
                 rm = true;
                 i += 1;
             }
-            "--name" if i + 1 < args.len() => {
-                name = Some(args[i + 1].clone());
+            "--name" if i + 1 < prefix.len() => {
+                if !prefix[i + 1].starts_with('-') {
+                    name = Some(prefix[i + 1].clone());
+                }
                 i += 2;
             }
             arg if arg.starts_with("--name=") => {
@@ -355,21 +355,6 @@ fn cleanup_rootless_run_rm(args: &[String]) {
     } else {
         cleanup_dead_run_states(&mut root);
     }
-}
-
-fn root_from_args(args: &[String]) -> Option<std::path::PathBuf> {
-    let mut i = 0usize;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--root" if i + 1 < args.len() => return Some(std::path::PathBuf::from(&args[i + 1])),
-            arg if arg.starts_with("--root=") => {
-                return Some(std::path::PathBuf::from(&arg["--root=".len()..]))
-            }
-            "--bundle" | "--pid-file" => i += 2,
-            _ => i += 1,
-        }
-    }
-    None
 }
 
 fn default_rootless_state_dir() -> std::path::PathBuf {

@@ -150,28 +150,47 @@ impl Command {
                                 Value::Number(JsonNumber::I64(current + 1)),
                             );
                         }
-                        _ => {
-                            let value_arg = if let Some(value) = inline_value {
-                                Some(value)
-                            } else {
-                                i += 1;
-                                args.get(i).map(String::as_str)
-                            };
-                            if let Some(delimiter) = a.value_delimiter {
-                                let values: Vec<_> = if let Some(value) = value_arg {
-                                    if !value.starts_with('-') || inline_value.is_some() {
-                                        value.split(delimiter).map(String::from).collect()
-                                    } else {
-                                        Vec::new()
+                        Some(Action::Append) => {
+                            if let Some(value) = option_value_arg(
+                                &args,
+                                &mut i,
+                                inline_value,
+                                arg,
+                                &self.args,
+                                &mut matches,
+                            ) {
+                                if let Some(delimiter) = a.value_delimiter {
+                                    for value in value.split(delimiter) {
+                                        matches.push_value(&a.name, value.to_string());
                                     }
                                 } else {
-                                    Vec::new()
-                                };
+                                    matches.push_value(&a.name, value.to_string());
+                                }
+                            }
+                        }
+                        _ => {
+                            if let Some(num_args) = a.num_args {
+                                let mut values = Vec::new();
+                                if let Some(value) = inline_value {
+                                    values.push(value.to_string());
+                                }
+                                while values.len() < num_args {
+                                    match args.get(i + 1) {
+                                        Some(value) if !is_known_option(value, &self.args) => {
+                                            i += 1;
+                                            values.push(value.clone());
+                                        }
+                                        _ => {
+                                            matches.missing_values.push(arg.clone());
+                                            break;
+                                        }
+                                    }
+                                }
                                 if values.len() == 1 {
                                     matches
                                         .map
                                         .insert(a.name.clone(), Value::String(values[0].clone()));
-                                } else {
+                                } else if values.len() > 1 {
                                     matches.map.insert(
                                         a.name.clone(),
                                         Value::Array(
@@ -179,37 +198,45 @@ impl Command {
                                         ),
                                     );
                                 }
-                            } else if let Some(value) = value_arg {
-                                if value.starts_with('-') && inline_value.is_none() {
-                                    matches.map.insert(a.name.clone(), Value::Bool(true));
-                                } else {
-                                    matches
-                                        .map
-                                        .insert(a.name.clone(), Value::String(value.to_string()));
-                                }
-                            } else if a.num_args.is_none() {
-                                matches.map.insert(a.name.clone(), Value::Bool(true));
                             } else {
-                                let mut values = Vec::new();
-                                for _ in 0..a.num_args.unwrap_or(1) {
-                                    if i < args.len() && !args[i].starts_with('-') {
-                                        values.push(args[i].clone());
-                                        i += 1;
-                                    }
-                                }
-                                if values.is_empty() {
-                                    matches.map.insert(a.name.clone(), Value::Bool(true));
-                                } else if values.len() == 1 {
-                                    matches
-                                        .map
-                                        .insert(a.name.clone(), Value::String(values[0].clone()));
+                                let value_arg = if let Some(value) = inline_value {
+                                    Some(value)
                                 } else {
-                                    matches.map.insert(
-                                        a.name.clone(),
-                                        Value::Array(
-                                            values.into_iter().map(Value::String).collect(),
-                                        ),
-                                    );
+                                    match args.get(i + 1) {
+                                        Some(value) if !is_known_option(value, &self.args) => {
+                                            i += 1;
+                                            Some(value.as_str())
+                                        }
+                                        _ => {
+                                            matches.missing_values.push(arg.clone());
+                                            None
+                                        }
+                                    }
+                                };
+
+                                if let Some(value) = value_arg {
+                                    if let Some(delimiter) = a.value_delimiter {
+                                        let values: Vec<_> =
+                                            value.split(delimiter).map(String::from).collect();
+                                        if values.len() == 1 {
+                                            matches.map.insert(
+                                                a.name.clone(),
+                                                Value::String(values[0].clone()),
+                                            );
+                                        } else {
+                                            matches.map.insert(
+                                                a.name.clone(),
+                                                Value::Array(
+                                                    values.into_iter().map(Value::String).collect(),
+                                                ),
+                                            );
+                                        }
+                                    } else {
+                                        matches.map.insert(
+                                            a.name.clone(),
+                                            Value::String(value.to_string()),
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -317,6 +344,44 @@ impl Command {
     }
 }
 
+fn option_value_arg<'a>(
+    args: &'a [String],
+    i: &mut usize,
+    inline_value: Option<&'a str>,
+    flag: &str,
+    known_args: &[Arg],
+    matches: &mut ArgMatches,
+) -> Option<&'a str> {
+    if let Some(value) = inline_value {
+        return Some(value);
+    }
+    match args.get(*i + 1) {
+        Some(value) if !is_known_option(value, known_args) => {
+            *i += 1;
+            Some(value.as_str())
+        }
+        _ => {
+            matches.missing_values.push(flag.to_string());
+            None
+        }
+    }
+}
+
+fn is_known_option(value: &str, known_args: &[Arg]) -> bool {
+    if !value.starts_with('-') || value == "-" {
+        return false;
+    }
+    let rest = value.trim_start_matches('-');
+    let name = rest.split_once('=').map_or(rest, |(name, _)| name);
+    known_args.iter().any(|arg| {
+        arg.long.as_deref() == Some(name)
+            || arg
+                .short
+                .map(|short| short.to_string() == name)
+                .unwrap_or(false)
+    })
+}
+
 pub struct Arg {
     name: String,
     short: Option<char>,
@@ -404,6 +469,7 @@ pub struct ArgMatches {
     pub(crate) map: alloc::collections::BTreeMap<String, Value>,
     pub positional: alloc::vec::Vec<String>,
     unknown: alloc::vec::Vec<String>,
+    missing_values: alloc::vec::Vec<String>,
 }
 
 impl Default for ArgMatches {
@@ -418,6 +484,7 @@ impl ArgMatches {
             map: alloc::collections::BTreeMap::new(),
             positional: alloc::vec::Vec::new(),
             unknown: alloc::vec::Vec::new(),
+            missing_values: alloc::vec::Vec::new(),
         }
     }
 
@@ -437,6 +504,23 @@ impl ArgMatches {
             }
             _ => None,
         })
+    }
+
+    fn push_value(&mut self, name: &str, value: String) {
+        use alloc::collections::btree_map::Entry;
+
+        match self.map.entry(name.to_string()) {
+            Entry::Vacant(entry) => {
+                entry.insert(Value::Array(alloc::vec![Value::String(value)]));
+            }
+            Entry::Occupied(mut entry) => match entry.get_mut() {
+                Value::Array(values) => values.push(Value::String(value)),
+                existing => {
+                    let previous = core::mem::replace(existing, Value::Null);
+                    *existing = Value::Array(alloc::vec![previous, Value::String(value)]);
+                }
+            },
+        }
     }
 
     pub fn get_many<T: core::str::FromStr>(&self, name: &str) -> Option<alloc::vec::Vec<T>>
@@ -489,6 +573,10 @@ impl ArgMatches {
 
     pub fn unknown_args(&self) -> &[String] {
         &self.unknown
+    }
+
+    pub fn missing_value_args(&self) -> &[String] {
+        &self.missing_values
     }
 }
 
@@ -572,6 +660,67 @@ mod tests {
             .get_matches_from_iter(["--name", "node-a", "--bad"]);
 
         assert_eq!(matches.unknown_args(), &["--bad".to_string()]);
+    }
+
+    #[test]
+    fn records_missing_option_values_for_strict_callers() {
+        let matches = Command::new("edge")
+            .arg(Arg::new("config").long("config"))
+            .arg(
+                Arg::new("verbose")
+                    .long("verbose")
+                    .action(Action::StoreTrue),
+            )
+            .get_matches_from_iter(["--config", "--verbose"]);
+
+        assert_eq!(matches.missing_value_args(), &["--config".to_string()]);
+        assert_eq!(matches.get_one::<String>("config"), None);
+        assert!(matches.get_flag("verbose"));
+    }
+
+    #[test]
+    fn option_values_can_start_with_dash_when_not_known_options() {
+        let matches = Command::new("edge")
+            .arg(Arg::new("entrypoint").long("entrypoint"))
+            .arg(
+                Arg::new("verbose")
+                    .long("verbose")
+                    .action(Action::StoreTrue),
+            )
+            .get_matches_from_iter(["--entrypoint", "-custom"]);
+
+        assert_eq!(
+            matches.get_one::<String>("entrypoint").as_deref(),
+            Some("-custom")
+        );
+        assert!(matches.missing_value_args().is_empty());
+    }
+
+    #[test]
+    fn appends_repeated_option_values() {
+        let matches = Command::new("edge")
+            .arg(
+                Arg::new("env")
+                    .short('e')
+                    .long("env")
+                    .action(Action::Append),
+            )
+            .arg(
+                Arg::new("tag")
+                    .long("tag")
+                    .value_delimiter(',')
+                    .action(Action::Append),
+            )
+            .get_matches_from_iter(["-e", "A=1", "--env", "B=2", "--tag=one,two"]);
+
+        assert_eq!(
+            matches.get_many::<String>("env"),
+            Some(alloc::vec!["A=1".to_string(), "B=2".to_string()])
+        );
+        assert_eq!(
+            matches.get_many::<String>("tag"),
+            Some(alloc::vec!["one".to_string(), "two".to_string()])
+        );
     }
 
     #[test]
