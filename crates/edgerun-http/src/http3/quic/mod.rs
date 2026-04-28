@@ -52,6 +52,16 @@ use crate::runtime::sync::Arc;
 use crate::runtime::AsyncUdpSocket;
 use edgerun_crypto::CipherSuite;
 
+/// Client-side QUIC connection options.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct QuicConnectOptions {
+    /// Permit the current incomplete QUIC certificate verifier.
+    ///
+    /// This is only appropriate for same-stack tests or local development with
+    /// explicitly trusted endpoints.
+    pub accept_invalid_certs: bool,
+}
+
 /// QUIC connection
 pub struct QuicConnection {
     /// UDP socket — async for client path, dummy/wrapped for tests
@@ -118,6 +128,13 @@ impl QuicConnection {
     /// Resolves `server` hostname via DNS, binds a UDP socket to a random
     /// local port, and returns the connection ready for HTTP/3 data transfer.
     pub async fn connect(server: &str) -> Result<Self, String> {
+        Self::connect_with_options(server, QuicConnectOptions::default()).await
+    }
+
+    pub async fn connect_with_options(
+        server: &str,
+        options: QuicConnectOptions,
+    ) -> Result<Self, String> {
         edgerun_log::debug!("CLIENT QUIC: connect({})", server);
         // Resolve hostname to IP address
         let (server_host, server_port) = if let Ok(addr) = server.parse::<SocketAddr>() {
@@ -171,7 +188,7 @@ impl QuicConnection {
             sent_packets_buffer: Vec::new(),
         };
 
-        conn.do_handshake().await?;
+        conn.do_handshake(options).await?;
 
         // Initialize active path
         if let Ok(local) = conn.socket.local_addr() {
@@ -197,13 +214,14 @@ impl QuicConnection {
     }
 
     /// Perform the QUIC + TLS 1.3 handshake.
-    async fn do_handshake(&mut self) -> Result<(), String> {
+    async fn do_handshake(&mut self, options: QuicConnectOptions) -> Result<(), String> {
         let server_name = self
             .server_addr
             .split(':')
             .next()
             .unwrap_or(&self.server_addr);
         let mut handshaker = handshake::QuicTlsHandshaker::new(server_name);
+        handshaker.allow_unverified_certificates(options.accept_invalid_certs);
 
         // ── Step 1: Derive Initial keys ──────────────────────────────
         let dcid = self.server_dcid.as_bytes().to_vec();

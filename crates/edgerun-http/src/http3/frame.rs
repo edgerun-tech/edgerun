@@ -67,6 +67,8 @@ pub enum Http3Frame {
     Goaway { stream_id: u64 },
     /// STREAMS_BLOCKED frame
     StreamsBlocked { limit: u64 },
+    /// Unknown or reserved extension frame.
+    Unknown { frame_type: u64, payload: Vec<u8> },
 }
 
 impl Http3Frame {
@@ -81,6 +83,7 @@ impl Http3Frame {
             Http3Frame::MaxPushId { .. } => Http3FrameType::MaxPushId,
             Http3Frame::Goaway { .. } => Http3FrameType::Goaway,
             Http3Frame::StreamsBlocked { .. } => Http3FrameType::StreamsBlocked,
+            Http3Frame::Unknown { .. } => Http3FrameType::Reserved,
         }
     }
 
@@ -89,7 +92,11 @@ impl Http3Frame {
         let mut output = Vec::new();
 
         // Frame type (variable-length integer)
-        quic_encode_varint(self.frame_type() as u64, &mut output);
+        let frame_type = match self {
+            Http3Frame::Unknown { frame_type, .. } => *frame_type,
+            _ => self.frame_type() as u64,
+        };
+        quic_encode_varint(frame_type, &mut output);
 
         // Payload
         let payload = match self {
@@ -132,6 +139,7 @@ impl Http3Frame {
                 quic_encode_varint(*limit, &mut p);
                 p
             }
+            Http3Frame::Unknown { payload, .. } => payload.clone(),
         };
 
         // Frame length
@@ -200,8 +208,11 @@ impl Http3Frame {
                 let (limit, _) = quic_decode_varint(payload).map_err(|e| e.to_string())?;
                 Http3Frame::StreamsBlocked { limit }
             }
-            Some(_) | None => {
-                return Err(format!("Unknown or unsupported frame type: {}", frame_type));
+            Some(Http3FrameType::Reserved) | Some(Http3FrameType::Reserved2) | None => {
+                Http3Frame::Unknown {
+                frame_type,
+                payload: payload.to_vec(),
+                }
             }
         };
 
@@ -277,5 +288,27 @@ mod tests {
         assert_eq!(Http3FrameType::from_u64(99), Some(Http3FrameType::Reserved));
         // 200 doesn't match any pattern
         assert!(Http3FrameType::from_u64(200).is_none());
+    }
+
+    #[test]
+    fn test_unknown_frame_roundtrip() {
+        let frame = Http3Frame::Unknown {
+            frame_type: 0x21,
+            payload: b"extension".to_vec(),
+        };
+        let bytes = frame.to_bytes();
+        let (parsed, consumed) = Http3Frame::from_bytes(&bytes).unwrap();
+
+        assert_eq!(consumed, bytes.len());
+        match parsed {
+            Http3Frame::Unknown {
+                frame_type,
+                payload,
+            } => {
+                assert_eq!(frame_type, 0x21);
+                assert_eq!(payload, b"extension");
+            }
+            _ => panic!("expected unknown frame"),
+        }
     }
 }

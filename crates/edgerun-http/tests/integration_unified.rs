@@ -252,7 +252,9 @@ fn client_http3_explicit() {
 
         eprintln!("[test] Starting client connection...");
 
-        let client = HttpClient::new().version(HttpVersion::Http3);
+        let client = HttpClient::new()
+            .version(HttpVersion::Http3)
+            .danger_accept_invalid_http3_certs(true);
         eprintln!("[test] Client created, making request...");
 
         let resp = client.get(&format!("https://127.0.0.1:{}/", port)).await?;

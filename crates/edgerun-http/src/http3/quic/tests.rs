@@ -327,6 +327,7 @@ fn test_full_quic_tls_handshake() {
     let server_dcid = ConnectionId::random(); // Server's dest connection ID (client's source)
 
     let mut client = QuicTlsHandshaker::new("localhost");
+    client.allow_unverified_certificates(true);
     let mut server = QuicTlsServerHandshaker::new(cert.clone());
 
     // ── Step 1: ClientHello exchange (Initial level) ───────────────

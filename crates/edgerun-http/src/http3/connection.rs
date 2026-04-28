@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use core::str::FromStr;
 
 use super::frame::{Http3Frame, Http3FrameType};
-use super::quic::QuicConnection as QuicConn;
+use super::quic::{QuicConnectOptions, QuicConnection as QuicConn};
 use super::settings::Http3Settings;
 use super::stream::{Http3Stream, Http3StreamType};
 use super::stream_types;
@@ -113,7 +113,14 @@ impl Http3Connection {
     /// Resolves the server hostname, establishes a QUIC connection with
     /// TLS 1.3 handshake, and sends the HTTP/3 connection preface.
     pub async fn connect(server_name: &str) -> Result<Self> {
-        let quic = QuicConn::connect(server_name).await?;
+        Self::connect_with_options(server_name, QuicConnectOptions::default()).await
+    }
+
+    pub async fn connect_with_options(
+        server_name: &str,
+        options: QuicConnectOptions,
+    ) -> Result<Self> {
+        let quic = QuicConn::connect_with_options(server_name, options).await?;
 
         let mut conn = Http3Connection {
             quic,

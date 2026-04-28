@@ -42,6 +42,7 @@ struct ClientInner {
     follow_redirects: bool,
     auto_decompress: bool,
     tls12_first: bool,
+    http3_accept_invalid_certs: bool,
     pool: Arc<Mutex<ConnectionPool>>,
     #[cfg(feature = "tls")]
     h2_pool: Arc<Mutex<Http2Pool>>,
@@ -66,6 +67,7 @@ impl HttpClient {
                 follow_redirects: true,
                 auto_decompress: true,
                 tls12_first: false,
+                http3_accept_invalid_certs: false,
                 pool: Arc::new(Mutex::new(ConnectionPool::new())),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::new(Mutex::new(Http2Pool::new())),
@@ -89,6 +91,7 @@ impl HttpClient {
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
+                http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -107,6 +110,7 @@ impl HttpClient {
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
+                http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -125,6 +129,7 @@ impl HttpClient {
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
+                http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -143,6 +148,7 @@ impl HttpClient {
                 follow_redirects: max > 0,
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
+                http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -161,6 +167,7 @@ impl HttpClient {
                 follow_redirects: false,
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
+                http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -179,6 +186,7 @@ impl HttpClient {
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: false,
                 tls12_first: self.inner.tls12_first,
+                http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -203,6 +211,33 @@ impl HttpClient {
                 follow_redirects: self.inner.follow_redirects,
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: enabled,
+                http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                pool: Arc::clone(&self.inner.pool),
+                #[cfg(feature = "tls")]
+                h2_pool: Arc::clone(&self.inner.h2_pool),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+            }),
+        }
+    }
+
+    /// Accept invalid HTTP/3 server certificates.
+    ///
+    /// The current QUIC/TLS verifier does not implement full X.509 chain,
+    /// hostname, and CertificateVerify validation. Keep this disabled for
+    /// production use; enable it only for local same-stack tests or explicitly
+    /// trusted development endpoints.
+    pub fn danger_accept_invalid_http3_certs(self, enabled: bool) -> Self {
+        Self {
+            inner: Arc::new(ClientInner {
+                version: self.inner.version,
+                connect_timeout: self.inner.connect_timeout,
+                read_timeout: self.inner.read_timeout,
+                max_redirects: self.inner.max_redirects,
+                follow_redirects: self.inner.follow_redirects,
+                auto_decompress: self.inner.auto_decompress,
+                tls12_first: self.inner.tls12_first,
+                http3_accept_invalid_certs: enabled,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -438,6 +473,7 @@ impl HttpClient {
     async fn execute_http3(&self, request: &Request) -> Result<Response> {
         use crate::http1::compression;
         use crate::http3::connection::Http3Connection;
+        use crate::http3::quic::QuicConnectOptions;
 
         edgerun_log::debug!("CLIENT HTTP3: execute_http3 start");
         let uri = request.uri();
@@ -480,7 +516,14 @@ impl HttpClient {
                 format!("{}:{}", cur_host, cur_port)
             };
 
-            let mut conn = Http3Connection::connect(&server_addr).await.map_err(|e| {
+            let mut conn = Http3Connection::connect_with_options(
+                &server_addr,
+                QuicConnectOptions {
+                    accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                },
+            )
+            .await
+            .map_err(|e| {
                 Error::Network(crate::runtime::io::Error::new(
                     crate::runtime::io::ErrorKind::ConnectionRefused,
                     e,

@@ -1,4 +1,12 @@
 //! HTTP/3 protocol (RFC 9114)
+//!
+//! Implemented status: this module has a working same-stack HTTP/3 client and
+//! server over the repository's QUIC code for local/integration use. It is not
+//! a production Internet HTTP/3 stack yet: strict QUIC certificate validation,
+//! header protection, congestion/loss recovery integration, and broad
+//! third-party interoperability are still blocked by missing implementation.
+//! Test and local self-signed endpoints must opt in with
+//! `HttpClient::danger_accept_invalid_http3_certs(true)`.
 
 use alloc::string::{String, ToString};
 use core::fmt;

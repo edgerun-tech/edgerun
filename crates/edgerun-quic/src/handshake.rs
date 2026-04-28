@@ -54,6 +54,12 @@ pub struct CertValidationResult {
     pub error: Option<String>,
 }
 
+impl CertValidationResult {
+    pub fn is_valid(&self) -> bool {
+        self.chain_valid && self.hostname_valid && self.error.is_none()
+    }
+}
+
 /// Certificate validator for TLS 1.3 (RFC 8446 §4.4.2).
 ///
 /// Validates:
@@ -327,6 +333,8 @@ pub struct QuicTlsHandshaker {
     cert_verify_signature: Option<(u16, Vec<u8>)>,
     /// Certificate validation result (set after processing Certificate)
     cert_validation: Option<CertValidationResult>,
+    /// Explicit local-test mode for same-stack QUIC without X.509 trust.
+    allow_unverified_certificates: bool,
 }
 
 impl QuicTlsHandshaker {
@@ -366,7 +374,17 @@ impl QuicTlsHandshaker {
             server_cert_chain: Vec::new(),
             cert_verify_signature: None,
             cert_validation: None,
+            allow_unverified_certificates: false,
         }
+    }
+
+    /// Allow unverified server certificates.
+    ///
+    /// This is intended only for same-stack tests and local development until
+    /// the QUIC client has full X.509 chain, hostname, and CertificateVerify
+    /// verification. Production callers should leave this disabled.
+    pub fn allow_unverified_certificates(&mut self, allow: bool) {
+        self.allow_unverified_certificates = allow;
     }
 
     /// Build the Initial packet payload: CRYPTO frame containing ClientHello.
@@ -592,6 +610,20 @@ impl QuicTlsHandshaker {
                             let validator = CertificateValidator::new(Some(self.server_name()));
                             self.cert_validation =
                                 Some(validator.validate_chain(&self.server_cert_chain));
+                            if !self.allow_unverified_certificates {
+                                let validation = self.cert_validation.as_ref().ok_or_else(|| {
+                                    "Server certificate validation was not recorded".to_string()
+                                })?;
+                                if !validation.is_valid() {
+                                    return Err(format!(
+                                        "Server certificate validation failed: {}",
+                                        validation
+                                            .error
+                                            .as_deref()
+                                            .unwrap_or("hostname or trust chain is invalid")
+                                    ));
+                                }
+                            }
                         }
                     }
                     self.transcript.extend_from_slice(msg);
@@ -607,9 +639,24 @@ impl QuicTlsHandshaker {
                             self.cert_verify_signature = Some((sig_alg, signature));
                         }
                     }
+                    if !self.allow_unverified_certificates {
+                        return Err(
+                            "Strict QUIC CertificateVerify validation is not implemented"
+                                .to_string(),
+                        );
+                    }
                     self.transcript.extend_from_slice(msg);
                 }
                 20 => {
+                    if !self.allow_unverified_certificates
+                        && (self.server_cert_chain.is_empty()
+                            || self.cert_verify_signature.is_none())
+                    {
+                        return Err(
+                            "Strict QUIC certificate validation requires Certificate and CertificateVerify"
+                                .to_string(),
+                        );
+                    }
                     // Finished — verify and append
                     // Transcript hash for verification: hash of all messages BEFORE Finished
                     let pre_finished_hash = self.hasher.hash(&self.transcript);
@@ -928,5 +975,42 @@ mod tests {
             hasher_for_suite(CipherSuite::TLS_AES_256_GCM_SHA384),
             Hasher::Sha384
         ));
+    }
+
+    fn certificate_message(cert_der: &[u8]) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.push(0); // certificate_request_context length
+
+        let cert_list_len = cert_der.len() + 5;
+        body.extend_from_slice(&(cert_list_len as u32).to_be_bytes()[1..]);
+        body.extend_from_slice(&(cert_der.len() as u32).to_be_bytes()[1..]);
+        body.extend_from_slice(cert_der);
+        body.extend_from_slice(&0u16.to_be_bytes()); // certificate extensions length
+
+        let mut msg = Vec::new();
+        msg.push(11);
+        msg.extend_from_slice(&(body.len() as u32).to_be_bytes()[1..]);
+        msg.extend_from_slice(&body);
+        msg
+    }
+
+    #[test]
+    fn strict_handshake_rejects_unvalidated_certificate() {
+        let mut hs = QuicTlsHandshaker::new("example.com");
+        let cert = vec![0x30; 128];
+        let err = hs.process_handshake_crypto(&certificate_message(&cert)).unwrap_err();
+
+        assert!(err.contains("Server certificate validation failed"));
+    }
+
+    #[test]
+    fn insecure_handshake_policy_makes_unverified_cert_explicit() {
+        let mut hs = QuicTlsHandshaker::new("example.com");
+        hs.allow_unverified_certificates(true);
+        let cert = vec![0x30; 128];
+        let err = hs.process_handshake_crypto(&certificate_message(&cert)).unwrap_err();
+
+        assert!(err.contains("Server Finished not found"));
+        assert!(hs.cert_validation().is_some());
     }
 }
