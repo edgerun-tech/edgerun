@@ -237,6 +237,7 @@ pub fn fork_container_child_with_terminal_socket(
     // Child { stdin, stdout, stderr, process } - we only need the PID for tracking.
     // Since we're using raw fork(), we manage the child via syscalls directly.
     Ok(ForkedChild {
+        container_id: container_id.to_string(),
         pid: child_pid as u32,
         bundle_path,
         cgroup_path,
@@ -248,6 +249,7 @@ pub fn fork_container_child_with_terminal_socket(
 
 /// Result of forking a container child.
 pub struct ForkedChild {
+    pub container_id: String,
     pub pid: u32,
     pub bundle_path: String,
     pub cgroup_path: String,
@@ -427,6 +429,7 @@ pub fn update_state_running(container_id: &str, pid: u32) -> io::Result<()> {
 /// Wrap a ForkedChild into a RunningContainer for the library API.
 pub fn into_running_container(child: ForkedChild) -> RunningContainer {
     RunningContainer {
+        container_id: child.container_id,
         cgroup_path: child.cgroup_path,
         bundle_path: child.bundle_path,
         pid: child.pid,
@@ -499,6 +502,7 @@ pub fn delete_container(container: RunningContainer) {
 /// Delete a container and run poststop hooks, returning a detailed result.
 pub fn delete_container_with_result(container: RunningContainer) -> io::Result<()> {
     delete_container_internal(
+        &container.container_id,
         container.pid,
         &container.bundle_path,
         &container.cgroup_path,
@@ -507,6 +511,7 @@ pub fn delete_container_with_result(container: RunningContainer) -> io::Result<(
 }
 
 fn delete_container_internal(
+    container_id: &str,
     pid: u32,
     bundle_path: &str,
     cgroup_path: &str,
@@ -514,7 +519,7 @@ fn delete_container_internal(
 ) -> io::Result<()> {
     let state = ContainerState {
         version: String::new(),
-        id: String::new(),
+        id: container_id.to_string(),
         status: "stopped".into(),
         pid,
         bundle: bundle_path.to_string(),

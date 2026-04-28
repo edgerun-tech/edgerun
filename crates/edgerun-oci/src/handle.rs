@@ -12,6 +12,7 @@ use crate::syscalls::{kill, SIGKILL, SIGTERM};
 
 /// A handle to a running container that can be awaited or killed.
 pub struct RunningContainer {
+    pub(crate) container_id: String,
     pub(crate) cgroup_path: String,
     pub(crate) bundle_path: String,
     pub(crate) pid: u32,
@@ -77,5 +78,10 @@ impl RunningContainer {
     /// The cgroup path for this container.
     pub fn cgroup_path(&self) -> &str {
         &self.cgroup_path
+    }
+
+    /// The container identifier.
+    pub fn container_id(&self) -> &str {
+        &self.container_id
     }
 }
