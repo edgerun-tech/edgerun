@@ -421,9 +421,7 @@ unsafe fn init_rx_filter_slice() {
 }
 
 unsafe fn init_mac_txrx_tail_slice() {
-    update(WIFI_MAC_CTRL_33118, |v| {
-        (v & 0xf00f_ffff) | (27 << 20)
-    });
+    update(WIFI_MAC_CTRL_33118, |v| (v & 0xf00f_ffff) | (27 << 20));
     update(WIFI_MAC_CTRL_33C78, |v| v | 3);
     update(WIFI_MAC_TX_CTRL_33C10, |v| {
         ((v & 0xffff_f000) | 0xf0) | 0xc000_0000
