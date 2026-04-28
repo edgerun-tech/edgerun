@@ -3,7 +3,12 @@
 use crate::prelude::*;
 use std::fs;
 use std::io;
+use std::io::Write;
+use std::os::unix::io::AsRawFd;
 
+use crate::cli::exec::{
+    enter_container_root, join_container_namespaces, load_exec_spec, open_exec_root,
+};
 use crate::state::{load_state, save_state, state_root_dir, ContainerState};
 
 pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -20,70 +25,28 @@ pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> 
         return list_containers(args);
     }
 
-    let id = crate::cli::require_container_id(args)?;
+    let id = container_id_arg(args).ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "container ID required")
+    })?;
 
     let state = load_state(id)?;
     let pid = state
         .pid
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "container has no PID"))?;
 
-    // Find all processes in the container's PID namespace
-    // We do this by scanning /proc and checking if the NSpid field contains
-    // a value that matches our container's init PID namespace
-    let mut pids: Vec<u32> = Vec::new();
-    if let Ok(entries) = fs::read_dir("/proc") {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            if let Ok(pid_str) = name.clone().into_string() {
-                if let Ok(n) = pid_str.parse::<u32>() {
-                    if n > 0 {
-                        // Check NSpid to find PID namespace ID
-                        let status_path = format!("/proc/{}/status", n);
-                        if let Ok(content) = fs::read_to_string(&status_path) {
-                            for line in content.lines() {
-                                if line.starts_with("NSpid:") {
-                                    let parts: Vec<&str> = line.split_whitespace().collect();
-                                    // NSpid format: "NSpid: <host-pid> <ns-pid> ..."
-                                    if parts.len() >= 3 {
-                                        // The last PID in NSpid is the deepest namespace PID
-                                        if let Ok(ns_pid) = parts[parts.len() - 1].parse::<u32>() {
-                                            if !pids.contains(&ns_pid) {
-                                                pids.push(ns_pid);
-                                            }
-                                        }
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    if !crate::cli::is_process_alive(pid) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("container {id} is not running"),
+        ));
     }
 
-    // Filter: only include PIDs that are descendants of the container init PID
-    let container_pids = find_descendants(pid);
-
-    // Check if --format json
-    let is_json = args.iter().any(|a| a == "--format" || a == "-f");
-
-    // Use container PID namespace PIDs
-    let display_pids = if container_pids.is_empty() {
-        // Fallback: show all PIDs found
-        pids.sort_unstable();
-        pids
-    } else {
-        container_pids
-    };
-
-    if is_json {
-        print_ps_json(&display_pids);
-    } else {
-        print_ps_table(&display_pids);
-    }
-
-    Ok(())
+    let spec = load_exec_spec(&state);
+    let (root_fd, _) = open_exec_root(pid, spec.as_ref())?;
+    let json = args
+        .iter()
+        .any(|arg| arg == "--format=json" || arg == "json");
+    print_container_processes(pid, root_fd.as_raw_fd(), json)
 }
 
 fn container_id_arg(args: &[String]) -> Option<&str> {
@@ -96,6 +59,7 @@ fn container_id_arg(args: &[String]) -> Option<&str> {
         match arg.as_str() {
             "--all" | "-a" => {}
             "--format" | "-f" => skip_next = true,
+            arg if arg.starts_with("--format=") => {}
             _ if !arg.starts_with('-') => return Some(arg.as_str()),
             _ => {}
         }
@@ -180,77 +144,123 @@ fn json_string(value: &str) -> String {
     edgerun_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
-/// Find all PIDs that are descendants of the given init PID.
-fn find_descendants(init_pid: u32) -> Vec<u32> {
-    let mut result = Vec::new();
-    result.push(init_pid);
+fn print_container_processes(init_pid: u32, root_fd: i32, json: bool) -> io::Result<()> {
+    let child = unsafe { libc::fork() };
+    if child < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if child == 0 {
+        let needs_pid_fork = match join_container_namespaces(init_pid) {
+            Ok(needs_pid_fork) => needs_pid_fork,
+            Err(_) => unsafe { libc::_exit(126) },
+        };
+        if needs_pid_fork {
+            let inner = unsafe { libc::fork() };
+            if inner < 0 {
+                unsafe { libc::_exit(126) };
+            }
+            if inner > 0 {
+                unsafe { libc::_exit(0) };
+            }
+        }
+        if enter_container_root(root_fd).is_err() {
+            unsafe { libc::_exit(126) };
+        }
+        let processes = read_proc_processes();
+        if json {
+            print_processes_json(&processes);
+        } else {
+            print_processes_table(&processes);
+        }
+        let _ = io::stdout().flush();
+        unsafe { libc::_exit(0) };
+    }
 
-    // Scan /proc for children of init_pid
+    let mut status = 0i32;
+    unsafe { libc::waitpid(child, &mut status, 0) };
+    if libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::other("failed to list container processes"))
+    }
+}
+
+#[derive(Debug)]
+struct ProcEntry {
+    pid: u32,
+    ppid: u32,
+    state: String,
+    name: String,
+}
+
+fn read_proc_processes() -> Vec<ProcEntry> {
+    let mut processes = Vec::new();
     if let Ok(entries) = fs::read_dir("/proc") {
         for entry in entries.flatten() {
-            let name = entry.file_name();
-            if let Ok(pid_str) = name.into_string() {
-                if let Ok(n) = pid_str.parse::<u32>() {
-                    if n > 0 {
-                        let status_path = format!("/proc/{}/status", n);
-                        if let Ok(content) = fs::read_to_string(&status_path) {
-                            for line in content.lines() {
-                                if line.starts_with("PPid:") {
-                                    if let Some(ppid_str) = line.split_whitespace().nth(1) {
-                                        if let Ok(ppid) = ppid_str.parse::<u32>() {
-                                            if (ppid == init_pid || result.contains(&ppid))
-                                                && !result.contains(&n)
-                                            {
-                                                result.push(n);
-                                            }
-                                        }
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            let Ok(pid) = name.parse::<u32>() else {
+                continue;
+            };
+            let status_path = format!("/proc/{pid}/status");
+            if let Ok(content) = fs::read_to_string(status_path) {
+                processes.push(parse_proc_status(pid, &content));
             }
         }
     }
-
-    result.sort_unstable();
-    result
+    processes.sort_by_key(|process| process.pid);
+    processes
 }
 
-fn print_ps_table(pids: &[u32]) {
-    println!("{:<10} {:<10} {:<10}", "PID", "PPID", "STATE");
-    println!("{:-<32}", "");
-    for &pid in pids {
-        let status_path = format!("/proc/{}/status", pid);
-        let (state, ppid) = if let Ok(content) = fs::read_to_string(&status_path) {
-            let mut s = "?".to_string();
-            let mut p = "0".to_string();
-            for line in content.lines() {
-                if line.starts_with("State:") {
-                    if let Some(val) = line.split_whitespace().nth(1) {
-                        s = val.to_string();
-                    }
-                }
-                if line.starts_with("PPid:") {
-                    if let Some(val) = line.split_whitespace().nth(1) {
-                        p = val.to_string();
-                    }
-                }
+fn parse_proc_status(pid: u32, content: &str) -> ProcEntry {
+    let mut name = String::new();
+    let mut state = "?".to_string();
+    let mut ppid = 0u32;
+    for line in content.lines() {
+        if let Some(rest) = line.strip_prefix("Name:") {
+            name = rest.trim().to_string();
+        }
+        if line.starts_with("State:") {
+            if let Some(val) = line.split_whitespace().nth(1) {
+                state = val.to_string();
             }
-            (s, p)
-        } else {
-            ("?".into(), "0".into())
-        };
-        println!("{:<10} {:<10} {:<10}", pid, ppid, state);
+        }
+        if line.starts_with("PPid:") {
+            if let Some(val) = line.split_whitespace().nth(1) {
+                ppid = val.parse().unwrap_or(0);
+            }
+        }
+    }
+    ProcEntry {
+        pid,
+        ppid,
+        state,
+        name,
     }
 }
 
-fn print_ps_json(pids: &[u32]) {
-    let mut entries: Vec<String> = Vec::new();
-    for &pid in pids {
-        entries.push(format!("{{\"pid\":{}}}", pid));
+fn print_processes_table(processes: &[ProcEntry]) {
+    println!("{:<10} {:<10} {:<10} COMMAND", "PID", "PPID", "STATE");
+    println!("{:-<48}", "");
+    for process in processes {
+        println!(
+            "{:<10} {:<10} {:<10} {}",
+            process.pid, process.ppid, process.state, process.name
+        );
     }
-    println!("[{}]", entries.join(", "));
+}
+
+fn print_processes_json(processes: &[ProcEntry]) {
+    let mut entries = Vec::new();
+    for process in processes {
+        entries.push(format!(
+            "{{\"pid\":{},\"ppid\":{},\"state\":{},\"command\":{}}}",
+            process.pid,
+            process.ppid,
+            json_string(&process.state),
+            json_string(&process.name)
+        ));
+    }
+    println!("[{}]", entries.join(","));
 }

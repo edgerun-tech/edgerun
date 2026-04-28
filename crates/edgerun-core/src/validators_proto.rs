@@ -1207,6 +1207,27 @@ pub fn validate_delegation_chain(
                     empty_map(),
                 );
             };
+            if let Some(parent_ref) = &delegation.parent_delegation {
+                if parent_ref.delegation_id != parent.delegation_id {
+                    return reject(
+                        ReasonCode::StructuralInvalid,
+                        Value::String(
+                            "delegation parent_delegation does not match previous record".into(),
+                        ),
+                        empty_map(),
+                    );
+                }
+                if parent_ref.delegation_hash.as_ref() != Some(&delegation_record_hash(parent)) {
+                    return reject(
+                        ReasonCode::StructuralInvalid,
+                        Value::String(
+                            "delegation parent_delegation hash does not match previous record"
+                                .into(),
+                        ),
+                        empty_map(),
+                    );
+                }
+            }
             if parent_cap.delegation_policy
                 == edgerun_proto::edgerun::v0::trust::DelegationPolicy::NonDelegable as i32
             {
@@ -1857,6 +1878,17 @@ fn delegation_timing_allows(parent: &DelegationRecord, child: &DelegationRecord)
         }
     }
     true
+}
+
+fn delegation_record_hash(delegation: &DelegationRecord) -> crate::protocol::Digest {
+    let record = ProtocolRecord::DelegationRecord(delegation.clone());
+    let canonical = canonical_bytes(&record, true);
+    let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_DELEGATION_RECORD, &canonical);
+    crate::protocol::Digest {
+        algorithm: edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256
+            as i32,
+        value: hash.to_vec(),
+    }
 }
 
 fn verify_delegation_signature(delegation: &DelegationRecord) -> bool {
@@ -5089,6 +5121,36 @@ mod tests {
 
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_parent_ref_hash_mismatch_is_rejected() {
+        let root_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mid_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[43u8; 32].into()).unwrap();
+        let mut parent = valid_delegation(b"root".to_vec(), b"mid".to_vec(), &["query"]);
+        sign_delegation(&mut parent, &root_key);
+        let mut child = valid_delegation(b"mid".to_vec(), b"user".to_vec(), &["query"]);
+        child.parent_delegation = Some(crate::protocol::DelegationRef {
+            delegation_id: parent.delegation_id.clone(),
+            delegation_hash: Some(crate::protocol::Digest {
+                algorithm:
+                    edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256
+                        as i32,
+                value: vec![0; 32],
+            }),
+        });
+        sign_delegation(&mut child, &mid_key);
+
+        let result = validate_delegation_chain(
+            &[parent, child],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
     }
 
     #[test]
