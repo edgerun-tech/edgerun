@@ -464,20 +464,18 @@ pub fn run_poststop_and_cleanup(
         }
     }
 
-    // Clean up cgroup directory
-    if let Some(cgroup_dir) = container_cgroup_dir(cgroup_path) {
-        if cgroup_dir.exists() {
-            std::fs::remove_dir_all(&cgroup_dir).map_err(|e| {
-                io::Error::new(
-                    e.kind(),
-                    format!(
-                        "failed to remove cgroup directory {}: {}",
-                        cgroup_dir.display(),
-                        e
-                    ),
-                )
-            })?;
-        }
+    let cgroup_dir = container_cgroup_dir(cgroup_path)?;
+    if cgroup_dir.exists() {
+        std::fs::remove_dir_all(&cgroup_dir).map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!(
+                    "failed to remove cgroup directory {}: {}",
+                    cgroup_dir.display(),
+                    e
+                ),
+            )
+        })?;
     }
 
     Ok(())
@@ -520,25 +518,24 @@ fn delete_container_internal(
 
     execute_poststop_hooks(Some(poststop_hooks), &state);
 
-    if let Some(cgroup_dir) = container_cgroup_dir(cgroup_path) {
-        if cgroup_dir.exists() {
-            std::fs::remove_dir_all(&cgroup_dir).map_err(|e| {
-                io::Error::new(
-                    e.kind(),
-                    format!(
-                        "failed to remove cgroup directory {}: {}",
-                        cgroup_dir.display(),
-                        e
-                    ),
-                )
-            })?;
-        }
+    let cgroup_dir = container_cgroup_dir(cgroup_path)?;
+    if cgroup_dir.exists() {
+        std::fs::remove_dir_all(&cgroup_dir).map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!(
+                    "failed to remove cgroup directory {}: {}",
+                    cgroup_dir.display(),
+                    e
+                ),
+            )
+        })?;
     }
 
     Ok(())
 }
 
-fn container_cgroup_dir(cgroup_path: &str) -> Option<PathBuf> {
+fn container_cgroup_dir(cgroup_path: &str) -> io::Result<PathBuf> {
     let normalized = if cgroup_path.is_empty() {
         "/edgerun".to_string()
     } else {
@@ -547,9 +544,8 @@ fn container_cgroup_dir(cgroup_path: &str) -> Option<PathBuf> {
     let resolved = crate::rootless::resolve_container_cgroup_path(
         crate::state::is_rootless_mode(),
         &normalized,
-    )
-    .ok()?;
-    Some(Path::new("/sys/fs/cgroup").join(resolved.trim_start_matches('/')))
+    )?;
+    Ok(Path::new("/sys/fs/cgroup").join(resolved.trim_start_matches('/')))
 }
 
 fn strip_sysfs_prefix(cgroup_path: &str) -> String {
