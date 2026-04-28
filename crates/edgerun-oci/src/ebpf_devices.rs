@@ -180,10 +180,8 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
                 insns.push(*bytes);
             }
             SymInsn::JmpNe { dst, imm, target } => {
-                // We'll fix up the offset after we know all positions
-                // For now, push a placeholder (off = 0)
+                // Offset is resolved after we know all labels and positions.
                 insns.push(jmp_imm(bpf_jmp::BPF_JNE, *dst, *imm, 0));
-                // We need to track which instruction index this is and its target
                 fwd_refs.push((insns.len() - 1, target.clone()));
             }
             SymInsn::Label(_) => {
