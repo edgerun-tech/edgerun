@@ -465,9 +465,10 @@ pub fn run_poststop_and_cleanup(
     }
 
     // Clean up cgroup directory
-    let cgroup_dir = container_cgroup_dir(cgroup_path);
-    if cgroup_dir.exists() {
-        let _ = std::fs::remove_dir_all(&cgroup_dir);
+    if let Some(cgroup_dir) = container_cgroup_dir(cgroup_path) {
+        if cgroup_dir.exists() {
+            let _ = std::fs::remove_dir_all(&cgroup_dir);
+        }
     }
 }
 
@@ -498,20 +499,20 @@ fn delete_container_internal(
 
     execute_poststop_hooks(Some(poststop_hooks), &state);
 
-    let cgroup_dir = container_cgroup_dir(cgroup_path);
-    if cgroup_dir.exists() {
-        let _ = std::fs::remove_dir_all(&cgroup_dir);
+    if let Some(cgroup_dir) = container_cgroup_dir(cgroup_path) {
+        if cgroup_dir.exists() {
+            let _ = std::fs::remove_dir_all(&cgroup_dir);
+        }
     }
 
     Ok(())
 }
 
-fn container_cgroup_dir(cgroup_path: &str) -> PathBuf {
+fn container_cgroup_dir(cgroup_path: &str) -> Option<PathBuf> {
     let raw = if cgroup_path.is_empty() { "/edgerun" } else { cgroup_path };
-    let resolved =
-        crate::rootless::resolve_container_cgroup_path(crate::state::is_rootless_mode(), raw)
-            .unwrap_or_else(|_| "/edgerun".to_string());
-    Path::new("/sys/fs/cgroup").join(resolved.trim_start_matches('/'))
+    let resolved = crate::rootless::resolve_container_cgroup_path(crate::state::is_rootless_mode(), raw)
+        .ok()?;
+    Some(Path::new("/sys/fs/cgroup").join(resolved.trim_start_matches('/')))
 }
 
 // ===========================================================================
