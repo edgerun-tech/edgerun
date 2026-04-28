@@ -1,6 +1,7 @@
 //! OCI spec types with serde-based JSON serialization via edgerun-json.
 
 use crate::prelude::*;
+use crate::util::StringResultExt;
 #[cfg(feature = "serde")]
 use edgerun_json::{from_slice, to_string, to_string_pretty};
 #[cfg(all(feature = "json", not(feature = "serde")))]
@@ -12,16 +13,6 @@ use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-
-trait StringResultExt<T> {
-    fn string_err(self) -> Result<T, String>;
-}
-
-impl<T, E: ToString> StringResultExt<T> for Result<T, E> {
-    fn string_err(self) -> Result<T, String> {
-        self.map_err(|error| error.to_string())
-    }
-}
 
 // ===========================================================================
 // Public API

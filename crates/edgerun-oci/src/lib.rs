@@ -39,6 +39,7 @@ pub mod runtime_config;
 pub mod tar_layer;
 #[cfg(all(test, feature = "json", not(target_os = "none")))]
 pub(crate) mod test_support;
+mod util;
 pub mod validate;
 
 mod registry {

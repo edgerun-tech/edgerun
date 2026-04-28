@@ -1,6 +1,7 @@
 //! Image config types (from the config blob).
 
 use crate::prelude::*;
+use crate::util::StringResultExt;
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -87,7 +88,7 @@ pub struct HistoryEntry {
 /// Parse an image config from JSON bytes.
 #[cfg(all(feature = "serde", not(feature = "json")))]
 pub fn parse_image_config(data: &[u8]) -> Result<ImageConfig, String> {
-    from_slice(data).map_err(|e| e.to_string())
+    from_slice(data).string_err()
 }
 
 /// Parse an image config from JSON bytes without serde.
@@ -100,8 +101,8 @@ pub fn parse_image_config(data: &[u8]) -> Result<ImageConfig, String> {
 /// Parse JSON bytes into a JsonValue (for ad-hoc inspection).
 #[cfg(feature = "json")]
 pub fn parse_json_bytes(data: &[u8]) -> Result<edgerun_json::JsonValue, String> {
-    let input = core::str::from_utf8(data).map_err(|e| e.to_string())?;
-    parse_json(input).map_err(|e| e.to_string())
+    let input = core::str::from_utf8(data).string_err()?;
+    parse_json(input).string_err()
 }
 
 // ===========================================================================
@@ -121,7 +122,7 @@ pub fn parse_manifest(data: &[u8]) -> Result<ImageManifest, String> {
     // Fall back to single manifest
     from_slice::<SingleManifest>(data)
         .map(ImageManifest::Single)
-        .map_err(|e| e.to_string())
+        .string_err()
 }
 
 /// Parse a raw JSON blob into an ImageManifest (index or single) without serde.
@@ -141,7 +142,7 @@ pub fn parse_manifest(data: &[u8]) -> Result<ImageManifest, String> {
 /// Parse a raw JSON blob as a single manifest.
 #[cfg(all(feature = "serde", not(feature = "json")))]
 pub fn parse_single_manifest(data: &[u8]) -> Result<SingleManifest, String> {
-    from_slice(data).map_err(|e| e.to_string())
+    from_slice(data).string_err()
 }
 
 /// Parse a raw JSON blob as a single manifest without serde.
@@ -198,7 +199,7 @@ fn parse_history_entry(value: &JsonValue) -> Result<HistoryEntry, String> {
         created: optional_string(obj, "created"),
         created_by: optional_string(obj, "created_by"),
         comment: optional_string(obj, "comment"),
-        empty_layer: optional_bool(obj, "empty_layer"),
+        empty_layer: obj.get_bool("empty_layer"),
     })
 }
 
@@ -218,7 +219,7 @@ fn parse_manifest_descriptor(
     Ok(super::manifest::ManifestDescriptor {
         media_type: optional_string(obj, "mediaType"),
         digest: required_string(obj, "digest")?,
-        size: obj.required_u64("size").map_err(|e| e.to_string())?,
+        size: obj.required_u64("size").string_err()?,
         platform: obj.get("platform").map(parse_platform).transpose()?,
     })
 }
@@ -257,7 +258,7 @@ fn parse_layer_descriptor(value: &JsonValue) -> Result<super::manifest::LayerDes
     Ok(super::manifest::LayerDescriptor {
         media_type: optional_string(obj, "mediaType"),
         digest: required_string(obj, "digest")?,
-        size: obj.required_u64("size").map_err(|e| e.to_string())?,
+        size: obj.required_u64("size").string_err()?,
     })
 }
 
@@ -281,14 +282,7 @@ fn optional_string_any(obj: &Map, keys: &[&str]) -> Option<String> {
 
 #[cfg(feature = "json")]
 fn required_string(obj: &Map, key: &str) -> Result<String, String> {
-    obj.required_str(key)
-        .map(ToString::to_string)
-        .map_err(|e| e.to_string())
-}
-
-#[cfg(feature = "json")]
-fn optional_bool(obj: &Map, key: &str) -> Option<bool> {
-    obj.get_bool(key)
+    obj.required_str(key).map(ToString::to_string).string_err()
 }
 
 #[cfg(feature = "json")]
@@ -314,7 +308,7 @@ fn parse_array_required<T>(
     parse_item: fn(&JsonValue) -> Result<T, String>,
 ) -> Result<Vec<T>, String> {
     obj.required_array(key)
-        .map_err(|e| e.to_string())?
+        .string_err()?
         .iter()
         .map(parse_item)
         .collect()
