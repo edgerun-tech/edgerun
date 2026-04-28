@@ -12,7 +12,7 @@
 //!
 //! let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 //! rt.block_on(async {
-//!     let cert = generate_self_signed(&["localhost"]);
+//!     let cert = generate_self_signed(&["localhost"]).unwrap();
 //!     let server = Http3Server::bind("127.0.0.1:4433", cert).await.unwrap();
 //!     println!("HTTP/3 server listening on {}", server.local_addr().unwrap());
 //!
@@ -561,11 +561,11 @@ impl Http3Server {
     /// use edgerun_http::{Handler, Request, Response, StatusCode, into_handler};
     /// use edgerun_tls::certificate_gen::generate_self_signed;
     /// use edgerun_rt::Runtime;
-    /// use crate::runtime::sync::Arc;
+    /// use edgerun_http::runtime::sync::Arc;
     ///
     /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     /// rt.block_on(async {
-    ///     let cert = generate_self_signed(&["localhost"]);
+    ///     let cert = generate_self_signed(&["localhost"]).unwrap();
     ///     let server = Http3Server::bind("127.0.0.1:4433", cert).await.unwrap();
     ///     let handler = into_handler(|_req| {
     ///         Response::text(StatusCode::new(200).unwrap(), "Hello!")

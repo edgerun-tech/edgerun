@@ -182,22 +182,13 @@ async fn select_manifest(
             if index.manifests.is_empty() {
                 return Err(RegistryError::NoManifests);
             }
-            let current_arch = crate::host_arch();
-            let current_os = crate::host_os();
-            let best = index
-                .manifests
-                .iter()
-                .find(|manifest| {
-                    manifest
-                        .platform
-                        .as_ref()
-                        .map(|platform| {
-                            platform.architecture.as_deref() == Some(current_arch)
-                                && platform.os.as_deref() == Some(current_os)
-                        })
-                        .unwrap_or(false)
-                })
-                .unwrap_or(&index.manifests[0]);
+            let best = crate::select_manifest_for_current_target(&index).ok_or_else(|| {
+                RegistryError::ParseError(format!(
+                    "no manifest found for platform {}/{}",
+                    crate::host_os(),
+                    crate::host_arch()
+                ))
+            })?;
             client
                 .fetch_manifest_by_digest(&image.registry, &image.repository, &best.digest)
                 .await
@@ -222,8 +213,9 @@ where
         let index = offset + 1;
         let cache_key = layer.digest.replace(':', "_");
         let cached_layer = cache_dir.join(&cache_key);
+        let cache_marker = cache_dir.join(format!("{cache_key}.complete"));
 
-        if cached_layer.is_dir() {
+        if cached_layer.is_dir() && layer_cache_complete(&cache_marker, &layer.digest) {
             progress(PullProgress::LayerCached {
                 index,
                 total: total_layers,
@@ -232,6 +224,10 @@ where
             layer_dirs.push(cached_layer);
             continue;
         }
+        if cached_layer.exists() {
+            std::fs::remove_dir_all(&cached_layer).map_err(RegistryError::IoError)?;
+        }
+        let _ = std::fs::remove_file(&cache_marker);
 
         let blob_path = store_path.join(format!("{}.{}", &cache_key, layer_extension(layer)));
         if !blob_path.exists() {
@@ -266,6 +262,7 @@ where
             digest: layer.digest.clone(),
         });
         extract_layer(&blob_path, &cached_layer, layer.media_type.as_deref())?;
+        std::fs::write(&cache_marker, &layer.digest).map_err(RegistryError::IoError)?;
         progress(PullProgress::LayerExtracted {
             index,
             total: total_layers,
@@ -274,6 +271,12 @@ where
         layer_dirs.push(cached_layer);
     }
     Ok(layer_dirs)
+}
+
+fn layer_cache_complete(marker: &Path, digest: &str) -> bool {
+    std::fs::read_to_string(marker)
+        .map(|value| value.trim() == digest)
+        .unwrap_or(false)
 }
 
 async fn download_blob(
@@ -296,5 +299,35 @@ fn layer_extension(layer: &LayerDescriptor) -> &'static str {
         Some(media_type) if media_type.contains("gzip") || media_type.contains("tar") => "tar.gz",
         Some(media_type) if media_type.contains("oci") => "tar",
         _ => "tar.gz",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_root() -> PathBuf {
+        static C: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = C.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let p = std::env::temp_dir().join(format!("oci_pull_test_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&p);
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    #[test]
+    fn layer_cache_requires_matching_completion_marker() {
+        let root = tmp_root();
+        let marker = root.join("sha256_layer.complete");
+
+        assert!(!layer_cache_complete(&marker, "sha256:layer"));
+
+        std::fs::write(&marker, "sha256:other\n").unwrap();
+        assert!(!layer_cache_complete(&marker, "sha256:layer"));
+
+        std::fs::write(&marker, "sha256:layer\n").unwrap();
+        assert!(layer_cache_complete(&marker, "sha256:layer"));
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }

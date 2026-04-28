@@ -203,8 +203,8 @@ impl BoundHttpServer {
             if tcp_shutdown.is_cancelled() {
                 break;
             }
-            match self.listener.accept().await {
-                Ok((stream, peer_addr)) => {
+            match timeout(Duration::from_millis(100), self.listener.accept()).await {
+                Ok(Ok((stream, peer_addr))) => {
                     let h = Arc::clone(&handler);
                     let ka = keep_alive;
                     let ms = max_size;
@@ -227,9 +227,12 @@ impl BoundHttpServer {
                         }
                     });
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     edgerun_log::error!("Accept error: {}", e);
                     sleep(Duration::from_millis(100)).await;
+                }
+                Err(_) => {
+                    continue;
                 }
             }
         }

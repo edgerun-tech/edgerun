@@ -267,6 +267,9 @@ impl Http2Pool {
         headers.push((b":authority".to_vec(), host.as_bytes().to_vec()));
         headers.push((b":path".to_vec(), path.as_bytes().to_vec()));
         for (name, value) in request.headers().iter() {
+            if is_http2_forbidden_request_header(name.as_str(), value.as_str()) {
+                continue;
+            }
             // HTTP/2 requires lowercase header field names (RFC 9113 §8.2.1)
             headers.push((
                 name.as_str()
@@ -411,8 +414,51 @@ impl Http2Pool {
     }
 }
 
+fn is_http2_forbidden_request_header(name: &str, value: &str) -> bool {
+    match name.to_ascii_lowercase().as_str() {
+        "connection" | "host" | "keep-alive" | "proxy-connection" | "transfer-encoding"
+        | "upgrade" => true,
+        "te" => !value.eq_ignore_ascii_case("trailers"),
+        _ => false,
+    }
+}
+
 impl Default for Http2Pool {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Method, Request};
+
+    #[test]
+    fn h2_header_bridge_drops_http1_connection_headers() {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("https://example.com/path?q=1")
+            .header("Connection", "close")
+            .header("Host", "example.com")
+            .header("Upgrade", "websocket")
+            .header("Accept", "*/*")
+            .build()
+            .unwrap();
+
+        let headers = Http2Pool::build_h2_headers(&request, "/path?q=1", "example.com", true);
+        let names = headers
+            .iter()
+            .map(|(name, _)| String::from_utf8_lossy(name).into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(names.contains(&":method".to_string()));
+        assert!(names.contains(&":scheme".to_string()));
+        assert!(names.contains(&":authority".to_string()));
+        assert!(names.contains(&":path".to_string()));
+        assert!(names.contains(&"accept".to_string()));
+        assert!(!names.contains(&"connection".to_string()));
+        assert!(!names.contains(&"host".to_string()));
+        assert!(!names.contains(&"upgrade".to_string()));
     }
 }

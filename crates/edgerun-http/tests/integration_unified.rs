@@ -1,12 +1,14 @@
 //! Integration tests for unified HTTP client and server.
 
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use edgerun_http::{Handler, HttpClient, HttpServer, HttpVersion, Request, Response, StatusCode};
 use edgerun_rt::{sleep, spawn, Runtime};
 
 static PORT: AtomicU32 = AtomicU32::new(13000);
+static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn next_port() -> u16 {
     PORT.fetch_add(1, Ordering::Relaxed) as u16
@@ -19,6 +21,7 @@ where
         + Send
         + 'static,
 {
+    let _guard = TEST_LOCK.lock().expect("integration test lock poisoned");
     eprintln!("[test] {}", name);
     let port = next_port();
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
@@ -215,13 +218,16 @@ fn client_http2_explicit() {
             .bind(format!("127.0.0.1:{}", port))
             .await?;
 
-        let server_task = spawn(async move { server.accept_one().await });
+        let shutdown = edgerun_rt::CancellationToken::new();
+        let shutdown_clone = shutdown.clone();
+        let server_task = spawn(async move { server.serve_with_shutdown(shutdown_clone).await });
         sleep(Duration::from_millis(100)).await;
 
         let client = HttpClient::new().version(HttpVersion::Http2);
         let resp = client.get(&format!("https://127.0.0.1:{}/", port)).await?;
 
         assert_eq!(resp.status().as_u16(), 200);
+        shutdown.cancel();
         server_task.await?;
         Ok(())
     });

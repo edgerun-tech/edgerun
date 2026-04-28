@@ -272,11 +272,27 @@ impl AsyncUdpSocket {
     }
 
     pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> std::io::Result<usize> {
-        self.inner.send_to(buf, target)
+        loop {
+            match self.inner.send_to(buf, target) {
+                Ok(n) => return Ok(n),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    crate::yieldnow().await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     pub async fn recv_from(&self, buf: &mut [u8]) -> std::io::Result<(usize, SocketAddr)> {
-        self.inner.recv_from(buf)
+        loop {
+            match self.inner.recv_from(buf) {
+                Ok(result) => return Ok(result),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    crate::yieldnow().await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     pub fn send(&self, buf: &[u8]) -> std::io::Result<usize> {

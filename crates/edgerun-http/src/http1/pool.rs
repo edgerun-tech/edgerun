@@ -126,7 +126,7 @@ impl PooledConn {
 /// eliminating connect + TLS handshake overhead for keep-alive servers.
 ///
 /// # Example
-/// ```ignore
+/// ```no_run
 /// let pool = ConnectionPool::new()
 ///     .with_max_connections_per_host(6)
 ///     .with_idle_timeout(Duration::from_secs(30));

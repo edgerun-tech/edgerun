@@ -536,6 +536,23 @@ impl QuicConnection {
             crate::runtime::wrap_udp_socket(socket)
                 .map_err(|e| format!("Cannot wrap socket: {}", e))?,
         );
+        Self::from_server_socket(
+            socket,
+            client_addr,
+            client_dcid,
+            client_scid,
+            handshake_result,
+        )
+    }
+
+    /// Create a server-side connection using an already-bound async UDP socket.
+    pub fn from_server_socket(
+        socket: Arc<AsyncUdpSocket>,
+        client_addr: String,
+        client_dcid: ConnectionId,
+        client_scid: ConnectionId,
+        handshake_result: crate::http3::quic::server_handshake::ServerHandshakeResult,
+    ) -> Result<Self, String> {
         let transport = QuicTransport::new(client_dcid.clone(), client_scid.clone());
 
         let mut conn = QuicConnection {

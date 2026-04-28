@@ -54,11 +54,26 @@ fn copy_dir_contents(src: &Path, dest: &Path, mode: CopyMode) -> io::Result<()> 
     if !src.is_dir() {
         return Ok(());
     }
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
+    let entries = fs::read_dir(src)?.collect::<io::Result<Vec<_>>>()?;
+    if mode.skip_whiteouts
+        && entries.iter().any(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .map(|name| name == ".wh..wh..opq")
+                .unwrap_or(false)
+        })
+    {
+        clear_dir_contents(dest)?;
+    }
+    for entry in entries {
         if mode.skip_whiteouts {
             if let Some(name) = entry.file_name().to_str() {
+                if name == ".wh..wh..opq" {
+                    continue;
+                }
                 if name.starts_with(".wh.") {
+                    remove_path(&dest.join(name.trim_start_matches(".wh.")))?;
                     continue;
                 }
             }
@@ -68,6 +83,25 @@ fn copy_dir_contents(src: &Path, dest: &Path, mode: CopyMode) -> io::Result<()> 
         copy_rootfs_entry(&src_path, &dest_path, mode)?;
     }
     Ok(())
+}
+
+fn clear_dir_contents(path: &Path) -> io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(path)? {
+        remove_path(&entry?.path())?;
+    }
+    Ok(())
+}
+
+fn remove_path(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => fs::remove_dir_all(path),
+        Ok(_) => fs::remove_file(path),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 fn copy_rootfs_entry(src: &Path, dest: &Path, mode: CopyMode) -> io::Result<()> {

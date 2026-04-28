@@ -242,7 +242,7 @@ where
 /// Middlewares are applied **outside → in**: the first `.with()` is the
 /// outermost layer, the last `.with()` is closest to the handler.
 ///
-/// ```ignore
+/// ```no_run
 /// let handler = edgerun_http::middleware::Chain::new(my_handler)
 ///     .with(cors())      // outermost
 ///     .with(logging())

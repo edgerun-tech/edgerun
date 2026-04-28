@@ -6,6 +6,7 @@
 
 use core::cell::UnsafeCell;
 use core::ffi::{c_int, c_void};
+use core::sync::atomic::{AtomicI32, Ordering};
 
 use edgerun_wifi::ieee80211::OpenApConfig;
 
@@ -21,6 +22,8 @@ const WIFI_PROMIS_FILTER_MASK_DATA: u32 = 1 << 2;
 
 const RAW_80211_MAX: usize = 2352;
 const RAW_RX_QUEUE: usize = 8;
+
+static LAST_START_STATUS: AtomicI32 = AtomicI32::new(0);
 
 // ESP32-S3 wifi_pkt_rx_ctrl_t is 48 bytes in IDF 5.5.x. sig_len is the low 12
 // bits of the u32 at offset 44 and includes the FCS when present.
@@ -130,6 +133,10 @@ impl EspressifPromiscRadio {
     pub const fn new() -> Self {
         Self
     }
+
+    pub fn last_start_status() -> i32 {
+        LAST_START_STATUS.load(Ordering::Relaxed)
+    }
 }
 
 impl Esp32s3WifiRadio for EspressifPromiscRadio {
@@ -138,10 +145,28 @@ impl Esp32s3WifiRadio for EspressifPromiscRadio {
             filter_mask: WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA,
         };
         unsafe {
-            esp_wifi_set_channel(config.channel, WIFI_SECOND_CHAN_NONE) == ESP_OK
-                && esp_wifi_set_promiscuous_filter(&filter) == ESP_OK
-                && esp_wifi_set_promiscuous_rx_cb(Some(promisc_rx_cb)) == ESP_OK
-                && esp_wifi_set_promiscuous(true) == ESP_OK
+            let status = esp_wifi_set_channel(config.channel, WIFI_SECOND_CHAN_NONE);
+            if status != ESP_OK {
+                LAST_START_STATUS.store(1000 + status, Ordering::Relaxed);
+                return false;
+            }
+            let status = esp_wifi_set_promiscuous_filter(&filter);
+            if status != ESP_OK {
+                LAST_START_STATUS.store(2000 + status, Ordering::Relaxed);
+                return false;
+            }
+            let status = esp_wifi_set_promiscuous_rx_cb(Some(promisc_rx_cb));
+            if status != ESP_OK {
+                LAST_START_STATUS.store(3000 + status, Ordering::Relaxed);
+                return false;
+            }
+            let status = esp_wifi_set_promiscuous(true);
+            if status != ESP_OK {
+                LAST_START_STATUS.store(4000 + status, Ordering::Relaxed);
+                return false;
+            }
+            LAST_START_STATUS.store(1, Ordering::Relaxed);
+            true
         }
     }
 

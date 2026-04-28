@@ -12,8 +12,9 @@ use core::task::{Context, Poll};
 
 use crate::io::{AsyncRead, AsyncWrite, IoError, Result as IoResult};
 use crate::ip::{
-    ETH_TYPE_ARP, ETH_TYPE_IPV4, EthHeader, IP_PROTO_TCP, IP_PROTO_UDP, IpHeader, TCP_FLAG_ACK,
-    TCP_FLAG_FIN, TCP_FLAG_PSH, TCP_FLAG_RST, TCP_FLAG_SYN, TcpHeader, checksum, ip_checksum,
+    checksum, ip_checksum, EthHeader, IpHeader, TcpHeader, ETH_TYPE_ARP, ETH_TYPE_IPV4,
+    IP_PROTO_TCP, IP_PROTO_UDP, TCP_FLAG_ACK, TCP_FLAG_FIN, TCP_FLAG_PSH, TCP_FLAG_RST,
+    TCP_FLAG_SYN,
 };
 use crate::sync::Mutex;
 

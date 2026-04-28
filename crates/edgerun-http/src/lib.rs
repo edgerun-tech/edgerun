@@ -9,7 +9,7 @@
 //! - [`Request`] / [`Response`] — Protocol-agnostic request/response types
 //!
 //! # HTTP/1.1 Example
-//! ```ignore
+//! ```no_run
 //! use edgerun_http::{HttpServer, Handler, Request, Response, StatusCode};
 //!
 //! struct HelloHandler;
@@ -37,7 +37,7 @@
 //! ```
 //!
 //! # Client Example
-//! ```ignore
+//! ```no_run
 //! use edgerun_http::HttpClient;
 //!
 //! # edgerun_http::runtime::block_on(async {

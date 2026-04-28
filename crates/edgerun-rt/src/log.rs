@@ -10,6 +10,7 @@ pub use edgerun_log::{
 
 static SERIAL_LOGGER_INSTALLED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
 pub fn init_serial_logger() {
     if SERIAL_LOGGER_INSTALLED.swap(true, Ordering::Relaxed) {
         return;
@@ -17,10 +18,27 @@ pub fn init_serial_logger() {
     edgerun_log::set_format_logger(serial_logger);
 }
 
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+pub fn init_serial_logger() {
+    let _ = SERIAL_LOGGER_INSTALLED.swap(true, Ordering::Relaxed);
+}
+
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
 #[inline]
 pub fn log(level: u8, message: &str) {
     init_serial_logger();
     edgerun_log::log(level_from_legacy(level), "edgerun_rt", message);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+#[inline]
+pub fn log(level: u8, message: &str) {
+    let level = level_from_legacy(level);
+    serial_write_str("[");
+    serial_write_str(level.as_str());
+    serial_write_str("] edgerun_rt: ");
+    serial_write_str(message);
+    serial_write_str("\n");
 }
 
 fn level_from_legacy(level: u8) -> Level {
@@ -34,11 +52,27 @@ fn level_from_legacy(level: u8) -> Level {
     }
 }
 
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
 fn serial_logger(level: Level, module: &str, args: fmt::Arguments<'_>) {
     let mut writer = SerialWriter;
-    let _ = write!(writer, "[{}] {}: ", level.as_str(), module);
+    let _ = writer.write_str("[");
+    let _ = writer.write_str(level.as_str());
+    let _ = writer.write_str("] ");
+    let _ = writer.write_str(module);
+    let _ = writer.write_str(": ");
     let _ = writer.write_fmt(args);
     let _ = writer.write_str("\n");
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn serial_logger(level: Level, module: &str, args: fmt::Arguments<'_>) {
+    serial_write_str("[");
+    serial_write_str(level.as_str());
+    serial_write_str("] ");
+    serial_write_str(module);
+    serial_write_str(": ");
+    serial_write_str(args.as_str().unwrap_or("<fmt>"));
+    serial_write_str("\n");
 }
 
 struct SerialWriter;

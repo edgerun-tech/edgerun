@@ -9,6 +9,7 @@ use crate::http1::pool::ConnectionPool;
 use crate::http2::pool::Http2Pool;
 use crate::method::Method;
 use crate::runtime::time::Duration;
+use crate::runtime::timeout as rt_timeout;
 use crate::runtime::Mutex;
 use crate::uri::Uri;
 use crate::{Error, Request, Response, Result, StatusCode};
@@ -219,9 +220,13 @@ impl HttpClient {
                 edgerun_log::debug!("CLIENT: using HTTP/1.1");
                 self.execute_http1(request).await
             }
-            HttpVersion::Http2 | HttpVersion::Http2OrHttp1 => {
+            HttpVersion::Http2 => {
                 edgerun_log::debug!("CLIENT: using HTTP/2");
-                match self.execute_http2(request).await {
+                self.execute_http2_with_timeout(request).await
+            }
+            HttpVersion::Http2OrHttp1 => {
+                edgerun_log::debug!("CLIENT: using HTTP/2");
+                match self.execute_http2_with_timeout(request).await {
                     Ok(r) => Ok(r),
                     Err(_) => self.execute_http1(request).await,
                 }
@@ -232,7 +237,7 @@ impl HttpClient {
             }
             HttpVersion::Best => {
                 edgerun_log::debug!("CLIENT: using Best");
-                match self.execute_http2(request).await {
+                match self.execute_http2_with_timeout(request).await {
                     Ok(r) => Ok(r),
                     Err(_) => self.execute_http1(request).await,
                 }
@@ -452,6 +457,19 @@ impl HttpClient {
         Err(Error::ProtocolError(
             "HTTP/3 requires edgerun-http http3 feature".into(),
         ))
+    }
+
+    #[cfg(feature = "tls")]
+    async fn execute_http2_with_timeout(&self, request: &Request) -> Result<Response> {
+        match rt_timeout(self.inner.read_timeout, self.execute_http2(request)).await {
+            Ok(result) => result,
+            Err(_) => Err(Error::Timeout),
+        }
+    }
+
+    #[cfg(not(feature = "tls"))]
+    async fn execute_http2_with_timeout(&self, request: &Request) -> Result<Response> {
+        self.execute_http2(request).await
     }
 
     #[cfg(feature = "tls")]

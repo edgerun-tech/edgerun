@@ -277,6 +277,20 @@ impl RegistryClient {
         body: &[u8],
         extra_headers: &[(&str, &str)],
     ) -> Result<Vec<u8>, RegistryError> {
+        Ok(self
+            .authenticated_post_response(registry, path, body, extra_headers)
+            .await?
+            .body()
+            .to_vec())
+    }
+
+    pub(crate) async fn authenticated_post_response(
+        &mut self,
+        registry: &str,
+        path: &str,
+        body: &[u8],
+        extra_headers: &[(&str, &str)],
+    ) -> Result<Response, RegistryError> {
         let url = self.registry_url(registry, path);
         let result = self.do_post(&url, body, extra_headers).await?;
         if result.status().as_u16() == 401 {
@@ -291,11 +305,11 @@ impl RegistryClient {
             if result2.status().as_u16() >= 400 {
                 return Err(RegistryError::HttpStatus(result2.status().as_u16()));
             }
-            Ok(result2.body().to_vec())
+            Ok(result2)
         } else if result.status().as_u16() >= 400 {
             Err(RegistryError::HttpStatus(result.status().as_u16()))
         } else {
-            Ok(result.body().to_vec())
+            Ok(result)
         }
     }
 
@@ -406,6 +420,11 @@ impl RegistryClient {
                 .or_else(|| resp.headers().get("WWW-Authenticate"))
                 .map(|v| v.as_str())
                 .ok_or_else(|| RegistryError::AuthError("No WWW-Authenticate header".into()))?;
+            if matches!(self.auth, RegistryAuth::Anonymous) {
+                parse_bearer_auth(www_auth)
+                    .ok_or_else(|| RegistryError::AuthError("Invalid Bearer challenge".into()))?;
+                return Ok(());
+            }
             self.handle_auth_challenge(registry, www_auth).await?;
             return Ok(());
         }
@@ -526,8 +545,14 @@ impl RegistryClient {
                 if index.manifests.is_empty() {
                     return Err(RegistryError::NoManifests);
                 }
-                let selected = crate::select_manifest_for_current_target(&index)
-                    .unwrap_or(&index.manifests[0]);
+                let selected =
+                    crate::select_manifest_for_current_target(&index).ok_or_else(|| {
+                        RegistryError::ParseError(format!(
+                            "no manifest found for platform {}/{}",
+                            crate::host_os(),
+                            crate::host_arch()
+                        ))
+                    })?;
                 self.fetch_manifest_by_digest(&image.registry, &image.repository, &selected.digest)
                     .await?
             }

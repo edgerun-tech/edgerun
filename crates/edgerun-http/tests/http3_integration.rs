@@ -58,9 +58,9 @@ where
 
         sleep(Duration::from_millis(200)).await;
 
-        if let Err(e) = f(port).await {
-            eprintln!("[{}] test failed: {}", name, e);
-        }
+        f(port)
+            .await
+            .unwrap_or_else(|e| panic!("[{}] test failed: {}", name, e));
 
         shutdown.cancel();
         let _ = server_task.await;
@@ -68,7 +68,6 @@ where
 }
 
 #[test]
-#[ignore = "HTTP/3 UDP handshake requires real networking - disabled until handshake is fully working"]
 fn test_http3_basic_get() {
     with_server("http3_basic_get", |port| async move {
         let client = HttpClient::new().version(HttpVersion::Http3);
@@ -79,7 +78,6 @@ fn test_http3_basic_get() {
 }
 
 #[test]
-#[ignore = "HTTP/3 UDP handshake requires real networking - disabled until handshake is fully working"]
 fn test_http3_echo_post_body() {
     with_server("http3_echo_post", |port| async move {
         let client = HttpClient::new().version(HttpVersion::Http3);
@@ -94,7 +92,6 @@ fn test_http3_echo_post_body() {
 }
 
 #[test]
-#[ignore = "HTTP/3 UDP handshake requires real networking - disabled until handshake is fully working"]
 fn test_http3_multiple_requests() {
     with_server("http3_multi", |port| async move {
         let client = HttpClient::new().version(HttpVersion::Http3);
@@ -119,7 +116,6 @@ fn test_http3_multiple_requests() {
 }
 
 #[test]
-#[ignore = "HTTP/3 UDP handshake requires real networking - disabled until handshake is fully working"]
 fn test_http3_large_body() {
     with_server("http3_large", |port| async move {
         let body = vec![0xAB; 64 * 1024];

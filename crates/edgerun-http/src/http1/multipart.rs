@@ -4,7 +4,7 @@
 //! and file uploads.
 //!
 //! # Usage
-//! ```ignore
+//! ```no_run
 //! use edgerun_http::http1::multipart::MultipartParser;
 //!
 //! let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";

@@ -50,3 +50,41 @@ fn merge_layer_dirs_replaces_file_with_symlink() {
     );
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn merge_layer_dirs_applies_remove_whiteout_to_lower_layer() {
+    let root = test_dir("remove-whiteout");
+    let layer1 = root.join("layer1");
+    let layer2 = root.join("layer2");
+    let dest = root.join("dest");
+    fs::create_dir_all(layer1.join("etc")).unwrap();
+    fs::create_dir_all(layer2.join("etc")).unwrap();
+    fs::write(layer1.join("etc/shadow"), b"old").unwrap();
+    fs::write(layer2.join("etc/.wh.shadow"), b"").unwrap();
+
+    merge_layer_dirs(&[layer1, layer2], &dest).unwrap();
+
+    assert!(!dest.join("etc/shadow").exists());
+    assert!(!dest.join("etc/.wh.shadow").exists());
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn merge_layer_dirs_applies_opaque_whiteout_to_lower_directory() {
+    let root = test_dir("opaque-whiteout");
+    let layer1 = root.join("layer1");
+    let layer2 = root.join("layer2");
+    let dest = root.join("dest");
+    fs::create_dir_all(layer1.join("etc")).unwrap();
+    fs::create_dir_all(layer2.join("etc")).unwrap();
+    fs::write(layer1.join("etc/lower"), b"old").unwrap();
+    fs::write(layer2.join("etc/.wh..wh..opq"), b"").unwrap();
+    fs::write(layer2.join("etc/upper"), b"new").unwrap();
+
+    merge_layer_dirs(&[layer1, layer2], &dest).unwrap();
+
+    assert!(!dest.join("etc/lower").exists());
+    assert_eq!(fs::read(dest.join("etc/upper")).unwrap(), b"new");
+    assert!(!dest.join("etc/.wh..wh..opq").exists());
+    let _ = fs::remove_dir_all(root);
+}

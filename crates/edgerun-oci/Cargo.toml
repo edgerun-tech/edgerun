@@ -27,6 +27,7 @@ edgefs = ["dep:edgerun-edgefs", "dep:edgerun-storage"]
 zstd = ["dep:ruzstd"]
 std = [
     "registry-client",
+    "edgerun-http/std",
     "dep:edgerun-rt",
     "dep:edgerun-secret-service",
     "dep:edgerun-core",

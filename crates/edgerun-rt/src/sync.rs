@@ -76,10 +76,15 @@ impl<T> Mutex<T> {
 
 impl<T> Mutex<T> {
     pub fn lock(&self) -> MutexGuard<'_, T> {
-        while self.locked.load(Ordering::Acquire) {
-            core::hint::spin_loop();
+        while self
+            .locked
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            while self.locked.load(Ordering::Relaxed) {
+                core::hint::spin_loop();
+            }
         }
-        self.locked.store(true, Ordering::Release);
         MutexGuard { mutex: self }
     }
 

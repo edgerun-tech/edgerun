@@ -9,11 +9,12 @@ use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, Waker};
 
 pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
     let queue = Arc::new(Queue {
         data: RefCell::new(VecDeque::new()),
+        waker: RefCell::new(None),
         sender_count: AtomicUsize::new(1),
         closed: AtomicUsize::new(0),
     });
@@ -32,6 +33,7 @@ pub fn mpsc_channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
 
 struct Queue<T> {
     data: RefCell<VecDeque<T>>,
+    waker: RefCell<Option<Waker>>,
     sender_count: AtomicUsize,
     closed: AtomicUsize,
 }
@@ -58,6 +60,7 @@ impl<T> Drop for Sender<T> {
     fn drop(&mut self) {
         if self.queue.sender_count.fetch_sub(1, Ordering::AcqRel) == 1 {
             self.queue.closed.store(1, Ordering::Release);
+            wake_receiver(&self.queue);
         }
     }
 }
@@ -83,6 +86,7 @@ impl<T> Sender<T> {
             return Err(TrySendError::Full(value));
         }
         self.queue.data.borrow_mut().push_back(value);
+        wake_receiver(&self.queue);
         Ok(())
     }
 
@@ -128,7 +132,7 @@ impl<T: Unpin> Future for Send<T> {
             Err(TrySendError::Closed(value)) => Poll::Ready(Err(SendError(value))),
             Err(TrySendError::Full(value)) => {
                 this.value = Some(value);
-                cx.waker().wake_by_ref();
+                *this.sender.queue.waker.borrow_mut() = Some(cx.waker().clone());
                 Poll::Pending
             }
         }
@@ -191,7 +195,7 @@ impl<T> Future for Receiver<T> {
         if self.queue.closed.load(Ordering::Acquire) != 0 {
             return Poll::Pending;
         }
-        cx.waker().wake_by_ref();
+        *self.queue.waker.borrow_mut() = Some(cx.waker().clone());
         Poll::Pending
     }
 }
@@ -203,6 +207,7 @@ impl<T> Receiver<T> {
 
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
         if let Some(value) = self.queue.data.borrow_mut().pop_front() {
+            wake_receiver(&self.queue);
             Ok(value)
         } else if self.queue.closed.load(Ordering::Acquire) != 0 {
             Err(TryRecvError::Disconnected)
@@ -231,6 +236,7 @@ impl<T> Receiver<T> {
 
     pub fn close(&self) {
         self.queue.closed.store(1, Ordering::Release);
+        wake_receiver(&self.queue);
     }
 }
 
@@ -246,9 +252,15 @@ impl<T> Future for Recv<'_, T> {
             Ok(value) => Poll::Ready(Some(value)),
             Err(TryRecvError::Disconnected) => Poll::Ready(None),
             Err(TryRecvError::Empty) => {
-                cx.waker().wake_by_ref();
+                *self.receiver.queue.waker.borrow_mut() = Some(cx.waker().clone());
                 Poll::Pending
             }
         }
+    }
+}
+
+fn wake_receiver<T>(queue: &Arc<Queue<T>>) {
+    if let Some(waker) = queue.waker.borrow_mut().take() {
+        waker.wake();
     }
 }

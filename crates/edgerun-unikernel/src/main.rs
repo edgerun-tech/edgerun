@@ -95,11 +95,58 @@ fn render_touch_ui(touch: (u16, u16)) {
     target_os = "none",
     feature = "esp32s3-wifi-blob"
 ))]
+type Esp32s3WifiAp = edgerun_platform::esp32s3_wifi::Esp32s3WifiOpenAp<
+    edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio,
+    4,
+>;
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+struct Esp32s3WifiApCell(core::cell::UnsafeCell<core::mem::MaybeUninit<Esp32s3WifiAp>>);
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+unsafe impl Sync for Esp32s3WifiApCell {}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+impl Esp32s3WifiApCell {
+    const fn new() -> Self {
+        Self(core::cell::UnsafeCell::new(core::mem::MaybeUninit::uninit()))
+    }
+
+    unsafe fn init(&self, ap: Esp32s3WifiAp) -> &'static mut Esp32s3WifiAp {
+        unsafe { (&mut *self.0.get()).write(ap) }
+    }
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+static ESP32S3_WIFI_AP: Esp32s3WifiApCell = Esp32s3WifiApCell::new();
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+#[inline(never)]
 fn try_start_esp32s3_wifi_ap() {
-    use edgerun_platform::esp32s3_wifi::Esp32s3WifiOpenAp;
     use edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio;
     use edgerun_wifi::ieee80211::{MacAddr, OpenApConfig};
 
+    rt::log::log(1, "ESP32-S3 WiFi AP start begin");
     let config = match OpenApConfig::new(
         MacAddr::new([0x02, 0xed, 0x67, 0x75, 0x6e, 0x01]),
         b"edgerun-ac",
@@ -107,16 +154,23 @@ fn try_start_esp32s3_wifi_ap() {
     ) {
         Ok(config) => config,
         Err(_) => {
-            rt::log::info!("ESP32-S3 WiFi AP config failed");
+            rt::log::log(3, "ESP32-S3 WiFi AP config failed");
             return;
         }
     };
 
-    let mut ap =
-        Esp32s3WifiOpenAp::<EspressifPromiscRadio, 4>::new(EspressifPromiscRadio::new(), config);
+    let ap = unsafe {
+        ESP32S3_WIFI_AP.init(Esp32s3WifiAp::new(EspressifPromiscRadio::new(), config))
+    };
     match ap.start() {
-        Ok(()) => rt::log::info!("ESP32-S3 WiFi AP start queued"),
-        Err(error) => rt::log::info!("ESP32-S3 WiFi AP start failed: {:?}", error),
+        Ok(()) => rt::log::log(1, "ESP32-S3 WiFi AP start queued"),
+        Err(_) => match EspressifPromiscRadio::last_start_status() {
+            12289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: channel not initialized"),
+            13289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: filter not initialized"),
+            14289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: callback not initialized"),
+            15289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: promiscuous not initialized"),
+            _ => rt::log::log(3, "ESP32-S3 WiFi AP start failed"),
+        },
     }
 }
 
