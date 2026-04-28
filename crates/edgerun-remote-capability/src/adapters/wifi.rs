@@ -13,8 +13,8 @@ use edgerun_wifi::{
 };
 
 use crate::adapters::common::{
-    decode_optional_string_field, decode_string_field, encode_optional_string_field,
-    encode_string_field, stream_oriented_error,
+    decode_count_u32, decode_optional_string_field, decode_string_field, encode_count_u32,
+    encode_optional_string_field, encode_string_field, stream_oriented_error,
 };
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
@@ -72,7 +72,7 @@ fn wifi_interface_mode_from_u8(v: u8) -> Result<WifiInterfaceMode, CapabilityErr
 
 pub fn encode_wifi_scan_result(scan: &WifiScanResult) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(&(scan.observations.len() as u32).to_le_bytes());
+    encode_count_u32(scan.observations.len(), &mut out);
     for observation in &scan.observations {
         encode_string_field(&observation.interface_name, &mut out);
         encode_optional_string_field(&observation.ssid, &mut out);
@@ -96,14 +96,8 @@ pub fn encode_wifi_scan_result(scan: &WifiScanResult) -> Vec<u8> {
 }
 
 pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, CapabilityError> {
-    if bytes.len() < 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote wifi scan payload too short",
-        ));
-    }
     let mut cursor = 0usize;
-    let count = read_u32_le(bytes, cursor) as usize;
-    cursor += 4;
+    let count = decode_count_u32(bytes, &mut cursor, "remote wifi scan payload too short")?;
     let mut observations = Vec::with_capacity(count);
     for _ in 0..count {
         let interface_name = decode_string_field(bytes, &mut cursor)?;

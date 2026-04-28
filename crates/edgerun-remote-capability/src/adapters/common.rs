@@ -1,5 +1,6 @@
 use crate::prelude::v1::*;
 use edgerun_capabilities::CapabilityError;
+use edgerun_encoding::byteorder::read_u32_le;
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 
 use crate::protocol::RemoteInvocationResult;
@@ -53,6 +54,23 @@ pub(super) fn decode_byte_field(
 ) -> Result<Vec<u8>, CapabilityError> {
     edgerun_encoding::string_field::decode_bytes_u32(bytes, cursor)
         .map_err(|_| CapabilityError::InvalidRequest("remote byte field decode failed"))
+}
+
+pub(super) fn encode_count_u32(count: usize, out: &mut Vec<u8>) {
+    out.extend_from_slice(&(count as u32).to_le_bytes());
+}
+
+pub(super) fn decode_count_u32(
+    bytes: &[u8],
+    cursor: &mut usize,
+    label: &'static str,
+) -> Result<usize, CapabilityError> {
+    if bytes.len().saturating_sub(*cursor) < 4 {
+        return Err(CapabilityError::InvalidRequest(label));
+    }
+    let count = read_u32_le(bytes, *cursor) as usize;
+    *cursor += 4;
+    Ok(count)
 }
 
 pub(super) fn stream_oriented_error(

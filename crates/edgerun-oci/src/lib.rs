@@ -217,11 +217,13 @@ pub use state::{
 pub use syscalls::*;
 #[cfg(feature = "json")]
 pub use tar_layer::{
-    apply_uncompressed_tar_layer, apply_validated_tar_layer, apply_validated_tar_layer_sha256,
+    apply_uncompressed_tar_layer, apply_uncompressed_tar_layer_streaming,
+    apply_validated_tar_layer, apply_validated_tar_layer_sha256,
     apply_validated_uncompressed_tar_layer, decompress_gzip_layer, decompress_zstd_layer,
     layer_compression, parse_oci_whiteout, validate_and_decode_tar_layer,
     validate_and_decode_tar_layer_sha256, DecodedTarLayer, OciLayerCompression, OciWhiteout,
     TarEntry, TarEntryKind, TarLayerApplyError, TarLayerApplyReport, TarLayerError, TarLayerSink,
+    UncompressedTarStream,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use userns::drop_capabilities;

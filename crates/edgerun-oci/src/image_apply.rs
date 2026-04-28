@@ -8,8 +8,9 @@ use crate::layer_pipeline::{
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 use crate::tar_layer::{
-    apply_uncompressed_tar_layer, layer_compression, validate_and_decode_tar_layer,
-    OciLayerCompression, TarLayerApplyError, TarLayerApplyReport, TarLayerSink,
+    apply_uncompressed_tar_layer, apply_uncompressed_tar_layer_streaming, layer_compression,
+    validate_and_decode_tar_layer, OciLayerCompression, TarLayerApplyError, TarLayerApplyReport,
+    TarLayerSink,
 };
 use core::fmt;
 
@@ -184,7 +185,7 @@ where
         if let Some(expected_diff_id) = plan.diff_ids.get(index) {
             validate_diff_id(index, expected_diff_id, blob, digest_for_layer(descriptor))?;
         }
-        let entries = apply_uncompressed_tar_layer(blob, sink).map_err(|error| {
+        let entries = apply_uncompressed_tar_layer_streaming([blob], sink).map_err(|error| {
             BareImageApplyError::Layer {
                 index,
                 error: TarLayerApplyError::Tar(error),

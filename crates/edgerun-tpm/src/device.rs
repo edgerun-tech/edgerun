@@ -13,6 +13,7 @@ use crate::wire::parse::{
     parse_start_auth_session_response,
 };
 use crate::wire::{read_u16, read_u32};
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
 
 /// Generic TPM device wrapping any transport.
 pub struct TpmDevice<T> {
@@ -152,8 +153,8 @@ impl<T: TpmTransport> TpmDevice<T> {
         let result = if response.len() < 10 {
             Err(TpmError::TpmResponseCode(0xffff_fffc))
         } else {
-            let size = u32::from_be_bytes([response[2], response[3], response[4], response[5]]);
-            let code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+            let size = read_u32_be(&response, 2);
+            let code = read_u32_be(&response, 6);
             if size as usize != response.len() {
                 Err(TpmError::TpmResponseCode(0xffff_fffc))
             } else if code == TPM_RC_SUCCESS || code == 0x100 || code == 0x120 {
@@ -178,7 +179,7 @@ impl<T: FixedTpmTransport + TpmTransport> TpmDevice<T> {
             return 0xffff_fffc;
         }
 
-        u32::from_be_bytes([response[6], response[7], response[8], response[9]])
+        read_u32_be(response, 6)
     }
 
     /// Send TPM2_Startup and return only the raw response code.
@@ -288,12 +289,11 @@ impl<T: FixedTpmTransport + TpmTransport> TpmDevice<T> {
         if response_len < 12 {
             return 0;
         }
-        let response_code =
-            u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+        let response_code = read_u32_be(&response, 6);
         if response_code != TPM_RC_SUCCESS {
             return 0;
         }
-        let random_len = u16::from_be_bytes([response[10], response[11]]) as usize;
+        let random_len = read_u16_be(&response, 10) as usize;
         if 12 + random_len > response_len || random_len > out.len() {
             return 0;
         }
@@ -388,13 +388,13 @@ impl<T: FixedTpmTransport + TpmTransport> TpmDevice<T> {
                 "CreatePrimary: outPublic too short".into(),
             ));
         }
-        let pub_type = u16::from_be_bytes([pub_data[0], pub_data[1]]);
+        let pub_type = read_u16_be(pub_data, 0);
         if pub_type != TPM_ALG_ECC {
             return Err(TpmError::Protocol(format!(
                 "CreatePrimary returned non-ECC key (type={pub_type:#06x})"
             )));
         }
-        let auth_policy_len = u16::from_be_bytes([pub_data[8], pub_data[9]]) as usize;
+        let auth_policy_len = read_u16_be(pub_data, 8) as usize;
         if pub_data.len() < 10 + auth_policy_len {
             return Err(TpmError::Protocol(
                 "CreatePrimary: authPolicy overrun".into(),
@@ -410,8 +410,7 @@ impl<T: FixedTpmTransport + TpmTransport> TpmDevice<T> {
                 "CreatePrimary: unique.x size missing".into(),
             ));
         }
-        let x_len =
-            u16::from_be_bytes([pub_data[unique_offset], pub_data[unique_offset + 1]]) as usize;
+        let x_len = read_u16_be(pub_data, unique_offset) as usize;
         let x_start = unique_offset + 2;
         if pub_data.len() < x_start + 2 {
             return Err(TpmError::Protocol(
@@ -419,7 +418,7 @@ impl<T: FixedTpmTransport + TpmTransport> TpmDevice<T> {
             ));
         }
         let y_start = x_start + x_len;
-        let y_len = u16::from_be_bytes([pub_data[y_start], pub_data[y_start + 1]]) as usize;
+        let y_len = read_u16_be(pub_data, y_start) as usize;
         let public_key_bytes = [
             &pub_data[x_start + 2..x_start + 2 + x_len],
             &pub_data[y_start + 2..y_start + 2 + y_len],
@@ -471,9 +470,9 @@ fn parse_p256_sha256_signature_response(
         return Err(0xffff_fffc);
     }
 
-    let tag = u16::from_be_bytes([response[0], response[1]]);
-    let size = u32::from_be_bytes([response[2], response[3], response[4], response[5]]) as usize;
-    let code = u32::from_be_bytes([response[6], response[7], response[8], response[9]]);
+    let tag = read_u16_be(response, 0);
+    let size = read_u32_be(response, 2) as usize;
+    let code = read_u32_be(response, 6);
     if code != TPM_RC_SUCCESS {
         return Err(code);
     }
@@ -493,9 +492,9 @@ fn parse_p256_sha256_signature_response(
     if response.len().saturating_sub(cursor) < 4 {
         return Err(0xffff_fffc);
     }
-    let scheme = u16::from_be_bytes([response[cursor], response[cursor + 1]]);
+    let scheme = read_u16_be(response, cursor);
     cursor += 2;
-    let hash = u16::from_be_bytes([response[cursor], response[cursor + 1]]);
+    let hash = read_u16_be(response, cursor);
     cursor += 2;
     if scheme != TPM_ALG_ECDSA || hash != TPM_ALG_SHA256 {
         return Err(0xffff_fffa);
@@ -517,7 +516,7 @@ fn read_fixed_tpm2b<'a>(bytes: &'a [u8], cursor: &mut usize) -> Result<&'a [u8],
     if bytes.len().saturating_sub(*cursor) < 2 {
         return Err(0xffff_fffc);
     }
-    let len = u16::from_be_bytes([bytes[*cursor], bytes[*cursor + 1]]) as usize;
+    let len = read_u16_be(bytes, *cursor) as usize;
     *cursor += 2;
     if bytes.len().saturating_sub(*cursor) < len {
         return Err(0xffff_fffc);

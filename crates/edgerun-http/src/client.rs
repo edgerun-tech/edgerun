@@ -240,6 +240,55 @@ impl HttpClient {
         }
     }
 
+    /// Execute an HTTP/1.1 request and pass response body chunks to `on_chunk`.
+    ///
+    /// The returned response contains status and headers, with an empty body.
+    /// This intentionally only targets HTTP/1.1 so callers that need streaming
+    /// can opt into a concrete transport while the unified `execute` API remains
+    /// fully materialized.
+    pub async fn execute_http1_body_chunks<F>(
+        &self,
+        request: &Request,
+        mut on_chunk: F,
+    ) -> Result<Response>
+    where
+        F: FnMut(&[u8]) -> Result<()>,
+    {
+        let uri_str = request.uri().to_string();
+        let mut h1_req = crate::http1::Request::builder()
+            .method(request.method().clone())
+            .uri(&uri_str);
+
+        for (k, v) in request.headers().iter() {
+            h1_req = h1_req.header(k.as_str(), v.as_str());
+        }
+
+        if let Some(body) = request.body() {
+            h1_req = h1_req.body(body.to_vec());
+        }
+
+        let h1_req = h1_req.build()?;
+        {
+            let mut pool = self.inner.pool.lock();
+            pool.set_connect_timeout(self.inner.connect_timeout);
+            pool.set_read_timeout(self.inner.read_timeout);
+            pool.set_max_redirects(0);
+            pool.set_follow_redirects(false);
+            pool.set_auto_decompress(false);
+        }
+
+        let h1_resp =
+            ConnectionPool::execute_async_body_chunks(&self.inner.pool, &h1_req, &mut on_chunk)
+                .await?;
+
+        let mut headers = HeaderMap::new();
+        for (k, v) in h1_resp.headers().iter() {
+            let _ = headers.insert(k.as_str(), v.as_str());
+        }
+
+        Ok(Response::from_parts(h1_resp.status(), headers, Vec::new()))
+    }
+
     /// Execute an HTTP/1.1 request using the connection pool.
     async fn execute_http1(&self, request: &Request) -> Result<Response> {
         let uri_str = request.uri().to_string();

@@ -408,6 +408,38 @@ impl ConnectionPool {
         }
     }
 
+    /// Execute a single HTTP/1.1 request and pass body bytes to `on_chunk`
+    /// as they are read. The returned response contains status and headers,
+    /// with an empty body.
+    pub async fn execute_async_body_chunks<F>(
+        pool: &Arc<Mutex<Self>>,
+        request: &Request,
+        mut on_chunk: F,
+    ) -> Result<Response>
+    where
+        F: FnMut(&[u8]) -> Result<()>,
+    {
+        let uri = request.uri();
+        let is_head = request.method() == &Method::HEAD;
+        let is_https = uri.is_https();
+        let host = uri
+            .host()
+            .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
+        let port = uri.port().unwrap_or(if is_https { 443 } else { 80 });
+        let (ct, dt, rt, sc) = {
+            let p = pool.lock();
+            (
+                p.connect_timeout,
+                p.dns_timeout,
+                p.read_timeout,
+                p.session_cache.clone(),
+            )
+        };
+        let mut conn = Self::create_connection_static(ct, dt, host, port, is_https, &sc).await?;
+        Self::write_request_on_conn(&mut conn, request, false).await?;
+        Self::read_response_body_chunks(&mut conn, is_head, rt, &mut on_chunk).await
+    }
+
     /// Execute a single request, trying the pool first.
     async fn execute_single(
         &mut self,
@@ -581,7 +613,20 @@ impl ConnectionPool {
         auto_decompress: bool,
         read_timeout: Duration,
     ) -> Result<(Response, PooledConn)> {
-        // Build request bytes
+        Self::write_request_on_conn(&mut conn, request, auto_decompress).await?;
+
+        // Read response
+        let response = Self::read_response(&mut conn, is_head, read_timeout).await?;
+
+        // Connection is still alive
+        Ok((response, conn))
+    }
+
+    async fn write_request_on_conn(
+        conn: &mut PooledConn,
+        request: &Request,
+        auto_decompress: bool,
+    ) -> Result<()> {
         let mut request_bytes = request.to_http_bytes();
 
         // Add Accept-Encoding if auto_decompress
@@ -601,13 +646,7 @@ impl ConnectionPool {
         // Write request
         conn.write_request(&request_bytes)
             .await
-            .map_err(Error::Network)?;
-
-        // Read response
-        let response = Self::read_response(&mut conn, is_head, read_timeout).await?;
-
-        // Connection is still alive
-        Ok((response, conn))
+            .map_err(Error::Network)
     }
 
     /// Try a request on a connection. Returns (response, conn) on success.
@@ -905,6 +944,98 @@ impl ConnectionPool {
         Ok(Response::from_parts(status, headers, body))
     }
 
+    async fn read_response_body_chunks<F>(
+        conn: &mut PooledConn,
+        is_head: bool,
+        read_timeout: Duration,
+        on_chunk: &mut F,
+    ) -> Result<Response>
+    where
+        F: FnMut(&[u8]) -> Result<()>,
+    {
+        let status_line = Self::read_line_with_timeout(conn, read_timeout)
+            .await?
+            .ok_or_else(|| {
+                Error::InvalidResponse("Unexpected EOF reading status line".to_string())
+            })?;
+
+        let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
+        if parts.len() < 2 {
+            return Err(Error::InvalidResponse("Invalid status line".to_string()));
+        }
+        let status_code = parts[1]
+            .parse::<u16>()
+            .map_err(|_| Error::InvalidResponse("Invalid status code".to_string()))?;
+        let status = StatusCode::new(status_code).map_err(Error::InvalidResponse)?;
+
+        let mut headers = HeaderMap::new();
+        loop {
+            let line = Self::read_line_with_timeout(conn, read_timeout)
+                .await?
+                .ok_or_else(|| {
+                    Error::InvalidResponse("Unexpected EOF reading headers".to_string())
+                })?;
+            if line.is_empty() {
+                break;
+            }
+            if let Some(colon) = line.find(':') {
+                let name = line[..colon].trim();
+                let value = line[colon + 1..].trim();
+                if !name.is_empty() {
+                    let _ = headers.insert(name, value);
+                }
+            }
+        }
+
+        let status_code_val = status.as_u16();
+        if is_head || status_code_val < 200 || status_code_val == 204 || status_code_val == 304 {
+            return Ok(Response::from_parts(status, headers, Vec::new()));
+        }
+
+        let is_chunked = headers
+            .get("transfer-encoding")
+            .map(|v| v.as_str().to_lowercase())
+            .is_some_and(|v| v.contains("chunked"));
+        let content_length = headers
+            .get("content-length")
+            .and_then(|v| v.as_str().parse::<usize>().ok());
+
+        if (300..400).contains(&status_code_val) && !is_chunked && content_length.is_none() {
+            return Ok(Response::from_parts(status, headers, Vec::new()));
+        }
+
+        if is_chunked {
+            Self::read_chunked_body_chunks(conn, read_timeout, on_chunk).await?;
+        } else if let Some(len) = content_length {
+            let mut remaining = len;
+            let mut buf = [0u8; 8192];
+            while remaining > 0 {
+                let to_read = remaining.min(buf.len());
+                let n = Self::read_with_timeout(conn, &mut buf[..to_read], read_timeout).await?;
+                if n == 0 {
+                    break;
+                }
+                on_chunk(&buf[..n])?;
+                remaining -= n;
+            }
+        } else {
+            let mut buf = [0u8; 8192];
+            loop {
+                let n = match Self::read_with_timeout(conn, &mut buf, read_timeout).await {
+                    Ok(n) => n,
+                    Err(Error::Timeout) => break,
+                    Err(e) => return Err(e),
+                };
+                if n == 0 {
+                    break;
+                }
+                on_chunk(&buf[..n])?;
+            }
+        }
+
+        Ok(Response::from_parts(status, headers, Vec::new()))
+    }
+
     /// Read a chunked transfer-encoded body.
     async fn read_chunked_body(conn: &mut PooledConn, read_timeout: Duration) -> Result<Vec<u8>> {
         let mut body = Vec::new();
@@ -966,6 +1097,70 @@ impl ConnectionPool {
         }
 
         Ok(body)
+    }
+
+    async fn read_chunked_body_chunks<F>(
+        conn: &mut PooledConn,
+        read_timeout: Duration,
+        on_chunk: &mut F,
+    ) -> Result<()>
+    where
+        F: FnMut(&[u8]) -> Result<()>,
+    {
+        let mut line_buf = Vec::with_capacity(32);
+
+        loop {
+            line_buf.clear();
+            loop {
+                let mut byte = [0u8; 1];
+                let n = Self::read_with_timeout(conn, &mut byte, read_timeout).await?;
+                if n == 0 {
+                    return Err(Error::InvalidResponse(
+                        "unexpected EOF reading chunk size".into(),
+                    ));
+                }
+                if byte[0] == b'\n' {
+                    break;
+                }
+                line_buf.push(byte[0]);
+            }
+            if line_buf.last() == Some(&b'\r') {
+                line_buf.pop();
+            }
+
+            let size_hex = core::str::from_utf8(&line_buf)
+                .map_err(|_| Error::InvalidResponse("invalid chunk size".into()))?;
+            let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
+            let chunk_size = usize::from_str_radix(size_str, 16)
+                .map_err(|_| Error::InvalidResponse("invalid chunk size".into()))?;
+
+            if chunk_size == 0 {
+                loop {
+                    let line = Self::read_line_with_timeout(conn, read_timeout).await?;
+                    if line.is_none_or(|l| l.is_empty()) {
+                        break;
+                    }
+                }
+                break;
+            }
+
+            let mut remaining = chunk_size;
+            let mut buf = [0u8; 8192];
+            while remaining > 0 {
+                let to_read = remaining.min(buf.len());
+                let n = Self::read_with_timeout(conn, &mut buf[..to_read], read_timeout).await?;
+                if n == 0 {
+                    break;
+                }
+                on_chunk(&buf[..n])?;
+                remaining -= n;
+            }
+
+            let mut crlf = [0u8; 2];
+            let _ = Self::read_with_timeout(conn, &mut crlf, read_timeout).await;
+        }
+
+        Ok(())
     }
 
     /// Resolve a redirect URL relative to the current URL.

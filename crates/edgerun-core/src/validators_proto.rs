@@ -452,12 +452,8 @@ pub fn validate_command_result_payload(payload: &CommandResultPayload) -> Valida
             empty_map(),
         );
     };
-    if issuer.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("CommandResultPayload issuer identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(issuer), "CommandResultPayload issuer") {
+        return result;
     }
     if edgerun_proto::edgerun::v0::stream::CommandDecision::from_i32(payload.decision).is_none_or(
         |decision| decision == edgerun_proto::edgerun::v0::stream::CommandDecision::Unspecified,
@@ -761,6 +757,17 @@ fn validate_identity_ref(
             empty_map(),
         ));
     }
+    if let Some(identity_kind) = identity.identity_kind {
+        if edgerun_proto::edgerun::v0::common::IdentityKind::from_i32(identity_kind).is_none_or(
+            |kind| kind == edgerun_proto::edgerun::v0::common::IdentityKind::Unspecified,
+        ) {
+            return Some(reject(
+                ReasonCode::StructuralInvalid,
+                Value::String(format!("{label} identity_kind is invalid")),
+                empty_map(),
+            ));
+        }
+    }
     None
 }
 
@@ -803,17 +810,22 @@ fn validate_optional_object_ref(
     object: Option<&crate::protocol::ObjectRef>,
     label: &str,
 ) -> Option<ValidationResult> {
-    if object.is_some_and(|object| object.object_id.is_empty()) {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String(format!("{label} object_id is empty")),
-            empty_map(),
-        ));
+    if let Some(object) = object {
+        if let Some(result) = validate_object_ref_fields(object, label) {
+            return Some(result);
+        }
     }
     None
 }
 
 fn validate_required_object_ref(
+    object: &crate::protocol::ObjectRef,
+    label: &str,
+) -> Option<ValidationResult> {
+    validate_object_ref_fields(object, label)
+}
+
+fn validate_object_ref_fields(
     object: &crate::protocol::ObjectRef,
     label: &str,
 ) -> Option<ValidationResult> {
@@ -823,6 +835,17 @@ fn validate_required_object_ref(
             Value::String(format!("{label} object_id is empty")),
             empty_map(),
         ));
+    }
+    if let Some(object_kind) = object.object_kind {
+        if edgerun_proto::edgerun::v0::common::ObjectKind::from_i32(object_kind)
+            .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified)
+        {
+            return Some(reject(
+                ReasonCode::StructuralInvalid,
+                Value::String(format!("{label} object_kind is invalid")),
+                empty_map(),
+            ));
+        }
     }
     None
 }
@@ -1050,12 +1073,8 @@ pub fn validate_delegation_chain(
                 empty_map(),
             );
         };
-        if issuer.identity_id.is_empty() {
-            return reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("delegation issuer identity is empty".into()),
-                empty_map(),
-            );
+        if let Some(result) = validate_identity_ref(Some(issuer), "delegation issuer") {
+            return result;
         }
         let Some(recipient) = &delegation.recipient else {
             return reject(
@@ -1064,12 +1083,8 @@ pub fn validate_delegation_chain(
                 empty_map(),
             );
         };
-        if recipient.identity_id.is_empty() {
-            return reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("delegation recipient identity is empty".into()),
-                empty_map(),
-            );
+        if let Some(result) = validate_identity_ref(Some(recipient), "delegation recipient") {
+            return result;
         }
         let Some(issued_at) = &delegation.issued_at else {
             return reject(
@@ -1715,12 +1730,8 @@ pub fn validate_snapshot(
             empty_map(),
         );
     };
-    if producer.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("snapshot producer identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(producer), "snapshot producer") {
+        return result;
     }
     let Some(produced_at) = &snapshot.produced_at else {
         return reject(
@@ -2550,12 +2561,8 @@ pub fn validate_query_request_signature(query: &QueryRequest) -> ValidationResul
             empty_map(),
         );
     };
-    if requester.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("query requester identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(requester), "query requester") {
+        return result;
     }
     let Some(key_hint) = &requester.key_hint else {
         return reject(
@@ -2649,12 +2656,8 @@ pub fn validate_query_result_fragment(
             empty_map(),
         );
     };
-    if responder.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("QueryResultFragment responder identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(responder), "QueryResultFragment responder") {
+        return result;
     }
     if !trusted_responders.is_empty()
         && !trusted_responders
@@ -2825,12 +2828,8 @@ pub fn validate_control_change_command(
             empty_map(),
         );
     };
-    if issuer.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("control command issuer identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(issuer), "control command issuer") {
+        return result;
     }
 
     if !current_controllers.is_empty()
@@ -2941,12 +2940,8 @@ pub fn validate_session_hello(
             empty_map(),
         );
     };
-    if initiator.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("SessionHello initiator identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(initiator), "SessionHello initiator") {
+        return result;
     }
     if hello.supported_protocol_versions.is_empty() {
         return reject(
@@ -3053,12 +3048,8 @@ pub fn validate_session_accept(
             empty_map(),
         );
     };
-    if responder.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("SessionAccept responder identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(responder), "SessionAccept responder") {
+        return result;
     }
     if accept_msg.selected_protocol_version == 0 {
         return reject(
@@ -3171,12 +3162,8 @@ pub fn validate_relay_envelope(
             empty_map(),
         );
     };
-    if sender.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("RelayEnvelope original_sender identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(sender), "RelayEnvelope original_sender") {
+        return result;
     }
     let Some(recipient) = &envelope.intended_recipient_node else {
         return reject(
@@ -3238,13 +3225,11 @@ pub fn validate_relay_envelope(
         }
     }
 
-    for relay in &envelope.relay_chain {
-        if relay.identity_id.is_empty() {
-            return reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("RelayEnvelope relay_chain identity is empty".into()),
-                empty_map(),
-            );
+    for (index, relay) in envelope.relay_chain.iter().enumerate() {
+        if let Some(result) =
+            validate_identity_ref(Some(relay), &format!("RelayEnvelope relay_chain[{index}]"))
+        {
+            return result;
         }
     }
 
@@ -3347,12 +3332,8 @@ pub fn validate_assurance_claim(
             empty_map(),
         );
     };
-    if attester.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("AssuranceClaim attester identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(attester), "AssuranceClaim attester") {
+        return result;
     }
     if !trusted_attesters.is_empty()
         && !trusted_attesters
@@ -3567,12 +3548,8 @@ pub fn validate_revocation_record(
             empty_map(),
         );
     };
-    if issuer.identity_id.is_empty() {
-        return reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("RevocationRecord issuer identity is empty".into()),
-            empty_map(),
-        );
+    if let Some(result) = validate_identity_ref(Some(issuer), "RevocationRecord issuer") {
+        return result;
     }
     if !trusted_issuers.is_empty()
         && !trusted_issuers
@@ -4818,6 +4795,24 @@ mod tests {
             identity_kind: None,
             key_hint: None,
         });
+        sign_delegation(&mut deleg, &signing_key);
+
+        let result = validate_delegation_chain(
+            &[deleg],
+            1_700_000_000_000,
+            &std::collections::HashSet::new(),
+        );
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn delegation_invalid_identity_kind_is_rejected() {
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut deleg = valid_delegation(b"root".to_vec(), b"user".to_vec(), &["query"]);
+        deleg.issuer.as_mut().unwrap().identity_kind = Some(999_999);
         sign_delegation(&mut deleg, &signing_key);
 
         let result = validate_delegation_chain(
@@ -6100,6 +6095,22 @@ mod tests {
     }
 
     #[test]
+    fn query_request_invalid_payload_object_kind_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut query = signed_query_request(&key);
+        query.query_payload_object = Some(ObjectRef {
+            object_id: b"payload-object".to_vec(),
+            object_kind: Some(0),
+        });
+        sign_query_request(&mut query, &key);
+
+        let result = validate_query_request_signature(&query);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn query_request_empty_target_stream_is_rejected() {
         let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let mut query = signed_query_request(&key);
@@ -6587,6 +6598,18 @@ mod tests {
     }
 
     #[test]
+    fn session_hello_invalid_initiator_kind_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut hello = signed_session_hello(&key);
+        hello.initiator.as_mut().unwrap().identity_kind = Some(0);
+
+        let result = validate_session_hello(&hello, Some(b"target-node"));
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
     fn session_hello_bad_signature_is_rejected() {
         let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let mut hello = signed_session_hello(&key);
@@ -6861,6 +6884,18 @@ mod tests {
         let mut envelope = signed_relay_envelope(&key);
         envelope.payload = None;
         envelope.signature = None;
+
+        let result = validate_relay_envelope(&envelope, Some(b"target-node"), 1_710_000_000_000);
+
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+    }
+
+    #[test]
+    fn relay_envelope_invalid_relay_identity_kind_is_rejected() {
+        let key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let mut envelope = signed_relay_envelope(&key);
+        envelope.relay_chain[0].identity_kind = Some(999_999);
 
         let result = validate_relay_envelope(&envelope, Some(b"target-node"), 1_710_000_000_000);
 

@@ -2,6 +2,7 @@
 #![allow(non_upper_case_globals)]
 
 extern crate alloc;
+use edgerun_encoding::byteorder::{read_u16_be, read_u16_le, read_u32_le};
 
 #[cfg(not(target_os = "none"))]
 extern crate std;
@@ -531,8 +532,8 @@ impl LinuxUsbYubiKey {
             return Err(YubiKeyError::Provider("control transfer failed".into()));
         }
 
-        let vendor_id = u16::from_le_bytes([desc[8], desc[9]]);
-        let product_id = u16::from_le_bytes([desc[10], desc[11]]);
+        let vendor_id = read_u16_le(&desc, 8);
+        let product_id = read_u16_le(&desc, 10);
 
         if vendor_id != YUBIKEY_VENDOR_ID {
             return Err(YubiKeyError::Provider("not a YubiKey".into()));
@@ -624,7 +625,7 @@ impl LinuxUsbYubiKey {
         }
 
         // Read data length (little-endian)
-        let data_len = u32::from_le_bytes([header[1], header[2], header[3], header[4]]) as usize;
+        let data_len = read_u32_le(&header, 1) as usize;
         if data_len > buf.len() {
             return Err(YubiKeyError::Provider(format!(
                 "CCID response too large: {data_len}"
@@ -1010,7 +1011,7 @@ fn parse_apdu_response(bytes: &[u8]) -> Result<YubiKeyApduResponse, YubiKeyError
     let split = bytes.len() - 2;
     Ok(YubiKeyApduResponse {
         data: bytes[..split].to_vec(),
-        status_word: u16::from_be_bytes([bytes[split], bytes[split + 1]]),
+        status_word: read_u16_be(bytes, split),
     })
 }
 

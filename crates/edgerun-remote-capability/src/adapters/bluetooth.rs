@@ -12,9 +12,9 @@ use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityRes
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::{
-    decode_byte_field, decode_optional_string_field, decode_string_field, decode_string_vec,
-    encode_byte_field, encode_optional_string_field, encode_string_field, encode_string_vec,
-    stream_oriented_error,
+    decode_byte_field, decode_count_u32, decode_optional_string_field, decode_string_field,
+    decode_string_vec, encode_byte_field, encode_count_u32, encode_optional_string_field,
+    encode_string_field, encode_string_vec, stream_oriented_error,
 };
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
@@ -129,7 +129,7 @@ fn bluetooth_link_kind_from_u8(v: u8) -> Result<BluetoothLinkKind, CapabilityErr
 }
 
 fn encode_profiles_vec(values: &[BluetoothProfile], out: &mut Vec<u8>) {
-    out.extend_from_slice(&(values.len() as u32).to_le_bytes());
+    encode_count_u32(values.len(), out);
     for value in values {
         out.push(bluetooth_profile_to_u8(*value));
     }
@@ -139,13 +139,7 @@ fn decode_profiles_vec(
     bytes: &[u8],
     cursor: &mut usize,
 ) -> Result<Vec<BluetoothProfile>, CapabilityError> {
-    if bytes.len() < *cursor + 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote bluetooth profile count missing",
-        ));
-    }
-    let count = read_u32_le(bytes, *cursor) as usize;
-    *cursor += 4;
+    let count = decode_count_u32(bytes, cursor, "remote bluetooth profile count missing")?;
     if bytes.len() < *cursor + count {
         return Err(CapabilityError::InvalidRequest(
             "remote bluetooth profiles payload too short",
@@ -163,7 +157,7 @@ fn decode_profiles_vec(
 
 pub fn encode_bluetooth_scan_result(scan: &BluetoothScanResult) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(&(scan.observations.len() as u32).to_le_bytes());
+    encode_count_u32(scan.observations.len(), &mut out);
     for observation in &scan.observations {
         encode_string_field(&observation.device_id, &mut out);
         out.push(bluetooth_transport_kind_to_u8(observation.transport_kind));
@@ -187,14 +181,12 @@ pub fn encode_bluetooth_scan_result(scan: &BluetoothScanResult) -> Vec<u8> {
 }
 
 pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult, CapabilityError> {
-    if bytes.len() < 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote bluetooth scan payload too short",
-        ));
-    }
     let mut cursor = 0usize;
-    let count = read_u32_le(bytes, cursor) as usize;
-    cursor += 4;
+    let count = decode_count_u32(
+        bytes,
+        &mut cursor,
+        "remote bluetooth scan payload too short",
+    )?;
     let mut observations = Vec::with_capacity(count);
     for _ in 0..count {
         let device_id = decode_string_field(bytes, &mut cursor)?;
@@ -282,7 +274,7 @@ pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult,
 
 pub fn encode_bluetooth_connections(connections: &[BluetoothConnectionInfo]) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(&(connections.len() as u32).to_le_bytes());
+    encode_count_u32(connections.len(), &mut out);
     for connection in connections {
         encode_string_field(&connection.device_id, &mut out);
         out.push(bluetooth_transport_kind_to_u8(connection.transport_kind));
@@ -310,14 +302,12 @@ pub fn encode_bluetooth_connections(connections: &[BluetoothConnectionInfo]) -> 
 pub fn decode_bluetooth_connections(
     bytes: &[u8],
 ) -> Result<Vec<BluetoothConnectionInfo>, CapabilityError> {
-    if bytes.len() < 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote bluetooth connections payload too short",
-        ));
-    }
     let mut cursor = 0usize;
-    let count = read_u32_le(bytes, cursor) as usize;
-    cursor += 4;
+    let count = decode_count_u32(
+        bytes,
+        &mut cursor,
+        "remote bluetooth connections payload too short",
+    )?;
     let mut out = Vec::with_capacity(count);
     for _ in 0..count {
         let device_id = decode_string_field(bytes, &mut cursor)?;

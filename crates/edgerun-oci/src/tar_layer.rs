@@ -423,6 +423,149 @@ pub fn apply_uncompressed_tar_layer<S: TarLayerSink>(
     Ok(applied)
 }
 
+pub struct UncompressedTarStream<'a, S: TarLayerSink> {
+    sink: &'a mut S,
+    buffer: Vec<u8>,
+    applied: usize,
+    global: TarEntryOverrides,
+    pending: TarEntryOverrides,
+    finished: bool,
+}
+
+impl<'a, S: TarLayerSink> UncompressedTarStream<'a, S> {
+    pub fn new(sink: &'a mut S) -> Self {
+        Self {
+            sink,
+            buffer: Vec::new(),
+            applied: 0,
+            global: TarEntryOverrides::default(),
+            pending: TarEntryOverrides::default(),
+            finished: false,
+        }
+    }
+
+    pub fn push(&mut self, chunk: &[u8]) -> Result<usize, TarLayerError> {
+        if self.finished {
+            if chunk.iter().any(|byte| *byte != 0) {
+                return Err(TarLayerError::InvalidHeader(
+                    "non-zero data after end-of-archive".into(),
+                ));
+            }
+            return Ok(self.applied);
+        }
+        self.buffer.extend_from_slice(chunk);
+        self.drain_ready_entries()?;
+        Ok(self.applied)
+    }
+
+    pub fn finish(mut self) -> Result<usize, TarLayerError> {
+        self.drain_ready_entries()?;
+        if self.finished || self.buffer.is_empty() {
+            return Ok(self.applied);
+        }
+        if self.buffer.len() < BLOCK_SIZE {
+            return Err(TarLayerError::TruncatedHeader);
+        }
+        Err(TarLayerError::TruncatedHeader)
+    }
+
+    fn drain_ready_entries(&mut self) -> Result<(), TarLayerError> {
+        loop {
+            if self.buffer.len() < BLOCK_SIZE {
+                return Ok(());
+            }
+
+            let header = &self.buffer[..BLOCK_SIZE];
+            if is_zero_block(header) {
+                self.buffer.drain(..BLOCK_SIZE);
+                self.finished = true;
+                if self.buffer.iter().any(|byte| *byte != 0) {
+                    return Err(TarLayerError::InvalidHeader(
+                        "non-zero data after end-of-archive".into(),
+                    ));
+                }
+                self.buffer.clear();
+                return Ok(());
+            }
+
+            let mut entry = parse_header(header)?;
+            let size = entry.size as usize;
+            let padded_size = round_up_to_block(size);
+            let needed = BLOCK_SIZE
+                .checked_add(padded_size)
+                .ok_or_else(|| TarLayerError::InvalidHeader("tar entry size overflow".into()))?;
+            if self.buffer.len() < needed {
+                return Ok(());
+            }
+
+            let payload = &self.buffer[BLOCK_SIZE..BLOCK_SIZE + size];
+            apply_parsed_entry(
+                self.sink,
+                &mut entry,
+                payload,
+                &mut self.global,
+                &mut self.pending,
+                &mut self.applied,
+            )?;
+            self.buffer.drain(..needed);
+        }
+    }
+}
+
+pub fn apply_uncompressed_tar_layer_streaming<'a, I, S>(
+    chunks: I,
+    sink: &mut S,
+) -> Result<usize, TarLayerError>
+where
+    I: IntoIterator<Item = &'a [u8]>,
+    S: TarLayerSink,
+{
+    let mut stream = UncompressedTarStream::new(sink);
+    for chunk in chunks {
+        stream.push(chunk)?;
+    }
+    stream.finish()
+}
+
+fn apply_parsed_entry<S: TarLayerSink>(
+    sink: &mut S,
+    entry: &mut TarEntry,
+    payload: &[u8],
+    global: &mut TarEntryOverrides,
+    pending: &mut TarEntryOverrides,
+    applied: &mut usize,
+) -> Result<(), TarLayerError> {
+    match entry.kind {
+        TarEntryKind::PaxExtended => {
+            pending.merge(parse_pax_overrides(payload)?);
+        }
+        TarEntryKind::PaxGlobal => {
+            global.merge(parse_pax_overrides(payload)?);
+        }
+        TarEntryKind::GnuLongName => {
+            pending.path = Some(parse_long_name(payload)?);
+        }
+        TarEntryKind::GnuLongLink => {
+            pending.link_name = Some(parse_long_name(payload)?);
+        }
+        TarEntryKind::Regular
+        | TarEntryKind::Directory
+        | TarEntryKind::Symlink
+        | TarEntryKind::Hardlink
+        | TarEntryKind::Character
+        | TarEntryKind::Block
+        | TarEntryKind::Fifo => {
+            apply_overrides(entry, global, pending);
+            *pending = TarEntryOverrides::default();
+            validate_entry_paths(entry)?;
+            sink.apply_entry(entry, payload)
+                .map_err(TarLayerError::Sink)?;
+            *applied = applied.saturating_add(1);
+        }
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 struct TarEntryOverrides {
     path: Option<String>,
@@ -799,6 +942,53 @@ mod tests {
         assert_eq!(report.layer.bytes_written, data.len() as u64);
         assert_eq!(sink.entries[0].0.path, "bin/app");
         assert_eq!(sink.entries[0].1, b"run");
+    }
+
+    #[test]
+    fn streams_uncompressed_tar_across_arbitrary_chunks() {
+        let data = tar(vec![
+            tar_entry("etc/hostname", b'0', b"edge"),
+            tar_entry("bin/app", b'0', b"run"),
+        ]);
+        let chunks: Vec<&[u8]> = data.chunks(137).collect();
+        let mut sink = CollectSink::default();
+
+        let count = apply_uncompressed_tar_layer_streaming(chunks, &mut sink).unwrap();
+
+        assert_eq!(count, 2);
+        assert_eq!(sink.entries[0].0.path, "etc/hostname");
+        assert_eq!(sink.entries[0].1, b"edge");
+        assert_eq!(sink.entries[1].0.path, "bin/app");
+        assert_eq!(sink.entries[1].1, b"run");
+    }
+
+    #[test]
+    fn streaming_tar_preserves_pax_overrides() {
+        let mut pax = Vec::new();
+        pax.extend_from_slice(&pax_record("path", "very/long/path/from/pax"));
+        let data = tar(vec![
+            tar_entry("pax", b'x', &pax),
+            tar_entry("short", b'0', b"body"),
+        ]);
+        let mut stream_sink = CollectSink::default();
+        let chunks: Vec<&[u8]> = data.chunks(211).collect();
+
+        let count = apply_uncompressed_tar_layer_streaming(chunks, &mut stream_sink).unwrap();
+
+        assert_eq!(count, 1);
+        assert_eq!(stream_sink.entries[0].0.path, "very/long/path/from/pax");
+        assert_eq!(stream_sink.entries[0].1, b"body");
+    }
+
+    #[test]
+    fn streaming_tar_rejects_truncated_header() {
+        let data = vec![0u8; TEST_TAR_BLOCK_SIZE - 1];
+        let mut sink = CollectSink::default();
+
+        let error =
+            apply_uncompressed_tar_layer_streaming([data.as_slice()], &mut sink).unwrap_err();
+
+        assert_eq!(error, TarLayerError::TruncatedHeader);
     }
 
     #[test]
