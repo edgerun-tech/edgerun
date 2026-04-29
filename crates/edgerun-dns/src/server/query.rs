@@ -51,7 +51,7 @@ pub async fn handle_query(wire: &[u8], state: &ServerState) -> Result<(Vec<u8>, 
     match query.header.opcode {
         DnsOpcode::Query => handle_standard_query(&query, wire, state).await,
         DnsOpcode::Notify => handle_notify_query(&query).await,
-        DnsOpcode::Update => handle_update_query(&query, state).await,
+        DnsOpcode::Update => handle_update_query(&query).await,
         DnsOpcode::IQuery | DnsOpcode::Status => Ok((
             DnsMessage::response(query.header.id, DnsResponseCode::NotImp, Vec::new()).to_wire(),
             false,
@@ -78,33 +78,11 @@ async fn handle_standard_query(
     };
 
     if question.qtype == DnsRecordType::AXFR {
-        let zones_guard = state.zones.read().await;
-        let qname = question.name.to_lowercase();
-        let zone = zones_guard.get(&qname).cloned();
-        drop(zones_guard);
-
-        if let Some(zone) = zone {
-            match crate::axfr::handle_axfr(query, &zone) {
-                Ok(messages) => {
-                    // Return the first message (SOA envelope); remaining messages
-                    // are handled by the TCP handler for multi-message responses.
-                    let wire = messages[0].to_wire();
-                    return Ok((wire, true)); // needs TCP for full transfer
-                }
-                Err(rcode) => {
-                    return Ok((
-                        DnsMessage::response(query.header.id, rcode, Vec::new()).to_wire(),
-                        false,
-                    ));
-                }
-            }
-        } else {
-            return Ok((
-                DnsMessage::response(query.header.id, DnsResponseCode::NotAuth, Vec::new())
-                    .to_wire(),
-                false,
-            ));
-        }
+        edgerun_log::warn!("edgerun-dns: refused AXFR for {}", question.name);
+        return Ok((
+            DnsMessage::response(query.header.id, DnsResponseCode::Refused, Vec::new()).to_wire(),
+            false,
+        ));
     }
 
     let qname = question.name.to_lowercase();
@@ -225,7 +203,9 @@ fn find_negative_response(
             }
             return Some((DnsResponseCode::NoError, authority));
         }
-        if let Some(mut proof) = find_nsec_covering(zone, qname) {
+        if let Some(mut proof) = all_nsec_proofs(zone) {
+            authority.append(&mut proof);
+        } else if let Some(mut proof) = find_nsec_covering(zone, qname) {
             authority.append(&mut proof);
         }
         return Some((DnsResponseCode::NXDomain, authority));
@@ -241,23 +221,62 @@ fn find_nsec_covering(zone: &DnsZone, qname: &str) -> Option<Vec<DnsRecord>> {
         .filter(|name| zone.resolve(name, DnsRecordType::NSEC).is_some())
         .map(str::to_string)
         .collect();
-    names.sort();
+    names.sort_by(|left, right| dnssec_canonical_name_cmp(left, right));
     names.dedup();
     if names.is_empty() {
         return None;
     }
     for (index, owner) in names.iter().enumerate() {
         let next = &names[(index + 1) % names.len()];
-        let covers = if owner < next {
-            owner.as_str() < qname.as_str() && qname.as_str() < next.as_str()
+        let owner_to_next = dnssec_canonical_name_cmp(owner, next);
+        let owner_to_qname = dnssec_canonical_name_cmp(owner, &qname);
+        let qname_to_next = dnssec_canonical_name_cmp(&qname, next);
+        let covers = if owner_to_next == core::cmp::Ordering::Less {
+            owner_to_qname == core::cmp::Ordering::Less
+                && qname_to_next == core::cmp::Ordering::Less
         } else {
-            owner.as_str() < qname.as_str() || qname.as_str() < next.as_str()
+            owner_to_qname == core::cmp::Ordering::Less
+                || qname_to_next == core::cmp::Ordering::Less
         };
         if covers || owner == &qname {
             return zone.resolve(owner, DnsRecordType::NSEC);
         }
     }
     zone.resolve(names.last()?, DnsRecordType::NSEC)
+}
+
+fn all_nsec_proofs(zone: &DnsZone) -> Option<Vec<DnsRecord>> {
+    let mut proofs = Vec::new();
+    for name in zone.names() {
+        if let Some(mut records) = zone.resolve(name, DnsRecordType::NSEC) {
+            proofs.append(&mut records);
+        }
+    }
+    if proofs.is_empty() {
+        None
+    } else {
+        Some(proofs)
+    }
+}
+
+fn dnssec_canonical_name_cmp(left: &str, right: &str) -> core::cmp::Ordering {
+    let left_lower = left.trim_end_matches('.').to_ascii_lowercase();
+    let right_lower = right.trim_end_matches('.').to_ascii_lowercase();
+    let left_labels: Vec<&str> = left_lower.split('.').collect();
+    let right_labels: Vec<&str> = right_lower.split('.').collect();
+    let mut left_iter = left_labels.iter().rev();
+    let mut right_iter = right_labels.iter().rev();
+    loop {
+        match (left_iter.next(), right_iter.next()) {
+            (Some(left), Some(right)) => match left.as_bytes().cmp(right.as_bytes()) {
+                core::cmp::Ordering::Equal => {}
+                order => return order,
+            },
+            (None, Some(_)) => return core::cmp::Ordering::Less,
+            (Some(_), None) => return core::cmp::Ordering::Greater,
+            (None, None) => return core::cmp::Ordering::Equal,
+        }
+    }
 }
 
 /// Forward a query to an upstream resolver and return the raw response.
@@ -351,40 +370,71 @@ async fn handle_notify_query(query: &DnsMessage) -> Result<(Vec<u8>, bool), Pars
 }
 
 /// Handle a DNS Update query (RFC 2136).
-async fn handle_update_query(
-    query: &DnsMessage,
-    state: &ServerState,
-) -> Result<(Vec<u8>, bool), ParseError> {
-    let zone_question = match query.questions.first() {
-        Some(q) => q,
-        None => {
-            return Ok((
-                DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new())
-                    .to_wire(),
-                false,
-            ))
+async fn handle_update_query(query: &DnsMessage) -> Result<(Vec<u8>, bool), ParseError> {
+    edgerun_log::warn!("edgerun-dns: refused unauthenticated DNS UPDATE");
+    Ok((
+        DnsMessage::response(query.header.id, DnsResponseCode::Refused, Vec::new()).to_wire(),
+        false,
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_state() -> ServerState {
+        ServerState {
+            zones: Arc::new(crate::compat::RwLock::new(HashMap::new())),
+            default_ttl: 3600,
+            forward_to: Arc::new(crate::compat::RwLock::new(None)),
         }
-    };
+    }
 
-    let zone_name = zone_question.name.to_lowercase();
+    #[test]
+    fn axfr_is_refused_by_default() {
+        let rt = edgerun_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let state = test_state();
+            let mut zone = DnsZone::new("example.com");
+            zone.add_soa("ns1.example.com", "admin.example.com");
+            state
+                .zones
+                .write()
+                .await
+                .insert("example.com".to_string(), zone);
 
-    // We need to hold the write lock to modify the zone
-    // Since we can't hold it across the axfr::handle_update call easily,
-    // we do the update inline here.
-    let mut zones_guard = state.zones.write().await;
-    let zone = zones_guard.get_mut(&zone_name);
+            let query = DnsMessage::query(0x1234, "example.com".to_string(), DnsRecordType::AXFR);
+            let Ok((wire, needs_tcp)) = handle_query(&query.to_wire(), &state).await else {
+                panic!("AXFR query should parse");
+            };
+            let response = DnsMessage::from_wire(&wire).unwrap();
 
-    match zone {
-        Some(zone) => match crate::axfr::handle_update(query, zone, None) {
-            Ok(response) => Ok((response.to_wire(), false)),
-            Err(rcode) => Ok((
-                DnsMessage::response(query.header.id, rcode, Vec::new()).to_wire(),
-                false,
-            )),
-        },
-        None => Ok((
-            DnsMessage::response(query.header.id, DnsResponseCode::NotAuth, Vec::new()).to_wire(),
-            false,
-        )),
+            assert!(!needs_tcp);
+            assert_eq!(response.header.response_code, DnsResponseCode::Refused);
+        });
+    }
+
+    #[test]
+    fn dns_update_is_refused_by_default() {
+        let rt = edgerun_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let state = test_state();
+            let mut query = DnsMessage::query(0x1234, "example.com".to_string(), DnsRecordType::SOA);
+            query.header.opcode = DnsOpcode::Update;
+
+            let Ok((wire, needs_tcp)) = handle_query(&query.to_wire(), &state).await else {
+                panic!("UPDATE query should parse");
+            };
+            let response = DnsMessage::from_wire(&wire).unwrap();
+
+            assert!(!needs_tcp);
+            assert_eq!(response.header.response_code, DnsResponseCode::Refused);
+        });
     }
 }

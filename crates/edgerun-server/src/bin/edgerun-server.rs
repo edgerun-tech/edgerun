@@ -1742,7 +1742,7 @@ fn dnskey_from_signing_key(
 
 fn add_nsec_chain(zone: &mut DnsZone, ttl: u32) {
     let mut names: Vec<String> = zone.names().into_iter().map(str::to_string).collect();
-    names.sort();
+    names.sort_by(|left, right| dnssec_canonical_name_cmp(left, right));
     names.dedup();
     if names.is_empty() {
         return;
@@ -1764,6 +1764,26 @@ fn add_nsec_chain(zone: &mut DnsZone, ttl: u32) {
             edgerun_dns::nsec3_type_bitmap(&types),
             ttl,
         ));
+    }
+}
+
+fn dnssec_canonical_name_cmp(left: &str, right: &str) -> std::cmp::Ordering {
+    let left_lower = left.trim_end_matches('.').to_ascii_lowercase();
+    let right_lower = right.trim_end_matches('.').to_ascii_lowercase();
+    let left_labels: Vec<&str> = left_lower.split('.').collect();
+    let right_labels: Vec<&str> = right_lower.split('.').collect();
+    let mut left_iter = left_labels.iter().rev();
+    let mut right_iter = right_labels.iter().rev();
+    loop {
+        match (left_iter.next(), right_iter.next()) {
+            (Some(left), Some(right)) => match left.as_bytes().cmp(right.as_bytes()) {
+                std::cmp::Ordering::Equal => {}
+                order => return order,
+            },
+            (None, Some(_)) => return std::cmp::Ordering::Less,
+            (Some(_), None) => return std::cmp::Ordering::Greater,
+            (None, None) => return std::cmp::Ordering::Equal,
+        }
     }
 }
 

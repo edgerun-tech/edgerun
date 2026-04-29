@@ -56,8 +56,21 @@ pub async fn udp_recv_loop_with_rate_limiting(
 
         crate::compat::spawn(async move {
             match handle_query(&query_buf, &state).await {
-                Ok((response_wire, _needs_tcp)) => {
-                    let _ = socket.send_to(&response_wire, src).await;
+                Ok((response_wire, needs_tcp)) => {
+                    if needs_tcp {
+                        if let Ok(query) = DnsMessage::from_wire(&query_buf) {
+                            let mut response =
+                                DnsMessage::response(query.header.id, DnsResponseCode::NoError, Vec::new());
+                            response.header.truncated = true;
+                            response.questions = query.questions;
+                            response.header.question_count = response.questions.len() as u16;
+                            let _ = socket.send_to(&response.to_wire(), src).await;
+                        } else {
+                            let _ = socket.send_to(&response_wire, src).await;
+                        }
+                    } else {
+                        let _ = socket.send_to(&response_wire, src).await;
+                    }
                 }
                 Err(ParseError) => {
                     let response = DnsMessage::response(0, DnsResponseCode::FormErr, Vec::new());
