@@ -8,7 +8,7 @@ use solana_program::{
     entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
     msg,
-    program::invoke,
+    program::{invoke, invoke_signed},
     program_error::ProgramError,
     pubkey::Pubkey,
     sysvar::Sysvar,
@@ -29,6 +29,11 @@ const NETWORK_MBIT_HOUR: u64 = 2_000;
 const SECONDS_PER_HOUR: u64 = 3_600;
 const PRICE_CHANGE_GRACE_SECONDS: i64 = 86_400;
 const GIB: u64 = 1024 * 1024 * 1024;
+const ESCROW_AUTHORITY_SEED: &[u8] = b"deployment-escrow";
+const TOKEN_TRANSFER_INSTRUCTION: u8 = 3;
+const TOKEN_ACCOUNT_LEN: usize = 165;
+const TOKEN_ACCOUNT_MINT_OFFSET: usize = 0;
+const TOKEN_ACCOUNT_OWNER_OFFSET: usize = 32;
 
 solana_program::entrypoint!(process_instruction);
 
@@ -56,6 +61,8 @@ pub fn process_instruction(
             burn_rate,
             auto_stop_on_price_increase,
             governance_authority,
+            payment_mint,
+            escrow_token_account,
         } => {
             msg!("DeploymentContract: Initialize");
             initialize(
@@ -72,6 +79,8 @@ pub fn process_instruction(
                 burn_rate,
                 auto_stop_on_price_increase,
                 governance_authority,
+                payment_mint,
+                escrow_token_account,
             )
         }
         instruction::DeploymentInstruction::Start => {
@@ -169,6 +178,8 @@ fn initialize(
     burn_rate: u64,
     auto_stop_on_price_increase: bool,
     governance_authority: [u8; 32],
+    payment_mint: [u8; 32],
+    escrow_token_account: [u8; 32],
 ) -> ProgramResult {
     let account_iter = &mut accounts.iter();
     let deployment_account = next_account_info(account_iter)?;
@@ -194,8 +205,45 @@ fn initialize(
         return Err(DeploymentError::Unauthorized.into());
     }
 
+    let payment_mint = Pubkey::new_from_array(payment_mint);
+    let escrow_token_account = Pubkey::new_from_array(escrow_token_account);
+    let token_escrow_enabled =
+        payment_mint != Pubkey::default() || escrow_token_account != Pubkey::default();
+    if token_escrow_enabled {
+        if payment_mint == Pubkey::default() || escrow_token_account == Pubkey::default() {
+            return Err(ProgramError::InvalidArgument);
+        }
+        let owner_token_account = next_account_info(account_iter)?;
+        let escrow_token_info = next_account_info(account_iter)?;
+        let token_program = next_account_info(account_iter)?;
+        if *escrow_token_info.key != escrow_token_account {
+            return Err(ProgramError::InvalidArgument);
+        }
+        let (escrow_authority, _) = escrow_authority(program_id, deployment_account.key);
+        validate_token_account(
+            owner_token_account,
+            token_program.key,
+            &payment_mint,
+            owner_account.key,
+        )?;
+        validate_token_account(
+            escrow_token_info,
+            token_program.key,
+            &payment_mint,
+            &escrow_authority,
+        )?;
+        transfer_spl_tokens(
+            owner_token_account,
+            escrow_token_info,
+            owner_account,
+            token_program,
+            deposit,
+        )?;
+    } else {
+        transfer_from_signer(owner_account, deployment_account, system_program, deposit)?;
+    }
+
     let now = Clock::get()?.unix_timestamp;
-    transfer_from_signer(owner_account, deployment_account, system_program, deposit)?;
     let governance_authority = Pubkey::new_from_array(governance_authority);
     let governance_authority = if governance_authority == Pubkey::default() {
         *owner_account.key
@@ -239,6 +287,8 @@ fn initialize(
         provider_earned: 0,
         buyer_refunded: 0,
         dao_slashed: 0,
+        payment_mint,
+        escrow_token_account,
     };
 
     let mut data = deployment_account.try_borrow_mut_data()?;
@@ -371,11 +421,38 @@ fn stop(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     apply_elapsed_burn_if_running(&mut deployment)?;
     let provider_payout = deployment.spent;
     let refund = deployment.deposit.saturating_sub(deployment.spent);
-    if provider_payout > 0 {
-        transfer_lamports(deployment_account, provider_payout_account, provider_payout)?;
-    }
-    if refund > 0 {
-        transfer_lamports(deployment_account, owner_account, refund)?;
+    if uses_token_escrow(&deployment) {
+        let escrow_token_account = next_account_info(account_iter)?;
+        let escrow_authority_account = next_account_info(account_iter)?;
+        let buyer_refund_account = next_account_info(account_iter)?;
+        let token_program = next_account_info(account_iter)?;
+        transfer_from_escrow(
+            program_id,
+            deployment_account,
+            &deployment,
+            escrow_token_account,
+            escrow_authority_account,
+            provider_payout_account,
+            token_program,
+            provider_payout,
+        )?;
+        transfer_from_escrow(
+            program_id,
+            deployment_account,
+            &deployment,
+            escrow_token_account,
+            escrow_authority_account,
+            buyer_refund_account,
+            token_program,
+            refund,
+        )?;
+    } else {
+        if provider_payout > 0 {
+            transfer_lamports(deployment_account, provider_payout_account, provider_payout)?;
+        }
+        if refund > 0 {
+            transfer_lamports(deployment_account, owner_account, refund)?;
+        }
     }
 
     deployment.status = DeploymentStatus::Stopped as u8;
@@ -455,9 +532,45 @@ fn resolve(
         let refund_account = next_account_info(account_iter)?;
         let provider_payout_account = next_account_info(account_iter)?;
         let slash_account = next_account_info(account_iter)?;
-        transfer_lamports(deployment_account, refund_account, refund_to_buyer)?;
-        transfer_lamports(deployment_account, provider_payout_account, provider_payout)?;
-        transfer_lamports(deployment_account, slash_account, slash_to_dao)?;
+        if uses_token_escrow(&deployment) {
+            let escrow_token_account = next_account_info(account_iter)?;
+            let escrow_authority_account = next_account_info(account_iter)?;
+            let token_program = next_account_info(account_iter)?;
+            transfer_from_escrow(
+                program_id,
+                deployment_account,
+                &deployment,
+                escrow_token_account,
+                escrow_authority_account,
+                refund_account,
+                token_program,
+                refund_to_buyer,
+            )?;
+            transfer_from_escrow(
+                program_id,
+                deployment_account,
+                &deployment,
+                escrow_token_account,
+                escrow_authority_account,
+                provider_payout_account,
+                token_program,
+                provider_payout,
+            )?;
+            transfer_from_escrow(
+                program_id,
+                deployment_account,
+                &deployment,
+                escrow_token_account,
+                escrow_authority_account,
+                slash_account,
+                token_program,
+                slash_to_dao,
+            )?;
+        } else {
+            transfer_lamports(deployment_account, refund_account, refund_to_buyer)?;
+            transfer_lamports(deployment_account, provider_payout_account, provider_payout)?;
+            transfer_lamports(deployment_account, slash_account, slash_to_dao)?;
+        }
     }
 
     deployment.status = DeploymentStatus::Stopped as u8;
@@ -863,6 +976,15 @@ fn governance_authority(deployment: &Deployment) -> Pubkey {
     }
 }
 
+fn uses_token_escrow(deployment: &Deployment) -> bool {
+    deployment.payment_mint != Pubkey::default()
+        && deployment.escrow_token_account != Pubkey::default()
+}
+
+fn escrow_authority(program_id: &Pubkey, deployment: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[ESCROW_AUTHORITY_SEED, deployment.as_ref()], program_id)
+}
+
 fn require_uninitialized_deployment(data: &[u8]) -> ProgramResult {
     let deployment = Deployment::unpack(data)?;
     if deployment.owner != Pubkey::default()
@@ -872,6 +994,139 @@ fn require_uninitialized_deployment(data: &[u8]) -> ProgramResult {
         return Err(ProgramError::AccountAlreadyInitialized);
     }
     Ok(())
+}
+
+fn validate_token_account(
+    account: &AccountInfo,
+    token_program: &Pubkey,
+    expected_mint: &Pubkey,
+    expected_owner: &Pubkey,
+) -> ProgramResult {
+    validate_token_account_mint(account, token_program, expected_mint)?;
+    let data = account.try_borrow_data()?;
+    if &data[TOKEN_ACCOUNT_OWNER_OFFSET..TOKEN_ACCOUNT_OWNER_OFFSET + 32] != expected_owner.as_ref()
+    {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    Ok(())
+}
+
+fn validate_token_account_mint(
+    account: &AccountInfo,
+    token_program: &Pubkey,
+    expected_mint: &Pubkey,
+) -> ProgramResult {
+    if account.owner != token_program {
+        return Err(ProgramError::IncorrectProgramId);
+    }
+    let data = account.try_borrow_data()?;
+    if data.len() < TOKEN_ACCOUNT_LEN {
+        return Err(ProgramError::AccountDataTooSmall);
+    }
+    if &data[TOKEN_ACCOUNT_MINT_OFFSET..TOKEN_ACCOUNT_MINT_OFFSET + 32] != expected_mint.as_ref() {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    Ok(())
+}
+
+fn transfer_spl_tokens<'a>(
+    source: &AccountInfo<'a>,
+    destination: &AccountInfo<'a>,
+    authority: &AccountInfo<'a>,
+    token_program: &AccountInfo<'a>,
+    amount: u64,
+) -> ProgramResult {
+    if amount == 0 {
+        return Ok(());
+    }
+    invoke(
+        &token_transfer_instruction(
+            token_program.key,
+            source.key,
+            destination.key,
+            authority.key,
+            amount,
+        ),
+        &[
+            source.clone(),
+            destination.clone(),
+            authority.clone(),
+            token_program.clone(),
+        ],
+    )
+}
+
+fn transfer_from_escrow<'a>(
+    program_id: &Pubkey,
+    deployment_account: &AccountInfo<'a>,
+    deployment: &Deployment,
+    escrow_token_account: &AccountInfo<'a>,
+    escrow_authority_account: &AccountInfo<'a>,
+    destination: &AccountInfo<'a>,
+    token_program: &AccountInfo<'a>,
+    amount: u64,
+) -> ProgramResult {
+    if amount == 0 {
+        return Ok(());
+    }
+    if *escrow_token_account.key != deployment.escrow_token_account {
+        return Err(ProgramError::InvalidArgument);
+    }
+    let (authority, bump) = escrow_authority(program_id, deployment_account.key);
+    if *escrow_authority_account.key != authority {
+        return Err(ProgramError::InvalidArgument);
+    }
+    validate_token_account(
+        escrow_token_account,
+        token_program.key,
+        &deployment.payment_mint,
+        &authority,
+    )?;
+    validate_token_account_mint(destination, token_program.key, &deployment.payment_mint)?;
+    let bump_seed = [bump];
+    let seeds: &[&[u8]] = &[
+        ESCROW_AUTHORITY_SEED,
+        deployment_account.key.as_ref(),
+        &bump_seed,
+    ];
+    invoke_signed(
+        &token_transfer_instruction(
+            token_program.key,
+            escrow_token_account.key,
+            destination.key,
+            &authority,
+            amount,
+        ),
+        &[
+            escrow_token_account.clone(),
+            destination.clone(),
+            escrow_authority_account.clone(),
+            token_program.clone(),
+        ],
+        &[seeds],
+    )
+}
+
+fn token_transfer_instruction(
+    token_program: &Pubkey,
+    source: &Pubkey,
+    destination: &Pubkey,
+    authority: &Pubkey,
+    amount: u64,
+) -> Instruction {
+    let mut data = Vec::with_capacity(9);
+    data.push(TOKEN_TRANSFER_INSTRUCTION);
+    data.extend_from_slice(&amount.to_le_bytes());
+
+    Instruction {
+        program_id: *token_program,
+        accounts: vec![
+            AccountMeta::new(*source, false),
+            AccountMeta::new(*destination, false),
+            AccountMeta::new_readonly(*authority, true),
+        ],
+        data,
+    }
 }
 
 fn transfer_lamports(from: &AccountInfo, to: &AccountInfo, amount: u64) -> ProgramResult {

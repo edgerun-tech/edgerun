@@ -51,6 +51,8 @@ pub struct Deployment {
     pub provider_earned: u64,
     pub buyer_refunded: u64,
     pub dao_slashed: u64,
+    pub payment_mint: Pubkey,
+    pub escrow_token_account: Pubkey,
 }
 
 impl Deployment {
@@ -110,6 +112,8 @@ impl Default for Deployment {
             provider_earned: 0,
             buyer_refunded: 0,
             dao_slashed: 0,
+            payment_mint: Pubkey::default(),
+            escrow_token_account: Pubkey::default(),
         }
     }
 }
@@ -156,6 +160,8 @@ mod tests {
             provider_earned: 30,
             buyer_refunded: 40,
             dao_slashed: 50,
+            payment_mint: Pubkey::new_unique(),
+            escrow_token_account: Pubkey::new_unique(),
         };
         let mut data = [0u8; SIZE];
 
@@ -181,5 +187,10 @@ mod tests {
         assert_eq!(unpacked.provider_earned, deployment.provider_earned);
         assert_eq!(unpacked.buyer_refunded, deployment.buyer_refunded);
         assert_eq!(unpacked.dao_slashed, deployment.dao_slashed);
+        assert_eq!(unpacked.payment_mint, deployment.payment_mint);
+        assert_eq!(
+            unpacked.escrow_token_account,
+            deployment.escrow_token_account
+        );
     }
 }

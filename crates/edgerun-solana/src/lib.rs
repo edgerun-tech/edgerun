@@ -74,7 +74,7 @@ pub mod signers;
 pub mod solana_types;
 pub mod types;
 
-pub use deployment::DeploymentClient;
+pub use deployment::{DeploymentClient, TokenEscrowAccounts, TokenSettlementAccounts};
 pub use error::SolanaError;
 pub use provider_registry::ProviderClient;
 pub use types::{Deployment, DeploymentStatus, Provider, ProviderStatus};

@@ -6,7 +6,7 @@ use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
 use edgerun_http::{HttpClient, HttpVersion};
-use edgerun_json::{JsonValue, json};
+use edgerun_json::{json, JsonValue};
 use std::sync::Arc;
 
 use crate::error::SolanaError;
@@ -15,6 +15,7 @@ use crate::types::{Deployment, DeploymentStatus};
 
 const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
 const DEPLOYMENT_ACCOUNT_SIZE: u64 = 448;
+const ESCROW_AUTHORITY_SEED: &[u8] = b"deployment-escrow";
 
 fn make_instruction(
     program_id: Pubkey,
@@ -42,6 +43,21 @@ pub struct DeploymentClient {
 pub struct DeploymentAccount {
     pub pubkey: Pubkey,
     pub deployment: Deployment,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenEscrowAccounts {
+    pub payment_mint: Pubkey,
+    pub owner_token_account: Pubkey,
+    pub escrow_token_account: Pubkey,
+    pub token_program: Pubkey,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenSettlementAccounts {
+    pub escrow_token_account: Pubkey,
+    pub escrow_authority: Pubkey,
+    pub token_program: Pubkey,
 }
 
 impl DeploymentClient {
@@ -139,6 +155,7 @@ impl DeploymentClient {
         burn_rate: u64,
         auto_stop_on_price_increase: bool,
         governance_authority: [u8; 32],
+        token_escrow: Option<TokenEscrowAccounts>,
     ) -> Instruction {
         let mut encoded = Vec::new();
         encoded.extend_from_slice(&name);
@@ -152,16 +169,21 @@ impl DeploymentClient {
         encoded.extend_from_slice(&burn_rate.to_le_bytes());
         encoded.push(u8::from(auto_stop_on_price_increase));
         encoded.extend_from_slice(&governance_authority);
-        make_instruction(
-            self.program_id,
-            0,
-            &encoded,
-            vec![
-                AccountMeta::new(*deployment_pubkey, false),
-                AccountMeta::new(*owner_pubkey, true),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID),
-            ],
-        )
+        if let Some(token_escrow) = token_escrow {
+            encoded.extend_from_slice(token_escrow.payment_mint.as_bytes());
+            encoded.extend_from_slice(token_escrow.escrow_token_account.as_bytes());
+        }
+        let mut accounts = vec![
+            AccountMeta::new(*deployment_pubkey, false),
+            AccountMeta::new(*owner_pubkey, true),
+            AccountMeta::new_readonly(SYSTEM_PROGRAM_ID),
+        ];
+        if let Some(token_escrow) = token_escrow {
+            accounts.push(AccountMeta::new(token_escrow.owner_token_account, false));
+            accounts.push(AccountMeta::new(token_escrow.escrow_token_account, false));
+            accounts.push(AccountMeta::new_readonly(token_escrow.token_program));
+        }
+        make_instruction(self.program_id, 0, &encoded, accounts)
     }
 
     pub fn deployment_address_with_seed(
@@ -188,6 +210,7 @@ impl DeploymentClient {
         burn_rate: u64,
         auto_stop_on_price_increase: bool,
         governance_authority: [u8; 32],
+        token_escrow: Option<TokenEscrowAccounts>,
     ) -> Result<(Pubkey, String), SolanaError> {
         let deployment_pubkey = self.deployment_address_with_seed(owner_pubkey, seed)?;
         let rent_lamports = self.minimum_balance_for_rent_exemption(DEPLOYMENT_ACCOUNT_SIZE)?;
@@ -214,6 +237,7 @@ impl DeploymentClient {
             burn_rate,
             auto_stop_on_price_increase,
             governance_authority,
+            token_escrow,
         );
         let tx = self
             .send_instructions_signed(&[create_ix, init_ix], owner_pubkey, signer)
@@ -315,6 +339,30 @@ impl DeploymentClient {
         )
     }
 
+    pub fn stop_token_instruction(
+        &self,
+        deployment_pubkey: &Pubkey,
+        owner_pubkey: &Pubkey,
+        provider_payout_token_account: &Pubkey,
+        buyer_refund_token_account: &Pubkey,
+        token_settlement: TokenSettlementAccounts,
+    ) -> Instruction {
+        make_instruction(
+            self.program_id,
+            4,
+            &[],
+            vec![
+                AccountMeta::new(*deployment_pubkey, false),
+                AccountMeta::new(*owner_pubkey, true),
+                AccountMeta::new(*provider_payout_token_account, false),
+                AccountMeta::new(token_settlement.escrow_token_account, false),
+                AccountMeta::new_readonly(token_settlement.escrow_authority),
+                AccountMeta::new(*buyer_refund_token_account, false),
+                AccountMeta::new_readonly(token_settlement.token_program),
+            ],
+        )
+    }
+
     pub fn pause_instruction(
         &self,
         deployment_pubkey: &Pubkey,
@@ -388,6 +436,39 @@ impl DeploymentClient {
                 AccountMeta::new(*refund_pubkey, false),
                 AccountMeta::new(*provider_payout_pubkey, false),
                 AccountMeta::new(*slash_pubkey, false),
+            ],
+        )
+    }
+
+    pub fn resolve_token_instruction(
+        &self,
+        deployment_pubkey: &Pubkey,
+        resolver_pubkey: &Pubkey,
+        refund_token_account: &Pubkey,
+        provider_payout_token_account: &Pubkey,
+        slash_token_account: &Pubkey,
+        token_settlement: TokenSettlementAccounts,
+        refund_to_buyer: u64,
+        provider_payout: u64,
+        slash_to_dao: u64,
+    ) -> Instruction {
+        let mut encoded = Vec::new();
+        encoded.extend_from_slice(&refund_to_buyer.to_le_bytes());
+        encoded.extend_from_slice(&provider_payout.to_le_bytes());
+        encoded.extend_from_slice(&slash_to_dao.to_le_bytes());
+        make_instruction(
+            self.program_id,
+            6,
+            &encoded,
+            vec![
+                AccountMeta::new(*deployment_pubkey, false),
+                AccountMeta::new(*resolver_pubkey, true),
+                AccountMeta::new(*refund_token_account, false),
+                AccountMeta::new(*provider_payout_token_account, false),
+                AccountMeta::new(*slash_token_account, false),
+                AccountMeta::new(token_settlement.escrow_token_account, false),
+                AccountMeta::new_readonly(token_settlement.escrow_authority),
+                AccountMeta::new_readonly(token_settlement.token_program),
             ],
         )
     }
@@ -596,9 +677,59 @@ impl DeploymentClient {
         deployment.deposit.saturating_sub(deployment.spent)
     }
 
+    pub fn escrow_authority(
+        &self,
+        deployment_pubkey: &Pubkey,
+    ) -> Result<(Pubkey, u8), SolanaError> {
+        find_program_address(
+            &[ESCROW_AUTHORITY_SEED, deployment_pubkey.as_bytes()],
+            &self.program_id,
+        )
+    }
+
     pub fn is_active(&self, deployment: &Deployment) -> bool {
         matches!(deployment.status, DeploymentStatus::Running)
     }
+}
+
+pub fn find_program_address(
+    seeds: &[&[u8]],
+    program_id: &Pubkey,
+) -> Result<(Pubkey, u8), SolanaError> {
+    for bump in (0..=u8::MAX).rev() {
+        let bump_seed = [bump];
+        let mut all_seeds = Vec::with_capacity(seeds.len() + 1);
+        all_seeds.extend_from_slice(seeds);
+        all_seeds.push(&bump_seed);
+        if let Ok(address) = create_program_address(&all_seeds, program_id) {
+            return Ok((address, bump));
+        }
+    }
+    Err(SolanaError::Transaction(
+        "unable to find valid program address".to_string(),
+    ))
+}
+
+pub fn create_program_address(seeds: &[&[u8]], program_id: &Pubkey) -> Result<Pubkey, SolanaError> {
+    const PDA_MARKER: &[u8] = b"ProgramDerivedAddress";
+    if seeds.len() > 16 || seeds.iter().any(|seed| seed.len() > 32) {
+        return Err(SolanaError::Transaction(
+            "program address seeds are too large".to_string(),
+        ));
+    }
+    let mut input = Vec::new();
+    for seed in seeds {
+        input.extend_from_slice(seed);
+    }
+    input.extend_from_slice(program_id.as_bytes());
+    input.extend_from_slice(PDA_MARKER);
+    let hash = edgerun_crypto::sha256(&input);
+    if edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&hash).is_ok() {
+        return Err(SolanaError::Transaction(
+            "program address must not be on the ed25519 curve".to_string(),
+        ));
+    }
+    Ok(Pubkey::new_from_array(hash))
 }
 
 pub fn create_address_with_seed(
@@ -971,6 +1102,51 @@ mod tests {
         assert_eq!(&assign.data[1..33], provider.as_bytes());
         assert_eq!(assign.accounts.len(), 3);
         assert!(assign.accounts[1].is_signer());
+
+        let token_escrow = TokenEscrowAccounts {
+            payment_mint: Pubkey::new_from_array([7u8; 32]),
+            owner_token_account: Pubkey::new_from_array([8u8; 32]),
+            escrow_token_account: Pubkey::new_from_array([9u8; 32]),
+            token_program: Pubkey::new_from_array([10u8; 32]),
+        };
+        let init = client.initialize_instruction(
+            &deployment,
+            &owner,
+            [0u8; 64],
+            [0u8; 32],
+            1,
+            1,
+            1024,
+            1024,
+            10,
+            1_000,
+            1,
+            true,
+            [0u8; 32],
+            Some(token_escrow),
+        );
+        assert_eq!(init.data[0], 0);
+        assert_eq!(&init.data[174..206], token_escrow.payment_mint.as_bytes());
+        assert_eq!(
+            &init.data[206..238],
+            token_escrow.escrow_token_account.as_bytes()
+        );
+        assert_eq!(init.accounts.len(), 6);
+
+        let token_settlement = TokenSettlementAccounts {
+            escrow_token_account: token_escrow.escrow_token_account,
+            escrow_authority: Pubkey::new_from_array([11u8; 32]),
+            token_program: token_escrow.token_program,
+        };
+        let stop = client.stop_token_instruction(
+            &deployment,
+            &owner,
+            &provider_payout,
+            &refund,
+            token_settlement,
+        );
+        assert_eq!(stop.data, vec![4]);
+        assert_eq!(stop.accounts.len(), 7);
     }
 
     #[test]

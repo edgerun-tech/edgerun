@@ -3,7 +3,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use core::str::FromStr;
 use edgerun_solana::signers::{Ed25519Signer, Signer};
-use edgerun_solana::{DeploymentClient, solana_types::Pubkey};
+use edgerun_solana::{
+    solana_types::Pubkey, DeploymentClient, TokenEscrowAccounts, TokenSettlementAccounts,
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{eprintln, println};
 
@@ -21,8 +23,19 @@ pub enum DeploymentCommand {
         storage_bytes: u64,
         deposit: u64,
         auto_stop_on_price_increase: bool,
+        payment_mint: Option<String>,
+        owner_token_account: Option<String>,
+        escrow_token_account: Option<String>,
+        token_program: Option<String>,
     },
     Get {
+        deployment: String,
+    },
+    Address {
+        seed: String,
+        owner: Option<String>,
+    },
+    EscrowAuthority {
         deployment: String,
     },
     Start {
@@ -60,6 +73,10 @@ pub enum DeploymentCommand {
         deployment: String,
         owner: Option<String>,
         provider_payout_recipient: String,
+        buyer_refund_token_account: Option<String>,
+        escrow_token_account: Option<String>,
+        escrow_authority: Option<String>,
+        token_program: Option<String>,
     },
     TickBurn {
         deployment: String,
@@ -124,6 +141,10 @@ where
             let mut storage_bytes = 5368709120u64;
             let mut deposit = 1000000000u64;
             let mut auto_stop_on_price_increase = true;
+            let mut payment_mint = None;
+            let mut owner_token_account = None;
+            let mut escrow_token_account = None;
+            let mut token_program = None;
 
             while let Some(arg) = args.next() {
                 match arg.as_str() {
@@ -141,6 +162,16 @@ where
                     "--memory" | "-m" => memory_bytes = next_parse(&mut args, &arg)?,
                     "--storage" | "-s" => storage_bytes = next_parse(&mut args, &arg)?,
                     "--deposit" | "-d" => deposit = next_parse(&mut args, &arg)?,
+                    "--payment-mint" | "--usdc-mint" => {
+                        payment_mint = Some(next_value(&mut args, &arg)?)
+                    }
+                    "--owner-token-account" => {
+                        owner_token_account = Some(next_value(&mut args, &arg)?)
+                    }
+                    "--escrow-token-account" => {
+                        escrow_token_account = Some(next_value(&mut args, &arg)?)
+                    }
+                    "--token-program" => token_program = Some(next_value(&mut args, &arg)?),
                     "--keep-running-on-price-increase" => auto_stop_on_price_increase = false,
                     "--auto-stop-on-price-increase" => auto_stop_on_price_increase = true,
                     _ if !arg.starts_with('-') && deployment.is_none() => deployment = Some(arg),
@@ -163,12 +194,26 @@ where
                 storage_bytes,
                 deposit,
                 auto_stop_on_price_increase,
+                payment_mint,
+                owner_token_account,
+                escrow_token_account,
+                token_program,
             })
         }
         Some("get") | Some("g") => {
             let deployment = args.next().unwrap_or_default();
             reject_trailing(args, "deployment get")?;
             Ok(DeploymentCommand::Get { deployment })
+        }
+        Some("address") => {
+            let seed = args.next().unwrap_or_default();
+            let owner = parse_owner_arg(args, "deployment address")?;
+            Ok(DeploymentCommand::Address { seed, owner })
+        }
+        Some("escrow-authority") => {
+            let deployment = args.next().unwrap_or_default();
+            reject_trailing(args, "deployment escrow-authority")?;
+            Ok(DeploymentCommand::EscrowAuthority { deployment })
         }
         Some("start") => {
             let deployment = args.next().unwrap_or_default();
@@ -257,12 +302,24 @@ where
             let deployment = args.next().unwrap_or_default();
             let mut owner = None;
             let mut provider_payout_recipient = None;
+            let mut buyer_refund_token_account = None;
+            let mut escrow_token_account = None;
+            let mut escrow_authority = None;
+            let mut token_program = None;
             while let Some(arg) = args.next() {
                 match arg.as_str() {
                     "--owner" | "-o" => owner = Some(next_value(&mut args, &arg)?),
                     "--provider-payout-recipient" => {
                         provider_payout_recipient = Some(next_value(&mut args, &arg)?)
                     }
+                    "--buyer-refund-token-account" => {
+                        buyer_refund_token_account = Some(next_value(&mut args, &arg)?)
+                    }
+                    "--escrow-token-account" => {
+                        escrow_token_account = Some(next_value(&mut args, &arg)?)
+                    }
+                    "--escrow-authority" => escrow_authority = Some(next_value(&mut args, &arg)?),
+                    "--token-program" => token_program = Some(next_value(&mut args, &arg)?),
                     _ if !arg.starts_with('-') => {
                         return Err(format!("unexpected argument for deployment stop: '{arg}'"));
                     }
@@ -273,6 +330,10 @@ where
                 deployment,
                 owner,
                 provider_payout_recipient: provider_payout_recipient.unwrap_or_default(),
+                buyer_refund_token_account,
+                escrow_token_account,
+                escrow_authority,
+                token_program,
             })
         }
         Some("tick-burn") | Some("tick") => {
@@ -373,7 +434,7 @@ where
                 effective_at,
             })
         }
-        _ => Err("unknown deployment command. Use: create, get, assign, start, pause, resume, dispute, resolve, stop, tick-burn, report, burn-rate, schedule-pricing".to_string()),
+        _ => Err("unknown deployment command. Use: create, get, address, escrow-authority, assign, start, pause, resume, dispute, resolve, stop, tick-burn, report, burn-rate, schedule-pricing".to_string()),
     }
 }
 
@@ -443,6 +504,55 @@ fn parse_pubkey(
         .map_err(|err| format!("invalid {label} pubkey '{value}': {err}").into())
 }
 
+fn parse_required_pubkey(
+    label: &str,
+    value: Option<&str>,
+    missing: &str,
+) -> Result<Pubkey, Box<dyn std::error::Error + Send + Sync>> {
+    match value {
+        Some(value) => parse_pubkey(label, value),
+        None => Err(missing.to_string().into()),
+    }
+}
+
+fn parse_token_program(
+    value: Option<&str>,
+) -> Result<Pubkey, Box<dyn std::error::Error + Send + Sync>> {
+    parse_pubkey(
+        "token program",
+        value.unwrap_or("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+    )
+}
+
+fn parse_token_escrow(
+    payment_mint: Option<&str>,
+    owner_token_account: Option<&str>,
+    escrow_token_account: Option<&str>,
+    token_program: Option<&str>,
+) -> Result<Option<TokenEscrowAccounts>, Box<dyn std::error::Error + Send + Sync>> {
+    if payment_mint.is_none() && owner_token_account.is_none() && escrow_token_account.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(TokenEscrowAccounts {
+        payment_mint: parse_required_pubkey(
+            "payment mint",
+            payment_mint,
+            "pass --payment-mint/--usdc-mint for token escrow",
+        )?,
+        owner_token_account: parse_required_pubkey(
+            "owner token account",
+            owner_token_account,
+            "pass --owner-token-account for token escrow",
+        )?,
+        escrow_token_account: parse_required_pubkey(
+            "escrow token account",
+            escrow_token_account,
+            "pass --escrow-token-account for token escrow",
+        )?,
+        token_program: parse_token_program(token_program)?,
+    }))
+}
+
 fn signer_pubkey(signer: &Ed25519Signer) -> Pubkey {
     Pubkey::new_from_array(signer.pubkey())
 }
@@ -477,6 +587,10 @@ pub async fn handle(
             storage_bytes,
             deposit,
             auto_stop_on_price_increase,
+            payment_mint,
+            owner_token_account,
+            escrow_token_account,
+            token_program,
         } => {
             let owner_pubkey = match (owner, signer.as_ref()) {
                 (Some(o), _) => parse_pubkey("owner", o)?,
@@ -501,6 +615,12 @@ pub async fn handle(
                 *storage_bytes,
                 100,
             );
+            let token_escrow = parse_token_escrow(
+                payment_mint.as_deref(),
+                owner_token_account.as_deref(),
+                escrow_token_account.as_deref(),
+                token_program.as_deref(),
+            )?;
 
             println!("=== Create Deployment ===");
             println!("Deployment: {}", deployment);
@@ -515,8 +635,19 @@ pub async fn handle(
                 "Resources: {} cores, {} bytes RAM, {} bytes storage",
                 cpu_cores, memory_bytes, storage_bytes
             );
-            println!("Initial deposit: {} lamports", deposit);
-            println!("Burn rate: {} lamports/sec", burn_rate);
+            if let Some(token_escrow) = token_escrow {
+                println!("Payment mint: {}", token_escrow.payment_mint);
+                println!("Owner token account: {}", token_escrow.owner_token_account);
+                println!(
+                    "Escrow token account: {}",
+                    token_escrow.escrow_token_account
+                );
+                println!("Initial deposit: {} token base units", deposit);
+                println!("Burn rate: {} token base units/sec", burn_rate);
+            } else {
+                println!("Initial deposit: {} lamports", deposit);
+                println!("Burn rate: {} lamports/sec", burn_rate);
+            }
             println!(
                 "Auto-stop on price increase: {}",
                 auto_stop_on_price_increase
@@ -556,6 +687,7 @@ pub async fn handle(
                             burn_rate,
                             *auto_stop_on_price_increase,
                             *governance_pubkey.as_bytes(),
+                            token_escrow,
                         )
                         .await?;
                     println!("Deployment account: {}", dep_pubkey);
@@ -577,6 +709,7 @@ pub async fn handle(
                         burn_rate,
                         *auto_stop_on_price_increase,
                         *governance_pubkey.as_bytes(),
+                        token_escrow,
                     );
                     let tx_sig = client
                         .send_instruction_signed(ix, &owner_pubkey, signer)
@@ -598,28 +731,39 @@ pub async fn handle(
                     println!("Governance: {}", d.governance_authority);
                     println!("Provider: {}", d.provider);
                     println!("Status: {:?}", d.status);
+                    let unit = if d.payment_mint == Pubkey::default() {
+                        "lamports"
+                    } else {
+                        "token base units"
+                    };
                     println!(
                         "Resources: {} cores, {} bytes RAM, {} bytes storage",
                         d.total_cpu_cores, d.total_memory_bytes, d.total_storage_bytes
                     );
                     println!("Containers: {}", d.container_count);
-                    println!("Deposit: {} lamports", d.deposit);
-                    println!("Spent: {} lamports", d.spent);
+                    println!("Deposit: {} {}", d.deposit, unit);
+                    println!("Spent: {} {}", d.spent, unit);
                     println!(
-                        "Remaining budget: {} lamports",
-                        d.deposit.saturating_sub(d.spent)
+                        "Remaining budget: {} {}",
+                        d.deposit.saturating_sub(d.spent),
+                        unit
                     );
-                    println!("Provider earned: {} lamports", d.provider_earned);
-                    println!("Buyer refunded: {} lamports", d.buyer_refunded);
-                    println!("DAO slashed: {} lamports", d.dao_slashed);
+                    println!("Provider earned: {} {}", d.provider_earned, unit);
+                    println!("Buyer refunded: {} {}", d.buyer_refunded, unit);
+                    println!("DAO slashed: {} {}", d.dao_slashed, unit);
+                    if d.payment_mint != Pubkey::default() {
+                        println!("Payment mint: {}", d.payment_mint);
+                        println!("Escrow token account: {}", d.escrow_token_account);
+                    }
                     if matches!(d.status, edgerun_solana::DeploymentStatus::Stopped) {
                         let settled = d
                             .provider_earned
                             .saturating_add(d.buyer_refunded)
                             .saturating_add(d.dao_slashed);
                         println!(
-                            "Unsettled escrow: {} lamports",
-                            d.deposit.saturating_sub(settled)
+                            "Unsettled escrow: {} {}",
+                            d.deposit.saturating_sub(settled),
+                            unit
                         );
                     }
                     println!("Last report: {}", d.last_report_at);
@@ -656,6 +800,25 @@ pub async fn handle(
                     println!("Deployment not found: {}", e);
                 }
             }
+            Ok(())
+        }
+        DeploymentCommand::Address { seed, owner } => {
+            let owner_pubkey = match (owner, signer.as_ref()) {
+                (Some(o), _) => parse_pubkey("owner", o)?,
+                (None, Some(signer)) => signer_pubkey(signer),
+                (None, None) => {
+                    return Err("missing owner pubkey; pass --owner or set SOLANA_KEYPAIR".into());
+                }
+            };
+            let deployment = client.deployment_address_with_seed(&owner_pubkey, seed)?;
+            println!("Deployment account: {}", deployment);
+            Ok(())
+        }
+        DeploymentCommand::EscrowAuthority { deployment } => {
+            let pubkey = parse_pubkey("deployment", deployment)?;
+            let (authority, bump) = client.escrow_authority(&pubkey)?;
+            println!("Escrow authority: {}", authority);
+            println!("Bump: {}", bump);
             Ok(())
         }
         DeploymentCommand::Start { deployment, owner } => {
@@ -825,6 +988,10 @@ pub async fn handle(
             deployment,
             owner,
             provider_payout_recipient,
+            buyer_refund_token_account,
+            escrow_token_account,
+            escrow_authority,
+            token_program,
         } => {
             let dep_pubkey = parse_pubkey("deployment", deployment)?;
             let owner_pubkey = match (owner, signer.as_ref()) {
@@ -837,8 +1004,35 @@ pub async fn handle(
             let provider_payout_pubkey =
                 parse_pubkey("provider payout recipient", provider_payout_recipient)?;
             if let Some(ref signer) = signer {
-                let ix =
-                    client.stop_instruction(&dep_pubkey, &owner_pubkey, &provider_payout_pubkey);
+                let ix = if let Some(buyer_refund_token_account) = buyer_refund_token_account {
+                    let escrow_token_account = parse_required_pubkey(
+                        "escrow token account",
+                        escrow_token_account.as_deref(),
+                        "pass --escrow-token-account for token settlement",
+                    )?;
+                    let escrow_authority = match escrow_authority {
+                        Some(escrow_authority) => {
+                            parse_pubkey("escrow authority", escrow_authority)?
+                        }
+                        None => client.escrow_authority(&dep_pubkey)?.0,
+                    };
+                    let token_program = parse_token_program(token_program.as_deref())?;
+                    let buyer_refund_token_account =
+                        parse_pubkey("buyer refund token account", buyer_refund_token_account)?;
+                    client.stop_token_instruction(
+                        &dep_pubkey,
+                        &owner_pubkey,
+                        &provider_payout_pubkey,
+                        &buyer_refund_token_account,
+                        TokenSettlementAccounts {
+                            escrow_token_account,
+                            escrow_authority,
+                            token_program,
+                        },
+                    )
+                } else {
+                    client.stop_instruction(&dep_pubkey, &owner_pubkey, &provider_payout_pubkey)
+                };
                 let tx_sig = client
                     .send_instruction_signed(ix, &owner_pubkey, signer)
                     .await?;
@@ -1016,6 +1210,10 @@ mod tests {
                 storage_bytes: 34_359_738_368,
                 deposit: 2_000_000_000,
                 auto_stop_on_price_increase: false,
+                payment_mint: None,
+                owner_token_account: None,
+                escrow_token_account: None,
+                token_program: None,
             }
         );
     }
@@ -1036,6 +1234,66 @@ mod tests {
         ])
         .unwrap_err();
         assert!(err.contains("buyer-selected providers are disabled"));
+    }
+
+    #[test]
+    fn parses_token_escrow_create_options() {
+        let command = parse_deployment_args(vec![
+            "create",
+            "deployment-key",
+            "--payment-mint",
+            "mint-key",
+            "--owner-token-account",
+            "owner-token-key",
+            "--escrow-token-account",
+            "escrow-token-key",
+            "--token-program",
+            "token-program-key",
+        ])
+        .unwrap();
+
+        match command {
+            DeploymentCommand::Create {
+                payment_mint,
+                owner_token_account,
+                escrow_token_account,
+                token_program,
+                ..
+            } => {
+                assert_eq!(payment_mint.as_deref(), Some("mint-key"));
+                assert_eq!(owner_token_account.as_deref(), Some("owner-token-key"));
+                assert_eq!(escrow_token_account.as_deref(), Some("escrow-token-key"));
+                assert_eq!(token_program.as_deref(), Some("token-program-key"));
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_escrow_authority() {
+        let command = parse_deployment_args(vec!["escrow-authority", "deployment-key"]).unwrap();
+
+        assert_eq!(
+            command,
+            DeploymentCommand::EscrowAuthority {
+                deployment: "deployment-key".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn parses_deployment_address() {
+        let command =
+            parse_deployment_args(vec!["address", "deployment-seed", "--owner", "owner-key"])
+                .unwrap();
+
+        assert_eq!(
+            command,
+            DeploymentCommand::Address {
+                seed: "deployment-seed".to_string(),
+                owner: Some("owner-key".to_string()),
+            }
+        );
     }
 
     #[test]

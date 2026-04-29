@@ -15,6 +15,8 @@ pub enum DeploymentInstruction {
         burn_rate: u64,
         auto_stop_on_price_increase: bool,
         governance_authority: [u8; 32],
+        payment_mint: [u8; 32],
+        escrow_token_account: [u8; 32],
     },
     Start,
     Pause,
@@ -81,6 +83,18 @@ impl DeploymentInstruction {
                             != 0
                     },
                     governance_authority: if ops.len() >= 32 {
+                        <[u8; 32]>::deserialize(&mut ops)
+                            .map_err(|_| ProgramError::InvalidInstructionData)?
+                    } else {
+                        [0u8; 32]
+                    },
+                    payment_mint: if ops.len() >= 32 {
+                        <[u8; 32]>::deserialize(&mut ops)
+                            .map_err(|_| ProgramError::InvalidInstructionData)?
+                    } else {
+                        [0u8; 32]
+                    },
+                    escrow_token_account: if ops.len() >= 32 {
                         <[u8; 32]>::deserialize(&mut ops)
                             .map_err(|_| ProgramError::InvalidInstructionData)?
                     } else {

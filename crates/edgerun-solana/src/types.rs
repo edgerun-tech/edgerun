@@ -125,6 +125,8 @@ pub struct Deployment {
     pub provider_earned: u64,
     pub buyer_refunded: u64,
     pub dao_slashed: u64,
+    pub payment_mint: Pubkey,
+    pub escrow_token_account: Pubkey,
 }
 
 edgerun_json::impl_json_struct! {
@@ -163,6 +165,8 @@ edgerun_json::impl_json_struct! {
         provider_earned: u64,
         buyer_refunded: u64,
         dao_slashed: u64,
+        payment_mint: Pubkey,
+        escrow_token_account: Pubkey,
     }
 }
 
@@ -203,6 +207,8 @@ impl Default for Deployment {
             provider_earned: 0,
             buyer_refunded: 0,
             dao_slashed: 0,
+            payment_mint: Pubkey::default(),
+            escrow_token_account: Pubkey::default(),
         }
     }
 }
@@ -300,6 +306,8 @@ impl Deployment {
             let provider_earned = read_optional_u64(data, &mut offset, 0)?;
             let buyer_refunded = read_optional_u64(data, &mut offset, 0)?;
             let dao_slashed = read_optional_u64(data, &mut offset, 0)?;
+            let payment_mint = read_optional_pubkey(data, &mut offset, Pubkey::default())?;
+            let escrow_token_account = read_optional_pubkey(data, &mut offset, Pubkey::default())?;
 
             return Ok(Self {
                 owner,
@@ -336,6 +344,8 @@ impl Deployment {
                 provider_earned,
                 buyer_refunded,
                 dao_slashed,
+                payment_mint,
+                escrow_token_account,
             });
         }
 
