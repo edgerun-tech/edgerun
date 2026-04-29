@@ -121,7 +121,9 @@ impl OutboundRelay {
         recipient: &str,
         remote_mta: &str,
     ) -> Result<String, String> {
-        // Connect
+        // Connect and opportunistically upgrade with STARTTLS when the remote
+        // MTA advertises it. Gmail and other large providers surface a warning
+        // when this hop is cleartext.
         let mut client = SmtpClient::connect(addr)
             .await
             .map_err(|e| format!("connection to {} failed: {}", addr, e))?;
@@ -150,19 +152,14 @@ impl OutboundRelay {
         }
 
         // MAIL FROM
-        let from_param = if !envelope.data.is_empty() {
-            format!("<{}> SIZE={}", envelope.from, envelope.data.len())
-        } else {
-            format!("<{}>", envelope.from)
-        };
         client
-            .mail_from(&from_param)
+            .mail_from(&envelope.from)
             .await
             .map_err(|e| format!("MAIL FROM rejected: {}", e))?;
 
         // RCPT TO
         client
-            .rcpt_to(&format!("<{}>", recipient))
+            .rcpt_to(recipient)
             .await
             .map_err(|e| format!("RCPT TO rejected: {}", e))?;
 

@@ -302,6 +302,7 @@ impl RequestBuilder {
             let _ = headers.insert("User-Agent", "edgerun-browser/0.1");
         }
         if let Some(ref body) = self.body {
+            headers.remove("Content-Length");
             let _ = headers.insert("Content-Length", &body.len().to_string());
         }
 
@@ -331,5 +332,28 @@ fn host_header_value(uri: &Uri, host: &str) -> String {
 impl Default for RequestBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_replaces_existing_content_length_for_body() {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("https://example.com/acme/new-account")
+            .header("Content-Length", "999")
+            .body(b"{}".to_vec())
+            .build()
+            .unwrap();
+
+        let lengths = request.headers().get_all("Content-Length");
+        assert_eq!(lengths.len(), 1);
+        assert_eq!(lengths[0].as_str(), "2");
+
+        let raw = String::from_utf8(request.to_http_bytes()).unwrap();
+        assert_eq!(raw.matches("Content-Length:").count(), 1);
     }
 }

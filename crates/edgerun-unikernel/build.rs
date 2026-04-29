@@ -28,6 +28,9 @@ fn main() {
             .join("devices/edgerun-tcl-usb-ap-bridge/.embuild/espressif/esp-idf/v5.5.3/components");
         let esp32s3_rom_ld = idf_components.join("esp_rom/esp32s3/ld/esp32s3.rom.ld");
         let esp32s3_rom_api_ld = idf_components.join("esp_rom/esp32s3/ld/esp32s3.rom.api.ld");
+        let esp32s3_rom_bt_funcs_ld =
+            idf_components.join("esp_rom/esp32s3/ld/esp32s3.rom.bt_funcs.ld");
+        let esp32s3_rom_libgcc_ld = idf_components.join("esp_rom/esp32s3/ld/esp32s3.rom.libgcc.ld");
         println!("cargo:rerun-if-changed={}", esp32s3_rom_ld.display());
         println!("cargo:rerun-if-changed={}", esp32s3_rom_api_ld.display());
         println!(
@@ -39,6 +42,7 @@ fn main() {
             esp32s3_rom_api_ld.display()
         );
         if std::env::var_os("CARGO_FEATURE_ESP32S3_WIFI_BLOB").is_some() {
+            println!("cargo:rustc-link-arg-bin=edgerun-unikernel=-Wl,--allow-multiple-definition");
             for lib_dir in [
                 "esp_wifi/lib/esp32s3",
                 "esp_phy/lib/esp32s3",
@@ -50,6 +54,35 @@ fn main() {
                 );
             }
             for lib in ["core", "net80211", "pp", "phy", "coexist"] {
+                println!("cargo:rustc-link-lib=static={lib}");
+            }
+        }
+        if std::env::var_os("CARGO_FEATURE_ESP32S3_BLE_BLOB").is_some() {
+            println!("cargo:rustc-link-arg-bin=edgerun-unikernel=-Wl,--allow-multiple-definition");
+            println!(
+                "cargo:rerun-if-changed={}",
+                esp32s3_rom_bt_funcs_ld.display()
+            );
+            println!("cargo:rerun-if-changed={}", esp32s3_rom_libgcc_ld.display());
+            println!(
+                "cargo:rustc-link-arg-bin=edgerun-unikernel=-T{}",
+                esp32s3_rom_bt_funcs_ld.display()
+            );
+            println!(
+                "cargo:rustc-link-arg-bin=edgerun-unikernel=-T{}",
+                esp32s3_rom_libgcc_ld.display()
+            );
+            for lib_dir in [
+                "bt/controller/lib_esp32c3_family/esp32s3",
+                "esp_phy/lib/esp32s3",
+                "esp_coex/lib/esp32s3",
+            ] {
+                println!(
+                    "cargo:rustc-link-search=native={}",
+                    idf_components.join(lib_dir).display()
+                );
+            }
+            for lib in ["btdm_app", "btbb", "phy", "coexist"] {
                 println!("cargo:rustc-link-lib=static={lib}");
             }
         }

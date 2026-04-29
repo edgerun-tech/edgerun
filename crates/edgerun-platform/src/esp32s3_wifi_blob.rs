@@ -85,8 +85,8 @@ unsafe extern "C" {
     fn hal_init();
     fn mac_txrx_init();
     fn ic_mac_init() -> i32;
-    fn ic_set_current_channel(channel: c_int);
-    fn ic_set_promis_filter(mask: u32) -> i32;
+    fn ic_set_current_channel(channel: *const u8);
+    fn ic_set_promis_filter(mask: *const u8) -> i32;
     fn ic_register_promis_rx_cb(cb: Option<extern "C" fn(*mut c_void, c_int)>) -> i32;
     fn ic_enable_sniffer();
     fn ic_tx_pkt(buffer: *const c_void) -> i32;
@@ -301,6 +301,12 @@ impl EspressifPromiscRadio {
         LAST_START_STATUS.load(Ordering::Relaxed)
     }
 
+    pub fn start_vendor_open_ap(ssid: &[u8], channel: u8) -> bool {
+        let status = crate::esp32s3_wifi_blob_init::ensure_started_open_ap(ssid, channel);
+        LAST_START_STATUS.store(status, Ordering::Relaxed);
+        status == 0
+    }
+
     pub fn debug_regs() -> WifiDebugRegs {
         unsafe {
             WifiDebugRegs {
@@ -349,6 +355,7 @@ impl EspressifPromiscRadio {
                 }
                 1 => {
                     LAST_START_STATUS.store(101, Ordering::Relaxed);
+                    crate::esp32s3_wifi_blob_init::install_osi_funcs_only();
                     hal_init();
                     LAST_START_STATUS.store(102, Ordering::Relaxed);
                     true
@@ -367,23 +374,24 @@ impl EspressifPromiscRadio {
                 }
                 4 => {
                     LAST_START_STATUS.store(401, Ordering::Relaxed);
-                    ic_set_current_channel(6);
+                    let channel = [6u8, 0u8];
+                    ic_set_current_channel(channel.as_ptr());
                     LAST_START_STATUS.store(402, Ordering::Relaxed);
                     true
                 }
                 5 => {
                     LAST_START_STATUS.store(501, Ordering::Relaxed);
-                    let status = ic_set_promis_filter(
-                        WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA,
-                    );
+                    let mask =
+                        (WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA).to_le_bytes();
+                    let status = ic_set_promis_filter(mask.as_ptr());
                     LAST_START_STATUS.store(500 + status, Ordering::Relaxed);
-                    status != 0
+                    status == 0
                 }
                 6 => {
                     LAST_START_STATUS.store(601, Ordering::Relaxed);
                     let status = ic_register_promis_rx_cb(Some(promisc_rx_cb));
                     LAST_START_STATUS.store(600 + status, Ordering::Relaxed);
-                    status != 0
+                    status == 0
                 }
                 7 => {
                     LAST_START_STATUS.store(701, Ordering::Relaxed);
@@ -563,6 +571,7 @@ unsafe fn register_phy_step(base: i32, mode: c_int) -> bool {
 impl Esp32s3WifiRadio for EspressifPromiscRadio {
     fn start_open_ap(&mut self, config: &OpenApConfig) -> bool {
         unsafe {
+            crate::esp32s3_wifi_blob_init::install_osi_funcs_only();
             enable_radio_clocks();
             reset_wifi_mac();
             hal_init();
@@ -572,19 +581,17 @@ impl Esp32s3WifiRadio for EspressifPromiscRadio {
                 LAST_START_STATUS.store(1000 + status, Ordering::Relaxed);
                 return false;
             }
-            ic_set_current_channel(config.channel as c_int);
-            let status =
-                ic_set_promis_filter(WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA);
-            if status == 0 {
+            let channel = [config.channel, 0u8];
+            ic_set_current_channel(channel.as_ptr());
+            let mask = (WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA).to_le_bytes();
+            let status = ic_set_promis_filter(mask.as_ptr());
+            if status != 0 {
                 LAST_START_STATUS.store(2000 + status, Ordering::Relaxed);
                 return false;
             }
-            let status = ic_register_promis_rx_cb(Some(promisc_rx_cb));
-            if status == 0 {
-                LAST_START_STATUS.store(3000 + status, Ordering::Relaxed);
-                return false;
-            }
-            ic_enable_sniffer();
+            // Direct promiscuous callback registration wedges this no-std shim
+            // because the vendor pTxRx/task context is not fully initialized.
+            // Keep the blob path TX-first for beacon/probe-response bring-up.
             LAST_START_STATUS.store(1, Ordering::Relaxed);
             true
         }

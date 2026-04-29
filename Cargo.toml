@@ -76,6 +76,7 @@ members = [
   "crates/edgerun-microphone",
   "crates/edgerun-network-interface",
   "crates/edgerun-nfc",
+  "crates/edgerun-passport-nfc",
   "crates/edgerun-node",
   "crates/edgerun-npu",
   "crates/edgerun-oauth",

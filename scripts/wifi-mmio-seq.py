@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Run ESP32-S3 Wi-Fi MMIO control sequences over the serial mux."""
+"""Run ESP32-S3 Wi-Fi MMIO control sequences over USB serial.
+
+The current ESP32-S3 headless bring-up image uses newline-delimited raw control
+commands. Pass --framed to use the older serial-mux framing.
+"""
 
 import argparse
 import os
@@ -199,6 +203,44 @@ def print_frame(channel: str, seq: int, payload: bytes) -> None:
     sys.stdout.flush()
 
 
+def read_raw_response(fd: int, deadline: float) -> bytes:
+    response = bytearray()
+    while time.monotonic() < deadline:
+        try:
+            chunk = os.read(fd, 1024)
+        except BlockingIOError:
+            time.sleep(0.01)
+            continue
+        if not chunk:
+            time.sleep(0.01)
+            continue
+        response.extend(chunk)
+        if b"\n" in response:
+            time.sleep(0.02)
+            try:
+                while True:
+                    response.extend(os.read(fd, 1024))
+            except BlockingIOError:
+                pass
+            break
+    return bytes(response)
+
+
+def print_raw(seq: int, command: str, payload: bytes) -> None:
+    label = f"[raw #{seq} {command}] "
+    if not payload:
+        sys.stdout.write(label + "timeout\n")
+    elif all(byte in b"\r\n\t" or 0x20 <= byte <= 0x7E for byte in payload):
+        text = payload.decode(errors="replace")
+        if text.endswith("\n"):
+            sys.stdout.write(label + text)
+        else:
+            sys.stdout.write(label + text + "\n")
+    else:
+        sys.stdout.write(label + payload.hex() + "\n")
+    sys.stdout.flush()
+
+
 def expand_sequence(items):
     commands = []
     for item in items:
@@ -216,6 +258,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("port", nargs="?", default="/dev/ttyACM0")
     parser.add_argument("sequence", nargs="*", default=["rx6"])
+    parser.add_argument(
+        "--framed",
+        action="store_true",
+        help="use serial-mux frames instead of headless raw newline commands",
+    )
     parser.add_argument("--delay", type=float, default=0.25)
     parser.add_argument("--timeout", type=float, default=2.0)
     args = parser.parse_args()
@@ -227,6 +274,16 @@ def main() -> int:
         tty.setraw(fd)
         for seq, command in enumerate(commands):
             deadline = time.monotonic() + args.timeout
+            if not args.framed:
+                payload = command.encode() + b"\n"
+                if not write_all(fd, payload, deadline):
+                    print(f"[raw #{seq} {command}] write-timeout", flush=True)
+                    time.sleep(args.delay)
+                    continue
+                print_raw(seq, command, read_raw_response(fd, deadline))
+                time.sleep(args.delay)
+                continue
+
             if not write_all(fd, encode_frame(CHANNEL_CONTROL, seq, command.encode()), deadline):
                 print(f"[host #{seq}] write-timeout command={command}", flush=True)
                 time.sleep(args.delay)

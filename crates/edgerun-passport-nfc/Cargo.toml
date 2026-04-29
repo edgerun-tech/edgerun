@@ -1,0 +1,21 @@
+[package]
+name = "edgerun-passport-nfc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "ICAO eMRTD passport NFC reader primitives for Edgerun"
+
+[features]
+default = []
+std = []
+
+[dependencies]
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-crypto = { workspace = true, default-features = false, features = ["des", "rsa", "sha1"] }
+edgerun-nfc = { version = "0.1", path = "../edgerun-nfc" }
+
+[lints]
+workspace = true

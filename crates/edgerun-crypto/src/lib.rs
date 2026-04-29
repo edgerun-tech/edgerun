@@ -9,6 +9,8 @@ extern crate std;
 pub mod aead;
 #[cfg(feature = "aead")]
 pub mod aes;
+#[cfg(feature = "des")]
+pub mod des;
 pub mod error;
 pub mod rng;
 pub mod sha;

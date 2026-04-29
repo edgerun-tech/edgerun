@@ -169,7 +169,7 @@ pub enum AuthorizationStatus {
 
 #[derive(Debug, Clone)]
 pub struct Challenge {
-    pub id: String,
+    pub id: Option<String>,
     pub challenge_type: ChallengeType,
     pub url: Url,
     pub status: ChallengeStatus,
@@ -179,11 +179,12 @@ pub struct Challenge {
     pub authorization: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChallengeType {
     Http01,
     Dns01,
     TlsAlpn01,
+    Other(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -494,12 +495,12 @@ edgerun_json::impl_json_string_enum! {
 edgerun_json::impl_json_struct! {
     Challenge {
         required {
-            id: "id" => String,
             challenge_type: "type" => ChallengeType,
             url: "url" => Url,
             status: "status" => ChallengeStatus
         }
         optional {
+            id: "id" => String,
             validated: "validated" => String,
             error: "error" => AcmeErrorDetail,
             token: "token" => String,
@@ -508,11 +509,26 @@ edgerun_json::impl_json_struct! {
     }
 }
 
-edgerun_json::impl_json_string_enum! {
-    ChallengeType {
-        Http01 => "http-01",
-        Dns01 => "dns-01",
-        TlsAlpn01 => "tls-alpn-01",
+impl ToJson for ChallengeType {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::String(match self {
+            ChallengeType::Http01 => "http-01".to_string(),
+            ChallengeType::Dns01 => "dns-01".to_string(),
+            ChallengeType::TlsAlpn01 => "tls-alpn-01".to_string(),
+            ChallengeType::Other(value) => value.clone(),
+        })
+    }
+}
+
+impl FromJson for ChallengeType {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let value = <String as FromJson>::from_json(value)?;
+        Ok(match value.as_str() {
+            "http-01" => ChallengeType::Http01,
+            "dns-01" => ChallengeType::Dns01,
+            "tls-alpn-01" => ChallengeType::TlsAlpn01,
+            _ => ChallengeType::Other(value),
+        })
     }
 }
 
@@ -647,6 +663,38 @@ mod tests {
         assert!(encoded.contains(r#""nonce":"nonce""#));
         assert!(!encoded.contains("jwk"));
         assert!(!encoded.contains("kid"));
+    }
+
+    #[test]
+    fn authorization_accepts_letsencrypt_challenges_without_ids() {
+        let authorization: Authorization = edgerun_json::from_json_str(
+            r#"{
+                "id":"https://acme-staging-v02.api.letsencrypt.org/acme/authz/1",
+                "identifier":{"type":"dns","value":"mail.edgerun.tech"},
+                "status":"pending",
+                "challenges":[{
+                    "type":"dns-01",
+                    "url":"https://acme-staging-v02.api.letsencrypt.org/acme/chall/1/2",
+                    "status":"pending",
+                    "token":"test-token"
+                },{
+                    "type":"dns-persist-01",
+                    "url":"https://acme-staging-v02.api.letsencrypt.org/acme/chall/1/3",
+                    "status":"pending"
+                }]
+            }"#,
+        )
+        .unwrap();
+
+        let challenges = authorization.challenges.unwrap();
+        let challenge = &challenges[0];
+        assert_eq!(challenge.id, None);
+        assert_eq!(challenge.challenge_type, ChallengeType::Dns01);
+        assert_eq!(challenge.token.as_deref(), Some("test-token"));
+        assert_eq!(
+            challenges[1].challenge_type,
+            ChallengeType::Other("dns-persist-01".to_string())
+        );
     }
 
     #[test]

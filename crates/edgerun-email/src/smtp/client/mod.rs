@@ -27,22 +27,22 @@ use edgerun_tls::AsyncTlsStream;
 // ===========================================================================
 
 enum ClientTransport {
+    Empty,
     Plain(AsyncTcpStream),
     #[cfg(feature = "tls")]
     Tls(AsyncTlsStream<AsyncTcpStream>),
 }
 
 impl ClientTransport {
-    /// Create a placeholder transport. Only used during TLS upgrade
-    /// to temporarily replace the real transport.
+    /// Create a placeholder transport. Only used during TLS upgrade to
+    /// temporarily replace the real transport.
     fn placeholder() -> Self {
-        // fd=-1 will fail on any I/O — intentional, since this is a
-        // short-lived placeholder during TLS handshake.
-        ClientTransport::Plain(AsyncTcpStream::from_fd(-1))
+        ClientTransport::Empty
     }
 
     fn is_tls(&self) -> bool {
         match self {
+            ClientTransport::Empty => false,
             ClientTransport::Plain(_) => false,
             #[cfg(feature = "tls")]
             ClientTransport::Tls(_) => true,
@@ -52,6 +52,7 @@ impl ClientTransport {
     #[cfg(feature = "tls")]
     async fn upgrade_tls(self, server_name: &str) -> io::Result<ClientTransport> {
         match self {
+            ClientTransport::Empty => Err(io::Error::other("missing transport")),
             ClientTransport::Tls(_) => Err(io::Error::other("already using TLS")),
             ClientTransport::Plain(stream) => {
                 let tls = AsyncTlsStream::client(stream, server_name, &[], None)
@@ -77,6 +78,7 @@ impl AsyncRead for ClientTransport {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         match &mut *self {
+            ClientTransport::Empty => Poll::Ready(Err(io::Error::other("missing transport"))),
             ClientTransport::Plain(s) => Pin::new(s).poll_read(cx, buf),
             #[cfg(feature = "tls")]
             ClientTransport::Tls(s) => Pin::new(s).poll_read(cx, buf),
@@ -91,6 +93,7 @@ impl AsyncWrite for ClientTransport {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         match &mut *self {
+            ClientTransport::Empty => Poll::Ready(Err(io::Error::other("missing transport"))),
             ClientTransport::Plain(s) => Pin::new(s).poll_write(cx, buf),
             #[cfg(feature = "tls")]
             ClientTransport::Tls(s) => Pin::new(s).poll_write(cx, buf),
@@ -99,6 +102,7 @@ impl AsyncWrite for ClientTransport {
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match &mut *self {
+            ClientTransport::Empty => Poll::Ready(Err(io::Error::other("missing transport"))),
             ClientTransport::Plain(s) => Pin::new(s).poll_flush(cx),
             #[cfg(feature = "tls")]
             ClientTransport::Tls(s) => Pin::new(s).poll_flush(cx),
@@ -107,6 +111,7 @@ impl AsyncWrite for ClientTransport {
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match &mut *self {
+            ClientTransport::Empty => Poll::Ready(Err(io::Error::other("missing transport"))),
             ClientTransport::Plain(s) => Pin::new(s).poll_shutdown(cx),
             #[cfg(feature = "tls")]
             ClientTransport::Tls(s) => Pin::new(s).poll_shutdown(cx),
@@ -411,7 +416,7 @@ impl SmtpClient {
             )));
         }
 
-        self.transport.write_all(message).await?;
+        self.transport.write_all(&dot_stuffed_data(message)).await?;
         self.transport.flush().await?;
 
         let response = self.read_response().await?;
@@ -531,6 +536,9 @@ impl SmtpClient {
         // Extract the transport and upgrade.
         let current = match std::mem::replace(&mut self.transport, ClientTransport::placeholder()) {
             ClientTransport::Plain(s) => s,
+            ClientTransport::Empty => {
+                return Err(io::Error::other("missing transport"));
+            }
             ClientTransport::Tls(_) => {
                 return Err(io::Error::other("already using TLS"));
             }
@@ -583,4 +591,20 @@ impl SmtpClient {
             .and_then(|s| s.as_ref())
             .and_then(|s| s.parse().ok())
     }
+}
+
+fn dot_stuffed_data(message: &[u8]) -> Vec<u8> {
+    let text = String::from_utf8_lossy(message)
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+    let mut out = Vec::with_capacity(message.len() + 8);
+    for line in text.split('\n') {
+        if line.starts_with('.') {
+            out.push(b'.');
+        }
+        out.extend_from_slice(line.as_bytes());
+        out.extend_from_slice(b"\r\n");
+    }
+    out.extend_from_slice(b".\r\n");
+    out
 }

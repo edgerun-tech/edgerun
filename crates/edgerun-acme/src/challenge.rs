@@ -14,7 +14,7 @@ impl Challenge {
     }
 
     pub fn challenge_type(&self) -> ChallengeType {
-        self.inner.challenge_type
+        self.inner.challenge_type.clone()
     }
 
     pub fn status(&self) -> ChallengeStatus {

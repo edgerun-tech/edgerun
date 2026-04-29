@@ -7,8 +7,9 @@ CHIP="esp32s3"
 PORT="${ESPFLASH_PORT:-/dev/ttyACM0}"
 BAUD="${ESPFLASH_BAUD:-921600}"
 MONITOR_BAUD="${MONITOR_BAUD:-115200}"
-ESP_TOOLCHAIN_BIN="${ESP_TOOLCHAIN_BIN:-$HOME/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin}"
+ESP_TOOLCHAIN_BIN="${ESP_TOOLCHAIN_BIN:-$ROOT/devices/edgerun-tcl-usb-ap-bridge/.embuild/espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin}"
 PROFILE="${PROFILE:-release}"
+FEATURES="${FEATURES:-esp32s3-wifi-mmio,esp32s3-headless}"
 OUT_DIR="$ROOT/target/edgerun-esp32s3"
 
 if [[ "$PROFILE" == "release" ]]; then
@@ -25,7 +26,11 @@ export PATH="$ESP_TOOLCHAIN_BIN:$PATH"
 export ESPFLASH_SKIP_UPDATE_CHECK="${ESPFLASH_SKIP_UPDATE_CHECK:-true}"
 
 build_elf() {
-  cargo +esp build "${BUILD_PROFILE[@]}" -p edgerun-unikernel --target "$TARGET" -Zbuild-std=core,alloc
+  local feature_args=()
+  if [[ -n "$FEATURES" ]]; then
+    feature_args=(--features "$FEATURES")
+  fi
+  cargo +esp build "${BUILD_PROFILE[@]}" -p edgerun-unikernel "${feature_args[@]}" --target "$TARGET" -Zbuild-std=core,alloc
 }
 
 save_image() {
@@ -46,6 +51,19 @@ image_info() {
 case "${1:-image}" in
   build)
     build_elf
+    ;;
+  layout)
+    build_elf
+    "$ROOT/scripts/esp32s3-elf-layout.py" \
+      --toolchain-bin "$ESP_TOOLCHAIN_BIN" \
+      "$ELF"
+    ;;
+  layout-strict)
+    build_elf
+    "$ROOT/scripts/esp32s3-elf-layout.py" \
+      --toolchain-bin "$ESP_TOOLCHAIN_BIN" \
+      --strict \
+      "$ELF"
     ;;
   image)
     build_elf
@@ -71,7 +89,7 @@ case "${1:-image}" in
     espflash list-ports
     ;;
   *)
-    echo "usage: $0 {build|image|flash|monitor|ports}" >&2
+    echo "usage: $0 {build|layout|layout-strict|image|flash|monitor|ports}" >&2
     exit 2
     ;;
 esac

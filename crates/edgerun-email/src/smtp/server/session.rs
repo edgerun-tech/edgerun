@@ -808,6 +808,7 @@ async fn handle_connection(
             &mut pending_bdat_last,
             &handler,
             &config,
+            &peer,
             &mut transport,
         )
         .await
@@ -973,6 +974,7 @@ async fn handle_command(
     pending_bdat_last: &mut bool,
     handler: &Arc<dyn MailHandler>,
     config: &SmtpServerConfig,
+    peer: &SocketAddr,
     transport: &mut SmtpTransport,
 ) -> io::Result<ControlFlow> {
     match cmd {
@@ -1114,7 +1116,17 @@ async fn handle_command(
                 return Ok(ControlFlow::Continue);
             }
 
-            if let Err(_e) = handler.validate_recipient(&address) {
+            let domain = extract_domain_from_address(&address);
+            let is_local = config
+                .local_domains
+                .iter()
+                .any(|d| d.eq_ignore_ascii_case(&domain));
+            if is_local && handler.validate_recipient(&address).is_err() {
+                send_response(transport, &SmtpResponse::mailbox_not_found(&address)).await?;
+                return Ok(ControlFlow::Continue);
+            }
+            let trusted_submitter = *authenticated || peer.ip().is_loopback();
+            if !is_local && (!trusted_submitter || config.queue_data_root.is_none()) {
                 send_response(transport, &SmtpResponse::mailbox_not_found(&address)).await?;
                 return Ok(ControlFlow::Continue);
             }

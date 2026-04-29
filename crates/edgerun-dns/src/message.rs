@@ -814,9 +814,30 @@ impl DnsRecord {
             ));
         }
 
-        let rdata = &data[rdata_start..rdata_start + rdlength];
         let rtype = DnsRecordType::from_u16(rtype_val).unwrap_or(DnsRecordType::A);
-        let data_parsed = DnsRecordData::from_wire(rtype, rdata, offset_map)?;
+        let rdata = &data[rdata_start..rdata_start + rdlength];
+        let data_parsed = match rtype {
+            DnsRecordType::CNAME => DnsRecordData::CNAME(decode_domain_name(
+                data,
+                rdata_start,
+                offset_map,
+            )?),
+            DnsRecordType::NS => DnsRecordData::NS(decode_domain_name(
+                data,
+                rdata_start,
+                offset_map,
+            )?),
+            DnsRecordType::PTR => DnsRecordData::PTR(decode_domain_name(
+                data,
+                rdata_start,
+                offset_map,
+            )?),
+            DnsRecordType::MX if rdlength >= 3 => DnsRecordData::MX {
+                priority: read_u16_be(data, rdata_start),
+                exchange: decode_domain_name(data, rdata_start + 2, offset_map)?,
+            },
+            _ => DnsRecordData::from_wire(rtype, rdata, offset_map)?,
+        };
 
         Ok((
             Self {

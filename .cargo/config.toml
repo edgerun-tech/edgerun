@@ -28,6 +28,9 @@ rustflags = ["-C", "link-arg=-landroid", "-C", "link-arg=-llog"]
 [target.x86_64-unknown-none]
 rustflags = ["-C", "relocation-model=static"]
 
+[target.xtensa-esp32s3-none-elf]
+linker = "/home/ken/edgerun_core/devices/edgerun-tcl-usb-ap-bridge/.embuild/espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc"
+
 [build]
 # Static musl builds — catches libc ABI incompatibilities at compile time
 target = "x86_64-unknown-linux-musl"

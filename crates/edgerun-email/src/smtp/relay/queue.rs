@@ -239,11 +239,23 @@ impl MailIndex {
         if let Ok(data) = data {
             let mut cursor = Cursor::new(data.as_slice());
             while cursor.position() < data.len() as u64 {
-                let msg = read_message_record(&mut cursor)?;
+                let mut msg = read_message_record(&mut cursor)?;
+                let recover_sending = matches!(msg.status, MailStatus::Sending);
+                if recover_sending {
+                    msg.status = MailStatus::Retrying;
+                    msg.next_retry_time = 0;
+                }
                 self.next_message_id.fetch_max(
                     msg.message_id.parse::<i64>().unwrap_or(0),
                     Ordering::Relaxed,
                 );
+                if recover_sending {
+                    self.retry_queue.write().await.push(RetryEntry {
+                        message_id: msg.message_id.clone(),
+                        next_retry_time: msg.next_retry_time,
+                        retry_count: msg.retry_count,
+                    });
+                }
                 self.messages
                     .write()
                     .await

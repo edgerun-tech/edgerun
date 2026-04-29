@@ -15,10 +15,27 @@ const ESP_WIFI_OS_ADAPTER_VERSION: i32 = 0x0000_0008;
 const ESP_WIFI_OS_ADAPTER_MAGIC: i32 = 0xdead_beafu32 as i32;
 const WIFI_MODE_NULL: i32 = 0;
 const WIFI_MODE_AP: i32 = 2;
+const WIFI_IF_AP: i32 = 1;
+const WIFI_AUTH_OPEN: u32 = 0;
+const WIFI_AP_CONFIG_BYTES: usize = 256;
+const WIFI_AP_CONFIG_SSID_OFFSET: usize = 0;
+const WIFI_AP_CONFIG_SSID_LEN_OFFSET: usize = 96;
+const WIFI_AP_CONFIG_CHANNEL_OFFSET: usize = 97;
+const WIFI_AP_CONFIG_AUTHMODE_OFFSET: usize = 100;
+const WIFI_AP_CONFIG_MAX_CONNECTION_OFFSET: usize = 105;
+const WIFI_AP_CONFIG_BEACON_INTERVAL_OFFSET: usize = 106;
+const WIFI_AP_CONFIG_DTIM_PERIOD_OFFSET: usize = 109;
+const BLOB_ABS_BSS_START: usize = 0x3fce_f800;
+const BLOB_ABS_BSS_END: usize = 0x3fcf_0000;
 
 static INIT_STATE: AtomicU32 = AtomicU32::new(0);
 static RAND_STATE: AtomicU32 = AtomicU32::new(0x1234_abcd);
 static TIME_US: AtomicU32 = AtomicU32::new(0);
+static OS_TRACE_COUNT: AtomicU32 = AtomicU32::new(0);
+static mut WIFI_THREAD_SEMPHR: [u8; 16] = [0; 16];
+static mut CURRENT_TASK: [u8; 16] = [0; 16];
+static mut AP_CONFIG: [u32; WIFI_AP_CONFIG_BYTES / core::mem::size_of::<u32>()] =
+    [0; WIFI_AP_CONFIG_BYTES / core::mem::size_of::<u32>()];
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -58,7 +75,7 @@ struct WifiInitConfig {
     wifi_task_core_id: c_int,
     beacon_max_len: c_int,
     mgmt_sbuf_num: c_int,
-    feature_caps: u64,
+    feature_caps: [u32; 2],
     sta_disconnected_pm: bool,
     espnow_max_encrypt_num: c_int,
     tx_hetb_queue_num: c_int,
@@ -212,6 +229,7 @@ unsafe impl Sync for WifiOsiFuncs {}
 unsafe extern "C" {
     fn esp_wifi_init_internal(config: *const WifiInitConfig) -> i32;
     fn esp_wifi_set_mode(mode: c_int) -> i32;
+    fn esp_wifi_set_config(interface: c_int, conf: *mut c_void) -> i32;
     fn esp_wifi_start() -> i32;
     static mut g_osi_funcs_p: *mut c_void;
 }
@@ -222,29 +240,96 @@ pub(crate) fn install_osi_funcs_only() {
     }
 }
 
-pub fn ensure_started_ap() -> i32 {
+pub fn ensure_started_open_ap(ssid: &[u8], channel: u8) -> i32 {
+    trace_stage(b"WB0\n");
+    if ssid.is_empty() || ssid.len() > 32 || !(1..=14).contains(&channel) {
+        return -1;
+    }
     match INIT_STATE.load(Ordering::Relaxed) {
-        3 => return ESP_OK,
+        4 => return ESP_OK,
         _ => {}
     }
     unsafe {
+        trace_stage(b"WB1\n");
+        clear_blob_absolute_bss();
+        install_osi_funcs_only();
         let status = esp_wifi_init_internal(ptr::addr_of!(WIFI_INIT_CONFIG));
+        trace_stage(b"WB2\n");
         if status != ESP_OK && status != 0x3003 {
             return 10_000 + status;
         }
         INIT_STATE.store(1, Ordering::Relaxed);
+        trace_stage(b"WB3\n");
         let status = esp_wifi_set_mode(WIFI_MODE_AP);
+        trace_stage(b"WB4\n");
         if status != ESP_OK {
             return 20_000 + status;
         }
         INIT_STATE.store(2, Ordering::Relaxed);
-        let status = esp_wifi_start();
+        fill_open_ap_config(ssid, channel);
+        trace_stage(b"WB5\n");
+        let status = esp_wifi_set_config(WIFI_IF_AP, ptr::addr_of_mut!(AP_CONFIG).cast::<c_void>());
+        trace_stage(b"WB6\n");
         if status != ESP_OK {
             return 30_000 + status;
         }
         INIT_STATE.store(3, Ordering::Relaxed);
+        trace_stage(b"WB7\n");
+        let status = esp_wifi_start();
+        trace_stage(b"WB8\n");
+        if status != ESP_OK {
+            return 40_000 + status;
+        }
+        INIT_STATE.store(4, Ordering::Relaxed);
     }
     ESP_OK
+}
+
+pub fn ensure_started_ap() -> i32 {
+    ensure_started_open_ap(b"edgerun-ac", 6)
+}
+
+fn trace_stage(bytes: &[u8]) {
+    unsafe { crate::arch::xtensa::esp32s3_usb_serial_jtag_write(bytes) };
+}
+
+fn trace_os(bytes: &[u8]) {
+    if OS_TRACE_COUNT.fetch_add(1, Ordering::Relaxed) < 96 {
+        trace_stage(bytes);
+    }
+}
+
+fn clear_blob_absolute_bss() {
+    trace_stage(b"BZ\n");
+    let ptr = BLOB_ABS_BSS_START as *mut u8;
+    let len = BLOB_ABS_BSS_END - BLOB_ABS_BSS_START;
+    unsafe { ptr::write_bytes(ptr, 0, len) };
+}
+
+unsafe fn fill_open_ap_config(ssid: &[u8], channel: u8) {
+    unsafe {
+        let bytes = ptr::addr_of_mut!(AP_CONFIG).cast::<u8>();
+        ptr::write_bytes(bytes, 0, WIFI_AP_CONFIG_BYTES);
+        ptr::copy_nonoverlapping(
+            ssid.as_ptr(),
+            bytes.add(WIFI_AP_CONFIG_SSID_OFFSET),
+            ssid.len(),
+        );
+        bytes
+            .add(WIFI_AP_CONFIG_SSID_LEN_OFFSET)
+            .write(ssid.len() as u8);
+        bytes.add(WIFI_AP_CONFIG_CHANNEL_OFFSET).write(channel);
+        bytes
+            .add(WIFI_AP_CONFIG_AUTHMODE_OFFSET)
+            .cast::<u32>()
+            .write(WIFI_AUTH_OPEN);
+        bytes.add(WIFI_AP_CONFIG_MAX_CONNECTION_OFFSET).write(4);
+        bytes
+            .add(WIFI_AP_CONFIG_BEACON_INTERVAL_OFFSET)
+            .cast::<u16>()
+            .write(100);
+        bytes.add(WIFI_AP_CONFIG_DTIM_PERIOD_OFFSET).write(1);
+    }
 }
 
 static mut WIFI_INIT_CONFIG: WifiInitConfig = WifiInitConfig {
@@ -264,9 +349,9 @@ static mut WIFI_INIT_CONFIG: WifiInitConfig = WifiInitConfig {
     },
     static_rx_buf_num: 10,
     dynamic_rx_buf_num: 32,
-    tx_buf_type: 0,
-    static_tx_buf_num: 16,
-    dynamic_tx_buf_num: 0,
+    tx_buf_type: 1,
+    static_tx_buf_num: 0,
+    dynamic_tx_buf_num: 32,
     rx_mgmt_buf_type: 0,
     rx_mgmt_buf_num: 5,
     cache_tx_buf_num: 32,
@@ -274,16 +359,16 @@ static mut WIFI_INIT_CONFIG: WifiInitConfig = WifiInitConfig {
     ampdu_rx_enable: 1,
     ampdu_tx_enable: 1,
     amsdu_tx_enable: 0,
-    nvs_enable: 0,
+    nvs_enable: 1,
     nano_enable: 0,
     rx_ba_win: 6,
     wifi_task_core_id: 0,
     beacon_max_len: 752,
     mgmt_sbuf_num: 32,
-    feature_caps: 0,
-    sta_disconnected_pm: false,
+    feature_caps: [161, 0],
+    sta_disconnected_pm: true,
     espnow_max_encrypt_num: 7,
-    tx_hetb_queue_num: 3,
+    tx_hetb_queue_num: 1,
     dump_hesigb_enable: false,
     magic: WIFI_INIT_CONFIG_MAGIC,
 };
@@ -297,7 +382,7 @@ static WIFI_OSI_FUNCS: WifiOsiFuncs = WifiOsiFuncs {
     _ints_on: Some(ints_on),
     _ints_off: Some(ints_off),
     _is_from_isr: Some(is_from_isr),
-    _spin_lock_create: Some(dummy_alloc),
+    _spin_lock_create: Some(spin_lock_create),
     _spin_lock_delete: Some(dummy_delete),
     _wifi_int_disable: Some(wifi_int_disable),
     _wifi_int_restore: Some(wifi_int_restore),
@@ -306,9 +391,9 @@ static WIFI_OSI_FUNCS: WifiOsiFuncs = WifiOsiFuncs {
     _semphr_delete: Some(dummy_delete),
     _semphr_take: Some(ok_take),
     _semphr_give: Some(ok_ptr),
-    _wifi_thread_semphr_get: Some(dummy_alloc),
-    _mutex_create: Some(dummy_alloc),
-    _recursive_mutex_create: Some(dummy_alloc),
+    _wifi_thread_semphr_get: Some(wifi_thread_semphr_get),
+    _mutex_create: Some(mutex_create),
+    _recursive_mutex_create: Some(recursive_mutex_create),
     _mutex_delete: Some(dummy_delete),
     _mutex_lock: Some(ok_ptr),
     _mutex_unlock: Some(ok_ptr),
@@ -320,7 +405,7 @@ static WIFI_OSI_FUNCS: WifiOsiFuncs = WifiOsiFuncs {
     _queue_send_to_front: Some(queue_send),
     _queue_recv: Some(queue_recv),
     _queue_msg_waiting: Some(zero_ptr),
-    _event_group_create: Some(dummy_alloc),
+    _event_group_create: Some(event_group_create),
     _event_group_delete: Some(dummy_delete),
     _event_group_set_bits: Some(return_bits),
     _event_group_clear_bits: Some(return_zero_bits),
@@ -330,7 +415,7 @@ static WIFI_OSI_FUNCS: WifiOsiFuncs = WifiOsiFuncs {
     _task_delete: Some(dummy_delete),
     _task_delay: Some(delay),
     _task_ms_to_tick: Some(ms_to_tick),
-    _task_get_current_task: Some(dummy_alloc),
+    _task_get_current_task: Some(task_get_current_task),
     _task_get_max_priority: Some(max_priority),
     _malloc: Some(os_malloc),
     _free: Some(os_free),
@@ -436,32 +521,62 @@ unsafe extern "C" fn null0() -> *mut c_void {
     ptr::null_mut()
 }
 unsafe extern "C" fn ok_ptr(_p: *mut c_void) -> i32 {
+    trace_os(b"OP\n");
     1
 }
 unsafe extern "C" fn ok_take(_p: *mut c_void, _ticks: u32) -> i32 {
+    trace_os(b"ST\n");
     1
 }
 unsafe extern "C" fn zero_ptr(_p: *mut c_void) -> u32 {
     0
 }
 unsafe extern "C" fn dummy_alloc() -> *mut c_void {
-    1usize as *mut c_void
+    trace_os(b"DA\n");
+    alloc_handle(16)
 }
 unsafe extern "C" fn dummy_delete(_p: *mut c_void) {}
+unsafe extern "C" fn spin_lock_create() -> *mut c_void {
+    trace_os(b"SL\n");
+    alloc_handle(16)
+}
+unsafe extern "C" fn wifi_thread_semphr_get() -> *mut c_void {
+    trace_os(b"WS\n");
+    ptr::addr_of_mut!(WIFI_THREAD_SEMPHR).cast::<c_void>()
+}
+unsafe extern "C" fn mutex_create() -> *mut c_void {
+    trace_os(b"MC\n");
+    alloc_handle(16)
+}
+unsafe extern "C" fn recursive_mutex_create() -> *mut c_void {
+    trace_os(b"RC\n");
+    alloc_handle(16)
+}
+unsafe extern "C" fn event_group_create() -> *mut c_void {
+    trace_os(b"EC\n");
+    alloc_handle(16)
+}
+unsafe extern "C" fn task_get_current_task() -> *mut c_void {
+    trace_os(b"CT\n");
+    ptr::addr_of_mut!(CURRENT_TASK).cast::<c_void>()
+}
 unsafe extern "C" fn wifi_int_disable(_p: *mut c_void) -> u32 {
     0
 }
 unsafe extern "C" fn wifi_int_restore(_p: *mut c_void, _state: u32) {}
 unsafe extern "C" fn semphr_create(_max: u32, _init: u32) -> *mut c_void {
-    1usize as *mut c_void
+    trace_os(b"SC\n");
+    alloc_handle(16)
 }
 unsafe extern "C" fn queue_create(_len: u32, _item_size: u32) -> *mut c_void {
-    1usize as *mut c_void
+    trace_os(b"QC\n");
+    alloc_handle(32)
 }
 unsafe extern "C" fn wifi_create_queue(len: c_int, item_size: c_int) -> *mut c_void {
     unsafe { queue_create(len as u32, item_size as u32) }
 }
 unsafe extern "C" fn queue_send(_q: *mut c_void, _item: *mut c_void, _ticks: u32) -> i32 {
+    trace_os(b"QS\n");
     1
 }
 unsafe extern "C" fn queue_send_from_isr(
@@ -469,9 +584,11 @@ unsafe extern "C" fn queue_send_from_isr(
     _item: *mut c_void,
     _hptw: *mut c_void,
 ) -> i32 {
+    trace_os(b"QI\n");
     1
 }
 unsafe extern "C" fn queue_recv(_q: *mut c_void, _item: *mut c_void, _ticks: u32) -> i32 {
+    trace_os(b"QR\n");
     0
 }
 unsafe extern "C" fn return_bits(_event: *mut c_void, bits: u32) -> u32 {
@@ -487,6 +604,7 @@ unsafe extern "C" fn wait_bits(
     _all: c_int,
     _ticks: u32,
 ) -> u32 {
+    trace_os(b"EW\n");
     bits
 }
 unsafe extern "C" fn task_create_pinned_to_core(
@@ -498,6 +616,7 @@ unsafe extern "C" fn task_create_pinned_to_core(
     handle: *mut c_void,
     _core: u32,
 ) -> i32 {
+    trace_os(b"TC\n");
     if !handle.is_null() {
         unsafe { (handle as *mut *mut c_void).write(1usize as *mut c_void) };
     }
@@ -515,6 +634,7 @@ unsafe extern "C" fn task_create(
 }
 unsafe extern "C" fn delay(_ticks: u32) {}
 unsafe extern "C" fn ms_to_tick(ms: u32) -> i32 {
+    trace_os(b"MT\n");
     ms as i32
 }
 unsafe extern "C" fn max_priority() -> i32 {
@@ -527,9 +647,11 @@ unsafe extern "C" fn event_post(
     _size: usize,
     _ticks: u32,
 ) -> i32 {
+    trace_os(b"EP\n");
     ESP_OK
 }
 unsafe extern "C" fn free_heap() -> u32 {
+    trace_os(b"FH\n");
     64 * 1024
 }
 unsafe extern "C" fn rand() -> u32 {
@@ -551,8 +673,11 @@ unsafe extern "C" fn read_mac(mac: *mut u8, type_: c_uint) -> c_int {
     ESP_OK
 }
 unsafe extern "C" fn timer_arm(_timer: *mut c_void, _timeout: u32, _repeat: bool) {}
-unsafe extern "C" fn timer_setfn(_timer: *mut c_void, _func: *mut c_void, _arg: *mut c_void) {}
+unsafe extern "C" fn timer_setfn(_timer: *mut c_void, _func: *mut c_void, _arg: *mut c_void) {
+    trace_os(b"TF\n");
+}
 unsafe extern "C" fn timer_get_time() -> i64 {
+    trace_os(b"GT\n");
     TIME_US.fetch_add(1000, Ordering::Relaxed) as i64
 }
 unsafe extern "C" fn nvs_set_i8(_h: u32, _k: *const c_char, _v: i8) -> c_int {
@@ -583,6 +708,7 @@ unsafe extern "C" fn nvs_get_u16(_h: u32, _k: *const c_char, out: *mut u16) -> c
     ESP_OK
 }
 unsafe extern "C" fn nvs_open(_name: *const c_char, _mode: c_uint, out: *mut u32) -> c_int {
+    trace_os(b"NO\n");
     if !out.is_null() {
         unsafe { out.write(1) }
     }
@@ -638,6 +764,7 @@ unsafe extern "C" fn log_timestamp() -> u32 {
     (unsafe { timer_get_time() } / 1000) as u32
 }
 unsafe extern "C" fn os_malloc(size: usize) -> *mut c_void {
+    trace_os(b"MA\n");
     let Ok(layout) = Layout::from_size_align(size.max(1), 4) else {
         return ptr::null_mut();
     };
@@ -645,9 +772,11 @@ unsafe extern "C" fn os_malloc(size: usize) -> *mut c_void {
 }
 unsafe extern "C" fn os_free(_p: *mut c_void) {}
 unsafe extern "C" fn os_realloc(_ptr: *mut c_void, size: usize) -> *mut c_void {
+    trace_os(b"RA\n");
     unsafe { os_malloc(size) }
 }
 unsafe extern "C" fn os_calloc(n: usize, size: usize) -> *mut c_void {
+    trace_os(b"CA\n");
     let Some(total) = n.checked_mul(size) else {
         return ptr::null_mut();
     };
@@ -657,7 +786,22 @@ unsafe extern "C" fn os_calloc(n: usize, size: usize) -> *mut c_void {
     unsafe { alloc_zeroed(layout).cast::<c_void>() }
 }
 unsafe extern "C" fn os_zalloc(size: usize) -> *mut c_void {
+    trace_os(b"ZA\n");
     unsafe { os_calloc(1, size) }
+}
+
+fn alloc_handle(size: usize) -> *mut c_void {
+    let Ok(layout) = Layout::from_size_align(size.max(1), 4) else {
+        return ptr::null_mut();
+    };
+    let ptr = unsafe { alloc(layout) };
+    if ptr.is_null() {
+        trace_os(b"HN\n");
+        return ptr::null_mut();
+    }
+    unsafe { ptr::write_bytes(ptr, 0, size.max(1)) };
+    trace_os(b"HO\n");
+    ptr.cast::<c_void>()
 }
 unsafe extern "C" fn coex_condition_set(_t: u32, _d: bool) {}
 unsafe extern "C" fn coex_wifi_request(_e: u32, _l: u32, _d: u32) -> c_int {

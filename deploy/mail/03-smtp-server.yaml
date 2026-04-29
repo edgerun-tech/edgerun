@@ -15,13 +15,13 @@ spec:
   maildir_root: /var/lib/edgerun/mail/maildirs
   relay_enabled: true
   queue_dir: /var/lib/edgerun/mail/queue
-  dns_server: "127.0.0.1:53"
+  dns_server: "1.1.1.1:53"
   dkim_domain: edgerun.tech
   dkim_selector: mail
   dkim_key_path: /etc/edgerun/mail/dkim-mail.private.pem
-  tls_cert: /etc/letsencrypt/live/mail.edgerun.tech/fullchain.pem
-  tls_key: /etc/letsencrypt/live/mail.edgerun.tech/privkey.pem
-  acme_enabled: false
+  tls_cert: /etc/edgerun/mail/tls/fullchain.pem
+  tls_key: /etc/edgerun/mail/tls/privkey.pem
+  acme_enabled: true
   acme_directory: letsencrypt
   acme_contact_email: ken@edgerun.tech
   acme_domains:

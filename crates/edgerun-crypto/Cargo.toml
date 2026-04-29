@@ -17,6 +17,7 @@ elliptic-curve = { version = "0.13", default-features = false, optional = true }
 sha2 = { version = "0.10", default-features = false }
 signature = { version = "2", default-features = false, optional = true }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"], optional = true }
+des = { version = "0.8", default-features = false, optional = true }
 hmac-crate = { package = "hmac", version = "0.12", default-features = false, optional = true }
 pbkdf2-crate = { package = "pbkdf2", version = "0.12", default-features = false, features = ["hmac"], optional = true }
 rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"], optional = true }
@@ -29,6 +30,7 @@ edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-feat
 default = []
 full = [
     "aead",
+    "des",
     "ed25519",
     "hmac",
     "pbkdf2",
@@ -38,6 +40,7 @@ full = [
     "x25519",
 ]
 aead = ["dep:aes-gcm"]
+des = ["dep:des"]
 ed25519 = ["dep:ed25519-dalek", "dep:signature"]
 hmac = ["dep:hmac-crate"]
 pbkdf2 = ["dep:pbkdf2-crate", "hmac"]

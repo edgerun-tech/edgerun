@@ -25,6 +25,12 @@ pub mod esp32s3_ble;
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+pub mod esp32s3_ble_blob;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
     feature = "esp32s3-ble-stub"
 ))]
 pub mod esp32s3_ble_stub;

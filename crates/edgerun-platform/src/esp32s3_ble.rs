@@ -111,7 +111,7 @@ pub enum HciEvent {
     },
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct AttWriteEvent {
     pub conn_handle: u16,
     pub attr_handle: u16,

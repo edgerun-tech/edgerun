@@ -1,9 +1,11 @@
 # ESP32-S3 Wi-Fi MMIO Bring-Up Notes
 
 Status: bare-target/stubbed hardware bring-up. The code can initialize clocks,
-MAC/RX descriptors, selected PHY/MMIO registers, and call a few ROM PHY slots
-without vendor Wi-Fi/PHY static libraries. It does not yet receive Wi-Fi frames
-or provide a network interface.
+MAC/RX descriptors, selected PHY/MMIO registers, call a few ROM PHY slots, arm a
+raw 802.11 RX path, and feed received frames into the Edgerun-owned open-AP
+state machine without vendor Wi-Fi/PHY static libraries. It does not yet have a
+verified raw 802.11 TX descriptor/doorbell path, so it still does not provide a
+usable network interface or a TV-visible AP.
 
 ## Stable Baseline
 
@@ -16,10 +18,31 @@ cargo +esp build --release -p edgerun-unikernel \
   --target xtensa-esp32s3-none-elf -Zbuild-std=core,alloc
 ```
 
+In this checkout the root Cargo config points `xtensa-esp32s3-none-elf` at the
+ESP GCC linker under `devices/edgerun-tcl-usb-ap-bridge/.embuild`, so the
+shorter build command also works:
+
+```bash
+cargo +esp build --release -p edgerun-unikernel \
+  --features esp32s3-wifi-mmio \
+  --target xtensa-esp32s3-none-elf -Zbuild-std=core,alloc
+```
+
+The generic helper script builds `esp32s3-wifi-mmio,esp32s3-headless` by
+default for USB-serial Wi-Fi probing without touching the display path:
+
+```bash
+scripts/esp32s3-unikernel.sh flash
+```
+
 Stable control commands:
 
 - `status`: board/display/touch status.
 - `wifiinit`: implemented; runs the current known-good MMIO init sequence.
+- `wifi`: implemented; starts the MMIO-backed open AP state machine and arms
+  RX on channel 6. TX is currently stubbed at the MMIO backend boundary.
+- `wifistats` / `wifi stats`: implemented; reports raw/AP bridge counters and
+  the last MMIO Wi-Fi status code.
 - `wififuns`: implemented; dumps ROM PHY function table slots via
   `phy_get_romfuncs`.
 - `wifirx`: implemented; dumps compact RX descriptor/MMIO scratch state.
@@ -54,6 +77,8 @@ table=0x3fcef3d8
 Use the host-side sequence runner to test multiple orderings without reflashing.
 This intentionally lives outside the firmware because adding large board-side
 test runners changed Xtensa image layout enough to hang the current display init.
+By default the script speaks the headless raw newline control protocol; pass
+`--framed` for the older serial-mux control channel.
 
 Tokens are separated by spaces, commas, or semicolons.
 
@@ -147,6 +172,10 @@ output grouped in one terminal run.
 - Currently blocked: the full RX enable path still lacks required PHY/MAC state;
   `reload` can latch and `noise` can move, but `irq`, RX end state, and RX
   buffer contents remain zero/unchanged after the tested sequences above.
+- Currently blocked: on April 29, 2026, a flashed headless image on the
+  JC3248W535 reached `ready headless`, accepted `wifi`, and completed the
+  `rxdmaromclone` sequence, but repeated `wifistats` still reported
+  `raw_rx=0`, `raw_tx=1`, and no RX IRQ/end state.
 - Currently blocked: the RF-test wrapper calls `rftest_set_chan`, which routes
   through `chip_v7_set_chan` and additional ROM PHY table entries for RX gain
   and channel-misc programming. The current direct channel start is not yet

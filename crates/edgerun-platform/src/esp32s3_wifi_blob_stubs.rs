@@ -48,11 +48,23 @@ pub extern "C" fn pp_printf(_format: *const c_char) -> c_int {
 
 #[no_mangle]
 pub unsafe extern "C" fn wifi_log(
-    _level: c_int,
-    _tag: *const c_char,
-    _format: *const c_char,
+    level: c_int,
+    arg1: c_int,
+    arg2: c_int,
+    format: *const c_char,
     _args: ...
 ) {
+    trace_stub(b"WL ");
+    trace_i32(level);
+    trace_stub(b" ");
+    trace_hex_usize(arg1 as usize);
+    trace_stub(b" ");
+    trace_hex_usize(arg2 as usize);
+    trace_stub(b" ");
+    trace_hex_usize(format as usize);
+    trace_stub(b" ");
+    trace_cstr(format, 96);
+    trace_stub(b"\n");
 }
 
 #[no_mangle]
@@ -194,6 +206,7 @@ fn hex_nibble(byte: c_char) -> c_int {
 
 #[no_mangle]
 pub unsafe extern "C" fn memcpy(dst: *mut c_void, src: *const c_void, n: usize) -> *mut c_void {
+    trace_stub(b"CP\n");
     let mut i = 0;
     let dst_bytes = dst.cast::<u8>();
     let src_bytes = src.cast::<u8>();
@@ -203,11 +216,13 @@ pub unsafe extern "C" fn memcpy(dst: *mut c_void, src: *const c_void, n: usize) 
         }
         i += 1;
     }
+    trace_stub(b"CD\n");
     dst
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn memset(dst: *mut c_void, value: c_int, n: usize) -> *mut c_void {
+    trace_stub(b"MS\n");
     let mut i = 0;
     let dst_bytes = dst.cast::<u8>();
     while i < n {
@@ -216,7 +231,99 @@ pub unsafe extern "C" fn memset(dst: *mut c_void, value: c_int, n: usize) -> *mu
         }
         i += 1;
     }
+    trace_stub(b"MD\n");
     dst
+}
+
+fn trace_stub(bytes: &[u8]) {
+    unsafe { crate::arch::xtensa::esp32s3_usb_serial_jtag_write(bytes) };
+}
+
+fn trace_i32(value: c_int) {
+    let mut buf = [0u8; 12];
+    let mut len = 0usize;
+    let mut n = value;
+    if n < 0 {
+        buf[len] = b'-';
+        len += 1;
+        n = n.saturating_neg();
+    }
+    let mut digits = [0u8; 10];
+    let mut digit_len = 0usize;
+    let mut u = n as u32;
+    loop {
+        digits[digit_len] = b'0' + (u % 10) as u8;
+        digit_len += 1;
+        u /= 10;
+        if u == 0 {
+            break;
+        }
+    }
+    while digit_len > 0 {
+        digit_len -= 1;
+        buf[len] = digits[digit_len];
+        len += 1;
+    }
+    trace_stub(&buf[..len]);
+}
+
+fn trace_cstr(ptr: *const c_char, max_len: usize) {
+    if ptr.is_null() {
+        trace_stub(b"(null)");
+        return;
+    }
+    if !is_readable_ptr(ptr.cast::<u8>()) {
+        trace_stub(b"@");
+        trace_hex_usize(ptr as usize);
+        return;
+    }
+    let mut buf = [0u8; 96];
+    let mut len = 0usize;
+    while len < max_len && len < buf.len() {
+        let byte = unsafe { ptr.add(len).read() as u8 };
+        if byte == 0 {
+            break;
+        }
+        buf[len] = if byte == b'\n' || byte == b'\r' {
+            b' '
+        } else if (0x20..=0x7e).contains(&byte) {
+            byte
+        } else {
+            b'.'
+        };
+        len += 1;
+    }
+    trace_stub(&buf[..len]);
+}
+
+fn is_readable_ptr(ptr: *const u8) -> bool {
+    let addr = ptr as usize;
+    (0x3c00_0020..0x3c40_0020).contains(&addr)
+        || (0x3fcc_9000..0x3fcd_b700).contains(&addr)
+        || (0x4038_0000..0x403b_9000).contains(&addr)
+        || (0x4200_0020..0x4240_0020).contains(&addr)
+}
+
+fn trace_hex_usize(value: usize) {
+    let mut buf = [0u8; 10];
+    buf[0] = b'0';
+    buf[1] = b'x';
+    let mut shift = 28usize;
+    let mut len = 2usize;
+    loop {
+        let digit = ((value >> shift) & 0xf) as u8;
+        buf[len] = if digit < 10 {
+            b'0' + digit
+        } else {
+            b'a' + (digit - 10)
+        };
+        len += 1;
+        if shift == 0 {
+            break;
+        }
+        shift -= 4;
+    }
+    trace_stub(&buf[..len]);
 }
 
 #[no_mangle]

@@ -2,7 +2,7 @@ use crate::prelude::v1::*;
 use alloc::sync::Arc;
 
 use edgerun_encoding::base64url_nopad_encode;
-use edgerun_http::{HttpClient, HttpVersion, Method};
+use edgerun_http::{HttpClient, HttpVersion, Method, Request};
 use edgerun_json::{FromJson, JsonValue};
 use edgerun_rt::RwLock;
 use edgerun_url::Url;
@@ -52,9 +52,10 @@ impl AcmeClient {
             account_key: Arc::new(account_key),
             account_id: RwLock::new(None),
             nonce: RwLock::new(None),
-            http_client: HttpClient::new()
-                .version(HttpVersion::Http1)
-                .with_tls12_first(true),
+            // ACME endpoints sit behind strict HTTP front ends. Keep the CA
+            // client on HTTP/1.1 until the Edgerun HTTP/2 client has broader
+            // interoperability coverage with public CDNs and CA ingress tiers.
+            http_client: HttpClient::new().version(HttpVersion::Http1),
         }
     }
 
@@ -161,9 +162,16 @@ impl AcmeClient {
         let jws_bytes =
             edgerun_json::to_json_vec(&jws).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(url.to_string())
+            .header("Content-Type", "application/jose+json")
+            .body(jws_bytes)
+            .build()
+            .map_err(|e| AcmeError::Network(e.to_string()))?;
         let res = self
             .http_client
-            .post(&url.to_string(), jws_bytes)
+            .execute(&request)
             .await
             .map_err(|e| AcmeError::Network(e.to_string()))?;
 

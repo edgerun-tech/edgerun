@@ -98,7 +98,7 @@ mod edgerun_layout {
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
-    feature = "esp32s3-wifi-blob"
+    any(feature = "esp32s3-wifi-blob", feature = "esp32s3-wifi-mmio")
 ))]
 extern crate edgerun_wifi;
 
@@ -801,11 +801,11 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
             }
             b"status" | b"status\n" => {
                 display_console_log("ctl status");
-                rt::serial_mux::write_with_seq(
-                    rt::serial_mux::CHANNEL_CONTROL,
-                    frame.seq,
-                    b"ok board=jc3248w535 display=up touch=up transport=usb-serial-jtag\n",
-                );
+                #[cfg(feature = "esp32s3-headless")]
+                let status = b"ok board=jc3248w535 display=skipped touch=skipped transport=usb-serial-jtag\n";
+                #[cfg(not(feature = "esp32s3-headless"))]
+                let status = b"ok board=jc3248w535 display=up touch=up transport=usb-serial-jtag\n";
+                rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, frame.seq, status);
                 if let Some((x, y)) = last_touch {
                     write_touch_status(frame.seq, x, y);
                 }
@@ -836,6 +836,16 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
                 write_board_capabilities(frame.seq);
             }
             b"fps" | b"fps\n" => write_touch_frame_stats(frame.seq),
+            b"bt" | b"bt\n" | b"ble" | b"ble\n" | b"bt start" | b"bt start\n" => {
+                display_console_log("ctl bt start");
+                write_bt_start(frame.seq);
+            }
+            b"btstats" | b"btstats\n" | b"ble stats" | b"ble stats\n" => {
+                write_bt_stats(frame.seq);
+            }
+            b"wifistats" | b"wifistats\n" | b"wifi stats" | b"wifi stats\n" => {
+                write_wifi_ap_stats(frame.seq)
+            }
             b"wifi" | b"wifi\n" | b"wifi start" | b"wifi start\n" => {
                 display_console_log("ctl wifi start");
                 if try_start_esp32s3_wifi_ap() {
@@ -1098,6 +1108,294 @@ fn write_wifi_debug_step(seq: u16, step: u8) {
     append_bytes(&mut buf, &mut len, b"\n");
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
 }
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn write_wifi_ap_stats_inner(seq: u16, stats: edgerun_platform::esp32s3_wifi::Esp32s3WifiStats) {
+    let mut buf = [0u8; 128];
+    let mut len = 0;
+    append_bytes(&mut buf, &mut len, b"wifi ap raw_rx=");
+    append_u32_dec(&mut buf, &mut len, stats.raw_rx);
+    append_bytes(&mut buf, &mut len, b" raw_tx=");
+    append_u32_dec(&mut buf, &mut len, stats.raw_tx);
+    append_bytes(&mut buf, &mut len, b" eth_rx=");
+    append_u32_dec(&mut buf, &mut len, stats.eth_rx);
+    append_bytes(&mut buf, &mut len, b" eth_tx=");
+    append_u32_dec(&mut buf, &mut len, stats.eth_tx);
+    append_bytes(&mut buf, &mut len, b" dropped_eth_rx=");
+    append_u32_dec(&mut buf, &mut len, stats.dropped_eth_rx);
+    append_bytes(&mut buf, &mut len, b" status=");
+    append_i32(&mut buf, &mut len, wifi_debug_status());
+    append_bytes(&mut buf, &mut len, b"\n");
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn poll_headless_raw_control(buf: &mut [u8; 64], len: &mut usize) {
+    while let Some(byte) =
+        unsafe { edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_read_byte() }
+    {
+        if byte == b'\r' || byte == b'\n' {
+            if *len != 0 {
+                handle_headless_raw_command(&buf[..*len]);
+                *len = 0;
+            }
+            continue;
+        }
+        if *len < buf.len() {
+            buf[*len] = byte;
+            *len += 1;
+        } else {
+            *len = 0;
+            headless_raw_write(b"err line-too-long\n");
+        }
+    }
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn handle_headless_raw_command(command: &[u8]) {
+    match command {
+        b"ping" => headless_raw_write(b"pong\n"),
+        b"status" => {
+            headless_raw_write(
+                b"ok board=jc3248w535 display=skipped touch=skipped transport=usb-serial-jtag\n",
+            );
+        }
+        b"wifi" | b"wifi start" => {
+            if try_start_esp32s3_wifi_ap() {
+                headless_raw_write(b"ok wifi-start\n");
+            } else {
+                headless_raw_write(b"err wifi-start\n");
+            }
+        }
+        b"bt" | b"ble" | b"bt start" => write_headless_bt_start_raw(),
+        b"btstats" | b"ble stats" => write_headless_bt_stats_raw(),
+        b"wifistats" | b"wifi stats" => write_headless_wifi_stats_raw(),
+        b"wifiinit" => write_headless_wifi_init_raw(),
+        b"wifirx" => write_headless_wifi_rx_raw(),
+        _ => {
+            if let Some(step) = parse_headless_wifi_step(command) {
+                write_headless_wifi_step_raw(step);
+            } else {
+                headless_raw_write(b"err unknown\n");
+            }
+        }
+    }
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn parse_headless_wifi_step(command: &[u8]) -> Option<u8> {
+    let digits = match command {
+        b"wifirftest" => return Some(40),
+        b"wifirxgate" => return Some(41),
+        b"wifirxbuf" => return Some(42),
+        b"wifirxaccept" => return Some(43),
+        b"wifirx2440" => return Some(44),
+        b"wifirxeof" => return Some(45),
+        b"wifirxwdev" => return Some(46),
+        b"wifimacflt" => return Some(47),
+        b"wifirxper" => return Some(48),
+        b"wifirxpbus0" => return Some(49),
+        b"wifirxpbus" => return Some(50),
+        b"wifiphyrx" => return Some(51),
+        b"wifipbusdbg" => return Some(52),
+        b"wifiromrx" => return Some(53),
+        b"wifiromphyrx" => return Some(54),
+        b"wifidmaromrx" => return Some(55),
+        b"wifidmaromphyrx" => return Some(56),
+        b"wifirfchsave" => return Some(57),
+        b"wifirfchpre" => return Some(58),
+        b"wifirfchmode" => return Some(59),
+        b"wifirfchgainpre" => return Some(60),
+        b"wifirfchgainch" => return Some(61),
+        b"wifirfchpost" => return Some(62),
+        b"wifirfchrestore" => return Some(63),
+        b"wifirfchan6" => return Some(64),
+        b"wifiphyparam" => return Some(65),
+        b"wifirfchreg0" => return Some(66),
+        b"wifitxgain0" => return Some(67),
+        b"wifigainwrite0" => return Some(68),
+        b"wifigainflat" => return Some(69),
+        b"wifirfsub06c" => return Some(70),
+        b"wifirfsub054" => return Some(71),
+        b"wifirfsub0c4" => return Some(72),
+        b"wifirfsub080" => return Some(73),
+        b"wifirfchclone" => return Some(74),
+        b"wifich1" => return Some(23),
+        b"wifich6" => return Some(24),
+        b"wifich11" => return Some(25),
+        b"wifistart" => return Some(26),
+        b"wifistart1" => return Some(34),
+        b"wifistart6" => return Some(35),
+        b"wifistart11" => return Some(36),
+        b"wifirxenable" => return Some(37),
+        b"wifirfon" => return Some(38),
+        _ => command.strip_prefix(b"wifi")?,
+    };
+    if digits.is_empty() {
+        return None;
+    }
+    let mut value = 0u16;
+    for byte in digits {
+        if !byte.is_ascii_digit() {
+            return None;
+        }
+        value = value
+            .saturating_mul(10)
+            .saturating_add((byte - b'0') as u16);
+    }
+    u8::try_from(value).ok()
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn write_headless_wifi_init_raw() {
+    if try_wifi_init_known_good() {
+        headless_raw_write(b"ok wifi-init status=");
+    } else {
+        headless_raw_write(b"err wifi-init status=");
+    }
+    write_headless_status_suffix();
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn write_headless_wifi_step_raw(step: u8) {
+    if try_wifi_debug_step(step) {
+        headless_raw_write(b"ok wifi-step ");
+    } else {
+        headless_raw_write(b"err wifi-step ");
+    }
+    let mut buf = [0u8; 48];
+    let mut len = 0;
+    append_bytes(&mut buf, &mut len, b"step=");
+    append_u32_dec(&mut buf, &mut len, step as u32);
+    append_bytes(&mut buf, &mut len, b" status=");
+    append_i32(&mut buf, &mut len, wifi_debug_status());
+    append_bytes(&mut buf, &mut len, b"\n");
+    headless_raw_write(&buf[..len]);
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn write_headless_wifi_rx_raw() {
+    let mut buf = [0u8; 1024];
+    let mut len = 0;
+    append_wifi_rx_scratch_regs(&mut buf, &mut len);
+    headless_raw_write(&buf[..len]);
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn write_headless_status_suffix() {
+    let mut buf = [0u8; 24];
+    let mut len = 0;
+    append_i32(&mut buf, &mut len, wifi_debug_status());
+    append_bytes(&mut buf, &mut len, b"\n");
+    headless_raw_write(&buf[..len]);
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless",
+    feature = "esp32s3-wifi-blob"
+))]
+fn write_headless_wifi_stats_raw() {
+    let mut buf = [0u8; 96];
+    let mut len = 0;
+    append_bytes(&mut buf, &mut len, b"wifi vendor ap ");
+    if ESP32S3_VENDOR_WIFI_AP_STARTED.load(core::sync::atomic::Ordering::Acquire) {
+        append_bytes(&mut buf, &mut len, b"started");
+    } else {
+        append_bytes(&mut buf, &mut len, b"stopped");
+    }
+    append_bytes(&mut buf, &mut len, b" status=");
+    append_i32(&mut buf, &mut len, wifi_debug_status());
+    append_bytes(&mut buf, &mut len, b"\n");
+    headless_raw_write(&buf[..len]);
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+fn write_headless_wifi_stats_raw() {
+    let mut buf = [0u8; 128];
+    let mut len = 0;
+    append_bytes(&mut buf, &mut len, b"wifi ap ");
+    if !ESP32S3_WIFI_MMIO_AP_STARTED.load(core::sync::atomic::Ordering::Acquire) {
+        append_bytes(&mut buf, &mut len, b"stopped");
+    } else {
+        let stats = unsafe { ESP32S3_WIFI_MMIO_AP.get().stats() };
+        append_bytes(&mut buf, &mut len, b"raw_rx=");
+        append_u32_dec(&mut buf, &mut len, stats.raw_rx);
+        append_bytes(&mut buf, &mut len, b" raw_tx=");
+        append_u32_dec(&mut buf, &mut len, stats.raw_tx);
+        append_bytes(&mut buf, &mut len, b" eth_rx=");
+        append_u32_dec(&mut buf, &mut len, stats.eth_rx);
+        append_bytes(&mut buf, &mut len, b" eth_tx=");
+        append_u32_dec(&mut buf, &mut len, stats.eth_tx);
+        append_bytes(&mut buf, &mut len, b" dropped_eth_rx=");
+        append_u32_dec(&mut buf, &mut len, stats.dropped_eth_rx);
+    }
+    append_bytes(&mut buf, &mut len, b" status=");
+    append_i32(&mut buf, &mut len, wifi_debug_status());
+    append_bytes(&mut buf, &mut len, b"\n");
+    headless_raw_write(&buf[..len]);
+}
+
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless",
+    any(feature = "esp32s3-wifi-blob", feature = "esp32s3-wifi-mmio")
+)))]
+fn write_headless_wifi_stats_raw() {
+    headless_raw_write(b"wifi ap backend disabled\n");
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn headless_raw_write(bytes: &[u8]) {
+    unsafe { edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(bytes) };
+}
+
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+)))]
+fn headless_raw_write(_bytes: &[u8]) {}
 
 #[cfg(all(
     target_arch = "xtensa",
@@ -1755,6 +2053,16 @@ fn append_u32_dec(out: &mut [u8], len: &mut usize, mut value: u32) {
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn append_i32_dec(out: &mut [u8], len: &mut usize, value: i32) {
+    if value < 0 {
+        append_bytes(out, len, b"-");
+        append_u32_dec(out, len, value.saturating_abs() as u32);
+    } else {
+        append_u32_dec(out, len, value as u32);
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn append_i32(out: &mut [u8], len: &mut usize, value: i32) {
     if value < 0 {
         append_bytes(out, len, b"-");
@@ -1791,40 +2099,289 @@ fn append_hex_nibble(out: &mut [u8], len: &mut usize, nibble: u8) {
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
-    feature = "esp32s3-wifi-blob"
+    feature = "esp32s3-ble-stub",
+    not(feature = "esp32s3-ble-blob")
 ))]
-type Esp32s3WifiAp = edgerun_platform::esp32s3_wifi::Esp32s3WifiOpenAp<
-    edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio,
-    4,
->;
+static ESP32S3_BT_STUB_STATE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-stub",
+    not(feature = "esp32s3-ble-blob")
+))]
+static ESP32S3_BT_STUB_TX_COUNT: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
 
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
-    feature = "esp32s3-wifi-blob"
+    feature = "esp32s3-ble-stub",
+    not(feature = "esp32s3-ble-blob")
 ))]
-struct Esp32s3WifiApCell(core::cell::UnsafeCell<core::mem::MaybeUninit<Esp32s3WifiAp>>);
+fn try_start_esp32s3_bt() -> bool {
+    use edgerun_platform::esp32s3_ble::Esp32s3BlePeripheral;
+    use edgerun_platform::esp32s3_ble_stub::NoBleRadio;
+
+    let radio = NoBleRadio::<8, 8>::new();
+    let mut ble = Esp32s3BlePeripheral::new(radio);
+    let ok = ble.init().is_ok()
+        && ble.set_adv_data(b"\x08edgerun").is_ok()
+        && ble.start_advertising().is_ok();
+    let tx_count = ble.raw_transport_mut().tx_count();
+    ESP32S3_BT_STUB_TX_COUNT.store(tx_count, core::sync::atomic::Ordering::Release);
+    ESP32S3_BT_STUB_STATE.store(
+        if ok { 1 } else { 2 },
+        core::sync::atomic::Ordering::Release,
+    );
+    ok
+}
 
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
-    feature = "esp32s3-wifi-blob"
+    feature = "esp32s3-ble-stub",
+    not(feature = "esp32s3-ble-blob")
 ))]
-unsafe impl Sync for Esp32s3WifiApCell {}
-
-#[cfg(all(
-    target_arch = "xtensa",
-    target_os = "none",
-    feature = "esp32s3-wifi-blob"
-))]
-impl Esp32s3WifiApCell {
-    const fn new() -> Self {
-        Self(core::cell::UnsafeCell::new(core::mem::MaybeUninit::uninit()))
+fn append_bt_stats(out: &mut [u8], len: &mut usize) {
+    let state = ESP32S3_BT_STUB_STATE.load(core::sync::atomic::Ordering::Acquire);
+    let tx_count = ESP32S3_BT_STUB_TX_COUNT.load(core::sync::atomic::Ordering::Acquire);
+    append_bytes(out, len, b"bt stub ");
+    match state {
+        0 => append_bytes(out, len, b"idle"),
+        1 => append_bytes(out, len, b"advertising"),
+        _ => append_bytes(out, len, b"error"),
     }
+    append_bytes(out, len, b" tx=");
+    append_u32_dec(out, len, tx_count);
+    append_bytes(out, len, b" controller=missing\n");
+}
 
-    unsafe fn init(&self, ap: Esp32s3WifiAp) -> &'static mut Esp32s3WifiAp {
-        unsafe { (&mut *self.0.get()).write(ap) }
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+static ESP32S3_BT_BLOB_STATE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+static mut ESP32S3_BT_BLOB_VERSION: [u8; edgerun_platform::esp32s3_ble_blob::VERSION_MAX] =
+    [0; edgerun_platform::esp32s3_ble_blob::VERSION_MAX];
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+static ESP32S3_BT_BLOB_VERSION_LEN: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+static ESP32S3_BT_BLOB_OSI_RC: core::sync::atomic::AtomicI32 =
+    core::sync::atomic::AtomicI32::new(i32::MIN);
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+static ESP32S3_BT_BLOB_INIT_RC: core::sync::atomic::AtomicI32 =
+    core::sync::atomic::AtomicI32::new(i32::MIN);
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+static ESP32S3_BT_BLOB_ENABLE_RC: core::sync::atomic::AtomicI32 =
+    core::sync::atomic::AtomicI32::new(i32::MIN);
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+static ESP32S3_BT_BLOB_VHCI_RC: core::sync::atomic::AtomicI32 =
+    core::sync::atomic::AtomicI32::new(i32::MIN);
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+static ESP32S3_BT_BLOB_HCI_TX: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+fn try_start_esp32s3_bt() -> bool {
+    match edgerun_platform::esp32s3_ble_blob::probe() {
+        Ok(status) => {
+            unsafe {
+                let version = core::ptr::addr_of_mut!(ESP32S3_BT_BLOB_VERSION);
+                (&mut (*version))[..status.version_len].copy_from_slice(status.version_bytes());
+            }
+            ESP32S3_BT_BLOB_VERSION_LEN.store(
+                status.version_len as u32,
+                core::sync::atomic::Ordering::Release,
+            );
+            ESP32S3_BT_BLOB_OSI_RC.store(status.osi_rc, core::sync::atomic::Ordering::Release);
+            ESP32S3_BT_BLOB_INIT_RC.store(status.init_rc, core::sync::atomic::Ordering::Release);
+            ESP32S3_BT_BLOB_ENABLE_RC
+                .store(status.enable_rc, core::sync::atomic::Ordering::Release);
+            ESP32S3_BT_BLOB_VHCI_RC.store(status.vhci_rc, core::sync::atomic::Ordering::Release);
+            ESP32S3_BT_BLOB_HCI_TX.store(status.hci_tx, core::sync::atomic::Ordering::Release);
+            ESP32S3_BT_BLOB_STATE.store(1, core::sync::atomic::Ordering::Release);
+            status.osi_rc == 0
+                && status.init_rc == 0
+                && status.enable_rc == 0
+                && status.vhci_rc == 0
+                && status.hci_tx >= 4
+        }
+        Err(_) => {
+            ESP32S3_BT_BLOB_STATE.store(2, core::sync::atomic::Ordering::Release);
+            false
+        }
     }
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+fn append_bt_stats(out: &mut [u8], len: &mut usize) {
+    let state = ESP32S3_BT_BLOB_STATE.load(core::sync::atomic::Ordering::Acquire);
+    append_bytes(out, len, b"bt blob ");
+    match state {
+        0 => append_bytes(out, len, b"idle"),
+        1 => append_bytes(out, len, b"linked"),
+        _ => append_bytes(out, len, b"probe-error"),
+    }
+    append_bytes(out, len, b" controller=vendor");
+    let version_len = ESP32S3_BT_BLOB_VERSION_LEN.load(core::sync::atomic::Ordering::Acquire);
+    if version_len != 0 {
+        append_bytes(out, len, b" version=");
+        let version_len =
+            (version_len as usize).min(edgerun_platform::esp32s3_ble_blob::VERSION_MAX);
+        let version = unsafe { &*core::ptr::addr_of!(ESP32S3_BT_BLOB_VERSION) };
+        append_bytes(out, len, &version[..version_len]);
+    }
+    append_bytes(out, len, b" osi=");
+    append_i32_dec(
+        out,
+        len,
+        ESP32S3_BT_BLOB_OSI_RC.load(core::sync::atomic::Ordering::Acquire),
+    );
+    append_bytes(out, len, b" init=");
+    append_i32_dec(
+        out,
+        len,
+        ESP32S3_BT_BLOB_INIT_RC.load(core::sync::atomic::Ordering::Acquire),
+    );
+    append_bytes(out, len, b" enable=");
+    append_i32_dec(
+        out,
+        len,
+        ESP32S3_BT_BLOB_ENABLE_RC.load(core::sync::atomic::Ordering::Acquire),
+    );
+    append_bytes(out, len, b" vhci=");
+    append_i32_dec(
+        out,
+        len,
+        ESP32S3_BT_BLOB_VHCI_RC.load(core::sync::atomic::Ordering::Acquire),
+    );
+    append_bytes(out, len, b" hci_tx=");
+    append_u32_dec(
+        out,
+        len,
+        ESP32S3_BT_BLOB_HCI_TX.load(core::sync::atomic::Ordering::Acquire),
+    );
+    append_bytes(out, len, b"\n");
+}
+
+#[cfg(not(any(
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-ble-blob"
+    ),
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-ble-stub",
+        not(feature = "esp32s3-ble-blob")
+    )
+)))]
+fn try_start_esp32s3_bt() -> bool {
+    false
+}
+
+#[cfg(not(any(
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-ble-blob"
+    ),
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-ble-stub",
+        not(feature = "esp32s3-ble-blob")
+    )
+)))]
+fn append_bt_stats(out: &mut [u8], len: &mut usize) {
+    append_bytes(out, len, b"bt backend disabled\n");
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn write_bt_start(seq: u16) {
+    let mut buf = [0u8; 160];
+    let mut len = 0usize;
+    if try_start_esp32s3_bt() {
+        append_bytes(&mut buf, &mut len, b"ok bt-start ");
+    } else {
+        append_bytes(&mut buf, &mut len, b"err bt-start ");
+    }
+    append_bt_stats(&mut buf, &mut len);
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn write_bt_stats(seq: u16) {
+    let mut buf = [0u8; 160];
+    let mut len = 0usize;
+    append_bt_stats(&mut buf, &mut len);
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn write_headless_bt_start_raw() {
+    if try_start_esp32s3_bt() {
+        headless_raw_write(b"ok bt-start ");
+    } else {
+        headless_raw_write(b"err bt-start ");
+    }
+    write_headless_bt_stats_raw();
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn write_headless_bt_stats_raw() {
+    let mut buf = [0u8; 160];
+    let mut len = 0usize;
+    append_bt_stats(&mut buf, &mut len);
+    headless_raw_write(&buf[..len]);
 }
 
 #[cfg(all(
@@ -1832,7 +2389,8 @@ impl Esp32s3WifiApCell {
     target_os = "none",
     feature = "esp32s3-wifi-blob"
 ))]
-static ESP32S3_WIFI_AP: Esp32s3WifiApCell = Esp32s3WifiApCell::new();
+static ESP32S3_VENDOR_WIFI_AP_STARTED: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
 
 #[cfg(all(
     target_arch = "xtensa",
@@ -1875,6 +2433,10 @@ impl Esp32s3WifiMmioApCell {
     unsafe fn init(&self, ap: Esp32s3WifiMmioAp) -> &'static mut Esp32s3WifiMmioAp {
         unsafe { (&mut *self.0.get()).write(ap) }
     }
+
+    unsafe fn get(&self) -> &'static mut Esp32s3WifiMmioAp {
+        unsafe { (&mut *self.0.get()).assume_init_mut() }
+    }
 }
 
 #[cfg(all(
@@ -1884,6 +2446,14 @@ impl Esp32s3WifiMmioApCell {
     not(feature = "esp32s3-wifi-blob")
 ))]
 static ESP32S3_WIFI_MMIO_AP: Esp32s3WifiMmioApCell = Esp32s3WifiMmioApCell::new();
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+static ESP32S3_WIFI_MMIO_AP_STARTED: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
 
 #[cfg(all(
     target_arch = "xtensa",
@@ -1893,47 +2463,21 @@ static ESP32S3_WIFI_MMIO_AP: Esp32s3WifiMmioApCell = Esp32s3WifiMmioApCell::new(
 #[inline(never)]
 fn try_start_esp32s3_wifi_ap() -> bool {
     use edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio;
-    use edgerun_wifi::ieee80211::{MacAddr, OpenApConfig};
 
-    rt::log::log(1, "ESP32-S3 WiFi AP start begin");
-    let config = match OpenApConfig::new(
-        MacAddr::new([0x02, 0xed, 0x67, 0x75, 0x6e, 0x01]),
-        b"edgerun-ac",
-        6,
-    ) {
-        Ok(config) => config,
-        Err(_) => {
-            rt::log::log(3, "ESP32-S3 WiFi AP config failed");
-            return false;
-        }
-    };
-
-    let ap =
-        unsafe { ESP32S3_WIFI_AP.init(Esp32s3WifiAp::new(EspressifPromiscRadio::new(), config)) };
-    match ap.start() {
-        Ok(()) => {
-            rt::log::log(1, "ESP32-S3 WiFi AP start queued");
-            true
-        }
-        Err(_) => {
-            match EspressifPromiscRadio::last_start_status() {
-                13289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: channel not initialized"),
-                14289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: filter not initialized"),
-                15289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: callback not initialized"),
-                16289 => rt::log::log(
-                    3,
-                    "ESP32-S3 WiFi AP start failed: promiscuous not initialized",
-                ),
-                27289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: set mode not initialized"),
-                37289 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: start not initialized"),
-                15000..=24999 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: init stage"),
-                25000..=34999 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: mode stage"),
-                35000..=44999 => rt::log::log(3, "ESP32-S3 WiFi AP start failed: start stage"),
-                _ => rt::log::log(3, "ESP32-S3 WiFi AP start failed"),
-            }
-            false
-        }
+    rt::log::log(1, "ESP32-S3 vendor WiFi AP start begin");
+    if EspressifPromiscRadio::start_vendor_open_ap(b"edgerun-ac", 6) {
+        ESP32S3_VENDOR_WIFI_AP_STARTED.store(true, core::sync::atomic::Ordering::Release);
+        rt::log::log(1, "ESP32-S3 vendor WiFi AP started");
+        return true;
     }
+    match EspressifPromiscRadio::last_start_status() {
+        10_000..=19_999 => rt::log::log(3, "ESP32-S3 vendor WiFi AP failed: init stage"),
+        20_000..=29_999 => rt::log::log(3, "ESP32-S3 vendor WiFi AP failed: mode stage"),
+        30_000..=39_999 => rt::log::log(3, "ESP32-S3 vendor WiFi AP failed: config stage"),
+        40_000..=49_999 => rt::log::log(3, "ESP32-S3 vendor WiFi AP failed: start stage"),
+        _ => rt::log::log(3, "ESP32-S3 vendor WiFi AP failed"),
+    }
+    false
 }
 
 #[cfg(all(
@@ -1951,7 +2495,7 @@ fn try_wifi_debug_step(step: u8) -> bool {
     feature = "esp32s3-wifi-blob"
 ))]
 fn try_wifi_init_known_good() -> bool {
-    false
+    try_start_esp32s3_wifi_ap()
 }
 
 #[cfg(all(
@@ -1961,6 +2505,37 @@ fn try_wifi_init_known_good() -> bool {
 ))]
 fn wifi_debug_status() -> i32 {
     edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio::last_start_status()
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+fn poll_esp32s3_wifi_ap() {}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+fn write_wifi_ap_stats(seq: u16) {
+    use edgerun_platform::esp32s3_wifi_blob::EspressifPromiscRadio;
+
+    if !ESP32S3_VENDOR_WIFI_AP_STARTED.load(core::sync::atomic::Ordering::Acquire) {
+        rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, b"wifi ap stopped\n");
+        return;
+    }
+    let mut out = [0u8; 96];
+    let mut len = 0usize;
+    append_bytes(&mut out, &mut len, b"wifi vendor ap started status=");
+    append_i32(
+        &mut out,
+        &mut len,
+        EspressifPromiscRadio::last_start_status(),
+    );
+    append_bytes(&mut out, &mut len, b"\n");
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &out[..len]);
 }
 
 #[cfg(all(
@@ -2004,6 +2579,7 @@ fn try_start_esp32s3_wifi_ap() -> bool {
     use edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio;
     use edgerun_wifi::ieee80211::{MacAddr, OpenApConfig};
 
+    #[cfg(not(feature = "esp32s3-headless"))]
     rt::log::log(1, "ESP32-S3 MMIO WiFi AP RX start begin");
     let config = match OpenApConfig::new(
         MacAddr::new([0x02, 0xed, 0x67, 0x75, 0x6e, 0x01]),
@@ -2012,6 +2588,7 @@ fn try_start_esp32s3_wifi_ap() -> bool {
     ) {
         Ok(config) => config,
         Err(_) => {
+            #[cfg(not(feature = "esp32s3-headless"))]
             rt::log::log(3, "ESP32-S3 MMIO WiFi AP config failed");
             return false;
         }
@@ -2022,14 +2599,44 @@ fn try_start_esp32s3_wifi_ap() -> bool {
     };
     match ap.start() {
         Ok(()) => {
+            ESP32S3_WIFI_MMIO_AP_STARTED.store(true, core::sync::atomic::Ordering::Release);
+            #[cfg(not(feature = "esp32s3-headless"))]
             rt::log::log(1, "ESP32-S3 MMIO WiFi RX path armed");
             true
         }
         Err(_) => {
+            #[cfg(not(feature = "esp32s3-headless"))]
             rt::log::log(3, "ESP32-S3 MMIO WiFi AP start failed");
             false
         }
     }
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+fn poll_esp32s3_wifi_ap() {
+    if ESP32S3_WIFI_MMIO_AP_STARTED.load(core::sync::atomic::Ordering::Acquire) {
+        unsafe { ESP32S3_WIFI_MMIO_AP.get().poll() };
+    }
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+fn write_wifi_ap_stats(seq: u16) {
+    if !ESP32S3_WIFI_MMIO_AP_STARTED.load(core::sync::atomic::Ordering::Acquire) {
+        rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, b"wifi ap stopped\n");
+        return;
+    }
+    let stats = unsafe { ESP32S3_WIFI_MMIO_AP.get().stats() };
+    write_wifi_ap_stats_inner(seq, stats);
 }
 
 #[cfg(not(any(
@@ -2063,6 +2670,42 @@ fn try_wifi_init_known_good() -> bool {
 fn try_start_esp32s3_wifi_ap() -> bool {
     rt::log::log(3, "ESP32-S3 WiFi AP backend disabled");
     false
+}
+
+#[cfg(not(any(
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-blob"
+    ),
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-mmio",
+        not(feature = "esp32s3-wifi-blob")
+    )
+)))]
+fn poll_esp32s3_wifi_ap() {}
+
+#[cfg(not(any(
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-blob"
+    ),
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-mmio",
+        not(feature = "esp32s3-wifi-blob")
+    )
+)))]
+fn write_wifi_ap_stats(seq: u16) {
+    rt::serial_mux::write_with_seq(
+        rt::serial_mux::CHANNEL_CONTROL,
+        seq,
+        b"wifi ap backend disabled\n",
+    );
 }
 
 #[cfg(not(any(
@@ -4058,6 +4701,20 @@ core::arch::global_asm!(
 
     .global _start
 _start:
+    rsil a0, 15
+    l32r a1, .Lstack_ptr
+    l32r a2, .Lbss_start_ptr
+    l32r a3, .Lbss_end_ptr
+    sub a3, a3, a2
+    srli a3, a3, 2
+    movi a4, 0
+1:
+    beqz a3, 2f
+    s32i a4, a2, 0
+    addi a2, a2, 4
+    addi a3, a3, -1
+    j 1b
+2:
     l32r a5, .Lsystem_perip_clk_en1_ptr
     l32i a6, a5, 0
     movi a7, 1
@@ -4101,18 +4758,6 @@ _start:
     addi a6, a6, -1
     bnez a6, 4b
 
-    l32r a1, .Lstack_ptr
-    l32r a2, .Lbss_start_ptr
-    l32r a3, .Lbss_end_ptr
-    sub a3, a3, a2
-    movi a4, 0
-1:
-    beqz a3, 2f
-    s8i a4, a2, 0
-    addi a2, a2, 1
-    addi a3, a3, -1
-    j 1b
-2:
     call8 kernel_main
 3:
     waiti 0
@@ -4630,50 +5275,85 @@ static MULTIBOOT_HEADER: [u32; 8] = [
 pub unsafe extern "C" fn kernel_main() -> ! {
     unsafe {
         edgerun_platform::arch::xtensa::esp32s3_disable_watchdogs();
-        #[cfg(all(feature = "esp32s3-wifi-mmio", not(feature = "esp32s3-wifi-blob")))]
+        #[cfg(all(
+            feature = "esp32s3-wifi-mmio",
+            feature = "esp32s3-headless",
+            not(feature = "esp32s3-wifi-blob")
+        ))]
         edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::quiesce_after_soft_reset();
         edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_init();
     }
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM0\n");
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM1\n");
     rt::timer::set_now(0);
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM1A\n");
     rt::log::set_mirror_logger(display_console_log);
-    rt::log::log(1, "Starting edgerun unikernel on Xtensa");
-    rt::log::init_serial_logger();
-    rt::log::log(1, "Xtensa serial mux online");
-    rt::log::log(1, "Initializing JC3248W535 display");
-    unsafe {
-        edgerun_platform::esp32s3::Jc3248w535Display::init();
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM1B\n");
+    #[cfg(not(feature = "esp32s3-headless"))]
+    {
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM1C\n");
     }
-    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM2\n");
-    rt::log::log(1, "JC3248W535 display init complete");
-    rt::log::log(1, "Rendering display UI");
-    render_initial_ui();
-    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
-    rt::log::log(1, "Display UI rendered");
-    unsafe {
-        edgerun_platform::esp32s3::Jc3248w535Touch::init();
+    #[cfg(feature = "esp32s3-headless")]
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KMH\n");
+    #[cfg(not(feature = "esp32s3-headless"))]
+    {
+        unsafe {
+            edgerun_platform::esp32s3::Jc3248w535Display::init();
+        }
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM2\n");
+        rt::log::log(1, "Starting edgerun unikernel on Xtensa");
+        rt::log::log(1, "Xtensa serial mux online");
+        rt::log::log(1, "JC3248W535 display init complete");
+        rt::log::log(1, "Rendering display UI");
+        render_initial_ui();
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
+        rt::log::log(1, "Display UI rendered");
+        unsafe {
+            edgerun_platform::esp32s3::Jc3248w535Touch::init();
+        }
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM4\n");
     }
-    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM4\n");
+    #[cfg(feature = "esp32s3-headless")]
+    {
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KMW\n");
+        headless_raw_write(b"ready headless\n");
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KMX\n");
+    }
+    #[cfg(not(feature = "esp32s3-headless"))]
     rt::log::log(1, "ESP32-S3 WiFi AP command ready");
+    #[cfg(not(feature = "esp32s3-headless"))]
     rt::log::log(1, "JC3248W535 touch polling enabled");
 
     let mut last_touch: Option<(u16, u16)> = None;
+    #[cfg(not(feature = "esp32s3-headless"))]
     let mut touch_overlay: Option<TouchOverlay> = None;
+    #[cfg(not(feature = "esp32s3-headless"))]
     let mut touch_tracker = TouchTracker::new();
     let mut serial_rx = rt::serial_mux::Receiver::<256>::new();
+    #[cfg(feature = "esp32s3-headless")]
+    let mut headless_raw_rx = [0u8; 64];
+    #[cfg(feature = "esp32s3-headless")]
+    let mut headless_raw_len = 0usize;
     loop {
+        #[cfg(not(feature = "esp32s3-headless"))]
         poll_serial_control(&mut serial_rx, last_touch);
-        let touch_sample = unsafe {
-            edgerun_platform::esp32s3::Jc3248w535Touch::read_point().map(|point| (point.x, point.y))
-        };
-        let now = edgerun_platform::timer::timer_ticks();
-        let touch = touch_tracker.update(touch_sample, now);
-        render_touch_overlay_step(&mut touch_overlay, touch, now);
-        if touch.is_some() {
-            last_touch = touch;
+        #[cfg(feature = "esp32s3-headless")]
+        poll_headless_raw_control(&mut headless_raw_rx, &mut headless_raw_len);
+        poll_esp32s3_wifi_ap();
+        #[cfg(not(feature = "esp32s3-headless"))]
+        {
+            let touch_sample = unsafe {
+                edgerun_platform::esp32s3::Jc3248w535Touch::read_point()
+                    .map(|point| (point.x, point.y))
+            };
+            let now = edgerun_platform::timer::timer_ticks();
+            let touch = touch_tracker.update(touch_sample, now);
+            render_touch_overlay_step(&mut touch_overlay, touch, now);
+            if touch.is_some() {
+                last_touch = touch;
+            }
+            render_console_if_dirty(last_touch);
         }
-        render_console_if_dirty(last_touch);
     }
 }
 
