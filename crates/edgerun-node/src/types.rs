@@ -20,6 +20,14 @@ pub enum StoreRequest {
         /// Reply channel. `None` for fire-and-forget (e.g., mesh commands).
         reply_tx: Option<edgerun_rt::oneshot::Sender<StoreResponse>>,
     },
+    /// Build a signed advisory aggregate from local query results plus remote
+    /// signed `QueryResultFragment` bytes.
+    FederatedQuery {
+        query: edgerun_proto::edgerun::v0::access::QueryRequest,
+        remote_fragments: Vec<Vec<u8>>,
+        trusted_responders: Vec<Vec<u8>>,
+        reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
+    },
     /// Produce a snapshot of current stream heads.
     ProduceSnapshot {
         view_type: String,

@@ -7,7 +7,7 @@ use crate::capacity;
 use crate::command_dispatch;
 use crate::daemon::send_command_to_peer;
 use crate::ingress;
-use crate::query_engine::execute_query;
+use crate::query_engine::{execute_federated_query, execute_query};
 use crate::types::{MeshReply, StoreRequest, StoreResponse};
 use crate::workload_policy;
 
@@ -85,6 +85,7 @@ pub fn run_store_task(
             StoreRequest::ProduceSnapshot { .. }
             | StoreRequest::FetchObject { .. }
             | StoreRequest::SendCommand { .. }
+            | StoreRequest::FederatedQuery { .. }
             | StoreRequest::FetchDequeue { .. }
             | StoreRequest::FetchMarkDone { .. }
             | StoreRequest::FetchRequeue { .. }
@@ -101,6 +102,7 @@ pub fn run_store_task(
             StoreRequest::ProduceSnapshot { .. }
             | StoreRequest::FetchObject { .. }
             | StoreRequest::SendCommand { .. }
+            | StoreRequest::FederatedQuery { .. }
             | StoreRequest::FetchDequeue { .. }
             | StoreRequest::FetchMarkDone { .. }
             | StoreRequest::FetchRequeue { .. }
@@ -119,6 +121,7 @@ pub fn run_store_task(
             StoreRequest::ProduceSnapshot { .. }
                 | StoreRequest::FetchObject { .. }
                 | StoreRequest::SendCommand { .. }
+                | StoreRequest::FederatedQuery { .. }
         ) {
             // 1. Recent duplicate detection (before any crypto work)
             let msg_hash = ingress::quick_message_hash(&raw_bytes);
@@ -143,6 +146,9 @@ pub fn run_store_task(
                         let _ = reply_tx.send(rejected);
                     }
                     StoreRequest::SendCommand { reply_tx, .. } => {
+                        let _ = reply_tx.send(rejected);
+                    }
+                    StoreRequest::FederatedQuery { reply_tx, .. } => {
                         let _ = reply_tx.send(rejected);
                     }
                     StoreRequest::FetchDequeue { reply_tx } => {
@@ -190,6 +196,9 @@ pub fn run_store_task(
                     StoreRequest::SendCommand { reply_tx, .. } => {
                         let _ = reply_tx.send(rejected);
                     }
+                    StoreRequest::FederatedQuery { reply_tx, .. } => {
+                        let _ = reply_tx.send(rejected);
+                    }
                     StoreRequest::FetchDequeue { reply_tx } => {
                         let _ = reply_tx.send(rejected);
                     }
@@ -234,6 +243,9 @@ pub fn run_store_task(
                             let _ = reply_tx.send(rejected);
                         }
                         StoreRequest::SendCommand { reply_tx, .. } => {
+                            let _ = reply_tx.send(rejected);
+                        }
+                        StoreRequest::FederatedQuery { reply_tx, .. } => {
                             let _ = reply_tx.send(rejected);
                         }
                         StoreRequest::FetchDequeue { reply_tx } => {
@@ -311,6 +323,34 @@ pub fn run_store_task(
                 if let Some(tx) = reply_tx {
                     let _ = tx.send(StoreResponse::Ok(result));
                 }
+            }
+            StoreRequest::FederatedQuery {
+                query,
+                remote_fragments,
+                trusted_responders,
+                reply_tx,
+            } => {
+                let query_validation =
+                    edgerun_core::validators_proto::validate_query_request_signature(&query);
+                if query_validation.verdict != edgerun_core::result::Verdict::Accept {
+                    edgerun_log::warn!(
+                        "federated query signature verification failed: {:?}",
+                        query_validation.reason_code
+                    );
+                    let _ =
+                        reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                    continue;
+                }
+                let result = execute_federated_query(
+                    &query,
+                    &mut store,
+                    stream_id,
+                    &responder_node_id,
+                    signer,
+                    &remote_fragments,
+                    &trusted_responders,
+                );
+                let _ = reply_tx.send(StoreResponse::Ok(result));
             }
             StoreRequest::ProduceSnapshot {
                 view_type,
