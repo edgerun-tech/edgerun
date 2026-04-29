@@ -41,6 +41,8 @@ pub struct MaildirStore {
     root: PathBuf,
     /// Per-user domain mappings (e.g. "ken" → ["edgerun.mail", "localhost"]).
     user_domains: Arc<RwLock<HashMap<String, Vec<String>>>>,
+    /// Optional mailbox that receives unknown users at registered local domains.
+    catch_all_user: Arc<RwLock<Option<String>>>,
     /// Counter for unique message filenames.
     counter: AtomicU64,
     /// Validated sender domains (simple allowlist).
@@ -54,6 +56,7 @@ impl MaildirStore {
         Ok(Self {
             root: root.to_path_buf(),
             user_domains: Arc::new(RwLock::new(HashMap::new())),
+            catch_all_user: Arc::new(RwLock::new(None)),
             counter: AtomicU64::new(0),
             valid_senders: Arc::new(RwLock::new(Vec::new())),
         })
@@ -75,6 +78,18 @@ impl MaildirStore {
             domains.iter().map(|d| d.to_string()).collect(),
         );
 
+        Ok(())
+    }
+
+    /// Route unknown local recipients to an existing mailbox user.
+    pub fn set_catch_all_user(&self, username: &str) -> io::Result<()> {
+        if !self.user_domains.read().unwrap().contains_key(username) {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("catch-all user not registered: {username}"),
+            ));
+        }
+        *self.catch_all_user.write().unwrap() = Some(username.to_string());
         Ok(())
     }
 
@@ -113,6 +128,11 @@ impl MaildirStore {
                     // Domain is valid — check if user exists
                     if domains.contains_key(local) {
                         return Some(local.to_string());
+                    }
+                    if let Some(catch_all_user) = self.catch_all_user.read().unwrap().clone() {
+                        if domains.contains_key(&catch_all_user) {
+                            return Some(catch_all_user);
+                        }
                     }
                 }
             }

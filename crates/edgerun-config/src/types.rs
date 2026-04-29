@@ -538,6 +538,20 @@ pub struct SmtpServerSpec {
     pub tls_key: Option<String>,
     /// Local mail users accepted by SMTP.
     pub users: Option<Vec<MailUserSpec>>,
+    /// Optional mailbox username that receives otherwise unknown local recipients.
+    pub catch_all_user: Option<String>,
+    /// Enable ACME certificate issuance for this server.
+    pub acme_enabled: bool,
+    /// ACME directory URL or preset name.
+    pub acme_directory: Option<String>,
+    /// ACME account contact email.
+    pub acme_contact_email: Option<String>,
+    /// Domains to include in the ACME certificate.
+    pub acme_domains: Option<Vec<String>>,
+    /// ACME account key path.
+    pub acme_account_key_path: Option<String>,
+    /// ACME certificate directory containing fullchain.pem and privkey.pem.
+    pub acme_cert_dir: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1615,12 +1629,19 @@ impl_config_json_struct! {
             tls_cert: "tls_cert" => String,
             tls_key: "tls_key" => String,
             users: "users" => Vec<MailUserSpec>,
+            catch_all_user: "catch_all_user" => String,
+            acme_directory: "acme_directory" => String,
+            acme_contact_email: "acme_contact_email" => String,
+            acme_domains: "acme_domains" => Vec<String>,
+            acme_account_key_path: "acme_account_key_path" => String,
+            acme_cert_dir: "acme_cert_dir" => String,
         }
         default {
             smtps: "smtps" => bool,
             starttls: "starttls" => bool,
             local_domains: "local_domains" => Vec<String>,
             relay_enabled: "relay_enabled" => bool,
+            acme_enabled: "acme_enabled" => bool,
         }
         default_with {}
     }

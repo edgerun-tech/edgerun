@@ -513,6 +513,10 @@ where
                 .map_err(crate::runtime::bare_io)?;
         }
 
+        if keep_alive.is_none() {
+            break;
+        }
+
         current_line = match timeout(ka_timeout, reader.read_line_max(max_request_size)).await {
             Ok(Ok(Some(line))) => line,
             _ => break,

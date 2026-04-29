@@ -1,14 +1,20 @@
-#!/bin/bash -u
+#!/usr/bin/env bash
+set -euo pipefail
 
 RUNTIME=${1:-./youki}
-ROOT=$(git rev-parse --show-toplevel)
-RUNC_DIR="${ROOT}/tests/runc/src/github.com/opencontainers/runc"
-PATTERN_FILE="${ROOT}/${2:-tests/runc/runc_test_pattern}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+RUNC_DIR="${SCRIPT_DIR}/src/github.com/opencontainers/runc"
+PATTERN_FILE=${2:-"${SCRIPT_DIR}/runc_test_pattern"}
+RUNC_REPO=${RUNC_REPO:-https://github.com/opencontainers/runc.git}
+RUNC_REF=${RUNC_REF:-main}
 
 if [[ ! -f "$RUNC_DIR/Makefile" ]]; then
-  echo "error: Makefile not found under: $RUNC_DIR" >&2
-  echo "please run: git submodule update --init --recursive" >&2
-  exit 1
+  echo "runc checkout not found; cloning ${RUNC_REPO} into ${RUNC_DIR}" >&2
+  mkdir -p "$(dirname "$RUNC_DIR")"
+  git clone --depth 1 --branch "$RUNC_REF" "$RUNC_REPO" "$RUNC_DIR"
+elif [[ -d "$RUNC_DIR/.git" ]]; then
+  git -C "$RUNC_DIR" fetch --depth 1 origin "$RUNC_REF"
+  git -C "$RUNC_DIR" checkout --detach FETCH_HEAD
 fi
 
 if [[ ! -x "$RUNTIME" ]]; then

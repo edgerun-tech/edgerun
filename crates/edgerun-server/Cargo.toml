@@ -24,7 +24,9 @@ edgerun-email = { version = "0.1", path = "../edgerun-email", optional = true }
 edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false, optional = true }
 edgerun-acme = { version = "0.1", path = "../edgerun-acme", features = ["dns_challenge"] }
 edgerun-config = { version = "0.1", path = "../edgerun-config" }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 edgerun-email-auth = { version = "0.1", path = "../edgerun-email-auth" }
+edgerun-url = { version = "0.1", path = "../edgerun-url" }
 edgerun-dhcp = { version = "0.1", path = "../edgerun-dhcp", optional = true }
 edgerun-tftp = { version = "0.1", path = "../edgerun-tftp", optional = true }
 edgerun-proxy = { version = "0.1", path = "../edgerun-proxy", optional = true }

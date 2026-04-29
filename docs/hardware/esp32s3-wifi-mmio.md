@@ -65,15 +65,36 @@ Tokens are separated by spaces, commas, or semicolons.
 - `rxdmarom` tests the descriptor-ring RX-base plus ROM-global variant.
 - `rxdmaromfilter` adds the RF-test MAC/filter and 2440 MHz optimization
   setup before the descriptor-ring RX-base ROM-global start.
+- `rxdmaromclone` extends `rxdmaromfilter` with the current no-blob PHY-param
+  scratch setup, the Rust-side channel-register clone, guarded TX-gain probe,
+  AGC restore, and RF-state restore.
 - `rfch-save`, `rfch-pre`, and `rfch-mode` are confirmed to return cleanly when
   run after the current descriptor-ring RX setup.
-- `rfch-gain-pre` calls ROM slot `g_phyFuns + 0x24c` as `(1)` and is currently
-  hazardous: it stalls the board. Keep `rfch-gain-ch`, `rfch-post`, and
-  `rfch-restore` untested until the board is reflashed or reset after any
-  `rfch-gain-pre` run.
+- `rfch-gain-pre` calls ROM slot `g_phyFuns + 0x24c` as `(1)` and
+  `rfch-gain-ch` calls `g_phyFuns + 0x264` as `(6, 0)`. Both are currently
+  hazardous when called directly: each stalls the board. The vendor path calls
+  `wr_rx_gain_mem` first, using `phy_param` bytes around `0xf1` and `0x1f6`, so
+  these slots probably require a generated RX gain table/context.
+- `rfch-post` and `rfch-restore` are confirmed to return cleanly when run
+  without the gain hooks.
 - `rfchan6` runs the combined `chip_v7_set_chan` slot-path approximation. This
-  is currently hazardous because it includes `rfch-gain-pre`; it must stay out
-  of default presets.
+  is state-sensitive and currently hazardous: it returned after the normal RX
+  setup plus `phyparam`, but `phyparam rfchan6` from a clean boot stalled the
+  board. It must stay out of default presets.
+- `phyparam` installs a local no-blob scratch buffer via `rom_phy_param_addr`.
+  The scratch buffer expands the public 128-byte ESP32-S3 PHY init data into
+  the runtime offsets reproduced from `register_chipv7_phy_init_param`, then
+  fills the separate channel runtime fields at `0x1f2..0x1f6`. Copying the
+  public 128-byte init table raw into this runtime block was tried and made the
+  board stop answering serial commands on the next clean boot, so raw-copy is
+  explicitly not the stable path.
+- `rfsub06c`, `rfsub054`, `rfsub0c4`, and `rfsub080` split the four subcalls
+  made by ROM `rom_set_chan_reg`. All four return when `rfsub0c4` receives
+  scratch-buffer pointers for the RX compensation tables. `rfch-reg0` still
+  stalls inside the ROM aggregate wrapper, so use `rfch-clone` instead.
+- `rfch-clone` is a Rust-side no-blob clone of the safe `rom_set_chan_reg`
+  subcall sequence. It returns cleanly, as do `txgain0`, `gainwrite0`, and
+  `gainflat` after `phyparam`.
 
 Example:
 
@@ -81,6 +102,7 @@ Example:
 scripts/wifi-mmio-seq.py /dev/ttyACM0 rx6
 scripts/wifi-mmio-seq.py /dev/ttyACM0 rxdmarom
 scripts/wifi-mmio-seq.py /dev/ttyACM0 rxdmaromfilter
+scripts/wifi-mmio-seq.py /dev/ttyACM0 rxdmaromclone
 scripts/wifi-mmio-seq.py /dev/ttyACM0 init rx 52 rx 50 35 51 40 41 42 rx
 scripts/wifi-mmio-seq.py /dev/ttyACM0 init rx 32 43 47 48 50 35 51 37 41 42 rx
 scripts/wifi-mmio-seq.py /dev/ttyACM0 init rx 46 32 43 47 48 50 35 51 37 41 42 rx
@@ -100,10 +122,13 @@ output grouped in one terminal run.
 - Implemented in code: `wifi57` through `wifi63` split the suspected
   `chip_v7_set_chan` ROM path into individual probes. `wifi64` keeps the
   combined path as an explicit hazardous test.
-- Current blocker: the `g_phyFuns + 0x24c` channel-gain preparation slot stalls
-  the board when called directly, so RX bring-up should avoid that path and
-  focus next on the missing state/argument setup that vendor `rftest_set_chan`
-  performs before this slot.
+- Current blocker: `g_phyFuns + 0x24c` maps to ROM `rom_set_chan_reg`, and the
+  ROM aggregate wrapper still stalls even though its four subcalls return when
+  invoked from Rust with explicit scratch pointers. `rfch-clone` bypasses that
+  wrapper and is the stable channel-register path for current tests.
+- Current blocker: `rxdmaromclone` runs to completion, but the RX descriptor
+  payload sentinel remains `deadbeef`. The MAC sees the descriptor ring and ROM
+  globals, but no received frame has landed in the buffer yet.
 - Implemented in code: `wifi53`/`wifi54` and `wifi55`/`wifi56` can install
   descriptor/control pointers into ROM RAM globals. The descriptor-base variant
   leaves `base` on the descriptor ring and sets `romptr[2]`, `romptr[4]`, and

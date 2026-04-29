@@ -2,7 +2,8 @@ use crate::prelude::v1::*;
 use alloc::sync::Arc;
 
 use edgerun_encoding::base64url_nopad_encode;
-use edgerun_http::{HttpClient, Method};
+use edgerun_http::{HttpClient, HttpVersion, Method};
+use edgerun_json::{FromJson, JsonValue};
 use edgerun_rt::RwLock;
 use edgerun_url::Url;
 
@@ -12,8 +13,8 @@ use crate::dns_challenge::DnsChallengeManager;
 use crate::http_challenge::HttpChallengeHandler;
 use crate::order::Order;
 use crate::types::{
-    AcmeErrorDetail, CSRRequest, CertificateResponse, Directory, DirectoryUrl, Identifier,
-    JwsHeader, NewAccountRequestWithNonce, NewOrderRequest, RevokeCertRequest, SignedJws,
+    AcmeErrorDetail, CSRRequest, Directory, DirectoryUrl, Identifier, JwsHeader,
+    NewAccountRequestWithNonce, NewOrderRequest, RevokeCertRequest, SignedJws,
 };
 use crate::AcmeError;
 
@@ -51,7 +52,9 @@ impl AcmeClient {
             account_key: Arc::new(account_key),
             account_id: RwLock::new(None),
             nonce: RwLock::new(None),
-            http_client: HttpClient::new(),
+            http_client: HttpClient::new()
+                .version(HttpVersion::Http1)
+                .with_tls12_first(true),
         }
     }
 
@@ -111,14 +114,28 @@ impl AcmeClient {
     }
 
     async fn post(&self, url: &Url, payload: Option<&[u8]>) -> Result<(u16, Vec<u8>), AcmeError> {
+        let (status, body, _) = self.post_with_location(url, payload).await?;
+        Ok((status, body))
+    }
+
+    async fn post_with_location(
+        &self,
+        url: &Url,
+        payload: Option<&[u8]>,
+    ) -> Result<(u16, Vec<u8>, Option<String>), AcmeError> {
         let nonce = self.get_nonce().await?;
+        let account_id = self.account_id.read().clone();
 
         let protected = JwsHeader {
             alg: "ES256".to_string(),
-            jwk: Some(self.account_key.jwk()),
+            jwk: if account_id.is_some() {
+                None
+            } else {
+                Some(self.account_key.jwk())
+            },
             url: url.to_string(),
             nonce: Some(nonce),
-            key_id: self.account_id.read().clone(),
+            key_id: account_id,
         };
 
         let protected_b64 = base64url_nopad_encode(
@@ -152,6 +169,10 @@ impl AcmeClient {
 
         let status = res.status().as_u16();
         let body = res.body().to_vec();
+        let location = res
+            .headers()
+            .get("location")
+            .map(|value| value.as_str().to_string());
 
         let new_nonce = res
             .headers()
@@ -163,11 +184,15 @@ impl AcmeClient {
             *self.nonce.write() = Some(nonce);
         }
 
-        if status == 200 || status == 201 {
-            Ok((status, body))
+        if status == 200 || status == 201 || status == 202 {
+            Ok((status, body, location))
+        } else if let Ok(error_detail) = edgerun_json::from_json_slice::<AcmeErrorDetail>(&body) {
+            Err(AcmeError::Server(status, Some(error_detail)))
         } else {
-            let error_detail: Option<AcmeErrorDetail> = edgerun_json::from_json_slice(&body).ok();
-            Err(AcmeError::Server(status, error_detail))
+            let body = String::from_utf8_lossy(&body);
+            Err(AcmeError::Protocol(format!(
+                "ACME server error {status}: {body}"
+            )))
         }
     }
 
@@ -190,19 +215,17 @@ impl AcmeClient {
                 Some(self.config.email.clone())
             },
             terms_of_service_agreed: Some(self.config.terms_of_service_agreed),
-            jwk: self.account_key.jwk(),
             external_account_binding: None,
         };
 
         let payload_bytes =
             edgerun_json::to_json_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
-        let (_, body) = self.post(&new_account_url, Some(&payload_bytes)).await?;
+        let (_, _body, location) = self
+            .post_with_location(&new_account_url, Some(&payload_bytes))
+            .await?;
 
-        let account: crate::types::AccountResponse =
-            edgerun_json::from_json_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
-
-        let id = account.id;
+        let id = location.ok_or_else(|| AcmeError::Protocol("missing account location".into()))?;
         *self.account_id.write() = Some(id.clone());
 
         Ok(id)
@@ -233,11 +256,21 @@ impl AcmeClient {
         let payload_bytes =
             edgerun_json::to_json_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
-        let (_, body) = self.post(&new_order_url, Some(&payload_bytes)).await?;
+        let (_, body, location) = self
+            .post_with_location(&new_order_url, Some(&payload_bytes))
+            .await?;
 
-        let order: crate::types::Order =
-            edgerun_json::from_json_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+        let order: crate::types::Order = parse_acme_object_with_id(
+            &body,
+            location.as_deref().unwrap_or(&new_order_url.to_string()),
+        )?;
 
+        Ok(Order::from_acme(order))
+    }
+
+    pub async fn get_order(&self, url: &Url) -> Result<Order, AcmeError> {
+        let (_, body, _) = self.post_with_location(url, None).await?;
+        let order: crate::types::Order = parse_acme_object_with_id(&body, &url.to_string())?;
         Ok(Order::from_acme(order))
     }
 
@@ -245,28 +278,28 @@ impl AcmeClient {
         &self,
         url: &Url,
     ) -> Result<crate::types::Authorization, AcmeError> {
-        let (_, body) = self.post(url, None).await?;
+        let (_, body, _) = self.post_with_location(url, None).await?;
 
         let authz: crate::types::Authorization =
-            edgerun_json::from_json_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            parse_acme_object_with_id(&body, &url.to_string())?;
 
         Ok(authz)
     }
 
     pub async fn get_challenge(&self, url: &Url) -> Result<Challenge, AcmeError> {
-        let (_, body) = self.post(url, None).await?;
+        let (_, body, _) = self.post_with_location(url, None).await?;
 
         let challenge: crate::types::Challenge =
-            edgerun_json::from_json_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            parse_acme_object_with_id(&body, &url.to_string())?;
 
         Ok(Challenge::from_acme(challenge))
     }
 
     pub async fn validate_challenge(&self, url: &Url) -> Result<Challenge, AcmeError> {
-        let (_, body) = self.post(url, Some(b"{}")).await?;
+        let (_, body, _) = self.post_with_location(url, Some(b"{}")).await?;
 
         let challenge: crate::types::Challenge =
-            edgerun_json::from_json_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+            parse_acme_object_with_id(&body, &url.to_string())?;
 
         Ok(Challenge::from_acme(challenge))
     }
@@ -278,21 +311,16 @@ impl AcmeClient {
         let payload_bytes =
             edgerun_json::to_json_vec(&payload).map_err(|e| AcmeError::Parse(e.to_string()))?;
 
-        let (_, body) = self.post(url, Some(&payload_bytes)).await?;
+        let (_, body, _) = self.post_with_location(url, Some(&payload_bytes)).await?;
 
-        let order: crate::types::Order =
-            edgerun_json::from_json_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+        let order: crate::types::Order = parse_acme_object_with_id(&body, &url.to_string())?;
 
         Ok(Order::from_acme(order))
     }
 
     pub async fn download_certificate(&self, url: &Url) -> Result<String, AcmeError> {
         let (_, body) = self.post(url, None).await?;
-
-        let cert: CertificateResponse =
-            edgerun_json::from_json_slice(&body).map_err(|e| AcmeError::Parse(e.to_string()))?;
-
-        Ok(cert.certificate)
+        String::from_utf8(body).map_err(|e| AcmeError::Parse(e.to_string()))
     }
 
     pub async fn revoke_certificate(
@@ -341,4 +369,13 @@ impl AcmeClient {
     pub fn generate_key(&self) -> String {
         self.account_key.pem()
     }
+}
+
+fn parse_acme_object_with_id<T: FromJson>(body: &[u8], id: &str) -> Result<T, AcmeError> {
+    let mut value: JsonValue =
+        edgerun_json::from_json_slice(body).map_err(|e| AcmeError::Parse(e.to_string()))?;
+    if let JsonValue::Object(_) = value {
+        value.push_field("id", id.to_string());
+    }
+    T::from_json(value).map_err(|e| AcmeError::Parse(e.to_string()))
 }

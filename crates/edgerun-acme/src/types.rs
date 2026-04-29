@@ -68,7 +68,10 @@ pub enum Jwk {
 impl Jwk {
     pub fn thumbprint(&self) -> Vec<u8> {
         use sha2::{Digest, Sha256};
-        let jwk_json = edgerun_json::to_json_string(self).unwrap_or_default();
+        let jwk_json = match self {
+            Jwk::RSA { n, e } => format!(r#"{{"e":"{e}","kty":"RSA","n":"{n}"}}"#),
+            Jwk::EC { crv, x, y } => format!(r#"{{"crv":"{crv}","kty":"EC","x":"{x}","y":"{y}"}}"#),
+        };
         let mut hasher = Sha256::new();
         hasher.update(jwk_json.as_bytes());
         hasher.finalize().to_vec()
@@ -86,7 +89,6 @@ pub struct NewAccountRequest {
 pub struct NewAccountRequestWithNonce {
     pub contact: Option<Vec<String>>,
     pub terms_of_service_agreed: Option<bool>,
-    pub jwk: Jwk,
     pub external_account_binding: Option<ExternalAccountBinding>,
 }
 
@@ -328,10 +330,12 @@ impl ToJson for Jwk {
         let mut object = Map::new();
         match self {
             Jwk::RSA { n, e } => {
+                object.push_field("kty", "RSA");
                 object.push_field("n", n.to_json());
                 object.push_field("e", e.to_json());
             }
             Jwk::EC { crv, x, y } => {
+                object.push_field("kty", "EC");
                 object.push_field("crv", crv.to_json());
                 object.push_field("x", x.to_json());
                 object.push_field("y", y.to_json());
@@ -373,9 +377,7 @@ edgerun_json::impl_json_struct! {
 
 edgerun_json::impl_json_struct! {
     NewAccountRequestWithNonce {
-        required {
-            jwk: "jwk" => Jwk
-        }
+        required {}
         optional {
             contact: "contact" => Vec<String>,
             terms_of_service_agreed: "termsOfServiceAgreed" => bool,
@@ -645,5 +647,23 @@ mod tests {
         assert!(encoded.contains(r#""nonce":"nonce""#));
         assert!(!encoded.contains("jwk"));
         assert!(!encoded.contains("kid"));
+    }
+
+    #[test]
+    fn jwk_thumbprint_uses_rfc7638_member_order() {
+        let jwk = Jwk::EC {
+            crv: "P-256".to_string(),
+            x: "x-coordinate".to_string(),
+            y: "y-coordinate".to_string(),
+        };
+        let expected_json = r#"{"crv":"P-256","kty":"EC","x":"x-coordinate","y":"y-coordinate"}"#;
+        let expected = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(expected_json.as_bytes());
+            hasher.finalize().to_vec()
+        };
+
+        assert_eq!(jwk.thumbprint(), expected);
     }
 }

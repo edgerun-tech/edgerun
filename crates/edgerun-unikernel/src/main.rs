@@ -943,6 +943,26 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
             b"wifirfchrestore" | b"wifirfchrestore\n" => write_wifi_debug_step(frame.seq, 63),
             b"wifi64" | b"wifi64\n" => write_wifi_debug_step(frame.seq, 64),
             b"wifirfchan6" | b"wifirfchan6\n" => write_wifi_debug_step(frame.seq, 64),
+            b"wifi65" | b"wifi65\n" => write_wifi_debug_step(frame.seq, 65),
+            b"wifiphyparam" | b"wifiphyparam\n" => write_wifi_debug_step(frame.seq, 65),
+            b"wifi66" | b"wifi66\n" => write_wifi_debug_step(frame.seq, 66),
+            b"wifirfchreg0" | b"wifirfchreg0\n" => write_wifi_debug_step(frame.seq, 66),
+            b"wifi67" | b"wifi67\n" => write_wifi_debug_step(frame.seq, 67),
+            b"wifitxgain0" | b"wifitxgain0\n" => write_wifi_debug_step(frame.seq, 67),
+            b"wifi68" | b"wifi68\n" => write_wifi_debug_step(frame.seq, 68),
+            b"wifigainwrite0" | b"wifigainwrite0\n" => write_wifi_debug_step(frame.seq, 68),
+            b"wifi69" | b"wifi69\n" => write_wifi_debug_step(frame.seq, 69),
+            b"wifigainflat" | b"wifigainflat\n" => write_wifi_debug_step(frame.seq, 69),
+            b"wifi70" | b"wifi70\n" => write_wifi_debug_step(frame.seq, 70),
+            b"wifirfsub06c" | b"wifirfsub06c\n" => write_wifi_debug_step(frame.seq, 70),
+            b"wifi71" | b"wifi71\n" => write_wifi_debug_step(frame.seq, 71),
+            b"wifirfsub054" | b"wifirfsub054\n" => write_wifi_debug_step(frame.seq, 71),
+            b"wifi72" | b"wifi72\n" => write_wifi_debug_step(frame.seq, 72),
+            b"wifirfsub0c4" | b"wifirfsub0c4\n" => write_wifi_debug_step(frame.seq, 72),
+            b"wifi73" | b"wifi73\n" => write_wifi_debug_step(frame.seq, 73),
+            b"wifirfsub080" | b"wifirfsub080\n" => write_wifi_debug_step(frame.seq, 73),
+            b"wifi74" | b"wifi74\n" => write_wifi_debug_step(frame.seq, 74),
+            b"wifirfchclone" | b"wifirfchclone\n" => write_wifi_debug_step(frame.seq, 74),
             b"wifich1" | b"wifich1\n" => write_wifi_debug_step(frame.seq, 23),
             b"wifich6" | b"wifich6\n" => write_wifi_debug_step(frame.seq, 24),
             b"wifich11" | b"wifich11\n" => write_wifi_debug_step(frame.seq, 25),
@@ -1026,7 +1046,7 @@ fn write_wifi_tx_regs(seq: u16) {
 
 fn write_wifi_rx_scratch_regs(seq: u16) {
     display_console_log("ctl wifirx");
-    let mut buf = [0u8; 768];
+    let mut buf = [0u8; 1024];
     let mut len = 0;
     append_wifi_rx_scratch_regs(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
@@ -1282,16 +1302,6 @@ fn append_wifi_rx_scratch_regs(out: &mut [u8], len: &mut usize) {
     for word in regs.ctrl_words {
         append_bytes(out, len, b" ");
         append_hex_u32(out, len, word);
-    }
-    append_bytes(out, len, b" desc0");
-    for word in regs.desc_words.iter().take(6) {
-        append_bytes(out, len, b" ");
-        append_hex_u32(out, len, *word);
-    }
-    append_bytes(out, len, b" buf");
-    for word in regs.buffer_words.iter().take(4) {
-        append_bytes(out, len, b" ");
-        append_hex_u32(out, len, *word);
     }
     append_bytes(out, len, b"\n");
 }
@@ -1596,18 +1606,26 @@ fn append_wifi_phy_fun_slots(out: &mut [u8], len: &mut usize) {
     let slots = edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::debug_phy_fun_slots();
     append_bytes(out, len, b"wifi funs table=0x");
     append_hex_u32(out, len, slots.table);
+    append_bytes(out, len, b" 02c=0x");
+    append_hex_u32(out, len, slots.slot_02c);
     append_bytes(out, len, b" 008=0x");
     append_hex_u32(out, len, slots.slot_008);
     append_bytes(out, len, b" 00c=0x");
     append_hex_u32(out, len, slots.slot_00c);
+    append_bytes(out, len, b" 054=0x");
+    append_hex_u32(out, len, slots.slot_054);
     append_bytes(out, len, b" 05c=0x");
     append_hex_u32(out, len, slots.slot_05c);
     append_bytes(out, len, b" 06c=0x");
     append_hex_u32(out, len, slots.slot_06c);
     append_bytes(out, len, b" 078=0x");
     append_hex_u32(out, len, slots.slot_078);
+    append_bytes(out, len, b" 080=0x");
+    append_hex_u32(out, len, slots.slot_080);
     append_bytes(out, len, b" 088=0x");
     append_hex_u32(out, len, slots.slot_088);
+    append_bytes(out, len, b" 0c4=0x");
+    append_hex_u32(out, len, slots.slot_0c4);
     append_bytes(out, len, b" 0c8=0x");
     append_hex_u32(out, len, slots.slot_0c8);
     append_bytes(out, len, b" 0d0=0x");
@@ -1819,6 +1837,57 @@ static ESP32S3_WIFI_AP: Esp32s3WifiApCell = Esp32s3WifiApCell::new();
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+type Esp32s3WifiMmioAp = edgerun_platform::esp32s3_wifi::Esp32s3WifiOpenAp<
+    edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio,
+    4,
+>;
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+struct Esp32s3WifiMmioApCell(core::cell::UnsafeCell<core::mem::MaybeUninit<Esp32s3WifiMmioAp>>);
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+unsafe impl Sync for Esp32s3WifiMmioApCell {}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+impl Esp32s3WifiMmioApCell {
+    const fn new() -> Self {
+        Self(core::cell::UnsafeCell::new(core::mem::MaybeUninit::uninit()))
+    }
+
+    unsafe fn init(&self, ap: Esp32s3WifiMmioAp) -> &'static mut Esp32s3WifiMmioAp {
+        unsafe { (&mut *self.0.get()).write(ap) }
+    }
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+static ESP32S3_WIFI_MMIO_AP: Esp32s3WifiMmioApCell = Esp32s3WifiMmioApCell::new();
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
     feature = "esp32s3-wifi-blob"
 ))]
 #[inline(never)]
@@ -1924,6 +1993,45 @@ fn wifi_debug_status() -> i32 {
     edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::last_status()
 }
 
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+#[inline(never)]
+fn try_start_esp32s3_wifi_ap() -> bool {
+    use edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio;
+    use edgerun_wifi::ieee80211::{MacAddr, OpenApConfig};
+
+    rt::log::log(1, "ESP32-S3 MMIO WiFi AP RX start begin");
+    let config = match OpenApConfig::new(
+        MacAddr::new([0x02, 0xed, 0x67, 0x75, 0x6e, 0x01]),
+        b"edgerun-ac",
+        6,
+    ) {
+        Ok(config) => config,
+        Err(_) => {
+            rt::log::log(3, "ESP32-S3 MMIO WiFi AP config failed");
+            return false;
+        }
+    };
+
+    let ap = unsafe {
+        ESP32S3_WIFI_MMIO_AP.init(Esp32s3WifiMmioAp::new(Esp32s3WifiMmio::new(), config))
+    };
+    match ap.start() {
+        Ok(()) => {
+            rt::log::log(1, "ESP32-S3 MMIO WiFi RX path armed");
+            true
+        }
+        Err(_) => {
+            rt::log::log(3, "ESP32-S3 MMIO WiFi AP start failed");
+            false
+        }
+    }
+}
+
 #[cfg(not(any(
     all(
         target_arch = "xtensa",
@@ -1945,6 +2053,12 @@ fn try_wifi_init_known_good() -> bool {
     target_arch = "xtensa",
     target_os = "none",
     feature = "esp32s3-wifi-blob"
+)))]
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
 )))]
 fn try_start_esp32s3_wifi_ap() -> bool {
     rt::log::log(3, "ESP32-S3 WiFi AP backend disabled");

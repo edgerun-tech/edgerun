@@ -12,7 +12,5 @@ spec:
   tls_cert: /etc/edgerun/mail/tls/fullchain.pem
   tls_key: /etc/edgerun/mail/tls/privkey.pem
   users:
-    - username: postmaster
-      password: change-me
-    - username: admin
+    - username: ken
       password: change-me

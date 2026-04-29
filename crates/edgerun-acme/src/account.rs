@@ -46,16 +46,16 @@ impl AccountKey {
     }
 
     pub fn thumbprint_b64(&self) -> String {
-        let jwk_json = edgerun_json::to_json_string(&self.jwk()).unwrap_or_default();
-        use edgerun_crypto::digest::Digest;
-        use edgerun_crypto::Sha256;
-        let mut hasher = <Sha256 as Digest>::new();
-        hasher.update(jwk_json.as_bytes());
-        base64url_nopad_encode(&hasher.finalize())
+        base64url_nopad_encode(&self.jwk().thumbprint())
     }
 
     pub fn sign(&self, message: &[u8]) -> Vec<u8> {
-        let sig: Signature = self.key.sign_prehash(message).expect("sign failed");
+        use edgerun_crypto::digest::Digest;
+        use edgerun_crypto::Sha256;
+        let mut hasher = <Sha256 as Digest>::new();
+        hasher.update(message);
+        let digest = hasher.finalize();
+        let sig: Signature = self.key.sign_prehash(&digest).expect("sign failed");
         sig.to_bytes().to_vec()
     }
 

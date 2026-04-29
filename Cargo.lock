@@ -273,6 +273,7 @@ dependencies = [
  "edgerun-json",
  "edgerun-rt",
  "edgerun-secret-service",
+ "edgerun-tls",
  "edgerun-url",
  "sha2",
 ]
@@ -1211,12 +1212,14 @@ dependencies = [
  "edgerun-dns",
  "edgerun-email",
  "edgerun-email-auth",
+ "edgerun-encoding",
  "edgerun-http",
  "edgerun-log",
  "edgerun-proxy",
  "edgerun-rt",
  "edgerun-tftp",
  "edgerun-tls",
+ "edgerun-url",
 ]
 
 [[package]]

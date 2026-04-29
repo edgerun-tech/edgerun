@@ -38,7 +38,7 @@ use crate::prf::{
 use crate::record::RecordCipher;
 use crate::server::client_hello::ClientHello;
 use crate::server::message_builder::{
-    build_certificate_message, build_certificate_verify, build_encrypted_extensions,
+    build_certificate_chain_message, build_certificate_verify, build_encrypted_extensions,
     build_finished_message, build_server_hello, compute_client_finished_verify_data,
     compute_server_finished_verify_data,
 };
@@ -1134,14 +1134,10 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                                 ));
                             }
                             if !leaf.matches_hostname(server_name) {
-                                if certs.len() == 1 {
-                                    // Self-signed — accept for testing
-                                } else {
-                                    return Err(TlsError::Certificate(format!(
-                                        "Certificate does not match hostname {}",
-                                        server_name,
-                                    )));
-                                }
+                                return Err(TlsError::Certificate(format!(
+                                    "Certificate does not match hostname {}",
+                                    server_name,
+                                )));
                             }
                             // Full chain validation needs a root store and broader signature
                             // algorithm support. For now, validate time and hostname only.
@@ -1519,7 +1515,7 @@ async fn async_server_send_encrypted_handshake<S: AsyncRead + AsyncWrite + Unpin
     transcript: &mut Vec<u8>,
     hash: &Hasher,
     handshake_transcript_hash: &[u8],
-    cert_der: &[u8],
+    cert_chain_der: &[Vec<u8>],
     signing_key: &edgerun_crypto::p256::ecdsa::SigningKey,
     alpn_protocol: Option<&[u8]>,
 ) -> Result<()> {
@@ -1539,7 +1535,8 @@ async fn async_server_send_encrypted_handshake<S: AsyncRead + AsyncWrite + Unpin
         .await?;
 
     // Certificate
-    let cert_msg = build_certificate_message(cert_der);
+    let cert_refs: Vec<&[u8]> = cert_chain_der.iter().map(Vec::as_slice).collect();
+    let cert_msg = build_certificate_chain_message(&cert_refs);
     transcript.extend_from_slice(&cert_msg);
     let cert_ct = write_cipher.encrypt(22, &cert_msg);
     stream
@@ -1698,12 +1695,12 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
         .cloned()
         .ok_or_else(|| TlsError::HandshakeFailure("No common cipher suite".into()))?;
 
-    // Negotiate ALPN: prefer "h2" for HTTP/2, fallback to "http/1.1"
+    // Prefer HTTP/1.1 until the HTTP/2 server path is robust enough for browsers.
     let alpn_protocol = if !ch.alpn_protocols.is_empty() {
-        if ch.alpn_protocols.iter().any(|p| p == b"h2") {
-            Some(b"h2".to_vec())
-        } else if ch.alpn_protocols.iter().any(|p| p == b"http/1.1") {
+        if ch.alpn_protocols.iter().any(|p| p == b"http/1.1") {
             Some(b"http/1.1".to_vec())
+        } else if ch.alpn_protocols.iter().any(|p| p == b"h2") {
+            Some(b"h2".to_vec())
         } else {
             None
         }
@@ -1792,7 +1789,7 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
         &mut transcript,
         &hash,
         &handshake_transcript_hash,
-        &cert_and_key.cert_der,
+        &cert_and_key.cert_chain_der,
         &cert_and_key.signing_key,
         alpn_protocol.as_deref(),
     )

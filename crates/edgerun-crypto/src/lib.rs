@@ -425,6 +425,40 @@ pub fn generate_self_signed_for_names(key: &SigningKey, names: &[&str]) -> alloc
 }
 
 #[cfg(feature = "p256")]
+pub fn generate_csr_for_names(key: &SigningKey, names: &[&str]) -> alloc::vec::Vec<u8> {
+    use p256::ecdsa::signature::hazmat::PrehashSigner;
+    use p256::elliptic_curve::sec1::ToEncodedPoint;
+
+    let common_name = names.first().copied().unwrap_or("localhost");
+    let subject = x509_name(common_name);
+    let public_key = key.verifying_key().to_encoded_point(false);
+    let public_key = public_key.as_bytes();
+    let spki_alg = seq(concat(&[
+        oid(&[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01]),
+        oid(&[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]),
+    ]));
+    let spki = seq(concat(&[spki_alg, bit_string(public_key)]));
+    let extension_request = seq(concat(&[
+        oid(&[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x09, 0x0e]),
+        set(seq(concat(&[subject_alt_name_extension(names)]))),
+    ]));
+    let attributes = tagged(0xa0, extension_request);
+    let certification_request_info = seq(concat(&[integer(&[0]), subject, spki, attributes]));
+    let sig_alg = seq(concat(&[oid(&[
+        0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02,
+    ])]));
+    let digest = sha256(&certification_request_info);
+    let signature: p256::ecdsa::Signature = key
+        .sign_prehash(&digest)
+        .expect("P-256 ECDSA signing should accept SHA-256 prehash");
+    seq(concat(&[
+        certification_request_info,
+        sig_alg,
+        bit_string(signature.to_der().as_bytes()),
+    ]))
+}
+
+#[cfg(feature = "p256")]
 pub fn generate_self_signed_pem(key: &SigningKey, cn: &str) -> alloc::string::String {
     pem_encode(&generate_self_signed(key, cn))
 }

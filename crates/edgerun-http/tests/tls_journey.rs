@@ -96,6 +96,7 @@ fn test_https_tls() {
 
         println!("  [3] Creating HTTPS server...");
         let server = HttpServer::new(EchoHandler)
+            .keep_alive(None)
             .with_tls(cert)
             .bind(format!("127.0.0.1:{}", port))
             .await
@@ -118,23 +119,19 @@ fn test_https_tls() {
         let client = HttpClient::new().version(HttpVersion::Http1);
 
         println!("  [8] Client connecting to https://127.0.0.1:{}...", port);
-        match client.get(&format!("https://127.0.0.1:{}/", port)).await {
-            Ok(resp) => println!("  [9] Got response: {}", resp.status().as_u16()),
-            Err(e) => {
-                eprintln!("  [9] ERROR: {}", e);
-                // Continue to see if server hung
-            }
-        }
+        let resp = client
+            .get(&format!("https://127.0.0.1:{}/", port))
+            .await
+            .expect("HTTPS request should succeed");
+        println!("  [9] Got response: {}", resp.status().as_u16());
+        assert_eq!(resp.status().as_u16(), 200);
 
         // Wait for server with timeout
         println!("  [10] Waiting for server (3s timeout)...");
         match edgerun_rt::timeout(Duration::from_secs(3), server_task).await {
             Ok(Ok(())) => println!("  [11] Server finished OK"),
-            Ok(Err(e)) => println!("  [11] Server error: {}", e),
-            Err(_) => {
-                println!("  [11] TIMEOUT! Server is hanging in TLS handshake!");
-                // We can't cancel the task easily but we know it hung
-            }
+            Ok(Err(e)) => panic!("server task failed: {}", e),
+            Err(_) => panic!("server task timed out after HTTPS request"),
         }
     });
 }

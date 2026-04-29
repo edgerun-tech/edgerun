@@ -5,13 +5,19 @@
 //! mail through the built-in queue, and exposes IMAP over the same Maildir.
 
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::io;
+use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process;
 use std::sync::Arc;
 use std::time::Duration;
 
+use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig};
+use edgerun_acme::{ChallengeStatus, ChallengeType, DirectoryUrl, OrderStatus};
+use edgerun_config::edgerun_json::JsonValue;
 use edgerun_config::{
     ConfigResource, DnsServerSpec, DnsZoneSpec, ImapServerSpec, MailUserSpec, SmtpServerSpec,
     ZoneRecord,
@@ -20,6 +26,8 @@ use edgerun_dns::{DnsRecord, DnsServer, DnsServerConfig, DnsZone};
 use edgerun_email::imap::{ImapServer, ImapServerConfig, MaildirImapStore};
 use edgerun_email::smtp::server::{MaildirStore, SmtpServer, SmtpServerConfig};
 use edgerun_email::smtp::ServerLimits;
+use edgerun_encoding::base64::standard_decode;
+use edgerun_http::{Handler, HttpServer, Request, Response, StatusCode};
 use edgerun_rt::CancellationToken;
 use edgerun_tls::CertificateAndKey;
 
@@ -180,6 +188,7 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
 
     let shutdown = CancellationToken::new();
     let mut tasks = Vec::new();
+    let mut dns_server = None;
 
     if !zones.is_empty() {
         let dns = Arc::new(build_dns_server(dns_servers.first(), &zones).await?);
@@ -194,6 +203,41 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
             dns_shutdown.shutdown().await;
             Ok(())
         }));
+        dns_server = Some(dns);
+    }
+
+    for spec in &smtp_specs {
+        if spec.acme_enabled {
+            let Some(dns) = dns_server.as_ref() else {
+                return Err(invalid_config("ACME DNS-01 requires at least one DnsZone"));
+            };
+            ensure_acme_certificate(spec, dns, &zones).await?;
+        }
+    }
+
+    if let Some(webmail) = build_webmail_config(&smtp_specs, &imap_specs)? {
+        let http = HttpServer::new(WebmailHandler::new(webmail.clone()))
+            .bind("0.0.0.0:80")
+            .await
+            .map_err(to_io_error)?;
+        let token = shutdown.clone();
+        tasks.push(edgerun_rt::spawn(async move {
+            http.serve_with_shutdown(token).await.map_err(to_io_error)
+        }));
+
+        if let Some(tls) =
+            load_tls_from_spec(webmail.tls_cert.as_deref(), webmail.tls_key.as_deref())?
+        {
+            let https = HttpServer::new(WebmailHandler::new(webmail))
+                .with_tls(tls)
+                .bind("0.0.0.0:443")
+                .await
+                .map_err(to_io_error)?;
+            let token = shutdown.clone();
+            tasks.push(edgerun_rt::spawn(async move {
+                https.serve_with_shutdown(token).await.map_err(to_io_error)
+            }));
+        }
     }
 
     for spec in smtp_specs {
@@ -229,6 +273,552 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
     }
     Ok(())
 }
+
+#[derive(Clone)]
+struct WebmailConfig {
+    hostname: String,
+    username: String,
+    password: String,
+    address: String,
+    maildir_root: PathBuf,
+    smtp_addr: String,
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
+}
+
+fn build_webmail_config(
+    smtp_specs: &[SmtpServerSpec],
+    imap_specs: &[ImapServerSpec],
+) -> io::Result<Option<WebmailConfig>> {
+    let Some(imap) = imap_specs.first() else {
+        return Ok(None);
+    };
+    let Some(user) = imap.users.as_deref().and_then(|users| users.first()) else {
+        return Ok(None);
+    };
+    let Some(password) = user.password.clone() else {
+        return Ok(None);
+    };
+    let smtp = smtp_specs.first();
+    let hostname = smtp
+        .map(|spec| spec.hostname.clone())
+        .unwrap_or_else(|| imap.hostname.clone());
+    let domain = smtp
+        .and_then(|spec| spec.local_domains.first().cloned())
+        .unwrap_or_else(|| hostname.trim_start_matches("mail.").to_string());
+    let smtp_addr = smtp
+        .and_then(|spec| spec.bind_address.clone())
+        .unwrap_or_else(|| "127.0.0.1:25".to_string())
+        .replace("0.0.0.0:", "127.0.0.1:");
+    let maildir_root = imap
+        .maildir_root
+        .clone()
+        .or_else(|| smtp.and_then(|spec| spec.maildir_root.clone()))
+        .unwrap_or_else(|| "/var/lib/edgerun/mail/maildirs".to_string());
+    Ok(Some(WebmailConfig {
+        hostname,
+        username: user.username.clone(),
+        password,
+        address: format!("{}@{}", user.username, domain),
+        maildir_root: PathBuf::from(maildir_root),
+        smtp_addr,
+        tls_cert: imap.tls_cert.clone(),
+        tls_key: imap.tls_key.clone(),
+    }))
+}
+
+struct WebmailHandler {
+    config: WebmailConfig,
+}
+
+impl WebmailHandler {
+    fn new(config: WebmailConfig) -> Self {
+        Self { config }
+    }
+
+    fn handle_sync(&self, request: Request) -> Response {
+        let path = request.uri().request_target();
+        if path == "/" || path == "/index.html" {
+            return html_response(WEBMAIL_HTML);
+        }
+        if path.starts_with("/api/") && !authorized(&request, &self.config) {
+            return unauthorized();
+        }
+        match (request.method().as_str(), path.as_str()) {
+            ("GET", "/api/messages") => match list_webmail_messages(&self.config) {
+                Ok(body) => json_response(&body),
+                Err(error) => server_error(&error.to_string()),
+            },
+            ("GET", path) if path.starts_with("/api/message/") => {
+                let id = percent_decode(&path["/api/message/".len()..]);
+                match read_webmail_message(&self.config, &id) {
+                    Ok(body) => json_response(&body),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => Response::not_found(),
+                    Err(error) => server_error(&error.to_string()),
+                }
+            }
+            ("POST", "/api/send") => match send_webmail_message(&self.config, &request) {
+                Ok(()) => json_response(r#"{"ok":true}"#),
+                Err(error) => server_error(&error.to_string()),
+            },
+            _ => Response::not_found(),
+        }
+    }
+}
+
+impl Handler for WebmailHandler {
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+        Box::pin(async move { self.handle_sync(request) })
+    }
+}
+
+fn authorized(request: &Request, config: &WebmailConfig) -> bool {
+    let Some(header) = request.headers().get("authorization") else {
+        return false;
+    };
+    let value = header.as_str();
+    let Some(encoded) = value.strip_prefix("Basic ") else {
+        return false;
+    };
+    let Ok(decoded) = standard_decode(encoded) else {
+        return false;
+    };
+    let Ok(credentials) = String::from_utf8(decoded) else {
+        return false;
+    };
+    credentials == format!("{}:{}", config.username, config.password)
+        || credentials == format!("{}:{}", config.address, config.password)
+}
+
+fn unauthorized() -> Response {
+    Response::text(StatusCode::new(401).unwrap(), "authentication required")
+        .with_header("WWW-Authenticate", r#"Basic realm="Edgerun Mail""#)
+        .with_header("Cache-Control", "no-store")
+}
+
+fn html_response(body: &str) -> Response {
+    Response::html(StatusCode::OK, body)
+        .with_header("Cache-Control", "no-store")
+        .with_header("X-Content-Type-Options", "nosniff")
+}
+
+fn json_response(body: &str) -> Response {
+    Response::json(StatusCode::OK, body).with_header("Cache-Control", "no-store")
+}
+
+fn server_error(message: &str) -> Response {
+    let body = format!(r#"{{"ok":false,"error":"{}"}}"#, json_escape(message));
+    Response::json(StatusCode::INTERNAL_SERVER_ERROR, &body)
+}
+
+fn list_webmail_messages(config: &WebmailConfig) -> io::Result<String> {
+    let mut messages = Vec::new();
+    collect_maildir_entries(config, "new", &mut messages)?;
+    collect_maildir_entries(config, "cur", &mut messages)?;
+    messages.sort_by(|a, b| b.modified.cmp(&a.modified));
+    messages.truncate(100);
+
+    let mut out = String::from(r#"{"messages":["#);
+    for (idx, message) in messages.iter().enumerate() {
+        let raw = std::fs::read_to_string(&message.path).unwrap_or_default();
+        if idx > 0 {
+            out.push(',');
+        }
+        out.push_str(&format!(
+            r#"{{"id":"{}","from":"{}","to":"{}","subject":"{}","date":"{}","state":"{}","preview":"{}"}}"#,
+            json_escape(&message.id),
+            json_escape(header_value(&raw, "From").unwrap_or_default().as_str()),
+            json_escape(header_value(&raw, "To").unwrap_or_default().as_str()),
+            json_escape(header_value(&raw, "Subject").unwrap_or_else(|| "(no subject)".to_string()).as_str()),
+            json_escape(header_value(&raw, "Date").unwrap_or_default().as_str()),
+            message.state,
+            json_escape(&message_preview(&raw)),
+        ));
+    }
+    out.push_str("]}");
+    Ok(out)
+}
+
+fn read_webmail_message(config: &WebmailConfig, id: &str) -> io::Result<String> {
+    let path = find_maildir_message(config, id)?;
+    let raw = std::fs::read_to_string(path)?;
+    Ok(format!(
+        r#"{{"id":"{}","from":"{}","to":"{}","subject":"{}","date":"{}","body":"{}","raw":"{}"}}"#,
+        json_escape(id),
+        json_escape(header_value(&raw, "From").unwrap_or_default().as_str()),
+        json_escape(header_value(&raw, "To").unwrap_or_default().as_str()),
+        json_escape(
+            header_value(&raw, "Subject")
+                .unwrap_or_else(|| "(no subject)".to_string())
+                .as_str()
+        ),
+        json_escape(header_value(&raw, "Date").unwrap_or_default().as_str()),
+        json_escape(&message_body(&raw)),
+        json_escape(&raw),
+    ))
+}
+
+fn send_webmail_message(config: &WebmailConfig, request: &Request) -> io::Result<()> {
+    let body = request.body().unwrap_or_default();
+    let value: JsonValue = edgerun_config::edgerun_json::from_json_slice(body)
+        .map_err(|error| invalid_config(format!("invalid JSON: {error}")))?;
+    let to = json_field(&value, "to")?;
+    let subject = json_field(&value, "subject")?;
+    let text = json_field(&value, "body")?;
+    if !to.contains('@') || to.contains('\r') || to.contains('\n') {
+        return Err(invalid_config("invalid recipient"));
+    }
+    let message = format!(
+        "From: {}\r\nTo: {}\r\nSubject: {}\r\nDate: {}\r\nMessage-ID: <{}@{}>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}\r\n",
+        config.address,
+        sanitize_header(&to),
+        sanitize_header(&subject),
+        http_date_now(),
+        unique_webmail_id(),
+        config.hostname,
+        normalize_crlf(&text),
+    );
+    let smtp_addr = config.smtp_addr.clone();
+    let hostname = config.hostname.clone();
+    let from = config.address.clone();
+    std::thread::spawn(move || {
+        if let Err(error) = submit_smtp(&smtp_addr, &hostname, &from, &to, &message) {
+            eprintln!("edgerun-webmail: SMTP submit failed: {error}");
+        }
+    });
+    Ok(())
+}
+
+fn json_field(value: &JsonValue, key: &str) -> io::Result<String> {
+    value
+        .get(key)
+        .and_then(JsonValue::as_str)
+        .map(ToString::to_string)
+        .ok_or_else(|| invalid_config(format!("missing JSON field: {key}")))
+}
+
+#[derive(Clone)]
+struct WebmailMessage {
+    id: String,
+    path: PathBuf,
+    state: &'static str,
+    modified: std::time::SystemTime,
+}
+
+fn collect_maildir_entries(
+    config: &WebmailConfig,
+    state: &'static str,
+    messages: &mut Vec<WebmailMessage>,
+) -> io::Result<()> {
+    let dir = config.maildir_root.join(&config.username).join(state);
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let modified = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .unwrap_or(std::time::UNIX_EPOCH);
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        messages.push(WebmailMessage {
+            id: name.to_string(),
+            path,
+            state,
+            modified,
+        });
+    }
+    Ok(())
+}
+
+fn find_maildir_message(config: &WebmailConfig, id: &str) -> io::Result<PathBuf> {
+    if id.contains('/') || id.contains('\\') || id.contains("..") {
+        return Err(io::Error::new(io::ErrorKind::NotFound, "message not found"));
+    }
+    for state in ["new", "cur"] {
+        let path = config
+            .maildir_root
+            .join(&config.username)
+            .join(state)
+            .join(id);
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::NotFound, "message not found"))
+}
+
+fn submit_smtp(addr: &str, hostname: &str, from: &str, to: &str, message: &str) -> io::Result<()> {
+    let mut stream = std::net::TcpStream::connect(addr)?;
+    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(10)))?;
+    let mut reader = BufReader::new(stream.try_clone()?);
+    expect_smtp(&mut reader, 220)?;
+    smtp_command(
+        &mut stream,
+        &mut reader,
+        &format!("EHLO {hostname}\r\n"),
+        250,
+    )?;
+    smtp_command(
+        &mut stream,
+        &mut reader,
+        &format!("MAIL FROM:<{from}>\r\n"),
+        250,
+    )?;
+    smtp_command(
+        &mut stream,
+        &mut reader,
+        &format!("RCPT TO:<{to}>\r\n"),
+        250,
+    )?;
+    smtp_command(&mut stream, &mut reader, "DATA\r\n", 354)?;
+    stream.write_all(dot_stuffed(message).as_bytes())?;
+    stream.write_all(b"\r\n.\r\n")?;
+    stream.flush()?;
+    expect_smtp(&mut reader, 250)?;
+    let _ = smtp_command(&mut stream, &mut reader, "QUIT\r\n", 221);
+    Ok(())
+}
+
+fn smtp_command(
+    stream: &mut std::net::TcpStream,
+    reader: &mut BufReader<std::net::TcpStream>,
+    command: &str,
+    expected: u16,
+) -> io::Result<()> {
+    stream.write_all(command.as_bytes())?;
+    stream.flush()?;
+    expect_smtp(reader, expected)
+}
+
+fn expect_smtp(reader: &mut BufReader<std::net::TcpStream>, expected: u16) -> io::Result<()> {
+    let mut line = String::new();
+    loop {
+        line.clear();
+        let n = match reader.read_line(&mut line) {
+            Ok(n) => n,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(25));
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        if n == 0 {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "SMTP closed"));
+        }
+        if line.len() < 4 {
+            continue;
+        }
+        let code = line[..3].parse::<u16>().unwrap_or(0);
+        let more = line.as_bytes().get(3) == Some(&b'-');
+        if !more {
+            if code == expected {
+                return Ok(());
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("SMTP expected {expected}, got {}", line.trim_end()),
+            ));
+        }
+    }
+}
+
+fn header_value(raw: &str, name: &str) -> Option<String> {
+    let mut current_name = String::new();
+    let mut current_value = String::new();
+    for line in raw.lines() {
+        if line.is_empty() || line == "\r" {
+            break;
+        }
+        if line.starts_with(' ') || line.starts_with('\t') {
+            if current_name.eq_ignore_ascii_case(name) {
+                current_value.push(' ');
+                current_value.push_str(line.trim());
+            }
+            continue;
+        }
+        if current_name.eq_ignore_ascii_case(name) {
+            return Some(current_value.trim().to_string());
+        }
+        if let Some((left, right)) = line.split_once(':') {
+            current_name.clear();
+            current_name.push_str(left.trim());
+            current_value.clear();
+            current_value.push_str(right.trim());
+        }
+    }
+    if current_name.eq_ignore_ascii_case(name) {
+        Some(current_value.trim().to_string())
+    } else {
+        None
+    }
+}
+
+fn message_body(raw: &str) -> String {
+    raw.split_once("\r\n\r\n")
+        .or_else(|| raw.split_once("\n\n"))
+        .map(|(_, body)| body.trim().to_string())
+        .unwrap_or_default()
+}
+
+fn message_preview(raw: &str) -> String {
+    let body = message_body(raw).replace('\r', " ").replace('\n', " ");
+    let mut preview = String::new();
+    for ch in body.chars().take(180) {
+        preview.push(ch);
+    }
+    preview
+}
+
+fn json_escape(value: &str) -> String {
+    let mut out = String::new();
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => {}
+            ch => out.push(ch),
+        }
+    }
+    out
+}
+
+fn percent_decode(value: &str) -> String {
+    let mut out = Vec::new();
+    let bytes = value.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(a), Some(b)) = (hex_value(bytes[i + 1]), hex_value(bytes[i + 2])) {
+                out.push((a << 4) | b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).to_string()
+}
+
+fn hex_value(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn sanitize_header(value: &str) -> String {
+    value.replace(['\r', '\n'], " ").trim().to_string()
+}
+
+fn normalize_crlf(value: &str) -> String {
+    value
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .replace('\n', "\r\n")
+}
+
+fn dot_stuffed(value: &str) -> String {
+    let mut out = String::new();
+    for line in value.replace("\r\n", "\n").split('\n') {
+        if line.starts_with('.') {
+            out.push('.');
+        }
+        out.push_str(line);
+        out.push_str("\r\n");
+    }
+    out.trim_end_matches("\r\n").to_string()
+}
+
+fn unique_webmail_id() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_micros())
+        .unwrap_or(0);
+    format!("webmail-{now}")
+}
+
+fn http_date_now() -> String {
+    // A stable RFC 5322-ish date is enough for the simple composer; MTAs add Received headers.
+    format!("{:?}", std::time::SystemTime::now())
+}
+
+const WEBMAIL_HTML: &str = r#"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edgerun Mail</title>
+<style>
+:root{color-scheme:light;--bg:#f7f7f4;--panel:#fff;--ink:#1c1d1f;--muted:#656b73;--line:#d8d9d4;--accent:#0f766e;--accent2:#7c2d12}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--ink)}
+.app{height:100vh;display:grid;grid-template-columns:minmax(280px,380px) 1fr}
+.list{border-right:1px solid var(--line);background:#fbfbf8;display:flex;flex-direction:column;min-width:0}
+.top{height:56px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line)}
+.brand{font-weight:700;font-size:16px}.who{color:var(--muted);font-size:12px;margin-left:auto}
+button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:8px 10px;cursor:pointer;color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button:disabled{opacity:.55;cursor:not-allowed}
+.messages{overflow:auto;min-height:0}.item{padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.item:hover,.item.active{background:#eef6f4}.from{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.subject{margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.preview{margin-top:4px;color:var(--muted);font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pane{min-width:0;display:grid;grid-template-rows:auto 1fr;background:var(--panel)}
+.actions{height:56px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line)}
+.content{overflow:auto;padding:22px;max-width:980px;width:100%}.empty{color:var(--muted);margin-top:20vh;text-align:center}
+h1{font-size:22px;margin:0 0 8px}.meta{color:var(--muted);margin-bottom:18px;display:grid;gap:3px}
+pre{white-space:pre-wrap;word-break:break-word;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:#fafafa;border:1px solid var(--line);border-radius:6px;padding:14px}
+.compose{display:none;padding:16px;border-bottom:1px solid var(--line);background:#fff}.compose.open{display:grid;gap:10px}
+input,textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px;font:inherit;background:#fff;color:var(--ink)}
+textarea{min-height:150px;resize:vertical}.row{display:flex;gap:8px}.status{color:var(--accent2);font-size:13px}
+@media(max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:45vh 55vh}.list{border-right:0;border-bottom:1px solid var(--line)}.content{padding:16px}}
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="list">
+    <div class="top"><div class="brand">Edgerun Mail</div><button id="refresh">Refresh</button><div class="who">ken@edgerun.tech</div></div>
+    <div id="messages" class="messages"></div>
+  </section>
+  <section class="pane">
+    <div class="actions"><button id="composeBtn" class="primary">Compose</button><div id="status" class="status"></div></div>
+    <form id="compose" class="compose">
+      <input id="to" placeholder="To" autocomplete="off">
+      <input id="subject" placeholder="Subject" autocomplete="off">
+      <textarea id="body" placeholder="Message"></textarea>
+      <div class="row"><button class="primary" type="submit">Send</button><button id="cancel" type="button">Cancel</button></div>
+    </form>
+    <article id="content" class="content"><div class="empty">Select a message</div></article>
+  </section>
+</main>
+<script>
+const messagesEl=document.getElementById('messages'),content=document.getElementById('content'),statusEl=document.getElementById('status');
+let selected='';
+function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function api(path,opts){const r=await fetch(path,opts);if(r.status===401){statusEl.textContent='Login required';throw new Error('auth');}if(!r.ok)throw new Error(await r.text());return r.json();}
+async function load(){statusEl.textContent='';const data=await api('/api/messages');messagesEl.innerHTML=data.messages.map(m=>`<div class="item ${m.id===selected?'active':''}" data-id="${encodeURIComponent(m.id)}"><div class="from">${esc(m.from||'(unknown)')}</div><div class="subject">${esc(m.subject)}</div><div class="preview">${esc(m.preview)}</div></div>`).join('')||'<div class="empty">No mail</div>';}
+messagesEl.onclick=e=>{const item=e.target.closest('.item');if(item)openMsg(decodeURIComponent(item.dataset.id));};
+async function openMsg(id){selected=id;load();const m=await api('/api/message/'+encodeURIComponent(id));content.innerHTML=`<h1>${esc(m.subject)}</h1><div class="meta"><div>From: ${esc(m.from)}</div><div>To: ${esc(m.to)}</div><div>${esc(m.date)}</div></div><pre>${esc(m.body||m.raw)}</pre>`;}
+document.getElementById('refresh').onclick=load;
+document.getElementById('composeBtn').onclick=()=>document.getElementById('compose').classList.add('open');
+document.getElementById('cancel').onclick=()=>document.getElementById('compose').classList.remove('open');
+document.getElementById('compose').onsubmit=async e=>{e.preventDefault();statusEl.textContent='Sending...';await api('/api/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:to.value,subject:subject.value,body:body.value})});to.value=subject.value=body.value='';document.getElementById('compose').classList.remove('open');statusEl.textContent='Sent';setTimeout(()=>statusEl.textContent='',2500);load();};
+load().catch(err=>statusEl.textContent=err.message);
+</script>
+</body>
+</html>"#;
 
 async fn build_dns_server(
     server_spec: Option<&DnsServerSpec>,
@@ -335,6 +925,242 @@ fn add_zone_record(zone: &mut DnsZone, record: &ZoneRecord, origin: &str) -> io:
     Ok(())
 }
 
+async fn ensure_acme_certificate(
+    spec: &SmtpServerSpec,
+    dns: &Arc<DnsServer>,
+    zones: &[DnsZoneSpec],
+) -> io::Result<()> {
+    let cert_dir = PathBuf::from(
+        spec.acme_cert_dir
+            .as_deref()
+            .unwrap_or("/etc/edgerun/mail/tls"),
+    );
+    let fullchain_path = cert_dir.join("fullchain.pem");
+    let privkey_path = cert_dir.join("privkey.pem");
+    if fullchain_path.exists() && privkey_path.exists() {
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(&cert_dir)?;
+    let domains = spec
+        .acme_domains
+        .clone()
+        .unwrap_or_else(|| vec![spec.hostname.clone()]);
+    let domain_refs: Vec<&str> = domains.iter().map(String::as_str).collect();
+    let account_key_path = PathBuf::from(
+        spec.acme_account_key_path
+            .as_deref()
+            .unwrap_or("/etc/edgerun/mail/acme-account.pem"),
+    );
+    let account_key = if account_key_path.exists() {
+        let pem = std::fs::read_to_string(&account_key_path)?;
+        AccountKey::from_pem(&pem).map_err(acme_io_error)?
+    } else {
+        let key = AccountKey::generate();
+        if let Some(parent) = account_key_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&account_key_path, key.pem())?;
+        key
+    };
+
+    let client = AcmeClient::new(
+        AcmeConfig {
+            directory_url: parse_acme_directory(spec.acme_directory.as_deref())?,
+            email: spec
+                .acme_contact_email
+                .as_deref()
+                .map(|email| vec![format!("mailto:{email}")])
+                .unwrap_or_default(),
+            terms_of_service_agreed: true,
+        },
+        account_key,
+    );
+    client.init().await.map_err(acme_io_error)?;
+    client.create_account().await.map_err(acme_io_error)?;
+    let order = client.create_order(&domains).await.map_err(acme_io_error)?;
+
+    let mut challenge_records = Vec::new();
+    for auth_url in order.authorization_urls() {
+        let authorization = client
+            .get_authorization(auth_url)
+            .await
+            .map_err(acme_io_error)?;
+        if authorization.status == edgerun_acme::types::AuthorizationStatus::Valid {
+            continue;
+        }
+        let challenge = authorization
+            .challenges
+            .as_deref()
+            .and_then(|challenges| {
+                challenges
+                    .iter()
+                    .find(|challenge| challenge.challenge_type == ChallengeType::Dns01)
+            })
+            .ok_or_else(|| invalid_config("ACME authorization has no dns-01 challenge"))?;
+        let token = challenge
+            .token
+            .as_deref()
+            .ok_or_else(|| invalid_config("ACME dns-01 challenge missing token"))?;
+        let domain = authorization.identifier.value.as_str();
+        let dns_manager = client.dns_manager();
+        let dns_challenge = dns_manager.create_challenge(domain, token);
+        challenge_records.push(ZoneRecord {
+            name: dns_challenge.record_name().to_string(),
+            record_type: "TXT".to_string(),
+            ttl: Some(60),
+            value: JsonValue::String(dns_challenge.record_value().to_string()),
+        });
+        publish_acme_challenge_records(dns, zones, &challenge_records).await?;
+        edgerun_rt::sleep(Duration::from_secs(20)).await;
+        client
+            .validate_challenge(&challenge.url)
+            .await
+            .map_err(acme_io_error)?;
+        wait_for_challenge(&client, &challenge.url).await?;
+    }
+
+    let mut ready_order = client
+        .get_order(&order.inner.id)
+        .await
+        .map_err(acme_io_error)?;
+    for _ in 0..30 {
+        match ready_order.status() {
+            OrderStatus::Ready | OrderStatus::Valid => break,
+            OrderStatus::Invalid => return Err(invalid_config("ACME order became invalid")),
+            _ => {
+                edgerun_rt::sleep(Duration::from_secs(2)).await;
+                ready_order = client
+                    .get_order(&order.inner.id)
+                    .await
+                    .map_err(acme_io_error)?;
+            }
+        }
+    }
+    let finalize_url = ready_order
+        .finalize_url()
+        .ok_or_else(|| invalid_config("ACME order missing finalize URL"))?;
+    let (csr_der, signing_key) = edgerun_tls::generate_csr(&domain_refs)
+        .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))?;
+    let mut finalized = client
+        .finalize_order(finalize_url, &csr_der)
+        .await
+        .map_err(acme_io_error)?;
+    for _ in 0..30 {
+        match finalized.status() {
+            OrderStatus::Valid => break,
+            OrderStatus::Invalid => {
+                return Err(invalid_config("ACME finalized order became invalid"))
+            }
+            _ => {
+                edgerun_rt::sleep(Duration::from_secs(2)).await;
+                finalized = client
+                    .get_order(&finalized.inner.id)
+                    .await
+                    .map_err(acme_io_error)?;
+            }
+        }
+    }
+    let certificate_url = finalized
+        .certificate_url()
+        .ok_or_else(|| invalid_config("ACME order missing certificate URL"))?;
+    let cert_pem = client
+        .download_certificate(certificate_url)
+        .await
+        .map_err(acme_io_error)?;
+    let key_pem = edgerun_tls::signing_key_to_pem(&signing_key)
+        .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))?;
+    std::fs::write(&fullchain_path, cert_pem)?;
+    std::fs::write(&privkey_path, key_pem)?;
+    Ok(())
+}
+
+async fn wait_for_challenge(client: &AcmeClient, url: &edgerun_url::Url) -> io::Result<()> {
+    for _ in 0..30 {
+        let challenge = client.get_challenge(url).await.map_err(acme_io_error)?;
+        match challenge.status() {
+            ChallengeStatus::Valid => return Ok(()),
+            ChallengeStatus::Invalid => {
+                return Err(invalid_config("ACME challenge became invalid"))
+            }
+            _ => edgerun_rt::sleep(Duration::from_secs(2)).await,
+        }
+    }
+    Err(invalid_config("ACME challenge did not become valid"))
+}
+
+async fn publish_acme_challenge_records(
+    dns: &Arc<DnsServer>,
+    zones: &[DnsZoneSpec],
+    records: &[ZoneRecord],
+) -> io::Result<()> {
+    let mut by_origin: BTreeMap<String, Vec<&DnsZoneSpec>> = BTreeMap::new();
+    for zone_spec in zones {
+        by_origin
+            .entry(zone_spec.origin.to_ascii_lowercase())
+            .or_default()
+            .push(zone_spec);
+    }
+    for (origin, specs) in by_origin {
+        let mut merged = Vec::new();
+        for spec in specs {
+            merged.push(spec);
+        }
+        let mut owned = merged
+            .first()
+            .ok_or_else(|| invalid_config("empty DNS zone group"))?
+            .to_owned()
+            .clone();
+        owned.records.extend(
+            records
+                .iter()
+                .filter(|record| {
+                    let fqdn = normalize_record_name(&record.name, &origin);
+                    fqdn == origin || fqdn.ends_with(&format!(".{origin}"))
+                })
+                .cloned(),
+        );
+        let refs = vec![&owned];
+        dns.add_zone(zone_from_config(&refs)?).await;
+    }
+    Ok(())
+}
+
+fn parse_acme_directory(value: Option<&str>) -> io::Result<DirectoryUrl> {
+    match value.unwrap_or("letsencrypt").to_ascii_lowercase().as_str() {
+        "letsencrypt" | "production" => Ok(DirectoryUrl::LetsEncrypt),
+        "letsencrypt-staging" | "staging" => Ok(DirectoryUrl::LetsEncryptStaging),
+        other => Err(invalid_config(format!(
+            "unsupported ACME directory preset: {other}"
+        ))),
+    }
+}
+
+fn normalize_record_name(name: &str, origin: &str) -> String {
+    let trimmed = name.trim_end_matches('.').to_ascii_lowercase();
+    let origin = origin.trim_end_matches('.').to_ascii_lowercase();
+    if trimmed == "@" || trimmed.is_empty() {
+        origin
+    } else if trimmed == origin || trimmed.ends_with(&format!(".{origin}")) {
+        trimmed
+    } else {
+        format!("{trimmed}.{origin}")
+    }
+}
+
+fn acme_io_error(error: edgerun_acme::AcmeError) -> io::Error {
+    match error {
+        edgerun_acme::AcmeError::Server(status, Some(detail)) => io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "ACME server error {status}: {}: {}",
+                detail.error_type, detail.detail
+            ),
+        ),
+        other => io::Error::new(io::ErrorKind::Other, other.to_string()),
+    }
+}
+
 fn build_smtp_servers(spec: &SmtpServerSpec) -> io::Result<Vec<SmtpServer>> {
     let tls_cert = load_tls_from_spec(spec.tls_cert.as_deref(), spec.tls_key.as_deref())?;
     let mut config = SmtpServerConfig {
@@ -428,6 +1254,9 @@ fn register_smtp_users(store: &MaildirStore, spec: &SmtpServerSpec) -> io::Resul
             .unwrap_or(spec.local_domains.as_slice());
         let domain_refs: Vec<&str> = domains.iter().map(String::as_str).collect();
         store.add_user(&user.username, &domain_refs)?;
+    }
+    if let Some(username) = spec.catch_all_user.as_deref() {
+        store.set_catch_all_user(username)?;
     }
     Ok(())
 }

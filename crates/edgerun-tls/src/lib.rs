@@ -55,8 +55,8 @@ pub use session_cache::{parse_new_session_ticket, SessionCache, SessionTicket};
 
 pub use alert::{Alert, AlertLevel};
 pub use certificate_gen::{
-    cert_from_pem, generate_self_signed, generate_self_signed_pem, signing_key_from_pem,
-    signing_key_to_pem, CertificateAndKey,
+    cert_from_pem, generate_csr, generate_self_signed, generate_self_signed_pem,
+    signing_key_from_pem, signing_key_to_pem, CertificateAndKey,
 };
 pub use tls_alpn::ACME_TLS_ALPN_PROTOCOL;
 

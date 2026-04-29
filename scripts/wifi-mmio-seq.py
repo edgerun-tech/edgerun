@@ -48,6 +48,16 @@ ALIASES = {
     "rfch-gain-ch": "wifirfchgainch",
     "rfch-post": "wifirfchpost",
     "rfch-restore": "wifirfchrestore",
+    "phyparam": "wifiphyparam",
+    "rfch-reg0": "wifirfchreg0",
+    "txgain0": "wifitxgain0",
+    "gainwrite0": "wifigainwrite0",
+    "gainflat": "wifigainflat",
+    "rfsub06c": "wifirfsub06c",
+    "rfsub054": "wifirfsub054",
+    "rfsub0c4": "wifirfsub0c4",
+    "rfsub080": "wifirfsub080",
+    "rfch-clone": "wifirfchclone",
 }
 
 PRESETS = {
@@ -66,6 +76,15 @@ PRESETS = {
         "rftest",
         "gate",
         "buf",
+        "rx",
+    ],
+    "rxdmaromclone": [
+        "rxdmaromfilter",
+        "phyparam",
+        "rfch-clone",
+        "txgain0",
+        "rfch-post",
+        "rfch-restore",
         "rx",
     ],
 }
@@ -152,6 +171,21 @@ def read_frame(fd: int, deadline: float):
     return None
 
 
+def write_all(fd: int, data: bytes, deadline: float) -> bool:
+    offset = 0
+    while offset < len(data) and time.monotonic() < deadline:
+        try:
+            written = os.write(fd, data[offset:])
+        except BlockingIOError:
+            time.sleep(0.005)
+            continue
+        if written == 0:
+            time.sleep(0.005)
+            continue
+        offset += written
+    return offset == len(data)
+
+
 def print_frame(channel: str, seq: int, payload: bytes) -> None:
     label = f"[{channel} #{seq}] "
     if payload and all(byte in b"\r\n\t" or 0x20 <= byte <= 0x7E for byte in payload):
@@ -192,8 +226,11 @@ def main() -> int:
     try:
         tty.setraw(fd)
         for seq, command in enumerate(commands):
-            os.write(fd, encode_frame(CHANNEL_CONTROL, seq, command.encode()))
             deadline = time.monotonic() + args.timeout
+            if not write_all(fd, encode_frame(CHANNEL_CONTROL, seq, command.encode()), deadline):
+                print(f"[host #{seq}] write-timeout command={command}", flush=True)
+                time.sleep(args.delay)
+                continue
             frame = None
             while time.monotonic() < deadline:
                 candidate = read_frame(fd, deadline)

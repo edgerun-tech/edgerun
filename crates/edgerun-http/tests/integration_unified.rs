@@ -183,6 +183,40 @@ fn server_https_get() {
     });
 }
 
+#[test]
+fn server_https_rejects_hostname_mismatch() {
+    use edgerun_tls::generate_self_signed as gen_cert;
+
+    run(
+        "server_https_rejects_hostname_mismatch",
+        |port| async move {
+            let cert = gen_cert(&["localhost"]).expect("cert");
+            let server = HttpServer::new(EchoHandler)
+                .with_tls(cert)
+                .bind(format!("127.0.0.1:{}", port))
+                .await?;
+
+            let server_task = spawn(async move { server.accept_one().await });
+            sleep(Duration::from_millis(100)).await;
+
+            let client = HttpClient::new().version(HttpVersion::Http1);
+            let result = client.get(&format!("https://127.0.0.1:{}/", port)).await;
+            let err = result.expect_err("hostname mismatch must fail TLS validation");
+            assert!(
+                err.to_string()
+                    .contains("Certificate does not match hostname"),
+                "unexpected error: {err}"
+            );
+
+            match edgerun_rt::timeout(Duration::from_secs(3), server_task).await {
+                Ok(Ok(_)) | Ok(Err(_)) => {}
+                Err(_) => panic!("server task timed out after hostname mismatch"),
+            }
+            Ok(())
+        },
+    );
+}
+
 // ============================================================================
 // Client version tests
 // ============================================================================

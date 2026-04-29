@@ -112,22 +112,30 @@ pub fn build_encrypted_extensions(alpn_protocol: Option<&[u8]>) -> Vec<u8> {
 ///       extensions_length(2) = 0
 ///       extensions (empty)
 pub fn build_certificate_message(cert_der: &[u8]) -> Vec<u8> {
+    build_certificate_chain_message(&[cert_der])
+}
+
+/// Build a Certificate message with a leaf-first certificate chain.
+pub fn build_certificate_chain_message(cert_chain_der: &[&[u8]]) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.push(11); // Certificate handshake type
 
-    // Each CertificateEntry: cert_data_length(3) + cert_data + extensions_length(2) + extensions(0)
-    let cert_entry_len = 3 + cert_der.len() + 2;
+    let cert_list_len: usize = cert_chain_der
+        .iter()
+        .map(|cert_der| 3 + cert_der.len() + 2)
+        .sum();
     // Full message after type+length: context_len(1) + cert_list_len(3) + cert_entry
-    let msg_body_len = 1 + 3 + cert_entry_len;
+    let msg_body_len = 1 + 3 + cert_list_len;
 
     msg.extend_from_slice(&(msg_body_len as u32).to_be_bytes()[1..]); // 3-byte message length
     msg.push(0); // certificate_request_context length = 0
-    msg.extend_from_slice(&(cert_entry_len as u32).to_be_bytes()[1..]); // 3-byte certificate_list length
+    msg.extend_from_slice(&(cert_list_len as u32).to_be_bytes()[1..]); // 3-byte certificate_list length
 
-    // CertificateEntry
-    msg.extend_from_slice(&(cert_der.len() as u32).to_be_bytes()[1..]); // 3-byte cert_data length
-    msg.extend_from_slice(cert_der);
-    msg.extend_from_slice(&[0u8; 2]); // extensions length = 0
+    for cert_der in cert_chain_der {
+        msg.extend_from_slice(&(cert_der.len() as u32).to_be_bytes()[1..]); // 3-byte cert_data length
+        msg.extend_from_slice(cert_der);
+        msg.extend_from_slice(&[0u8; 2]); // extensions length = 0
+    }
 
     msg
 }
