@@ -10,7 +10,7 @@ use edgerun_json::{json, JsonValue};
 use std::sync::Arc;
 
 use crate::error::SolanaError;
-use crate::provider_registry_program_id;
+use crate::try_provider_registry_program_id;
 use crate::types::{collateral, Provider, ProviderStatus};
 
 pub struct ProviderClient {
@@ -22,10 +22,14 @@ pub struct ProviderClient {
 
 impl ProviderClient {
     pub fn new(rpc_url: &str) -> Result<Self, SolanaError> {
+        Self::new_with_program_id(rpc_url, try_provider_registry_program_id()?)
+    }
+
+    pub fn new_with_program_id(rpc_url: &str, program_id: Pubkey) -> Result<Self, SolanaError> {
         let rt = HttpRuntime::new();
         Ok(Self {
             http: HttpClient::new().no_redirects(),
-            program_id: provider_registry_program_id(),
+            program_id,
             rpc_url: rpc_url.to_string(),
             runtime: Arc::new(rt),
         })
@@ -62,10 +66,7 @@ impl ProviderClient {
             "params": [provider_pubkey.to_string(), { "encoding": "base64" }]
         });
         let resp = self.rpc_call(payload)?;
-        let data = resp["result"]["value"]["data"]
-            .as_str()
-            .ok_or_else(|| SolanaError::Rpc("no data in response".to_string()))?;
-        let bytes = base64_decode(data)?;
+        let bytes = decode_rpc_account_data(&resp)?;
         Provider::try_from_slice(&bytes).map_err(|e| SolanaError::Serialization(e.to_string()))
     }
 
@@ -76,7 +77,7 @@ impl ProviderClient {
             "method": "getProgramAccounts",
             "params": [
                 self.program_id.to_string(),
-                { "encoding": "base64", "filters": [{ "dataSize": 200 }] }
+                { "encoding": "base64", "filters": [{ "dataSize": 128 }] }
             ]
         });
         let resp = self.rpc_call(payload)?;
@@ -85,10 +86,8 @@ impl ProviderClient {
             .ok_or_else(|| SolanaError::Rpc("no accounts".to_string()))?;
         let mut pubkeys = Vec::new();
         for account in accounts {
-            if let Some(pubkey_str) = account["pubkey"].as_str() {
-                if let Ok(pk) = pubkey_str.parse::<Pubkey>() {
-                    pubkeys.push(pk);
-                }
+            if let Some(pubkey) = active_provider_pubkey(account)? {
+                pubkeys.push(pubkey);
             }
         }
         Ok(pubkeys)
@@ -97,12 +96,11 @@ impl ProviderClient {
     fn make_instruction(
         &self,
         variant: u8,
-        data: JsonValue,
+        data: &[u8],
         accounts: Vec<AccountMeta>,
     ) -> Instruction {
-        let encoded = data.to_json_string().unwrap_or_default().into_bytes();
         let mut bytes = vec![variant];
-        bytes.extend(encoded);
+        bytes.extend_from_slice(data);
         Instruction {
             program_id: self.program_id,
             accounts,
@@ -119,16 +117,21 @@ impl ProviderClient {
         storage_bytes: u64,
         network_mbits: u32,
     ) -> Instruction {
+        let stake_amount = Self::calculate_minimum_collateral(
+            cpu_cores,
+            memory_bytes,
+            storage_bytes,
+            network_mbits,
+        );
+        let mut data = Vec::with_capacity(32);
+        data.extend_from_slice(&cpu_cores.to_le_bytes());
+        data.extend_from_slice(&stake_amount.to_le_bytes());
+        data.extend_from_slice(&memory_bytes.to_le_bytes());
+        data.extend_from_slice(&storage_bytes.to_le_bytes());
+        data.extend_from_slice(&network_mbits.to_le_bytes());
         self.make_instruction(
             1,
-            json!({
-                "Register": {
-                    "cpu_cores": cpu_cores,
-                    "memory_bytes": memory_bytes,
-                    "storage_bytes": storage_bytes,
-                    "network_mbits": network_mbits
-                }
-            }),
+            &data,
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
@@ -143,7 +146,7 @@ impl ProviderClient {
     ) -> Instruction {
         self.make_instruction(
             0,
-            json!("Initialize"),
+            &[],
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
@@ -157,8 +160,8 @@ impl ProviderClient {
         authority_pubkey: &Pubkey,
     ) -> Instruction {
         self.make_instruction(
-            3,
-            json!("Pause"),
+            2,
+            &[],
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
@@ -172,8 +175,8 @@ impl ProviderClient {
         authority_pubkey: &Pubkey,
     ) -> Instruction {
         self.make_instruction(
-            4,
-            json!("Resume"),
+            3,
+            &[],
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
@@ -185,11 +188,12 @@ impl ProviderClient {
         &self,
         provider_pubkey: &Pubkey,
         authority_pubkey: &Pubkey,
-        uptime_seconds: u32,
+        uptime_percent_bps: u32,
     ) -> Instruction {
+        let data = uptime_percent_bps.to_le_bytes();
         self.make_instruction(
             5,
-            json!({ "Attest": { "uptime_seconds": uptime_seconds } }),
+            &data,
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
@@ -231,13 +235,25 @@ impl ProviderClient {
         signer_pubkey: &Pubkey,
         signer: &S,
     ) -> Result<String, SolanaError> {
-        let msg =
-            crate::deployment::serialize_transaction_message(signer_pubkey, &[instruction.clone()]);
+        crate::deployment::validate_single_signer(
+            signer_pubkey,
+            core::slice::from_ref(&instruction),
+        )?;
+        let recent_blockhash = self.get_latest_blockhash()?;
+        let msg = crate::deployment::serialize_transaction_message(
+            signer_pubkey,
+            &[instruction.clone()],
+            &recent_blockhash,
+        );
         let signature = signer
             .sign(&msg)
             .map_err(|e| SolanaError::Signing(e.to_string()))?;
-        let tx_bytes =
-            crate::deployment::serialize_transaction(signer_pubkey, &[instruction], &signature);
+        let tx_bytes = crate::deployment::serialize_transaction(
+            signer_pubkey,
+            &[instruction],
+            &recent_blockhash,
+            &signature,
+        );
         let payload = json!({
             "jsonrpc": "2.0",
             "id": 2,
@@ -252,6 +268,22 @@ impl ProviderClient {
             .as_str()
             .map(|s| s.to_string())
             .ok_or_else(|| SolanaError::Rpc("no result in response".to_string()))
+    }
+
+    fn get_latest_blockhash(&self) -> Result<Pubkey, SolanaError> {
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "getLatestBlockhash",
+            "params": [{ "commitment": "processed" }]
+        });
+        let resp = self.rpc_call(payload)?;
+        let blockhash = resp["result"]["value"]["blockhash"]
+            .as_str()
+            .ok_or_else(|| SolanaError::Rpc("missing latest blockhash".to_string()))?;
+        blockhash
+            .parse::<Pubkey>()
+            .map_err(|err| SolanaError::Rpc(format!("invalid latest blockhash: {err}")))
     }
 }
 
@@ -279,4 +311,159 @@ impl HttpRuntime {
 fn base64_decode(input: &str) -> Result<Vec<u8>, SolanaError> {
     edgerun_encoding::base64::standard_decode(input)
         .map_err(|err| SolanaError::Rpc(err.to_string()))
+}
+
+fn decode_rpc_account_data(resp: &JsonValue) -> Result<Vec<u8>, SolanaError> {
+    let data = if !resp["result"]["value"]["data"].is_null() {
+        &resp["result"]["value"]["data"]
+    } else {
+        &resp["result"]["data"]
+    };
+
+    decode_rpc_account_data_value(data)
+}
+
+fn decode_rpc_account_data_value(data: &JsonValue) -> Result<Vec<u8>, SolanaError> {
+    if let Some(encoded) = data.as_str() {
+        return base64_decode(encoded);
+    }
+
+    let values = data
+        .as_array()
+        .ok_or_else(|| SolanaError::Rpc("no data in response".to_string()))?;
+
+    if let Some(encoded) = values.first().and_then(JsonValue::as_str) {
+        return base64_decode(encoded);
+    }
+
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_u64()
+                .and_then(|n| u8::try_from(n).ok())
+                .ok_or_else(|| SolanaError::Rpc("account data byte is not u8".to_string()))
+        })
+        .collect()
+}
+
+fn active_provider_pubkey(account: &JsonValue) -> Result<Option<Pubkey>, SolanaError> {
+    let pubkey = account["pubkey"]
+        .as_str()
+        .ok_or_else(|| SolanaError::Rpc("program account missing pubkey".to_string()))?
+        .parse::<Pubkey>()
+        .map_err(|err| SolanaError::Rpc(format!("invalid program account pubkey: {err}")))?;
+
+    let data = &account["account"]["data"];
+    if data.is_null() {
+        return Err(SolanaError::Rpc(
+            "program account missing account.data".to_string(),
+        ));
+    }
+
+    let bytes = decode_rpc_account_data_value(data)?;
+    let provider =
+        Provider::try_from_slice(&bytes).map_err(|e| SolanaError::Serialization(e.to_string()))?;
+    Ok((provider.status == ProviderStatus::Active).then_some(pubkey))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn client() -> ProviderClient {
+        ProviderClient::new_with_program_id(
+            "http://127.0.0.1:8899",
+            crate::provider_registry_program_id(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn register_instruction_uses_binary_provider_layout() {
+        let provider = Pubkey::new_from_array([1u8; 32]);
+        let authority = Pubkey::new_from_array([2u8; 32]);
+        let ix = client().register_instruction(
+            &provider,
+            &authority,
+            4,
+            8 * 1024 * 1024 * 1024,
+            16 * 1024 * 1024 * 1024,
+            100,
+        );
+
+        assert_eq!(ix.data.len(), 33);
+        assert_eq!(ix.data[0], 1);
+        assert_eq!(u32::from_le_bytes(ix.data[1..5].try_into().unwrap()), 4);
+        assert_eq!(
+            u64::from_le_bytes(ix.data[5..13].try_into().unwrap()),
+            ProviderClient::calculate_minimum_collateral(
+                4,
+                8 * 1024 * 1024 * 1024,
+                16 * 1024 * 1024 * 1024,
+                100,
+            )
+        );
+        assert_eq!(
+            u64::from_le_bytes(ix.data[13..21].try_into().unwrap()),
+            8 * 1024 * 1024 * 1024
+        );
+        assert_eq!(
+            u64::from_le_bytes(ix.data[21..29].try_into().unwrap()),
+            16 * 1024 * 1024 * 1024
+        );
+        assert_eq!(u32::from_le_bytes(ix.data[29..33].try_into().unwrap()), 100);
+    }
+
+    #[test]
+    fn provider_control_variants_match_program() {
+        let provider = Pubkey::new_from_array([1u8; 32]);
+        let authority = Pubkey::new_from_array([2u8; 32]);
+        let client = client();
+
+        assert_eq!(
+            client.pause_instruction(&provider, &authority).data,
+            vec![2]
+        );
+        assert_eq!(
+            client.resume_instruction(&provider, &authority).data,
+            vec![3]
+        );
+        assert_eq!(
+            client.attest_instruction(&provider, &authority, 9_999).data,
+            vec![5, 15, 39, 0, 0]
+        );
+    }
+
+    #[test]
+    fn program_account_filter_decodes_only_active_providers() {
+        let active_pubkey = Pubkey::new_from_array([9u8; 32]);
+        let paused_pubkey = Pubkey::new_from_array([8u8; 32]);
+        let active = provider_program_account(active_pubkey, ProviderStatus::Active);
+        let paused = provider_program_account(paused_pubkey, ProviderStatus::Paused);
+
+        assert_eq!(
+            active_provider_pubkey(&active).unwrap(),
+            Some(active_pubkey)
+        );
+        assert_eq!(active_provider_pubkey(&paused).unwrap(), None);
+    }
+
+    fn provider_program_account(pubkey: Pubkey, status: ProviderStatus) -> JsonValue {
+        let mut data = [0u8; 128];
+        data[0..32].copy_from_slice(&[7u8; 32]);
+        data[32..40].copy_from_slice(&1000u64.to_le_bytes());
+        data[40..44].copy_from_slice(&4u32.to_le_bytes());
+        data[44..52].copy_from_slice(&(8 * 1024 * 1024 * 1024u64).to_le_bytes());
+        data[52..60].copy_from_slice(&(16 * 1024 * 1024 * 1024u64).to_le_bytes());
+        data[60..64].copy_from_slice(&100u32.to_le_bytes());
+        data[80] = status as u8;
+
+        let data_json = data.iter().map(u8::to_string).collect::<Vec<_>>().join(",");
+        edgerun_json::parse_json(&format!(
+            r#"{{"pubkey":"{}","account":{{"data":[{}]}}}}"#,
+            pubkey, data_json
+        ))
+        .unwrap()
+    }
 }

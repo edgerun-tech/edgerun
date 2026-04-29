@@ -1396,6 +1396,7 @@ name = "edgerun-tuya"
 version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
+ "edgerun-crypto",
  "edgerun-json",
  "edgerun-rt",
 ]

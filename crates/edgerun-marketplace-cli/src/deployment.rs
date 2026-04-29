@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
+use alloc::format;
 use alloc::string::String;
-use edgerun_solana::signers::Ed25519Signer;
+use edgerun_solana::signers::{Ed25519Signer, Signer};
 use edgerun_solana::{solana_types::Pubkey, DeploymentClient};
 use std::{eprintln, println};
 
@@ -110,16 +111,24 @@ pub fn parse_deployment_command() -> DeploymentCommand {
         }
         Some("start") => {
             let deployment = args.next().unwrap_or_default();
-            let owner = args
-                .find(|a| a.starts_with("--owner"))
-                .map(|_| args.next().unwrap_or_default());
+            let mut owner = None;
+            while let Some(arg) = args.next() {
+                match arg.as_str() {
+                    "--owner" | "-o" => owner = args.next(),
+                    _ => {}
+                }
+            }
             DeploymentCommand::Start { deployment, owner }
         }
         Some("stop") => {
             let deployment = args.next().unwrap_or_default();
-            let owner = args
-                .find(|a| a.starts_with("--owner"))
-                .map(|_| args.next().unwrap_or_default());
+            let mut owner = None;
+            while let Some(arg) = args.next() {
+                match arg.as_str() {
+                    "--owner" | "-o" => owner = args.next(),
+                    _ => {}
+                }
+            }
             DeploymentCommand::Stop { deployment, owner }
         }
         Some("report") | Some("r") => {
@@ -217,6 +226,22 @@ pub fn parse_deployment_command() -> DeploymentCommand {
     }
 }
 
+fn parse_pubkey(
+    label: &str,
+    value: &str,
+) -> Result<Pubkey, Box<dyn std::error::Error + Send + Sync>> {
+    if value.is_empty() {
+        return Err(format!("missing {label} pubkey").into());
+    }
+    value
+        .parse()
+        .map_err(|err| format!("invalid {label} pubkey '{value}': {err}").into())
+}
+
+fn signer_pubkey(signer: &Ed25519Signer) -> Pubkey {
+    Pubkey::new_from_array(signer.pubkey())
+}
+
 pub async fn handle(
     cmd: DeploymentCommand,
     rpc_url: String,
@@ -235,9 +260,12 @@ pub async fn handle(
             storage_bytes,
             deposit,
         } => {
-            let owner_pubkey = match owner {
-                Some(o) => o.parse().unwrap_or_default(),
-                None => Pubkey::default(),
+            let owner_pubkey = match (owner, signer.as_ref()) {
+                (Some(o), _) => parse_pubkey("owner", o)?,
+                (None, Some(signer)) => signer_pubkey(signer),
+                (None, None) => {
+                    return Err("missing owner pubkey; pass --owner or set SOLANA_KEYPAIR".into());
+                }
             };
             let burn_rate = DeploymentClient::calculate_burn_rate(
                 *cpu_cores,
@@ -261,7 +289,7 @@ pub async fn handle(
             println!("Burn rate: {} lamports/sec", burn_rate);
 
             if let Some(ref signer) = signer {
-                let dep_pubkey: Pubkey = deployment.parse().unwrap_or_default();
+                let dep_pubkey = parse_pubkey("deployment", deployment)?;
                 let mut name_bytes = [0u8; 64];
                 if let Some(ref n) = name {
                     let bytes = n.as_bytes();
@@ -292,7 +320,7 @@ pub async fn handle(
             Ok(())
         }
         DeploymentCommand::Get { deployment } => {
-            let pubkey: Pubkey = deployment.parse().unwrap_or_default();
+            let pubkey = parse_pubkey("deployment", deployment)?;
             match client.get_deployment(&pubkey) {
                 Ok(d) => {
                     println!("=== Deployment Info ===");
@@ -315,10 +343,13 @@ pub async fn handle(
             Ok(())
         }
         DeploymentCommand::Start { deployment, owner } => {
-            let dep_pubkey: Pubkey = deployment.parse().unwrap_or_default();
-            let owner_pubkey = match owner {
-                Some(o) => o.parse().unwrap_or_default(),
-                None => Pubkey::default(),
+            let dep_pubkey = parse_pubkey("deployment", deployment)?;
+            let owner_pubkey = match (owner, signer.as_ref()) {
+                (Some(o), _) => parse_pubkey("owner", o)?,
+                (None, Some(signer)) => signer_pubkey(signer),
+                (None, None) => {
+                    return Err("missing owner pubkey; pass --owner or set SOLANA_KEYPAIR".into());
+                }
             };
             if let Some(ref signer) = signer {
                 let ix = client.start_instruction(&dep_pubkey, &owner_pubkey);
@@ -332,10 +363,13 @@ pub async fn handle(
             Ok(())
         }
         DeploymentCommand::Stop { deployment, owner } => {
-            let dep_pubkey: Pubkey = deployment.parse().unwrap_or_default();
-            let owner_pubkey = match owner {
-                Some(o) => o.parse().unwrap_or_default(),
-                None => Pubkey::default(),
+            let dep_pubkey = parse_pubkey("deployment", deployment)?;
+            let owner_pubkey = match (owner, signer.as_ref()) {
+                (Some(o), _) => parse_pubkey("owner", o)?,
+                (None, Some(signer)) => signer_pubkey(signer),
+                (None, None) => {
+                    return Err("missing owner pubkey; pass --owner or set SOLANA_KEYPAIR".into());
+                }
             };
             if let Some(ref signer) = signer {
                 let ix = client.stop_instruction(&dep_pubkey, &owner_pubkey);
@@ -357,8 +391,8 @@ pub async fn handle(
             network_bytes,
             containers,
         } => {
-            let dep_pubkey: Pubkey = deployment.parse().unwrap_or_default();
-            let prov_pubkey: Pubkey = provider.parse().unwrap_or_default();
+            let dep_pubkey = parse_pubkey("deployment", deployment)?;
+            let prov_pubkey = parse_pubkey("provider", provider)?;
             println!("=== Report Metrics ===");
             println!("Deployment: {}", deployment);
             println!("Provider: {}", provider);

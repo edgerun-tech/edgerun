@@ -3,6 +3,8 @@ name = "mock-solana-rpc"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+
 [[bin]]
 name = "mock-solana-rpc"
 path = "src/main.rs"

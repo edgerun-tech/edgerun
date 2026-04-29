@@ -1257,6 +1257,7 @@ fn dispatch_execute_workload(
     let memory_multiplier_bg = cert.memory_multiplier();
     let storage_multiplier_bg = cert.storage_multiplier();
     let cert_digest_bg = cert.digest;
+    let accounting_sink_bg = store.work_accounting_sink();
 
     // Clone values needed for panic-safe cleanup (moved into catch_unwind below)
     let cleanup_capacity = Arc::clone(&capacity_tracker_bg);
@@ -1285,6 +1286,7 @@ fn dispatch_execute_workload(
                     memory_multiplier_bg,
                     storage_multiplier_bg,
                     cert_digest_bg,
+                    accounting_sink_bg,
                     allocated_cores,
                     allocated_memory_bytes,
                     image_str,
@@ -1363,6 +1365,7 @@ fn workload_thread_body(
     memory_multiplier_bg: edgerun_core::fixed_point::FixedPoint16,
     storage_multiplier_bg: edgerun_core::fixed_point::FixedPoint16,
     cert_digest_bg: [u8; 32],
+    accounting_sink_bg: edgerun_storage::WorkAccountingSink,
     allocated_cores: u32,
     allocated_memory_bytes: u64,
     _image_str: String,
@@ -1401,7 +1404,7 @@ fn workload_thread_body(
     let billable_compute_rc_us = cpu_multiplier_bg.mul_u64(physical_core_us);
 
     // Build the accounting record
-    let _accounting = edgerun_core::accounting::WorkAccounting {
+    let accounting = edgerun_core::accounting::WorkAccounting {
         work_id,
         requester_id: requester_id_bg,
         provider_id: provider_id_bg,
@@ -1443,6 +1446,13 @@ fn workload_thread_body(
         elapsed_s,
         container_pid
     );
+    if let Err(err) = accounting_sink_bg.record_work_accounting(&accounting) {
+        edgerun_log::error!(
+            "failed to record work accounting for {}: {}",
+            edgerun_core::util::bytes_to_hex(&work_id[..8]),
+            err
+        );
+    }
 
     // 2. Release reserved resources (exactly once — terminate() never does this)
     capacity_tracker_bg.release(allocated_cores, allocated_memory_bytes);

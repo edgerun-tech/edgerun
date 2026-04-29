@@ -128,6 +128,7 @@ fn base58_decode(input: &str) -> Result<Vec<u8>, &'static str> {
 pub enum AccountMeta {
     NonSigner { pubkey: Pubkey },
     Signer { pubkey: Pubkey },
+    Readonly { pubkey: Pubkey },
 }
 
 impl AccountMeta {
@@ -140,17 +141,23 @@ impl AccountMeta {
     }
 
     pub fn new_readonly(pubkey: Pubkey) -> Self {
-        Self::NonSigner { pubkey }
+        Self::Readonly { pubkey }
     }
 
     pub fn pubkey(&self) -> Pubkey {
         match self {
-            Self::NonSigner { pubkey } | Self::Signer { pubkey } => *pubkey,
+            Self::NonSigner { pubkey } | Self::Signer { pubkey } | Self::Readonly { pubkey } => {
+                *pubkey
+            }
         }
     }
 
     pub fn is_signer(&self) -> bool {
         matches!(self, Self::Signer { .. })
+    }
+
+    pub fn is_readonly(&self) -> bool {
+        matches!(self, Self::Readonly { .. })
     }
 }
 

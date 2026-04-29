@@ -13,6 +13,7 @@ const RTC_CNTL_DIG_ISO: *mut u32 = 0x6000_8094 as *mut u32;
 const WIFI_MAC_RESET_CTRL: *mut u32 = 0x6003_3d14 as *mut u32;
 const WIFI_MAC_DMA_CTRL: *mut u32 = 0x6003_3c6c as *mut u32;
 const WIFI_MAC_RX_POLICY_BASE: *mut u32 = 0x6003_30d8 as *mut u32;
+const WIFI_MAC_CTRL_33C00: *mut u32 = 0x6003_3c00 as *mut u32;
 const WIFI_MAC_CTRL_33C34: *mut u32 = 0x6003_3c34 as *mut u32;
 const WIFI_MAC_CTRL_33C40: *mut u32 = 0x6003_3c40 as *mut u32;
 const WIFI_MAC_CTRL_33C74: *mut u32 = 0x6003_3c74 as *mut u32;
@@ -46,6 +47,7 @@ const WIFI_PHY_RX_11B_CTRL0: *mut u32 = 0x6001_c044 as *mut u32;
 const WIFI_PHY_RX_11B_CTRL1: *mut u32 = 0x6001_c124 as *mut u32;
 const WIFI_PHY_RX_11B_CTRL2: *mut u32 = 0x6001_c804 as *mut u32;
 const WIFI_PHY_RX_11B_CTRL3: *mut u32 = 0x6001_c104 as *mut u32;
+const WIFI_PHY_RX_2440M_CTRL: *mut u32 = 0x6001_c02c as *mut u32;
 const WIFI_PHY_BB_CTRL_1CC48: *mut u32 = 0x6001_cc48 as *mut u32;
 const WIFI_MODEM_WIFI_ENABLE: *mut u32 = 0x6002_600c as *mut u32;
 const WIFI_MODEM_CTRL_26010: *mut u32 = 0x6002_6010 as *mut u32;
@@ -100,6 +102,10 @@ const WIFI_MAC_RX_CTRL1: *mut u32 = 0x6003_3104 as *mut u32;
 const WIFI_MAC_RX_CTRL2: *mut u32 = 0x6003_3108 as *mut u32;
 const WIFI_MAC_RX_CTRL3: *mut u32 = 0x6003_310c as *mut u32;
 const WIFI_MAC_RX_GLOBAL: *mut u32 = 0x6003_309c as *mut u32;
+const WIFI_MAC_RX_ADDR0: *mut u32 = 0x6003_3040 as *mut u32;
+const WIFI_MAC_RX_ADDR1: *mut u32 = 0x6003_3044 as *mut u32;
+const WIFI_MAC_RX_ADDR_MASK0: *mut u32 = 0x6003_3060 as *mut u32;
+const WIFI_MAC_RX_ADDR_MASK1: *mut u32 = 0x6003_3064 as *mut u32;
 const WIFI_MAC_RX_CFG0: *mut u32 = 0x6003_3c5c as *mut u32;
 const WIFI_MAC_RX_CFG1: *mut u32 = 0x6003_3c60 as *mut u32;
 const WIFI_MAC_RX_CFG2: *mut u32 = 0x6003_3c64 as *mut u32;
@@ -108,7 +114,11 @@ const WIFI_MAC_RX_RELOAD: *mut u32 = 0x6003_3084 as *mut u32;
 const WIFI_MAC_RX_BASE: *mut u32 = 0x6003_3088 as *mut u32;
 const WIFI_MAC_RX_NEXT: *mut u32 = 0x6003_308c as *mut u32;
 const WIFI_MAC_RX_LAST: *mut u32 = 0x6003_3090 as *mut u32;
+const WIFI_MAC_RX_AUX0: *mut u32 = 0x6003_3094 as *mut u32;
+const WIFI_MAC_RX_AUX1: *mut u32 = 0x6003_3098 as *mut u32;
 const WIFI_MAC_RX_END_STATE: *mut u32 = 0x6003_30a8 as *mut u32;
+const WIFI_MAC_RX_STATE0: *mut u32 = 0x6003_30ac as *mut u32;
+const WIFI_MAC_RX_STATE1: *mut u32 = 0x6003_30b0 as *mut u32;
 const WIFI_MAC_RX_FILTER_COUNT: *mut u32 = 0x6003_311c as *mut u32;
 const WIFI_MAC_RX_FILTER_CTRL_BASE: *mut u32 = 0x6003_3120 as *mut u32;
 const WIFI_MAC_RX_FILTER_PATTERN_BASE: *mut u32 = 0x6003_313c as *mut u32;
@@ -116,6 +126,10 @@ const WIFI_MAC_RX_FILTER_MASK_BASE: *mut u32 = 0x6003_3158 as *mut u32;
 const WIFI_MAC_RX_INFO2: *mut u32 = 0x6003_3314 as *mut u32;
 const WIFI_MAC_RX_INFO1: *mut u32 = 0x6003_3318 as *mut u32;
 const WIFI_MAC_RX_INFO0: *mut u32 = 0x6003_331c as *mut u32;
+const WIFI_MAC_RX_INFO3: *mut u32 = 0x6003_3320 as *mut u32;
+const WIFI_MAC_RX_POLICY_A: *mut u32 = 0x6003_30dc as *mut u32;
+const WIFI_MAC_RX_POLICY_B: *mut u32 = 0x6003_30e0 as *mut u32;
+const WIFI_MAC_RX_POLICY_C: *mut u32 = 0x6003_30e4 as *mut u32;
 const WIFI_MAC_CTRL_33114: *mut u32 = 0x6003_3114 as *mut u32;
 const WIFI_MAC_CTRL_33118: *mut u32 = 0x6003_3118 as *mut u32;
 const WIFI_MAC_SNIFFER_CTRL: *mut u32 = 0x6003_30e4 as *mut u32;
@@ -144,7 +158,7 @@ const MODEM_RESET_FIELD_WHEN_POWERED: u32 =
 static LAST_STATUS: AtomicI32 = AtomicI32::new(0);
 
 const RX_DESC_COUNT: usize = 4;
-const RX_BUFFER_LEN: usize = 0x8a4;
+const RX_BUFFER_LEN: usize = 0x8a8;
 const RX_BUFFER_USABLE_LEN: u32 = (RX_BUFFER_LEN as u32) - 4;
 const RX_BUFFER_SENTINEL: u32 = 0xdead_beef;
 
@@ -172,9 +186,13 @@ struct AlignedRxDescriptors([RxDescriptor; RX_DESC_COUNT]);
 #[repr(align(16))]
 struct AlignedRxBuffers([[u8; RX_BUFFER_LEN]; RX_DESC_COUNT]);
 
+#[repr(align(16))]
+struct AlignedWdevRxControl([u32; 14]);
+
 static mut RX_DESCRIPTORS: AlignedRxDescriptors =
     AlignedRxDescriptors([RxDescriptor::empty(); RX_DESC_COUNT]);
 static mut RX_BUFFERS: AlignedRxBuffers = AlignedRxBuffers([[0; RX_BUFFER_LEN]; RX_DESC_COUNT]);
+static mut WDEV_RX_CONTROL: AlignedWdevRxControl = AlignedWdevRxControl([0; 14]);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiMmioDebugRegs {
@@ -193,6 +211,7 @@ pub struct WifiMmioMacRegs {
     pub rx_policy1: u32,
     pub rx_policy2: u32,
     pub rx_policy3: u32,
+    pub ctrl_33c00: u32,
     pub ctrl_33c34: u32,
     pub ctrl_33c40: u32,
     pub ctrl_33c74: u32,
@@ -201,6 +220,10 @@ pub struct WifiMmioMacRegs {
     pub rx_ctrl2: u32,
     pub rx_ctrl3: u32,
     pub rx_global: u32,
+    pub rx_addr0: u32,
+    pub rx_addr1: u32,
+    pub rx_addr_mask0: u32,
+    pub rx_addr_mask1: u32,
     pub rx_cfg0: u32,
     pub rx_cfg1: u32,
     pub rx_cfg2: u32,
@@ -242,6 +265,9 @@ pub struct WifiMmioRxScratchRegs {
     pub base: u32,
     pub next: u32,
     pub last: u32,
+    pub aux0: u32,
+    pub aux1: u32,
+    pub ctrl_33c00: u32,
     pub reload: u32,
     pub interrupt_status: u32,
     pub interrupt_clear: u32,
@@ -249,9 +275,13 @@ pub struct WifiMmioRxScratchRegs {
     pub rx_end0: u32,
     pub rx_end1: u32,
     pub rx_end_state: u32,
+    pub rx_state0: u32,
+    pub rx_state1: u32,
     pub rx_info0: u32,
     pub rx_info1: u32,
     pub rx_info2: u32,
+    pub rx_info3: u32,
+    pub ctrl_words: [u32; 4],
     pub desc_words: [u32; RX_DESC_COUNT * 3],
     pub buffer_words: [u32; 8],
 }
@@ -293,6 +323,7 @@ pub struct WifiMmioPhyRegs {
     pub rx_11b_ctrl1: u32,
     pub rx_11b_ctrl2: u32,
     pub rx_11b_ctrl3: u32,
+    pub rx_2440m_ctrl: u32,
     pub bb_ctrl_1cc48: u32,
     pub modem_wifi_enable: u32,
     pub modem_ctrl_26010: u32,
@@ -358,6 +389,7 @@ impl Esp32s3WifiMmio {
                 rx_policy1: WIFI_MAC_RX_POLICY_BASE.add(1).read_volatile(),
                 rx_policy2: WIFI_MAC_RX_POLICY_BASE.add(2).read_volatile(),
                 rx_policy3: WIFI_MAC_RX_POLICY_BASE.add(3).read_volatile(),
+                ctrl_33c00: WIFI_MAC_CTRL_33C00.read_volatile(),
                 ctrl_33c34: WIFI_MAC_CTRL_33C34.read_volatile(),
                 ctrl_33c40: WIFI_MAC_CTRL_33C40.read_volatile(),
                 ctrl_33c74: WIFI_MAC_CTRL_33C74.read_volatile(),
@@ -366,6 +398,10 @@ impl Esp32s3WifiMmio {
                 rx_ctrl2: WIFI_MAC_RX_CTRL2.read_volatile(),
                 rx_ctrl3: WIFI_MAC_RX_CTRL3.read_volatile(),
                 rx_global: WIFI_MAC_RX_GLOBAL.read_volatile(),
+                rx_addr0: WIFI_MAC_RX_ADDR0.read_volatile(),
+                rx_addr1: WIFI_MAC_RX_ADDR1.read_volatile(),
+                rx_addr_mask0: WIFI_MAC_RX_ADDR_MASK0.read_volatile(),
+                rx_addr_mask1: WIFI_MAC_RX_ADDR_MASK1.read_volatile(),
                 rx_cfg0: WIFI_MAC_RX_CFG0.read_volatile(),
                 rx_cfg1: WIFI_MAC_RX_CFG1.read_volatile(),
                 rx_cfg2: WIFI_MAC_RX_CFG2.read_volatile(),
@@ -424,10 +460,20 @@ impl Esp32s3WifiMmio {
                 buffer_snapshot[index] = buffer_words.add(index).read_volatile();
                 index += 1;
             }
+            let ctrl_words = core::ptr::addr_of!(WDEV_RX_CONTROL.0).cast::<u32>();
+            let mut ctrl_snapshot = [0u32; 4];
+            index = 0;
+            while index < ctrl_snapshot.len() {
+                ctrl_snapshot[index] = ctrl_words.add(index).read_volatile();
+                index += 1;
+            }
             WifiMmioRxScratchRegs {
                 base: WIFI_MAC_RX_BASE.read_volatile(),
                 next: WIFI_MAC_RX_NEXT.read_volatile(),
                 last: WIFI_MAC_RX_LAST.read_volatile(),
+                aux0: WIFI_MAC_RX_AUX0.read_volatile(),
+                aux1: WIFI_MAC_RX_AUX1.read_volatile(),
+                ctrl_33c00: WIFI_MAC_CTRL_33C00.read_volatile(),
                 reload: WIFI_MAC_RX_RELOAD.read_volatile(),
                 interrupt_status: WIFI_MAC_INTERRUPT_STATUS.read_volatile(),
                 interrupt_clear: WIFI_MAC_INTERRUPT_CLEAR.read_volatile(),
@@ -435,9 +481,13 @@ impl Esp32s3WifiMmio {
                 rx_end0: WIFI_MAC_RX_END0.read_volatile(),
                 rx_end1: WIFI_MAC_RX_END1.read_volatile(),
                 rx_end_state: WIFI_MAC_RX_END_STATE.read_volatile(),
+                rx_state0: WIFI_MAC_RX_STATE0.read_volatile(),
+                rx_state1: WIFI_MAC_RX_STATE1.read_volatile(),
                 rx_info0: WIFI_MAC_RX_INFO0.read_volatile(),
                 rx_info1: WIFI_MAC_RX_INFO1.read_volatile(),
                 rx_info2: WIFI_MAC_RX_INFO2.read_volatile(),
+                rx_info3: WIFI_MAC_RX_INFO3.read_volatile(),
+                ctrl_words: ctrl_snapshot,
                 desc_words: desc_snapshot,
                 buffer_words: buffer_snapshot,
             }
@@ -495,6 +545,7 @@ impl Esp32s3WifiMmio {
                 rx_11b_ctrl1: WIFI_PHY_RX_11B_CTRL1.read_volatile(),
                 rx_11b_ctrl2: WIFI_PHY_RX_11B_CTRL2.read_volatile(),
                 rx_11b_ctrl3: WIFI_PHY_RX_11B_CTRL3.read_volatile(),
+                rx_2440m_ctrl: WIFI_PHY_RX_2440M_CTRL.read_volatile(),
                 bb_ctrl_1cc48: WIFI_PHY_BB_CTRL_1CC48.read_volatile(),
                 modem_wifi_enable: WIFI_MODEM_WIFI_ENABLE.read_volatile(),
                 modem_ctrl_26010: WIFI_MODEM_CTRL_26010.read_volatile(),
@@ -686,6 +737,7 @@ impl Esp32s3WifiMmio {
                 26 => {
                     LAST_STATUS.store(2601, Ordering::Relaxed);
                     set_chan_freq_sw_start_direct_slice(11);
+                    enable_mac_direct_slice();
                     release_txrx_force_direct_slice();
                     enable_rx_direct_slice();
                     LAST_STATUS.store(2602, Ordering::Relaxed);
@@ -736,6 +788,7 @@ impl Esp32s3WifiMmio {
                 34 => {
                     LAST_STATUS.store(3401, Ordering::Relaxed);
                     set_chan_freq_sw_start_direct_slice(1);
+                    enable_mac_direct_slice();
                     release_txrx_force_direct_slice();
                     enable_rx_direct_slice();
                     LAST_STATUS.store(3402, Ordering::Relaxed);
@@ -744,6 +797,7 @@ impl Esp32s3WifiMmio {
                 35 => {
                     LAST_STATUS.store(3501, Ordering::Relaxed);
                     set_chan_freq_sw_start_direct_slice(6);
+                    enable_mac_direct_slice();
                     release_txrx_force_direct_slice();
                     enable_rx_direct_slice();
                     LAST_STATUS.store(3502, Ordering::Relaxed);
@@ -752,6 +806,7 @@ impl Esp32s3WifiMmio {
                 36 => {
                     LAST_STATUS.store(3601, Ordering::Relaxed);
                     set_chan_freq_sw_start_direct_slice(11);
+                    enable_mac_direct_slice();
                     release_txrx_force_direct_slice();
                     enable_rx_direct_slice();
                     LAST_STATUS.store(3602, Ordering::Relaxed);
@@ -767,6 +822,78 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(3801, Ordering::Relaxed);
                     release_txrx_force_direct_slice();
                     LAST_STATUS.store(3802, Ordering::Relaxed);
+                    true
+                }
+                39 => {
+                    LAST_STATUS.store(3901, Ordering::Relaxed);
+                    enable_mac_direct_slice();
+                    LAST_STATUS.store(3902, Ordering::Relaxed);
+                    true
+                }
+                40 => {
+                    LAST_STATUS.store(4001, Ordering::Relaxed);
+                    enable_rftest_rx_policy_direct_slice();
+                    LAST_STATUS.store(4002, Ordering::Relaxed);
+                    true
+                }
+                41 => {
+                    LAST_STATUS.store(4101, Ordering::Relaxed);
+                    enable_rftest_rx_gate_direct_slice();
+                    LAST_STATUS.store(4102, Ordering::Relaxed);
+                    true
+                }
+                42 => {
+                    LAST_STATUS.store(4201, Ordering::Relaxed);
+                    trigger_rftest_rx_buffer_direct_slice();
+                    LAST_STATUS.store(4202, Ordering::Relaxed);
+                    true
+                }
+                43 => {
+                    LAST_STATUS.store(4301, Ordering::Relaxed);
+                    enable_rftest_rx_accept_filter_direct_slice();
+                    LAST_STATUS.store(4302, Ordering::Relaxed);
+                    true
+                }
+                44 => {
+                    LAST_STATUS.store(4401, Ordering::Relaxed);
+                    init_rftest_rx_2440m_opt_direct_slice();
+                    LAST_STATUS.store(4402, Ordering::Relaxed);
+                    true
+                }
+                45 => {
+                    LAST_STATUS.store(4501, Ordering::Relaxed);
+                    init_rx_descriptor_ring_with_eof();
+                    LAST_STATUS.store(4502, Ordering::Relaxed);
+                    true
+                }
+                46 => {
+                    LAST_STATUS.store(4601, Ordering::Relaxed);
+                    init_wdev_rx_buffer_slice();
+                    LAST_STATUS.store(4602, Ordering::Relaxed);
+                    true
+                }
+                47 => {
+                    LAST_STATUS.store(4701, Ordering::Relaxed);
+                    init_rftest_rx_mac_filter_direct_slice();
+                    LAST_STATUS.store(4702, Ordering::Relaxed);
+                    true
+                }
+                48 => {
+                    LAST_STATUS.store(4801, Ordering::Relaxed);
+                    init_rftest_rx_per_filter_direct_slice();
+                    LAST_STATUS.store(4802, Ordering::Relaxed);
+                    true
+                }
+                49 => {
+                    LAST_STATUS.store(4901, Ordering::Relaxed);
+                    init_rftest_rx_pbus_direct_slice(0, 0, 0, 0);
+                    LAST_STATUS.store(4902, Ordering::Relaxed);
+                    true
+                }
+                50 => {
+                    LAST_STATUS.store(5001, Ordering::Relaxed);
+                    init_rftest_rx_pbus_direct_slice(4, 8, 4, 8);
+                    LAST_STATUS.store(5002, Ordering::Relaxed);
                     true
                 }
                 _ => false,
@@ -831,6 +958,7 @@ unsafe fn request_mac_enable() {
     unsafe {
         WIFI_MAC_RESET_CTRL.write_volatile(current | 2);
     }
+    enable_mac_direct_slice();
 }
 
 unsafe fn set_mac_ready_bit() {
@@ -894,7 +1022,26 @@ unsafe fn init_rx_buffer_slice() {
     init_rx_descriptor_ring();
 }
 
+unsafe fn init_wdev_rx_buffer_slice() {
+    update(WIFI_MAC_RX_CFG0, |v| (v & 0xfff0_0000) | (31 << 15));
+    update(WIFI_MAC_RX_CFG1, |v| (v & 0xfff0_0000) | (33 << 14));
+    update(WIFI_MAC_RX_CFG2, |v| (v & 0x000f_ffff) | (255 << 22));
+    update(WIFI_MAC_RX_CFG3, |v| v & 0xffff_ff00);
+
+    init_wdev_rx_descriptor_ring();
+}
+
 unsafe fn init_rx_descriptor_ring() {
+    init_rx_descriptor_ring_with_control(encode_rx_descriptor_control(RX_BUFFER_USABLE_LEN));
+}
+
+unsafe fn init_rx_descriptor_ring_with_eof() {
+    init_rx_descriptor_ring_with_control(encode_rx_descriptor_control_with_eof(
+        RX_BUFFER_USABLE_LEN,
+    ));
+}
+
+unsafe fn init_rx_descriptor_ring_with_control(control: u32) {
     let desc_base = core::ptr::addr_of_mut!(RX_DESCRIPTORS.0).cast::<RxDescriptor>();
     let buffer_base = core::ptr::addr_of_mut!(RX_BUFFERS.0).cast::<u8>();
 
@@ -903,7 +1050,6 @@ unsafe fn init_rx_descriptor_ring() {
         let buffer = buffer_base.add(index * RX_BUFFER_LEN);
         zero_rx_buffer(buffer);
 
-        let control = encode_rx_descriptor_control(RX_BUFFER_USABLE_LEN);
         let next = if index + 1 < RX_DESC_COUNT {
             desc_base.add(index + 1) as usize as u32
         } else {
@@ -928,9 +1074,55 @@ unsafe fn init_rx_descriptor_ring() {
     }
 }
 
+unsafe fn init_wdev_rx_descriptor_ring() {
+    let ctrl = core::ptr::addr_of_mut!(WDEV_RX_CONTROL.0).cast::<u32>();
+    let desc_base = core::ptr::addr_of_mut!(RX_DESCRIPTORS.0).cast::<RxDescriptor>();
+    let buffer_base = core::ptr::addr_of_mut!(RX_BUFFERS.0).cast::<u8>();
+    let control = encode_rx_descriptor_control(RX_BUFFER_USABLE_LEN);
+
+    for index in 0..14 {
+        ctrl.add(index).write_volatile(0);
+    }
+
+    for index in 0..RX_DESC_COUNT {
+        let desc = desc_base.add(index);
+        let buffer = buffer_base.add(index * RX_BUFFER_LEN);
+        zero_rx_buffer(buffer);
+
+        let next = if index + 1 < RX_DESC_COUNT {
+            desc_base.add(index + 1) as usize as u32
+        } else {
+            0
+        };
+
+        (*desc).control = control;
+        (*desc).buffer = buffer as usize as u32;
+        (*desc).next = next;
+        buffer.cast::<u32>().write_volatile(RX_BUFFER_SENTINEL);
+        buffer
+            .add(RX_BUFFER_USABLE_LEN as usize)
+            .cast::<u32>()
+            .write_volatile(RX_BUFFER_SENTINEL);
+    }
+
+    ctrl.add(0).write_volatile(desc_base as usize as u32);
+    ctrl.add(1)
+        .write_volatile(desc_base.add(RX_DESC_COUNT - 1) as usize as u32);
+    ctrl.add(2).write_volatile(desc_base as usize as u32);
+
+    let ctrl_base = ctrl as usize as u32;
+    WIFI_MAC_RX_BASE.write_volatile(ctrl_base);
+    WIFI_MAC_RX_NEXT.write_volatile(0);
+    WIFI_MAC_RX_LAST.write_volatile(desc_base.add(RX_DESC_COUNT - 1) as usize as u32);
+}
+
 fn encode_rx_descriptor_control(len: u32) -> u32 {
     let len = len & 0x0fff;
     0x8000_0000 | len | (len << 12)
+}
+
+fn encode_rx_descriptor_control_with_eof(len: u32) -> u32 {
+    encode_rx_descriptor_control(len) | 0x4000_0000
 }
 
 unsafe fn zero_rx_buffer(buffer: *mut u8) {
@@ -995,19 +1187,17 @@ unsafe fn init_rx_filter_slice() {
 }
 
 unsafe fn enable_sniffer_direct_slice() {
-    update(WIFI_MAC_SNIFFER_CTRL, |v| {
-        (v & !0x0000_000f) | 0x0000_80e0
-    });
-    update(WIFI_MAC_SNIFFER_MISC0, |v| {
-        (v & 0xffff_0000) | 0x0000_78f8
-    });
-    update(WIFI_MAC_SNIFFER_MISC1, |v| {
-        (v & 0xffff_0000) | 0x0000_40ff
-    });
+    update(WIFI_MAC_SNIFFER_CTRL, |v| (v & !0x0000_000f) | 0x0000_80e0);
+    update(WIFI_MAC_SNIFFER_MISC0, |v| (v & 0xffff_0000) | 0x0000_78f8);
+    update(WIFI_MAC_SNIFFER_MISC1, |v| (v & 0xffff_0000) | 0x0000_40ff);
     update(WIFI_MAC_RX_CTRL0, |v| v | 4);
     update(WIFI_MAC_RX_CTRL1, |v| v | 4);
     update(WIFI_MAC_RX_CTRL3, |v| v | 4);
     update(WIFI_MAC_CTRL_33C34, |v| v | 4);
+}
+
+unsafe fn enable_mac_direct_slice() {
+    update(WIFI_MAC_CTRL_33C00, |v| v & !0x0000_00f0);
 }
 
 unsafe fn poll_rx_event_direct_slice() {
@@ -1018,6 +1208,66 @@ unsafe fn poll_rx_event_direct_slice() {
         }
     }
     update(WIFI_MAC_RX_RELOAD, |v| v | 1);
+}
+
+unsafe fn enable_rftest_rx_policy_direct_slice() {
+    WIFI_MAC_RX_POLICY_BASE.write_volatile(0x0000_7960);
+    WIFI_MAC_INTERRUPT_CLEAR.write_volatile(0x0000_000c);
+    WIFI_MAC_RX_RELOAD.write_volatile(0x8000_0000);
+}
+
+unsafe fn enable_rftest_rx_gate_direct_slice() {
+    update(WIFI_MAC_RX_RELOAD, |v| v & !0x2000_0000);
+    update(WIFI_MAC_RX_CFG3, |v| v & !0x1000_0000);
+    WIFI_MAC_INTERRUPT_CLEAR.write_volatile(0x0000_000c);
+    update(WIFI_MAC_RX_RELOAD, |v| v | 0x8000_0000);
+}
+
+unsafe fn trigger_rftest_rx_buffer_direct_slice() {
+    update(WIFI_MAC_RX_RELOAD, |v| v & !0x2000_0000);
+    update(WIFI_MAC_RX_CFG3, |v| v & !0x1000_0000);
+    update(WIFI_MAC_RX_RELOAD, |v| v | 0x4000_0000);
+}
+
+unsafe fn enable_rftest_rx_accept_filter_direct_slice() {
+    let mut index = 0;
+    while index < 4 {
+        let reg = WIFI_MAC_RX_POLICY_BASE.add(index);
+        update(reg, |v| (v | 0x0000_000d) & !0x0000_0800);
+        index += 1;
+    }
+}
+
+unsafe fn init_rftest_rx_mac_filter_direct_slice() {
+    WIFI_MAC_RX_ADDR0.write_volatile(0x0134_fe18);
+    WIFI_MAC_RX_ADDR1.write_volatile(0x0504_0302);
+    WIFI_MAC_RX_POLICY_A.write_volatile(0x0000_000f);
+    WIFI_MAC_RX_POLICY_B.write_volatile(0x0000_000f);
+    WIFI_MAC_RX_POLICY_C.write_volatile(0x0000_000f);
+    WIFI_MAC_RX_ADDR_MASK0.write_volatile(0xffff_ffff);
+    WIFI_MAC_RX_ADDR_MASK1.write_volatile(0x0001_ffff);
+    update(WIFI_MAC_CTRL_33C78, |v| v | 1);
+}
+
+unsafe fn init_rftest_rx_per_filter_direct_slice() {
+    WIFI_MAC_RX_ADDR0.write_volatile(0x0304_0506);
+    WIFI_MAC_RX_ADDR1.write_volatile(0x0000_0102);
+    WIFI_MAC_RX_POLICY_BASE
+        .write_volatile((WIFI_MAC_RX_POLICY_BASE.read_volatile() & !0x01ff) | 0x0d);
+    let mut index = 1;
+    while index < 4 {
+        let reg = WIFI_MAC_RX_POLICY_BASE.add(index);
+        reg.write_volatile((reg.read_volatile() & !0x01ff) | 0x0f);
+        index += 1;
+    }
+}
+
+unsafe fn init_rftest_rx_2440m_opt_direct_slice() {
+    update(WIFI_PHY_RX_2440M_CTRL, |v| (v & 0x00ff_ffff) | 0x4b00_0000);
+    update(WIFI_PHY_RX_2440M_CTRL, |v| v | 0x0080_0000);
+    update(WIFI_PHY_RX_2440M_CTRL, |v| (v & 0x00ff_ffff) | 0x3200_0000);
+    update(WIFI_PHY_RX_2440M_CTRL, |v| v | 0x0080_0000);
+    update(WIFI_PHY_RX_2440M_CTRL, |v| v & !0x0080_0000);
 }
 
 unsafe fn enable_rx_direct_slice() {
@@ -1166,6 +1416,22 @@ unsafe fn write_pbus_window(bank: *mut u32, start: u32, shift: u32, values: &[u3
         update(WIFI_PBUS_ADDR_CTRL, |v| v & 0xfffc_ffff);
         addr += 1;
     }
+}
+
+unsafe fn init_rftest_rx_pbus_direct_slice(rx0: u16, rx1: u16, rx2: u16, rx3: u16) {
+    let low = [
+        ((rx0 as u32) << 9) | 0x0004_01ff,
+        ((rx1 as u32) << 9) | 0x0014_01ff,
+        0x00f5_0000,
+        0x00f6_0000,
+    ];
+    let high = [
+        ((rx2 as u32) << 9) | 0x0004_01ff,
+        ((rx3 as u32) << 9) | 0x0014_01ff,
+    ];
+
+    write_pbus_window(WIFI_PBUS_BANK0, 0, 0, &low);
+    write_pbus_window(WIFI_PBUS_BANK0, 4, 16, &high);
 }
 
 unsafe fn write_txrate_power_offset_slice() {

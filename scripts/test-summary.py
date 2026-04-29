@@ -7,6 +7,7 @@ import argparse
 import re
 import subprocess
 from collections import deque
+from dataclasses import dataclass
 
 
 TEST_RESULT_RE = re.compile(r"^test (?P<name>.+) \.\.\. (?P<status>ok|FAILED|ignored)$")
@@ -32,23 +33,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    command = args.command
-    if command[:1] == ["--"]:
-        command = command[1:]
-    if not command:
-        command = ["cargo", "test", "--workspace"]
+@dataclass
+class TestTotals:
+    ok_lines: int = 0
+    passed: int = 0
+    failed: int = 0
+    ignored: int = 0
+    measured: int = 0
+    filtered: int = 0
+    failed_tests: list[str] | None = None
+    recent_lines: deque[str] | None = None
 
-    ok_lines = 0
-    passed_total = 0
-    failed_total = 0
-    ignored_total = 0
-    measured_total = 0
-    filtered_total = 0
-    failed: list[str] = []
-    recent_lines: deque[str] = deque(maxlen=80)
+    def __post_init__(self) -> None:
+        if self.failed_tests is None:
+            self.failed_tests = []
+        if self.recent_lines is None:
+            self.recent_lines = deque(maxlen=80)
 
+
+def run_and_collect(command: list[str], totals: TestTotals) -> int:
     print(f"Running: {' '.join(command)}", flush=True)
     proc = subprocess.Popen(
         command,
@@ -62,44 +65,65 @@ def main() -> int:
     for line in proc.stdout:
         print(line, end="")
         stripped = line.rstrip("\n")
-        recent_lines.append(stripped)
+        totals.recent_lines.append(stripped)
         match = TEST_RESULT_RE.match(stripped)
         if match:
             name = match.group("name")
             status = match.group("status")
             if status == "ok":
-                ok_lines += 1
+                totals.ok_lines += 1
             elif status == "FAILED":
-                failed.append(name)
+                totals.failed_tests.append(name)
             continue
 
         summary = TEST_SUMMARY_RE.match(stripped)
         if summary:
-            passed_total += int(summary.group("passed"))
-            failed_total += int(summary.group("failed"))
-            ignored_total += int(summary.group("ignored"))
-            measured_total += int(summary.group("measured"))
-            filtered_total += int(summary.group("filtered"))
+            totals.passed += int(summary.group("passed"))
+            totals.failed += int(summary.group("failed"))
+            totals.ignored += int(summary.group("ignored"))
+            totals.measured += int(summary.group("measured"))
+            totals.filtered += int(summary.group("filtered"))
 
-    return_code = proc.wait()
+    return proc.wait()
+
+
+def main() -> int:
+    args = parse_args()
+    command = args.command
+    if command[:1] == ["--"]:
+        command = command[1:]
+    commands = [command] if command else [
+        ["cargo", "test", "--workspace"],
+        ["cargo", "test", "--manifest-path", "programs/deployment/Cargo.toml"],
+        ["cargo", "test", "--manifest-path", "programs/provider_registry/Cargo.toml"],
+    ]
+
+    totals = TestTotals()
+    return_code = 0
+    for idx, cmd in enumerate(commands):
+        if idx:
+            print()
+        code = run_and_collect(cmd, totals)
+        if code != 0 and return_code == 0:
+            return_code = code
 
     print("\n=== Test Summary ===")
-    print(f"Successful: {passed_total}")
-    print(f"Failed: {failed_total}")
-    print(f"Ignored: {ignored_total}")
-    print(f"Measured: {measured_total}")
-    print(f"Filtered out: {filtered_total}")
-    print(f"Individual ok lines seen: {ok_lines}")
+    print(f"Successful: {totals.passed}")
+    print(f"Failed: {totals.failed}")
+    print(f"Ignored: {totals.ignored}")
+    print(f"Measured: {totals.measured}")
+    print(f"Filtered out: {totals.filtered}")
+    print(f"Individual ok lines seen: {totals.ok_lines}")
 
-    if failed:
+    if totals.failed_tests:
         print("\nFailed tests:")
-        for name in failed:
+        for name in totals.failed_tests:
             print(f"  - {name}")
     elif return_code != 0:
         print("\nNo individual failed test lines were seen.")
         print("Cargo likely failed during compile, link, or test harness setup.")
         print("\nRecent output:")
-        for line in recent_lines:
+        for line in totals.recent_lines:
             print(line)
     else:
         print("\nFailed tests: none")

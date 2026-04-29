@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
+use alloc::format;
 use alloc::string::{String, ToString};
-use edgerun_solana::signers::Ed25519Signer;
+use edgerun_solana::signers::{Ed25519Signer, Signer};
 use edgerun_solana::{solana_types::Pubkey, ProviderClient};
 use std::{eprintln, println};
 
@@ -19,7 +20,7 @@ pub enum ProviderCommand {
     List,
     Attest {
         provider: String,
-        uptime_seconds: u32,
+        uptime_percent_bps: u32,
     },
     Pause {
         provider: String,
@@ -87,10 +88,16 @@ pub fn parse_provider_command() -> ProviderCommand {
         Some("list") | Some("l") => ProviderCommand::List,
         Some("attest") | Some("a") => {
             let provider = args.next().unwrap_or_default();
-            let uptime: u32 = args.next().unwrap_or_default().parse().unwrap_or(0);
+            let uptime = match args.next().unwrap_or_default().parse() {
+                Ok(value) => value,
+                Err(_) => {
+                    eprintln!("invalid uptime percent basis-points value");
+                    std::process::exit(1);
+                }
+            };
             ProviderCommand::Attest {
                 provider,
-                uptime_seconds: uptime,
+                uptime_percent_bps: uptime,
             }
         }
         Some("pause") => {
@@ -106,6 +113,22 @@ pub fn parse_provider_command() -> ProviderCommand {
             std::process::exit(1);
         }
     }
+}
+
+fn parse_pubkey(
+    label: &str,
+    value: &str,
+) -> Result<Pubkey, Box<dyn std::error::Error + Send + Sync>> {
+    if value.is_empty() {
+        return Err(format!("missing {label} pubkey").into());
+    }
+    value
+        .parse()
+        .map_err(|err| format!("invalid {label} pubkey '{value}': {err}").into())
+}
+
+fn signer_pubkey(signer: &Ed25519Signer) -> Pubkey {
+    Pubkey::new_from_array(signer.pubkey())
 }
 
 pub async fn handle(
@@ -124,10 +147,15 @@ pub async fn handle(
             storage_bytes,
             network_mbits,
         } => {
-            let provider_pubkey: Pubkey = provider.parse().unwrap_or_default();
-            let authority_pubkey = match authority {
-                Some(a) => a.parse().unwrap_or_default(),
-                None => Pubkey::default(),
+            let provider_pubkey = parse_pubkey("provider", provider)?;
+            let authority_pubkey = match (authority, signer.as_ref()) {
+                (Some(a), _) => parse_pubkey("authority", a)?,
+                (None, Some(signer)) => signer_pubkey(signer),
+                (None, None) => {
+                    return Err(
+                        "missing authority pubkey; pass --authority or set SOLANA_KEYPAIR".into(),
+                    );
+                }
             };
 
             let min_collateral = edgerun_solana::types::collateral::calculate_minimum(
@@ -164,7 +192,7 @@ pub async fn handle(
             Ok(())
         }
         ProviderCommand::Get { provider } => {
-            let pubkey: Pubkey = provider.parse().unwrap_or_default();
+            let pubkey = parse_pubkey("provider", provider)?;
             match client.get_provider(&pubkey) {
                 Ok(p) => {
                     println!("=== Provider Info ===");
@@ -198,23 +226,32 @@ pub async fn handle(
         }
         ProviderCommand::Attest {
             provider,
-            uptime_seconds,
+            uptime_percent_bps,
         } => {
-            let pubkey: Pubkey = provider.parse().unwrap_or_default();
+            let pubkey = parse_pubkey("provider", provider)?;
+            if *uptime_percent_bps > 10_000 {
+                return Err("uptime percent basis-points must be <= 10000".into());
+            }
             if let Some(ref signer) = signer {
-                let ix = client.attest_instruction(&pubkey, &pubkey, *uptime_seconds);
-                let tx_sig = client.send_instruction_signed(ix, &pubkey, signer).await?;
+                let authority_pubkey = signer_pubkey(signer);
+                let ix = client.attest_instruction(&pubkey, &authority_pubkey, *uptime_percent_bps);
+                let tx_sig = client
+                    .send_instruction_signed(ix, &authority_pubkey, signer)
+                    .await?;
                 println!("Transaction sent: {}", tx_sig);
             } else {
-                println!("Attest {} ({}s uptime)", provider, uptime_seconds);
+                println!("Attest {} ({} bps uptime)", provider, uptime_percent_bps);
             }
             Ok(())
         }
         ProviderCommand::Pause { provider } => {
-            let pubkey: Pubkey = provider.parse().unwrap_or_default();
+            let pubkey = parse_pubkey("provider", provider)?;
             if let Some(ref signer) = signer {
-                let ix = client.pause_instruction(&pubkey, &pubkey);
-                let tx_sig = client.send_instruction_signed(ix, &pubkey, signer).await?;
+                let authority_pubkey = signer_pubkey(signer);
+                let ix = client.pause_instruction(&pubkey, &authority_pubkey);
+                let tx_sig = client
+                    .send_instruction_signed(ix, &authority_pubkey, signer)
+                    .await?;
                 println!("Transaction sent: {}", tx_sig);
             } else {
                 println!("Pause instruction created for {}", provider);
@@ -222,10 +259,13 @@ pub async fn handle(
             Ok(())
         }
         ProviderCommand::Resume { provider } => {
-            let pubkey: Pubkey = provider.parse().unwrap_or_default();
+            let pubkey = parse_pubkey("provider", provider)?;
             if let Some(ref signer) = signer {
-                let ix = client.resume_instruction(&pubkey, &pubkey);
-                let tx_sig = client.send_instruction_signed(ix, &pubkey, signer).await?;
+                let authority_pubkey = signer_pubkey(signer);
+                let ix = client.resume_instruction(&pubkey, &authority_pubkey);
+                let tx_sig = client
+                    .send_instruction_signed(ix, &authority_pubkey, signer)
+                    .await?;
                 println!("Transaction sent: {}", tx_sig);
             } else {
                 println!("Resume instruction created for {}", provider);

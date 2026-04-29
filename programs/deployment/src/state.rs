@@ -44,7 +44,8 @@ impl Deployment {
         if data.len() < SIZE {
             return Err(ProgramError::AccountDataTooSmall);
         }
-        Self::try_from_slice(data).map_err(|_| ProgramError::InvalidAccountData)
+        let mut reader = data;
+        Self::deserialize(&mut reader).map_err(|_| ProgramError::InvalidAccountData)
     }
 
     pub fn pack(&self, data: &mut [u8]) -> Result<(), ProgramError> {
@@ -52,7 +53,8 @@ impl Deployment {
             return Err(ProgramError::AccountDataTooSmall);
         }
         let mut cursor = std::io::Cursor::new(data);
-        self.serialize(&mut cursor).map_err(|_| ProgramError::InvalidAccountData)
+        self.serialize(&mut cursor)
+            .map_err(|_| ProgramError::InvalidAccountData)
     }
 }
 
@@ -81,5 +83,49 @@ impl Default for Deployment {
             storage_bytes_used: 0,
             network_bytes_sent: 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unpack_accepts_padded_account_data() {
+        let deployment = Deployment {
+            owner: Pubkey::new_unique(),
+            provider: Pubkey::new_unique(),
+            name: [7u8; 64],
+            container_count: 3,
+            total_cpu_cores: 4,
+            total_memory_bytes: 8_000,
+            total_storage_bytes: 16_000,
+            total_network_mbps: 100,
+            deposit: 1_000,
+            burn_rate: 10,
+            spent: 20,
+            status: DeploymentStatus::Running as u8,
+            created_at: 11,
+            started_at: 12,
+            paused_at: 13,
+            bump_seed: 1,
+            last_report_at: 14,
+            cpu_cores_used: 2,
+            memory_bytes_used: 4_000,
+            storage_bytes_used: 5_000,
+            network_bytes_sent: 6_000,
+        };
+        let mut data = [0u8; SIZE];
+
+        deployment.pack(&mut data).unwrap();
+        let unpacked = Deployment::unpack(&data).unwrap();
+
+        assert_eq!(unpacked.owner, deployment.owner);
+        assert_eq!(unpacked.provider, deployment.provider);
+        assert_eq!(unpacked.name, deployment.name);
+        assert_eq!(unpacked.container_count, deployment.container_count);
+        assert_eq!(unpacked.status, deployment.status);
+        assert_eq!(unpacked.spent, deployment.spent);
+        assert_eq!(unpacked.network_bytes_sent, deployment.network_bytes_sent);
     }
 }

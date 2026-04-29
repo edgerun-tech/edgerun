@@ -105,6 +105,41 @@ pub struct NodeStore {
     backend: EventBackend,
 }
 
+/// Cloneable handle for recording completed marketplace work from background
+/// tasks that cannot borrow the owning `NodeStore`.
+#[derive(Clone)]
+pub struct WorkAccountingSink {
+    index: Arc<FileIndex>,
+}
+
+impl WorkAccountingSink {
+    /// Record a completed work unit.
+    pub fn record_work_accounting(
+        &self,
+        accounting: &edgerun_core::accounting::WorkAccounting,
+    ) -> Result<(), StorageError> {
+        record_work_accounting_to_index(&self.index, accounting)
+    }
+}
+
+fn record_work_accounting_to_index(
+    index: &FileIndex,
+    accounting: &edgerun_core::accounting::WorkAccounting,
+) -> Result<(), StorageError> {
+    let record_hash = accounting.compute_record_hash();
+    let record = crate::WorkAccountingRecord {
+        data: accounting.to_bytes(),
+        record_hash: edgerun_core::util::bytes_to_hex(&record_hash),
+        requester_hex: edgerun_core::util::bytes_to_hex(&accounting.requester_id),
+        provider_hex: edgerun_core::util::bytes_to_hex(&accounting.provider_id),
+        workload_class: accounting.workload_class.as_str().to_string(),
+        status: accounting.status.as_str().to_string(),
+        started_at_us: accounting.started_at_us,
+        billable_rc_us: accounting.billable_compute_rc_us,
+    };
+    Ok(index.record_work_accounting(record)?)
+}
+
 fn to_event_backend_block<S>(device: S) -> Result<EventBackend, StorageError>
 where
     S: BlockStorage + Send + 'static,
@@ -1017,18 +1052,14 @@ impl NodeStore {
         &self,
         accounting: &edgerun_core::accounting::WorkAccounting,
     ) -> Result<(), StorageError> {
-        let record_hash = accounting.compute_record_hash();
-        let record = crate::WorkAccountingRecord {
-            data: accounting.to_bytes(),
-            record_hash: edgerun_core::util::bytes_to_hex(&record_hash),
-            requester_hex: edgerun_core::util::bytes_to_hex(&accounting.requester_id),
-            provider_hex: edgerun_core::util::bytes_to_hex(&accounting.provider_id),
-            workload_class: accounting.workload_class.as_str().to_string(),
-            status: accounting.status.as_str().to_string(),
-            started_at_us: accounting.started_at_us,
-            billable_rc_us: accounting.billable_compute_rc_us,
-        };
-        Ok(self.index.record_work_accounting(record)?)
+        record_work_accounting_to_index(&self.index, accounting)
+    }
+
+    /// Clone a lightweight handle for recording work accounting from background tasks.
+    pub fn work_accounting_sink(&self) -> WorkAccountingSink {
+        WorkAccountingSink {
+            index: Arc::clone(&self.index),
+        }
     }
 
     /// Get total billable RC-µs for a requester (buyer).

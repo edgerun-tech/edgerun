@@ -257,7 +257,10 @@ mod tests {
         let key = FakeYubiKey;
         let req = HardwareValidationRequirements::default();
         let sig = sign_record_with_yubikey_provider(&key, &req, "test:v0:sig", b"hash").unwrap();
-        assert_eq!(sig, crate::signature_input_for_record("test:v0:sig", b"hash"));
+        assert_eq!(
+            sig,
+            crate::signature_input_for_record("test:v0:sig", b"hash")
+        );
     }
 
     #[test]

@@ -320,6 +320,29 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
             b"wifi36" | b"wifi36\n" => write_wifi_debug_step(frame.seq, 36),
             b"wifi37" | b"wifi37\n" => write_wifi_debug_step(frame.seq, 37),
             b"wifi38" | b"wifi38\n" => write_wifi_debug_step(frame.seq, 38),
+            b"wifi39" | b"wifi39\n" => write_wifi_debug_step(frame.seq, 39),
+            b"wifi40" | b"wifi40\n" => write_wifi_debug_step(frame.seq, 40),
+            b"wifirftest" | b"wifirftest\n" => write_wifi_debug_step(frame.seq, 40),
+            b"wifi41" | b"wifi41\n" => write_wifi_debug_step(frame.seq, 41),
+            b"wifirxgate" | b"wifirxgate\n" => write_wifi_debug_step(frame.seq, 41),
+            b"wifi42" | b"wifi42\n" => write_wifi_debug_step(frame.seq, 42),
+            b"wifirxbuf" | b"wifirxbuf\n" => write_wifi_debug_step(frame.seq, 42),
+            b"wifi43" | b"wifi43\n" => write_wifi_debug_step(frame.seq, 43),
+            b"wifirxaccept" | b"wifirxaccept\n" => write_wifi_debug_step(frame.seq, 43),
+            b"wifi44" | b"wifi44\n" => write_wifi_debug_step(frame.seq, 44),
+            b"wifirx2440" | b"wifirx2440\n" => write_wifi_debug_step(frame.seq, 44),
+            b"wifi45" | b"wifi45\n" => write_wifi_debug_step(frame.seq, 45),
+            b"wifirxeof" | b"wifirxeof\n" => write_wifi_debug_step(frame.seq, 45),
+            b"wifi46" | b"wifi46\n" => write_wifi_debug_step(frame.seq, 46),
+            b"wifirxwdev" | b"wifirxwdev\n" => write_wifi_debug_step(frame.seq, 46),
+            b"wifi47" | b"wifi47\n" => write_wifi_debug_step(frame.seq, 47),
+            b"wifimacflt" | b"wifimacflt\n" => write_wifi_debug_step(frame.seq, 47),
+            b"wifi48" | b"wifi48\n" => write_wifi_debug_step(frame.seq, 48),
+            b"wifirxper" | b"wifirxper\n" => write_wifi_debug_step(frame.seq, 48),
+            b"wifi49" | b"wifi49\n" => write_wifi_debug_step(frame.seq, 49),
+            b"wifirxpbus0" | b"wifirxpbus0\n" => write_wifi_debug_step(frame.seq, 49),
+            b"wifi50" | b"wifi50\n" => write_wifi_debug_step(frame.seq, 50),
+            b"wifirxpbus" | b"wifirxpbus\n" => write_wifi_debug_step(frame.seq, 50),
             b"wifich1" | b"wifich1\n" => write_wifi_debug_step(frame.seq, 23),
             b"wifich6" | b"wifich6\n" => write_wifi_debug_step(frame.seq, 24),
             b"wifich11" | b"wifich11\n" => write_wifi_debug_step(frame.seq, 25),
@@ -403,7 +426,7 @@ fn write_wifi_tx_regs(seq: u16) {
 
 fn write_wifi_rx_scratch_regs(seq: u16) {
     display_console_log("ctl wifirx");
-    let mut buf = [0u8; 640];
+    let mut buf = [0u8; 960];
     let mut len = 0;
     append_wifi_rx_scratch_regs(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
@@ -498,6 +521,8 @@ fn append_wifi_mmio_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.rx_policy2);
     append_bytes(out, len, b" rxp3=0x");
     append_hex_u32(out, len, regs.rx_policy3);
+    append_bytes(out, len, b" c00=0x");
+    append_hex_u32(out, len, regs.ctrl_33c00);
     append_bytes(out, len, b" c34=0x");
     append_hex_u32(out, len, regs.ctrl_33c34);
     append_bytes(out, len, b" c40=0x");
@@ -514,6 +539,14 @@ fn append_wifi_mmio_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.rx_ctrl3);
     append_bytes(out, len, b" rg=0x");
     append_hex_u32(out, len, regs.rx_global);
+    append_bytes(out, len, b" ra0=0x");
+    append_hex_u32(out, len, regs.rx_addr0);
+    append_bytes(out, len, b" ra1=0x");
+    append_hex_u32(out, len, regs.rx_addr1);
+    append_bytes(out, len, b" ram0=0x");
+    append_hex_u32(out, len, regs.rx_addr_mask0);
+    append_bytes(out, len, b" ram1=0x");
+    append_hex_u32(out, len, regs.rx_addr_mask1);
     append_bytes(out, len, b" cfg0=0x");
     append_hex_u32(out, len, regs.rx_cfg0);
     append_bytes(out, len, b" cfg1=0x");
@@ -602,6 +635,12 @@ fn append_wifi_rx_scratch_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.next);
     append_bytes(out, len, b" last=0x");
     append_hex_u32(out, len, regs.last);
+    append_bytes(out, len, b" a0=0x");
+    append_hex_u32(out, len, regs.aux0);
+    append_bytes(out, len, b" a1=0x");
+    append_hex_u32(out, len, regs.aux1);
+    append_bytes(out, len, b" c00=0x");
+    append_hex_u32(out, len, regs.ctrl_33c00);
     append_bytes(out, len, b" reload=0x");
     append_hex_u32(out, len, regs.reload);
     append_bytes(out, len, b" irq=0x");
@@ -616,12 +655,23 @@ fn append_wifi_rx_scratch_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.rx_end1);
     append_bytes(out, len, b" est=0x");
     append_hex_u32(out, len, regs.rx_end_state);
+    append_bytes(out, len, b" st0=0x");
+    append_hex_u32(out, len, regs.rx_state0);
+    append_bytes(out, len, b" st1=0x");
+    append_hex_u32(out, len, regs.rx_state1);
     append_bytes(out, len, b" ri0=0x");
     append_hex_u32(out, len, regs.rx_info0);
     append_bytes(out, len, b" ri1=0x");
     append_hex_u32(out, len, regs.rx_info1);
     append_bytes(out, len, b" ri2=0x");
     append_hex_u32(out, len, regs.rx_info2);
+    append_bytes(out, len, b" ri3=0x");
+    append_hex_u32(out, len, regs.rx_info3);
+    append_bytes(out, len, b" ctrl");
+    for word in regs.ctrl_words {
+        append_bytes(out, len, b" ");
+        append_hex_u32(out, len, word);
+    }
     append_bytes(out, len, b" desc");
     for word in regs.desc_words {
         append_bytes(out, len, b" ");
@@ -732,6 +782,8 @@ fn append_wifi_phy_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.rx_11b_ctrl2);
     append_bytes(out, len, b" b3=0x");
     append_hex_u32(out, len, regs.rx_11b_ctrl3);
+    append_bytes(out, len, b" r2440=0x");
+    append_hex_u32(out, len, regs.rx_2440m_ctrl);
     append_bytes(out, len, b" bb=0x");
     append_hex_u32(out, len, regs.bb_ctrl_1cc48);
     append_bytes(out, len, b" en=0x");
@@ -1851,11 +1903,11 @@ use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 #[cfg(target_arch = "x86_64")]
 use edgerun_dhcp::{DhcpMessage, DhcpMessageType};
 #[cfg(target_arch = "x86_64")]
-use edgerun_tftp::message::{TftpMessage, TFTP_PORT};
+use edgerun_tftp::message::{TFTP_PORT, TftpMessage};
 #[cfg(target_arch = "x86_64")]
-use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
+use rt::ip::{ARP_OP_REQUEST, ICMP_ECHO_REQUEST, ParsedPacket};
 #[cfg(target_arch = "x86_64")]
-use rt::{block_on, crc32, IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket};
+use rt::{IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket, block_on, crc32};
 
 #[cfg(target_arch = "x86_64")]
 use core::future::Future;
@@ -1873,12 +1925,12 @@ mod oci_syscall {
     use edgerun_oci::prelude::String;
     use edgerun_oci::rootfs_access::OciRootfs;
     use edgerun_oci::{
-        dispatch_x86_64_linux_syscall_frame, prepare_and_load_oci_elf_program_with_load_bias,
         OciElfError, OciElfLoadBias, OciElfUnsafeIdentityMapper, OciPreparedLaunchState,
         OciSyscallAction, OciSyscallError, OciSyscallMemory, OciSyscallSink, OciX86_64SyscallFrame,
+        dispatch_x86_64_linux_syscall_frame, prepare_and_load_oci_elf_program_with_load_bias,
     };
     use edgerun_platform::arch::x86_64::{
-        self, SyscallFrame, KERNEL_CODE_SELECTOR, USER_COMPAT_CODE_SELECTOR,
+        self, KERNEL_CODE_SELECTOR, SyscallFrame, USER_COMPAT_CODE_SELECTOR,
     };
 
     struct DirectMemory;
@@ -2476,9 +2528,9 @@ mod disk_boot {
     use super::boot_config::{BootConfig, BootConfigError, EdgeFsBootTarget};
     use edgerun_edgefs::{EdgeFs, EdgeFsError, EdgeFsInfo};
     use edgerun_storage::{
-        detect_partitions, probe_filesystem, BlockStorage, FatError, FatReadOnly, FileSystemKind,
-        FileSystemProbe, FileSystemProbeError, PartitionBlockDevice, PartitionEntry,
-        PartitionError, PartitionTable, StorageError,
+        BlockStorage, FatError, FatReadOnly, FileSystemKind, FileSystemProbe, FileSystemProbeError,
+        PartitionBlockDevice, PartitionEntry, PartitionError, PartitionTable, StorageError,
+        detect_partitions, probe_filesystem,
     };
 
     pub const DEFAULT_BOOT_CONFIG_PATHS: &[&str] =
