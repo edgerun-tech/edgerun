@@ -32,7 +32,7 @@ Run it with:
 ```bash
 cargo run -p edgerun-blog -- serve \
   --root /srv/blog \
-  --static-root /srv/blog-public \
+  --static-root /srv/blog/.generated \
   --bind 127.0.0.1:8088 \
   --title "Edgerun Blog" \
   --base-url https://blog.edgerun.tech
@@ -43,16 +43,16 @@ Generate static output with:
 ```bash
 cargo run -p edgerun-blog -- generate \
   --root /srv/blog \
-  --out /srv/blog-public \
+  --out /path/to/blog/.generated \
   --title "Edgerun Blog" \
   --base-url https://blog.edgerun.tech
 ```
 
-The generator is intended for host automation such as a Git `post-receive`
-hook. It rewrites the generated `posts/` directory and emits `index.html`,
+The generator is intended for developer-side automation such as a Git
+`pre-commit` hook. It rewrites the generated `posts/` directory and emits `index.html`,
 `favicon.svg`, `robots.txt`, `sitemap.xml`, `site.webmanifest`, `feed.xml`,
 `style.css`, `app.js`, and `search.json` from the current checkout. A sample
-hook lives at `deploy/server/edgerun-blog-post-receive.sample`. When
+hook lives at `crates/edgerun-blog/hooks/pre-commit.sample`. When
 `--static-root` is configured, the HTTP handler serves those generated files
 first and falls back to live rendering if a file is missing.
 
