@@ -169,12 +169,10 @@ async fn handle_standard_query(
 
 /// Find the SOA record for the zone that would match this query name.
 fn find_matching_zone_soa(qname: &str, zones: &HashMap<String, DnsZone>) -> Vec<DnsRecord> {
-    for zone in zones.values() {
+    if let Some(zone) = best_matching_zone(qname, zones) {
         let origin = zone.origin.to_lowercase();
-        if qname == origin || qname.ends_with(&format!(".{}", origin)) {
-            if let Some(soa) = zone.resolve(&origin, DnsRecordType::SOA) {
-                return soa;
-            }
+        if let Some(soa) = zone.resolve(&origin, DnsRecordType::SOA) {
+            return soa;
         }
     }
     Vec::new()
@@ -184,33 +182,25 @@ fn find_negative_response(
     qname: &str,
     zones: &HashMap<String, DnsZone>,
 ) -> Option<(DnsResponseCode, Vec<DnsRecord>)> {
-    for zone in zones.values() {
-        let origin = zone.origin.to_lowercase();
-        if qname != origin && !qname.ends_with(&format!(".{}", origin)) {
-            continue;
-        }
-
-        let rname = if qname == origin {
-            "@".to_string()
-        } else {
-            qname[..qname.len() - origin.len() - 1].to_string()
-        };
-        let name_exists = zone.resolve(&rname, DnsRecordType::ANY).is_some();
-        let mut authority = zone.resolve(&origin, DnsRecordType::SOA).unwrap_or_default();
-        if name_exists {
-            if let Some(mut proof) = zone.resolve(&rname, DnsRecordType::NSEC) {
-                authority.append(&mut proof);
-            }
-            return Some((DnsResponseCode::NoError, authority));
-        }
-        if let Some(mut proof) = all_nsec_proofs(zone) {
-            authority.append(&mut proof);
-        } else if let Some(mut proof) = find_nsec_covering(zone, qname) {
+    let zone = best_matching_zone(qname, zones)?;
+    let origin = zone.origin.to_lowercase();
+    let rname = relative_zone_name(qname, &origin);
+    let name_exists = zone.resolve(&rname, DnsRecordType::ANY).is_some();
+    let mut authority = zone
+        .resolve(&origin, DnsRecordType::SOA)
+        .unwrap_or_default();
+    if name_exists {
+        if let Some(mut proof) = zone.resolve(&rname, DnsRecordType::NSEC) {
             authority.append(&mut proof);
         }
-        return Some((DnsResponseCode::NXDomain, authority));
+        return Some((DnsResponseCode::NoError, authority));
     }
-    None
+    if let Some(mut proof) = all_nsec_proofs(zone) {
+        authority.append(&mut proof);
+    } else if let Some(mut proof) = find_nsec_covering(zone, qname) {
+        authority.append(&mut proof);
+    }
+    Some((DnsResponseCode::NXDomain, authority))
 }
 
 fn find_nsec_covering(zone: &DnsZone, qname: &str) -> Option<Vec<DnsRecord>> {
@@ -321,41 +311,53 @@ pub fn resolve(
     zones: &HashMap<String, DnsZone>,
 ) -> Vec<DnsRecord> {
     let qname = qname.trim_end_matches('.').to_lowercase();
-    for zone in zones.values() {
+    if let Some(zone) = best_matching_zone(&qname, zones) {
         let origin = zone.origin.to_lowercase();
+        let rname = relative_zone_name(&qname, &origin);
 
-        if qname == origin || qname.ends_with(&format!(".{}", origin)) {
-            let rname = if qname == origin {
-                "@".to_string()
-            } else {
-                qname[..qname.len() - origin.len() - 1].to_string()
-            };
+        if let Some(records) = zone.resolve(&rname, qtype) {
+            return records;
+        }
 
-            if let Some(records) = zone.resolve(&rname, qtype) {
-                return records;
-            }
-
-            // Follow CNAME
-            if qtype != DnsRecordType::CNAME && qtype != DnsRecordType::ANY {
-                if let Some(cname_records) = zone.resolve(&rname, DnsRecordType::CNAME) {
-                    for rr in &cname_records {
-                        if let DnsRecordData::CNAME(target) = &rr.data {
-                            let target_records = resolve(target, qtype, zones);
-                            if !target_records.is_empty() {
-                                let mut all = cname_records.clone();
-                                all.extend(target_records);
-                                return all;
-                            }
+        // Follow CNAME
+        if qtype != DnsRecordType::CNAME && qtype != DnsRecordType::ANY {
+            if let Some(cname_records) = zone.resolve(&rname, DnsRecordType::CNAME) {
+                for rr in &cname_records {
+                    if let DnsRecordData::CNAME(target) = &rr.data {
+                        let target_records = resolve(target, qtype, zones);
+                        if !target_records.is_empty() {
+                            let mut all = cname_records.clone();
+                            all.extend(target_records);
+                            return all;
                         }
                     }
                 }
             }
-
-            return Vec::new();
         }
+
+        return Vec::new();
     }
 
     Vec::new()
+}
+
+fn best_matching_zone<'a>(qname: &str, zones: &'a HashMap<String, DnsZone>) -> Option<&'a DnsZone> {
+    let qname = qname.trim_end_matches('.').to_lowercase();
+    zones
+        .values()
+        .filter(|zone| {
+            let origin = zone.origin.to_lowercase();
+            qname == origin || qname.ends_with(&format!(".{origin}"))
+        })
+        .max_by_key(|zone| zone.origin.len())
+}
+
+fn relative_zone_name(qname: &str, origin: &str) -> String {
+    if qname == origin {
+        "@".to_string()
+    } else {
+        qname[..qname.len() - origin.len() - 1].to_string()
+    }
 }
 
 /// Handle a NOTIFY query (RFC 1996).
@@ -425,7 +427,8 @@ mod tests {
             .unwrap();
         rt.block_on(async {
             let state = test_state();
-            let mut query = DnsMessage::query(0x1234, "example.com".to_string(), DnsRecordType::SOA);
+            let mut query =
+                DnsMessage::query(0x1234, "example.com".to_string(), DnsRecordType::SOA);
             query.header.opcode = DnsOpcode::Update;
 
             let Ok((wire, needs_tcp)) = handle_query(&query.to_wire(), &state).await else {
@@ -436,5 +439,31 @@ mod tests {
             assert!(!needs_tcp);
             assert_eq!(response.header.response_code, DnsResponseCode::Refused);
         });
+    }
+
+    #[test]
+    fn resolve_prefers_longest_matching_zone() {
+        let mut zones = HashMap::new();
+        let mut parent = DnsZone::new("example.com");
+        parent.add_soa("ns1.example.com", "admin.example.com");
+        parent.add_record(DnsRecord::txt(
+            "child.example.com".to_string(),
+            "parent".to_string(),
+            3600,
+        ));
+        zones.insert("example.com".to_string(), parent);
+
+        let mut child = DnsZone::new("child.example.com");
+        child.add_soa("ns1.example.com", "admin.example.com");
+        child.add_record(DnsRecord::txt(
+            "child.example.com".to_string(),
+            "child".to_string(),
+            3600,
+        ));
+        zones.insert("child.example.com".to_string(), child);
+
+        let answers = resolve("child.example.com", DnsRecordType::TXT, &zones);
+        assert_eq!(answers.len(), 1);
+        assert!(matches!(&answers[0].data, DnsRecordData::TXT(value) if value == "child"));
     }
 }

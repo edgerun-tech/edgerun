@@ -17,6 +17,7 @@
 | `/etc/edgerun/server/dkim-mail.private.pem` | DKIM RSA private key (PEM format) |
 | `/etc/edgerun/server/tls/fullchain.pem` | TLS certificate chain (PEM format), generated or renewed by `edgerun-acme` |
 | `/etc/edgerun/server/tls/privkey.pem` | TLS private key (PEM format), generated or renewed by `edgerun-acme` |
+| `/etc/edgerun/server/dnssec-edgerun-tech-ksk.pem` | DNSSEC ECDSAP256SHA256 private key for the `edgerun.tech` zone |
 
 `edgerun-server` consumes these paths through `edgerun-config` YAML fields
 (`dkim_key_path`, `tls_cert`, and `tls_key`). The DKIM TXT record in
@@ -32,7 +33,9 @@ key at `/etc/edgerun/server/dkim-mail.private.pem`.
 - `ns1 A 172.245.67.49`
 - `ns2 A 172.245.67.49`
 - `@ MX 0 mail.edgerun.tech`
+- `nodes MX 0 mail.edgerun.tech`
 - `@ TXT v=spf1 mx -all`
+- `nodes TXT v=spf1 -all`
 - `@ CAA 0 issue letsencrypt.org`
 - `@ CAA 0 iodef mailto:admin@edgerun.tech`
 - `_dmarc TXT v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@edgerun.tech`
@@ -50,12 +53,18 @@ key at `/etc/edgerun/server/dkim-mail.private.pem`.
   remaining configured.
 - CAA is implemented as generated DNS record material and restricts public
   issuance to Let's Encrypt for this zone.
-- DNSSEC types and signing primitives exist in `edgerun-dns`, but DNSSEC is not
-  a full public chain until the generated DS record is installed at the
-  registrar. `edgerun-server` implements host-side ECDSAP256SHA256 signing for
-  configured zones with persistent key material, DNSKEY, NSEC, and RRSIG
-  records. Signed zones are refreshed by the running host process before
-  signature expiry. Parent DS delegation remains a registrar operation.
+- DNSSEC is implemented in code for host-side authoritative serving:
+  `edgerun-server` signs configured zones with persistent ECDSAP256SHA256 key
+  material, publishes DNSKEY/NSEC/RRSIG records, and refreshes signed zones
+  before signature expiry. Public chain validation additionally requires the
+  generated DS record to remain installed at the registrar.
+
+## Health Checks
+
+`edgerun-server --health-check --config /etc/edgerun/server/server.yaml` is a
+host-only operational check. It verifies configured local listeners, plaintext
+SMTP/IMAP banners, the local HTTP surface, TLS socket listeners, and DNSSEC
+answers for signed zones, including DNSKEY/RRSIG and NXDOMAIN NSEC proofs.
 
 ## Service Ports
 

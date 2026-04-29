@@ -8,13 +8,13 @@ use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::future::Future;
 use std::io;
-use std::io::{BufRead, BufReader, Write};
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig};
 use edgerun_acme::{ChallengeStatus, ChallengeType, DirectoryUrl, OrderStatus};
@@ -24,7 +24,10 @@ use edgerun_config::{
     ConfigResource, DnsServerSpec, DnsZoneSpec, DnssecConfig, ImapServerSpec, MailUserSpec,
     SmtpServerSpec, ZoneRecord,
 };
-use edgerun_dns::{DnsRecord, DnsRecordData, DnsRecordType, DnsServer, DnsServerConfig, DnsZone};
+use edgerun_dns::{
+    DnsMessage, DnsRecord, DnsRecordData, DnsRecordType, DnsResponseCode, DnsServer,
+    DnsServerConfig, DnsZone,
+};
 use edgerun_email::imap::{ImapServer, ImapServerConfig, MaildirImapStore};
 use edgerun_email::smtp::server::{MaildirStore, SmtpServer, SmtpServerConfig};
 use edgerun_email::smtp::ServerLimits;
@@ -73,6 +76,15 @@ fn main() {
         }
         return;
     }
+    if args.iter().any(|arg| arg == "--health-check") {
+        match run_health_check_from_args(&args) {
+            Ok(()) => return,
+            Err(error) => {
+                eprintln!("health: failed: {error}");
+                process::exit(1);
+            }
+        }
+    }
     let options = match parse_server_options(&args) {
         Ok(options) => options,
         Err(message) => {
@@ -108,6 +120,7 @@ fn main() {
 fn print_usage(program: &str) {
     println!(
         "usage: {program} --config /etc/edgerun/server/server.yaml\n\
+         usage: {program} --health-check --config /etc/edgerun/server/server.yaml\n\
          usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/blog\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
@@ -168,6 +181,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
     while i < args.len() {
         match args[i].as_str() {
             "--check-config" => {}
+            "--health-check" => {}
             "--config" | "-c" if i + 1 < args.len() => {
                 config = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
@@ -217,6 +231,328 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
         }
     };
     Ok(ServerOptions { config_path, blog })
+}
+
+fn run_health_check_from_args(args: &[String]) -> io::Result<()> {
+    let resources = load_resources_from_args(args).map_err(invalid_config)?;
+    let mut dns_servers = Vec::new();
+    let mut zones = Vec::new();
+    let mut smtp_specs = Vec::new();
+    let mut imap_specs = Vec::new();
+
+    for resource in resources {
+        match resource {
+            ConfigResource::DnsServer(spec) => dns_servers.push(spec),
+            ConfigResource::DnsZone(spec) => zones.push(spec),
+            ConfigResource::SmtpServer(spec) => smtp_specs.push(spec),
+            ConfigResource::ImapServer(spec) => imap_specs.push(spec),
+            _ => {}
+        }
+    }
+
+    let mut checks = 0usize;
+    if !zones.is_empty() {
+        let dns_addr = local_probe_addr(
+            dns_servers
+                .first()
+                .and_then(|spec| spec.bind_address.as_deref()),
+            "0.0.0.0:53",
+        );
+        for zone in &zones {
+            check_dns_zone(&dns_addr, zone)?;
+            checks += 1;
+        }
+    }
+
+    for spec in &smtp_specs {
+        let smtp_addr = local_probe_addr(spec.bind_address.as_deref(), "0.0.0.0:25");
+        check_line_banner("smtp", &smtp_addr, "220")?;
+        checks += 1;
+
+        if spec.smtps {
+            let smtps_addr =
+                local_probe_addr(Some(&implicit_tls_addr(&smtp_addr, 465)), "127.0.0.1:465");
+            check_tcp_connect("smtps", &smtps_addr)?;
+            checks += 1;
+        }
+        if spec.starttls
+            && smtp_health_auth_enabled(spec, &imap_specs)
+            && spec.tls_cert.is_some()
+            && spec.tls_key.is_some()
+        {
+            let submission_addr = local_probe_addr(
+                Some(&implicit_tls_addr(
+                    spec.bind_address.as_deref().unwrap_or("0.0.0.0:25"),
+                    587,
+                )),
+                "127.0.0.1:587",
+            );
+            check_line_banner("submission", &submission_addr, "220")?;
+            checks += 1;
+        }
+    }
+
+    for spec in &imap_specs {
+        let imap_addr = local_probe_addr(spec.bind_address.as_deref(), "0.0.0.0:143");
+        check_line_banner("imap", &imap_addr, "* OK")?;
+        checks += 1;
+
+        if spec.imaps {
+            let imaps_addr = local_probe_addr(
+                Some(&implicit_tls_addr(
+                    spec.bind_address.as_deref().unwrap_or("0.0.0.0:143"),
+                    993,
+                )),
+                "127.0.0.1:993",
+            );
+            check_tcp_connect("imaps", &imaps_addr)?;
+            checks += 1;
+        }
+    }
+
+    if let Some(webmail) = build_webmail_config(&smtp_specs, &imap_specs)? {
+        check_http_status(
+            "http",
+            "127.0.0.1:80",
+            &webmail.hostname,
+            &["HTTP/1.1 200", "HTTP/1.1 308", "HTTP/1.1 404"],
+        )?;
+        checks += 1;
+        if webmail.tls_cert.is_some() && webmail.tls_key.is_some() {
+            check_tcp_connect("https", "127.0.0.1:443")?;
+            checks += 1;
+        }
+    }
+
+    if checks == 0 {
+        return Err(invalid_config(
+            "config did not define any health-checkable DNS, SMTP, IMAP, or web listener",
+        ));
+    }
+    println!("health: ok checks={checks}");
+    Ok(())
+}
+
+fn check_dns_zone(addr: &str, zone: &DnsZoneSpec) -> io::Result<()> {
+    let soa = dns_query(addr, &zone.origin, DnsRecordType::SOA)?;
+    require_dns_response(
+        &soa,
+        DnsResponseCode::NoError,
+        &zone.origin,
+        DnsRecordType::SOA,
+    )?;
+    require_record(&soa.answers, DnsRecordType::SOA, "answer")?;
+    if zone.dnssec.is_some() {
+        require_rrsig(&soa.answers, DnsRecordType::SOA, "answer")?;
+
+        let dnskey = dns_query(addr, &zone.origin, DnsRecordType::DNSKEY)?;
+        require_dns_response(
+            &dnskey,
+            DnsResponseCode::NoError,
+            &zone.origin,
+            DnsRecordType::DNSKEY,
+        )?;
+        require_record(&dnskey.answers, DnsRecordType::DNSKEY, "answer")?;
+        require_rrsig(&dnskey.answers, DnsRecordType::DNSKEY, "answer")?;
+        require_fresh_rrsigs(&dnskey.answers, Duration::from_secs(24 * 60 * 60))?;
+
+        let negative_name = format!("health-nx-{}.{}", process::id(), zone.origin);
+        let negative = dns_query(addr, &negative_name, DnsRecordType::A)?;
+        require_dns_response(
+            &negative,
+            DnsResponseCode::NXDomain,
+            &negative_name,
+            DnsRecordType::A,
+        )?;
+        require_record(&negative.authority, DnsRecordType::NSEC, "authority")?;
+        require_rrsig(&negative.authority, DnsRecordType::NSEC, "authority")?;
+        require_fresh_rrsigs(&negative.authority, Duration::from_secs(24 * 60 * 60))?;
+    }
+    println!("health: ok dns zone={}", zone.origin);
+    Ok(())
+}
+
+fn dns_query(addr: &str, name: &str, qtype: DnsRecordType) -> io::Result<DnsMessage> {
+    let query = DnsMessage::query(dns_query_id(), name.to_string(), qtype);
+    let wire = query.to_wire();
+    let socket = UdpSocket::bind("0.0.0.0:0")?;
+    socket.set_read_timeout(Some(Duration::from_secs(5)))?;
+    socket.set_write_timeout(Some(Duration::from_secs(5)))?;
+    socket.send_to(&wire, addr)?;
+    let mut buf = [0u8; 4096];
+    let (len, _) = socket.recv_from(&mut buf)?;
+    let response = parse_dns_message(&buf[..len])?;
+    if response.header.truncated {
+        return dns_query_tcp(addr, name, qtype);
+    }
+    Ok(response)
+}
+
+fn dns_query_tcp(addr: &str, name: &str, qtype: DnsRecordType) -> io::Result<DnsMessage> {
+    let query = DnsMessage::query(dns_query_id(), name.to_string(), qtype);
+    let wire = query.to_wire();
+    let mut stream = connect_tcp(addr)?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    stream.write_all(&(wire.len() as u16).to_be_bytes())?;
+    stream.write_all(&wire)?;
+    let mut len_buf = [0u8; 2];
+    stream.read_exact(&mut len_buf)?;
+    let len = u16::from_be_bytes(len_buf) as usize;
+    let mut response = vec![0u8; len];
+    stream.read_exact(&mut response)?;
+    parse_dns_message(&response)
+}
+
+fn dns_query_id() -> u16 {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    (nanos as u16) ^ (process::id() as u16)
+}
+
+fn parse_dns_message(data: &[u8]) -> io::Result<DnsMessage> {
+    DnsMessage::from_wire(data).map_err(to_io_error)
+}
+
+fn require_dns_response(
+    message: &DnsMessage,
+    expected: DnsResponseCode,
+    name: &str,
+    qtype: DnsRecordType,
+) -> io::Result<()> {
+    if message.header.response_code != expected {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "dns {name} {qtype}: expected {}, got {}",
+                expected.as_str(),
+                message.header.response_code.as_str()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn require_record(records: &[DnsRecord], rtype: DnsRecordType, section: &str) -> io::Result<()> {
+    if records.iter().any(|record| record.rtype == rtype) {
+        return Ok(());
+    }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("dns response missing {rtype} in {section} section"),
+    ))
+}
+
+fn require_rrsig(records: &[DnsRecord], covered: DnsRecordType, section: &str) -> io::Result<()> {
+    let covered = covered.as_u16();
+    if records.iter().any(|record| {
+        matches!(
+            &record.data,
+            DnsRecordData::RRSIG { type_covered, .. } if *type_covered == covered
+        )
+    }) {
+        return Ok(());
+    }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("dns response missing RRSIG in {section} section"),
+    ))
+}
+
+fn require_fresh_rrsigs(records: &[DnsRecord], minimum_remaining: Duration) -> io::Result<()> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let threshold = now + minimum_remaining.as_secs();
+    let stale = records.iter().find_map(|record| {
+        if let DnsRecordData::RRSIG { expiration, .. } = &record.data {
+            if u64::from(*expiration) <= threshold {
+                return Some(*expiration);
+            }
+        }
+        None
+    });
+    if let Some(expiration) = stale {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("dns response contains RRSIG expiring too soon: {expiration}"),
+        ));
+    }
+    Ok(())
+}
+
+fn check_line_banner(label: &str, addr: &str, expected_prefix: &str) -> io::Result<()> {
+    let mut stream = connect_tcp(addr)?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    if !line.starts_with(expected_prefix) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{label} {addr}: unexpected banner {line:?}"),
+        ));
+    }
+    println!("health: ok {label} addr={addr}");
+    Ok(())
+}
+
+fn check_http_status(label: &str, addr: &str, host: &str, allowed: &[&str]) -> io::Result<()> {
+    let mut stream = connect_tcp(addr)?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    write!(
+        stream,
+        "GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+    )?;
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    if !allowed.iter().any(|prefix| line.starts_with(prefix)) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{label} {addr}: unexpected status {line:?}"),
+        ));
+    }
+    println!("health: ok {label} addr={addr}");
+    Ok(())
+}
+
+fn check_tcp_connect(label: &str, addr: &str) -> io::Result<()> {
+    let stream = connect_tcp(addr)?;
+    stream.shutdown(std::net::Shutdown::Both).ok();
+    println!("health: ok {label} addr={addr}");
+    Ok(())
+}
+
+fn connect_tcp(addr: &str) -> io::Result<TcpStream> {
+    if let Ok(socket) = addr.parse::<SocketAddr>() {
+        TcpStream::connect_timeout(&socket, Duration::from_secs(5))
+    } else {
+        TcpStream::connect(addr)
+    }
+}
+
+fn local_probe_addr(configured: Option<&str>, default_addr: &str) -> String {
+    let addr = configured.unwrap_or(default_addr);
+    let Some((host, port)) = addr.rsplit_once(':') else {
+        return default_addr.to_string();
+    };
+    let local_host = match host {
+        "" | "0.0.0.0" | "::" | "[::]" => "127.0.0.1",
+        other => other,
+    };
+    format!("{local_host}:{port}")
+}
+
+fn smtp_health_auth_enabled(spec: &SmtpServerSpec, imap_specs: &[ImapServerSpec]) -> bool {
+    configured_users(spec.users.as_deref(), &spec.local_domains)
+        .iter()
+        .any(|user| smtp_user_password(user, imap_specs).is_some())
 }
 
 async fn run(resources: Vec<ConfigResource>, blog: Option<BlogMount>) -> io::Result<()> {
@@ -2448,7 +2784,7 @@ fn normalize_target(value: &str, origin: &str) -> String {
     let trimmed = value.trim_end_matches('.');
     if trimmed == "@" {
         origin.to_string()
-    } else if trimmed.ends_with(origin) {
+    } else if trimmed.contains('.') {
         trimmed.to_string()
     } else {
         format!("{trimmed}.{origin}")
@@ -2509,4 +2845,30 @@ async fn _keep_acme_dns_challenge_api_reachable(
     challenge: &edgerun_acme::DnsChallenge,
 ) {
     challenge.add_to_zone(zone);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_target_keeps_dotted_parent_names_absolute() {
+        assert_eq!(
+            normalize_target("ns1.edgerun.tech", "nodes.edgerun.tech"),
+            "ns1.edgerun.tech"
+        );
+        assert_eq!(
+            normalize_target("mail.edgerun.tech.", "nodes.edgerun.tech"),
+            "mail.edgerun.tech"
+        );
+    }
+
+    #[test]
+    fn normalize_target_expands_relative_labels() {
+        assert_eq!(normalize_target("@", "edgerun.tech"), "edgerun.tech");
+        assert_eq!(
+            normalize_target("mail", "edgerun.tech"),
+            "mail.edgerun.tech"
+        );
+    }
 }

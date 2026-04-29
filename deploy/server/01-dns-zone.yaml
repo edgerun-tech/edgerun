@@ -66,6 +66,14 @@ spec:
       type: TXT
       value: "v=spf1 mx -all"
       ttl: 3600
+    - name: nodes
+      type: MX
+      value: "0 mail.edgerun.tech"
+      ttl: 3600
+    - name: nodes
+      type: TXT
+      value: "v=spf1 -all"
+      ttl: 3600
     - name: "@"
       type: CAA
       value: "0 issue letsencrypt.org"
@@ -94,37 +102,3 @@ spec:
       type: TXT
       value: "v=DKIM1; k=rsa; p=MIIBCgKCAQEAy+Enfug7AYUY+u5InnNMGM39BJsmkqkZFpx5HAUe7ffAPBJhVDIJI4OfcewD+04at3W8aXBx/ZYXxPVO2twqj5nIuKpJVAAeKCaJUuMCyciUtZ89bG61zHFtimMekY4YdSRUwN05Ukq1QfSKFz5FF0E7q7/+KlKATLb3lTtzMJK4olNIDj7EnzW2b9W9PIyyzsnjp/YRSL/u6YlZRWkAT62I8AqnpbegdXMt89aWJMkXF7cfR2TJCJb73qU/ACFYSd6asGWfsCFsDh3dtp8lwpJFwmDY2kUlv6HdN0Hp9NuiX+Ck7z+rrsH9YhVlKlQTtna++bjg2XVgS1rE0o0ogQIDAQAB"
       ttl: 86400
-
----
-apiVersion: edgerun.io/v1alpha1
-kind: DnsZone
-metadata:
-  name: nodes.edgerun.tech
-  namespace: edgerun-dns
-spec:
-  origin: nodes.edgerun.tech
-  soa:
-    mname: ns1.edgerun.tech
-    rname: admin.edgerun.tech
-    serial: 2025041801
-    refresh: 3600
-    retry: 900
-    expire: 604800
-    minimum: 86400
-  records:
-    - name: "@"
-      type: NS
-      value: ns1.edgerun.tech
-      ttl: 86400
-    - name: "@"
-      type: NS
-      value: ns2.edgerun.tech
-      ttl: 86400
-    - name: "@"
-      type: MX
-      value: "0 mail.edgerun.tech"
-      ttl: 3600
-    - name: "@"
-      type: TXT
-      value: "v=spf1 -all"
-      ttl: 3600

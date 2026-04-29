@@ -8,6 +8,25 @@ The crate scans Markdown and HTML files from the configured root at request
 time, renders a simple organized layout, serves a client-side search index, and
 supports light and dark modes.
 
+Baseline site files are implemented in code: `/favicon.svg`, `/robots.txt`,
+`/sitemap.xml`, `/site.webmanifest`, `/feed.xml`, `/style.css`, `/app.js`, and
+`/search.json`. HTML pages include canonical URLs, description metadata,
+Open Graph/Twitter summary metadata, accessible landmarks, and a skip link.
+
+Posts are intended to live in the same Git checkout as the code. Fenced code
+blocks can carry real source pointers:
+
+````markdown
+```rust path=crates/edgerun-server/src/bin/edgerun-server.rs commit=<git-sha> lines=400-460
+// excerpt copied from that exact commit
+```
+````
+
+When `commit` is present, the rendered caption links to the future
+`git.edgerun.tech` code explorer using the commit hash, path, and first line.
+Until that explorer exists, the post still preserves the source identity in the
+HTML.
+
 Run it with:
 
 ```bash

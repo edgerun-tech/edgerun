@@ -74,6 +74,10 @@ impl BlogHandler {
 
         match path {
             "/" | "/index.html" => self.index_response(),
+            "/favicon.svg" => favicon_response(),
+            "/robots.txt" => self.robots_response(),
+            "/sitemap.xml" => self.sitemap_response(),
+            "/site.webmanifest" => manifest_response(&self.config),
             "/style.css" => css_response(),
             "/app.js" => js_response(),
             "/search.json" => self.search_response(),
@@ -127,6 +131,25 @@ impl BlogHandler {
                 .with_header("Cache-Control", "no-store")
                 .with_header("X-Content-Type-Options", "nosniff")
                 .with_body(render_feed(&self.config, &posts)),
+            Err(error) => server_error(error),
+        }
+    }
+
+    fn robots_response(&self) -> Response {
+        Response::new(StatusCode::OK)
+            .with_header("Content-Type", "text/plain; charset=utf-8")
+            .with_header("Cache-Control", "public, max-age=300")
+            .with_header("X-Content-Type-Options", "nosniff")
+            .with_body(render_robots(&self.config))
+    }
+
+    fn sitemap_response(&self) -> Response {
+        match load_posts(&self.config.root) {
+            Ok(posts) => Response::new(StatusCode::OK)
+                .with_header("Content-Type", "application/xml; charset=utf-8")
+                .with_header("Cache-Control", "public, max-age=300")
+                .with_header("X-Content-Type-Options", "nosniff")
+                .with_body(render_sitemap(&self.config, &posts)),
             Err(error) => server_error(error),
         }
     }
@@ -239,9 +262,9 @@ fn render_index(config: &BlogConfig, posts: &[Post]) -> String {
 
     page_shell(
         config,
-        &config.title,
+        &PageMeta::index(config),
         &format!(
-            "<section class=\"hero\"><div><p class=\"eyebrow\">Static from Git</p><h1>{}</h1><p>{}</p></div><div class=\"search-panel\"><label for=\"search\">Search</label><input id=\"search\" type=\"search\" placeholder=\"Search posts, tags, and text\" autocomplete=\"off\"><p id=\"search-count\">{} posts</p></div></section><main class=\"layout\"><aside><h2>Topics</h2>{}</aside><section id=\"posts\" class=\"posts\">{}</section></main>",
+            "<section class=\"hero\"><div><p class=\"eyebrow\">Static from Git</p><h1>{}</h1><p>{}</p></div><form class=\"search-panel\" role=\"search\"><label for=\"search\">Search</label><input id=\"search\" type=\"search\" placeholder=\"Search posts, tags, and text\" autocomplete=\"off\" aria-describedby=\"search-count\"><p id=\"search-count\">{} posts</p></form></section><main id=\"content\" class=\"layout\" tabindex=\"-1\"><aside aria-label=\"Post topics\"><h2>Topics</h2>{}</aside><section id=\"posts\" class=\"posts\" aria-label=\"Posts\">{}</section></main>",
             escape_html(&config.title),
             escape_html(&config.description),
             posts.len(),
@@ -266,9 +289,9 @@ fn render_post(config: &BlogConfig, post: &Post, posts: &[Post]) -> String {
         .join("");
     page_shell(
         config,
-        &post.title,
+        &PageMeta::post(config, post),
         &format!(
-            "<main class=\"article-layout\"><article class=\"article\"><a class=\"back\" href=\"/\">Back to posts</a><p class=\"date\">{}</p><h1>{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article><aside><h2>Recent</h2><nav class=\"recent\">{}</nav></aside></main>",
+            "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><article class=\"article\" aria-labelledby=\"post-title\"><a class=\"back\" href=\"/\">Back to posts</a><p class=\"date\">{}</p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article><aside aria-label=\"Recent posts\"><h2>Recent</h2><nav class=\"recent\" aria-label=\"Recent posts\">{}</nav></aside></main>",
             escape_html(&post.date),
             escape_html(&post.title),
             escape_html(&post.summary),
@@ -279,11 +302,101 @@ fn render_post(config: &BlogConfig, post: &Post, posts: &[Post]) -> String {
     )
 }
 
-fn page_shell(config: &BlogConfig, title: &str, body: &str) -> String {
+struct PageMeta {
+    title: String,
+    description: String,
+    canonical: String,
+    page_type: &'static str,
+    published_time: Option<String>,
+    noindex: bool,
+}
+
+impl PageMeta {
+    fn index(config: &BlogConfig) -> Self {
+        Self {
+            title: config.title.clone(),
+            description: config.description.clone(),
+            canonical: absolute_url(config, "/"),
+            page_type: "website",
+            published_time: None,
+            noindex: false,
+        }
+    }
+
+    fn post(config: &BlogConfig, post: &Post) -> Self {
+        Self {
+            title: post.title.clone(),
+            description: post.summary.clone(),
+            canonical: absolute_url(config, &format!("/posts/{}.html", post.path)),
+            page_type: "article",
+            published_time: if post.date.is_empty() {
+                None
+            } else {
+                Some(atom_date(&post.date))
+            },
+            noindex: false,
+        }
+    }
+
+    fn not_found(title: &str) -> Self {
+        Self {
+            title: "Not found".to_string(),
+            description: "The requested page does not exist.".to_string(),
+            canonical: String::new(),
+            page_type: "website",
+            published_time: None,
+            noindex: true,
+        }
+        .with_site_title(title)
+    }
+
+    fn with_site_title(mut self, site_title: &str) -> Self {
+        if !site_title.is_empty() && self.title != site_title {
+            self.title = format!("{} | {}", self.title, site_title);
+        }
+        self
+    }
+}
+
+fn page_shell(config: &BlogConfig, meta: &PageMeta, body: &str) -> String {
+    let mut head = format!(
+        "<meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\"><title>{}</title><meta name=\"description\" content=\"{}\">",
+        escape_html(&meta.title),
+        escape_attr(&meta.description)
+    );
+    if meta.noindex {
+        head.push_str("<meta name=\"robots\" content=\"noindex,nofollow\">");
+    }
+    if !meta.canonical.is_empty() {
+        head.push_str(&format!(
+            "<link rel=\"canonical\" href=\"{}\">",
+            escape_attr(&meta.canonical)
+        ));
+        head.push_str(&format!(
+            "<meta property=\"og:url\" content=\"{}\">",
+            escape_attr(&meta.canonical)
+        ));
+    }
+    head.push_str(&format!(
+        "<meta property=\"og:site_name\" content=\"{}\"><meta property=\"og:title\" content=\"{}\"><meta property=\"og:description\" content=\"{}\"><meta property=\"og:type\" content=\"{}\"><meta name=\"twitter:card\" content=\"summary\"><meta name=\"twitter:title\" content=\"{}\"><meta name=\"twitter:description\" content=\"{}\">",
+        escape_attr(&config.title),
+        escape_attr(&meta.title),
+        escape_attr(&meta.description),
+        meta.page_type,
+        escape_attr(&meta.title),
+        escape_attr(&meta.description)
+    ));
+    if let Some(published_time) = meta.published_time.as_deref() {
+        head.push_str(&format!(
+            "<meta property=\"article:published_time\" content=\"{}\">",
+            escape_attr(published_time)
+        ));
+    }
+    head.push_str("<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"><link rel=\"manifest\" href=\"/site.webmanifest\"><link rel=\"alternate\" type=\"application/atom+xml\" href=\"/feed.xml\"><link rel=\"stylesheet\" href=\"/style.css\">");
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\"><title>{}</title><meta name=\"description\" content=\"{}\"><link rel=\"alternate\" type=\"application/atom+xml\" href=\"/feed.xml\"><link rel=\"stylesheet\" href=\"/style.css\"></head><body><header class=\"topbar\"><a class=\"brand\" href=\"/\">{}</a><nav><a href=\"/feed.xml\">Feed</a><er-theme-toggle></er-theme-toggle></nav></header>{}<script src=\"/app.js\"></script></body></html>",
-        escape_html(title),
-        escape_attr(&config.description),
+        "<!doctype html><html lang=\"en\"><head>{}</head><body><a class=\"skip-link\" href=\"#content\">Skip to content</a><header class=\"topbar\"><a class=\"brand\" href=\"/\" aria-label=\"{} home\">{}</a><nav aria-label=\"Primary\"><a href=\"/feed.xml\">Feed</a><er-theme-toggle></er-theme-toggle></nav></header>{}<script src=\"/app.js\"></script></body></html>",
+        head,
+        escape_attr(&config.title),
         escape_html(&config.title),
         body
     )
@@ -332,10 +445,52 @@ fn render_feed(config: &BlogConfig, posts: &[Post]) -> String {
     )
 }
 
+fn render_robots(config: &BlogConfig) -> String {
+    let sitemap = absolute_url(config, "/sitemap.xml");
+    if sitemap.is_empty() {
+        "User-agent: *\nAllow: /\n".to_string()
+    } else {
+        format!("User-agent: *\nAllow: /\nSitemap: {sitemap}\n")
+    }
+}
+
+fn render_sitemap(config: &BlogConfig, posts: &[Post]) -> String {
+    let mut xml = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+    xml.push_str(&format!(
+        "  <url><loc>{}</loc></url>\n",
+        escape_html(&absolute_url(config, "/"))
+    ));
+    for post in posts {
+        xml.push_str("  <url>");
+        xml.push_str(&format!(
+            "<loc>{}</loc>",
+            escape_html(&absolute_url(config, &format!("/posts/{}.html", post.path)))
+        ));
+        if !post.date.is_empty() {
+            xml.push_str(&format!("<lastmod>{}</lastmod>", escape_html(&post.date)));
+        }
+        xml.push_str("</url>\n");
+    }
+    xml.push_str("</urlset>\n");
+    xml
+}
+
+fn absolute_url(config: &BlogConfig, path: &str) -> String {
+    let base = config.base_url.trim_end_matches('/');
+    if base.is_empty() {
+        path.to_string()
+    } else if path.starts_with('/') {
+        format!("{base}{path}")
+    } else {
+        format!("{base}/{path}")
+    }
+}
+
 fn markdown_to_html(input: &str) -> String {
     let mut html = String::new();
     let mut paragraph = String::new();
     let mut in_code = false;
+    let mut code_has_figure = false;
     let mut in_ul = false;
     let mut in_ol = false;
     for line in input.lines() {
@@ -344,9 +499,15 @@ fn markdown_to_html(input: &str) -> String {
             flush_blocks(&mut html, &mut paragraph, &mut in_ul, &mut in_ol);
             if in_code {
                 html.push_str("</code></pre>");
+                if code_has_figure {
+                    html.push_str("</figure>");
+                }
                 in_code = false;
+                code_has_figure = false;
             } else {
-                html.push_str("<pre><code>");
+                let info = trimmed.trim_start_matches("```").trim();
+                code_has_figure = !info.is_empty();
+                html.push_str(&code_block_open(info));
                 in_code = true;
             }
             continue;
@@ -400,8 +561,92 @@ fn markdown_to_html(input: &str) -> String {
     flush_blocks(&mut html, &mut paragraph, &mut in_ul, &mut in_ol);
     if in_code {
         html.push_str("</code></pre>");
+        if code_has_figure {
+            html.push_str("</figure>");
+        }
     }
     html
+}
+
+fn code_block_open(info: &str) -> String {
+    if info.is_empty() {
+        return "<pre><code>".to_string();
+    }
+    let reference = CodeReference::parse(info);
+    let mut html = String::from("<figure class=\"code-ref\">");
+    html.push_str(&reference.caption_html());
+    html.push_str("<pre><code");
+    if let Some(language) = reference.language.as_deref() {
+        html.push_str(&format!(" class=\"language-{}\"", escape_attr(language)));
+    }
+    html.push('>');
+    html
+}
+
+#[derive(Default)]
+struct CodeReference {
+    language: Option<String>,
+    path: Option<String>,
+    commit: Option<String>,
+    lines: Option<String>,
+}
+
+impl CodeReference {
+    fn parse(info: &str) -> Self {
+        let mut reference = Self::default();
+        for token in info.split_whitespace() {
+            if let Some((key, value)) = token.split_once('=') {
+                let value = trim_quotes(value).to_string();
+                match key {
+                    "path" => reference.path = Some(value),
+                    "commit" | "hash" => reference.commit = Some(value),
+                    "lines" | "line" => reference.lines = Some(value),
+                    _ => {}
+                }
+            } else if reference.language.is_none() {
+                reference.language = Some(token.to_string());
+            }
+        }
+        reference
+    }
+
+    fn caption_html(&self) -> String {
+        let Some(path) = self.path.as_deref() else {
+            let label = self.language.as_deref().unwrap_or("code");
+            return format!("<figcaption>{}</figcaption>", escape_html(label));
+        };
+        let commit = self.commit.as_deref().unwrap_or("working-tree");
+        let mut label = format!("{path} @ {commit}");
+        if let Some(lines) = self.lines.as_deref() {
+            label.push_str(&format!(":{lines}"));
+        }
+        if self.commit.is_some() {
+            format!(
+                "<figcaption><a href=\"{}\">{}</a></figcaption>",
+                escape_attr(&self.url(path)),
+                escape_html(&label)
+            )
+        } else {
+            format!("<figcaption>{}</figcaption>", escape_html(&label))
+        }
+    }
+
+    fn url(&self, path: &str) -> String {
+        let commit = self.commit.as_deref().unwrap_or("HEAD");
+        let mut url = format!(
+            "https://git.edgerun.tech/edgerun_core/src/{}/{}",
+            commit,
+            path.trim_start_matches('/')
+        );
+        if let Some(lines) = self.lines.as_deref() {
+            let first = lines.split(['-', ':']).next().unwrap_or(lines);
+            if !first.is_empty() {
+                url.push_str("#L");
+                url.push_str(first);
+            }
+        }
+        url
+    }
 }
 
 fn inline_markdown(input: &str) -> String {
@@ -701,18 +946,19 @@ fn escape_json(input: &str) -> String {
 }
 
 fn not_found_response(title: &str) -> Response {
+    let config = BlogConfig {
+        root: PathBuf::new(),
+        bind_addr: String::new(),
+        title: title.to_string(),
+        description: "Not found".to_string(),
+        base_url: String::new(),
+    };
     Response::html(
         StatusCode::NOT_FOUND,
         &page_shell(
-            &BlogConfig {
-                root: PathBuf::new(),
-                bind_addr: String::new(),
-                title: title.to_string(),
-                description: "Not found".to_string(),
-                base_url: String::new(),
-            },
-            "Not found",
-            "<main class=\"empty\"><h1>Not found</h1><p>The requested post does not exist.</p><a href=\"/\">Back to posts</a></main>",
+            &config,
+            &PageMeta::not_found(title),
+            "<main id=\"content\" class=\"empty\" tabindex=\"-1\"><h1>Not found</h1><p>The requested post does not exist.</p><a href=\"/\">Back to posts</a></main>",
         ),
     )
 }
@@ -722,6 +968,26 @@ fn server_error(error: io::Error) -> Response {
         StatusCode::INTERNAL_SERVER_ERROR,
         &format!("edgerun-blog: {error}"),
     )
+}
+
+fn favicon_response() -> Response {
+    Response::new(StatusCode::OK)
+        .with_header("Content-Type", "image/svg+xml")
+        .with_header("Cache-Control", "public, max-age=86400")
+        .with_header("X-Content-Type-Options", "nosniff")
+        .with_body(FAVICON_SVG)
+}
+
+fn manifest_response(config: &BlogConfig) -> Response {
+    Response::new(StatusCode::OK)
+        .with_header("Content-Type", "application/manifest+json")
+        .with_header("Cache-Control", "public, max-age=300")
+        .with_header("X-Content-Type-Options", "nosniff")
+        .with_body(format!(
+            "{{\"name\":\"{}\",\"short_name\":\"{}\",\"start_url\":\"/\",\"scope\":\"/\",\"display\":\"minimal-ui\",\"background_color\":\"#f7f3eb\",\"theme_color\":\"#146c63\",\"icons\":[{{\"src\":\"/favicon.svg\",\"sizes\":\"any\",\"type\":\"image/svg+xml\"}}]}}",
+            escape_json(&config.title),
+            escape_json(&config.title)
+        ))
 }
 
 fn css_response() -> Response {
@@ -744,6 +1010,8 @@ fn to_io_error(error: edgerun_http::io::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, error.to_string())
 }
 
+const FAVICON_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="76" font-size="76">🧭</text></svg>"#;
+
 const APP_JS: &str = r#"
 const root=document.documentElement;
 const stored=localStorage.getItem('theme');
@@ -760,7 +1028,7 @@ for(const btn of document.querySelectorAll('[data-topic]')){btn.addEventListener
 const STYLE: &str = r#"
 :root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent-2:#8b3f2f;--code:#eee6d8}
 :root[data-theme=dark]{--bg:#101418;--panel:#171d22;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent-2:#dfa06b;--code:#232b31}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}.topbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:14px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none}.topbar nav{display:flex;gap:16px;align-items:center}.topbar nav a{color:var(--muted);text-decoration:none}button,input{font:inherit}.hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:28px;padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:720px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.search-panel{align-self:end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.search-panel label{display:block;font-weight:800;margin-bottom:8px}.search-panel input{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:12px 13px}.search-panel p{margin:10px 0 0;font-size:14px}.layout,.article-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:32px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.posts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article{max-width:780px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(22px,5vw,48px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.empty{max-width:720px;margin:80px auto;padding:0 18px}.muted{color:var(--muted)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:14px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none}.topbar nav{display:flex;gap:16px;align-items:center}.topbar nav a{color:var(--muted);text-decoration:none}button,input{font:inherit}.hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:28px;padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:720px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.search-panel{align-self:end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.search-panel label{display:block;font-weight:800;margin-bottom:8px}.search-panel input{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:12px 13px}.search-panel p{margin:10px 0 0;font-size:14px}.layout,.article-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:32px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.posts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article{max-width:780px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(22px,5vw,48px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.empty{max-width:720px;margin:80px auto;padding:0 18px}.muted{color:var(--muted)}
 @media(max-width:820px){.hero,.layout,.article-layout{grid-template-columns:1fr}.hero{padding-top:42px}.posts{grid-template-columns:1fr}.article{padding:22px}.topbar{position:static}}
 "#;
 
@@ -791,5 +1059,17 @@ mod tests {
             slug_for_path(Path::new("posts/2026-04-30 Hello World.md")),
             "posts/2026-04-30-hello-world"
         );
+    }
+
+    #[test]
+    fn renders_commit_pinned_code_reference() {
+        let html = markdown_to_html(
+            "```rust path=crates/edgerun-blog/src/lib.rs commit=abc123 lines=10-20\nfn demo() {}\n```",
+        );
+        assert!(html.contains("class=\"code-ref\""));
+        assert!(html.contains("crates/edgerun-blog/src/lib.rs @ abc123:10-20"));
+        assert!(html.contains(
+            "https://git.edgerun.tech/edgerun_core/src/abc123/crates/edgerun-blog/src/lib.rs#L10"
+        ));
     }
 }
