@@ -183,9 +183,11 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
         let mut router = MeshRouter::new(LocalNode::new(node_id));
         router.set_default_ttl(config.default_ttl);
         let heartbeat_interval = config.heartbeat_interval;
+        let mut link = MeshLink::new();
+        link.set_local_node_id(node_id);
 
         Self {
-            link: MeshLink::new(),
+            link,
             router,
             server: MeshCapabilityServer::new(provider),
             sessions: SessionManager::new(node_id),
@@ -395,10 +397,8 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             // Step 1: fill in src NodeID (public key only, no secret material)
             frame.header.src = signer.node_id();
 
-            // Step 2: sign the preimage with domain separation
-            let preimage = frame.signed_preimage();
-            frame.signature =
-                signer.sign_record(edgerun_core::crypto::SIG_DOMAIN_MESH_FRAME, &preimage)?;
+            // Step 2: sign the exact mesh-frame signature input verified by MeshFrame.
+            sign_mesh_frame_with_signer(signer.as_ref(), &mut frame)?;
 
             signed.push(frame);
         }
@@ -488,6 +488,12 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             match frame.header.frame_type {
                 FrameType::HandshakeInit => {
                     if let Some(init) = HandshakeInit::decode(&frame.payload) {
+                        if !handshake_init_matches_frame(&frame, &init) {
+                            edgerun_log::warn!(
+                                "dropping handshake init with mismatched frame source"
+                            );
+                            continue;
+                        }
                         let peer = init.initiator;
                         match self.sessions.respond_to_handshake(&init) {
                             Ok((accept, _secret)) => {
@@ -514,6 +520,12 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                 }
                 FrameType::HandshakeAccept => {
                     if let Some(accept) = HandshakeAccept::decode(&frame.payload) {
+                        if !handshake_accept_matches_frame(&frame, &accept) {
+                            edgerun_log::warn!(
+                                "dropping handshake accept with mismatched frame source"
+                            );
+                            continue;
+                        }
                         let peer = accept.responder;
                         if let Some(secret) = self.pending_handshakes.remove(&peer) {
                             if self
@@ -712,7 +724,17 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
 
     /// Broadcasts a discovery frame on all multicast and raw Ethernet sockets.
     pub fn broadcast_discovery(&mut self) -> Result<(), io::Error> {
-        self.link.broadcast_discovery(&mut self.router)
+        let frame = self.router.build_discovery_frame();
+        self.link.queue_frame(frame);
+
+        let signed_frames = self
+            .sign_pending_frames()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        for frame in signed_frames {
+            self.link.queue_frame(frame);
+        }
+
+        self.link.drain_pending_frames(&mut self.router).map(|_| ())
     }
 
     /// Ticks the heartbeat — increments missed counters and removes dead peers.
@@ -729,6 +751,27 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
     pub fn is_running(&self) -> bool {
         self.running
     }
+}
+
+fn sign_mesh_frame_with_signer(
+    signer: &dyn MeshSigner,
+    frame: &mut MeshFrame,
+) -> Result<(), HardwareSigningError> {
+    let record_hash = edgerun_core::crypto::sha256(&frame.signed_preimage());
+    let sig_input = edgerun_core::crypto::signature_input(
+        edgerun_core::crypto::SIG_DOMAIN_MESH_FRAME,
+        &record_hash,
+    );
+    frame.signature = signer.sign_message_var(&sig_input)?;
+    Ok(())
+}
+
+fn handshake_init_matches_frame(frame: &MeshFrame, init: &HandshakeInit) -> bool {
+    frame.header.src == init.initiator
+}
+
+fn handshake_accept_matches_frame(frame: &MeshFrame, accept: &HandshakeAccept) -> bool {
+    frame.header.src == accept.responder
 }
 
 // -----------------------------------------------------------------------
@@ -764,6 +807,9 @@ fn interface_name_to_ifindex(name: &str) -> Result<c_int, io::Error> {
 mod tests {
     use super::*;
     use edgerun_capabilities::CapabilityError;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::p256::ecdsa::{Signature, SigningKey};
+    use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
     use edgerun_proto::edgerun::v0::capability::{
         CapabilityDescriptor, CapabilityGrant, CapabilityInvocation, CapabilityRequest,
         CapabilityRevocation,
@@ -815,6 +861,46 @@ mod tests {
         let mut bytes = [0u8; 64];
         bytes[0] = v;
         NodeID(bytes)
+    }
+
+    struct TestMeshSigner {
+        node_id: NodeID,
+        signing_key: SigningKey,
+    }
+
+    impl TestMeshSigner {
+        fn new() -> Self {
+            let mut bytes = [0u8; 32];
+            edgerun_crypto::fill_random(&mut bytes).expect("random generation failed");
+            let signing_key = SigningKey::from_bytes(&bytes.into()).unwrap();
+            let encoded = signing_key.verifying_key().to_encoded_point(false);
+            let mut node_bytes = [0u8; 64];
+            node_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            Self {
+                node_id: NodeID(node_bytes),
+                signing_key,
+            }
+        }
+    }
+
+    impl MeshSigner for TestMeshSigner {
+        fn node_id(&self) -> NodeID {
+            self.node_id
+        }
+
+        fn sign_digest(
+            &self,
+            digest: &[u8; 32],
+        ) -> Result<[u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH], HardwareSigningError>
+        {
+            let sig: Signature = self
+                .signing_key
+                .sign_prehash(digest)
+                .map_err(|_| HardwareSigningError::Provider("test signing failed".into()))?;
+            let mut out = [0u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH];
+            out.copy_from_slice(&sig.to_bytes());
+            Ok(out)
+        }
     }
 
     #[test]
@@ -920,6 +1006,14 @@ mod tests {
     }
 
     #[test]
+    fn daemon_initializes_link_identity_from_configured_node() {
+        let local = node_id(0x42);
+        let daemon = TestDaemon::new(local, MeshDaemonConfig::default(), TestProvider);
+
+        assert_eq!(daemon.link.local_node_id(), local);
+    }
+
+    #[test]
     fn daemon_outbound_queue_is_shared() {
         let daemon = TestDaemon::new(node_id(1), MeshDaemonConfig::default(), TestProvider);
         let q1 = daemon.outbound_queue();
@@ -986,6 +1080,91 @@ mod tests {
         let result = daemon.broadcast_discovery();
         // On a system without the required capabilities, this will be an error; that's fine
         let _ = result;
+    }
+
+    #[test]
+    fn sign_pending_frames_produces_verifiable_mesh_signature() {
+        let signer = TestMeshSigner::new();
+        let local_id = signer.node_id();
+        let mut daemon = TestDaemon::new(local_id, MeshDaemonConfig::default(), TestProvider)
+            .with_signer(Box::new(signer));
+        let frame = MeshFrame {
+            header: MeshFrameHeader {
+                dest: node_id(0xBB),
+                src: NodeID([0u8; 64]),
+                ttl: 16,
+                frame_type: FrameType::Data,
+            },
+            payload: b"payload".to_vec(),
+            signature: [0u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH],
+        };
+        daemon.link.queue_frame(frame);
+
+        let signed = daemon.sign_pending_frames().unwrap();
+
+        assert_eq!(signed.len(), 1);
+        assert_eq!(signed[0].header.src, local_id);
+        assert!(signed[0].verify_signature());
+    }
+
+    #[test]
+    fn handshake_init_must_match_signed_frame_source() {
+        let peer = node_id(0xAA);
+        let other = node_id(0xBB);
+        let init = HandshakeInit {
+            initiator: peer,
+            ephemeral_pub: [1u8; edgerun_mesh_session::ECDH_PUBLIC_KEY_SIZE],
+        };
+        let matching = MeshFrame {
+            header: MeshFrameHeader {
+                dest: node_id(0xCC),
+                src: peer,
+                ttl: 16,
+                frame_type: FrameType::HandshakeInit,
+            },
+            payload: init.encode().to_vec(),
+            signature: [0u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH],
+        };
+        let mismatched = MeshFrame {
+            header: MeshFrameHeader {
+                src: other,
+                ..matching.header
+            },
+            ..matching.clone()
+        };
+
+        assert!(handshake_init_matches_frame(&matching, &init));
+        assert!(!handshake_init_matches_frame(&mismatched, &init));
+    }
+
+    #[test]
+    fn handshake_accept_must_match_signed_frame_source() {
+        let peer = node_id(0xAA);
+        let other = node_id(0xBB);
+        let accept = HandshakeAccept {
+            responder: peer,
+            ephemeral_pub: [2u8; edgerun_mesh_session::ECDH_PUBLIC_KEY_SIZE],
+        };
+        let matching = MeshFrame {
+            header: MeshFrameHeader {
+                dest: node_id(0xCC),
+                src: peer,
+                ttl: 16,
+                frame_type: FrameType::HandshakeAccept,
+            },
+            payload: accept.encode().to_vec(),
+            signature: [0u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH],
+        };
+        let mismatched = MeshFrame {
+            header: MeshFrameHeader {
+                src: other,
+                ..matching.header
+            },
+            ..matching.clone()
+        };
+
+        assert!(handshake_accept_matches_frame(&matching, &accept));
+        assert!(!handshake_accept_matches_frame(&mismatched, &accept));
     }
 
     // --- tick_heartbeat ---

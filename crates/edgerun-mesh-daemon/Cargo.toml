@@ -26,5 +26,8 @@ libc.workspace = true
 edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
 edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interface" }
 
+[dev-dependencies]
+edgerun-crypto = { version = "0.1", path = "../edgerun-crypto" }
+
 [lints]
 workspace = true

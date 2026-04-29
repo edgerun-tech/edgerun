@@ -67,6 +67,12 @@ impl MeshLink {
         self.local_node_id = node_id;
     }
 
+    /// Returns this link manager's local mesh identity.
+    #[must_use]
+    pub fn local_node_id(&self) -> NodeID {
+        self.local_node_id
+    }
+
     /// Adds a raw Ethernet socket on the given interface.
     pub fn add_raw_ethernet(&mut self, ifindex: c_int) -> Result<(), io::Error> {
         let socket = RawEthernetSocket::open(ifindex)?;
@@ -179,6 +185,9 @@ impl MeshLink {
         if dest.0 == [0u8; 64] {
             for mcast in &self.multicast_sockets {
                 let _ = mcast.send(&wire); // best effort
+            }
+            if let Some(udp) = &self.udp_broadcast {
+                let _ = udp.broadcast(&wire);
             }
             // Also broadcast on raw Ethernet
             let broadcast_mac = [0xff; 6];
@@ -347,6 +356,9 @@ impl MeshLink {
         let broadcast_mac = [0xff; 6];
         for socket in self.raw_sockets.values() {
             let _ = socket.send_to_mac(&wire, &broadcast_mac);
+        }
+        if let Some(udp) = &self.udp_broadcast {
+            let _ = udp.broadcast(&wire);
         }
         Ok(())
     }

@@ -257,13 +257,8 @@ fn mesh_link_set_local_node_id() {
     let mut link = MeshLink::new();
     let id = node_id(0x42);
     link.set_local_node_id(id);
-    // We can't directly inspect local_node_id, but it affects sent frames.
-    // We verify it via the drain_pending_frames_raw side effect.
-    let frame = MeshFrame::from_payload(id, b"test".to_vec());
-    link.queue_frame(frame);
-    let frames = link.drain_pending_frames_raw();
-    assert_eq!(frames.len(), 1);
-    // After re-queue and drain_with_send (simulated), src would be filled.
+
+    assert_eq!(link.local_node_id(), id);
 }
 
 // =======================================================================
