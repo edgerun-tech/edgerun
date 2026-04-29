@@ -1983,8 +1983,11 @@ fn unique_webmail_id() -> String {
 }
 
 fn http_date_now() -> String {
-    // A stable RFC 5322-ish date is enough for the simple composer; MTAs add Received headers.
-    format!("{:?}", std::time::SystemTime::now())
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    edgerun_encoding::rfc2822::format_rfc2822_utc(seconds)
 }
 
 const WEBMAIL_HTML: &str = r##"<!doctype html>
