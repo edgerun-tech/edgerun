@@ -65,6 +65,12 @@ Tokens are separated by spaces, commas, or semicolons.
 - `rxdmarom` tests the descriptor-ring RX-base plus ROM-global variant.
 - `rxdmaromfilter` adds the RF-test MAC/filter and 2440 MHz optimization
   setup before the descriptor-ring RX-base ROM-global start.
+- `rfch-save`, `rfch-pre`, `rfch-mode`, `rfch-gain-pre`, `rfch-gain-ch`,
+  `rfch-post`, and `rfch-restore` are opt-in ROM-slot probes for the
+  `chip_v7_set_chan` path.
+- `rfchan6` runs the combined `chip_v7_set_chan` slot-path approximation. This
+  is currently hazardous: it stalled the board after the filter setup sequence
+  and must stay out of default presets until the failing slot is isolated.
 
 Example:
 
@@ -88,6 +94,9 @@ output grouped in one terminal run.
 - Implemented in code: RX descriptor ring setup is visible to the MAC; `wifirx`
   shows descriptor addresses and the sentinel buffer.
 - Implemented in code: `wififuns` dumps ROM PHY slots without vendor libraries.
+- Implemented in code: `wifi57` through `wifi63` split the suspected
+  `chip_v7_set_chan` ROM path into individual probes. `wifi64` keeps the
+  combined path as an explicit hazardous test.
 - Implemented in code: `wifi53`/`wifi54` and `wifi55`/`wifi56` can install
   descriptor/control pointers into ROM RAM globals. The descriptor-base variant
   leaves `base` on the descriptor ring and sets `romptr[2]`, `romptr[4]`, and
