@@ -343,6 +343,10 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
             b"wifirxpbus0" | b"wifirxpbus0\n" => write_wifi_debug_step(frame.seq, 49),
             b"wifi50" | b"wifi50\n" => write_wifi_debug_step(frame.seq, 50),
             b"wifirxpbus" | b"wifirxpbus\n" => write_wifi_debug_step(frame.seq, 50),
+            b"wifi51" | b"wifi51\n" => write_wifi_debug_step(frame.seq, 51),
+            b"wifiphyrx" | b"wifiphyrx\n" => write_wifi_debug_step(frame.seq, 51),
+            b"wifi52" | b"wifi52\n" => write_wifi_debug_step(frame.seq, 52),
+            b"wifipbusdbg" | b"wifipbusdbg\n" => write_wifi_debug_step(frame.seq, 52),
             b"wifich1" | b"wifich1\n" => write_wifi_debug_step(frame.seq, 23),
             b"wifich6" | b"wifich6\n" => write_wifi_debug_step(frame.seq, 24),
             b"wifich11" | b"wifich11\n" => write_wifi_debug_step(frame.seq, 25),
@@ -401,7 +405,7 @@ fn write_wifi_init(seq: u16) {
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn write_wifi_phy_fun_slots(seq: u16) {
     display_console_log("ctl wififuns");
-    let mut buf = [0u8; 320];
+    let mut buf = [0u8; 640];
     let mut len = 0;
     append_wifi_phy_fun_slots(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
@@ -426,7 +430,7 @@ fn write_wifi_tx_regs(seq: u16) {
 
 fn write_wifi_rx_scratch_regs(seq: u16) {
     display_console_log("ctl wifirx");
-    let mut buf = [0u8; 960];
+    let mut buf = [0u8; 768];
     let mut len = 0;
     append_wifi_rx_scratch_regs(&mut buf, &mut len);
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
@@ -667,20 +671,26 @@ fn append_wifi_rx_scratch_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.rx_info2);
     append_bytes(out, len, b" ri3=0x");
     append_hex_u32(out, len, regs.rx_info3);
+    append_bytes(out, len, b" noise=0x");
+    append_hex_u32(out, len, regs.phy_noise_status);
+    append_bytes(out, len, b" t0=0x");
+    append_hex_u32(out, len, regs.systimer_value);
+    append_bytes(out, len, b" t1=0x");
+    append_hex_u32(out, len, regs.systimer_aux);
     append_bytes(out, len, b" ctrl");
     for word in regs.ctrl_words {
         append_bytes(out, len, b" ");
         append_hex_u32(out, len, word);
     }
-    append_bytes(out, len, b" desc");
-    for word in regs.desc_words {
+    append_bytes(out, len, b" desc0");
+    for word in regs.desc_words.iter().take(6) {
         append_bytes(out, len, b" ");
-        append_hex_u32(out, len, word);
+        append_hex_u32(out, len, *word);
     }
     append_bytes(out, len, b" buf");
-    for word in regs.buffer_words {
+    for word in regs.buffer_words.iter().take(4) {
         append_bytes(out, len, b" ");
-        append_hex_u32(out, len, word);
+        append_hex_u32(out, len, *word);
     }
     append_bytes(out, len, b"\n");
 }
@@ -958,13 +968,96 @@ fn append_wifi_phy_fun_slots(out: &mut [u8], len: &mut usize) {
     append_bytes(out, len, b"\n");
 }
 
-#[cfg(not(all(
-    target_arch = "xtensa",
-    target_os = "none",
-    feature = "esp32s3-wifi-blob"
+#[cfg(not(any(
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-blob"
+    ),
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-mmio",
+        not(feature = "esp32s3-wifi-blob")
+    )
 )))]
 fn append_wifi_phy_fun_slots(out: &mut [u8], len: &mut usize) {
     append_bytes(out, len, b"wifi funs unavailable\n");
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio",
+    not(feature = "esp32s3-wifi-blob")
+))]
+fn append_wifi_phy_fun_slots(out: &mut [u8], len: &mut usize) {
+    let slots = edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio::debug_phy_fun_slots();
+    append_bytes(out, len, b"wifi funs table=0x");
+    append_hex_u32(out, len, slots.table);
+    append_bytes(out, len, b" 008=0x");
+    append_hex_u32(out, len, slots.slot_008);
+    append_bytes(out, len, b" 00c=0x");
+    append_hex_u32(out, len, slots.slot_00c);
+    append_bytes(out, len, b" 05c=0x");
+    append_hex_u32(out, len, slots.slot_05c);
+    append_bytes(out, len, b" 06c=0x");
+    append_hex_u32(out, len, slots.slot_06c);
+    append_bytes(out, len, b" 078=0x");
+    append_hex_u32(out, len, slots.slot_078);
+    append_bytes(out, len, b" 088=0x");
+    append_hex_u32(out, len, slots.slot_088);
+    append_bytes(out, len, b" 0c8=0x");
+    append_hex_u32(out, len, slots.slot_0c8);
+    append_bytes(out, len, b" 0d0=0x");
+    append_hex_u32(out, len, slots.slot_0d0);
+    append_bytes(out, len, b" 0fc=0x");
+    append_hex_u32(out, len, slots.slot_0fc);
+    append_bytes(out, len, b" 100=0x");
+    append_hex_u32(out, len, slots.slot_100);
+    append_bytes(out, len, b" 110=0x");
+    append_hex_u32(out, len, slots.slot_110);
+    append_bytes(out, len, b" 148=0x");
+    append_hex_u32(out, len, slots.slot_148);
+    append_bytes(out, len, b" 160=0x");
+    append_hex_u32(out, len, slots.slot_160);
+    append_bytes(out, len, b" 164=0x");
+    append_hex_u32(out, len, slots.slot_164);
+    append_bytes(out, len, b" 190=0x");
+    append_hex_u32(out, len, slots.slot_190);
+    append_bytes(out, len, b" 198=0x");
+    append_hex_u32(out, len, slots.slot_198);
+    append_bytes(out, len, b" 1a8=0x");
+    append_hex_u32(out, len, slots.slot_1a8);
+    append_bytes(out, len, b" 1b4=0x");
+    append_hex_u32(out, len, slots.slot_1b4);
+    append_bytes(out, len, b" 1d4=0x");
+    append_hex_u32(out, len, slots.slot_1d4);
+    append_bytes(out, len, b" 200=0x");
+    append_hex_u32(out, len, slots.slot_200);
+    append_bytes(out, len, b" 204=0x");
+    append_hex_u32(out, len, slots.slot_204);
+    append_bytes(out, len, b" 208=0x");
+    append_hex_u32(out, len, slots.slot_208);
+    append_bytes(out, len, b" 20c=0x");
+    append_hex_u32(out, len, slots.slot_20c);
+    append_bytes(out, len, b" 224=0x");
+    append_hex_u32(out, len, slots.slot_224);
+    append_bytes(out, len, b" 22c=0x");
+    append_hex_u32(out, len, slots.slot_22c);
+    append_bytes(out, len, b" 234=0x");
+    append_hex_u32(out, len, slots.slot_234);
+    append_bytes(out, len, b" 254=0x");
+    append_hex_u32(out, len, slots.slot_254);
+    append_bytes(out, len, b" 264=0x");
+    append_hex_u32(out, len, slots.slot_264);
+    append_bytes(out, len, b" 268=0x");
+    append_hex_u32(out, len, slots.slot_268);
+    append_bytes(out, len, b" 288=0x");
+    append_hex_u32(out, len, slots.slot_288);
+    append_bytes(out, len, b" 28c=0x");
+    append_hex_u32(out, len, slots.slot_28c);
+    append_bytes(out, len, b"\n");
 }
 
 #[cfg(not(any(

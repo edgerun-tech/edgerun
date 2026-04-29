@@ -6,6 +6,11 @@
 
 use core::sync::atomic::{AtomicI32, Ordering};
 
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe extern "C" {
+    fn phy_get_romfuncs() -> *mut core::ffi::c_void;
+}
+
 const APB_CTRL_WIFI_CLK_EN: *mut u32 = 0x6002_6014 as *mut u32;
 const APB_CTRL_WIFI_RST_EN: *mut u32 = 0x6002_6018 as *mut u32;
 const RTC_CNTL_DIG_PWC: *mut u32 = 0x6000_8090 as *mut u32;
@@ -72,6 +77,8 @@ const WIFI_FREQ_SW_CTRL: *mut u32 = 0x6000_e150 as *mut u32;
 const WIFI_FREQ_BUSY: *mut u32 = 0x6000_e168 as *mut u32;
 const WIFI_FREQ_STATUS: *mut u32 = 0x6000_e170 as *mut u32;
 const WIFI_FREQ_MODE_CTRL: *mut u32 = 0x6003_509c as *mut u32;
+const WIFI_SYSTIMER_VALUE: *mut u32 = 0x6003_5000 as *mut u32;
+const WIFI_SYSTIMER_AUX: *mut u32 = 0x6003_5004 as *mut u32;
 const WIFI_FREQ_I2C_ADDR_CTRL: *mut u32 = 0x6000_e164 as *mut u32;
 const WIFI_FREQ_I2C_NIB0: *mut u32 = 0x6000_e100 as *mut u32;
 const WIFI_FREQ_I2C_NIB1: *mut u32 = 0x6000_e104 as *mut u32;
@@ -127,6 +134,7 @@ const WIFI_MAC_RX_INFO2: *mut u32 = 0x6003_3314 as *mut u32;
 const WIFI_MAC_RX_INFO1: *mut u32 = 0x6003_3318 as *mut u32;
 const WIFI_MAC_RX_INFO0: *mut u32 = 0x6003_331c as *mut u32;
 const WIFI_MAC_RX_INFO3: *mut u32 = 0x6003_3320 as *mut u32;
+const WIFI_PHY_NOISE_STATUS: *mut u32 = 0x6001_c06c as *mut u32;
 const WIFI_MAC_RX_POLICY_A: *mut u32 = 0x6003_30dc as *mut u32;
 const WIFI_MAC_RX_POLICY_B: *mut u32 = 0x6003_30e0 as *mut u32;
 const WIFI_MAC_RX_POLICY_C: *mut u32 = 0x6003_30e4 as *mut u32;
@@ -281,6 +289,9 @@ pub struct WifiMmioRxScratchRegs {
     pub rx_info1: u32,
     pub rx_info2: u32,
     pub rx_info3: u32,
+    pub phy_noise_status: u32,
+    pub systimer_value: u32,
+    pub systimer_aux: u32,
     pub ctrl_words: [u32; 4],
     pub desc_words: [u32; RX_DESC_COUNT * 3],
     pub buffer_words: [u32; 8],
@@ -348,6 +359,42 @@ pub struct WifiMmioPhyRegs {
     pub freq_busy: u32,
     pub freq_status: u32,
     pub freq_mode_ctrl: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WifiMmioPhyFunSlots {
+    pub table: u32,
+    pub slot_008: u32,
+    pub slot_00c: u32,
+    pub slot_05c: u32,
+    pub slot_06c: u32,
+    pub slot_078: u32,
+    pub slot_088: u32,
+    pub slot_0c8: u32,
+    pub slot_0d0: u32,
+    pub slot_0fc: u32,
+    pub slot_100: u32,
+    pub slot_110: u32,
+    pub slot_148: u32,
+    pub slot_160: u32,
+    pub slot_164: u32,
+    pub slot_190: u32,
+    pub slot_198: u32,
+    pub slot_1a8: u32,
+    pub slot_1b4: u32,
+    pub slot_1d4: u32,
+    pub slot_200: u32,
+    pub slot_204: u32,
+    pub slot_208: u32,
+    pub slot_20c: u32,
+    pub slot_224: u32,
+    pub slot_22c: u32,
+    pub slot_234: u32,
+    pub slot_254: u32,
+    pub slot_264: u32,
+    pub slot_268: u32,
+    pub slot_288: u32,
+    pub slot_28c: u32,
 }
 
 pub struct Esp32s3WifiMmio;
@@ -487,6 +534,9 @@ impl Esp32s3WifiMmio {
                 rx_info1: WIFI_MAC_RX_INFO1.read_volatile(),
                 rx_info2: WIFI_MAC_RX_INFO2.read_volatile(),
                 rx_info3: WIFI_MAC_RX_INFO3.read_volatile(),
+                phy_noise_status: WIFI_PHY_NOISE_STATUS.read_volatile(),
+                systimer_value: WIFI_SYSTIMER_VALUE.read_volatile(),
+                systimer_aux: WIFI_SYSTIMER_AUX.read_volatile(),
                 ctrl_words: ctrl_snapshot,
                 desc_words: desc_snapshot,
                 buffer_words: buffer_snapshot,
@@ -570,6 +620,46 @@ impl Esp32s3WifiMmio {
                 freq_busy: WIFI_FREQ_BUSY.read_volatile(),
                 freq_status: WIFI_FREQ_STATUS.read_volatile(),
                 freq_mode_ctrl: WIFI_FREQ_MODE_CTRL.read_volatile(),
+            }
+        }
+    }
+
+    pub fn debug_phy_fun_slots() -> WifiMmioPhyFunSlots {
+        unsafe {
+            let table = phy_get_romfuncs();
+            WifiMmioPhyFunSlots {
+                table: table as usize as u32,
+                slot_008: read_phy_fun_slot(table, 0x008),
+                slot_00c: read_phy_fun_slot(table, 0x00c),
+                slot_05c: read_phy_fun_slot(table, 0x05c),
+                slot_06c: read_phy_fun_slot(table, 0x06c),
+                slot_078: read_phy_fun_slot(table, 0x078),
+                slot_088: read_phy_fun_slot(table, 0x088),
+                slot_0c8: read_phy_fun_slot(table, 0x0c8),
+                slot_0d0: read_phy_fun_slot(table, 0x0d0),
+                slot_0fc: read_phy_fun_slot(table, 0x0fc),
+                slot_100: read_phy_fun_slot(table, 0x100),
+                slot_110: read_phy_fun_slot(table, 0x110),
+                slot_148: read_phy_fun_slot(table, 0x148),
+                slot_160: read_phy_fun_slot(table, 0x160),
+                slot_164: read_phy_fun_slot(table, 0x164),
+                slot_190: read_phy_fun_slot(table, 0x190),
+                slot_198: read_phy_fun_slot(table, 0x198),
+                slot_1a8: read_phy_fun_slot(table, 0x1a8),
+                slot_1b4: read_phy_fun_slot(table, 0x1b4),
+                slot_1d4: read_phy_fun_slot(table, 0x1d4),
+                slot_200: read_phy_fun_slot(table, 0x200),
+                slot_204: read_phy_fun_slot(table, 0x204),
+                slot_208: read_phy_fun_slot(table, 0x208),
+                slot_20c: read_phy_fun_slot(table, 0x20c),
+                slot_224: read_phy_fun_slot(table, 0x224),
+                slot_22c: read_phy_fun_slot(table, 0x22c),
+                slot_234: read_phy_fun_slot(table, 0x234),
+                slot_254: read_phy_fun_slot(table, 0x254),
+                slot_264: read_phy_fun_slot(table, 0x264),
+                slot_268: read_phy_fun_slot(table, 0x268),
+                slot_288: read_phy_fun_slot(table, 0x288),
+                slot_28c: read_phy_fun_slot(table, 0x28c),
             }
         }
     }
@@ -896,6 +986,18 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(5002, Ordering::Relaxed);
                     true
                 }
+                51 => {
+                    LAST_STATUS.store(5101, Ordering::Relaxed);
+                    let ok = call_phy_rx_start_slot_direct_slice();
+                    LAST_STATUS.store(if ok { 5102 } else { -5102 }, Ordering::Relaxed);
+                    ok
+                }
+                52 => {
+                    LAST_STATUS.store(5201, Ordering::Relaxed);
+                    let ok = call_phy_pbus_debug_slot_direct_slice();
+                    LAST_STATUS.store(if ok { 5202 } else { -5202 }, Ordering::Relaxed);
+                    ok
+                }
                 _ => false,
             }
         }
@@ -911,6 +1013,19 @@ impl Esp32s3WifiMmio {
         }
         true
     }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn read_phy_fun_slot(table: *mut core::ffi::c_void, offset: usize) -> u32 {
+    if table.is_null() {
+        return 0;
+    }
+    unsafe { table.cast::<u8>().add(offset).cast::<u32>().read_volatile() }
+}
+
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
+unsafe fn read_phy_fun_slot(_table: *mut core::ffi::c_void, _offset: usize) -> u32 {
+    0
 }
 
 unsafe fn enable_radio_clocks() {
@@ -1432,6 +1547,73 @@ unsafe fn init_rftest_rx_pbus_direct_slice(rx0: u16, rx1: u16, rx2: u16, rx3: u1
 
     write_pbus_window(WIFI_PBUS_BANK0, 0, 0, &low);
     write_pbus_window(WIFI_PBUS_BANK0, 4, 16, &high);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn call_phy_rx_start_slot_direct_slice() -> bool {
+    type PhyRxStartSlot = unsafe extern "C" fn(u32);
+
+    let table = unsafe { phy_get_romfuncs() };
+    if table.is_null() {
+        return false;
+    }
+
+    let slot = unsafe { table.cast::<u8>().add(0x88).cast::<usize>().read_volatile() };
+    if slot == 0 {
+        return false;
+    }
+
+    let func: PhyRxStartSlot = unsafe { core::mem::transmute(slot) };
+    unsafe {
+        func(1);
+    }
+    true
+}
+
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
+unsafe fn call_phy_rx_start_slot_direct_slice() -> bool {
+    false
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn call_phy_pbus_debug_slot_direct_slice() -> bool {
+    type PbusSlot = unsafe extern "C" fn(u32, u32, u32);
+
+    let table = unsafe { phy_get_romfuncs() };
+    if table.is_null() {
+        return false;
+    }
+
+    let slot = unsafe {
+        table
+            .cast::<u8>()
+            .add(0x1a8)
+            .cast::<usize>()
+            .read_volatile()
+    };
+    if slot == 0 {
+        return false;
+    }
+
+    let func: PbusSlot = unsafe { core::mem::transmute(slot) };
+    unsafe {
+        func(0, 1, 1);
+        func(1, 1, 124);
+        func(1, 1, 126);
+        func(1, 2, 0);
+        func(2, 1, 0x100);
+        func(3, 1, 0x100);
+        func(2, 2, 0x100);
+        func(3, 2, 0x100);
+        func(4, 1, 127);
+        func(5, 1, 15);
+    }
+    true
+}
+
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
+unsafe fn call_phy_pbus_debug_slot_direct_slice() -> bool {
+    false
 }
 
 unsafe fn write_txrate_power_offset_slice() {

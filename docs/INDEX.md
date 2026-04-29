@@ -35,6 +35,8 @@ component notes, generated spec snapshots, or older design documents.
 - [OCI runtime](oci-runtime/README.md)
 - [Virtual disk](virtual-disk/README.md)
 - [Remote capability](remote-capability/README.md)
+- [ESP32-S3 Wi-Fi MMIO bring-up](hardware/esp32s3-wifi-mmio.md) - bare-target
+  no-blob Wi-Fi diagnostics and current blocker notes.
 - [Fuzzing](fuzz-README.md)
 - [TPM overview](security/tpm.md)
 - [TPM implementation notes](security/tpm-implementation-notes.md)
