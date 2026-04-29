@@ -1,11 +1,13 @@
 use alloc::boxed::Box;
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
+use core::str::FromStr;
 use edgerun_solana::signers::{Ed25519Signer, Signer};
-use edgerun_solana::{solana_types::Pubkey, DeploymentClient};
+use edgerun_solana::{DeploymentClient, solana_types::Pubkey};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{eprintln, println};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeploymentCommand {
     Create {
         deployment: String,
@@ -88,6 +90,22 @@ pub fn parse_deployment_command() -> DeploymentCommand {
     let _ = args.next();
     let _ = args.next();
 
+    match parse_deployment_args(args) {
+        Ok(command) => command,
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn parse_deployment_args<I, S>(args: I) -> Result<DeploymentCommand, String>
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    let mut args = args.into_iter().map(Into::into);
+
     match args.next().as_deref() {
         Some("create") | Some("c") => {
             let mut deployment = None;
@@ -104,43 +122,26 @@ pub fn parse_deployment_command() -> DeploymentCommand {
 
             while let Some(arg) = args.next() {
                 match arg.as_str() {
-                    "--owner" | "-o" => owner = args.next(),
-                    "--governance" | "-g" => governance = args.next(),
-                    "--provider" | "-p" => provider = args.next(),
-                    "--name" => name = args.next(),
-                    "--containers" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            containers = v;
-                        }
-                    }
-                    "--cpu" | "-c" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            cpu_cores = v;
-                        }
-                    }
-                    "--memory" | "-m" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            memory_bytes = v;
-                        }
-                    }
-                    "--storage" | "-s" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            storage_bytes = v;
-                        }
-                    }
-                    "--deposit" | "-d" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            deposit = v;
-                        }
-                    }
+                    "--owner" | "-o" => owner = Some(next_value(&mut args, &arg)?),
+                    "--governance" | "-g" => governance = Some(next_value(&mut args, &arg)?),
+                    "--provider" | "-p" => provider = Some(next_value(&mut args, &arg)?),
+                    "--name" => name = Some(next_value(&mut args, &arg)?),
+                    "--containers" => containers = next_parse(&mut args, &arg)?,
+                    "--cpu" | "-c" => cpu_cores = next_parse(&mut args, &arg)?,
+                    "--memory" | "-m" => memory_bytes = next_parse(&mut args, &arg)?,
+                    "--storage" | "-s" => storage_bytes = next_parse(&mut args, &arg)?,
+                    "--deposit" | "-d" => deposit = next_parse(&mut args, &arg)?,
                     "--keep-running-on-price-increase" => auto_stop_on_price_increase = false,
                     "--auto-stop-on-price-increase" => auto_stop_on_price_increase = true,
-                    _ if !arg.starts_with('-') => deployment = Some(arg),
-                    _ => {}
+                    _ if !arg.starts_with('-') && deployment.is_none() => deployment = Some(arg),
+                    _ if !arg.starts_with('-') => {
+                        return Err(format!("unexpected extra deployment argument '{arg}'"));
+                    }
+                    _ => return Err(format!("unknown deployment create option '{arg}'")),
                 }
             }
 
-            DeploymentCommand::Create {
+            Ok(DeploymentCommand::Create {
                 deployment: deployment.unwrap_or_default(),
                 owner,
                 governance,
@@ -152,37 +153,32 @@ pub fn parse_deployment_command() -> DeploymentCommand {
                 storage_bytes,
                 deposit,
                 auto_stop_on_price_increase,
-            }
+            })
         }
         Some("get") | Some("g") => {
             let deployment = args.next().unwrap_or_default();
-            DeploymentCommand::Get { deployment }
+            reject_trailing(args, "deployment get")?;
+            Ok(DeploymentCommand::Get { deployment })
         }
         Some("start") => {
             let deployment = args.next().unwrap_or_default();
-            let mut owner = None;
-            while let Some(arg) = args.next() {
-                match arg.as_str() {
-                    "--owner" | "-o" => owner = args.next(),
-                    _ => {}
-                }
-            }
-            DeploymentCommand::Start { deployment, owner }
+            let owner = parse_owner_arg(args, "deployment start")?;
+            Ok(DeploymentCommand::Start { deployment, owner })
         }
         Some("pause") => {
             let deployment = args.next().unwrap_or_default();
-            let owner = parse_owner_arg(args);
-            DeploymentCommand::Pause { deployment, owner }
+            let owner = parse_owner_arg(args, "deployment pause")?;
+            Ok(DeploymentCommand::Pause { deployment, owner })
         }
         Some("resume") => {
             let deployment = args.next().unwrap_or_default();
-            let owner = parse_owner_arg(args);
-            DeploymentCommand::Resume { deployment, owner }
+            let owner = parse_owner_arg(args, "deployment resume")?;
+            Ok(DeploymentCommand::Resume { deployment, owner })
         }
         Some("dispute") => {
             let deployment = args.next().unwrap_or_default();
-            let owner = parse_owner_arg(args);
-            DeploymentCommand::Dispute { deployment, owner }
+            let owner = parse_owner_arg(args, "deployment dispute")?;
+            Ok(DeploymentCommand::Dispute { deployment, owner })
         }
         Some("resolve") => {
             let mut deployment = None;
@@ -196,31 +192,24 @@ pub fn parse_deployment_command() -> DeploymentCommand {
 
             while let Some(arg) = args.next() {
                 match arg.as_str() {
-                    "--resolver" | "-r" => resolver = args.next(),
-                    "--refund-recipient" => refund_recipient = args.next(),
-                    "--provider-payout-recipient" => provider_payout_recipient = args.next(),
-                    "--slash-recipient" => slash_recipient = args.next(),
-                    "--refund" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            refund_to_buyer = v;
-                        }
+                    "--resolver" | "-r" => resolver = Some(next_value(&mut args, &arg)?),
+                    "--refund-recipient" => refund_recipient = Some(next_value(&mut args, &arg)?),
+                    "--provider-payout-recipient" => {
+                        provider_payout_recipient = Some(next_value(&mut args, &arg)?)
                     }
-                    "--provider-payout" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            provider_payout = v;
-                        }
-                    }
-                    "--slash" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            slash_to_dao = v;
-                        }
-                    }
+                    "--slash-recipient" => slash_recipient = Some(next_value(&mut args, &arg)?),
+                    "--refund" => refund_to_buyer = next_parse(&mut args, &arg)?,
+                    "--provider-payout" => provider_payout = next_parse(&mut args, &arg)?,
+                    "--slash" => slash_to_dao = next_parse(&mut args, &arg)?,
                     _ if !arg.starts_with('-') && deployment.is_none() => deployment = Some(arg),
-                    _ => {}
+                    _ if !arg.starts_with('-') => {
+                        return Err(format!("unexpected extra deployment argument '{arg}'"));
+                    }
+                    _ => return Err(format!("unknown deployment resolve option '{arg}'")),
                 }
             }
 
-            DeploymentCommand::Resolve {
+            Ok(DeploymentCommand::Resolve {
                 deployment: deployment.unwrap_or_default(),
                 resolver,
                 refund_recipient: refund_recipient.unwrap_or_default(),
@@ -229,7 +218,7 @@ pub fn parse_deployment_command() -> DeploymentCommand {
                 refund_to_buyer,
                 provider_payout,
                 slash_to_dao,
-            }
+            })
         }
         Some("stop") => {
             let deployment = args.next().unwrap_or_default();
@@ -237,20 +226,26 @@ pub fn parse_deployment_command() -> DeploymentCommand {
             let mut provider_payout_recipient = None;
             while let Some(arg) = args.next() {
                 match arg.as_str() {
-                    "--owner" | "-o" => owner = args.next(),
-                    "--provider-payout-recipient" => provider_payout_recipient = args.next(),
-                    _ => {}
+                    "--owner" | "-o" => owner = Some(next_value(&mut args, &arg)?),
+                    "--provider-payout-recipient" => {
+                        provider_payout_recipient = Some(next_value(&mut args, &arg)?)
+                    }
+                    _ if !arg.starts_with('-') => {
+                        return Err(format!("unexpected argument for deployment stop: '{arg}'"));
+                    }
+                    _ => return Err(format!("unknown deployment stop option '{arg}'")),
                 }
             }
-            DeploymentCommand::Stop {
+            Ok(DeploymentCommand::Stop {
                 deployment,
                 owner,
                 provider_payout_recipient: provider_payout_recipient.unwrap_or_default(),
-            }
+            })
         }
         Some("tick-burn") | Some("tick") => {
             let deployment = args.next().unwrap_or_default();
-            DeploymentCommand::TickBurn { deployment }
+            reject_trailing(args, "deployment tick-burn")?;
+            Ok(DeploymentCommand::TickBurn { deployment })
         }
         Some("report") | Some("r") => {
             let mut deployment = None;
@@ -259,37 +254,25 @@ pub fn parse_deployment_command() -> DeploymentCommand {
             let mut memory_bytes = 0u64;
             let mut storage_bytes = 0u64;
             let mut network_bytes = 0u64;
-            let containers = 1u32;
+            let mut containers = 1u32;
 
             while let Some(arg) = args.next() {
                 match arg.as_str() {
-                    "--provider" | "-p" => provider = args.next(),
-                    "--cpu" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            cpu_cores = v;
-                        }
-                    }
-                    "--memory" | "-m" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            memory_bytes = v;
-                        }
-                    }
-                    "--storage" | "-s" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            storage_bytes = v;
-                        }
-                    }
-                    "--network" | "-n" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            network_bytes = v;
-                        }
-                    }
+                    "--provider" | "-p" => provider = Some(next_value(&mut args, &arg)?),
+                    "--cpu" => cpu_cores = next_parse(&mut args, &arg)?,
+                    "--memory" | "-m" => memory_bytes = next_parse(&mut args, &arg)?,
+                    "--storage" | "-s" => storage_bytes = next_parse(&mut args, &arg)?,
+                    "--network" | "-n" => network_bytes = next_parse(&mut args, &arg)?,
+                    "--containers" => containers = next_parse(&mut args, &arg)?,
                     _ if !arg.starts_with('-') && deployment.is_none() => deployment = Some(arg),
-                    _ => {}
+                    _ if !arg.starts_with('-') => {
+                        return Err(format!("unexpected extra deployment argument '{arg}'"));
+                    }
+                    _ => return Err(format!("unknown deployment report option '{arg}'")),
                 }
             }
 
-            DeploymentCommand::Report {
+            Ok(DeploymentCommand::Report {
                 deployment: deployment.unwrap_or_default(),
                 provider: provider.unwrap_or_default(),
                 cpu_cores,
@@ -297,7 +280,7 @@ pub fn parse_deployment_command() -> DeploymentCommand {
                 storage_bytes,
                 network_bytes,
                 containers,
-            }
+            })
         }
         Some("burn-rate") | Some("burn") => {
             let mut cpu_cores = 2u32;
@@ -307,36 +290,20 @@ pub fn parse_deployment_command() -> DeploymentCommand {
 
             while let Some(arg) = args.next() {
                 match arg.as_str() {
-                    "--cpu" | "-c" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            cpu_cores = v;
-                        }
-                    }
-                    "--memory" | "-m" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            memory_bytes = v;
-                        }
-                    }
-                    "--storage" | "-s" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            storage_bytes = v;
-                        }
-                    }
-                    "--network" | "-n" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            network_mbps = v;
-                        }
-                    }
-                    _ => {}
+                    "--cpu" | "-c" => cpu_cores = next_parse(&mut args, &arg)?,
+                    "--memory" | "-m" => memory_bytes = next_parse(&mut args, &arg)?,
+                    "--storage" | "-s" => storage_bytes = next_parse(&mut args, &arg)?,
+                    "--network" | "-n" => network_mbps = next_parse(&mut args, &arg)?,
+                    _ => return Err(format!("unknown deployment burn-rate option '{arg}'")),
                 }
             }
 
-            DeploymentCommand::BurnRate {
+            Ok(DeploymentCommand::BurnRate {
                 cpu_cores,
                 memory_bytes,
                 storage_bytes,
                 network_mbps,
-            }
+            })
         }
         Some("schedule-pricing") | Some("price") => {
             let mut deployment = None;
@@ -349,38 +316,21 @@ pub fn parse_deployment_command() -> DeploymentCommand {
 
             while let Some(arg) = args.next() {
                 match arg.as_str() {
-                    "--governance" | "-g" => governance = args.next(),
-                    "--core-hour" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            core_hour = v;
-                        }
-                    }
-                    "--ram-gib-hour" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            ram_gib_hour = v;
-                        }
-                    }
-                    "--storage-gib-hour" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            storage_gib_hour = v;
-                        }
-                    }
-                    "--network-mbit-hour" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            network_mbit_hour = v;
-                        }
-                    }
-                    "--effective-at" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            effective_at = v;
-                        }
-                    }
+                    "--governance" | "-g" => governance = Some(next_value(&mut args, &arg)?),
+                    "--core-hour" => core_hour = next_parse(&mut args, &arg)?,
+                    "--ram-gib-hour" => ram_gib_hour = next_parse(&mut args, &arg)?,
+                    "--storage-gib-hour" => storage_gib_hour = next_parse(&mut args, &arg)?,
+                    "--network-mbit-hour" => network_mbit_hour = next_parse(&mut args, &arg)?,
+                    "--effective-at" => effective_at = next_parse(&mut args, &arg)?,
                     _ if !arg.starts_with('-') && deployment.is_none() => deployment = Some(arg),
-                    _ => {}
+                    _ if !arg.starts_with('-') => {
+                        return Err(format!("unexpected extra deployment argument '{arg}'"));
+                    }
+                    _ => return Err(format!("unknown deployment schedule-pricing option '{arg}'")),
                 }
             }
 
-            DeploymentCommand::SchedulePricing {
+            Ok(DeploymentCommand::SchedulePricing {
                 deployment: deployment.unwrap_or_default(),
                 governance,
                 core_hour,
@@ -388,14 +338,9 @@ pub fn parse_deployment_command() -> DeploymentCommand {
                 storage_gib_hour,
                 network_mbit_hour,
                 effective_at,
-            }
+            })
         }
-        _ => {
-            eprintln!(
-                "Unknown deployment command. Use: create, get, start, pause, resume, dispute, resolve, stop, tick-burn, report, burn-rate, schedule-pricing"
-            );
-            std::process::exit(1);
-        }
+        _ => Err("unknown deployment command. Use: create, get, start, pause, resume, dispute, resolve, stop, tick-burn, report, burn-rate, schedule-pricing".to_string()),
     }
 }
 
@@ -406,15 +351,51 @@ fn default_price_effective_at() -> i64 {
         .unwrap_or(86_400)
 }
 
-fn parse_owner_arg(mut args: std::env::Args) -> Option<String> {
+fn parse_owner_arg<I>(mut args: I, command: &str) -> Result<Option<String>, String>
+where
+    I: Iterator<Item = String>,
+{
     let mut owner = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--owner" | "-o" => owner = args.next(),
-            _ => {}
+            "--owner" | "-o" => owner = Some(next_value(&mut args, &arg)?),
+            _ if !arg.starts_with('-') => {
+                return Err(format!("unexpected argument for {command}: '{arg}'"));
+            }
+            _ => return Err(format!("unknown {command} option '{arg}'")),
         }
     }
-    owner
+    Ok(owner)
+}
+
+fn next_value<I>(args: &mut I, flag: &str) -> Result<String, String>
+where
+    I: Iterator<Item = String>,
+{
+    args.next()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("missing value for {flag}"))
+}
+
+fn next_parse<I, T>(args: &mut I, flag: &str) -> Result<T, String>
+where
+    I: Iterator<Item = String>,
+    T: FromStr,
+{
+    let value = next_value(args, flag)?;
+    value
+        .parse()
+        .map_err(|_| format!("invalid value for {flag}: '{value}'"))
+}
+
+fn reject_trailing<I>(mut args: I, command: &str) -> Result<(), String>
+where
+    I: Iterator<Item = String>,
+{
+    match args.next() {
+        Some(arg) => Err(format!("unexpected argument for {command}: '{arg}'")),
+        None => Ok(()),
+    }
 }
 
 fn parse_pubkey(
@@ -917,5 +898,142 @@ pub async fn handle(
             }
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+
+    #[test]
+    fn parses_create_deployment_options() {
+        let command = parse_deployment_args(vec![
+            "create",
+            "deployment-seed",
+            "--owner",
+            "owner-key",
+            "--governance",
+            "governance-key",
+            "--provider",
+            "provider-key",
+            "--name",
+            "web",
+            "--containers",
+            "3",
+            "--cpu",
+            "8",
+            "--memory",
+            "17179869184",
+            "--storage",
+            "34359738368",
+            "--deposit",
+            "2000000000",
+            "--keep-running-on-price-increase",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            command,
+            DeploymentCommand::Create {
+                deployment: "deployment-seed".to_string(),
+                owner: Some("owner-key".to_string()),
+                governance: Some("governance-key".to_string()),
+                provider: Some("provider-key".to_string()),
+                name: Some("web".to_string()),
+                containers: 3,
+                cpu_cores: 8,
+                memory_bytes: 17_179_869_184,
+                storage_bytes: 34_359_738_368,
+                deposit: 2_000_000_000,
+                auto_stop_on_price_increase: false,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_create_capacity() {
+        let err = parse_deployment_args(vec!["create", "--cpu", "many"]).unwrap_err();
+        assert!(err.contains("invalid value for --cpu"));
+    }
+
+    #[test]
+    fn rejects_missing_owner_value() {
+        let err = parse_deployment_args(vec!["start", "deployment-key", "--owner"]).unwrap_err();
+        assert!(err.contains("missing value for --owner"));
+    }
+
+    #[test]
+    fn rejects_trailing_get_argument() {
+        let err = parse_deployment_args(vec!["get", "deployment-key", "extra"]).unwrap_err();
+        assert!(err.contains("unexpected argument for deployment get"));
+    }
+
+    #[test]
+    fn parses_report_containers() {
+        let command = parse_deployment_args(vec![
+            "report",
+            "deployment-key",
+            "--provider",
+            "provider-key",
+            "--cpu",
+            "2",
+            "--memory",
+            "4096",
+            "--storage",
+            "8192",
+            "--network",
+            "16384",
+            "--containers",
+            "4",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            command,
+            DeploymentCommand::Report {
+                deployment: "deployment-key".to_string(),
+                provider: "provider-key".to_string(),
+                cpu_cores: 2,
+                memory_bytes: 4096,
+                storage_bytes: 8192,
+                network_bytes: 16_384,
+                containers: 4,
+            }
+        );
+    }
+
+    #[test]
+    fn parses_schedule_pricing() {
+        let command = parse_deployment_args(vec![
+            "schedule-pricing",
+            "deployment-key",
+            "--governance",
+            "governance-key",
+            "--core-hour",
+            "10",
+            "--ram-gib-hour",
+            "20",
+            "--storage-gib-hour",
+            "30",
+            "--network-mbit-hour",
+            "40",
+            "--effective-at",
+            "12345",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            command,
+            DeploymentCommand::SchedulePricing {
+                deployment: "deployment-key".to_string(),
+                governance: Some("governance-key".to_string()),
+                core_hour: 10,
+                ram_gib_hour: 20,
+                storage_gib_hour: 30,
+                network_mbit_hour: 40,
+                effective_at: 12345,
+            }
+        );
     }
 }
