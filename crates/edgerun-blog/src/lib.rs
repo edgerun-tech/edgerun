@@ -177,11 +177,16 @@ impl BlogHandler {
 
     fn sitemap_response(&self) -> Response {
         match load_posts(&self.config.root) {
-            Ok(posts) => Response::new(StatusCode::OK)
-                .with_header("Content-Type", "application/xml; charset=utf-8")
-                .with_header("Cache-Control", "public, max-age=300")
-                .with_header("X-Content-Type-Options", "nosniff")
-                .with_body(render_sitemap(&self.config, &posts)),
+            Ok(posts) => {
+                let has_about = load_about_page(&self.config.root)
+                    .map(|page| page.is_some())
+                    .unwrap_or(false);
+                Response::new(StatusCode::OK)
+                    .with_header("Content-Type", "application/xml; charset=utf-8")
+                    .with_header("Cache-Control", "public, max-age=300")
+                    .with_header("X-Content-Type-Options", "nosniff")
+                    .with_body(render_sitemap(&self.config, &posts, has_about))
+            }
             Err(error) => server_error(error),
         }
     }
@@ -314,7 +319,7 @@ fn build_generated_site(
     ));
     files.push(generated_file(
         output.join("sitemap.xml"),
-        render_sitemap(config, posts),
+        render_sitemap(config, posts, about.is_some()),
     ));
     files.push(generated_file(
         output.join("opensearch.xml"),
@@ -962,12 +967,18 @@ fn render_robots(config: &BlogConfig) -> String {
     }
 }
 
-fn render_sitemap(config: &BlogConfig, posts: &[Post]) -> String {
+fn render_sitemap(config: &BlogConfig, posts: &[Post], has_about: bool) -> String {
     let mut xml = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
     xml.push_str(&format!(
         "  <url><loc>{}</loc></url>\n",
         escape_html(&absolute_url(config, "/"))
     ));
+    if has_about {
+        xml.push_str(&format!(
+            "  <url><loc>{}</loc></url>\n",
+            escape_html(&absolute_url(config, "/about.html"))
+        ));
+    }
     for post in posts {
         xml.push_str("  <url>");
         xml.push_str(&format!(
@@ -1733,6 +1744,11 @@ mod tests {
             "---\ntitle: Hello\ndate: 2026-04-30\nauthor: Ken\nsummary: One post\ntags: [test]\n---\n# Hello\n\nBody.",
         )
         .unwrap();
+        fs::write(
+            source.join("about.md"),
+            "---\ntitle: About Edgerun\nsummary: Why Edgerun exists.\n---\n# About\n\nEverything from scratch.",
+        )
+        .unwrap();
 
         let mut config = BlogConfig::new(&source);
         config.base_url = "https://blog.edgerun.tech".to_string();
@@ -1740,9 +1756,13 @@ mod tests {
 
         assert_eq!(site.posts, 1);
         assert!(output.join("index.html").exists());
+        assert!(output.join("about.html").exists());
         assert!(output.join("posts/hello.html").exists());
         assert!(output.join("sitemap.xml").exists());
         assert!(output.join("opensearch.xml").exists());
+        assert!(fs::read_to_string(output.join("sitemap.xml"))
+            .unwrap()
+            .contains("/about.html"));
         assert!(fs::read_to_string(output.join("search.json"))
             .unwrap()
             .contains("\"title\":\"Hello\""));
