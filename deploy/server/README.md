@@ -102,7 +102,11 @@ build step and no authentication.
 installed in `/etc/systemd/system/`, then enabled with `systemctl enable
 edgerun-server.service` so systemd starts it through `multi-user.target` on
 boot. Runtime crash handling is configured with `Restart=on-failure` and
-`RestartSec=5`.
+`RestartSec=5`. The unit is sandboxed with a static unprivileged user, a
+bounded `CAP_NET_BIND_SERVICE` capability set, strict filesystem protection,
+private temporary storage, namespace/realtime/personality restrictions,
+kernel/sysctl/device protections, writable-executable memory denial, and a
+denylist for high-risk syscall classes.
 
 `edgerun-server-health.timer` is host-only deployment material. It should be
 installed next to the service unit and enabled with
