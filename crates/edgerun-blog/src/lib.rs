@@ -60,9 +60,21 @@ pub struct Post {
     pub source_path: PathBuf,
     pub summary: String,
     pub date: String,
+    pub author: String,
     pub tags: Vec<String>,
     pub body: String,
     pub html: String,
+    pub missing_front_matter: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Page {
+    pub title: String,
+    pub source_path: PathBuf,
+    pub summary: String,
+    pub body: String,
+    pub html: String,
+    pub missing_front_matter: Vec<String>,
 }
 
 impl BlogHandler {
@@ -82,9 +94,11 @@ impl BlogHandler {
 
         match path {
             "/" | "/index.html" => self.index_response(),
+            "/about.html" => self.about_response(),
             "/favicon.svg" => favicon_response(),
             "/robots.txt" => self.robots_response(),
             "/sitemap.xml" => self.sitemap_response(),
+            "/opensearch.xml" => opensearch_response(&self.config),
             "/site.webmanifest" => manifest_response(&self.config),
             "/style.css" => css_response(),
             "/app.js" => js_response(),
@@ -119,6 +133,16 @@ impl BlogHandler {
                     not_found_response(&self.config.title)
                 }
             }
+            Err(error) => server_error(error),
+        }
+    }
+
+    fn about_response(&self) -> Response {
+        match load_about_page(&self.config.root) {
+            Ok(Some(page)) => Response::html(StatusCode::OK, &render_about(&self.config, &page))
+                .with_header("Cache-Control", "no-store")
+                .with_header("X-Content-Type-Options", "nosniff"),
+            Ok(None) => not_found_response(&self.config.title),
             Err(error) => server_error(error),
         }
     }
@@ -199,7 +223,35 @@ pub fn load_posts(root: &Path) -> io::Result<Vec<Post>> {
     Ok(posts)
 }
 
+pub fn load_about_page(root: &Path) -> io::Result<Option<Page>> {
+    for name in ["about.md", "about.markdown", "about.html"] {
+        let path = root.join(name);
+        if path.is_file() {
+            return load_page(root, &path);
+        }
+    }
+    Ok(None)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GenerateMode {
+    Write,
+    Check,
+}
+
 pub fn generate_static_site(config: &BlogConfig, output: &Path) -> io::Result<GeneratedSite> {
+    generate_static_site_with_mode(config, output, GenerateMode::Write)
+}
+
+pub fn check_static_site(config: &BlogConfig, output: &Path) -> io::Result<GeneratedSite> {
+    generate_static_site_with_mode(config, output, GenerateMode::Check)
+}
+
+fn generate_static_site_with_mode(
+    config: &BlogConfig,
+    output: &Path,
+    mode: GenerateMode,
+) -> io::Result<GeneratedSite> {
     let source = config
         .root
         .canonicalize()
@@ -217,53 +269,307 @@ pub fn generate_static_site(config: &BlogConfig, output: &Path) -> io::Result<Ge
     }
 
     let posts = load_posts(&config.root)?;
-    fs::create_dir_all(output)?;
-    let posts_output = output.join("posts");
-    if posts_output.exists() {
-        fs::remove_dir_all(&posts_output)?;
-    }
-    fs::create_dir_all(&posts_output)?;
+    let about = load_about_page(&config.root)?;
+    validate_content(&posts, about.as_ref())?;
 
-    let mut files = Vec::new();
-    write_generated(
-        output.join("index.html"),
-        render_index(config, &posts),
-        &mut files,
-    )?;
-    write_generated(output.join("favicon.svg"), FAVICON_SVG, &mut files)?;
-    write_generated(output.join("robots.txt"), render_robots(config), &mut files)?;
-    write_generated(
-        output.join("sitemap.xml"),
-        render_sitemap(config, &posts),
-        &mut files,
-    )?;
-    write_generated(
-        output.join("site.webmanifest"),
-        render_manifest(config),
-        &mut files,
-    )?;
-    write_generated(
-        output.join("feed.xml"),
-        render_feed(config, &posts),
-        &mut files,
-    )?;
-    write_generated(output.join("style.css"), STYLE, &mut files)?;
-    write_generated(output.join("app.js"), APP_JS, &mut files)?;
-    write_generated(
-        output.join("search.json"),
-        render_search_json(&posts),
-        &mut files,
-    )?;
-
-    for post in &posts {
-        let post_path = posts_output.join(format!("{}.html", post.path));
-        write_generated(post_path, render_post(config, post, &posts), &mut files)?;
+    let plan = build_generated_site(config, output, &posts, about.as_ref());
+    if mode == GenerateMode::Check {
+        check_generated_files(output, &plan)?;
+    } else {
+        write_generated_site(output, &plan)?;
     }
 
     Ok(GeneratedSite {
         posts: posts.len(),
-        files,
+        files: plan.files.iter().map(|file| file.path.clone()).collect(),
     })
+}
+
+#[derive(Clone, Debug)]
+struct GeneratedFile {
+    path: PathBuf,
+    body: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+struct GeneratedPlan {
+    files: Vec<GeneratedFile>,
+}
+
+fn build_generated_site(
+    config: &BlogConfig,
+    output: &Path,
+    posts: &[Post],
+    about: Option<&Page>,
+) -> GeneratedPlan {
+    let mut files = Vec::new();
+    files.push(generated_file(
+        output.join("index.html"),
+        render_index(config, posts),
+    ));
+    files.push(generated_file(output.join("favicon.svg"), FAVICON_SVG));
+    files.push(generated_file(
+        output.join("robots.txt"),
+        render_robots(config),
+    ));
+    files.push(generated_file(
+        output.join("sitemap.xml"),
+        render_sitemap(config, posts),
+    ));
+    files.push(generated_file(
+        output.join("opensearch.xml"),
+        render_opensearch(config),
+    ));
+    files.push(generated_file(
+        output.join("site.webmanifest"),
+        render_manifest(config),
+    ));
+    files.push(generated_file(
+        output.join("feed.xml"),
+        render_feed(config, posts),
+    ));
+    files.push(generated_file(output.join("style.css"), STYLE));
+    files.push(generated_file(output.join("app.js"), APP_JS));
+    files.push(generated_file(
+        output.join("search.json"),
+        render_search_json(posts),
+    ));
+
+    for post in posts {
+        files.push(generated_file(
+            output.join("posts").join(format!("{}.html", post.path)),
+            render_post(config, post, posts),
+        ));
+    }
+    if let Some(about) = about {
+        files.push(generated_file(
+            output.join("about.html"),
+            render_about(config, about),
+        ));
+    }
+
+    GeneratedPlan { files }
+}
+
+fn generated_file(path: PathBuf, body: impl AsRef<[u8]>) -> GeneratedFile {
+    GeneratedFile {
+        path,
+        body: body.as_ref().to_vec(),
+    }
+}
+
+fn write_generated_site(output: &Path, plan: &GeneratedPlan) -> io::Result<()> {
+    let parent = output.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let name = output
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("site");
+    let tmp = parent.join(format!(".{name}.tmp-{}", std::process::id()));
+    if tmp.exists() {
+        fs::remove_dir_all(&tmp)?;
+    }
+    fs::create_dir_all(&tmp)?;
+
+    let write_result = (|| -> io::Result<()> {
+        for file in &plan.files {
+            let relative = file.path.strip_prefix(output).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "generated file escaped output directory",
+                )
+            })?;
+            write_generated_bytes(tmp.join(relative), &file.body)?;
+        }
+        Ok(())
+    })();
+
+    if let Err(error) = write_result {
+        let _ = fs::remove_dir_all(&tmp);
+        return Err(error);
+    }
+
+    let old = parent.join(format!(".{name}.old-{}", std::process::id()));
+    if old.exists() {
+        fs::remove_dir_all(&old)?;
+    }
+    if output.exists() {
+        fs::rename(output, &old)?;
+    }
+    if let Err(error) = fs::rename(&tmp, output) {
+        if old.exists() {
+            let _ = fs::rename(&old, output);
+        }
+        let _ = fs::remove_dir_all(&tmp);
+        return Err(error);
+    }
+    if old.exists() {
+        fs::remove_dir_all(old)?;
+    }
+    Ok(())
+}
+
+fn check_generated_files(output: &Path, plan: &GeneratedPlan) -> io::Result<()> {
+    let mut stale = Vec::new();
+    let expected = plan
+        .files
+        .iter()
+        .map(|file| file.path.clone())
+        .collect::<Vec<_>>();
+    for file in &plan.files {
+        match fs::read(&file.path) {
+            Ok(existing) if existing == file.body => {}
+            Ok(_) => stale.push(file.path.display().to_string()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                stale.push(file.path.display().to_string())
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    if output.exists() {
+        for path in collect_regular_files(output)? {
+            if !expected.iter().any(|expected| expected == &path) {
+                stale.push(path.display().to_string());
+            }
+        }
+    }
+    if !stale.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "generated output is stale; run edgerun-blog generate. First stale files: {}",
+                stale.into_iter().take(5).collect::<Vec<_>>().join(", ")
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn collect_regular_files(root: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    collect_regular_files_inner(root, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_regular_files_inner(dir: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            collect_regular_files_inner(&path, files)?;
+        } else if file_type.is_file() {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn validate_content(posts: &[Post], about: Option<&Page>) -> io::Result<()> {
+    let mut errors = Vec::new();
+    validate_posts(posts, &mut errors);
+    if let Some(about) = about {
+        validate_about_page(about, &mut errors);
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            errors.join("; "),
+        ))
+    }
+}
+
+fn validate_posts(posts: &[Post], errors: &mut Vec<String>) {
+    for (index, post) in posts.iter().enumerate() {
+        if !post.missing_front_matter.is_empty() {
+            errors.push(format!(
+                "{} is missing required front matter: {}",
+                post.source_path.display(),
+                post.missing_front_matter.join(", ")
+            ));
+        }
+        if post.title.trim().is_empty() {
+            errors.push(format!("{} has an empty title", post.source_path.display()));
+        }
+        if post.summary.trim().is_empty() {
+            errors.push(format!(
+                "{} has an empty summary",
+                post.source_path.display()
+            ));
+        }
+        if !is_valid_date(&post.date) {
+            errors.push(format!(
+                "{} has invalid or missing date '{}'; use YYYY-MM-DD",
+                post.source_path.display(),
+                post.date
+            ));
+        }
+        if post.author.trim().is_empty() {
+            errors.push(format!(
+                "{} has an empty author",
+                post.source_path.display()
+            ));
+        }
+        if post.tags.is_empty() || post.tags.iter().any(|tag| tag.trim().is_empty()) {
+            errors.push(format!(
+                "{} has missing or empty tags",
+                post.source_path.display()
+            ));
+        }
+        if post.path.trim().is_empty() {
+            errors.push(format!(
+                "{} produced an empty slug",
+                post.source_path.display()
+            ));
+        }
+        for other in posts.iter().skip(index + 1) {
+            if post.path == other.path {
+                errors.push(format!(
+                    "duplicate blog slug '{}': {} and {}",
+                    post.path,
+                    post.source_path.display(),
+                    other.source_path.display()
+                ));
+            }
+        }
+    }
+}
+
+fn validate_about_page(page: &Page, errors: &mut Vec<String>) {
+    if !page.missing_front_matter.is_empty() {
+        errors.push(format!(
+            "{} is missing required front matter: {}",
+            page.source_path.display(),
+            page.missing_front_matter.join(", ")
+        ));
+    }
+    if page.title.trim().is_empty() {
+        errors.push(format!("{} has an empty title", page.source_path.display()));
+    }
+    if page.summary.trim().is_empty() {
+        errors.push(format!(
+            "{} has an empty summary",
+            page.source_path.display()
+        ));
+    }
+}
+
+fn is_valid_date(date: &str) -> bool {
+    date.len() == 10
+        && date.as_bytes()[0..10]
+            .iter()
+            .enumerate()
+            .all(|(i, b)| matches!((i, *b), (4, b'-') | (7, b'-')) || b.is_ascii_digit())
+}
+
+fn write_generated_bytes(path: PathBuf, body: &[u8]) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, body)
 }
 
 #[derive(Clone, Debug)]
@@ -272,26 +578,14 @@ pub struct GeneratedSite {
     pub files: Vec<PathBuf>,
 }
 
-fn write_generated(
-    path: PathBuf,
-    body: impl AsRef<[u8]>,
-    files: &mut Vec<PathBuf>,
-) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(&path, body)?;
-    files.push(path);
-    Ok(())
-}
-
 fn collect_content_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
+    let mut entries = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|entry| entry.path());
+    for entry in entries {
         let path = entry.path();
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if name.starts_with('.') || name == "target" || name == "node_modules" {
+        if should_skip_source_entry(&name) {
             continue;
         }
         let file_type = entry.file_type()?;
@@ -304,23 +598,54 @@ fn collect_content_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> i
     Ok(())
 }
 
+fn should_skip_source_entry(name: &str) -> bool {
+    name.starts_with('.') || matches!(name, "target" | "node_modules" | "dist" | "public")
+}
+
+fn is_about_path(path: &Path) -> bool {
+    let parts = path
+        .components()
+        .filter_map(|part| match part {
+            Component::Normal(name) => name.to_str(),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    matches!(
+        parts.as_slice(),
+        ["about.md"] | ["about.markdown"] | ["about.html"]
+    )
+}
+
 fn load_post(root: &Path, source_path: &Path) -> io::Result<Option<Post>> {
     let raw = fs::read_to_string(source_path)?;
     let rel = match safe_relative(root, source_path) {
         Some(rel) => rel,
         None => return Ok(None),
     };
+    if is_about_path(&rel) {
+        return Ok(None);
+    }
     let (front, body) = parse_front_matter(&raw);
     let fallback_title = rel
         .file_stem()
         .and_then(|name| name.to_str())
         .map(title_from_slug)
         .unwrap_or_else(|| "Untitled".to_string());
-    let title = front_value(front, "title")
-        .unwrap_or_else(|| first_heading(body).unwrap_or(fallback_title));
-    let date = front_value(front, "date").unwrap_or_else(|| date_from_path(&rel));
+    let title_value = front_value(front, "title");
+    let date_value = front_value(front, "date");
+    let summary_value = front_value(front, "summary");
+    let author_value = front_value(front, "author");
+    let mut missing_front_matter = Vec::new();
+    for key in ["title", "date", "summary", "author", "tags"] {
+        if !front_has_key(front, key) {
+            missing_front_matter.push(key.to_string());
+        }
+    }
+    let title = title_value.unwrap_or_else(|| first_heading(body).unwrap_or(fallback_title));
+    let date = date_value.unwrap_or_else(|| date_from_path(&rel));
+    let author = author_value.unwrap_or_default();
     let tags = front_list(front, "tags");
-    let summary = front_value(front, "summary").unwrap_or_else(|| summarize(body));
+    let summary = summary_value.unwrap_or_else(|| summarize(body));
     let path = slug_for_path(&rel);
     let html = if source_path.extension().and_then(|ext| ext.to_str()) == Some("html") {
         body.to_string()
@@ -334,9 +659,48 @@ fn load_post(root: &Path, source_path: &Path) -> io::Result<Option<Post>> {
         source_path: source_path.to_path_buf(),
         summary,
         date,
+        author,
         tags,
         body: strip_markdown(body),
         html,
+        missing_front_matter,
+    }))
+}
+
+fn load_page(root: &Path, source_path: &Path) -> io::Result<Option<Page>> {
+    let raw = fs::read_to_string(source_path)?;
+    let (front, body) = parse_front_matter(&raw);
+    let rel = match safe_relative(root, source_path) {
+        Some(rel) => rel,
+        None => return Ok(None),
+    };
+    let fallback_title = rel
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .map(title_from_slug)
+        .unwrap_or_else(|| "Untitled".to_string());
+    let title_value = front_value(front, "title");
+    let summary_value = front_value(front, "summary");
+    let mut missing_front_matter = Vec::new();
+    for key in ["title", "summary"] {
+        if !front_has_key(front, key) {
+            missing_front_matter.push(key.to_string());
+        }
+    }
+    let title = title_value.unwrap_or_else(|| first_heading(body).unwrap_or(fallback_title));
+    let summary = summary_value.unwrap_or_else(|| summarize(body));
+    let html = if source_path.extension().and_then(|ext| ext.to_str()) == Some("html") {
+        body.to_string()
+    } else {
+        markdown_to_html(body)
+    };
+    Ok(Some(Page {
+        title,
+        source_path: source_path.to_path_buf(),
+        summary,
+        body: strip_markdown(body),
+        html,
+        missing_front_matter,
     }))
 }
 
@@ -358,7 +722,7 @@ fn render_index(config: &BlogConfig, posts: &[Post]) -> String {
         config,
         &PageMeta::index(config),
         &format!(
-            "<section class=\"hero\"><div><p class=\"eyebrow\">Static from Git</p><h1>{}</h1><p>{}</p></div><form class=\"search-panel\" role=\"search\"><label for=\"search\">Search</label><input id=\"search\" type=\"search\" placeholder=\"Search posts, tags, and text\" autocomplete=\"off\" aria-describedby=\"search-count\"><p id=\"search-count\">{} posts</p></form></section><main id=\"content\" class=\"layout\" tabindex=\"-1\"><aside aria-label=\"Post topics\"><h2>Topics</h2>{}</aside><section id=\"posts\" class=\"posts\" aria-label=\"Posts\">{}</section></main>",
+            "<section class=\"hero\"><div><p class=\"eyebrow\">Static from Git</p><h1>{}</h1><p>{}</p><p><a class=\"inline-link\" href=\"/about.html\">About Edgerun</a></p></div><form class=\"search-panel\" role=\"search\"><label for=\"search\">Search</label><input id=\"search\" type=\"search\" placeholder=\"Search posts, tags, and text\" autocomplete=\"off\" aria-describedby=\"search-count\"><p id=\"search-count\">{} posts</p></form></section><main id=\"content\" class=\"layout\" tabindex=\"-1\"><aside aria-label=\"Post topics\"><h2>Topics</h2>{}</aside><section id=\"posts\" class=\"posts\" aria-label=\"Posts\">{}</section></main>",
             escape_html(&config.title),
             escape_html(&config.description),
             posts.len(),
@@ -385,8 +749,10 @@ fn render_post(config: &BlogConfig, post: &Post, posts: &[Post]) -> String {
         config,
         &PageMeta::post(config, post),
         &format!(
-            "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><article class=\"article\" aria-labelledby=\"post-title\"><a class=\"back\" href=\"/\">Back to posts</a><p class=\"date\">{}</p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article><aside aria-label=\"Recent posts\"><h2>Recent</h2><nav class=\"recent\" aria-label=\"Recent posts\">{}</nav></aside></main>",
+            "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><article class=\"article\" aria-labelledby=\"post-title\"><a class=\"back\" href=\"/\">Back to posts</a><p class=\"date\"><time datetime=\"{}\">{}</time> by <span rel=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article><aside aria-label=\"Recent posts\"><h2>Recent</h2><nav class=\"recent\" aria-label=\"Recent posts\">{}</nav></aside></main>",
+            escape_attr(&post.date),
             escape_html(&post.date),
+            escape_html(&post.author),
             escape_html(&post.title),
             escape_html(&post.summary),
             render_tags(&post.tags),
@@ -396,11 +762,26 @@ fn render_post(config: &BlogConfig, post: &Post, posts: &[Post]) -> String {
     )
 }
 
+fn render_about(config: &BlogConfig, page: &Page) -> String {
+    page_shell(
+        config,
+        &PageMeta::about(config, page),
+        &format!(
+            "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><article class=\"article\" aria-labelledby=\"page-title\"><a class=\"back\" href=\"/\">Back to posts</a><h1 id=\"page-title\">{}</h1><p class=\"summary\">{}</p><div class=\"content\">{}</div></article><aside aria-label=\"Site links\"><h2>Explore</h2><nav class=\"recent\" aria-label=\"Site links\"><a href=\"/\">Posts</a><a href=\"/feed.xml\">Feed</a></nav></aside></main>",
+            escape_html(&page.title),
+            escape_html(&page.summary),
+            page.html
+        ),
+    )
+}
+
 struct PageMeta {
     title: String,
     description: String,
     canonical: String,
     page_type: &'static str,
+    schema_type: &'static str,
+    author: Option<String>,
     published_time: Option<String>,
     noindex: bool,
 }
@@ -412,6 +793,8 @@ impl PageMeta {
             description: config.description.clone(),
             canonical: absolute_url(config, "/"),
             page_type: "website",
+            schema_type: "Blog",
+            author: None,
             published_time: None,
             noindex: false,
         }
@@ -423,6 +806,8 @@ impl PageMeta {
             description: post.summary.clone(),
             canonical: absolute_url(config, &format!("/posts/{}.html", post.path)),
             page_type: "article",
+            schema_type: "BlogPosting",
+            author: Some(post.author.clone()),
             published_time: if post.date.is_empty() {
                 None
             } else {
@@ -432,12 +817,28 @@ impl PageMeta {
         }
     }
 
+    fn about(config: &BlogConfig, page: &Page) -> Self {
+        Self {
+            title: page.title.clone(),
+            description: page.summary.clone(),
+            canonical: absolute_url(config, "/about.html"),
+            page_type: "website",
+            schema_type: "AboutPage",
+            author: None,
+            published_time: None,
+            noindex: false,
+        }
+        .with_site_title(&config.title)
+    }
+
     fn not_found(title: &str) -> Self {
         Self {
             title: "Not found".to_string(),
             description: "The requested page does not exist.".to_string(),
             canonical: String::new(),
             page_type: "website",
+            schema_type: "WebPage",
+            author: None,
             published_time: None,
             noindex: true,
         }
@@ -454,7 +855,7 @@ impl PageMeta {
 
 fn page_shell(config: &BlogConfig, meta: &PageMeta, body: &str) -> String {
     let mut head = format!(
-        "<meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\"><title>{}</title><meta name=\"description\" content=\"{}\">",
+        "<meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\"><meta name=\"theme-color\" content=\"#146c63\"><meta name=\"referrer\" content=\"strict-origin-when-cross-origin\"><meta name=\"generator\" content=\"edgerun-blog\"><title>{}</title><meta name=\"description\" content=\"{}\">",
         escape_html(&meta.title),
         escape_attr(&meta.description)
     );
@@ -472,7 +873,7 @@ fn page_shell(config: &BlogConfig, meta: &PageMeta, body: &str) -> String {
         ));
     }
     head.push_str(&format!(
-        "<meta property=\"og:site_name\" content=\"{}\"><meta property=\"og:title\" content=\"{}\"><meta property=\"og:description\" content=\"{}\"><meta property=\"og:type\" content=\"{}\"><meta name=\"twitter:card\" content=\"summary\"><meta name=\"twitter:title\" content=\"{}\"><meta name=\"twitter:description\" content=\"{}\">",
+        "<meta property=\"og:locale\" content=\"en_US\"><meta property=\"og:site_name\" content=\"{}\"><meta property=\"og:title\" content=\"{}\"><meta property=\"og:description\" content=\"{}\"><meta property=\"og:type\" content=\"{}\"><meta name=\"twitter:card\" content=\"summary\"><meta name=\"twitter:title\" content=\"{}\"><meta name=\"twitter:description\" content=\"{}\">",
         escape_attr(&config.title),
         escape_attr(&meta.title),
         escape_attr(&meta.description),
@@ -486,7 +887,18 @@ fn page_shell(config: &BlogConfig, meta: &PageMeta, body: &str) -> String {
             escape_attr(published_time)
         ));
     }
-    head.push_str("<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"><link rel=\"manifest\" href=\"/site.webmanifest\"><link rel=\"alternate\" type=\"application/atom+xml\" href=\"/feed.xml\"><link rel=\"stylesheet\" href=\"/style.css\">");
+    if let Some(author) = meta.author.as_deref() {
+        head.push_str(&format!(
+            "<meta name=\"author\" content=\"{}\"><meta property=\"article:author\" content=\"{}\">",
+            escape_attr(author),
+            escape_attr(author)
+        ));
+    }
+    head.push_str(&format!(
+        "<script type=\"application/ld+json\">{}</script>",
+        render_json_ld(config, meta)
+    ));
+    head.push_str("<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"><link rel=\"manifest\" href=\"/site.webmanifest\"><link rel=\"search\" type=\"application/opensearchdescription+xml\" href=\"/opensearch.xml\" title=\"Search\"><link rel=\"alternate\" type=\"application/atom+xml\" href=\"/feed.xml\" title=\"Feed\"><link rel=\"stylesheet\" href=\"/style.css\">");
     format!(
         "<!doctype html><html lang=\"en\"><head>{}</head><body><a class=\"skip-link\" href=\"#content\">Skip to content</a><header class=\"topbar\"><a class=\"brand\" href=\"/\" aria-label=\"{} home\">{}</a><nav aria-label=\"Primary\"><a href=\"/feed.xml\">Feed</a><er-theme-toggle></er-theme-toggle></nav></header>{}<script src=\"/app.js\"></script></body></html>",
         head,
@@ -503,10 +915,11 @@ fn render_search_json(posts: &[Post]) -> String {
             out.push(',');
         }
         out.push_str(&format!(
-            "{{\"title\":\"{}\",\"url\":\"/posts/{}.html\",\"date\":\"{}\",\"summary\":\"{}\",\"tags\":[{}],\"text\":\"{}\"}}",
+            "{{\"title\":\"{}\",\"url\":\"/posts/{}.html\",\"date\":\"{}\",\"author\":\"{}\",\"summary\":\"{}\",\"tags\":[{}],\"text\":\"{}\"}}",
             escape_json(&post.title),
             escape_json(&post.path),
             escape_json(&post.date),
+            escape_json(&post.author),
             escape_json(&post.summary),
             post.tags.iter().map(|tag| format!("\"{}\"", escape_json(tag))).collect::<Vec<_>>().join(","),
             escape_json(&post.body)
@@ -522,11 +935,12 @@ fn render_feed(config: &BlogConfig, posts: &[Post]) -> String {
     for post in posts.iter().take(20) {
         let url = format!("{base}/posts/{}.html", post.path);
         entries.push_str(&format!(
-            "<entry><title>{}</title><link href=\"{}\"/><id>{}</id><updated>{}</updated><summary>{}</summary></entry>",
+            "<entry><title>{}</title><link href=\"{}\"/><id>{}</id><updated>{}</updated><author><name>{}</name></author><summary>{}</summary></entry>",
             escape_html(&post.title),
             escape_attr(&url),
             escape_html(&url),
             atom_date(&post.date),
+            escape_html(&post.author),
             escape_html(&post.summary)
         ));
     }
@@ -567,6 +981,53 @@ fn render_sitemap(config: &BlogConfig, posts: &[Post]) -> String {
     }
     xml.push_str("</urlset>\n");
     xml
+}
+
+fn render_opensearch(config: &BlogConfig) -> String {
+    format!(
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?><OpenSearchDescription xmlns=\"http://a9.com/-/spec/opensearch/1.1/\"><ShortName>{}</ShortName><Description>{}</Description><InputEncoding>UTF-8</InputEncoding><Url type=\"text/html\" template=\"{}?q={{searchTerms}}\"/><Url type=\"application/json\" template=\"{}/search.json\"/></OpenSearchDescription>",
+        escape_html(&config.title),
+        escape_html(&config.description),
+        escape_attr(&absolute_url(config, "/")),
+        escape_attr(config.base_url.trim_end_matches('/'))
+    )
+}
+
+fn render_json_ld(config: &BlogConfig, meta: &PageMeta) -> String {
+    let mut fields = vec![
+        "\"@context\":\"https://schema.org\"".to_string(),
+        format!("\"@type\":\"{}\"", meta.schema_type),
+        format!("\"name\":\"{}\"", escape_json(&meta.title)),
+        format!("\"description\":\"{}\"", escape_json(&meta.description)),
+        format!(
+            "\"publisher\":{{\"@type\":\"Organization\",\"name\":\"{}\"}}",
+            escape_json(&config.title)
+        ),
+    ];
+    if !meta.canonical.is_empty() {
+        fields.push(format!("\"url\":\"{}\"", escape_json(&meta.canonical)));
+        fields.push(format!(
+            "\"mainEntityOfPage\":\"{}\"",
+            escape_json(&meta.canonical)
+        ));
+    }
+    if let Some(published_time) = meta.published_time.as_deref() {
+        fields.push(format!(
+            "\"datePublished\":\"{}\"",
+            escape_json(published_time)
+        ));
+        fields.push(format!(
+            "\"dateModified\":\"{}\"",
+            escape_json(published_time)
+        ));
+    }
+    if let Some(author) = meta.author.as_deref() {
+        fields.push(format!(
+            "\"author\":{{\"@type\":\"Person\",\"name\":\"{}\"}}",
+            escape_json(author)
+        ));
+    }
+    format!("{{{}}}", fields.join(","))
 }
 
 fn absolute_url(config: &BlogConfig, path: &str) -> String {
@@ -821,6 +1282,13 @@ fn front_value(front: &str, key: &str) -> Option<String> {
     None
 }
 
+fn front_has_key(front: &str, key: &str) -> bool {
+    front
+        .lines()
+        .filter_map(|line| line.split_once(':').map(|(name, _)| name.trim()))
+        .any(|name| name == key)
+}
+
 fn front_list(front: &str, key: &str) -> Vec<String> {
     front_value(front, key)
         .map(|value| {
@@ -999,9 +1467,10 @@ fn render_topic_list(posts: &[Post]) -> String {
 
 fn search_blob(post: &Post) -> String {
     format!(
-        "{} {} {} {}",
+        "{} {} {} {} {}",
         post.title,
         post.summary,
+        post.author,
         post.tags.join(" "),
         post.body
     )
@@ -1103,6 +1572,14 @@ fn static_file_path(root: &Path, route: &str) -> Option<PathBuf> {
 }
 
 fn content_type_for(path: &Path) -> &'static str {
+    match path.file_name().and_then(|name| name.to_str()) {
+        Some("feed.xml") => return "application/atom+xml; charset=utf-8",
+        Some("opensearch.xml") => {
+            return "application/opensearchdescription+xml; charset=utf-8";
+        }
+        Some("sitemap.xml") => return "application/xml; charset=utf-8",
+        _ => {}
+    }
     match path.extension().and_then(|ext| ext.to_str()) {
         Some("html") => "text/html; charset=utf-8",
         Some("svg") => "image/svg+xml",
@@ -1114,6 +1591,17 @@ fn content_type_for(path: &Path) -> &'static str {
         Some("json") => "application/json",
         _ => "application/octet-stream",
     }
+}
+
+fn opensearch_response(config: &BlogConfig) -> Response {
+    Response::new(StatusCode::OK)
+        .with_header(
+            "Content-Type",
+            "application/opensearchdescription+xml; charset=utf-8",
+        )
+        .with_header("Cache-Control", "public, max-age=300")
+        .with_header("X-Content-Type-Options", "nosniff")
+        .with_body(render_opensearch(config))
 }
 
 fn favicon_response() -> Response {
@@ -1172,14 +1660,17 @@ const cards=[...document.querySelectorAll('.post-card')];
 const count=document.getElementById('search-count');
 function applyFilter(term){const q=term.trim().toLowerCase();let shown=0;for(const card of cards){const ok=!q||card.dataset.search.includes(q);card.hidden=!ok;if(ok)shown++}if(count){count.textContent=shown+' post'+(shown===1?'':'s')}}
 if(search){search.addEventListener('input',e=>applyFilter(e.target.value))}
+const initialQuery=new URLSearchParams(location.search).get('q');
+if(search&&initialQuery){search.value=initialQuery;applyFilter(initialQuery)}
 for(const btn of document.querySelectorAll('[data-topic]')){btn.addEventListener('click',()=>{if(search){search.value=btn.dataset.topic;applyFilter(btn.dataset.topic);search.focus()}})}
 "#;
 
 const STYLE: &str = r#"
 :root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent-2:#8b3f2f;--code:#eee6d8}
 :root[data-theme=dark]{--bg:#101418;--panel:#171d22;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent-2:#dfa06b;--code:#232b31}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:14px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none}.topbar nav{display:flex;gap:16px;align-items:center}.topbar nav a{color:var(--muted);text-decoration:none}button,input{font:inherit}.hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:28px;padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:720px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.search-panel{align-self:end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.search-panel label{display:block;font-weight:800;margin-bottom:8px}.search-panel input{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:12px 13px}.search-panel p{margin:10px 0 0;font-size:14px}.layout,.article-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:32px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.posts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article{max-width:780px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(22px,5vw,48px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.empty{max-width:720px;margin:80px auto;padding:0 18px}.muted{color:var(--muted)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:14px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none}.topbar nav{display:flex;gap:16px;align-items:center}.topbar nav a{color:var(--muted);text-decoration:none}button,input{font:inherit}.hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:28px;padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:720px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.search-panel{align-self:end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.search-panel label{display:block;font-weight:800;margin-bottom:8px}.search-panel input{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:12px 13px}.search-panel p{margin:10px 0 0;font-size:14px}.layout,.article-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:32px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.posts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article{max-width:780px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(22px,5vw,48px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.empty{max-width:720px;margin:80px auto;padding:0 18px}.muted{color:var(--muted)}
 @media(max-width:820px){.hero,.layout,.article-layout{grid-template-columns:1fr}.hero{padding-top:42px}.posts{grid-template-columns:1fr}.article{padding:22px}.topbar{position:static}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 "#;
 
 #[cfg(test)]
@@ -1239,7 +1730,7 @@ mod tests {
         fs::create_dir_all(&source).unwrap();
         fs::write(
             source.join("hello.md"),
-            "---\ntitle: Hello\ndate: 2026-04-30\nsummary: One post\ntags: [test]\n---\n# Hello\n\nBody.",
+            "---\ntitle: Hello\ndate: 2026-04-30\nauthor: Ken\nsummary: One post\ntags: [test]\n---\n# Hello\n\nBody.",
         )
         .unwrap();
 
@@ -1251,10 +1742,58 @@ mod tests {
         assert!(output.join("index.html").exists());
         assert!(output.join("posts/hello.html").exists());
         assert!(output.join("sitemap.xml").exists());
+        assert!(output.join("opensearch.xml").exists());
         assert!(fs::read_to_string(output.join("search.json"))
             .unwrap()
             .contains("\"title\":\"Hello\""));
 
         let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn check_reports_stale_static_site() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("edgerun-blog-check-test-{stamp}"));
+        let source = base.join("source");
+        let output = base.join("public");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(
+            source.join("hello.md"),
+            "---\ntitle: Hello\ndate: 2026-04-30\nauthor: Ken\nsummary: One post\ntags: [test]\n---\n# Hello\n\nBody.",
+        )
+        .unwrap();
+        let config = BlogConfig::new(&source);
+        generate_static_site(&config, &output).unwrap();
+        check_static_site(&config, &output).unwrap();
+        fs::write(output.join("posts/old.html"), "stale").unwrap();
+        let error = check_static_site(&config, &output).unwrap_err();
+        assert!(error.to_string().contains("generated output is stale"));
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn validates_publishable_posts() {
+        let posts = vec![Post {
+            title: "No date".to_string(),
+            path: "same".to_string(),
+            source_path: PathBuf::from("posts/a.md"),
+            summary: "Summary".to_string(),
+            date: String::new(),
+            author: String::new(),
+            tags: Vec::new(),
+            body: String::new(),
+            html: String::new(),
+            missing_front_matter: vec![
+                "date".to_string(),
+                "author".to_string(),
+                "tags".to_string(),
+            ],
+        }];
+        let error = validate_content(&posts, None).unwrap_err();
+        assert!(error.to_string().contains("invalid or missing date"));
+        assert!(error.to_string().contains("missing required front matter"));
     }
 }

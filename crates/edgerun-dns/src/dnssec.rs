@@ -170,10 +170,11 @@ fn build_signed_data(rrset: &[DnsRecord], rrsig: &DnsRecord) -> Vec<u8> {
         data.extend_from_slice(&key_tag.to_be_bytes());
         data.extend_from_slice(&super::record::encode_domain_name(signer_name));
 
-        // Canonical form of the RRset
-        // Sort records by owner name (canonical order)
         let mut sorted: Vec<_> = rrset.to_vec();
-        sorted.sort_by(|a, b| canonical_name_cmp(&a.name, &b.name));
+        sorted.sort_by(|a, b| {
+            canonical_name_cmp(&a.name, &b.name)
+                .then_with(|| a.data.to_wire(a.rtype).cmp(&b.data.to_wire(b.rtype)))
+        });
 
         for rr in &sorted {
             // Owner name in canonical form (lowercase)
@@ -181,7 +182,7 @@ fn build_signed_data(rrset: &[DnsRecord], rrsig: &DnsRecord) -> Vec<u8> {
             // Type, class, original TTL, RDLENGTH
             data.extend_from_slice(&rr.rtype.as_u16().to_be_bytes());
             data.extend_from_slice(&rr.rclass.to_be_bytes());
-            data.extend_from_slice(&rr.ttl.to_be_bytes());
+            data.extend_from_slice(&original_ttl.to_be_bytes());
             // RDATA in canonical form
             let rdata = rr.data.to_wire(rr.rtype);
             data.extend_from_slice(&(rdata.len() as u16).to_be_bytes());

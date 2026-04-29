@@ -13,3 +13,11 @@ BLOG_BINARY=${BLOG_BINARY:-edgerun-blog}
   --base-url https://blog.edgerun.tech
 
 git -C "$BLOG_REPO" add .generated
+
+"$BLOG_BINARY" generate \
+  --root "$BLOG_REPO" \
+  --out "$BLOG_PUBLIC" \
+  --title "Edgerun Blog" \
+  --description "Notes from the Edgerun project." \
+  --base-url https://blog.edgerun.tech \
+  --check

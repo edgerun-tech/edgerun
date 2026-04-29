@@ -30,6 +30,7 @@ use edgerun_dns::{
     DnsServerConfig, DnsZone,
 };
 use edgerun_email::imap::{ImapServer, ImapServerConfig, MaildirImapStore};
+use edgerun_email::smtp::relay::queue::{MailIndex, MailQueueStats};
 use edgerun_email::smtp::server::{MailHandler, MaildirStore, SmtpServer, SmtpServerConfig};
 use edgerun_email::smtp::types::MailEnvelope;
 use edgerun_email::smtp::ServerLimits;
@@ -297,6 +298,20 @@ fn run_health_check_from_args(args: &[String]) -> io::Result<()> {
         let smtp_addr = local_probe_addr(spec.bind_address.as_deref(), "0.0.0.0:25");
         check_line_banner("smtp", &smtp_addr, "220")?;
         checks += 1;
+        if spec.relay_enabled {
+            let stats = queue_stats_from_spec(spec)?;
+            println!(
+                "health: ok mail_queue active={} queued={} retrying={} sending={} recipients={} bytes={} max_retries={}",
+                stats.active,
+                stats.queued,
+                stats.retrying,
+                stats.sending,
+                stats.recipients,
+                stats.bytes,
+                stats.max_retry_count
+            );
+            checks += 1;
+        }
 
         if spec.smtps {
             let smtps_addr =
@@ -391,6 +406,7 @@ fn send_system_report_from_args(args: &[String]) -> io::Result<()> {
 
     let report = gather_machine_report();
     let machine = render_machine_report(&report, OutputFormat::Text).map_err(invalid_config)?;
+    let queue_stats = queue_report_block(smtp)?;
     let body = format!(
         "edgerun server report\r\n\
          hostname: {}\r\n\
@@ -398,6 +414,13 @@ fn send_system_report_from_args(args: &[String]) -> io::Result<()> {
          local_domains: {}\r\n\
          maildir_root: {}\r\n\
          queue_dir: {}\r\n\
+         queue_active: {}\r\n\
+         queue_queued: {}\r\n\
+         queue_retrying: {}\r\n\
+         queue_sending: {}\r\n\
+         queue_recipients: {}\r\n\
+         queue_bytes: {}\r\n\
+         queue_max_retries: {}\r\n\
          tls_cert: {}\r\n\
          generated_by: edgerun-server --send-system-report\r\n\
          \r\n\
@@ -407,6 +430,13 @@ fn send_system_report_from_args(args: &[String]) -> io::Result<()> {
         smtp.local_domains.join(","),
         maildir_root.display(),
         smtp.queue_dir.as_deref().unwrap_or("(disabled)"),
+        queue_stats.active,
+        queue_stats.queued,
+        queue_stats.retrying,
+        queue_stats.sending,
+        queue_stats.recipients,
+        queue_stats.bytes,
+        queue_stats.max_retry_count,
         smtp.tls_cert.as_deref().unwrap_or("(none)"),
         normalize_crlf(&machine)
     );
@@ -435,6 +465,13 @@ fn send_system_report_from_args(args: &[String]) -> io::Result<()> {
     store.accept_mail(&envelope)?;
     println!("system-report: delivered locally to {to}");
     Ok(())
+}
+
+fn queue_report_block(spec: &SmtpServerSpec) -> io::Result<MailQueueStats> {
+    if !spec.relay_enabled || spec.queue_dir.is_none() {
+        return Ok(MailQueueStats::default());
+    }
+    queue_stats_from_spec(spec)
 }
 
 fn default_report_recipient(spec: &SmtpServerSpec) -> Option<String> {
@@ -550,8 +587,40 @@ fn check_dns_zone(addr: &str, zone: &DnsZoneSpec) -> io::Result<()> {
         require_rrsig(&negative.authority, DnsRecordType::NSEC, "authority")?;
         require_fresh_rrsigs(&negative.authority, Duration::from_secs(24 * 60 * 60))?;
     }
+    if zone
+        .records
+        .iter()
+        .any(|record| record.record_type.eq_ignore_ascii_case("CAA"))
+    {
+        let caa = dns_query(addr, &zone.origin, DnsRecordType::CAA)?;
+        require_dns_response(
+            &caa,
+            DnsResponseCode::NoError,
+            &zone.origin,
+            DnsRecordType::CAA,
+        )?;
+        require_record(&caa.answers, DnsRecordType::CAA, "answer")?;
+        if zone.dnssec.is_some() {
+            require_rrsig(&caa.answers, DnsRecordType::CAA, "answer")?;
+            require_fresh_rrsigs(&caa.answers, Duration::from_secs(24 * 60 * 60))?;
+        }
+    }
     println!("health: ok dns zone={}", zone.origin);
     Ok(())
+}
+
+fn queue_stats_from_spec(spec: &SmtpServerSpec) -> io::Result<MailQueueStats> {
+    let queue_dir = spec
+        .queue_dir
+        .as_deref()
+        .ok_or_else(|| invalid_config("relay_enabled requires SmtpServer.queue_dir"))?;
+    let rt = edgerun_rt::Builder::new_multi_thread()
+        .build()
+        .map_err(to_io_error)?;
+    rt.block_on(async move {
+        let index = MailIndex::open(Path::new(queue_dir)).await?;
+        Ok(index.stats().await)
+    })
 }
 
 fn dns_query(addr: &str, name: &str, qtype: DnsRecordType) -> io::Result<DnsMessage> {

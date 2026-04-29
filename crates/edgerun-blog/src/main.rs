@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process;
 
-use edgerun_blog::{generate_static_site, start_blog, BlogConfig};
+use edgerun_blog::{check_static_site, generate_static_site, start_blog, BlogConfig};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -21,14 +21,31 @@ fn main() {
 
     match command {
         BlogCommand::Serve(config) => serve(config),
-        BlogCommand::Generate { config, output } => match generate_static_site(&config, &output) {
+        BlogCommand::Generate {
+            config,
+            output,
+            check,
+        } => match if check {
+            check_static_site(&config, &output)
+        } else {
+            generate_static_site(&config, &output)
+        } {
             Ok(site) => {
-                println!(
-                    "generated {} files for {} posts in {}",
-                    site.files.len(),
-                    site.posts,
-                    output.display()
-                );
+                if check {
+                    println!(
+                        "checked {} generated files for {} posts in {}",
+                        site.files.len(),
+                        site.posts,
+                        output.display()
+                    );
+                } else {
+                    println!(
+                        "generated {} files for {} posts in {}",
+                        site.files.len(),
+                        site.posts,
+                        output.display()
+                    );
+                }
             }
             Err(error) => {
                 eprintln!("edgerun-blog generate: {error}");
@@ -59,7 +76,11 @@ fn serve(config: BlogConfig) {
 
 enum BlogCommand {
     Serve(BlogConfig),
-    Generate { config: BlogConfig, output: PathBuf },
+    Generate {
+        config: BlogConfig,
+        output: PathBuf,
+        check: bool,
+    },
 }
 
 fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
@@ -75,6 +96,7 @@ fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
     let mut root = None;
     let mut static_root = None;
     let mut output = None;
+    let mut check = false;
     let mut bind = "127.0.0.1:8088".to_string();
     let mut title = "Edgerun Blog".to_string();
     let mut description = "Notes from the Edgerun project.".to_string();
@@ -83,6 +105,9 @@ fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
     let mut i = first;
     while i < args.len() {
         match args[i].as_str() {
+            "--check" => {
+                check = true;
+            }
             "--root" if i + 1 < args.len() => {
                 root = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
@@ -130,6 +155,7 @@ fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
         "generate" => Ok(BlogCommand::Generate {
             config,
             output: output.ok_or_else(|| "missing --out /path/to/static/output".to_string())?,
+            check,
         }),
         _ => unreachable!(),
     }
@@ -138,7 +164,7 @@ fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
 fn print_usage(program: &str) {
     println!(
         "usage:\n  {program} serve --root /srv/blog --bind 127.0.0.1:8088 [--static-root /srv/blog/.generated] \\
-         [--title 'Edgerun Blog'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n  {program} generate --root /srv/blog --out /srv/blog/.generated \\
+         [--title 'Edgerun Blog'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n  {program} generate --root /srv/blog --out /srv/blog/.generated [--check] \\
          [--title 'Edgerun Blog'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n\n\
          The command name is optional; omitted commands default to serve."
     );

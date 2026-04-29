@@ -300,42 +300,26 @@ async fn cmd_stats(data_root: &PathBuf) -> Result<(), String> {
     let index = MailIndex::open(data_root)
         .await
         .map_err(|e| e.to_string())?;
-    let messages = index.list_queued().await;
+    let stats = index.stats().await;
 
-    let total = messages.len();
-    let queued = messages
-        .iter()
-        .filter(|m| matches!(m.status, MailStatus::Queued))
-        .count();
-    let retrying = messages
-        .iter()
-        .filter(|m| matches!(m.status, MailStatus::Retrying))
-        .count();
-    let sending = messages
-        .iter()
-        .filter(|m| matches!(m.status, MailStatus::Sending))
-        .count();
-
-    let total_recipients: usize = messages.iter().map(|m| m.recipients.len()).sum();
-    let avg_retries: f64 = if total > 0 {
-        messages.iter().map(|m| m.retry_count as f64).sum::<f64>() / total as f64
+    let avg_retries: f64 = if stats.active > 0 {
+        stats.retry_count_total as f64 / stats.active as f64
     } else {
         0.0
     };
 
-    let total_data: usize = messages.iter().map(|m| m.data.len()).sum();
-
     println!("Queue Statistics:");
-    println!("  Total queued:       {}", total);
-    println!("  Queued (new):       {}", queued);
-    println!("  Retrying:           {}", retrying);
-    println!("  Sending:            {}", sending);
-    println!("  Total recipients:   {}", total_recipients);
+    println!("  Active:             {}", stats.active);
+    println!("  Queued (new):       {}", stats.queued);
+    println!("  Retrying:           {}", stats.retrying);
+    println!("  Sending:            {}", stats.sending);
+    println!("  Total recipients:   {}", stats.recipients);
     println!("  Avg retry count:    {:.1}", avg_retries);
+    println!("  Max retry count:    {}", stats.max_retry_count);
     println!(
         "  Total data:         {} bytes ({:.1} KB)",
-        total_data,
-        total_data as f64 / 1024.0
+        stats.bytes,
+        stats.bytes as f64 / 1024.0
     );
 
     Ok(())

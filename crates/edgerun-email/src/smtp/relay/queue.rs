@@ -88,6 +88,19 @@ pub enum MailStatus {
     Bounced,
 }
 
+/// Summary of active outbound queue state.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MailQueueStats {
+    pub active: usize,
+    pub queued: usize,
+    pub retrying: usize,
+    pub sending: usize,
+    pub recipients: usize,
+    pub bytes: usize,
+    pub retry_count_total: i64,
+    pub max_retry_count: i32,
+}
+
 impl MailStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -619,6 +632,24 @@ impl MailIndex {
             .filter(|m| matches!(m.status, MailStatus::Queued | MailStatus::Retrying))
             .cloned()
             .collect()
+    }
+
+    pub async fn stats(&self) -> MailQueueStats {
+        let mut stats = MailQueueStats::default();
+        for message in self.messages.read().await.values() {
+            match message.status {
+                MailStatus::Queued => stats.queued += 1,
+                MailStatus::Retrying => stats.retrying += 1,
+                MailStatus::Sending => stats.sending += 1,
+                MailStatus::Delivered | MailStatus::Bounced => continue,
+            }
+            stats.active += 1;
+            stats.recipients += message.recipients.len();
+            stats.bytes += message.data.len();
+            stats.retry_count_total += i64::from(message.retry_count);
+            stats.max_retry_count = stats.max_retry_count.max(message.retry_count);
+        }
+        stats
     }
 }
 
