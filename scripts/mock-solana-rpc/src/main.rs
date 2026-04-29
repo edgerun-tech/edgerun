@@ -81,6 +81,33 @@ fn make_send_response(tx_hash: &str) -> String {
     format!(r#"{{"jsonrpc": "2.0", "result": "{}", "id": 1}}"#, tx_hash)
 }
 
+fn make_signature_status_response() -> String {
+    r#"{
+        "jsonrpc": "2.0",
+        "result": {
+            "context": { "slot": 1 },
+            "value": [
+                {
+                    "slot": 1,
+                    "confirmations": 1,
+                    "err": null,
+                    "confirmationStatus": "confirmed"
+                }
+            ]
+        },
+        "id": 1
+    }"#
+    .to_string()
+}
+
+fn make_rent_response() -> String {
+    r#"{"jsonrpc": "2.0", "result": 0, "id": 1}"#.to_string()
+}
+
+fn make_program_accounts_response() -> String {
+    r#"{"jsonrpc": "2.0", "result": [], "id": 1}"#.to_string()
+}
+
 fn handle_request(state: &MockState, body: &str) -> String {
     // Simple JSON-RPC parsing
     if body.contains("getLatestBlockhash") {
@@ -96,6 +123,18 @@ fn handle_request(state: &MockState, body: &str) -> String {
             "id": 1
         }"#
         .to_string();
+    }
+
+    if body.contains("getMinimumBalanceForRentExemption") {
+        return make_rent_response();
+    }
+
+    if body.contains("getSignatureStatuses") {
+        return make_signature_status_response();
+    }
+
+    if body.contains("getProgramAccounts") {
+        return make_program_accounts_response();
     }
 
     if body.contains("getAccountInfo") {
@@ -116,13 +155,25 @@ fn handle_request(state: &MockState, body: &str) -> String {
 }
 
 async fn handle_connection(state: Arc<MockState>, mut stream: TcpStream) {
-    let mut buf = [0u8; 4096];
+    let mut buf = vec![0u8; 8192];
     let n = match stream.read(&mut buf).await {
         Ok(n) if n > 0 => n,
         _ => return,
     };
 
-    let body = String::from_utf8_lossy(&buf[..n]).to_string();
+    let mut request = buf[..n].to_vec();
+    if let Some(content_length) = content_length(&request) {
+        while request_body_len(&request) < content_length {
+            let mut chunk = [0u8; 8192];
+            let n = match stream.read(&mut chunk).await {
+                Ok(n) if n > 0 => n,
+                _ => break,
+            };
+            request.extend_from_slice(&chunk[..n]);
+        }
+    }
+
+    let body = String::from_utf8_lossy(&request).to_string();
 
     let response = handle_request(&state, &body);
 
@@ -135,9 +186,30 @@ async fn handle_connection(state: Arc<MockState>, mut stream: TcpStream) {
     stream.write_all(response.as_bytes()).await.ok();
 }
 
+fn content_length(request: &[u8]) -> Option<usize> {
+    let headers = String::from_utf8_lossy(request);
+    headers.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("content-length")
+            .then(|| value.trim().parse().ok())
+            .flatten()
+    })
+}
+
+fn request_body_len(request: &[u8]) -> usize {
+    request
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|idx| request.len().saturating_sub(idx + 4))
+        .unwrap_or(0)
+}
+
 #[tokio::main]
 async fn main() {
-    let addr: SocketAddr = "127.0.0.1:8899".parse().unwrap();
+    let addr: SocketAddr = std::env::var("MOCK_SOLANA_RPC_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:8899".to_string())
+        .parse()
+        .unwrap();
     let listener = TcpListener::bind(addr).await.unwrap();
 
     let state = Arc::new(MockState::new());
