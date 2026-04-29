@@ -2310,19 +2310,6 @@ fn append_bt_stats(out: &mut [u8], len: &mut usize) {
         len,
         ESP32S3_BT_BLOB_HCI_TX.load(core::sync::atomic::Ordering::Acquire),
     );
-    let hci = edgerun_platform::esp32s3_ble_blob::hci_stats();
-    append_bytes(out, len, b" hci_rx=");
-    append_u32_dec(out, len, hci.rx);
-    append_bytes(out, len, b" ready=");
-    append_u32_dec(out, len, hci.send_available);
-    append_bytes(out, len, b" evt=0x");
-    append_hex_nibble(out, len, hci.last_event >> 4);
-    append_hex_nibble(out, len, hci.last_event);
-    append_bytes(out, len, b" st=0x");
-    append_hex_nibble(out, len, hci.last_status >> 4);
-    append_hex_nibble(out, len, hci.last_status);
-    append_bytes(out, len, b" op=0x");
-    append_u16(out, len, hci.last_opcode);
     append_bytes(out, len, b"\n");
 }
 
@@ -2346,6 +2333,11 @@ fn try_send_esp32s3_bt_adv() -> bool {
     false
 }
 
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
 #[cfg(not(any(
     all(
         target_arch = "xtensa",
@@ -2414,6 +2406,7 @@ fn write_bt_adv(seq: u16) {
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
 }
 
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
@@ -2442,6 +2435,11 @@ fn write_headless_bt_adv_raw() {
     write_headless_bt_stats_raw();
 }
 
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",

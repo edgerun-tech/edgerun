@@ -43,6 +43,8 @@ pub struct MaildirStore {
     user_domains: Arc<RwLock<HashMap<String, Vec<String>>>>,
     /// Optional mailbox that receives unknown users at registered local domains.
     catch_all_user: Arc<RwLock<Option<String>>>,
+    /// SMTP AUTH passwords keyed by username and address aliases.
+    auth_users: Arc<RwLock<HashMap<String, String>>>,
     /// Counter for unique message filenames.
     counter: AtomicU64,
     /// Validated sender domains (simple allowlist).
@@ -57,6 +59,7 @@ impl MaildirStore {
             root: root.to_path_buf(),
             user_domains: Arc::new(RwLock::new(HashMap::new())),
             catch_all_user: Arc::new(RwLock::new(None)),
+            auth_users: Arc::new(RwLock::new(HashMap::new())),
             counter: AtomicU64::new(0),
             valid_senders: Arc::new(RwLock::new(Vec::new())),
         })
@@ -78,6 +81,27 @@ impl MaildirStore {
             domains.iter().map(|d| d.to_string()).collect(),
         );
 
+        Ok(())
+    }
+
+    /// Register SMTP AUTH credentials for a local mailbox user.
+    pub fn set_user_password(&self, username: &str, password: &str) -> io::Result<()> {
+        let domains = self.user_domains.read().unwrap();
+        let Some(user_domains) = domains.get(username) else {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("auth user not registered: {username}"),
+            ));
+        };
+
+        let mut auth_users = self.auth_users.write().unwrap();
+        auth_users.insert(username.to_ascii_lowercase(), password.to_string());
+        for domain in user_domains {
+            auth_users.insert(
+                format!("{}@{}", username, domain).to_ascii_lowercase(),
+                password.to_string(),
+            );
+        }
         Ok(())
     }
 
@@ -301,8 +325,27 @@ impl MailHandler for MaildirStore {
         Ok(())
     }
 
-    fn authenticate(&self, _mechanism: &str, _credentials: &AuthCredentials) -> AuthResult {
-        AuthResult::Unsupported
+    fn authenticate(&self, mechanism: &str, credentials: &AuthCredentials) -> AuthResult {
+        if !matches!(mechanism.to_ascii_uppercase().as_str(), "PLAIN" | "LOGIN") {
+            return AuthResult::Unsupported;
+        }
+
+        let authc_id = credentials.authc_id.to_ascii_lowercase();
+        let authz_id = credentials.authz_id.to_ascii_lowercase();
+        let auth_users = self.auth_users.read().unwrap();
+        let Some(stored_password) = auth_users.get(&authc_id) else {
+            return AuthResult::Failed;
+        };
+        if stored_password != &credentials.password {
+            return AuthResult::Failed;
+        }
+        if !authz_id.is_empty()
+            && authz_id != authc_id
+            && auth_local_part(&authz_id) != auth_local_part(&authc_id)
+        {
+            return AuthResult::Failed;
+        }
+        AuthResult::Authenticated(credentials.authc_id.clone())
     }
 
     fn auth_required(&self) -> bool {
@@ -371,6 +414,10 @@ fn hostname() -> String {
         .unwrap_or_else(|| "localhost".to_string())
 }
 
+fn auth_local_part(identity: &str) -> &str {
+    identity.split_once('@').map(|(local, _)| local).unwrap_or(identity)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,6 +445,33 @@ mod tests {
         assert!(dir.join("ken/new").exists());
         assert!(dir.join("ken/cur").exists());
         assert!(dir.join("ken/tmp").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_smtp_auth_known_user() {
+        let dir = test_dir("smtp_auth");
+        let store = MaildirStore::new(&dir).unwrap();
+        store.add_user("ken", &["edgerun.mail"]).unwrap();
+        store.set_user_password("ken", "secret").unwrap();
+
+        let creds = AuthCredentials {
+            authz_id: String::new(),
+            authc_id: "ken@edgerun.mail".to_string(),
+            password: "secret".to_string(),
+        };
+        assert!(matches!(
+            store.authenticate("PLAIN", &creds),
+            AuthResult::Authenticated(_)
+        ));
+
+        let wrong = AuthCredentials {
+            authz_id: String::new(),
+            authc_id: "ken".to_string(),
+            password: "wrong".to_string(),
+        };
+        assert!(matches!(store.authenticate("PLAIN", &wrong), AuthResult::Failed));
 
         let _ = fs::remove_dir_all(&dir);
     }

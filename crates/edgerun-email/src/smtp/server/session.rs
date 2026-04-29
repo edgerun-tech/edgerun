@@ -50,6 +50,8 @@ pub struct SmtpServerConfig {
     pub starttls: bool,
     /// Comma-separated list of supported AUTH mechanisms (e.g. "PLAIN,LOGIN").
     pub auth_mechanisms: Vec<String>,
+    /// Require successful SMTP AUTH before MAIL FROM.
+    pub require_auth: bool,
     #[cfg(feature = "tls")]
     pub tls_cert: Option<CertificateAndKey>,
     /// Per-IP rate limiter. If None, no rate limiting is applied.
@@ -75,6 +77,7 @@ impl Default for SmtpServerConfig {
             smtps: false,
             starttls: true,
             auth_mechanisms: vec!["PLAIN".to_string(), "LOGIN".to_string()],
+            require_auth: false,
             #[cfg(feature = "tls")]
             tls_cert: None,
             rate_limiter: None,
@@ -952,6 +955,16 @@ fn base64_decode_raw(encoded: &str) -> io::Result<Vec<u8>> {
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
+#[cfg(feature = "tls")]
+fn smtp_tls_configured(config: &SmtpServerConfig) -> bool {
+    config.tls_cert.is_some()
+}
+
+#[cfg(not(feature = "tls"))]
+fn smtp_tls_configured(_config: &SmtpServerConfig) -> bool {
+    false
+}
+
 // ===========================================================================
 // Command Dispatcher
 // ===========================================================================
@@ -981,8 +994,10 @@ async fn handle_command(
                 lines.push(ext.to_string());
             }
 
-            // AUTH extension (only if not already authenticated)
-            if !*authenticated && !config.auth_mechanisms.is_empty() {
+            // AUTH extension is only advertised before authentication, and only
+            // on encrypted transports when TLS is configured for the listener.
+            let auth_transport_ok = transport.is_tls() || !smtp_tls_configured(config);
+            if !*authenticated && auth_transport_ok && !config.auth_mechanisms.is_empty() {
                 let mech = config.auth_mechanisms.join(" ");
                 lines.push(format!("AUTH {}", mech));
             }
@@ -1014,7 +1029,7 @@ async fn handle_command(
                 return Ok(ControlFlow::Continue);
             }
 
-            if handler.auth_required() && !*authenticated {
+            if (config.require_auth || handler.auth_required()) && !*authenticated {
                 send_response(transport, &SmtpResponse::auth_required()).await?;
                 return Ok(ControlFlow::Continue);
             }
@@ -1161,8 +1176,10 @@ async fn handle_command(
             }
 
             // Check size limit
-            if config.limits.max_message_size > 0
-                && envelope.data.len() + size > config.limits.max_message_size
+            let requested_size = envelope.data.len().checked_add(size);
+            if requested_size.is_none()
+                || (config.limits.max_message_size > 0
+                    && requested_size.unwrap_or(usize::MAX) > config.limits.max_message_size)
             {
                 send_response(transport, &SmtpResponse::message_too_large()).await?;
                 return Ok(ControlFlow::Continue);
@@ -1263,6 +1280,14 @@ async fn handle_command(
             mechanism,
             initial_response,
         } => {
+            if !transport.is_tls() && smtp_tls_configured(config) {
+                send_response(
+                    transport,
+                    &SmtpResponse::bad_sequence("TLS required before AUTH"),
+                )
+                .await?;
+                return Ok(ControlFlow::Continue);
+            }
             if *authenticated {
                 send_response(
                     transport,

@@ -8,7 +8,6 @@
 use alloc::alloc::{alloc, Layout};
 use core::ffi::{c_char, c_int, c_void};
 use core::ptr;
-use core::sync::atomic::{AtomicU32, Ordering};
 
 pub const VERSION_MAX: usize = 64;
 
@@ -27,23 +26,6 @@ pub struct BleBlobStatus {
     pub vhci_rc: i32,
     pub hci_tx: u32,
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct HciStats {
-    pub rx: u32,
-    pub send_available: u32,
-    pub last_event: u8,
-    pub last_status: u8,
-    pub last_opcode: u16,
-    pub last_len: u16,
-}
-
-static HCI_RX_COUNT: AtomicU32 = AtomicU32::new(0);
-static HCI_SEND_AVAILABLE_COUNT: AtomicU32 = AtomicU32::new(0);
-static HCI_LAST_EVENT: AtomicU32 = AtomicU32::new(0);
-static HCI_LAST_STATUS: AtomicU32 = AtomicU32::new(0xff);
-static HCI_LAST_OPCODE: AtomicU32 = AtomicU32::new(0);
-static HCI_LAST_LEN: AtomicU32 = AtomicU32::new(0);
 
 impl BleBlobStatus {
     pub const fn empty() -> Self {
@@ -97,17 +79,6 @@ pub fn probe() -> Result<BleBlobStatus, BleBlobError> {
 
 pub fn send_advertising() -> u32 {
     send_adv_sequence()
-}
-
-pub fn hci_stats() -> HciStats {
-    HciStats {
-        rx: HCI_RX_COUNT.load(Ordering::Acquire),
-        send_available: HCI_SEND_AVAILABLE_COUNT.load(Ordering::Acquire),
-        last_event: HCI_LAST_EVENT.load(Ordering::Acquire) as u8,
-        last_status: HCI_LAST_STATUS.load(Ordering::Acquire) as u8,
-        last_opcode: HCI_LAST_OPCODE.load(Ordering::Acquire) as u16,
-        last_len: HCI_LAST_LEN.load(Ordering::Acquire) as u16,
-    }
 }
 
 fn version_probe() -> Result<BleBlobStatus, BleBlobError> {
@@ -201,26 +172,9 @@ static VHCI_CALLBACK: VhciHostCallback = VhciHostCallback {
     notify_host_recv: Some(vhci_recv),
 };
 
-unsafe extern "C" fn vhci_send_available() {
-    HCI_SEND_AVAILABLE_COUNT.fetch_add(1, Ordering::AcqRel);
-}
+unsafe extern "C" fn vhci_send_available() {}
 
-unsafe extern "C" fn vhci_recv(data: *mut u8, len: u16) -> i32 {
-    HCI_RX_COUNT.fetch_add(1, Ordering::AcqRel);
-    HCI_LAST_LEN.store(len as u32, Ordering::Release);
-    if !data.is_null() && len >= 2 {
-        let event = data.read();
-        HCI_LAST_EVENT.store(event as u32, Ordering::Release);
-        if event == 0x0e && len >= 6 {
-            HCI_LAST_STATUS.store(data.add(5).read() as u32, Ordering::Release);
-            let opcode = data.add(3).read() as u16 | ((data.add(4).read() as u16) << 8);
-            HCI_LAST_OPCODE.store(opcode as u32, Ordering::Release);
-        } else if event == 0x0f && len >= 6 {
-            HCI_LAST_STATUS.store(data.add(2).read() as u32, Ordering::Release);
-            let opcode = data.add(4).read() as u16 | ((data.add(5).read() as u16) << 8);
-            HCI_LAST_OPCODE.store(opcode as u32, Ordering::Release);
-        }
-    }
+unsafe extern "C" fn vhci_recv(_data: *mut u8, _len: u16) -> i32 {
     0
 }
 
@@ -490,17 +444,13 @@ unsafe extern "C" fn task_create(
     1
 }
 
-unsafe extern "C" fn queue_recv(
-    _queue: *mut c_void,
-    _item: *mut c_void,
-    _block_time_ms: u32,
-) -> i32 {
+unsafe extern "C" fn queue_recv(queue: *mut c_void, item: *mut c_void, _block_time_ms: u32) -> i32 {
     0
 }
 
 unsafe extern "C" fn queue_recv_isr(
-    _queue: *mut c_void,
-    _item: *mut c_void,
+    queue: *mut c_void,
+    item: *mut c_void,
     _hptw: *mut c_void,
 ) -> i32 {
     0

@@ -6,7 +6,7 @@
 |------|---------|
 | `01-dns-zone.yaml` | DNS zone for `edgerun.tech` - A, MX, SPF, DMARC records |
 | `02-dns-zone-dkim.yaml` | DKIM public key DNS record (selector: mail) |
-| `03-smtp-server.yaml` | SMTP server config (port 25, STARTTLS, relay) |
+| `03-smtp-server.yaml` | SMTP server config (implemented: port 25 MX, port 465 SMTPS submission, port 587 STARTTLS submission, relay) |
 | `04-imap-server.yaml` | IMAP server config (port 143, IMAPS) |
 
 ## Required Key Material
@@ -38,7 +38,8 @@ key at `/etc/edgerun/mail/dkim-mail.private.pem`.
 | Service | Port | Protocol |
 |---------|------|----------|
 | SMTP | 25 | SMTP (with STARTTLS) |
-| SMTP | 465 | SMTPS (implicit TLS) |
+| SMTP submission | 465 | SMTPS (implicit TLS, authenticated when users have passwords) |
+| SMTP submission | 587 | SMTP with STARTTLS (authenticated when users have passwords) |
 | IMAP | 143 | IMAP (with STARTTLS) |
 | IMAP | 993 | IMAPS (implicit TLS) |
 | DNS | 53 | UDP/TCP |

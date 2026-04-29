@@ -377,6 +377,15 @@ name = "edgerun-biometrics"
 version = "0.1.1"
 
 [[package]]
+name = "edgerun-blog"
+version = "0.1.1"
+dependencies = [
+ "edgerun-http",
+ "edgerun-log",
+ "edgerun-rt",
+]
+
+[[package]]
 name = "edgerun-bluetooth"
 version = "0.1.1"
 dependencies = [

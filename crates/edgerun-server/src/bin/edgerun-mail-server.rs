@@ -216,18 +216,28 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
     }
 
     if let Some(webmail) = build_webmail_config(&smtp_specs, &imap_specs)? {
-        let http = HttpServer::new(WebmailHandler::new(webmail.clone()))
-            .bind("0.0.0.0:80")
-            .await
-            .map_err(to_io_error)?;
-        let token = shutdown.clone();
-        tasks.push(edgerun_rt::spawn(async move {
-            http.serve_with_shutdown(token).await.map_err(to_io_error)
-        }));
+        let tls = load_tls_from_spec(webmail.tls_cert.as_deref(), webmail.tls_key.as_deref())?;
+        if tls.is_some() {
+            let http = HttpServer::new(HttpsRedirectHandler::new(webmail.hostname.clone()))
+                .bind("0.0.0.0:80")
+                .await
+                .map_err(to_io_error)?;
+            let token = shutdown.clone();
+            tasks.push(edgerun_rt::spawn(async move {
+                http.serve_with_shutdown(token).await.map_err(to_io_error)
+            }));
+        } else {
+            let http = HttpServer::new(WebmailHandler::new(webmail.clone()))
+                .bind("0.0.0.0:80")
+                .await
+                .map_err(to_io_error)?;
+            let token = shutdown.clone();
+            tasks.push(edgerun_rt::spawn(async move {
+                http.serve_with_shutdown(token).await.map_err(to_io_error)
+            }));
+        }
 
-        if let Some(tls) =
-            load_tls_from_spec(webmail.tls_cert.as_deref(), webmail.tls_key.as_deref())?
-        {
+        if let Some(tls) = tls {
             let https = HttpServer::new(WebmailHandler::new(webmail))
                 .with_tls(tls)
                 .bind("0.0.0.0:443")
@@ -240,8 +250,8 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
         }
     }
 
-    for spec in smtp_specs {
-        for server in build_smtp_servers(&spec)? {
+    for spec in &smtp_specs {
+        for server in build_smtp_servers(spec, &imap_specs)? {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move { server.run(token).await }));
         }
@@ -397,6 +407,32 @@ impl WebmailHandler {
             },
             _ => Response::not_found(),
         }
+    }
+}
+
+struct HttpsRedirectHandler {
+    hostname: String,
+}
+
+impl HttpsRedirectHandler {
+    fn new(hostname: String) -> Self {
+        Self { hostname }
+    }
+}
+
+impl Handler for HttpsRedirectHandler {
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+        Box::pin(async move {
+            if request.method().as_str() != "GET" && request.method().as_str() != "HEAD" {
+                return method_not_allowed("GET, HEAD");
+            }
+            let target = request.uri().request_target();
+            let location = format!("https://{}{}", self.hostname, target);
+            Response::text(StatusCode::new(308).unwrap(), "")
+                .with_header("Location", &location)
+                .with_header("Cache-Control", "no-store")
+                .with_header("X-Content-Type-Options", "nosniff")
+        })
     }
 }
 
@@ -1727,7 +1763,10 @@ fn acme_io_error(error: edgerun_acme::AcmeError) -> io::Error {
     }
 }
 
-fn build_smtp_servers(spec: &SmtpServerSpec) -> io::Result<Vec<SmtpServer>> {
+fn build_smtp_servers(
+    spec: &SmtpServerSpec,
+    imap_specs: &[ImapServerSpec],
+) -> io::Result<Vec<SmtpServer>> {
     let tls_cert = load_tls_from_spec(spec.tls_cert.as_deref(), spec.tls_key.as_deref())?;
     let mut config = SmtpServerConfig {
         bind_addr: spec
@@ -1752,6 +1791,7 @@ fn build_smtp_servers(spec: &SmtpServerSpec) -> io::Result<Vec<SmtpServer>> {
             .clone()
             .unwrap_or_else(|| "127.0.0.1:53".to_string()),
         auth_mechanisms: Vec::new(),
+        require_auth: false,
         #[cfg(feature = "tls")]
         tls_cert: tls_cert.clone(),
         #[cfg(feature = "dkim")]
@@ -1763,13 +1803,27 @@ fn build_smtp_servers(spec: &SmtpServerSpec) -> io::Result<Vec<SmtpServer>> {
         spec.maildir_root.as_deref(),
         "SmtpServer.maildir_root",
     )?)?);
-    register_smtp_users(&handler, spec)?;
+    let auth_enabled = register_smtp_users(&handler, spec, imap_specs)?;
+    if auth_enabled {
+        config.auth_mechanisms = vec!["PLAIN".to_string(), "LOGIN".to_string()];
+    }
     let mut servers = vec![SmtpServer::new(config.clone(), handler.clone())?];
 
     if spec.smtps {
         config.bind_addr = implicit_tls_addr(&config.bind_addr, 465);
         config.smtps = true;
         config.starttls = false;
+        config.require_auth = auth_enabled;
+        servers.push(SmtpServer::new(config.clone(), handler.clone())?);
+    }
+    if spec.starttls && auth_enabled && tls_cert.is_some() {
+        config.bind_addr = implicit_tls_addr(
+            spec.bind_address.as_deref().unwrap_or("0.0.0.0:25"),
+            587,
+        );
+        config.smtps = false;
+        config.starttls = true;
+        config.require_auth = true;
         servers.push(SmtpServer::new(config, handler)?);
     }
     Ok(servers)
@@ -1812,8 +1866,13 @@ fn build_imap_servers(spec: &ImapServerSpec) -> io::Result<Vec<ImapServer>> {
     Ok(servers)
 }
 
-fn register_smtp_users(store: &MaildirStore, spec: &SmtpServerSpec) -> io::Result<()> {
+fn register_smtp_users(
+    store: &MaildirStore,
+    spec: &SmtpServerSpec,
+    imap_specs: &[ImapServerSpec],
+) -> io::Result<bool> {
     let users = configured_users(spec.users.as_deref(), &spec.local_domains);
+    let mut auth_enabled = false;
     for user in users {
         let domains = user
             .domains
@@ -1821,11 +1880,27 @@ fn register_smtp_users(store: &MaildirStore, spec: &SmtpServerSpec) -> io::Resul
             .unwrap_or(spec.local_domains.as_slice());
         let domain_refs: Vec<&str> = domains.iter().map(String::as_str).collect();
         store.add_user(&user.username, &domain_refs)?;
+        if let Some(password) = smtp_user_password(&user, imap_specs) {
+            store.set_user_password(&user.username, &password)?;
+            auth_enabled = true;
+        }
     }
     if let Some(username) = spec.catch_all_user.as_deref() {
         store.set_catch_all_user(username)?;
     }
-    Ok(())
+    Ok(auth_enabled)
+}
+
+fn smtp_user_password(user: &MailUserSpec, imap_specs: &[ImapServerSpec]) -> Option<String> {
+    if let Some(password) = user.password.clone() {
+        return Some(password);
+    }
+    imap_specs
+        .iter()
+        .filter_map(|spec| spec.users.as_deref())
+        .flatten()
+        .find(|imap_user| imap_user.username == user.username)
+        .and_then(|imap_user| imap_user.password.clone())
 }
 
 fn register_imap_users(store: &MaildirImapStore, spec: &ImapServerSpec) {
