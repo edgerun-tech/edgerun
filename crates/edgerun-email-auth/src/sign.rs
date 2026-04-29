@@ -132,7 +132,6 @@ impl DkimSigner {
             }
         }
 
-        signed_header_names.push("dkim-signature".to_string());
         let signed_header_names_str = signed_header_names.join(":");
 
         let dkim_header = format!(
@@ -151,10 +150,7 @@ impl DkimSigner {
 
         let canonical_headers = canonicalize_headers(headers_with_dkim.as_slice())?;
 
-        let mut sign_data = canonical_headers;
-        sign_data.extend(canonical_body);
-
-        let hash = Sha256::digest(&sign_data);
+        let hash = Sha256::digest(&canonical_headers);
         let signing_key =
             edgerun_crypto::rsa::pkcs1v15::SigningKey::<Sha256>::new((*self.private_key).clone());
         let signature = edgerun_crypto::rsa::signature::Signer::sign(&signing_key, &hash);
@@ -267,4 +263,24 @@ fn unfold_headers(s: &str) -> String {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dkim_h_tag_does_not_include_dkim_signature() {
+        let signer = DkimSigner::generate("example.com", "mail").unwrap();
+        let header = signer
+            .sign(
+                b"From: a@example.com\r\nTo: b@example.net\r\nSubject: Test",
+                b"Hello\r\n",
+            )
+            .unwrap();
+
+        assert!(header.starts_with("DKIM-Signature: "));
+        assert!(header.contains("h=from:to:subject;"));
+        assert!(!header.contains("dkim-signature"));
+    }
 }

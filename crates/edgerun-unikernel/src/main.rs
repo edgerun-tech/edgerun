@@ -840,6 +840,10 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
                 display_console_log("ctl bt start");
                 write_bt_start(frame.seq);
             }
+            b"btadv" | b"btadv\n" | b"ble adv" | b"ble adv\n" => {
+                display_console_log("ctl bt adv");
+                write_bt_adv(frame.seq);
+            }
             b"btstats" | b"btstats\n" | b"ble stats" | b"ble stats\n" => {
                 write_bt_stats(frame.seq);
             }
@@ -1176,6 +1180,7 @@ fn handle_headless_raw_command(command: &[u8]) {
             }
         }
         b"bt" | b"ble" | b"bt start" => write_headless_bt_start_raw(),
+        b"btadv" | b"ble adv" => write_headless_bt_adv_raw(),
         b"btstats" | b"ble stats" => write_headless_bt_stats_raw(),
         b"wifistats" | b"wifi stats" => write_headless_wifi_stats_raw(),
         b"wifiinit" => write_headless_wifi_init_raw(),
@@ -2218,6 +2223,12 @@ static ESP32S3_BT_BLOB_HCI_TX: core::sync::atomic::AtomicU32 =
     feature = "esp32s3-ble-blob"
 ))]
 fn try_start_esp32s3_bt() -> bool {
+    if ESP32S3_BT_BLOB_STATE.load(core::sync::atomic::Ordering::Acquire) == 1 {
+        return ESP32S3_BT_BLOB_OSI_RC.load(core::sync::atomic::Ordering::Acquire) == 0
+            && ESP32S3_BT_BLOB_INIT_RC.load(core::sync::atomic::Ordering::Acquire) == 0
+            && ESP32S3_BT_BLOB_ENABLE_RC.load(core::sync::atomic::Ordering::Acquire) == 0
+            && ESP32S3_BT_BLOB_VHCI_RC.load(core::sync::atomic::Ordering::Acquire) == 0;
+    }
     match edgerun_platform::esp32s3_ble_blob::probe() {
         Ok(status) => {
             unsafe {
@@ -2239,7 +2250,6 @@ fn try_start_esp32s3_bt() -> bool {
                 && status.init_rc == 0
                 && status.enable_rc == 0
                 && status.vhci_rc == 0
-                && status.hci_tx >= 4
         }
         Err(_) => {
             ESP32S3_BT_BLOB_STATE.store(2, core::sync::atomic::Ordering::Release);
@@ -2300,7 +2310,40 @@ fn append_bt_stats(out: &mut [u8], len: &mut usize) {
         len,
         ESP32S3_BT_BLOB_HCI_TX.load(core::sync::atomic::Ordering::Acquire),
     );
+    let hci = edgerun_platform::esp32s3_ble_blob::hci_stats();
+    append_bytes(out, len, b" hci_rx=");
+    append_u32_dec(out, len, hci.rx);
+    append_bytes(out, len, b" ready=");
+    append_u32_dec(out, len, hci.send_available);
+    append_bytes(out, len, b" evt=0x");
+    append_hex_nibble(out, len, hci.last_event >> 4);
+    append_hex_nibble(out, len, hci.last_event);
+    append_bytes(out, len, b" st=0x");
+    append_hex_nibble(out, len, hci.last_status >> 4);
+    append_hex_nibble(out, len, hci.last_status);
+    append_bytes(out, len, b" op=0x");
+    append_u16(out, len, hci.last_opcode);
     append_bytes(out, len, b"\n");
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+))]
+fn try_send_esp32s3_bt_adv() -> bool {
+    let tx = edgerun_platform::esp32s3_ble_blob::send_advertising();
+    ESP32S3_BT_BLOB_HCI_TX.store(tx, core::sync::atomic::Ordering::Release);
+    tx >= 4
+}
+
+#[cfg(not(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-blob"
+)))]
+fn try_send_esp32s3_bt_adv() -> bool {
+    false
 }
 
 #[cfg(not(any(
@@ -2358,6 +2401,19 @@ fn write_bt_stats(seq: u16) {
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
 }
 
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn write_bt_adv(seq: u16) {
+    let mut buf = [0u8; 160];
+    let mut len = 0usize;
+    if try_send_esp32s3_bt_adv() {
+        append_bytes(&mut buf, &mut len, b"ok bt-adv ");
+    } else {
+        append_bytes(&mut buf, &mut len, b"err bt-adv ");
+    }
+    append_bt_stats(&mut buf, &mut len);
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
@@ -2368,6 +2424,20 @@ fn write_headless_bt_start_raw() {
         headless_raw_write(b"ok bt-start ");
     } else {
         headless_raw_write(b"err bt-start ");
+    }
+    write_headless_bt_stats_raw();
+}
+
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-headless"
+))]
+fn write_headless_bt_adv_raw() {
+    if try_send_esp32s3_bt_adv() {
+        headless_raw_write(b"ok bt-adv ");
+    } else {
+        headless_raw_write(b"err bt-adv ");
     }
     write_headless_bt_stats_raw();
 }
@@ -5284,6 +5354,12 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_init();
     }
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM0\n");
+    #[cfg(all(feature = "esp32s3-ble-blob", not(feature = "esp32s3-headless")))]
+    {
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KMB0\n");
+        let _ = try_start_esp32s3_bt();
+        edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KMB1\n");
+    }
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM1\n");
     rt::timer::set_now(0);
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM1A\n");

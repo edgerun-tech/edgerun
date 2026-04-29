@@ -121,12 +121,27 @@ impl OutboundRelay {
         recipient: &str,
         remote_mta: &str,
     ) -> Result<String, String> {
-        // Connect and opportunistically upgrade with STARTTLS when the remote
-        // MTA advertises it. Gmail and other large providers surface a warning
-        // when this hop is cleartext.
-        let mut client = SmtpClient::connect(addr)
-            .await
-            .map_err(|e| format!("connection to {} failed: {}", addr, e))?;
+        // Try STARTTLS first. If the local TLS client cannot interoperate with
+        // the remote MTA, retry plaintext rather than wedging the outbound
+        // queue. This keeps delivery opportunistic while TLS coverage matures.
+        let mut client = match SmtpClient::connect(addr).await {
+            Ok(client) => client,
+            Err(tls_error) => {
+                edgerun_log::warn!(
+                    "edgerun-smtp-relay: STARTTLS delivery to {} failed: {}; retrying plaintext",
+                    addr,
+                    tls_error
+                );
+                SmtpClient::connect_no_tls(addr)
+                    .await
+                    .map_err(|plain_error| {
+                        format!(
+                            "connection to {} failed: STARTTLS {}; plaintext {}",
+                            addr, tls_error, plain_error
+                        )
+                    })?
+            }
+        };
 
         // EHLO
         client
@@ -168,16 +183,8 @@ impl OutboundRelay {
             #[cfg(feature = "dkim")]
             {
                 if let Some(ref signer) = self.dkim_signer {
-                    match signer.sign(&envelope.data, &[]) {
-                        Ok(signature) => {
-                            let mut signed = envelope.data.clone();
-                            if !signed.ends_with(b"\r\n") {
-                                signed.push(b'\r');
-                                signed.push(b'\n');
-                            }
-                            signed.extend(signature.as_bytes());
-                            signed
-                        }
+                    match sign_message_data(signer, &envelope.data) {
+                        Ok(signed) => signed,
                         Err(e) => {
                             edgerun_log::warn!("DKIM signing failed: {}, sending unsigned", e);
                             envelope.data.clone()
@@ -204,6 +211,41 @@ impl OutboundRelay {
 
         Ok(remote_mta.to_string())
     }
+}
+
+#[cfg(feature = "dkim")]
+pub(crate) fn sign_message_data(signer: &DkimSigner, data: &[u8]) -> io::Result<Vec<u8>> {
+    let (headers, body) = split_header_body(data);
+    let signature = signer
+        .sign(headers, body)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    let mut signed = Vec::with_capacity(data.len() + signature.len() + 4);
+    signed.extend_from_slice(headers);
+    if !headers.ends_with(b"\r\n") {
+        signed.extend_from_slice(b"\r\n");
+    }
+    signed.extend_from_slice(signature.as_bytes());
+    signed.extend_from_slice(b"\r\n\r\n");
+    signed.extend_from_slice(body);
+    Ok(signed)
+}
+
+#[cfg(feature = "dkim")]
+fn split_header_body(data: &[u8]) -> (&[u8], &[u8]) {
+    if let Some(pos) = find_bytes(data, b"\r\n\r\n") {
+        return (&data[..pos], &data[pos + 4..]);
+    }
+    if let Some(pos) = find_bytes(data, b"\n\n") {
+        return (&data[..pos], &data[pos + 2..]);
+    }
+    (data, &[])
+}
+
+#[cfg(feature = "dkim")]
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn extract_domain(email: &str) -> Option<String> {
@@ -243,5 +285,22 @@ mod tests {
         assert_eq!(relay.ehlo_domain, "mail.example.com");
         assert_eq!(relay.dns_server, "8.8.8.8:53");
         assert_eq!(relay.max_message_size, 35_882_577);
+    }
+
+    #[cfg(feature = "dkim")]
+    #[test]
+    fn dkim_signature_is_inserted_as_header() {
+        let signer = DkimSigner::generate("example.com", "mail").unwrap();
+        let signed = sign_message_data(
+            &signer,
+            b"From: a@example.com\r\nTo: b@example.net\r\nSubject: Test\r\n\r\nHello\r\n",
+        )
+        .unwrap();
+        let signed = String::from_utf8(signed).unwrap();
+        let (headers, body) = signed.split_once("\r\n\r\n").unwrap();
+
+        assert!(headers.contains("\r\nDKIM-Signature: "));
+        assert_eq!(body, "Hello\r\n");
+        assert!(!body.contains("DKIM-Signature"));
     }
 }

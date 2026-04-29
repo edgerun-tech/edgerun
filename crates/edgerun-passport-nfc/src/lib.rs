@@ -160,11 +160,13 @@ pub fn verify_cms_signatures(cms: &CmsSignedDataInfo) -> Vec<CmsSignatureVerific
             let Some(cert) = &certificate.info else {
                 continue;
             };
-            if cert.subject_public_key_algorithm_oid.as_deref() != Some("1.2.840.113549.1.1.1") {
+            if !is_supported_signature_public_key_algorithm(
+                cert.subject_public_key_algorithm_oid.as_deref(),
+            ) {
                 continue;
             }
             found_candidate = true;
-            let result = verify_rsa_pkcs1_signature(
+            let result = verify_signature(
                 algorithm,
                 &cert.subject_public_key_der,
                 message,
@@ -189,7 +191,7 @@ pub fn verify_cms_signatures(cms: &CmsSignedDataInfo) -> Vec<CmsSignatureVerific
                 certificate_index: None,
                 algorithm,
                 verified: false,
-                error: Some("no RSA signer certificate candidate".to_string()),
+                error: Some("no supported signer certificate candidate".to_string()),
             });
         }
     }
@@ -219,11 +221,13 @@ pub fn verify_document_signer_certificates(
             if !cert.is_issued_by(anchor) {
                 continue;
             }
-            if anchor.subject_public_key_algorithm_oid.as_deref() != Some("1.2.840.113549.1.1.1") {
+            if !is_supported_signature_public_key_algorithm(
+                anchor.subject_public_key_algorithm_oid.as_deref(),
+            ) {
                 continue;
             }
             found_anchor = true;
-            let result = verify_rsa_pkcs1_signature(
+            let result = verify_signature(
                 algorithm,
                 &anchor.subject_public_key_der,
                 &cert.tbs_certificate_der,
@@ -360,6 +364,7 @@ pub struct X509CertificateInfo {
     pub tbs_certificate_der: Vec<u8>,
     pub tbs_certificate_sha256: [u8; 32],
     pub signature_algorithm_oid: Option<String>,
+    pub signature_algorithm_params_der: Option<Vec<u8>>,
     pub issuer_der: Vec<u8>,
     pub issuer_sha256: [u8; 32],
     pub not_before: String,
@@ -370,6 +375,7 @@ pub struct X509CertificateInfo {
     pub subject_public_key_der: Vec<u8>,
     pub subject_public_key_sha256: [u8; 32],
     pub certificate_signature_algorithm_oid: Option<String>,
+    pub certificate_signature_algorithm_params_der: Option<Vec<u8>>,
     pub certificate_signature: Vec<u8>,
     pub certificate_sha256: [u8; 32],
 }
@@ -379,6 +385,7 @@ pub struct CmsSignerInfo {
     pub version: u64,
     pub digest_algorithm_oid: Option<String>,
     pub signature_algorithm_oid: Option<String>,
+    pub signature_algorithm_params_der: Option<Vec<u8>>,
     pub signature: Vec<u8>,
     pub signed_attributes_der: Option<Vec<u8>>,
     pub signed_attributes_signature_input_der: Option<Vec<u8>>,
@@ -409,6 +416,10 @@ pub enum CmsSignatureAlgorithm {
     RsaPkcs1Sha256,
     RsaPkcs1Sha384,
     RsaPkcs1Sha512,
+    RsaPssSha256,
+    EcdsaP256Sha256,
+    EcdsaP256Sha384,
+    EcdsaP256Sha512,
     Unsupported,
 }
 
@@ -1323,6 +1334,12 @@ fn parse_signer_info(bytes: &[u8]) -> Result<CmsSignerInfo> {
         .skip(1)
         .find(|field| field.tag == 0x30)
         .and_then(|field| parse_algorithm_oid(field.value).ok());
+    let signature_algorithm_params_der = fields
+        .iter()
+        .skip_while(|field| field.tag != 0xA0)
+        .skip(1)
+        .find(|field| field.tag == 0x30)
+        .and_then(|field| parse_algorithm_params_der(field.value).ok().flatten());
     let signature = fields
         .iter()
         .find(|field| field.tag == 0x04)
@@ -1333,6 +1350,7 @@ fn parse_signer_info(bytes: &[u8]) -> Result<CmsSignerInfo> {
         version,
         digest_algorithm_oid,
         signature_algorithm_oid,
+        signature_algorithm_params_der,
         signature,
         signed_attributes_der,
         signed_attributes_signature_input_der,
@@ -1357,6 +1375,15 @@ fn parse_algorithm_oid(bytes: &[u8]) -> Result<String> {
         }
     }
     Err(PassportError::MalformedTlv)
+}
+
+fn parse_algorithm_params_der(bytes: &[u8]) -> Result<Option<Vec<u8>>> {
+    let fields = collect_sequence_fields(bytes)?;
+    let Some(params) = fields.get(1) else {
+        return Ok(None);
+    };
+    let offset = tbs_field_offset(bytes, 1)?;
+    Ok(Some(bytes[offset..offset + params.total_len].to_vec()))
 }
 
 pub fn parse_x509_certificate_info(der: &[u8]) -> Result<X509CertificateInfo> {
@@ -1394,6 +1421,9 @@ pub fn parse_x509_certificate_info(der: &[u8]) -> Result<X509CertificateInfo> {
     let signature_algorithm = tbs_fields.get(idx).ok_or(PassportError::MalformedTlv)?;
     idx += 1;
     let signature_algorithm_oid = parse_algorithm_oid(signature_algorithm.value).ok();
+    let signature_algorithm_params_der = parse_algorithm_params_der(signature_algorithm.value)
+        .ok()
+        .flatten();
     let issuer = tbs_fields.get(idx).ok_or(PassportError::MalformedTlv)?;
     idx += 1;
     let issuer_der =
@@ -1411,6 +1441,10 @@ pub fn parse_x509_certificate_info(der: &[u8]) -> Result<X509CertificateInfo> {
     let (subject_public_key_algorithm_oid, subject_public_key_der) = parse_x509_spki(spki.value)?;
     let subject_public_key_sha256 = sha256(&subject_public_key_der);
     let certificate_signature_algorithm_oid = parse_algorithm_oid(cert_fields[1].value).ok();
+    let certificate_signature_algorithm_params_der =
+        parse_algorithm_params_der(cert_fields[1].value)
+            .ok()
+            .flatten();
     let certificate_signature = parse_der_bit_string(cert_fields[2].value)?;
     let certificate_sha256 = sha256(der);
 
@@ -1420,6 +1454,7 @@ pub fn parse_x509_certificate_info(der: &[u8]) -> Result<X509CertificateInfo> {
         tbs_certificate_der,
         tbs_certificate_sha256,
         signature_algorithm_oid,
+        signature_algorithm_params_der,
         issuer_der,
         issuer_sha256,
         not_before,
@@ -1430,6 +1465,7 @@ pub fn parse_x509_certificate_info(der: &[u8]) -> Result<X509CertificateInfo> {
         subject_public_key_der,
         subject_public_key_sha256,
         certificate_signature_algorithm_oid,
+        certificate_signature_algorithm_params_der,
         certificate_signature,
         certificate_sha256,
     })
@@ -1602,6 +1638,28 @@ fn digest_algorithm_from_oid(oid: &str) -> Result<DigestAlgorithm> {
     })
 }
 
+fn parse_rsa_pss_hash_algorithm(params_der: &[u8]) -> Option<DigestAlgorithm> {
+    let params = Tlv::parse(params_der).ok()?;
+    let value = if params.tag == 0x30 {
+        params.value
+    } else {
+        params_der
+    };
+    for field in TlvIter::new(value) {
+        let field = field.ok()?;
+        if field.tag == 0xA0 {
+            let algorithm = Tlv::parse(field.value).ok()?;
+            if algorithm.tag != 0x30 {
+                return None;
+            }
+            return parse_algorithm_oid(algorithm.value)
+                .ok()
+                .and_then(|oid| digest_algorithm_from_oid(&oid).ok());
+        }
+    }
+    Some(DigestAlgorithm::Sha1)
+}
+
 fn digest_algorithm_from_len(len: usize) -> DigestAlgorithm {
     match len {
         20 => DigestAlgorithm::Sha1,
@@ -1629,6 +1687,10 @@ fn digest_bytes(algorithm: DigestAlgorithm, bytes: &[u8]) -> Option<Vec<u8>> {
 fn cms_signature_algorithm(signer: &CmsSignerInfo) -> CmsSignatureAlgorithm {
     let signature_oid = signer.signature_algorithm_oid.as_deref();
     let digest_oid = signer.digest_algorithm_oid.as_deref();
+    let pss_hash = signer
+        .signature_algorithm_params_der
+        .as_deref()
+        .and_then(parse_rsa_pss_hash_algorithm);
     match (signature_oid, digest_oid) {
         (Some("1.2.840.113549.1.1.11"), _) => CmsSignatureAlgorithm::RsaPkcs1Sha256,
         (Some("1.2.840.113549.1.1.12"), _) => CmsSignatureAlgorithm::RsaPkcs1Sha384,
@@ -1642,16 +1704,67 @@ fn cms_signature_algorithm(signer: &CmsSignerInfo) -> CmsSignatureAlgorithm {
         (Some("1.2.840.113549.1.1.1"), Some("2.16.840.1.101.3.4.2.3")) => {
             CmsSignatureAlgorithm::RsaPkcs1Sha512
         }
+        (Some("1.2.840.113549.1.1.10"), _) if pss_hash == Some(DigestAlgorithm::Sha256) => {
+            CmsSignatureAlgorithm::RsaPssSha256
+        }
+        (Some("1.2.840.113549.1.1.10"), Some("2.16.840.1.101.3.4.2.1")) => {
+            CmsSignatureAlgorithm::RsaPssSha256
+        }
+        (Some("1.2.840.10045.4.3.2"), _) => CmsSignatureAlgorithm::EcdsaP256Sha256,
+        (Some("1.2.840.10045.4.3.3"), _) => CmsSignatureAlgorithm::EcdsaP256Sha384,
+        (Some("1.2.840.10045.4.3.4"), _) => CmsSignatureAlgorithm::EcdsaP256Sha512,
         _ => CmsSignatureAlgorithm::Unsupported,
     }
 }
 
 fn certificate_signature_algorithm(cert: &X509CertificateInfo) -> CmsSignatureAlgorithm {
+    let pss_hash = cert
+        .certificate_signature_algorithm_params_der
+        .as_deref()
+        .and_then(parse_rsa_pss_hash_algorithm);
     match cert.certificate_signature_algorithm_oid.as_deref() {
         Some("1.2.840.113549.1.1.11") => CmsSignatureAlgorithm::RsaPkcs1Sha256,
         Some("1.2.840.113549.1.1.12") => CmsSignatureAlgorithm::RsaPkcs1Sha384,
         Some("1.2.840.113549.1.1.13") => CmsSignatureAlgorithm::RsaPkcs1Sha512,
+        Some("1.2.840.113549.1.1.10") if pss_hash == Some(DigestAlgorithm::Sha256) => {
+            CmsSignatureAlgorithm::RsaPssSha256
+        }
+        Some("1.2.840.113549.1.1.10") => CmsSignatureAlgorithm::Unsupported,
+        Some("1.2.840.10045.4.3.2") => CmsSignatureAlgorithm::EcdsaP256Sha256,
+        Some("1.2.840.10045.4.3.3") => CmsSignatureAlgorithm::EcdsaP256Sha384,
+        Some("1.2.840.10045.4.3.4") => CmsSignatureAlgorithm::EcdsaP256Sha512,
         _ => CmsSignatureAlgorithm::Unsupported,
+    }
+}
+
+fn is_supported_signature_public_key_algorithm(oid: Option<&str>) -> bool {
+    matches!(
+        oid,
+        Some("1.2.840.113549.1.1.1") | Some("1.2.840.10045.2.1")
+    )
+}
+
+fn verify_signature(
+    algorithm: CmsSignatureAlgorithm,
+    public_key_der: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> core::result::Result<(), String> {
+    match algorithm {
+        CmsSignatureAlgorithm::RsaPkcs1Sha256
+        | CmsSignatureAlgorithm::RsaPkcs1Sha384
+        | CmsSignatureAlgorithm::RsaPkcs1Sha512 => {
+            verify_rsa_pkcs1_signature(algorithm, public_key_der, message, signature)
+        }
+        CmsSignatureAlgorithm::RsaPssSha256 => {
+            verify_rsa_pss_signature(algorithm, public_key_der, message, signature)
+        }
+        CmsSignatureAlgorithm::EcdsaP256Sha256
+        | CmsSignatureAlgorithm::EcdsaP256Sha384
+        | CmsSignatureAlgorithm::EcdsaP256Sha512 => {
+            verify_ecdsa_p256_signature(algorithm, public_key_der, message, signature)
+        }
+        CmsSignatureAlgorithm::Unsupported => Err("unsupported signature algorithm".to_string()),
     }
 }
 
@@ -1693,9 +1806,64 @@ fn verify_rsa_pkcs1_signature(
                 .verify(message, &signature)
                 .map_err(|e| format!("RSA PKCS#1 SHA-512 verification failed: {e}"))
         }
-        CmsSignatureAlgorithm::Unsupported => {
+        CmsSignatureAlgorithm::RsaPssSha256
+        | CmsSignatureAlgorithm::EcdsaP256Sha256
+        | CmsSignatureAlgorithm::EcdsaP256Sha384
+        | CmsSignatureAlgorithm::EcdsaP256Sha512
+        | CmsSignatureAlgorithm::Unsupported => {
             Err("unsupported CMS signature algorithm".to_string())
         }
+    }
+}
+
+fn verify_rsa_pss_signature(
+    algorithm: CmsSignatureAlgorithm,
+    public_key_der: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> core::result::Result<(), String> {
+    use edgerun_crypto::rsa::pkcs1::DecodeRsaPublicKey;
+    use edgerun_crypto::rsa::signature::Verifier;
+
+    let public_key = edgerun_crypto::rsa::RsaPublicKey::from_pkcs1_der(public_key_der)
+        .map_err(|e| format!("failed to parse RSA public key: {e}"))?;
+    let signature = edgerun_crypto::rsa::pss::Signature::try_from(signature)
+        .map_err(|e| format!("failed to parse RSA-PSS signature: {e}"))?;
+    match algorithm {
+        CmsSignatureAlgorithm::RsaPssSha256 => {
+            let verifying_key = edgerun_crypto::rsa::pss::VerifyingKey::<
+                edgerun_crypto::sha2::Sha256,
+            >::new(public_key);
+            verifying_key
+                .verify(message, &signature)
+                .map_err(|e| format!("RSA-PSS SHA-256 verification failed: {e}"))
+        }
+        _ => Err("unsupported RSA-PSS signature algorithm".to_string()),
+    }
+}
+
+fn verify_ecdsa_p256_signature(
+    algorithm: CmsSignatureAlgorithm,
+    public_key_der: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> core::result::Result<(), String> {
+    let verifying_key = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(public_key_der)
+        .map_err(|e| format!("failed to parse P-256 public key: {e}"))?;
+    let signature = edgerun_crypto::p256::ecdsa::Signature::from_der(signature)
+        .map_err(|e| format!("failed to parse ECDSA signature: {e}"))?;
+    use edgerun_crypto::signature::hazmat::PrehashVerifier;
+    match algorithm {
+        CmsSignatureAlgorithm::EcdsaP256Sha256 => verifying_key
+            .verify_prehash(&sha256(message), &signature)
+            .map_err(|e| format!("ECDSA P-256 SHA-256 verification failed: {e}")),
+        CmsSignatureAlgorithm::EcdsaP256Sha384 => verifying_key
+            .verify_prehash(&sha384(message), &signature)
+            .map_err(|e| format!("ECDSA P-256 SHA-384 verification failed: {e}")),
+        CmsSignatureAlgorithm::EcdsaP256Sha512 => verifying_key
+            .verify_prehash(&sha512(message), &signature)
+            .map_err(|e| format!("ECDSA P-256 SHA-512 verification failed: {e}")),
+        _ => Err("unsupported ECDSA signature algorithm".to_string()),
     }
 }
 
@@ -2244,6 +2412,7 @@ mod tests {
                 version: 1,
                 digest_algorithm_oid: Some("2.16.840.1.101.3.4.2.1".to_string()),
                 signature_algorithm_oid: Some("1.2.840.113549.1.1.1".to_string()),
+                signature_algorithm_params_der: None,
                 signature,
                 signed_attributes_der: Some(signed_attributes),
                 signed_attributes_signature_input_der: Some(signed_input),
@@ -2261,6 +2430,109 @@ mod tests {
         assert_eq!(
             verification[0].algorithm,
             CmsSignatureAlgorithm::RsaPkcs1Sha256
+        );
+    }
+
+    #[test]
+    fn verifies_rsa_pss_sha256_cms_signature() {
+        use edgerun_crypto::rsa::pkcs1::EncodeRsaPublicKey;
+        use edgerun_crypto::rsa::signature::{RandomizedSigner, SignatureEncoding};
+
+        let mut rng = edgerun_crypto::rng::OsRng;
+        let private_key = edgerun_crypto::rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let public_key = edgerun_crypto::rsa::RsaPublicKey::from(&private_key);
+        let public_key_der = public_key.to_pkcs1_der().unwrap().as_bytes().to_vec();
+        let signed_attributes = der_sequence(&[
+            der_oid(&[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x09, 0x04]),
+            der_set(&[der_octet_string(&[0x33; 32])]),
+        ]);
+        let signed_input = encode_tlv(0x31, &signed_attributes).unwrap();
+        let signing_key =
+            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::sha2::Sha256>::new(private_key);
+        let signature = signing_key.sign_with_rng(&mut rng, &signed_input).to_vec();
+        let cms = CmsSignedDataInfo {
+            lds_security_object: LdsSecurityObject::default(),
+            digest_algorithm_oids: vec!["2.16.840.1.101.3.4.2.1".to_string()],
+            certificates: vec![CmsCertificate {
+                der: Vec::new(),
+                info: Some(X509CertificateInfo {
+                    subject_public_key_algorithm_oid: Some("1.2.840.113549.1.1.1".to_string()),
+                    subject_public_key_der: public_key_der,
+                    ..X509CertificateInfo::default()
+                }),
+            }],
+            signer_infos: vec![CmsSignerInfo {
+                version: 1,
+                digest_algorithm_oid: Some("2.16.840.1.101.3.4.2.1".to_string()),
+                signature_algorithm_oid: Some("1.2.840.113549.1.1.10".to_string()),
+                signature_algorithm_params_der: Some(der_rsa_pss_sha256_params()),
+                signature,
+                signed_attributes_der: Some(signed_attributes),
+                signed_attributes_signature_input_der: Some(signed_input),
+                signed_attributes_sha256: None,
+                signed_attr_message_digest: None,
+            }],
+            signed_attr_message_digest: None,
+            signed_attr_digest_algorithm: DigestAlgorithm::Unknown,
+            signed_attr_digest_matches_econtent: None,
+        };
+        let verification = verify_cms_signatures(&cms);
+        assert_eq!(verification.len(), 1);
+        assert!(verification[0].verified);
+        assert_eq!(verification[0].certificate_index, Some(0));
+        assert_eq!(
+            verification[0].algorithm,
+            CmsSignatureAlgorithm::RsaPssSha256
+        );
+    }
+
+    #[test]
+    fn verifies_ecdsa_p256_sha256_cms_signature() {
+        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+        use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
+
+        let signing_key =
+            edgerun_crypto::p256::ecdsa::SigningKey::random(&mut edgerun_crypto::rng::OsRng);
+        let public_key = signing_key.verifying_key().to_encoded_point(false);
+        let signed_attributes = der_sequence(&[
+            der_oid(&[0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x09, 0x04]),
+            der_set(&[der_octet_string(&[0x22; 32])]),
+        ]);
+        let signed_input = encode_tlv(0x31, &signed_attributes).unwrap();
+        let signature: edgerun_crypto::p256::ecdsa::Signature =
+            signing_key.sign_prehash(&sha256(&signed_input)).unwrap();
+        let cms = CmsSignedDataInfo {
+            lds_security_object: LdsSecurityObject::default(),
+            digest_algorithm_oids: vec!["2.16.840.1.101.3.4.2.1".to_string()],
+            certificates: vec![CmsCertificate {
+                der: Vec::new(),
+                info: Some(X509CertificateInfo {
+                    subject_public_key_algorithm_oid: Some("1.2.840.10045.2.1".to_string()),
+                    subject_public_key_der: public_key.as_bytes().to_vec(),
+                    ..X509CertificateInfo::default()
+                }),
+            }],
+            signer_infos: vec![CmsSignerInfo {
+                version: 1,
+                digest_algorithm_oid: Some("2.16.840.1.101.3.4.2.1".to_string()),
+                signature_algorithm_oid: Some("1.2.840.10045.4.3.2".to_string()),
+                signature_algorithm_params_der: None,
+                signature: signature.to_der().as_bytes().to_vec(),
+                signed_attributes_der: Some(signed_attributes),
+                signed_attributes_signature_input_der: Some(signed_input),
+                signed_attributes_sha256: None,
+                signed_attr_message_digest: None,
+            }],
+            signed_attr_message_digest: None,
+            signed_attr_digest_algorithm: DigestAlgorithm::Unknown,
+            signed_attr_digest_matches_econtent: None,
+        };
+        let verification = verify_cms_signatures(&cms);
+        assert_eq!(verification.len(), 1);
+        assert!(verification[0].verified);
+        assert_eq!(
+            verification[0].algorithm,
+            CmsSignatureAlgorithm::EcdsaP256Sha256
         );
     }
 
@@ -2540,6 +2812,10 @@ mod tests {
             der_oid(&[0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01]),
             der_null(),
         ])
+    }
+
+    fn der_rsa_pss_sha256_params() -> Vec<u8> {
+        der_sequence(&[der_context(0, &der_sha256_algorithm_identifier())])
     }
 
     fn minimal_x509_certificate_der() -> Vec<u8> {

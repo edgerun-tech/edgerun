@@ -9,7 +9,7 @@ const HEAP_MIN_START: usize = 0;
 const HEAP_MIN_START: usize = 0x200000;
 
 #[cfg(target_arch = "xtensa")]
-const HEAP_END: usize = 0x3fcd_b700;
+const HEAP_END: usize = 0x3fce_f000;
 #[cfg(not(target_arch = "xtensa"))]
 const HEAP_END: usize = 0x1000000;
 

@@ -6,12 +6,12 @@ use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
 use edgerun_http::{HttpClient, HttpVersion};
-use edgerun_json::{JsonValue, json};
+use edgerun_json::{json, JsonValue};
 use std::sync::Arc;
 
 use crate::error::SolanaError;
 use crate::try_provider_registry_program_id;
-use crate::types::{Provider, ProviderStatus, collateral};
+use crate::types::{collateral, Provider, ProviderStatus};
 
 const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
 const PROVIDER_ACCOUNT_SIZE: u64 = 128;

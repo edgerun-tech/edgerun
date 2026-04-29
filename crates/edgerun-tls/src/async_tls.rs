@@ -499,8 +499,21 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         write_plain_record(&mut stream, 22, &encrypted_finished).await?;
         stream.flush().await?;
 
-        let (content_type, ccs) = read_plain_record(&mut stream).await?;
-        if content_type != 20 || ccs != [1] {
+        loop {
+            let (content_type, fragment) = read_plain_record(&mut stream).await?;
+            if content_type == 20 && fragment == [1] {
+                break;
+            }
+            if content_type == 21 {
+                return Err(parse_alert_record(&fragment));
+            }
+            if content_type == 22 {
+                // Some TLS 1.2 servers send post-handshake messages such as
+                // NewSessionTicket before ChangeCipherSpec. They are still
+                // part of the handshake transcript used for server Finished.
+                transcript.extend_from_slice(&fragment);
+                continue;
+            }
             return Err(TlsError::Protocol(
                 "TLS 1.2 expected ChangeCipherSpec".into(),
             ));

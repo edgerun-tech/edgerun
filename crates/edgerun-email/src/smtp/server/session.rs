@@ -17,6 +17,8 @@ use crate::command_middleware::{
 use crate::server::{read_line, ConnectionInterceptor};
 use crate::smtp::relay::bounce::BounceConfig;
 use crate::smtp::relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};
+#[cfg(feature = "dkim")]
+use crate::smtp::relay::relay::sign_message_data;
 use crate::smtp::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::smtp::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::smtp::server::rate_limit::RateLimiter;
@@ -609,16 +611,8 @@ async fn handle_connection(
                     // DKIM sign local delivery if configured
                     #[cfg(feature = "dkim")]
                     if let Some(ref signer) = config.dkim_signer {
-                        match signer.sign(&envelope.data, &[]) {
-                            Ok(signature) => {
-                                let mut signed_data = envelope.data.clone();
-                                if !signed_data.ends_with(b"\r\n") {
-                                    signed_data.push(b'\r');
-                                    signed_data.push(b'\n');
-                                }
-                                signed_data.extend(signature.as_bytes());
-                                local_envelope.data = signed_data;
-                            }
+                        match sign_message_data(signer, &envelope.data) {
+                            Ok(signed_data) => local_envelope.data = signed_data,
                             Err(e) => {
                                 edgerun_log::warn!("edgerun-smtp: local DKIM signing failed: {}, delivering unsigned", e);
                             }

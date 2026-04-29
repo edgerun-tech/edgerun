@@ -3,7 +3,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use core::str::FromStr;
 use edgerun_solana::signers::{Ed25519Signer, Signer};
-use edgerun_solana::{DeploymentClient, DeploymentStatus, ProviderClient, solana_types::Pubkey};
+use edgerun_solana::{solana_types::Pubkey, DeploymentClient, DeploymentStatus, ProviderClient};
 use std::{eprintln, println};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

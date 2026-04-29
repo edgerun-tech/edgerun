@@ -544,7 +544,12 @@ impl SmtpClient {
             }
         };
         let server_name = self.server_name.clone();
-        let tls = AsyncTlsStream::client(current, &server_name, &[], None)
+        // SMTP STARTTLS upgrades happen in-place after the server has switched
+        // protocols, so a failed TLS 1.3 attempt cannot safely retry on the
+        // same connection. Prefer the smaller TLS 1.2 path for MTA
+        // interoperability until the TLS 1.3 client is proven against large
+        // receiver fleets like Google.
+        let tls = AsyncTlsStream::client_tls12(current, &server_name)
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.to_string()))?;
         self.transport = ClientTransport::Tls(tls);

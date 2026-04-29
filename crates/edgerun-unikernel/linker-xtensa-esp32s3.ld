@@ -66,7 +66,7 @@ SECTIONS
 
     . = ALIGN(16);
     _stack_end = .;
-    . += 32768;
+    . += 28672;
     _stack = .;
 
     _end = .;
