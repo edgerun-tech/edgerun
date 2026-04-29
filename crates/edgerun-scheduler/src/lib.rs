@@ -98,22 +98,46 @@ impl Scheduler {
         &mut self,
         name: &str,
         provider_id: &[u8; 32],
-        cpu_avail: u32,
-        mem_avail: u64,
+        _cpu_avail: u32,
+        _mem_avail: u64,
     ) -> Result<(), String> {
-        if let Some(d) = self.deployment_manager.get(name) {
-            if d.total_cpu_cores > cpu_avail || d.total_memory_bytes > mem_avail {
-                return Err("Insufficient resources".to_string());
+        // The capacity arguments are retained for API compatibility. Assignment
+        // must use the scheduler's tracked provider state so stale callers cannot
+        // overcommit an offline or capacity-constrained provider.
+        let deployment = self
+            .deployment_manager
+            .get(name)
+            .ok_or_else(|| "Deployment not found".to_string())?;
+
+        if deployment.assigned {
+            if deployment.provider == *provider_id {
+                self.record_provider_deployment(provider_id, name);
+                return Ok(());
             }
-            self.deployment_manager
-                .assign_to_provider(name, provider_id);
-            self.provider_deployments
-                .entry(*provider_id)
-                .or_default()
-                .push(name.to_string());
-            Ok(())
-        } else {
-            Err("Deployment not found".to_string())
+            return Err("Deployment already assigned".to_string());
+        }
+
+        let provider = self
+            .provider_manager
+            .get_mut(provider_id)
+            .ok_or_else(|| "Provider not found".to_string())?;
+        if !provider.is_online {
+            return Err("Provider is offline".to_string());
+        }
+        if !provider.reserve(deployment.total_cpu_cores, deployment.total_memory_bytes) {
+            return Err("Insufficient resources".to_string());
+        }
+
+        self.deployment_manager
+            .assign_to_provider(name, provider_id);
+        self.record_provider_deployment(provider_id, name);
+        Ok(())
+    }
+
+    fn record_provider_deployment(&mut self, provider_id: &[u8; 32], name: &str) {
+        let deployments = self.provider_deployments.entry(*provider_id).or_default();
+        if !deployments.iter().any(|deployment| deployment == name) {
+            deployments.push(name.to_string());
         }
     }
 
@@ -208,6 +232,105 @@ mod tests {
 
         let result = scheduler.assign_deployment("test", &node_id, 2, 4_000_000_000);
         assert!(result.is_ok());
+        let provider = scheduler.provider_manager.get(&node_id).unwrap();
+        assert_eq!(provider.cpu_cores_available, 2);
+        assert_eq!(provider.cpu_cores_used, 2);
+        assert_eq!(provider.memory_bytes_available, 4_000_000_000);
+        assert_eq!(provider.memory_bytes_used, 4_000_000_000);
+    }
+
+    #[test]
+    fn assign_deployment_requires_registered_online_provider() {
+        let mut scheduler = Scheduler::new();
+        scheduler.deployment_manager.create_local(DeploymentHandle {
+            on_chain_address: [0u8; 32],
+            name: "test".to_string(),
+            provider: [0u8; 32],
+            container_count: 1,
+            total_cpu_cores: 2,
+            total_memory_bytes: 4_000_000_000,
+            status: DeploymentStatus::Running,
+            deposit: 1_000_000_000,
+            burn_rate: 100,
+            spent: 0,
+            assigned: false,
+        });
+
+        let missing = scheduler.assign_deployment("test", &[9u8; 32], 100, 100_000_000_000);
+        assert_eq!(missing.unwrap_err(), "Provider not found");
+
+        let mut offline = ProviderInfo::new([1u8; 32], "offline");
+        offline.cpu_cores_available = 100;
+        offline.memory_bytes_available = 100_000_000_000;
+        scheduler.add_provider(offline);
+
+        let result = scheduler.assign_deployment("test", &[1u8; 32], 100, 100_000_000_000);
+        assert_eq!(result.unwrap_err(), "Provider is offline");
+    }
+
+    #[test]
+    fn assign_deployment_uses_tracked_provider_capacity() {
+        let mut scheduler = Scheduler::new();
+        let mut info = ProviderInfo::new([1u8; 32], "test-provider");
+        info.cpu_cores_available = 1;
+        info.memory_bytes_available = 8_000_000_000;
+        info.is_online = true;
+        scheduler.add_provider(info);
+
+        scheduler.deployment_manager.create_local(DeploymentHandle {
+            on_chain_address: [0u8; 32],
+            name: "test".to_string(),
+            provider: [0u8; 32],
+            container_count: 1,
+            total_cpu_cores: 2,
+            total_memory_bytes: 4_000_000_000,
+            status: DeploymentStatus::Running,
+            deposit: 1_000_000_000,
+            burn_rate: 100,
+            spent: 0,
+            assigned: false,
+        });
+
+        let result = scheduler.assign_deployment("test", &[1u8; 32], 100, 100_000_000_000);
+        assert_eq!(result.unwrap_err(), "Insufficient resources");
+    }
+
+    #[test]
+    fn assign_deployment_is_idempotent_for_same_provider() {
+        let mut scheduler = Scheduler::new();
+        let mut info = ProviderInfo::new([1u8; 32], "test-provider");
+        info.cpu_cores_available = 4;
+        info.memory_bytes_available = 8_000_000_000;
+        info.is_online = true;
+        scheduler.add_provider(info);
+
+        scheduler.deployment_manager.create_local(DeploymentHandle {
+            on_chain_address: [0u8; 32],
+            name: "test".to_string(),
+            provider: [0u8; 32],
+            container_count: 1,
+            total_cpu_cores: 2,
+            total_memory_bytes: 4_000_000_000,
+            status: DeploymentStatus::Running,
+            deposit: 1_000_000_000,
+            burn_rate: 100,
+            spent: 0,
+            assigned: false,
+        });
+
+        scheduler
+            .assign_deployment("test", &[1u8; 32], 4, 8_000_000_000)
+            .unwrap();
+        scheduler
+            .assign_deployment("test", &[1u8; 32], 4, 8_000_000_000)
+            .unwrap();
+
+        let provider = scheduler.provider_manager.get(&[1u8; 32]).unwrap();
+        assert_eq!(provider.cpu_cores_available, 2);
+        assert_eq!(
+            scheduler.provider_deployments.get(&[1u8; 32]).unwrap(),
+            &alloc::vec!["test".to_string()]
+        );
     }
 
     #[test]

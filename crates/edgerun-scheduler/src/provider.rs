@@ -56,6 +56,17 @@ impl ProviderInfo {
     pub fn can_fit(&self, cpu: u32, memory: u64) -> bool {
         self.cpu_cores_available >= cpu && self.memory_bytes_available >= memory
     }
+
+    pub fn reserve(&mut self, cpu: u32, memory: u64) -> bool {
+        if !self.can_fit(cpu, memory) {
+            return false;
+        }
+        self.cpu_cores_available -= cpu;
+        self.cpu_cores_used = self.cpu_cores_used.saturating_add(cpu);
+        self.memory_bytes_available -= memory;
+        self.memory_bytes_used = self.memory_bytes_used.saturating_add(memory);
+        true
+    }
 }
 
 pub struct ProviderManager {
@@ -157,5 +168,21 @@ mod tests {
 
         let selected = mgr.select(4, 4_000_000_000);
         assert!(selected.is_some());
+    }
+
+    #[test]
+    fn reserve_updates_capacity_once_it_fits() {
+        let mut provider = ProviderInfo::new([1u8; 32], "p1");
+        provider.cpu_cores_available = 4;
+        provider.memory_bytes_available = 8_000_000_000;
+
+        assert!(provider.reserve(2, 4_000_000_000));
+        assert_eq!(provider.cpu_cores_available, 2);
+        assert_eq!(provider.cpu_cores_used, 2);
+        assert_eq!(provider.memory_bytes_available, 4_000_000_000);
+        assert_eq!(provider.memory_bytes_used, 4_000_000_000);
+
+        assert!(!provider.reserve(3, 1));
+        assert_eq!(provider.cpu_cores_available, 2);
     }
 }
