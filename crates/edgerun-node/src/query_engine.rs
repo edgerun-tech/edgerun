@@ -491,11 +491,28 @@ pub fn execute_federated_query(
         }
     }
 
+    enforce_aggregate_result_limits(query, &mut aggregate);
     aggregate.completeness = ResultCompleteness::Partial as i32;
     aggregate.answered_at = Some(now_prost_timestamp());
     aggregate.signature = None;
     sign_query_result_fragment(&mut aggregate, signer);
-    QueryResultFragment::encode_to_vec(&aggregate)
+    let aggregate_bytes = QueryResultFragment::encode_to_vec(&aggregate);
+    if let Some(max_b) = query
+        .cost_limit
+        .as_ref()
+        .and_then(|limit| limit.max_total_bytes)
+    {
+        if aggregate_bytes.len() > max_b as usize {
+            edgerun_log::warn!("federated query aggregate exceeds max_total_bytes");
+            return build_signed_query_denial(
+                query,
+                responder_node_id,
+                "federated_response_too_large",
+                signer,
+            );
+        }
+    }
+    aggregate_bytes
 }
 
 fn merge_fragment_refs(
@@ -534,6 +551,43 @@ fn merge_fragment_refs(
         {
             aggregate.proof_objects.push(proof_object.clone());
         }
+    }
+}
+
+fn enforce_aggregate_result_limits(
+    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    aggregate: &mut edgerun_proto::edgerun::v0::access::QueryResultFragment,
+) {
+    let mut limit = query.result_limit.map(|value| value as usize);
+    if let Some(cost_limit) = query
+        .cost_limit
+        .as_ref()
+        .and_then(|cost_limit| cost_limit.max_results)
+        .map(|value| value as usize)
+    {
+        limit = Some(limit.map_or(cost_limit, |current| current.min(cost_limit)));
+    }
+
+    let Some(limit) = limit else {
+        return;
+    };
+
+    let mut truncated = false;
+    if aggregate.event_refs.len() > limit {
+        aggregate.event_refs.truncate(limit);
+        truncated = true;
+    }
+    if aggregate.object_refs.len() > limit {
+        aggregate.object_refs.truncate(limit);
+        truncated = true;
+    }
+    if aggregate.snapshot_refs.len() > limit {
+        aggregate.snapshot_refs.truncate(limit);
+        truncated = true;
+    }
+    if truncated {
+        aggregate.completeness =
+            edgerun_proto::edgerun::v0::access::ResultCompleteness::Partial as i32;
     }
 }
 
@@ -1028,6 +1082,96 @@ mod tests {
             .any(|event| event.stream_id == b"remote-stream" && event.seq == 7));
         assert!(!aggregate.proof_objects.is_empty());
         assert!(aggregate.signature.is_some());
+    }
+
+    #[test]
+    fn federated_query_enforces_result_and_byte_limits_after_merge() {
+        let local_signer = TestSigner::new();
+        let remote_signer = TestSigner::new();
+        let mut store = test_store(local_signer.node_id());
+        let mut query = QueryRequest {
+            request_version: 1,
+            query_id: b"federated-limits".to_vec(),
+            requester: None,
+            target_scope: None,
+            query_class: QueryClass::Head as i32,
+            time_window: None,
+            checkpoint_base: None,
+            result_limit: Some(1),
+            cost_limit: Some(CostLimit {
+                max_results: Some(1),
+                max_total_bytes: None,
+                max_wall_time: None,
+                max_federated_responders: Some(1),
+            }),
+            required_proof_classes: vec![],
+            query_payload_object: None,
+            signature: None,
+        };
+
+        let mut remote_fragment = QueryResultFragment {
+            fragment_version: 1,
+            query_id: b"federated-limits".to_vec(),
+            responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+                identity_id: remote_signer.node_id().0.to_vec(),
+                identity_kind: Some(2),
+                key_hint: Some(remote_signer.node_id().0.to_vec()),
+            }),
+            answered_at: Some(now_prost_timestamp()),
+            completeness: ResultCompleteness::CompleteForLocalKnowledge as i32,
+            snapshot_refs: vec![],
+            event_refs: vec![
+                edgerun_proto::edgerun::v0::common::EventRef {
+                    stream_id: b"remote-stream-a".to_vec(),
+                    seq: 1,
+                    event_hash: Some(edgerun_core::protocol::Digest {
+                        algorithm: 1,
+                        value: vec![1; 32],
+                    }),
+                },
+                edgerun_proto::edgerun::v0::common::EventRef {
+                    stream_id: b"remote-stream-b".to_vec(),
+                    seq: 2,
+                    event_hash: Some(edgerun_core::protocol::Digest {
+                        algorithm: 1,
+                        value: vec![2; 32],
+                    }),
+                },
+            ],
+            object_refs: vec![],
+            proof_objects: vec![],
+            omission_reason: String::new(),
+            bundled_result_object: None,
+            result_metadata: None,
+            signature: None,
+        };
+        sign_query_result_fragment(&mut remote_fragment, &remote_signer);
+
+        let aggregate_bytes = execute_federated_query(
+            &query,
+            &mut store,
+            b"local-stream",
+            &local_signer.node_id(),
+            &local_signer,
+            &[QueryResultFragment::encode_to_vec(&remote_fragment)],
+            &[remote_signer.node_id().0.to_vec()],
+        );
+        let aggregate = QueryResultFragment::decode(&aggregate_bytes[..]).unwrap();
+        assert_eq!(aggregate.event_refs.len(), 1);
+
+        query.cost_limit.as_mut().unwrap().max_total_bytes = Some(1);
+        let denial_bytes = execute_federated_query(
+            &query,
+            &mut store,
+            b"local-stream",
+            &local_signer.node_id(),
+            &local_signer,
+            &[QueryResultFragment::encode_to_vec(&remote_fragment)],
+            &[remote_signer.node_id().0.to_vec()],
+        );
+        let denial = QueryResultFragment::decode(&denial_bytes[..]).unwrap();
+        assert_eq!(denial.completeness, ResultCompleteness::Denied as i32);
+        assert_eq!(denial.omission_reason, "federated_response_too_large");
     }
 
     #[test]
