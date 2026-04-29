@@ -8,6 +8,7 @@
 | `02-dns-zone-dkim.yaml` | DKIM public key DNS record (selector: mail) |
 | `03-smtp-server.yaml` | SMTP server config (implemented: port 25 MX, port 465 SMTPS submission, port 587 STARTTLS submission, relay) |
 | `04-imap-server.yaml` | IMAP server config (port 143, IMAPS) |
+| `edgerun-server.service` | Host-only systemd unit with boot target enablement, failure restart, and sandboxing |
 
 ## Required Key Material
 
@@ -64,3 +65,11 @@ key at `/etc/edgerun/server/dkim-mail.private.pem`.
 | IMAP | 143 | IMAP (with STARTTLS) |
 | IMAP | 993 | IMAPS (implicit TLS) |
 | DNS | 53 | UDP/TCP |
+
+## systemd
+
+`edgerun-server.service` is host-only deployment material. It is intended to be
+installed in `/etc/systemd/system/`, then enabled with `systemctl enable
+edgerun-server.service` so systemd starts it through `multi-user.target` on
+boot. Runtime crash handling is configured with `Restart=on-failure` and
+`RestartSec=5`.
