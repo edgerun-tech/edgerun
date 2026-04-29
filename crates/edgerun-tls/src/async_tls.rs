@@ -49,6 +49,8 @@ use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 
 use crate::compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+const TLS_MAX_PLAINTEXT_FRAGMENT: usize = 16 * 1024;
+
 // ---------------------------------------------------------------------------
 // AsyncTlsStream — client-side async TLS stream
 // ---------------------------------------------------------------------------
@@ -613,7 +615,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             return Poll::Ready(Ok(0));
         }
         if self.write_record.is_empty() {
-            let ciphertext = self.write_cipher.encrypt(23, buf);
+            let plaintext_len = buf.len().min(TLS_MAX_PLAINTEXT_FRAGMENT);
+            let ciphertext = self.write_cipher.encrypt(23, &buf[..plaintext_len]);
             let record = crate::record::TlsRecord {
                 content_type: 23,
                 version: 0x0303,
@@ -621,7 +624,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             };
             self.write_record = record.to_bytes();
             self.write_record_pos = 0;
-            self.write_plaintext_len = buf.len();
+            self.write_plaintext_len = plaintext_len;
             self.write_needs_flush = true;
         }
 
@@ -768,6 +771,14 @@ pub struct AsyncTlsServerStream<S> {
     pending_data: Vec<u8>,
     pending_offset: usize,
     cipher_suite: CipherSuite,
+    /// Partially written encrypted TLS record.
+    write_record: Vec<u8>,
+    /// Current write position within `write_record`.
+    write_record_pos: usize,
+    /// Plaintext byte count represented by `write_record`.
+    write_plaintext_len: usize,
+    /// Whether the underlying stream still needs flushing after `write_record`.
+    write_needs_flush: bool,
     /// The ALPN protocol negotiated during the TLS handshake
     /// (e.g. b"h2" or b"http/1.1").
     alpn_protocol: Option<Vec<u8>>,
@@ -801,6 +812,10 @@ impl<S> AsyncTlsServerStream<S> {
             pending_data: Vec::new(),
             pending_offset: 0,
             cipher_suite: CipherSuite::TLS_AES_128_GCM_SHA256,
+            write_record: Vec::new(),
+            write_record_pos: 0,
+            write_plaintext_len: 0,
+            write_needs_flush: false,
             alpn_protocol: None,
         }
     }
@@ -831,6 +846,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             pending_data: Vec::new(),
             pending_offset: 0,
             cipher_suite,
+            write_record: Vec::new(),
+            write_record_pos: 0,
+            write_plaintext_len: 0,
+            write_needs_flush: false,
             alpn_protocol,
         })
     }
@@ -866,6 +885,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                 self.read_cipher = read_cipher;
                 self.handshake_done = true;
                 self.cipher_suite = cipher_suite;
+                self.write_record.clear();
+                self.write_record_pos = 0;
+                self.write_plaintext_len = 0;
+                self.write_needs_flush = false;
                 self.alpn_protocol = alpn;
             })
     }
@@ -923,18 +946,24 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
         if buf.is_empty() {
             return Poll::Ready(Ok(0));
         }
-        let ciphertext = self.write_cipher.encrypt(23, buf);
-        let record = crate::record::TlsRecord {
-            content_type: 23,
-            version: 0x0303,
-            fragment: ciphertext,
-        };
-        let bytes = record.to_bytes();
+        if self.write_record.is_empty() {
+            let plaintext_len = buf.len().min(TLS_MAX_PLAINTEXT_FRAGMENT);
+            let ciphertext = self.write_cipher.encrypt(23, &buf[..plaintext_len]);
+            let record = crate::record::TlsRecord {
+                content_type: 23,
+                version: 0x0303,
+                fragment: ciphertext,
+            };
+            self.write_record = record.to_bytes();
+            self.write_record_pos = 0;
+            self.write_plaintext_len = plaintext_len;
+            self.write_needs_flush = true;
+        }
 
-        // Write all bytes, then flush — inline poll loop
-        let mut pos = 0;
-        while pos < bytes.len() {
-            match Pin::new(&mut self.stream).poll_write(cx, &bytes[pos..]) {
+        while self.write_record_pos < self.write_record.len() {
+            match Pin::new(&mut self.stream)
+                .poll_write(cx, &self.write_record[self.write_record_pos..])
+            {
                 Poll::Ready(Ok(n)) => {
                     if n == 0 {
                         return Poll::Ready(Err(std::io::Error::new(
@@ -942,19 +971,28 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                             "failed to write whole buffer",
                         )));
                     }
-                    pos += n;
+                    self.write_record_pos += n;
                 }
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
                 Poll::Pending => return Poll::Pending,
             }
         }
-        // Flush
-        match Pin::new(&mut self.stream).poll_flush(cx) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-            Poll::Pending => return Poll::Pending,
+
+        if self.write_needs_flush {
+            match Pin::new(&mut self.stream).poll_flush(cx) {
+                Poll::Ready(Ok(())) => {
+                    self.write_needs_flush = false;
+                }
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => return Poll::Pending,
+            }
         }
-        Poll::Ready(Ok(buf.len()))
+
+        let written = self.write_plaintext_len;
+        self.write_record.clear();
+        self.write_record_pos = 0;
+        self.write_plaintext_len = 0;
+        Poll::Ready(Ok(written))
     }
 
     /// Flush the underlying transport.

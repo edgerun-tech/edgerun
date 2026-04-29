@@ -217,6 +217,45 @@ fn server_https_rejects_hostname_mismatch() {
     );
 }
 
+#[test]
+fn server_https_large_body_fragments_tls_records() {
+    use edgerun_tls::generate_self_signed as gen_cert;
+
+    struct LargeHandler;
+
+    impl Handler for LargeHandler {
+        fn handle(
+            &self,
+            _req: Request,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+            Box::pin(async move { Response::new(StatusCode::OK).with_body(vec![b'x'; 20 * 1024]) })
+        }
+    }
+
+    run(
+        "server_https_large_body_fragments_tls_records",
+        |port| async move {
+            let cert = gen_cert(&["127.0.0.1", "localhost"]).expect("cert");
+            let server = HttpServer::new(LargeHandler)
+                .with_tls(cert)
+                .bind(format!("127.0.0.1:{}", port))
+                .await?;
+
+            let server_task = spawn(async move { server.accept_one().await });
+            sleep(Duration::from_millis(100)).await;
+
+            let client = HttpClient::new().version(HttpVersion::Http1);
+            let resp = client.get(&format!("https://127.0.0.1:{}/", port)).await?;
+
+            assert_eq!(resp.status().as_u16(), 200);
+            assert_eq!(resp.body().len(), 20 * 1024);
+            assert!(resp.body().iter().all(|byte| *byte == b'x'));
+            server_task.await?;
+            Ok(())
+        },
+    );
+}
+
 // ============================================================================
 // Client version tests
 // ============================================================================
