@@ -1246,6 +1246,7 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-http",
  "edgerun-log",
+ "edgerun-machine-report",
  "edgerun-proxy",
  "edgerun-rt",
  "edgerun-tftp",

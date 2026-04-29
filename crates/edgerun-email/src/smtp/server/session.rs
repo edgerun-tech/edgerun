@@ -16,9 +16,9 @@ use crate::command_middleware::{
 };
 use crate::server::{read_line, ConnectionInterceptor};
 use crate::smtp::relay::bounce::BounceConfig;
-use crate::smtp::relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};
 #[cfg(feature = "dkim")]
 use crate::smtp::relay::relay::sign_message_data;
+use crate::smtp::relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};
 use crate::smtp::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::smtp::server::handler::{AuthCredentials, AuthResult, MailHandler};
 use crate::smtp::server::rate_limit::RateLimiter;

@@ -11,6 +11,8 @@
 | `edgerun-server.service` | Host-only systemd unit with boot target enablement, failure restart, and sandboxing |
 | `edgerun-server-health.service` | Host-only systemd oneshot health check using `edgerun-server --health-check` |
 | `edgerun-server-health.timer` | Host-only systemd timer that runs the health check every 15 minutes |
+| `edgerun-server-report.service` | Host-only systemd oneshot that delivers a local machine report email |
+| `edgerun-server-report.timer` | Host-only systemd timer that sends the report every 12 hours |
 
 ## Required Key Material
 
@@ -106,3 +108,9 @@ boot. Runtime crash handling is configured with `Restart=on-failure` and
 installed next to the service unit and enabled with
 `systemctl enable --now edgerun-server-health.timer`; failures are reported by
 the `edgerun-server-health.service` journal.
+
+`edgerun-server-report.timer` is host-only deployment material for visibility
+without external monitoring. It runs
+`edgerun-server --send-system-report --config /etc/edgerun/server/server.yaml`
+every 12 hours. The report is delivered directly into the configured local
+Maildir for the catch-all or first configured user.

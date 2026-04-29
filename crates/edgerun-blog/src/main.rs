@@ -21,22 +21,20 @@ fn main() {
 
     match command {
         BlogCommand::Serve(config) => serve(config),
-        BlogCommand::Generate { config, output } => {
-            match generate_static_site(&config, &output) {
-                Ok(site) => {
-                    println!(
-                        "generated {} files for {} posts in {}",
-                        site.files.len(),
-                        site.posts,
-                        output.display()
-                    );
-                }
-                Err(error) => {
-                    eprintln!("edgerun-blog generate: {error}");
-                    process::exit(1);
-                }
+        BlogCommand::Generate { config, output } => match generate_static_site(&config, &output) {
+            Ok(site) => {
+                println!(
+                    "generated {} files for {} posts in {}",
+                    site.files.len(),
+                    site.posts,
+                    output.display()
+                );
             }
-        }
+            Err(error) => {
+                eprintln!("edgerun-blog generate: {error}");
+                process::exit(1);
+            }
+        },
     }
 }
 
@@ -139,8 +137,8 @@ fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
 
 fn print_usage(program: &str) {
     println!(
-        "usage:\n  {program} serve --root /srv/blog --bind 127.0.0.1:8088 [--static-root /srv/blog-public] \\
-         [--title 'Edgerun Blog'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n  {program} generate --root /srv/blog --out /srv/blog-public \\
+        "usage:\n  {program} serve --root /srv/blog --bind 127.0.0.1:8088 [--static-root /srv/blog/.generated] \\
+         [--title 'Edgerun Blog'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n  {program} generate --root /srv/blog --out /srv/blog/.generated \\
          [--title 'Edgerun Blog'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n\n\
          The command name is optional; omitted commands default to serve."
     );

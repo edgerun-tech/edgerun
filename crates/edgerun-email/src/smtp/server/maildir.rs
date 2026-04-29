@@ -415,7 +415,10 @@ fn hostname() -> String {
 }
 
 fn auth_local_part(identity: &str) -> &str {
-    identity.split_once('@').map(|(local, _)| local).unwrap_or(identity)
+    identity
+        .split_once('@')
+        .map(|(local, _)| local)
+        .unwrap_or(identity)
 }
 
 #[cfg(test)]
@@ -471,7 +474,10 @@ mod tests {
             authc_id: "ken".to_string(),
             password: "wrong".to_string(),
         };
-        assert!(matches!(store.authenticate("PLAIN", &wrong), AuthResult::Failed));
+        assert!(matches!(
+            store.authenticate("PLAIN", &wrong),
+            AuthResult::Failed
+        ));
 
         let _ = fs::remove_dir_all(&dir);
     }

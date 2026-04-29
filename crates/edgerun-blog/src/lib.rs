@@ -200,9 +200,14 @@ pub fn load_posts(root: &Path) -> io::Result<Vec<Post>> {
 }
 
 pub fn generate_static_site(config: &BlogConfig, output: &Path) -> io::Result<GeneratedSite> {
-    let source = config.root.canonicalize().unwrap_or_else(|_| config.root.clone());
+    let source = config
+        .root
+        .canonicalize()
+        .unwrap_or_else(|_| config.root.clone());
     if output.exists() {
-        let destination = output.canonicalize().unwrap_or_else(|_| output.to_path_buf());
+        let destination = output
+            .canonicalize()
+            .unwrap_or_else(|_| output.to_path_buf());
         if source == destination {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -220,16 +225,28 @@ pub fn generate_static_site(config: &BlogConfig, output: &Path) -> io::Result<Ge
     fs::create_dir_all(&posts_output)?;
 
     let mut files = Vec::new();
-    write_generated(output.join("index.html"), render_index(config, &posts), &mut files)?;
+    write_generated(
+        output.join("index.html"),
+        render_index(config, &posts),
+        &mut files,
+    )?;
     write_generated(output.join("favicon.svg"), FAVICON_SVG, &mut files)?;
     write_generated(output.join("robots.txt"), render_robots(config), &mut files)?;
-    write_generated(output.join("sitemap.xml"), render_sitemap(config, &posts), &mut files)?;
+    write_generated(
+        output.join("sitemap.xml"),
+        render_sitemap(config, &posts),
+        &mut files,
+    )?;
     write_generated(
         output.join("site.webmanifest"),
         render_manifest(config),
         &mut files,
     )?;
-    write_generated(output.join("feed.xml"), render_feed(config, &posts), &mut files)?;
+    write_generated(
+        output.join("feed.xml"),
+        render_feed(config, &posts),
+        &mut files,
+    )?;
     write_generated(output.join("style.css"), STYLE, &mut files)?;
     write_generated(output.join("app.js"), APP_JS, &mut files)?;
     write_generated(
@@ -879,14 +896,17 @@ fn safe_relative(root: &Path, path: &Path) -> Option<PathBuf> {
 
 fn slug_for_path(path: &Path) -> String {
     let without_ext = path.with_extension("");
-    without_ext
+    let mut parts = without_ext
         .components()
         .filter_map(|part| match part {
             Component::Normal(name) => name.to_str().map(slugify),
             _ => None,
         })
-        .collect::<Vec<_>>()
-        .join("/")
+        .collect::<Vec<_>>();
+    if parts.first().map(String::as_str) == Some("posts") {
+        let _ = parts.remove(0);
+    }
+    parts.join("/")
 }
 
 fn title_from_slug(input: &str) -> String {
@@ -1063,7 +1083,11 @@ fn static_file_response(root: &Path, route: &str) -> Option<Response> {
 
 fn static_file_path(root: &Path, route: &str) -> Option<PathBuf> {
     let trimmed = route.trim_start_matches('/');
-    let relative = if trimmed.is_empty() { "index.html" } else { trimmed };
+    let relative = if trimmed.is_empty() {
+        "index.html"
+    } else {
+        trimmed
+    };
     let mut path = root.to_path_buf();
     for part in Path::new(relative).components() {
         match part {
@@ -1183,7 +1207,11 @@ mod tests {
     fn builds_nested_slug() {
         assert_eq!(
             slug_for_path(Path::new("posts/2026-04-30 Hello World.md")),
-            "posts/2026-04-30-hello-world"
+            "2026-04-30-hello-world"
+        );
+        assert_eq!(
+            slug_for_path(Path::new("posts/releases/email.md")),
+            "releases/email"
         );
     }
 

@@ -29,10 +29,12 @@ use edgerun_dns::{
     DnsServerConfig, DnsZone,
 };
 use edgerun_email::imap::{ImapServer, ImapServerConfig, MaildirImapStore};
-use edgerun_email::smtp::server::{MaildirStore, SmtpServer, SmtpServerConfig};
+use edgerun_email::smtp::server::{MailHandler, MaildirStore, SmtpServer, SmtpServerConfig};
+use edgerun_email::smtp::types::MailEnvelope;
 use edgerun_email::smtp::ServerLimits;
 use edgerun_encoding::base64::{standard_decode, standard_encode_wrapped};
 use edgerun_http::{Handler, HttpServer, Request, Response, StatusCode};
+use edgerun_machine_report::{gather_machine_report, render_machine_report, OutputFormat};
 use edgerun_rt::CancellationToken;
 use edgerun_tls::CertificateAndKey;
 
@@ -75,6 +77,15 @@ fn main() {
             }
         }
         return;
+    }
+    if args.iter().any(|arg| arg == "--send-system-report") {
+        match send_system_report_from_args(&args) {
+            Ok(()) => return,
+            Err(error) => {
+                eprintln!("system-report: failed: {error}");
+                process::exit(1);
+            }
+        }
     }
     if args.iter().any(|arg| arg == "--health-check") {
         match run_health_check_from_args(&args) {
@@ -121,7 +132,8 @@ fn print_usage(program: &str) {
     println!(
         "usage: {program} --config /etc/edgerun/server/server.yaml\n\
          usage: {program} --health-check --config /etc/edgerun/server/server.yaml\n\
-         usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/blog [--blog-static-root /srv/blog-public]\n\
+         usage: {program} --send-system-report --config /etc/edgerun/server/server.yaml [--report-to admin@example.com]\n\
+         usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/blog [--blog-static-root /srv/blog/.generated]\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
 }
@@ -184,6 +196,10 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
         match args[i].as_str() {
             "--check-config" => {}
             "--health-check" => {}
+            "--send-system-report" => {}
+            "--report-to" | "--report-from" if i + 1 < args.len() => {
+                i += 1;
+            }
             "--config" | "-c" if i + 1 < args.len() => {
                 config = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
@@ -343,6 +359,108 @@ fn run_health_check_from_args(args: &[String]) -> io::Result<()> {
     }
     println!("health: ok checks={checks}");
     Ok(())
+}
+
+fn send_system_report_from_args(args: &[String]) -> io::Result<()> {
+    let resources = load_resources_from_args(args).map_err(invalid_config)?;
+    let mut smtp_specs = Vec::new();
+    let mut imap_specs = Vec::new();
+    for resource in resources {
+        match resource {
+            ConfigResource::SmtpServer(spec) => smtp_specs.push(spec),
+            ConfigResource::ImapServer(spec) => imap_specs.push(spec),
+            _ => {}
+        }
+    }
+    let smtp = smtp_specs
+        .first()
+        .ok_or_else(|| invalid_config("system report requires a SmtpServer resource"))?;
+    let maildir_root = required_path(smtp.maildir_root.as_deref(), "SmtpServer.maildir_root")?;
+    let store = MaildirStore::new(&maildir_root)?;
+    register_smtp_users(&store, smtp, &imap_specs)?;
+
+    let to = arg_value(args, "--report-to")
+        .map(str::to_string)
+        .or_else(|| default_report_recipient(smtp))
+        .ok_or_else(|| invalid_config("missing --report-to and no default local user"))?;
+    let from = arg_value(args, "--report-from")
+        .map(str::to_string)
+        .unwrap_or_else(|| default_report_sender(smtp));
+    store.validate_recipient(&to)?;
+
+    let report = gather_machine_report();
+    let machine = render_machine_report(&report, OutputFormat::Text).map_err(invalid_config)?;
+    let body = format!(
+        "edgerun server report\r\n\
+         hostname: {}\r\n\
+         smtp_hostname: {}\r\n\
+         local_domains: {}\r\n\
+         maildir_root: {}\r\n\
+         queue_dir: {}\r\n\
+         tls_cert: {}\r\n\
+         generated_by: edgerun-server --send-system-report\r\n\
+         \r\n\
+         {}\r\n",
+        local_hostname(),
+        smtp.hostname,
+        smtp.local_domains.join(","),
+        maildir_root.display(),
+        smtp.queue_dir.as_deref().unwrap_or("(disabled)"),
+        smtp.tls_cert.as_deref().unwrap_or("(none)"),
+        normalize_crlf(&machine)
+    );
+    let message = format!(
+        "From: Edgerun System <{}>\r\n\
+         To: <{}>\r\n\
+         Subject: Edgerun system report for {}\r\n\
+         Date: {}\r\n\
+         Message-ID: <system-report-{}@{}>\r\n\
+         MIME-Version: 1.0\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\
+         Content-Transfer-Encoding: 8bit\r\n\
+         \r\n\
+         {}",
+        sanitize_header(&from),
+        sanitize_header(&to),
+        sanitize_header(&smtp.hostname),
+        http_date_now(),
+        unique_webmail_id(),
+        sanitize_header(&smtp.hostname),
+        body
+    );
+    let mut envelope = MailEnvelope::new(from);
+    envelope.add_recipient(to.clone(), Vec::new(), Default::default(), None);
+    envelope.data = message.into_bytes();
+    store.accept_mail(&envelope)?;
+    println!("system-report: delivered locally to {to}");
+    Ok(())
+}
+
+fn default_report_recipient(spec: &SmtpServerSpec) -> Option<String> {
+    let users = configured_users(spec.users.as_deref(), &spec.local_domains);
+    let user = spec
+        .catch_all_user
+        .as_deref()
+        .or_else(|| users.first().map(|user| user.username.as_str()))?;
+    let domain = spec.local_domains.first()?;
+    Some(format!("{user}@{domain}"))
+}
+
+fn default_report_sender(spec: &SmtpServerSpec) -> String {
+    let domain = spec
+        .local_domains
+        .first()
+        .map(String::as_str)
+        .unwrap_or("localhost");
+    format!("system@{domain}")
+}
+
+fn local_hostname() -> String {
+    std::fs::read_to_string("/etc/hostname")
+        .map(|value| value.trim().to_string())
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "localhost".to_string())
 }
 
 fn health_tls_cert_paths(

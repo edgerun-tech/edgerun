@@ -121,27 +121,14 @@ impl OutboundRelay {
         recipient: &str,
         remote_mta: &str,
     ) -> Result<String, String> {
-        // Try STARTTLS first. If the local TLS client cannot interoperate with
-        // the remote MTA, retry plaintext rather than wedging the outbound
-        // queue. This keeps delivery opportunistic while TLS coverage matures.
-        let mut client = match SmtpClient::connect(addr).await {
-            Ok(client) => client,
-            Err(tls_error) => {
-                edgerun_log::warn!(
-                    "edgerun-smtp-relay: STARTTLS delivery to {} failed: {}; retrying plaintext",
-                    addr,
-                    tls_error
-                );
-                SmtpClient::connect_no_tls(addr)
-                    .await
-                    .map_err(|plain_error| {
-                        format!(
-                            "connection to {} failed: STARTTLS {}; plaintext {}",
-                            addr, tls_error, plain_error
-                        )
-                    })?
-            }
-        };
+        let mut client = SmtpClient::connect(addr)
+            .await
+            .map_err(|error| format!("encrypted connection to {addr} failed: {error}"))?;
+        if !client.is_tls_active() {
+            return Err(format!(
+                "remote MTA {remote_mta} did not negotiate STARTTLS; refusing plaintext delivery"
+            ));
+        }
 
         // EHLO
         client
