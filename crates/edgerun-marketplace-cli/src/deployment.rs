@@ -5,6 +5,7 @@ use core::str::FromStr;
 use edgerun_solana::signers::{Ed25519Signer, Signer};
 use edgerun_solana::{
     solana_types::Pubkey, DeploymentClient, TokenEscrowAccounts, TokenSettlementAccounts,
+    WORKLOAD_IMAGE_SIZE,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{eprintln, println};
@@ -17,6 +18,7 @@ pub enum DeploymentCommand {
         governance: Option<String>,
         provider: Option<String>,
         name: Option<String>,
+        image: Option<String>,
         containers: u32,
         cpu_cores: u32,
         memory_bytes: u64,
@@ -135,6 +137,7 @@ where
             let mut governance = None;
             let mut provider = None;
             let mut name = None;
+            let mut image = None;
             let mut containers = 1u32;
             let mut cpu_cores = 2u32;
             let mut memory_bytes = 4294967296u64;
@@ -157,6 +160,7 @@ where
                         );
                     }
                     "--name" => name = Some(next_value(&mut args, &arg)?),
+                    "--image" | "--oci-image" => image = Some(next_value(&mut args, &arg)?),
                     "--containers" => containers = next_parse(&mut args, &arg)?,
                     "--cpu" | "-c" => cpu_cores = next_parse(&mut args, &arg)?,
                     "--memory" | "-m" => memory_bytes = next_parse(&mut args, &arg)?,
@@ -188,6 +192,7 @@ where
                 governance,
                 provider,
                 name,
+                image,
                 containers,
                 cpu_cores,
                 memory_bytes,
@@ -553,6 +558,29 @@ fn parse_token_escrow(
     }))
 }
 
+fn encode_workload_image(
+    image: Option<&str>,
+) -> Result<[u8; WORKLOAD_IMAGE_SIZE], Box<dyn std::error::Error + Send + Sync>> {
+    let mut encoded = [0u8; WORKLOAD_IMAGE_SIZE];
+    let Some(image) = image else {
+        return Ok(encoded);
+    };
+    let bytes = image.as_bytes();
+    if bytes.is_empty() {
+        return Ok(encoded);
+    }
+    if bytes.len() > WORKLOAD_IMAGE_SIZE {
+        return Err(format!(
+            "workload image reference is {} bytes; maximum is {} bytes",
+            bytes.len(),
+            WORKLOAD_IMAGE_SIZE
+        )
+        .into());
+    }
+    encoded[..bytes.len()].copy_from_slice(bytes);
+    Ok(encoded)
+}
+
 fn signer_pubkey(signer: &Ed25519Signer) -> Pubkey {
     Pubkey::new_from_array(signer.pubkey())
 }
@@ -581,6 +609,7 @@ pub async fn handle(
             governance,
             provider,
             name,
+            image,
             containers,
             cpu_cores,
             memory_bytes,
@@ -630,6 +659,9 @@ pub async fn handle(
             if let Some(n) = name {
                 println!("Name: {}", n);
             }
+            if let Some(image) = image {
+                println!("Image: {}", image);
+            }
             println!("Containers: {}", containers);
             println!(
                 "Resources: {} cores, {} bytes RAM, {} bytes storage",
@@ -660,6 +692,7 @@ pub async fn handle(
                     name_bytes[..bytes.len().min(64)]
                         .copy_from_slice(&bytes[..bytes.len().min(64)]);
                 }
+                let workload_image = encode_workload_image(image.as_deref())?;
                 if deployment.is_empty() || deployment.parse::<Pubkey>().is_err() {
                     let seed = if deployment.is_empty() {
                         "deployment"
@@ -687,6 +720,7 @@ pub async fn handle(
                             burn_rate,
                             *auto_stop_on_price_increase,
                             *governance_pubkey.as_bytes(),
+                            workload_image,
                             token_escrow,
                         )
                         .await?;
@@ -709,6 +743,7 @@ pub async fn handle(
                         burn_rate,
                         *auto_stop_on_price_increase,
                         *governance_pubkey.as_bytes(),
+                        workload_image,
                         token_escrow,
                     );
                     let tx_sig = client
@@ -754,6 +789,9 @@ pub async fn handle(
                     if d.payment_mint != Pubkey::default() {
                         println!("Payment mint: {}", d.payment_mint);
                         println!("Escrow token account: {}", d.escrow_token_account);
+                    }
+                    if !d.workload_image.is_empty() {
+                        println!("Image: {}", String::from_utf8_lossy(&d.workload_image));
                     }
                     if matches!(d.status, edgerun_solana::DeploymentStatus::Stopped) {
                         let settled = d
@@ -1182,6 +1220,8 @@ mod tests {
             "governance-key",
             "--name",
             "web",
+            "--image",
+            "registry.example/web:dev",
             "--containers",
             "3",
             "--cpu",
@@ -1204,6 +1244,7 @@ mod tests {
                 governance: Some("governance-key".to_string()),
                 provider: None,
                 name: Some("web".to_string()),
+                image: Some("registry.example/web:dev".to_string()),
                 containers: 3,
                 cpu_cores: 8,
                 memory_bytes: 17_179_869_184,

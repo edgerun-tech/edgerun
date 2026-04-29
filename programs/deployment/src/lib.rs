@@ -63,6 +63,7 @@ pub fn process_instruction(
             governance_authority,
             payment_mint,
             escrow_token_account,
+            workload_image,
         } => {
             msg!("DeploymentContract: Initialize");
             initialize(
@@ -81,6 +82,7 @@ pub fn process_instruction(
                 governance_authority,
                 payment_mint,
                 escrow_token_account,
+                workload_image,
             )
         }
         instruction::DeploymentInstruction::Start => {
@@ -180,6 +182,7 @@ fn initialize(
     governance_authority: [u8; 32],
     payment_mint: [u8; 32],
     escrow_token_account: [u8; 32],
+    workload_image: [u8; state::WORKLOAD_IMAGE_SIZE],
 ) -> ProgramResult {
     let account_iter = &mut accounts.iter();
     let deployment_account = next_account_info(account_iter)?;
@@ -289,6 +292,7 @@ fn initialize(
         dao_slashed: 0,
         payment_mint,
         escrow_token_account,
+        workload_image,
     };
 
     let mut data = deployment_account.try_borrow_mut_data()?;

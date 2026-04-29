@@ -127,6 +127,7 @@ pub struct Deployment {
     pub dao_slashed: u64,
     pub payment_mint: Pubkey,
     pub escrow_token_account: Pubkey,
+    pub workload_image: Vec<u8>,
 }
 
 edgerun_json::impl_json_struct! {
@@ -167,6 +168,7 @@ edgerun_json::impl_json_struct! {
         dao_slashed: u64,
         payment_mint: Pubkey,
         escrow_token_account: Pubkey,
+        workload_image: Vec<u8>,
     }
 }
 
@@ -209,6 +211,7 @@ impl Default for Deployment {
             dao_slashed: 0,
             payment_mint: Pubkey::default(),
             escrow_token_account: Pubkey::default(),
+            workload_image: Vec::new(),
         }
     }
 }
@@ -308,6 +311,7 @@ impl Deployment {
             let dao_slashed = read_optional_u64(data, &mut offset, 0)?;
             let payment_mint = read_optional_pubkey(data, &mut offset, Pubkey::default())?;
             let escrow_token_account = read_optional_pubkey(data, &mut offset, Pubkey::default())?;
+            let workload_image = read_optional_fixed_bytes(data, &mut offset, 256)?;
 
             return Ok(Self {
                 owner,
@@ -346,6 +350,7 @@ impl Deployment {
                 dao_slashed,
                 payment_mint,
                 escrow_token_account,
+                workload_image,
             });
         }
 
@@ -400,6 +405,25 @@ fn read_optional_pubkey(
         .map_err(|_| "invalid optional pubkey field".to_string())?;
     *offset = end;
     Ok(Pubkey::new_from_array(bytes))
+}
+
+fn read_optional_fixed_bytes(
+    data: &[u8],
+    offset: &mut usize,
+    len: usize,
+) -> Result<Vec<u8>, String> {
+    if (*offset).saturating_add(len) > data.len() {
+        return Ok(Vec::new());
+    }
+    let end = (*offset).saturating_add(len);
+    let bytes = &data[*offset..end];
+    *offset = end;
+    let trimmed_len = bytes
+        .iter()
+        .rposition(|byte| *byte != 0)
+        .map(|idx| idx + 1)
+        .unwrap_or(0);
+    Ok(bytes[..trimmed_len].to_vec())
 }
 
 fn default_if_zero(value: u64, default: u64) -> u64 {

@@ -17,6 +17,7 @@ pub enum DeploymentInstruction {
         governance_authority: [u8; 32],
         payment_mint: [u8; 32],
         escrow_token_account: [u8; 32],
+        workload_image: [u8; crate::state::WORKLOAD_IMAGE_SIZE],
     },
     Start,
     Pause,
@@ -100,6 +101,12 @@ impl DeploymentInstruction {
                     } else {
                         [0u8; 32]
                     },
+                    workload_image: if ops.len() >= crate::state::WORKLOAD_IMAGE_SIZE {
+                        <[u8; crate::state::WORKLOAD_IMAGE_SIZE]>::deserialize(&mut ops)
+                            .map_err(|_| ProgramError::InvalidInstructionData)?
+                    } else {
+                        [0u8; crate::state::WORKLOAD_IMAGE_SIZE]
+                    },
                 })
             }
             1 => Ok(DeploymentInstruction::Start),
@@ -180,6 +187,35 @@ mod tests {
         match DeploymentInstruction::unpack(&data).unwrap() {
             DeploymentInstruction::AssignProvider { provider } => {
                 assert_eq!(provider, [7u8; 32]);
+            }
+            other => panic!("unexpected instruction: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unpack_initialize_accepts_workload_image() {
+        let mut data = vec![0];
+        data.extend_from_slice(&[1u8; 64]);
+        data.extend_from_slice(&[0u8; 32]);
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&2u32.to_le_bytes());
+        data.extend_from_slice(&3u64.to_le_bytes());
+        data.extend_from_slice(&4u64.to_le_bytes());
+        data.extend_from_slice(&5u32.to_le_bytes());
+        data.extend_from_slice(&6u64.to_le_bytes());
+        data.extend_from_slice(&7u64.to_le_bytes());
+        data.push(1);
+        data.extend_from_slice(&[8u8; 32]);
+        data.extend_from_slice(&[9u8; 32]);
+        data.extend_from_slice(&[10u8; 32]);
+        let mut image = [0u8; crate::state::WORKLOAD_IMAGE_SIZE];
+        let image_ref = b"registry/app:dev";
+        image[..image_ref.len()].copy_from_slice(image_ref);
+        data.extend_from_slice(&image);
+
+        match DeploymentInstruction::unpack(&data).unwrap() {
+            DeploymentInstruction::Initialize { workload_image, .. } => {
+                assert_eq!(&workload_image[..image_ref.len()], image_ref);
             }
             other => panic!("unexpected instruction: {other:?}"),
         }

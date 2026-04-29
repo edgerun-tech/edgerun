@@ -1,7 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{program_error::ProgramError, pubkey::Pubkey};
 
-pub const SIZE: usize = 448;
+pub const LEGACY_SIZE: usize = 448;
+pub const WORKLOAD_IMAGE_SIZE: usize = 256;
+pub const SIZE: usize = 704;
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[borsh(use_discriminant = true)]
@@ -53,12 +55,19 @@ pub struct Deployment {
     pub dao_slashed: u64,
     pub payment_mint: Pubkey,
     pub escrow_token_account: Pubkey,
+    pub workload_image: [u8; WORKLOAD_IMAGE_SIZE],
 }
 
 impl Deployment {
     pub fn unpack(data: &[u8]) -> Result<Self, ProgramError> {
-        if data.len() < SIZE {
+        if data.len() < LEGACY_SIZE {
             return Err(ProgramError::AccountDataTooSmall);
+        }
+        if data.len() < SIZE {
+            let mut padded = [0u8; SIZE];
+            padded[..data.len()].copy_from_slice(data);
+            let mut reader = padded.as_slice();
+            return Self::deserialize(&mut reader).map_err(|_| ProgramError::InvalidAccountData);
         }
         let mut reader = data;
         Self::deserialize(&mut reader).map_err(|_| ProgramError::InvalidAccountData)
@@ -114,6 +123,7 @@ impl Default for Deployment {
             dao_slashed: 0,
             payment_mint: Pubkey::default(),
             escrow_token_account: Pubkey::default(),
+            workload_image: [0u8; WORKLOAD_IMAGE_SIZE],
         }
     }
 }
@@ -162,6 +172,7 @@ mod tests {
             dao_slashed: 50,
             payment_mint: Pubkey::new_unique(),
             escrow_token_account: Pubkey::new_unique(),
+            workload_image: [42u8; WORKLOAD_IMAGE_SIZE],
         };
         let mut data = [0u8; SIZE];
 
@@ -192,5 +203,27 @@ mod tests {
             unpacked.escrow_token_account,
             deployment.escrow_token_account
         );
+        assert_eq!(unpacked.workload_image, deployment.workload_image);
+    }
+
+    #[test]
+    fn unpack_pads_legacy_account_data() {
+        let deployment = Deployment {
+            owner: Pubkey::new_unique(),
+            name: {
+                let mut name = [0u8; 64];
+                name[..3].copy_from_slice(b"api");
+                name
+            },
+            ..Deployment::default()
+        };
+        let mut data = [0u8; SIZE];
+        deployment.pack(&mut data).unwrap();
+
+        let unpacked = Deployment::unpack(&data[..LEGACY_SIZE]).unwrap();
+
+        assert_eq!(unpacked.owner, deployment.owner);
+        assert_eq!(&unpacked.name[..3], b"api");
+        assert_eq!(unpacked.workload_image, [0u8; WORKLOAD_IMAGE_SIZE]);
     }
 }

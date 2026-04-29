@@ -14,7 +14,8 @@ use crate::try_deployment_program_id;
 use crate::types::{Deployment, DeploymentStatus};
 
 const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
-const DEPLOYMENT_ACCOUNT_SIZE: u64 = 448;
+pub const WORKLOAD_IMAGE_SIZE: usize = 256;
+const DEPLOYMENT_ACCOUNT_SIZE: u64 = 704;
 const ESCROW_AUTHORITY_SEED: &[u8] = b"deployment-escrow";
 
 fn make_instruction(
@@ -155,6 +156,7 @@ impl DeploymentClient {
         burn_rate: u64,
         auto_stop_on_price_increase: bool,
         governance_authority: [u8; 32],
+        workload_image: [u8; WORKLOAD_IMAGE_SIZE],
         token_escrow: Option<TokenEscrowAccounts>,
     ) -> Instruction {
         let mut encoded = Vec::new();
@@ -169,10 +171,15 @@ impl DeploymentClient {
         encoded.extend_from_slice(&burn_rate.to_le_bytes());
         encoded.push(u8::from(auto_stop_on_price_increase));
         encoded.extend_from_slice(&governance_authority);
-        if let Some(token_escrow) = token_escrow {
-            encoded.extend_from_slice(token_escrow.payment_mint.as_bytes());
-            encoded.extend_from_slice(token_escrow.escrow_token_account.as_bytes());
-        }
+        let payment_mint = token_escrow
+            .map(|escrow| escrow.payment_mint)
+            .unwrap_or_default();
+        let escrow_token_account = token_escrow
+            .map(|escrow| escrow.escrow_token_account)
+            .unwrap_or_default();
+        encoded.extend_from_slice(payment_mint.as_bytes());
+        encoded.extend_from_slice(escrow_token_account.as_bytes());
+        encoded.extend_from_slice(&workload_image);
         let mut accounts = vec![
             AccountMeta::new(*deployment_pubkey, false),
             AccountMeta::new(*owner_pubkey, true),
@@ -210,6 +217,7 @@ impl DeploymentClient {
         burn_rate: u64,
         auto_stop_on_price_increase: bool,
         governance_authority: [u8; 32],
+        workload_image: [u8; WORKLOAD_IMAGE_SIZE],
         token_escrow: Option<TokenEscrowAccounts>,
     ) -> Result<(Pubkey, String), SolanaError> {
         let deployment_pubkey = self.deployment_address_with_seed(owner_pubkey, seed)?;
@@ -237,6 +245,7 @@ impl DeploymentClient {
             burn_rate,
             auto_stop_on_price_increase,
             governance_authority,
+            workload_image,
             token_escrow,
         );
         let tx = self
@@ -1123,6 +1132,7 @@ mod tests {
             1,
             true,
             [0u8; 32],
+            [11u8; WORKLOAD_IMAGE_SIZE],
             Some(token_escrow),
         );
         assert_eq!(init.data[0], 0);
@@ -1131,6 +1141,7 @@ mod tests {
             &init.data[206..238],
             token_escrow.escrow_token_account.as_bytes()
         );
+        assert_eq!(&init.data[238..494], &[11u8; WORKLOAD_IMAGE_SIZE]);
         assert_eq!(init.accounts.len(), 6);
 
         let token_settlement = TokenSettlementAccounts {
