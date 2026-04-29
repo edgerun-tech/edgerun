@@ -273,7 +273,7 @@ impl ProviderClient {
                     && p.cpu_cores >= required_cpu
                     && p.memory_bytes >= required_memory
             })
-            .max_by_key(|p| p.uptime_percent.saturating_sub(p.slash_count * 100))
+            .max_by_key(|p| provider_reputation_score(p.uptime_percent, p.slash_count))
     }
 
     pub async fn send_instruction_signed<S: Signer>(
@@ -395,6 +395,10 @@ impl ProviderClient {
             .parse::<Pubkey>()
             .map_err(|err| SolanaError::Rpc(format!("invalid latest blockhash: {err}")))
     }
+}
+
+fn provider_reputation_score(uptime_percent: u32, slash_count: u32) -> u32 {
+    uptime_percent.saturating_sub(slash_count.saturating_mul(100))
 }
 
 struct HttpRuntime {
@@ -548,6 +552,27 @@ mod tests {
             client.attest_instruction(&provider, &authority, 9_999).data,
             vec![5, 15, 39, 0, 0]
         );
+    }
+
+    #[test]
+    fn select_best_provider_handles_large_slash_counts() {
+        let client = client();
+        let mut slashed = Provider::default();
+        slashed.status = ProviderStatus::Active;
+        slashed.cpu_cores = 4;
+        slashed.memory_bytes = 8_000_000_000;
+        slashed.uptime_percent = 10_000;
+        slashed.slash_count = u32::MAX;
+
+        let mut stable = Provider::default();
+        stable.status = ProviderStatus::Active;
+        stable.cpu_cores = 4;
+        stable.memory_bytes = 8_000_000_000;
+        stable.uptime_percent = 9_000;
+
+        let providers = [slashed, stable];
+        let selected = client.select_best_provider(&providers, 1, 1).unwrap();
+        assert_eq!(selected.uptime_percent, 9_000);
     }
 
     #[test]

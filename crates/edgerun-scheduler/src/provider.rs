@@ -108,7 +108,7 @@ impl ProviderManager {
         self.providers
             .values()
             .filter(|p| p.is_online && p.can_fit(required_cpu, required_memory))
-            .max_by_key(|p| p.uptime_percent.saturating_sub(p.slash_count * 100))
+            .max_by_key(|p| provider_reputation_score(p.uptime_percent, p.slash_count))
     }
 
     pub fn set_online(&mut self, node_id: &[u8; 32], online: bool) {
@@ -131,6 +131,10 @@ impl ProviderManager {
             p.storage_bytes_available = storage_available;
         }
     }
+}
+
+fn provider_reputation_score(uptime_percent: u32, slash_count: u32) -> u32 {
+    uptime_percent.saturating_sub(slash_count.saturating_mul(100))
 }
 
 impl Default for ProviderManager {
@@ -168,6 +172,29 @@ mod tests {
 
         let selected = mgr.select(4, 4_000_000_000);
         assert!(selected.is_some());
+    }
+
+    #[test]
+    fn provider_selection_handles_large_slash_counts() {
+        let mut mgr = ProviderManager::new();
+
+        let mut slashed = ProviderInfo::new([1u8; 32], "slashed");
+        slashed.cpu_cores_available = 4;
+        slashed.memory_bytes_available = 8_000_000_000;
+        slashed.is_online = true;
+        slashed.uptime_percent = 10_000;
+        slashed.slash_count = u32::MAX;
+        mgr.add(slashed);
+
+        let mut stable = ProviderInfo::new([2u8; 32], "stable");
+        stable.cpu_cores_available = 4;
+        stable.memory_bytes_available = 8_000_000_000;
+        stable.is_online = true;
+        stable.uptime_percent = 9_000;
+        mgr.add(stable);
+
+        let selected = mgr.select(1, 1).unwrap();
+        assert_eq!(selected.node_id, [2u8; 32]);
     }
 
     #[test]
