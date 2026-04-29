@@ -19,7 +19,7 @@ cargo run -p edgerun-blog -- \
 ```
 
 The Git-backed content model is implemented in code. On the current mail host,
-DNS for `blog.edgerun.tech` is served from the Edgerun mail server's own
+DNS for `blog.edgerun.tech` is served from the Edgerun server's own
 `DnsZone` config. Public hosting should route that host through an Edgerun HTTP
-listener, either by mounting `BlogHandler` in the existing mail server process or
-by running this binary on its own Edgerun-managed listener.
+listener, either by mounting `BlogHandler` in the existing `edgerun-server`
+process or by running this binary on its own Edgerun-managed listener.

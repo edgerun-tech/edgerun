@@ -1,4 +1,4 @@
-//! Host mail server binary.
+//! Host Edgerun server binary.
 //!
 //! Loads Kubernetes-style Edgerun YAML via `edgerun-config`, serves
 //! authoritative DNS zones with `edgerun-dns`, accepts SMTP, relays outbound
@@ -34,11 +34,7 @@ use edgerun_tls::CertificateAndKey;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
-        print_usage(
-            args.first()
-                .map(String::as_str)
-                .unwrap_or("edgerun-mail-server"),
-        );
+        print_usage(args.first().map(String::as_str).unwrap_or("edgerun-server"));
         return;
     }
     if args.iter().any(|arg| arg == "--init-material") {
@@ -101,7 +97,7 @@ fn main() {
 
     rt.block_on(async move {
         if let Err(error) = run(resources).await {
-            eprintln!("edgerun-mail-server: {error}");
+            eprintln!("edgerun-server: {error}");
             process::exit(1);
         }
     });
@@ -109,8 +105,8 @@ fn main() {
 
 fn print_usage(program: &str) {
     println!(
-        "usage: {program} --config /etc/edgerun/mail.yaml\n\
-         usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/mail"
+        "usage: {program} --config /etc/edgerun/server/server.yaml\n\
+         usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
 }
 
@@ -158,7 +154,7 @@ fn parse_config_path(args: &[String]) -> Result<PathBuf, String> {
         i += 1;
     }
     config.ok_or_else(|| {
-        "missing --config /path/to/mail.yaml\nusage: edgerun-mail-server --config /etc/edgerun/mail.yaml"
+        "missing --config /path/to/server.yaml\nusage: edgerun-server --config /etc/edgerun/server/server.yaml"
             .to_string()
     })
 }
@@ -179,7 +175,7 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
         }
     }
     eprintln!(
-        "edgerun-mail-server: config dns_servers={} dns_zones={} smtp_servers={} imap_servers={}",
+        "edgerun-server: config dns_servers={} dns_zones={} smtp_servers={} imap_servers={}",
         dns_servers.len(),
         zones.len(),
         smtp_specs.len(),
@@ -271,10 +267,7 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
         ));
     }
 
-    eprintln!(
-        "edgerun-mail-server: running {} service task(s)",
-        tasks.len()
-    );
+    eprintln!("edgerun-server: running {} service task(s)", tasks.len());
     for task in tasks {
         match task.await {
             Ok(result) => result?,
@@ -630,7 +623,10 @@ fn read_webmail_attachment(
             return Ok((attachment, data));
         }
     }
-    Err(io::Error::new(io::ErrorKind::NotFound, "attachment not found"))
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "attachment not found",
+    ))
 }
 
 fn apply_message_action(config: &WebmailConfig, id: &str, action: &str) -> io::Result<()> {
@@ -679,7 +675,7 @@ fn send_webmail_message(config: &WebmailConfig, request: &Request) -> io::Result
     let from = config.address.clone();
     std::thread::spawn(move || {
         if let Err(error) = submit_smtp(&smtp_addr, &hostname, &from, &to, &message) {
-            eprintln!("edgerun-webmail: SMTP submit failed: {error}");
+            eprintln!("edgerun-server: webmail SMTP submit failed: {error}");
         }
     });
     Ok(())
@@ -838,7 +834,10 @@ fn find_maildir_message(config: &WebmailConfig, id: &str) -> io::Result<PathBuf>
 
 fn move_maildir_message(config: &WebmailConfig, id: &str, target_state: &str) -> io::Result<()> {
     let path = find_maildir_message(config, id)?;
-    let target_dir = config.maildir_root.join(&config.username).join(target_state);
+    let target_dir = config
+        .maildir_root
+        .join(&config.username)
+        .join(target_state);
     std::fs::create_dir_all(&target_dir)?;
     let target = target_dir.join(id);
     if path == target {
@@ -847,13 +846,7 @@ fn move_maildir_message(config: &WebmailConfig, id: &str, target_state: &str) ->
     std::fs::rename(path, target)
 }
 
-fn submit_smtp(
-    addr: &str,
-    hostname: &str,
-    from: &str,
-    to: &str,
-    message: &str,
-) -> io::Result<()> {
+fn submit_smtp(addr: &str, hostname: &str, from: &str, to: &str, message: &str) -> io::Result<()> {
     let mut stream = std::net::TcpStream::connect(addr)?;
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     stream.set_write_timeout(Some(Duration::from_secs(10)))?;
@@ -961,7 +954,9 @@ fn header_value(raw: &str, name: &str) -> Option<String> {
 }
 
 fn message_body(raw: &str) -> String {
-    if let Some(boundary) = header_value(raw, "Content-Type").and_then(|value| header_param(&value, "boundary")) {
+    if let Some(boundary) =
+        header_value(raw, "Content-Type").and_then(|value| header_param(&value, "boundary"))
+    {
         for part in multipart_parts(raw, &boundary) {
             let headers = part_headers(&part);
             let content_type = header_value(&headers, "Content-Type")
@@ -1001,21 +996,21 @@ struct MailAttachment {
 }
 
 fn message_attachments(raw: &str) -> Vec<MailAttachment> {
-    let Some(boundary) = header_value(raw, "Content-Type").and_then(|value| header_param(&value, "boundary")) else {
+    let Some(boundary) =
+        header_value(raw, "Content-Type").and_then(|value| header_param(&value, "boundary"))
+    else {
         return Vec::new();
     };
     let mut attachments = Vec::new();
     for part in multipart_parts(raw, &boundary) {
         let headers = part_headers(&part);
         let disposition = header_value(&headers, "Content-Disposition").unwrap_or_default();
-        let content_type =
-            header_value(&headers, "Content-Type").unwrap_or_else(|| "application/octet-stream".to_string());
-        let name = header_param(&disposition, "filename")
-            .or_else(|| header_param(&content_type, "name"));
-        let is_attachment = disposition
-            .to_ascii_lowercase()
-            .contains("attachment")
-            || name.is_some();
+        let content_type = header_value(&headers, "Content-Type")
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+        let name =
+            header_param(&disposition, "filename").or_else(|| header_param(&content_type, "name"));
+        let is_attachment =
+            disposition.to_ascii_lowercase().contains("attachment") || name.is_some();
         if !is_attachment {
             continue;
         }
@@ -1024,9 +1019,14 @@ fn message_attachments(raw: &str) -> Vec<MailAttachment> {
             .to_ascii_lowercase();
         let body = part_body(&part).trim().to_string();
         let size = if transfer_encoding == "base64" {
-            standard_decode(&body.chars().filter(|ch| !ch.is_whitespace()).collect::<String>())
-                .map(|data| data.len())
-                .unwrap_or(0)
+            standard_decode(
+                &body
+                    .chars()
+                    .filter(|ch| !ch.is_whitespace())
+                    .collect::<String>(),
+            )
+            .map(|data| data.len())
+            .unwrap_or(0)
         } else {
             body.len()
         };
@@ -1061,7 +1061,10 @@ fn decode_attachment_body(attachment: &MailAttachment) -> io::Result<Vec<u8>> {
 }
 
 fn multipart_parts(raw: &str, boundary: &str) -> Vec<String> {
-    let Some((_, body)) = raw.split_once("\r\n\r\n").or_else(|| raw.split_once("\n\n")) else {
+    let Some((_, body)) = raw
+        .split_once("\r\n\r\n")
+        .or_else(|| raw.split_once("\n\n"))
+    else {
         return Vec::new();
     };
     let marker = format!("--{boundary}");
@@ -1095,12 +1098,7 @@ fn header_param(value: &str, param: &str) -> Option<String> {
     for segment in value.split(';').skip(1) {
         if let Some((key, val)) = segment.split_once('=') {
             if key.trim().eq_ignore_ascii_case(param) {
-                return Some(
-                    val.trim()
-                        .trim_matches('"')
-                        .trim_matches('\'')
-                        .to_string(),
-                );
+                return Some(val.trim().trim_matches('"').trim_matches('\'').to_string());
             }
         }
     }
@@ -1112,14 +1110,21 @@ fn auth_warning_reason(raw: &str) -> Option<String> {
         .or_else(|| header_value(raw, "X-Authentication-Results"))
         .unwrap_or_default()
         .to_ascii_lowercase();
-    for marker in ["dmarc=fail", "spf=fail", "dkim=fail", "dmarc=permerror", "spf=permerror"] {
+    for marker in [
+        "dmarc=fail",
+        "spf=fail",
+        "dkim=fail",
+        "dmarc=permerror",
+        "spf=permerror",
+    ] {
         if auth.contains(marker) {
             return Some(format!("sender authentication reported {marker}"));
         }
     }
 
     let from_domain = header_value(raw, "From").and_then(|value| email_domain(&value));
-    let return_path_domain = header_value(raw, "Return-Path").and_then(|value| email_domain(&value));
+    let return_path_domain =
+        header_value(raw, "Return-Path").and_then(|value| email_domain(&value));
     if let (Some(from), Some(return_path)) = (from_domain, return_path_domain) {
         if !domains_align(&from, &return_path) {
             return Some(format!(
@@ -1215,7 +1220,11 @@ fn sanitize_attachment_name(value: &str) -> String {
 
 fn sanitize_content_type(value: &str) -> String {
     let value = sanitize_header(value);
-    if value.contains('/') && value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '-' | '+' | '.' )) {
+    if value.contains('/')
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '-' | '+' | '.'))
+    {
         value
     } else {
         "application/octet-stream".to_string()
@@ -1380,7 +1389,8 @@ const BIMI_LOGO_SVG: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 </svg>
 "##;
 
-const MTA_STS_POLICY: &str = "version: STSv1\nmode: enforce\nmx: mail.edgerun.tech\nmax_age: 604800\n";
+const MTA_STS_POLICY: &str =
+    "version: STSv1\nmode: enforce\nmx: mail.edgerun.tech\nmax_age: 604800\n";
 
 async fn build_dns_server(
     server_spec: Option<&DnsServerSpec>,
@@ -1432,6 +1442,11 @@ fn zone_from_config(specs: &[&DnsZoneSpec]) -> io::Result<DnsZone> {
         spec.soa.minimum,
     ));
     for spec in specs {
+        if spec.dnssec.is_some() {
+            return Err(invalid_config(
+                "DnsZone.dnssec is parsed but not implemented by edgerun-server; DNSSEC needs stable key management, signed RRsets, and parent DS delegation",
+            ));
+        }
         for record in &spec.records {
             add_zone_record(&mut zone, record, &spec.origin)?;
         }
@@ -1480,7 +1495,7 @@ fn add_zone_record(zone: &mut DnsZone, record: &ZoneRecord, origin: &str) -> io:
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("unsupported DNS record type in mail server config: {rtype}"),
+                format!("unsupported DNS record type in server config: {rtype}"),
             ));
         }
     }
@@ -1495,7 +1510,7 @@ async fn ensure_acme_certificate(
     let cert_dir = PathBuf::from(
         spec.acme_cert_dir
             .as_deref()
-            .unwrap_or("/etc/edgerun/mail/tls"),
+            .unwrap_or("/etc/edgerun/server/tls"),
     );
     let fullchain_path = cert_dir.join("fullchain.pem");
     let privkey_path = cert_dir.join("privkey.pem");
@@ -1512,7 +1527,7 @@ async fn ensure_acme_certificate(
     let account_key_path = PathBuf::from(
         spec.acme_account_key_path
             .as_deref()
-            .unwrap_or("/etc/edgerun/mail/acme-account.pem"),
+            .unwrap_or("/etc/edgerun/server/acme-account.pem"),
     );
     let account_key = if account_key_path.exists() {
         let pem = std::fs::read_to_string(&account_key_path)?;
@@ -1632,7 +1647,9 @@ async fn ensure_acme_certificate(
             }
         }
         if attempt == 59 {
-            return Err(invalid_config("ACME order did not become ready for finalization"));
+            return Err(invalid_config(
+                "ACME order did not become ready for finalization",
+            ));
         }
     }
     for _ in 0..30 {
@@ -1840,10 +1857,8 @@ fn build_smtp_servers(
         servers.push(SmtpServer::new(config.clone(), handler.clone())?);
     }
     if spec.starttls && auth_enabled && tls_cert.is_some() {
-        config.bind_addr = implicit_tls_addr(
-            spec.bind_address.as_deref().unwrap_or("0.0.0.0:25"),
-            587,
-        );
+        config.bind_addr =
+            implicit_tls_addr(spec.bind_address.as_deref().unwrap_or("0.0.0.0:25"), 587);
         config.smtps = false;
         config.starttls = true;
         config.require_auth = true;
@@ -2073,7 +2088,7 @@ fn to_io_error(error: impl std::fmt::Display) -> io::Error {
 fn init_material(args: &[String]) -> io::Result<()> {
     let domain = arg_value(args, "--domain").unwrap_or("edgerun.tech");
     let selector = arg_value(args, "--selector").unwrap_or("mail");
-    let out_dir = PathBuf::from(arg_value(args, "--out-dir").unwrap_or("/etc/edgerun/mail"));
+    let out_dir = PathBuf::from(arg_value(args, "--out-dir").unwrap_or("/etc/edgerun/server"));
     let tls_dir = out_dir.join("tls");
     std::fs::create_dir_all(&tls_dir)?;
 

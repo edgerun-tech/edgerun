@@ -14,8 +14,8 @@ path = "src/bin/http-server.rs"
 required-features = ["std", "http3"]
 
 [[bin]]
-name = "edgerun-mail-server"
-path = "src/bin/edgerun-mail-server.rs"
+name = "edgerun-server"
+path = "src/bin/edgerun-server.rs"
 required-features = ["std", "smtp", "imap", "dns", "tls"]
 
 [dependencies]

@@ -9,7 +9,7 @@ spec:
   soa:
     mname: ns1.edgerun.tech
     rname: admin.edgerun.tech
-    serial: 2026042903
+    serial: 2026043001
     refresh: 3600
     retry: 900
     expire: 604800
@@ -32,6 +32,10 @@ spec:
       value: "172.245.67.49"
       ttl: 3600
     - name: mta-sts
+      type: A
+      value: "172.245.67.49"
+      ttl: 3600
+    - name: blog
       type: A
       value: "172.245.67.49"
       ttl: 3600
@@ -69,7 +73,7 @@ spec:
       ttl: 3600
     - name: _mta-sts
       type: TXT
-      value: "v=STSv1; id=2026042903"
+      value: "v=STSv1; id=2026043001"
       ttl: 3600
     - name: _smtp._tls
       type: TXT

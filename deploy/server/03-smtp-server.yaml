@@ -3,7 +3,7 @@ apiVersion: edgerun.io/v1alpha1
 kind: SmtpServer
 metadata:
   name: mail
-  namespace: edgerun-mail
+  namespace: edgerun-server
 spec:
   hostname: mail.edgerun.tech
   bind_address: "0.0.0.0:25"
@@ -18,17 +18,17 @@ spec:
   dns_server: "1.1.1.1:53"
   dkim_domain: edgerun.tech
   dkim_selector: mail
-  dkim_key_path: /etc/edgerun/mail/dkim-mail.private.pem
-  tls_cert: /etc/edgerun/mail/tls/fullchain.pem
-  tls_key: /etc/edgerun/mail/tls/privkey.pem
+  dkim_key_path: /etc/edgerun/server/dkim-mail.private.pem
+  tls_cert: /etc/edgerun/server/tls/fullchain.pem
+  tls_key: /etc/edgerun/server/tls/privkey.pem
   acme_enabled: true
   acme_directory: letsencrypt
   acme_contact_email: ken@edgerun.tech
   acme_domains:
     - mail.edgerun.tech
     - mta-sts.edgerun.tech
-  acme_account_key_path: /etc/edgerun/mail/acme-account.pem
-  acme_cert_dir: /etc/edgerun/mail/tls
+  acme_account_key_path: /etc/edgerun/server/acme-account.pem
+  acme_cert_dir: /etc/edgerun/server/tls
   catch_all_user: ken
   users:
     - username: ken

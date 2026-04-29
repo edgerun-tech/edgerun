@@ -1,10 +1,10 @@
-# Mail Server Deployment
+# Edgerun Server Deployment
 
 ## Configuration Files
 
 | File | Purpose |
 |------|---------|
-| `01-dns-zone.yaml` | DNS zone for `edgerun.tech` - A, MX, SPF, DMARC, CAA, MTA-STS, TLS-RPT records |
+| `01-dns-zone.yaml` | DNS zone for `edgerun.tech` - A, MX, SPF, DMARC, CAA, MTA-STS, TLS-RPT, service host records |
 | `02-dns-zone-dkim.yaml` | DKIM public key DNS record (selector: mail) |
 | `03-smtp-server.yaml` | SMTP server config (implemented: port 25 MX, port 465 SMTPS submission, port 587 STARTTLS submission, relay) |
 | `04-imap-server.yaml` | IMAP server config (port 143, IMAPS) |
@@ -13,20 +13,21 @@
 
 | Name | Description |
 |------|-------------|
-| `/etc/edgerun/mail/dkim-mail.private.pem` | DKIM RSA private key (PEM format) |
-| `/etc/edgerun/mail/tls/fullchain.pem` | TLS certificate chain (PEM format), generated or renewed by `edgerun-acme` |
-| `/etc/edgerun/mail/tls/privkey.pem` | TLS private key (PEM format), generated or renewed by `edgerun-acme` |
+| `/etc/edgerun/server/dkim-mail.private.pem` | DKIM RSA private key (PEM format) |
+| `/etc/edgerun/server/tls/fullchain.pem` | TLS certificate chain (PEM format), generated or renewed by `edgerun-acme` |
+| `/etc/edgerun/server/tls/privkey.pem` | TLS private key (PEM format), generated or renewed by `edgerun-acme` |
 
-`edgerun-mail-server` consumes these paths through `edgerun-config` YAML fields
+`edgerun-server` consumes these paths through `edgerun-config` YAML fields
 (`dkim_key_path`, `tls_cert`, and `tls_key`). The DKIM TXT record in
 `02-dns-zone-dkim.yaml` must contain the public key produced from the private
-key at `/etc/edgerun/mail/dkim-mail.private.pem`.
+key at `/etc/edgerun/server/dkim-mail.private.pem`.
 
 ## DNS Records Generated
 
 - `@ A 172.245.67.49`
 - `mail A 172.245.67.49`
 - `mta-sts A 172.245.67.49`
+- `blog A 172.245.67.49`
 - `ns1 A 172.245.67.49`
 - `ns2 A 172.245.67.49`
 - `@ MX 0 mail.edgerun.tech`
@@ -40,7 +41,7 @@ key at `/etc/edgerun/mail/dkim-mail.private.pem`.
 
 ## Mail Transport Hardening
 
-- MTA-STS is implemented in code: the mail server serves
+- MTA-STS is implemented in code: the server serves
   `https://mta-sts.edgerun.tech/.well-known/mta-sts.txt` with `mode: enforce`,
   `mx: mail.edgerun.tech`, and `max_age: 604800`.
 - TLS-RPT is a DNS/reporting configuration requirement. Reports are directed to
