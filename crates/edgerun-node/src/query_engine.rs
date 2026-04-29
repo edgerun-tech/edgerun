@@ -1,6 +1,7 @@
 use edgerun_core::util::now_prost_timestamp;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_storage::NodeStore;
+use prost::Message;
 
 /// Result of query cost evaluation.
 pub enum QueryCostCheck {
@@ -368,6 +369,194 @@ pub fn execute_query(
     }
 
     fragment_bytes
+}
+
+/// Executes a local query and folds validated remote `QueryResultFragment`s
+/// into one advisory aggregate response.
+///
+/// Remote fragments are never treated as local authority. They must be signed,
+/// match the query id, and come from `trusted_responders` when that list is
+/// non-empty. Accepted fragments are stored as immutable objects and referenced
+/// by a `FederatedAggregateDescriptor` object in the aggregate response.
+pub fn execute_federated_query(
+    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    store: &mut NodeStore,
+    local_stream_id: &[u8],
+    responder_node_id: &NodeID,
+    signer: &dyn MeshSigner,
+    remote_fragments: &[Vec<u8>],
+    trusted_responders: &[Vec<u8>],
+) -> Vec<u8> {
+    use edgerun_core::result::Verdict;
+    use edgerun_proto::edgerun::v0::access::{
+        FederatedAggregateDescriptor, QueryResultFragment, ResultCompleteness,
+    };
+    use edgerun_proto::edgerun::v0::common::{IdentityRef, ObjectKind};
+
+    let local_bytes = execute_query(query, store, local_stream_id, responder_node_id, signer);
+    let Ok(mut aggregate) = QueryResultFragment::decode(&local_bytes[..]) else {
+        return local_bytes;
+    };
+
+    let max_remote = query
+        .cost_limit
+        .as_ref()
+        .and_then(|limit| limit.max_federated_responders)
+        .map(|limit| limit as usize)
+        .unwrap_or(remote_fragments.len());
+
+    let mut input_fragments = Vec::new();
+    let mut included_responders = Vec::new();
+    let mut accepted = 0usize;
+    let mut skipped = 0usize;
+
+    for fragment_bytes in remote_fragments {
+        if accepted >= max_remote {
+            skipped += 1;
+            continue;
+        }
+        let Ok(fragment) = QueryResultFragment::decode(&fragment_bytes[..]) else {
+            skipped += 1;
+            continue;
+        };
+        let validation = edgerun_core::validators_proto::validate_query_result_fragment(
+            &fragment,
+            Some(&query.query_id),
+            trusted_responders,
+        );
+        if validation.verdict != Verdict::Accept {
+            skipped += 1;
+            continue;
+        }
+        if fragment.completeness == ResultCompleteness::Denied as i32 {
+            skipped += 1;
+            continue;
+        }
+
+        merge_fragment_refs(&mut aggregate, &fragment);
+        if let Some(responder) = fragment.responder.clone() {
+            included_responders.push(responder);
+        }
+        match store.put_object(
+            fragment_bytes,
+            ObjectKind::DerivedView as i32,
+            &[responder_node_id.0.to_vec()],
+        ) {
+            Ok(object_ref) => input_fragments.push(object_ref),
+            Err(e) => edgerun_log::warn!("failed to store remote query fragment: {}", e),
+        }
+        accepted += 1;
+    }
+
+    if accepted == 0 {
+        return local_bytes;
+    }
+
+    let summary = build_federated_summary_payload(accepted, skipped, &included_responders);
+    let payload_object = store
+        .put_object(
+            &summary,
+            ObjectKind::DerivedView as i32,
+            &[responder_node_id.0.to_vec()],
+        )
+        .ok();
+
+    if let Some(payload_object) = payload_object {
+        let descriptor = FederatedAggregateDescriptor {
+            descriptor_version: 1,
+            aggregate_id: edgerun_core::crypto::domain_hash("edgerun:v0:query-aggregate", &summary),
+            source_query_id: query.query_id.clone(),
+            aggregator: Some(IdentityRef {
+                identity_id: responder_node_id.0.to_vec(),
+                identity_kind: Some(2),
+                key_hint: Some(responder_node_id.0.to_vec()),
+            }),
+            aggregated_at: Some(now_prost_timestamp()),
+            input_fragments,
+            aggregation_policy_object: None,
+            payload_object: Some(payload_object),
+            signature: None,
+        };
+        let descriptor_bytes = FederatedAggregateDescriptor::encode_to_vec(&descriptor);
+        match store.put_object(
+            &descriptor_bytes,
+            ObjectKind::DerivedView as i32,
+            &[responder_node_id.0.to_vec()],
+        ) {
+            Ok(mut descriptor_ref) => {
+                descriptor_ref.object_kind = Some(ObjectKind::DerivedView as i32);
+                aggregate.proof_objects.push(descriptor_ref);
+            }
+            Err(e) => edgerun_log::warn!("failed to store aggregate descriptor: {}", e),
+        }
+    }
+
+    aggregate.completeness = ResultCompleteness::Partial as i32;
+    aggregate.answered_at = Some(now_prost_timestamp());
+    aggregate.signature = None;
+    sign_query_result_fragment(&mut aggregate, signer);
+    QueryResultFragment::encode_to_vec(&aggregate)
+}
+
+fn merge_fragment_refs(
+    aggregate: &mut edgerun_proto::edgerun::v0::access::QueryResultFragment,
+    fragment: &edgerun_proto::edgerun::v0::access::QueryResultFragment,
+) {
+    for snapshot_ref in &fragment.snapshot_refs {
+        if !aggregate.snapshot_refs.iter().any(|existing| {
+            existing.snapshot_id == snapshot_ref.snapshot_id
+                && existing.object_id == snapshot_ref.object_id
+        }) {
+            aggregate.snapshot_refs.push(snapshot_ref.clone());
+        }
+    }
+    for event_ref in &fragment.event_refs {
+        if !aggregate.event_refs.iter().any(|existing| {
+            existing.stream_id == event_ref.stream_id && existing.seq == event_ref.seq
+        }) {
+            aggregate.event_refs.push(event_ref.clone());
+        }
+    }
+    for object_ref in &fragment.object_refs {
+        if !aggregate
+            .object_refs
+            .iter()
+            .any(|existing| existing.object_id == object_ref.object_id)
+        {
+            aggregate.object_refs.push(object_ref.clone());
+        }
+    }
+    for proof_object in &fragment.proof_objects {
+        if !aggregate
+            .proof_objects
+            .iter()
+            .any(|existing| existing.object_id == proof_object.object_id)
+        {
+            aggregate.proof_objects.push(proof_object.clone());
+        }
+    }
+}
+
+fn build_federated_summary_payload(
+    accepted: usize,
+    skipped: usize,
+    responders: &[edgerun_proto::edgerun::v0::common::IdentityRef],
+) -> Vec<u8> {
+    let responder_ids = responders
+        .iter()
+        .map(|responder| {
+            format!(
+                "\"{}\"",
+                edgerun_core::util::bytes_to_hex(&responder.identity_id)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"accepted_fragments\":{},\"skipped_fragments\":{},\"responders\":[{}]}}",
+        accepted, skipped, responder_ids
+    )
+    .into_bytes()
 }
 
 fn sign_query_result_fragment(
@@ -767,6 +956,78 @@ mod tests {
         assert_eq!(fragment.completeness, ResultCompleteness::Denied as i32);
         assert_eq!(fragment.omission_reason, "response_too_large");
         assert!(fragment.signature.is_some());
+    }
+
+    #[test]
+    fn federated_query_merges_valid_remote_fragments() {
+        let local_signer = TestSigner::new();
+        let remote_signer = TestSigner::new();
+        let mut store = test_store(local_signer.node_id());
+        let query = QueryRequest {
+            request_version: 1,
+            query_id: b"federated-query".to_vec(),
+            requester: None,
+            target_scope: None,
+            query_class: QueryClass::Head as i32,
+            time_window: None,
+            checkpoint_base: None,
+            result_limit: None,
+            cost_limit: Some(CostLimit {
+                max_results: None,
+                max_total_bytes: None,
+                max_wall_time: None,
+                max_federated_responders: Some(1),
+            }),
+            required_proof_classes: vec![],
+            query_payload_object: None,
+            signature: None,
+        };
+
+        let mut remote_fragment = QueryResultFragment {
+            fragment_version: 1,
+            query_id: b"federated-query".to_vec(),
+            responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+                identity_id: remote_signer.node_id().0.to_vec(),
+                identity_kind: Some(2),
+                key_hint: Some(remote_signer.node_id().0.to_vec()),
+            }),
+            answered_at: Some(now_prost_timestamp()),
+            completeness: ResultCompleteness::CompleteForLocalKnowledge as i32,
+            snapshot_refs: vec![],
+            event_refs: vec![edgerun_proto::edgerun::v0::common::EventRef {
+                stream_id: b"remote-stream".to_vec(),
+                seq: 7,
+                event_hash: Some(edgerun_core::protocol::Digest {
+                    algorithm: 1,
+                    value: vec![9; 32],
+                }),
+            }],
+            object_refs: vec![],
+            proof_objects: vec![],
+            omission_reason: String::new(),
+            bundled_result_object: None,
+            result_metadata: None,
+            signature: None,
+        };
+        sign_query_result_fragment(&mut remote_fragment, &remote_signer);
+
+        let aggregate_bytes = execute_federated_query(
+            &query,
+            &mut store,
+            b"local-stream",
+            &local_signer.node_id(),
+            &local_signer,
+            &[QueryResultFragment::encode_to_vec(&remote_fragment)],
+            &[remote_signer.node_id().0.to_vec()],
+        );
+        let aggregate = QueryResultFragment::decode(&aggregate_bytes[..]).unwrap();
+
+        assert!(aggregate
+            .event_refs
+            .iter()
+            .any(|event| event.stream_id == b"remote-stream" && event.seq == 7));
+        assert!(!aggregate.proof_objects.is_empty());
+        assert!(aggregate.signature.is_some());
     }
 
     #[test]

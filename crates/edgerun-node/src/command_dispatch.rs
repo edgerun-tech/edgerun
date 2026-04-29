@@ -19,6 +19,7 @@ use edgerun_core::validators_proto::{
 };
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
+use edgerun_json::Value as JsonValue;
 use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef};
 use edgerun_proto::edgerun::v0::stream::{
     CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload,
@@ -134,24 +135,56 @@ pub fn project_config(
     stream_id: &[u8],
     initial_config_yaml: &str,
 ) -> Result<NodeConfig, String> {
+    let mut config = parse_config(initial_config_yaml).map_err(|e| e.to_string())?;
     let head_seq = match store.get_head(stream_id) {
         Ok(Some((seq, _))) => seq,
         Ok(None) => {
             // No events yet, use initial YAML config
-            return parse_config(initial_config_yaml).map_err(|e| e.to_string());
+            return Ok(config);
         }
         Err(e) => return Err(format!("failed to get head: {}", e)),
     };
 
     if head_seq == 0 {
-        return parse_config(initial_config_yaml).map_err(|e| e.to_string());
+        return Ok(config);
     }
 
-    // TODO: Actually replay UpdateConfig events
-    // For now, just use the initial config
-    edgerun_log::info!("projecting config from event store ({} events)", head_seq);
+    let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+    let events = store
+        .list_event_range(&stream_id_hex, 1, head_seq)
+        .map_err(|e| format!("failed to list config projection events: {e}"))?;
 
-    parse_config(initial_config_yaml).map_err(|e| e.to_string())
+    for (seq, _hash, _ver) in events {
+        let Some((event, Some(payload_bytes))) = store
+            .get_event_with_payload(stream_id, seq as u64)
+            .map_err(|e| format!("failed to load event {seq}: {e}"))?
+        else {
+            continue;
+        };
+        if event.event_type != EventType::CommandCommitted as i32 {
+            continue;
+        }
+
+        let Ok(result) = ProtoCommandResultPayload::decode(&payload_bytes[..]) else {
+            continue;
+        };
+        let Some(result_object) = result.result_object.as_ref() else {
+            continue;
+        };
+        let Some(patch) = store
+            .get_object(result_object)
+            .map_err(|e| format!("failed to load config patch object at event {seq}: {e}"))?
+        else {
+            continue;
+        };
+        if try_apply_projected_config_patch(&mut config, &patch.content)
+            .map_err(|e| format!("invalid committed config patch at event {seq}: {e}"))?
+        {
+            edgerun_log::info!("applied projected config patch from event {}", seq);
+        }
+    }
+
+    Ok(config)
 }
 
 // ---------------------------------------------------------------------------
@@ -539,11 +572,16 @@ fn dispatch_update_config(
         }
     };
 
-    // Validate it's valid JSON (basic check)
-    if !config_patch.is_empty()
-        && !config_patch.starts_with(b"{")
-        && !config_patch.starts_with(b"[")
-    {
+    let mut projected = NodeConfig {
+        stream_id: edgerun_core::util::bytes_to_hex(stream_id),
+        name: None,
+        controllers: vec![],
+        trust_nodes: vec![],
+        allowed_peers: vec![],
+        bootstrap_peers: vec![],
+        signer: None,
+    };
+    if let Err(reason) = apply_config_patch(&mut projected, &config_patch) {
         return record_and_respond(
             command,
             store,
@@ -557,15 +595,32 @@ fn dispatch_update_config(
         );
     }
 
-    // TODO: Validate the config patch against a schema
-    // For now, just accept it and store it
-
     edgerun_log::info!("config update received");
 
-    // Apply the config patch by storing it in the event
-    // The config will be projected on next boot or reload
+    let patch_object = match store.put_object(
+        &config_patch,
+        edgerun_proto::edgerun::v0::common::ObjectKind::DerivedView as i32,
+        &[stream_id.to_vec()],
+    ) {
+        Ok(object_ref) => Some(object_ref),
+        Err(e) => {
+            edgerun_log::warn!("failed to store config patch object: {}", e);
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "storage_failed",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
     let response = b"config_update_received".to_vec();
-    record_and_respond(
+    record_and_respond_with_result_object(
         command,
         store,
         stream_id,
@@ -575,6 +630,7 @@ fn dispatch_update_config(
         "",
         response,
         None,
+        patch_object,
     )
 }
 
@@ -2423,6 +2479,32 @@ fn record_and_respond(
     response_bytes: Vec<u8>,
     controller_change: Option<(&str, &str)>, // (controller_hex, change_type)
 ) -> CommandDispatchResult {
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        _controllers,
+        committed,
+        reason_code,
+        response_bytes,
+        controller_change,
+        None,
+    )
+}
+
+fn record_and_respond_with_result_object(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    _controllers: &ControllerSet,
+    committed: bool,
+    reason_code: &str,
+    response_bytes: Vec<u8>,
+    controller_change: Option<(&str, &str)>, // (controller_hex, change_type)
+    result_object: Option<edgerun_proto::edgerun::v0::common::ObjectRef>,
+) -> CommandDispatchResult {
     let command_id_bytes = command.command_id.clone();
     let command_ref = CommandRef {
         command_id: command_id_bytes.clone(),
@@ -2461,7 +2543,7 @@ fn record_and_respond(
         decision_basis: None,
         reason_code: reason_code.to_string(),
         effect_summary_object: None,
-        result_object: None,
+        result_object,
     };
     let result_bytes = prost::Message::encode_to_vec(&result_payload);
     let object_ref = store_object_or_log(store, &result_bytes, 6, &[stream_id.to_vec()]);
@@ -2472,7 +2554,7 @@ fn record_and_respond(
     } else {
         EventType::CommandRejected
     };
-    let _event_seq = append_signed_event(
+    let event_seq = append_signed_event(
         store,
         stream_id,
         signer,
@@ -2493,7 +2575,7 @@ fn record_and_respond(
             &target_hex,
             &cmd_hash_hex,
             &edgerun_core::util::bytes_to_hex(&command.command_id),
-            _event_seq.unwrap_or(0) as i64,
+            event_seq.unwrap_or(0) as i64,
         ) {
             edgerun_log::warn!("failed to write replay cache entry: {}", e);
         }
@@ -2540,7 +2622,11 @@ fn record_and_respond(
     // 5. Record controller change if this was a committed control command
     if committed {
         if let Some((controller_hex, change_type)) = controller_change {
-            if let Err(e) = store.record_controller_change(controller_hex, change_type, 0) {
+            if let Err(e) = store.record_controller_change(
+                controller_hex,
+                change_type,
+                event_seq.unwrap_or(0) as i64,
+            ) {
                 edgerun_log::warn!("failed to record controller change: {}", e);
             }
         }
@@ -2552,6 +2638,90 @@ fn record_and_respond(
         reason_code: reason_code.to_string(),
         response_bytes,
     }
+}
+
+fn apply_config_patch(config: &mut NodeConfig, patch_bytes: &[u8]) -> Result<bool, String> {
+    let patch: JsonValue = edgerun_json::from_slice(patch_bytes)
+        .map_err(|e| format!("invalid_config_patch_json: {e}"))?;
+    apply_config_patch_value(config, patch)
+}
+
+fn try_apply_projected_config_patch(
+    config: &mut NodeConfig,
+    patch_bytes: &[u8],
+) -> Result<bool, String> {
+    let Ok(patch) = edgerun_json::from_slice(patch_bytes) else {
+        return Ok(false);
+    };
+    if !is_config_patch_value(&patch) {
+        return Ok(false);
+    }
+    apply_config_patch_value(config, patch)
+}
+
+fn apply_config_patch_value(config: &mut NodeConfig, patch: JsonValue) -> Result<bool, String> {
+    let JsonValue::Object(object) = patch else {
+        return Err("config patch must be a JSON object".into());
+    };
+
+    let mut changed = false;
+    if let Some(name) = object.get("name").and_then(JsonValue::as_str) {
+        config.name = Some(name.to_string());
+        changed = true;
+    }
+    for key in [
+        "controllers",
+        "trust_nodes",
+        "allowed_peers",
+        "bootstrap_peers",
+    ] {
+        if let Some(values) = object.get(key) {
+            let parsed = json_string_array(values)
+                .ok_or_else(|| format!("{key} must be an array of strings"))?;
+            match key {
+                "controllers" => config.controllers = parsed,
+                "trust_nodes" => config.trust_nodes = parsed,
+                "allowed_peers" => config.allowed_peers = parsed,
+                "bootstrap_peers" => config.bootstrap_peers = parsed,
+                _ => {}
+            }
+            changed = true;
+        }
+    }
+
+    if object.get("stream_id").is_some() || object.get("signer").is_some() {
+        return Err("stream_id and signer are immutable through UpdateConfig".into());
+    }
+
+    Ok(changed)
+}
+
+fn is_config_patch_value(value: &JsonValue) -> bool {
+    let JsonValue::Object(object) = value else {
+        return false;
+    };
+    [
+        "name",
+        "controllers",
+        "trust_nodes",
+        "allowed_peers",
+        "bootstrap_peers",
+        "stream_id",
+        "signer",
+    ]
+    .iter()
+    .any(|key| object.get(key).is_some())
+}
+
+fn json_string_array(value: &JsonValue) -> Option<Vec<String>> {
+    let JsonValue::Array(items) = value else {
+        return None;
+    };
+    let mut parsed = Vec::with_capacity(items.len());
+    for item in items {
+        parsed.push(item.as_str()?.to_string());
+    }
+    Some(parsed)
 }
 
 /// Sign an event envelope with the local node's key.
@@ -2950,6 +3120,104 @@ mod tests {
         let mut set = ControllerSet::new(vec![vec![1, 2, 3]]);
         set.add(vec![1, 2, 3]);
         assert_eq!(set.to_vec().len(), 1);
+    }
+
+    #[test]
+    fn config_patch_updates_projectable_fields() {
+        let mut config = crate::config::parse_config(
+            r#"
+stream_id: "node-stream"
+name: "old"
+controllers: ["a"]
+trust_nodes: []
+allowed_peers: []
+bootstrap_peers: []
+"#,
+        )
+        .unwrap();
+
+        let changed = apply_config_patch(
+            &mut config,
+            br#"{"name":"new","allowed_peers":["peer-a"],"bootstrap_peers":["127.0.0.1:9000@peer-a"]}"#,
+        )
+        .unwrap();
+
+        assert!(changed);
+        assert_eq!(config.name.as_deref(), Some("new"));
+        assert_eq!(config.allowed_peers, vec!["peer-a"]);
+        assert_eq!(config.bootstrap_peers, vec!["127.0.0.1:9000@peer-a"]);
+    }
+
+    #[test]
+    fn project_config_replays_committed_config_patch_result_object() {
+        let mut store = test_store();
+        let signer = TestSigner::new();
+        let stream_id = b"stream-1";
+
+        append_signed_event(
+            &mut store,
+            stream_id,
+            &signer,
+            EventType::NodeGenesis,
+            1,
+            None,
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        let patch_ref = store
+            .put_object(
+                br#"{"name":"projected","allowed_peers":["peer-b"]}"#,
+                edgerun_proto::edgerun::v0::common::ObjectKind::DerivedView as i32,
+                &[stream_id.to_vec()],
+            )
+            .unwrap();
+        let result_payload = ProtoCommandResultPayload {
+            payload_version: 1,
+            command: None,
+            issuer: None,
+            decision: CommandDecision::Committed as i32,
+            decision_basis: None,
+            reason_code: String::new(),
+            effect_summary_object: None,
+            result_object: Some(patch_ref),
+        };
+        let result_ref = store
+            .put_object(
+                &prost::Message::encode_to_vec(&result_payload),
+                edgerun_proto::edgerun::v0::common::ObjectKind::Command as i32,
+                &[stream_id.to_vec()],
+            )
+            .unwrap();
+        append_signed_event(
+            &mut store,
+            stream_id,
+            &signer,
+            EventType::CommandCommitted,
+            1,
+            Some(result_ref),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        let projected = project_config(
+            &store,
+            stream_id,
+            r#"
+stream_id: "stream-1"
+name: "initial"
+controllers: []
+trust_nodes: []
+allowed_peers: []
+bootstrap_peers: []
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(projected.name.as_deref(), Some("projected"));
+        assert_eq!(projected.allowed_peers, vec!["peer-b"]);
     }
 
     #[test]

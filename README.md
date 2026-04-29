@@ -53,16 +53,13 @@ type catalogs used by codegen experiments.
 
 ## Current Workspace State
 
-The tree currently contains 113 first-level directories under `crates/`, of
-which 110 have `Cargo.toml` manifests. `cargo metadata --no-deps` succeeds in
-this checkout and reports 110 workspace packages/members.
+The tree currently contains 109 first-level directories under `crates/`, all of
+which have `Cargo.toml` manifests. `cargo metadata --no-deps` succeeds in this
+checkout and reports 109 workspace packages/members. The textual `members` list
+in the root `Cargo.toml` has 109 unique entries.
 
-The textual `members` list in the root `Cargo.toml` still has 108 entries with
-`crates/edgerun-tftp` listed twice. `edgerun-android-hardware`,
-`edgerun-error`, and `edgerun-gpu` have manifests but are not listed directly in
-that root member array; Cargo still includes them through workspace/path
-resolution. `edgerun-css`, `edgerun-ecmascript`, and `edgerun-html` are
-directories without crate manifests.
+For a code-grounded readiness assessment, see
+[docs/project-state.md](docs/project-state.md).
 
 ## License and Release Status
 
@@ -129,6 +126,9 @@ scripts/qemu-unikernel-swtpm.sh
 
 - Route advertisements, query proofs, snapshots, and cached views are evidence
   or acceleration structures; they do not replace stream authority.
+- The protocol-critical crates are substantially implemented and tested, but
+  the project is still alpha. Federation, some node projections, service
+  conformance, and bare-target hardware paths are partial.
 - Many hardware crates have host-Linux implementations and bare-target stubs so
   the type surface can compile in no_std contexts.
 - Browser/web-platform files under `proto/` and `docs/` are generated type

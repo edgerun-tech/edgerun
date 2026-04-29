@@ -55,9 +55,10 @@ enum CommandType {
   COMMAND_TYPE_CREATE_DELEGATION = 10;
   COMMAND_TYPE_CREATE_REVOCATION = 11;
   COMMAND_TYPE_STORE_AND_FORWARD = 12;
+  COMMAND_TYPE_UPDATE_CONFIG = 13;
   // Extension range: implementations MAY add command types starting here.
   // Unknown extension types MUST be rejected unless local policy explicitly allows them.
-  reserved 13 to 999;
+  reserved 14 to 999;
   reserved "COMMAND_TYPE_CUSTOM";
   // Implementation-specific extensions start at 1000.
   // These are NOT part of the core protocol. Receivers MUST reject unknown

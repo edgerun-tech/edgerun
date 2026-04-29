@@ -68,8 +68,6 @@ all-hardware = [
     "dep:edgerun-amd-xdna",
     # Storage
     "dep:edgerun-virtual-disk",
-    # Misc
-    "dep:edgerun-json",
     "dep:edgerun-machine-report",
 ]
 
@@ -97,7 +95,7 @@ edgerun-log = { version = "0.1", path = "../edgerun-log" }
 # Hardware signing is required for node identity and stream writing
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", default-features = false }
 
-edgerun-json = { version = "0.1", path = "../edgerun-json", optional = true }
+edgerun-json = { version = "0.1", path = "../edgerun-json" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true

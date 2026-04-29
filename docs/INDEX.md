@@ -25,6 +25,8 @@ component notes, generated spec snapshots, or older design documents.
 ## Current Implementation
 
 - [Root README](../README.md) - current code-grounded overview and build caveats.
+- [Project state assessment](project-state.md) - honest implemented/partial/
+  generated/host-only/bare-target status from the current code.
 - [Crate layout](../crates/README.md) - implementation-oriented crate map.
 - [Crate organization map](crate-organization.md) - current workspace inventory
   grouped by protocol, runtime, mesh, services, hardware, adapters, and tools.
@@ -94,11 +96,11 @@ These files are large upstream/reference snapshots or generated-source inputs.
 
 | Metric | Value |
 |---|---:|
-| Protocol draft length | 3298 lines |
+| Protocol draft length | 3299 lines |
 | `.proto` files under `proto/edgerun/v0` | 44 |
 | Files under `proto/` including README/generated notes | 47 |
-| First-level directories under `crates/` | 113 |
+| First-level directories under `crates/` | 109 |
 | Crate manifests under `crates/` | 109 |
 | `cargo metadata --no-deps` packages/members | 109 |
 | Root `Cargo.toml` textual member entries | 109 |
-| Known inventory quirks | `edgerun-css`, `edgerun-ecmascript`, `edgerun-html`, and `edgerun-net` are directories without crate manifests |
+| Known inventory quirks | No crate directories without manifests found under `crates/` in this checkout |

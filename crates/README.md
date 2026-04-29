@@ -7,16 +7,14 @@ capabilities/delegation, query access, and local trust policy.
 
 ## Workspace State
 
-- `crates/` currently contains 113 first-level directories; 110 of them have
+- `crates/` currently contains 109 first-level directories; all of them have
   `Cargo.toml` manifests.
-- `cargo metadata --no-deps --format-version 1` succeeds and reports 110
+- `cargo metadata --no-deps --format-version 1` succeeds and reports 109
   workspace packages/members.
-- The root `Cargo.toml` textual `members` array has 108 entries and still lists
-  `crates/edgerun-tftp` twice.
-- `edgerun-android-hardware`, `edgerun-error`, and `edgerun-gpu` have manifests
-  but are not listed directly in the root member array.
-- `edgerun-css`, `edgerun-ecmascript`, and `edgerun-html` are directories
-  without crate manifests.
+- The root `Cargo.toml` textual `members` array has 109 unique entries.
+- See [docs/project-state.md](../docs/project-state.md) for a code-grounded
+  assessment of implemented, partial, generated, host-only, and bare-target
+  surfaces.
 
 ## Protocol Fabric
 
