@@ -16,19 +16,20 @@ important v0 authority rule: commands are requests until a target node validates
 and records an outcome event.
 
 The project is not yet a complete production edge platform. Several broad
-surfaces are partial: federation now has signed-fragment aggregation, but not a
-full peer-selection and remote-query orchestration loop; service stacks vary by
-protocol; and bare-metal/ESP32 paths include bring-up code and stubs. The
-repository also contains generated web-platform protobuf catalogs and historical
-RFC/design files that should not be read as implemented browser/runtime support.
+surfaces are partial: federation now has signed-fragment aggregation routed
+through the node store task, but not a full peer-selection and remote-query
+orchestration loop; service stacks vary by protocol; and bare-metal/ESP32 paths
+include bring-up code and stubs. The repository also contains generated
+web-platform protobuf catalogs and historical RFC/design files that should not
+be read as implemented browser/runtime support.
 
 ## Verified Workspace Facts
 
 - Implemented in code: `cargo metadata --no-deps --format-version 1` succeeds
-  and reports 109 packages/workspace members.
-- Implemented in code: `crates/` has 109 first-level directories, all with
+  and reports 110 packages/workspace members.
+- Implemented in code: `crates/` has 110 first-level directories, all with
   `Cargo.toml` manifests in this checkout.
-- Implemented in code: the root `Cargo.toml` textual `members` list has 109
+- Implemented in code: the root `Cargo.toml` textual `members` list has 110
   unique entries.
 - Generated type/catalog material: `proto/edgerun/v0` contains 44 protobuf
   files, including core protocol families and generated web-platform catalogs.
@@ -82,6 +83,10 @@ Hosted node command/query plumbing is implemented in `edgerun-node`:
   `QueryResultFragment`s, enforces trusted responders and responder limits,
   stores accepted fragments as immutable objects, and returns a signed aggregate
   fragment with a `FederatedAggregateDescriptor` proof object.
+- federation can be requested through the node store task via
+  `StoreRequest::FederatedQuery`, so query signature verification and aggregate
+  construction stay inside the same serialized store authority path as local
+  queries.
 
 Mesh and remote capabilities are implemented as usable building blocks:
 
@@ -103,9 +108,9 @@ Runtime, service, and hardware support is broad but uneven:
 
 - Currently partial: federated query behavior. The core validates query and
   proof artifacts, the node can answer local queries, and signed remote
-  fragments can now be aggregated. What remains is end-to-end peer selection,
-  network fanout, timeout handling, and fetch-back of remote referenced
-  objects/events.
+  fragments can now be aggregated through the store task. What remains is
+  end-to-end peer selection, network fanout, timeout handling, retry policy, and
+  fetch-back of remote referenced objects/events.
 - Currently partial: several service protocol crates are better described as
   protocol stacks/building blocks than production-certified services. The HTTP
   docs still call out TODO/conformance gaps, especially HTTP/3.
@@ -122,15 +127,17 @@ Runtime, service, and hardware support is broad but uneven:
   "not implemented" notes have since been surpassed by code; verify against
   current source before treating an RFC as status.
 
-## Verification Run
+## Verification
 
-The following package-level checks passed in this checkout:
+The following package-level checks passed during this assessment work:
 
 ```bash
 cargo test -p edgerun-core
 cargo test -p edgerun-stream
 cargo test -p edgerun-storage
 cargo test -p edgerun-node
+cargo test -p edgerun-node --features std --bin edgerund
+cargo check -p edgerun-node --no-default-features
 ```
 
 Results:
@@ -139,10 +146,13 @@ Results:
 - `edgerun-stream`: 60 tests passed.
 - `edgerun-storage`: 64 tests passed.
 - `edgerun-node`: 43 tests passed.
+- `edgerund` binary with `std`: 122 tests passed, including projected config
+  and federated aggregate coverage.
+- `edgerun-node` without default features: check passed.
 
-These checks cover the core authority model well. They do not prove full
-workspace production readiness, hardware availability, service conformance, or
-bare-metal bootability on every target.
+These checks cover the core authority model and the hosted node path well. They
+do not prove full workspace production readiness, hardware availability, service
+conformance, or bare-metal bootability on every target.
 
 ## Honest Read
 

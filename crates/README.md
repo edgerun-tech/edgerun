@@ -7,11 +7,11 @@ capabilities/delegation, query access, and local trust policy.
 
 ## Workspace State
 
-- `crates/` currently contains 109 first-level directories; all of them have
+- `crates/` currently contains 110 first-level directories; all of them have
   `Cargo.toml` manifests.
-- `cargo metadata --no-deps --format-version 1` succeeds and reports 109
+- `cargo metadata --no-deps --format-version 1` succeeds and reports 110
   workspace packages/members.
-- The root `Cargo.toml` textual `members` array has 109 unique entries.
+- The root `Cargo.toml` textual `members` array has 110 unique entries.
 - See [docs/project-state.md](../docs/project-state.md) for a code-grounded
   assessment of implemented, partial, generated, host-only, and bare-target
   surfaces.

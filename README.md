@@ -53,10 +53,10 @@ type catalogs used by codegen experiments.
 
 ## Current Workspace State
 
-The tree currently contains 109 first-level directories under `crates/`, all of
+The tree currently contains 110 first-level directories under `crates/`, all of
 which have `Cargo.toml` manifests. `cargo metadata --no-deps` succeeds in this
-checkout and reports 109 workspace packages/members. The textual `members` list
-in the root `Cargo.toml` has 109 unique entries.
+checkout and reports 110 workspace packages/members. The textual `members` list
+in the root `Cargo.toml` has 110 unique entries.
 
 For a code-grounded readiness assessment, see
 [docs/project-state.md](docs/project-state.md).
