@@ -10,6 +10,7 @@ use std::future::Future;
 use std::io;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, UdpSocket};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process;
@@ -2712,6 +2713,16 @@ fn build_smtp_servers(
     imap_specs: &[ImapServerSpec],
 ) -> io::Result<Vec<SmtpServer>> {
     let tls_cert = load_tls_from_spec(spec.tls_cert.as_deref(), spec.tls_key.as_deref())?;
+    let maildir_root = required_path(spec.maildir_root.as_deref(), "SmtpServer.maildir_root")?;
+    secure_private_dir(&maildir_root)?;
+    let queue_data_root = if spec.relay_enabled {
+        spec.queue_dir.as_ref().map(PathBuf::from)
+    } else {
+        None
+    };
+    if let Some(queue_dir) = queue_data_root.as_deref() {
+        secure_private_dir(queue_dir)?;
+    }
     let mut config = SmtpServerConfig {
         bind_addr: spec
             .bind_address
@@ -2725,11 +2736,7 @@ fn build_smtp_servers(
         smtps: false,
         starttls: spec.starttls,
         local_domains: spec.local_domains.clone(),
-        queue_data_root: if spec.relay_enabled {
-            spec.queue_dir.as_ref().map(PathBuf::from)
-        } else {
-            None
-        },
+        queue_data_root,
         relay_dns_server: spec
             .dns_server
             .clone()
@@ -2743,10 +2750,7 @@ fn build_smtp_servers(
         ..Default::default()
     };
 
-    let handler = Arc::new(MaildirStore::new(required_path(
-        spec.maildir_root.as_deref(),
-        "SmtpServer.maildir_root",
-    )?)?);
+    let handler = Arc::new(MaildirStore::new(&maildir_root)?);
     let auth_enabled = register_smtp_users(&handler, spec, imap_specs)?;
     if auth_enabled {
         config.auth_mechanisms = vec!["PLAIN".to_string(), "LOGIN".to_string()];
@@ -2773,10 +2777,9 @@ fn build_smtp_servers(
 
 fn build_imap_servers(spec: &ImapServerSpec) -> io::Result<Vec<ImapServer>> {
     let tls_cert = load_tls_from_spec(spec.tls_cert.as_deref(), spec.tls_key.as_deref())?;
-    let store = Arc::new(MaildirImapStore::new(required_path(
-        spec.maildir_root.as_deref(),
-        "ImapServer.maildir_root",
-    )?)?);
+    let maildir_root = required_path(spec.maildir_root.as_deref(), "ImapServer.maildir_root")?;
+    secure_private_dir(&maildir_root)?;
+    let store = Arc::new(MaildirImapStore::new(&maildir_root)?);
     register_imap_users(&store, spec);
     let config = ImapServerConfig {
         bind_addr: spec
@@ -2912,6 +2915,41 @@ fn required_path<'a>(value: Option<&'a str>, field: &str) -> io::Result<&'a Path
             format!("{field} is required for persistent mail service"),
         )
     })
+}
+
+fn secure_private_dir(path: &Path) -> io::Result<()> {
+    std::fs::create_dir_all(path)?;
+    secure_private_dir_mode(path)?;
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        if entry.file_type()?.is_dir() {
+            secure_private_dir_tree(&entry_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn secure_private_dir_tree(path: &Path) -> io::Result<()> {
+    secure_private_dir_mode(path)?;
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        if entry.file_type()?.is_dir() {
+            secure_private_dir_tree(&entry_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn secure_private_dir_mode(path: &Path) -> io::Result<()> {
+    let mut permissions = std::fs::metadata(path)?.permissions();
+    let mode = permissions.mode() & 0o777;
+    if mode & 0o077 != 0 {
+        permissions.set_mode(mode & !0o077);
+        std::fs::set_permissions(path, permissions)?;
+    }
+    Ok(())
 }
 
 fn record_value_string(record: &ZoneRecord) -> io::Result<String> {
