@@ -1,10 +1,12 @@
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
+use core::str::FromStr;
 use edgerun_solana::signers::{Ed25519Signer, Signer};
-use edgerun_solana::{solana_types::Pubkey, DeploymentClient, DeploymentStatus, ProviderClient};
+use edgerun_solana::{DeploymentClient, DeploymentStatus, ProviderClient, solana_types::Pubkey};
 use std::{eprintln, println};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderCommand {
     Register {
         provider: String,
@@ -38,6 +40,22 @@ pub fn parse_provider_command() -> ProviderCommand {
     let _ = args.next();
     let _ = args.next();
 
+    match parse_provider_args(args) {
+        Ok(command) => command,
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn parse_provider_args<I, S>(args: I) -> Result<ProviderCommand, String>
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    let mut args = args.into_iter().map(Into::into);
+
     match args.next().as_deref() {
         Some("register") | Some("r") => {
             let mut provider = None;
@@ -49,78 +67,95 @@ pub fn parse_provider_command() -> ProviderCommand {
 
             while let Some(arg) = args.next() {
                 match arg.as_str() {
-                    "--authority" | "-a" => authority = args.next(),
-                    "--cpu-cores" | "-c" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            cpu_cores = v;
-                        }
+                    "--authority" | "-a" => authority = Some(next_value(&mut args, &arg)?),
+                    "--cpu-cores" | "-c" => cpu_cores = next_parse(&mut args, &arg)?,
+                    "--memory" | "-m" => memory_bytes = next_parse(&mut args, &arg)?,
+                    "--storage" | "-s" => storage_bytes = next_parse(&mut args, &arg)?,
+                    "--network" | "-n" => network_mbits = next_parse(&mut args, &arg)?,
+                    _ if !arg.starts_with('-') && provider.is_none() => provider = Some(arg),
+                    _ if !arg.starts_with('-') => {
+                        return Err(format!("unexpected extra provider argument '{arg}'"));
                     }
-                    "--memory" | "-m" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            memory_bytes = v;
-                        }
-                    }
-                    "--storage" | "-s" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            storage_bytes = v;
-                        }
-                    }
-                    "--network" | "-n" => {
-                        if let Ok(v) = args.next().unwrap_or_default().parse() {
-                            network_mbits = v;
-                        }
-                    }
-                    _ if !arg.starts_with('-') => provider = Some(arg),
-                    _ => {}
+                    _ => return Err(format!("unknown provider register option '{arg}'")),
                 }
             }
 
-            ProviderCommand::Register {
+            Ok(ProviderCommand::Register {
                 provider: provider.unwrap_or_else(|| "".to_string()),
                 authority,
                 cpu_cores,
                 memory_bytes,
                 storage_bytes,
                 network_mbits,
-            }
+            })
         }
         Some("get") | Some("g") => {
             let provider = args.next().unwrap_or_default();
-            ProviderCommand::Get { provider }
+            reject_trailing(args, "provider get")?;
+            Ok(ProviderCommand::Get { provider })
         }
-        Some("list") | Some("l") => ProviderCommand::List,
+        Some("list") | Some("l") => {
+            reject_trailing(args, "provider list")?;
+            Ok(ProviderCommand::List)
+        }
         Some("earnings") | Some("e") => {
             let provider = args.next().unwrap_or_default();
-            ProviderCommand::Earnings { provider }
+            reject_trailing(args, "provider earnings")?;
+            Ok(ProviderCommand::Earnings { provider })
         }
         Some("attest") | Some("a") => {
             let provider = args.next().unwrap_or_default();
-            let uptime = match args.next().unwrap_or_default().parse() {
-                Ok(value) => value,
-                Err(_) => {
-                    eprintln!("invalid uptime percent basis-points value");
-                    std::process::exit(1);
-                }
-            };
-            ProviderCommand::Attest {
+            let uptime = next_parse(&mut args, "uptime percent basis-points")?;
+            reject_trailing(args, "provider attest")?;
+            Ok(ProviderCommand::Attest {
                 provider,
                 uptime_percent_bps: uptime,
-            }
+            })
         }
         Some("pause") => {
             let provider = args.next().unwrap_or_default();
-            ProviderCommand::Pause { provider }
+            reject_trailing(args, "provider pause")?;
+            Ok(ProviderCommand::Pause { provider })
         }
         Some("resume") => {
             let provider = args.next().unwrap_or_default();
-            ProviderCommand::Resume { provider }
+            reject_trailing(args, "provider resume")?;
+            Ok(ProviderCommand::Resume { provider })
         }
-        _ => {
-            eprintln!(
-                "Unknown provider command. Use: register, get, list, earnings, attest, pause, resume"
-            );
-            std::process::exit(1);
-        }
+        _ => Err(
+            "unknown provider command. Use: register, get, list, earnings, attest, pause, resume"
+                .to_string(),
+        ),
+    }
+}
+
+fn next_value<I>(args: &mut I, flag: &str) -> Result<String, String>
+where
+    I: Iterator<Item = String>,
+{
+    args.next()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("missing value for {flag}"))
+}
+
+fn next_parse<I, T>(args: &mut I, flag: &str) -> Result<T, String>
+where
+    I: Iterator<Item = String>,
+    T: FromStr,
+{
+    let value = next_value(args, flag)?;
+    value
+        .parse()
+        .map_err(|_| format!("invalid value for {flag}: '{value}'"))
+}
+
+fn reject_trailing<I>(mut args: I, command: &str) -> Result<(), String>
+where
+    I: Iterator<Item = String>,
+{
+    match args.next() {
+        Some(arg) => Err(format!("unexpected argument for {command}: '{arg}'")),
+        None => Ok(()),
     }
 }
 
@@ -367,5 +402,72 @@ pub async fn handle(
             }
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+
+    #[test]
+    fn parses_register_provider_options() {
+        let command = parse_provider_args(vec![
+            "register",
+            "provider-seed",
+            "--authority",
+            "authority-key",
+            "--cpu-cores",
+            "8",
+            "--memory",
+            "17179869184",
+            "--storage",
+            "34359738368",
+            "--network",
+            "1000",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            command,
+            ProviderCommand::Register {
+                provider: "provider-seed".to_string(),
+                authority: Some("authority-key".to_string()),
+                cpu_cores: 8,
+                memory_bytes: 17_179_869_184,
+                storage_bytes: 34_359_738_368,
+                network_mbits: 1000,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_register_capacity() {
+        let err = parse_provider_args(vec!["register", "--cpu-cores", "many"]).unwrap_err();
+        assert!(err.contains("invalid value for --cpu-cores"));
+    }
+
+    #[test]
+    fn rejects_missing_register_option_value() {
+        let err = parse_provider_args(vec!["register", "--memory"]).unwrap_err();
+        assert!(err.contains("missing value for --memory"));
+    }
+
+    #[test]
+    fn parses_attest_uptime() {
+        let command = parse_provider_args(vec!["attest", "provider-key", "9999"]).unwrap();
+        assert_eq!(
+            command,
+            ProviderCommand::Attest {
+                provider: "provider-key".to_string(),
+                uptime_percent_bps: 9999,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_trailing_get_argument() {
+        let err = parse_provider_args(vec!["get", "provider-key", "extra"]).unwrap_err();
+        assert!(err.contains("unexpected argument for provider get"));
     }
 }
