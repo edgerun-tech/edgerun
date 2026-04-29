@@ -148,6 +148,10 @@ pub fn process_instruction(
                 effective_at,
             )
         }
+        instruction::DeploymentInstruction::AssignProvider { provider } => {
+            msg!("DeploymentContract: AssignProvider");
+            assign_provider(program_id, accounts, provider)
+        }
     }
 }
 
@@ -186,6 +190,10 @@ fn initialize(
         require_uninitialized_deployment(&data)?;
     }
 
+    if Pubkey::new_from_array(provider) != Pubkey::default() {
+        return Err(DeploymentError::Unauthorized.into());
+    }
+
     let now = Clock::get()?.unix_timestamp;
     transfer_from_signer(owner_account, deployment_account, system_program, deposit)?;
     let governance_authority = Pubkey::new_from_array(governance_authority);
@@ -197,7 +205,7 @@ fn initialize(
 
     let deployment = Deployment {
         owner: *owner_account.key,
-        provider: provider.into(),
+        provider: Pubkey::default(),
         name,
         container_count,
         total_cpu_cores,
@@ -260,6 +268,10 @@ fn start(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         && deployment.status != DeploymentStatus::Paused as u8
     {
         return Err(DeploymentError::InvalidState.into());
+    }
+
+    if deployment.provider == Pubkey::default() {
+        return Err(DeploymentError::ProviderNotAssigned.into());
     }
 
     let now = Clock::get()?.unix_timestamp;
@@ -786,6 +798,56 @@ fn schedule_pricing(
     Ok(())
 }
 
+fn assign_provider(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    provider: [u8; 32],
+) -> ProgramResult {
+    let account_iter = &mut accounts.iter();
+    let deployment_account = next_account_info(account_iter)?;
+    let scheduler_account = next_account_info(account_iter)?;
+    let provider_account = next_account_info(account_iter)?;
+
+    require_program_owned(deployment_account, program_id)?;
+
+    if !scheduler_account.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let provider = Pubkey::new_from_array(provider);
+    if provider == Pubkey::default() || provider != *provider_account.key {
+        return Err(ProgramError::InvalidArgument);
+    }
+
+    let mut data = deployment_account.try_borrow_mut_data()?;
+    let mut deployment = Deployment::unpack(&data)?;
+
+    if governance_authority(&deployment) != *scheduler_account.key {
+        return Err(DeploymentError::Unauthorized.into());
+    }
+
+    if deployment.status != DeploymentStatus::Created as u8 {
+        return Err(DeploymentError::InvalidState.into());
+    }
+
+    {
+        let provider_data = provider_account.try_borrow_data()?;
+        if provider_data.len() < 81 {
+            return Err(ProgramError::AccountDataTooSmall);
+        }
+        if provider_data[80] != 0 {
+            return Err(DeploymentError::InvalidState.into());
+        }
+        if provider_data[0..32] == *deployment.owner.as_ref() {
+            return Err(DeploymentError::SelfProviderNotAllowed.into());
+        }
+    }
+
+    deployment.provider = provider;
+    deployment.pack(&mut data)?;
+    Ok(())
+}
+
 fn require_program_owned(account: &AccountInfo, program_id: &Pubkey) -> ProgramResult {
     if account.owner != program_id {
         return Err(ProgramError::IncorrectProgramId);
@@ -960,6 +1022,182 @@ mod tests {
             process_instruction(&program_id, &accounts, &instruction),
             Err(DeploymentError::Unauthorized.into())
         );
+    }
+
+    #[test]
+    fn start_rejects_unassigned_provider() {
+        let program_id = Pubkey::new_unique();
+        let deployment_key = Pubkey::new_unique();
+        let owner = Pubkey::new_unique();
+        let mut deployment_lamports = 0;
+        let mut owner_lamports = 0;
+        let mut deployment_data = [0u8; state::SIZE];
+        let mut owner_data = [];
+
+        state::Deployment {
+            owner,
+            provider: Pubkey::default(),
+            name: [0u8; 64],
+            container_count: 1,
+            total_cpu_cores: 2,
+            total_memory_bytes: 4096,
+            total_storage_bytes: 8192,
+            total_network_mbps: 100,
+            deposit: 1000,
+            burn_rate: 1,
+            status: state::DeploymentStatus::Created as u8,
+            ..state::Deployment::default()
+        }
+        .pack(&mut deployment_data)
+        .unwrap();
+
+        let deployment_account = account(
+            &deployment_key,
+            &program_id,
+            false,
+            &mut deployment_data,
+            &mut deployment_lamports,
+        );
+        let owner_account = account(
+            &owner,
+            &program_id,
+            true,
+            &mut owner_data,
+            &mut owner_lamports,
+        );
+        let accounts = vec![deployment_account, owner_account];
+
+        assert_eq!(
+            process_instruction(&program_id, &accounts, &[1]),
+            Err(DeploymentError::ProviderNotAssigned.into())
+        );
+    }
+
+    #[test]
+    fn assign_provider_requires_scheduler_and_rejects_self_provider() {
+        let program_id = Pubkey::new_unique();
+        let deployment_key = Pubkey::new_unique();
+        let provider_key = Pubkey::new_unique();
+        let owner = Pubkey::new_unique();
+        let mut deployment_lamports = 0;
+        let mut scheduler_lamports = 0;
+        let mut provider_lamports = 0;
+        let mut deployment_data = [0u8; state::SIZE];
+        let mut scheduler_data = [];
+        let mut provider_data = [0u8; 128];
+        provider_data[0..32].copy_from_slice(owner.as_ref());
+
+        state::Deployment {
+            owner,
+            provider: Pubkey::default(),
+            name: [0u8; 64],
+            container_count: 1,
+            total_cpu_cores: 2,
+            total_memory_bytes: 4096,
+            total_storage_bytes: 8192,
+            total_network_mbps: 100,
+            deposit: 1000,
+            burn_rate: 1,
+            status: state::DeploymentStatus::Created as u8,
+            ..state::Deployment::default()
+        }
+        .pack(&mut deployment_data)
+        .unwrap();
+
+        let deployment_account = account(
+            &deployment_key,
+            &program_id,
+            false,
+            &mut deployment_data,
+            &mut deployment_lamports,
+        );
+        let scheduler_account = account(
+            &owner,
+            &program_id,
+            true,
+            &mut scheduler_data,
+            &mut scheduler_lamports,
+        );
+        let provider_account = account(
+            &provider_key,
+            &program_id,
+            false,
+            &mut provider_data,
+            &mut provider_lamports,
+        );
+        let accounts = vec![deployment_account, scheduler_account, provider_account];
+        let mut instruction = vec![10];
+        instruction.extend_from_slice(provider_key.as_ref());
+
+        assert_eq!(
+            process_instruction(&program_id, &accounts, &instruction),
+            Err(DeploymentError::SelfProviderNotAllowed.into())
+        );
+    }
+
+    #[test]
+    fn assign_provider_sets_active_provider() {
+        let program_id = Pubkey::new_unique();
+        let deployment_key = Pubkey::new_unique();
+        let provider_key = Pubkey::new_unique();
+        let provider_authority = Pubkey::new_unique();
+        let owner = Pubkey::new_unique();
+        let governance = Pubkey::new_unique();
+        let mut deployment_lamports = 0;
+        let mut scheduler_lamports = 0;
+        let mut provider_lamports = 0;
+        let mut deployment_data = [0u8; state::SIZE];
+        let mut scheduler_data = [];
+        let mut provider_data = [0u8; 128];
+        provider_data[0..32].copy_from_slice(provider_authority.as_ref());
+
+        state::Deployment {
+            owner,
+            provider: Pubkey::default(),
+            name: [0u8; 64],
+            container_count: 1,
+            total_cpu_cores: 2,
+            total_memory_bytes: 4096,
+            total_storage_bytes: 8192,
+            total_network_mbps: 100,
+            deposit: 1000,
+            burn_rate: 1,
+            status: state::DeploymentStatus::Created as u8,
+            governance_authority: governance,
+            ..state::Deployment::default()
+        }
+        .pack(&mut deployment_data)
+        .unwrap();
+
+        let deployment_account = account(
+            &deployment_key,
+            &program_id,
+            false,
+            &mut deployment_data,
+            &mut deployment_lamports,
+        );
+        let scheduler_account = account(
+            &governance,
+            &program_id,
+            true,
+            &mut scheduler_data,
+            &mut scheduler_lamports,
+        );
+        let provider_account = account(
+            &provider_key,
+            &program_id,
+            false,
+            &mut provider_data,
+            &mut provider_lamports,
+        );
+        let accounts = vec![deployment_account, scheduler_account, provider_account];
+        let mut instruction = vec![10];
+        instruction.extend_from_slice(provider_key.as_ref());
+
+        process_instruction(&program_id, &accounts, &instruction).unwrap();
+
+        let deployment = state::Deployment::unpack(&deployment_data).unwrap();
+        assert_eq!(deployment.provider, provider_key);
     }
 
     #[test]

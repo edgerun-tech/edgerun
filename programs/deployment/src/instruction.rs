@@ -41,6 +41,9 @@ pub enum DeploymentInstruction {
         network_mbit_hour: u64,
         effective_at: i64,
     },
+    AssignProvider {
+        provider: [u8; 32],
+    },
 }
 
 impl DeploymentInstruction {
@@ -139,7 +142,32 @@ impl DeploymentInstruction {
                         .map_err(|_| ProgramError::InvalidInstructionData)?,
                 })
             }
+            10 => {
+                let mut ops = data[1..].as_ref();
+                Ok(DeploymentInstruction::AssignProvider {
+                    provider: <[u8; 32]>::deserialize(&mut ops)
+                        .map_err(|_| ProgramError::InvalidInstructionData)?,
+                })
+            }
             _ => Err(ProgramError::InvalidInstructionData),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unpack_assign_provider() {
+        let mut data = vec![10];
+        data.extend_from_slice(&[7u8; 32]);
+
+        match DeploymentInstruction::unpack(&data).unwrap() {
+            DeploymentInstruction::AssignProvider { provider } => {
+                assert_eq!(provider, [7u8; 32]);
+            }
+            other => panic!("unexpected instruction: {other:?}"),
         }
     }
 }

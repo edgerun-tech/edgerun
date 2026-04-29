@@ -29,6 +29,11 @@ pub enum DeploymentCommand {
         deployment: String,
         owner: Option<String>,
     },
+    Assign {
+        deployment: String,
+        provider: String,
+        scheduler: Option<String>,
+    },
     Pause {
         deployment: String,
         owner: Option<String>,
@@ -124,7 +129,12 @@ where
                 match arg.as_str() {
                     "--owner" | "-o" => owner = Some(next_value(&mut args, &arg)?),
                     "--governance" | "-g" => governance = Some(next_value(&mut args, &arg)?),
-                    "--provider" | "-p" => provider = Some(next_value(&mut args, &arg)?),
+                    "--provider" | "-p" => {
+                        return Err(
+                            "buyer-selected providers are disabled; use deployment assign after create"
+                                .to_string(),
+                        );
+                    }
                     "--name" => name = Some(next_value(&mut args, &arg)?),
                     "--containers" => containers = next_parse(&mut args, &arg)?,
                     "--cpu" | "-c" => cpu_cores = next_parse(&mut args, &arg)?,
@@ -164,6 +174,29 @@ where
             let deployment = args.next().unwrap_or_default();
             let owner = parse_owner_arg(args, "deployment start")?;
             Ok(DeploymentCommand::Start { deployment, owner })
+        }
+        Some("assign") | Some("assign-provider") => {
+            let mut deployment = None;
+            let mut provider = None;
+            let mut scheduler = None;
+
+            while let Some(arg) = args.next() {
+                match arg.as_str() {
+                    "--provider" | "-p" => provider = Some(next_value(&mut args, &arg)?),
+                    "--scheduler" | "-s" => scheduler = Some(next_value(&mut args, &arg)?),
+                    _ if !arg.starts_with('-') && deployment.is_none() => deployment = Some(arg),
+                    _ if !arg.starts_with('-') => {
+                        return Err(format!("unexpected extra deployment argument '{arg}'"));
+                    }
+                    _ => return Err(format!("unknown deployment assign option '{arg}'")),
+                }
+            }
+
+            Ok(DeploymentCommand::Assign {
+                deployment: deployment.unwrap_or_default(),
+                provider: provider.unwrap_or_default(),
+                scheduler,
+            })
         }
         Some("pause") => {
             let deployment = args.next().unwrap_or_default();
@@ -340,7 +373,7 @@ where
                 effective_at,
             })
         }
-        _ => Err("unknown deployment command. Use: create, get, start, pause, resume, dispute, resolve, stop, tick-burn, report, burn-rate, schedule-pricing".to_string()),
+        _ => Err("unknown deployment command. Use: create, get, assign, start, pause, resume, dispute, resolve, stop, tick-burn, report, burn-rate, schedule-pricing".to_string()),
     }
 }
 
@@ -452,10 +485,12 @@ pub async fn handle(
                     return Err("missing owner pubkey; pass --owner or set SOLANA_KEYPAIR".into());
                 }
             };
-            let provider_pubkey = match provider {
-                Some(provider) => parse_pubkey("provider", provider)?,
-                None => Pubkey::default(),
-            };
+            if provider.is_some() {
+                return Err(
+                    "buyer-selected providers are disabled; create unassigned deployments and use deployment assign from the scheduler".into(),
+                );
+            }
+            let provider_pubkey = Pubkey::default();
             let governance_pubkey = match governance {
                 Some(governance) => parse_pubkey("governance", governance)?,
                 None => owner_pubkey,
@@ -640,6 +675,42 @@ pub async fn handle(
                 print_confirmed_tx(&client, &tx_sig)?;
             } else {
                 println!("Start instruction created for {}", deployment);
+            }
+            Ok(())
+        }
+        DeploymentCommand::Assign {
+            deployment,
+            provider,
+            scheduler,
+        } => {
+            let dep_pubkey = parse_pubkey("deployment", deployment)?;
+            let provider_pubkey = parse_pubkey("provider", provider)?;
+            let scheduler_pubkey = match (scheduler, signer.as_ref()) {
+                (Some(s), _) => parse_pubkey("scheduler", s)?,
+                (None, Some(signer)) => signer_pubkey(signer),
+                (None, None) => {
+                    return Err(
+                        "missing scheduler pubkey; pass --scheduler or set SOLANA_KEYPAIR".into(),
+                    );
+                }
+            };
+
+            println!("=== Assign Provider ===");
+            println!("Deployment: {}", deployment);
+            println!("Provider: {}", provider_pubkey);
+            println!("Scheduler: {}", scheduler_pubkey);
+            if let Some(ref signer) = signer {
+                let tx_sig = client
+                    .assign_provider_signed(
+                        &dep_pubkey,
+                        &scheduler_pubkey,
+                        &provider_pubkey,
+                        signer,
+                    )
+                    .await?;
+                print_confirmed_tx(&client, &tx_sig)?;
+            } else {
+                println!("\nNote: No keypair loaded. To assign providers, load a keypair.");
             }
             Ok(())
         }
@@ -915,8 +986,6 @@ mod tests {
             "owner-key",
             "--governance",
             "governance-key",
-            "--provider",
-            "provider-key",
             "--name",
             "web",
             "--containers",
@@ -939,7 +1008,7 @@ mod tests {
                 deployment: "deployment-seed".to_string(),
                 owner: Some("owner-key".to_string()),
                 governance: Some("governance-key".to_string()),
-                provider: Some("provider-key".to_string()),
+                provider: None,
                 name: Some("web".to_string()),
                 containers: 3,
                 cpu_cores: 8,
@@ -955,6 +1024,40 @@ mod tests {
     fn rejects_invalid_create_capacity() {
         let err = parse_deployment_args(vec!["create", "--cpu", "many"]).unwrap_err();
         assert!(err.contains("invalid value for --cpu"));
+    }
+
+    #[test]
+    fn rejects_buyer_selected_provider_on_create() {
+        let err = parse_deployment_args(vec![
+            "create",
+            "deployment-key",
+            "--provider",
+            "provider-key",
+        ])
+        .unwrap_err();
+        assert!(err.contains("buyer-selected providers are disabled"));
+    }
+
+    #[test]
+    fn parses_assign_provider() {
+        let command = parse_deployment_args(vec![
+            "assign",
+            "deployment-key",
+            "--provider",
+            "provider-key",
+            "--scheduler",
+            "scheduler-key",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            command,
+            DeploymentCommand::Assign {
+                deployment: "deployment-key".to_string(),
+                provider: "provider-key".to_string(),
+                scheduler: Some("scheduler-key".to_string()),
+            }
+        );
     }
 
     #[test]

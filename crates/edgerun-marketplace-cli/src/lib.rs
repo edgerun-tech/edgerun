@@ -160,7 +160,7 @@ fn print_usage() {
         "  provider    Provider operations (register, get, list, earnings, attest, pause, resume)"
     );
     eprintln!(
-        "  deployment  Deployment operations (create, get, start, pause, resume, dispute, resolve, stop, tick-burn, report, burn-rate, schedule-pricing)"
+        "  deployment  Deployment operations (create, get, assign, start, pause, resume, dispute, resolve, stop, tick-burn, report, burn-rate, schedule-pricing)"
     );
     eprintln!("  status      Show marketplace status");
     eprintln!();

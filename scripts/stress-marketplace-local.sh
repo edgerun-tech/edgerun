@@ -4,6 +4,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -n "${SOLANA_BIN_DIR:-}" ]; then
+  PATH="$SOLANA_BIN_DIR:$PATH"
+fi
 ENV_FILE="${SOLANA_LOCALNET_ENV:-$ROOT_DIR/target/localnet/marketplace.env}"
 ITERATIONS="${1:-${MARKETPLACE_STRESS_ITERATIONS:-25}}"
 DEPOSIT="${MARKETPLACE_STRESS_DEPOSIT:-10000000}"
@@ -15,6 +18,7 @@ REPORT_NETWORK_BYTES="${MARKETPLACE_STRESS_REPORT_NETWORK_BYTES:-2048}"
 REPORT_DELAY_SECONDS="${MARKETPLACE_STRESS_REPORT_DELAY_SECONDS:-0}"
 PRICE_GUARD_CHECK="${MARKETPLACE_STRESS_PRICE_GUARD_CHECK:-1}"
 CLI_BIN="${MARKETPLACE_CLI_BIN:-$ROOT_DIR/target/debug/edgerun-marketplace}"
+PROVIDER_KEYPAIR="${MARKETPLACE_PROVIDER_KEYPAIR:-$ROOT_DIR/target/localnet/provider-authority.json}"
 
 if [ -f "$ENV_FILE" ]; then
   # shellcheck disable=SC1090
@@ -47,6 +51,25 @@ CLI=("$CLI_BIN")
 RUN_ID="$(date +%s)"
 PROVIDER_SEED="stress-provider-$RUN_ID"
 
+if [ "$PROVIDER_KEYPAIR" = "$SOLANA_KEYPAIR" ]; then
+  echo "MARKETPLACE_PROVIDER_KEYPAIR must differ from SOLANA_KEYPAIR to exercise scheduler assignment" >&2
+  exit 1
+fi
+
+if [ ! -f "$PROVIDER_KEYPAIR" ]; then
+  if ! command -v solana-keygen >/dev/null 2>&1; then
+    echo "missing provider keypair and solana-keygen is not on PATH: $PROVIDER_KEYPAIR" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$PROVIDER_KEYPAIR")"
+  solana-keygen new --no-bip39-passphrase --silent --outfile "$PROVIDER_KEYPAIR" >/dev/null
+fi
+
+if command -v solana >/dev/null 2>&1; then
+  provider_authority="$(solana-keygen pubkey "$PROVIDER_KEYPAIR")"
+  solana --url "$SOLANA_RPC_URL" airdrop 2 "$provider_authority" >/dev/null || true
+fi
+
 extract_field() {
   awk -v label="$1" '$0 ~ label {print $NF; exit}'
 }
@@ -64,7 +87,7 @@ require_contains() {
 
 echo "Registering provider seed $PROVIDER_SEED"
 echo "Stress config: iterations=$ITERATIONS deposit=$DEPOSIT cpu=$CPU memory=$MEMORY storage=$STORAGE network_mbps=$NETWORK report_network_bytes=$REPORT_NETWORK_BYTES report_delay_seconds=$REPORT_DELAY_SECONDS"
-PROVIDER_OUT="$("${CLI[@]}" provider register "$PROVIDER_SEED" \
+PROVIDER_OUT="$(SOLANA_KEYPAIR="$PROVIDER_KEYPAIR" "${CLI[@]}" provider register "$PROVIDER_SEED" \
   --cpu-cores "$CPU" \
   --memory "$MEMORY" \
   --storage "$STORAGE" \
@@ -89,7 +112,6 @@ for i in $(seq 1 "$ITERATIONS"); do
   echo
   echo "[$i/$ITERATIONS] create $seed"
   if ! CREATE_OUT="$("${CLI[@]}" deployment create "$seed" \
-    --provider "$PROVIDER" \
     --name "$seed" \
     --cpu "$CPU" \
     --memory "$MEMORY" \
@@ -106,6 +128,8 @@ for i in $(seq 1 "$ITERATIONS"); do
     failed=$((failed + 1))
     continue
   fi
+
+  "${CLI[@]}" deployment assign "$DEPLOYMENT" --provider "$PROVIDER"
 
   if [ "$PRICE_GUARD_CHECK" -ne 0 ] && [ "$price_guard_checked" -eq 0 ]; then
     price_guard_checked=1
@@ -147,7 +171,7 @@ for i in $(seq 1 "$ITERATIONS"); do
     sleep "$REPORT_DELAY_SECONDS"
   fi
 
-  "${CLI[@]}" deployment report "$DEPLOYMENT" \
+  SOLANA_KEYPAIR="$PROVIDER_KEYPAIR" "${CLI[@]}" deployment report "$DEPLOYMENT" \
     --provider "$PROVIDER" \
     --cpu "$CPU" \
     --memory "$MEMORY" \

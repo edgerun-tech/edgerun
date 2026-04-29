@@ -8,6 +8,7 @@ MOCK_ADDR="${MOCK_SOLANA_RPC_ADDR:-127.0.0.1:18899}"
 MOCK_URL="http://$MOCK_ADDR"
 WORK_DIR="${MARKETPLACE_MOCK_WORK_DIR:-$ROOT_DIR/target/marketplace-mock}"
 KEYPAIR="$WORK_DIR/mock-keypair.bin"
+PROVIDER_KEYPAIR="$WORK_DIR/mock-provider-keypair.bin"
 MOCK_LOG="$WORK_DIR/mock-solana-rpc.log"
 MOCK_PID=""
 TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT_DIR/target}"
@@ -26,6 +27,12 @@ python3 - "$KEYPAIR" <<'PY'
 import sys
 with open(sys.argv[1], "wb") as f:
     f.write(bytes(range(32)))
+PY
+
+python3 - "$PROVIDER_KEYPAIR" <<'PY'
+import sys
+with open(sys.argv[1], "wb") as f:
+    f.write(bytes(range(32, 64)))
 PY
 
 cargo build --manifest-path "$ROOT_DIR/scripts/mock-solana-rpc/Cargo.toml"
@@ -73,7 +80,7 @@ DEPLOYMENT_SEED="deployment-$RUN_ID"
 
 echo "Using mock Solana RPC at $MOCK_URL"
 
-PROVIDER_OUT="$("$CLI_BIN" provider register "$PROVIDER_SEED" \
+PROVIDER_OUT="$(SOLANA_KEYPAIR="$PROVIDER_KEYPAIR" "$CLI_BIN" provider register "$PROVIDER_SEED" \
   --cpu-cores 2 \
   --memory 1073741824 \
   --storage 2147483648 \
@@ -84,7 +91,6 @@ test -n "$PROVIDER"
 grep -Fq "Transaction confirmed:" <<<"$PROVIDER_OUT"
 
 CREATE_OUT="$("$CLI_BIN" deployment create "$DEPLOYMENT_SEED" \
-  --provider "$PROVIDER" \
   --name "$DEPLOYMENT_SEED" \
   --cpu 1 \
   --memory 536870912 \
@@ -95,8 +101,9 @@ DEPLOYMENT="$(awk '/Deployment account:/ {print $NF; exit}' <<<"$CREATE_OUT")"
 test -n "$DEPLOYMENT"
 grep -Fq "Transaction confirmed:" <<<"$CREATE_OUT"
 
+"$CLI_BIN" deployment assign "$DEPLOYMENT" --provider "$PROVIDER"
 "$CLI_BIN" deployment start "$DEPLOYMENT"
-"$CLI_BIN" deployment report "$DEPLOYMENT" \
+SOLANA_KEYPAIR="$PROVIDER_KEYPAIR" "$CLI_BIN" deployment report "$DEPLOYMENT" \
   --provider "$PROVIDER" \
   --cpu 1 \
   --memory 536870912 \

@@ -266,6 +266,37 @@ impl DeploymentClient {
         )
     }
 
+    pub fn assign_provider_instruction(
+        &self,
+        deployment_pubkey: &Pubkey,
+        scheduler_pubkey: &Pubkey,
+        provider_pubkey: &Pubkey,
+    ) -> Instruction {
+        make_instruction(
+            self.program_id,
+            10,
+            provider_pubkey.as_bytes(),
+            vec![
+                AccountMeta::new(*deployment_pubkey, false),
+                AccountMeta::new(*scheduler_pubkey, true),
+                AccountMeta::new(*provider_pubkey, false),
+            ],
+        )
+    }
+
+    pub async fn assign_provider_signed<S: Signer>(
+        &self,
+        deployment_pubkey: &Pubkey,
+        scheduler_pubkey: &Pubkey,
+        provider_pubkey: &Pubkey,
+        signer: &S,
+    ) -> Result<String, SolanaError> {
+        let ix =
+            self.assign_provider_instruction(deployment_pubkey, scheduler_pubkey, provider_pubkey);
+        self.send_instruction_signed(ix, scheduler_pubkey, signer)
+            .await
+    }
+
     pub fn stop_instruction(
         &self,
         deployment_pubkey: &Pubkey,
@@ -933,6 +964,13 @@ mod tests {
             1_700_000_000
         );
         assert_eq!(scheduled.accounts.len(), 2);
+
+        let provider = Pubkey::new_from_array([6u8; 32]);
+        let assign = client.assign_provider_instruction(&deployment, &owner, &provider);
+        assert_eq!(assign.data[0], 10);
+        assert_eq!(&assign.data[1..33], provider.as_bytes());
+        assert_eq!(assign.accounts.len(), 3);
+        assert!(assign.accounts[1].is_signer());
     }
 
     #[test]

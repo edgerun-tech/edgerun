@@ -9,6 +9,8 @@ pub enum DeploymentError {
     Overflow,
     NotRunning,
     PriceChangeGracePeriod,
+    ProviderNotAssigned,
+    SelfProviderNotAllowed,
 }
 
 impl From<DeploymentError> for ProgramError {
@@ -41,6 +43,14 @@ impl From<DeploymentError> for ProgramError {
             DeploymentError::PriceChangeGracePeriod => {
                 solana_program::msg!("Error: price changes require at least 24 hours grace");
                 ProgramError::Custom(16)
+            }
+            DeploymentError::ProviderNotAssigned => {
+                solana_program::msg!("Error: provider not assigned");
+                ProgramError::Custom(17)
+            }
+            DeploymentError::SelfProviderNotAllowed => {
+                solana_program::msg!("Error: buyer cannot assign their own provider account");
+                ProgramError::Custom(18)
             }
         }
     }
