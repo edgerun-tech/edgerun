@@ -6,12 +6,12 @@ use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
 use edgerun_http::{HttpClient, HttpVersion};
-use edgerun_json::{json, JsonValue};
+use edgerun_json::{JsonValue, json};
 use std::sync::Arc;
 
 use crate::error::SolanaError;
 use crate::try_provider_registry_program_id;
-use crate::types::{collateral, Provider, ProviderStatus};
+use crate::types::{Provider, ProviderStatus, collateral};
 
 const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
 const PROVIDER_ACCOUNT_SIZE: u64 = 128;
@@ -424,6 +424,10 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, SolanaError> {
 }
 
 fn decode_rpc_account_data(resp: &JsonValue) -> Result<Vec<u8>, SolanaError> {
+    if resp["result"]["value"].is_null() {
+        return Err(SolanaError::AccountNotFound("provider account".to_string()));
+    }
+
     let data = if !resp["result"]["value"]["data"].is_null() {
         &resp["result"]["value"]["data"]
     } else {
@@ -558,6 +562,32 @@ mod tests {
             Some(active_pubkey)
         );
         assert_eq!(active_provider_pubkey(&paused).unwrap(), None);
+    }
+
+    #[test]
+    fn get_account_info_null_value_is_account_not_found() {
+        let resp = json!({
+            "jsonrpc": "2.0",
+            "result": { "value": null },
+            "id": 1
+        });
+
+        match decode_rpc_account_data(&resp) {
+            Err(SolanaError::AccountNotFound(label)) => assert_eq!(label, "provider account"),
+            other => panic!("unexpected decode result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn get_account_info_decodes_base64_data_array() {
+        let encoded = edgerun_encoding::base64::standard_encode(&[9, 8, 7, 6]);
+        let resp = json!({
+            "jsonrpc": "2.0",
+            "result": { "value": { "data": [encoded, "base64"] } },
+            "id": 1
+        });
+
+        assert_eq!(decode_rpc_account_data(&resp).unwrap(), vec![9, 8, 7, 6]);
     }
 
     fn provider_program_account(pubkey: Pubkey, status: ProviderStatus) -> JsonValue {

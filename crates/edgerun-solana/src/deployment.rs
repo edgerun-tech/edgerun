@@ -6,7 +6,7 @@ use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
 use edgerun_http::{HttpClient, HttpVersion};
-use edgerun_json::{json, JsonValue};
+use edgerun_json::{JsonValue, json};
 use std::sync::Arc;
 
 use crate::error::SolanaError;
@@ -774,6 +774,12 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, SolanaError> {
 }
 
 fn decode_rpc_account_data(resp: &JsonValue) -> Result<Vec<u8>, SolanaError> {
+    if resp["result"]["value"].is_null() {
+        return Err(SolanaError::AccountNotFound(
+            "deployment account".to_string(),
+        ));
+    }
+
     let data = if !resp["result"]["value"]["data"].is_null() {
         &resp["result"]["value"]["data"]
     } else {
@@ -927,5 +933,31 @@ mod tests {
             1_700_000_000
         );
         assert_eq!(scheduled.accounts.len(), 2);
+    }
+
+    #[test]
+    fn get_account_info_null_value_is_account_not_found() {
+        let resp = json!({
+            "jsonrpc": "2.0",
+            "result": { "value": null },
+            "id": 1
+        });
+
+        match decode_rpc_account_data(&resp) {
+            Err(SolanaError::AccountNotFound(label)) => assert_eq!(label, "deployment account"),
+            other => panic!("unexpected decode result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn get_account_info_decodes_base64_data_array() {
+        let encoded = base64_encode(&[1, 2, 3, 4]);
+        let resp = json!({
+            "jsonrpc": "2.0",
+            "result": { "value": { "data": [encoded, "base64"] } },
+            "id": 1
+        });
+
+        assert_eq!(decode_rpc_account_data(&resp).unwrap(), vec![1, 2, 3, 4]);
     }
 }
