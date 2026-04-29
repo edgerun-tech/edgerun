@@ -127,19 +127,35 @@ async fn handle_standard_query(
     // Resolve while holding the zones lock, then drop it before any
     // other `.await` points. The borrow checker can't prove that
     // `answers`/`authority` outlive the guard unless we scope it.
-    let (answers, authority) = {
+    let (answers, authority, negative) = {
         let zones_guard = state.zones.read().await;
         let answers = resolve(&qname, qtype, &zones_guard);
-        let authority = if answers.is_empty() {
+        let negative = if answers.is_empty() {
+            find_negative_response(&qname, &zones_guard)
+        } else {
+            None
+        };
+        let authority = if let Some((_, authority)) = &negative {
+            authority.clone()
+        } else if answers.is_empty() {
             find_matching_zone_soa(&qname, &zones_guard)
         } else {
             Vec::new()
         };
-        (answers, authority)
+        (answers, authority, negative.map(|(rcode, _)| rcode))
     };
     // zones_guard dropped here ^
 
     if answers.is_empty() {
+        if let Some(rcode) = negative {
+            edgerun_log::debug!("edgerun-dns: local negative response for {}", qname);
+            let mut resp = DnsMessage::response(query.header.id, rcode, Vec::new());
+            resp.questions = query.questions.clone();
+            resp.header.question_count = 1;
+            resp.authority = authority;
+            return Ok((resp.to_wire(), false));
+        }
+
         // Try forwarding if upstream is configured
         let forward_addr = state.forward_to.read().await.clone();
         if let Some(ref upstream) = forward_addr {
@@ -184,6 +200,64 @@ fn find_matching_zone_soa(qname: &str, zones: &HashMap<String, DnsZone>) -> Vec<
         }
     }
     Vec::new()
+}
+
+fn find_negative_response(
+    qname: &str,
+    zones: &HashMap<String, DnsZone>,
+) -> Option<(DnsResponseCode, Vec<DnsRecord>)> {
+    for zone in zones.values() {
+        let origin = zone.origin.to_lowercase();
+        if qname != origin && !qname.ends_with(&format!(".{}", origin)) {
+            continue;
+        }
+
+        let rname = if qname == origin {
+            "@".to_string()
+        } else {
+            qname[..qname.len() - origin.len() - 1].to_string()
+        };
+        let name_exists = zone.resolve(&rname, DnsRecordType::ANY).is_some();
+        let mut authority = zone.resolve(&origin, DnsRecordType::SOA).unwrap_or_default();
+        if name_exists {
+            if let Some(mut proof) = zone.resolve(&rname, DnsRecordType::NSEC) {
+                authority.append(&mut proof);
+            }
+            return Some((DnsResponseCode::NoError, authority));
+        }
+        if let Some(mut proof) = find_nsec_covering(zone, qname) {
+            authority.append(&mut proof);
+        }
+        return Some((DnsResponseCode::NXDomain, authority));
+    }
+    None
+}
+
+fn find_nsec_covering(zone: &DnsZone, qname: &str) -> Option<Vec<DnsRecord>> {
+    let qname = qname.trim_end_matches('.').to_ascii_lowercase();
+    let mut names: Vec<String> = zone
+        .names()
+        .into_iter()
+        .filter(|name| zone.resolve(name, DnsRecordType::NSEC).is_some())
+        .map(str::to_string)
+        .collect();
+    names.sort();
+    names.dedup();
+    if names.is_empty() {
+        return None;
+    }
+    for (index, owner) in names.iter().enumerate() {
+        let next = &names[(index + 1) % names.len()];
+        let covers = if owner < next {
+            owner.as_str() < qname.as_str() && qname.as_str() < next.as_str()
+        } else {
+            owner.as_str() < qname.as_str() || qname.as_str() < next.as_str()
+        };
+        if covers || owner == &qname {
+            return zone.resolve(owner, DnsRecordType::NSEC);
+        }
+    }
+    zone.resolve(names.last()?, DnsRecordType::NSEC)
 }
 
 /// Forward a query to an upstream resolver and return the raw response.

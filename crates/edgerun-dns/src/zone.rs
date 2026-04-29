@@ -394,12 +394,19 @@ impl DnsZone {
             if qtype == DnsRecordType::ANY {
                 Some(records.clone())
             } else {
-                let matching: Vec<_> = records
+                let mut matching: Vec<_> = records
                     .iter()
                     .filter(|r| r.rtype == qtype)
                     .cloned()
                     .collect();
                 if !matching.is_empty() {
+                    matching.extend(records.iter().filter_map(|record| {
+                        if rrsig_covers(record, qtype) {
+                            Some(record.clone())
+                        } else {
+                            None
+                        }
+                    }));
                     Some(matching)
                 } else {
                     // Name exists but no records of this type
@@ -494,6 +501,16 @@ impl DnsZone {
             format!("{}.{}", lower, origin_lower)
         }
     }
+}
+
+fn rrsig_covers(record: &DnsRecord, qtype: DnsRecordType) -> bool {
+    if record.rtype != DnsRecordType::RRSIG {
+        return false;
+    }
+    matches!(
+        &record.data,
+        DnsRecordData::RRSIG { type_covered, .. } if *type_covered == qtype.as_u16()
+    )
 }
 
 #[cfg(test)]

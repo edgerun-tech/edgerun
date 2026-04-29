@@ -5,6 +5,7 @@
 //! mail through the built-in queue, and exposes IMAP over the same Maildir.
 
 use std::collections::BTreeMap;
+use std::fs::OpenOptions;
 use std::future::Future;
 use std::io;
 use std::io::{BufRead, BufReader, Write};
@@ -17,12 +18,13 @@ use std::time::Duration;
 
 use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig};
 use edgerun_acme::{ChallengeStatus, ChallengeType, DirectoryUrl, OrderStatus};
+use edgerun_blog::{BlogConfig, BlogHandler};
 use edgerun_config::edgerun_json::JsonValue;
 use edgerun_config::{
-    ConfigResource, DnsServerSpec, DnsZoneSpec, ImapServerSpec, MailUserSpec, SmtpServerSpec,
-    ZoneRecord,
+    ConfigResource, DnsServerSpec, DnsZoneSpec, DnssecConfig, ImapServerSpec, MailUserSpec,
+    SmtpServerSpec, ZoneRecord,
 };
-use edgerun_dns::{DnsRecord, DnsServer, DnsServerConfig, DnsZone};
+use edgerun_dns::{DnsRecord, DnsRecordData, DnsRecordType, DnsServer, DnsServerConfig, DnsZone};
 use edgerun_email::imap::{ImapServer, ImapServerConfig, MaildirImapStore};
 use edgerun_email::smtp::server::{MaildirStore, SmtpServer, SmtpServerConfig};
 use edgerun_email::smtp::ServerLimits;
@@ -71,15 +73,15 @@ fn main() {
         }
         return;
     }
-    let config_path = match parse_config_path(&args) {
-        Ok(path) => path,
+    let options = match parse_server_options(&args) {
+        Ok(options) => options,
         Err(message) => {
             eprintln!("{message}");
             process::exit(2);
         }
     };
 
-    let resources = match load_resources(&config_path) {
+    let resources = match load_resources(&options.config_path) {
         Ok(resources) => resources,
         Err(error) => {
             eprintln!("{error}");
@@ -96,7 +98,7 @@ fn main() {
         });
 
     rt.block_on(async move {
-        if let Err(error) = run(resources).await {
+        if let Err(error) = run(resources, options.blog).await {
             eprintln!("edgerun-server: {error}");
             process::exit(1);
         }
@@ -106,12 +108,13 @@ fn main() {
 fn print_usage(program: &str) {
     println!(
         "usage: {program} --config /etc/edgerun/server/server.yaml\n\
+         usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/blog\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
 }
 
 fn load_resources_from_args(args: &[String]) -> Result<Vec<ConfigResource>, String> {
-    let config_path = parse_config_path(args)?;
+    let config_path = parse_server_options(args)?.config_path;
     load_resources(&config_path)
 }
 
@@ -139,8 +142,28 @@ fn count_resources(resources: &[ConfigResource]) -> (usize, usize, usize, usize)
     (dns, zones, smtp, imap)
 }
 
-fn parse_config_path(args: &[String]) -> Result<PathBuf, String> {
+#[derive(Clone)]
+struct ServerOptions {
+    config_path: PathBuf,
+    blog: Option<BlogMount>,
+}
+
+#[derive(Clone)]
+struct BlogMount {
+    host: String,
+    root: PathBuf,
+    title: String,
+    description: String,
+    base_url: String,
+}
+
+fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
     let mut config = None;
+    let mut blog_host = None;
+    let mut blog_root = None;
+    let mut blog_title = "Edgerun Blog".to_string();
+    let mut blog_description = "Notes from the Edgerun project.".to_string();
+    let mut blog_base_url = String::new();
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -149,17 +172,54 @@ fn parse_config_path(args: &[String]) -> Result<PathBuf, String> {
                 config = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
             }
+            "--blog-host" if i + 1 < args.len() => {
+                blog_host = Some(args[i + 1].clone());
+                i += 1;
+            }
+            "--blog-root" if i + 1 < args.len() => {
+                blog_root = Some(PathBuf::from(&args[i + 1]));
+                i += 1;
+            }
+            "--blog-title" if i + 1 < args.len() => {
+                blog_title = args[i + 1].clone();
+                i += 1;
+            }
+            "--blog-description" if i + 1 < args.len() => {
+                blog_description = args[i + 1].clone();
+                i += 1;
+            }
+            "--blog-base-url" if i + 1 < args.len() => {
+                blog_base_url = args[i + 1].trim_end_matches('/').to_string();
+                i += 1;
+            }
             other => return Err(format!("unknown argument: {other}")),
         }
         i += 1;
     }
-    config.ok_or_else(|| {
+    let config_path = config.ok_or_else(|| {
         "missing --config /path/to/server.yaml\nusage: edgerun-server --config /etc/edgerun/server/server.yaml"
             .to_string()
-    })
+    })?;
+    let blog = match (blog_host, blog_root) {
+        (Some(host), Some(root)) => Some(BlogMount {
+            host,
+            root,
+            title: blog_title,
+            description: blog_description,
+            base_url: blog_base_url,
+        }),
+        (None, None) => None,
+        _ => {
+            return Err(
+                "--blog-host and --blog-root must be provided together when enabling the blog"
+                    .to_string(),
+            );
+        }
+    };
+    Ok(ServerOptions { config_path, blog })
 }
 
-async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
+async fn run(resources: Vec<ConfigResource>, blog: Option<BlogMount>) -> io::Result<()> {
     let mut dns_servers = Vec::new();
     let mut zones = Vec::new();
     let mut smtp_specs = Vec::new();
@@ -213,6 +273,8 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
 
     if let Some(webmail) = build_webmail_config(&smtp_specs, &imap_specs)? {
         let tls = load_tls_from_spec(webmail.tls_cert.as_deref(), webmail.tls_key.as_deref())?;
+        let web_handler = WebmailHandler::new(webmail.clone());
+        let site_handler = SiteRouter::new(web_handler, blog);
         if tls.is_some() {
             let http = HttpServer::new(HttpsRedirectHandler::new(webmail.hostname.clone()))
                 .bind("0.0.0.0:80")
@@ -223,7 +285,7 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
                 http.serve_with_shutdown(token).await.map_err(to_io_error)
             }));
         } else {
-            let http = HttpServer::new(WebmailHandler::new(webmail.clone()))
+            let http = HttpServer::new(site_handler.clone())
                 .bind("0.0.0.0:80")
                 .await
                 .map_err(to_io_error)?;
@@ -234,7 +296,7 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
         }
 
         if let Some(tls) = tls {
-            let https = HttpServer::new(WebmailHandler::new(webmail))
+            let https = HttpServer::new(site_handler)
                 .with_tls(tls)
                 .bind("0.0.0.0:443")
                 .await
@@ -330,6 +392,7 @@ fn build_webmail_config(
     }))
 }
 
+#[derive(Clone)]
 struct WebmailHandler {
     config: WebmailConfig,
 }
@@ -407,6 +470,71 @@ impl WebmailHandler {
             _ => Response::not_found(),
         }
     }
+}
+
+#[derive(Clone)]
+struct SiteRouter {
+    webmail: WebmailHandler,
+    blog_host: Option<String>,
+    blog: Option<BlogHandler>,
+}
+
+impl SiteRouter {
+    fn new(webmail: WebmailHandler, blog: Option<BlogMount>) -> Self {
+        let (blog_host, blog) = match blog {
+            Some(blog) => {
+                let base_url = if blog.base_url.is_empty() {
+                    format!("https://{}", blog.host)
+                } else {
+                    blog.base_url
+                };
+                let config = BlogConfig {
+                    root: blog.root,
+                    bind_addr: String::new(),
+                    title: blog.title,
+                    description: blog.description,
+                    base_url,
+                };
+                (
+                    Some(normalize_host(&blog.host)),
+                    Some(BlogHandler::new(config)),
+                )
+            }
+            None => (None, None),
+        };
+        Self {
+            webmail,
+            blog_host,
+            blog,
+        }
+    }
+
+    fn handle_sync(&self, request: Request) -> Response {
+        let host = request_host(&request);
+        if self.blog_host.as_deref() == host.as_deref() {
+            if let Some(blog) = &self.blog {
+                return blog.handle_sync(request);
+            }
+        }
+        self.webmail.handle_sync(request)
+    }
+}
+
+impl Handler for SiteRouter {
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+        Box::pin(async move { self.handle_sync(request) })
+    }
+}
+
+fn request_host(request: &Request) -> Option<String> {
+    request
+        .headers()
+        .get("Host")
+        .map(|value| normalize_host(value.as_str()))
+}
+
+fn normalize_host(host: &str) -> String {
+    host.split(':').next().unwrap_or(host).to_ascii_lowercase()
 }
 
 struct HttpsRedirectHandler {
@@ -1441,11 +1569,15 @@ fn zone_from_config(specs: &[&DnsZoneSpec]) -> io::Result<DnsZone> {
         spec.soa.minimum,
         spec.soa.minimum,
     ));
+    let mut dnssec = None;
     for spec in specs {
-        if spec.dnssec.is_some() {
-            return Err(invalid_config(
-                "DnsZone.dnssec is parsed but not implemented by edgerun-server; DNSSEC needs stable key management, signed RRsets, and parent DS delegation",
-            ));
+        if let Some(config) = &spec.dnssec {
+            if dnssec.is_some() {
+                return Err(invalid_config(
+                    "only one DnsZone.dnssec block is allowed per origin",
+                ));
+            }
+            dnssec = Some(config);
         }
         for record in &spec.records {
             add_zone_record(&mut zone, record, &spec.origin)?;
@@ -1456,7 +1588,180 @@ fn zone_from_config(specs: &[&DnsZoneSpec]) -> io::Result<DnsZone> {
             }
         }
     }
+    if let Some(config) = dnssec {
+        apply_dnssec(&mut zone, config)?;
+    }
     Ok(zone)
+}
+
+fn apply_dnssec(zone: &mut DnsZone, config: &DnssecConfig) -> io::Result<()> {
+    let algorithm = config.algorithm.to_ascii_lowercase();
+    if !matches!(
+        algorithm.as_str(),
+        "ecdsap256" | "ecdsap256sha256" | "ecdsa-p256-sha256" | "algorithm13"
+    ) {
+        return Err(invalid_config(
+            "DnsZone.dnssec.algorithm must be ecdsap256 for production signing",
+        ));
+    }
+    if config.nsec3 {
+        return Err(invalid_config(
+            "DnsZone.dnssec.nsec3 is parsed but not yet integrated into authoritative negative answers; use NSEC for now",
+        ));
+    }
+    let key_path = config
+        .key_path
+        .as_deref()
+        .ok_or_else(|| invalid_config("DnsZone.dnssec.key_path is required"))?;
+    let signing_key = load_or_create_dnssec_key(Path::new(key_path))?;
+    let dnskey = dnskey_from_signing_key(
+        zone.origin.clone(),
+        config.key_flags,
+        config.key_ttl,
+        &signing_key,
+    );
+    let ds = ds_record_for_dnskey(&dnskey, config.key_ttl)?;
+    let key_tag = edgerun_dns::compute_key_tag(&dnskey);
+    zone.add_record(dnskey.clone());
+    add_nsec_chain(zone, config.key_ttl);
+    let now = dnssec_unix_time()?;
+    let inception = now.saturating_sub(300);
+    let expiration = now.saturating_add(config.signature_validity);
+    for rrsig in edgerun_dns::sign_zone_ecdsap256(zone, &dnskey, &signing_key, inception, expiration)
+    {
+        zone.add_record(rrsig);
+    }
+    eprintln!(
+        "edgerun-server: dnssec zone={} algorithm=13 key_tag={} ds=\"{}\"",
+        zone.origin,
+        key_tag,
+        ds_record_text(&ds)?
+    );
+    Ok(())
+}
+
+fn load_or_create_dnssec_key(
+    path: &Path,
+) -> io::Result<edgerun_crypto::p256::ecdsa::SigningKey> {
+    if path.exists() {
+        let pem = std::fs::read_to_string(path)?;
+        return edgerun_tls::signing_key_from_pem(&pem).map_err(|_| {
+            invalid_config(format!(
+                "failed to parse DNSSEC P-256 private key at {}",
+                path.display()
+            ))
+        });
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let key = edgerun_crypto::random_p256_signing_key();
+    let pem = edgerun_tls::signing_key_to_pem(&key)
+        .map_err(|_| invalid_config("failed to serialize DNSSEC P-256 private key"))?;
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    file.write_all(pem.as_bytes())?;
+    Ok(key)
+}
+
+fn dnskey_from_signing_key(
+    name: String,
+    flags: u16,
+    ttl: u32,
+    key: &edgerun_crypto::p256::ecdsa::SigningKey,
+) -> DnsRecord {
+    use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
+    let encoded = key.verifying_key().to_encoded_point(false);
+    DnsRecord::dnskey(name, flags, 3, 13, encoded.as_bytes()[1..].to_vec(), ttl)
+}
+
+fn add_nsec_chain(zone: &mut DnsZone, ttl: u32) {
+    let mut names: Vec<String> = zone.names().into_iter().map(str::to_string).collect();
+    names.sort();
+    names.dedup();
+    if names.is_empty() {
+        return;
+    }
+    for (index, name) in names.iter().enumerate() {
+        let next = names[(index + 1) % names.len()].clone();
+        let mut types: Vec<DnsRecordType> = zone
+            .get_records(name)
+            .into_iter()
+            .map(|record| record.rtype)
+            .collect();
+        types.push(DnsRecordType::NSEC);
+        types.push(DnsRecordType::RRSIG);
+        types.sort_by_key(|rtype| rtype.as_u16());
+        types.dedup();
+        zone.add_record(DnsRecord::nsec(
+            name.clone(),
+            next,
+            edgerun_dns::nsec3_type_bitmap(&types),
+            ttl,
+        ));
+    }
+}
+
+fn ds_record_for_dnskey(dnskey: &DnsRecord, ttl: u32) -> io::Result<DnsRecord> {
+    if let DnsRecordData::DNSKEY { algorithm, .. } = &dnskey.data {
+        let mut digest_input =
+            edgerun_dns::record::encode_domain_name(&dnskey.name.to_ascii_lowercase());
+        digest_input.extend_from_slice(&dnskey.data.to_wire(dnskey.rtype));
+        let digest = edgerun_crypto::sha256(&digest_input);
+        Ok(DnsRecord::ds(
+            dnskey.name.clone(),
+            edgerun_dns::compute_key_tag(dnskey),
+            *algorithm,
+            2,
+            digest.to_vec(),
+            ttl,
+        ))
+    } else {
+        Err(invalid_config("DNSSEC DS generation requires a DNSKEY record"))
+    }
+}
+
+fn ds_record_text(ds: &DnsRecord) -> io::Result<String> {
+    if let DnsRecordData::DS {
+        key_tag,
+        algorithm,
+        digest_type,
+        digest,
+    } = &ds.data
+    {
+        Ok(format!(
+            "{} IN DS {} {} {} {}",
+            ds.name,
+            key_tag,
+            algorithm,
+            digest_type,
+            hex_lower(digest)
+        ))
+    } else {
+        Err(invalid_config("expected DS record"))
+    }
+}
+
+fn dnssec_unix_time() -> io::Result<u32> {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(invalid_config)?
+        .as_secs();
+    u32::try_from(seconds).map_err(|_| invalid_config("system time is outside DNSSEC range"))
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
 }
 
 fn add_zone_record(zone: &mut DnsZone, record: &ZoneRecord, origin: &str) -> io::Result<()> {

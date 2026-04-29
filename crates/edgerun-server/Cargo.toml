@@ -23,7 +23,9 @@ edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = f
 edgerun-email = { version = "0.1", path = "../edgerun-email", optional = true }
 edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false, optional = true }
 edgerun-acme = { version = "0.1", path = "../edgerun-acme", features = ["dns_challenge"] }
+edgerun-blog = { version = "0.1", path = "../edgerun-blog" }
 edgerun-config = { version = "0.1", path = "../edgerun-config" }
+edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, features = ["p256"] }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 edgerun-email-auth = { version = "0.1", path = "../edgerun-email-auth" }
 edgerun-url = { version = "0.1", path = "../edgerun-url" }
@@ -40,7 +42,7 @@ std = []
 smtp = ["dep:edgerun-email", "edgerun-email/tls", "edgerun-email/dkim"]
 imap = ["dep:edgerun-email", "edgerun-email/tls"]
 lmtp = ["dep:edgerun-email"]
-dns = ["dep:edgerun-dns"]
+dns = ["dep:edgerun-dns", "edgerun-dns/dnssec"]
 dhcp = ["dep:edgerun-dhcp"]
 tftp = ["dep:edgerun-tftp", "edgerun-tftp/server"]
 proxy = ["dep:edgerun-proxy"]

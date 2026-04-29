@@ -70,7 +70,6 @@ impl Ed25519SigningKey {
 /// Compute the key tag for a DNSKEY record (RFC 4034 Appendix B).
 pub fn compute_key_tag(dnskey: &DnsRecord) -> u16 {
     if let DnsRecordData::DNSKEY {
-        flags,
         algorithm,
         public_key,
         ..
@@ -86,9 +85,9 @@ pub fn compute_key_tag(dnskey: &DnsRecord) -> u16 {
             return 0;
         }
 
-        // For all other algorithms:
-        let mut ac = u32::from(*flags & 0xFF) + u32::from(*algorithm) + u32::from(flags >> 8);
-        for (i, &b) in public_key.iter().enumerate() {
+        let rdata = dnskey.data.to_wire(dnskey.rtype);
+        let mut ac = 0u32;
+        for (i, &b) in rdata.iter().enumerate() {
             ac += u32::from(b) << (if i % 2 == 0 { 8 } else { 0 });
         }
         ac += (ac >> 16) & 0xFFFF;
@@ -249,7 +248,7 @@ fn verify_signature(
             if signature.len() != 64 {
                 return DnssecResult::BadSignature;
             }
-            if public_key.len() != 65 {
+            if public_key.len() != 64 && public_key.len() != 65 {
                 return DnssecResult::BadSignature;
             }
             // Verify ECDSA P-256 signature using edgerun-crypto
@@ -258,7 +257,20 @@ fn verify_signature(
             use edgerun_crypto::p256::EncodedPoint;
             use edgerun_crypto::signature::Verifier;
 
-            if let Ok(point) = EncodedPoint::from_bytes(public_key.as_slice()) {
+            let point_bytes;
+            let public_key = if public_key.len() == 64 {
+                point_bytes = {
+                    let mut bytes = Vec::with_capacity(65);
+                    bytes.push(0x04);
+                    bytes.extend_from_slice(public_key);
+                    bytes
+                };
+                point_bytes.as_slice()
+            } else {
+                public_key.as_slice()
+            };
+
+            if let Ok(point) = EncodedPoint::from_bytes(public_key) {
                 if let Ok(vk) = VerifyingKey::from_encoded_point(&point) {
                     if let Ok(sig) = Signature::from_slice(signature) {
                         return if vk.verify(signed_data, &sig).is_ok() {
@@ -315,8 +327,10 @@ pub fn verify_chain_of_trust(
                         continue;
                     }
 
-                    // Compute digest of the DNSKEY RDATA
-                    let dnskey_rdata = dnskey.data.to_wire(dnskey.rtype);
+                    // Compute digest of the canonical DNSKEY owner name plus DNSKEY RDATA.
+                    let mut dnskey_rdata =
+                        super::record::encode_domain_name(&dnskey.name.to_ascii_lowercase());
+                    dnskey_rdata.extend_from_slice(&dnskey.data.to_wire(dnskey.rtype));
                     let computed_digest = match digest_type {
                         1 => sha1_compat(&dnskey_rdata),
                         2 => {
@@ -649,7 +663,7 @@ pub fn generate_dnskey_ecdsap256(
     let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::random(&mut edgerun_crypto::OsRng);
     let vk = signing_key.verifying_key();
     let encoded = vk.to_encoded_point(false);
-    let public_key_bytes = encoded.as_bytes().to_vec();
+    let public_key_bytes = encoded.as_bytes()[1..].to_vec();
     let dnskey = DnsRecord::dnskey(name, flags, 3, 13, public_key_bytes, ttl);
     (dnskey, signing_key)
 }
@@ -785,10 +799,7 @@ pub fn sign_zone_ed25519(
     let signer_name = zone.origin.clone();
     let mut rrsigs = Vec::new();
     for ((_, rtype), records) in &rrsets {
-        if *rtype == DnsRecordType::RRSIG
-            || *rtype == DnsRecordType::NSEC
-            || *rtype == DnsRecordType::NSEC3
-        {
+        if *rtype == DnsRecordType::RRSIG {
             continue;
         }
         let rrsig = sign_rrsig_ed25519(
@@ -827,10 +838,7 @@ pub fn sign_zone_ecdsap256(
     let signer_name = zone.origin.clone();
     let mut rrsigs = Vec::new();
     for ((_, rtype), records) in &rrsets {
-        if *rtype == DnsRecordType::RRSIG
-            || *rtype == DnsRecordType::NSEC
-            || *rtype == DnsRecordType::NSEC3
-        {
+        if *rtype == DnsRecordType::RRSIG {
             continue;
         }
         let rrsig = sign_rrset_ecdsap256(

@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use edgerun_dns::dnssec::*;
 use edgerun_dns::message::DnsRecord;
-use edgerun_dns::record::{DnsRecordData, DnsRecordType};
+use edgerun_dns::record::{encode_domain_name, DnsRecordData, DnsRecordType};
 
 // -----------------------------------------------------------------------
 // Helpers
@@ -25,6 +25,12 @@ fn make_a_rr(name: &str, ip: &str, ttl: u32) -> DnsRecord {
         .try_into()
         .unwrap();
     DnsRecord::a(name.to_string(), std::net::Ipv4Addr::from(octets), ttl)
+}
+
+fn dnskey_digest_input(dnskey: &DnsRecord) -> Vec<u8> {
+    let mut input = encode_domain_name(&dnskey.name.to_ascii_lowercase());
+    input.extend_from_slice(&dnskey.data.to_wire(dnskey.rtype));
+    input
 }
 
 // -----------------------------------------------------------------------
@@ -190,14 +196,12 @@ fn test_ed25519_not_yet_valid() {
 
 #[test]
 fn test_ecdsap256_key_generation() {
-    use edgerun_crypto::p256::ecdsa::SigningKey;
-    use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-
-    let signing_key = SigningKey::random(&mut edgerun_crypto::OsRng);
-    let verifying_key = signing_key.verifying_key();
-    let encoded = verifying_key.to_encoded_point(false);
-    let public_key_bytes = encoded.as_bytes().to_vec();
-    assert_eq!(public_key_bytes.len(), 65);
+    let (dnskey, _signing_key) = generate_dnskey_ecdsap256("example.com".to_string(), 257, 3600);
+    if let DnsRecordData::DNSKEY { public_key, .. } = dnskey.data {
+        assert_eq!(public_key.len(), 64);
+    } else {
+        panic!("expected DNSKEY");
+    }
 }
 
 #[test]
@@ -263,9 +267,8 @@ fn test_chain_of_trust_valid_sha256() {
         3600,
     );
 
-    let dnskey_rdata = dnskey.data.to_wire(dnskey.rtype);
     let mut hasher = Sha256::new();
-    hasher.update(&dnskey_rdata);
+    hasher.update(dnskey_digest_input(&dnskey));
     let digest = hasher.finalize().to_vec();
 
     let key_tag = compute_key_tag(&dnskey);
@@ -323,9 +326,8 @@ fn test_chain_of_trust_sha1_digest() {
         3600,
     );
 
-    let dnskey_rdata = dnskey.data.to_wire(dnskey.rtype);
     let mut hasher = Sha1::new();
-    hasher.update(&dnskey_rdata);
+    hasher.update(dnskey_digest_input(&dnskey));
     let digest = hasher.finalize().to_vec();
 
     let ds = DnsRecord::ds(
@@ -347,9 +349,8 @@ fn test_chain_of_trust_sha384_digest() {
 
     let dnskey = DnsRecord::dnskey("example.com".to_string(), 257, 3, 14, vec![0x04; 97], 3600);
 
-    let dnskey_rdata = dnskey.data.to_wire(dnskey.rtype);
     let mut hasher = Sha384::new();
-    hasher.update(&dnskey_rdata);
+    hasher.update(dnskey_digest_input(&dnskey));
     let digest = hasher.finalize().to_vec();
 
     let ds = DnsRecord::ds(

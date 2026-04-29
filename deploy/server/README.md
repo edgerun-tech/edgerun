@@ -51,9 +51,10 @@ key at `/etc/edgerun/server/dkim-mail.private.pem`.
 - CAA is implemented as generated DNS record material and restricts public
   issuance to Let's Encrypt for this zone.
 - DNSSEC types and signing primitives exist in `edgerun-dns`, but DNSSEC is not
-  yet enabled for this host. Public DNSSEC also requires stable zone key
-  material and a DS record installed at the registrar; do not document the zone
-  as DNSSEC-signed until those are implemented and delegated.
+  a full public chain until the generated DS record is installed at the
+  registrar. `edgerun-server` implements host-side ECDSAP256SHA256 signing for
+  configured zones with persistent key material, DNSKEY, NSEC, and RRSIG
+  records. Parent DS delegation remains a registrar operation.
 
 ## Service Ports
 
@@ -65,6 +66,13 @@ key at `/etc/edgerun/server/dkim-mail.private.pem`.
 | IMAP | 143 | IMAP (with STARTTLS) |
 | IMAP | 993 | IMAPS (implicit TLS) |
 | DNS | 53 | UDP/TCP |
+
+## Blog Surface
+
+`blog.edgerun.tech` is implemented in code by `edgerun-blog` and mounted into
+`edgerun-server` with `--blog-host blog.edgerun.tech --blog-root /srv/blog`.
+The content root is a host Git checkout scanned at request time; there is no
+build step and no authentication.
 
 ## systemd
 

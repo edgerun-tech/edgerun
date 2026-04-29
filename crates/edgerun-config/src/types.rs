@@ -271,6 +271,8 @@ pub struct ZoneRecord {
 pub struct DnssecConfig {
     /// Algorithm: "ed25519", "ecdsap256".
     pub algorithm: String,
+    /// Persistent private key path for zone signing.
+    pub key_path: Option<String>,
     /// Key flags: 256 (ZSK), 257 (KSK).
     pub key_flags: u16,
     /// Key TTL (seconds).
@@ -1461,7 +1463,7 @@ impl_config_json_struct! {
 impl_config_json_struct! {
     DnssecConfig {
         required { algorithm: "algorithm" => String }
-        optional { nsec3_salt: "nsec3_salt" => String }
+        optional { key_path: "key_path" => String, nsec3_salt: "nsec3_salt" => String }
         default { nsec3: "nsec3" => bool, nsec3_iterations: "nsec3_iterations" => u16 }
         default_with {
             key_flags: "key_flags" => u16 = default_ksk,

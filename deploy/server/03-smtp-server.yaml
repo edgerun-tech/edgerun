@@ -27,6 +27,7 @@ spec:
   acme_domains:
     - mail.edgerun.tech
     - mta-sts.edgerun.tech
+    - blog.edgerun.tech
   acme_account_key_path: /etc/edgerun/server/acme-account.pem
   acme_cert_dir: /etc/edgerun/server/tls
   catch_all_user: ken
