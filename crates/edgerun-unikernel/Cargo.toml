@@ -4,12 +4,14 @@ version = "0.1.0"
 edition.workspace = true
 license = "MIT OR Apache-2.0"
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Edgerun unikernel - bare-metal bootable"
 build = "build.rs"
 
 [features]
 default = []
-html-ui = ["dep:edgerun-layout"]
+html-ui = []
 esp32s3-ble = ["edgerun-platform/esp32s3-ble"]
 esp32s3-ble-stub = ["edgerun-platform/esp32s3-ble-stub", "esp32s3-ble"]
 esp32s3-wifi-mmio = ["edgerun-platform/esp32s3-wifi-mmio"]
@@ -18,27 +20,26 @@ esp32s3-wifi-phy-probe = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wifi-ph
 esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wifi-ram-phy-patch"]
 
 [dependencies]
-edgerun-platform = { path = "../edgerun-platform" }
-edgerun-rt = { path = "../edgerun-rt" }
-edgerun-dhcp = { path = "../edgerun-dhcp" }
-edgerun-http = { path = "../edgerun-http", default-features = false, features = ["client"] }
-edgerun-tftp = { path = "../edgerun-tftp" }
-edgerun-tpm = { path = "../edgerun-tpm", default-features = false }
-edgerun-crypto = { path = "../edgerun-crypto", default-features = false }
-edgerun-oci = { path = "../edgerun-oci", default-features = false, features = ["registry-client", "edgefs"] }
-edgerun-edgefs = { path = "../edgerun-edgefs" }
-edgerun-storage = { path = "../edgerun-storage" }
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-display = { path = "../edgerun-display" }
-edgerun-input = { path = "../edgerun-input" }
+edgerun-platform = { version = "0.1", path = "../edgerun-platform" }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+edgerun-dhcp = { version = "0.1", path = "../edgerun-dhcp" }
+edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["client"] }
+edgerun-tftp = { version = "0.1", path = "../edgerun-tftp" }
+edgerun-tpm = { version = "0.1", path = "../edgerun-tpm", default-features = false }
+edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false }
+edgerun-oci = { version = "0.1", path = "../edgerun-oci", default-features = false, features = ["registry-client", "edgefs"] }
+edgerun-edgefs = { version = "0.1", path = "../edgerun-edgefs" }
+edgerun-storage = { version = "0.1", path = "../edgerun-storage" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-display = { version = "0.1", path = "../edgerun-display" }
+edgerun-input = { version = "0.1", path = "../edgerun-input" }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-edgerun-virtio = { path = "../edgerun-virtio" }
-edgerun-rtl8125 = { path = "../edgerun-rtl8125" }
+edgerun-virtio = { version = "0.1", path = "../edgerun-virtio" }
+edgerun-rtl8125 = { version = "0.1", path = "../edgerun-rtl8125" }
 
 [target.'cfg(target_arch = "xtensa")'.dependencies]
-edgerun-layout = { path = "../../../edgerun-browser/crates/edgerun-layout", optional = true }
-edgerun-wifi = { path = "../edgerun-wifi", optional = true }
+edgerun-wifi = { version = "0.1", path = "../edgerun-wifi", optional = true }
 
 [lints]
 workspace = true

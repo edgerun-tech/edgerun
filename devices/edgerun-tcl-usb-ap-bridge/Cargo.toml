@@ -5,6 +5,10 @@ authors = ["ken <ken@fw>"]
 edition = "2021"
 resolver = "2"
 rust-version = "1.82"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/Sylchi/edgerun_reference_core"
+homepage = "https://github.com/Sylchi/edgerun_reference_core"
 
 [workspace]
 

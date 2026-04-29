@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Command-line tooling for the Edgerun compute marketplace"
 
 [[bin]]
@@ -12,13 +14,13 @@ path = "src/main.rs"
 required-features = ["std"]
 
 [dependencies]
-edgerun-solana = { path = "../edgerun-solana", default-features = false }
-edgerun-rt = { path = "../edgerun-rt" }
-edgerun-log = { path = "../edgerun-log" }
-edgerun-json = { path = "../edgerun-json", default-features = false }
+edgerun-solana = { version = "0.1", path = "../edgerun-solana", default-features = false }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
-edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
+edgerun-clap = { version = "0.1", path = "../edgerun-clap", features = ["std"] }
 
 [features]
 std = ["edgerun-solana/std"]

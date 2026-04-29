@@ -13,9 +13,9 @@ use crate::std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 #[cfg(not(target_os = "none"))]
 use host_std::io::{Read, Write};
 #[cfg(not(target_os = "none"))]
-use host_std::net::{TcpListener as StdTcpListener, TcpStream as StdTcpStream};
-#[cfg(not(target_os = "none"))]
 use host_std::net::UdpSocket as StdUdpSocket;
+#[cfg(not(target_os = "none"))]
+use host_std::net::{TcpListener as StdTcpListener, TcpStream as StdTcpStream};
 
 pub use edgerun_rt::{sleep, spawn, timeout, Duration, Instant};
 
@@ -101,7 +101,7 @@ impl AsyncUdpSocket {
             match self.0.recv_from(buf) {
                 Ok((size, addr)) => return Ok((size, to_compat_addr(addr))),
                 Err(error) if error.kind() == host_std::io::ErrorKind::WouldBlock => {
-                    edgerun_rt::yieldnow().await;
+                    edgerun_rt::sleep(edgerun_rt::Duration::from_millis(1)).await;
                 }
                 Err(error) => return Err(map_host_io(error)),
             }
@@ -121,7 +121,7 @@ impl AsyncUdpSocket {
             match self.0.send_to(buf, addr) {
                 Ok(value) => return Ok(value),
                 Err(error) if error.kind() == host_std::io::ErrorKind::WouldBlock => {
-                    edgerun_rt::yieldnow().await;
+                    edgerun_rt::sleep(edgerun_rt::Duration::from_millis(1)).await;
                 }
                 Err(error) => return Err(map_host_io(error)),
             }
@@ -230,7 +230,7 @@ impl AsyncTcpListener {
                     return Ok((Arc::new(AsyncTcpStream(stream)), to_compat_addr(peer)));
                 }
                 Err(error) if error.kind() == host_std::io::ErrorKind::WouldBlock => {
-                    edgerun_rt::yieldnow().await;
+                    edgerun_rt::sleep(edgerun_rt::Duration::from_millis(1)).await;
                 }
                 Err(error) => return Err(map_host_io(error)),
             }

@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "HTTP/1.1, HTTP/2, and HTTP/3 with HPACK/QPACK compression"
 
 [features]
@@ -21,15 +23,15 @@ static-files = ["std", "server"]
 tls = ["dep:edgerun-tls"]
 
 [dependencies]
-edgerun-tls = { path = "../edgerun-tls", optional = true }
-edgerun-crypto = { path = "../edgerun-crypto", default-features = false, optional = true }
-edgerun-rt = { path = "../edgerun-rt", optional = true }
-edgerun-log = { path = "../edgerun-log", optional = true }
-edgerun-dns = { path = "../edgerun-dns", default-features = false, optional = true }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, optional = true }
-edgerun-hpack = { path = "../edgerun-hpack", optional = true }
-edgerun-qpack = { path = "../edgerun-qpack", optional = true }
-edgerun-quic = { path = "../edgerun-quic", optional = true }
+edgerun-tls = { version = "0.1", path = "../edgerun-tls", optional = true }
+edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, optional = true }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
+edgerun-log = { version = "0.1", path = "../edgerun-log", optional = true }
+edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false, optional = true }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false, optional = true }
+edgerun-hpack = { version = "0.1", path = "../edgerun-hpack", optional = true }
+edgerun-qpack = { version = "0.1", path = "../edgerun-qpack", optional = true }
+edgerun-quic = { version = "0.1", path = "../edgerun-quic", optional = true }
 miniz_oxide = { workspace = true, optional = true }
 brotli = { workspace = true, optional = true }
 

@@ -105,10 +105,11 @@ pub fn validate_name(name: &str) -> Result<(), NameError> {
             });
         }
 
-        // Accept ASCII letters, digits, hyphens
-        // Also accept punycode (xn--) which uses only these chars
+        // Accept ASCII letters, digits, hyphens, and underscores. Underscore
+        // labels are used by service records and mail authentication records
+        // such as _dmarc and _domainkey.
         for ch in label.chars() {
-            if !ch.is_ascii_alphanumeric() && ch != '-' {
+            if !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_' {
                 return Err(NameError::InvalidCharacter {
                     label: label.to_string(),
                 });
@@ -136,6 +137,8 @@ mod tests {
         assert!(validate_name("@").is_ok());
         assert!(validate_name("").is_ok());
         assert!(validate_name("a-b-c.example.com").is_ok());
+        assert!(validate_name("_dmarc.example.com").is_ok());
+        assert!(validate_name("mail._domainkey.example.com").is_ok());
         assert!(validate_name("xn--nxasmq5b.example.com").is_ok()); // punycode
         assert!(validate_name("123.456.789").is_ok()); // numeric (technically valid in zone files)
     }
@@ -154,7 +157,7 @@ mod tests {
 
         // Invalid characters
         assert!(validate_name("exam ple.com").is_err()); // space
-        assert!(validate_name("exam_ple.com").is_err()); // underscore (common but not RFC-compliant)
+        assert!(validate_name("example!.com").is_err()); // exclamation
     }
 
     #[test]

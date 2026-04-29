@@ -4,12 +4,14 @@ version = "0.1.0"
 edition.workspace = true
 license = "MIT OR Apache-2.0"
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "no_std-first async runtime, synchronization, and I/O primitives for Edgerun"
 
 [dependencies]
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
-edgerun-platform = { path = "../edgerun-platform" }
-edgerun-log = { path = "../edgerun-log" }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
+edgerun-platform = { version = "0.1", path = "../edgerun-platform" }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [lints]
 workspace = true

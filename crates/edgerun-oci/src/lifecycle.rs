@@ -663,12 +663,7 @@ fn cgroup_remove_error(cgroup_dir: &Path, error: io::Error) -> io::Error {
 fn spawn_deferred_cgroup_remove(cgroup_dir: &Path) -> io::Result<()> {
     let cleanup_dir = cgroup_dir
         .parent()
-        .map(|parent| {
-            parent.join(format!(
-                ".edgerun-cgroup-delete-{}",
-                std::process::id()
-            ))
-        })
+        .map(|parent| parent.join(format!(".edgerun-cgroup-delete-{}", std::process::id())))
         .unwrap_or_else(|| cgroup_dir.to_path_buf());
     let cleanup_dir = match std::fs::rename(cgroup_dir, &cleanup_dir) {
         Ok(()) => cleanup_dir,

@@ -4,13 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Email authentication: SPF, DKIM, DMARC evaluation"
 
 [dependencies]
-edgerun-dns = { path = "../edgerun-dns", default-features = false }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
-edgerun-log = { path = "../edgerun-log" }
-edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["rsa"] }
+edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, features = ["rsa"] }
 
 [lints]
 workspace = true

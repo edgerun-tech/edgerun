@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Command-line tool for TCL air conditioner integration"
 
 [[bin]]
@@ -12,13 +14,13 @@ path = "src/main.rs"
 required-features = ["std"]
 
 [dependencies]
-edgerun-tcl-ac = { path = "../edgerun-tcl-ac" }
-edgerun-matter = { path = "../edgerun-matter" }
-edgerun-bluetooth-gatt = { path = "../edgerun-bluetooth-gatt" }
-edgerun-mgmt-bluetooth = { path = "../edgerun-mgmt-bluetooth" }
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
-edgerun-json = { path = "../edgerun-json", default-features = false }
+edgerun-tcl-ac = { version = "0.1", path = "../edgerun-tcl-ac" }
+edgerun-matter = { version = "0.1", path = "../edgerun-matter" }
+edgerun-bluetooth-gatt = { version = "0.1", path = "../edgerun-bluetooth-gatt" }
+edgerun-mgmt-bluetooth = { version = "0.1", path = "../edgerun-mgmt-bluetooth" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-clap = { version = "0.1", path = "../edgerun-clap", features = ["std"] }
+edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
 
 [features]
 std = []

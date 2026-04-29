@@ -4,10 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Camera-backed biometric capture abstractions for Edgerun"
 
 [dependencies]
-edgerun-biometrics = { path = "../edgerun-biometrics" }
+edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
 
 [lints]
 workspace = true

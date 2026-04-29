@@ -4,30 +4,32 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "End-to-end capability delegation scenarios for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-capability-policy = { path = "../edgerun-capability-policy" }
-edgerun-remote-capability = { path = "../edgerun-remote-capability" }
-edgerun-proto = { path = "../edgerun-proto" }
-edgerun-input = { path = "../edgerun-input" }
-edgerun-evdev-input = { path = "../edgerun-evdev-input" }
-edgerun-microphone = { path = "../edgerun-microphone" }
-edgerun-alsa-microphone = { path = "../edgerun-alsa-microphone" }
-edgerun-speaker = { path = "../edgerun-speaker" }
-edgerun-alsa-speaker = { path = "../edgerun-alsa-speaker" }
-edgerun-v4l2-camera = { path = "../edgerun-v4l2-camera" }
-edgerun-camera-biometrics = { path = "../edgerun-camera-biometrics" }
-edgerun-tpm = { path = "../edgerun-tpm" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capability-policy = { version = "0.1", path = "../edgerun-capability-policy" }
+edgerun-remote-capability = { version = "0.1", path = "../edgerun-remote-capability" }
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
+edgerun-input = { version = "0.1", path = "../edgerun-input" }
+edgerun-evdev-input = { version = "0.1", path = "../edgerun-evdev-input" }
+edgerun-microphone = { version = "0.1", path = "../edgerun-microphone" }
+edgerun-alsa-microphone = { version = "0.1", path = "../edgerun-alsa-microphone" }
+edgerun-speaker = { version = "0.1", path = "../edgerun-speaker" }
+edgerun-alsa-speaker = { version = "0.1", path = "../edgerun-alsa-speaker" }
+edgerun-v4l2-camera = { version = "0.1", path = "../edgerun-v4l2-camera" }
+edgerun-camera-biometrics = { version = "0.1", path = "../edgerun-camera-biometrics" }
+edgerun-tpm = { version = "0.1", path = "../edgerun-tpm" }
 
-edgerun-npu = { path = "../edgerun-npu" }
-edgerun-fingerprint = { path = "../edgerun-fingerprint" }
-edgerun-drm-display = { path = "../edgerun-drm-display" }
-edgerun-linux-npu = { path = "../edgerun-linux-npu" }
-edgerun-goodix-fingerprint = { path = "../edgerun-goodix-fingerprint" }
-edgerun-mgmt-bluetooth = { path = "../edgerun-mgmt-bluetooth" }
-edgerun-linux-wifi = { path = "../edgerun-linux-wifi" }
+edgerun-npu = { version = "0.1", path = "../edgerun-npu" }
+edgerun-fingerprint = { version = "0.1", path = "../edgerun-fingerprint" }
+edgerun-drm-display = { version = "0.1", path = "../edgerun-drm-display" }
+edgerun-linux-npu = { version = "0.1", path = "../edgerun-linux-npu" }
+edgerun-goodix-fingerprint = { version = "0.1", path = "../edgerun-goodix-fingerprint" }
+edgerun-mgmt-bluetooth = { version = "0.1", path = "../edgerun-mgmt-bluetooth" }
+edgerun-linux-wifi = { version = "0.1", path = "../edgerun-linux-wifi" }
 prost.workspace = true
 
 [lints]

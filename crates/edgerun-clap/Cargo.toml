@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Zero-dependency drop-in replacement for clap crate"
 
 [features]
@@ -11,8 +13,8 @@ default = []
 std = ["edgerun-json/std"]
 
 [dependencies]
-edgerun-json = { path = "../edgerun-json", default-features = false }
-edgerun-clap-derive = { path = "../edgerun-clap-derive" }
+edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
+edgerun-clap-derive = { version = "0.1", path = "../edgerun-clap-derive" }
 
 [lints]
 workspace = true

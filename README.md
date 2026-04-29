@@ -64,6 +64,20 @@ that root member array; Cargo still includes them through workspace/path
 resolution. `edgerun-css`, `edgerun-ecmascript`, and `edgerun-html` are
 directories without crate manifests.
 
+## License and Release Status
+
+Edgerun Core is licensed under `MIT OR Apache-2.0`. See [LICENSE](LICENSE),
+[LICENSE-MIT](LICENSE-MIT), and [LICENSE-APACHE](LICENSE-APACHE). Contributions
+are accepted under the same dual-license terms unless explicitly stated
+otherwise.
+
+The project is currently an alpha protocol/runtime implementation. GitHub tag
+releases are source-first and may include an `edgerund` Linux amd64 binary and
+checksums. Crates.io publication is disabled by default for the workspace until
+individual crates have explicit package-readiness review, versioned internal
+dependencies, and clean package contents. See [RELEASE.md](RELEASE.md) and
+[SECURITY.md](SECURITY.md).
+
 ## Build
 
 Hosted checks for a specific crate:

@@ -4,13 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Identity-routed mesh primitives for Edgerun"
 
 [dependencies]
-edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
+edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
-edgerun-core = { path = "../edgerun-core" }
-edgerun-json = { path = "../edgerun-json", default-features = false }
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
 
 [lints]
 workspace = true

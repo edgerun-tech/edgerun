@@ -4,8 +4,8 @@
 //! authoritative DNS zones with `edgerun-dns`, accepts SMTP, relays outbound
 //! mail through the built-in queue, and exposes IMAP over the same Maildir.
 
-use std::io;
 use std::collections::BTreeMap;
+use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::process;
@@ -26,7 +26,11 @@ use edgerun_tls::CertificateAndKey;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
-        print_usage(args.first().map(String::as_str).unwrap_or("edgerun-mail-server"));
+        print_usage(
+            args.first()
+                .map(String::as_str)
+                .unwrap_or("edgerun-mail-server"),
+        );
         return;
     }
     if args.iter().any(|arg| arg == "--init-material") {
@@ -40,7 +44,21 @@ fn main() {
         match load_resources_from_args(&args) {
             Ok(resources) => {
                 let (dns, zones, smtp, imap) = count_resources(&resources);
-                println!("dns_servers={dns} dns_zones={zones} smtp_servers={smtp} imap_servers={imap}");
+                println!(
+                    "dns_servers={dns} dns_zones={zones} smtp_servers={smtp} imap_servers={imap}"
+                );
+                for resource in &resources {
+                    if let ConfigResource::DnsZone(zone) = resource {
+                        println!("dns_zone={} records={}", zone.origin, zone.records.len());
+                    } else if let ConfigResource::SmtpServer(smtp) = resource {
+                        println!(
+                            "smtp_server={} local_domains={} users={}",
+                            smtp.hostname,
+                            smtp.local_domains.join(","),
+                            smtp.users.as_ref().map(|users| users.len()).unwrap_or(0)
+                        );
+                    }
+                }
             }
             Err(error) => {
                 eprintln!("{error}");
@@ -122,6 +140,7 @@ fn parse_config_path(args: &[String]) -> Result<PathBuf, String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
+            "--check-config" => {}
             "--config" | "-c" if i + 1 < args.len() => {
                 config = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
@@ -198,7 +217,10 @@ async fn run(resources: Vec<ConfigResource>) -> io::Result<()> {
         ));
     }
 
-    eprintln!("edgerun-mail-server: running {} service task(s)", tasks.len());
+    eprintln!(
+        "edgerun-mail-server: running {} service task(s)",
+        tasks.len()
+    );
     for task in tasks {
         match task.await {
             Ok(result) => result?,
@@ -291,7 +313,12 @@ fn add_zone_record(zone: &mut DnsZone, record: &ZoneRecord, origin: &str) -> io:
         "PTR" => zone.add_ptr(&record.name, &normalize_target(&value, origin), ttl),
         "MX" => {
             let (priority, exchange) = parse_mx(&value)?;
-            zone.add_mx(&record.name, priority, &normalize_target(&exchange, origin), ttl);
+            zone.add_mx(
+                &record.name,
+                priority,
+                &normalize_target(&exchange, origin),
+                ttl,
+            );
         }
         "TXT" | "SPF" => zone.add_txt(&record.name, &value, ttl),
         "CAA" => {
@@ -378,9 +405,7 @@ fn build_imap_servers(spec: &ImapServerSpec) -> io::Result<Vec<ImapServer>> {
     if spec.imaps {
         let config = ImapServerConfig {
             bind_addr: implicit_tls_addr(
-                spec.bind_address
-                    .as_deref()
-                    .unwrap_or("0.0.0.0:143"),
+                spec.bind_address.as_deref().unwrap_or("0.0.0.0:143"),
                 993,
             ),
             domain_name: spec.hostname.clone(),
@@ -433,9 +458,7 @@ fn configured_users(users: Option<&[MailUserSpec]>, local_domains: &[String]) ->
 }
 
 #[cfg(feature = "dkim")]
-fn load_dkim_signer(
-    spec: &SmtpServerSpec,
-) -> io::Result<Option<edgerun_email_auth::DkimSigner>> {
+fn load_dkim_signer(spec: &SmtpServerSpec) -> io::Result<Option<edgerun_email_auth::DkimSigner>> {
     let (Some(domain), Some(selector), Some(path)) = (
         spec.dkim_domain.as_deref(),
         spec.dkim_selector.as_deref(),
@@ -447,7 +470,10 @@ fn load_dkim_signer(
     edgerun_email_auth::DkimSigner::from_private_key_pem(domain, selector, &pem).map(Some)
 }
 
-fn load_tls_from_spec(cert: Option<&str>, key: Option<&str>) -> io::Result<Option<CertificateAndKey>> {
+fn load_tls_from_spec(
+    cert: Option<&str>,
+    key: Option<&str>,
+) -> io::Result<Option<CertificateAndKey>> {
     let (Some(cert), Some(key)) = (cert, key) else {
         return Ok(None);
     };
@@ -559,16 +585,11 @@ fn init_material(args: &[String]) -> io::Result<()> {
 
     let dkim = edgerun_email_auth::DkimSigner::generate(domain, selector).map_err(to_io_error)?;
     let dkim_key_path = out_dir.join(format!("dkim-{selector}.private.pem"));
-    std::fs::write(
-        &dkim_key_path,
-        dkim.private_key_pem().map_err(to_io_error)?,
-    )?;
+    std::fs::write(&dkim_key_path, dkim.private_key_pem().map_err(to_io_error)?)?;
 
-    let (cert_pem, key_pem) = edgerun_tls::generate_self_signed_pem(&[
-        &format!("mail.{domain}"),
-        domain,
-    ])
-    .map_err(to_io_error)?;
+    let (cert_pem, key_pem) =
+        edgerun_tls::generate_self_signed_pem(&[&format!("mail.{domain}"), domain])
+            .map_err(to_io_error)?;
     std::fs::write(tls_dir.join("fullchain.pem"), cert_pem)?;
     std::fs::write(tls_dir.join("privkey.pem"), key_pem)?;
     println!("dkim_key_path={}", dkim_key_path.display());

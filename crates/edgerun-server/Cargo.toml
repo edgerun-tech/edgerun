@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Unified multi-protocol server: HTTP, SMTP, IMAP, LMTP, DNS, DHCP, TFTP, Proxy"
 
 [[bin]]
@@ -17,18 +19,18 @@ path = "src/bin/edgerun-mail-server.rs"
 required-features = ["std", "smtp", "imap", "dns", "tls"]
 
 [dependencies]
-edgerun-http = { path = "../edgerun-http", default-features = false, features = ["connection-middleware", "server"] }
-edgerun-email = { path = "../edgerun-email", optional = true }
-edgerun-dns = { path = "../edgerun-dns", default-features = false, optional = true }
-edgerun-acme = { path = "../edgerun-acme", features = ["dns_challenge"] }
-edgerun-config = { path = "../edgerun-config" }
-edgerun-email-auth = { path = "../edgerun-email-auth" }
-edgerun-dhcp = { path = "../edgerun-dhcp", optional = true }
-edgerun-tftp = { path = "../edgerun-tftp", optional = true }
-edgerun-proxy = { path = "../edgerun-proxy", optional = true }
-edgerun-rt = { path = "../edgerun-rt" }
-edgerun-tls = { path = "../edgerun-tls", optional = true }
-edgerun-log = { path = "../edgerun-log" }
+edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["connection-middleware", "server"] }
+edgerun-email = { version = "0.1", path = "../edgerun-email", optional = true }
+edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false, optional = true }
+edgerun-acme = { version = "0.1", path = "../edgerun-acme", features = ["dns_challenge"] }
+edgerun-config = { version = "0.1", path = "../edgerun-config" }
+edgerun-email-auth = { version = "0.1", path = "../edgerun-email-auth" }
+edgerun-dhcp = { version = "0.1", path = "../edgerun-dhcp", optional = true }
+edgerun-tftp = { version = "0.1", path = "../edgerun-tftp", optional = true }
+edgerun-proxy = { version = "0.1", path = "../edgerun-proxy", optional = true }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+edgerun-tls = { version = "0.1", path = "../edgerun-tls", optional = true }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [features]
 default = ["smtp", "imap", "lmtp", "dns", "dhcp", "tftp", "tls"]

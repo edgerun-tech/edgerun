@@ -4,13 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Audio liveliness checks for Edgerun biometric workflows"
 
 [dependencies]
-edgerun-biometrics = { path = "../edgerun-biometrics" }
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-microphone = { path = "../edgerun-microphone" }
-edgerun-speaker = { path = "../edgerun-speaker" }
+edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-microphone = { version = "0.1", path = "../edgerun-microphone" }
+edgerun-speaker = { version = "0.1", path = "../edgerun-speaker" }
 
 [lints]
 workspace = true

@@ -614,7 +614,10 @@ pub fn bpf_prog_load(
     };
     if ret < 0 {
         let error = std::io::Error::last_os_error();
-        let nul = log_buf.iter().position(|b| *b == 0).unwrap_or(log_buf.len());
+        let nul = log_buf
+            .iter()
+            .position(|b| *b == 0)
+            .unwrap_or(log_buf.len());
         let verifier_log = String::from_utf8_lossy(&log_buf[..nul]).trim().to_string();
         if verifier_log.is_empty() {
             Err(error)

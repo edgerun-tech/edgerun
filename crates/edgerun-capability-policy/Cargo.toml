@@ -4,14 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Capability attenuation and policy evaluation for Edgerun"
 
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false }
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-proto = { path = "../edgerun-proto" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 prost-types.workspace = true
-edgerun-core = { path = "../edgerun-core" }
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
 
 [lints]
 workspace = true

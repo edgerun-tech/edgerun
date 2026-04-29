@@ -10,7 +10,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-edgerun-json = { path = ".." }
+edgerun-json = { version = "0.1", path = ".." }
 
 [[bin]]
 name = "parse"

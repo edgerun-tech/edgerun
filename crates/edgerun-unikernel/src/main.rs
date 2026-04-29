@@ -8,8 +8,6 @@
 extern crate alloc;
 extern crate edgerun_dhcp;
 extern crate edgerun_http;
-#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
-extern crate edgerun_layout;
 extern crate edgerun_oci;
 extern crate edgerun_platform;
 extern crate edgerun_rt as rt;
@@ -19,6 +17,84 @@ extern crate edgerun_tftp;
 extern crate edgerun_tpm;
 #[cfg(target_arch = "x86_64")]
 extern crate edgerun_virtio;
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+mod edgerun_layout {
+    #[derive(Clone, Copy)]
+    pub struct Color {
+        pub r: u8,
+        pub g: u8,
+        pub b: u8,
+        pub a: u8,
+    }
+
+    impl Color {
+        pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
+            Self { r, g, b, a: 255 }
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    pub enum EmbeddedCommand<'a> {
+        FillRect {
+            x: u32,
+            y: u32,
+            w: u32,
+            h: u32,
+            color: Color,
+        },
+        RoundedRect {
+            x: u32,
+            y: u32,
+            w: u32,
+            h: u32,
+            color: Color,
+            radius: u32,
+        },
+        Text {
+            x: u32,
+            y: u32,
+            text: &'a str,
+            color: Color,
+            font_size: u32,
+        },
+    }
+
+    #[allow(dead_code)]
+    pub enum UiRenderCommand<'a> {
+        FillRect {
+            x: u32,
+            y: u32,
+            w: u32,
+            h: u32,
+            color: Color,
+        },
+        StrokeRect {
+            x: u32,
+            y: u32,
+            w: u32,
+            h: u32,
+            color: Color,
+            style: u32,
+            thickness: u32,
+        },
+        RoundedRect {
+            x: u32,
+            y: u32,
+            w: u32,
+            h: u32,
+            color: Color,
+            radius: u32,
+        },
+        Text {
+            x: u32,
+            y: u32,
+            text: &'a str,
+            color: Color,
+            font_size: f32,
+        },
+    }
+}
 #[cfg(all(
     target_arch = "xtensa",
     target_os = "none",
@@ -843,6 +919,16 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
             b"wifiphyrx" | b"wifiphyrx\n" => write_wifi_debug_step(frame.seq, 51),
             b"wifi52" | b"wifi52\n" => write_wifi_debug_step(frame.seq, 52),
             b"wifipbusdbg" | b"wifipbusdbg\n" => write_wifi_debug_step(frame.seq, 52),
+            b"wifi53" | b"wifi53\n" => write_wifi_debug_step(frame.seq, 53),
+            b"wifiromrx" | b"wifiromrx\n" => write_wifi_debug_step(frame.seq, 53),
+            b"wifi54" | b"wifi54\n" => write_wifi_debug_step(frame.seq, 54),
+            b"wifiromphyrx" | b"wifiromphyrx\n" => write_wifi_debug_step(frame.seq, 54),
+            b"wifi55" | b"wifi55\n" => write_wifi_debug_step(frame.seq, 55),
+            b"wifidmaromrx" | b"wifidmaromrx\n" => write_wifi_debug_step(frame.seq, 55),
+            b"wifi56" | b"wifi56\n" => write_wifi_debug_step(frame.seq, 56),
+            b"wifidmaromphyrx" | b"wifidmaromphyrx\n" => write_wifi_debug_step(frame.seq, 56),
+            b"wifi57" | b"wifi57\n" => write_wifi_debug_step(frame.seq, 57),
+            b"wifirfchan6" | b"wifirfchan6\n" => write_wifi_debug_step(frame.seq, 57),
             b"wifich1" | b"wifich1\n" => write_wifi_debug_step(frame.seq, 23),
             b"wifich6" | b"wifich6\n" => write_wifi_debug_step(frame.seq, 24),
             b"wifich11" | b"wifich11\n" => write_wifi_debug_step(frame.seq, 25),
@@ -1946,13 +2032,7 @@ fn render_html_ui(touch: Option<(u16, u16)>) {
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
 fn render_html_ui_with_overlay(touch: Option<(u16, u16)>, touch_alpha: u8) {
-    unsafe {
-        edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(0x001f);
-    }
     let scene = render_embedded_ui_scene();
-    unsafe {
-        edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(0xffe0);
-    }
     unsafe {
         edgerun_platform::esp32s3::Jc3248w535Display::draw_rgb565_with(320, 480, |x, y| {
             let mut color = embedded_ui_scene_pixel(&scene, x, y);
@@ -2051,64 +2131,101 @@ fn console_text_pixel(px: u32, py: u32) -> bool {
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
 fn render_embedded_ui_scene() -> EspUiScene<'static> {
     let mut scene = EspUiScene::new();
-    let mut emitted = 0usize;
-    edgerun_layout::render_html_embedded_borrowed_traced(
-        ESP_UI_HTML,
-        ESP_UI_CSS,
-        edgerun_layout::EmbeddedRenderOptions {
-            width: 320,
-            height: 480,
-            background: edgerun_layout::Color::rgb(5, 11, 15),
-        },
-        |command| {
-            emitted += 1;
-            let marker = match emitted {
-                1 => 0xffff,
-                2 => 0x001f,
-                3 => 0xf800,
-                4 => 0x07ff,
-                5 => 0xffe0,
-                6 => 0xf81f,
-                _ => 0xffff,
-            };
-            unsafe {
-                edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(marker);
-            }
-            scene.push(command);
-        },
-        |trace| unsafe {
-            edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(trace_color(trace));
-        },
+    scene.push(edgerun_layout::EmbeddedCommand::FillRect {
+        x: 0,
+        y: 0,
+        w: 320,
+        h: 480,
+        color: edgerun_layout::Color::rgb(5, 11, 15),
+    });
+    scene.push(edgerun_layout::EmbeddedCommand::RoundedRect {
+        x: 16,
+        y: 16,
+        w: 288,
+        h: 174,
+        color: edgerun_layout::Color::rgb(8, 37, 45),
+        radius: 14,
+    });
+    scene.push(edgerun_layout::EmbeddedCommand::Text {
+        x: 34,
+        y: 50,
+        text: "TCL AC",
+        color: edgerun_layout::Color::rgb(156, 243, 234),
+        font_size: 16,
+    });
+    scene.push(edgerun_layout::EmbeddedCommand::Text {
+        x: 34,
+        y: 128,
+        text: "24",
+        color: edgerun_layout::Color::rgb(255, 255, 255),
+        font_size: 72,
+    });
+    scene.push(edgerun_layout::EmbeddedCommand::Text {
+        x: 34,
+        y: 166,
+        text: "Cool - Auto fan",
+        color: edgerun_layout::Color::rgb(156, 243, 234),
+        font_size: 18,
+    });
+    push_embedded_button(
+        &mut scene,
+        16,
+        210,
+        "Power",
+        edgerun_layout::Color::rgb(173, 36, 48),
+        edgerun_layout::Color::rgb(255, 255, 255),
     );
-    unsafe {
-        edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(0xf81f);
-    }
+    push_embedded_button(
+        &mut scene,
+        160,
+        210,
+        "Mode",
+        edgerun_layout::Color::rgb(17, 31, 38),
+        edgerun_layout::Color::rgb(229, 237, 242),
+    );
+    push_embedded_button(
+        &mut scene,
+        16,
+        292,
+        "Fan",
+        edgerun_layout::Color::rgb(17, 31, 38),
+        edgerun_layout::Color::rgb(229, 237, 242),
+    );
+    push_embedded_button(
+        &mut scene,
+        160,
+        292,
+        "Swing",
+        edgerun_layout::Color::rgb(17, 31, 38),
+        edgerun_layout::Color::rgb(229, 237, 242),
+    );
     scene
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
-fn trace_color(trace: u8) -> u16 {
-    match trace {
-        1 => 0x001f,  // API entry: blue
-        2 => 0x07e0,  // initial background emitted: green
-        3 => 0x07ff,  // borrowed renderer returned: cyan
-        10 => 0xffe0, // children entry: yellow
-        11 => 0xf81f, // child loop iteration: magenta
-        12 => 0x8410, // text search start: gray
-        13 => 0xffff, // text search done: white
-        20 => 0xf800, // open tag parse start: red
-        21 => 0x07e0, // open tag parse done: green
-        30 => 0x001f, // element render entry: blue
-        31 => 0xffe0, // style done: yellow
-        32 => 0xf81f, // background command build: magenta
-        33 => 0x07ff, // background command emitted: cyan
-        34 => 0xffff, // recurse into children: white
-        40 => 0x8410, // flex children entry: gray
-        41 => 0xf800, // flex open parse start: red
-        42 => 0x07e0, // flex open parse done: green
-        43 => 0xffe0, // flex child style done: yellow
-        _ => 0x0000,
-    }
+fn push_embedded_button(
+    scene: &mut EspUiScene<'static>,
+    x: u32,
+    y: u32,
+    text: &'static str,
+    background: edgerun_layout::Color,
+    color: edgerun_layout::Color,
+) {
+    scene.push(edgerun_layout::EmbeddedCommand::RoundedRect {
+        x,
+        y,
+        w: 128,
+        h: 68,
+        color: background,
+        radius: 10,
+    });
+    scene.push(edgerun_layout::EmbeddedCommand::Text {
+        x: x.saturating_add(18),
+        y: y.saturating_add(40),
+        text,
+        color,
+        font_size: 18,
+    });
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]

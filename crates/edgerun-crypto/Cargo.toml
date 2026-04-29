@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "no_std cryptographic primitives and algorithm adapters for Edgerun"
 
 [dependencies]
@@ -21,7 +23,7 @@ rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"], o
 sha1-crate = { package = "sha1", version = "0.10", default-features = false, optional = true }
 x25519-dalek = { version = "2", default-features = false, features = ["static_secrets"], optional = true }
 rand_core = { version = "0.6", default-features = false }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
 
 [features]
 default = []

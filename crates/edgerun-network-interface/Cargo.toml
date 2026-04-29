@@ -4,11 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Network interface capability abstractions for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-quectel-ec200a = { path = "../edgerun-quectel-ec200a" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-quectel-ec200a = { version = "0.1", path = "../edgerun-quectel-ec200a" }
 
 [lints]
 workspace = true

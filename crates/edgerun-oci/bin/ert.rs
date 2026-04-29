@@ -36,8 +36,7 @@ fn main() {
     let result = dispatch_command(&opts, &command, &cmd_args);
 
     if let Err(e) = result {
-        if e.kind() == std::io::ErrorKind::NotFound
-            && e.to_string().starts_with("unknown command:")
+        if e.kind() == std::io::ErrorKind::NotFound && e.to_string().starts_with("unknown command:")
         {
             eprintln!("Unknown command: {}", command);
             print_usage();

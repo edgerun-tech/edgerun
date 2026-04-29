@@ -33,10 +33,41 @@ ALIASES = {
     "rftest": "wifirftest",
     "gate": "wifirxgate",
     "buf": "wifirxbuf",
+    "romrx": "wifiromrx",
+    "romphyrx": "wifiromphyrx",
+    "dmaromrx": "wifidmaromrx",
+    "dmaromphyrx": "wifidmaromphyrx",
+    "macflt": "wifimacflt",
+    "perflt": "wifirxper",
+    "rx2440": "wifirx2440",
+    "rfchan6": "wifirfchan6",
+    "rfch-save": "wifirfchsave",
+    "rfch-pre": "wifirfchpre",
+    "rfch-mode": "wifirfchmode",
+    "rfch-gain-pre": "wifirfchgainpre",
+    "rfch-gain-ch": "wifirfchgainch",
+    "rfch-post": "wifirfchpost",
+    "rfch-restore": "wifirfchrestore",
 }
 
 PRESETS = {
     "rx6": ["init", "rx", "pbusdbg", "rx", "pbus", "start6", "phyrx", "rftest", "gate", "buf", "rx"],
+    "rxrom": ["init", "rx", "romrx", "rx", "pbus", "start6", "romphyrx", "rftest", "gate", "buf", "rx"],
+    "rxdmarom": ["init", "rx", "dmaromrx", "rx", "pbus", "start6", "dmaromphyrx", "rftest", "gate", "buf", "rx"],
+    "rxdmaromfilter": [
+        "init",
+        "rx",
+        "dmaromrx",
+        "macflt",
+        "perflt",
+        "rx2440",
+        "pbus",
+        "dmaromphyrx",
+        "rftest",
+        "gate",
+        "buf",
+        "rx",
+    ],
 }
 
 
@@ -184,4 +215,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1968,6 +1968,13 @@ async fn write_response(transport: &mut ImapTransport, resp: &ImapResponse) -> i
     Ok(())
 }
 
+fn scoped_mailbox(authenticated_user: Option<&str>, mailbox: &str) -> String {
+    match authenticated_user {
+        Some(user) if mailbox.eq_ignore_ascii_case("INBOX") => format!("{user}/INBOX"),
+        _ => mailbox.to_string(),
+    }
+}
+
 // ===========================================================================
 // Command Dispatcher
 // ===========================================================================
@@ -2123,11 +2130,12 @@ async fn dispatch_command(
             if *state != ImapState::Authenticated {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
+            let store_mailbox = scoped_mailbox(authenticated_user.as_deref(), mailbox);
 
-            match store.select(mailbox) {
+            match store.select(&store_mailbox) {
                 Ok(Some(mb)) => {
                     *state = ImapState::Selected;
-                    *current_mailbox = Some(mailbox.clone());
+                    *current_mailbox = Some(store_mailbox);
 
                     // Send mailbox status
                     if let Some(status) = &mb.status {
@@ -2164,11 +2172,12 @@ async fn dispatch_command(
             if *state != ImapState::Authenticated {
                 return Ok(ImapResponse::no(tag, "Not authenticated"));
             }
+            let store_mailbox = scoped_mailbox(authenticated_user.as_deref(), mailbox);
 
-            match store.select(mailbox) {
+            match store.select(&store_mailbox) {
                 Ok(Some(mb)) => {
                     *state = ImapState::Selected;
-                    *current_mailbox = Some(mailbox.clone());
+                    *current_mailbox = Some(store_mailbox);
 
                     if let Some(status) = &mb.status {
                         transport

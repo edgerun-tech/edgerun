@@ -9,8 +9,8 @@ use std::io;
 use std::io::Read;
 
 use crate::cli::{invalid_input, parse_cli_args, required_positional};
-use crate::spec::{OciLinuxDeviceCgroup, OciLinuxResources};
 use crate::spec::OciSpec;
+use crate::spec::{OciLinuxDeviceCgroup, OciLinuxResources};
 use crate::state::load_state;
 use edgerun_clap::{Arg, Command};
 

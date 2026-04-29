@@ -227,6 +227,7 @@ pub fn resolve(
     qtype: DnsRecordType,
     zones: &HashMap<String, DnsZone>,
 ) -> Vec<DnsRecord> {
+    let qname = qname.trim_end_matches('.').to_lowercase();
     for zone in zones.values() {
         let origin = zone.origin.to_lowercase();
 

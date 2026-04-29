@@ -4,14 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Goodix fingerprint sensor adapter for Edgerun"
 
 [dependencies]
-edgerun-fingerprint = { path = "../edgerun-fingerprint" }
-edgerun-encoding = { path = "../edgerun-encoding" }
+edgerun-fingerprint = { version = "0.1", path = "../edgerun-fingerprint" }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 
 [dev-dependencies]
-edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 
 [[bin]]
 name = "goodix_tool"

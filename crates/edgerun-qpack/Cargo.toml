@@ -5,9 +5,11 @@ edition.workspace = true
 description = "QPACK header compression for HTTP/3 (RFC 9204)"
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
 
 
 [features]

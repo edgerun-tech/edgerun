@@ -91,7 +91,12 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
                 _ => 0,
             };
             // r7 = (*(u32*)(r6 + OFF_ACCESS_TYPE)) & DEV_TYPE_MASK
-            sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W, R7, R6, OFF_ACCESS_TYPE)));
+            sym.push(SymInsn::Raw(ld_imm(
+                bpf_size::BPF_W,
+                R7,
+                R6,
+                OFF_ACCESS_TYPE,
+            )));
             sym.push(SymInsn::Raw(and_imm(R7, DEV_TYPE_MASK)));
             // if r7 != dev_type → goto skip_label
             sym.push(SymInsn::JmpNe {
@@ -138,7 +143,12 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
                     };
                 }
                 if access_mask != 0 {
-                    sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W, R7, R6, OFF_ACCESS_TYPE)));
+                    sym.push(SymInsn::Raw(ld_imm(
+                        bpf_size::BPF_W,
+                        R7,
+                        R6,
+                        OFF_ACCESS_TYPE,
+                    )));
                     sym.push(SymInsn::Raw(and_imm(R7, access_mask)));
                     sym.push(SymInsn::JmpEq {
                         dst: R7,

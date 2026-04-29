@@ -1018,6 +1018,84 @@ impl Esp32s3WifiMmio {
                     LAST_STATUS.store(if ok { 5202 } else { -5202 }, Ordering::Relaxed);
                     ok
                 }
+                53 => {
+                    LAST_STATUS.store(5301, Ordering::Relaxed);
+                    install_rom_rx_globals_slice();
+                    LAST_STATUS.store(5302, Ordering::Relaxed);
+                    true
+                }
+                54 => {
+                    LAST_STATUS.store(5401, Ordering::Relaxed);
+                    install_rom_rx_globals_slice();
+                    let ok = call_phy_rx_start_slot_direct_slice();
+                    LAST_STATUS.store(if ok { 5402 } else { -5402 }, Ordering::Relaxed);
+                    ok
+                }
+                55 => {
+                    LAST_STATUS.store(5501, Ordering::Relaxed);
+                    install_rom_rx_globals_direct_dma_slice();
+                    LAST_STATUS.store(5502, Ordering::Relaxed);
+                    true
+                }
+                56 => {
+                    LAST_STATUS.store(5601, Ordering::Relaxed);
+                    install_rom_rx_globals_direct_dma_slice();
+                    let ok = call_phy_rx_start_slot_direct_slice();
+                    LAST_STATUS.store(if ok { 5602 } else { -5602 }, Ordering::Relaxed);
+                    ok
+                }
+                57 => {
+                    LAST_STATUS.store(5701, Ordering::Relaxed);
+                    let ok = call_phy_slot0(0x160);
+                    LAST_STATUS.store(if ok { 5702 } else { -5702 }, Ordering::Relaxed);
+                    ok
+                }
+                58 => {
+                    LAST_STATUS.store(5801, Ordering::Relaxed);
+                    let ok = call_phy_slot0(0x008);
+                    LAST_STATUS.store(if ok { 5802 } else { -5802 }, Ordering::Relaxed);
+                    ok
+                }
+                59 => {
+                    LAST_STATUS.store(5901, Ordering::Relaxed);
+                    force_txrx_off_slice(true);
+                    set_chan_freq_hw_init_direct_slice(6, 0);
+                    set_chan_freq_sw_start_direct_slice(6);
+                    let ok = call_phy_slot1(0x06c, 0);
+                    LAST_STATUS.store(if ok { 5902 } else { -5902 }, Ordering::Relaxed);
+                    ok
+                }
+                60 => {
+                    LAST_STATUS.store(6001, Ordering::Relaxed);
+                    let ok = call_phy_slot1(0x24c, 1);
+                    LAST_STATUS.store(if ok { 6002 } else { -6002 }, Ordering::Relaxed);
+                    ok
+                }
+                61 => {
+                    LAST_STATUS.store(6101, Ordering::Relaxed);
+                    let ok = call_phy_slot2(0x264, 6, 0);
+                    LAST_STATUS.store(if ok { 6102 } else { -6102 }, Ordering::Relaxed);
+                    ok
+                }
+                62 => {
+                    LAST_STATUS.store(6201, Ordering::Relaxed);
+                    force_txrx_off_slice(false);
+                    let ok = call_phy_slot0(0x00c);
+                    LAST_STATUS.store(if ok { 6202 } else { -6202 }, Ordering::Relaxed);
+                    ok
+                }
+                63 => {
+                    LAST_STATUS.store(6301, Ordering::Relaxed);
+                    let ok = call_phy_slot1(0x164, 0);
+                    LAST_STATUS.store(if ok { 6302 } else { -6302 }, Ordering::Relaxed);
+                    ok
+                }
+                64 => {
+                    LAST_STATUS.store(6401, Ordering::Relaxed);
+                    let ok = call_phy_rftest_channel6_slot_path();
+                    LAST_STATUS.store(if ok { 6402 } else { -6402 }, Ordering::Relaxed);
+                    ok
+                }
                 _ => false,
             }
         }
@@ -1249,6 +1327,34 @@ unsafe fn init_wdev_rx_descriptor_ring() {
     WIFI_MAC_RX_BASE.write_volatile(ctrl_base);
     WIFI_MAC_RX_NEXT.write_volatile(0);
     WIFI_MAC_RX_LAST.write_volatile(desc_base.add(RX_DESC_COUNT - 1) as usize as u32);
+}
+
+unsafe fn install_rom_rx_globals_slice() {
+    init_wdev_rx_descriptor_ring();
+
+    let ctrl = core::ptr::addr_of_mut!(WDEV_RX_CONTROL.0).cast::<u32>() as usize as u32;
+    let desc_base =
+        core::ptr::addr_of_mut!(RX_DESCRIPTORS.0).cast::<RxDescriptor>() as usize as u32;
+
+    ROM_G_EB_LIST_DESC_PTR.write_volatile(desc_base);
+    ROM_WDEV_CTRL_PTR.write_volatile(ctrl);
+    ROM_P_TX_RX.write_volatile(ctrl);
+}
+
+unsafe fn install_rom_rx_globals_direct_dma_slice() {
+    init_rx_descriptor_ring();
+
+    let ctrl = core::ptr::addr_of_mut!(WDEV_RX_CONTROL.0).cast::<u32>();
+    let desc_base = core::ptr::addr_of_mut!(RX_DESCRIPTORS.0).cast::<RxDescriptor>();
+
+    ctrl.add(0).write_volatile(desc_base as usize as u32);
+    ctrl.add(1)
+        .write_volatile(desc_base.add(RX_DESC_COUNT - 1) as usize as u32);
+    ctrl.add(2).write_volatile(desc_base as usize as u32);
+
+    ROM_G_EB_LIST_DESC_PTR.write_volatile(desc_base as usize as u32);
+    ROM_WDEV_CTRL_PTR.write_volatile(ctrl as usize as u32);
+    ROM_P_TX_RX.write_volatile(ctrl as usize as u32);
 }
 
 fn encode_rx_descriptor_control(len: u32) -> u32 {
@@ -1633,6 +1739,123 @@ unsafe fn call_phy_pbus_debug_slot_direct_slice() -> bool {
 
 #[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
 unsafe fn call_phy_pbus_debug_slot_direct_slice() -> bool {
+    false
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn call_phy_rftest_channel6_slot_path() -> bool {
+    type Slot0 = unsafe extern "C" fn();
+    type Slot1 = unsafe extern "C" fn(u32);
+    type Slot2 = unsafe extern "C" fn(u32, u32);
+
+    let table = unsafe { phy_get_romfuncs() };
+    if table.is_null() {
+        return false;
+    }
+
+    let save = read_phy_fun_slot(table, 0x160) as usize;
+    let pre = read_phy_fun_slot(table, 0x008) as usize;
+    let mode = read_phy_fun_slot(table, 0x06c) as usize;
+    let rx_gain_prepare = read_phy_fun_slot(table, 0x24c) as usize;
+    let rx_gain_channel = read_phy_fun_slot(table, 0x264) as usize;
+    let post = read_phy_fun_slot(table, 0x00c) as usize;
+    let restore = read_phy_fun_slot(table, 0x164) as usize;
+
+    if save == 0
+        || pre == 0
+        || mode == 0
+        || rx_gain_prepare == 0
+        || rx_gain_channel == 0
+        || post == 0
+        || restore == 0
+    {
+        return false;
+    }
+
+    let save: Slot0 = core::mem::transmute(save);
+    let pre: Slot0 = core::mem::transmute(pre);
+    let mode: Slot1 = core::mem::transmute(mode);
+    let rx_gain_prepare: Slot1 = core::mem::transmute(rx_gain_prepare);
+    let rx_gain_channel: Slot2 = core::mem::transmute(rx_gain_channel);
+    let post: Slot0 = core::mem::transmute(post);
+    let restore: Slot1 = core::mem::transmute(restore);
+
+    save();
+    pre();
+    force_txrx_off_slice(true);
+    set_chan_freq_hw_init_direct_slice(6, 0);
+    set_chan_freq_sw_start_direct_slice(6);
+    mode(0);
+    rx_gain_prepare(1);
+    rx_gain_channel(6, 0);
+    force_txrx_off_slice(false);
+    post();
+    restore(0);
+    true
+}
+
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
+unsafe fn call_phy_rftest_channel6_slot_path() -> bool {
+    false
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn call_phy_slot0(offset: usize) -> bool {
+    type Slot = unsafe extern "C" fn();
+
+    let table = unsafe { phy_get_romfuncs() };
+    let slot = unsafe { read_phy_fun_slot(table, offset) } as usize;
+    if slot == 0 {
+        return false;
+    }
+
+    let func: Slot = unsafe { core::mem::transmute(slot) };
+    unsafe { func() };
+    true
+}
+
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
+unsafe fn call_phy_slot0(_offset: usize) -> bool {
+    false
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn call_phy_slot1(offset: usize, arg0: u32) -> bool {
+    type Slot = unsafe extern "C" fn(u32);
+
+    let table = unsafe { phy_get_romfuncs() };
+    let slot = unsafe { read_phy_fun_slot(table, offset) } as usize;
+    if slot == 0 {
+        return false;
+    }
+
+    let func: Slot = unsafe { core::mem::transmute(slot) };
+    unsafe { func(arg0) };
+    true
+}
+
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
+unsafe fn call_phy_slot1(_offset: usize, _arg0: u32) -> bool {
+    false
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe fn call_phy_slot2(offset: usize, arg0: u32, arg1: u32) -> bool {
+    type Slot = unsafe extern "C" fn(u32, u32);
+
+    let table = unsafe { phy_get_romfuncs() };
+    let slot = unsafe { read_phy_fun_slot(table, offset) } as usize;
+    if slot == 0 {
+        return false;
+    }
+
+    let func: Slot = unsafe { core::mem::transmute(slot) };
+    unsafe { func(arg0, arg1) };
+    true
+}
+
+#[cfg(not(all(target_arch = "xtensa", target_os = "none")))]
+unsafe fn call_phy_slot2(_offset: usize, _arg0: u32, _arg1: u32) -> bool {
     false
 }
 

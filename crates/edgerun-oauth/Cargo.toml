@@ -4,16 +4,18 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "OAuth helpers for Edgerun service authentication"
 
 [dependencies]
-edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["hmac", "p256", "rsa"] }
-edgerun-http = { path = "../edgerun-http", default-features = false, features = ["client", "tls"] }
-edgerun-log = { path = "../edgerun-log" }
-edgerun-json = { path = "../edgerun-json" }
-edgerun-rt = { path = "../edgerun-rt" }
-edgerun-secret-service = { path = "../edgerun-secret-service" }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
+edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, features = ["hmac", "p256", "rsa"] }
+edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["client", "tls"] }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-json = { version = "0.1", path = "../edgerun-json" }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+edgerun-secret-service = { version = "0.1", path = "../edgerun-secret-service" }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
 
 [lints]
 workspace = true

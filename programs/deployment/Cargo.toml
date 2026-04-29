@@ -2,6 +2,10 @@
 name = "deployment-contract"
 version = "0.1.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/Sylchi/edgerun_reference_core"
+homepage = "https://github.com/Sylchi/edgerun_reference_core"
 
 [workspace]
 exclude = ["../"]

@@ -4,12 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "YubiKey signing provider for Edgerun hardware identities"
 
 [dependencies]
-edgerun-core = { path = "../edgerun-core" }
-edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
-edgerun-encoding = { path = "../edgerun-encoding" }
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true

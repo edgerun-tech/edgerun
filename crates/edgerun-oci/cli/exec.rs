@@ -254,13 +254,8 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
         let exit_code = exec_error.exit_code();
         if parsed.detach {
             let byte = exit_code as u8;
-            let _ = unsafe {
-                libc::write(
-                    ready_pipe[1],
-                    &byte as *const u8 as *const libc::c_void,
-                    1,
-                )
-            };
+            let _ =
+                unsafe { libc::write(ready_pipe[1], &byte as *const u8 as *const libc::c_void, 1) };
         }
         unsafe { libc::_exit(exit_code) };
     }
@@ -273,13 +268,7 @@ pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()
     if parsed.detach {
         unsafe { libc::close(ready_pipe[1]) };
         let mut byte = 0u8;
-        let n = unsafe {
-            libc::read(
-                ready_pipe[0],
-                &mut byte as *mut u8 as *mut libc::c_void,
-                1,
-            )
-        };
+        let n = unsafe { libc::read(ready_pipe[0], &mut byte as *mut u8 as *mut libc::c_void, 1) };
         unsafe { libc::close(ready_pipe[0]) };
         if n > 0 {
             let mut status = 0i32;

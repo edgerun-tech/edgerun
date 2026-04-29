@@ -4,12 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Kubernetes-compatible DNS/DHCP configuration with event-sourced state"
 
 [dependencies]
-edgerun-dhcpv6 = { path = "../edgerun-dhcpv6" }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
-edgerun-json = { path = "../edgerun-json", default-features = false, features = ["yaml"] }
+edgerun-dhcpv6 = { version = "0.1", path = "../edgerun-dhcpv6" }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
+edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false, features = ["yaml"] }
 edgerun-error.workspace = true
 
 [lints]

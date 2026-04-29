@@ -4,11 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "ALSA microphone adapter for Edgerun audio capture capabilities"
 
 [dependencies]
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-microphone = { path = "../edgerun-microphone" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-microphone = { version = "0.1", path = "../edgerun-microphone" }
 
 [[bin]]
 name = "alsa_mic_tool"

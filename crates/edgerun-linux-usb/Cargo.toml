@@ -4,12 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Linux USB device adapter for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
-edgerun-usb = { path = "../edgerun-usb" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
+edgerun-usb = { version = "0.1", path = "../edgerun-usb" }
 
 [features]
 std = []

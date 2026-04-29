@@ -4,17 +4,19 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Linux Wi-Fi adapter for Edgerun network capabilities"
 
 [dependencies]
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-linux-netif = { path = "../edgerun-linux-netif" }
-edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
-edgerun-network-interface = { path = "../edgerun-network-interface" }
-edgerun-wifi = { path = "../edgerun-wifi" }
-edgerun-encoding = { path = "../edgerun-encoding" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
+edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interface" }
+edgerun-wifi = { version = "0.1", path = "../edgerun-wifi" }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "pbkdf2", "sha1"] }
-edgerun-log = { path = "../edgerun-log" }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true

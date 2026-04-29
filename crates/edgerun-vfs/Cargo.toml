@@ -5,6 +5,8 @@ edition.workspace = true
 description = "In-memory virtual filesystem with git-aware write-back for transparent RAM acceleration"
 license = "MIT OR Apache-2.0"
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 readme = "README.md"
 keywords = ["vfs", "filesystem", "in-memory", "copy-on-write", "ram"]
 categories = ["filesystem", "caching", "development-tools"]
@@ -12,13 +14,13 @@ categories = ["filesystem", "caching", "development-tools"]
 [dependencies]
 edgerun-glob.workspace = true
 edgerun-regex.workspace = true
-edgerun-crypto = { path = "../edgerun-crypto", default-features = false, features = ["sha1"] }
-edgerun-rt = { path = "../edgerun-rt" }
-edgerun-log = { path = "../edgerun-log" }
+edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, features = ["sha1"] }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc = { version = "0.2", optional = true }
-edgerun-inotify = { path = "../edgerun-inotify", optional = true }
+edgerun-inotify = { version = "0.1", path = "../edgerun-inotify", optional = true }
 
 [[bin]]
 name = "mount_ramfs"

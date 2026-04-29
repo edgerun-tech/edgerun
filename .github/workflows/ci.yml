@@ -22,8 +22,49 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
       - name: Format check
         run: cargo fmt --check
 
       - name: Workspace metadata
         run: cargo metadata --no-deps --format-version 1 >/tmp/edgerun_metadata.json
+
+      - name: License policy
+        run: cargo deny check licenses
+
+      - name: Internal path dependency versions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          bad = []
+          line_re = re.compile(
+              r'^\s*edgerun-[A-Za-z0-9_-]+\s*=\s*\{'
+              r'(?=[^}\n]*\bpath\s*=)(?![^}\n]*\bversion\s*=)'
+          )
+          roots = [Path('Cargo.toml'), Path('crates'), Path('devices'), Path('programs'), Path('scripts')]
+          for root in roots:
+              files = [root] if root.is_file() else root.rglob('Cargo.toml')
+              for path in files:
+                  text_path = str(path)
+                  if '/.embuild/' in text_path or '/tests/runc/src/' in text_path:
+                      continue
+                  for line_no, line in enumerate(path.read_text().splitlines(), 1):
+                      if line_re.search(line):
+                          bad.append(f'{path}:{line_no}:{line}')
+          if bad:
+              print('Internal edgerun path dependencies need version requirements:')
+              print('\n'.join(bad))
+              raise SystemExit(1)
+          PY
+
+      - name: Package previews
+        run: |
+          cargo package -p edgerun-log --list --allow-dirty
+          cargo package -p edgerun-proto --list --allow-dirty
+          cargo package -p edgerun-core --list --allow-dirty
+
+      - name: Release binary check
+        run: cargo check -p edgerun-node

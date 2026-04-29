@@ -34,6 +34,18 @@ fn register_and_wake_waker(slot: &mut Option<Waker>, cx: &Context<'_>) {
     }
 }
 
+fn register_and_wake_waker_after_brief_pause(slot: &mut Option<Waker>, cx: &Context<'_>) {
+    let needs_refresh =
+        !matches!(slot.as_ref(), Some(registered) if registered.will_wake(cx.waker()));
+    if needs_refresh {
+        *slot = Some(cx.waker().clone());
+    }
+    if let Some(waker) = slot.as_ref() {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        waker.wake_by_ref();
+    }
+}
+
 fn clear_waker(slot: &mut Option<Waker>) {
     slot.take();
 }
@@ -288,7 +300,7 @@ impl Future for AcceptFuture<'_> {
                 }
             },
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                register_and_wake_waker(&mut this.waker, cx);
+                register_and_wake_waker_after_brief_pause(&mut this.waker, cx);
                 Poll::Pending
             }
             Err(e) => {

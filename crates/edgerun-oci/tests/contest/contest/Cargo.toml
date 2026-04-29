@@ -47,8 +47,8 @@ thiserror = { version = "2.0", optional = true }
 tracing = { version = "0.1.44", features = ["attributes"], optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"], optional = true }
 regex = { version = "1", optional = true }
-edgerun-crypto = { path = "../../../../edgerun-crypto", optional = true }
-edgerun-json = { path = "../../../../edgerun-json", features = ["std"], optional = true }
+edgerun-crypto = { version = "0.1", path = "../../../../edgerun-crypto", optional = true }
+edgerun-json = { version = "0.1", path = "../../../../edgerun-json", features = ["std"], optional = true }
 
 [[bin]]
 name = "contest"

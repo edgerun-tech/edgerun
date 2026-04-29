@@ -4,11 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Webmail frontend for edgerun email server"
 
 [dependencies]
-edgerun-http = { path = "../edgerun-http", default-features = false, features = ["server", "static-files"] }
-edgerun-log = { path = "../edgerun-log" }
+edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["server", "static-files"] }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [lints]
 workspace = true

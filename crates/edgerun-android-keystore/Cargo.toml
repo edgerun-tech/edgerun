@@ -4,10 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Android Keystore signing provider for Edgerun hardware identities"
 
 [dependencies]
-edgerun-core = { path = "../edgerun-core" }
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
 
 [features]
 default = []

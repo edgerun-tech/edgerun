@@ -4,13 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "AMD XDNA Linux NPU adapter for Edgerun"
 
 [dependencies]
-edgerun-linux-npu = { path = "../edgerun-linux-npu" }
-edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
-edgerun-npu = { path = "../edgerun-npu" }
-edgerun-log = { path = "../edgerun-log" }
+edgerun-linux-npu = { version = "0.1", path = "../edgerun-linux-npu" }
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
+edgerun-npu = { version = "0.1", path = "../edgerun-npu" }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true

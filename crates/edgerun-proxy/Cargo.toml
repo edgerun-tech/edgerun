@@ -4,11 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "HTTP proxy server with CONNECT support for HTTPS tunneling"
 
 [dependencies]
-edgerun-rt = { path = "../edgerun-rt" }
-edgerun-log = { path = "../edgerun-log" }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [features]
 default = []

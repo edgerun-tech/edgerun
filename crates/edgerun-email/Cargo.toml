@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Complete email server: SMTP (RFC 5321), IMAP (RFC 3501), LMTP (RFC 2033)"
 
 [[bin]]
@@ -21,9 +23,9 @@ std = []
 workspace = true
 
 [dependencies]
-edgerun-rt = { path = "../edgerun-rt" }
-edgerun-log = { path = "../edgerun-log" }
-edgerun-dns = { path = "../edgerun-dns", default-features = false }
-edgerun-email-auth = { path = "../edgerun-email-auth", optional = true }
-edgerun-tls = { path = "../edgerun-tls", optional = true }
-edgerun-encoding = { path = "../edgerun-encoding" }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false }
+edgerun-email-auth = { version = "0.1", path = "../edgerun-email-auth", optional = true }
+edgerun-tls = { version = "0.1", path = "../edgerun-tls", optional = true }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }

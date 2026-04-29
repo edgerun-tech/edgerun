@@ -117,16 +117,15 @@ members = [
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
+repository = "https://github.com/Sylchi/edgerun_reference_core"
+homepage = "https://github.com/Sylchi/edgerun_reference_core"
 rust-version = "1.81"
 version = "0.1.1"
 
-# Version management:
-# - Run: cargo install cargo-public-api
-# - CI automatically bumps version on main push based on API changes:
-#   - patch: bug fixes only, no API changes
-#   - minor: new public APIs added
-#   - major: public APIs removed/renamed
-# - Git tag triggers release build
+# Release management:
+# - Git tags matching v* trigger the GitHub release workflow.
+# - Workspace crates are not publishable by default while the v0 surface is
+#   alpha. See RELEASE.md before enabling crates.io publication for a crate.
 
 [profile.release]
 panic = "abort"
@@ -156,50 +155,50 @@ function_casts_as_integer = "allow"
 
 [workspace.dependencies]
 # Core edgerun crates
-edgerun-core = { path = "crates/edgerun-core" }
-edgerun-proto = { path = "crates/edgerun-proto" }
-edgerun-proxy = { path = "crates/edgerun-proxy" }
-edgerun-storage = { path = "crates/edgerun-storage" }
-edgerun-stream = { path = "crates/edgerun-stream" }
-edgerun-http = { path = "crates/edgerun-http", default-features = false }
-edgerun-node = { path = "crates/edgerun-node" }
-edgerun-hardware-signing = { path = "crates/edgerun-hardware-signing" }
-edgerun-capabilities = { path = "crates/edgerun-capabilities" }
-edgerun-mesh = { path = "crates/edgerun-mesh" }
-edgerun-mesh-link = { path = "crates/edgerun-mesh-link" }
-edgerun-mesh-session = { path = "crates/edgerun-mesh-session" }
-edgerun-mesh-capability = { path = "crates/edgerun-mesh-capability" }
-edgerun-mesh-daemon = { path = "crates/edgerun-mesh-daemon" }
-edgerun-secret-service = { path = "crates/edgerun-secret-service" }
-edgerun-biometrics = { path = "crates/edgerun-biometrics" }
-edgerun-mgmt-bluetooth = { path = "crates/edgerun-mgmt-bluetooth" }
-edgerun-bluetooth-gatt = { path = "crates/edgerun-bluetooth-gatt" }
-edgerun-tcl-ac = { path = "crates/edgerun-tcl-ac" }
-edgerun-tcl-ac-cli = { path = "crates/edgerun-tcl-ac-cli" }
-edgerun-matter = { path = "crates/edgerun-matter" }
-edgerun-capability-policy = { path = "crates/edgerun-capability-policy" }
-edgerun-linux-wifi = { path = "crates/edgerun-linux-wifi" }
-edgerun-input = { path = "crates/edgerun-input" }
-edgerun-oci = { path = "crates/edgerun-oci" }
-edgerun-edgefs = { path = "crates/edgerun-edgefs" }
-edgerun-encoding = { path = "crates/edgerun-encoding" }
-edgerun-acme = { path = "crates/edgerun-acme" }
-edgerun-dns = { path = "crates/edgerun-dns" }
-edgerun-tls = { path = "crates/edgerun-tls" }
-edgerun-url = { path = "crates/edgerun-url" }
-edgerun-glob = { path = "crates/edgerun-glob" }
-edgerun-regex = { path = "crates/edgerun-regex" }
-edgerun-email = { path = "crates/edgerun-email" }
-edgerun-log = { path = "crates/edgerun-log" }
-edgerun-rt = { path = "crates/edgerun-rt" }
+edgerun-core = { version = "0.1", path = "crates/edgerun-core" }
+edgerun-proto = { version = "0.1", path = "crates/edgerun-proto" }
+edgerun-proxy = { version = "0.1", path = "crates/edgerun-proxy" }
+edgerun-storage = { version = "0.1", path = "crates/edgerun-storage" }
+edgerun-stream = { version = "0.1", path = "crates/edgerun-stream" }
+edgerun-http = { version = "0.1", path = "crates/edgerun-http", default-features = false }
+edgerun-node = { version = "0.1", path = "crates/edgerun-node" }
+edgerun-hardware-signing = { version = "0.1", path = "crates/edgerun-hardware-signing" }
+edgerun-capabilities = { version = "0.1", path = "crates/edgerun-capabilities" }
+edgerun-mesh = { version = "0.1", path = "crates/edgerun-mesh" }
+edgerun-mesh-link = { version = "0.1", path = "crates/edgerun-mesh-link" }
+edgerun-mesh-session = { version = "0.1", path = "crates/edgerun-mesh-session" }
+edgerun-mesh-capability = { version = "0.1", path = "crates/edgerun-mesh-capability" }
+edgerun-mesh-daemon = { version = "0.1", path = "crates/edgerun-mesh-daemon" }
+edgerun-secret-service = { version = "0.1", path = "crates/edgerun-secret-service" }
+edgerun-biometrics = { version = "0.1", path = "crates/edgerun-biometrics" }
+edgerun-mgmt-bluetooth = { version = "0.1", path = "crates/edgerun-mgmt-bluetooth" }
+edgerun-bluetooth-gatt = { version = "0.1", path = "crates/edgerun-bluetooth-gatt" }
+edgerun-tcl-ac = { version = "0.1", path = "crates/edgerun-tcl-ac" }
+edgerun-tcl-ac-cli = { version = "0.1", path = "crates/edgerun-tcl-ac-cli" }
+edgerun-matter = { version = "0.1", path = "crates/edgerun-matter" }
+edgerun-capability-policy = { version = "0.1", path = "crates/edgerun-capability-policy" }
+edgerun-linux-wifi = { version = "0.1", path = "crates/edgerun-linux-wifi" }
+edgerun-input = { version = "0.1", path = "crates/edgerun-input" }
+edgerun-oci = { version = "0.1", path = "crates/edgerun-oci" }
+edgerun-edgefs = { version = "0.1", path = "crates/edgerun-edgefs" }
+edgerun-encoding = { version = "0.1", path = "crates/edgerun-encoding" }
+edgerun-acme = { version = "0.1", path = "crates/edgerun-acme" }
+edgerun-dns = { version = "0.1", path = "crates/edgerun-dns" }
+edgerun-tls = { version = "0.1", path = "crates/edgerun-tls" }
+edgerun-url = { version = "0.1", path = "crates/edgerun-url" }
+edgerun-glob = { version = "0.1", path = "crates/edgerun-glob" }
+edgerun-regex = { version = "0.1", path = "crates/edgerun-regex" }
+edgerun-email = { version = "0.1", path = "crates/edgerun-email" }
+edgerun-log = { version = "0.1", path = "crates/edgerun-log" }
+edgerun-rt = { version = "0.1", path = "crates/edgerun-rt" }
 # Single crypto boundary — all crypto flows through edgerun-crypto
-edgerun-crypto = { path = "crates/edgerun-crypto", default-features = false }
+edgerun-crypto = { version = "0.1", path = "crates/edgerun-crypto", default-features = false }
     # edgerun-json native JSON APIs
-edgerun-json = { path = "crates/edgerun-json", default-features = false }
-edgerun-error = { path = "crates/edgerun-error" }
+edgerun-json = { version = "0.1", path = "crates/edgerun-json", default-features = false }
+edgerun-error = { version = "0.1", path = "crates/edgerun-error" }
 # Browser deps
-edgerun-display = { path = "crates/edgerun-display" }
-edgerun-gpu = { path = "crates/edgerun-gpu" }
+edgerun-display = { version = "0.1", path = "crates/edgerun-display" }
+edgerun-gpu = { version = "0.1", path = "crates/edgerun-gpu" }
 # edgerun-wgpu = { path = "crates/edgerun-wgpu" }
 # edgerun-rasterizer = { path = "crates/edgerun-rasterizer" }
 # edgerun-css-cascade = { path = "crates/edgerun-css-cascade" }

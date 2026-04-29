@@ -4,25 +4,27 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Mesh daemon orchestration for Edgerun nodes"
 
 [dependencies]
-edgerun-mesh = { path = "../edgerun-mesh" }
-edgerun-mesh-link = { path = "../edgerun-mesh-link" }
-edgerun-mesh-capability = { path = "../edgerun-mesh-capability" }
-edgerun-mesh-session = { path = "../edgerun-mesh-session" }
-edgerun-remote-capability = { path = "../edgerun-remote-capability" }
-edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
-edgerun-core = { path = "../edgerun-core" }
-edgerun-capabilities = { path = "../edgerun-capabilities" }
-edgerun-proto = { path = "../edgerun-proto" }
+edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
+edgerun-mesh-link = { version = "0.1", path = "../edgerun-mesh-link" }
+edgerun-mesh-capability = { version = "0.1", path = "../edgerun-mesh-capability" }
+edgerun-mesh-session = { version = "0.1", path = "../edgerun-mesh-session" }
+edgerun-remote-capability = { version = "0.1", path = "../edgerun-remote-capability" }
+edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 prost.workspace = true
-edgerun-log = { path = "../edgerun-log" }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc.workspace = true
-edgerun-linux-netif = { path = "../edgerun-linux-netif" }
-edgerun-network-interface = { path = "../edgerun-network-interface" }
+edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
+edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interface" }
 
 [lints]
 workspace = true

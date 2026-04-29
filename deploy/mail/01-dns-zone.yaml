@@ -15,7 +15,6 @@ spec:
     expire: 604800
     minimum: 86400
   records:
-    # NS records for delegation
     - name: "@"
       type: NS
       value: ns1.edgerun.tech
@@ -24,39 +23,34 @@ spec:
       type: NS
       value: ns2.edgerun.tech
       ttl: 86400
-    # A records
     - name: "@"
       type: A
-      value: 172.245.67.49
+      value: "172.245.67.49"
       ttl: 3600
     - name: mail
       type: A
-      value: 172.245.67.49
+      value: "172.245.67.49"
       ttl: 3600
     - name: ns1
       type: A
-      value: 172.245.67.49
+      value: "172.245.67.49"
       ttl: 3600
     - name: ns2
       type: A
-      value: 172.245.67.49
+      value: "172.245.67.49"
       ttl: 3600
-    # MX record - mail server priority 0
     - name: "@"
       type: MX
       value: "0 mail.edgerun.tech"
       ttl: 3600
-    # SPF - only this server can send email
     - name: "@"
       type: TXT
       value: "v=spf1 mx -all"
       ttl: 3600
-    # DMARC - quarantine failures
     - name: _dmarc
       type: TXT
       value: "v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@edgerun.tech"
       ttl: 3600
-    # DKIM public key for selector: mail
     - name: mail._domainkey
       type: TXT
       value: "v=DKIM1; k=rsa; p=MIIBCgKCAQEAy+Enfug7AYUY+u5InnNMGM39BJsmkqkZFpx5HAUe7ffAPBJhVDIJI4OfcewD+04at3W8aXBx/ZYXxPVO2twqj5nIuKpJVAAeKCaJUuMCyciUtZ89bG61zHFtimMekY4YdSRUwN05Ukq1QfSKFz5FF0E7q7/+KlKATLb3lTtzMJK4olNIDj7EnzW2b9W9PIyyzsnjp/YRSL/u6YlZRWkAT62I8AqnpbegdXMt89aWJMkXF7cfR2TJCJb73qU/ACFYSd6asGWfsCFsDh3dtp8lwpJFwmDY2kUlv6HdN0Hp9NuiX+Ck7z+rrsH9YhVlKlQTtna++bjg2XVgS1rE0o0ogQIDAQAB"
@@ -79,7 +73,6 @@ spec:
     expire: 604800
     minimum: 86400
   records:
-    # NS records - nodes domain points to same mail server
     - name: "@"
       type: NS
       value: ns1.edgerun.tech
@@ -88,12 +81,10 @@ spec:
       type: NS
       value: ns2.edgerun.tech
       ttl: 86400
-    # MX for node addresses
     - name: "@"
       type: MX
       value: "0 mail.edgerun.tech"
       ttl: 3600
-    # SPF - node addresses must sign (no direct SMTP)
     - name: "@"
       type: TXT
       value: "v=spf1 -all"
