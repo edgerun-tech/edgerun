@@ -54,7 +54,8 @@ key at `/etc/edgerun/server/dkim-mail.private.pem`.
   a full public chain until the generated DS record is installed at the
   registrar. `edgerun-server` implements host-side ECDSAP256SHA256 signing for
   configured zones with persistent key material, DNSKEY, NSEC, and RRSIG
-  records. Parent DS delegation remains a registrar operation.
+  records. Signed zones are refreshed by the running host process before
+  signature expiry. Parent DS delegation remains a registrar operation.
 
 ## Service Ports
 

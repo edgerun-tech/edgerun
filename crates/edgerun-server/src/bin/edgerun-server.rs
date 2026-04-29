@@ -259,6 +259,14 @@ async fn run(resources: Vec<ConfigResource>, blog: Option<BlogMount>) -> io::Res
             dns_shutdown.shutdown().await;
             Ok(())
         }));
+        if zones_have_dnssec(&zones) {
+            let dns_resign = Arc::clone(&dns);
+            let zone_specs = zones.clone();
+            let token = shutdown.clone();
+            tasks.push(edgerun_rt::spawn(async move {
+                run_dnssec_resigner(dns_resign, zone_specs, token).await
+            }));
+        }
         dns_server = Some(dns);
     }
 
@@ -1399,31 +1407,32 @@ const WEBMAIL_HTML: &str = r##"<!doctype html>
 <title>Edgerun Mail</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="76" font-size="76">📧</text></svg>'>
 <style>
-:root{color-scheme:dark;--bg:#111316;--panel:#171a1f;--panel2:#1d2128;--ink:#eef1f5;--muted:#9aa3af;--line:#303640;--accent:#2dd4bf;--accent-ink:#06201d;--accent2:#f59e0b;--danger:#fb7185}
-*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--ink)}
+:root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--panel2:#f1eadc;--ink:#1c2430;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent2:#8b3f2f;--danger:#b42342;--code:#eee6d8}
+:root[data-theme=dark]{--bg:#101418;--panel:#171d22;--panel2:#232b31;--ink:#f2ede4;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent2:#dfa06b;--danger:#fb7185;--code:#232b31}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
 .app{height:100vh;display:grid;grid-template-columns:minmax(280px,380px) 1fr}
-.list{border-right:1px solid var(--line);background:#14171c;display:flex;flex-direction:column;min-width:0}
+.list{border-right:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;min-width:0}
 .top{min-height:56px;display:grid;grid-template-columns:1fr auto;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
 .brand{font-weight:700;font-size:16px}.who{color:var(--muted);font-size:12px;align-self:center}
 .search{grid-column:1/3;position:relative}.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--muted);stroke:currentColor;fill:none;stroke-width:2}.search input{padding-left:34px;height:34px}
 button{border:1px solid var(--line);background:var(--panel2);border-radius:6px;padding:8px 10px;cursor:pointer;color:var(--ink);transition:background .12s ease,border-color .12s ease,opacity .12s ease}
-button:hover:not(:disabled){background:#262b34;border-color:#43505f}button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:650}button.danger:hover:not(:disabled){border-color:var(--danger);color:#fecdd3}button:disabled{opacity:.38;cursor:not-allowed}
+button:hover:not(:disabled){border-color:var(--accent)}button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:650}button.danger:hover:not(:disabled){border-color:var(--danger);color:var(--danger)}button:disabled{opacity:.38;cursor:not-allowed}
 .icon{width:32px;height:32px;padding:0;display:inline-grid;place-items:center}.icon svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.copy{font-size:13px}
 .messages{overflow:auto;min-height:0}.item{padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .12s ease,opacity .12s ease;display:grid;grid-template-columns:22px 1fr;gap:2px 8px}
-.item:hover,.item.active,.item.checked{background:#20302f}.item.pending{opacity:.55}.item.unread .from,.item.unread .subject{font-weight:750}.item:not(.unread) .from,.item:not(.unread) .subject{font-weight:450}.pick{grid-row:1/4;align-self:start;margin:2px 0 0;width:auto}.from{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item:hover,.item.active,.item.checked{background:color-mix(in srgb,var(--accent) 12%,var(--panel))}.item.pending{opacity:.55}.item.unread .from,.item.unread .subject{font-weight:750}.item:not(.unread) .from,.item:not(.unread) .subject{font-weight:450}.pick{grid-row:1/4;align-self:start;margin:2px 0 0;width:auto}.from{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .subject{margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.preview{margin-top:4px;color:var(--muted);font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.paperclip{color:var(--muted);margin-left:5px}.paperclip svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-2px}
 .warn{color:var(--accent2);font-weight:700;margin-right:5px}.item .warn{font-size:13px}.warn svg,.warning svg{stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-2px}
 .pane{min-width:0;display:grid;grid-template-rows:auto 1fr;background:var(--panel)}
 .actions{height:56px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line)}
 .content{overflow:auto;padding:22px;max-width:980px;width:100%}.empty{color:var(--muted);margin-top:20vh;text-align:center}
 h1{font-size:22px;margin:0 0 8px}.meta{color:var(--muted);margin-bottom:18px;display:grid;gap:3px}
-.meta-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.warning{border:1px solid #7c5a16;background:#2a2111;color:#fbbf24;border-radius:6px;padding:9px 10px;margin:0 0 14px}
-pre{white-space:pre-wrap;word-break:break-word;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:#101215;border:1px solid var(--line);border-radius:6px;padding:14px}
-.compose{display:none;padding:16px;border-bottom:1px solid var(--line);background:#15181d}.compose.open{display:grid;gap:10px}
+.meta-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.warning{border:1px solid var(--accent2);background:color-mix(in srgb,var(--accent2) 12%,var(--panel));color:var(--accent2);border-radius:6px;padding:9px 10px;margin:0 0 14px}
+pre{white-space:pre-wrap;word-break:break-word;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);border:1px solid var(--line);border-radius:6px;padding:14px}
+.compose{display:none;padding:16px;border-bottom:1px solid var(--line);background:var(--panel)}.compose.open{display:grid;gap:10px}
 .compose-grid{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:center}.compose-grid textarea,.compose-grid .attach-row{grid-column:1/3}
 label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
-input,textarea,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px;font:inherit;background:#0f1216;color:var(--ink)}
-input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:var(--accent)}textarea{min-height:190px;resize:vertical}.row{display:flex;gap:8px;align-items:center}.status{color:var(--muted);font-size:13px;min-width:82px}.status.warn{color:var(--accent2)}.grow{flex:1}.attachments{display:flex;flex-wrap:wrap;gap:6px}.chip,.attachment{border:1px solid var(--line);border-radius:6px;background:#101215;color:var(--muted);padding:5px 8px;font-size:12px}.attachment{display:inline-flex;align-items:center;gap:7px;color:var(--ink);text-decoration:none;margin:0 6px 6px 0}.chip button{border:0;background:transparent;color:var(--muted);padding:0;margin-left:6px;width:auto;height:auto}.attach-input{display:none}
+input,textarea,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px;font:inherit;background:var(--bg);color:var(--ink)}
+input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:var(--accent)}textarea{min-height:190px;resize:vertical}.row{display:flex;gap:8px;align-items:center}.status{color:var(--muted);font-size:13px;min-width:82px}.status.warn{color:var(--accent2)}.grow{flex:1}.attachments{display:flex;flex-wrap:wrap;gap:6px}.chip,.attachment{border:1px solid var(--line);border-radius:6px;background:var(--code);color:var(--muted);padding:5px 8px;font-size:12px}.attachment{display:inline-flex;align-items:center;gap:7px;color:var(--ink);text-decoration:none;margin:0 6px 6px 0}.chip button{border:0;background:transparent;color:var(--muted);padding:0;margin-left:6px;width:auto;height:auto}.attach-input{display:none}
 .spin svg{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 @media(max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:45vh 55vh}.list{border-right:0;border-bottom:1px solid var(--line)}.content{padding:16px}}
 </style>
@@ -1456,6 +1465,7 @@ input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:v
       <button id="markUnread" class="icon" title="Mark unread" aria-label="Mark unread" disabled><svg><use href="#i-mail"/></svg></button>
       <button id="deleteMsg" class="icon danger" title="Delete" aria-label="Delete" disabled><svg><use href="#i-trash"/></svg></button>
       <div id="status" class="status"></div><div class="grow"></div>
+      <er-theme-toggle></er-theme-toggle>
       <button id="logout" class="icon" title="Log out" aria-label="Log out"><svg><use href="#i-log-out"/></svg></button>
     </div>
     <form id="compose" class="compose">
@@ -1472,6 +1482,10 @@ input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:v
   </section>
 </main>
 <script>
+const root=document.documentElement;
+const storedTheme=localStorage.getItem('theme');
+if(storedTheme){root.dataset.theme=storedTheme}
+if(!customElements.get('er-theme-toggle')){customElements.define('er-theme-toggle',class extends HTMLElement{connectedCallback(){this.attachShadow({mode:'open'}).innerHTML='<style>button{width:32px;height:32px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--ink);cursor:pointer;font:inherit}button:hover{border-color:var(--accent)}</style><button type="button" aria-label="Toggle color theme">◐</button>';this.shadowRoot.querySelector('button').onclick=()=>{const next=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=next;localStorage.setItem('theme',next)}}})}
 const messagesEl=document.getElementById('messages'),content=document.getElementById('content'),statusEl=document.getElementById('status');
 const refreshBtn=document.getElementById('refresh'),composeEl=document.getElementById('compose'),searchEl=document.getElementById('search'),filePick=document.getElementById('filePick'),composeAttachments=document.getElementById('composeAttachments');
 let selected='',messages=[],checked=new Set(),draftAttachments=[],loading=false,statusTimer=0;
@@ -1519,6 +1533,8 @@ const BIMI_LOGO_SVG: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 
 const MTA_STS_POLICY: &str =
     "version: STSv1\nmode: enforce\nmx: mail.edgerun.tech\nmax_age: 604800\n";
+const DNSSEC_RESIGN_INTERVAL_SECS: u64 = 12 * 60 * 60;
+const DNSSEC_RESIGN_POLL_SECS: u64 = 60;
 
 async fn build_dns_server(
     server_spec: Option<&DnsServerSpec>,
@@ -1551,6 +1567,50 @@ async fn build_dns_server(
         server.add_zone(zone_from_config(specs)?).await;
     }
     Ok(server)
+}
+
+fn zones_have_dnssec(zone_specs: &[DnsZoneSpec]) -> bool {
+    zone_specs.iter().any(|spec| spec.dnssec.is_some())
+}
+
+async fn run_dnssec_resigner(
+    dns: Arc<DnsServer>,
+    zone_specs: Vec<DnsZoneSpec>,
+    shutdown: CancellationToken,
+) -> io::Result<()> {
+    let mut elapsed = 0u64;
+    while !shutdown.is_cancelled() {
+        edgerun_rt::sleep(Duration::from_secs(DNSSEC_RESIGN_POLL_SECS)).await;
+        if shutdown.is_cancelled() {
+            break;
+        }
+        elapsed = elapsed.saturating_add(DNSSEC_RESIGN_POLL_SECS);
+        if elapsed < DNSSEC_RESIGN_INTERVAL_SECS {
+            continue;
+        }
+        refresh_dnssec_zones(&dns, &zone_specs).await?;
+        elapsed = 0;
+    }
+    Ok(())
+}
+
+async fn refresh_dnssec_zones(dns: &DnsServer, zone_specs: &[DnsZoneSpec]) -> io::Result<()> {
+    let mut by_origin: BTreeMap<String, Vec<&DnsZoneSpec>> = BTreeMap::new();
+    for zone_spec in zone_specs {
+        by_origin
+            .entry(zone_spec.origin.to_ascii_lowercase())
+            .or_default()
+            .push(zone_spec);
+    }
+    for specs in by_origin.values() {
+        if specs.iter().any(|spec| spec.dnssec.is_some()) {
+            let zone = zone_from_config(specs)?;
+            let origin = zone.origin.clone();
+            dns.add_zone(zone).await;
+            eprintln!("edgerun-server: dnssec refreshed zone={origin}");
+        }
+    }
+    Ok(())
 }
 
 fn zone_from_config(specs: &[&DnsZoneSpec]) -> io::Result<DnsZone> {
@@ -1627,7 +1687,8 @@ fn apply_dnssec(zone: &mut DnsZone, config: &DnssecConfig) -> io::Result<()> {
     let now = dnssec_unix_time()?;
     let inception = now.saturating_sub(300);
     let expiration = now.saturating_add(config.signature_validity);
-    for rrsig in edgerun_dns::sign_zone_ecdsap256(zone, &dnskey, &signing_key, inception, expiration)
+    for rrsig in
+        edgerun_dns::sign_zone_ecdsap256(zone, &dnskey, &signing_key, inception, expiration)
     {
         zone.add_record(rrsig);
     }
@@ -1640,9 +1701,7 @@ fn apply_dnssec(zone: &mut DnsZone, config: &DnssecConfig) -> io::Result<()> {
     Ok(())
 }
 
-fn load_or_create_dnssec_key(
-    path: &Path,
-) -> io::Result<edgerun_crypto::p256::ecdsa::SigningKey> {
+fn load_or_create_dnssec_key(path: &Path) -> io::Result<edgerun_crypto::p256::ecdsa::SigningKey> {
     if path.exists() {
         let pem = std::fs::read_to_string(path)?;
         return edgerun_tls::signing_key_from_pem(&pem).map_err(|_| {
@@ -1723,7 +1782,9 @@ fn ds_record_for_dnskey(dnskey: &DnsRecord, ttl: u32) -> io::Result<DnsRecord> {
             ttl,
         ))
     } else {
-        Err(invalid_config("DNSSEC DS generation requires a DNSKEY record"))
+        Err(invalid_config(
+            "DNSSEC DS generation requires a DNSKEY record",
+        ))
     }
 }
 
