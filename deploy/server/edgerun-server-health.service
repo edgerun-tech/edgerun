@@ -1,0 +1,24 @@
+[Unit]
+Description=Edgerun server health check
+After=edgerun-server.service
+Wants=edgerun-server.service
+
+[Service]
+Type=oneshot
+User=edgerun-server
+Group=edgerun-server
+ExecStart=/usr/local/bin/edgerun-server --health-check --config /etc/edgerun/server/server.yaml
+NoNewPrivileges=true
+UMask=0077
+ProtectSystem=strict
+ReadOnlyPaths=/etc/edgerun/server
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

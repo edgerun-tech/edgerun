@@ -9,6 +9,8 @@
 | `03-smtp-server.yaml` | SMTP server config (implemented: port 25 MX, port 465 SMTPS submission, port 587 STARTTLS submission, relay) |
 | `04-imap-server.yaml` | IMAP server config (port 143, IMAPS) |
 | `edgerun-server.service` | Host-only systemd unit with boot target enablement, failure restart, and sandboxing |
+| `edgerun-server-health.service` | Host-only systemd oneshot health check using `edgerun-server --health-check` |
+| `edgerun-server-health.timer` | Host-only systemd timer that runs the health check every 15 minutes |
 
 ## Required Key Material
 
@@ -64,7 +66,9 @@ key at `/etc/edgerun/server/dkim-mail.private.pem`.
 `edgerun-server --health-check --config /etc/edgerun/server/server.yaml` is a
 host-only operational check. It verifies configured local listeners, plaintext
 SMTP/IMAP banners, the local HTTP surface, TLS socket listeners, and DNSSEC
-answers for signed zones, including DNSKEY/RRSIG and NXDOMAIN NSEC proofs.
+answers for signed zones, including DNSKEY/RRSIG and NXDOMAIN NSEC proofs. It
+also parses configured TLS certificates and fails when a certificate is not
+currently valid or has less than 14 days remaining.
 
 ## Service Ports
 
@@ -81,6 +85,11 @@ answers for signed zones, including DNSKEY/RRSIG and NXDOMAIN NSEC proofs.
 
 `blog.edgerun.tech` is implemented in code by `edgerun-blog` and mounted into
 `edgerun-server` with `--blog-host blog.edgerun.tech --blog-root /srv/blog`.
+The blog can also generate deterministic static output from that Git checkout
+with `edgerun-blog generate`; the service can prefer that output with
+`--blog-static-root /srv/blog-public` while keeping live rendering as a
+fallback. `edgerun-blog-post-receive.sample` is a host-side Git hook template
+for refreshing those files automatically after pushes.
 The content root is a host Git checkout scanned at request time; there is no
 build step and no authentication.
 
@@ -91,3 +100,8 @@ installed in `/etc/systemd/system/`, then enabled with `systemctl enable
 edgerun-server.service` so systemd starts it through `multi-user.target` on
 boot. Runtime crash handling is configured with `Restart=on-failure` and
 `RestartSec=5`.
+
+`edgerun-server-health.timer` is host-only deployment material. It should be
+installed next to the service unit and enabled with
+`systemctl enable --now edgerun-server-health.timer`; failures are reported by
+the `edgerun-server-health.service` journal.

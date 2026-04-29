@@ -121,7 +121,7 @@ fn print_usage(program: &str) {
     println!(
         "usage: {program} --config /etc/edgerun/server/server.yaml\n\
          usage: {program} --health-check --config /etc/edgerun/server/server.yaml\n\
-         usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/blog\n\
+         usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/blog [--blog-static-root /srv/blog-public]\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
 }
@@ -165,6 +165,7 @@ struct ServerOptions {
 struct BlogMount {
     host: String,
     root: PathBuf,
+    static_root: Option<PathBuf>,
     title: String,
     description: String,
     base_url: String,
@@ -174,6 +175,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
     let mut config = None;
     let mut blog_host = None;
     let mut blog_root = None;
+    let mut blog_static_root = None;
     let mut blog_title = "Edgerun Blog".to_string();
     let mut blog_description = "Notes from the Edgerun project.".to_string();
     let mut blog_base_url = String::new();
@@ -192,6 +194,10 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
             }
             "--blog-root" if i + 1 < args.len() => {
                 blog_root = Some(PathBuf::from(&args[i + 1]));
+                i += 1;
+            }
+            "--blog-static-root" if i + 1 < args.len() => {
+                blog_static_root = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
             }
             "--blog-title" if i + 1 < args.len() => {
@@ -218,6 +224,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
         (Some(host), Some(root)) => Some(BlogMount {
             host,
             root,
+            static_root: blog_static_root,
             title: blog_title,
             description: blog_description,
             base_url: blog_base_url,
@@ -251,6 +258,11 @@ fn run_health_check_from_args(args: &[String]) -> io::Result<()> {
     }
 
     let mut checks = 0usize;
+    for cert_path in health_tls_cert_paths(&smtp_specs, &imap_specs) {
+        check_certificate_fresh(&cert_path, Duration::from_secs(14 * 24 * 60 * 60))?;
+        checks += 1;
+    }
+
     if !zones.is_empty() {
         let dns_addr = local_probe_addr(
             dns_servers
@@ -330,6 +342,57 @@ fn run_health_check_from_args(args: &[String]) -> io::Result<()> {
         ));
     }
     println!("health: ok checks={checks}");
+    Ok(())
+}
+
+fn health_tls_cert_paths(
+    smtp_specs: &[SmtpServerSpec],
+    imap_specs: &[ImapServerSpec],
+) -> Vec<String> {
+    let mut paths = Vec::new();
+    for path in smtp_specs
+        .iter()
+        .filter_map(|spec| spec.tls_cert.as_deref())
+        .chain(
+            imap_specs
+                .iter()
+                .filter_map(|spec| spec.tls_cert.as_deref()),
+        )
+    {
+        if !paths.iter().any(|existing| existing == path) {
+            paths.push(path.to_string());
+        }
+    }
+    paths
+}
+
+fn check_certificate_fresh(path: &str, minimum_remaining: Duration) -> io::Result<()> {
+    let pem = std::fs::read_to_string(path)?;
+    let cert = edgerun_tls::certificate::Certificate::from_pem(&pem).map_err(invalid_config)?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    if now < cert.not_before {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("certificate {path} is not valid yet"),
+        ));
+    }
+    let threshold = now.saturating_add(minimum_remaining.as_secs());
+    if cert.not_after <= threshold {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "certificate {path} expires too soon: not_after={}",
+                cert.not_after
+            ),
+        ));
+    }
+    println!(
+        "health: ok certificate path={path} not_after={}",
+        cert.not_after
+    );
     Ok(())
 }
 
@@ -834,6 +897,7 @@ impl SiteRouter {
                 };
                 let config = BlogConfig {
                     root: blog.root,
+                    static_root: blog.static_root,
                     bind_addr: String::new(),
                     title: blog.title,
                     description: blog.description,

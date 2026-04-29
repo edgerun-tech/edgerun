@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+BLOG_REPO=${BLOG_REPO:-/srv/blog}
+BLOG_PUBLIC=${BLOG_PUBLIC:-/srv/blog-public}
+BLOG_BINARY=${BLOG_BINARY:-/usr/local/bin/edgerun-blog}
+
+git --work-tree="$BLOG_REPO" --git-dir="$BLOG_REPO/.git" checkout -f
+
+"$BLOG_BINARY" generate \
+  --root "$BLOG_REPO" \
+  --out "$BLOG_PUBLIC" \
+  --title "Edgerun Blog" \
+  --description "Notes from the Edgerun project." \
+  --base-url https://blog.edgerun.tech

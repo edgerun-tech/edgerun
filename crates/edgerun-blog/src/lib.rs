@@ -1,9 +1,9 @@
 //! Host-only static blog handler served from a Git checkout.
 //!
 //! This crate intentionally has no non-Edgerun dependencies and no build step.
-//! It scans Markdown and HTML files from a working tree at request time, renders
-//! Markdown through a small local renderer, and serves a client-side search
-//! index plus a light/dark UI.
+//! It can scan Markdown and HTML files from a working tree at request time, or
+//! render the same deterministic files into an output directory for a Git hook
+//! or other host-local publication path.
 
 #![cfg_attr(target_os = "none", no_std)]
 
@@ -28,6 +28,7 @@ use std::path::{Component, Path, PathBuf};
 #[derive(Clone, Debug)]
 pub struct BlogConfig {
     pub root: PathBuf,
+    pub static_root: Option<PathBuf>,
     pub bind_addr: String,
     pub title: String,
     pub description: String,
@@ -38,6 +39,7 @@ impl BlogConfig {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self {
             root: root.into(),
+            static_root: None,
             bind_addr: "127.0.0.1:8088".to_string(),
             title: "Edgerun Blog".to_string(),
             description: "Notes from the Edgerun project.".to_string(),
@@ -71,6 +73,12 @@ impl BlogHandler {
     pub fn handle_sync(&self, request: Request) -> Response {
         let target = request.uri().request_target();
         let path = target.split('?').next().unwrap_or("/");
+
+        if let Some(static_root) = self.config.static_root.as_deref() {
+            if let Some(response) = static_file_response(static_root, path) {
+                return response;
+            }
+        }
 
         match path {
             "/" | "/index.html" => self.index_response(),
@@ -189,6 +197,75 @@ pub fn load_posts(root: &Path) -> io::Result<Vec<Post>> {
             .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
     });
     Ok(posts)
+}
+
+pub fn generate_static_site(config: &BlogConfig, output: &Path) -> io::Result<GeneratedSite> {
+    let source = config.root.canonicalize().unwrap_or_else(|_| config.root.clone());
+    if output.exists() {
+        let destination = output.canonicalize().unwrap_or_else(|_| output.to_path_buf());
+        if source == destination {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "static output directory must be separate from the post source root",
+            ));
+        }
+    }
+
+    let posts = load_posts(&config.root)?;
+    fs::create_dir_all(output)?;
+    let posts_output = output.join("posts");
+    if posts_output.exists() {
+        fs::remove_dir_all(&posts_output)?;
+    }
+    fs::create_dir_all(&posts_output)?;
+
+    let mut files = Vec::new();
+    write_generated(output.join("index.html"), render_index(config, &posts), &mut files)?;
+    write_generated(output.join("favicon.svg"), FAVICON_SVG, &mut files)?;
+    write_generated(output.join("robots.txt"), render_robots(config), &mut files)?;
+    write_generated(output.join("sitemap.xml"), render_sitemap(config, &posts), &mut files)?;
+    write_generated(
+        output.join("site.webmanifest"),
+        render_manifest(config),
+        &mut files,
+    )?;
+    write_generated(output.join("feed.xml"), render_feed(config, &posts), &mut files)?;
+    write_generated(output.join("style.css"), STYLE, &mut files)?;
+    write_generated(output.join("app.js"), APP_JS, &mut files)?;
+    write_generated(
+        output.join("search.json"),
+        render_search_json(&posts),
+        &mut files,
+    )?;
+
+    for post in &posts {
+        let post_path = posts_output.join(format!("{}.html", post.path));
+        write_generated(post_path, render_post(config, post, &posts), &mut files)?;
+    }
+
+    Ok(GeneratedSite {
+        posts: posts.len(),
+        files,
+    })
+}
+
+#[derive(Clone, Debug)]
+pub struct GeneratedSite {
+    pub posts: usize,
+    pub files: Vec<PathBuf>,
+}
+
+fn write_generated(
+    path: PathBuf,
+    body: impl AsRef<[u8]>,
+    files: &mut Vec<PathBuf>,
+) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&path, body)?;
+    files.push(path);
+    Ok(())
 }
 
 fn collect_content_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
@@ -948,6 +1025,7 @@ fn escape_json(input: &str) -> String {
 fn not_found_response(title: &str) -> Response {
     let config = BlogConfig {
         root: PathBuf::new(),
+        static_root: None,
         bind_addr: String::new(),
         title: title.to_string(),
         description: "Not found".to_string(),
@@ -970,6 +1048,50 @@ fn server_error(error: io::Error) -> Response {
     )
 }
 
+fn static_file_response(root: &Path, route: &str) -> Option<Response> {
+    let path = static_file_path(root, route)?;
+    let body = fs::read(&path).ok()?;
+    let content_type = content_type_for(&path);
+    Some(
+        Response::new(StatusCode::OK)
+            .with_header("Content-Type", content_type)
+            .with_header("Cache-Control", "public, max-age=60")
+            .with_header("X-Content-Type-Options", "nosniff")
+            .with_body(body),
+    )
+}
+
+fn static_file_path(root: &Path, route: &str) -> Option<PathBuf> {
+    let trimmed = route.trim_start_matches('/');
+    let relative = if trimmed.is_empty() { "index.html" } else { trimmed };
+    let mut path = root.to_path_buf();
+    for part in Path::new(relative).components() {
+        match part {
+            Component::Normal(name) => path.push(name),
+            _ => return None,
+        }
+    }
+    if path.is_file() {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+fn content_type_for(path: &Path) -> &'static str {
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("txt") => "text/plain; charset=utf-8",
+        Some("xml") => "application/xml; charset=utf-8",
+        Some("webmanifest") => "application/manifest+json",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") => "application/javascript; charset=utf-8",
+        Some("json") => "application/json",
+        _ => "application/octet-stream",
+    }
+}
+
 fn favicon_response() -> Response {
     Response::new(StatusCode::OK)
         .with_header("Content-Type", "image/svg+xml")
@@ -983,11 +1105,15 @@ fn manifest_response(config: &BlogConfig) -> Response {
         .with_header("Content-Type", "application/manifest+json")
         .with_header("Cache-Control", "public, max-age=300")
         .with_header("X-Content-Type-Options", "nosniff")
-        .with_body(format!(
-            "{{\"name\":\"{}\",\"short_name\":\"{}\",\"start_url\":\"/\",\"scope\":\"/\",\"display\":\"minimal-ui\",\"background_color\":\"#f7f3eb\",\"theme_color\":\"#146c63\",\"icons\":[{{\"src\":\"/favicon.svg\",\"sizes\":\"any\",\"type\":\"image/svg+xml\"}}]}}",
-            escape_json(&config.title),
-            escape_json(&config.title)
-        ))
+        .with_body(render_manifest(config))
+}
+
+fn render_manifest(config: &BlogConfig) -> String {
+    format!(
+        "{{\"name\":\"{}\",\"short_name\":\"{}\",\"start_url\":\"/\",\"scope\":\"/\",\"display\":\"minimal-ui\",\"background_color\":\"#f7f3eb\",\"theme_color\":\"#146c63\",\"icons\":[{{\"src\":\"/favicon.svg\",\"sizes\":\"any\",\"type\":\"image/svg+xml\"}}]}}",
+        escape_json(&config.title),
+        escape_json(&config.title)
+    )
 }
 
 fn css_response() -> Response {
@@ -1071,5 +1197,36 @@ mod tests {
         assert!(html.contains(
             "https://git.edgerun.tech/edgerun_core/src/abc123/crates/edgerun-blog/src/lib.rs#L10"
         ));
+    }
+
+    #[test]
+    fn generates_static_site_files() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("edgerun-blog-test-{stamp}"));
+        let source = base.join("source");
+        let output = base.join("public");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(
+            source.join("hello.md"),
+            "---\ntitle: Hello\ndate: 2026-04-30\nsummary: One post\ntags: [test]\n---\n# Hello\n\nBody.",
+        )
+        .unwrap();
+
+        let mut config = BlogConfig::new(&source);
+        config.base_url = "https://blog.edgerun.tech".to_string();
+        let site = generate_static_site(&config, &output).unwrap();
+
+        assert_eq!(site.posts, 1);
+        assert!(output.join("index.html").exists());
+        assert!(output.join("posts/hello.html").exists());
+        assert!(output.join("sitemap.xml").exists());
+        assert!(fs::read_to_string(output.join("search.json"))
+            .unwrap()
+            .contains("\"title\":\"Hello\""));
+
+        let _ = fs::remove_dir_all(base);
     }
 }

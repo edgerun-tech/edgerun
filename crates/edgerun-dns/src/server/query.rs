@@ -466,4 +466,49 @@ mod tests {
         assert_eq!(answers.len(), 1);
         assert!(matches!(&answers[0].data, DnsRecordData::TXT(value) if value == "child"));
     }
+
+    #[test]
+    fn ds_denial_for_existing_unsigned_name_includes_nsec() {
+        let rt = edgerun_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let state = test_state();
+            let mut zone = DnsZone::new("example.com");
+            zone.add_soa("ns1.example.com", "admin.example.com");
+            zone.add_record(DnsRecord::mx(
+                "nodes.example.com".to_string(),
+                0,
+                "mail.example.com".to_string(),
+                3600,
+            ));
+            zone.add_record(DnsRecord::nsec(
+                "nodes.example.com".to_string(),
+                "ns1.example.com".to_string(),
+                vec![0, 3, 0, 0, 0x40],
+                86400,
+            ));
+            state
+                .zones
+                .write()
+                .await
+                .insert("example.com".to_string(), zone);
+
+            let query =
+                DnsMessage::query(0x1234, "nodes.example.com".to_string(), DnsRecordType::DS);
+            let Ok((wire, needs_tcp)) = handle_query(&query.to_wire(), &state).await else {
+                panic!("DS query should parse");
+            };
+            let response = DnsMessage::from_wire(&wire).unwrap();
+
+            assert!(!needs_tcp);
+            assert_eq!(response.header.response_code, DnsResponseCode::NoError);
+            assert!(response.answers.is_empty());
+            assert!(response
+                .authority
+                .iter()
+                .any(|record| record.rtype == DnsRecordType::NSEC));
+        });
+    }
 }
