@@ -555,6 +555,22 @@ pub async fn cmd_run(
         }
     }
 
+    let runtime_config = match command_dispatch::project_config(&store, stream_id_bytes, &yaml) {
+        Ok(projected) => {
+            if projected.allowed_peers != config.allowed_peers
+                || projected.bootstrap_peers != config.bootstrap_peers
+                || projected.name != config.name
+            {
+                edgerun_log::info!("runtime config projected from event log");
+            }
+            projected
+        }
+        Err(e) => {
+            edgerun_log::warn!("failed to project runtime config: {}", e);
+            config.clone()
+        }
+    };
+
     // --- Unix socket capability server ---
     let socket_path = data_root.join("capabilities.sock");
     {
@@ -592,7 +608,7 @@ pub async fn cmd_run(
     // Ingress screening state
     let global_rate_limiter = ingress::TokenBucket::new(1000, 500); // burst 1000, 500/sec global
     let message_hash_cache = ingress::RecentHashCache::new(4096);
-    let allowed_peers: Vec<Vec<u8>> = config
+    let allowed_peers: Vec<Vec<u8>> = runtime_config
         .allowed_peers
         .iter()
         .map(|s| s.as_bytes().to_vec())
@@ -602,7 +618,7 @@ pub async fn cmd_run(
     }
 
     // --- Peer bootstrap (before store is moved) ---
-    let bootstrap_peers = parse_bootstrap_peers(&config.bootstrap_peers);
+    let bootstrap_peers = parse_bootstrap_peers(&runtime_config.bootstrap_peers);
     let unreachable_peers = store.list_unreachable_peers_with_addr().unwrap_or_default();
     for peer in &bootstrap_peers {
         if let Err(_e) = store.upsert_peer(&peer.node_id_hex, Some(&peer.addr), "unknown", true) {

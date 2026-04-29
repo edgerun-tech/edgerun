@@ -135,7 +135,15 @@ pub fn project_config(
     stream_id: &[u8],
     initial_config_yaml: &str,
 ) -> Result<NodeConfig, String> {
-    let mut config = parse_config(initial_config_yaml).map_err(|e| e.to_string())?;
+    let config = parse_config(initial_config_yaml).map_err(|e| e.to_string())?;
+    project_config_from_base(store, stream_id, config)
+}
+
+pub fn project_config_from_base(
+    store: &NodeStore,
+    stream_id: &[u8],
+    mut config: NodeConfig,
+) -> Result<NodeConfig, String> {
     let head_seq = match store.get_head(stream_id) {
         Ok(Some((seq, _))) => seq,
         Ok(None) => {

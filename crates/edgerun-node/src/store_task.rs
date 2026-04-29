@@ -429,8 +429,20 @@ pub fn run_store_task(
                 break;
             }
             StoreRequest::ConfigReload { config, reply_tx } => {
+                let projected_config = match command_dispatch::project_config_from_base(
+                    &store,
+                    stream_id,
+                    config.clone(),
+                ) {
+                    Ok(projected) => projected,
+                    Err(e) => {
+                        edgerun_log::warn!("config reload projection failed: {}", e);
+                        config
+                    }
+                };
+
                 // Reload allowed_peers
-                let new_allowed_peers: Vec<Vec<u8>> = config
+                let new_allowed_peers: Vec<Vec<u8>> = projected_config
                     .allowed_peers
                     .iter()
                     .map(|s| s.as_bytes().to_vec())
