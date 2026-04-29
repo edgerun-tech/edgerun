@@ -6,6 +6,8 @@
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint::ProgramResult,
+    instruction::{AccountMeta, Instruction},
+    program::invoke,
     program_error::ProgramError,
     pubkey::Pubkey,
 };
@@ -16,6 +18,7 @@ const COLLATERAL_PER_GIB_RAM: u64 = 50_000_000;
 const COLLATERAL_PER_GIB_STORAGE: u64 = 10_000_000;
 const COLLATERAL_PER_MBIT: u64 = 5_000_000;
 const MAX_UPTIME_PERCENT_BPS: u32 = 10_000;
+const PROVIDER_SIZE: usize = 128;
 
 solana_program::entrypoint!(process_instruction);
 
@@ -56,6 +59,7 @@ fn initialize(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
 
     // Initialize provider data: [authority(32), collateral(8), cpu(4), memory(8), storage(8), network(4), earnings(8), slash(4), uptime(4), status(1), ...]
     let mut data = _provider.try_borrow_mut_data()?;
+    require_uninitialized_provider(&data)?;
     data[0..32].copy_from_slice(authority.key.as_ref());
     data[80] = 0; // Active status
 
@@ -70,11 +74,17 @@ fn register(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Progr
     let account_iter = &mut accounts.iter();
     let provider = next_account_info(account_iter)?;
     let authority = next_account_info(account_iter)?;
+    let system_program = next_account_info(account_iter)?;
 
     require_program_owned(provider, program_id)?;
 
     if !authority.is_signer {
         return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    {
+        let account_data = provider.try_borrow_data()?;
+        require_uninitialized_provider(&account_data)?;
     }
 
     let cpu_cores = u32::from_le_bytes(data[0..4].try_into().unwrap());
@@ -93,6 +103,8 @@ fn register(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Progr
     if stake_amount < min_stake {
         return Err(ProgramError::Custom(1)); // InsufficientCollateral
     }
+
+    transfer_from_signer(authority, provider, system_program, stake_amount)?;
 
     let mut account_data = provider.try_borrow_mut_data()?;
     account_data[0..32].copy_from_slice(authority.key.as_ref());
@@ -122,6 +134,10 @@ fn pause(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::Custom(2)); // Unauthorized
     }
 
+    if data[80] == 2 {
+        return Err(ProgramError::Custom(4)); // InvalidState
+    }
+
     data[80] = 1; // Paused
     Ok(())
 }
@@ -140,6 +156,10 @@ fn resume(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let mut data = provider.try_borrow_mut_data()?;
     if data[0..32] != *authority.key.as_ref() {
         return Err(ProgramError::Custom(2)); // Unauthorized
+    }
+
+    if data[80] != 1 {
+        return Err(ProgramError::Custom(4)); // InvalidState
     }
 
     data[80] = 0; // Active
@@ -162,6 +182,12 @@ fn slash(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::Custom(2)); // Unauthorized
     }
 
+    if data[80] == 2 {
+        return Err(ProgramError::Custom(4)); // InvalidState
+    }
+
+    let collateral = u64::from_le_bytes(data[32..40].try_into().unwrap());
+    transfer_lamports(provider, _dao, collateral)?;
     data[32..40].fill(0); // Slash collateral
     data[80] = 2; // Slashed
     let slash_count = u32::from_le_bytes(data[72..76].try_into().unwrap());
@@ -190,6 +216,10 @@ fn update_reputation(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8])
         return Err(ProgramError::Custom(2)); // Unauthorized
     }
 
+    if account_data[80] == 2 {
+        return Err(ProgramError::Custom(4)); // InvalidState
+    }
+
     let uptime_percent_bps = u32::from_le_bytes(data[0..4].try_into().unwrap());
     if uptime_percent_bps > MAX_UPTIME_PERCENT_BPS {
         return Err(ProgramError::InvalidArgument);
@@ -204,6 +234,77 @@ fn require_program_owned(account: &AccountInfo, program_id: &Pubkey) -> ProgramR
         return Err(ProgramError::IncorrectProgramId);
     }
     Ok(())
+}
+
+fn require_uninitialized_provider(data: &[u8]) -> ProgramResult {
+    if data.len() < PROVIDER_SIZE {
+        return Err(ProgramError::AccountDataTooSmall);
+    }
+    let has_authority = data[0..32].iter().any(|byte| *byte != 0);
+    let collateral = u64::from_le_bytes(data[32..40].try_into().unwrap());
+    let cpu_cores = u32::from_le_bytes(data[40..44].try_into().unwrap());
+    let status = data[80];
+    if has_authority || collateral != 0 || cpu_cores != 0 || status != 0 {
+        return Err(ProgramError::AccountAlreadyInitialized);
+    }
+    Ok(())
+}
+
+fn transfer_lamports(from: &AccountInfo, to: &AccountInfo, amount: u64) -> ProgramResult {
+    if amount == 0 {
+        return Ok(());
+    }
+
+    {
+        let mut from_lamports = from.try_borrow_mut_lamports()?;
+        if **from_lamports < amount {
+            return Err(ProgramError::InsufficientFunds);
+        }
+        **from_lamports -= amount;
+    }
+
+    let mut to_lamports = to.try_borrow_mut_lamports()?;
+    **to_lamports = to_lamports
+        .checked_add(amount)
+        .ok_or(ProgramError::ArithmeticOverflow)?;
+    Ok(())
+}
+
+fn transfer_from_signer<'a>(
+    from: &AccountInfo<'a>,
+    to: &AccountInfo<'a>,
+    system_program_account: &AccountInfo<'a>,
+    amount: u64,
+) -> ProgramResult {
+    if amount == 0 {
+        return Ok(());
+    }
+    if !from.is_signer {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+    if *system_program_account.key != system_program_id() {
+        return Err(ProgramError::IncorrectProgramId);
+    }
+    invoke(
+        &system_transfer_instruction(from.key, to.key, amount),
+        &[from.clone(), to.clone(), system_program_account.clone()],
+    )
+}
+
+fn system_program_id() -> Pubkey {
+    Pubkey::default()
+}
+
+fn system_transfer_instruction(from: &Pubkey, to: &Pubkey, amount: u64) -> Instruction {
+    let mut data = Vec::with_capacity(12);
+    data.extend_from_slice(&2u32.to_le_bytes());
+    data.extend_from_slice(&amount.to_le_bytes());
+
+    Instruction {
+        program_id: system_program_id(),
+        accounts: vec![AccountMeta::new(*from, true), AccountMeta::new(*to, false)],
+        data,
+    }
 }
 
 use ::core::convert::TryInto;
@@ -245,9 +346,12 @@ mod tests {
         let provider_key = Pubkey::new_unique();
         let authority_key = Pubkey::new_unique();
         let mut provider_lamports = 0;
-        let mut authority_lamports = 0;
+        let mut authority_lamports = 2_000_000_000;
+        let mut system_lamports = 0;
         let mut provider_data = [0u8; 128];
         let mut authority_data = [];
+        let mut system_data = [];
+        let system_key = system_program_id();
 
         let provider = account(
             &provider_key,
@@ -263,7 +367,14 @@ mod tests {
             &mut authority_data,
             &mut authority_lamports,
         );
-        let accounts = vec![provider, authority];
+        let system = account(
+            &system_key,
+            &system_key,
+            false,
+            &mut system_data,
+            &mut system_lamports,
+        );
+        let accounts = vec![provider, authority, system];
 
         let memory_bytes = 8 * 1024 * 1024 * 1024;
         let storage_bytes = 16 * 1024 * 1024 * 1024;
@@ -307,8 +418,11 @@ mod tests {
         let authority_key = Pubkey::new_unique();
         let mut provider_lamports = 0;
         let mut authority_lamports = 0;
+        let mut system_lamports = 0;
         let mut provider_data = [0u8; 128];
         let mut authority_data = [];
+        let mut system_data = [];
+        let system_key = system_program_id();
 
         let provider = account(
             &provider_key,
@@ -324,7 +438,14 @@ mod tests {
             &mut authority_data,
             &mut authority_lamports,
         );
-        let accounts = vec![provider, authority];
+        let system = account(
+            &system_key,
+            &system_key,
+            false,
+            &mut system_data,
+            &mut system_lamports,
+        );
+        let accounts = vec![provider, authority, system];
         let data = register_data(4, 1, 8 * 1024 * 1024 * 1024, 0, 0);
 
         assert_eq!(
@@ -507,6 +628,132 @@ mod tests {
     }
 
     #[test]
+    fn slash_transfers_collateral_to_authority() {
+        let program_id = Pubkey::new_unique();
+        let provider_key = Pubkey::new_unique();
+        let authority_key = Pubkey::new_unique();
+        let mut provider_lamports = 500;
+        let mut authority_lamports = 10;
+        let mut provider_data = [0u8; 128];
+        provider_data[0..32].copy_from_slice(authority_key.as_ref());
+        provider_data[32..40].copy_from_slice(&500u64.to_le_bytes());
+        let mut authority_data = [];
+
+        let provider = account(
+            &provider_key,
+            &program_id,
+            false,
+            &mut provider_data,
+            &mut provider_lamports,
+        );
+        let authority = account(
+            &authority_key,
+            &program_id,
+            true,
+            &mut authority_data,
+            &mut authority_lamports,
+        );
+        let accounts = vec![provider, authority];
+
+        process_instruction(&program_id, &accounts, &[4]).unwrap();
+
+        assert_eq!(provider_lamports, 0);
+        assert_eq!(authority_lamports, 510);
+        assert_eq!(
+            u64::from_le_bytes(provider_data[32..40].try_into().unwrap()),
+            0
+        );
+        assert_eq!(provider_data[80], 2);
+    }
+
+    #[test]
+    fn slashed_provider_rejects_resume_reslash_and_reputation() {
+        let program_id = Pubkey::new_unique();
+        let provider_key = Pubkey::new_unique();
+        let authority_key = Pubkey::new_unique();
+        let mut provider_lamports = 0;
+        let mut authority_lamports = 0;
+        let mut provider_data = [0u8; 128];
+        provider_data[0..32].copy_from_slice(authority_key.as_ref());
+        provider_data[80] = 2;
+        let mut authority_data = [];
+
+        {
+            let provider = account(
+                &provider_key,
+                &program_id,
+                false,
+                &mut provider_data,
+                &mut provider_lamports,
+            );
+            let authority = account(
+                &authority_key,
+                &program_id,
+                true,
+                &mut authority_data,
+                &mut authority_lamports,
+            );
+            let accounts = vec![provider, authority];
+            assert_eq!(
+                process_instruction(&program_id, &accounts, &[3]),
+                Err(ProgramError::Custom(4))
+            );
+        }
+
+        {
+            let provider = account(
+                &provider_key,
+                &program_id,
+                false,
+                &mut provider_data,
+                &mut provider_lamports,
+            );
+            let authority = account(
+                &authority_key,
+                &program_id,
+                true,
+                &mut authority_data,
+                &mut authority_lamports,
+            );
+            let accounts = vec![provider, authority];
+            assert_eq!(
+                process_instruction(&program_id, &accounts, &[4]),
+                Err(ProgramError::Custom(4))
+            );
+        }
+
+        {
+            let provider = account(
+                &provider_key,
+                &program_id,
+                false,
+                &mut provider_data,
+                &mut provider_lamports,
+            );
+            let authority = account(
+                &authority_key,
+                &program_id,
+                true,
+                &mut authority_data,
+                &mut authority_lamports,
+            );
+            let accounts = vec![provider, authority];
+            let mut data = vec![5];
+            data.extend_from_slice(&9_999u32.to_le_bytes());
+            assert_eq!(
+                process_instruction(&program_id, &accounts, &data),
+                Err(ProgramError::Custom(4))
+            );
+        }
+
+        assert_eq!(provider_data[80], 2);
+        assert_eq!(
+            u32::from_le_bytes(provider_data[76..80].try_into().unwrap()),
+            0
+        );
+    }
+
+    #[test]
     fn reputation_rejects_uptime_above_one_hundred_percent() {
         let program_id = Pubkey::new_unique();
         let provider_key = Pubkey::new_unique();
@@ -553,8 +800,11 @@ mod tests {
         let authority_key = Pubkey::new_unique();
         let mut provider_lamports = 0;
         let mut authority_lamports = 0;
+        let mut system_lamports = 0;
         let mut provider_data = [0u8; 128];
         let mut authority_data = [];
+        let mut system_data = [];
+        let system_key = system_program_id();
         let stake = 2 * COLLATERAL_PER_CORE
             + 4 * COLLATERAL_PER_GIB_RAM
             + 8 * COLLATERAL_PER_GIB_STORAGE
@@ -581,11 +831,75 @@ mod tests {
             &mut authority_data,
             &mut authority_lamports,
         );
-        let accounts = vec![provider_account, authority_account];
+        let system_account = account(
+            &system_key,
+            &system_key,
+            false,
+            &mut system_data,
+            &mut system_lamports,
+        );
+        let accounts = vec![provider_account, authority_account, system_account];
 
         assert_eq!(
             process_instruction(&program_id, &accounts, &data),
             Err(ProgramError::IncorrectProgramId)
         );
+    }
+
+    #[test]
+    fn register_rejects_existing_provider_state_before_funding() {
+        let program_id = Pubkey::new_unique();
+        let provider_key = Pubkey::new_unique();
+        let authority_key = Pubkey::new_unique();
+        let system_key = system_program_id();
+        let mut provider_lamports = 0;
+        let mut authority_lamports = 2_000_000_000;
+        let mut system_lamports = 0;
+        let mut provider_data = [0u8; 128];
+        provider_data[0..32].copy_from_slice(authority_key.as_ref());
+        provider_data[32..40].copy_from_slice(&100u64.to_le_bytes());
+        let mut authority_data = [];
+        let mut system_data = [];
+        let stake = 2 * COLLATERAL_PER_CORE
+            + 4 * COLLATERAL_PER_GIB_RAM
+            + 8 * COLLATERAL_PER_GIB_STORAGE
+            + 100 * COLLATERAL_PER_MBIT;
+        let data = register_data(
+            2,
+            stake,
+            4 * 1024 * 1024 * 1024,
+            8 * 1024 * 1024 * 1024,
+            100,
+        );
+
+        let provider = account(
+            &provider_key,
+            &program_id,
+            false,
+            &mut provider_data,
+            &mut provider_lamports,
+        );
+        let authority = account(
+            &authority_key,
+            &program_id,
+            true,
+            &mut authority_data,
+            &mut authority_lamports,
+        );
+        let system = account(
+            &system_key,
+            &system_key,
+            false,
+            &mut system_data,
+            &mut system_lamports,
+        );
+        let accounts = vec![provider, authority, system];
+
+        assert_eq!(
+            process_instruction(&program_id, &accounts, &data),
+            Err(ProgramError::AccountAlreadyInitialized)
+        );
+        assert_eq!(provider_lamports, 0);
+        assert_eq!(authority_lamports, 2_000_000_000);
     }
 }

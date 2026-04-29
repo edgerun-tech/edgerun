@@ -6,8 +6,10 @@
 use crate::prelude::*;
 use std::fs;
 use std::io;
+use std::io::Read;
 
 use crate::cli::{invalid_input, parse_cli_args, required_positional};
+use crate::spec::{OciLinuxDeviceCgroup, OciLinuxResources};
 use crate::spec::OciSpec;
 use crate::state::load_state;
 use edgerun_clap::{Arg, Command};
@@ -17,6 +19,8 @@ use edgerun_clap::{Arg, Command};
 struct UpdateOpts {
     /// Memory limit in bytes
     memory: Option<i64>,
+    /// Memory reservation in bytes
+    memory_reservation: Option<i64>,
     /// Memory swap limit in bytes
     memory_swap: Option<i64>,
     /// CPU shares (legacy)
@@ -37,6 +41,8 @@ struct UpdateOpts {
     pids_limit: Option<i64>,
     /// Block I/O weight
     blkio_weight: Option<u64>,
+    /// Device cgroup rules
+    devices: Option<Vec<OciLinuxDeviceCgroup>>,
 }
 
 pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -90,11 +96,22 @@ pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
 
     // Apply updates
     apply_update(&cgroup_root, &update_opts)?;
+    apply_device_update(&cgroup_root, &update_opts)?;
 
     // Update the spec file with the new values
     update_spec_config(&config_path, &mut spec, &update_opts)?;
 
     Ok(())
+}
+
+fn apply_device_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<()> {
+    let Some(devices) = opts.devices.as_deref() else {
+        return Ok(());
+    };
+    if devices.is_empty() {
+        return Ok(());
+    }
+    crate::ebpf_devices::setup_device_cgroup_ebpf(cgroup_root, devices)
 }
 
 fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<()> {
@@ -114,29 +131,20 @@ fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<
     // Memory
     if let Some(limit) = opts.memory {
         let value = format_limit(limit, "memory limit")?;
-        crate::cgroups::setup_container_cgroups_from_file_result(
-            cgroup_root,
-            "memory.max",
-            &value,
-        )?;
+        write_cgroup_update(cgroup_root, "memory.max", &value)?;
     }
     if let Some(swap) = opts.memory_swap {
         let value = format_limit(swap, "memory swap limit")?;
-        crate::cgroups::setup_container_cgroups_from_file_result(
-            cgroup_root,
-            "memory.swap.max",
-            &value,
-        )?;
+        write_cgroup_update(cgroup_root, "memory.swap.max", &value)?;
+    }
+    if let Some(reservation) = opts.memory_reservation {
+        write_memory_reservation(cgroup_root, reservation)?;
     }
 
     // CPU
     if let Some(shares) = opts.cpu_shares {
         let weight = crate::cgroups::shares_to_weight(shares);
-        crate::cgroups::setup_container_cgroups_from_file_result(
-            cgroup_root,
-            "cpu.weight",
-            &weight.to_string(),
-        )?;
+        write_cgroup_update(cgroup_root, "cpu.weight", &weight.to_string())?;
     }
     if let Some(quota) = opts.cpu_quota {
         let period = opts.cpu_period.unwrap_or(100_000);
@@ -147,11 +155,7 @@ fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<
             ));
         }
         let quota = format_limit(quota, "cpu quota")?;
-        crate::cgroups::setup_container_cgroups_from_file_result(
-            cgroup_root,
-            "cpu.max",
-            &format!("{} {}", quota, period),
-        )?;
+        write_cgroup_update(cgroup_root, "cpu.max", &format!("{} {}", quota, period))?;
     } else if let Some(period) = opts.cpu_period {
         if period == 0 {
             return Err(io::Error::new(
@@ -177,15 +181,11 @@ fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<
                 "failed to read current cpu.max quota",
             ));
         }
-        crate::cgroups::setup_container_cgroups_from_file_result(
-            cgroup_root,
-            "cpu.max",
-            &format!("{} {}", quota_str, period),
-        )?;
+        write_cgroup_update(cgroup_root, "cpu.max", &format!("{} {}", quota_str, period))?;
     }
     if let Some(rt_runtime) = opts.cpu_rt_runtime {
         if let Some(rt_period) = opts.cpu_rt_period {
-            crate::cgroups::setup_container_cgroups_from_file_result(
+            write_cgroup_update(
                 cgroup_root,
                 "cpu.max.rt",
                 &format!("{} {}", rt_runtime, rt_period),
@@ -194,20 +194,12 @@ fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<
     }
     if let Some(ref cpus) = opts.cpuset_cpus {
         if !cpus.is_empty() {
-            crate::cgroups::setup_container_cgroups_from_file_result(
-                cgroup_root,
-                "cpuset.cpus",
-                cpus,
-            )?;
+            write_cgroup_update(cgroup_root, "cpuset.cpus", cpus)?;
         }
     }
     if let Some(ref mems) = opts.cpuset_mems {
         if !mems.is_empty() {
-            crate::cgroups::setup_container_cgroups_from_file_result(
-                cgroup_root,
-                "cpuset.mems",
-                mems,
-            )?;
+            write_cgroup_update(cgroup_root, "cpuset.mems", mems)?;
         }
     }
 
@@ -223,22 +215,25 @@ fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<
             }
             _ => limit.to_string(),
         };
-        crate::cgroups::setup_container_cgroups_from_file_result(cgroup_root, "pids.max", &value)?;
+        write_cgroup_update(cgroup_root, "pids.max", &value)?;
     }
 
     // Block I/O
     if let Some(weight) = opts.blkio_weight {
         if weight > 0 {
             let v2_weight = weight.saturating_mul(100).clamp(1, 10000);
-            crate::cgroups::setup_container_cgroups_from_file_result(
-                cgroup_root,
-                "io.weight",
-                &v2_weight.to_string(),
-            )?;
+            write_cgroup_update(cgroup_root, "io.weight", &v2_weight.to_string())?;
         }
     }
 
     Ok(())
+}
+
+fn write_cgroup_update(cgroup_root: &std::path::Path, file: &str, value: &str) -> io::Result<()> {
+    match crate::cgroups::setup_container_cgroups_from_file_result(cgroup_root, file, value) {
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => Ok(()),
+        result => result,
+    }
 }
 
 fn update_spec_config(
@@ -288,11 +283,17 @@ fn update_spec_config(
     if let Some(limit) = opts.pids_limit {
         pids.limit = limit;
     }
+    if let Some(reservation) = opts.memory_reservation {
+        memory.reservation = Some(reservation);
+    }
     if let Some(weight) = opts.blkio_weight {
         if weight > 0 {
             let stored_weight = if weight > 10_000 { 10_000 } else { weight };
             block_io.weight = Some(stored_weight as u16);
         }
+    }
+    if let Some(ref devices) = opts.devices {
+        resources.devices = Some(devices.clone());
     }
 
     let tmp_path = config_path.with_extension(format!("json.new.{}", std::process::id()));
@@ -311,8 +312,11 @@ fn parse_update_args(args: &[String]) -> io::Result<(String, UpdateOpts)> {
     const USAGE: &str = "Usage: ert update <container-id> [resource flags]";
     let matches = parse_cli_args(
         Command::new("update")
+            .arg(Arg::new("resources").short('r').long("resources"))
             .arg(Arg::new("memory").short('m').long("memory"))
             .arg(Arg::new("memory-swap").long("memory-swap"))
+            .arg(Arg::new("memory-reservation").long("memory-reservation"))
+            .arg(Arg::new("cpu-share").long("cpu-share"))
             .arg(Arg::new("cpu-shares").short('c').long("cpu-shares"))
             .arg(Arg::new("cpu-quota").long("cpu-quota"))
             .arg(Arg::new("cpu-period").long("cpu-period"))
@@ -333,123 +337,134 @@ fn parse_update_args(args: &[String]) -> io::Result<(String, UpdateOpts)> {
     crate::cli::validate_container_id(&id)?;
     let mut opts = UpdateOpts::default();
 
-    if let Some(memory) = matches.get_one::<String>("memory") {
-        let value = parse_memory_arg(&memory)?;
-        if value < -1 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "memory limit must be -1 or a non-negative value",
-            ));
+    if let Some(resources) = matches.get_one::<String>("resources") {
+        let resources = parse_update_resources(&resources)?;
+        apply_resource_updates(&mut opts, resources)?;
+    } else {
+        if let Some(memory) = matches.get_one::<String>("memory") {
+            let value = parse_memory_arg(&memory)?;
+            if value < -1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "memory limit must be -1 or a non-negative value",
+                ));
+            }
+            opts.memory = Some(value);
         }
-        opts.memory = Some(value);
-    }
-    if let Some(memory_swap) = matches.get_one::<String>("memory-swap") {
-        let value = parse_memory_arg(&memory_swap)?;
-        if value < -1 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "memory swap limit must be -1 or a non-negative value",
-            ));
+        if let Some(memory_swap) = matches.get_one::<String>("memory-swap") {
+            let value = parse_memory_arg(&memory_swap)?;
+            if value < -1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "memory swap limit must be -1 or a non-negative value",
+                ));
+            }
+            opts.memory_swap = Some(value);
         }
-        opts.memory_swap = Some(value);
-    }
-    if let Some(cpu_shares) = matches.get_one::<String>("cpu-shares") {
-        opts.cpu_shares = Some(parse_u64_arg("cpu-shares", &cpu_shares)?);
-    }
-    if let Some(cpu_quota) = matches.get_one::<String>("cpu-quota") {
-        let value = parse_i64_arg("cpu-quota", &cpu_quota)?;
-        if value < -1 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "cpu quota must be -1 or a non-negative value",
-            ));
+        if let Some(memory_reservation) = matches.get_one::<String>("memory-reservation") {
+            let value = parse_memory_arg(&memory_reservation)?;
+            if value < 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "memory reservation must be a non-negative value",
+                ));
+            }
+            opts.memory_reservation = Some(value);
         }
-        opts.cpu_quota = Some(value);
-    }
-    if let Some(cpu_period) = matches.get_one::<String>("cpu-period") {
-        let period = parse_u64_arg("cpu-period", &cpu_period)?;
-        if period == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "cpu period must be greater than zero",
-            ));
+        if let Some(cpu_shares) = matches.get_one::<String>("cpu-share") {
+            opts.cpu_shares = Some(parse_u64_arg("cpu-share", &cpu_shares)?);
+        } else if let Some(cpu_shares) = matches.get_one::<String>("cpu-shares") {
+            opts.cpu_shares = Some(parse_u64_arg("cpu-shares", &cpu_shares)?);
         }
-        opts.cpu_period = Some(period);
-    }
-    if let Some(cpu_rt_runtime) = matches.get_one::<String>("cpu-rt-runtime") {
-        let runtime = parse_u64_arg("cpu-rt-runtime", &cpu_rt_runtime)?;
-        if runtime == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "cpu rt runtime must be greater than zero",
-            ));
+        if let Some(cpu_quota) = matches.get_one::<String>("cpu-quota") {
+            let value = parse_i64_arg("cpu-quota", &cpu_quota)?;
+            if value < -1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpu quota must be -1 or a non-negative value",
+                ));
+            }
+            opts.cpu_quota = Some(value);
         }
-        opts.cpu_rt_runtime = Some(runtime);
-    }
-    if let Some(cpu_rt_period) = matches.get_one::<String>("cpu-rt-period") {
-        let period = parse_u64_arg("cpu-rt-period", &cpu_rt_period)?;
-        if period == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "cpu rt period must be greater than zero",
-            ));
+        if let Some(cpu_period) = matches.get_one::<String>("cpu-period") {
+            let period = parse_u64_arg("cpu-period", &cpu_period)?;
+            if period == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpu period must be greater than zero",
+                ));
+            }
+            opts.cpu_period = Some(period);
         }
-        opts.cpu_rt_period = Some(period);
-    }
-    if let Some(cpuset_cpus) = matches.get_one::<String>("cpuset-cpus") {
-        if cpuset_cpus.trim().is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "cpuset-cpus cannot be empty",
-            ));
+        if let Some(cpu_rt_runtime) = matches.get_one::<String>("cpu-rt-runtime") {
+            let runtime = parse_u64_arg("cpu-rt-runtime", &cpu_rt_runtime)?;
+            if runtime == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpu rt runtime must be greater than zero",
+                ));
+            }
+            opts.cpu_rt_runtime = Some(runtime);
         }
-        opts.cpuset_cpus = Some(cpuset_cpus);
-    }
-    if let Some(cpuset_mems) = matches.get_one::<String>("cpuset-mems") {
-        if cpuset_mems.trim().is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "cpuset-mems cannot be empty",
-            ));
+        if let Some(cpu_rt_period) = matches.get_one::<String>("cpu-rt-period") {
+            let period = parse_u64_arg("cpu-rt-period", &cpu_rt_period)?;
+            if period == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpu rt period must be greater than zero",
+                ));
+            }
+            opts.cpu_rt_period = Some(period);
         }
-        opts.cpuset_mems = Some(cpuset_mems);
-    }
-    if let Some(pids_limit) = matches.get_one::<String>("pids-limit") {
-        let limit = parse_i64_arg("pids-limit", &pids_limit)?;
-        if limit < -1 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "pids limit must be -1 or greater than zero",
-            ));
+        if let Some(cpuset_cpus) = matches.get_one::<String>("cpuset-cpus") {
+            if cpuset_cpus.trim().is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpuset-cpus cannot be empty",
+                ));
+            }
+            opts.cpuset_cpus = Some(cpuset_cpus);
         }
-        opts.pids_limit = Some(limit);
-    }
-
-    if opts.cpu_rt_runtime.is_some() != opts.cpu_rt_period.is_some() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "cpu rt runtime and cpu rt period must be provided together",
-        ));
-    }
-    if let Some(blkio_weight) = matches.get_one::<String>("blkio-weight") {
-        let value = parse_u64_arg("blkio-weight", &blkio_weight)?;
-        if value == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "blkio-weight must be greater than zero",
-            ));
+        if let Some(cpuset_mems) = matches.get_one::<String>("cpuset-mems") {
+            if cpuset_mems.trim().is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpuset-mems cannot be empty",
+                ));
+            }
+            opts.cpuset_mems = Some(cpuset_mems);
         }
-        if value > 10_000 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "blkio-weight must be <= 10000",
-            ));
+        if let Some(pids_limit) = matches.get_one::<String>("pids-limit") {
+            let limit = parse_i64_arg("pids-limit", &pids_limit)?;
+            if limit < -1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "pids limit must be -1 or greater than zero",
+                ));
+            }
+            opts.pids_limit = Some(limit);
         }
-        opts.blkio_weight = Some(value);
+        if let Some(blkio_weight) = matches.get_one::<String>("blkio-weight") {
+            let value = parse_u64_arg("blkio-weight", &blkio_weight)?;
+            if value == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "blkio-weight must be greater than zero",
+                ));
+            }
+            if value > 10_000 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "blkio-weight must be <= 10000",
+                ));
+            }
+            opts.blkio_weight = Some(value);
+        }
     }
 
     if opts.memory.is_none()
         && opts.memory_swap.is_none()
+        && opts.memory_reservation.is_none()
         && opts.cpu_shares.is_none()
         && opts.cpu_quota.is_none()
         && opts.cpu_period.is_none()
@@ -459,6 +474,7 @@ fn parse_update_args(args: &[String]) -> io::Result<(String, UpdateOpts)> {
         && opts.cpuset_mems.is_none()
         && opts.cpu_rt_runtime.is_none()
         && opts.cpu_rt_period.is_none()
+        && opts.devices.is_none()
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -466,7 +482,177 @@ fn parse_update_args(args: &[String]) -> io::Result<(String, UpdateOpts)> {
         ));
     }
 
+    if opts.cpu_rt_runtime.is_some() != opts.cpu_rt_period.is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cpu rt runtime and cpu rt period must be provided together",
+        ));
+    }
+
     Ok((id, opts))
+}
+
+fn parse_update_resources(path: &str) -> io::Result<OciLinuxResources> {
+    let mut data = Vec::new();
+    if path == "-" {
+        io::stdin().read_to_end(&mut data)?;
+    } else {
+        data = fs::read(path)?;
+    }
+
+    if data.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "resources payload cannot be empty",
+        ));
+    }
+
+    edgerun_json::from_json_slice(&data).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid resources payload: {error}"),
+        )
+    })
+}
+
+fn apply_resource_updates(opts: &mut UpdateOpts, resources: OciLinuxResources) -> io::Result<()> {
+    opts.devices = resources.devices;
+
+    if let Some(memory) = resources.memory {
+        if let Some(limit) = memory.limit {
+            if limit < -1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "memory limit must be -1 or a non-negative value",
+                ));
+            }
+            opts.memory = Some(limit);
+        }
+        if let Some(reservation) = memory.reservation {
+            if reservation < 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "memory reservation must be a non-negative value",
+                ));
+            }
+            opts.memory_reservation = Some(reservation);
+        }
+        if let Some(swap) = memory.swap {
+            if swap < -1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "memory swap limit must be -1 or a non-negative value",
+                ));
+            }
+            opts.memory_swap = Some(swap);
+        }
+    }
+
+    if let Some(cpu) = resources.cpu {
+        if let Some(shares) = cpu.shares {
+            opts.cpu_shares = Some(shares);
+        }
+        if let Some(quota) = cpu.quota {
+            if quota < -1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpu quota must be -1 or a non-negative value",
+                ));
+            }
+            opts.cpu_quota = Some(quota);
+        }
+        if let Some(period) = cpu.period {
+            if period == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpu period must be greater than zero",
+                ));
+            }
+            opts.cpu_period = Some(period);
+        }
+        if let Some(rt_runtime) = cpu.realtime_runtime {
+            if rt_runtime <= 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpu rt runtime must be greater than zero",
+                ));
+            }
+            opts.cpu_rt_runtime = Some(rt_runtime.try_into().map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpu rt runtime exceeds supported unsigned 64-bit range",
+                )
+            })?);
+        }
+        if let Some(rt_period) = cpu.realtime_period {
+            if rt_period == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpu rt period must be greater than zero",
+                ));
+            }
+            opts.cpu_rt_period = Some(rt_period);
+        }
+        if let Some(cpus) = cpu.cpus {
+            if cpus.trim().is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpuset-cpus cannot be empty",
+                ));
+            }
+            opts.cpuset_cpus = Some(cpus);
+        }
+        if let Some(mems) = cpu.mems {
+            if mems.trim().is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cpuset-mems cannot be empty",
+                ));
+            }
+            opts.cpuset_mems = Some(mems);
+        }
+    }
+
+    if let Some(pids) = resources.pids {
+        if pids.limit < -1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "pids limit must be -1 or greater than zero",
+            ));
+        }
+        opts.pids_limit = Some(pids.limit);
+    }
+
+    if let Some(block_io) = resources.block_io {
+        if let Some(weight) = block_io.weight {
+            let weight = weight as u64;
+            if weight == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "blkio-weight must be greater than zero",
+                ));
+            }
+            if weight > 10_000 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "blkio-weight must be <= 10000",
+                ));
+            }
+            opts.blkio_weight = Some(weight);
+        }
+    }
+
+    Ok(())
+}
+
+fn write_memory_reservation(cgroup_root: &std::path::Path, reservation: i64) -> io::Result<()> {
+    if reservation < 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "memory reservation must be a non-negative value",
+        ));
+    }
+    write_cgroup_update(cgroup_root, "memory.low", &reservation.to_string())
 }
 
 fn parse_i64_arg(name: &str, value: &str) -> io::Result<i64> {

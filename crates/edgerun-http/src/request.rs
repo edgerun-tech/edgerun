@@ -177,18 +177,24 @@ impl Request {
         buf.extend_from_slice(self.uri.request_target().as_bytes());
         buf.extend_from_slice(b" HTTP/1.1\r\n");
 
+        let mut has_content_length = false;
         for (name, value) in self.headers.iter() {
+            if name.as_str().eq_ignore_ascii_case("content-length") {
+                has_content_length = true;
+            }
             buf.extend_from_slice(name.as_str().as_bytes());
             buf.extend_from_slice(b": ");
             buf.extend_from_slice(value.as_str().as_bytes());
             buf.extend_from_slice(b"\r\n");
         }
 
-        if let Some(ref body) = self.body {
-            let cl = body.len().to_string();
-            buf.extend_from_slice(b"Content-Length: ");
-            buf.extend_from_slice(cl.as_bytes());
-            buf.extend_from_slice(b"\r\n");
+        if !has_content_length {
+            if let Some(ref body) = self.body {
+                let cl = body.len().to_string();
+                buf.extend_from_slice(b"Content-Length: ");
+                buf.extend_from_slice(cl.as_bytes());
+                buf.extend_from_slice(b"\r\n");
+            }
         }
 
         buf.extend_from_slice(b"\r\n");

@@ -1,11 +1,12 @@
-//! Spec command implementation — generates a default OCI spec JSON to stdout.
+//! Spec command implementation — generates a default OCI config.json.
 
 use crate::prelude::*;
+use std::fs;
 use std::io;
 
 pub fn cmd_spec(_opts: &crate::cli::GlobalOpts, _args: &[String]) -> io::Result<()> {
     let spec = default_spec();
-    print!("{}", spec);
+    fs::write("config.json", spec.as_bytes())?;
     Ok(())
 }
 

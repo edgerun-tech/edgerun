@@ -11,10 +11,18 @@ name = "http-server"
 path = "src/bin/http-server.rs"
 required-features = ["std", "http3"]
 
+[[bin]]
+name = "edgerun-mail-server"
+path = "src/bin/edgerun-mail-server.rs"
+required-features = ["std", "smtp", "imap", "dns", "tls"]
+
 [dependencies]
 edgerun-http = { path = "../edgerun-http", default-features = false, features = ["connection-middleware", "server"] }
 edgerun-email = { path = "../edgerun-email", optional = true }
 edgerun-dns = { path = "../edgerun-dns", default-features = false, optional = true }
+edgerun-acme = { path = "../edgerun-acme", features = ["dns_challenge"] }
+edgerun-config = { path = "../edgerun-config" }
+edgerun-email-auth = { path = "../edgerun-email-auth" }
 edgerun-dhcp = { path = "../edgerun-dhcp", optional = true }
 edgerun-tftp = { path = "../edgerun-tftp", optional = true }
 edgerun-proxy = { path = "../edgerun-proxy", optional = true }

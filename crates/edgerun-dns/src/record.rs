@@ -418,9 +418,11 @@ impl DnsRecordData {
             }
             (DnsRecordType::TXT, DnsRecordData::TXT(text)) => {
                 let bytes = text.as_bytes();
-                let mut buf = Vec::with_capacity(bytes.len() + 1);
-                buf.push(bytes.len() as u8);
-                buf.extend_from_slice(bytes);
+                let mut buf = Vec::with_capacity(bytes.len() + (bytes.len() / 255) + 1);
+                for chunk in bytes.chunks(255) {
+                    buf.push(chunk.len() as u8);
+                    buf.extend_from_slice(chunk);
+                }
                 buf
             }
             (
@@ -757,8 +759,18 @@ impl DnsRecordData {
                 if data.is_empty() {
                     return Ok(Self::TXT(String::new()));
                 }
-                let len = data[0] as usize;
-                let text = String::from_utf8_lossy(&data[1..=len.min(data.len() - 1)]).to_string();
+                let mut pos = 0;
+                let mut text = Vec::new();
+                while pos < data.len() {
+                    let len = data[pos] as usize;
+                    pos += 1;
+                    if pos + len > data.len() {
+                        return Ok(Self::Raw(data.to_vec()));
+                    }
+                    text.extend_from_slice(&data[pos..pos + len]);
+                    pos += len;
+                }
+                let text = String::from_utf8_lossy(&text).to_string();
                 Ok(Self::TXT(text))
             }
             DnsRecordType::SOA => {

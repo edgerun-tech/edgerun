@@ -108,6 +108,47 @@ impl DisplayConsoleCell {
 static DISPLAY_CONSOLE: DisplayConsoleCell = DisplayConsoleCell::new();
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
+#[derive(Clone, Copy)]
+struct TouchFrameStats {
+    frames: u32,
+    total_us: u64,
+    max_us: u32,
+    last_us: u32,
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl TouchFrameStats {
+    const fn new() -> Self {
+        Self {
+            frames: 0,
+            total_us: 0,
+            max_us: 0,
+            last_us: 0,
+        }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+struct TouchFrameStatsCell(core::cell::UnsafeCell<TouchFrameStats>);
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+unsafe impl Sync for TouchFrameStatsCell {}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl TouchFrameStatsCell {
+    const fn new() -> Self {
+        Self(core::cell::UnsafeCell::new(TouchFrameStats::new()))
+    }
+
+    fn with<R>(&self, f: impl FnOnce(&mut TouchFrameStats) -> R) -> R {
+        unsafe { f(&mut *self.0.get()) }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+static TOUCH_FRAME_STATS: TouchFrameStatsCell = TouchFrameStatsCell::new();
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn display_console_log(message: &str) {
     DISPLAY_CONSOLE.with(|console| console.push(message));
 }
@@ -216,6 +257,448 @@ fn render_touch_ui(touch: (u16, u16)) {
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
+#[derive(Clone, Copy)]
+struct TouchOverlay {
+    center: (u16, u16),
+    alpha: u8,
+    fade_started_at: Option<u64>,
+    last_frame_at: u64,
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+#[derive(Clone, Copy)]
+struct TouchTracker {
+    active: Option<(u16, u16)>,
+    last_seen_at: u64,
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl TouchTracker {
+    const fn new() -> Self {
+        Self {
+            active: None,
+            last_seen_at: 0,
+        }
+    }
+
+    fn update(&mut self, sample: Option<(u16, u16)>, now: u64) -> Option<(u16, u16)> {
+        if let Some(sample) = sample {
+            self.active = Some(sample);
+            self.last_seen_at = now;
+            return self.active;
+        }
+
+        if self.active.is_some()
+            && now.saturating_sub(self.last_seen_at) < TOUCH_RELEASE_GRACE_TICKS
+        {
+            return self.active;
+        }
+
+        self.active = None;
+        None
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl TouchOverlay {
+    fn pressed(center: (u16, u16), now: u64) -> Self {
+        Self {
+            center,
+            alpha: TOUCH_OVERLAY_ALPHA,
+            fade_started_at: None,
+            last_frame_at: now,
+        }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const TOUCH_OVERLAY_RADIUS: u16 = 22;
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const TOUCH_OVERLAY_ALPHA: u8 = 96;
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const TOUCH_FADE_TICKS: u64 = 160_000_000;
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const TOUCH_FRAME_TICKS: u64 = 2_666_666;
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+const TOUCH_RELEASE_GRACE_TICKS: u64 = 12_800_000;
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn render_touch_overlay_step(
+    overlay: &mut Option<TouchOverlay>,
+    touch: Option<(u16, u16)>,
+    now: u64,
+) {
+    match (touch, *overlay) {
+        (Some(center), Some(mut current)) => {
+            if current.center != center || current.fade_started_at.is_some() {
+                let previous_center = current.center;
+                current.center = center;
+                current.alpha = TOUCH_OVERLAY_ALPHA;
+                current.fade_started_at = None;
+                if now.saturating_sub(current.last_frame_at) >= TOUCH_FRAME_TICKS {
+                    current.last_frame_at = now;
+                    render_touch_overlay_band(Some(previous_center), current.center, current.alpha);
+                }
+                *overlay = Some(current);
+            }
+        }
+        (Some(center), None) => {
+            let current = TouchOverlay::pressed(center, now);
+            render_touch_overlay_band(None, current.center, current.alpha);
+            *overlay = Some(current);
+        }
+        (None, Some(mut current)) => {
+            let fade_started_at = match current.fade_started_at {
+                Some(start) => start,
+                None => {
+                    current.fade_started_at = Some(now);
+                    current.last_frame_at = now.saturating_sub(TOUCH_FRAME_TICKS);
+                    now
+                }
+            };
+
+            if now.saturating_sub(current.last_frame_at) < TOUCH_FRAME_TICKS {
+                *overlay = Some(current);
+                return;
+            }
+
+            let elapsed = now.saturating_sub(fade_started_at);
+            current.last_frame_at = now;
+            if elapsed >= TOUCH_FADE_TICKS {
+                render_touch_overlay_band(None, current.center, 0);
+                *overlay = None;
+                return;
+            }
+
+            let remaining = TOUCH_FADE_TICKS - elapsed;
+            current.alpha = ((TOUCH_OVERLAY_ALPHA as u64 * remaining) / TOUCH_FADE_TICKS) as u8;
+            render_touch_overlay_band(None, current.center, current.alpha);
+            *overlay = Some(current);
+        }
+        (None, None) => {}
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn render_touch_overlay_band(previous: Option<(u16, u16)>, center: (u16, u16), alpha: u8) {
+    let _ = previous;
+    let started = edgerun_platform::timer::timer_ticks();
+    #[cfg(feature = "html-ui")]
+    {
+        render_html_ui_with_overlay(Some(center), alpha);
+    }
+    #[cfg(not(feature = "html-ui"))]
+    {
+        unsafe {
+            edgerun_platform::esp32s3::Jc3248w535Display::draw_rgb565_with(320, 480, |x, y| {
+                touch_overlay_pixel(x, y, center, alpha)
+            });
+        }
+    }
+    let elapsed_us = edgerun_platform::timer::ticks_to_us(
+        edgerun_platform::timer::timer_ticks().saturating_sub(started),
+    ) as u32;
+    TOUCH_FRAME_STATS.with(|stats| {
+        stats.frames = stats.frames.saturating_add(1);
+        stats.total_us = stats.total_us.saturating_add(elapsed_us as u64);
+        stats.last_us = elapsed_us;
+        if elapsed_us > stats.max_us {
+            stats.max_us = elapsed_us;
+        }
+    });
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn touch_overlay_pixel(x: u16, y: u16, center: (u16, u16), alpha: u8) -> u16 {
+    let base = ui_base_pixel(x, y);
+    touch_overlay_over_base(base, x, y, center, alpha)
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn touch_overlay_over_base(base: u16, x: u16, y: u16, center: (u16, u16), alpha: u8) -> u16 {
+    if alpha == 0 {
+        return base;
+    }
+
+    let dx = x.abs_diff(center.0) as u32;
+    let dy = y.abs_diff(center.1) as u32;
+    let radius = TOUCH_OVERLAY_RADIUS as u32;
+    let distance2 = dx * dx + dy * dy;
+    let radius2 = radius * radius;
+    if distance2 > radius2 {
+        return base;
+    }
+
+    let edge = radius2 - distance2;
+    let local_alpha = ((alpha as u32 * edge) / radius2) as u8;
+    blend_rgb565(base, rgb565(255, 40, 32), local_alpha)
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn blend_rgb565(base: u16, overlay: u16, alpha: u8) -> u16 {
+    let inv = 255u16 - alpha as u16;
+    let br = (base >> 11) & 0x1f;
+    let bg = (base >> 5) & 0x3f;
+    let bb = base & 0x1f;
+    let or = (overlay >> 11) & 0x1f;
+    let og = (overlay >> 5) & 0x3f;
+    let ob = overlay & 0x1f;
+    let r = (br * inv + or * alpha as u16) / 255;
+    let g = (bg * inv + og * alpha as u16) / 255;
+    let b = (bb * inv + ob * alpha as u16) / 255;
+    (r << 11) | (g << 5) | b
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+struct Jc3248w535TouchCapability {
+    was_down: bool,
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl Jc3248w535TouchCapability {
+    const fn new() -> Self {
+        Self { was_down: false }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl edgerun_capabilities::CapabilityProvider for Jc3248w535TouchCapability {
+    fn descriptor(&self) -> edgerun_capabilities::CapabilityDescriptor {
+        edgerun_input::default_input_descriptor("jc3248w535", "touch")
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl edgerun_input::InputDevice for Jc3248w535TouchCapability {
+    fn input_info(
+        &self,
+    ) -> Result<edgerun_input::InputDeviceInfo, edgerun_capabilities::CapabilityError> {
+        Ok(edgerun_input::InputDeviceInfo {
+            provider: alloc::string::String::from("jc3248w535"),
+            instance_id: alloc::string::String::from("touch"),
+            display_name: alloc::string::String::from("JC3248W535 capacitive touch"),
+            kind: edgerun_input::InputDeviceKind::Touch,
+            event_node: alloc::string::String::from("i2c://axs15231b-touch"),
+            physical_path: Some(alloc::string::String::from("esp32s3/i2c0")),
+            unique_id: None,
+        })
+    }
+
+    fn read_events(
+        &mut self,
+        max_events: usize,
+    ) -> Result<
+        alloc::vec::Vec<edgerun_input::InputEventRecord>,
+        edgerun_capabilities::CapabilityError,
+    > {
+        edgerun_input::validate_event_read_request(max_events)?;
+        let now = edgerun_platform::timer::ticks_to_us(edgerun_platform::timer::timer_ticks());
+        let timestamp_sec = (now / 1_000_000) as i64;
+        let timestamp_usec = (now % 1_000_000) as i64;
+        let mut events = alloc::vec::Vec::new();
+        let point = unsafe { edgerun_platform::esp32s3::Jc3248w535Touch::read_point() };
+        if let Some(point) = point {
+            if !self.was_down && events.len() < max_events {
+                events.push(input_event(
+                    timestamp_sec,
+                    timestamp_usec,
+                    edgerun_input::InputEventKind::Key,
+                    330,
+                    1,
+                ));
+            }
+            if events.len() < max_events {
+                events.push(input_event(
+                    timestamp_sec,
+                    timestamp_usec,
+                    edgerun_input::InputEventKind::AbsoluteMotion,
+                    0,
+                    point.x as i32,
+                ));
+            }
+            if events.len() < max_events {
+                events.push(input_event(
+                    timestamp_sec,
+                    timestamp_usec,
+                    edgerun_input::InputEventKind::AbsoluteMotion,
+                    1,
+                    point.y as i32,
+                ));
+            }
+            self.was_down = true;
+        } else if self.was_down {
+            events.push(input_event(
+                timestamp_sec,
+                timestamp_usec,
+                edgerun_input::InputEventKind::Key,
+                330,
+                0,
+            ));
+            self.was_down = false;
+        }
+        Ok(events)
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn input_event(
+    timestamp_sec: i64,
+    timestamp_usec: i64,
+    kind: edgerun_input::InputEventKind,
+    code: u16,
+    value: i32,
+) -> edgerun_input::InputEventRecord {
+    edgerun_input::InputEventRecord {
+        timestamp_sec,
+        timestamp_usec,
+        kind,
+        code,
+        value,
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+struct Jc3248w535DisplayCapability;
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl edgerun_capabilities::CapabilityProvider for Jc3248w535DisplayCapability {
+    fn descriptor(&self) -> edgerun_capabilities::CapabilityDescriptor {
+        edgerun_display::default_display_descriptor("jc3248w535", "display")
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+impl edgerun_display::DisplayDevice for Jc3248w535DisplayCapability {
+    fn display_info(
+        &self,
+    ) -> Result<edgerun_display::DisplayInfo, edgerun_capabilities::CapabilityError> {
+        let mode = edgerun_display::DisplayMode {
+            width: 320,
+            height: 480,
+            refresh_millihz: 60_000,
+        };
+        Ok(edgerun_display::DisplayInfo {
+            provider: alloc::string::String::from("jc3248w535"),
+            display_name: alloc::string::String::from("JC3248W535 LCD"),
+            instance_id: alloc::string::String::from("display"),
+            built_in: true,
+            primary: true,
+            current_mode: mode,
+            modes: alloc::vec![mode],
+            hdr_capable: false,
+            touch_capable: true,
+        })
+    }
+
+    fn present(
+        &mut self,
+        request: &edgerun_display::DisplayUpdateRequest,
+    ) -> Result<(), edgerun_capabilities::CapabilityError> {
+        edgerun_display::validate_display_update_request(request)?;
+        render_initial_ui();
+        Ok(())
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn write_board_capabilities(seq: u16) {
+    display_console_log("ctl caps");
+    rt::serial_mux::write_with_seq(
+        rt::serial_mux::CHANNEL_CONTROL,
+        seq,
+        b"cap input provider=jc3248w535 instance=touch role=1\ncap display provider=jc3248w535 instance=display role=2\n",
+    );
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn write_touch_frame_stats(seq: u16) {
+    let stats = TOUCH_FRAME_STATS.with(|stats| *stats);
+    let avg_us = if stats.frames == 0 {
+        0
+    } else {
+        (stats.total_us / stats.frames as u64) as u32
+    };
+    let fps_x100 = if avg_us == 0 {
+        0
+    } else {
+        100_000_000u32 / avg_us
+    };
+    let mut buf = [0u8; 96];
+    let mut len = 0;
+    append_bytes(&mut buf, &mut len, b"frames=");
+    append_u32_dec(&mut buf, &mut len, stats.frames);
+    append_bytes(&mut buf, &mut len, b" last_us=");
+    append_u32_dec(&mut buf, &mut len, stats.last_us);
+    append_bytes(&mut buf, &mut len, b" avg_us=");
+    append_u32_dec(&mut buf, &mut len, avg_us);
+    append_bytes(&mut buf, &mut len, b" max_us=");
+    append_u32_dec(&mut buf, &mut len, stats.max_us);
+    append_bytes(&mut buf, &mut len, b" fps_x100=");
+    append_u32_dec(&mut buf, &mut len, fps_x100);
+    append_bytes(&mut buf, &mut len, b"\n");
+    rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn run_render_animation_demo() {
+    const SIZE: u16 = 28;
+    let mut previous: Option<(u16, u16)> = None;
+    let mut frame = 0u16;
+    while frame < 120 {
+        let phase = frame % 112;
+        let x = if phase < 56 {
+            18 + phase * 4
+        } else {
+            18 + (111 - phase) * 4
+        };
+        let y = 82 + ((frame / 2) % 64);
+
+        if let Some((px, py)) = previous {
+            render_animation_rect(px, py, SIZE, false, frame);
+        }
+        render_animation_rect(x, y, SIZE, true, frame);
+        previous = Some((x, y));
+
+        let mut i = 0;
+        while i < 350_000 {
+            unsafe {
+                core::arch::asm!("nop");
+            }
+            i += 1;
+        }
+        frame += 1;
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn render_animation_rect(x: u16, y: u16, size: u16, active: bool, frame: u16) {
+    unsafe {
+        edgerun_platform::esp32s3::Jc3248w535Display::draw_rgb565_rect_with(
+            x,
+            y,
+            size,
+            size,
+            |px, py| {
+                if !active {
+                    return ui_base_pixel(px, py);
+                }
+
+                let lx = px.saturating_sub(x);
+                let ly = py.saturating_sub(y);
+                if lx == 0 || ly == 0 || lx + 1 == size || ly + 1 == size {
+                    return 0xffff;
+                }
+                rgb565(
+                    (32 + ((frame * 3 + lx) & 0x7f)) as u8,
+                    (160 + ((ly * 3) & 0x3f)) as u8,
+                    (220 + ((frame + lx + ly) & 0x1f)) as u8,
+                )
+            },
+        );
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Option<(u16, u16)>) {
     let mut processed = 0;
     while processed < 8 {
@@ -264,6 +747,19 @@ fn poll_serial_control(rx: &mut rt::serial_mux::Receiver<256>, last_touch: Optio
                     b"ok repaint\n",
                 );
             }
+            b"anim" | b"anim\n" => {
+                display_console_log("ctl anim");
+                run_render_animation_demo();
+                rt::serial_mux::write_with_seq(
+                    rt::serial_mux::CHANNEL_CONTROL,
+                    frame.seq,
+                    b"ok anim\n",
+                );
+            }
+            b"caps" | b"caps\n" | b"capabilities" | b"capabilities\n" => {
+                write_board_capabilities(frame.seq);
+            }
+            b"fps" | b"fps\n" => write_touch_frame_stats(frame.seq),
             b"wifi" | b"wifi\n" | b"wifi start" | b"wifi start\n" => {
                 display_console_log("ctl wifi start");
                 if try_start_esp32s3_wifi_ap() {
@@ -677,6 +1173,11 @@ fn append_wifi_rx_scratch_regs(out: &mut [u8], len: &mut usize) {
     append_hex_u32(out, len, regs.systimer_value);
     append_bytes(out, len, b" t1=0x");
     append_hex_u32(out, len, regs.systimer_aux);
+    append_bytes(out, len, b" romptr");
+    for word in regs.rom_wifi_ptrs {
+        append_bytes(out, len, b" ");
+        append_hex_u32(out, len, word);
+    }
     append_bytes(out, len, b" ctrl");
     for word in regs.ctrl_words {
         append_bytes(out, len, b" ");
@@ -1089,19 +1590,6 @@ fn write_touch_status(seq: u16, x: u16, y: u16) {
     rt::serial_mux::write_with_seq(rt::serial_mux::CHANNEL_CONTROL, seq, &buf[..len]);
 }
 
-#[cfg(all(target_arch = "xtensa", target_os = "none"))]
-fn display_touch_status(x: u16, y: u16) {
-    let mut buf = [0u8; 32];
-    let mut len = 0;
-    append_bytes(&mut buf, &mut len, b"touch x=");
-    append_u16(&mut buf, &mut len, x);
-    append_bytes(&mut buf, &mut len, b" y=");
-    append_u16(&mut buf, &mut len, y);
-    if let Ok(text) = core::str::from_utf8(&buf[..len]) {
-        display_console_log(text);
-    }
-}
-
 fn append_bytes(out: &mut [u8], len: &mut usize, bytes: &[u8]) {
     for &byte in bytes {
         if *len == out.len() {
@@ -1115,6 +1603,24 @@ fn append_bytes(out: &mut [u8], len: &mut usize, bytes: &[u8]) {
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn append_u16(out: &mut [u8], len: &mut usize, mut value: u16) {
     let mut digits = [0u8; 5];
+    let mut count = 0;
+    loop {
+        digits[count] = b'0' + (value % 10) as u8;
+        count += 1;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
+    }
+    while count > 0 {
+        count -= 1;
+        append_bytes(out, len, &digits[count..count + 1]);
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn append_u32_dec(out: &mut [u8], len: &mut usize, mut value: u32) {
+    let mut digits = [0u8; 10];
     let mut count = 0;
     loop {
         digits[count] = b'0' + (value % 10) as u8;
@@ -1381,21 +1887,102 @@ fn wifi_debug_status() -> i32 {
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+const ESP_UI_HTML: &str = r#"
+<div class="screen">
+  <div class="hero">
+    <div class="eyebrow">TCL AC</div>
+    <div class="temp">24</div>
+    <div class="status">Cool - Auto fan</div>
+  </div>
+  <div class="actions">
+    <div class="button power">Power</div>
+    <div class="button">Mode</div>
+    <div class="button">Fan</div>
+    <div class="button">Swing</div>
+  </div>
+</div>
+"#;
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+const ESP_UI_CSS: &str = r#"
+.screen { background-color: #050b0f; color: #e5edf2; width: 320px; min-height: 366px; padding: 16px; }
+.hero { background-color: #08252d; color: white; width: 288px; height: 174px; padding: 18px; margin-bottom: 20px; border-radius: 14px; }
+.eyebrow { color: #9cf3ea; font-size: 16px; margin-bottom: 26px; }
+.temp { color: white; font-size: 72px; line-height: 1.0; margin-bottom: 2px; }
+.status { color: #9cf3ea; font-size: 18px; }
+.actions { width: 288px; flex-wrap: wrap; }
+.button { background-color: #111f26; color: #e5edf2; width: 128px; height: 68px; padding: 18px; margin-right: 16px; margin-bottom: 14px; border-radius: 10px; font-size: 18px; }
+.power { background-color: #ad2430; color: white; }
+"#;
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+#[derive(Clone, Copy)]
+struct EspUiScene<'a> {
+    commands: [Option<edgerun_layout::EmbeddedCommand<'a>>; 48],
+    len: usize,
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+impl<'a> EspUiScene<'a> {
+    const fn new() -> Self {
+        Self {
+            commands: [None; 48],
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, command: edgerun_layout::EmbeddedCommand<'a>) {
+        if self.len < self.commands.len() {
+            self.commands[self.len] = Some(command);
+            self.len += 1;
+        }
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
 fn render_html_ui(touch: Option<(u16, u16)>) {
+    render_html_ui_with_overlay(touch, TOUCH_OVERLAY_ALPHA);
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn render_html_ui_with_overlay(touch: Option<(u16, u16)>, touch_alpha: u8) {
+    unsafe {
+        edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(0x001f);
+    }
+    let scene = render_embedded_ui_scene();
+    unsafe {
+        edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(0xffe0);
+    }
     unsafe {
         edgerun_platform::esp32s3::Jc3248w535Display::draw_rgb565_with(320, 480, |x, y| {
-            if let Some((tx, ty)) = touch {
-                let dx = x.abs_diff(tx);
-                let dy = y.abs_diff(ty);
-                if dx <= 5 && dy <= 5 {
-                    return 0xf800;
-                }
+            let mut color = embedded_ui_scene_pixel(&scene, x, y);
+            if let Some(console) = console_pixel(x, y) {
+                color = console;
             }
-            if let Some(color) = console_pixel(x, y) {
-                return color;
+            if let Some(center) = touch {
+                color = touch_overlay_over_base(color, x, y, center, touch_alpha);
             }
-            html_ui_pixel(x, y)
+            color
         });
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn ui_base_pixel(x: u16, y: u16) -> u16 {
+    if let Some(color) = console_pixel(x, y) {
+        color
+    } else {
+        let scene = render_embedded_ui_scene();
+        embedded_ui_scene_pixel(&scene, x, y)
+    }
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none", not(feature = "html-ui")))]
+fn ui_base_pixel(x: u16, y: u16) -> u16 {
+    if let Some(color) = console_pixel(x, y) {
+        color
+    } else {
+        debug_pixel(x, y)
     }
 }
 
@@ -1462,59 +2049,128 @@ fn console_text_pixel(px: u32, py: u32) -> bool {
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
-fn html_ui_pixel(x: u16, y: u16) -> u16 {
-    let x = x as u32;
-    let y = y as u32;
+fn render_embedded_ui_scene() -> EspUiScene<'static> {
+    let mut scene = EspUiScene::new();
+    let mut emitted = 0usize;
+    edgerun_layout::render_html_embedded_borrowed_traced(
+        ESP_UI_HTML,
+        ESP_UI_CSS,
+        edgerun_layout::EmbeddedRenderOptions {
+            width: 320,
+            height: 480,
+            background: edgerun_layout::Color::rgb(5, 11, 15),
+        },
+        |command| {
+            emitted += 1;
+            let marker = match emitted {
+                1 => 0xffff,
+                2 => 0x001f,
+                3 => 0xf800,
+                4 => 0x07ff,
+                5 => 0xffe0,
+                6 => 0xf81f,
+                _ => 0xffff,
+            };
+            unsafe {
+                edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(marker);
+            }
+            scene.push(command);
+        },
+        |trace| unsafe {
+            edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(trace_color(trace));
+        },
+    );
+    unsafe {
+        edgerun_platform::esp32s3::Jc3248w535Display::fill_rows_rgb565(0xf81f);
+    }
+    scene
+}
 
-    const TEXT: u16 = 0xe79f;
-    const MUTED_TEXT: u16 = 0x9cf3;
-    const PANEL_TEXT: u16 = 0xffff;
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn trace_color(trace: u8) -> u16 {
+    match trace {
+        1 => 0x001f,  // API entry: blue
+        2 => 0x07e0,  // initial background emitted: green
+        3 => 0x07ff,  // borrowed renderer returned: cyan
+        10 => 0xffe0, // children entry: yellow
+        11 => 0xf81f, // child loop iteration: magenta
+        12 => 0x8410, // text search start: gray
+        13 => 0xffff, // text search done: white
+        20 => 0xf800, // open tag parse start: red
+        21 => 0x07e0, // open tag parse done: green
+        30 => 0x001f, // element render entry: blue
+        31 => 0xffe0, // style done: yellow
+        32 => 0xf81f, // background command build: magenta
+        33 => 0x07ff, // background command emitted: cyan
+        34 => 0xffff, // recurse into children: white
+        40 => 0x8410, // flex children entry: gray
+        41 => 0xf800, // flex open parse start: red
+        42 => 0x07e0, // flex open parse done: green
+        43 => 0xffe0, // flex child style done: yellow
+        _ => 0x0000,
+    }
+}
 
-    if text_pixel(x, y, 32, 50, 16, "TCL AC") {
-        return MUTED_TEXT;
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn embedded_ui_scene_pixel(scene: &EspUiScene<'_>, x: u16, y: u16) -> u16 {
+    let mut color = rgb565(5, 11, 15);
+    let px = x as u32;
+    let py = y as u32;
+    let mut index = 0;
+    while index < scene.len {
+        let Some(command) = scene.commands[index] else {
+            index += 1;
+            continue;
+        };
+        match command {
+            edgerun_layout::EmbeddedCommand::FillRect {
+                x,
+                y,
+                w,
+                h,
+                color: command_color,
+            } => {
+                if px >= x && py >= y && px < x.saturating_add(w) && py < y.saturating_add(h) {
+                    color = apply_layout_color(color, command_color);
+                }
+            }
+            edgerun_layout::EmbeddedCommand::RoundedRect {
+                x,
+                y,
+                w,
+                h,
+                color: command_color,
+                radius,
+            } => {
+                if in_rounded_rect(px, py, x, y, w, h, radius) {
+                    color = apply_layout_color(color, command_color);
+                }
+            }
+            edgerun_layout::EmbeddedCommand::Text {
+                x,
+                y,
+                text,
+                color: command_color,
+                font_size,
+            } => {
+                if text_pixel(px, py, x, y, font_size, text) {
+                    color = apply_layout_color(color, command_color);
+                }
+            }
+        }
+        index += 1;
     }
-    if text_pixel(x, y, 30, 128, 72, "24") {
-        return PANEL_TEXT;
-    }
-    if text_pixel(x, y, 34, 160, 18, "Cool - Auto fan") {
-        return MUTED_TEXT;
-    }
-    if text_pixel(x, y, 57, 251, 18, "Power") {
-        return PANEL_TEXT;
-    }
-    if text_pixel(x, y, 211, 251, 18, "Mode") {
-        return TEXT;
-    }
-    if text_pixel(x, y, 69, 333, 18, "Fan") {
-        return TEXT;
-    }
-    if text_pixel(x, y, 205, 333, 18, "Swing") {
-        return TEXT;
-    }
+    color
+}
 
-    if y == 188 && x >= 28 && x < 292 {
-        return rgb565(22, 47, 55);
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
+fn apply_layout_color(base: u16, color: edgerun_layout::Color) -> u16 {
+    let overlay = rgb565(color.r, color.g, color.b);
+    if color.a == 255 {
+        overlay
+    } else {
+        blend_rgb565(base, overlay, color.a)
     }
-
-    if in_rounded_rect(x, y, 16, 16, 288, 174, 14) {
-        return rgb565(8, 37, 45);
-    }
-    if in_rounded_rect(x, y, 22, 210, 128, 68, 10) {
-        return rgb565(173, 36, 48);
-    }
-    if in_rounded_rect(x, y, 170, 210, 128, 68, 10)
-        || in_rounded_rect(x, y, 22, 292, 128, 68, 10)
-        || in_rounded_rect(x, y, 170, 292, 128, 68, 10)
-    {
-        return rgb565(17, 31, 38);
-    }
-
-    if x < 320 && y < 480 {
-        let shade = if ((x / 24) + (y / 24)) & 1 == 0 { 0 } else { 3 };
-        return rgb565(5 + shade, 11 + shade, 15 + shade);
-    }
-
-    0
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none", feature = "html-ui"))]
@@ -1611,6 +2267,7 @@ fn paint_tile_commands(
                 text,
                 color,
                 font_size,
+                ..
             } => {
                 draw_text_bgra(
                     pixels, width, height, tile_y, *x, *y, text, *color, *font_size,
@@ -1884,12 +2541,8 @@ fn paint_touch_marker(pixels: &mut [u8], width: u32, height: u32, tile_y: u32, x
 fn render_debug_pattern(touch: Option<(u16, u16)>) {
     unsafe {
         edgerun_platform::esp32s3::Jc3248w535Display::draw_rgb565_with(320, 480, |x, y| {
-            if let Some((tx, ty)) = touch {
-                let dx = x.abs_diff(tx);
-                let dy = y.abs_diff(ty);
-                if dx <= 5 && dy <= 5 {
-                    return 0xf800;
-                }
+            if let Some(center) = touch {
+                return touch_overlay_pixel(x, y, center, TOUCH_OVERLAY_ALPHA);
             }
             if let Some(color) = console_pixel(x, y) {
                 return color;
@@ -1902,6 +2555,15 @@ fn render_debug_pattern(touch: Option<(u16, u16)>) {
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 fn rgb565(r: u8, g: u8, b: u8) -> u16 {
     (((r as u16) & 0xf8) << 8) | (((g as u16) & 0xfc) << 3) | (b as u16 >> 3)
+}
+
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+fn min_u16(a: u16, b: u16) -> u16 {
+    if a < b {
+        a
+    } else {
+        b
+    }
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
@@ -1996,11 +2658,11 @@ use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 #[cfg(target_arch = "x86_64")]
 use edgerun_dhcp::{DhcpMessage, DhcpMessageType};
 #[cfg(target_arch = "x86_64")]
-use edgerun_tftp::message::{TFTP_PORT, TftpMessage};
+use edgerun_tftp::message::{TftpMessage, TFTP_PORT};
 #[cfg(target_arch = "x86_64")]
-use rt::ip::{ARP_OP_REQUEST, ICMP_ECHO_REQUEST, ParsedPacket};
+use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
 #[cfg(target_arch = "x86_64")]
-use rt::{IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket, block_on, crc32};
+use rt::{block_on, crc32, IpAddr, IpStack, Network, RingBuffer, Rng, TcpSocket};
 
 #[cfg(target_arch = "x86_64")]
 use core::future::Future;
@@ -2018,12 +2680,12 @@ mod oci_syscall {
     use edgerun_oci::prelude::String;
     use edgerun_oci::rootfs_access::OciRootfs;
     use edgerun_oci::{
+        dispatch_x86_64_linux_syscall_frame, prepare_and_load_oci_elf_program_with_load_bias,
         OciElfError, OciElfLoadBias, OciElfUnsafeIdentityMapper, OciPreparedLaunchState,
         OciSyscallAction, OciSyscallError, OciSyscallMemory, OciSyscallSink, OciX86_64SyscallFrame,
-        dispatch_x86_64_linux_syscall_frame, prepare_and_load_oci_elf_program_with_load_bias,
     };
     use edgerun_platform::arch::x86_64::{
-        self, KERNEL_CODE_SELECTOR, SyscallFrame, USER_COMPAT_CODE_SELECTOR,
+        self, SyscallFrame, KERNEL_CODE_SELECTOR, USER_COMPAT_CODE_SELECTOR,
     };
 
     struct DirectMemory;
@@ -2621,9 +3283,9 @@ mod disk_boot {
     use super::boot_config::{BootConfig, BootConfigError, EdgeFsBootTarget};
     use edgerun_edgefs::{EdgeFs, EdgeFsError, EdgeFsInfo};
     use edgerun_storage::{
-        BlockStorage, FatError, FatReadOnly, FileSystemKind, FileSystemProbe, FileSystemProbeError,
-        PartitionBlockDevice, PartitionEntry, PartitionError, PartitionTable, StorageError,
-        detect_partitions, probe_filesystem,
+        detect_partitions, probe_filesystem, BlockStorage, FatError, FatReadOnly, FileSystemKind,
+        FileSystemProbe, FileSystemProbeError, PartitionBlockDevice, PartitionEntry,
+        PartitionError, PartitionTable, StorageError,
     };
 
     pub const DEFAULT_BOOT_CONFIG_PATHS: &[&str] =
@@ -3737,7 +4399,6 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     rt::log::log(1, "Initializing JC3248W535 display");
     unsafe {
         edgerun_platform::esp32s3::Jc3248w535Display::init();
-        edgerun_platform::esp32s3::Jc3248w535Touch::init();
     }
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM2\n");
     rt::log::log(1, "JC3248W535 display init complete");
@@ -3745,30 +4406,29 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     render_initial_ui();
     edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM3\n");
     rt::log::log(1, "Display UI rendered");
+    unsafe {
+        edgerun_platform::esp32s3::Jc3248w535Touch::init();
+    }
+    edgerun_platform::arch::xtensa::esp32s3_usb_serial_jtag_write(b"KM4\n");
     rt::log::log(1, "ESP32-S3 WiFi AP command ready");
     rt::log::log(1, "JC3248W535 touch polling enabled");
 
     let mut last_touch: Option<(u16, u16)> = None;
+    let mut touch_overlay: Option<TouchOverlay> = None;
+    let mut touch_tracker = TouchTracker::new();
     let mut serial_rx = rt::serial_mux::Receiver::<256>::new();
     loop {
         poll_serial_control(&mut serial_rx, last_touch);
-        unsafe {
-            if let Some(point) = edgerun_platform::esp32s3::Jc3248w535Touch::read_point() {
-                let touch = (point.x, point.y);
-                if last_touch != Some(touch) {
-                    render_touch_ui(touch);
-                    display_touch_status(point.x, point.y);
-                    last_touch = Some(touch);
-                }
-            }
+        let touch_sample = unsafe {
+            edgerun_platform::esp32s3::Jc3248w535Touch::read_point().map(|point| (point.x, point.y))
+        };
+        let now = edgerun_platform::timer::timer_ticks();
+        let touch = touch_tracker.update(touch_sample, now);
+        render_touch_overlay_step(&mut touch_overlay, touch, now);
+        if touch.is_some() {
+            last_touch = touch;
         }
         render_console_if_dirty(last_touch);
-
-        let mut i = 0;
-        while i < 1_000_000 {
-            core::arch::asm!("nop");
-            i += 1;
-        }
     }
 }
 

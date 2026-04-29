@@ -153,6 +153,14 @@ const WIFI_MAC_DMA_STATE: *mut u32 = 0x6003_5128 as *mut u32;
 const WIFI_COEX_CTRL: *mut u32 = 0x6003_5084 as *mut u32;
 const WIFI_COEX_PTI: *mut u32 = 0x6003_32ac as *mut u32;
 const WIFI_COEX_DEFAULT_PTI: *mut u32 = 0x6003_5094 as *mut u32;
+const ROM_STA_RXCB: *mut u32 = 0x3fce_f838 as *mut u32;
+const ROM_G_IC_PTR: *mut u32 = 0x3fce_f84c as *mut u32;
+const ROM_G_EB_LIST_DESC_PTR: *mut u32 = 0x3fce_f92c as *mut u32;
+const ROM_G_LMAC_CNT_PTR: *mut u32 = 0x3fce_f934 as *mut u32;
+const ROM_WDEV_CTRL_PTR: *mut u32 = 0x3fce_f93c as *mut u32;
+const ROM_PP_WDEV_FUNCS: *mut u32 = 0x3fce_f944 as *mut u32;
+const ROM_LMAC_CONF_MIB_PTR: *mut u32 = 0x3fce_f950 as *mut u32;
+const ROM_P_TX_RX: *mut u32 = 0x3fce_f954 as *mut u32;
 
 const SYSTEM_WIFI_CLK_WIFI_BT_COMMON: u32 = 0x0078_078f;
 const SYSTEM_WIFI_CLK_EN: u32 = 0x00fb_9fcf;
@@ -292,6 +300,7 @@ pub struct WifiMmioRxScratchRegs {
     pub phy_noise_status: u32,
     pub systimer_value: u32,
     pub systimer_aux: u32,
+    pub rom_wifi_ptrs: [u32; 8],
     pub ctrl_words: [u32; 4],
     pub desc_words: [u32; RX_DESC_COUNT * 3],
     pub buffer_words: [u32; 8],
@@ -514,6 +523,16 @@ impl Esp32s3WifiMmio {
                 ctrl_snapshot[index] = ctrl_words.add(index).read_volatile();
                 index += 1;
             }
+            let rom_wifi_ptrs = [
+                ROM_STA_RXCB.read_volatile(),
+                ROM_G_IC_PTR.read_volatile(),
+                ROM_G_EB_LIST_DESC_PTR.read_volatile(),
+                ROM_G_LMAC_CNT_PTR.read_volatile(),
+                ROM_WDEV_CTRL_PTR.read_volatile(),
+                ROM_PP_WDEV_FUNCS.read_volatile(),
+                ROM_LMAC_CONF_MIB_PTR.read_volatile(),
+                ROM_P_TX_RX.read_volatile(),
+            ];
             WifiMmioRxScratchRegs {
                 base: WIFI_MAC_RX_BASE.read_volatile(),
                 next: WIFI_MAC_RX_NEXT.read_volatile(),
@@ -537,6 +556,7 @@ impl Esp32s3WifiMmio {
                 phy_noise_status: WIFI_PHY_NOISE_STATUS.read_volatile(),
                 systimer_value: WIFI_SYSTIMER_VALUE.read_volatile(),
                 systimer_aux: WIFI_SYSTIMER_AUX.read_volatile(),
+                rom_wifi_ptrs,
                 ctrl_words: ctrl_snapshot,
                 desc_words: desc_snapshot,
                 buffer_words: buffer_snapshot,

@@ -60,6 +60,8 @@ Example:
 ```bash
 scripts/wifi-mmio-seq.py /dev/ttyACM0 rx6
 scripts/wifi-mmio-seq.py /dev/ttyACM0 init rx 52 rx 50 35 51 40 41 42 rx
+scripts/wifi-mmio-seq.py /dev/ttyACM0 init rx 32 43 47 48 50 35 51 37 41 42 rx
+scripts/wifi-mmio-seq.py /dev/ttyACM0 init rx 46 32 43 47 48 50 35 51 37 41 42 rx
 ```
 
 This avoids reflashing for each ordering/timing assumption and keeps sequence
@@ -75,8 +77,22 @@ output grouped in one terminal run.
 - Implemented in code: `wififuns` dumps ROM PHY slots without vendor libraries.
 - Bare-target/stubbed: `wifiphyrx` and `wifipbusdbg` execute without panicking,
   but no DMA payload lands in the RX buffer.
+- Currently blocked: vendor RF-test RX entry points in the recovered `wifi.o`
+  reference unresolved harness functions (`esp_rx_func`, `do_rx_poll`,
+  `get_rx_buffer`, `esp_get_rx_result`). Those symbols were not found in the
+  installed ESP archives either, so this is not a simple link-time gap.
+- Currently blocked: ROM Wi-Fi globals (`sta_rxcb`, `g_ic_ptr`,
+  `wDevCtrl_ptr`, `pp_wdev_funcs`, `pTxRx`, and related slots) remain zero
+  after the current no-blob init sequence.
 - Currently blocked: the full RX enable path still lacks required PHY/MAC state;
-  `reload` can latch but `irq`, `noise`, and RX buffer contents are not yet
-  reliably driven.
+  `reload` can latch and `noise` can move, but `irq`, RX end state, and RX
+  buffer contents remain zero/unchanged after the tested sequences above.
 - Avoid for now: direct `rom_noise_check_loop(1, 1)` caused a LoadProhibited
   panic when called without the full vendor PHY state.
+- Avoid for now: adding a direct ROM `ic_mac_init` probe at `0x400052e0`
+  changed the Xtensa image enough to hang during display initialization before
+  the control loop. Revisit only after the boot/layout sensitivity is fixed.
+- Avoid for now: adding `wifi53`/`wifi54` probes for manually installing
+  `wDevCtrl_ptr` and calling ROM `wDev_AppendRxBlocks` also changed the image
+  enough to stop control-loop responses after flash. Revisit only after the
+  boot/layout sensitivity is fixed.

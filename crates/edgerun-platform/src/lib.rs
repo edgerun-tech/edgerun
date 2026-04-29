@@ -20,6 +20,14 @@ pub mod arch;
 pub mod cpu;
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 pub mod esp32s3;
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-ble"))]
+pub mod esp32s3_ble;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-stub"
+))]
+pub mod esp32s3_ble_stub;
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 pub mod esp32s3_wifi;
 #[cfg(all(

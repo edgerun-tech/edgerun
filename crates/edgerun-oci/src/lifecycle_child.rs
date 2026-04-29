@@ -123,6 +123,8 @@ fn run_child_post_setup(fifo_fd: i32, ctx: &ChildExecContext) {
         }
     }
 
+    close_extra_fds();
+
     if ctx.use_pid1_init && std::env::var_os("_ERT_PIDNS_READY").is_none() {
         if let Err(e) = crate::init::fork_and_init() {
             kmsg(&format!("child: fork_and_init failed: {}", e));
@@ -142,4 +144,12 @@ fn run_child_post_setup(fifo_fd: i32, ctx: &ChildExecContext) {
         ctx.workload_args[0], error
     ));
     unsafe { libc::_exit(error.exit_code()) };
+}
+
+fn close_extra_fds() {
+    let max_fd = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) };
+    let max_fd = if max_fd > 0 { max_fd as i32 } else { 1024 };
+    for fd in 3..max_fd.min(4096) {
+        unsafe { libc::close(fd) };
+    }
 }

@@ -14,6 +14,7 @@ mod features;
 mod images;
 mod inspect;
 mod kill;
+mod list;
 mod logs;
 mod pause;
 mod process_tree;
@@ -44,6 +45,7 @@ pub use features::cmd_features;
 pub use images::cmd_images;
 pub use inspect::cmd_inspect;
 pub use kill::cmd_kill;
+pub use list::cmd_list;
 pub use logs::cmd_logs;
 pub use pause::cmd_pause;
 pub use ps::cmd_ps;
@@ -87,6 +89,7 @@ const COMMANDS: &[CommandSpec] = &[
     command_spec!("state", cmd_state, true),
     command_spec!("inspect", cmd_inspect, true),
     command_spec!("kill", cmd_kill, true),
+    command_spec!("list", cmd_list, false),
     command_spec!("logs", cmd_logs, true),
     command_spec!("delete", cmd_delete, true),
     command_spec!("rm", cmd_delete, true),
@@ -213,6 +216,8 @@ pub(crate) fn parse_cli_args(
 }
 
 pub const RUN_VALUE_OPTIONS: &[&str] = &[
+    "--console-socket",
+    "--pid-file",
     "-v",
     "--volume",
     "--mount",
@@ -243,6 +248,8 @@ pub(crate) const EXEC_VALUE_OPTIONS: &[&str] = &[
     "--process",
     "-p",
     "--process-json",
+    "--pid-file",
+    "--console-socket",
 ];
 
 pub(crate) fn required_positional<'a>(
@@ -394,7 +401,7 @@ pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> 
 
 fn global_option_consumed(arg: &str) -> Option<usize> {
     match arg {
-        "--bundle" | "--pid-file" | "--root" => Some(2),
+        "--bundle" | "-b" | "--pid-file" | "--root" => Some(2),
         _ if global_option_inline_kind(arg).is_some() => Some(1),
         _ => None,
     }
@@ -444,6 +451,7 @@ impl GlobalOption {
     fn from_name(name: &str) -> Option<Self> {
         match name {
             "--bundle" => Some(Self::Bundle),
+            "-b" => Some(Self::Bundle),
             "--pid-file" => Some(Self::PidFile),
             "--root" => Some(Self::Root),
             _ => None,
@@ -469,6 +477,7 @@ pub fn print_usage() {
     eprintln!("  state <container-id>      Output state of a container");
     eprintln!("  inspect <container-id>    Output state and config details");
     eprintln!("  kill <container-id>       Send signal to container");
+    eprintln!("  list [-q|--format json]   List containers");
     eprintln!("  logs [--tail N] <id>      Print container stdout/stderr logs");
     eprintln!("  delete <container-id>     Delete container resources");
     eprintln!("  rm <container-id>         Alias for delete");
@@ -515,7 +524,7 @@ pub fn print_usage() {
     eprintln!("                             $XDG_DATA_HOME/edgerun/store rootless)");
     eprintln!();
     eprintln!("Global options:");
-    eprintln!("  --bundle <path>           Path to bundle directory");
+    eprintln!("  --bundle, -b <path>       Path to bundle directory");
     eprintln!("  --pid-file <path>         Path to write container PID");
     eprintln!("  --root <path>             Root directory for state files");
     eprintln!("                            (default: /run/edgerun-oci as root,");

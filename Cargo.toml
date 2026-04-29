@@ -115,8 +115,8 @@ members = [
 
 [workspace.package]
 edition = "2021"
-license = "MIT"
-publish = true
+license = "MIT OR Apache-2.0"
+publish = false
 rust-version = "1.81"
 version = "0.1.1"
 

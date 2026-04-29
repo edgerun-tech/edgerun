@@ -12,7 +12,7 @@ path = "src/main.rs"
 required-features = ["std"]
 
 [dependencies]
-edgerun-solana = { path = "../edgerun-solana" }
+edgerun-solana = { path = "../edgerun-solana", default-features = false }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-json = { path = "../edgerun-json", default-features = false }
@@ -21,7 +21,7 @@ edgerun-json = { path = "../edgerun-json", default-features = false }
 edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
 
 [features]
-std = []
+std = ["edgerun-solana/std"]
 
 [lints]
 workspace = true

@@ -61,7 +61,7 @@ pub fn decode_speaker_playback_request(
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote speaker playback request format is unknown",
-            ))
+            ));
         }
     };
     Ok(AudioPlaybackRequest {
@@ -107,7 +107,7 @@ pub fn decode_speaker_output_level(bytes: &[u8]) -> Result<SpeakerOutputLevel, C
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote speaker output level mute flag is invalid",
-            ))
+            ));
         }
     };
     Ok(SpeakerOutputLevel {

@@ -9,6 +9,7 @@ use crate::prelude::*;
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::os::unix::io::AsRawFd;
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 
 use crate::cli::pull::print_pull_progress;
@@ -27,7 +28,7 @@ use crate::process::validate_spec;
 use crate::rootfs_copy::copy_rootfs_tree;
 use crate::spec::{parse_oci_spec, OciSpec};
 use crate::state::{delete_state_with_result, load_state};
-use crate::terminal::{recv_fd, relay_pty_until_exit, wait_for_exit_code};
+use crate::terminal::{recv_fd, relay_pty_until_exit, send_fd, wait_for_exit_code};
 
 use crate::ImageRef;
 use crate::ImageTrustPolicy;
@@ -38,6 +39,10 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
     let (run_opts, image_ref_str, cmd_args) = parse_run_args(args)?;
+    let run_pid_file = run_opts.pid_file.clone().or(opts.pid_file.clone());
+    if selected_bundle(opts).join("config.json").exists() {
+        return run_bundle_compat(opts, run_opts, image_ref_str, cmd_args, run_pid_file);
+    }
     if run_opts.detach && run_opts.rm {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -179,6 +184,9 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
         unsafe { libc::close(terminal_sockets[1]) };
     }
     let child_pid = forked.pid();
+    if let Some(pid_file) = run_pid_file {
+        fs::write(&pid_file, format!("{}", child_pid))?;
+    }
 
     save_and_start_forked_child(
         &spec,
@@ -229,6 +237,144 @@ pub fn cmd_run(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
             return Err(error);
         }
     }
+
+    std::process::exit(exit_code as i32);
+}
+
+fn selected_bundle(opts: &GlobalOpts) -> PathBuf {
+    opts.bundle.clone().unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn run_bundle_compat(
+    opts: &GlobalOpts,
+    run_opts: crate::cli::run_config::RunOpts,
+    container_id: String,
+    cmd_args: Vec<String>,
+    pid_file: Option<PathBuf>,
+) -> io::Result<()> {
+    if !cmd_args.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "bundle mode does not accept command arguments",
+        ));
+    }
+    crate::cli::validate_container_id(&container_id)?;
+    if run_opts.detach && run_opts.rm {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--rm cannot be combined with detached mode yet",
+        ));
+    }
+
+    let bundle = selected_bundle(opts);
+    let bundle_abs = bundle.canonicalize().map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("cannot resolve bundle path: {error}"),
+        )
+    })?;
+    std::env::set_current_dir(&bundle_abs).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("cannot chdir to bundle: {error}"),
+        )
+    })?;
+
+    let config_data = fs::read("config.json").map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("cannot read config: {error}"),
+        )
+    })?;
+    let spec: OciSpec = parse_oci_spec(&config_data)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+
+    validate_spec(&spec)?;
+    run_prestart_hooks(&spec, &container_id)?;
+    run_create_runtime_hooks(&spec, &container_id)?;
+
+    let terminal = spec
+        .process
+        .as_ref()
+        .and_then(|process| process.terminal)
+        .unwrap_or(false);
+    let external_console = if terminal {
+        run_opts
+            .console_socket
+            .as_ref()
+            .map(UnixStream::connect)
+            .transpose()?
+    } else {
+        None
+    };
+
+    let mut terminal_sockets = [-1i32; 2];
+    let terminal_socket_fd = if terminal && (external_console.is_some() || !run_opts.detach) {
+        let ret = unsafe {
+            libc::socketpair(
+                libc::AF_UNIX,
+                libc::SOCK_STREAM,
+                0,
+                terminal_sockets.as_mut_ptr(),
+            )
+        };
+        if ret != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Some(terminal_sockets[1])
+    } else {
+        None
+    };
+
+    let stdio_restore = if run_opts.detach {
+        Some(redirect_stdio_for_detach(
+            &crate::state::container_state_dir(&container_id),
+        )?)
+    } else {
+        None
+    };
+
+    let forked =
+        fork_container_child_with_terminal_socket(&spec, &container_id, terminal_socket_fd)?;
+    drop(stdio_restore);
+    if terminal && (external_console.is_some() || !run_opts.detach) {
+        unsafe { libc::close(terminal_sockets[1]) };
+    }
+    let child_pid = forked.pid();
+    if let Some(pid_file) = pid_file {
+        fs::write(&pid_file, format!("{}", child_pid))?;
+    }
+
+    save_and_start_forked_child(
+        &spec,
+        &container_id,
+        child_pid,
+        &bundle_abs.to_string_lossy(),
+    )?;
+
+    if let Some(ref socket) = external_console {
+        let pty_master = recv_fd(terminal_sockets[0])
+            .map_err(|error| io::Error::other(format!("failed to receive PTY: {error}")))?;
+        unsafe { libc::close(terminal_sockets[0]) };
+        send_fd(socket.as_raw_fd(), pty_master)
+            .map_err(|error| io::Error::other(format!("failed to send PTY: {error}")))?;
+        unsafe { libc::close(pty_master) };
+    }
+
+    if run_opts.detach {
+        return Ok(());
+    }
+
+    let exit_code = if terminal && external_console.is_none() {
+        let pty_master = recv_fd(terminal_sockets[0])
+            .map_err(|error| io::Error::other(format!("failed to receive PTY: {error}")))?;
+        unsafe { libc::close(terminal_sockets[0]) };
+        let code = relay_pty_until_exit(pty_master, child_pid as i32, true)?;
+        unsafe { libc::close(pty_master) };
+        code
+    } else {
+        wait_for_exit_code(child_pid as i32)?
+    };
 
     std::process::exit(exit_code as i32);
 }

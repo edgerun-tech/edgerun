@@ -64,6 +64,35 @@ fn mount_flags_from_opts(opts: Option<&[String]>) -> c_ulong {
     flags
 }
 
+fn mount_data_from_opts(opts: Option<&[String]>) -> String {
+    opts.map(|opts| {
+        opts.iter()
+            .filter(|opt| {
+                !matches!(
+                    opt.as_str(),
+                    "ro" | "rw"
+                        | "rbind"
+                        | "bind"
+                        | "nosuid"
+                        | "nodev"
+                        | "noexec"
+                        | "relatime"
+                        | "strictatime"
+                        | "shared"
+                        | "slave"
+                        | "private"
+                        | "unbindable"
+                        | "idmap"
+                        | "ridmap"
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(",")
+    })
+    .unwrap_or_default()
+}
+
 fn is_bind_mount(mount: &OciMount) -> bool {
     mount.mount_type.as_deref() == Some("bind")
         || mount
@@ -196,11 +225,7 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
     let flags = mount_flags_from_opts(mount.options.as_deref());
 
     // Build data string: options + optional SELinux label
-    let mut data = mount
-        .options
-        .as_ref()
-        .map(|o| o.join(","))
-        .unwrap_or_default();
+    let mut data = mount_data_from_opts(mount.options.as_deref());
     if let Some(label) = mount_label {
         if !data.is_empty() {
             data.push(',');
@@ -549,7 +574,10 @@ fn setup_rootfs_inner(
                 continue;
             }
             // Make certain filesystem types best-effort (mqueue, hugetlbfs, etc.)
-            let is_optional = matches!(m.mount_type.as_deref(), Some("mqueue") | Some("hugetlbfs"));
+            let is_optional = matches!(
+                m.mount_type.as_deref(),
+                Some("mqueue") | Some("hugetlbfs") | Some("cgroup")
+            );
             if is_optional {
                 let _ = setup_mount(m, mount_label);
             } else {
@@ -570,8 +598,7 @@ fn setup_rootfs_inner(
     if let Some(paths) = masked {
         for p in paths {
             if Path::new(p).exists() {
-                do_mount("/dev/null", p, "", ms::BIND, "")
-                    .map_err(|e| io::Error::other(format!("failed to mask path {}: {}", p, e)))?;
+                let _ = do_mount("/dev/null", p, "", ms::BIND, "");
             }
         }
     }
@@ -582,19 +609,16 @@ fn setup_rootfs_inner(
             if !Path::new(p).exists() {
                 continue;
             }
-            do_mount(p, p, "", ms::BIND | ms::REC, "").map_err(|e| {
-                io::Error::other(format!("failed to bind readonly path {}: {}", p, e))
-            })?;
-            do_mount(
+            if do_mount(p, p, "", ms::BIND | ms::REC, "").is_err() {
+                continue;
+            }
+            let _ = do_mount(
                 p,
                 p,
                 "",
                 ms::BIND | ms::REMOUNT | ms::RDONLY | ms::NOSUID | ms::NODEV | ms::NOEXEC,
                 "",
-            )
-            .map_err(|e| {
-                io::Error::other(format!("failed to remount readonly path {}: {}", p, e))
-            })?;
+            );
         }
     }
 

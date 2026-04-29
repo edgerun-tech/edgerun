@@ -11,9 +11,19 @@ The workspace package is `edgerun-oci`; the old `edgerun-oci-runtime`
 package name is stale. Source lives in `crates/edgerun-oci/`, with the CLI
 entry point at `src/bin/edgerun-oci.rs`.
 
-As of this audit, `cargo metadata --no-deps --format-version 1` succeeds for
-the root workspace. Treat the test counts below as the last recorded
-OCI-specific run, not as freshly verified output from this documentation pass.
+As of 2026-04-29, `cargo metadata --no-deps --format-version 1` succeeds for
+the root workspace. The runtime is not yet production-ready as a `runc`/`crun`
+replacement. It has working OCI bundle lifecycle paths and targeted runc
+compatibility fixes, but full unskipped runc/contest coverage is still being
+triaged.
+
+Status labels in this document mean:
+
+- **Implemented in code**: code path exists and is intended to run.
+- **Validated**: verified by the focused command shown below or by the listed
+  project tests.
+- **Partial**: works for the covered path but still has compatibility gaps.
+- **Blocked / unverified**: code or tests are missing for production claims.
 
 ## Architecture
 
@@ -71,11 +81,34 @@ delete  →  (poststop + cgroup cleanup)                                     →
 
 ## Test Results
 
-**Last run:** 2026-04-24 | **All green:** 149 tests (125 unit + 24 integration), 0 clippy warnings
+**Last focused run:** 2026-04-29
 
-### Unit tests: 125 passed, 0 failed
+Validated commands from this documentation update:
 
-### Integration tests: 24 passed, 0 failed
+```bash
+cargo build -p edgerun-oci --features std --target x86_64-unknown-linux-musl
+cd crates/edgerun-oci/tests/runc/src/github.com/opencontainers/runc
+sudo -E PATH="$PATH" script -q -e -c 'bats -f "^update devices \[minimal transition rules\]$" -t tests/integration'
+sudo -E PATH="$PATH" script -q -e -c 'bats -f "^list$" -t tests/integration'
+```
+
+Validated result:
+
+```text
+ok 1 update devices [minimal transition rules]
+ok 1 list
+```
+
+Earlier project-local conformance snapshot, retained for context:
+
+- Unit tests: 125 passed, 0 failed.
+- Integration tests: 24 passed, 0 failed.
+- Clippy warnings: 0.
+
+Treat the earlier counts as a historical project-local snapshot, not as proof of
+full `runc`/`crun` compatibility.
+
+### Project-local integration tests from the earlier snapshot
 
 | Test | What it verifies |
 |------|-----------------|
@@ -98,7 +131,22 @@ delete  →  (poststop + cgroup cleanup)                                     →
 | **`time_namespace_accepted_by_validator`** | "time" in KNOWN_NAMESPACES — validates spec with time namespace |
 | **`cgroup_weight_device_per_device_written`** | weightDevice global weight written to cgroup (per-device needs BFQ scheduler) |
 
-Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -- --test-threads=1`
+Run project-local integration tests with:
+
+```bash
+sudo cargo test -p edgerun-oci --test conformance -- --test-threads=1
+```
+
+Run focused runc compatibility checks from the vendored runc harness with:
+
+```bash
+cargo build -p edgerun-oci --features std --target x86_64-unknown-linux-musl
+cp target/x86_64-unknown-linux-musl/debug/ert crates/edgerun-oci/tests/runc/src/github.com/opencontainers/runc/runc
+chmod +x crates/edgerun-oci/tests/runc/src/github.com/opencontainers/runc/runc
+cd crates/edgerun-oci/tests/runc/src/github.com/opencontainers/runc
+sudo -E PATH="$PATH" script -q -e -c 'bats -f "^update devices \[minimal transition rules\]$" -t tests/integration'
+sudo -E PATH="$PATH" script -q -e -c 'bats -f "^list$" -t tests/integration'
+```
 
 ## OCI Spec Compliance
 
@@ -117,7 +165,7 @@ Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -
 | Seccomp fields | 7/7 | 7/7 | ✅ |
 | Hook types | 6/6 | 6/6 | ✅ |
 | Linux devices | 7/7 | 7/7 | ✅ |
-| Device cgroup rules (eBPF) | 4/4 | 4/4 | ✅ |
+| Device cgroup rules (eBPF) | 4/4 | 4/4 | ✅ Validated for focused runc transition-rule path |
 | OCI 1.1 features | 6/6 | 4/6 | ⚠️ (recursive + idmapped types only) |
 | OCI 1.2 features | 3/3 | 2/3 | ⚠️ (personality applied, time namespace accepted) |
 
@@ -146,29 +194,58 @@ Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -
 | `memory.checkBeforeUpdate` (v1.1.0) | Type defined (runtime hint) | — | ⚠️ Type only |
 | `leafWeight/leafWeightDevice` | Type defined, v1-only, intentionally skipped | — | ⚠️ Type only (correct for v2) |
 
+### runc compatibility work validated on 2026-04-29
+
+| Area | Status | Notes |
+|------|--------|-------|
+| Bundle-mode `run -d --console-socket` | ✅ Validated | Focused runc update-devices test starts detached workload and hands off console fd |
+| Device cgroup eBPF | ✅ Validated for targeted path | Correct cgroup-device BPF ABI, attach type, access masks, and transition-rule timing |
+| `update --pids-limit` while device rules are active | ✅ Validated | Repeated 30x in `update devices [minimal transition rules]` |
+| `/dev/kmsg` deny with `/dev/null` still usable | ✅ Validated | Targeted runc test asserts no container output leaks |
+| `list`, `list -q`, `list --format table`, `list --format json` | ✅ Validated | Vendored runc `list` integration test passes |
+| Delete/poststop rootfs cleanup | ✅ Validated for targeted path | Relative bundle rootfs is resolved and detached before harness teardown |
+
+### Current production-readiness assessment
+
+`edgerun-oci` is not currently production-ready as a general `runc` or `crun`
+replacement. It should be treated as a compatibility target under active
+hardening.
+
+Production blockers:
+
+1. Full unskipped runc and contest suites have not passed.
+2. Some runtime paths still use best-effort behavior for host-dependent mounts
+   and cgroup writes; isolation-critical failures must not be silently bypassed.
+3. Rootless behavior needs separate coverage from rootful behavior.
+4. Seccomp, mount, namespace, hook, update, and exec edge cases need broader
+   compatibility coverage.
+5. CLI parity is still incomplete beyond the commands already listed.
+
 ### Remaining Gaps
 
 #### Integration tests needed
 
-1. **personality end-to-end** — Code applies `personality(2)` but no container-level test verifies it.
-2. **consoleSize end-to-end** — Code applies `TIOCSWINSZ` but no container-level test verifies terminal dimensions.
-3. **listenerMetadata end-to-end** — Code writes metadata file but no test verifies file creation.
-4. **cpu.idle end-to-end** — `cpu.idle` cgroup write but no container-level test verifies idle state.
-5. **cpu.burst end-to-end** — `cpu.max.burst` cgroup write but no container-level test verifies burst behavior.
-6. **I/O priority end-to-end** — `ioprio_set(2)` but no container-level test verifies I/O priority.
-7. **domainname end-to-end** — `setdomainname(2)` but no container-level test verifies NIS domain.
-8. **hugetlb rsvd end-to-end** — `hugetlb.<size>.rsvd.max` write but no container-level test verifies reserved accounting.
+1. **full unskipped runc/contest pass** — Required before replacement claims.
+2. **rootless runc compatibility sweep** — Rootless behavior must be tracked independently.
+3. **personality end-to-end** — Code applies `personality(2)` but no container-level test verifies it.
+4. **consoleSize end-to-end** — Code applies `TIOCSWINSZ` but no container-level test verifies terminal dimensions.
+5. **listenerMetadata end-to-end** — Code writes metadata file but no test verifies file creation.
+6. **cpu.idle end-to-end** — `cpu.idle` cgroup write but no container-level test verifies idle state.
+7. **cpu.burst end-to-end** — `cpu.max.burst` cgroup write but no container-level test verifies burst behavior.
+8. **I/O priority end-to-end** — `ioprio_set(2)` but no container-level test verifies I/O priority.
+9. **domainname end-to-end** — `setdomainname(2)` but no container-level test verifies NIS domain.
+10. **hugetlb rsvd end-to-end** — `hugetlb.<size>.rsvd.max` write but no container-level test verifies reserved accounting.
 
 #### Intentionally skipped
 
-9. **leafWeight / leafWeightDevice** — Cgroup v1-only. This runtime is v2-only. Correct to skip.
-10. **memory.checkBeforeUpdate** — Runtime hint only, not a cgroup file. Type defined for spec compliance.
+11. **leafWeight / leafWeightDevice** — Cgroup v1-only. This runtime is v2-only. Correct to skip.
+12. **memory.checkBeforeUpdate** — Runtime hint only, not a cgroup file. Type defined for spec compliance.
 
 #### Future OCI versions (v1.3.0 VM support)
 
-11. **hwConfig / VM containers** — Entire new runtime model requiring hypervisor integration. Major feature.
-12. **netDevices** — Network device configuration for VM containers.
-13. **memoryPolicy** — NUMA memory policy configuration.
+13. **hwConfig / VM containers** — Entire new runtime model requiring hypervisor integration. Major feature.
+14. **netDevices** — Network device configuration for VM containers.
+15. **memoryPolicy** — NUMA memory policy configuration.
 
 #### Previously Fixed
 
@@ -183,6 +260,9 @@ Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -
 - ~~Poststop error logging~~ — stderr + kmsg fallback
 - ~~Seccomp listenerMetadata~~ — written to bundle directory
 - ~~bundle_path threading~~ — full lifecycle propagation
+- ~~Device cgroup transition-rule path~~ — focused runc test passes
+- ~~`list` command~~ — focused runc test passes
+- ~~Relative bundle rootfs cleanup~~ — focused runc teardown exits cleanly
 
 ## Features Summary
 
@@ -195,8 +275,9 @@ Run integration tests with: `sudo cargo test -p edgerun-oci --test conformance -
 | `state` | ✅ Full | Reads `/run/edgerun-oci/<id>/state.json` |
 | `kill` | ✅ Full | Signal parsing, no-op for stopped |
 | `delete` | ✅ Full | Poststop hooks, cgroup cleanup |
+| `list` | ✅ Partial | runc-compatible quiet/table/json output validated |
 | `exec` | ✅ Full | setns join, double-fork for PID namespace, PTY relay |
-| `update` | ✅ Full | Memory, CPU, PIDs, block I/O |
+| `update` | ✅ Partial | Memory, CPU, PIDs, block I/O; focused device-rule reapply path validated |
 | `pause` | ✅ Full | cgroup.freeze |
 | `resume` | ✅ Full | cgroup.unfreeze |
 | `events` | ✅ Basic | Cgroup stats streaming |
@@ -274,7 +355,9 @@ sudo cargo test -p edgerun-oci --test conformance -- --test-threads=1
 cargo clippy -p edgerun-oci
 ```
 
-The binary is `edgerun-oci` — a drop-in replacement for `runc` for basic OCI conformance.
+The binary is `edgerun-oci` / `ert`. It is not yet a production drop-in
+replacement for `runc` or `crun`; use it as an active compatibility target and
+validate required workloads explicitly.
 
 ## Running
 
@@ -282,7 +365,7 @@ The binary is `edgerun-oci` — a drop-in replacement for `runc` for basic OCI c
 # Create a bundle
 mkdir -p mybundle/rootfs
 # ... populate rootfs ...
-edgerun-oci spec > mybundle/config.json
+edgerun-oci spec
 
 # Run container (blocking)
 edgerun-oci --bundle mybundle create mycontainer

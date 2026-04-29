@@ -8,6 +8,7 @@ pub enum DeploymentError {
     DepositExhausted,
     Overflow,
     NotRunning,
+    PriceChangeGracePeriod,
 }
 
 impl From<DeploymentError> for ProgramError {
@@ -36,6 +37,10 @@ impl From<DeploymentError> for ProgramError {
             DeploymentError::NotRunning => {
                 solana_program::msg!("Error: Deployment not running");
                 ProgramError::Custom(15)
+            }
+            DeploymentError::PriceChangeGracePeriod => {
+                solana_program::msg!("Error: price changes require at least 24 hours grace");
+                ProgramError::Custom(16)
             }
         }
     }

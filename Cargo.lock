@@ -1229,6 +1229,7 @@ dependencies = [
  "edgerun-capability-policy",
  "edgerun-core",
  "edgerun-crypto",
+ "edgerun-display",
  "edgerun-encoding",
  "edgerun-fingerprint",
  "edgerun-hardware-signing",
@@ -1284,9 +1285,12 @@ dependencies = [
 name = "edgerun-server"
 version = "0.1.1"
 dependencies = [
+ "edgerun-acme",
+ "edgerun-config",
  "edgerun-dhcp",
  "edgerun-dns",
  "edgerun-email",
+ "edgerun-email-auth",
  "edgerun-http",
  "edgerun-log",
  "edgerun-proxy",
@@ -1405,10 +1409,13 @@ dependencies = [
 name = "edgerun-unikernel"
 version = "0.1.0"
 dependencies = [
+ "edgerun-capabilities",
  "edgerun-crypto",
  "edgerun-dhcp",
+ "edgerun-display",
  "edgerun-edgefs",
  "edgerun-http",
+ "edgerun-input",
  "edgerun-layout",
  "edgerun-oci",
  "edgerun-platform",

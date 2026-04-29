@@ -106,6 +106,25 @@ pub struct Deployment {
     pub created_at: i64,
     pub started_at: i64,
     pub paused_at: i64,
+    pub last_report_at: i64,
+    pub cpu_cores_used: u32,
+    pub memory_bytes_used: u64,
+    pub storage_bytes_used: u64,
+    pub network_bytes_sent: u64,
+    pub current_core_hour: u64,
+    pub current_ram_gib_hour: u64,
+    pub current_storage_gib_hour: u64,
+    pub current_network_mbit_hour: u64,
+    pub pending_core_hour: u64,
+    pub pending_ram_gib_hour: u64,
+    pub pending_storage_gib_hour: u64,
+    pub pending_network_mbit_hour: u64,
+    pub pending_price_effective_at: i64,
+    pub auto_stop_on_price_increase: bool,
+    pub governance_authority: Pubkey,
+    pub provider_earned: u64,
+    pub buyer_refunded: u64,
+    pub dao_slashed: u64,
 }
 
 edgerun_json::impl_json_struct! {
@@ -125,6 +144,25 @@ edgerun_json::impl_json_struct! {
         created_at: i64,
         started_at: i64,
         paused_at: i64,
+        last_report_at: i64,
+        cpu_cores_used: u32,
+        memory_bytes_used: u64,
+        storage_bytes_used: u64,
+        network_bytes_sent: u64,
+        current_core_hour: u64,
+        current_ram_gib_hour: u64,
+        current_storage_gib_hour: u64,
+        current_network_mbit_hour: u64,
+        pending_core_hour: u64,
+        pending_ram_gib_hour: u64,
+        pending_storage_gib_hour: u64,
+        pending_network_mbit_hour: u64,
+        pending_price_effective_at: i64,
+        auto_stop_on_price_increase: bool,
+        governance_authority: Pubkey,
+        provider_earned: u64,
+        buyer_refunded: u64,
+        dao_slashed: u64,
     }
 }
 
@@ -146,6 +184,25 @@ impl Default for Deployment {
             created_at: 0,
             started_at: 0,
             paused_at: 0,
+            last_report_at: 0,
+            cpu_cores_used: 0,
+            memory_bytes_used: 0,
+            storage_bytes_used: 0,
+            network_bytes_sent: 0,
+            current_core_hour: pricing::CORE_HOUR,
+            current_ram_gib_hour: pricing::RAM_GIB_HOUR,
+            current_storage_gib_hour: pricing::STORAGE_GIB_HOUR,
+            current_network_mbit_hour: pricing::NETWORK_MBIT_HOUR,
+            pending_core_hour: 0,
+            pending_ram_gib_hour: 0,
+            pending_storage_gib_hour: 0,
+            pending_network_mbit_hour: 0,
+            pending_price_effective_at: 0,
+            auto_stop_on_price_increase: true,
+            governance_authority: Pubkey::default(),
+            provider_earned: 0,
+            buyer_refunded: 0,
+            dao_slashed: 0,
         }
     }
 }
@@ -212,11 +269,37 @@ impl Deployment {
             let paused_at = read_i64(&mut offset)?;
 
             let _bump_seed = take(&mut offset, 1)?;
-            let _last_report_at = read_i64(&mut offset)?;
-            let _cpu_cores_used = read_u32(&mut offset)?;
-            let _memory_bytes_used = read_u64(&mut offset)?;
-            let _storage_bytes_used = read_u64(&mut offset)?;
-            let _network_bytes_sent = read_u64(&mut offset)?;
+            let last_report_at = read_i64(&mut offset)?;
+            let cpu_cores_used = read_u32(&mut offset)?;
+            let memory_bytes_used = read_u64(&mut offset)?;
+            let storage_bytes_used = read_u64(&mut offset)?;
+            let network_bytes_sent = read_u64(&mut offset)?;
+            let current_core_hour = default_if_zero(
+                read_optional_u64(data, &mut offset, pricing::CORE_HOUR)?,
+                pricing::CORE_HOUR,
+            );
+            let current_ram_gib_hour = default_if_zero(
+                read_optional_u64(data, &mut offset, pricing::RAM_GIB_HOUR)?,
+                pricing::RAM_GIB_HOUR,
+            );
+            let current_storage_gib_hour = default_if_zero(
+                read_optional_u64(data, &mut offset, pricing::STORAGE_GIB_HOUR)?,
+                pricing::STORAGE_GIB_HOUR,
+            );
+            let current_network_mbit_hour = default_if_zero(
+                read_optional_u64(data, &mut offset, pricing::NETWORK_MBIT_HOUR)?,
+                pricing::NETWORK_MBIT_HOUR,
+            );
+            let pending_core_hour = read_optional_u64(data, &mut offset, 0)?;
+            let pending_ram_gib_hour = read_optional_u64(data, &mut offset, 0)?;
+            let pending_storage_gib_hour = read_optional_u64(data, &mut offset, 0)?;
+            let pending_network_mbit_hour = read_optional_u64(data, &mut offset, 0)?;
+            let pending_price_effective_at = read_optional_i64(data, &mut offset, 0)?;
+            let auto_stop_on_price_increase = read_optional_u8(data, &mut offset, 1)? != 0;
+            let governance_authority = read_optional_pubkey(data, &mut offset, owner)?;
+            let provider_earned = read_optional_u64(data, &mut offset, 0)?;
+            let buyer_refunded = read_optional_u64(data, &mut offset, 0)?;
+            let dao_slashed = read_optional_u64(data, &mut offset, 0)?;
 
             return Ok(Self {
                 owner,
@@ -234,10 +317,86 @@ impl Deployment {
                 created_at,
                 started_at,
                 paused_at,
+                last_report_at,
+                cpu_cores_used,
+                memory_bytes_used,
+                storage_bytes_used,
+                network_bytes_sent,
+                current_core_hour,
+                current_ram_gib_hour,
+                current_storage_gib_hour,
+                current_network_mbit_hour,
+                pending_core_hour,
+                pending_ram_gib_hour,
+                pending_storage_gib_hour,
+                pending_network_mbit_hour,
+                pending_price_effective_at,
+                auto_stop_on_price_increase,
+                governance_authority,
+                provider_earned,
+                buyer_refunded,
+                dao_slashed,
             });
         }
 
         from_json_slice(data).map_err(|e| format!("{:?}", e))
+    }
+}
+
+fn read_optional_u8(data: &[u8], offset: &mut usize, default: u8) -> Result<u8, String> {
+    if *offset >= data.len() {
+        return Ok(default);
+    }
+    let value = data[*offset];
+    *offset = (*offset).saturating_add(1);
+    Ok(value)
+}
+
+fn read_optional_i64(data: &[u8], offset: &mut usize, default: i64) -> Result<i64, String> {
+    if (*offset).saturating_add(8) > data.len() {
+        return Ok(default);
+    }
+    let end = (*offset).saturating_add(8);
+    let bytes: [u8; 8] = data[*offset..end]
+        .try_into()
+        .map_err(|_| "invalid optional i64 field".to_string())?;
+    *offset = end;
+    Ok(i64::from_le_bytes(bytes))
+}
+
+fn read_optional_u64(data: &[u8], offset: &mut usize, default: u64) -> Result<u64, String> {
+    if (*offset).saturating_add(8) > data.len() {
+        return Ok(default);
+    }
+    let end = (*offset).saturating_add(8);
+    let bytes: [u8; 8] = data[*offset..end]
+        .try_into()
+        .map_err(|_| "invalid optional u64 field".to_string())?;
+    *offset = end;
+    Ok(u64::from_le_bytes(bytes))
+}
+
+fn read_optional_pubkey(
+    data: &[u8],
+    offset: &mut usize,
+    default: Pubkey,
+) -> Result<Pubkey, String> {
+    if (*offset).saturating_add(32) > data.len() {
+        return Ok(default);
+    }
+    let end = (*offset).saturating_add(32);
+    let bytes: [u8; 32] = data[*offset..end]
+        .try_into()
+        .map_err(|_| "invalid optional pubkey field".to_string())?;
+    *offset = end;
+    Ok(Pubkey::new_from_array(bytes))
+}
+
+fn default_if_zero(value: u64, default: u64) -> u64 {
+    if value == 0 {
+        default
+    } else {
+        value
     }
 }
 

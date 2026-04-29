@@ -38,7 +38,7 @@ fn wifi_power_state_from_u8(v: u8) -> Result<WifiPowerState, CapabilityError> {
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote wifi power state is invalid",
-            ))
+            ));
         }
     })
 }
@@ -63,7 +63,7 @@ fn wifi_interface_mode_from_u8(v: u8) -> Result<WifiInterfaceMode, CapabilityErr
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote wifi interface mode is invalid",
-            ))
+            ));
         }
     })
 }
@@ -153,7 +153,7 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
             _ => {
                 return Err(CapabilityError::InvalidRequest(
                     "remote wifi secure flag is invalid",
-                ))
+                ));
             }
         };
         cursor += 1;

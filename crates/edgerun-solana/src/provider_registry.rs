@@ -5,13 +5,16 @@
 use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
-use edgerun_http::HttpClient;
+use edgerun_http::{HttpClient, HttpVersion};
 use edgerun_json::{json, JsonValue};
 use std::sync::Arc;
 
 use crate::error::SolanaError;
 use crate::try_provider_registry_program_id;
 use crate::types::{collateral, Provider, ProviderStatus};
+
+const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
+const PROVIDER_ACCOUNT_SIZE: u64 = 128;
 
 pub struct ProviderClient {
     http: HttpClient,
@@ -28,7 +31,7 @@ impl ProviderClient {
     pub fn new_with_program_id(rpc_url: &str, program_id: Pubkey) -> Result<Self, SolanaError> {
         let rt = HttpRuntime::new();
         Ok(Self {
-            http: HttpClient::new().no_redirects(),
+            http: HttpClient::new().version(HttpVersion::Http1).no_redirects(),
             program_id,
             rpc_url: rpc_url.to_string(),
             runtime: Arc::new(rt),
@@ -63,7 +66,7 @@ impl ProviderClient {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getAccountInfo",
-            "params": [provider_pubkey.to_string(), { "encoding": "base64" }]
+            "params": [provider_pubkey.to_string(), { "encoding": "base64", "commitment": "confirmed" }]
         });
         let resp = self.rpc_call(payload)?;
         let bytes = decode_rpc_account_data(&resp)?;
@@ -77,7 +80,7 @@ impl ProviderClient {
             "method": "getProgramAccounts",
             "params": [
                 self.program_id.to_string(),
-                { "encoding": "base64", "filters": [{ "dataSize": 128 }] }
+                { "encoding": "base64", "commitment": "confirmed", "filters": [{ "dataSize": 128 }] }
             ]
         });
         let resp = self.rpc_call(payload)?;
@@ -135,8 +138,52 @@ impl ProviderClient {
             vec![
                 AccountMeta::new(*provider_pubkey, false),
                 AccountMeta::new(*authority_pubkey, true),
+                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID),
             ],
         )
+    }
+
+    pub fn provider_address_with_seed(
+        &self,
+        authority_pubkey: &Pubkey,
+        seed: &str,
+    ) -> Result<Pubkey, SolanaError> {
+        crate::deployment::create_address_with_seed(authority_pubkey, seed, &self.program_id)
+    }
+
+    pub async fn register_with_seed_signed<S: Signer>(
+        &self,
+        authority_pubkey: &Pubkey,
+        seed: &str,
+        signer: &S,
+        cpu_cores: u32,
+        memory_bytes: u64,
+        storage_bytes: u64,
+        network_mbits: u32,
+    ) -> Result<(Pubkey, String), SolanaError> {
+        let provider_pubkey = self.provider_address_with_seed(authority_pubkey, seed)?;
+        let rent_lamports = self.minimum_balance_for_rent_exemption(PROVIDER_ACCOUNT_SIZE)?;
+        let create_ix = crate::deployment::create_account_with_seed_instruction(
+            authority_pubkey,
+            &provider_pubkey,
+            authority_pubkey,
+            seed,
+            rent_lamports,
+            PROVIDER_ACCOUNT_SIZE,
+            &self.program_id,
+        )?;
+        let register_ix = self.register_instruction(
+            &provider_pubkey,
+            authority_pubkey,
+            cpu_cores,
+            memory_bytes,
+            storage_bytes,
+            network_mbits,
+        );
+        let tx = self
+            .send_instructions_signed(&[create_ix, register_ix], authority_pubkey, signer)
+            .await?;
+        Ok((provider_pubkey, tx))
     }
 
     pub fn initialize_instruction(
@@ -235,14 +282,21 @@ impl ProviderClient {
         signer_pubkey: &Pubkey,
         signer: &S,
     ) -> Result<String, SolanaError> {
-        crate::deployment::validate_single_signer(
-            signer_pubkey,
-            core::slice::from_ref(&instruction),
-        )?;
+        self.send_instructions_signed(core::slice::from_ref(&instruction), signer_pubkey, signer)
+            .await
+    }
+
+    pub async fn send_instructions_signed<S: Signer>(
+        &self,
+        instructions: &[Instruction],
+        signer_pubkey: &Pubkey,
+        signer: &S,
+    ) -> Result<String, SolanaError> {
+        crate::deployment::validate_single_signer(signer_pubkey, instructions)?;
         let recent_blockhash = self.get_latest_blockhash()?;
         let msg = crate::deployment::serialize_transaction_message(
             signer_pubkey,
-            &[instruction.clone()],
+            instructions,
             &recent_blockhash,
         );
         let signature = signer
@@ -250,7 +304,7 @@ impl ProviderClient {
             .map_err(|e| SolanaError::Signing(e.to_string()))?;
         let tx_bytes = crate::deployment::serialize_transaction(
             signer_pubkey,
-            &[instruction],
+            instructions,
             &recent_blockhash,
             &signature,
         );
@@ -268,6 +322,62 @@ impl ProviderClient {
             .as_str()
             .map(|s| s.to_string())
             .ok_or_else(|| SolanaError::Rpc("no result in response".to_string()))
+    }
+
+    pub fn minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, SolanaError> {
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "getMinimumBalanceForRentExemption",
+            "params": [size]
+        });
+        let resp = self.rpc_call(payload)?;
+        resp["result"]
+            .as_u64()
+            .ok_or_else(|| SolanaError::Rpc("missing rent exemption result".to_string()))
+    }
+
+    #[cfg(not(target_os = "none"))]
+    pub fn confirm_transaction(&self, signature: &str) -> Result<(), SolanaError> {
+        const ATTEMPTS: usize = 30;
+        const SLEEP_MS: u64 = 500;
+
+        for _ in 0..ATTEMPTS {
+            let payload = json!({
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "getSignatureStatuses",
+                "params": [[signature], { "searchTransactionHistory": true }]
+            });
+            let resp = self.rpc_call(payload)?;
+            let statuses = resp["result"]["value"]
+                .as_array()
+                .ok_or_else(|| SolanaError::Rpc("missing signature status array".to_string()))?;
+            if let Some(status) = statuses.first() {
+                if status.is_null() {
+                    std::thread::sleep(std::time::Duration::from_millis(SLEEP_MS));
+                    continue;
+                }
+                if !status["err"].is_null() {
+                    return Err(SolanaError::Transaction(format!(
+                        "transaction {signature} failed: {}",
+                        status["err"].to_json_string().unwrap_or_default()
+                    )));
+                }
+                if matches!(
+                    status["confirmationStatus"].as_str(),
+                    Some("confirmed" | "finalized")
+                ) {
+                    return Ok(());
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(SLEEP_MS));
+        }
+
+        Err(SolanaError::Transaction(format!(
+            "transaction {signature} was not confirmed after {} seconds",
+            (ATTEMPTS as u64 * SLEEP_MS) / 1_000
+        )))
     }
 
     fn get_latest_blockhash(&self) -> Result<Pubkey, SolanaError> {
@@ -393,6 +503,7 @@ mod tests {
         );
 
         assert_eq!(ix.data.len(), 33);
+        assert_eq!(ix.accounts.len(), 3);
         assert_eq!(ix.data[0], 1);
         assert_eq!(u32::from_le_bytes(ix.data[1..5].try_into().unwrap()), 4);
         assert_eq!(

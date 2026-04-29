@@ -17,6 +17,8 @@ pub(super) struct RunOpts {
     pub rm: bool,
     pub detach: bool,
     pub name: Option<String>,
+    pub pid_file: Option<std::path::PathBuf>,
+    pub console_socket: Option<String>,
     pub env: Vec<String>,
     pub env_files: Vec<PathBuf>,
     pub user: Option<String>,
@@ -91,6 +93,8 @@ pub(super) fn parse_run_args(args: &[String]) -> io::Result<(RunOpts, String, Ve
             .arg(Arg::new("workdir").short('w').long("workdir"))
             .arg(Arg::new("user").short('u').long("user"))
             .arg(Arg::new("entrypoint").long("entrypoint"))
+            .arg(Arg::new("pid-file").long("pid-file"))
+            .arg(Arg::new("console-socket").long("console-socket"))
             .arg(Arg::new("pull").long("pull"))
             .arg(
                 Arg::new("allow-unverified-tags")
@@ -108,6 +112,8 @@ pub(super) fn parse_run_args(args: &[String]) -> io::Result<(RunOpts, String, Ve
     let mut opts = RunOpts {
         rm: matches.get_flag("rm"),
         detach: matches.get_flag("detach"),
+        pid_file: matches.get_one::<PathBuf>("pid-file"),
+        console_socket: matches.get_one::<String>("console-socket"),
         name: matches
             .get_one::<String>("name")
             .map(|name| {

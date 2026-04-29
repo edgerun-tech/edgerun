@@ -46,7 +46,7 @@ fn camera_pixel_format_from_u32(raw: u32) -> Result<CameraPixelFormat, Capabilit
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote camera pixel format is unknown",
-            ))
+            ));
         }
     })
 }
@@ -103,7 +103,7 @@ fn camera_capture_quality_from_u8(v: u8) -> Result<CameraCaptureQuality, Capabil
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote camera capture quality is invalid",
-            ))
+            ));
         }
     })
 }

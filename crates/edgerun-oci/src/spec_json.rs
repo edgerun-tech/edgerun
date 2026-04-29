@@ -390,8 +390,10 @@ edgerun_json::impl_json_struct! {
 
 edgerun_json::impl_json_struct! {
     OciLinuxDeviceCgroup {
-        required { ns_type: "type" => String }
+        required {}
         optional {
+            allow: "allow" => bool,
+            ns_type: "type" => String,
             major: "major" => i64,
             minor: "minor" => i64,
             access: "access" => String,

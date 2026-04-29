@@ -36,7 +36,7 @@ fn bluetooth_address_kind_from_u8(v: u8) -> Result<BluetoothAddressKind, Capabil
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth address kind is invalid",
-            ))
+            ));
         }
     })
 }
@@ -59,7 +59,7 @@ fn bluetooth_transport_kind_from_u8(v: u8) -> Result<BluetoothTransportKind, Cap
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth transport kind is invalid",
-            ))
+            ));
         }
     })
 }
@@ -100,7 +100,7 @@ fn bluetooth_profile_from_u8(v: u8) -> Result<BluetoothProfile, CapabilityError>
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth profile is invalid",
-            ))
+            ));
         }
     })
 }
@@ -123,7 +123,7 @@ fn bluetooth_link_kind_from_u8(v: u8) -> Result<BluetoothLinkKind, CapabilityErr
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth link kind is invalid",
-            ))
+            ));
         }
     })
 }
@@ -341,7 +341,7 @@ pub fn decode_bluetooth_connections(
             _ => {
                 return Err(CapabilityError::InvalidRequest(
                     "remote bluetooth trusted flag is invalid",
-                ))
+                ));
             }
         };
         cursor += 1;
@@ -352,7 +352,7 @@ pub fn decode_bluetooth_connections(
             _ => {
                 return Err(CapabilityError::InvalidRequest(
                     "remote bluetooth paired flag is invalid",
-                ))
+                ));
             }
         };
         cursor += 1;

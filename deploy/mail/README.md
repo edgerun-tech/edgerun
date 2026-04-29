@@ -9,40 +9,18 @@
 | `03-smtp-server.yaml` | SMTP server config (port 25, STARTTLS, relay) |
 | `04-imap-server.yaml` | IMAP server config (port 143, IMAPS) |
 
-## Secrets Integration with vals
-
-This configuration uses vals `ref+` expressions. Before deployment, run:
-
-```bash
-# Replace refs with actual secrets from storage
-vals eval -f deploy/mail/01-dns-zone.yaml
-vals eval -f deploy/mail/02-dns-zone-dkim.yaml
-vals eval -f deploy/mail/03-smtp-server.yaml
-vals eval -f deploy/mail/04-imap-server.yaml
-```
-
-### Required Secrets in edgerun-storage
-
-Store these credentials in edgerun-storage (namespace: `mail`):
+## Required Key Material
 
 | Name | Description |
 |------|-------------|
-| `dkim-private-key` | DKIM RSA private key (PEM format) |
-| `tls-cert` | TLS certificate (PEM format) |
-| `tls-key` | TLS private key (PEM format) |
+| `/etc/edgerun/mail/dkim-mail.private.pem` | DKIM RSA private key (PEM format) |
+| `/etc/edgerun/mail/tls/fullchain.pem` | TLS certificate chain (PEM format), generated or renewed by `edgerun-acme` |
+| `/etc/edgerun/mail/tls/privkey.pem` | TLS private key (PEM format), generated or renewed by `edgerun-acme` |
 
-### Required Environment Variables for vals
-
-Set these before running vals:
-
-```bash
-# For storage backend (if using)
-export STORAGE_BACKEND=...
-export STORAGE_ENDPOINT=...
-
-# For any other secrets
-export DKIM_PUBLIC_KEY="v=DKIM1; k=rsa; p=..."
-```
+`edgerun-mail-server` consumes these paths through `edgerun-config` YAML fields
+(`dkim_key_path`, `tls_cert`, and `tls_key`). The DKIM TXT record in
+`02-dns-zone-dkim.yaml` must contain the public key produced from the private
+key at `/etc/edgerun/mail/dkim-mail.private.pem`.
 
 ## DNS Records Generated
 

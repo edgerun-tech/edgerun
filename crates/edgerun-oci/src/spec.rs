@@ -433,7 +433,8 @@ pub struct OciLinuxResources {
 /// Device cgroup rule for allowed/denied device access.
 #[derive(Debug, Clone, Default)]
 pub struct OciLinuxDeviceCgroup {
-    pub ns_type: String,
+    pub ns_type: Option<String>,
+    pub allow: Option<bool>,
     pub major: Option<i64>,
     pub minor: Option<i64>,
     pub access: Option<String>,

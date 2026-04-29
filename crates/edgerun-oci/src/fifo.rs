@@ -67,19 +67,25 @@ pub fn open_fifo_read(path: &Path) -> io::Result<i32> {
 ///
 /// This unblocks the child process that is waiting on `open_fifo_read`.
 pub fn signal_start(path: &Path) -> io::Result<()> {
-    let mut fifo = fs::File::create(path)
-        .map_err(|e| io::Error::other(format!("failed to open FIFO for writing: {}", e)))?;
+    let mut fifo = open_fifo_write(path)?;
+    write_start_signal(&mut fifo)
+}
 
+/// Open a FIFO for writing. This blocks until the child has opened the read end,
+/// which means runtime-only child setup has completed.
+pub fn open_fifo_write(path: &Path) -> io::Result<fs::File> {
+    fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .map_err(|e| io::Error::other(format!("failed to open FIFO for writing: {}", e)))
+}
+
+/// Write the start signal to an already-open FIFO writer.
+pub fn write_start_signal(fifo: &mut fs::File) -> io::Result<()> {
     fifo.write_all(START_SIGNAL)
         .map_err(|e| io::Error::other(format!("failed to write to FIFO: {}", e)))?;
     fifo.flush()
         .map_err(|e| io::Error::other(format!("failed to flush FIFO: {}", e)))?;
-
-    // Drop the write end — the reader will get the data we wrote.
-    // FIFOs are byte-stream: once written and flushed, the reader gets it
-    // even if the writer closes immediately.
-    drop(fifo);
-
     Ok(())
 }
 

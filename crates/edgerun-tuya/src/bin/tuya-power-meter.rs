@@ -4,7 +4,7 @@ use edgerun_rt::crc32;
 use std::env;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const PREFIX_55AA: u32 = 0x0000_55aa;
 const SUFFIX_55AA: u32 = 0x0000_aa55;
@@ -18,15 +18,15 @@ const DP_QUERY_NEW: u32 = 0x10;
 
 fn main() -> io::Result<()> {
     let config = Config::from_args()?;
-    let dps_json = query_v35_status(&config.id, &config.ip, config.key.as_bytes())?;
+    let dps_json = query_v35_status(&config.ip, config.key.as_bytes(), config.verbose)?;
     println!("{dps_json}");
     Ok(())
 }
 
 struct Config {
-    id: String,
     ip: String,
     key: String,
+    verbose: bool,
 }
 
 impl Config {
@@ -34,6 +34,7 @@ impl Config {
         let mut id = env::var("TUYA_DEVICE_ID").unwrap_or_default();
         let mut ip = env::var("TUYA_DEVICE_IP").unwrap_or_else(|_| "192.168.1.43".to_string());
         let mut key = env::var("TUYA_LOCAL_KEY").unwrap_or_default();
+        let mut verbose = false;
 
         let mut args = env::args().skip(1);
         while let Some(arg) = args.next() {
@@ -41,9 +42,10 @@ impl Config {
                 "--id" => id = args.next().unwrap_or_default(),
                 "--ip" => ip = args.next().unwrap_or_default(),
                 "--key" => key = args.next().unwrap_or_default(),
+                "--verbose" | "-v" => verbose = true,
                 "--help" | "-h" => {
                     eprintln!(
-                        "Usage: tuya-power-meter --id <device-id> --ip <addr> --key <local-key>"
+                        "Usage: tuya-power-meter --id <device-id> --ip <addr> --key <local-key> [--verbose]"
                     );
                     std::process::exit(0);
                 }
@@ -62,33 +64,34 @@ impl Config {
                 "TUYA_DEVICE_ID/--id, TUYA_DEVICE_IP/--ip, and 16-byte TUYA_LOCAL_KEY/--key are required",
             ));
         }
-        Ok(Self { id, ip, key })
+        Ok(Self { ip, key, verbose })
     }
 }
 
-fn query_v35_status(id: &str, ip: &str, local_key: &[u8]) -> io::Result<String> {
+fn query_v35_status(ip: &str, local_key: &[u8], verbose: bool) -> io::Result<String> {
     let mut stream = TcpStream::connect((ip, 6668))?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(10)))?;
     stream.set_nodelay(true)?;
 
     let local_nonce = *b"0123456789abcdef";
-    let start = pack_55aa(1, SESS_KEY_NEG_START, &local_nonce);
-    eprintln!("connected; sending v3.5 session start");
+    let start = pack_6699(1, SESS_KEY_NEG_START, &local_nonce, local_key)?;
+    trace(verbose, "connected; sending v3.5 session start");
     stream.write_all(&start)?;
     let step2 = read_tuya_message(&mut stream)?;
-    eprintln!(
-        "received session step 2: prefix={:08x} cmd={}",
-        step2.prefix, step2.cmd
+    trace(
+        verbose,
+        &format!(
+            "received session step 2: prefix={:08x} cmd={}",
+            step2.prefix, step2.cmd
+        ),
     );
     if step2.cmd != SESS_KEY_NEG_RESP {
         return Err(invalid_data("unexpected session negotiation response"));
     }
 
-    let mut step2_payload = step2.payload.as_slice();
-    if step2_payload.len() >= 52 && step2_payload[..4] == [0, 0, 0, 0] {
-        step2_payload = &step2_payload[4..];
-    }
+    let step2_plaintext = decrypt_6699_payload(&step2.raw_header, &step2.payload, local_key)?;
+    let step2_payload = strip_retcode(&step2_plaintext);
     if step2_payload.len() < 48 {
         return Err(invalid_data("short session negotiation payload"));
     }
@@ -100,19 +103,22 @@ fn query_v35_status(id: &str, ip: &str, local_key: &[u8]) -> io::Result<String> 
     }
 
     let remote_hmac = edgerun_crypto::hmac_sha256(local_key, remote_nonce);
-    let finish = pack_55aa(2, SESS_KEY_NEG_FINISH, &remote_hmac);
-    eprintln!("sending session finish");
+    let finish = pack_6699(2, SESS_KEY_NEG_FINISH, &remote_hmac, local_key)?;
+    trace(verbose, "sending session finish");
     stream.write_all(&finish)?;
 
     let session_key = derive_v35_session_key(local_key, &local_nonce, remote_nonce)?;
     let query = pack_6699(3, DP_QUERY_NEW, b"{}", &session_key)?;
-    eprintln!("sending DP_QUERY_NEW");
+    trace(verbose, "sending DP_QUERY_NEW");
     stream.write_all(&query)?;
 
     let response = read_tuya_message(&mut stream)?;
-    eprintln!(
-        "received query response: prefix={:08x} cmd={}",
-        response.prefix, response.cmd
+    trace(
+        verbose,
+        &format!(
+            "received query response: prefix={:08x} cmd={}",
+            response.prefix, response.cmd
+        ),
     );
     if response.prefix != PREFIX_6699 {
         return Err(invalid_data("expected v3.5 6699 response"));
@@ -227,9 +233,9 @@ fn pack_55aa(seq: u32, cmd: u32, payload: &[u8]) -> Vec<u8> {
     frame
 }
 
-fn pack_6699(seq: u32, cmd: u32, payload: &[u8], session_key: &[u8]) -> io::Result<Vec<u8>> {
+fn pack_6699(seq: u32, cmd: u32, payload: &[u8], key: &[u8]) -> io::Result<Vec<u8>> {
     let mut encrypted = payload.to_vec();
-    let iv = *b"0123456789ab";
+    let iv = tuya_gcm_iv();
     let len = (iv.len() + encrypted.len() + 16) as u32;
 
     let mut frame = Vec::with_capacity(18 + len as usize + 4);
@@ -239,8 +245,7 @@ fn pack_6699(seq: u32, cmd: u32, payload: &[u8], session_key: &[u8]) -> io::Resu
     frame.extend_from_slice(&cmd.to_be_bytes());
     frame.extend_from_slice(&len.to_be_bytes());
 
-    let cipher =
-        Aes256GcmCipher::new(session_key).map_err(|_| invalid_data("invalid session key"))?;
+    let cipher = Aes256GcmCipher::new(key).map_err(|_| invalid_data("invalid AES-GCM key"))?;
     let tag = cipher
         .encrypt_in_place_detached(GenericArray::from_slice(&iv), &frame[4..], &mut encrypted)
         .map_err(|_| invalid_data("v3.5 payload encryption failed"))?;
@@ -250,6 +255,24 @@ fn pack_6699(seq: u32, cmd: u32, payload: &[u8], session_key: &[u8]) -> io::Resu
     frame.extend_from_slice(tag.as_slice());
     frame.extend_from_slice(&SUFFIX_6699.to_be_bytes());
     Ok(frame)
+}
+
+fn tuya_gcm_iv() -> [u8; 12] {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let mut iv = [0u8; 12];
+    iv.copy_from_slice(&nanos.to_be_bytes()[4..]);
+    iv
+}
+
+fn strip_retcode(payload: &[u8]) -> &[u8] {
+    if payload.len() >= 4 && payload[..4] == [0, 0, 0, 0] {
+        &payload[4..]
+    } else {
+        payload
+    }
 }
 
 fn decrypt_6699_payload(header: &[u8], payload: &[u8], session_key: &[u8]) -> io::Result<Vec<u8>> {
@@ -292,4 +315,10 @@ fn decode_json_payload(payload: &[u8]) -> io::Result<String> {
 
 fn invalid_data(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
+}
+
+fn trace(verbose: bool, message: &str) {
+    if verbose {
+        eprintln!("{message}");
+    }
 }

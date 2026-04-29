@@ -1,7 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{program_error::ProgramError, pubkey::Pubkey};
 
-pub const SIZE: usize = 320;
+pub const SIZE: usize = 448;
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[borsh(use_discriminant = true)]
@@ -37,6 +37,20 @@ pub struct Deployment {
     pub memory_bytes_used: u64,
     pub storage_bytes_used: u64,
     pub network_bytes_sent: u64,
+    pub current_core_hour: u64,
+    pub current_ram_gib_hour: u64,
+    pub current_storage_gib_hour: u64,
+    pub current_network_mbit_hour: u64,
+    pub pending_core_hour: u64,
+    pub pending_ram_gib_hour: u64,
+    pub pending_storage_gib_hour: u64,
+    pub pending_network_mbit_hour: u64,
+    pub pending_price_effective_at: i64,
+    pub auto_stop_on_price_increase: u8,
+    pub governance_authority: Pubkey,
+    pub provider_earned: u64,
+    pub buyer_refunded: u64,
+    pub dao_slashed: u64,
 }
 
 impl Deployment {
@@ -82,6 +96,20 @@ impl Default for Deployment {
             memory_bytes_used: 0,
             storage_bytes_used: 0,
             network_bytes_sent: 0,
+            current_core_hour: 0,
+            current_ram_gib_hour: 0,
+            current_storage_gib_hour: 0,
+            current_network_mbit_hour: 0,
+            pending_core_hour: 0,
+            pending_ram_gib_hour: 0,
+            pending_storage_gib_hour: 0,
+            pending_network_mbit_hour: 0,
+            pending_price_effective_at: 0,
+            auto_stop_on_price_increase: 1,
+            governance_authority: Pubkey::default(),
+            provider_earned: 0,
+            buyer_refunded: 0,
+            dao_slashed: 0,
         }
     }
 }
@@ -114,6 +142,20 @@ mod tests {
             memory_bytes_used: 4_000,
             storage_bytes_used: 5_000,
             network_bytes_sent: 6_000,
+            current_core_hour: 10,
+            current_ram_gib_hour: 11,
+            current_storage_gib_hour: 12,
+            current_network_mbit_hour: 13,
+            pending_core_hour: 20,
+            pending_ram_gib_hour: 21,
+            pending_storage_gib_hour: 22,
+            pending_network_mbit_hour: 23,
+            pending_price_effective_at: 15,
+            auto_stop_on_price_increase: 1,
+            governance_authority: Pubkey::new_unique(),
+            provider_earned: 30,
+            buyer_refunded: 40,
+            dao_slashed: 50,
         };
         let mut data = [0u8; SIZE];
 
@@ -127,5 +169,17 @@ mod tests {
         assert_eq!(unpacked.status, deployment.status);
         assert_eq!(unpacked.spent, deployment.spent);
         assert_eq!(unpacked.network_bytes_sent, deployment.network_bytes_sent);
+        assert_eq!(
+            unpacked.pending_price_effective_at,
+            deployment.pending_price_effective_at
+        );
+        assert_eq!(unpacked.auto_stop_on_price_increase, 1);
+        assert_eq!(
+            unpacked.governance_authority,
+            deployment.governance_authority
+        );
+        assert_eq!(unpacked.provider_earned, deployment.provider_earned);
+        assert_eq!(unpacked.buyer_refunded, deployment.buyer_refunded);
+        assert_eq!(unpacked.dao_slashed, deployment.dao_slashed);
     }
 }

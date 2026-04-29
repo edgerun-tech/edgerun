@@ -97,7 +97,8 @@ impl DeliveryWorker {
         }
 
         // Build envelope from queued data
-        let envelope = MailEnvelope::new(msg.envelope_sender.clone());
+        let mut envelope = MailEnvelope::new(msg.envelope_sender.clone());
+        envelope.data = msg.data.clone();
 
         let mut any_failed = false;
 

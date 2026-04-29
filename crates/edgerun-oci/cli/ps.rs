@@ -7,6 +7,7 @@ use std::io::Write;
 use std::os::unix::io::AsRawFd;
 
 use crate::cli::exec::{enter_container_root, join_container_namespaces, open_exec_root};
+use crate::cli::exec::container_namespace_pid;
 use crate::cli::process_tree;
 use crate::cli::{invalid_input, parse_cli_args};
 use crate::state::{load_state, save_state, state_root_dir, ContainerState};
@@ -33,10 +34,11 @@ pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> 
         ));
     }
 
+    let ns_pid = container_namespace_pid(pid);
     let spec = crate::cli::load_runtime_or_bundle_spec(&state.id, &state.bundle);
-    let (root_fd, root_path) = open_exec_root(pid, spec.as_ref())?;
+    let (root_fd, root_path) = open_exec_root(ns_pid, spec.as_ref(), &state.bundle)?;
     if !root_path.join("proc/self").exists() {
-        let processes = read_host_process_tree(pid);
+        let processes = read_host_process_tree(ns_pid);
         if parsed.json {
             print_processes_json(&processes);
         } else {
@@ -44,7 +46,7 @@ pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> 
         }
         return Ok(());
     }
-    print_container_processes(pid, root_fd.as_raw_fd(), parsed.json)
+    print_container_processes(ns_pid, root_fd.as_raw_fd(), parsed.json)
 }
 
 #[derive(Debug)]

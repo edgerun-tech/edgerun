@@ -385,15 +385,7 @@ impl Jc3248w535Display {
 
     /// Fill the full 320x480 panel with one RGB565 color.
     pub unsafe fn fill_rgb565(color: u16) {
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_address_window(0, 0, LCD_WIDTH, LCD_HEIGHT);
         tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
         let hi = (color >> 8) as u8;
         let lo = color as u8;
@@ -420,15 +412,7 @@ impl Jc3248w535Display {
 
     /// Fill the panel using the vendor QSPI row protocol.
     pub unsafe fn fill_rows_rgb565(color: u16) {
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_address_window(0, 0, LCD_WIDTH, LCD_HEIGHT);
 
         let hi = (color >> 8) as u8;
         let lo = color as u8;
@@ -466,15 +450,7 @@ impl Jc3248w535Display {
         let x_end = min_u16(LCD_WIDTH - 1, x.saturating_add(radius * 2));
         let y_end = min_u16(LCD_HEIGHT - 1, y.saturating_add(radius * 2));
 
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_address_window(0, 0, LCD_WIDTH, LCD_HEIGHT);
         tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
 
         let mut chunk = [0u8; 64];
@@ -506,15 +482,7 @@ impl Jc3248w535Display {
             return;
         }
 
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_address_window(0, 0, LCD_WIDTH, LCD_HEIGHT);
         tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
 
         let mut chunk = [0u8; 64];
@@ -570,15 +538,7 @@ impl Jc3248w535Display {
             return;
         }
 
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_address_window(0, 0, LCD_WIDTH, LCD_HEIGHT);
 
         let mut row = [0u8; LCD_WIDTH as usize * 2];
         let mut local_y = 0u16;
@@ -619,15 +579,7 @@ impl Jc3248w535Display {
             return;
         }
 
-        tx_cmd(
-            0x2A,
-            &[
-                0x00,
-                0x00,
-                ((LCD_WIDTH - 1) >> 8) as u8,
-                (LCD_WIDTH - 1) as u8,
-            ],
-        );
+        set_address_window(0, 0, LCD_WIDTH, LCD_HEIGHT);
         tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
 
         let mut chunk = [0u8; 64];
@@ -638,6 +590,45 @@ impl Jc3248w535Display {
                 let mut offset = 0usize;
                 while offset < chunk.len() && px < width {
                     let color = pixel_rgb565(px, py);
+                    chunk[offset] = (color >> 8) as u8;
+                    chunk[offset + 1] = color as u8;
+                    offset += 2;
+                    px += 1;
+                }
+                let keep_cs = py + 1 < height || px < width;
+                spi2_write(&chunk[..offset], true, keep_cs);
+            }
+            py += 1;
+        }
+    }
+
+    /// Stream a generated RGB565 rectangle to a bounded panel address window.
+    pub unsafe fn draw_rgb565_rect_with<F>(
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        mut pixel_rgb565: F,
+    ) where
+        F: FnMut(u16, u16) -> u16,
+    {
+        if x >= LCD_WIDTH || y >= LCD_HEIGHT || width == 0 || height == 0 {
+            return;
+        }
+
+        let width = min_u16(width, LCD_WIDTH - x);
+        let height = min_u16(height, LCD_HEIGHT - y);
+        set_address_window(x, y, width, height);
+        tx_command_word(0x2C, LCD_OPCODE_WRITE_COLOR, false, true);
+
+        let mut chunk = [0u8; 64];
+        let mut py = 0u16;
+        while py < height {
+            let mut px = 0u16;
+            while px < width {
+                let mut offset = 0usize;
+                while offset < chunk.len() && px < width {
+                    let color = pixel_rgb565(x + px, y + py);
                     chunk[offset] = (color >> 8) as u8;
                     chunk[offset + 1] = color as u8;
                     offset += 2;
@@ -703,6 +694,19 @@ unsafe fn tx_command_word(cmd: u8, opcode: u32, quad: bool, keep_cs: bool) {
     spi2_write(&word, quad, keep_cs);
 }
 
+unsafe fn set_address_window(x: u16, y: u16, width: u16, height: u16) {
+    let x_end = min_u16(LCD_WIDTH - 1, x.saturating_add(width).saturating_sub(1));
+    let y_end = min_u16(LCD_HEIGHT - 1, y.saturating_add(height).saturating_sub(1));
+    tx_cmd(
+        0x2A,
+        &[(x >> 8) as u8, x as u8, (x_end >> 8) as u8, x_end as u8],
+    );
+    tx_cmd(
+        0x2B,
+        &[(y >> 8) as u8, y as u8, (y_end >> 8) as u8, y_end as u8],
+    );
+}
+
 unsafe fn spi2_init() {
     let clk = read_volatile(SYSTEM_PERIP_CLK_EN0);
     write_volatile(SYSTEM_PERIP_CLK_EN0, clk | SYSTEM_SPI2_CLK_EN);
@@ -726,7 +730,8 @@ unsafe fn spi2_init() {
     write_volatile(SPI_DMA_CONF, 0);
     write_volatile(SPI_DMA_INT_CLR, u32::MAX);
 
-    // Source clock is 80 MHz. N=3 gives 20 MHz for conservative first bring-up.
+    // Source clock is 80 MHz. N=3 gives 20 MHz; 40 MHz works but produces
+    // visible artifacts on the JC3248W535 panel path.
     write_volatile(SPI_CLOCK, (3 << 12) | (1 << 6) | 3);
     write_volatile(SPI_CTRL, 0);
     write_volatile(SPI_MISC, SPI_CK_IDLE_EDGE | 0x3e);

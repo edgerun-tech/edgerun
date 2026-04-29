@@ -20,8 +20,9 @@ use std::ffi::CString;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
-use crate::cgroups::setup_cgroups;
+use crate::cgroups::{setup_cgroups, setup_device_cgroup};
 pub use crate::handle::RunningContainer;
 use crate::hooks::{
     execute_create_runtime_hooks, execute_poststart_hooks, execute_poststop_hooks,
@@ -176,7 +177,7 @@ pub fn fork_container_child_with_terminal_socket(
         .as_ref()
         .and_then(|l| l.cgroups_path.as_ref())
         .cloned()
-        .unwrap_or_else(|| "/edgerun".into());
+        .unwrap_or_else(|| format!("/{container_id}"));
     let resources = spec.linux.as_ref().and_then(|l| l.resources.clone());
 
     // Create state directory and FIFO
@@ -303,6 +304,31 @@ pub fn signal_start(container_id: &str) -> io::Result<()> {
     crate::fifo::signal_start(&fifo)
 }
 
+fn normalized_spec_cgroup_path(spec: &OciSpec, container_id: &str) -> io::Result<Option<String>> {
+    let Some(linux) = spec.linux.as_ref() else {
+        return Ok(None);
+    };
+
+    let default_cgroup_path;
+    let raw_cgroup_path = match linux.cgroups_path.as_deref() {
+        Some(path) => path,
+        None => {
+            default_cgroup_path = format!("/{container_id}");
+            default_cgroup_path.as_str()
+        }
+    };
+    let normalized = if raw_cgroup_path.is_empty() {
+        format!("/{container_id}")
+    } else {
+        strip_sysfs_prefix(raw_cgroup_path)
+    };
+    let rootless = is_rootless_mode();
+    Ok(Some(crate::rootless::resolve_container_cgroup_path(
+        rootless,
+        &normalized,
+    )?))
+}
+
 // ===========================================================================
 // Step 6: cgroups
 // ===========================================================================
@@ -327,29 +353,49 @@ pub fn setup_container_cgroups(
 }
 
 /// Set up cgroups declared by the spec before the container is started.
-pub fn setup_spec_cgroups(pid: u32, spec: &OciSpec) -> io::Result<()> {
+pub fn setup_spec_cgroups(pid: u32, spec: &OciSpec, container_id: &str) -> io::Result<()> {
+    let Some(linux) = spec.linux.as_ref() else {
+        return Ok(());
+    };
+    if linux.resources.is_none() && linux.cgroups_path.is_none() {
+        return Ok(());
+    }
+    let default_resources;
+    let resources = match linux.resources.as_ref() {
+        Some(resources) => resources,
+        None => {
+            default_resources = OciLinuxResources::default();
+            &default_resources
+        }
+    };
+
+    let Some(cgroup_path) = normalized_spec_cgroup_path(spec, container_id)? else {
+        return Ok(());
+    };
+    setup_container_cgroups(pid, resources, &cgroup_path)
+}
+
+/// Attach device cgroup rules after the child has completed setup.
+pub fn setup_spec_device_cgroups(spec: &OciSpec, container_id: &str) -> io::Result<()> {
     let Some(linux) = spec.linux.as_ref() else {
         return Ok(());
     };
     let Some(resources) = linux.resources.as_ref() else {
         return Ok(());
     };
-
-    let raw_cgroup_path = linux.cgroups_path.as_deref().unwrap_or("");
-    let normalized = if raw_cgroup_path.is_empty() {
-        "/edgerun".to_string()
-    } else {
-        strip_sysfs_prefix(raw_cgroup_path)
+    let Some(cgroup_path) = normalized_spec_cgroup_path(spec, container_id)? else {
+        return Ok(());
     };
-    let rootless = is_rootless_mode();
-    let cgroup_path = crate::rootless::resolve_container_cgroup_path(rootless, &normalized)?;
-    setup_container_cgroups(pid, resources, &cgroup_path)
+    setup_device_cgroup(&cgroup_path, resources)
 }
 
 /// Start a created container: cgroups, FIFO signal, poststart hooks, and state.
 pub fn start_created_container(spec: &OciSpec, container_id: &str, pid: u32) -> io::Result<()> {
-    setup_spec_cgroups(pid, spec)?;
-    signal_start(container_id)?;
+    setup_spec_cgroups(pid, spec, container_id)?;
+    let fifo = crate::state::fifo_path(container_id);
+    let mut fifo_writer = crate::fifo::open_fifo_write(&fifo)?;
+    setup_spec_device_cgroups(spec, container_id)?;
+    crate::fifo::write_start_signal(&mut fifo_writer)?;
     run_poststart_hooks(spec, container_id, pid)?;
     update_state_running(container_id, pid)
 }
@@ -472,18 +518,12 @@ pub fn run_poststop_and_cleanup(
         }
     }
 
+    cleanup_rootfs_mount(spec, bundle_path)?;
+    wait_proc_gone(pid);
+
     let cgroup_dir = container_cgroup_dir(cgroup_path)?;
     if cgroup_dir.exists() {
-        std::fs::remove_dir_all(&cgroup_dir).map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!(
-                    "failed to remove cgroup directory {}: {}",
-                    cgroup_dir.display(),
-                    e
-                ),
-            )
-        })?;
+        remove_cgroup_dir(&cgroup_dir)?;
     }
 
     Ok(())
@@ -528,21 +568,165 @@ fn delete_container_internal(
 
     execute_poststop_hooks(Some(poststop_hooks), &state);
 
+    cleanup_rootfs_path(bundle_path);
+    wait_proc_gone(pid);
+
     let cgroup_dir = container_cgroup_dir(cgroup_path)?;
     if cgroup_dir.exists() {
-        std::fs::remove_dir_all(&cgroup_dir).map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!(
-                    "failed to remove cgroup directory {}: {}",
-                    cgroup_dir.display(),
-                    e
-                ),
-            )
-        })?;
+        remove_cgroup_dir(&cgroup_dir)?;
     }
 
     Ok(())
+}
+
+fn wait_proc_gone(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    let proc_path = Path::new("/proc").join(pid.to_string());
+    for _ in 0..100 {
+        if !proc_path.exists() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn remove_cgroup_dir(cgroup_dir: &Path) -> io::Result<()> {
+    if let Ok(entries) = std::fs::read_dir(cgroup_dir) {
+        let mut children = entries
+            .flatten()
+            .filter_map(|entry| {
+                entry
+                    .file_type()
+                    .ok()
+                    .filter(|kind| kind.is_dir())
+                    .map(|_| entry.path())
+            })
+            .collect::<Vec<_>>();
+        children.sort_by(|left, right| right.cmp(left));
+        for child in children {
+            let _ = remove_cgroup_dir(&child);
+        }
+    }
+
+    let mut last_error = None;
+    let mut deferred_started = false;
+    let _ = std::fs::write(cgroup_dir.join("cgroup.kill"), "1");
+    std::thread::sleep(Duration::from_millis(50));
+    for _ in 0..100 {
+        match std::fs::remove_dir(cgroup_dir) {
+            Ok(()) => return Ok(()),
+            Err(error)
+                if error.raw_os_error() == Some(libc::EBUSY)
+                    || error.kind() == io::ErrorKind::ResourceBusy =>
+            {
+                if !deferred_started {
+                    let _ = spawn_deferred_cgroup_remove(cgroup_dir);
+                    deferred_started = true;
+                }
+                last_error = Some(error);
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => {
+                return Err(io::Error::new(
+                    error.kind(),
+                    format!(
+                        "failed to remove cgroup directory {}: {}",
+                        cgroup_dir.display(),
+                        error
+                    ),
+                ))
+            }
+        }
+    }
+
+    let error = last_error.unwrap_or_else(|| io::Error::other("cgroup directory remained busy"));
+    if error.raw_os_error() == Some(libc::EBUSY) || error.kind() == io::ErrorKind::ResourceBusy {
+        return spawn_deferred_cgroup_remove(cgroup_dir);
+    }
+    Err(cgroup_remove_error(cgroup_dir, error))
+}
+
+fn cgroup_remove_error(cgroup_dir: &Path, error: io::Error) -> io::Error {
+    io::Error::new(
+        error.kind(),
+        format!(
+            "failed to remove cgroup directory {}: {}",
+            cgroup_dir.display(),
+            error
+        ),
+    )
+}
+
+fn spawn_deferred_cgroup_remove(cgroup_dir: &Path) -> io::Result<()> {
+    let cleanup_dir = cgroup_dir
+        .parent()
+        .map(|parent| {
+            parent.join(format!(
+                ".edgerun-cgroup-delete-{}",
+                std::process::id()
+            ))
+        })
+        .unwrap_or_else(|| cgroup_dir.to_path_buf());
+    let cleanup_dir = match std::fs::rename(cgroup_dir, &cleanup_dir) {
+        Ok(()) => cleanup_dir,
+        Err(_) => cgroup_dir.to_path_buf(),
+    };
+
+    let Some(path) = cleanup_dir.to_str().map(str::to_string) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cgroup path is not valid UTF-8",
+        ));
+    };
+
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg("for i in $(seq 1 2000); do rmdir \"$1\" 2>/dev/null && exit 0; sleep 0.01; done; exit 1")
+        .arg("edgerun-cgroup-cleanup")
+        .arg(&path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|error| cgroup_remove_error(cgroup_dir, error))?;
+
+    for _ in 0..100 {
+        if !cleanup_dir.exists() || !cgroup_dir.exists() {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    Ok(())
+}
+
+fn cleanup_rootfs_mount(spec: &OciSpec, bundle_path: &str) -> io::Result<()> {
+    if let Some(ref root) = spec.root {
+        if Path::new(&root.path).is_absolute() {
+            cleanup_rootfs_path(&root.path);
+        } else if !bundle_path.is_empty() {
+            let path = Path::new(bundle_path).join(&root.path);
+            cleanup_rootfs_path(path.to_string_lossy().as_ref());
+        } else {
+            cleanup_rootfs_path(&root.path);
+        }
+    }
+    Ok(())
+}
+
+fn cleanup_rootfs_path(path: &str) {
+    if path.is_empty() {
+        return;
+    }
+    match crate::syscalls::do_umount2(path, crate::syscalls::MNT_DETACH) {
+        Ok(()) => {}
+        Err(error) if error.raw_os_error() == Some(libc::EINVAL) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(_) => {}
+    }
 }
 
 fn container_cgroup_dir(cgroup_path: &str) -> io::Result<PathBuf> {

@@ -3,13 +3,13 @@
 //! Uses the library lifecycle to run hooks with full OCI spec compliance.
 
 use crate::cli::process_tree::{signal_tree, wait_tree_dead};
+use crate::cli::{parse_cli_args, required_positional, split_cli_prefix, GlobalOpts};
 use crate::prelude::*;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::cli::GlobalOpts;
 use crate::lifecycle::{
     fork_container_child, run_create_runtime_hooks, run_prestart_hooks, save_created_state,
 };
@@ -18,9 +18,14 @@ use crate::spec::{parse_oci_spec, OciSpec};
 use crate::state::delete_state_with_result;
 
 pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
-    let bundle = opts.bundle.as_deref().unwrap_or(Path::new("."));
-    let id = crate::cli::parse_container_id_args(args, "create")?;
+    let (id, bundle_override, pid_file_override) = parse_create_args(args)?;
     let id = id.as_str();
+    let bundle = bundle_override
+        .as_ref()
+        .or_else(|| opts.bundle.as_ref())
+        .map(PathBuf::as_path)
+        .unwrap_or_else(|| Path::new("."));
+    let pid_file = pid_file_override.or_else(|| opts.pid_file.clone());
 
     crate::cli::apply_global_opts(opts)?;
 
@@ -114,9 +119,37 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     // Step 4: state is persisted as "created" and runtime spec snapshot is recorded.
 
     // Write PID to pid-file if requested
-    if let Some(ref pid_file) = opts.pid_file {
+    if let Some(ref pid_file) = pid_file {
         fs::write(pid_file, format!("{}", child_pid))?;
     }
 
     Ok(())
+}
+
+fn parse_create_args(args: &[String]) -> io::Result<(String, Option<PathBuf>, Option<PathBuf>)> {
+    const USAGE: &str = "Usage: ert create [options] <container-id>";
+    let (prefix, id, remaining) =
+        split_cli_prefix(args, &["--pid-file", "--bundle", "--console-socket", "-b"]);
+    let matches = parse_cli_args(
+        edgerun_clap::Command::new("create")
+            .arg(edgerun_clap::Arg::new("pid-file").long("pid-file"))
+            .arg(edgerun_clap::Arg::new("bundle").short('b').long("bundle"))
+            .arg(edgerun_clap::Arg::new("console-socket").long("console-socket")),
+        &prefix,
+        USAGE,
+    )?;
+    let id = required_positional(&matches, 0, "container ID required")?;
+    if !remaining.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "unexpected additional arguments after container id",
+        ));
+    }
+    crate::cli::validate_container_id(&id)?;
+
+    Ok((
+        id.to_string(),
+        matches.get_one::<PathBuf>("bundle"),
+        matches.get_one::<PathBuf>("pid-file"),
+    ))
 }

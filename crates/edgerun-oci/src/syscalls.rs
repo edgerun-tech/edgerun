@@ -357,24 +357,45 @@ pub fn makedev(major: u64, minor: u64) -> c_uint {
 ///
 /// This must be called BEFORE dropping privileges (setuid/setgid).
 pub fn do_capset(effective: u64, permitted: u64, inheritable: u64) -> io::Result<()> {
-    // cap_data structure for version 3:
-    // [0]: version (u32) = 0x20080522
-    // [1]: pid (i32) = 0 (current process)
-    // [2]: effective (u32)
-    // [3]: permitted (u32)
-    // [4]: inheritable low (u32)
-    // [5]: inheritable high (u32)
+    #[repr(C)]
+    struct CapHeader {
+        version: u32,
+        pid: i32,
+    }
+
+    #[repr(C)]
+    struct CapData {
+        effective: u32,
+        permitted: u32,
+        inheritable: u32,
+    }
+
     const CAP_VERSION: u32 = 0x20080522;
 
-    let mut data: [u32; 6] = [0; 6];
-    data[0] = CAP_VERSION;
-    data[1] = 0; // pid = current process
-    data[2] = effective as u32;
-    data[3] = permitted as u32;
-    data[4] = inheritable as u32;
-    data[5] = (inheritable >> 32) as u32;
+    let header = CapHeader {
+        version: CAP_VERSION,
+        pid: 0,
+    };
+    let data = [
+        CapData {
+            effective: effective as u32,
+            permitted: permitted as u32,
+            inheritable: inheritable as u32,
+        },
+        CapData {
+            effective: (effective >> 32) as u32,
+            permitted: (permitted >> 32) as u32,
+            inheritable: (inheritable >> 32) as u32,
+        },
+    ];
 
-    let ret = unsafe { syscall(CAPSET_SYSCALL_NR, &data as *const _ as *const c_void) as c_int };
+    let ret = unsafe {
+        syscall(
+            CAPSET_SYSCALL_NR,
+            &header as *const _ as *const c_void,
+            data.as_ptr() as *const c_void,
+        ) as c_int
+    };
     syscall_unit(ret)
 }
 
@@ -514,11 +535,11 @@ pub mod bpf_prog_type {
 pub mod bpf_attach_type {
     pub const BPF_CGROUP_INET_INGRESS: u32 = 0;
     pub const BPF_CGROUP_INET_EGRESS: u32 = 1;
-    pub const BPF_CGROUP_DEVICE: u32 = 14;
+    pub const BPF_CGROUP_DEVICE: u32 = 6;
 }
 
 /// eBPF return value for cgroup device programs (allow device access).
-pub const BPF_CGROUP_DEV_ALLOW: i32 = 0;
+pub const BPF_CGROUP_DEV_ALLOW: i32 = 1;
 
 /// Build an eBPF instruction (8 bytes, kernel bpf_insn format).
 ///
@@ -568,15 +589,16 @@ pub fn bpf_prog_load(
 ) -> std::io::Result<i32> {
     let insn_cnt = insns.len() as u32;
     let license_c = std::ffi::CString::new(license).unwrap();
+    let mut log_buf = vec![0u8; 64 * 1024];
 
     let attr = BpfProgLoadAttr {
         prog_type,
         insn_cnt,
         insns: insns.as_ptr() as u64,
         license: license_c.as_ptr() as u64,
-        log_level: 0,
-        log_size: 0,
-        log_buf: 0,
+        log_level: 1,
+        log_size: log_buf.len() as u32,
+        log_buf: log_buf.as_mut_ptr() as u64,
         kern_version: 0,
         prog_flags: 0,
         _padding: [0; 4],
@@ -591,7 +613,17 @@ pub fn bpf_prog_load(
         )
     };
     if ret < 0 {
-        Err(std::io::Error::last_os_error())
+        let error = std::io::Error::last_os_error();
+        let nul = log_buf.iter().position(|b| *b == 0).unwrap_or(log_buf.len());
+        let verifier_log = String::from_utf8_lossy(&log_buf[..nul]).trim().to_string();
+        if verifier_log.is_empty() {
+            Err(error)
+        } else {
+            Err(std::io::Error::new(
+                error.kind(),
+                format!("{}: {}", error, verifier_log),
+            ))
+        }
     } else {
         Ok(ret as i32)
     }
@@ -679,6 +711,11 @@ pub fn mov_imm(dst: u8, imm: i32) -> [u8; 8] {
 /// BPF_ALU64 | BPF_MOV | BPF_X: dst = src
 pub fn mov_reg(dst: u8, src: u8) -> [u8; 8] {
     ebpf_insn(0xbf, dst, src, 0, 0)
+}
+
+/// BPF_ALU64 | BPF_AND | BPF_K: dst &= imm
+pub fn and_imm(dst: u8, imm: i32) -> [u8; 8] {
+    ebpf_insn(0x57, dst, 0, 0, imm)
 }
 
 /// BPF_JMP | BPF_JNE | BPF_K: if dst != imm then jt else jf

@@ -79,7 +79,7 @@ pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
         let cgroup = linux
             .cgroups_path
             .clone()
-            .unwrap_or_else(|| "/edgerun".into());
+            .unwrap_or_else(|| format!("/{id}"));
         if let Err(e) = run_poststop_and_cleanup(id, pid, &bundle, &cgroup, spec) {
             cleanup_err = Some(e);
         }

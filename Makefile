@@ -1,4 +1,5 @@
 .PHONY: check test build release docker-build install-ert version
+.PHONY: marketplace-localnet marketplace-localnet-status marketplace-localnet-stop marketplace-stress
 .PHONY: e2e e2e-full e2e-hardware e2e-mesh e2e-conformance e2e-runner
 
 # Run local CI checks (format, clippy, check, release build)
@@ -16,6 +17,22 @@ release:
 # Run all Rust tests and print an aggregate pass/fail summary
 test:
 	./scripts/test-summary.py
+
+# Start a local Solana validator with marketplace programs preloaded
+marketplace-localnet:
+	./scripts/start-solana-validator.sh
+
+# Show local marketplace validator status
+marketplace-localnet-status:
+	./scripts/start-solana-validator.sh status
+
+# Stop the local marketplace validator
+marketplace-localnet-stop:
+	./scripts/start-solana-validator.sh stop
+
+# Run local marketplace lifecycle stress; override with MARKETPLACE_STRESS_ITERATIONS=N
+marketplace-stress: marketplace-localnet
+	./scripts/stress-marketplace-local.sh
 
 # Build all workspace binaries
 build:

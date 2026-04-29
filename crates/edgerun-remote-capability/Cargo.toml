@@ -12,6 +12,7 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-camera-biometrics = { path = "../edgerun-camera-biometrics" }
 edgerun-biometrics = { path = "../edgerun-biometrics" }
 edgerun-bluetooth = { path = "../edgerun-bluetooth" }
+edgerun-display = { path = "../edgerun-display" }
 edgerun-input = { path = "../edgerun-input" }
 edgerun-microphone = { path = "../edgerun-microphone" }
 edgerun-speaker = { path = "../edgerun-speaker" }

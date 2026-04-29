@@ -12,6 +12,10 @@ use std::path::Path;
 
 use crate::spec::OciLinuxResources;
 
+fn cgroup_root(cgroup_path: &str) -> std::path::PathBuf {
+    Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'))
+}
+
 /// Write to a cgroup file, logging errors to /dev/kmsg (best-effort).
 pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
     if let Err(e) = cgroup_write_result(cgroup_root, file, content) {
@@ -68,7 +72,7 @@ pub fn setup_container_cgroups_from_file_result(
 
 /// Apply cgroup v2 resource limits by writing to /sys/fs/cgroup.
 pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str) -> io::Result<()> {
-    let cgroup_root = Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
+    let cgroup_root = cgroup_root(cgroup_path);
     fs::create_dir_all(&cgroup_root)?;
 
     // Move PID into cgroup
@@ -231,14 +235,26 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
         }
     }
 
-    // Device cgroup rules via eBPF
-    if let Some(ref devices) = resources.devices {
-        if !devices.is_empty() {
-            let _ = crate::ebpf_devices::setup_device_cgroup_ebpf(&cgroup_root, devices);
-        }
-    }
+    // Device cgroup updates require transition rules so runtime setup can still
+    // allocate PTYs and open stdio devices before the workload restrictions land.
+    // Until that is implemented, leave device eBPF unattached rather than
+    // installing deny-all rules too early.
 
     Ok(())
+}
+
+/// Attach cgroup v2 device access rules after runtime-only setup has completed
+/// but before the workload is released from the start FIFO.
+pub fn setup_device_cgroup(cgroup_path: &str, resources: &OciLinuxResources) -> io::Result<()> {
+    let Some(rules) = resources.devices.as_deref() else {
+        return Ok(());
+    };
+    if rules.is_empty() {
+        return Ok(());
+    }
+
+    let root = cgroup_root(cgroup_path);
+    crate::ebpf_devices::setup_device_cgroup_ebpf(&root, rules)
 }
 
 /// Write throttle device limits to io.max.

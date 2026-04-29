@@ -5,7 +5,7 @@
 use crate::prelude::*;
 use crate::signers::Signer;
 use crate::solana_types::{AccountMeta, Instruction, Pubkey};
-use edgerun_http::HttpClient;
+use edgerun_http::{HttpClient, HttpVersion};
 use edgerun_json::{json, JsonValue};
 use std::sync::Arc;
 
@@ -14,6 +14,7 @@ use crate::try_deployment_program_id;
 use crate::types::{Deployment, DeploymentStatus};
 
 const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
+const DEPLOYMENT_ACCOUNT_SIZE: u64 = 448;
 
 fn make_instruction(
     program_id: Pubkey,
@@ -37,6 +38,12 @@ pub struct DeploymentClient {
     runtime: Arc<HttpRuntime>,
 }
 
+#[derive(Debug, Clone)]
+pub struct DeploymentAccount {
+    pub pubkey: Pubkey,
+    pub deployment: Deployment,
+}
+
 impl DeploymentClient {
     pub fn new(rpc_url: &str) -> Result<Self, SolanaError> {
         Self::new_with_program_id(rpc_url, try_deployment_program_id()?)
@@ -45,7 +52,7 @@ impl DeploymentClient {
     pub fn new_with_program_id(rpc_url: &str, program_id: Pubkey) -> Result<Self, SolanaError> {
         let rt = HttpRuntime::new();
         Ok(Self {
-            http: HttpClient::new().no_redirects(),
+            http: HttpClient::new().version(HttpVersion::Http1).no_redirects(),
             program_id,
             rpc_url: rpc_url.to_string(),
             runtime: Arc::new(rt),
@@ -80,11 +87,41 @@ impl DeploymentClient {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getAccountInfo",
-            "params": [deployment_pubkey.to_string(), { "encoding": "base64" }]
+            "params": [deployment_pubkey.to_string(), { "encoding": "base64", "commitment": "confirmed" }]
         });
         let resp = self.rpc_call(payload)?;
         let bytes = decode_rpc_account_data(&resp)?;
         Deployment::try_from_slice(&bytes).map_err(|e| SolanaError::Serialization(e.to_string()))
+    }
+
+    pub fn list_deployments(&self) -> Result<Vec<DeploymentAccount>, SolanaError> {
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "getProgramAccounts",
+            "params": [
+                self.program_id.to_string(),
+                { "encoding": "base64", "commitment": "confirmed" }
+            ]
+        });
+        let resp = self.rpc_call(payload)?;
+        let accounts = resp["result"]
+            .as_array()
+            .ok_or_else(|| SolanaError::Rpc("no deployment accounts".to_string()))?;
+        let mut deployments = Vec::new();
+        for account in accounts {
+            let pubkey = account["pubkey"]
+                .as_str()
+                .ok_or_else(|| SolanaError::Rpc("program account missing pubkey".to_string()))?
+                .parse::<Pubkey>()
+                .map_err(|err| SolanaError::Rpc(format!("invalid deployment pubkey: {err}")))?;
+            let bytes = decode_rpc_account_data_value(&account["account"]["data"])?;
+            match Deployment::try_from_slice(&bytes) {
+                Ok(deployment) => deployments.push(DeploymentAccount { pubkey, deployment }),
+                Err(_) => continue,
+            }
+        }
+        Ok(deployments)
     }
 
     pub fn initialize_instruction(
@@ -100,6 +137,8 @@ impl DeploymentClient {
         total_network_mbps: u32,
         deposit: u64,
         burn_rate: u64,
+        auto_stop_on_price_increase: bool,
+        governance_authority: [u8; 32],
     ) -> Instruction {
         let mut encoded = Vec::new();
         encoded.extend_from_slice(&name);
@@ -111,6 +150,8 @@ impl DeploymentClient {
         encoded.extend_from_slice(&total_network_mbps.to_le_bytes());
         encoded.extend_from_slice(&deposit.to_le_bytes());
         encoded.extend_from_slice(&burn_rate.to_le_bytes());
+        encoded.push(u8::from(auto_stop_on_price_increase));
+        encoded.extend_from_slice(&governance_authority);
         make_instruction(
             self.program_id,
             0,
@@ -123,10 +164,68 @@ impl DeploymentClient {
         )
     }
 
+    pub fn deployment_address_with_seed(
+        &self,
+        owner_pubkey: &Pubkey,
+        seed: &str,
+    ) -> Result<Pubkey, SolanaError> {
+        create_address_with_seed(owner_pubkey, seed, &self.program_id)
+    }
+
+    pub async fn create_deployment_signed<S: Signer>(
+        &self,
+        owner_pubkey: &Pubkey,
+        seed: &str,
+        signer: &S,
+        name: [u8; 64],
+        provider: [u8; 32],
+        container_count: u32,
+        total_cpu_cores: u32,
+        total_memory_bytes: u64,
+        total_storage_bytes: u64,
+        total_network_mbps: u32,
+        deposit: u64,
+        burn_rate: u64,
+        auto_stop_on_price_increase: bool,
+        governance_authority: [u8; 32],
+    ) -> Result<(Pubkey, String), SolanaError> {
+        let deployment_pubkey = self.deployment_address_with_seed(owner_pubkey, seed)?;
+        let rent_lamports = self.minimum_balance_for_rent_exemption(DEPLOYMENT_ACCOUNT_SIZE)?;
+        let create_ix = create_account_with_seed_instruction(
+            owner_pubkey,
+            &deployment_pubkey,
+            owner_pubkey,
+            seed,
+            rent_lamports,
+            DEPLOYMENT_ACCOUNT_SIZE,
+            &self.program_id,
+        )?;
+        let init_ix = self.initialize_instruction(
+            &deployment_pubkey,
+            owner_pubkey,
+            name,
+            provider,
+            container_count,
+            total_cpu_cores,
+            total_memory_bytes,
+            total_storage_bytes,
+            total_network_mbps,
+            deposit,
+            burn_rate,
+            auto_stop_on_price_increase,
+            governance_authority,
+        );
+        let tx = self
+            .send_instructions_signed(&[create_ix, init_ix], owner_pubkey, signer)
+            .await?;
+        Ok((deployment_pubkey, tx))
+    }
+
     pub fn report_metrics_instruction(
         &self,
         deployment_pubkey: &Pubkey,
         provider_pubkey: &Pubkey,
+        provider_authority_pubkey: &Pubkey,
         cpu_cores_used: u32,
         memory_bytes_used: u64,
         storage_bytes_used: u64,
@@ -145,7 +244,8 @@ impl DeploymentClient {
             &encoded,
             vec![
                 AccountMeta::new(*deployment_pubkey, false),
-                AccountMeta::new(*provider_pubkey, true),
+                AccountMeta::new(*provider_pubkey, false),
+                AccountMeta::new(*provider_authority_pubkey, true),
             ],
         )
     }
@@ -170,6 +270,7 @@ impl DeploymentClient {
         &self,
         deployment_pubkey: &Pubkey,
         owner_pubkey: &Pubkey,
+        provider_payout_pubkey: &Pubkey,
     ) -> Instruction {
         make_instruction(
             self.program_id,
@@ -178,6 +279,120 @@ impl DeploymentClient {
             vec![
                 AccountMeta::new(*deployment_pubkey, false),
                 AccountMeta::new(*owner_pubkey, true),
+                AccountMeta::new(*provider_payout_pubkey, false),
+            ],
+        )
+    }
+
+    pub fn pause_instruction(
+        &self,
+        deployment_pubkey: &Pubkey,
+        owner_pubkey: &Pubkey,
+    ) -> Instruction {
+        make_instruction(
+            self.program_id,
+            2,
+            &[],
+            vec![
+                AccountMeta::new(*deployment_pubkey, false),
+                AccountMeta::new(*owner_pubkey, true),
+            ],
+        )
+    }
+
+    pub fn resume_instruction(
+        &self,
+        deployment_pubkey: &Pubkey,
+        owner_pubkey: &Pubkey,
+    ) -> Instruction {
+        make_instruction(
+            self.program_id,
+            3,
+            &[],
+            vec![
+                AccountMeta::new(*deployment_pubkey, false),
+                AccountMeta::new(*owner_pubkey, true),
+            ],
+        )
+    }
+
+    pub fn dispute_instruction(
+        &self,
+        deployment_pubkey: &Pubkey,
+        owner_pubkey: &Pubkey,
+    ) -> Instruction {
+        make_instruction(
+            self.program_id,
+            5,
+            &[],
+            vec![
+                AccountMeta::new(*deployment_pubkey, false),
+                AccountMeta::new(*owner_pubkey, true),
+            ],
+        )
+    }
+
+    pub fn resolve_instruction(
+        &self,
+        deployment_pubkey: &Pubkey,
+        resolver_pubkey: &Pubkey,
+        refund_pubkey: &Pubkey,
+        provider_payout_pubkey: &Pubkey,
+        slash_pubkey: &Pubkey,
+        refund_to_buyer: u64,
+        provider_payout: u64,
+        slash_to_dao: u64,
+    ) -> Instruction {
+        let mut encoded = Vec::new();
+        encoded.extend_from_slice(&refund_to_buyer.to_le_bytes());
+        encoded.extend_from_slice(&provider_payout.to_le_bytes());
+        encoded.extend_from_slice(&slash_to_dao.to_le_bytes());
+        make_instruction(
+            self.program_id,
+            6,
+            &encoded,
+            vec![
+                AccountMeta::new(*deployment_pubkey, false),
+                AccountMeta::new(*resolver_pubkey, true),
+                AccountMeta::new(*refund_pubkey, false),
+                AccountMeta::new(*provider_payout_pubkey, false),
+                AccountMeta::new(*slash_pubkey, false),
+            ],
+        )
+    }
+
+    pub fn tick_burn_instruction(&self, deployment_pubkey: &Pubkey) -> Instruction {
+        make_instruction(
+            self.program_id,
+            7,
+            &[],
+            vec![AccountMeta::new(*deployment_pubkey, false)],
+        )
+    }
+
+    pub fn schedule_pricing_instruction(
+        &self,
+        deployment_pubkey: &Pubkey,
+        governance_pubkey: &Pubkey,
+        core_hour: u64,
+        ram_gib_hour: u64,
+        storage_gib_hour: u64,
+        network_mbit_hour: u64,
+        effective_at: i64,
+    ) -> Instruction {
+        let mut encoded = Vec::new();
+        encoded.extend_from_slice(&core_hour.to_le_bytes());
+        encoded.extend_from_slice(&ram_gib_hour.to_le_bytes());
+        encoded.extend_from_slice(&storage_gib_hour.to_le_bytes());
+        encoded.extend_from_slice(&network_mbit_hour.to_le_bytes());
+        encoded.extend_from_slice(&effective_at.to_le_bytes());
+        make_instruction(
+            self.program_id,
+            9,
+            &encoded,
+            vec![
+                AccountMeta::new(*deployment_pubkey, false),
+                AccountMeta::new(*governance_pubkey, true),
             ],
         )
     }
@@ -198,15 +413,24 @@ impl DeploymentClient {
         signer_pubkey: &Pubkey,
         signer: &S,
     ) -> Result<String, SolanaError> {
-        validate_single_signer(signer_pubkey, core::slice::from_ref(&instruction))?;
+        self.send_instructions_signed(core::slice::from_ref(&instruction), signer_pubkey, signer)
+            .await
+    }
+
+    pub async fn send_instructions_signed<S: Signer>(
+        &self,
+        instructions: &[Instruction],
+        signer_pubkey: &Pubkey,
+        signer: &S,
+    ) -> Result<String, SolanaError> {
+        validate_single_signer(signer_pubkey, instructions)?;
         let recent_blockhash = self.get_latest_blockhash()?;
-        let ix = instruction.clone();
-        let msg = serialize_transaction_message(signer_pubkey, &[ix], &recent_blockhash);
+        let msg = serialize_transaction_message(signer_pubkey, instructions, &recent_blockhash);
         let signature = signer
             .sign(&msg)
             .map_err(|e| SolanaError::Signing(e.to_string()))?;
         let tx_bytes =
-            serialize_transaction(signer_pubkey, &[instruction], &recent_blockhash, &signature);
+            serialize_transaction(signer_pubkey, instructions, &recent_blockhash, &signature);
         let payload = json!({
             "jsonrpc": "2.0",
             "id": 2,
@@ -221,6 +445,62 @@ impl DeploymentClient {
             .as_str()
             .map(|s| s.to_string())
             .ok_or_else(|| SolanaError::Rpc("no result in response".to_string()))
+    }
+
+    pub fn minimum_balance_for_rent_exemption(&self, size: u64) -> Result<u64, SolanaError> {
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "getMinimumBalanceForRentExemption",
+            "params": [size]
+        });
+        let resp = self.rpc_call(payload)?;
+        resp["result"]
+            .as_u64()
+            .ok_or_else(|| SolanaError::Rpc("missing rent exemption result".to_string()))
+    }
+
+    #[cfg(not(target_os = "none"))]
+    pub fn confirm_transaction(&self, signature: &str) -> Result<(), SolanaError> {
+        const ATTEMPTS: usize = 30;
+        const SLEEP_MS: u64 = 500;
+
+        for _ in 0..ATTEMPTS {
+            let payload = json!({
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "getSignatureStatuses",
+                "params": [[signature], { "searchTransactionHistory": true }]
+            });
+            let resp = self.rpc_call(payload)?;
+            let statuses = resp["result"]["value"]
+                .as_array()
+                .ok_or_else(|| SolanaError::Rpc("missing signature status array".to_string()))?;
+            if let Some(status) = statuses.first() {
+                if status.is_null() {
+                    std::thread::sleep(std::time::Duration::from_millis(SLEEP_MS));
+                    continue;
+                }
+                if !status["err"].is_null() {
+                    return Err(SolanaError::Transaction(format!(
+                        "transaction {signature} failed: {}",
+                        status["err"].to_json_string().unwrap_or_default()
+                    )));
+                }
+                if matches!(
+                    status["confirmationStatus"].as_str(),
+                    Some("confirmed" | "finalized")
+                ) {
+                    return Ok(());
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(SLEEP_MS));
+        }
+
+        Err(SolanaError::Transaction(format!(
+            "transaction {signature} was not confirmed after {} seconds",
+            (ATTEMPTS as u64 * SLEEP_MS) / 1_000
+        )))
     }
 
     fn get_latest_blockhash(&self) -> Result<Pubkey, SolanaError> {
@@ -250,16 +530,18 @@ impl DeploymentClient {
         network_bytes_sent: u64,
         container_count: u32,
     ) -> Result<String, SolanaError> {
+        let provider_authority = Pubkey::new_from_array(signer.pubkey());
         let instruction = self.report_metrics_instruction(
             deployment_pubkey,
             provider_pubkey,
+            &provider_authority,
             cpu_cores_used,
             memory_bytes_used,
             storage_bytes_used,
             network_bytes_sent,
             container_count,
         );
-        self.send_instruction_signed(instruction, provider_pubkey, signer)
+        self.send_instruction_signed(instruction, &provider_authority, signer)
             .await
     }
 
@@ -286,6 +568,63 @@ impl DeploymentClient {
     pub fn is_active(&self, deployment: &Deployment) -> bool {
         matches!(deployment.status, DeploymentStatus::Running)
     }
+}
+
+pub fn create_address_with_seed(
+    base: &Pubkey,
+    seed: &str,
+    owner: &Pubkey,
+) -> Result<Pubkey, SolanaError> {
+    if seed.len() > 32 {
+        return Err(SolanaError::Transaction(
+            "seed must be 32 bytes or less".to_string(),
+        ));
+    }
+
+    let mut input = Vec::with_capacity(64 + seed.len());
+    input.extend_from_slice(base.as_bytes());
+    input.extend_from_slice(seed.as_bytes());
+    input.extend_from_slice(owner.as_bytes());
+    Ok(Pubkey::new_from_array(edgerun_crypto::sha256(&input)))
+}
+
+pub fn create_account_with_seed_instruction(
+    payer: &Pubkey,
+    new_account: &Pubkey,
+    base: &Pubkey,
+    seed: &str,
+    lamports: u64,
+    space: u64,
+    owner: &Pubkey,
+) -> Result<Instruction, SolanaError> {
+    if seed.len() > 32 {
+        return Err(SolanaError::Transaction(
+            "seed must be 32 bytes or less".to_string(),
+        ));
+    }
+
+    let mut data = Vec::with_capacity(4 + 32 + 8 + seed.len() + 8 + 8 + 32);
+    data.extend_from_slice(&3u32.to_le_bytes());
+    data.extend_from_slice(base.as_bytes());
+    data.extend_from_slice(&(seed.len() as u64).to_le_bytes());
+    data.extend_from_slice(seed.as_bytes());
+    data.extend_from_slice(&lamports.to_le_bytes());
+    data.extend_from_slice(&space.to_le_bytes());
+    data.extend_from_slice(owner.as_bytes());
+
+    let mut accounts = vec![
+        AccountMeta::new(*payer, true),
+        AccountMeta::new(*new_account, false),
+    ];
+    if base != payer {
+        accounts.push(AccountMeta::new_readonly(*base));
+    }
+
+    Ok(Instruction {
+        program_id: SYSTEM_PROGRAM_ID,
+        accounts,
+        data,
+    })
 }
 
 // Dedicated runtime for HTTP calls
@@ -441,6 +780,10 @@ fn decode_rpc_account_data(resp: &JsonValue) -> Result<Vec<u8>, SolanaError> {
         &resp["result"]["data"]
     };
 
+    decode_rpc_account_data_value(data)
+}
+
+fn decode_rpc_account_data_value(data: &JsonValue) -> Result<Vec<u8>, SolanaError> {
     if let Some(encoded) = data.as_str() {
         return base64_decode(encoded);
     }
@@ -517,5 +860,72 @@ mod tests {
         assert_eq!(tx[0], 1);
         assert_eq!(&tx[1..65], &signature);
         assert_eq!(&tx[65..], msg.as_slice());
+    }
+
+    #[test]
+    fn deployment_lifecycle_instruction_variants_match_program() {
+        let client = DeploymentClient::new_with_program_id(
+            "http://127.0.0.1:8899",
+            crate::deployment_program_id(),
+        )
+        .unwrap();
+        let deployment = Pubkey::new_from_array([1u8; 32]);
+        let owner = Pubkey::new_from_array([2u8; 32]);
+        let refund = Pubkey::new_from_array([3u8; 32]);
+        let slash = Pubkey::new_from_array([4u8; 32]);
+
+        assert_eq!(client.pause_instruction(&deployment, &owner).data, vec![2]);
+        assert_eq!(client.resume_instruction(&deployment, &owner).data, vec![3]);
+        assert_eq!(
+            client.dispute_instruction(&deployment, &owner).data,
+            vec![5]
+        );
+        assert_eq!(client.tick_burn_instruction(&deployment).data, vec![7]);
+
+        let provider_payout = Pubkey::new_from_array([5u8; 32]);
+        let resolve = client.resolve_instruction(
+            &deployment,
+            &owner,
+            &refund,
+            &provider_payout,
+            &slash,
+            500,
+            200,
+            300,
+        );
+        assert_eq!(resolve.data[0], 6);
+        assert_eq!(
+            u64::from_le_bytes(resolve.data[1..9].try_into().unwrap()),
+            500
+        );
+        assert_eq!(
+            u64::from_le_bytes(resolve.data[9..17].try_into().unwrap()),
+            200
+        );
+        assert_eq!(
+            u64::from_le_bytes(resolve.data[17..25].try_into().unwrap()),
+            300
+        );
+        assert_eq!(resolve.accounts.len(), 5);
+
+        let scheduled = client.schedule_pricing_instruction(
+            &deployment,
+            &owner,
+            10_000,
+            5_000,
+            1_000,
+            2_000,
+            1_700_000_000,
+        );
+        assert_eq!(scheduled.data[0], 9);
+        assert_eq!(
+            u64::from_le_bytes(scheduled.data[1..9].try_into().unwrap()),
+            10_000
+        );
+        assert_eq!(
+            i64::from_le_bytes(scheduled.data[33..41].try_into().unwrap()),
+            1_700_000_000
+        );
+        assert_eq!(scheduled.accounts.len(), 2);
     }
 }

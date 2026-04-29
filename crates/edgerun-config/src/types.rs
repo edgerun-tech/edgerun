@@ -536,6 +536,8 @@ pub struct SmtpServerSpec {
     pub tls_cert: Option<String>,
     /// TLS private key (PEM format).
     pub tls_key: Option<String>,
+    /// Local mail users accepted by SMTP.
+    pub users: Option<Vec<MailUserSpec>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -557,6 +559,19 @@ pub struct ImapServerSpec {
     pub tls_cert: Option<String>,
     /// TLS private key (PEM format).
     pub tls_key: Option<String>,
+    /// IMAP users and passwords.
+    pub users: Option<Vec<MailUserSpec>>,
+}
+
+/// Local mailbox user configuration.
+#[derive(Debug, Clone)]
+pub struct MailUserSpec {
+    /// Mailbox username, normally the local part before `@`.
+    pub username: String,
+    /// Optional password for IMAP authentication.
+    pub password: Option<String>,
+    /// Optional accepted domains for SMTP local delivery.
+    pub domains: Option<Vec<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1599,6 +1614,7 @@ impl_config_json_struct! {
             dkim_key_path: "dkim_key_path" => String,
             tls_cert: "tls_cert" => String,
             tls_key: "tls_key" => String,
+            users: "users" => Vec<MailUserSpec>,
         }
         default {
             smtps: "smtps" => bool,
@@ -1618,8 +1634,21 @@ impl_config_json_struct! {
             maildir_root: "maildir_root" => String,
             tls_cert: "tls_cert" => String,
             tls_key: "tls_key" => String,
+            users: "users" => Vec<MailUserSpec>,
         }
         default { imaps: "imaps" => bool }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    MailUserSpec {
+        required { username: "username" => String }
+        optional {
+            password: "password" => String,
+            domains: "domains" => Vec<String>,
+        }
+        default {}
         default_with {}
     }
 }
