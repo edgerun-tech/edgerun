@@ -64,7 +64,66 @@ impl ContentEncoding {
 
 /// Build Accept-Encoding header value
 pub fn accept_encoding_value() -> &'static str {
-    "identity"
+    #[cfg(feature = "http-compression")]
+    {
+        "br, gzip, deflate"
+    }
+    #[cfg(not(feature = "http-compression"))]
+    {
+        "identity"
+    }
+}
+
+/// Compress response body for a negotiated content encoding.
+#[cfg(feature = "http-compression")]
+pub fn compress_body(body: &[u8], encoding: ContentEncoding) -> Option<Vec<u8>> {
+    match encoding {
+        ContentEncoding::Brotli => Some(compress_brotli(body)),
+        ContentEncoding::Gzip => Some(compress_gzip(body)),
+        ContentEncoding::Deflate => Some(compress_deflate(body)),
+        ContentEncoding::Identity | ContentEncoding::Unknown => None,
+    }
+}
+
+/// Compress response body for a negotiated content encoding.
+#[cfg(not(feature = "http-compression"))]
+pub fn compress_body(_body: &[u8], _encoding: ContentEncoding) -> Option<Vec<u8>> {
+    None
+}
+
+/// Pick the best response encoding from an Accept-Encoding header.
+pub fn preferred_response_encoding(accept_encoding: &str) -> ContentEncoding {
+    #[cfg(feature = "http-compression")]
+    {
+        if accepts_encoding(accept_encoding, "br") {
+            ContentEncoding::Brotli
+        } else if accepts_encoding(accept_encoding, "gzip") {
+            ContentEncoding::Gzip
+        } else if accepts_encoding(accept_encoding, "deflate") {
+            ContentEncoding::Deflate
+        } else {
+            ContentEncoding::Identity
+        }
+    }
+    #[cfg(not(feature = "http-compression"))]
+    {
+        let _ = accept_encoding;
+        ContentEncoding::Identity
+    }
+}
+
+fn accepts_encoding(header: &str, encoding: &str) -> bool {
+    header.split(',').any(|part| {
+        let mut pieces = part.trim().split(';');
+        let token = pieces.next().unwrap_or("").trim();
+        if !token.eq_ignore_ascii_case(encoding) && token != "*" {
+            return false;
+        }
+        pieces.all(|piece| {
+            let piece = piece.trim();
+            !piece.starts_with("q=") || piece[2..].parse::<f32>().map(|q| q > 0.0).unwrap_or(true)
+        })
+    })
 }
 
 /// Decompress response body based on Content-Encoding header

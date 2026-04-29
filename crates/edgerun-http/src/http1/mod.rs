@@ -19,7 +19,10 @@ pub use crate::{Request, Response};
 
 pub use crate::runtime::BufReader;
 pub use body::{AsyncBodyReader, Body, BodyReader, BodySender};
-pub use compression::{accept_encoding_value, decompress_body, ContentEncoding};
+pub use compression::{
+    accept_encoding_value, compress_body, decompress_body, preferred_response_encoding,
+    ContentEncoding,
+};
 pub use connection::{determine_connection, ConnectionState};
 pub use handler::{into_handler, into_handler_async, Handler};
 pub use multipart::{extract_boundary, is_multipart, parse_multipart, MultipartField};

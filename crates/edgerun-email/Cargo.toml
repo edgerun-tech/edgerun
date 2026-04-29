@@ -13,6 +13,11 @@ name = "edgerun-mailq"
 path = "src/bin/edgerun-mailq.rs"
 required-features = ["std"]
 
+[[bin]]
+name = "edgerun-smtp-probe"
+path = "src/bin/edgerun-smtp-probe.rs"
+required-features = ["std", "tls"]
+
 [features]
 default = ["dkim"]
 tls = ["dep:edgerun-tls"]

@@ -221,20 +221,27 @@ async fn cmd_show(data_root: &Path, message_id: &str) -> Result<(), String> {
 
     // Show per-recipient status
     println!("\nPer-recipient status:");
-    for recipient in &msg.recipients {
-        let delivered = index.is_recipient_delivered(message_id, recipient).await;
-        let failed = index.get_failed_recipients(message_id).await;
-        let is_failed = failed.iter().any(|r| &r.recipient == recipient);
-
-        let status = if delivered {
-            RecipientStatusType::Delivered
-        } else if is_failed {
-            RecipientStatusType::Failed
-        } else {
-            RecipientStatusType::Pending
-        };
-
-        println!("  {:<40} {:?}", recipient, status);
+    let statuses = index.get_recipient_statuses(message_id).await;
+    if statuses.is_empty() {
+        for recipient in &msg.recipients {
+            println!("  {:<40} {:?}", recipient, RecipientStatusType::Pending);
+        }
+    } else {
+        for status in statuses {
+            let detail = if let Some(reason) = status.failure_reason.as_deref() {
+                reason
+            } else if status.delivered_at.is_some() {
+                "delivered"
+            } else {
+                ""
+            };
+            println!(
+                "  {:<40} {:<10} {}",
+                status.recipient,
+                status.status.as_str(),
+                detail
+            );
+        }
     }
 
     Ok(())

@@ -652,10 +652,11 @@ fn load_post(root: &Path, source_path: &Path) -> io::Result<Option<Post>> {
     let tags = front_list(front, "tags");
     let summary = summary_value.unwrap_or_else(|| summarize(body));
     let path = slug_for_path(&rel);
+    let content_body = remove_leading_heading(body, &title);
     let html = if source_path.extension().and_then(|ext| ext.to_str()) == Some("html") {
         body.to_string()
     } else {
-        markdown_to_html(body)
+        markdown_to_html(content_body)
     };
 
     Ok(Some(Post {
@@ -666,7 +667,7 @@ fn load_post(root: &Path, source_path: &Path) -> io::Result<Option<Post>> {
         date,
         author,
         tags,
-        body: strip_markdown(body),
+        body: strip_markdown(content_body),
         html,
         missing_front_matter,
     }))
@@ -694,16 +695,17 @@ fn load_page(root: &Path, source_path: &Path) -> io::Result<Option<Page>> {
     }
     let title = title_value.unwrap_or_else(|| first_heading(body).unwrap_or(fallback_title));
     let summary = summary_value.unwrap_or_else(|| summarize(body));
+    let content_body = remove_leading_heading(body, &title);
     let html = if source_path.extension().and_then(|ext| ext.to_str()) == Some("html") {
         body.to_string()
     } else {
-        markdown_to_html(body)
+        markdown_to_html(content_body)
     };
     Ok(Some(Page {
         title,
         source_path: source_path.to_path_buf(),
         summary,
-        body: strip_markdown(body),
+        body: strip_markdown(content_body),
         html,
         missing_front_matter,
     }))
@@ -723,14 +725,18 @@ fn render_index(config: &BlogConfig, posts: &[Post]) -> String {
         ));
     }
 
+    let search_summary = format!(
+        "<p id=\"search-count\" class=\"search-count\">{} posts</p>",
+        posts.len()
+    );
     page_shell(
         config,
         &PageMeta::index(config),
         &format!(
-            "<section class=\"hero\"><div><p class=\"eyebrow\">Static from Git</p><h1>{}</h1><p>{}</p><p><a class=\"inline-link\" href=\"/about.html\">About Edgerun</a></p></div><form class=\"search-panel\" role=\"search\"><label for=\"search\">Search</label><input id=\"search\" type=\"search\" placeholder=\"Search posts, tags, and text\" autocomplete=\"off\" aria-describedby=\"search-count\"><p id=\"search-count\">{} posts</p></form></section><main id=\"content\" class=\"layout\" tabindex=\"-1\"><aside aria-label=\"Post topics\"><h2>Topics</h2>{}</aside><section id=\"posts\" class=\"posts\" aria-label=\"Posts\">{}</section></main>",
+            "<section class=\"hero\"><div><p class=\"eyebrow\">Static from Git</p><h1>{}</h1><p>{}</p><p><a class=\"inline-link\" href=\"/about.html\">About Edgerun</a></p></div>{}</section><main id=\"content\" class=\"layout\" tabindex=\"-1\"><aside aria-label=\"Post topics\"><h2>Topics</h2>{}</aside><section id=\"posts\" class=\"posts\" aria-label=\"Posts\">{}</section></main>",
             escape_html(&config.title),
             escape_html(&config.description),
-            posts.len(),
+            search_summary,
             render_topic_list(posts),
             cards
         ),
@@ -754,7 +760,7 @@ fn render_post(config: &BlogConfig, post: &Post, posts: &[Post]) -> String {
         config,
         &PageMeta::post(config, post),
         &format!(
-            "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><article class=\"article\" aria-labelledby=\"post-title\"><a class=\"back\" href=\"/\">Back to posts</a><p class=\"date\"><time datetime=\"{}\">{}</time> by <span rel=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article><aside aria-label=\"Recent posts\"><h2>Recent</h2><nav class=\"recent\" aria-label=\"Recent posts\">{}</nav></aside></main>",
+            "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><article class=\"article\" aria-labelledby=\"post-title\"><a class=\"back\" href=\"/\">Back to posts</a><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article><aside aria-label=\"Recent posts\"><h2>Recent</h2><nav class=\"recent\" aria-label=\"Recent posts\">{}</nav></aside></main>",
             escape_attr(&post.date),
             escape_html(&post.date),
             escape_html(&post.author),
@@ -782,6 +788,7 @@ fn render_about(config: &BlogConfig, page: &Page) -> String {
 
 struct PageMeta {
     title: String,
+    schema_name: String,
     description: String,
     canonical: String,
     page_type: &'static str,
@@ -795,6 +802,7 @@ impl PageMeta {
     fn index(config: &BlogConfig) -> Self {
         Self {
             title: config.title.clone(),
+            schema_name: config.title.clone(),
             description: config.description.clone(),
             canonical: absolute_url(config, "/"),
             page_type: "website",
@@ -808,6 +816,7 @@ impl PageMeta {
     fn post(config: &BlogConfig, post: &Post) -> Self {
         Self {
             title: post.title.clone(),
+            schema_name: post.title.clone(),
             description: post.summary.clone(),
             canonical: absolute_url(config, &format!("/posts/{}.html", post.path)),
             page_type: "article",
@@ -820,11 +829,13 @@ impl PageMeta {
             },
             noindex: false,
         }
+        .with_site_title(&config.title)
     }
 
     fn about(config: &BlogConfig, page: &Page) -> Self {
         Self {
             title: page.title.clone(),
+            schema_name: page.title.clone(),
             description: page.summary.clone(),
             canonical: absolute_url(config, "/about.html"),
             page_type: "website",
@@ -839,6 +850,7 @@ impl PageMeta {
     fn not_found(title: &str) -> Self {
         Self {
             title: "Not found".to_string(),
+            schema_name: "Not found".to_string(),
             description: "The requested page does not exist.".to_string(),
             canonical: String::new(),
             page_type: "website",
@@ -903,13 +915,18 @@ fn page_shell(config: &BlogConfig, meta: &PageMeta, body: &str) -> String {
         "<script type=\"application/ld+json\">{}</script>",
         render_json_ld(config, meta)
     ));
-    head.push_str("<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"><link rel=\"manifest\" href=\"/site.webmanifest\"><link rel=\"search\" type=\"application/opensearchdescription+xml\" href=\"/opensearch.xml\" title=\"Search\"><link rel=\"alternate\" type=\"application/atom+xml\" href=\"/feed.xml\" title=\"Feed\"><link rel=\"stylesheet\" href=\"/style.css\">");
+    let script_src = format!("/app.js?v={}", asset_version(APP_JS));
+    head.push_str(&format!(
+        "<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"><link rel=\"manifest\" href=\"/site.webmanifest\"><link rel=\"search\" type=\"application/opensearchdescription+xml\" href=\"/opensearch.xml\"><link rel=\"alternate\" type=\"application/atom+xml\" href=\"/feed.xml\"><style>{}</style>",
+        STYLE
+    ));
     format!(
-        "<!doctype html><html lang=\"en\"><head>{}</head><body><a class=\"skip-link\" href=\"#content\">Skip to content</a><header class=\"topbar\"><a class=\"brand\" href=\"/\" aria-label=\"{} home\">{}</a><nav aria-label=\"Primary\"><a href=\"/feed.xml\">Feed</a><er-theme-toggle></er-theme-toggle></nav></header>{}<script src=\"/app.js\"></script></body></html>",
+        "<!doctype html><html lang=\"en\"><head>{}</head><body><a class=\"skip-link\" href=\"#content\">Skip to content</a><header class=\"topbar\"><a class=\"brand\" href=\"/\" aria-label=\"{} home\">{}</a><form class=\"header-search\" role=\"search\" action=\"/\" method=\"get\"><label for=\"search\">Search posts</label><input id=\"search\" name=\"q\" type=\"search\" placeholder=\"Search\" autocomplete=\"off\"><button type=\"submit\" title=\"Search posts\" aria-label=\"Search posts\">🔍</button></form><nav aria-label=\"Primary\"><a href=\"/about.html\">About</a><er-theme-toggle></er-theme-toggle></nav></header>{}<footer class=\"site-footer\"><a href=\"/feed.xml\">Feed</a></footer><script src=\"{}\" defer></script></body></html>",
         head,
         escape_attr(&config.title),
         escape_html(&config.title),
-        body
+        body,
+        escape_attr(&script_src)
     )
 }
 
@@ -1008,13 +1025,19 @@ fn render_json_ld(config: &BlogConfig, meta: &PageMeta) -> String {
     let mut fields = vec![
         "\"@context\":\"https://schema.org\"".to_string(),
         format!("\"@type\":\"{}\"", meta.schema_type),
-        format!("\"name\":\"{}\"", escape_json(&meta.title)),
+        format!("\"name\":\"{}\"", escape_json(&meta.schema_name)),
         format!("\"description\":\"{}\"", escape_json(&meta.description)),
         format!(
             "\"publisher\":{{\"@type\":\"Organization\",\"name\":\"{}\"}}",
             escape_json(&config.title)
         ),
     ];
+    if meta.schema_type == "BlogPosting" {
+        fields.push(format!(
+            "\"headline\":\"{}\"",
+            escape_json(&meta.schema_name)
+        ));
+    }
     if !meta.canonical.is_empty() {
         fields.push(format!("\"url\":\"{}\"", escape_json(&meta.canonical)));
         fields.push(format!(
@@ -1050,6 +1073,15 @@ fn absolute_url(config: &BlogConfig, path: &str) -> String {
     } else {
         format!("{base}/{path}")
     }
+}
+
+fn asset_version(input: &str) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in input.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
 }
 
 fn markdown_to_html(input: &str) -> String {
@@ -1344,6 +1376,17 @@ fn first_heading(input: &str) -> Option<String> {
         .find_map(|line| heading(line.trim()).map(|(_, text)| text.to_string()))
 }
 
+fn remove_leading_heading<'a>(input: &'a str, title: &str) -> &'a str {
+    let start = input.trim_start_matches(|ch| ch == '\n' || ch == '\r');
+    let first_line_end = start.find('\n').unwrap_or(start.len());
+    let first_line = start[..first_line_end].trim_end_matches('\r').trim();
+    if heading(first_line).is_some_and(|(_, text)| text == title.trim()) {
+        start[first_line_end..].trim_start_matches(|ch| ch == '\n' || ch == '\r')
+    } else {
+        input
+    }
+}
+
 fn summarize(input: &str) -> String {
     strip_markdown(input)
         .split_whitespace()
@@ -1555,7 +1598,7 @@ fn static_file_response(root: &Path, route: &str) -> Option<Response> {
     Some(
         Response::new(StatusCode::OK)
             .with_header("Content-Type", content_type)
-            .with_header("Cache-Control", "public, max-age=60")
+            .with_header("Cache-Control", cache_control_for(&path))
             .with_header("X-Content-Type-Options", "nosniff")
             .with_body(body),
     )
@@ -1601,6 +1644,14 @@ fn content_type_for(path: &Path) -> &'static str {
         Some("js") => "application/javascript; charset=utf-8",
         Some("json") => "application/json",
         _ => "application/octet-stream",
+    }
+}
+
+fn cache_control_for(path: &Path) -> &'static str {
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some("css") | Some("js") | Some("svg") => "public, max-age=31536000, immutable",
+        Some("html") => "public, max-age=60",
+        _ => "public, max-age=300",
     }
 }
 
@@ -1665,7 +1716,7 @@ const APP_JS: &str = r#"
 const root=document.documentElement;
 const stored=localStorage.getItem('theme');
 if(stored){root.dataset.theme=stored}
-if(!customElements.get('er-theme-toggle')){customElements.define('er-theme-toggle',class extends HTMLElement{connectedCallback(){this.attachShadow({mode:'open'}).innerHTML='<style>button{width:36px;height:36px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;font:inherit}button:hover{border-color:var(--accent)}</style><button type="button" aria-label="Toggle color theme">◐</button>';this.shadowRoot.querySelector('button').onclick=()=>{const next=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=next;localStorage.setItem('theme',next)}}})}
+if(!customElements.get('er-theme-toggle')){customElements.define('er-theme-toggle',class extends HTMLElement{connectedCallback(){this.attachShadow({mode:'open'}).innerHTML='<style>button{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;font:24px/1 system-ui}button:hover{border-color:var(--accent)}</style><button type="button"></button>';const btn=this.shadowRoot.querySelector('button');const current=()=>root.dataset.theme||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');const render=()=>{const dark=current()==='dark';btn.textContent=dark?'☾':'☀';btn.title=dark?'Dark mode: switch to light mode':'Light mode: switch to dark mode';btn.setAttribute('aria-label',btn.title)};btn.onclick=()=>{const next=current()==='dark'?'light':'dark';root.dataset.theme=next;localStorage.setItem('theme',next);render()};render()}})}
 const search=document.getElementById('search');
 const cards=[...document.querySelectorAll('.post-card')];
 const count=document.getElementById('search-count');
@@ -1679,8 +1730,8 @@ for(const btn of document.querySelectorAll('[data-topic]')){btn.addEventListener
 const STYLE: &str = r#"
 :root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent-2:#8b3f2f;--code:#eee6d8}
 :root[data-theme=dark]{--bg:#101418;--panel:#171d22;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent-2:#dfa06b;--code:#232b31}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:14px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none}.topbar nav{display:flex;gap:16px;align-items:center}.topbar nav a{color:var(--muted);text-decoration:none}button,input{font:inherit}.hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:28px;padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:720px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.search-panel{align-self:end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.search-panel label{display:block;font-weight:800;margin-bottom:8px}.search-panel input{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:12px 13px}.search-panel p{margin:10px 0 0;font-size:14px}.layout,.article-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:32px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.posts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article{max-width:780px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(22px,5vw,48px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.empty{max-width:720px;margin:80px auto;padding:0 18px}.muted{color:var(--muted)}
-@media(max-width:820px){.hero,.layout,.article-layout{grid-template-columns:1fr}.hero{padding-top:42px}.posts{grid-template-columns:1fr}.article{padding:22px}.topbar{position:static}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:auto minmax(220px,520px) auto;gap:18px;align-items:center;padding:12px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none}.topbar nav{display:flex;gap:16px;align-items:center;justify-content:end}.topbar nav a{color:var(--muted);text-decoration:none}.header-search{display:grid;grid-template-columns:1fr 44px;align-items:center}.header-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.header-search input{min-width:0;border:1px solid var(--line);border-right:0;border-radius:8px 0 0 8px;background:var(--panel);color:var(--text);padding:10px 12px}.header-search button{width:44px;height:44px;border:1px solid var(--line);border-radius:0 8px 8px 0;background:var(--panel);color:var(--text);font-size:24px;line-height:1;cursor:pointer}.header-search button:hover{border-color:var(--accent)}button,input{font:inherit}.hero{padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:720px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.search-count{margin-top:18px}.layout,.article-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:32px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.posts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article{max-width:780px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(22px,5vw,48px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.empty{max-width:720px;margin:80px auto;padding:0 18px}.muted{color:var(--muted)}.site-footer{border-top:1px solid var(--line);padding:22px clamp(18px,4vw,56px);color:var(--muted)}.site-footer a{text-decoration:none}
+@media(max-width:820px){.topbar{position:static;grid-template-columns:1fr auto}.brand{grid-column:1}.topbar nav{grid-column:2;grid-row:1}.header-search{grid-column:1/-1;grid-row:2}.hero,.layout,.article-layout{grid-template-columns:1fr}.hero{padding-top:42px}.posts{grid-template-columns:1fr}.article{padding:22px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 "#;
 
@@ -1730,6 +1781,13 @@ mod tests {
     }
 
     #[test]
+    fn removes_title_heading_from_rendered_body() {
+        let body = remove_leading_heading("# Hello\n\nBody.", "Hello");
+        assert_eq!(body, "Body.");
+        assert!(!markdown_to_html(body).contains("<h1>Hello</h1>"));
+    }
+
+    #[test]
     fn generates_static_site_files() {
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1766,6 +1824,9 @@ mod tests {
         assert!(fs::read_to_string(output.join("search.json"))
             .unwrap()
             .contains("\"title\":\"Hello\""));
+        let post_html = fs::read_to_string(output.join("posts/hello.html")).unwrap();
+        assert_eq!(post_html.matches("<h1").count(), 1);
+        assert!(!post_html.contains("aria-describedby=\"search-count\""));
 
         let _ = fs::remove_dir_all(base);
     }

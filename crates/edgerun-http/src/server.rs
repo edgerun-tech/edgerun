@@ -498,7 +498,8 @@ where
 
         let request = Request::new(method, uri, headers, body);
         let is_head = request.method().as_str() == "HEAD";
-        let response = handler.handle(request).await;
+        let response = handler.handle(request.clone()).await;
+        let response = maybe_compress_response(&request, response);
         write_response_head(&mut reader, &response, is_head).await?;
 
         let skip_body = is_head
@@ -1099,7 +1100,8 @@ async fn process_request_with_body(
     }
 
     let request = Request::new(method, uri, req_headers, Some(body));
-    let response = handler.handle(request).await;
+    let response = handler.handle(request.clone()).await;
+    let response = maybe_compress_response(&request, response);
 
     let mut resp_frames = Vec::new();
     let mut resp_headers = vec![(
@@ -1304,4 +1306,70 @@ fn should_write_response_body(response: &Response) -> bool {
         && response.status().as_u16() != 204
         && response.status().as_u16() != 304
         && !response.status().is_informational()
+}
+
+fn maybe_compress_response(request: &Request, response: Response) -> Response {
+    if !should_write_response_body(&response)
+        || response.body().len() < 512
+        || response.headers().contains_key("Content-Encoding")
+        || request.headers().contains_key("Range")
+    {
+        return response;
+    }
+    let Some(content_type) = response
+        .headers()
+        .get("Content-Type")
+        .map(|value| value.as_str())
+    else {
+        return response;
+    };
+    if !is_compressible_content_type(content_type) {
+        return response;
+    }
+    let Some(accept_encoding) = request
+        .headers()
+        .get("Accept-Encoding")
+        .map(|value| value.as_str())
+    else {
+        return response;
+    };
+    let encoding = crate::http1::preferred_response_encoding(accept_encoding);
+    if encoding == crate::http1::ContentEncoding::Identity {
+        return response;
+    }
+    let Some(compressed) = crate::http1::compress_body(response.body(), encoding) else {
+        return response;
+    };
+    if compressed.len() >= response.body().len() {
+        return response;
+    }
+
+    let mut headers = response.headers().clone();
+    headers.remove("Content-Length");
+    headers.remove("Content-Encoding");
+    let _ = headers.insert("Content-Encoding", encoding.as_str());
+    headers.remove("Vary");
+    let _ = headers.insert("Vary", "Accept-Encoding");
+    let _ = headers.insert("Content-Length", &compressed.len().to_string());
+    Response::from_parts(response.status(), headers, compressed)
+}
+
+fn is_compressible_content_type(content_type: &str) -> bool {
+    let content_type = content_type
+        .split(';')
+        .next()
+        .unwrap_or(content_type)
+        .trim()
+        .to_ascii_lowercase();
+    content_type.starts_with("text/")
+        || matches!(
+            content_type.as_str(),
+            "application/javascript"
+                | "application/json"
+                | "application/manifest+json"
+                | "application/opensearchdescription+xml"
+                | "application/xml"
+                | "application/atom+xml"
+                | "image/svg+xml"
+        )
 }

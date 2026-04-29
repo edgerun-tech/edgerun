@@ -306,6 +306,7 @@ impl MailIndex {
                 self.retry_queue.write().await.push(entry);
             }
         }
+        self.repair_retry_queue().await;
 
         // Load send_log.bin
         let data = spawn_blocking({
@@ -323,6 +324,31 @@ impl MailIndex {
         }
 
         Ok(())
+    }
+
+    async fn repair_retry_queue(&self) {
+        let messages: Vec<MailMessageRecord> =
+            self.messages.read().await.values().cloned().collect();
+        let mut retry_queue = self.retry_queue.write().await;
+        retry_queue.sort_by(|left, right| {
+            left.message_id
+                .cmp(&right.message_id)
+                .then_with(|| left.next_retry_time.cmp(&right.next_retry_time))
+        });
+        retry_queue.dedup_by(|left, right| left.message_id == right.message_id);
+        for message in messages {
+            if matches!(message.status, MailStatus::Queued | MailStatus::Retrying)
+                && !retry_queue
+                    .iter()
+                    .any(|entry| entry.message_id == message.message_id)
+            {
+                retry_queue.push(RetryEntry {
+                    message_id: message.message_id,
+                    next_retry_time: message.next_retry_time,
+                    retry_count: message.retry_count,
+                });
+            }
+        }
     }
 
     pub async fn save(&self) -> io::Result<()> {
@@ -622,6 +648,19 @@ impl MailIndex {
             })
             .map(|(_, rec)| rec.clone())
             .collect()
+    }
+
+    pub async fn get_recipient_statuses(&self, message_id: &str) -> Vec<RecipientStatus> {
+        let mut statuses: Vec<_> = self
+            .recipients
+            .read()
+            .await
+            .iter()
+            .filter(|((mid, _), _)| mid == message_id)
+            .map(|(_, rec)| rec.clone())
+            .collect();
+        statuses.sort_by(|left, right| left.recipient.cmp(&right.recipient));
+        statuses
     }
 
     pub async fn list_queued(&self) -> Vec<MailMessageRecord> {

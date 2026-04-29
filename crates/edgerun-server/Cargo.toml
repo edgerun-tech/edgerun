@@ -19,7 +19,7 @@ path = "src/bin/edgerun-server.rs"
 required-features = ["std", "smtp", "imap", "dns", "tls"]
 
 [dependencies]
-edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["connection-middleware", "server"] }
+edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["connection-middleware", "http-compression", "server"] }
 edgerun-email = { version = "0.1", path = "../edgerun-email", optional = true }
 edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false, optional = true }
 edgerun-acme = { version = "0.1", path = "../edgerun-acme", features = ["dns_challenge"] }

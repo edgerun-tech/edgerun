@@ -233,8 +233,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         session_cache: Option<&SessionCache>,
     ) -> Result<Self> {
         let client_random = generate_random();
-        let key_pair =
-            EcdhKeyPair::generate(KeyExchangeGroup::X25519).map_err(TlsError::HandshakeFailure)?;
+        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1)
+            .map_err(TlsError::HandshakeFailure)?;
 
         // 1. Send ClientHello
         let group = match key_pair.group() {
@@ -402,14 +402,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
     /// suites so the fallback stays small and modern.
     pub async fn client_tls12(mut stream: S, server_name: &str) -> Result<Self> {
         let client_random = generate_random();
-        let key_pair =
-            EcdhKeyPair::generate(KeyExchangeGroup::X25519).map_err(TlsError::HandshakeFailure)?;
+        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1)
+            .map_err(TlsError::HandshakeFailure)?;
         let ch = build_tls12_client_hello(client_random, server_name);
         let mut transcript = ch.clone();
-        write_plain_record(&mut stream, 22, &ch).await?;
+        write_plain_record_with_version(&mut stream, 22, 0x0301, &ch).await?;
 
         let mut server_random = [0u8; 32];
         let mut cipher_suite = 0u16;
+        let mut extended_master_secret = false;
+        let mut certificate_requested = false;
         let mut server_key_exchange = Vec::new();
 
         loop {
@@ -433,7 +435,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 let msg = &record[pos..end];
                 match msg_type {
                     2 => {
-                        parse_tls12_server_hello(msg, &mut server_random, &mut cipher_suite)?;
+                        parse_tls12_server_hello(
+                            msg,
+                            &mut server_random,
+                            &mut cipher_suite,
+                            &mut extended_master_secret,
+                        )?;
                         transcript.extend_from_slice(msg);
                     }
                     11 => {
@@ -441,6 +448,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                     }
                     12 => {
                         server_key_exchange = msg.to_vec();
+                        transcript.extend_from_slice(msg);
+                    }
+                    13 => {
+                        certificate_requested = true;
                         transcript.extend_from_slice(msg);
                     }
                     14 => {
@@ -463,13 +474,28 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let shared_secret = key_pair
             .exchange(&server_public)
             .map_err(TlsError::HandshakeFailure)?;
-        let master_secret = tls12_prf(
-            cipher_suite,
-            &shared_secret,
-            b"master secret",
-            &[client_random.as_slice(), server_random.as_slice()].concat(),
-            48,
-        )?;
+
+        if certificate_requested {
+            let certificate = handshake_message(11, &[0, 0, 0]);
+            transcript.extend_from_slice(&certificate);
+            write_plain_record(&mut stream, 22, &certificate).await?;
+        }
+        let client_key_exchange = build_tls12_client_key_exchange(&key_pair.public_key_bytes());
+        transcript.extend_from_slice(&client_key_exchange);
+        write_plain_record(&mut stream, 22, &client_key_exchange).await?;
+
+        let master_seed = if extended_master_secret {
+            tls12_handshake_hash(cipher_suite, &transcript)?
+        } else {
+            [client_random.as_slice(), server_random.as_slice()].concat()
+        };
+        let master_label = if extended_master_secret {
+            b"extended master secret".as_slice()
+        } else {
+            b"master secret".as_slice()
+        };
+        let master_secret =
+            tls12_prf(cipher_suite, &shared_secret, master_label, &master_seed, 48)?;
         let key_block = tls12_prf(
             cipher_suite,
             &master_secret,
@@ -479,9 +505,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         )?;
         let keys = split_tls12_key_block(cipher_suite, &key_block)?;
 
-        let client_key_exchange = build_tls12_client_key_exchange(&key_pair.public_key_bytes());
-        transcript.extend_from_slice(&client_key_exchange);
-        write_plain_record(&mut stream, 22, &client_key_exchange).await?;
         stream.write_all(&[20, 0x03, 0x03, 0, 1, 1]).await?;
         stream.flush().await?;
 
@@ -1320,17 +1343,17 @@ fn build_tls12_client_hello(client_random: [u8; 32], server_name: &str) -> Vec<u
     body.extend_from_slice(&0x0303u16.to_be_bytes());
     body.extend_from_slice(&client_random);
     body.push(0);
-    for bytes in [
-        &4u16.to_be_bytes(),
-        &0xC030u16.to_be_bytes(),
-        &0xC02Fu16.to_be_bytes(),
-    ] {
+    for bytes in [&2u16.to_be_bytes(), &0xC02Fu16.to_be_bytes()] {
         body.extend_from_slice(bytes);
     }
     body.push(1);
     body.push(0);
 
     let mut extensions = Vec::new();
+    extensions.extend_from_slice(&0xff01u16.to_be_bytes());
+    extensions.extend_from_slice(&1u16.to_be_bytes());
+    extensions.push(0);
+
     let mut sni = Vec::new();
     sni.extend_from_slice(&((1 + 2 + server_name.len()) as u16).to_be_bytes());
     sni.push(0);
@@ -1341,14 +1364,20 @@ fn build_tls12_client_hello(client_random: [u8; 32], server_name: &str) -> Vec<u
     extensions.extend_from_slice(&sni);
 
     extensions.extend_from_slice(&10u16.to_be_bytes());
-    extensions.extend_from_slice(&6u16.to_be_bytes());
-    extensions.extend_from_slice(&[0, 4, 0, 0x1d, 0, 0x17]);
+    extensions.extend_from_slice(&4u16.to_be_bytes());
+    extensions.extend_from_slice(&[0, 2, 0, 0x17]);
     extensions.extend_from_slice(&11u16.to_be_bytes());
     extensions.extend_from_slice(&2u16.to_be_bytes());
     extensions.extend_from_slice(&[1, 0]);
+    extensions.extend_from_slice(&35u16.to_be_bytes());
+    extensions.extend_from_slice(&0u16.to_be_bytes());
+    extensions.extend_from_slice(&22u16.to_be_bytes());
+    extensions.extend_from_slice(&0u16.to_be_bytes());
+    extensions.extend_from_slice(&23u16.to_be_bytes());
+    extensions.extend_from_slice(&0u16.to_be_bytes());
     extensions.extend_from_slice(&13u16.to_be_bytes());
-    extensions.extend_from_slice(&10u16.to_be_bytes());
-    extensions.extend_from_slice(&[0, 8, 8, 4, 4, 3, 5, 3, 6, 3]);
+    extensions.extend_from_slice(&16u16.to_be_bytes());
+    extensions.extend_from_slice(&[0, 14, 8, 4, 4, 1, 4, 3, 5, 1, 5, 3, 6, 1, 6, 3]);
 
     body.extend_from_slice(&(extensions.len() as u16).to_be_bytes());
     body.extend_from_slice(&extensions);
@@ -1379,9 +1408,18 @@ async fn write_plain_record<S: AsyncRead + AsyncWrite + Unpin>(
     content_type: u8,
     fragment: &[u8],
 ) -> Result<()> {
+    write_plain_record_with_version(stream, content_type, 0x0303, fragment).await
+}
+
+async fn write_plain_record_with_version<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut S,
+    content_type: u8,
+    version: u16,
+    fragment: &[u8],
+) -> Result<()> {
     let mut record = Vec::with_capacity(5 + fragment.len());
     record.push(content_type);
-    record.extend_from_slice(&0x0303u16.to_be_bytes());
+    record.extend_from_slice(&version.to_be_bytes());
     record.extend_from_slice(&(fragment.len() as u16).to_be_bytes());
     record.extend_from_slice(fragment);
     stream.write_all(&record).await?;
@@ -1426,6 +1464,7 @@ fn parse_tls12_server_hello(
     msg: &[u8],
     random: &mut [u8; 32],
     cipher_suite: &mut u16,
+    extended_master_secret: &mut bool,
 ) -> Result<()> {
     if msg.len() < 42 || msg[0] != 2 {
         return Err(TlsError::Protocol("TLS 1.2 ServerHello truncated".into()));
@@ -1437,10 +1476,29 @@ fn parse_tls12_server_hello(
         return Err(TlsError::Protocol("TLS 1.2 ServerHello invalid".into()));
     }
     *cipher_suite = read_u16_be(body, suite_pos);
-    if *cipher_suite != 0xC02F && *cipher_suite != 0xC030 {
+    if !matches!(*cipher_suite, 0xC02B | 0xC02C | 0xC02F | 0xC030) {
         return Err(TlsError::Protocol(format!(
             "TLS 1.2 unsupported cipher suite 0x{cipher_suite:04x}",
         )));
+    }
+    *extended_master_secret = false;
+    let ext_len_pos = suite_pos + 3;
+    if ext_len_pos + 2 <= body.len() {
+        let ext_len = read_u16_be(body, ext_len_pos) as usize;
+        let mut pos = ext_len_pos + 2;
+        let end = pos.saturating_add(ext_len).min(body.len());
+        while pos + 4 <= end {
+            let ext_type = read_u16_be(body, pos);
+            let len = read_u16_be(body, pos + 2) as usize;
+            pos += 4;
+            if pos + len > end {
+                break;
+            }
+            if ext_type == 23 {
+                *extended_master_secret = true;
+            }
+            pos += len;
+        }
     }
     Ok(())
 }
@@ -1462,7 +1520,7 @@ fn parse_tls12_server_key_exchange(msg: &[u8]) -> Result<Vec<u8>> {
     if body.len() < 4 + key_len {
         return Err(TlsError::Protocol("TLS 1.2 ECDHE key truncated".into()));
     }
-    if group != 0x001D {
+    if !matches!(group, 0x0017 | 0x001D) {
         return Err(TlsError::Protocol(format!(
             "TLS 1.2 unsupported ECDHE group 0x{group:04x}",
         )));
@@ -1472,8 +1530,8 @@ fn parse_tls12_server_key_exchange(msg: &[u8]) -> Result<Vec<u8>> {
 
 fn split_tls12_key_block(cipher_suite: u16, key_block: &[u8]) -> Result<Tls12Keys> {
     let key_len = match cipher_suite {
-        0xC02F => 16,
-        0xC030 => 32,
+        0xC02B | 0xC02F => 16,
+        0xC02C | 0xC030 => 32,
         _ => {
             return Err(TlsError::Protocol(
                 "TLS 1.2 unsupported cipher suite".into(),
@@ -1498,8 +1556,8 @@ fn split_tls12_key_block(cipher_suite: u16, key_block: &[u8]) -> Result<Tls12Key
 
 fn tls12_key_block_len(cipher_suite: u16) -> Result<usize> {
     match cipher_suite {
-        0xC02F => Ok(40),
-        0xC030 => Ok(72),
+        0xC02B | 0xC02F => Ok(40),
+        0xC02C | 0xC030 => Ok(72),
         _ => Err(TlsError::Protocol(
             "TLS 1.2 unsupported cipher suite".into(),
         )),
@@ -1517,8 +1575,8 @@ fn tls12_prf(
     label_seed.extend_from_slice(label);
     label_seed.extend_from_slice(seed);
     Ok(match cipher_suite {
-        0xC02F => p_hash(secret, &label_seed, len, hmac_sha256),
-        0xC030 => p_hash(secret, &label_seed, len, hmac_sha384),
+        0xC02B | 0xC02F => p_hash(secret, &label_seed, len, hmac_sha256),
+        0xC02C | 0xC030 => p_hash(secret, &label_seed, len, hmac_sha384),
         _ => return Err(TlsError::Protocol("TLS 1.2 unsupported PRF suite".into())),
     })
 }
@@ -1544,8 +1602,8 @@ fn tls12_finished_verify_data(
     transcript: &[u8],
 ) -> Result<Vec<u8>> {
     let hash = match cipher_suite {
-        0xC02F => Hasher::Sha256.hash(transcript),
-        0xC030 => Hasher::Sha384.hash(transcript),
+        0xC02B | 0xC02F => Hasher::Sha256.hash(transcript),
+        0xC02C | 0xC030 => Hasher::Sha384.hash(transcript),
         _ => {
             return Err(TlsError::Protocol(
                 "TLS 1.2 unsupported Finished suite".into(),
@@ -1553,6 +1611,18 @@ fn tls12_finished_verify_data(
         }
     };
     tls12_prf(cipher_suite, master_secret, label, &hash, 12)
+}
+
+fn tls12_handshake_hash(cipher_suite: u16, transcript: &[u8]) -> Result<Vec<u8>> {
+    Ok(match cipher_suite {
+        0xC02B | 0xC02F => Hasher::Sha256.hash(transcript),
+        0xC02C | 0xC030 => Hasher::Sha384.hash(transcript),
+        _ => {
+            return Err(TlsError::Protocol(
+                "TLS 1.2 unsupported handshake hash suite".into(),
+            ));
+        }
+    })
 }
 
 // ---------------------------------------------------------------------------
