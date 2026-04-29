@@ -9,7 +9,7 @@ spec:
   soa:
     mname: ns1.edgerun.tech
     rname: admin.edgerun.tech
-    serial: 2026042902
+    serial: 2026042903
     refresh: 3600
     retry: 900
     expire: 604800
@@ -28,6 +28,10 @@ spec:
       value: "172.245.67.49"
       ttl: 3600
     - name: mail
+      type: A
+      value: "172.245.67.49"
+      ttl: 3600
+    - name: mta-sts
       type: A
       value: "172.245.67.49"
       ttl: 3600
@@ -51,9 +55,25 @@ spec:
       type: TXT
       value: "v=spf1 mx -all"
       ttl: 3600
+    - name: "@"
+      type: CAA
+      value: "0 issue letsencrypt.org"
+      ttl: 3600
+    - name: "@"
+      type: CAA
+      value: "0 iodef mailto:admin@edgerun.tech"
+      ttl: 3600
     - name: _dmarc
       type: TXT
       value: "v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@edgerun.tech"
+      ttl: 3600
+    - name: _mta-sts
+      type: TXT
+      value: "v=STSv1; id=2026042903"
+      ttl: 3600
+    - name: _smtp._tls
+      type: TXT
+      value: "v=TLSRPTv1; rua=mailto:tls-reports@edgerun.tech"
       ttl: 3600
     - name: default._bimi
       type: TXT

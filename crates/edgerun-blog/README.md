@@ -18,7 +18,8 @@ cargo run -p edgerun-blog -- \
   --base-url https://blog.edgerun.tech
 ```
 
-The Git-backed content model is implemented in code. Hosting
-`blog.edgerun.tech` on the current mail host is currently blocked on adding DNS
-for `blog.edgerun.tech` and routing that host through the active
-`edgerun-mail-server` HTTP listener or another frontend bound to ports 80/443.
+The Git-backed content model is implemented in code. On the current mail host,
+DNS for `blog.edgerun.tech` is served from the Edgerun mail server's own
+`DnsZone` config. Public hosting should route that host through an Edgerun HTTP
+listener, either by mounting `BlogHandler` in the existing mail server process or
+by running this binary on its own Edgerun-managed listener.

@@ -360,6 +360,12 @@ impl WebmailHandler {
                 _ => method_not_allowed("GET, HEAD"),
             };
         }
+        if path == "/.well-known/mta-sts.txt" {
+            return match request.method().as_str() {
+                "GET" | "HEAD" => mta_sts_policy_response(),
+                _ => method_not_allowed("GET, HEAD"),
+            };
+        }
         if path.starts_with("/api/") && !authorized(&request, &self.config) {
             return unauthorized();
         }
@@ -427,7 +433,12 @@ impl Handler for HttpsRedirectHandler {
                 return method_not_allowed("GET, HEAD");
             }
             let target = request.uri().request_target();
-            let location = format!("https://{}{}", self.hostname, target);
+            let host = request
+                .headers()
+                .get("Host")
+                .map(|value| value.as_str())
+                .unwrap_or(&self.hostname);
+            let location = format!("https://{}{}", host, target);
             Response::text(StatusCode::new(308).unwrap(), "")
                 .with_header("Location", &location)
                 .with_header("Cache-Control", "no-store")
@@ -503,6 +514,14 @@ fn svg_response(body: &str) -> Response {
         .with_header("Cache-Control", "public, max-age=3600")
         .with_header("X-Content-Type-Options", "nosniff")
         .with_body(body.as_bytes().to_vec())
+}
+
+fn mta_sts_policy_response() -> Response {
+    Response::new(StatusCode::OK)
+        .with_header("Content-Type", "text/plain; charset=utf-8")
+        .with_header("Cache-Control", "public, max-age=3600")
+        .with_header("X-Content-Type-Options", "nosniff")
+        .with_body(MTA_STS_POLICY.as_bytes().to_vec())
 }
 
 fn attachment_response(attachment: &MailAttachment, data: Vec<u8>) -> Response {
@@ -1361,6 +1380,8 @@ const BIMI_LOGO_SVG: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 </svg>
 "##;
 
+const MTA_STS_POLICY: &str = "version: STSv1\nmode: enforce\nmx: mail.edgerun.tech\nmax_age: 604800\n";
+
 async fn build_dns_server(
     server_spec: Option<&DnsServerSpec>,
     zone_specs: &[DnsZoneSpec],
@@ -1478,15 +1499,15 @@ async fn ensure_acme_certificate(
     );
     let fullchain_path = cert_dir.join("fullchain.pem");
     let privkey_path = cert_dir.join("privkey.pem");
-    if !acme_certificate_needs_renewal(&fullchain_path, &privkey_path, &spec.hostname)? {
-        return Ok(());
-    }
-
-    std::fs::create_dir_all(&cert_dir)?;
     let domains = spec
         .acme_domains
         .clone()
         .unwrap_or_else(|| vec![spec.hostname.clone()]);
+    if !acme_certificate_needs_renewal(&fullchain_path, &privkey_path, &domains)? {
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(&cert_dir)?;
     let domain_refs: Vec<&str> = domains.iter().map(String::as_str).collect();
     let account_key_path = PathBuf::from(
         spec.acme_account_key_path
@@ -1656,7 +1677,7 @@ fn acme_error_is_retryable_finalize(error: &edgerun_acme::AcmeError) -> bool {
 fn acme_certificate_needs_renewal(
     fullchain_path: &Path,
     privkey_path: &Path,
-    hostname: &str,
+    domains: &[String],
 ) -> io::Result<bool> {
     if !fullchain_path.exists() || !privkey_path.exists() {
         return Ok(true);
@@ -1666,8 +1687,10 @@ fn acme_certificate_needs_renewal(
         Ok(cert) => cert,
         Err(_) => return Ok(true),
     };
-    if !cert.matches_hostname(hostname) {
-        return Ok(true);
+    for domain in domains {
+        if !cert.matches_hostname(domain) {
+            return Ok(true);
+        }
     }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

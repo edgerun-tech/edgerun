@@ -26,6 +26,7 @@ spec:
   acme_contact_email: ken@edgerun.tech
   acme_domains:
     - mail.edgerun.tech
+    - mta-sts.edgerun.tech
   acme_account_key_path: /etc/edgerun/mail/acme-account.pem
   acme_cert_dir: /etc/edgerun/mail/tls
   catch_all_user: ken
