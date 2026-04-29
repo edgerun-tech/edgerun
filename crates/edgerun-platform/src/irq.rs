@@ -41,15 +41,15 @@ pub struct Ipi {
 
 impl Ipi {
     /// Send reschedule IPI to another CPU
-    pub fn reschedule(cpu: u8) {
+    pub fn reschedule(_cpu: u8) {
         #[cfg(target_arch = "x86_64")]
-        crate::arch::x86_64::send_ipi(cpu, 0xFEE0);
+        crate::arch::x86_64::send_ipi(_cpu, 0xFEE0);
     }
 
     /// Broadcast to all CPUs
-    pub fn broadcast(vector: u8) {
+    pub fn broadcast(_vector: u8) {
         #[cfg(target_arch = "x86_64")]
-        crate::arch::x86_64::send_ipi(0xFF, vector as u16);
+        crate::arch::x86_64::send_ipi(0xFF, _vector as u16);
     }
 }
 
@@ -84,11 +84,11 @@ pub unsafe fn disable() -> usize {
 
 /// Restore interrupt state
 #[inline]
-pub unsafe fn restore(flags: usize) {
+pub unsafe fn restore(_flags: usize) {
     #[cfg(target_arch = "x86_64")]
     {
         unsafe {
-            core::arch::asm!("push rax", "popfq", in("rax") flags as u64);
+            core::arch::asm!("push rax", "popfq", in("rax") _flags as u64);
         }
     }
 }

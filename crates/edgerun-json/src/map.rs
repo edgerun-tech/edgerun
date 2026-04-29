@@ -8,6 +8,8 @@ use alloc::string::String;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
+use crate::value::JsonValueError;
+use crate::FromJson;
 use crate::JsonValue;
 use core::ops::{Deref, DerefMut};
 
@@ -18,6 +20,11 @@ impl Map {
     #[must_use]
     pub fn new() -> Self {
         Self(Vec::new())
+    }
+
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self(Vec::with_capacity(capacity))
     }
 
     #[must_use]
@@ -39,6 +46,11 @@ impl Map {
         self.0.iter()
     }
 
+    #[must_use]
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = (&str, &JsonValue)> {
+        self.0.iter().map(|(key, value)| (key.as_str(), value))
+    }
+
     pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut (String, JsonValue)> {
         self.0.iter_mut()
     }
@@ -58,6 +70,111 @@ impl Map {
             .map(|(_, value)| value)
     }
 
+    pub fn required(&self, key: &str) -> Result<&JsonValue, JsonValueError> {
+        self.get(key)
+            .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))
+    }
+
+    pub fn get_str(&self, key: &str) -> Option<&str> {
+        self.get(key).and_then(JsonValue::as_str)
+    }
+
+    pub fn required_str(&self, key: &str) -> Result<&str, JsonValueError> {
+        self.required(key)?
+            .as_str()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected string")))
+    }
+
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        self.get(key).and_then(JsonValue::as_bool)
+    }
+
+    pub fn required_bool(&self, key: &str) -> Result<bool, JsonValueError> {
+        self.required(key)?
+            .as_bool()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected boolean")))
+    }
+
+    pub fn get_i64(&self, key: &str) -> Option<i64> {
+        self.get(key).and_then(JsonValue::as_i64)
+    }
+
+    pub fn required_i64(&self, key: &str) -> Result<i64, JsonValueError> {
+        self.required(key)?
+            .as_i64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i64")))
+    }
+
+    pub fn get_u64(&self, key: &str) -> Option<u64> {
+        self.get(key).and_then(JsonValue::as_u64)
+    }
+
+    pub fn required_u64(&self, key: &str) -> Result<u64, JsonValueError> {
+        self.required(key)?
+            .as_u64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u64")))
+    }
+
+    pub fn get_i32(&self, key: &str) -> Option<i32> {
+        self.get(key).and_then(JsonValue::as_i32)
+    }
+
+    pub fn required_i32(&self, key: &str) -> Result<i32, JsonValueError> {
+        self.required(key)?
+            .as_i32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i32")))
+    }
+
+    pub fn get_u32(&self, key: &str) -> Option<u32> {
+        self.get(key).and_then(JsonValue::as_u32)
+    }
+
+    pub fn required_u32(&self, key: &str) -> Result<u32, JsonValueError> {
+        self.required(key)?
+            .as_u32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u32")))
+    }
+
+    pub fn get_usize(&self, key: &str) -> Option<usize> {
+        self.get(key).and_then(JsonValue::as_usize)
+    }
+
+    pub fn required_usize(&self, key: &str) -> Result<usize, JsonValueError> {
+        self.required(key)?
+            .as_usize()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected usize")))
+    }
+
+    pub fn get_f64(&self, key: &str) -> Option<f64> {
+        self.get(key).and_then(JsonValue::as_f64)
+    }
+
+    pub fn required_f64(&self, key: &str) -> Result<f64, JsonValueError> {
+        self.required(key)?
+            .as_f64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected f64")))
+    }
+
+    pub fn get_array(&self, key: &str) -> Option<&Vec<JsonValue>> {
+        self.get(key).and_then(JsonValue::as_array)
+    }
+
+    pub fn required_array(&self, key: &str) -> Result<&Vec<JsonValue>, JsonValueError> {
+        self.required(key)?
+            .as_array()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected array")))
+    }
+
+    pub fn get_object(&self, key: &str) -> Option<&Map> {
+        self.get(key).and_then(JsonValue::as_object)
+    }
+
+    pub fn required_object(&self, key: &str) -> Result<&Map, JsonValueError> {
+        self.required(key)?
+            .as_object()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected object")))
+    }
+
     #[must_use]
     pub fn contains_key(&self, key: &str) -> bool {
         self.get(key).is_some()
@@ -71,11 +188,64 @@ impl Map {
         None
     }
 
+    pub fn push_field(&mut self, key: impl Into<String>, value: impl Into<JsonValue>) {
+        self.0.push((key.into(), value.into()));
+    }
+
+    pub fn push_opt_field(&mut self, key: impl Into<String>, value: Option<impl Into<JsonValue>>) {
+        if let Some(value) = value {
+            self.push_field(key, value);
+        }
+    }
+
+    #[must_use]
+    pub fn into_vec(self) -> Vec<(String, JsonValue)> {
+        self.0
+    }
+
     pub fn remove(&mut self, key: &str) -> Option<JsonValue> {
         self.0
             .iter()
             .position(|(candidate, _)| candidate == key)
             .map(|index| self.0.remove(index).1)
+    }
+
+    pub fn take_required<T: FromJson>(&mut self, key: &str) -> Result<T, JsonValueError> {
+        let value = self
+            .remove(key)
+            .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))?;
+        T::from_json(value)
+    }
+
+    pub fn take_required_any<T: FromJson>(&mut self, keys: &[&str]) -> Result<T, JsonValueError> {
+        for key in keys {
+            if self.contains_key(key) {
+                return self.take_required(key);
+            }
+        }
+        let key = keys.first().copied().unwrap_or("<unknown>");
+        Err(JsonValueError::WrongType(format!(
+            "missing required field `{key}`"
+        )))
+    }
+
+    pub fn take_optional<T: FromJson>(&mut self, key: &str) -> Result<Option<T>, JsonValueError> {
+        match self.remove(key) {
+            Some(JsonValue::Null) | None => Ok(None),
+            Some(value) => T::from_json(value).map(Some),
+        }
+    }
+
+    pub fn take_optional_any<T: FromJson>(
+        &mut self,
+        keys: &[&str],
+    ) -> Result<Option<T>, JsonValueError> {
+        for key in keys {
+            if self.contains_key(key) {
+                return self.take_optional(key);
+            }
+        }
+        Ok(None)
     }
 
     pub fn append(&mut self, other: &mut Self) {
@@ -147,9 +317,30 @@ impl From<Vec<(String, JsonValue)>> for Map {
     }
 }
 
-impl core::iter::FromIterator<(String, JsonValue)> for Map {
-    fn from_iter<T: IntoIterator<Item = (String, JsonValue)>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
+impl<K, V> FromIterator<(K, V)> for Map
+where
+    K: Into<String>,
+    V: Into<JsonValue>,
+{
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        Self(
+            iter.into_iter()
+                .map(|(key, value)| (key.into(), value.into()))
+                .collect(),
+        )
+    }
+}
+
+impl<K, V> Extend<(K, V)> for Map
+where
+    K: Into<String>,
+    V: Into<JsonValue>,
+{
+    fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
+        self.0.extend(
+            iter.into_iter()
+                .map(|(key, value)| (key.into(), value.into())),
+        );
     }
 }
 

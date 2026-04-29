@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Secret storage and retrieval service for Edgerun"
 
 [lib]
 name = "edgerun_secret_service"
@@ -18,11 +19,11 @@ required-features = ["std"]
 edgerun-biometrics = { path = "../edgerun-biometrics" }
 edgerun-storage = { path = "../edgerun-storage" }
 edgerun-core = { path = "../edgerun-core" }
-edgerun-json = { path = "../edgerun-json" }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
+edgerun-json = { path = "../edgerun-json", default-features = false }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-proto = { path = "../edgerun-proto" }
 prost.workspace = true
-prost-types.workspace = true
 
 [features]
 std = []

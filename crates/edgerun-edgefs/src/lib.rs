@@ -216,6 +216,15 @@ struct Superblock {
     fs_id: [u8; 16],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EdgeFsInfo {
+    pub generation: u64,
+    pub cursor: u64,
+    pub sector_size: usize,
+    pub sectors: u64,
+    pub fs_id: [u8; 16],
+}
+
 #[derive(Clone)]
 struct KeyMaterial {
     record: [u8; KEY_LEN],
@@ -323,6 +332,26 @@ impl<S: BlockStorage> EdgeFs<S> {
         };
         fs.rebuild_index()?;
         Ok(fs)
+    }
+
+    /// Probe an encrypted EdgeFS superblock using the supplied volume key.
+    ///
+    /// EdgeFS keeps the public superblock authenticated with a key-derived tag,
+    /// so probing is intentionally key-aware. A wrong key returns a corrupt
+    /// superblock error instead of a false mount.
+    pub fn probe(mut device: S, key: [u8; KEY_LEN]) -> Result<EdgeFsInfo> {
+        validate_key(&key)?;
+        let sector_size = device.sector_size();
+        let sectors = device.sectors();
+        validate_geometry(sector_size, sectors)?;
+        let superblock_key = derive_superblock_key(&key);
+        let superblock = read_best_superblock(&mut device, &superblock_key, sector_size)?;
+        if superblock.sector_size != sector_size || superblock.sectors != sectors {
+            return Err(EdgeFsError::CorruptSuperblock(
+                "stored geometry does not match device".into(),
+            ));
+        }
+        Ok(superblock.info())
     }
 
     pub fn into_device(self) -> S {
@@ -867,6 +896,18 @@ impl<S: BlockStorage> EdgeFs<S> {
             self.device.write_sector(sector as u64, &zeroes)?;
         }
         Ok(())
+    }
+}
+
+impl Superblock {
+    fn info(&self) -> EdgeFsInfo {
+        EdgeFsInfo {
+            generation: self.generation,
+            cursor: self.cursor,
+            sector_size: self.sector_size,
+            sectors: self.sectors,
+            fs_id: self.fs_id,
+        }
     }
 }
 
@@ -1549,6 +1590,18 @@ mod tests {
         let fs_id = [0x99; 16];
         let fs = EdgeFs::format_with_id(device, KEY, fs_id).unwrap();
         assert_eq!(fs.filesystem_id(), fs_id);
+    }
+
+    #[test]
+    fn probe_reports_authenticated_edgefs_superblock() {
+        let device = InMemoryBlockDevice::new(512, 64);
+        let fs_id = [0x45; 16];
+        let fs = EdgeFs::format_with_id(device, KEY, fs_id).unwrap();
+        let info = EdgeFs::probe(fs.into_device(), KEY).unwrap();
+        assert_eq!(info.fs_id, fs_id);
+        assert_eq!(info.sector_size, 512);
+        assert_eq!(info.sectors, 64);
+        assert_eq!(info.generation, 1);
     }
 
     #[test]

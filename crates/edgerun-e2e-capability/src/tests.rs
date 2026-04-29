@@ -1,7 +1,7 @@
 //! Hardware e2e tests — each test opens a real device and exercises the
 //! full remote-capability protocol stack (descriptor → session → invoke/stream).
 //!
-//! Run with: `HARDWARE_E2E=1 cargo test -p edgerun-e2e-capability -- --ignored`
+//! Run against hardware with: `HARDWARE_E2E=1 cargo test -p edgerun-e2e-capability`
 
 use crate::require_hardware;
 use crate::session_harness;
@@ -34,9 +34,10 @@ use std::time::Duration;
 // ===========================================================================
 
 #[test]
-#[ignore = "requires real input hardware (evdev)"]
 fn test_input_device_e2e_discover_and_open() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_evdev_input::discover_evdev_devices;
 
@@ -67,9 +68,10 @@ fn test_input_device_e2e_discover_and_open() {
 }
 
 #[test]
-#[ignore = "requires real input hardware (evdev)"]
 fn test_input_device_e2e_session_and_events() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_evdev_input::{discover_evdev_devices, EvdevInputBackend};
 
@@ -112,9 +114,10 @@ fn test_input_device_e2e_session_and_events() {
 }
 
 #[test]
-#[ignore = "requires real input hardware (evdev)"]
 fn test_input_device_e2e_unix_socket_full_protocol() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_evdev_input::{discover_evdev_devices, EvdevInputBackend};
 
@@ -135,9 +138,10 @@ fn test_input_device_e2e_unix_socket_full_protocol() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires real microphone hardware (ALSA)"]
 fn test_microphone_e2e_discover_and_open() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_alsa_microphone::{discover_alsa_pcms, AlsaMicrophoneBackend};
     use edgerun_microphone::MicrophoneDevice;
@@ -178,9 +182,10 @@ fn test_microphone_e2e_discover_and_open() {
 }
 
 #[test]
-#[ignore = "requires real microphone hardware (ALSA)"]
 fn test_microphone_e2e_session_and_capture() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_alsa_microphone::{discover_alsa_pcms, AlsaMicrophoneBackend};
     use edgerun_microphone::{AudioCaptureRequest, MicrophoneSampleFormat};
@@ -234,9 +239,10 @@ fn test_microphone_e2e_session_and_capture() {
 }
 
 #[test]
-#[ignore = "requires real microphone hardware"]
 fn test_microphone_encoding_roundtrip_real_device() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_alsa_microphone::{discover_alsa_pcms, AlsaMicrophoneBackend};
     use edgerun_microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
@@ -288,9 +294,10 @@ fn test_microphone_encoding_roundtrip_real_device() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires real speaker hardware (ALSA)"]
 fn test_speaker_e2e_discover_and_open() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_alsa_speaker::discover_speakers;
     use edgerun_speaker::SpeakerDevice;
@@ -318,9 +325,10 @@ fn test_speaker_e2e_discover_and_open() {
 }
 
 #[test]
-#[ignore = "requires real speaker hardware (ALSA)"]
 fn test_speaker_e2e_playback() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_alsa_speaker::discover_speakers;
     use edgerun_speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
@@ -372,9 +380,10 @@ fn test_speaker_e2e_playback() {
 }
 
 #[test]
-#[ignore = "requires real speaker hardware (ALSA)"]
 fn test_speaker_e2e_session_and_invoke() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_alsa_speaker::discover_speakers;
     use edgerun_speaker::SpeakerDevice;
@@ -414,9 +423,10 @@ fn test_speaker_e2e_session_and_invoke() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires real camera hardware (V4L2)"]
 fn test_camera_e2e_discover_and_open() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_camera_biometrics::CameraBiometricReader;
     use edgerun_v4l2_camera::{discover_camera_devices, V4l2CameraBiometricReader};
@@ -450,9 +460,10 @@ fn test_camera_e2e_discover_and_open() {
 }
 
 #[test]
-#[ignore = "requires real camera hardware (V4L2)"]
 fn test_camera_e2e_capture_frame() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_camera_biometrics::{CameraBiometricPurpose, CameraBiometricReader};
     use edgerun_v4l2_camera::{discover_camera_devices, V4l2CameraBiometricReader};
@@ -485,9 +496,10 @@ fn test_camera_e2e_capture_frame() {
 }
 
 #[test]
-#[ignore = "requires real camera hardware (V4L2)"]
 fn test_camera_e2e_remote_adapter_session() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_camera_biometrics::CameraBiometricPurpose;
     use edgerun_capabilities::{
@@ -545,10 +557,11 @@ fn test_camera_e2e_remote_adapter_session() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires real TPM hardware"]
 #[cfg(all(feature = "std", not(target_os = "none")))]
 fn test_tpm_e2e_open() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_tpm::LinuxTpmDevice;
     use std::path::Path;
@@ -565,10 +578,11 @@ fn test_tpm_e2e_open() {
 }
 
 #[test]
-#[ignore = "requires real TPM hardware"]
 #[cfg(all(feature = "std", not(target_os = "none")))]
 fn test_tpm_e2e_get_random() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_tpm::{LinuxTpmDevice, TpmTransport};
     use std::path::Path;
@@ -649,9 +663,10 @@ fn test_tpm_e2e_get_random() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires real input hardware + Unix socket"]
 fn test_full_e2e_unix_socket_input_device() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_evdev_input::{discover_evdev_devices, EvdevInputBackend};
     use edgerun_input::InputDevice;
@@ -789,9 +804,10 @@ fn test_full_e2e_unix_socket_input_device() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires real input hardware"]
 fn test_input_encoding_roundtrip_real_device() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_evdev_input::{discover_evdev_devices, EvdevInputBackend};
     use edgerun_input::InputDevice;
@@ -841,9 +857,10 @@ fn test_input_encoding_roundtrip_real_device() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires real input hardware"]
 fn test_policy_enforcement_real_device() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_evdev_input::{discover_evdev_devices, EvdevInputBackend};
 
@@ -890,9 +907,10 @@ fn test_policy_enforcement_real_device() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires real hardware"]
 fn test_multi_device_enumeration() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_alsa_microphone::discover_alsa_pcms;
     use edgerun_alsa_speaker::discover_speakers;
@@ -944,9 +962,10 @@ fn test_multi_device_enumeration() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires Bluetooth controller"]
 fn test_bluetooth_e2e_scan() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     // Try mgmt socket discovery (requires root/CAP_NET_ADMIN)
     let result = edgerun_mgmt_bluetooth::discover_controllers();
@@ -982,9 +1001,10 @@ fn test_bluetooth_e2e_scan() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires WiFi interface"]
 fn test_wifi_e2e_discover() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     let result = edgerun_linux_wifi::discover_wifi_interfaces();
     match result {
@@ -1017,9 +1037,10 @@ fn test_wifi_e2e_discover() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires DRM display"]
 fn test_drm_display_e2e_discover() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     let connectors =
         edgerun_drm_display::discover_drm_connectors().expect("DRM discovery should not error");
@@ -1054,9 +1075,10 @@ fn test_drm_display_e2e_discover() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires NPU hardware"]
 fn test_npu_e2e_discover() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     let npus = edgerun_linux_npu::discover_linux_npus().expect("NPU discovery should not error");
 
@@ -1082,9 +1104,10 @@ fn test_npu_e2e_discover() {
 // ===========================================================================
 
 #[test]
-#[ignore = "requires Goodix fingerprint sensor"]
 fn test_goodix_e2e_discover() {
-    require_hardware();
+    if !require_hardware() {
+        return;
+    }
 
     use edgerun_fingerprint::FingerprintReader;
 

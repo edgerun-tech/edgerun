@@ -17,6 +17,78 @@ qemu_net_dump="${QEMU_NET_DUMP:-}"
 qemu_netdev="${QEMU_NETDEV:-user,id=n0}"
 qemu_tpm_socket="${QEMU_TPM_SOCKET:-}"
 qemu_tpm_device="${QEMU_TPM_DEVICE:-tpm-crb}"
+qemu_virtio_rng="${QEMU_VIRTIO_RNG:-1}"
+qemu_virtio_console="${QEMU_VIRTIO_CONSOLE:-1}"
+qemu_virtio_blk="${QEMU_VIRTIO_BLK:-1}"
+qemu_console_log="${QEMU_CONSOLE_LOG:-/tmp/edgerun-qemu-virtio-console.log}"
+qemu_disk_img="${QEMU_DISK_IMG:-/tmp/edgerun-qemu-virtio-blk.img}"
+qemu_disk_size="${QEMU_DISK_SIZE:-64M}"
+qemu_disk_layout="${QEMU_DISK_LAYOUT:-empty}"
+qemu_http_smoke="${QEMU_HTTP_SMOKE:-0}"
+qemu_oci_pull_smoke="${QEMU_OCI_PULL_SMOKE:-0}"
+qemu_boot_config="${QEMU_BOOT_CONFIG:-image=registry.local/edge/test:latest
+edgefs=format-data-partition
+rootfs_path=/apps/test
+}"
+if [[ "$qemu_http_smoke" != "0" ]]; then
+    qemu_boot_config="${qemu_boot_config}http_smoke=http://10.0.2.2:${QEMU_HTTP_SMOKE_PORT:-18080}/edgerun-smoke
+"
+fi
+if [[ "$qemu_oci_pull_smoke" != "0" ]]; then
+    qemu_boot_config="${qemu_boot_config}image=10.0.2.2:${QEMU_OCI_PULL_SMOKE_PORT:-18080}/edge/test:latest
+oci_pull=true
+registry_insecure_http=true
+"
+fi
+
+create_qemu_disk_image() {
+    local image="$1"
+    local size="$2"
+    local layout="$3"
+
+    truncate -s "$size" "$image"
+    case "$layout" in
+        empty)
+            ;;
+        mbr-blank)
+            printf '\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x08\x00\x00\x00\xf8\x01\x00' |
+                dd of="$image" bs=1 seek=446 conv=notrunc status=none
+            printf '\x55\xaa' | dd of="$image" bs=1 seek=510 conv=notrunc status=none
+            ;;
+        fat-boot)
+            printf '\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x08\x00\x00\x00\xf8\x01\x00' |
+                dd of="$image" bs=1 seek=446 conv=notrunc status=none
+            printf '\x55\xaa' | dd of="$image" bs=1 seek=510 conv=notrunc status=none
+            mkfs.fat --invariant --offset=2048 -F 16 -r 16 -n EDGERUN "$image" 64512
+            local cfg_dir
+            cfg_dir="$(mktemp -d)"
+            printf '%s' "$qemu_boot_config" >"$cfg_dir/boot.cfg"
+            mmd -i "$image@@1048576" ::/edgerun
+            mcopy -i "$image@@1048576" "$cfg_dir/boot.cfg" ::/edgerun/
+            rm -f "$cfg_dir/boot.cfg"
+            rmdir "$cfg_dir"
+            ;;
+        fat-edgefs-boot)
+            printf '\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x08\x00\x00\x00\xfc\x00\x00' |
+                dd of="$image" bs=1 seek=446 conv=notrunc status=none
+            printf '\x00\x00\x00\x00\x83\x00\x00\x00\x00\x08\x01\x00\x00\xf0\x00\x00' |
+                dd of="$image" bs=1 seek=462 conv=notrunc status=none
+            printf '\x55\xaa' | dd of="$image" bs=1 seek=510 conv=notrunc status=none
+            mkfs.fat --invariant --offset=2048 -F 16 -r 16 -n EDGERUN "$image" 64512
+            local cfg_dir
+            cfg_dir="$(mktemp -d)"
+            printf '%s' "$qemu_boot_config" >"$cfg_dir/boot.cfg"
+            mmd -i "$image@@1048576" ::/edgerun
+            mcopy -i "$image@@1048576" "$cfg_dir/boot.cfg" ::/edgerun/
+            rm -f "$cfg_dir/boot.cfg"
+            rmdir "$cfg_dir"
+            ;;
+        *)
+            echo "Unsupported QEMU_DISK_LAYOUT: $layout" >&2
+            exit 2
+            ;;
+    esac
+}
 
 cargo +nightly build --release -p edgerun-unikernel \
     --target "$target" \
@@ -35,6 +107,32 @@ if [[ -n "$qemu_tpm_socket" ]]; then
         -chardev "socket,id=chrtpm,path=$qemu_tpm_socket"
         -tpmdev "emulator,id=tpm0,chardev=chrtpm"
         -device "$qemu_tpm_device,tpmdev=tpm0"
+    )
+fi
+
+if [[ "$qemu_virtio_rng" != "0" ]]; then
+    qemu_extra_args+=(
+        -object "rng-random,id=edgerun-rng,filename=/dev/urandom"
+        -device "virtio-rng-pci,disable-legacy=on,disable-modern=off,rng=edgerun-rng"
+    )
+fi
+
+if [[ "$qemu_virtio_console" != "0" ]]; then
+    rm -f "$qemu_console_log"
+    qemu_extra_args+=(
+        -device "virtio-serial-pci,disable-legacy=on,disable-modern=off"
+        -chardev "file,id=edgerun-console,path=$qemu_console_log"
+        -device "virtconsole,chardev=edgerun-console"
+    )
+fi
+
+if [[ "$qemu_virtio_blk" != "0" ]]; then
+    if [[ ! -e "$qemu_disk_img" ]]; then
+        create_qemu_disk_image "$qemu_disk_img" "$qemu_disk_size" "$qemu_disk_layout"
+    fi
+    qemu_extra_args+=(
+        -drive "if=none,id=edgerun-blk,file=$qemu_disk_img,format=raw"
+        -device "virtio-blk-pci,disable-legacy=on,disable-modern=off,drive=edgerun-blk"
     )
 fi
 

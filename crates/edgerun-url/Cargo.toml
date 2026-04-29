@@ -8,10 +8,9 @@ description = "Zero-dependency URL parsing for edgerun (RFC 3986 subset)"
 
 [features]
 default = []
-serde = ["dep:serde"]
 
 [dependencies]
-serde = { version = "1", default-features = false, features = ["alloc"], optional = true }
+edgerun-json.workspace = true
 
 [lints]
 workspace = true

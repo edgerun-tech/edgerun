@@ -6,6 +6,7 @@
 //!
 //! Provides safe conversion between null-terminated byte slices and Rust strings.
 
+use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
@@ -30,6 +31,12 @@ use core::str;
 pub fn decode_c_string(bytes: &[u8]) -> Result<String, core::str::Utf8Error> {
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     str::from_utf8(&bytes[..end]).map(|s| s.to_string())
+}
+
+/// Decode a null-terminated C string, replacing invalid UTF-8.
+pub fn decode_c_string_lossy(bytes: &[u8]) -> String {
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    String::from_utf8_lossy(&bytes[..end]).into_owned()
 }
 
 /// Decode a null-terminated C string, returning a string slice reference.
@@ -111,6 +118,34 @@ pub fn decode_c_string_trimmed(bytes: &[u8]) -> Result<String, core::str::Utf8Er
     Ok(s.trim().to_string())
 }
 
+/// Decode a null-terminated C string, replacing invalid UTF-8 and trimming whitespace.
+pub fn decode_c_string_lossy_trimmed(bytes: &[u8]) -> String {
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    match String::from_utf8_lossy(&bytes[..end]) {
+        Cow::Borrowed(s) => s.trim().to_string(),
+        Cow::Owned(s) => s.trim().to_string(),
+    }
+}
+
+/// Decode a PC/SC-style multi-string: NUL-separated strings terminated by an empty entry.
+pub fn decode_c_multi_string_lossy_until_empty(bytes: &[u8]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut start = 0usize;
+    while start < bytes.len() {
+        let end = bytes[start..]
+            .iter()
+            .position(|&b| b == 0)
+            .map(|i| start + i)
+            .unwrap_or(bytes.len());
+        if end == start {
+            break;
+        }
+        out.push(String::from_utf8_lossy(&bytes[start..end]).into_owned());
+        start = end + 1;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,6 +157,12 @@ mod tests {
         assert_eq!(decode_c_string(b"hello\0"), Ok("hello".to_string()));
         assert_eq!(decode_c_string(b"\0"), Ok("".to_string()));
         assert_eq!(decode_c_string(b""), Ok("".to_string()));
+    }
+
+    #[test]
+    fn test_decode_c_string_lossy() {
+        assert_eq!(decode_c_string_lossy(b"hello\0world"), "hello");
+        assert_eq!(decode_c_string_lossy(b"\xff\xfe\0"), "\u{fffd}\u{fffd}");
     }
 
     #[test]
@@ -192,5 +233,27 @@ mod tests {
         );
         assert_eq!(decode_c_string_trimmed(b"no-trim\0").unwrap(), "no-trim");
         assert_eq!(decode_c_string_trimmed(b"\0").unwrap(), "");
+    }
+
+    #[test]
+    fn test_decode_c_string_lossy_trimmed() {
+        assert_eq!(decode_c_string_lossy_trimmed(b" hello  \0world"), "hello");
+        assert_eq!(decode_c_string_lossy_trimmed(b"\xff \0"), "\u{fffd}");
+    }
+
+    #[test]
+    fn test_decode_c_multi_string_lossy_until_empty() {
+        assert_eq!(
+            decode_c_multi_string_lossy_until_empty(b"Reader1\0Reader2\0\0"),
+            vec!["Reader1".to_string(), "Reader2".to_string()]
+        );
+        assert_eq!(
+            decode_c_multi_string_lossy_until_empty(b"\0"),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            decode_c_multi_string_lossy_until_empty(b"Reader1\0Reader2"),
+            vec!["Reader1".to_string(), "Reader2".to_string()]
+        );
     }
 }

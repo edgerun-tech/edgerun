@@ -4,22 +4,19 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
+use edgerun_encoding::byteorder::{read_i16_le, read_i64_le, read_u32_le};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
-};
+use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 use edgerun_wifi::{
     WifiController, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState,
     WifiScanResult, WifiScanner,
 };
 
 use crate::adapters::common::{
-    decode_optional_string_field, decode_string_field, encode_optional_string_field,
-    encode_string_field, stream_oriented_error,
+    decode_count_u32, decode_optional_string_field, decode_string_field, encode_count_u32,
+    encode_optional_string_field, encode_string_field, stream_oriented_error,
 };
-use crate::protocol::{
-    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
-};
+use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 // --- Enum converters ---
 
@@ -41,7 +38,7 @@ fn wifi_power_state_from_u8(v: u8) -> Result<WifiPowerState, CapabilityError> {
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote wifi power state is invalid",
-            ))
+            ));
         }
     })
 }
@@ -66,7 +63,7 @@ fn wifi_interface_mode_from_u8(v: u8) -> Result<WifiInterfaceMode, CapabilityErr
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote wifi interface mode is invalid",
-            ))
+            ));
         }
     })
 }
@@ -75,7 +72,7 @@ fn wifi_interface_mode_from_u8(v: u8) -> Result<WifiInterfaceMode, CapabilityErr
 
 pub fn encode_wifi_scan_result(scan: &WifiScanResult) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(&(scan.observations.len() as u32).to_le_bytes());
+    encode_count_u32(scan.observations.len(), &mut out);
     for observation in &scan.observations {
         encode_string_field(&observation.interface_name, &mut out);
         encode_optional_string_field(&observation.ssid, &mut out);
@@ -99,14 +96,8 @@ pub fn encode_wifi_scan_result(scan: &WifiScanResult) -> Vec<u8> {
 }
 
 pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, CapabilityError> {
-    if bytes.len() < 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote wifi scan payload too short",
-        ));
-    }
     let mut cursor = 0usize;
-    let count = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
-    cursor += 4;
+    let count = decode_count_u32(bytes, &mut cursor, "remote wifi scan payload too short")?;
     let mut observations = Vec::with_capacity(count);
     for _ in 0..count {
         let interface_name = decode_string_field(bytes, &mut cursor)?;
@@ -124,7 +115,7 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
                     "remote wifi signal payload too short",
                 ));
             }
-            let v = i16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
+            let v = read_i16_le(bytes, cursor);
             cursor += 2;
             Some(v)
         } else {
@@ -143,7 +134,7 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
                     "remote wifi frequency payload too short",
                 ));
             }
-            let v = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+            let v = read_u32_le(bytes, cursor);
             cursor += 4;
             Some(v)
         } else {
@@ -162,11 +153,11 @@ pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, Capabilit
             _ => {
                 return Err(CapabilityError::InvalidRequest(
                     "remote wifi secure flag is invalid",
-                ))
+                ));
             }
         };
         cursor += 1;
-        let observed_at_unix_ms = i64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
+        let observed_at_unix_ms = read_i64_le(bytes, cursor);
         cursor += 8;
         observations.push(WifiNetworkObservation {
             interface_name,
@@ -250,13 +241,6 @@ where
         self.descriptor.clone()
     }
 
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
-    }
-
     fn invoke(
         &mut self,
         _session_id: &[u8],
@@ -304,13 +288,6 @@ where
 {
     fn descriptor(&self) -> CapabilityDescriptor {
         self.descriptor.clone()
-    }
-
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
     }
 
     fn invoke(

@@ -23,7 +23,7 @@ use crate::runtime::{
     timeout as rt_timeout, AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
     BufReader, ConnectFuture,
 };
-use alloc::collections::BTreeMap as HashMap;
+use alloc::collections::{BTreeMap as HashMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -126,7 +126,7 @@ impl PooledConn {
 /// eliminating connect + TLS handshake overhead for keep-alive servers.
 ///
 /// # Example
-/// ```ignore
+/// ```text
 /// let pool = ConnectionPool::new()
 ///     .with_max_connections_per_host(6)
 ///     .with_idle_timeout(Duration::from_secs(30));
@@ -158,6 +158,10 @@ pub struct ConnectionPool {
     auto_decompress: bool,
     /// TLS session ticket cache for session resumption.
     session_cache: SessionCache,
+    /// Prefer TLS 1.2 for new HTTPS connections.
+    tls12_first: bool,
+    #[cfg(feature = "tls")]
+    tls12_fallback_hosts: BTreeSet<String>,
 }
 
 impl ConnectionPool {
@@ -174,6 +178,9 @@ impl ConnectionPool {
             max_redirects: 10,
             auto_decompress: true,
             session_cache: SessionCache::new(),
+            tls12_first: false,
+            #[cfg(feature = "tls")]
+            tls12_fallback_hosts: BTreeSet::new(),
         }
     }
 
@@ -205,6 +212,12 @@ impl ConnectionPool {
     /// Set read timeout.
     pub fn with_read_timeout(mut self, t: Duration) -> Self {
         self.read_timeout = t;
+        self
+    }
+
+    /// Prefer TLS 1.2 for new HTTPS connections.
+    pub fn with_tls12_first(mut self, enabled: bool) -> Self {
+        self.tls12_first = enabled;
         self
     }
 
@@ -258,6 +271,11 @@ impl ConnectionPool {
     /// Set auto_decompress (for runtime configuration).
     pub fn set_auto_decompress(&mut self, v: bool) {
         self.auto_decompress = v;
+    }
+
+    /// Set whether new HTTPS connections should try TLS 1.2 first.
+    pub fn set_tls12_first(&mut self, enabled: bool) {
+        self.tls12_first = enabled;
     }
 
     /// Execute an HTTP/1.1 request, reusing pooled connections when available.
@@ -408,6 +426,40 @@ impl ConnectionPool {
         }
     }
 
+    /// Execute a single HTTP/1.1 request and pass body bytes to `on_chunk`
+    /// as they are read. The returned response contains status and headers,
+    /// with an empty body.
+    pub async fn execute_async_body_chunks<F>(
+        pool: &Arc<Mutex<Self>>,
+        request: &Request,
+        mut on_chunk: F,
+    ) -> Result<Response>
+    where
+        F: FnMut(&[u8]) -> Result<()>,
+    {
+        let uri = request.uri();
+        let is_head = request.method() == &Method::HEAD;
+        let is_https = uri.is_https();
+        let host = uri
+            .host()
+            .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
+        let port = uri.port().unwrap_or(if is_https { 443 } else { 80 });
+        let (ct, dt, rt, sc, tls12_first) = {
+            let p = pool.lock();
+            (
+                p.connect_timeout,
+                p.dns_timeout,
+                p.read_timeout,
+                p.session_cache.clone(),
+                p.tls12_first,
+            )
+        };
+        let (mut conn, _) =
+            Self::create_connection_static(ct, dt, host, port, is_https, &sc, tls12_first).await?;
+        Self::write_request_on_conn(&mut conn, request, false).await?;
+        Self::read_response_body_chunks(&mut conn, is_head, rt, &mut on_chunk).await
+    }
+
     /// Execute a single request, trying the pool first.
     async fn execute_single(
         &mut self,
@@ -444,21 +496,24 @@ impl ConnectionPool {
         }
 
         if let Ok((response, conn)) = result {
-            // Return working connection to pool
-            self.connections
-                .entry(key)
-                .or_default()
-                .push((conn, Instant::now()));
+            if Self::response_allows_reuse(&response) {
+                self.connections
+                    .entry(key)
+                    .or_default()
+                    .push((conn, Instant::now()));
+            }
             return Ok(response);
         }
 
         // All pooled connections failed — create a new one
         let pooled = self.create_connection(host, port, is_https).await?;
         let (response, conn) = self.try_request_on_conn(pooled, request, is_head).await?;
-        self.connections
-            .entry(key)
-            .or_default()
-            .push((conn, Instant::now()));
+        if Self::response_allows_reuse(&response) {
+            self.connections
+                .entry(key)
+                .or_default()
+                .push((conn, Instant::now()));
+        }
         Ok(response)
     }
 
@@ -492,6 +547,16 @@ impl ConnectionPool {
             let mut p = pool.lock();
             p.connections.remove(&key).unwrap_or_default()
         };
+        timing_log(
+            "http1.pool",
+            format!(
+                "host={} port={} tls={} pooled={}",
+                host,
+                port,
+                is_https,
+                conns.len()
+            ),
+        );
 
         // Try pooled (no lock)
         let (result, leftover_conns) =
@@ -505,30 +570,48 @@ impl ConnectionPool {
         }
 
         if let Ok((response, conn)) = result {
-            let mut p = pool.lock();
-            p.connections
-                .entry(key)
-                .or_default()
-                .push((conn, Instant::now()));
+            if Self::response_allows_reuse(&response) {
+                let mut p = pool.lock();
+                p.connections
+                    .entry(key)
+                    .or_default()
+                    .push((conn, Instant::now()));
+            }
             return Ok(response);
         }
 
         // Create new connection (no lock)
-        let (ct, dt, rt, sc) = {
+        let (ct, dt, rt, sc, prefer_tls12) = {
             let p = pool.lock();
             (
                 p.connect_timeout,
                 p.dns_timeout,
                 p.read_timeout,
                 p.session_cache.clone(),
+                p.tls12_first || {
+                    #[cfg(feature = "tls")]
+                    {
+                        p.tls12_fallback_hosts.contains(host)
+                    }
+                    #[cfg(not(feature = "tls"))]
+                    {
+                        false
+                    }
+                },
             )
         };
-        let pooled = Self::create_connection_static(ct, dt, host, port, is_https, &sc).await?;
+        let (pooled, used_tls12_fallback) =
+            Self::create_connection_static(ct, dt, host, port, is_https, &sc, prefer_tls12).await?;
+        if used_tls12_fallback {
+            let mut p = pool.lock();
+            #[cfg(feature = "tls")]
+            p.tls12_fallback_hosts.insert(host.to_string());
+        }
         let (response, conn) =
             Self::try_request_on_conn_static(pooled, request, is_head, auto_decompress, rt).await?;
 
         // Return to pool (brief lock)
-        {
+        if Self::response_allows_reuse(&response) {
             let mut p = pool.lock();
             p.connections
                 .entry(key)
@@ -581,7 +664,31 @@ impl ConnectionPool {
         auto_decompress: bool,
         read_timeout: Duration,
     ) -> Result<(Response, PooledConn)> {
-        // Build request bytes
+        let write_started = Instant::now();
+        Self::write_request_on_conn(&mut conn, request, auto_decompress).await?;
+        timing_log_elapsed(
+            "http1.write_request",
+            request.uri().to_string(),
+            write_started.elapsed(),
+        );
+
+        let read_started = Instant::now();
+        let response = Self::read_response(&mut conn, is_head, read_timeout).await?;
+        timing_log_elapsed(
+            "http1.read_response",
+            format!("{} status={}", request.uri(), response.status().as_u16()),
+            read_started.elapsed(),
+        );
+
+        // Connection is still alive
+        Ok((response, conn))
+    }
+
+    async fn write_request_on_conn(
+        conn: &mut PooledConn,
+        request: &Request,
+        auto_decompress: bool,
+    ) -> Result<()> {
         let mut request_bytes = request.to_http_bytes();
 
         // Add Accept-Encoding if auto_decompress
@@ -601,13 +708,7 @@ impl ConnectionPool {
         // Write request
         conn.write_request(&request_bytes)
             .await
-            .map_err(Error::Network)?;
-
-        // Read response
-        let response = Self::read_response(&mut conn, is_head, read_timeout).await?;
-
-        // Connection is still alive
-        Ok((response, conn))
+            .map_err(Error::Network)
     }
 
     /// Try a request on a connection. Returns (response, conn) on success.
@@ -636,45 +737,149 @@ impl ConnectionPool {
         port: u16,
         is_https: bool,
         session_cache: &SessionCache,
-    ) -> Result<PooledConn> {
+        prefer_tls12: bool,
+    ) -> Result<(PooledConn, bool)> {
         if is_https {
             #[cfg(not(feature = "tls"))]
             {
-                let _ = (connect_timeout, dns_timeout, host, port, session_cache);
+                let _ = (
+                    connect_timeout,
+                    dns_timeout,
+                    host,
+                    port,
+                    session_cache,
+                    prefer_tls12,
+                );
                 return Err(Error::ProtocolError(
                     "HTTPS requires edgerun-http tls feature".into(),
                 ));
             }
             #[cfg(feature = "tls")]
             {
+                let connect_started = Instant::now();
                 let stream =
                     Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port)
                         .await?;
-                let tls = AsyncTlsStream::client(stream, host, &[], Some(session_cache))
-                    .await
-                    .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
+                timing_log_elapsed(
+                    "http1.connect",
+                    format!("{}:{}", host, port),
+                    connect_started.elapsed(),
+                );
+                let tls_started = Instant::now();
+                let (tls, used_tls12_fallback) = if prefer_tls12 {
+                    match AsyncTlsStream::client_tls12(stream, host).await {
+                        Ok(tls) => {
+                            timing_log_elapsed(
+                                "http1.tls12_first",
+                                host.to_string(),
+                                tls_started.elapsed(),
+                            );
+                            (tls, false)
+                        }
+                        Err(first_err) => {
+                            let stream = Self::resolve_and_connect_static(
+                                connect_timeout,
+                                dns_timeout,
+                                host,
+                                port,
+                            )
+                            .await?;
+                            let tls = AsyncTlsStream::client(stream, host, &[], Some(session_cache))
+                                .await
+                                .map_err(|second_err| {
+                                    Error::ProtocolError(format!(
+                                        "TLS 1.2 handshake failed: {first_err}; TLS 1.3 fallback failed: {second_err}"
+                                    ))
+                                })?;
+                            timing_log_elapsed(
+                                "http1.tls13_after_tls12",
+                                host.to_string(),
+                                tls_started.elapsed(),
+                            );
+                            (tls, false)
+                        }
+                    }
+                } else {
+                    match AsyncTlsStream::client(stream, host, &[], Some(session_cache)).await {
+                        Ok(tls) => {
+                            timing_log_elapsed(
+                                "http1.tls13",
+                                host.to_string(),
+                                tls_started.elapsed(),
+                            );
+                            (tls, false)
+                        }
+                        Err(first_err) => {
+                            let stream = Self::resolve_and_connect_static(
+                                connect_timeout,
+                                dns_timeout,
+                                host,
+                                port,
+                            )
+                            .await?;
+                            let tls = AsyncTlsStream::client_tls12(stream, host).await.map_err(|second_err| {
+                            Error::ProtocolError(format!(
+                                "TLS handshake failed: {first_err}; TLS 1.2 fallback failed: {second_err}"
+                            ))
+                        })?;
+                            timing_log_elapsed(
+                                "http1.tls12",
+                                host.to_string(),
+                                tls_started.elapsed(),
+                            );
+                            (tls, true)
+                        }
+                    }
+                };
                 let reader = BufReader::new(tls);
-                Ok(PooledConn::Tls(reader))
+                Ok((PooledConn::Tls(reader), used_tls12_fallback))
             }
         } else {
+            let connect_started = Instant::now();
             let stream =
                 Self::resolve_and_connect_static(connect_timeout, dns_timeout, host, port).await?;
+            timing_log_elapsed(
+                "http1.connect",
+                format!("{}:{}", host, port),
+                connect_started.elapsed(),
+            );
             let reader = BufReader::new(stream);
-            Ok(PooledConn::Plain(reader))
+            Ok((PooledConn::Plain(reader), false))
         }
     }
 
     /// Create a new connection (instance method for non-async use).
-    async fn create_connection(&self, host: &str, port: u16, is_https: bool) -> Result<PooledConn> {
-        Self::create_connection_static(
+    async fn create_connection(
+        &mut self,
+        host: &str,
+        port: u16,
+        is_https: bool,
+    ) -> Result<PooledConn> {
+        let prefer_tls12 = self.tls12_first || {
+            #[cfg(feature = "tls")]
+            {
+                self.tls12_fallback_hosts.contains(host)
+            }
+            #[cfg(not(feature = "tls"))]
+            {
+                false
+            }
+        };
+        let (conn, used_tls12_fallback) = Self::create_connection_static(
             self.connect_timeout,
             self.dns_timeout,
             host,
             port,
             is_https,
             &self.session_cache,
+            prefer_tls12,
         )
-        .await
+        .await?;
+        if used_tls12_fallback {
+            #[cfg(feature = "tls")]
+            self.tls12_fallback_hosts.insert(host.to_string());
+        }
+        Ok(conn)
     }
 
     /// Resolve hostname and connect TCP — static version.
@@ -751,7 +956,7 @@ impl ConnectionPool {
         let fut = ConnectFuture::new(addr.to_string());
         match rt_timeout(connect_timeout, fut).await {
             Ok(Ok(stream)) => Ok(stream),
-            Ok(Err(e)) => Err(Error::Network(e.into())),
+            Ok(Err(e)) => Err(Error::Network(crate::runtime::io::Error::other(e))),
             Err(_) => Err(Error::Timeout),
         }
     }
@@ -843,10 +1048,7 @@ impl ConnectionPool {
         }
 
         // Read body
-        let is_chunked = headers
-            .get("transfer-encoding")
-            .map(|v| v.as_str().to_lowercase())
-            .is_some_and(|v| v.contains("chunked"));
+        let is_chunked = crate::chunked::has_chunked_transfer_coding(&headers);
 
         let content_length = headers
             .get("content-length")
@@ -888,6 +1090,141 @@ impl ConnectionPool {
         };
 
         Ok(Response::from_parts(status, headers, body))
+    }
+
+    async fn read_response_body_chunks<F>(
+        conn: &mut PooledConn,
+        is_head: bool,
+        read_timeout: Duration,
+        on_chunk: &mut F,
+    ) -> Result<Response>
+    where
+        F: FnMut(&[u8]) -> Result<()>,
+    {
+        let status_line = Self::read_line_with_timeout(conn, read_timeout)
+            .await?
+            .ok_or_else(|| {
+                Error::InvalidResponse("Unexpected EOF reading status line".to_string())
+            })?;
+
+        let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
+        if parts.len() < 2 {
+            return Err(Error::InvalidResponse("Invalid status line".to_string()));
+        }
+        let status_code = parts[1]
+            .parse::<u16>()
+            .map_err(|_| Error::InvalidResponse("Invalid status code".to_string()))?;
+        let status = StatusCode::new(status_code).map_err(Error::InvalidResponse)?;
+
+        let mut headers = HeaderMap::new();
+        loop {
+            let line = Self::read_line_with_timeout(conn, read_timeout)
+                .await?
+                .ok_or_else(|| {
+                    Error::InvalidResponse("Unexpected EOF reading headers".to_string())
+                })?;
+            if line.is_empty() {
+                break;
+            }
+            if let Some(colon) = line.find(':') {
+                let name = line[..colon].trim();
+                let value = line[colon + 1..].trim();
+                if !name.is_empty() {
+                    let _ = headers.insert(name, value);
+                }
+            }
+        }
+
+        let status_code_val = status.as_u16();
+        if is_head || status_code_val < 200 || status_code_val == 204 || status_code_val == 304 {
+            return Ok(Response::from_parts(status, headers, Vec::new()));
+        }
+
+        let is_chunked = crate::chunked::has_chunked_transfer_coding(&headers);
+        let content_length = headers
+            .get("content-length")
+            .and_then(|v| v.as_str().parse::<usize>().ok());
+
+        if (300..400).contains(&status_code_val) && !is_chunked && content_length.is_none() {
+            return Ok(Response::from_parts(status, headers, Vec::new()));
+        }
+
+        if status_code_val >= 400 {
+            let body =
+                Self::read_body_bytes_from_framing(conn, read_timeout, is_chunked, content_length)
+                    .await?;
+            return Ok(Response::from_parts(status, headers, body));
+        }
+
+        if is_chunked {
+            Self::read_chunked_body_chunks(conn, read_timeout, on_chunk).await?;
+        } else if let Some(len) = content_length {
+            let mut remaining = len;
+            let mut buf = [0u8; 8192];
+            while remaining > 0 {
+                let to_read = remaining.min(buf.len());
+                let n = Self::read_with_timeout(conn, &mut buf[..to_read], read_timeout).await?;
+                if n == 0 {
+                    break;
+                }
+                on_chunk(&buf[..n])?;
+                remaining -= n;
+            }
+        } else {
+            let mut buf = [0u8; 8192];
+            loop {
+                let n = match Self::read_with_timeout(conn, &mut buf, read_timeout).await {
+                    Ok(n) => n,
+                    Err(Error::Timeout) => break,
+                    Err(e) => return Err(e),
+                };
+                if n == 0 {
+                    break;
+                }
+                on_chunk(&buf[..n])?;
+            }
+        }
+
+        Ok(Response::from_parts(status, headers, Vec::new()))
+    }
+
+    async fn read_body_bytes_from_framing(
+        conn: &mut PooledConn,
+        read_timeout: Duration,
+        is_chunked: bool,
+        content_length: Option<usize>,
+    ) -> Result<Vec<u8>> {
+        if is_chunked {
+            return Self::read_chunked_body(conn, read_timeout).await;
+        }
+        if let Some(len) = content_length {
+            let mut buf = vec![0u8; len];
+            let mut total = 0;
+            while total < len {
+                let n = Self::read_with_timeout(conn, &mut buf[total..], read_timeout).await?;
+                if n == 0 {
+                    break;
+                }
+                total += n;
+            }
+            buf.truncate(total);
+            return Ok(buf);
+        }
+
+        let mut body = Vec::new();
+        let mut buf = [0u8; 8192];
+        loop {
+            let n = match Self::read_with_timeout(conn, &mut buf, read_timeout).await {
+                Ok(n) => n,
+                Err(Error::Timeout) if !body.is_empty() => break,
+                Err(e) => return Err(e),
+            };
+            if n == 0 {
+                break;
+            }
+            body.extend_from_slice(&buf[..n]);
+        }
+        Ok(body)
     }
 
     /// Read a chunked transfer-encoded body.
@@ -953,6 +1290,70 @@ impl ConnectionPool {
         Ok(body)
     }
 
+    async fn read_chunked_body_chunks<F>(
+        conn: &mut PooledConn,
+        read_timeout: Duration,
+        on_chunk: &mut F,
+    ) -> Result<()>
+    where
+        F: FnMut(&[u8]) -> Result<()>,
+    {
+        let mut line_buf = Vec::with_capacity(32);
+
+        loop {
+            line_buf.clear();
+            loop {
+                let mut byte = [0u8; 1];
+                let n = Self::read_with_timeout(conn, &mut byte, read_timeout).await?;
+                if n == 0 {
+                    return Err(Error::InvalidResponse(
+                        "unexpected EOF reading chunk size".into(),
+                    ));
+                }
+                if byte[0] == b'\n' {
+                    break;
+                }
+                line_buf.push(byte[0]);
+            }
+            if line_buf.last() == Some(&b'\r') {
+                line_buf.pop();
+            }
+
+            let size_hex = core::str::from_utf8(&line_buf)
+                .map_err(|_| Error::InvalidResponse("invalid chunk size".into()))?;
+            let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
+            let chunk_size = usize::from_str_radix(size_str, 16)
+                .map_err(|_| Error::InvalidResponse("invalid chunk size".into()))?;
+
+            if chunk_size == 0 {
+                loop {
+                    let line = Self::read_line_with_timeout(conn, read_timeout).await?;
+                    if line.is_none_or(|l| l.is_empty()) {
+                        break;
+                    }
+                }
+                break;
+            }
+
+            let mut remaining = chunk_size;
+            let mut buf = [0u8; 8192];
+            while remaining > 0 {
+                let to_read = remaining.min(buf.len());
+                let n = Self::read_with_timeout(conn, &mut buf[..to_read], read_timeout).await?;
+                if n == 0 {
+                    break;
+                }
+                on_chunk(&buf[..n])?;
+                remaining -= n;
+            }
+
+            let mut crlf = [0u8; 2];
+            let _ = Self::read_with_timeout(conn, &mut crlf, read_timeout).await;
+        }
+
+        Ok(())
+    }
+
     /// Resolve a redirect URL relative to the current URL.
     fn resolve_redirect_url(current: &str, location: &str) -> String {
         if location.starts_with("http://") || location.starts_with("https://") {
@@ -974,10 +1375,31 @@ impl ConnectionPool {
         }
         location.to_string()
     }
+
+    fn response_allows_reuse(response: &Response) -> bool {
+        response
+            .headers()
+            .get("connection")
+            .is_none_or(|value| !value.as_str().eq_ignore_ascii_case("close"))
+    }
 }
 
 impl Default for ConnectionPool {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[cfg(feature = "std")]
+fn timing_log(label: &str, detail: String) {
+    if std::env::var_os("EDGERUN_TIMING").is_some() {
+        std::eprintln!("{label}: {detail}");
+    }
+}
+
+#[cfg(not(feature = "std"))]
+fn timing_log(_label: &str, _detail: String) {}
+
+fn timing_log_elapsed(label: &str, detail: String, elapsed: Duration) {
+    timing_log(label, format!("{:.3}s {}", elapsed.as_secs_f64(), detail));
 }

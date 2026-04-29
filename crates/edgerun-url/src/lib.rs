@@ -9,6 +9,7 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::string::ToString;
+use edgerun_json::{FromJson, JsonValue, JsonValueError, ToJson};
 
 /// A parsed URL.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +106,19 @@ impl Url {
             s.push_str(f);
         }
         s
+    }
+}
+
+impl ToJson for Url {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::String(self.to_string())
+    }
+}
+
+impl FromJson for Url {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let value = String::from_json(value)?;
+        Url::parse(&value).map_err(|_| JsonValueError::WrongType("invalid URL".to_string()))
     }
 }
 
@@ -213,27 +227,6 @@ fn parse_authority(input: &str) -> Option<(&str, Authority)> {
     };
 
     Some((rest, Authority { host, port }))
-}
-
-#[cfg(feature = "serde")]
-impl serde::Serialize for Url {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Url {
-    fn deserialize<D>(deserializer: D) -> Result<Url, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
-        Url::parse(&s).map_err(|_| serde::de::Error::custom("invalid URL"))
-    }
 }
 
 #[cfg(test)]

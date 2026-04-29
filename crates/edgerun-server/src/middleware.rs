@@ -13,7 +13,7 @@
 //! - TLS interception (wrap all connections with TLS)
 //!
 //! # Example
-//! ```ignore
+//! ```text
 //! use edgerun_server::middleware::{ConnectionMiddleware, NextConnection};
 //!
 //! struct IpFilter { allowed: Vec<IpNet> }
@@ -150,7 +150,7 @@ pub trait ConnectionHandler: Send + Sync + 'static {
 /// Builder for composing connection middleware into a single handler.
 ///
 /// # Example
-/// ```ignore
+/// ```text
 /// let handler = ConnectionChain::new(http_handler)
 ///     .with(IpFilter { allowed: vec!["10.0.0.0/8".parse().unwrap()] })
 ///     .with(ConnectionLogger)
@@ -202,7 +202,7 @@ pub struct FnConnectionMiddleware<F> {
 /// Create connection middleware from a closure.
 ///
 /// # Example
-/// ```ignore
+/// ```text
 /// let mw = connection_fn(|peer, _stream, next| {
 ///     println!("Connection from {}", peer);
 ///     next.run(peer, stream)

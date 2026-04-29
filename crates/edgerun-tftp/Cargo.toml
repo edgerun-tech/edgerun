@@ -2,7 +2,8 @@
 name = "edgerun-tftp"
 version = "0.1.0"
 edition.workspace = true
-license = "MIT"
+license = "MIT OR Apache-2.0"
+publish.workspace = true
 description = "TFTP client for kernel loading"
 
 [features]
@@ -11,5 +12,9 @@ default = []
 server = []
 
 [dependencies]
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
+
+[lints]
+workspace = true

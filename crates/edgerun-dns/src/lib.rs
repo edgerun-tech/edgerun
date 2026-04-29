@@ -28,10 +28,10 @@
 //! use edgerun_dns::zone::DnsZone;
 //! use edgerun_rt::Runtime;
 //!
-//! let rt = Runtime::new().build().unwrap();
+//! let rt = Runtime::new_multi_thread().build().unwrap();
 //! rt.block_on(async {
 //!     let mut zone = DnsZone::new("example.com");
-//!     zone.add_a("@", edgerun_dns::std::net::Ipv4Addr::new(192, 168, 1, 1), 3600);
+//!     zone.add_a("@", std::net::Ipv4Addr::new(192, 168, 1, 1), 3600);
 //!
 //!     let config = DnsServerConfig::default();
 //!     let server = DnsServer::new(config).unwrap();
@@ -105,7 +105,7 @@ pub use tsig::{TsigAlgorithm, TsigError, TsigKey, TsigSigner, TsigVerifier};
 pub use dhcp::DhcpClient;
 #[cfg(feature = "dhcp")]
 pub use dhcp::{
-    DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, DhcpServer, Lease, NetworkConfig,
+    DhcpError, DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, DhcpServer, Lease, NetworkConfig,
     PxeClientArch,
 };
 #[cfg(feature = "dhcp")]

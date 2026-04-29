@@ -7,6 +7,24 @@ pub fn validate_reachability_hint_map(
     verifier: &dyn FixtureVerifier,
     semantic_hash_hex: &dyn Fn(&BTreeMap<String, Value>) -> Option<String>,
 ) -> Result<(), ReasonCode> {
+    if number_value(hint, "hint_version", 0) != 1 {
+        return Err(ReasonCode::VersionUnsupported);
+    }
+    if string_value(hint, "subject_node", "").is_empty() {
+        return Err(ReasonCode::StructuralInvalid);
+    }
+    if matches!(
+        hint.get("transport_class").and_then(Value::as_str),
+        None | Some("") | Some("TRANSPORT_CLASS_UNSPECIFIED")
+    ) {
+        return Err(ReasonCode::StructuralInvalid);
+    }
+    if matches!(
+        hint.get("directness").and_then(Value::as_str),
+        None | Some("") | Some("DIRECTNESS_UNSPECIFIED")
+    ) {
+        return Err(ReasonCode::StructuralInvalid);
+    }
     let locator = hint
         .get("locator_payload")
         .and_then(Value::as_str)

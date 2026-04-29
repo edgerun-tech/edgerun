@@ -10,7 +10,20 @@ pub fn validate_trust_case(
     let now = parse_ts(&string_value(local_state, "now", "1970-01-01T00:00:00Z"))
         .unwrap_or(crate::util::DateTimeUtc::epoch());
     if let Some(claim) = get_map(semantic_input, "assurance_claim") {
-        if !claim.contains_key("subject_identity") && !claim.contains_key("subject_node") {
+        let subject = string_value(
+            claim,
+            "subject_identity",
+            &string_value(claim, "subject_node", ""),
+        );
+        if subject.is_empty() {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
+        let attester = string_value(claim, "attester", "");
+        if attester.is_empty()
+            || assurance_rank(&string_value(claim, "assurance_class", "")) == 0
+            || !object_ref_is_valid(claim.get("evidence_object"))
+            || !object_ref_is_valid(claim.get("assurance_metadata"))
+        {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if let Some(s) = claim.get("issued_at").and_then(Value::as_str) {
@@ -18,7 +31,6 @@ pub fn validate_trust_case(
                 return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
             }
         }
-        let attester = string_value(claim, "attester", "");
         let expected = claim
             .get("signature_fixture")
             .and_then(Value::as_str)
@@ -70,11 +82,6 @@ pub fn validate_trust_case(
         if !required.is_empty() && assurance_rank(&actual) < assurance_rank(&required) {
             return reject(ReasonCode::AssuranceInsufficient, empty_map(), empty_map());
         }
-        let subject = string_value(
-            claim,
-            "subject_identity",
-            &string_value(claim, "subject_node", ""),
-        );
         return accept(
             mapping([
                 ("decision", ystr("assurance_accepted")),
@@ -89,6 +96,15 @@ pub fn validate_trust_case(
     }
     if let Some(revocation) = get_map(semantic_input, "revocation_record") {
         let issuer = string_value(revocation, "issuer", "");
+        if issuer.is_empty()
+            || !object_ref_is_valid(revocation.get("revocation_metadata"))
+            || revocation
+                .get("replacement_id")
+                .and_then(Value::as_str)
+                .is_some_and(|replacement_id| replacement_id.is_empty())
+        {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        }
         let expected = revocation
             .get("signature_fixture")
             .and_then(Value::as_str)

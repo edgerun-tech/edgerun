@@ -18,53 +18,6 @@ use edgerun_hardware_signing::NodeID;
 use edgerun_mesh::{discovery::DiscoveryPacket, router::MeshRouter, FrameType, MeshFrame};
 use std::collections::{HashMap, VecDeque};
 use std::io;
-use std::os::raw::{c_int, c_void};
-
-// ---------------------------------------------------------------------------
-
-unsafe extern "C" {
-    fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int;
-    fn bind(fd: c_int, addr: *const c_void, len: u32) -> c_int;
-    fn sendto(
-        fd: c_int,
-        buf: *const c_void,
-        len: usize,
-        flags: c_int,
-        addr: *const c_void,
-        addrlen: u32,
-    ) -> isize;
-    fn recvfrom(
-        fd: c_int,
-        buf: *mut c_void,
-        len: usize,
-        flags: c_int,
-        addr: *mut c_void,
-        addrlen: *mut u32,
-    ) -> isize;
-    fn setsockopt(
-        fd: c_int,
-        level: c_int,
-        optname: c_int,
-        optval: *const c_void,
-        optlen: u32,
-    ) -> c_int;
-    fn close(fd: c_int) -> c_int;
-}
-
-const AF_PACKET: c_int = 17;
-const SOCK_RAW: c_int = 3;
-const SOL_SOCKET: c_int = 1;
-
-#[repr(C)]
-struct SockaddrLl {
-    sll_family: u16,
-    sll_protocol: u16,
-    sll_ifindex: c_int,
-    sll_hatype: u16,
-    sll_pkttype: u8,
-    sll_halen: u8,
-    sll_addr: [u8; 8],
-}
 
 /// A raw Ethernet socket bound to a specific interface for our EtherType.
 pub struct RawEthernetSocket {

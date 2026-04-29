@@ -14,6 +14,7 @@ use alloc::vec::Vec;
 use crate::error::JsonError;
 use crate::util;
 use crate::JsonValue;
+use crate::JsonValueError;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompiledObjectSchema {
@@ -98,6 +99,15 @@ impl JsonTape {
 }
 
 impl<'a> TapeValue<'a> {
+    fn token(&self) -> &TapeToken {
+        &self.tape.tokens[self.index]
+    }
+
+    fn raw(&self) -> &'a str {
+        let token = self.token();
+        &self.input[token.start..token.end]
+    }
+
     #[must_use]
     pub fn kind(&self) -> TapeTokenKind {
         self.tape.tokens[self.index].kind
@@ -121,11 +131,349 @@ impl<'a> TapeValue<'a> {
     }
 
     #[must_use]
+    pub fn as_bool(&self) -> Option<bool> {
+        match (self.kind(), self.raw()) {
+            (TapeTokenKind::Bool, "true") => Some(true),
+            (TapeTokenKind::Bool, "false") => Some(false),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_i64(&self) -> Option<i64> {
+        if self.kind() != TapeTokenKind::Number {
+            return None;
+        }
+        let raw = self.raw();
+        if raw.contains(['.', 'e', 'E']) {
+            return None;
+        }
+        raw.parse().ok()
+    }
+
+    #[must_use]
+    pub fn as_u64(&self) -> Option<u64> {
+        if self.kind() != TapeTokenKind::Number {
+            return None;
+        }
+        let raw = self.raw();
+        if raw.starts_with('-') || raw.contains(['.', 'e', 'E']) {
+            return None;
+        }
+        raw.parse().ok()
+    }
+
+    #[must_use]
+    pub fn as_i32(&self) -> Option<i32> {
+        self.as_i64().and_then(|value| i32::try_from(value).ok())
+    }
+
+    #[must_use]
+    pub fn as_u32(&self) -> Option<u32> {
+        self.as_u64().and_then(|value| u32::try_from(value).ok())
+    }
+
+    #[must_use]
+    pub fn as_usize(&self) -> Option<usize> {
+        self.as_u64().and_then(|value| usize::try_from(value).ok())
+    }
+
+    #[must_use]
+    pub fn as_f64(&self) -> Option<f64> {
+        (self.kind() == TapeTokenKind::Number)
+            .then(|| self.raw().parse().ok())
+            .flatten()
+    }
+
+    #[must_use]
+    pub fn is_null(&self) -> bool {
+        self.kind() == TapeTokenKind::Null
+    }
+
+    #[must_use]
+    pub fn to_json_value(&self) -> Option<JsonValue> {
+        match self.kind() {
+            TapeTokenKind::Null => Some(JsonValue::Null),
+            TapeTokenKind::Bool => self.as_bool().map(JsonValue::Bool),
+            TapeTokenKind::Number => {
+                if let Some(value) = self.as_i64() {
+                    Some(JsonValue::from(value))
+                } else if let Some(value) = self.as_u64() {
+                    Some(JsonValue::from(value))
+                } else {
+                    self.as_f64().map(JsonValue::from)
+                }
+            }
+            TapeTokenKind::String | TapeTokenKind::Key => self.as_str().map(JsonValue::from),
+            TapeTokenKind::Array => self.array_items().map(|items| {
+                JsonValue::Array(
+                    items
+                        .into_iter()
+                        .filter_map(|v| v.to_json_value())
+                        .collect(),
+                )
+            }),
+            TapeTokenKind::Object => self.object_fields().map(|fields| {
+                JsonValue::Object(
+                    fields
+                        .into_iter()
+                        .filter_map(|(key, value)| {
+                            value.to_json_value().map(|value| (key.to_owned(), value))
+                        })
+                        .collect(),
+                )
+            }),
+        }
+    }
+
+    #[must_use]
+    pub fn array_items(&self) -> Option<Vec<TapeValue<'a>>> {
+        if self.kind() != TapeTokenKind::Array {
+            return None;
+        }
+        Some(
+            self.tape
+                .tokens
+                .iter()
+                .enumerate()
+                .filter_map(|(index, token)| {
+                    (token.parent == Some(self.index)).then_some(TapeValue {
+                        tape: self.tape,
+                        input: self.input,
+                        index,
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    #[must_use]
+    pub fn object_fields(&self) -> Option<Vec<(&'a str, TapeValue<'a>)>> {
+        if self.kind() != TapeTokenKind::Object {
+            return None;
+        }
+        let mut fields = Vec::new();
+        let tokens = &self.tape.tokens;
+        let mut i = self.index + 1;
+        while i + 1 < tokens.len() {
+            if tokens[i].parent != Some(self.index) || tokens[i].kind != TapeTokenKind::Key {
+                i += 1;
+                continue;
+            }
+            let key = TapeValue {
+                tape: self.tape,
+                input: self.input,
+                index: i,
+            };
+            let value_index = i + 1;
+            if tokens[value_index].parent == Some(self.index) {
+                if let Some(key) = key.as_str() {
+                    fields.push((
+                        key,
+                        TapeValue {
+                            tape: self.tape,
+                            input: self.input,
+                            index: value_index,
+                        },
+                    ));
+                }
+            }
+            i += 2;
+        }
+        Some(fields)
+    }
+
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<TapeValue<'a>> {
         if self.kind() != TapeTokenKind::Object {
             return None;
         }
         self.get_linear(key)
+    }
+
+    pub fn required(&self, key: &str) -> Result<TapeValue<'a>, JsonValueError> {
+        if self.kind() != TapeTokenKind::Object {
+            return Err(JsonValueError::WrongType(format!(
+                "field lookup expected object, found {:?}",
+                self.kind()
+            )));
+        }
+        self.get(key)
+            .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))
+    }
+
+    fn optional_field<T>(
+        &self,
+        key: &str,
+        expected: &str,
+        convert: impl FnOnce(TapeValue<'a>) -> Option<T>,
+    ) -> Result<Option<T>, JsonValueError> {
+        self.get(key)
+            .map(|value| {
+                convert(value).ok_or_else(|| {
+                    JsonValueError::WrongType(format!("field `{key}` expected {expected}"))
+                })
+            })
+            .transpose()
+    }
+
+    #[must_use]
+    pub fn get_str(&self, key: &str) -> Option<&'a str> {
+        self.get(key).and_then(|value| value.as_str())
+    }
+
+    pub fn optional_str(&self, key: &str) -> Result<Option<&'a str>, JsonValueError> {
+        self.optional_field(key, "string", |value| value.as_str())
+    }
+
+    pub fn required_str(&self, key: &str) -> Result<&'a str, JsonValueError> {
+        self.required(key)?
+            .as_str()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected string")))
+    }
+
+    #[must_use]
+    pub fn get_string(&self, key: &str) -> Option<String> {
+        self.get_str(key).map(ToOwned::to_owned)
+    }
+
+    pub fn optional_string(&self, key: &str) -> Result<Option<String>, JsonValueError> {
+        self.optional_str(key)
+            .map(|value| value.map(ToOwned::to_owned))
+    }
+
+    pub fn required_string(&self, key: &str) -> Result<String, JsonValueError> {
+        self.required_str(key).map(ToOwned::to_owned)
+    }
+
+    #[must_use]
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        self.get(key).and_then(|value| value.as_bool())
+    }
+
+    pub fn optional_bool(&self, key: &str) -> Result<Option<bool>, JsonValueError> {
+        self.optional_field(key, "boolean", |value| value.as_bool())
+    }
+
+    pub fn required_bool(&self, key: &str) -> Result<bool, JsonValueError> {
+        self.required(key)?
+            .as_bool()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected boolean")))
+    }
+
+    #[must_use]
+    pub fn get_i64(&self, key: &str) -> Option<i64> {
+        self.get(key).and_then(|value| value.as_i64())
+    }
+
+    pub fn optional_i64(&self, key: &str) -> Result<Option<i64>, JsonValueError> {
+        self.optional_field(key, "i64", |value| value.as_i64())
+    }
+
+    pub fn required_i64(&self, key: &str) -> Result<i64, JsonValueError> {
+        self.required(key)?
+            .as_i64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i64")))
+    }
+
+    #[must_use]
+    pub fn get_i32(&self, key: &str) -> Option<i32> {
+        self.get(key).and_then(|value| value.as_i32())
+    }
+
+    pub fn optional_i32(&self, key: &str) -> Result<Option<i32>, JsonValueError> {
+        self.optional_field(key, "i32", |value| value.as_i32())
+    }
+
+    pub fn required_i32(&self, key: &str) -> Result<i32, JsonValueError> {
+        self.required(key)?
+            .as_i32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected i32")))
+    }
+
+    #[must_use]
+    pub fn get_u64(&self, key: &str) -> Option<u64> {
+        self.get(key).and_then(|value| value.as_u64())
+    }
+
+    pub fn optional_u64(&self, key: &str) -> Result<Option<u64>, JsonValueError> {
+        self.optional_field(key, "u64", |value| value.as_u64())
+    }
+
+    pub fn required_u64(&self, key: &str) -> Result<u64, JsonValueError> {
+        self.required(key)?
+            .as_u64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u64")))
+    }
+
+    #[must_use]
+    pub fn get_u32(&self, key: &str) -> Option<u32> {
+        self.get(key).and_then(|value| value.as_u32())
+    }
+
+    pub fn optional_u32(&self, key: &str) -> Result<Option<u32>, JsonValueError> {
+        self.optional_field(key, "u32", |value| value.as_u32())
+    }
+
+    pub fn required_u32(&self, key: &str) -> Result<u32, JsonValueError> {
+        self.required(key)?
+            .as_u32()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected u32")))
+    }
+
+    #[must_use]
+    pub fn get_usize(&self, key: &str) -> Option<usize> {
+        self.get(key).and_then(|value| value.as_usize())
+    }
+
+    pub fn optional_usize(&self, key: &str) -> Result<Option<usize>, JsonValueError> {
+        self.optional_field(key, "usize", |value| value.as_usize())
+    }
+
+    pub fn required_usize(&self, key: &str) -> Result<usize, JsonValueError> {
+        self.required(key)?
+            .as_usize()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected usize")))
+    }
+
+    #[must_use]
+    pub fn get_f64(&self, key: &str) -> Option<f64> {
+        self.get(key).and_then(|value| value.as_f64())
+    }
+
+    pub fn optional_f64(&self, key: &str) -> Result<Option<f64>, JsonValueError> {
+        self.optional_field(key, "f64", |value| value.as_f64())
+    }
+
+    pub fn required_f64(&self, key: &str) -> Result<f64, JsonValueError> {
+        self.required(key)?
+            .as_f64()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected f64")))
+    }
+
+    #[must_use]
+    pub fn get_array(&self, key: &str) -> Option<Vec<TapeValue<'a>>> {
+        self.get(key).and_then(|value| value.array_items())
+    }
+
+    pub fn required_array(&self, key: &str) -> Result<Vec<TapeValue<'a>>, JsonValueError> {
+        self.required(key)?
+            .array_items()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected array")))
+    }
+
+    #[must_use]
+    pub fn get_object_fields(&self, key: &str) -> Option<Vec<(&'a str, TapeValue<'a>)>> {
+        self.get(key).and_then(|value| value.object_fields())
+    }
+
+    pub fn required_object_fields(
+        &self,
+        key: &str,
+    ) -> Result<Vec<(&'a str, TapeValue<'a>)>, JsonValueError> {
+        self.required(key)?
+            .object_fields()
+            .ok_or_else(|| JsonValueError::WrongType(format!("field `{key}` expected object")))
     }
 
     #[must_use]
@@ -427,5 +775,83 @@ impl CompiledRowSchema {
         }
         out.push(b']');
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{parse_json_tape, TapeTokenKind};
+    use alloc::{string::String, vec, vec::Vec};
+
+    #[test]
+    fn tape_value_scalar_accessors() {
+        let input = r#"{"s":"edge","t":true,"f":false,"i":-7,"u":42,"float":1.5}"#;
+        let tape = parse_json_tape(input).unwrap();
+        let root = tape.root(input).unwrap();
+
+        assert_eq!(root.get("t").unwrap().as_bool(), Some(true));
+        assert_eq!(root.get("f").unwrap().as_bool(), Some(false));
+        assert_eq!(root.get("i").unwrap().as_i64(), Some(-7));
+        assert_eq!(root.get("u").unwrap().as_u64(), Some(42));
+        assert_eq!(root.get("float").unwrap().as_i64(), None);
+        assert_eq!(root.get("float").unwrap().as_u64(), None);
+        assert_eq!(root.get_string("s"), Some(String::from("edge")));
+        assert_eq!(
+            root.optional_string("s").unwrap(),
+            Some(String::from("edge"))
+        );
+        assert_eq!(root.optional_string("missing").unwrap(), None);
+        assert!(root.optional_string("u").is_err());
+        assert_eq!(root.get_f64("float"), Some(1.5));
+        assert_eq!(root.optional_bool("t").unwrap(), Some(true));
+        assert_eq!(root.optional_i64("i").unwrap(), Some(-7));
+        assert_eq!(root.optional_i32("i").unwrap(), Some(-7));
+        assert_eq!(root.optional_u64("u").unwrap(), Some(42));
+        assert_eq!(root.optional_u32("u").unwrap(), Some(42));
+        assert_eq!(root.optional_usize("u").unwrap(), Some(42));
+        assert_eq!(root.optional_f64("float").unwrap(), Some(1.5));
+        assert_eq!(root.required_bool("t").unwrap(), true);
+        assert_eq!(root.required_i64("i").unwrap(), -7);
+        assert_eq!(root.required_u64("u").unwrap(), 42);
+        assert_eq!(root.required_i32("i").unwrap(), -7);
+        assert_eq!(root.required_u32("u").unwrap(), 42);
+        assert_eq!(root.required_usize("u").unwrap(), 42);
+    }
+
+    #[test]
+    fn tape_value_array_items_and_object_fields_are_direct_children() {
+        let input = r#"{"items":[1,{"nested":true},3],"other":null}"#;
+        let tape = parse_json_tape(input).unwrap();
+        let root = tape.root(input).unwrap();
+        let items = root.get("items").unwrap().array_items().unwrap();
+
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].as_u64(), Some(1));
+        assert_eq!(items[1].kind(), TapeTokenKind::Object);
+        assert_eq!(items[2].as_u64(), Some(3));
+
+        let fields = root.object_fields().unwrap();
+        assert_eq!(
+            fields.iter().map(|(key, _)| *key).collect::<Vec<_>>(),
+            vec!["items", "other"]
+        );
+        assert_eq!(root.required_array("items").unwrap().len(), 3);
+        assert!(root.required_object_fields("items").is_err());
+    }
+
+    #[test]
+    fn tape_value_converts_to_owned_json_value() {
+        let input = r#"{"items":[1,{"nested":true},3.5],"other":null}"#;
+        let tape = parse_json_tape(input).unwrap();
+        let root = tape.root(input).unwrap();
+        let value = root.to_json_value().unwrap();
+
+        assert_eq!(value.get_array("items").unwrap().len(), 3);
+        assert_eq!(
+            value.pointer("/items/1/nested").unwrap().as_bool(),
+            Some(true)
+        );
+        assert_eq!(value.pointer("/items/2").unwrap().as_f64(), Some(3.5));
+        assert!(value.required("other").unwrap().is_null());
     }
 }

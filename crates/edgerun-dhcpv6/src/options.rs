@@ -3,6 +3,7 @@
 use crate::std::io;
 use crate::std::net::Ipv6Addr;
 use crate::std::prelude::v1::*;
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
 
 // ---------------------------------------------------------------------------
 // Option codes
@@ -186,8 +187,8 @@ impl Dhcpv6Option {
         let mut pos = 0;
 
         while pos + 4 <= data.len() {
-            let code = u16::from_be_bytes([data[pos], data[pos + 1]]);
-            let len = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
+            let code = read_u16_be(data, pos);
+            let len = read_u16_be(data, pos + 2) as usize;
             pos += 4;
 
             if pos + len > data.len() {
@@ -217,12 +218,7 @@ impl Dhcpv6Option {
     /// Get IAID from an IA_NA or IA_PD option.
     pub fn iaid(&self) -> Option<u32> {
         if (self.code == OPT_IA_NA || self.code == OPT_IA_PD) && self.data.len() >= 12 {
-            Some(u32::from_be_bytes([
-                self.data[0],
-                self.data[1],
-                self.data[2],
-                self.data[3],
-            ]))
+            Some(read_u32_be(&self.data, 0))
         } else {
             None
         }
@@ -231,12 +227,7 @@ impl Dhcpv6Option {
     /// Get T1 from an IA_NA or IA_PD option.
     pub fn t1(&self) -> Option<u32> {
         if (self.code == OPT_IA_NA || self.code == OPT_IA_PD) && self.data.len() >= 12 {
-            Some(u32::from_be_bytes([
-                self.data[4],
-                self.data[5],
-                self.data[6],
-                self.data[7],
-            ]))
+            Some(read_u32_be(&self.data, 4))
         } else {
             None
         }
@@ -245,12 +236,7 @@ impl Dhcpv6Option {
     /// Get T2 from an IA_NA or IA_PD option.
     pub fn t2(&self) -> Option<u32> {
         if (self.code == OPT_IA_NA || self.code == OPT_IA_PD) && self.data.len() >= 12 {
-            Some(u32::from_be_bytes([
-                self.data[8],
-                self.data[9],
-                self.data[10],
-                self.data[11],
-            ]))
+            Some(read_u32_be(&self.data, 8))
         } else {
             None
         }
@@ -283,18 +269,8 @@ impl Dhcpv6Option {
     /// Get preferred lifetime from IAADDR or IAPREFIX.
     pub fn preferred_lifetime(&self) -> Option<u32> {
         match self.code {
-            OPT_IAADDR if self.data.len() >= 20 => Some(u32::from_be_bytes([
-                self.data[16],
-                self.data[17],
-                self.data[18],
-                self.data[19],
-            ])),
-            OPT_IAPREFIX if self.data.len() >= 8 => Some(u32::from_be_bytes([
-                self.data[0],
-                self.data[1],
-                self.data[2],
-                self.data[3],
-            ])),
+            OPT_IAADDR if self.data.len() >= 20 => Some(read_u32_be(&self.data, 16)),
+            OPT_IAPREFIX if self.data.len() >= 8 => Some(read_u32_be(&self.data, 0)),
             _ => None,
         }
     }
@@ -302,18 +278,8 @@ impl Dhcpv6Option {
     /// Get valid lifetime from IAADDR or IAPREFIX.
     pub fn valid_lifetime(&self) -> Option<u32> {
         match self.code {
-            OPT_IAADDR if self.data.len() >= 24 => Some(u32::from_be_bytes([
-                self.data[20],
-                self.data[21],
-                self.data[22],
-                self.data[23],
-            ])),
-            OPT_IAPREFIX if self.data.len() >= 12 => Some(u32::from_be_bytes([
-                self.data[4],
-                self.data[5],
-                self.data[6],
-                self.data[7],
-            ])),
+            OPT_IAADDR if self.data.len() >= 24 => Some(read_u32_be(&self.data, 20)),
+            OPT_IAPREFIX if self.data.len() >= 12 => Some(read_u32_be(&self.data, 4)),
             _ => None,
         }
     }
@@ -332,7 +298,7 @@ impl Dhcpv6Option {
     /// Get status code and message.
     pub fn status(&self) -> Option<(StatusCode, String)> {
         if self.code == OPT_STATUS_CODE && self.data.len() >= 2 {
-            let code = u16::from_be_bytes([self.data[0], self.data[1]]);
+            let code = read_u16_be(&self.data, 0);
             let msg = String::from_utf8_lossy(&self.data[2..]).to_string();
             Some((StatusCode::from_u16(code), msg))
         } else {

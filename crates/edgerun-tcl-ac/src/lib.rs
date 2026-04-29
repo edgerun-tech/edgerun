@@ -13,20 +13,20 @@ use core::option::Option::{None, Some};
 use core::result::Result::{Err, Ok};
 #[cfg(target_os = "none")]
 use edgerun_bluetooth_gatt::sync::RwLock;
-use edgerun_bluetooth_gatt::{
-    format_gatt_uuid, parse_gatt_uuid, AttProtocol, GattAddressKind, GattCharacteristic,
-    GattDescriptor, GattError, GattProperty, GattService, GattUuid, L2capSocket,
-};
+use edgerun_bluetooth_gatt::{format_gatt_uuid, AttProtocol, GattError, L2capSocket};
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
-use edgerun_crypto::{hkdf_sha256, sha256, OsRng, RngCore};
+use edgerun_crypto::{hmac_sha256, sha256, OsRng, RngCore};
 #[cfg(not(target_os = "none"))]
 use std::sync::RwLock;
 
-pub const TCL_SERVICE_UUID: &str = "0000f100-0000-1000-8000-00805f9b34fb";
-pub const TCL_WRITE_CHAR_UUID: &str = "0000ff01-0000-1000-8000-00805f9b34fb";
-pub const TCL_INDICATE_CHAR_UUID: &str = "0000ff02-0000-1000-8000-00805f9b34fb";
+pub const TCL_SERVICE_UUID: &str = "0000f900-0000-1000-8000-00805f9b34fb";
+pub const TCL_WRITE_CHAR_UUID: &str = "0000f901-0000-1000-8000-00805f9b34fb";
+pub const TCL_INDICATE_CHAR_UUID: &str = "0000f902-0000-1000-8000-00805f9b34fb";
+pub const TCL_LEGACY_SERVICE_UUID: &str = "0000f100-0000-1000-8000-00805f9b34fb";
+pub const TCL_LEGACY_WRITE_CHAR_UUID: &str = "0000f101-0000-1000-8000-00805f9b34fb";
+pub const TCL_LEGACY_INDICATE_CHAR_UUID: &str = "0000f102-0000-1000-8000-00805f9b34fb";
 
-const BASE_KEY: &[u8; 16] = b"Hj8%Wd4*Qy3!Lm6@";
+const BASE_KEY: &[u8; 16] = b"p7#z9@L2!c5%v1&k";
 const PRESET_IV: &[u8; 16] = b"GjVEI7lQ382O7Ua0";
 const PROTOCOL_HEAD: u8 = 0xBB;
 const PROTOCOL_HEADER_LEN: usize = 37;
@@ -158,7 +158,6 @@ impl Default for AcState {
 }
 
 struct SessionKeys {
-    local_random: [u8; 32],
     session_key: [u8; 16],
 }
 
@@ -171,6 +170,7 @@ pub struct TclAcClient {
     indicate_char_handle: RwLock<Option<u16>>,
     mtu: RwLock<u16>,
     session: RwLock<Option<SessionKeys>>,
+    encrypted: RwLock<bool>,
 }
 
 impl TclAcClient {
@@ -184,6 +184,7 @@ impl TclAcClient {
             indicate_char_handle: RwLock::new(None),
             mtu: RwLock::new(512),
             session: RwLock::new(None),
+            encrypted: RwLock::new(false),
         }
     }
 
@@ -192,17 +193,39 @@ impl TclAcClient {
             return Err(CapabilityError::Provider("device address required".into()));
         }
 
-        let socket = L2capSocket::new()?;
-        socket.connect_device(device_addr, 0x04)?;
+        let socket = match Self::connect_socket(device_addr, 0x01) {
+            Ok(socket) => socket,
+            Err(public_err) => Self::connect_socket(device_addr, 0x02).map_err(|random_err| {
+                CapabilityError::Provider(format!(
+                    "failed to connect as public ({}) or random ({}) BLE address",
+                    public_err, random_err
+                ))
+            })?,
+        };
 
         *self.device_addr.write().unwrap() = Some(device_addr.to_string());
         *self.connected.write().unwrap() = true;
         *self.socket.write().unwrap() = Some(socket);
 
+        if let Ok(mut proto) = self.create_protocol() {
+            if let Ok(mtu) = proto.exchange_mtu(512) {
+                *self.mtu.write().unwrap() = mtu;
+            }
+        }
+
         self.discover_tcl_service()?;
-        self.perform_key_exchange()?;
+        self.enable_indications()?;
+        if *self.encrypted.read().unwrap() {
+            self.perform_key_exchange()?;
+        }
 
         Ok(())
+    }
+
+    fn connect_socket(device_addr: &str, addr_type: u8) -> Result<L2capSocket, GattError> {
+        let socket = L2capSocket::new()?;
+        socket.connect_device(device_addr, addr_type)?;
+        Ok(socket)
     }
 
     fn discover_tcl_service(&self) -> Result<(), CapabilityError> {
@@ -218,9 +241,14 @@ impl TclAcClient {
         let services = proto.parse_read_by_group_response(&data);
 
         for (start, end, uuid) in services {
-            let uuid_str = format_gatt_uuid(&uuid).replace("-", "");
-            let tcl_str = TCL_SERVICE_UUID.replace("-", "");
-            if uuid_str.ends_with(&tcl_str[tcl_str.len() - 8..]) {
+            if uuid_matches(&uuid, TCL_SERVICE_UUID) {
+                *self.encrypted.write().unwrap() = true;
+                *self.service_handle.write().unwrap() = Some(start);
+                self.discover_characteristics_in_range(start, end)?;
+                return Ok(());
+            }
+            if uuid_matches(&uuid, TCL_LEGACY_SERVICE_UUID) {
+                *self.encrypted.write().unwrap() = false;
                 *self.service_handle.write().unwrap() = Some(start);
                 self.discover_characteristics_in_range(start, end)?;
                 return Ok(());
@@ -245,24 +273,55 @@ impl TclAcClient {
 
         let chars = proto.parse_read_by_type_response(&data);
 
-        let write_str = TCL_WRITE_CHAR_UUID.replace("-", "");
-        let indicate_str = TCL_INDICATE_CHAR_UUID.replace("-", "");
-
         for (handle, value) in chars {
-            if value.len() < 3 {
+            if value.len() < 5 {
                 continue;
             }
-            let uuid = value[2..].to_vec();
-            let uuid_str = format_gatt_uuid(&uuid).replace("-", "");
+            let value_handle = u16::from_le_bytes([value[1], value[2]]);
+            let uuid = value[3..].to_vec();
 
-            if uuid_str.ends_with(&write_str[write_str.len() - 8..]) {
-                *self.write_char_handle.write().unwrap() = Some(handle);
-            } else if uuid_str.ends_with(&indicate_str[indicate_str.len() - 8..]) {
-                *self.indicate_char_handle.write().unwrap() = Some(handle);
+            if uuid_matches(&uuid, TCL_WRITE_CHAR_UUID)
+                || uuid_matches(&uuid, TCL_LEGACY_WRITE_CHAR_UUID)
+            {
+                *self.write_char_handle.write().unwrap() = Some(value_handle);
+            } else if uuid_matches(&uuid, TCL_INDICATE_CHAR_UUID)
+                || uuid_matches(&uuid, TCL_LEGACY_INDICATE_CHAR_UUID)
+            {
+                *self.indicate_char_handle.write().unwrap() = Some(value_handle);
             }
         }
 
         Ok(())
+    }
+
+    fn enable_indications(&self) -> Result<(), CapabilityError> {
+        self.service_handle
+            .read()
+            .unwrap()
+            .ok_or_else(|| CapabilityError::Provider("TCL service not found".into()))?;
+        let indicate_handle =
+            self.indicate_char_handle.read().unwrap().ok_or_else(|| {
+                CapabilityError::Provider("indicate characteristic not found".into())
+            })?;
+        let mut proto = self.create_protocol()?;
+        let data = proto
+            .find_information(indicate_handle + 1, 0xffff)
+            .map_err(|e| {
+                CapabilityError::Provider(format!("failed to discover descriptors: {}", e))
+            })?;
+        for (handle, uuid) in proto.parse_find_information_response(&data) {
+            if format_gatt_uuid(&uuid) == "2902" {
+                proto
+                    .write_value(handle, &[0x02, 0x00], true)
+                    .map_err(|e| {
+                        CapabilityError::Provider(format!("failed to enable indications: {}", e))
+                    })?;
+                return Ok(());
+            }
+        }
+        Err(CapabilityError::Provider(
+            "client characteristic configuration descriptor not found".into(),
+        ))
     }
 
     fn create_protocol(&self) -> Result<AttProtocol, CapabilityError> {
@@ -290,9 +349,12 @@ impl TclAcClient {
         combined[..32].copy_from_slice(local_random);
         combined[32..].copy_from_slice(remote_random);
 
-        let okm = hkdf_sha256(Some(BASE_KEY), &combined, &[], 16);
+        let prk = hmac_sha256(&combined, BASE_KEY);
+        let mut info = Vec::new();
+        info.push(1);
+        let okm = hmac_sha256(&prk, &info);
         let mut key = [0u8; 16];
-        key.copy_from_slice(&okm);
+        key.copy_from_slice(&okm[..16]);
         key
     }
 
@@ -312,11 +374,7 @@ impl TclAcClient {
         let mut proto = self.create_protocol()?;
         proto.write_cmd(write_handle, &send_data)?;
 
-        sleep_ms(500);
-
-        let response = proto.read_value(write_handle).map_err(|e| {
-            CapabilityError::Provider(format!("failed to read key exchange response: {}", e))
-        })?;
+        let response = self.wait_for_protocol_packet(3000)?;
 
         let parsed = self
             .parse_protocol_packet(&response)
@@ -344,10 +402,7 @@ impl TclAcClient {
 
         let session_key = self.derive_session_key(&local_random, &remote_random);
 
-        *self.session.write().unwrap() = Some(SessionKeys {
-            local_random,
-            session_key,
-        });
+        *self.session.write().unwrap() = Some(SessionKeys { session_key });
 
         Ok(())
     }
@@ -402,13 +457,71 @@ impl TclAcClient {
         let mut payload = vec![0u8; payload_len];
         payload.copy_from_slice(&data[4..4 + payload_len]);
 
-        let mut packet_for_crc = data[..data.len() - 1].to_vec();
-        let crc = Self::calculate_crc8(&packet_for_crc);
+        let crc = Self::calculate_crc8(&data[..data.len() - 1]);
         if crc != data[data.len() - 1] {
+            return None;
+        }
+        let sha = sha256(&payload);
+        if sha.as_slice() != &data[4 + payload_len..4 + payload_len + 32] {
             return None;
         }
 
         Some((cmd, payload))
+    }
+
+    fn wait_for_protocol_packet(&self, timeout_ms: i32) -> Result<Vec<u8>, CapabilityError> {
+        let socket_guard = self.socket.read().unwrap();
+        let socket = socket_guard
+            .as_ref()
+            .ok_or_else(|| CapabilityError::Provider("not connected".into()))?;
+        let indicate_handle =
+            self.indicate_char_handle.read().unwrap().ok_or_else(|| {
+                CapabilityError::Provider("indicate characteristic not found".into())
+            })?;
+        let mut proto = self.create_protocol()?;
+        let start = now_ms();
+        let mut payload = Vec::new();
+        loop {
+            let elapsed = now_ms().saturating_sub(start);
+            if elapsed >= timeout_ms as u64 {
+                return Err(CapabilityError::Provider(
+                    "timed out waiting for indication".into(),
+                ));
+            }
+            let mut buf = vec![0u8; *self.mtu.read().unwrap() as usize];
+            let remaining = (timeout_ms as u64 - elapsed).min(500) as i32;
+            let n = match socket.recv_data(&mut buf, remaining) {
+                Ok(n) => n,
+                Err(GattError::Timeout(_)) => continue,
+                Err(e) => {
+                    return Err(CapabilityError::Provider(format!(
+                        "failed reading indication: {}",
+                        e
+                    )));
+                }
+            };
+            buf.truncate(n);
+            let indicated = proto
+                .handle_indication(&buf)
+                .or_else(|| proto.handle_notification(&buf));
+            let Some((handle, value)) = indicated else {
+                continue;
+            };
+            if handle != indicate_handle {
+                continue;
+            }
+            if value.first() == Some(&PROTOCOL_HEAD) {
+                payload.clear();
+            }
+            payload.extend_from_slice(&value);
+            if payload.len() >= 4 && payload[0] == PROTOCOL_HEAD {
+                let expected =
+                    (((payload[2] as usize) << 8) | payload[3] as usize) + PROTOCOL_HEADER_LEN;
+                if payload.len() == expected {
+                    return Ok(payload);
+                }
+            }
+        }
     }
 
     fn calculate_crc8(data: &[u8]) -> u8 {
@@ -434,6 +547,7 @@ impl TclAcClient {
         *self.write_char_handle.write().unwrap() = None;
         *self.indicate_char_handle.write().unwrap() = None;
         *self.session.write().unwrap() = None;
+        *self.encrypted.write().unwrap() = false;
         Ok(())
     }
 
@@ -455,22 +569,90 @@ impl TclAcClient {
         proto.write_cmd(write_handle, &packet).map_err(Into::into)
     }
 
-    pub fn get_device_info(&self) -> Result<String, CapabilityError> {
-        let indicate_handle = {
-            let guard = self.indicate_char_handle.read().unwrap();
-            guard.ok_or_else(|| {
-                CapabilityError::Provider("indicate characteristic not found".into())
-            })?
+    pub fn send_raw_command(&self, payload: &[u8]) -> Result<(), CapabilityError> {
+        let write_handle = {
+            let guard = self.write_char_handle.read().unwrap();
+            guard
+                .ok_or_else(|| CapabilityError::Provider("write characteristic not found".into()))?
         };
 
-        self.send_encrypted_command(CMD_GET_DEVICE_INFO, b"")?;
+        let mut proto = self.create_protocol_gatt()?;
+        let max_write = proto.mtu().saturating_sub(3) as usize;
+        if payload.len() <= max_write {
+            return proto
+                .write_value(write_handle, payload, true)
+                .map_err(Into::into);
+        }
 
-        sleep_ms(500);
+        let chunk_len = max_write;
+        if chunk_len == 0 {
+            return Err(CapabilityError::Provider(
+                "invalid ATT MTU for split write".into(),
+            ));
+        }
+        for chunk in payload.chunks(chunk_len) {
+            proto.write_value(write_handle, chunk, true)?;
+            sleep_ms(10);
+        }
+        Ok(())
+    }
 
-        let mut proto = self.create_protocol()?;
-        let response = proto
-            .read_value(indicate_handle)
-            .map_err(|e| CapabilityError::Provider(format!("failed to read device info: {}", e)))?;
+    fn wait_for_raw_value(&self, timeout_ms: i32) -> Result<Vec<u8>, CapabilityError> {
+        let socket_guard = self.socket.read().unwrap();
+        let socket = socket_guard
+            .as_ref()
+            .ok_or_else(|| CapabilityError::Provider("not connected".into()))?;
+        let indicate_handle =
+            self.indicate_char_handle.read().unwrap().ok_or_else(|| {
+                CapabilityError::Provider("indicate characteristic not found".into())
+            })?;
+        let proto = self.create_protocol()?;
+        let start = now_ms();
+        loop {
+            let elapsed = now_ms().saturating_sub(start);
+            if elapsed >= timeout_ms as u64 {
+                return Err(CapabilityError::Provider(
+                    "timed out waiting for indication".into(),
+                ));
+            }
+            let mut buf = vec![0u8; *self.mtu.read().unwrap() as usize];
+            let remaining = (timeout_ms as u64 - elapsed).min(500) as i32;
+            let n = match socket.recv_data(&mut buf, remaining) {
+                Ok(n) => n,
+                Err(GattError::Timeout(_)) => continue,
+                Err(e) => {
+                    return Err(CapabilityError::Provider(format!(
+                        "failed reading indication: {}",
+                        e
+                    )));
+                }
+            };
+            buf.truncate(n);
+            let indicated = proto
+                .handle_indication(&buf)
+                .or_else(|| proto.handle_notification(&buf));
+            let Some((handle, value)) = indicated else {
+                continue;
+            };
+            if handle == indicate_handle {
+                return Ok(value);
+            }
+        }
+    }
+
+    pub fn get_device_info(&self) -> Result<String, CapabilityError> {
+        if !*self.encrypted.read().unwrap() {
+            self.send_raw_command(
+                br#"{"msgId":"123","version":"1","method":"getDeviceInfo","params":{"code":0}}"#,
+            )?;
+            let response = self.wait_for_raw_value(3000)?;
+            return String::from_utf8(response)
+                .map_err(|e| CapabilityError::Provider(format!("invalid UTF-8: {}", e)));
+        }
+
+        self.send_encrypted_command(CMD_GET_DEVICE_INFO, br#"{"command":"get_wifi_status"}"#)?;
+
+        let response = self.wait_for_protocol_packet(3000)?;
 
         let parsed = self
             .parse_protocol_packet(&response)
@@ -489,6 +671,185 @@ impl TclAcClient {
 
         String::from_utf8(decrypted)
             .map_err(|e| CapabilityError::Provider(format!("invalid UTF-8: {}", e)))
+    }
+
+    pub fn provision_wifi(
+        &self,
+        ssid: &str,
+        password: &str,
+        bind_code: &str,
+        tenant_id: Option<&str>,
+        new_product_key: Option<&str>,
+    ) -> Result<Option<String>, CapabilityError> {
+        let payload = self.build_legacy_provision_payload(
+            ssid,
+            password,
+            bind_code,
+            tenant_id,
+            new_product_key,
+        );
+        self.send_raw_command(payload.as_bytes())?;
+
+        match self.wait_for_raw_value(15_000) {
+            Ok(response) => String::from_utf8(response)
+                .map(Some)
+                .map_err(|e| CapabilityError::Provider(format!("invalid UTF-8: {}", e))),
+            Err(CapabilityError::Provider(msg)) if msg == "timed out waiting for indication" => {
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn provision_wifi_responses(
+        &self,
+        ssid: &str,
+        password: &str,
+        bind_code: &str,
+        tenant_id: Option<&str>,
+        new_product_key: Option<&str>,
+        timeout_ms: i32,
+    ) -> Result<Vec<String>, CapabilityError> {
+        let payload = self.build_legacy_provision_payload(
+            ssid,
+            password,
+            bind_code,
+            tenant_id,
+            new_product_key,
+        );
+        self.send_raw_command(payload.as_bytes())?;
+
+        let start = now_ms();
+        let mut responses = Vec::new();
+        loop {
+            let elapsed = now_ms().saturating_sub(start);
+            if elapsed >= timeout_ms as u64 {
+                return Ok(responses);
+            }
+            let remaining = (timeout_ms as u64 - elapsed).min(5_000) as i32;
+            match self.wait_for_raw_value(remaining) {
+                Ok(response) => responses.push(
+                    String::from_utf8(response)
+                        .map_err(|e| CapabilityError::Provider(format!("invalid UTF-8: {}", e)))?,
+                ),
+                Err(CapabilityError::Provider(msg))
+                    if msg == "timed out waiting for indication" =>
+                {
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    pub fn provision_wifi_with_commission_responses(
+        &self,
+        ssid: &str,
+        password: &str,
+        bind_code: &str,
+        server_host: Option<&str>,
+        server_host_v2: Option<&str>,
+        tenant_id: Option<&str>,
+        new_product_key: Option<&str>,
+        timeout_ms: i32,
+    ) -> Result<Vec<String>, CapabilityError> {
+        let payload = self.build_legacy_provision_payload_with_hosts(
+            ssid,
+            password,
+            bind_code,
+            server_host,
+            server_host_v2,
+            tenant_id,
+            new_product_key,
+        );
+        self.send_raw_command(payload.as_bytes())?;
+
+        let start = now_ms();
+        let mut responses = Vec::new();
+        loop {
+            let elapsed = now_ms().saturating_sub(start);
+            if elapsed >= timeout_ms as u64 {
+                return Ok(responses);
+            }
+            let remaining = (timeout_ms as u64 - elapsed).min(5_000) as i32;
+            match self.wait_for_raw_value(remaining) {
+                Ok(response) => responses.push(
+                    String::from_utf8(response)
+                        .map_err(|e| CapabilityError::Provider(format!("invalid UTF-8: {}", e)))?,
+                ),
+                Err(CapabilityError::Provider(msg))
+                    if msg == "timed out waiting for indication" =>
+                {
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    pub fn build_legacy_provision_payload(
+        &self,
+        ssid: &str,
+        password: &str,
+        bind_code: &str,
+        tenant_id: Option<&str>,
+        new_product_key: Option<&str>,
+    ) -> String {
+        self.build_legacy_provision_payload_with_hosts(
+            ssid,
+            password,
+            bind_code,
+            Some("prod-center.aws.tcljd.com"),
+            Some("prod-center.aws.tcljd.com"),
+            tenant_id,
+            new_product_key,
+        )
+    }
+
+    pub fn build_legacy_provision_payload_with_hosts(
+        &self,
+        ssid: &str,
+        password: &str,
+        bind_code: &str,
+        server_host: Option<&str>,
+        server_host_v2: Option<&str>,
+        tenant_id: Option<&str>,
+        new_product_key: Option<&str>,
+    ) -> String {
+        let msg_id = ((now_ms() / 1000) % 900 + 100).to_string();
+        let mut params = Vec::new();
+        push_json_field(&mut params, "bindCode", bind_code);
+        push_json_field(&mut params, "ssid", ssid);
+        push_json_field(&mut params, "password", password);
+        params.push(format!("\"timestamp\":{}", now_ms() / 1000));
+        params.push("\"timezone\":7".to_string());
+        push_json_field(&mut params, "timearea", "Asia/Bangkok");
+        params.push("\"serverPort\":443".to_string());
+        push_json_field(&mut params, "cloudType", "AWS");
+        push_json_field(&mut params, "caType", "release");
+        if let Some(value) = server_host.filter(|s| !s.is_empty()) {
+            push_json_field(&mut params, "serverHost", normalize_commission_host(value));
+        }
+        if let Some(value) = server_host_v2.filter(|s| !s.is_empty()) {
+            push_json_field(
+                &mut params,
+                "serverHostV2",
+                normalize_commission_host(value),
+            );
+        }
+        if let Some(value) = tenant_id.filter(|s| !s.is_empty()) {
+            push_json_field(&mut params, "tenantId", value);
+            push_json_field(&mut params, "stationId", value);
+        }
+        if let Some(value) = new_product_key.filter(|s| !s.is_empty()) {
+            push_json_field(&mut params, "newProductKey", value);
+        }
+
+        format!(
+            "{{\"msgId\":\"{}\",\"method\":\"setReq\",\"version\":\"1\",\"params\":{{{}}}}}",
+            msg_id,
+            params.join(",")
+        )
     }
 
     pub fn report_status_ack(&self) -> Result<(), CapabilityError> {
@@ -641,6 +1002,61 @@ impl TclAcClient {
     pub fn characteristic_handle(&self) -> Option<u16> {
         *self.write_char_handle.read().unwrap()
     }
+
+    pub fn negotiated_mtu(&self) -> u16 {
+        *self.mtu.read().unwrap()
+    }
+
+    pub fn uses_legacy_provisioning(&self) -> bool {
+        !*self.encrypted.read().unwrap()
+    }
+}
+
+fn uuid_matches(raw: &[u8], expected: &str) -> bool {
+    let actual = format_gatt_uuid(raw).replace('-', "").to_lowercase();
+    let expected = expected.replace('-', "").to_lowercase();
+    actual == expected || (actual.len() == 4 && expected.starts_with(&format!("0000{}", actual)))
+}
+
+fn push_json_field(fields: &mut Vec<String>, key: &str, value: &str) {
+    fields.push(format!("\"{}\":\"{}\"", key, json_escape(value)));
+}
+
+fn normalize_commission_host(value: &str) -> &str {
+    let value = value
+        .strip_prefix("https://")
+        .or_else(|| value.strip_prefix("http://"))
+        .unwrap_or(value);
+    value.strip_suffix(":443").unwrap_or(value)
+}
+
+fn json_escape(value: &str) -> String {
+    let mut escaped = String::new();
+    for ch in value.chars() {
+        match ch {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            c => escaped.push(c),
+        }
+    }
+    escaped
+}
+
+#[cfg(not(target_os = "none"))]
+fn now_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+#[cfg(target_os = "none")]
+fn now_ms() -> u64 {
+    0
 }
 
 fn aes128_cbc_encrypt_pkcs7(key: &[u8; 16], iv: &[u8; 16], payload: &[u8]) -> Vec<u8> {

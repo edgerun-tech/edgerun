@@ -1,7 +1,8 @@
 use alloc::boxed::Box;
+use alloc::format;
 use alloc::string::{String, ToString};
-use edgerun_solana::signers::Ed25519Signer;
-use edgerun_solana::{solana_types::Pubkey, ProviderClient};
+use edgerun_solana::signers::{Ed25519Signer, Signer};
+use edgerun_solana::{solana_types::Pubkey, DeploymentClient, DeploymentStatus, ProviderClient};
 use std::{eprintln, println};
 
 pub enum ProviderCommand {
@@ -17,9 +18,12 @@ pub enum ProviderCommand {
         provider: String,
     },
     List,
+    Earnings {
+        provider: String,
+    },
     Attest {
         provider: String,
-        uptime_seconds: u32,
+        uptime_percent_bps: u32,
     },
     Pause {
         provider: String,
@@ -85,12 +89,22 @@ pub fn parse_provider_command() -> ProviderCommand {
             ProviderCommand::Get { provider }
         }
         Some("list") | Some("l") => ProviderCommand::List,
+        Some("earnings") | Some("e") => {
+            let provider = args.next().unwrap_or_default();
+            ProviderCommand::Earnings { provider }
+        }
         Some("attest") | Some("a") => {
             let provider = args.next().unwrap_or_default();
-            let uptime: u32 = args.next().unwrap_or_default().parse().unwrap_or(0);
+            let uptime = match args.next().unwrap_or_default().parse() {
+                Ok(value) => value,
+                Err(_) => {
+                    eprintln!("invalid uptime percent basis-points value");
+                    std::process::exit(1);
+                }
+            };
             ProviderCommand::Attest {
                 provider,
-                uptime_seconds: uptime,
+                uptime_percent_bps: uptime,
             }
         }
         Some("pause") => {
@@ -102,10 +116,38 @@ pub fn parse_provider_command() -> ProviderCommand {
             ProviderCommand::Resume { provider }
         }
         _ => {
-            eprintln!("Unknown provider command. Use: register, get, list, attest, pause, resume");
+            eprintln!(
+                "Unknown provider command. Use: register, get, list, earnings, attest, pause, resume"
+            );
             std::process::exit(1);
         }
     }
+}
+
+fn parse_pubkey(
+    label: &str,
+    value: &str,
+) -> Result<Pubkey, Box<dyn std::error::Error + Send + Sync>> {
+    if value.is_empty() {
+        return Err(format!("missing {label} pubkey").into());
+    }
+    value
+        .parse()
+        .map_err(|err| format!("invalid {label} pubkey '{value}': {err}").into())
+}
+
+fn signer_pubkey(signer: &Ed25519Signer) -> Pubkey {
+    Pubkey::new_from_array(signer.pubkey())
+}
+
+fn print_confirmed_tx(
+    client: &ProviderClient,
+    tx_sig: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Transaction sent: {}", tx_sig);
+    client.confirm_transaction(tx_sig)?;
+    println!("Transaction confirmed: {}", tx_sig);
+    Ok(())
 }
 
 pub async fn handle(
@@ -113,8 +155,6 @@ pub async fn handle(
     rpc_url: String,
     signer: Option<Ed25519Signer>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = ProviderClient::new(&rpc_url)?;
-
     match &cmd {
         ProviderCommand::Register {
             provider,
@@ -124,10 +164,15 @@ pub async fn handle(
             storage_bytes,
             network_mbits,
         } => {
-            let provider_pubkey: Pubkey = provider.parse().unwrap_or_default();
-            let authority_pubkey = match authority {
-                Some(a) => a.parse().unwrap_or_default(),
-                None => Pubkey::default(),
+            let client = ProviderClient::new(&rpc_url)?;
+            let authority_pubkey = match (authority, signer.as_ref()) {
+                (Some(a), _) => parse_pubkey("authority", a)?,
+                (None, Some(signer)) => signer_pubkey(signer),
+                (None, None) => {
+                    return Err(
+                        "missing authority pubkey; pass --authority or set SOLANA_KEYPAIR".into(),
+                    );
+                }
             };
 
             let min_collateral = edgerun_solana::types::collateral::calculate_minimum(
@@ -145,18 +190,46 @@ pub async fn handle(
             );
 
             if let Some(ref signer) = signer {
-                let ix = client.register_instruction(
-                    &provider_pubkey,
-                    &authority_pubkey,
-                    *cpu_cores,
-                    *memory_bytes,
-                    *storage_bytes,
-                    *network_mbits,
-                );
-                let tx_sig = client
-                    .send_instruction_signed(ix, &authority_pubkey, signer)
-                    .await?;
-                println!("Transaction sent: {}", tx_sig);
+                if provider.is_empty() || provider.parse::<Pubkey>().is_err() {
+                    let seed = if provider.is_empty() {
+                        "provider"
+                    } else {
+                        provider.as_str()
+                    };
+                    if authority_pubkey != signer_pubkey(signer) {
+                        return Err(
+                            "seeded provider creation requires signer to be the authority".into(),
+                        );
+                    }
+                    let (provider_pubkey, tx_sig) = client
+                        .register_with_seed_signed(
+                            &authority_pubkey,
+                            seed,
+                            signer,
+                            *cpu_cores,
+                            *memory_bytes,
+                            *storage_bytes,
+                            *network_mbits,
+                        )
+                        .await?;
+                    println!("Provider account: {}", provider_pubkey);
+                    println!("Seed: {}", seed);
+                    print_confirmed_tx(&client, &tx_sig)?;
+                } else {
+                    let provider_pubkey = parse_pubkey("provider", provider)?;
+                    let ix = client.register_instruction(
+                        &provider_pubkey,
+                        &authority_pubkey,
+                        *cpu_cores,
+                        *memory_bytes,
+                        *storage_bytes,
+                        *network_mbits,
+                    );
+                    let tx_sig = client
+                        .send_instruction_signed(ix, &authority_pubkey, signer)
+                        .await?;
+                    print_confirmed_tx(&client, &tx_sig)?;
+                }
             } else {
                 println!("\nNote: No keypair loaded. To send this transaction:");
                 println!("  export SOLANA_KEYPAIR=/path/to/keypair");
@@ -164,7 +237,8 @@ pub async fn handle(
             Ok(())
         }
         ProviderCommand::Get { provider } => {
-            let pubkey: Pubkey = provider.parse().unwrap_or_default();
+            let client = ProviderClient::new(&rpc_url)?;
+            let pubkey = parse_pubkey("provider", provider)?;
             match client.get_provider(&pubkey) {
                 Ok(p) => {
                     println!("=== Provider Info ===");
@@ -183,6 +257,7 @@ pub async fn handle(
             Ok(())
         }
         ProviderCommand::List => {
+            let client = ProviderClient::new(&rpc_url)?;
             match client.find_active_providers() {
                 Ok(providers) => {
                     println!("=== Active Providers ({}) ===", providers.len());
@@ -196,37 +271,97 @@ pub async fn handle(
             }
             Ok(())
         }
+        ProviderCommand::Earnings { provider } => {
+            let provider_pubkey = parse_pubkey("provider", provider)?;
+            let deployment_client = DeploymentClient::new(&rpc_url)?;
+            let deployments = deployment_client.list_deployments()?;
+            let mut matched = 0usize;
+            let mut stopped = 0usize;
+            let mut provider_earned = 0u64;
+            let mut active_spent = 0u64;
+            let mut buyer_refunded = 0u64;
+            let mut dao_slashed = 0u64;
+
+            println!("=== Provider Deployment Earnings ===");
+            println!("Provider: {}", provider_pubkey);
+            for account in deployments {
+                if account.deployment.provider != provider_pubkey {
+                    continue;
+                }
+                matched += 1;
+                provider_earned =
+                    provider_earned.saturating_add(account.deployment.provider_earned);
+                buyer_refunded = buyer_refunded.saturating_add(account.deployment.buyer_refunded);
+                dao_slashed = dao_slashed.saturating_add(account.deployment.dao_slashed);
+                if matches!(account.deployment.status, DeploymentStatus::Stopped) {
+                    stopped += 1;
+                } else {
+                    active_spent = active_spent.saturating_add(account.deployment.spent);
+                }
+                println!(
+                    "  {} {:?} earned={} spent={} refunded={} slashed={}",
+                    account.pubkey,
+                    account.deployment.status,
+                    account.deployment.provider_earned,
+                    account.deployment.spent,
+                    account.deployment.buyer_refunded,
+                    account.deployment.dao_slashed
+                );
+            }
+            println!("Deployments: {}", matched);
+            println!("Stopped deployments: {}", stopped);
+            println!("Settled provider earnings: {} lamports", provider_earned);
+            println!("Unsettled active spent: {} lamports", active_spent);
+            println!("Buyer refunded: {} lamports", buyer_refunded);
+            println!("DAO slashed: {} lamports", dao_slashed);
+            Ok(())
+        }
         ProviderCommand::Attest {
             provider,
-            uptime_seconds,
+            uptime_percent_bps,
         } => {
-            let pubkey: Pubkey = provider.parse().unwrap_or_default();
+            let client = ProviderClient::new(&rpc_url)?;
+            let pubkey = parse_pubkey("provider", provider)?;
+            if *uptime_percent_bps > 10_000 {
+                return Err("uptime percent basis-points must be <= 10000".into());
+            }
             if let Some(ref signer) = signer {
-                let ix = client.attest_instruction(&pubkey, &pubkey, *uptime_seconds);
-                let tx_sig = client.send_instruction_signed(ix, &pubkey, signer).await?;
-                println!("Transaction sent: {}", tx_sig);
+                let authority_pubkey = signer_pubkey(signer);
+                let ix = client.attest_instruction(&pubkey, &authority_pubkey, *uptime_percent_bps);
+                let tx_sig = client
+                    .send_instruction_signed(ix, &authority_pubkey, signer)
+                    .await?;
+                print_confirmed_tx(&client, &tx_sig)?;
             } else {
-                println!("Attest {} ({}s uptime)", provider, uptime_seconds);
+                println!("Attest {} ({} bps uptime)", provider, uptime_percent_bps);
             }
             Ok(())
         }
         ProviderCommand::Pause { provider } => {
-            let pubkey: Pubkey = provider.parse().unwrap_or_default();
+            let client = ProviderClient::new(&rpc_url)?;
+            let pubkey = parse_pubkey("provider", provider)?;
             if let Some(ref signer) = signer {
-                let ix = client.pause_instruction(&pubkey, &pubkey);
-                let tx_sig = client.send_instruction_signed(ix, &pubkey, signer).await?;
-                println!("Transaction sent: {}", tx_sig);
+                let authority_pubkey = signer_pubkey(signer);
+                let ix = client.pause_instruction(&pubkey, &authority_pubkey);
+                let tx_sig = client
+                    .send_instruction_signed(ix, &authority_pubkey, signer)
+                    .await?;
+                print_confirmed_tx(&client, &tx_sig)?;
             } else {
                 println!("Pause instruction created for {}", provider);
             }
             Ok(())
         }
         ProviderCommand::Resume { provider } => {
-            let pubkey: Pubkey = provider.parse().unwrap_or_default();
+            let client = ProviderClient::new(&rpc_url)?;
+            let pubkey = parse_pubkey("provider", provider)?;
             if let Some(ref signer) = signer {
-                let ix = client.resume_instruction(&pubkey, &pubkey);
-                let tx_sig = client.send_instruction_signed(ix, &pubkey, signer).await?;
-                println!("Transaction sent: {}", tx_sig);
+                let authority_pubkey = signer_pubkey(signer);
+                let ix = client.resume_instruction(&pubkey, &authority_pubkey);
+                let tx_sig = client
+                    .send_instruction_signed(ix, &authority_pubkey, signer)
+                    .await?;
+                print_confirmed_tx(&client, &tx_sig)?;
             } else {
                 println!("Resume instruction created for {}", provider);
             }

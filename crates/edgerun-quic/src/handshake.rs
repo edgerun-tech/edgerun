@@ -25,10 +25,9 @@ use alloc::{
     vec::Vec,
 };
 use edgerun_crypto::fill_random;
-use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
-use edgerun_crypto::p256::elliptic_curve::sec1::FromEncodedPoint;
-use edgerun_crypto::p256::EncodedPoint;
 use edgerun_crypto::CipherSuite;
+use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
+use edgerun_tls::certificate::Certificate;
 use edgerun_tls::cipher::NamedGroup;
 use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello};
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
@@ -53,16 +52,26 @@ pub struct CertValidationResult {
     pub error: Option<String>,
 }
 
+impl CertValidationResult {
+    pub fn is_valid(&self) -> bool {
+        self.chain_valid && self.hostname_valid && self.error.is_none()
+    }
+}
+
 /// Certificate validator for TLS 1.3 (RFC 8446 §4.4.2).
 ///
 /// Validates:
-/// 1. Certificate chain (leaf → intermediates → root)
+/// 1. Certificate chain signatures and validity periods
 /// 2. Hostname/SNI matching (RFC 2818)
-/// 3. Certificate expiration
-/// 4. CertificateVerify signature
+/// 3. CertificateVerify signature
+///
+/// Production root trust is intentionally not faked: chains without a
+/// configured trusted root are rejected by strict validation.
 pub struct CertificateValidator {
     /// Expected server hostname (for SNI verification)
     expected_hostname: Option<String>,
+    /// Trusted root certificates, parsed from configured DER roots.
+    trusted_roots: Vec<Certificate>,
     /// Whether to skip hostname verification (testing only)
     skip_hostname_check: bool,
     /// Whether to skip chain validation (testing only)
@@ -73,9 +82,24 @@ impl CertificateValidator {
     pub fn new(expected_hostname: Option<&str>) -> Self {
         CertificateValidator {
             expected_hostname: expected_hostname.map(|s| s.to_string()),
+            trusted_roots: Vec::new(),
             skip_hostname_check: false,
             skip_chain_check: false,
         }
+    }
+
+    /// Configure trust roots from DER-encoded X.509 certificates.
+    pub fn with_trusted_roots_der(
+        expected_hostname: Option<&str>,
+        roots: &[Vec<u8>],
+    ) -> Result<Self, String> {
+        let trusted_roots = parse_trusted_roots_der(roots);
+        Ok(CertificateValidator {
+            expected_hostname: expected_hostname.map(|s| s.to_string()),
+            trusted_roots,
+            skip_hostname_check: false,
+            skip_chain_check: false,
+        })
     }
 
     /// Skip hostname verification (testing only — DANGEROUS in production).
@@ -89,15 +113,6 @@ impl CertificateValidator {
     }
 
     /// Validate a certificate chain presented by the server.
-    ///
-    /// In a full implementation this would:
-    /// 1. Parse the DER-encoded certificates
-    /// 2. Build a chain from leaf to root
-    /// 3. Verify signatures at each level
-    /// 4. Check expiration dates
-    /// 5. Verify against system trust store
-    ///
-    /// For now, we perform basic structural checks.
     pub fn validate_chain(&self, cert_der_list: &[Vec<u8>]) -> CertValidationResult {
         if self.skip_chain_check {
             return CertValidationResult {
@@ -115,32 +130,86 @@ impl CertificateValidator {
             };
         }
 
-        // Basic structural validation:
-        // The leaf certificate must be present
-        let leaf = &cert_der_list[0];
-        if leaf.len() < 64 {
+        let certs = match parse_cert_der_list(cert_der_list) {
+            Ok(certs) => certs,
+            Err(err) => {
+                return CertValidationResult {
+                    chain_valid: false,
+                    hostname_valid: false,
+                    error: Some(err),
+                };
+            }
+        };
+
+        let leaf = &certs[0];
+        let hostname_valid = self.check_hostname(leaf);
+        if !leaf.is_valid_now() {
             return CertValidationResult {
                 chain_valid: false,
-                hostname_valid: false,
-                error: Some("Leaf certificate too small".to_string()),
+                hostname_valid,
+                error: Some("Leaf certificate is expired or not yet valid".to_string()),
             };
         }
 
-        // Check for self-signed leaf (common in testing)
-        if cert_der_list.len() == 1 {
-            // Self-signed cert — accept if hostname check passes
+        if certs.len() == 1 && self.trusted_roots.is_empty() {
             return CertValidationResult {
-                chain_valid: true, // Self-signed accepted
-                hostname_valid: self.check_hostname(leaf),
-                error: None,
+                chain_valid: false,
+                hostname_valid,
+                error: Some("Self-signed certificate is not trusted".to_string()),
             };
         }
 
-        // Multi-cert chain — basic acceptance
+        for pair in certs.windows(2) {
+            let cert = &pair[0];
+            let issuer = &pair[1];
+            if !issuer.is_valid_now() {
+                return CertValidationResult {
+                    chain_valid: false,
+                    hostname_valid,
+                    error: Some("Issuer certificate is expired or not yet valid".to_string()),
+                };
+            }
+            if let Err(err) = cert.verify_signature(issuer) {
+                return CertValidationResult {
+                    chain_valid: false,
+                    hostname_valid,
+                    error: Some(err),
+                };
+            }
+        }
+
+        let chain_anchor = certs.last().expect("nonempty certificate chain");
+        for trusted_root in &self.trusted_roots {
+            if !trusted_root.is_valid_now() {
+                continue;
+            }
+            if chain_anchor.verify_signature(trusted_root).is_ok() {
+                return CertValidationResult {
+                    chain_valid: true,
+                    hostname_valid,
+                    error: if hostname_valid {
+                        None
+                    } else {
+                        Some("Hostname does not match certificate".to_string())
+                    },
+                };
+            }
+        }
+
+        if self.trusted_roots.is_empty() {
+            if let Err(err) = chain_anchor.verify_signature(chain_anchor) {
+                return CertValidationResult {
+                    chain_valid: false,
+                    hostname_valid,
+                    error: Some(format!("Root certificate is not self-signed: {err}")),
+                };
+            }
+        }
+
         CertValidationResult {
-            chain_valid: true,
-            hostname_valid: self.check_hostname(leaf),
-            error: None,
+            chain_valid: false,
+            hostname_valid,
+            error: Some("Certificate chain has no configured trusted root".to_string()),
         }
     }
 
@@ -151,120 +220,244 @@ impl CertificateValidator {
     /// 2. Extract the SAN extension (2.5.29.17)
     /// 3. Match against DNS names and IP addresses
     /// 4. Fall back to Common Name if no SAN
-    fn check_hostname(&self, _cert_der: &[u8]) -> bool {
+    fn check_hostname(&self, cert: &Certificate) -> bool {
         if self.skip_hostname_check {
             return true;
         }
 
-        // Without an X.509 parser, we can't validate hostname.
-        // In production, integrate with rustls or an X.509 parser.
-        // For now, accept if no hostname expected.
-        self.expected_hostname.is_none()
+        match self.expected_hostname.as_deref() {
+            Some(hostname) => cert.matches_hostname(hostname),
+            None => true,
+        }
     }
 
     /// Verify a CertificateVerify signature (RFC 8446 §4.4.3).
     ///
-    /// The server signs the transcript hash with its private key.
+    /// The server signs the RFC 8446 context string plus transcript hash with
+    /// its private key.
     /// The client verifies this signature using the server's public key from
     /// the leaf certificate.
     ///
     /// Supported algorithms:
     /// - 0x0403: ECDSA-SECP256R1-SHA256 (P-256)
-    /// - 0x0804: ED25519 (Curve25519)
-    /// - 0x0401: RSA-PSS-SHA256
+    /// - 0x0804/0x0805/0x0806: RSA-PSS-RSAE with SHA-256/SHA-384/SHA-512
+    /// - 0x0807: Ed25519
+    /// - 0x0809/0x080a/0x080b: RSA-PSS-PSS with SHA-256/SHA-384/SHA-512
     pub fn verify_certificate_signature(
         &self,
         cert_der: &[u8],
         signature_algorithm: u16,
         signature: &[u8],
-        transcript_hash: &[u8],
+        transcript: &[u8],
+        hasher: &Hasher,
     ) -> bool {
         match signature_algorithm {
             0x0403 => {
                 // ECDSA-SECP256R1-SHA256 (P-256)
-                self.verify_ecdsa_p256(cert_der, signature, transcript_hash)
+                self.verify_ecdsa_p256(cert_der, signature, transcript, hasher)
             }
-            0x0804 => {
-                // ED25519
-                self.verify_ed25519(cert_der, signature, transcript_hash)
+            0x0807 => {
+                // Ed25519
+                self.verify_ed25519(cert_der, signature, transcript, hasher)
             }
-            0x0401 => {
-                // RSA-PSS-SHA256
-                self.verify_rsa_pss_sha256(cert_der, signature, transcript_hash)
+            0x0804 | 0x0805 | 0x0806 | 0x0809 | 0x080a | 0x080b => {
+                self.verify_rsa_pss(cert_der, signature_algorithm, signature, transcript, hasher)
             }
             _ => false,
         }
     }
 
     /// Verify an ED25519 signature over the transcript hash.
-    fn verify_ed25519(&self, _cert_der: &[u8], _signature: &[u8], _transcript_hash: &[u8]) -> bool {
-        false
-    }
-
-    /// Verify an RSA-PSS-SHA256 signature over the transcript hash.
-    fn verify_rsa_pss_sha256(
+    fn verify_ed25519(
         &self,
-        _cert_der: &[u8],
-        _signature: &[u8],
-        _transcript_hash: &[u8],
+        cert_der: &[u8],
+        signature: &[u8],
+        transcript: &[u8],
+        hasher: &Hasher,
     ) -> bool {
-        false
+        let cert = match Certificate::from_der(cert_der) {
+            Ok(cert) => cert,
+            Err(_) => return false,
+        };
+        let public_key: [u8; 32] = match cert.subject_public_key.as_slice().try_into() {
+            Ok(public_key) => public_key,
+            Err(_) => return false,
+        };
+        let verifying_key =
+            match edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&public_key) {
+                Ok(key) => key,
+                Err(_) => return false,
+            };
+        let signature = match edgerun_crypto::ed25519_dalek::Signature::from_slice(signature) {
+            Ok(signature) => signature,
+            Err(_) => return false,
+        };
+        let signed_input = certificate_verify_signed_input(transcript, hasher);
+
+        use edgerun_crypto::ed25519_dalek::Verifier;
+        verifying_key.verify(&signed_input, &signature).is_ok()
     }
 
-    /// Find a byte subsequence in data.
-    fn find_subsequence(data: &[u8], needle: &[u8]) -> Option<usize> {
-        if needle.is_empty() || needle.len() > data.len() {
-            return None;
-        }
-        for i in 0..=data.len() - needle.len() {
-            if data[i..i + needle.len()] == *needle {
-                return Some(i);
+    /// Verify an RSA-PSS CertificateVerify signature.
+    fn verify_rsa_pss(
+        &self,
+        cert_der: &[u8],
+        signature_algorithm: u16,
+        signature: &[u8],
+        transcript: &[u8],
+        hasher: &Hasher,
+    ) -> bool {
+        use edgerun_crypto::rsa::pkcs1::DecodeRsaPublicKey;
+
+        let cert = match Certificate::from_der(cert_der) {
+            Ok(cert) => cert,
+            Err(_) => return false,
+        };
+        let public_key =
+            match edgerun_crypto::rsa::RsaPublicKey::from_pkcs1_der(&cert.subject_public_key) {
+                Ok(key) => key,
+                Err(_) => return false,
+            };
+        let signature = match edgerun_crypto::rsa::pss::Signature::try_from(signature) {
+            Ok(signature) => signature,
+            Err(_) => return false,
+        };
+        let signed_input = certificate_verify_signed_input(transcript, hasher);
+
+        match signature_algorithm {
+            0x0804 | 0x0809 => {
+                let key =
+                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha256>::new(
+                        public_key,
+                    );
+                use edgerun_crypto::rsa::signature::Verifier;
+                key.verify(&signed_input, &signature).is_ok()
             }
-        }
-        None
-    }
-
-    /// Verify an ECDSA P-256 signature over the transcript hash.
-    fn verify_ecdsa_p256(&self, cert_der: &[u8], signature: &[u8], transcript_hash: &[u8]) -> bool {
-        use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-
-        // Minimal X.509 SubjectPublicKeyInfo parsing for P-256 keys.
-        // We scan for the 0x04 uncompressed point prefix in the cert.
-        let mut point_data = None;
-        for i in 0..cert_der.len().saturating_sub(64) {
-            if cert_der[i] == 0x04 && cert_der.len() >= i + 65 {
-                point_data = Some(&cert_der[i..i + 65]);
-                break;
+            0x0805 | 0x080a => {
+                let key =
+                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha384>::new(
+                        public_key,
+                    );
+                use edgerun_crypto::rsa::signature::Verifier;
+                key.verify(&signed_input, &signature).is_ok()
             }
+            0x0806 | 0x080b => {
+                let key =
+                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha512>::new(
+                        public_key,
+                    );
+                use edgerun_crypto::rsa::signature::Verifier;
+                key.verify(&signed_input, &signature).is_ok()
+            }
+            _ => false,
         }
-
-        let point_bytes = match point_data {
-            Some(p) => p,
-            None => return false,
-        };
-
-        let encoded_point = match EncodedPoint::from_bytes(point_bytes) {
-            Ok(ep) => ep,
-            Err(_) => return false,
-        };
-
-        let verifying_key = match VerifyingKey::from_encoded_point(&encoded_point) {
-            Ok(vk) => vk,
-            Err(_) => return false,
-        };
-
-        if signature.len() < 64 {
-            return false;
-        }
-
-        let sig = match Signature::from_slice(signature) {
-            Ok(s) => s,
-            Err(_) => return false,
-        };
-
-        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
-        verifying_key.verify_prehash(transcript_hash, &sig).is_ok()
     }
+
+    /// Verify an ECDSA P-256 CertificateVerify signature.
+    fn verify_ecdsa_p256(
+        &self,
+        cert_der: &[u8],
+        signature: &[u8],
+        transcript: &[u8],
+        hasher: &Hasher,
+    ) -> bool {
+        let cert = match Certificate::from_der(cert_der) {
+            Ok(cert) => cert,
+            Err(_) => return false,
+        };
+        let verifying_key = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(
+            cert.subject_public_key.as_slice(),
+        ) {
+            Ok(key) => key,
+            Err(_) => return false,
+        };
+        let signature = match edgerun_crypto::p256::ecdsa::Signature::from_der(signature) {
+            Ok(signature) => signature,
+            Err(_) => return false,
+        };
+
+        let signed_input = certificate_verify_signed_input(transcript, hasher);
+
+        use edgerun_crypto::p256::ecdsa::signature::Verifier;
+        verifying_key.verify(&signed_input, &signature).is_ok()
+    }
+}
+
+fn certificate_verify_signed_input(transcript: &[u8], hasher: &Hasher) -> Vec<u8> {
+    let mut signed_input = vec![0x20u8; 64];
+    signed_input.extend_from_slice(b"TLS 1.3, server CertificateVerify");
+    signed_input.push(0x00);
+    signed_input.extend_from_slice(&hasher.hash(transcript));
+    signed_input
+}
+
+fn parse_cert_der_list(cert_der_list: &[Vec<u8>]) -> Result<Vec<Certificate>, String> {
+    cert_der_list
+        .iter()
+        .map(|cert| Certificate::from_der(cert))
+        .collect::<Result<Vec<_>, _>>()
+}
+
+fn parse_trusted_roots_der(cert_der_list: &[Vec<u8>]) -> Vec<Certificate> {
+    cert_der_list
+        .iter()
+        .filter_map(|cert| Certificate::from_der(cert).ok())
+        .collect()
+}
+
+/// Common host CA bundle paths for Linux distributions.
+#[cfg(feature = "std")]
+pub const LINUX_CA_BUNDLE_PATHS: &[&str] = &[
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/ca-certificates/extracted/tls-ca-bundle.pem",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+    "/etc/ssl/cert.pem",
+    "/etc/ssl/ca-bundle.pem",
+];
+
+/// Load DER-encoded trust roots from the host Linux CA bundle.
+///
+/// Implemented only for host builds with the `std` feature. Bare targets must
+/// supply roots explicitly with `QuicTlsHandshaker::set_trusted_roots_der`.
+#[cfg(feature = "std")]
+pub fn load_linux_trust_roots_der() -> Result<Vec<Vec<u8>>, String> {
+    for path in LINUX_CA_BUNDLE_PATHS {
+        let Ok(pem) = real_std::fs::read_to_string(path) else {
+            continue;
+        };
+        let roots = parse_pem_certificates(&pem);
+        if !roots.is_empty() {
+            return Ok(roots);
+        }
+    }
+    Err(format!(
+        "No readable Linux CA bundle found in {}",
+        LINUX_CA_BUNDLE_PATHS.join(", ")
+    ))
+}
+
+#[cfg(feature = "std")]
+fn parse_pem_certificates(pem: &str) -> Vec<Vec<u8>> {
+    let begin = "-----BEGIN CERTIFICATE-----";
+    let end = "-----END CERTIFICATE-----";
+    let mut roots = Vec::new();
+    let mut rest = pem;
+
+    while let Some(begin_pos) = rest.find(begin) {
+        let block_start = begin_pos;
+        let after_begin = begin_pos + begin.len();
+        let Some(end_rel) = rest[after_begin..].find(end) else {
+            break;
+        };
+        let block_end = after_begin + end_rel + end.len();
+        if let Some(der) = edgerun_crypto::x509_cert_from_pem(&rest[block_start..block_end]) {
+            roots.push(der);
+        }
+        rest = &rest[block_end..];
+    }
+
+    roots
 }
 
 /// QUIC-TLS handshake result.
@@ -326,6 +519,10 @@ pub struct QuicTlsHandshaker {
     cert_verify_signature: Option<(u16, Vec<u8>)>,
     /// Certificate validation result (set after processing Certificate)
     cert_validation: Option<CertValidationResult>,
+    /// Configured trusted root certificates, DER-encoded.
+    trusted_roots_der: Vec<Vec<u8>>,
+    /// Explicit local-test mode for same-stack QUIC without X.509 trust.
+    allow_unverified_certificates: bool,
 }
 
 impl QuicTlsHandshaker {
@@ -365,7 +562,33 @@ impl QuicTlsHandshaker {
             server_cert_chain: Vec::new(),
             cert_verify_signature: None,
             cert_validation: None,
+            trusted_roots_der: Vec::new(),
+            allow_unverified_certificates: false,
         }
+    }
+
+    /// Allow unverified server certificates.
+    ///
+    /// This is intended only for same-stack tests and local development.
+    /// Production callers should leave this disabled and configure trust roots.
+    pub fn allow_unverified_certificates(&mut self, allow: bool) {
+        self.allow_unverified_certificates = allow;
+    }
+
+    /// Configure DER-encoded X.509 trust roots for strict certificate validation.
+    pub fn set_trusted_roots_der(&mut self, roots: Vec<Vec<u8>>) {
+        self.trusted_roots_der = roots;
+    }
+
+    /// Load trust roots from the host Linux CA bundle paths.
+    ///
+    /// This is available only for host builds with the `std` feature.
+    #[cfg(feature = "std")]
+    pub fn load_linux_trust_roots(&mut self) -> Result<usize, String> {
+        let roots = load_linux_trust_roots_der()?;
+        let count = roots.len();
+        self.set_trusted_roots_der(roots);
+        Ok(count)
     }
 
     /// Build the Initial packet payload: CRYPTO frame containing ClientHello.
@@ -378,11 +601,15 @@ impl QuicTlsHandshaker {
     /// Derive Initial-level protection keys for the given destination connection ID.
     pub fn initial_keys(&self, dcid: &[u8]) -> ProtectionKeys {
         let (write, read) = quic_initial_client_keys(dcid, 16, 12, &self.hasher);
-        let hp = quic_hp_key(
-            &self.key_schedule_derive_initial_secret(dcid),
-            16,
-            &self.hasher,
-        );
+        let initial_secret = self.key_schedule_derive_initial_secret(dcid);
+        let client_in_secret =
+            self.hasher
+                .quic_expand_label(&initial_secret, "client in", &[], self.hasher.len());
+        let server_in_secret =
+            self.hasher
+                .quic_expand_label(&initial_secret, "server in", &[], self.hasher.len());
+        let write_hp = quic_hp_key(&server_in_secret, 16, &self.hasher);
+        let read_hp = quic_hp_key(&client_in_secret, 16, &self.hasher);
         ProtectionKeys::new(
             CipherSuite::TLS_AES_128_GCM_SHA256,
             write.write_key,
@@ -390,6 +617,7 @@ impl QuicTlsHandshaker {
             read.write_key,
             read.write_iv,
         )
+        .with_header_protection(write_hp, read_hp)
     }
 
     /// Derive the initial traffic secret from DCID (for HP key derivation).
@@ -436,8 +664,7 @@ impl QuicTlsHandshaker {
         // ServerHello bytes for the transcript. ServerHello::parse doesn't return
         // consumed bytes, so we re-serialize the length.
         let sh_msg_len = if crypto_data.len() >= 4 {
-            let msg_len =
-                u32::from_be_bytes([0, crypto_data[1], crypto_data[2], crypto_data[3]]) as usize;
+            let msg_len = read_u24_be(crypto_data, 1) as usize;
             4 + msg_len
         } else {
             crypto_data.len()
@@ -519,15 +746,17 @@ impl QuicTlsHandshaker {
             12,
             &self.hasher,
         );
-        let hp = quic_hp_key(&client_hs_secret, self.cipher_suite.key_len(), &self.hasher);
+        let write_hp = quic_hp_key(&client_hs_secret, self.cipher_suite.key_len(), &self.hasher);
+        let read_hp = quic_hp_key(&server_hs_secret, self.cipher_suite.key_len(), &self.hasher);
 
         Ok(ProtectionKeys::new(
-            CipherSuite::TLS_AES_128_GCM_SHA256,
+            self.cipher_suite,
             write.write_key,
             write.write_iv,
             read.write_key,
             read.write_iv,
         ))
+        .map(|keys| keys.with_header_protection(write_hp, read_hp))
     }
 
     /// Process received CRYPTO data from Handshake-level packets.
@@ -549,12 +778,7 @@ impl QuicTlsHandshaker {
             }
 
             let msg_type = crypto_data[pos];
-            let msg_len = u32::from_be_bytes([
-                0,
-                crypto_data[pos + 1],
-                crypto_data[pos + 2],
-                crypto_data[pos + 3],
-            ]) as usize;
+            let msg_len = read_u24_be(crypto_data, pos + 1) as usize;
 
             if pos + 4 + msg_len > crypto_data.len() {
                 break; // Partial message, wait for more data
@@ -574,22 +798,12 @@ impl QuicTlsHandshaker {
                         let context_len = msg[4] as usize;
                         let cert_list_start = 5 + context_len;
                         if cert_list_start + 3 <= msg.len() {
-                            let cert_list_len = u32::from_be_bytes([
-                                0,
-                                msg[cert_list_start],
-                                msg[cert_list_start + 1],
-                                msg[cert_list_start + 2],
-                            ]) as usize;
+                            let cert_list_len = read_u24_be(msg, cert_list_start) as usize;
                             let mut cert_pos = cert_list_start + 3;
                             let cert_end = cert_pos + cert_list_len.min(msg.len() - cert_pos);
 
                             while cert_pos + 3 <= cert_end {
-                                let cert_len = u32::from_be_bytes([
-                                    0,
-                                    msg[cert_pos],
-                                    msg[cert_pos + 1],
-                                    msg[cert_pos + 2],
-                                ]) as usize;
+                                let cert_len = read_u24_be(msg, cert_pos) as usize;
                                 cert_pos += 3;
                                 if cert_pos + cert_len <= cert_end && cert_len > 0 {
                                     let cert_der = msg[cert_pos..cert_pos + cert_len].to_vec();
@@ -598,17 +812,33 @@ impl QuicTlsHandshaker {
                                 cert_pos += cert_len;
                                 // Skip extensions (2-byte length + data)
                                 if cert_pos + 2 <= cert_end {
-                                    let ext_len =
-                                        u16::from_be_bytes([msg[cert_pos], msg[cert_pos + 1]])
-                                            as usize;
+                                    let ext_len = read_u16_be(msg, cert_pos) as usize;
                                     cert_pos += 2 + ext_len;
                                 }
                             }
 
                             // Validate certificate chain
-                            let validator = CertificateValidator::new(Some(self.server_name()));
+                            let validator = CertificateValidator::with_trusted_roots_der(
+                                Some(self.server_name()),
+                                &self.trusted_roots_der,
+                            )?;
                             self.cert_validation =
                                 Some(validator.validate_chain(&self.server_cert_chain));
+                            if !self.allow_unverified_certificates {
+                                let validation =
+                                    self.cert_validation.as_ref().ok_or_else(|| {
+                                        "Server certificate validation was not recorded".to_string()
+                                    })?;
+                                if !validation.is_valid() {
+                                    return Err(format!(
+                                        "Server certificate validation failed: {}",
+                                        validation
+                                            .error
+                                            .as_deref()
+                                            .unwrap_or("hostname or trust chain is invalid")
+                                    ));
+                                }
+                            }
                         }
                     }
                     self.transcript.extend_from_slice(msg);
@@ -616,17 +846,49 @@ impl QuicTlsHandshaker {
                 15 => {
                     // CertificateVerify — extract signature algorithm and signature
                     // Format: type(1) + len(3) + sig_alg(2) + sig_len(2) + signature
-                    if msg_len >= 8 {
-                        let sig_alg = u16::from_be_bytes([msg[4], msg[5]]);
-                        let sig_len = u16::from_be_bytes([msg[6], msg[7]]) as usize;
-                        if 8 + sig_len <= msg.len() {
-                            let signature = msg[8..8 + sig_len].to_vec();
-                            self.cert_verify_signature = Some((sig_alg, signature));
+                    if msg_len < 8 {
+                        return Err("Malformed CertificateVerify message".to_string());
+                    }
+                    let sig_alg = read_u16_be(msg, 4);
+                    let sig_len = read_u16_be(msg, 6) as usize;
+                    if 8 + sig_len > msg.len() {
+                        return Err("Malformed CertificateVerify signature length".to_string());
+                    }
+                    let signature = msg[8..8 + sig_len].to_vec();
+                    self.cert_verify_signature = Some((sig_alg, signature.clone()));
+
+                    if !self.allow_unverified_certificates {
+                        let leaf_cert = self.server_cert_chain.first().ok_or_else(|| {
+                            "CertificateVerify received before Certificate".to_string()
+                        })?;
+                        let validator = CertificateValidator::with_trusted_roots_der(
+                            Some(self.server_name()),
+                            &self.trusted_roots_der,
+                        )?;
+                        if !validator.verify_certificate_signature(
+                            leaf_cert,
+                            sig_alg,
+                            &signature,
+                            &self.transcript,
+                            &self.hasher,
+                        ) {
+                            return Err(
+                                "Server CertificateVerify signature validation failed".to_string()
+                            );
                         }
                     }
                     self.transcript.extend_from_slice(msg);
                 }
                 20 => {
+                    if !self.allow_unverified_certificates
+                        && (self.server_cert_chain.is_empty()
+                            || self.cert_verify_signature.is_none())
+                    {
+                        return Err(
+                            "Strict QUIC certificate validation requires Certificate and CertificateVerify"
+                                .to_string(),
+                        );
+                    }
                     // Finished — verify and append
                     // Transcript hash for verification: hash of all messages BEFORE Finished
                     let pre_finished_hash = self.hasher.hash(&self.transcript);
@@ -725,15 +987,44 @@ impl QuicTlsHandshaker {
             12,
             &self.hasher,
         );
-        // For 0-RTT, client sends so we use client's write keys.
-        // The server would use read keys from the same secret.
+        let key_len = self.cipher_suite.key_len();
+        let iv_len = 12;
+        let write_hp = quic_hp_key(&self.early_traffic_secret, key_len, &self.hasher);
+        // 0-RTT is client-to-server only. Do not mirror write keys into
+        // the read side or tests can accidentally decrypt with client state.
         Some(ProtectionKeys::new(
-            CipherSuite::TLS_AES_128_GCM_SHA256,
-            keys.write_key.clone(),
-            keys.write_iv.clone(),
-            keys.write_key, // Same keys for simplicity — client sends, server reads
+            self.cipher_suite,
+            keys.write_key,
+            keys.write_iv,
+            vec![0u8; key_len],
+            vec![0u8; iv_len],
+        ))
+        .map(|keys| keys.with_header_protection(write_hp, vec![0u8; key_len]))
+    }
+
+    /// Build server-side keys for reading client 0-RTT data from the same
+    /// early traffic secret.
+    pub fn server_early_data_read_keys(&self) -> Option<ProtectionKeys> {
+        if self.early_traffic_secret.is_empty() {
+            return None;
+        }
+        let keys = quic_traffic_keys(
+            &self.early_traffic_secret,
+            self.cipher_suite.key_len(),
+            12,
+            &self.hasher,
+        );
+        let key_len = self.cipher_suite.key_len();
+        let iv_len = 12;
+        let read_hp = quic_hp_key(&self.early_traffic_secret, key_len, &self.hasher);
+        Some(ProtectionKeys::new(
+            self.cipher_suite,
+            vec![0u8; key_len],
+            vec![0u8; iv_len],
+            keys.write_key,
             keys.write_iv,
         ))
+        .map(|keys| keys.with_header_protection(vec![0u8; key_len], read_hp))
     }
 
     /// Derive application traffic keys from the post-Client-Finished transcript hash.
@@ -759,14 +1050,25 @@ impl QuicTlsHandshaker {
             12,
             &self.hasher,
         );
+        let write_hp = quic_hp_key(
+            &client_app_secret,
+            self.cipher_suite.key_len(),
+            &self.hasher,
+        );
+        let read_hp = quic_hp_key(
+            &server_app_secret,
+            self.cipher_suite.key_len(),
+            &self.hasher,
+        );
 
         ProtectionKeys::new(
-            CipherSuite::TLS_AES_128_GCM_SHA256,
+            self.cipher_suite,
             write.write_key,
             write.write_iv,
             read.write_key,
             read.write_iv,
         )
+        .with_header_protection(write_hp, read_hp)
     }
 
     /// Check if handshake is complete.
@@ -807,44 +1109,15 @@ impl QuicTlsHandshaker {
         dcid: &[u8],
         transcript_after_finished: &[u8],
     ) -> Result<HandshakeResult, String> {
-        let (init_write, init_read) = quic_initial_client_keys(dcid, 16, 12, &self.hasher);
+        let initial_keys = self.initial_keys(dcid);
 
         let hs_keys = self.handshake_keys()?;
         let app_keys = self.app_keys(transcript_after_finished);
 
-        // Derive 0-RTT early data protection keys (if early traffic secret was derived)
-        let early_data_keys = if !self.early_traffic_secret.is_empty() {
-            let early_keys = quic_traffic_keys(
-                &self.early_traffic_secret,
-                self.cipher_suite.key_len(),
-                12,
-                &self.hasher,
-            );
-            let early_read = quic_traffic_keys(
-                &self.early_traffic_secret,
-                self.cipher_suite.key_len(),
-                12,
-                &self.hasher,
-            );
-            Some(ProtectionKeys::new(
-                CipherSuite::TLS_AES_128_GCM_SHA256,
-                early_keys.write_key,
-                early_keys.write_iv,
-                early_read.write_key,
-                early_read.write_iv,
-            ))
-        } else {
-            None
-        };
+        let early_data_keys = self.early_data_keys();
 
         Ok(HandshakeResult {
-            initial_keys: ProtectionKeys::new(
-                CipherSuite::TLS_AES_128_GCM_SHA256,
-                init_write.write_key,
-                init_write.write_iv,
-                init_read.write_key,
-                init_read.write_iv,
-            ),
+            initial_keys,
             handshake_keys: hs_keys,
             app_keys,
             early_data_keys,
@@ -945,5 +1218,279 @@ mod tests {
             hasher_for_suite(CipherSuite::TLS_AES_256_GCM_SHA384),
             Hasher::Sha384
         ));
+    }
+
+    #[test]
+    fn early_data_keys_are_directional() {
+        let mut hs = QuicTlsHandshaker::new("example.com");
+        hs.early_traffic_secret = vec![0x11; hs.hasher.len()];
+
+        let client_keys = hs.early_data_keys().unwrap();
+        let server_keys = hs.server_early_data_read_keys().unwrap();
+        assert_ne!(client_keys.write_key, client_keys.read_key);
+        assert_eq!(client_keys.write_key, server_keys.read_key);
+
+        let header = b"0rtt header";
+        let plaintext = b"GET /";
+        let mut client = PacketProtection::new(&client_keys);
+        let encrypted = client
+            .protect_with_packet_number(7, header, plaintext)
+            .unwrap();
+
+        let mut wrong_direction = PacketProtection::new(&client_keys);
+        assert!(wrong_direction.unprotect(header, 7, &encrypted).is_err());
+
+        let mut server = PacketProtection::new(&server_keys);
+        let decrypted = server.unprotect(header, 7, &encrypted).unwrap();
+        assert_eq!(decrypted, plaintext);
+    }
+
+    fn certificate_message(cert_der: &[u8]) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.push(0); // certificate_request_context length
+
+        let cert_list_len = cert_der.len() + 5;
+        body.extend_from_slice(&(cert_list_len as u32).to_be_bytes()[1..]);
+        body.extend_from_slice(&(cert_der.len() as u32).to_be_bytes()[1..]);
+        body.extend_from_slice(cert_der);
+        body.extend_from_slice(&0u16.to_be_bytes()); // certificate extensions length
+
+        let mut msg = Vec::new();
+        msg.push(11);
+        msg.extend_from_slice(&(body.len() as u32).to_be_bytes()[1..]);
+        msg.extend_from_slice(&body);
+        msg
+    }
+
+    fn der_len(len: usize) -> Vec<u8> {
+        if len < 128 {
+            return vec![len as u8];
+        }
+        let mut bytes = Vec::new();
+        let mut value = len;
+        while value > 0 {
+            bytes.push(value as u8);
+            value >>= 8;
+        }
+        bytes.reverse();
+        let mut out = vec![0x80 | bytes.len() as u8];
+        out.extend_from_slice(&bytes);
+        out
+    }
+
+    fn der(tag: u8, value: &[u8]) -> Vec<u8> {
+        let mut out = vec![tag];
+        out.extend_from_slice(&der_len(value.len()));
+        out.extend_from_slice(value);
+        out
+    }
+
+    fn der_seq(parts: &[Vec<u8>]) -> Vec<u8> {
+        let mut value = Vec::new();
+        for part in parts {
+            value.extend_from_slice(part);
+        }
+        der(0x30, &value)
+    }
+
+    fn der_oid(value: &[u8]) -> Vec<u8> {
+        der(0x06, value)
+    }
+
+    fn der_bit_string(value: &[u8]) -> Vec<u8> {
+        let mut bit_string = vec![0];
+        bit_string.extend_from_slice(value);
+        der(0x03, &bit_string)
+    }
+
+    fn fake_certificate_with_spki(spki_algorithm: &[u8], public_key: &[u8]) -> Vec<u8> {
+        let tbs = der_seq(&[
+            der(0x02, &[1]),
+            der_seq(&[der_oid(&[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02])]),
+            der_seq(&[]),
+            der_seq(&[der(0x17, b"250101000000Z"), der(0x17, b"491231235959Z")]),
+            der_seq(&[]),
+            der_seq(&[
+                der_seq(&[der_oid(spki_algorithm)]),
+                der_bit_string(public_key),
+            ]),
+        ]);
+        der_seq(&[
+            tbs,
+            der_seq(&[der_oid(&[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02])]),
+            der_bit_string(&[0x30, 0x00]),
+        ])
+    }
+
+    #[test]
+    fn certificate_validator_rejects_untrusted_self_signed_chain() {
+        let cert = edgerun_tls::generate_self_signed(&["example.com"]).unwrap();
+        let validator = CertificateValidator::new(Some("example.com"));
+
+        let result = validator.validate_chain(&[cert.cert_der]);
+
+        assert!(!result.is_valid());
+        assert!(result.hostname_valid);
+        assert_eq!(
+            result.error.as_deref(),
+            Some("Self-signed certificate is not trusted")
+        );
+    }
+
+    #[test]
+    fn certificate_validator_accepts_configured_trusted_root() {
+        let cert = edgerun_tls::generate_self_signed(&["example.com"]).unwrap();
+        let validator = CertificateValidator::with_trusted_roots_der(
+            Some("example.com"),
+            &[cert.cert_der.clone()],
+        )
+        .unwrap();
+
+        let result = validator.validate_chain(&[cert.cert_der]);
+
+        assert!(result.is_valid(), "{result:?}");
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn linux_ca_bundle_paths_include_arch_bundle() {
+        assert!(LINUX_CA_BUNDLE_PATHS.contains(&"/etc/ca-certificates/extracted/tls-ca-bundle.pem"));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn parses_multiple_pem_certificates_from_linux_bundle() {
+        let first = edgerun_tls::generate_self_signed(&["first.example"]).unwrap();
+        let second = edgerun_tls::generate_self_signed(&["second.example"]).unwrap();
+        let bundle = format!(
+            "# generated test bundle\n{}\n\n{}\n",
+            first.cert_pem(),
+            second.cert_pem()
+        );
+
+        let roots = parse_pem_certificates(&bundle);
+
+        assert_eq!(roots.len(), 2);
+        assert_eq!(roots[0], first.cert_der);
+        assert_eq!(roots[1], second.cert_der);
+    }
+
+    #[test]
+    fn certificate_verify_signature_validates_tls13_context() {
+        let cert = edgerun_tls::generate_self_signed(&["example.com"]).unwrap();
+        let transcript = b"prior tls handshake messages";
+        let cv = edgerun_tls::server::build_certificate_verify(
+            transcript,
+            &cert.signing_key,
+            &Hasher::Sha256,
+        )
+        .unwrap();
+        let sig_alg = read_u16_be(&cv, 4);
+        let sig_len = read_u16_be(&cv, 6) as usize;
+        let signature = &cv[8..8 + sig_len];
+        let validator = CertificateValidator::new(Some("example.com"));
+
+        assert!(validator.verify_certificate_signature(
+            &cert.cert_der,
+            sig_alg,
+            signature,
+            transcript,
+            &Hasher::Sha256
+        ));
+        assert!(!validator.verify_certificate_signature(
+            &cert.cert_der,
+            sig_alg,
+            signature,
+            b"tampered transcript",
+            &Hasher::Sha256
+        ));
+    }
+
+    #[test]
+    fn certificate_verify_accepts_ed25519_signature() {
+        let mut rng = edgerun_crypto::rand_core::OsRng;
+        let signing_key = edgerun_crypto::ed25519_dalek::SigningKey::generate(&mut rng);
+        let verifying_key = signing_key.verifying_key();
+        let cert_der = fake_certificate_with_spki(&[0x2b, 0x65, 0x70], verifying_key.as_bytes());
+        let transcript = b"prior tls handshake messages";
+        let signed_input = certificate_verify_signed_input(transcript, &Hasher::Sha256);
+        use edgerun_crypto::ed25519_dalek::Signer;
+        let signature = signing_key.sign(&signed_input);
+        let validator = CertificateValidator::new(Some("example.com"));
+
+        assert!(validator.verify_certificate_signature(
+            &cert_der,
+            0x0807,
+            signature.to_bytes().as_slice(),
+            transcript,
+            &Hasher::Sha256
+        ));
+        assert!(!validator.verify_certificate_signature(
+            &cert_der,
+            0x0807,
+            signature.to_bytes().as_slice(),
+            b"tampered transcript",
+            &Hasher::Sha256
+        ));
+    }
+
+    #[test]
+    fn certificate_verify_accepts_rsa_pss_signature() {
+        use edgerun_crypto::rsa::pkcs1::EncodeRsaPublicKey;
+        use edgerun_crypto::rsa::signature::{RandomizedSigner, SignatureEncoding};
+
+        let mut rng = edgerun_crypto::rand_core::OsRng;
+        let private_key = edgerun_crypto::rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let public_key = edgerun_crypto::rsa::RsaPublicKey::from(&private_key);
+        let public_key_der = public_key.to_pkcs1_der().unwrap();
+        let cert_der = fake_certificate_with_spki(
+            &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01],
+            public_key_der.as_bytes(),
+        );
+        let transcript = b"prior tls handshake messages";
+        let signed_input = certificate_verify_signed_input(transcript, &Hasher::Sha256);
+        let signing_key =
+            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::sha2::Sha256>::new(private_key);
+        let signature = signing_key.sign_with_rng(&mut rng, &signed_input);
+        let validator = CertificateValidator::new(Some("example.com"));
+
+        assert!(validator.verify_certificate_signature(
+            &cert_der,
+            0x0804,
+            signature.to_vec().as_slice(),
+            transcript,
+            &Hasher::Sha256
+        ));
+        assert!(!validator.verify_certificate_signature(
+            &cert_der,
+            0x0804,
+            signature.to_vec().as_slice(),
+            b"tampered transcript",
+            &Hasher::Sha256
+        ));
+    }
+
+    #[test]
+    fn strict_handshake_rejects_unvalidated_certificate() {
+        let mut hs = QuicTlsHandshaker::new("example.com");
+        let cert = vec![0x30; 128];
+        let err = hs
+            .process_handshake_crypto(&certificate_message(&cert))
+            .unwrap_err();
+
+        assert!(err.contains("Server certificate validation failed"));
+    }
+
+    #[test]
+    fn insecure_handshake_policy_makes_unverified_cert_explicit() {
+        let mut hs = QuicTlsHandshaker::new("example.com");
+        hs.allow_unverified_certificates(true);
+        let cert = vec![0x30; 128];
+        let err = hs
+            .process_handshake_crypto(&certificate_message(&cert))
+            .unwrap_err();
+
+        assert!(err.contains("Server Finished not found"));
+        assert!(hs.cert_validation().is_some());
     }
 }

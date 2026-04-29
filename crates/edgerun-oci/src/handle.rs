@@ -7,11 +7,12 @@ use std::os::raw::c_int;
 use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 
-use crate::json::OciHook;
+use crate::spec::OciHook;
 use crate::syscalls::{kill, SIGKILL, SIGTERM};
 
 /// A handle to a running container that can be awaited or killed.
 pub struct RunningContainer {
+    pub(crate) container_id: String,
     pub(crate) cgroup_path: String,
     pub(crate) bundle_path: String,
     pub(crate) pid: u32,
@@ -45,6 +46,9 @@ impl RunningContainer {
             if result > 0 {
                 return Ok(std::process::ExitStatus::from_raw(status as i32));
             }
+            if result < 0 {
+                return Err(io::Error::last_os_error());
+            }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
@@ -52,7 +56,9 @@ impl RunningContainer {
 
         // Wait for final exit
         let mut status: c_int = 0;
-        unsafe { libc::waitpid(pid as i32, &mut status, 0) };
+        if unsafe { libc::waitpid(pid as i32, &mut status, 0) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
         Ok(std::process::ExitStatus::from_raw(status as i32))
     }
 
@@ -77,5 +83,10 @@ impl RunningContainer {
     /// The cgroup path for this container.
     pub fn cgroup_path(&self) -> &str {
         &self.cgroup_path
+    }
+
+    /// The container identifier.
+    pub fn container_id(&self) -> &str {
+        &self.container_id
     }
 }

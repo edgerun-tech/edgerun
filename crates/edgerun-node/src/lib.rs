@@ -30,6 +30,7 @@ use edgerun_capability_policy::SimplePolicyEngine;
 use edgerun_core::command::{validate_command, CommandValidationContext};
 use edgerun_core::protocol::{CommandEnvelope, EventEnvelope, EventType};
 use edgerun_core::result::Verdict;
+use edgerun_core::util::now_unix_millis_i64 as now_ms;
 use edgerun_core::value::Value;
 use edgerun_hardware_signing::NodeID;
 use edgerun_storage::core::EventLog;
@@ -243,14 +244,28 @@ impl<L: EventLog> Node<L> {
             .iter()
             .filter_map(|s| edgerun_core::util::hex_to_bytes(s).ok())
             .collect();
+        let delegation_use_counts: HashMap<Vec<u8>, u64> = HashMap::new();
+        let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
 
         let ctx = CommandValidationContext {
             local_node_id: &self.identity.0,
             replay_cache: &self.processed_commands,
             revoked_delegation_ids: &self.revoked_delegation_ids,
+            delegation_use_counts: &delegation_use_counts,
+            delegation_rate_events_ms: &delegation_rate_events_ms,
             now_ms: now_ms(),
             trusted_root_ids: &trusted_root_ids,
             local_assurance_class: 0, // Unknown — simple config path doesn't track signer type
+            accepted_assurance_claims: &[],
+            has_local_session: false,
+            has_user_presence: false,
+            transport_class: None,
+            location_classes: &[],
+            target_stream_id: None,
+            target_view_type: None,
+            target_domain: None,
+            execution_class: None,
+            storage_class: None,
         };
 
         let result = validate_command(command, &ctx);
@@ -349,21 +364,6 @@ impl<L: EventLog> Node<L> {
         self.stream_writer
             .append(EventType::CommandCommitted as i32, 1, now_ms())?;
         Ok(())
-    }
-}
-
-fn now_ms() -> i64 {
-    #[cfg(not(target_os = "none"))]
-    {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64
-    }
-
-    #[cfg(target_os = "none")]
-    {
-        0
     }
 }
 
@@ -872,11 +872,7 @@ trust_nodes: []
             command_type: 7,
             command_version: 1,
             issued_at: Some(prost_types::Timestamp {
-                seconds: (std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as i64)
-                    / 1000,
+                seconds: edgerun_core::util::now_unix_secs_i64(),
                 nanos: 0,
             }),
             not_before: None,

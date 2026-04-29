@@ -1,5 +1,6 @@
 use crate::prelude::v1::*;
 use crate::{GattError, GattResult};
+use edgerun_encoding::byteorder::read_u16_le;
 use std::collections::HashMap;
 use std::io;
 use std::mem::size_of;
@@ -104,16 +105,7 @@ unsafe extern "C" {
 }
 
 fn parse_bdaddr_string(addr: &str) -> Option<[u8; 6]> {
-    let parts: Vec<u8> = addr
-        .split(':')
-        .map(|p| u8::from_str_radix(p, 16).ok())
-        .collect::<Option<_>>()?;
-    if parts.len() != 6 {
-        return None;
-    }
-    let mut result = [0u8; 6];
-    result.copy_from_slice(&parts);
-    Some(result)
+    edgerun_encoding::hex::parse_mac(addr)
 }
 
 fn reverse_bdaddr(addr: &str) -> Option<[u8; 6]> {
@@ -265,12 +257,12 @@ impl HciConnection {
         for i in 0..data.len() {
             if data[i] == HCI_EV_LE_CONN_COMPLETE && i + 18 <= data.len() {
                 let status = data[i + 1];
-                let handle = u16::from_le_bytes([data[i + 2], data[i + 3]]);
+                let handle = read_u16_le(data, i + 2);
                 return Some((status, handle));
             }
             if data[i] == HCI_EV_CONN_COMPLETE && i + 11 <= data.len() {
                 let status = data[i + 1];
-                let handle = u16::from_le_bytes([data[i + 2], data[i + 3]]);
+                let handle = read_u16_le(data, i + 2);
                 return Some((status, handle));
             }
         }

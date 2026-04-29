@@ -1,6 +1,8 @@
 //! CPU identification and per-CPU state for SMP
 
+#[cfg(target_arch = "x86_64")]
 use crate::arch::x86_64::send_ipi;
+#[cfg(target_arch = "x86_64")]
 use crate::timer::timer_ticks;
 use core::sync::atomic::{AtomicU8, Ordering};
 
@@ -83,9 +85,9 @@ pub fn all_cpus() -> impl Iterator<Item = CpuId> {
     (0..CPU_COUNT.load(Ordering::Acquire) as u8).map(CpuId)
 }
 
-pub fn wake(cpu: CpuId) {
+pub fn wake(_cpu: CpuId) {
     #[cfg(target_arch = "x86_64")]
-    send_ipi(cpu.0, 0xFEE0);
+    send_ipi(_cpu.0, 0xFEE0);
 }
 
 pub fn smp_init(count: u8) -> bool {

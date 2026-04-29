@@ -2,21 +2,18 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_encoding::byteorder::{read_i32_le, read_i64_le, read_u16_le};
 use edgerun_input::{InputDevice, InputEventKind, InputEventRecord};
 use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
-};
+use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
-use crate::adapters::common::stream_oriented_error;
-use crate::protocol::{
-    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
-};
+use crate::adapters::common::{decode_count_u32, encode_count_u32, stream_oriented_error};
+use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 /// Binary-encode input events for remote transport.
 pub fn encode_input_events(events: &[InputEventRecord]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + events.len() * 24);
-    out.extend_from_slice(&(events.len() as u32).to_le_bytes());
+    encode_count_u32(events.len(), &mut out);
     for event in events {
         out.extend_from_slice(&event.timestamp_sec.to_le_bytes());
         out.extend_from_slice(&event.timestamp_usec.to_le_bytes());
@@ -38,12 +35,12 @@ pub fn encode_input_events(events: &[InputEventRecord]) -> Vec<u8> {
 
 /// Binary-decode input events from remote transport.
 pub fn decode_input_events(bytes: &[u8]) -> Result<Vec<InputEventRecord>, CapabilityError> {
-    if bytes.len() < 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote input payload too short for event count",
-        ));
-    }
-    let count = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
+    let mut offset = 0usize;
+    let count = decode_count_u32(
+        bytes,
+        &mut offset,
+        "remote input payload too short for event count",
+    )?;
     let expected = 4 + count * 24;
     if bytes.len() != expected {
         return Err(CapabilityError::InvalidRequest(
@@ -51,17 +48,16 @@ pub fn decode_input_events(bytes: &[u8]) -> Result<Vec<InputEventRecord>, Capabi
         ));
     }
     let mut out = Vec::with_capacity(count);
-    let mut offset = 4;
     for _ in 0..count {
-        let timestamp_sec = i64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
+        let timestamp_sec = read_i64_le(bytes, offset);
         offset += 8;
-        let timestamp_usec = i64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
+        let timestamp_usec = read_i64_le(bytes, offset);
         offset += 8;
-        let raw_kind = u16::from_le_bytes(bytes[offset..offset + 2].try_into().unwrap());
+        let raw_kind = read_u16_le(bytes, offset);
         offset += 2;
-        let code = u16::from_le_bytes(bytes[offset..offset + 2].try_into().unwrap());
+        let code = read_u16_le(bytes, offset);
         offset += 2;
-        let value = i32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
+        let value = read_i32_le(bytes, offset);
         offset += 4;
         let kind = match raw_kind {
             1 => InputEventKind::Key,
@@ -107,13 +103,6 @@ where
 {
     fn descriptor(&self) -> CapabilityDescriptor {
         self.device.descriptor()
-    }
-
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
     }
 
     fn invoke(

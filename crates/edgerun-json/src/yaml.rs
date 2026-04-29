@@ -1,15 +1,10 @@
-//! YAML parsing/serialization - compatible with serde_yaml.
-//!
-//! This module provides drop-in replacements for serde_yaml functionality.
+//! YAML parsing and serialization.
 
 #[cfg(feature = "yaml")]
 pub use crate::yaml_api::{
     from_yaml_str, json_to_yaml, parse_yaml_value, to_yaml_string, yaml_to_json, YamlDeserializer,
     YamlError, YamlValue,
 };
-
-#[cfg(all(feature = "yaml", feature = "serde"))]
-pub use crate::yaml_api::{from_yaml_str_typed, to_yaml_string_typed};
 
 #[cfg(feature = "yaml")]
 #[cfg(test)]
@@ -24,7 +19,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // causes stack overflow in nested structure parsing
     fn parses_yaml_array() {
         let value = from_yaml_str("- item1\n- item2\n- 3").unwrap();
         assert_eq!(value[0].as_str(), Some("item1"));
@@ -33,7 +27,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // causes stack overflow in nested structure parsing
     fn roundtrips_yaml() {
         let original = r#"name: test
 items:

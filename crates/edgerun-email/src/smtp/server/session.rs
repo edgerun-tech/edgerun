@@ -27,7 +27,8 @@ use crate::smtp::types::response::EnhancedStatusCode;
 use crate::smtp::types::{
     MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
 };
-use edgerun_email_auth::{AuthenticationResults, EmailAuthEvaluator};
+#[cfg(feature = "dkim")]
+use edgerun_email_auth::EmailAuthEvaluator;
 
 #[cfg(feature = "tls")]
 use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
@@ -521,6 +522,7 @@ async fn handle_connection(
                         false
                     }
                 };
+                #[cfg(feature = "dkim")]
                 if delivery_ok {
                     // Evaluate SPF/DKIM/DMARC in background
                     let handler_clone = Arc::clone(&handler);
@@ -683,18 +685,21 @@ async fn handle_connection(
                         &SmtpResponse::ok("OK: queued").with_enhanced(EnhancedStatusCode::QUEUED),
                     )
                     .await?;
-                    let handler_clone = Arc::clone(&handler);
-                    let envelope_clone = envelope.clone();
-                    let config_clone = config.clone();
-                    crate::rt::spawn(async move {
-                        evaluate_and_notify_auth(
-                            &handler_clone,
-                            &envelope_clone,
-                            &config_clone,
-                            &peer_ip_str,
-                        )
-                        .await;
-                    });
+                    #[cfg(feature = "dkim")]
+                    {
+                        let handler_clone = Arc::clone(&handler);
+                        let envelope_clone = envelope.clone();
+                        let config_clone = config.clone();
+                        crate::rt::spawn(async move {
+                            evaluate_and_notify_auth(
+                                &handler_clone,
+                                &envelope_clone,
+                                &config_clone,
+                                &peer_ip_str,
+                            )
+                            .await;
+                        });
+                    }
                 } else {
                     if !delivery_ok || !queued_ok {
                         send_response(
@@ -1426,6 +1431,7 @@ fn send_dsn_bounce(
 }
 
 /// Evaluate SPF/DKIM/DMARC and notify the handler.
+#[cfg(feature = "dkim")]
 async fn evaluate_and_notify_auth(
     handler: &Arc<dyn MailHandler>,
     envelope: &MailEnvelope,

@@ -23,7 +23,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crate::json::OciHook;
+use crate::spec::OciHook;
 
 /// Container state passed to hooks via stdin.
 #[derive(Debug, Clone)]
@@ -38,26 +38,21 @@ pub struct ContainerState {
 
 impl ContainerState {
     pub fn to_json(&self) -> String {
-        let mut json = String::from("{\n");
-        json.push_str(&format!("  \"ociVersion\": \"{}\",\n", self.version));
-        json.push_str(&format!("  \"id\": \"{}\",\n", self.id));
-        json.push_str(&format!("  \"status\": \"{}\",\n", self.status));
-        json.push_str(&format!("  \"pid\": {},\n", self.pid));
-        json.push_str(&format!("  \"bundle\": \"{}\",\n", self.bundle));
-        if !self.annotations.is_empty() {
-            json.push_str("  \"annotations\": {\n");
-            let entries: Vec<_> = self
-                .annotations
-                .iter()
-                .map(|(k, v)| format!("    \"{}\": \"{}\"", k, v))
-                .collect();
-            json.push_str(&entries.join(",\n"));
-            json.push_str("\n  }\n");
-        } else {
-            json.push_str("  \"annotations\": {}\n");
+        edgerun_json::to_json_string(self).unwrap_or_default()
+    }
+}
+
+edgerun_json::impl_json_struct! {
+    ContainerState {
+        required {
+            version: "ociVersion" => String,
+            id: "id" => String,
+            status: "status" => String,
+            pid: "pid" => u32,
+            bundle: "bundle" => String,
+            annotations: "annotations" => BTreeMap<String, String>,
         }
-        json.push_str("}\n");
-        json
+        optional {}
     }
 }
 
@@ -289,226 +284,5 @@ pub fn execute_poststop_hooks(hooks: Option<&[OciHook]>, state: &ContainerState)
 }
 // ===========================================================================
 #[cfg(all(test, not(target_os = "none")))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn container_state_to_json_is_valid() {
-        let mut annotations = BTreeMap::new();
-        annotations.insert("key".into(), "value".into());
-
-        let state = ContainerState {
-            version: "1.0.2".into(),
-            id: "test-container".into(),
-            status: "created".into(),
-            pid: 12345,
-            bundle: "/var/lib/bundles/test".into(),
-            annotations,
-        };
-
-        let json = state.to_json();
-        assert!(json.contains("\"ociVersion\": \"1.0.2\""));
-        assert!(json.contains("\"id\": \"test-container\""));
-        assert!(json.contains("\"status\": \"created\""));
-        assert!(json.contains("\"pid\": 12345"));
-        assert!(json.contains("\"bundle\": \"/var/lib/bundles/test\""));
-        assert!(json.contains("\"key\": \"value\""));
-    }
-
-    #[test]
-    fn container_state_empty_annotations() {
-        let state = ContainerState {
-            version: "1.0.2".into(),
-            id: "test".into(),
-            status: "running".into(),
-            pid: 1,
-            bundle: "/rootfs".into(),
-            annotations: BTreeMap::new(),
-        };
-        let json = state.to_json();
-        assert!(json.contains("\"annotations\": {}"));
-    }
-
-    #[test]
-    fn oci_hooks_deserializes_all_types() {
-        let json = r#"{"prestart":[{"path":"/usr/bin/prestart"}],"createRuntime":[{"path":"/usr/bin/create-runtime","args":["arg1"],"env":["FOO=bar"],"timeout":10}],"createContainer":[{"path":"/usr/bin/create-container"}],"startContainer":[{"path":"/usr/bin/start-container"}],"poststart":[{"path":"/usr/bin/poststart","timeout":5}],"poststop":[{"path":"/usr/bin/poststop"}]}"#;
-
-        let hooks: crate::json::OciHooks =
-            edgerun_json::from_slice::<crate::json::OciHooks>(json.as_bytes()).unwrap();
-
-        assert!(hooks.prestart.is_some());
-        assert_eq!(hooks.prestart.as_ref().unwrap().len(), 1);
-        assert_eq!(
-            hooks.prestart.as_ref().unwrap()[0].path,
-            "/usr/bin/prestart"
-        );
-
-        assert!(hooks.create_runtime.is_some());
-        let cr = hooks.create_runtime.as_ref().unwrap();
-        assert_eq!(cr.len(), 1);
-        assert_eq!(cr[0].path, "/usr/bin/create-runtime");
-        assert_eq!(cr[0].args, Some(vec!["arg1".into()]));
-        assert_eq!(cr[0].env, Some(vec!["FOO=bar".into()]));
-        assert_eq!(cr[0].timeout, Some(10));
-
-        assert!(hooks.create_container.is_some());
-        assert!(hooks.start_container.is_some());
-        assert!(hooks.poststart.is_some());
-        assert!(hooks.poststop.is_some());
-    }
-
-    #[test]
-    fn oci_hooks_deserializes_empty() {
-        let json = r#"{}"#;
-        let hooks: crate::json::OciHooks =
-            edgerun_json::from_slice::<crate::json::OciHooks>(json.as_bytes()).unwrap();
-        assert!(hooks.prestart.is_none());
-        assert!(hooks.create_runtime.is_none());
-        assert!(hooks.create_container.is_none());
-        assert!(hooks.start_container.is_none());
-        assert!(hooks.poststart.is_none());
-        assert!(hooks.poststop.is_none());
-    }
-
-    #[test]
-    fn execute_hooks_empty_is_ok() {
-        let state = ContainerState {
-            version: "1.0.2".into(),
-            id: "test".into(),
-            status: "created".into(),
-            pid: 1,
-            bundle: "/rootfs".into(),
-            annotations: BTreeMap::new(),
-        };
-        assert!(execute_hooks(None, &state).is_ok());
-        assert!(execute_hooks(Some(&[]), &state).is_ok());
-    }
-
-    #[test]
-    fn execute_hooks_failing_hook_returns_error() {
-        let state = ContainerState {
-            version: "1.0.2".into(),
-            id: "test".into(),
-            status: "created".into(),
-            pid: 1,
-            bundle: "/rootfs".into(),
-            annotations: BTreeMap::new(),
-        };
-
-        // Hook with non-existent path should fail
-        let hooks = vec![crate::json::OciHook {
-            path: "/usr/bin/nonexistent-hook".into(),
-            args: None,
-            env: None,
-            timeout: None,
-        }];
-        let result = execute_hooks(Some(&hooks), &state);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn execute_hooks_successful_hook() {
-        let state = ContainerState {
-            version: "1.0.2".into(),
-            id: "test".into(),
-            status: "created".into(),
-            pid: 1,
-            bundle: "/rootfs".into(),
-            annotations: BTreeMap::new(),
-        };
-
-        // Use /bin/true which always exits 0
-        let hooks = vec![crate::json::OciHook {
-            path: "/bin/true".into(),
-            args: None,
-            env: None,
-            timeout: None,
-        }];
-        let result = execute_hooks(Some(&hooks), &state);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn execute_hooks_hook_with_nonzero_exit_fails() {
-        let state = ContainerState {
-            version: "1.0.2".into(),
-            id: "test".into(),
-            status: "created".into(),
-            pid: 1,
-            bundle: "/rootfs".into(),
-            annotations: BTreeMap::new(),
-        };
-
-        // /bin/false always exits 1
-        let hooks = vec![crate::json::OciHook {
-            path: "/bin/false".into(),
-            args: None,
-            env: None,
-            timeout: None,
-        }];
-        let result = execute_hooks(Some(&hooks), &state);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn execute_poststop_hooks_never_fails() {
-        let state = ContainerState {
-            version: "1.0.2".into(),
-            id: "test".into(),
-            status: "stopped".into(),
-            pid: 1,
-            bundle: "/rootfs".into(),
-            annotations: BTreeMap::new(),
-        };
-
-        // Even with failing hooks, poststop should not return an error
-        let hooks = vec![
-            crate::json::OciHook {
-                path: "/bin/false".into(),
-                args: None,
-                env: None,
-                timeout: None,
-            },
-            crate::json::OciHook {
-                path: "/bin/true".into(),
-                args: None,
-                env: None,
-                timeout: None,
-            },
-        ];
-        // Should not panic — poststop logs warnings but continues
-        execute_poststop_hooks(Some(&hooks), &state);
-    }
-
-    #[test]
-    fn execute_hooks_stops_on_first_failure() {
-        let state = ContainerState {
-            version: "1.0.2".into(),
-            id: "test".into(),
-            status: "created".into(),
-            pid: 1,
-            bundle: "/rootfs".into(),
-            annotations: BTreeMap::new(),
-        };
-
-        // false should fail, true should never run
-        let hooks = vec![
-            crate::json::OciHook {
-                path: "/bin/false".into(),
-                args: None,
-                env: None,
-                timeout: None,
-            },
-            crate::json::OciHook {
-                path: "/bin/true".into(),
-                args: None,
-                env: None,
-                timeout: None,
-            },
-        ];
-        let result = execute_hooks(Some(&hooks), &state);
-        assert!(result.is_err());
-        // The error should be about /bin/false, not /bin/true
-        assert!(result.unwrap_err().hook_path.contains("false"));
-    }
-}
+#[path = "../tests/unit_src/src/hooks_tests.rs"]
+mod tests;

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Benchmark harnesses for Edgerun signing and mesh paths"
 
 [dependencies]
 edgerun-core.workspace = true

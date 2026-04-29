@@ -1,0 +1,14 @@
+route_advertisement:
+  target_node: node_server
+  advertiser: node_phone
+  next_hop_node: user_alice
+  route_metadata:
+    object_id: ''
+  advertised_at: '2030-01-01T00:00:00Z'
+  expires_at: '2099-01-01T00:00:00Z'
+  reachability:
+  - hint_version: 1
+    subject_node: node_server
+    transport_class: TRANSPORT_CLASS_QUIC
+    locator_payload: quic://node_server.example
+    directness: DIRECTNESS_DIRECT

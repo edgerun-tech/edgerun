@@ -1,16 +1,21 @@
 use edgerun_rt::Runtime;
 use edgerun_tuya::TuyaDiscovery;
+use std::env;
 use std::net::SocketAddr;
 use std::process::exit;
 
 fn main() {
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 
-    let bind_addr: SocketAddr = if cfg!(target_os = "linux") {
-        "192.168.1.86:0".parse().unwrap()
-    } else {
-        "0.0.0.0:0".parse().unwrap()
-    };
+    let bind_addr = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "0.0.0.0:0".to_string())
+        .parse::<SocketAddr>()
+        .unwrap_or_else(|error| {
+            eprintln!("Invalid bind address: {error}");
+            eprintln!("Usage: tuya-discover [bind-addr:port]");
+            exit(2);
+        });
 
     println!("Scanning for Tuya devices from {}...", bind_addr);
 

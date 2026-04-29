@@ -84,7 +84,11 @@ impl Future for Cancelled<'_> {
         }
 
         if !this.registered {
-            this.token.inner.wakers.lock().push(cx.waker().clone());
+            let mut wakers = this.token.inner.wakers.lock();
+            let waker = cx.waker();
+            if !wakers.iter().any(|stored| stored.will_wake(waker)) {
+                wakers.push(waker.clone());
+            }
             this.registered = true;
         }
 

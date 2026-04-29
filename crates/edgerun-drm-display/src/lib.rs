@@ -43,7 +43,7 @@ use edgerun_display::{
     default_display_descriptor, DisplayDevice, DisplayInfo, DisplayMode, DisplayUpdateRequest,
 };
 use edgerun_linux_sysfs::prelude::v1::*;
-use edgerun_linux_sysfs::read_trimmed;
+use edgerun_linux_sysfs::{parse_display_mode_line, read_trimmed};
 #[cfg(not(target_os = "none"))]
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -65,26 +65,10 @@ pub struct DrmDisplayBackend {
 }
 
 fn parse_mode_line(line: &str) -> Option<DisplayMode> {
-    let mut parts = line.split('x');
-    let width = parts.next()?.trim().parse().ok()?;
-    let rest = parts.next()?;
-    let mut rest_parts = rest.split(['i', 'p', '@']);
-    let height: u32 = rest_parts.next()?.trim().parse().ok()?;
-    let refresh = line
-        .split('@')
-        .nth(1)
-        .and_then(|v| {
-            v.trim_end_matches('H')
-                .trim_end_matches('z')
-                .parse::<f32>()
-                .ok()
-        })
-        .map(|hz| (hz * 1000.0) as u32)
-        .unwrap_or(60_000);
-    Some(DisplayMode {
-        width,
-        height,
-        refresh_millihz: refresh,
+    parse_display_mode_line(line).map(|mode| DisplayMode {
+        width: mode.width,
+        height: mode.height,
+        refresh_millihz: mode.refresh_millihz,
     })
 }
 

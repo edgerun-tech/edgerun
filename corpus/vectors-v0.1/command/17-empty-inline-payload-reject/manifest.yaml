@@ -1,0 +1,10 @@
+id: command/17-empty-inline-payload-reject
+suite: command
+validator: validate_command
+version: 1
+priority: mandatory
+description: present inline_payload must not be empty
+tags:
+- command
+- structural
+- validate_command

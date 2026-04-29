@@ -2,8 +2,8 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, bail};
+use edgerun_json::JsonValue as Value;
 use oci_spec::runtime::{ProcessBuilder, Spec, SpecBuilder};
-use serde_json::Value;
 use test_framework::{ConditionalTest, TestGroup, TestResult};
 
 use crate::utils::{CreateOptions, is_runtime_runc, test_inside_container};
@@ -28,10 +28,10 @@ fn host_config_path_from_rootfs(rootfs: &Path) -> Result<std::path::PathBuf> {
 
 fn write_top_level_str(path: &Path, key: &str, value: &str) -> Result<()> {
     let s = fs::read_to_string(path)?;
-    let mut v: Value = serde_json::from_str(&s)?;
+    let mut v: Value = crate::utils::json::parse(s)?;
     if let Value::Object(map) = &mut v {
         map.insert(key.to_string(), Value::String(value.to_string()));
-        fs::write(path, serde_json::to_vec_pretty(&v)?)?;
+        fs::write(path, crate::utils::json::to_vec_pretty(v)?)?;
         Ok(())
     } else {
         bail!("config.json is not a JSON object");

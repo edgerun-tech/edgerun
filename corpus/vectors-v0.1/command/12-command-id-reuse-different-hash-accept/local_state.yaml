@@ -1,0 +1,9 @@
+now: '2030-01-01T00:00:00Z'
+local_node: node_server
+current_controller_set:
+- user_alice
+replay_cache:
+  '0xed14e17be55cfe13f077cddd3bc143acc4a64f2bf5c8a6119d4943c6b37c8f47':
+    command_id: cmd_collision
+    decision: committed
+policy_profile: default-v0

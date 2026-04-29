@@ -3,28 +3,33 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, Waker};
+
+use crate::sync::Mutex;
 
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let inner = Arc::new(Inner {
         data: UnsafeCell::new(None),
         sent: AtomicBool::new(false),
+        wakers: Mutex::new(Vec::new()),
     });
     (
         Sender {
             inner: inner.clone(),
         },
-        Receiver { inner },
+        Receiver { inner, waker: None },
     )
 }
 
 struct Inner<T> {
     data: UnsafeCell<Option<T>>,
     sent: AtomicBool,
+    wakers: Mutex<Vec<Waker>>,
 }
 
 unsafe impl<T: Send> Send for Inner<T> {}
@@ -41,6 +46,13 @@ impl<T> Sender<T> {
         }
         unsafe { *self.inner.data.get() = Some(value) };
         self.inner.sent.store(true, Ordering::Release);
+        let wakers = {
+            let mut wakers = self.inner.wakers.lock();
+            core::mem::take(&mut *wakers)
+        };
+        for waker in wakers {
+            waker.wake();
+        }
         Ok(())
     }
 
@@ -65,6 +77,7 @@ impl<T> core::fmt::Display for SendError<T> {
 
 pub struct Receiver<T> {
     inner: Arc<Inner<T>>,
+    waker: Option<Waker>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -74,17 +87,45 @@ impl<T> Future for Receiver<T> {
     type Output = Result<T, RecvError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.inner.sent.load(Ordering::Acquire) {
-            let ptr = self.inner.data.get();
+        let this = self.get_mut();
+        if this.inner.sent.load(Ordering::Acquire) {
+            let ptr = this.inner.data.get();
             unsafe {
                 if (*ptr).is_some() {
+                    if let Some(waker) = this.waker.take() {
+                        let mut wakers = this.inner.wakers.lock();
+                        remove_waker(&mut wakers, &waker);
+                    }
                     return Poll::Ready(Ok((*ptr).take().unwrap()));
                 }
             }
+            if let Some(waker) = this.waker.take() {
+                let mut wakers = this.inner.wakers.lock();
+                remove_waker(&mut wakers, &waker);
+            }
             return Poll::Ready(Err(RecvError));
         }
-        cx.waker().wake_by_ref();
+        let should_register = match this.waker.as_ref() {
+            Some(registered) => !registered.will_wake(cx.waker()),
+            None => true,
+        };
+        if should_register {
+            let mut wakers = this.inner.wakers.lock();
+            if let Some(previous) = this.waker.replace(cx.waker().clone()) {
+                remove_waker(&mut wakers, &previous);
+            }
+            register_waker(&mut wakers, this.waker.as_ref().expect("registered wakeup"));
+        }
         Poll::Pending
+    }
+}
+
+impl<T> Drop for Receiver<T> {
+    fn drop(&mut self) {
+        if let Some(waker) = self.waker.take() {
+            let mut wakers = self.inner.wakers.lock();
+            remove_waker(&mut wakers, &waker);
+        }
     }
 }
 
@@ -99,5 +140,27 @@ impl<T> Receiver<T> {
 
     pub fn close(&self) {
         self.inner.sent.store(true, Ordering::Release);
+        let wakers = {
+            let mut wakers = self.inner.wakers.lock();
+            core::mem::take(&mut *wakers)
+        };
+        for waker in wakers {
+            waker.wake();
+        }
+    }
+}
+
+fn register_waker(wakers: &mut Vec<Waker>, waker: &Waker) {
+    if !wakers.iter().any(|registered| registered.will_wake(waker)) {
+        wakers.push(waker.clone());
+    }
+}
+
+fn remove_waker(wakers: &mut Vec<Waker>, waker: &Waker) {
+    if let Some(pos) = wakers
+        .iter()
+        .position(|registered| registered.will_wake(waker))
+    {
+        wakers.remove(pos);
     }
 }

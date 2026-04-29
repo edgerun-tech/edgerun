@@ -285,7 +285,6 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "solana-program",
- "thiserror",
 ]
 
 [[package]]

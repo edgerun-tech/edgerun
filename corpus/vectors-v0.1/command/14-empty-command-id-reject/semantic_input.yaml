@@ -1,0 +1,19 @@
+brief:
+  command_type: QUERY
+  target_node: node_server
+command:
+  envelope_version: 1
+  command_version: 1
+  issuer: user_alice
+  target_node: node_server
+  command_type: QUERY
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: ''
+  record_domain_tag: edgerun:v0:command-envelope
+  sig_domain_tag: edgerun:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0x3046022100a3dfb500588bf5350429edb91535bdaac49151c0b2b24deb054f31a4c35776e5022100894434c48b8add6ffc3faf3d94299d6f28495c3f9267f6bd80c85e438fed6675'
+  command_hash_hex: '0x14a4a476cbe4336b1fd49eb6eb7805c48b0bd3598d10e13995d13e2284dbb0af'

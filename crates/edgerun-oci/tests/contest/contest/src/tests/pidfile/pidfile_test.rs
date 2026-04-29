@@ -43,7 +43,7 @@ fn test_pidfile() -> TestResult {
         return TestResult::Failed(anyhow!("error in state : {}", err));
     }
 
-    let state: State = serde_json::from_str(&out).unwrap();
+    let state: State = crate::utils::json::parse_state(&out).unwrap();
 
     if state.id != container_id.to_string() {
         cleanup(&container_id, &bundle);

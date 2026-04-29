@@ -18,6 +18,7 @@ use crate::crypto::sha256;
 /// | Storage I/O | ops + bytes           | u64    |
 /// | Network     | bytes                 | u64    |
 use crate::fixed_point::FixedPoint16;
+use edgerun_encoding::byteorder::{read_i32_le, read_u32_le, read_u64_le};
 
 // ===========================================================================
 // Workload classification
@@ -358,23 +359,23 @@ impl PerformanceCertificate {
         }
         let mut node_id = [0u8; 64];
         node_id.copy_from_slice(&data[0..64]);
-        let cpu_int_score = u64::from_le_bytes(data[64..72].try_into().ok()?);
-        let cpu_crypto_score = u64::from_le_bytes(data[72..80].try_into().ok()?);
-        let mem_bandwidth_mbps = u64::from_le_bytes(data[80..88].try_into().ok()?);
-        let mem_latency_ns = u64::from_le_bytes(data[88..96].try_into().ok()?);
-        let storage_random_iops = u64::from_le_bytes(data[96..104].try_into().ok()?);
-        let storage_seq_mbps = u64::from_le_bytes(data[104..112].try_into().ok()?);
-        let storage_event_iops = u64::from_le_bytes(data[112..120].try_into().ok()?);
-        let storage_blob_ops = u64::from_le_bytes(data[120..128].try_into().ok()?);
-        let storage_object_ops = u64::from_le_bytes(data[128..136].try_into().ok()?);
-        let net_frame_encode_decode_ops = u64::from_le_bytes(data[136..144].try_into().ok()?);
-        let net_frame_sign_verify_ops = u64::from_le_bytes(data[144..152].try_into().ok()?);
-        let net_udp_throughput_ops = u64::from_le_bytes(data[152..160].try_into().ok()?);
-        let net_router_lookup_ops = u64::from_le_bytes(data[160..168].try_into().ok()?);
-        let gpu_raw = u64::from_le_bytes(data[168..176].try_into().ok()?);
-        let npu_raw = u64::from_le_bytes(data[176..184].try_into().ok()?);
-        let benchmark_started_us = u64::from_le_bytes(data[184..192].try_into().ok()?);
-        let benchmark_completed_us = u64::from_le_bytes(data[192..200].try_into().ok()?);
+        let cpu_int_score = read_u64_le(data, 64);
+        let cpu_crypto_score = read_u64_le(data, 72);
+        let mem_bandwidth_mbps = read_u64_le(data, 80);
+        let mem_latency_ns = read_u64_le(data, 88);
+        let storage_random_iops = read_u64_le(data, 96);
+        let storage_seq_mbps = read_u64_le(data, 104);
+        let storage_event_iops = read_u64_le(data, 112);
+        let storage_blob_ops = read_u64_le(data, 120);
+        let storage_object_ops = read_u64_le(data, 128);
+        let net_frame_encode_decode_ops = read_u64_le(data, 136);
+        let net_frame_sign_verify_ops = read_u64_le(data, 144);
+        let net_udp_throughput_ops = read_u64_le(data, 152);
+        let net_router_lookup_ops = read_u64_le(data, 160);
+        let gpu_raw = read_u64_le(data, 168);
+        let npu_raw = read_u64_le(data, 176);
+        let benchmark_started_us = read_u64_le(data, 184);
+        let benchmark_completed_us = read_u64_le(data, 192);
         let mut digest = [0u8; 32];
         digest.copy_from_slice(&data[200..232]);
         let mut signature = [0u8; 64];
@@ -585,8 +586,7 @@ impl WorkAccounting {
                 if self.offset + 8 > self.data.len() {
                     return None;
                 }
-                let v =
-                    u64::from_le_bytes(self.data[self.offset..self.offset + 8].try_into().ok()?);
+                let v = read_u64_le(self.data, self.offset);
                 self.offset += 8;
                 Some(v)
             }
@@ -594,8 +594,7 @@ impl WorkAccounting {
                 if self.offset + 4 > self.data.len() {
                     return None;
                 }
-                let v =
-                    u32::from_le_bytes(self.data[self.offset..self.offset + 4].try_into().ok()?);
+                let v = read_u32_le(self.data, self.offset);
                 self.offset += 4;
                 Some(v)
             }
@@ -603,8 +602,7 @@ impl WorkAccounting {
                 if self.offset + 4 > self.data.len() {
                     return None;
                 }
-                let v =
-                    i32::from_le_bytes(self.data[self.offset..self.offset + 4].try_into().ok()?);
+                let v = read_i32_le(self.data, self.offset);
                 self.offset += 4;
                 Some(v)
             }
@@ -788,16 +786,16 @@ impl ComputeAdvertisement {
         }
         let mut node_id = [0u8; 64];
         node_id.copy_from_slice(&data[0..64]);
-        let available_cores = u32::from_le_bytes(data[64..68].try_into().ok()?);
-        let available_memory_bytes = u64::from_le_bytes(data[68..76].try_into().ok()?);
-        let available_storage_bytes = u64::from_le_bytes(data[76..84].try_into().ok()?);
-        let gpu_count = u32::from_le_bytes(data[84..88].try_into().ok()?);
-        let npu_count = u32::from_le_bytes(data[88..92].try_into().ok()?);
+        let available_cores = read_u32_le(data, 64);
+        let available_memory_bytes = read_u64_le(data, 68);
+        let available_storage_bytes = read_u64_le(data, 76);
+        let gpu_count = read_u32_le(data, 84);
+        let npu_count = read_u32_le(data, 88);
         let mut cert_digest = [0u8; 32];
         cert_digest.copy_from_slice(&data[92..124]);
-        let price_per_million_rc_us = u64::from_le_bytes(data[124..132].try_into().ok()?);
-        let min_contract_duration_us = u64::from_le_bytes(data[132..140].try_into().ok()?);
-        let timestamp_us = u64::from_le_bytes(data[140..148].try_into().ok()?);
+        let price_per_million_rc_us = read_u64_le(data, 124);
+        let min_contract_duration_us = read_u64_le(data, 132);
+        let timestamp_us = read_u64_le(data, 140);
         let mut signature = [0u8; 64];
         signature.copy_from_slice(&data[148..212]);
 

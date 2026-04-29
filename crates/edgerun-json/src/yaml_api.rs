@@ -1,6 +1,4 @@
-//! YAML API compatible with serde_yaml.
-//!
-//! This module provides drop-in replacements for serde_yaml functionality.
+//! YAML value parsing and serialization API.
 
 use crate::prelude::*;
 
@@ -10,7 +8,7 @@ use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::string::ToString;
-#[cfg(all(feature = "alloc", any(not(feature = "std"), target_os = "none")))]
+#[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::{format, string::String, vec};
@@ -219,7 +217,6 @@ fn parse_yaml_at(
     let mut values = Vec::new();
     let mut i = start;
     let mut in_list = false;
-    let mut seen_list_key: Option<String> = None;
 
     while i < lines.len() {
         let line = lines[i];
@@ -239,21 +236,52 @@ fn parse_yaml_at(
         if trimmed.starts_with('-') {
             in_list = true;
             let item = trimmed.trim_start_matches('-').trim();
-            // Parse list item - could be simple value or nested object
-            let item_value = if item.contains(':') {
-                // Multi-line nested object - parse as mapping directly
-                parse_yaml_at(&[item], 0, 0)
+            let item_indent = leading;
+            let mut item_lines = Vec::new();
+            if !item.is_empty() {
+                item_lines.push(item.to_string());
+            }
+
+            let mut next = i + 1;
+            while next < lines.len() {
+                let next_line = lines[next];
+                let next_trimmed = next_line.trim();
+                if next_trimmed.is_empty() {
+                    next += 1;
+                    continue;
+                }
+
+                let next_leading = next_line.len() - next_line.trim_start().len();
+                if next_leading <= item_indent {
+                    break;
+                }
+
+                let continuation_indent = item_indent + 2;
+                let continuation = if next_line.len() >= continuation_indent {
+                    &next_line[continuation_indent..]
+                } else {
+                    next_trimmed
+                };
+                item_lines.push(continuation.to_string());
+                next += 1;
+            }
+
+            let item_value = if item_lines.is_empty() {
+                YamlValue::Null
+            } else if item_lines.len() == 1 && !looks_like_mapping_entry(&item_lines[0]) {
+                parse_yaml_simple(&item_lines[0]).unwrap_or(YamlValue::Null)
+            } else {
+                let item_refs: Vec<&str> = item_lines.iter().map(String::as_str).collect();
+                parse_yaml_at(&item_refs, 0, 0)
                     .map(|(v, _)| v)
                     .unwrap_or(YamlValue::Null)
-            } else {
-                parse_yaml_simple(item).unwrap_or(YamlValue::Null)
             };
             values.push(item_value);
-            i += 1;
+            i = next;
             continue;
         }
 
-        if let Some(colon_pos) = trimmed.find(':') {
+        if let Some(colon_pos) = find_mapping_colon(trimmed) {
             let mut key = trimmed[..colon_pos].trim().to_string();
             // Strip quotes from keys
             if (key.starts_with('"') && key.ends_with('"'))
@@ -286,15 +314,10 @@ fn parse_yaml_at(
     for v in &values {
         match v {
             YamlValue::Mapping(m) => {
-                // Check if this mapping came from a list item (single key like "issuer")
-                if in_list && m.len() == 1 {
-                    if let Some((k, _)) = m.first() {
-                        // Single-field mapping from list item - treat as array element
-                        array_items.push(v.clone());
-                        continue;
-                    }
+                if in_list {
+                    array_items.push(v.clone());
+                    continue;
                 }
-                // Add mapping entries
                 result_map.extend(m.iter().cloned());
             }
             YamlValue::Array(arr) => {
@@ -327,7 +350,7 @@ fn parse_yaml_item(item: &str) -> Result<YamlValue, YamlError> {
         let inner = trimmed.trim_start_matches('-').trim();
         let (value, _) = parse_yaml_at(&[inner], 0, 0)?;
         Ok(value)
-    } else if let Some(colon_pos) = trimmed.find(':') {
+    } else if let Some(colon_pos) = find_mapping_colon(trimmed) {
         let key = trimmed[..colon_pos].trim();
         let value_str = trimmed[colon_pos + 1..].trim();
 
@@ -341,6 +364,38 @@ fn parse_yaml_item(item: &str) -> Result<YamlValue, YamlError> {
     } else {
         parse_yaml_simple(trimmed)
     }
+}
+
+fn looks_like_mapping_entry(line: &str) -> bool {
+    find_mapping_colon(line)
+        .map(|colon| {
+            let rest = &line[colon + 1..];
+            rest.is_empty() || rest.starts_with(char::is_whitespace)
+        })
+        .unwrap_or(false)
+}
+
+fn find_mapping_colon(line: &str) -> Option<usize> {
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut escaped = false;
+
+    for (index, ch) in line.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if in_double => escaped = true,
+            '"' if !in_single => in_double = !in_double,
+            '\'' if !in_double => in_single = !in_single,
+            ':' if !in_single && !in_double => return Some(index),
+            _ => {}
+        }
+    }
+
+    None
 }
 
 fn parse_yaml_simple(s: &str) -> Result<YamlValue, YamlError> {
@@ -368,6 +423,10 @@ fn parse_yaml_simple(s: &str) -> Result<YamlValue, YamlError> {
             values.push(parse_yaml_simple(item.trim())?);
         }
         return Ok(YamlValue::Array(values));
+    }
+
+    if s == "{}" {
+        return Ok(YamlValue::Mapping(Vec::new()));
     }
 
     if let Ok(i) = s.parse::<i64>() {
@@ -439,7 +498,8 @@ fn to_yaml_string_impl(
             output.push_str(&n.to_string());
         }
         YamlValue::String(s) => {
-            if s.contains(':')
+            if s.is_empty()
+                || s.contains(':')
                 || s.contains('#')
                 || s.starts_with(' ')
                 || s.ends_with(' ')
@@ -461,6 +521,10 @@ fn to_yaml_string_impl(
             }
         }
         YamlValue::Array(arr) => {
+            if arr.is_empty() {
+                output.push_str("[]");
+                return Ok(());
+            }
             for (i, v) in arr.iter().enumerate() {
                 if i > 0 {
                     output.push('\n');
@@ -471,6 +535,10 @@ fn to_yaml_string_impl(
             }
         }
         YamlValue::Mapping(map) => {
+            if map.is_empty() {
+                output.push_str("{}");
+                return Ok(());
+            }
             for (i, (k, v)) in map.iter().enumerate() {
                 if i > 0 {
                     output.push('\n');
@@ -498,24 +566,6 @@ fn to_yaml_string_impl(
     Ok(())
 }
 
-#[cfg(feature = "serde")]
-pub fn to_value<T>(value: T) -> Result<YamlValue, crate::serde_error::Error>
-where
-    T: serde_crate::Serialize,
-{
-    let json_value = crate::to_value(value)?;
-    Ok(json_to_yaml(json_value))
-}
-
-#[cfg(feature = "serde")]
-pub fn from_value<T>(value: YamlValue) -> Result<T, crate::serde_error::Error>
-where
-    T: serde_crate::de::DeserializeOwned,
-{
-    let json_value = yaml_to_json(value);
-    crate::from_value(json_value)
-}
-
 /// Convert JsonValue to YamlValue
 pub fn json_to_yaml(value: JsonValue) -> YamlValue {
     match value {
@@ -524,13 +574,12 @@ pub fn json_to_yaml(value: JsonValue) -> YamlValue {
         JsonValue::Number(n) => YamlValue::Number(n),
         JsonValue::String(s) => YamlValue::String(s),
         JsonValue::Array(arr) => YamlValue::Array(arr.into_iter().map(json_to_yaml).collect()),
-        JsonValue::Object(map) => {
-            let mut mapping: Vec<(String, YamlValue)> = Vec::new();
-            for (k, v) in map.0.iter() {
-                mapping.push((k.clone(), json_to_yaml(v.clone())));
-            }
-            YamlValue::Mapping(mapping)
-        }
+        JsonValue::Object(map) => YamlValue::Mapping(
+            map.into_vec()
+                .into_iter()
+                .map(|(key, value)| (key, json_to_yaml(value)))
+                .collect(),
+        ),
     }
 }
 
@@ -541,36 +590,16 @@ pub fn yaml_to_json(value: YamlValue) -> JsonValue {
         YamlValue::Bool(b) => JsonValue::Bool(b),
         YamlValue::Number(n) => JsonValue::Number(n),
         YamlValue::String(s) => JsonValue::String(s),
-        YamlValue::Array(arr) => JsonValue::Array(arr.into_iter().map(yaml_to_json).collect()),
+        YamlValue::Array(arr) => JsonValue::array_from_iter(arr.into_iter().map(yaml_to_json)),
         YamlValue::Mapping(map) => {
             let mut obj = crate::Map::new();
             for (k, v) in map {
-                obj.0.push((k.clone(), yaml_to_json(v)));
+                obj.push_field(k, yaml_to_json(v));
             }
-            JsonValue::Object(obj)
+            obj.into()
         }
         YamlValue::Tagged(tagged) => yaml_to_json(*tagged.value),
     }
-}
-
-#[cfg(feature = "serde")]
-pub fn from_yaml_str_typed<T>(s: &str) -> Result<T, YamlError>
-where
-    T: serde_crate::de::DeserializeOwned,
-{
-    let yaml = from_yaml_str(s)?;
-    let json = yaml_to_json(yaml);
-    crate::from_value(json).map_err(|e| YamlError::IoError(e.to_string()))
-}
-
-#[cfg(feature = "serde")]
-pub fn to_yaml_string_typed<T>(value: &T) -> Result<String, YamlError>
-where
-    T: serde_crate::Serialize,
-{
-    let json_value = crate::to_value(value).map_err(|e| YamlError::IoError(e.to_string()))?;
-    let yaml_value = json_to_yaml(json_value);
-    to_yaml_string(&yaml_value)
 }
 
 pub struct YamlDeserializer<'a> {
@@ -615,69 +644,5 @@ impl<'a> Iterator for YamlDeserializer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_doc()
-    }
-}
-
-#[cfg(feature = "serde")]
-impl serde_crate::Serialize for YamlValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde_crate::Serializer,
-    {
-        match self {
-            YamlValue::Null => serializer.serialize_unit(),
-            YamlValue::Bool(b) => serializer.serialize_bool(*b),
-            YamlValue::Number(n) => {
-                if let Some(i) = n.as_i64() {
-                    serializer.serialize_i64(i)
-                } else if let Some(u) = n.as_u64() {
-                    serializer.serialize_u64(u)
-                } else if let Some(f) = n.as_f64() {
-                    serializer.serialize_f64(f)
-                } else {
-                    serializer.serialize_str(&n.to_string())
-                }
-            }
-            YamlValue::String(s) => serializer.serialize_str(s),
-            YamlValue::Array(arr) => {
-                use serde_crate::ser::SerializeSeq;
-                let mut seq = serializer.serialize_seq(Some(arr.len()))?;
-                for item in arr {
-                    seq.serialize_element(item)?;
-                }
-                seq.end()
-            }
-            YamlValue::Mapping(map) => {
-                use serde_crate::ser::SerializeMap;
-                let mut m = serializer.serialize_map(Some(map.len()))?;
-                for (k, v) in map {
-                    m.serialize_key(k)?;
-                    m.serialize_value(v)?;
-                }
-                m.end()
-            }
-            YamlValue::Tagged(tagged) => tagged.value.serialize(serializer),
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde_crate::Deserialize<'de> for YamlValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde_crate::Deserializer<'de>,
-    {
-        let json = JsonValue::deserialize(deserializer)?;
-        Ok(json_to_yaml(json))
-    }
-}
-
-#[cfg(feature = "serde")]
-impl serde_crate::Serialize for YamlError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde_crate::Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
     }
 }

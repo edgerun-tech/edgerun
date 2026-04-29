@@ -16,7 +16,8 @@ default = []
 std = []
 
 [dependencies]
-edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "hmac", "p256", "x25519", "x509"] }
+edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "ed25519", "hmac", "p256", "rsa", "x25519"] }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 edgerun-rt.workspace = true
 
 [lints]

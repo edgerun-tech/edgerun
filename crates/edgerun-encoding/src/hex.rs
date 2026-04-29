@@ -311,6 +311,14 @@ pub fn format_mac(bytes: &[u8; 6]) -> String {
     bytes_to_hex_sep(bytes, ':')
 }
 
+/// Format the first six bytes as a colon-separated MAC/BDADDR string.
+pub fn format_mac_bytes(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 6 {
+        return None;
+    }
+    Some(bytes_to_hex_sep(&bytes[..6], ':'))
+}
+
 /// Parse a Bluetooth device address (BDADDR) string into `[u8; 6]`.
 ///
 /// Same as `parse_mac` but reverses the bytes (Bluetooth uses little-endian
@@ -326,6 +334,17 @@ pub fn parse_bdaddr(s: &str) -> Option<[u8; 6]> {
     let mut mac = parse_mac(s)?;
     mac.reverse();
     Some(mac)
+}
+
+/// Format little-endian Bluetooth address bytes as display-order BDADDR.
+pub fn format_bdaddr_le(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 6 {
+        return None;
+    }
+    let mut reversed = [0u8; 6];
+    reversed.copy_from_slice(&bytes[..6]);
+    reversed.reverse();
+    Some(bytes_to_hex_sep(&reversed, ':'))
 }
 
 // ---------------------------------------------------------------------------

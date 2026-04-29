@@ -9,7 +9,10 @@ use std::io;
 
 use edgerun_crypto::rsa::sha2::Digest;
 use edgerun_crypto::rsa::{
-    pkcs1::EncodeRsaPublicKey, pkcs8::DecodePrivateKey, signature::SignatureEncoding, RsaPrivateKey,
+    pkcs1::EncodeRsaPublicKey,
+    pkcs8::{DecodePrivateKey, EncodePrivateKey, LineEnding},
+    signature::SignatureEncoding,
+    RsaPrivateKey,
 };
 use edgerun_crypto::sha2::Sha256;
 use edgerun_crypto::OsRng;
@@ -89,6 +92,18 @@ impl DkimSigner {
         let base64_key = base64::standard_encode(public_key_der.as_bytes());
 
         format!("v=DKIM1; k=rsa; p={}", base64_key)
+    }
+
+    pub fn private_key_pem(&self) -> io::Result<String> {
+        self.private_key
+            .to_pkcs8_pem(LineEnding::LF)
+            .map(|pem| pem.to_string())
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("failed to encode DKIM private key: {}", e),
+                )
+            })
     }
 
     pub fn selector(&self) -> &str {

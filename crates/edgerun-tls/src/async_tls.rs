@@ -5,16 +5,15 @@
 //! async `poll_read` / `poll_write` instead of `std::io::Read` / `Write`.
 //!
 //! # Example (client)
-//! ```ignore
-//! use edgerun_tls::async_tls::AsyncTlsStream;
-//! use alloc::sync::Arc;
+//! ```rust
+//! use edgerun_tls::{AsyncRead, AsyncTlsStream, AsyncWrite};
 //!
 //! // AsyncTlsStream works with any async read/write stream
-//! async fn tls_client_example() {
-//!     // let tcp_stream = ... // some async TCP connection
-//!     // let arc_stream = Arc::new(tcp_stream);
-//!     // let mut tls = AsyncTlsStream::client(arc_stream, "example.com").await.unwrap();
-//!     // tls.write_all(b"GET / HTTP/1.1\r\n").await.unwrap();
+//! async fn tls_client_example<S>(stream: S) -> edgerun_tls::Result<AsyncTlsStream<S>>
+//! where
+//!     S: AsyncRead + AsyncWrite + Unpin,
+//! {
+//!     AsyncTlsStream::client(stream, "example.com", &[], None).await
 //! }
 //! ```
 
@@ -46,12 +45,121 @@ use crate::server::message_builder::{
 use crate::session_cache::SessionCache;
 use crate::{Result, TlsError};
 use edgerun_crypto::CipherSuite;
+use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 
 use crate::compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 // ---------------------------------------------------------------------------
 // AsyncTlsStream — client-side async TLS stream
 // ---------------------------------------------------------------------------
+
+enum ClientRecordCipher {
+    Tls13(RecordCipher),
+    Tls12(Tls12RecordCipher),
+}
+
+impl ClientRecordCipher {
+    fn encrypt(&mut self, content_type: u8, plaintext: &[u8]) -> Vec<u8> {
+        match self {
+            Self::Tls13(cipher) => cipher.encrypt(content_type, plaintext),
+            Self::Tls12(cipher) => cipher.encrypt(content_type, plaintext),
+        }
+    }
+
+    fn decrypt(&mut self, ciphertext: &[u8]) -> Result<(u8, Vec<u8>)> {
+        self.decrypt_record(23, ciphertext)
+    }
+
+    fn decrypt_record(&mut self, content_type: u8, ciphertext: &[u8]) -> Result<(u8, Vec<u8>)> {
+        match self {
+            Self::Tls13(cipher) => cipher.decrypt(ciphertext).map_err(TlsError::Cipher),
+            Self::Tls12(cipher) => cipher.decrypt_record(content_type, ciphertext),
+        }
+    }
+}
+
+struct Tls12RecordCipher {
+    cipher: edgerun_crypto::Aes256GcmCipher,
+    fixed_iv: Vec<u8>,
+    seq: u64,
+}
+
+impl Tls12RecordCipher {
+    fn new(key: &[u8], fixed_iv: &[u8]) -> Result<Self> {
+        let cipher = edgerun_crypto::Aes256GcmCipher::new(key)
+            .map_err(|_| TlsError::Cipher("invalid TLS 1.2 AES-GCM key".into()))?;
+        Ok(Self {
+            cipher,
+            fixed_iv: fixed_iv.to_vec(),
+            seq: 0,
+        })
+    }
+
+    fn encrypt(&mut self, content_type: u8, plaintext: &[u8]) -> Vec<u8> {
+        let explicit = self.seq.to_be_bytes();
+        let nonce = tls12_gcm_nonce(&self.fixed_iv, &explicit);
+        let aad = tls12_gcm_aad(self.seq, content_type, plaintext.len());
+        let mut buffer = plaintext.to_vec();
+        let tag = self
+            .cipher
+            .encrypt_in_place_detached(
+                edgerun_crypto::aes_gcm::Nonce::from_slice(&nonce),
+                &aad,
+                &mut buffer,
+            )
+            .expect("TLS 1.2 AEAD encryption failed");
+        self.seq = self.seq.wrapping_add(1);
+
+        let encrypted_len = 8 + buffer.len() + tag.len();
+        let mut out = Vec::with_capacity(encrypted_len);
+        out.extend_from_slice(&explicit);
+        out.extend_from_slice(&buffer);
+        out.extend_from_slice(&tag);
+        out
+    }
+
+    fn decrypt(&mut self, fragment: &[u8]) -> Result<(u8, Vec<u8>)> {
+        self.decrypt_record(23, fragment)
+    }
+
+    fn decrypt_record(&mut self, content_type: u8, fragment: &[u8]) -> Result<(u8, Vec<u8>)> {
+        if fragment.len() < 8 + 16 {
+            return Err(TlsError::Cipher("TLS 1.2 AEAD record too short".into()));
+        }
+        let (explicit, encrypted) = fragment.split_at(8);
+        let cipher_len = encrypted.len() - 16;
+        let (ciphertext, tag) = encrypted.split_at(cipher_len);
+        let nonce = tls12_gcm_nonce(&self.fixed_iv, explicit);
+        let aad = tls12_gcm_aad(self.seq, content_type, cipher_len);
+        let mut buffer = ciphertext.to_vec();
+        self.cipher
+            .decrypt_in_place_detached(
+                edgerun_crypto::aes_gcm::Nonce::from_slice(&nonce),
+                &aad,
+                &mut buffer,
+                edgerun_crypto::aes_gcm::aead::generic_array::GenericArray::from_slice(tag),
+            )
+            .map_err(|_| TlsError::Cipher("TLS 1.2 AEAD decryption failed".into()))?;
+        self.seq = self.seq.wrapping_add(1);
+        Ok((content_type, buffer))
+    }
+}
+
+fn tls12_gcm_nonce(fixed_iv: &[u8], explicit: &[u8]) -> [u8; 12] {
+    let mut nonce = [0u8; 12];
+    nonce[..4].copy_from_slice(&fixed_iv[..4]);
+    nonce[4..].copy_from_slice(&explicit[..8]);
+    nonce
+}
+
+fn tls12_gcm_aad(seq: u64, content_type: u8, plaintext_len: usize) -> [u8; 13] {
+    let mut aad = [0u8; 13];
+    aad[..8].copy_from_slice(&seq.to_be_bytes());
+    aad[8] = content_type;
+    aad[9..11].copy_from_slice(&0x0303u16.to_be_bytes());
+    aad[11..13].copy_from_slice(&(plaintext_len as u16).to_be_bytes());
+    aad
+}
 
 /// Async TLS 1.3 client stream wrapping any `AsyncRead + AsyncWrite` transport.
 pub struct AsyncTlsStream<S> {
@@ -62,9 +170,9 @@ pub struct AsyncTlsStream<S> {
     /// The negotiated cipher suite.
     cipher_suite: CipherSuite,
     /// Record cipher for writing (client → server).
-    write_cipher: RecordCipher,
+    write_cipher: ClientRecordCipher,
     /// Record cipher for reading (server → client).
-    read_cipher: RecordCipher,
+    read_cipher: ClientRecordCipher,
     /// Whether the TLS handshake has completed.
     handshake_done: bool,
     /// Buffered application data that was read but not yet consumed.
@@ -87,6 +195,8 @@ pub struct AsyncTlsStream<S> {
     write_plaintext_len: usize,
     /// Whether the underlying stream still needs flushing after `write_record`.
     write_needs_flush: bool,
+    /// The ALPN protocol negotiated during the TLS handshake.
+    alpn_protocol: Option<Vec<u8>>,
 }
 
 impl<S> AsyncTlsStream<S> {
@@ -98,6 +208,11 @@ impl<S> AsyncTlsStream<S> {
     /// Consume the TLS stream and return the underlying transport stream.
     pub fn into_inner(self) -> S {
         self.stream
+    }
+
+    /// Returns the negotiated ALPN protocol, or `None` if none was negotiated.
+    pub fn alpn_protocol(&self) -> Option<&[u8]> {
+        self.alpn_protocol.as_deref()
     }
 }
 
@@ -144,7 +259,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
 
         let record = crate::record::TlsRecord {
             content_type: 22,
-            version: 0x0303,
+            version: 0x0301,
             fragment: ch,
         };
         stream.write_all(&record.to_bytes()).await?;
@@ -156,7 +271,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let ct = hdr[0];
         if ct != 22 {
             if ct == 21 {
-                let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+                let len = read_u16_be(&hdr, 3) as usize;
                 let mut fragment = vec![0u8; len];
                 stream.read_exact(&mut fragment).await?;
                 if fragment.len() >= 2 {
@@ -169,7 +284,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 "Expected handshake record, got content_type={ct}",
             )));
         }
-        let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+        let len = read_u16_be(&hdr, 3) as usize;
         let mut fragment = vec![0u8; len];
         stream.read_exact(&mut fragment).await?;
         let sh = ServerHello::parse(&fragment)?;
@@ -216,7 +331,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
 
         // 4. Read encrypted handshake messages
-        async_read_encrypted_handshake_messages(
+        let alpn_protocol = async_read_encrypted_handshake_messages(
             &mut stream,
             &mut _read_cipher,
             &mut ks,
@@ -250,9 +365,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let server_app_keys =
             server_app_write_keys(&server_app, negotiated_suite.key_len(), 12, &hash);
 
-        let write_cipher =
-            RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv)?;
-        let read_cipher = RecordCipher::new(&server_app_keys.write_key, &server_app_keys.write_iv)?;
+        let write_cipher = ClientRecordCipher::Tls13(RecordCipher::new(
+            &client_app_keys.write_key,
+            &client_app_keys.write_iv,
+        )?);
+        let read_cipher = ClientRecordCipher::Tls13(RecordCipher::new(
+            &server_app_keys.write_key,
+            &server_app_keys.write_iv,
+        )?);
 
         Ok(AsyncTlsStream {
             stream,
@@ -271,6 +391,163 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             write_record_pos: 0,
             write_plaintext_len: 0,
             write_needs_flush: false,
+            alpn_protocol,
+        })
+    }
+
+    /// Perform an async TLS 1.2 client handshake for servers that do not
+    /// negotiate TLS 1.3. This intentionally supports only ECDHE + AES-GCM
+    /// suites so the fallback stays small and modern.
+    pub async fn client_tls12(mut stream: S, server_name: &str) -> Result<Self> {
+        let client_random = generate_random();
+        let key_pair =
+            EcdhKeyPair::generate(KeyExchangeGroup::X25519).map_err(TlsError::HandshakeFailure)?;
+        let ch = build_tls12_client_hello(client_random, server_name);
+        let mut transcript = ch.clone();
+        write_plain_record(&mut stream, 22, &ch).await?;
+
+        let mut server_random = [0u8; 32];
+        let mut cipher_suite = 0u16;
+        let mut server_key_exchange = Vec::new();
+
+        loop {
+            let (content_type, record) = read_plain_record(&mut stream).await?;
+            if content_type == 21 {
+                return Err(parse_alert_record(&record));
+            }
+            if content_type != 22 {
+                return Err(TlsError::Protocol(format!(
+                    "TLS 1.2 expected handshake record, got {content_type}",
+                )));
+            }
+            let mut pos = 0usize;
+            while pos + 4 <= record.len() {
+                let msg_type = record[pos];
+                let len = read_u24_be(&record, pos + 1) as usize;
+                let end = pos + 4 + len;
+                if end > record.len() {
+                    return Err(TlsError::Protocol("TLS 1.2 handshake truncated".into()));
+                }
+                let msg = &record[pos..end];
+                match msg_type {
+                    2 => {
+                        parse_tls12_server_hello(msg, &mut server_random, &mut cipher_suite)?;
+                        transcript.extend_from_slice(msg);
+                    }
+                    11 => {
+                        transcript.extend_from_slice(msg);
+                    }
+                    12 => {
+                        server_key_exchange = msg.to_vec();
+                        transcript.extend_from_slice(msg);
+                    }
+                    14 => {
+                        transcript.extend_from_slice(msg);
+                        break;
+                    }
+                    _ => transcript.extend_from_slice(msg),
+                }
+                if msg_type == 14 {
+                    break;
+                }
+                pos = end;
+            }
+            if !server_key_exchange.is_empty() && record_handshake_has_type(&record, 14) {
+                break;
+            }
+        }
+
+        let server_public = parse_tls12_server_key_exchange(&server_key_exchange)?;
+        let shared_secret = key_pair
+            .exchange(&server_public)
+            .map_err(TlsError::HandshakeFailure)?;
+        let master_secret = tls12_prf(
+            cipher_suite,
+            &shared_secret,
+            b"master secret",
+            &[client_random.as_slice(), server_random.as_slice()].concat(),
+            48,
+        )?;
+        let key_block = tls12_prf(
+            cipher_suite,
+            &master_secret,
+            b"key expansion",
+            &[server_random.as_slice(), client_random.as_slice()].concat(),
+            tls12_key_block_len(cipher_suite)?,
+        )?;
+        let keys = split_tls12_key_block(cipher_suite, &key_block)?;
+
+        let client_key_exchange = build_tls12_client_key_exchange(&key_pair.public_key_bytes());
+        transcript.extend_from_slice(&client_key_exchange);
+        write_plain_record(&mut stream, 22, &client_key_exchange).await?;
+        stream.write_all(&[20, 0x03, 0x03, 0, 1, 1]).await?;
+        stream.flush().await?;
+
+        let verify_data = tls12_finished_verify_data(
+            cipher_suite,
+            &master_secret,
+            b"client finished",
+            &transcript,
+        )?;
+        let client_finished = build_tls12_finished(&verify_data);
+        transcript.extend_from_slice(&client_finished);
+        let mut write_cipher = Tls12RecordCipher::new(&keys.client_key, &keys.client_iv)?;
+        let mut read_cipher = Tls12RecordCipher::new(&keys.server_key, &keys.server_iv)?;
+        let encrypted_finished = write_cipher.encrypt(22, &client_finished);
+        write_plain_record(&mut stream, 22, &encrypted_finished).await?;
+        stream.flush().await?;
+
+        let (content_type, ccs) = read_plain_record(&mut stream).await?;
+        if content_type != 20 || ccs != [1] {
+            return Err(TlsError::Protocol(
+                "TLS 1.2 expected ChangeCipherSpec".into(),
+            ));
+        }
+        let (content_type, encrypted) = read_plain_record(&mut stream).await?;
+        if content_type != 22 {
+            return Err(TlsError::Protocol(
+                "TLS 1.2 expected encrypted Finished".into(),
+            ));
+        }
+        let (inner_type, server_finished) = read_cipher.decrypt_record(22, &encrypted)?;
+        if inner_type != 23 && inner_type != 22 {
+            return Err(TlsError::Protocol("TLS 1.2 invalid Finished record".into()));
+        }
+        if server_finished.len() < 16 || server_finished[0] != 20 {
+            return Err(TlsError::Protocol(
+                "TLS 1.2 invalid Finished message".into(),
+            ));
+        }
+        let expected = tls12_finished_verify_data(
+            cipher_suite,
+            &master_secret,
+            b"server finished",
+            &transcript,
+        )?;
+        if !constant_time_eq(&server_finished[4..], &expected) {
+            return Err(TlsError::HandshakeFailure(
+                "TLS 1.2 server Finished verification failed".into(),
+            ));
+        }
+
+        Ok(AsyncTlsStream {
+            stream,
+            server_name: server_name.to_string(),
+            cipher_suite: CipherSuite::TLS_AES_128_GCM_SHA256,
+            write_cipher: ClientRecordCipher::Tls12(write_cipher),
+            read_cipher: ClientRecordCipher::Tls12(read_cipher),
+            handshake_done: true,
+            pending_data: Vec::new(),
+            pending_offset: 0,
+            read_header: [0; 5],
+            read_header_pos: 0,
+            read_fragment: Vec::new(),
+            read_fragment_pos: 0,
+            write_record: Vec::new(),
+            write_record_pos: 0,
+            write_plaintext_len: 0,
+            write_needs_flush: false,
+            alpn_protocol: None,
         })
     }
 
@@ -415,8 +692,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 }
             }
             let content_type = self.read_header[0];
-            let _version = u16::from_be_bytes([self.read_header[1], self.read_header[2]]);
-            let length = u16::from_be_bytes([self.read_header[3], self.read_header[4]]) as usize;
+            let _version = read_u16_be(&self.read_header, 1);
+            let length = read_u16_be(&self.read_header, 3) as usize;
 
             if self.read_fragment.len() != length {
                 self.read_fragment.resize(length, 0);
@@ -445,9 +722,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             self.read_header_pos = 0;
             self.read_fragment_pos = 0;
 
-            if content_type == 23 {
-                // application_data
-                match self.read_cipher.decrypt(&fragment) {
+            if content_type == 23 || content_type == 21 {
+                // application_data or encrypted alert
+                match self.read_cipher.decrypt_record(content_type, &fragment) {
                     Ok((inner_type, plaintext)) => {
                         if inner_type == 23 {
                             return Poll::Ready(Ok(plaintext));
@@ -461,7 +738,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                         }
                         // Post-handshake message (e.g., NewSessionTicket) — ignore
                     }
-                    Err(e) => return Poll::Ready(Err(TlsError::Cipher(e))),
+                    Err(e) => return Poll::Ready(Err(e)),
                 }
             } else if content_type == 21 {
                 // alert
@@ -565,12 +842,21 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     /// complete the TLS handshake on the same fd.
     ///
     /// # Example
-    /// ```ignore
-    /// let mut tls_stream = AsyncTlsServerStream::new(tcp_stream);
-    /// // ... read plaintext: EHLO, STARTTLS ...
-    /// // ... send "220 Ready to start TLS" ...
-    /// tls_stream.handshake(&cert).await?;
-    /// // ... continue reading encrypted SMTP commands ...
+    /// ```rust
+    /// use edgerun_tls::{AsyncRead, AsyncTlsServerStream, AsyncWrite};
+    /// use edgerun_tls::certificate_gen::CertificateAndKey;
+    ///
+    /// async fn starttls<S>(tcp_stream: S, cert: CertificateAndKey) -> edgerun_tls::Result<()>
+    /// where
+    ///     S: AsyncRead + AsyncWrite + Unpin,
+    /// {
+    ///     let mut tls_stream = AsyncTlsServerStream::new(tcp_stream);
+    ///     // ... read plaintext: EHLO, STARTTLS ...
+    ///     // ... send "220 Ready to start TLS" ...
+    ///     tls_stream.handshake(&cert).await?;
+    ///     // ... continue reading encrypted SMTP commands ...
+    ///     Ok(())
+    /// }
     /// ```
     pub async fn handshake(&mut self, cert_and_key: &CertificateAndKey) -> Result<()> {
         server_handshake_impl(&mut self.stream, cert_and_key)
@@ -705,8 +991,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                 }
             }
             let content_type = hdr[0];
-            let _version = u16::from_be_bytes([hdr[1], hdr[2]]);
-            let length = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+            let _version = read_u16_be(&hdr, 1);
+            let length = read_u16_be(&hdr, 3) as usize;
 
             // Read record fragment
             let mut fragment = vec![0u8; length];
@@ -768,14 +1054,15 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
     hash: &Hasher,
     handshake_transcript_hash: &[u8],
     server_name: &str,
-) -> Result<()> {
+) -> Result<Option<Vec<u8>>> {
     let mut handshake_buf = Vec::new();
+    let mut alpn_protocol = None;
 
     loop {
         let mut hdr = [0u8; 5];
         stream.read_exact(&mut hdr).await?;
         let content_type = hdr[0];
-        let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+        let len = read_u16_be(&hdr, 3) as usize;
         let mut fragment = vec![0u8; len];
         stream.read_exact(&mut fragment).await?;
 
@@ -801,10 +1088,7 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
 
         handshake_buf.extend_from_slice(&plaintext);
         while handshake_buf.len() >= 4 {
-            let msg_len =
-                u32::from_be_bytes([0, handshake_buf[1], handshake_buf[2], handshake_buf[3]])
-                    as usize
-                    + 4;
+            let msg_len = read_u24_be(&handshake_buf, 1) as usize + 4;
             if handshake_buf.len() < msg_len {
                 break;
             }
@@ -812,34 +1096,28 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
             match msg[0] {
                 8 => {
                     // EncryptedExtensions
+                    alpn_protocol = parse_encrypted_extensions_alpn(&msg);
                     transcript.extend_from_slice(&msg);
                 }
                 11 => {
                     // Certificate
                     transcript.extend_from_slice(&msg);
                     if msg.len() >= 8 {
-                        let cert_list_len =
-                            u32::from_be_bytes([0, msg[5], msg[6], msg[7]]) as usize;
+                        let cert_list_len = read_u24_be(&msg, 5) as usize;
                         let cert_list_start = 8;
                         if cert_list_start + cert_list_len <= msg.len() {
                             let mut cert_pos = cert_list_start;
                             let cert_list_end = cert_list_start + cert_list_len;
                             let mut certs = Vec::new();
                             while cert_pos + 5 < cert_list_end {
-                                let cert_data_len = u32::from_be_bytes([
-                                    0,
-                                    msg[cert_pos],
-                                    msg[cert_pos + 1],
-                                    msg[cert_pos + 2],
-                                ]) as usize;
+                                let cert_data_len = read_u24_be(&msg, cert_pos) as usize;
                                 cert_pos += 3;
                                 if cert_pos + cert_data_len + 2 > cert_list_end {
                                     break;
                                 }
                                 let cert_der = &msg[cert_pos..cert_pos + cert_data_len];
                                 cert_pos += cert_data_len;
-                                let ext_len =
-                                    u16::from_be_bytes([msg[cert_pos], msg[cert_pos + 1]]) as usize;
+                                let ext_len = read_u16_be(&msg, cert_pos) as usize;
                                 cert_pos += 2 + ext_len;
                                 let cert = Certificate::from_der(cert_der)?;
                                 certs.push(cert);
@@ -900,12 +1178,58 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                         ));
                     }
                     transcript.extend_from_slice(&msg);
-                    return Ok(());
+                    return Ok(alpn_protocol);
                 }
                 _ => {}
             }
         }
     }
+}
+
+fn parse_encrypted_extensions_alpn(msg: &[u8]) -> Option<Vec<u8>> {
+    if msg.len() < 6 || msg[0] != 8 {
+        return None;
+    }
+    let body_len = read_u24_be(msg, 1) as usize;
+    if msg.len() < 4 + body_len || body_len < 2 {
+        return None;
+    }
+    let body = &msg[4..4 + body_len];
+    let ext_len = u16::from_be_bytes([body[0], body[1]]) as usize;
+    if body.len() < 2 + ext_len {
+        return None;
+    }
+
+    let mut pos = 2usize;
+    let end = 2 + ext_len;
+    while pos + 4 <= end {
+        let ext_type = u16::from_be_bytes([body[pos], body[pos + 1]]);
+        let ext_data_len = u16::from_be_bytes([body[pos + 2], body[pos + 3]]) as usize;
+        pos += 4;
+        if pos + ext_data_len > end {
+            return None;
+        }
+        if ext_type == 16 {
+            return parse_alpn_extension_data(&body[pos..pos + ext_data_len]);
+        }
+        pos += ext_data_len;
+    }
+    None
+}
+
+fn parse_alpn_extension_data(data: &[u8]) -> Option<Vec<u8>> {
+    if data.len() < 3 {
+        return None;
+    }
+    let list_len = u16::from_be_bytes([data[0], data[1]]) as usize;
+    if list_len == 0 || data.len() < 2 + list_len {
+        return None;
+    }
+    let protocol_len = data[2] as usize;
+    if protocol_len == 0 || 3 + protocol_len > 2 + list_len {
+        return None;
+    }
+    Some(data[3..3 + protocol_len].to_vec())
 }
 
 async fn async_send_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
@@ -935,6 +1259,253 @@ async fn async_send_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
     stream.write_all(&record.to_bytes()).await?;
     stream.flush().await?;
     Ok(())
+}
+
+struct Tls12Keys {
+    client_key: Vec<u8>,
+    server_key: Vec<u8>,
+    client_iv: Vec<u8>,
+    server_iv: Vec<u8>,
+}
+
+fn build_tls12_client_hello(client_random: [u8; 32], server_name: &str) -> Vec<u8> {
+    let mut body = Vec::new();
+    body.extend_from_slice(&0x0303u16.to_be_bytes());
+    body.extend_from_slice(&client_random);
+    body.push(0);
+    for bytes in [
+        &4u16.to_be_bytes(),
+        &0xC030u16.to_be_bytes(),
+        &0xC02Fu16.to_be_bytes(),
+    ] {
+        body.extend_from_slice(bytes);
+    }
+    body.push(1);
+    body.push(0);
+
+    let mut extensions = Vec::new();
+    let mut sni = Vec::new();
+    sni.extend_from_slice(&((1 + 2 + server_name.len()) as u16).to_be_bytes());
+    sni.push(0);
+    sni.extend_from_slice(&(server_name.len() as u16).to_be_bytes());
+    sni.extend_from_slice(server_name.as_bytes());
+    extensions.extend_from_slice(&0u16.to_be_bytes());
+    extensions.extend_from_slice(&(sni.len() as u16).to_be_bytes());
+    extensions.extend_from_slice(&sni);
+
+    extensions.extend_from_slice(&10u16.to_be_bytes());
+    extensions.extend_from_slice(&6u16.to_be_bytes());
+    extensions.extend_from_slice(&[0, 4, 0, 0x1d, 0, 0x17]);
+    extensions.extend_from_slice(&11u16.to_be_bytes());
+    extensions.extend_from_slice(&2u16.to_be_bytes());
+    extensions.extend_from_slice(&[1, 0]);
+    extensions.extend_from_slice(&13u16.to_be_bytes());
+    extensions.extend_from_slice(&10u16.to_be_bytes());
+    extensions.extend_from_slice(&[0, 8, 8, 4, 4, 3, 5, 3, 6, 3]);
+
+    body.extend_from_slice(&(extensions.len() as u16).to_be_bytes());
+    body.extend_from_slice(&extensions);
+    handshake_message(1, &body)
+}
+
+fn build_tls12_client_key_exchange(public_key: &[u8]) -> Vec<u8> {
+    let mut body = Vec::with_capacity(1 + public_key.len());
+    body.push(public_key.len() as u8);
+    body.extend_from_slice(public_key);
+    handshake_message(16, &body)
+}
+
+fn build_tls12_finished(verify_data: &[u8]) -> Vec<u8> {
+    handshake_message(20, verify_data)
+}
+
+fn handshake_message(kind: u8, body: &[u8]) -> Vec<u8> {
+    let mut msg = Vec::with_capacity(4 + body.len());
+    msg.push(kind);
+    msg.extend_from_slice(&(body.len() as u32).to_be_bytes()[1..]);
+    msg.extend_from_slice(body);
+    msg
+}
+
+async fn write_plain_record<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut S,
+    content_type: u8,
+    fragment: &[u8],
+) -> Result<()> {
+    let mut record = Vec::with_capacity(5 + fragment.len());
+    record.push(content_type);
+    record.extend_from_slice(&0x0303u16.to_be_bytes());
+    record.extend_from_slice(&(fragment.len() as u16).to_be_bytes());
+    record.extend_from_slice(fragment);
+    stream.write_all(&record).await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+async fn read_plain_record<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut S,
+) -> Result<(u8, Vec<u8>)> {
+    let mut hdr = [0u8; 5];
+    stream.read_exact(&mut hdr).await?;
+    let len = read_u16_be(&hdr, 3) as usize;
+    let mut fragment = vec![0u8; len];
+    stream.read_exact(&mut fragment).await?;
+    Ok((hdr[0], fragment))
+}
+
+fn parse_alert_record(fragment: &[u8]) -> TlsError {
+    if fragment.len() >= 2 {
+        let level = AlertLevel::from_wire(fragment[0]).unwrap_or(AlertLevel::Fatal);
+        let alert = Alert::from_wire(fragment[1]).unwrap_or(Alert::HandshakeFailure);
+        TlsError::Alert(level, alert)
+    } else {
+        TlsError::Protocol("TLS alert record truncated".into())
+    }
+}
+
+fn record_handshake_has_type(record: &[u8], wanted: u8) -> bool {
+    let mut pos = 0usize;
+    while pos + 4 <= record.len() {
+        let len = read_u24_be(record, pos + 1) as usize;
+        if record[pos] == wanted {
+            return true;
+        }
+        pos = pos.saturating_add(4 + len);
+    }
+    false
+}
+
+fn parse_tls12_server_hello(
+    msg: &[u8],
+    random: &mut [u8; 32],
+    cipher_suite: &mut u16,
+) -> Result<()> {
+    if msg.len() < 42 || msg[0] != 2 {
+        return Err(TlsError::Protocol("TLS 1.2 ServerHello truncated".into()));
+    }
+    let body = &msg[4..];
+    random.copy_from_slice(&body[2..34]);
+    let suite_pos = 35 + body[34] as usize;
+    if suite_pos + 3 > body.len() {
+        return Err(TlsError::Protocol("TLS 1.2 ServerHello invalid".into()));
+    }
+    *cipher_suite = read_u16_be(body, suite_pos);
+    if *cipher_suite != 0xC02F && *cipher_suite != 0xC030 {
+        return Err(TlsError::Protocol(format!(
+            "TLS 1.2 unsupported cipher suite 0x{cipher_suite:04x}",
+        )));
+    }
+    Ok(())
+}
+
+fn parse_tls12_server_key_exchange(msg: &[u8]) -> Result<Vec<u8>> {
+    if msg.len() < 12 || msg[0] != 12 {
+        return Err(TlsError::Protocol(
+            "TLS 1.2 ServerKeyExchange missing".into(),
+        ));
+    }
+    let body = &msg[4..];
+    if body[0] != 3 {
+        return Err(TlsError::Protocol(
+            "TLS 1.2 only named curves are supported".into(),
+        ));
+    }
+    let group = read_u16_be(body, 1);
+    let key_len = body[3] as usize;
+    if body.len() < 4 + key_len {
+        return Err(TlsError::Protocol("TLS 1.2 ECDHE key truncated".into()));
+    }
+    if group != 0x001D {
+        return Err(TlsError::Protocol(format!(
+            "TLS 1.2 unsupported ECDHE group 0x{group:04x}",
+        )));
+    }
+    Ok(body[4..4 + key_len].to_vec())
+}
+
+fn split_tls12_key_block(cipher_suite: u16, key_block: &[u8]) -> Result<Tls12Keys> {
+    let key_len = match cipher_suite {
+        0xC02F => 16,
+        0xC030 => 32,
+        _ => {
+            return Err(TlsError::Protocol(
+                "TLS 1.2 unsupported cipher suite".into(),
+            ));
+        }
+    };
+    let mut pos = 0usize;
+    let client_key = key_block[pos..pos + key_len].to_vec();
+    pos += key_len;
+    let server_key = key_block[pos..pos + key_len].to_vec();
+    pos += key_len;
+    let client_iv = key_block[pos..pos + 4].to_vec();
+    pos += 4;
+    let server_iv = key_block[pos..pos + 4].to_vec();
+    Ok(Tls12Keys {
+        client_key,
+        server_key,
+        client_iv,
+        server_iv,
+    })
+}
+
+fn tls12_key_block_len(cipher_suite: u16) -> Result<usize> {
+    match cipher_suite {
+        0xC02F => Ok(40),
+        0xC030 => Ok(72),
+        _ => Err(TlsError::Protocol(
+            "TLS 1.2 unsupported cipher suite".into(),
+        )),
+    }
+}
+
+fn tls12_prf(
+    cipher_suite: u16,
+    secret: &[u8],
+    label: &[u8],
+    seed: &[u8],
+    len: usize,
+) -> Result<Vec<u8>> {
+    let mut label_seed = Vec::with_capacity(label.len() + seed.len());
+    label_seed.extend_from_slice(label);
+    label_seed.extend_from_slice(seed);
+    Ok(match cipher_suite {
+        0xC02F => p_hash(secret, &label_seed, len, hmac_sha256),
+        0xC030 => p_hash(secret, &label_seed, len, hmac_sha384),
+        _ => return Err(TlsError::Protocol("TLS 1.2 unsupported PRF suite".into())),
+    })
+}
+
+fn p_hash(secret: &[u8], seed: &[u8], len: usize, hmac: fn(&[u8], &[u8]) -> Vec<u8>) -> Vec<u8> {
+    let mut out = Vec::with_capacity(len);
+    let mut a = hmac(secret, seed);
+    while out.len() < len {
+        let mut input = Vec::with_capacity(a.len() + seed.len());
+        input.extend_from_slice(&a);
+        input.extend_from_slice(seed);
+        out.extend_from_slice(&hmac(secret, &input));
+        a = hmac(secret, &a);
+    }
+    out.truncate(len);
+    out
+}
+
+fn tls12_finished_verify_data(
+    cipher_suite: u16,
+    master_secret: &[u8],
+    label: &[u8],
+    transcript: &[u8],
+) -> Result<Vec<u8>> {
+    let hash = match cipher_suite {
+        0xC02F => Hasher::Sha256.hash(transcript),
+        0xC030 => Hasher::Sha384.hash(transcript),
+        _ => {
+            return Err(TlsError::Protocol(
+                "TLS 1.2 unsupported Finished suite".into(),
+            ));
+        }
+    };
+    tls12_prf(cipher_suite, master_secret, label, &hash, 12)
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,7 +1606,7 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
         let mut hdr = [0u8; 5];
         stream.read_exact(&mut hdr).await?;
         let ct = hdr[0];
-        let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+        let len = read_u16_be(&hdr, 3) as usize;
         if ct == 20 {
             // ChangeCipherSpec — skip
             let _fragment = {
@@ -1104,7 +1675,7 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
             "Expected handshake record, got content_type={ct}",
         )));
     }
-    let len = u16::from_be_bytes([hdr[3], hdr[4]]) as usize;
+    let len = read_u16_be(&hdr, 3) as usize;
     let mut fragment = vec![0u8; len];
     stream.read_exact(&mut fragment).await?;
     let ch = ClientHello::parse(&fragment)?;
@@ -1354,5 +1925,35 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<edgerun_rt::io::Result<()>> {
         self.get_mut().poll_shutdown(cx).map_err(to_bare_io_error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_encrypted_extensions_alpn;
+
+    #[test]
+    fn parses_alpn_from_encrypted_extensions() {
+        let msg = [
+            8, 0, 0, 11, // EncryptedExtensions, 11-byte body
+            0, 9, // extensions length
+            0, 16, // ALPN extension
+            0, 5, // extension data length
+            0, 3, // protocol name list length
+            2, b'h', b'2',
+        ];
+
+        assert_eq!(parse_encrypted_extensions_alpn(&msg), Some(b"h2".to_vec()));
+    }
+
+    #[test]
+    fn ignores_encrypted_extensions_without_alpn() {
+        let msg = [
+            8, 0, 0, 4, // EncryptedExtensions, 4-byte body
+            0, 2, // extensions length
+            0, 0, // empty SNI extension
+        ];
+
+        assert_eq!(parse_encrypted_extensions_alpn(&msg), None);
     }
 }

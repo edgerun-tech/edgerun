@@ -281,7 +281,7 @@ impl TokenResponse {
 
     /// Serialize to JSON.
     pub fn to_json(&self) -> String {
-        let mut obj = Vec::new();
+        let mut obj: Vec<(String, JsonValue)> = Vec::new();
         if let Some(ref v) = self.access_token {
             obj.push(("access_token".into(), JsonValue::String(v.clone())));
         }

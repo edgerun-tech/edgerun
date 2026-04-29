@@ -4,9 +4,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "ALSA speaker adapter for Edgerun audio output capabilities"
 
 [dependencies]
 edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-encoding = { path = "../edgerun-encoding" }
 edgerun-speaker = { path = "../edgerun-speaker" }
 
 [dev-dependencies]

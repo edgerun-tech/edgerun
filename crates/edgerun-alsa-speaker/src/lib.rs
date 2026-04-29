@@ -491,8 +491,7 @@ fn control_device_path(card_index: u32) -> PathBuf {
 }
 
 fn trim_cstr(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).trim().to_string()
+    edgerun_encoding::cstring::decode_c_string_lossy_trimmed(bytes)
 }
 
 fn control_score(name: &str, is_switch: bool) -> i32 {
@@ -768,7 +767,7 @@ impl SpeakerDevice for AlsaSpeakerBackend {
             default_sample_rate_hz: self.default_sample_rate_hz,
             channels: self.channels,
             supports_playback: true,
-            supports_output_level_control: self.preferred_volume_control()?.is_some(),
+            supports_output_level_control: self.preferred_volume_control().ok().flatten().is_some(),
         })
     }
 
@@ -953,7 +952,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires ALSA hardware"]
     fn speaker_info_descriptor_is_playback() {
         let backend = AlsaSpeakerBackend {
             card_index: 0,

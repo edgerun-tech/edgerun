@@ -2,6 +2,7 @@ use crate::prelude::v1::*;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ptr::{read_volatile, write_volatile};
+use edgerun_encoding::byteorder::read_u32_be;
 
 use crate::traits::{FixedTpmTransport, TpmTransport};
 use crate::types::TpmError;
@@ -105,8 +106,7 @@ impl TisTpmTransport {
         let mut header = [0u8; HEADER_SIZE];
         self.read_fifo_exact(&mut header)?;
 
-        let response_size =
-            u32::from_be_bytes([header[2], header[3], header[4], header[5]]) as usize;
+        let response_size = read_u32_be(&header, 2) as usize;
         if !(HEADER_SIZE..=MAX_RESPONSE_SIZE).contains(&response_size) {
             return Err(TpmError::TpmResponseCode(TPM_TIS_TIMEOUT_CODE));
         }
@@ -125,8 +125,7 @@ impl TisTpmTransport {
         let mut header = [0u8; HEADER_SIZE];
         self.read_fifo_exact(&mut header)?;
 
-        let response_size =
-            u32::from_be_bytes([header[2], header[3], header[4], header[5]]) as usize;
+        let response_size = read_u32_be(&header, 2) as usize;
         if !(HEADER_SIZE..=MAX_RESPONSE_SIZE).contains(&response_size) {
             return Err(TpmError::TpmResponseCode(TPM_TIS_TIMEOUT_CODE));
         }

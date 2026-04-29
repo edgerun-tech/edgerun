@@ -1,3 +1,4 @@
+use super::varint::decode_varint_string as decode_varint;
 use super::QuicFrame;
 use super::QuicFrameType;
 use alloc::{
@@ -5,10 +6,6 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-
-fn decode_varint(data: &[u8]) -> Result<(u64, usize), String> {
-    edgerun_encoding::quic_varint::decode_varint(data).map_err(|e| format!("{e}"))
-}
 
 pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
     if data.is_empty() {
@@ -72,8 +69,13 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
                 (data.len().saturating_sub(pos) as u64, 0)
             };
 
-            let data_end = pos + data_len as usize;
-            let frame_data = data[pos..data_end.min(data.len())].to_vec();
+            let data_end = pos
+                .checked_add(data_len as usize)
+                .ok_or_else(|| "Stream frame data length overflow".to_string())?;
+            if data_end > data.len() {
+                return Err("Stream frame data incomplete".to_string());
+            }
+            let frame_data = data[pos..data_end].to_vec();
 
             Ok((
                 QuicFrame::Stream {
@@ -82,7 +84,7 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
                     fin,
                     data: frame_data,
                 },
-                data_end.min(data.len()),
+                data_end,
             ))
         }
         QuicFrameType::MaxData => {
@@ -97,8 +99,14 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
             pos += n;
             let (reason_len, n) = decode_varint(&data[pos..])?;
             pos += n;
-            let reason = data[pos..(pos + reason_len as usize).min(data.len())].to_vec();
-            pos += reason_len as usize;
+            let reason_end = pos
+                .checked_add(reason_len as usize)
+                .ok_or_else(|| "Connection close reason length overflow".to_string())?;
+            if reason_end > data.len() {
+                return Err("Connection close reason incomplete".to_string());
+            }
+            let reason = data[pos..reason_end].to_vec();
+            pos = reason_end;
             Ok((
                 QuicFrame::ConnectionClose {
                     error_code,
@@ -120,14 +128,8 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
             pos += n;
             let mut ack_ranges = Vec::new();
             for _ in 0..ack_range_count {
-                if pos >= data.len() {
-                    break;
-                }
                 let (gap, n) = decode_varint(&data[pos..])?;
                 pos += n;
-                if pos >= data.len() {
-                    break;
-                }
                 let (additional, n) = decode_varint(&data[pos..])?;
                 pos += n;
                 ack_ranges.push((gap, additional));
@@ -155,14 +157,8 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
             pos += n;
             let mut ack_ranges = Vec::new();
             for _ in 0..ack_range_count {
-                if pos >= data.len() {
-                    break;
-                }
                 let (gap, n) = decode_varint(&data[pos..])?;
                 pos += n;
-                if pos >= data.len() {
-                    break;
-                }
                 let (additional, n) = decode_varint(&data[pos..])?;
                 pos += n;
                 ack_ranges.push((gap, additional));
@@ -222,7 +218,12 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
             let mut pos = 1;
             let (token_len, n) = decode_varint(&data[pos..])?;
             pos += n;
-            let end = (pos + token_len as usize).min(data.len());
+            let end = pos
+                .checked_add(token_len as usize)
+                .ok_or_else(|| "NEW_TOKEN: token length overflow".to_string())?;
+            if end > data.len() {
+                return Err("NEW_TOKEN: token incomplete".to_string());
+            }
             let token = data[pos..end].to_vec();
             pos = end;
             Ok((QuicFrame::NewToken { token }, pos))
@@ -333,7 +334,12 @@ pub fn from_bytes(data: &[u8]) -> Result<(QuicFrame, usize), String> {
             pos += n;
             let (reason_len, n) = decode_varint(&data[pos..])?;
             pos += n;
-            let end = (pos + reason_len as usize).min(data.len());
+            let end = pos
+                .checked_add(reason_len as usize)
+                .ok_or_else(|| "Application close reason length overflow".to_string())?;
+            if end > data.len() {
+                return Err("Application close reason incomplete".to_string());
+            }
             let reason = data[pos..end].to_vec();
             pos = end;
             Ok((

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Durable event, object, index, and blob storage for Edgerun nodes"
 
 [dependencies]
 edgerun-rt = { path = "../edgerun-rt" }
@@ -12,6 +13,7 @@ edgerun-proto = { path = "../edgerun-proto" }
 edgerun-stream = { path = "../edgerun-stream" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing", default-features = false }
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256", "pbkdf2"] }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 prost.workspace = true
 prost-types.workspace = true
 edgerun-log = { path = "../edgerun-log" }

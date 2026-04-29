@@ -126,6 +126,27 @@ pub struct Envelope {
     pub message_id: Option<String>,
 }
 
+impl Envelope {
+    /// Format as an RFC 3501 ENVELOPE body without the response name.
+    pub fn format_imap(&self) -> String {
+        let date = format_nstring(&self.date);
+        let subject = format_nstring(&self.subject);
+        let from = format_address_list(&self.from);
+        let sender = format_address_list_opt(&self.sender);
+        let reply_to = format_address_list_opt(&self.reply_to);
+        let to = format_address_list(&self.to);
+        let cc = format_address_list(&self.cc);
+        let bcc = format_address_list(&self.bcc);
+        let in_reply_to = format_nstring(&self.in_reply_to);
+        let message_id = format_nstring(&self.message_id);
+
+        format!(
+            "({} {} {} {} {} {} {} {} {} {})",
+            date, subject, from, sender, reply_to, to, cc, bcc, in_reply_to, message_id
+        )
+    }
+}
+
 /// RFC 2822 mailbox address.
 #[derive(Debug, Clone, Default)]
 pub struct Address {
@@ -153,6 +174,40 @@ impl Address {
             _ => email,
         }
     }
+}
+
+/// Format an IMAP nstring, escaping quoted-string metacharacters.
+pub fn format_nstring(s: &Option<String>) -> String {
+    match s {
+        Some(s) if !s.is_empty() => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+        _ => "NIL".to_string(),
+    }
+}
+
+/// Format an IMAP envelope address list.
+pub fn format_address_list(addrs: &[Address]) -> String {
+    if addrs.is_empty() {
+        return "NIL".to_string();
+    }
+    let parts: Vec<String> = addrs.iter().map(format_address).collect();
+    format!("({})", parts.join(" "))
+}
+
+/// Format a single optional address as an IMAP envelope address list.
+pub fn format_address_list_opt(addr: &Option<Address>) -> String {
+    match addr {
+        Some(a) => format!("({})", format_address(a)),
+        None => "NIL".to_string(),
+    }
+}
+
+/// Format a single RFC 3501 envelope address tuple.
+pub fn format_address(addr: &Address) -> String {
+    let name = format_nstring(&addr.name);
+    let adl = format_nstring(&addr.adl);
+    let mailbox = format_nstring(&addr.mailbox);
+    let host = format_nstring(&addr.host);
+    format!("({} {} {} {})", name, adl, mailbox, host)
 }
 
 // ===========================================================================

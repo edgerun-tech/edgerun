@@ -227,19 +227,5 @@ impl fmt::Display for FifoError {
 impl Error for FifoError {}
 
 #[cfg(all(test, not(target_os = "none")))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn all_errors_are_send_sync() {
-        fn assert_send_sync<T: Send + Sync>() {}
-        assert_send_sync::<LifecycleError>();
-        assert_send_sync::<RootfsError>();
-        assert_send_sync::<SeccompError>();
-        assert_send_sync::<CgroupError>();
-        assert_send_sync::<CapabilityError>();
-        assert_send_sync::<NamespaceError>();
-        assert_send_sync::<ConfigError>();
-        assert_send_sync::<FifoError>();
-    }
-}
+#[path = "../tests/unit_src/src/error_tests.rs"]
+mod tests;

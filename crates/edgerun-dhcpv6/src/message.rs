@@ -3,6 +3,7 @@
 use crate::std::fmt;
 use crate::std::io;
 use crate::std::prelude::v1::*;
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -378,12 +379,7 @@ impl Dhcpv6Message {
     pub fn ia_id(&self) -> Option<u32> {
         self.ia_na_options().first().and_then(|opt| {
             if opt.data.len() >= 12 {
-                Some(u32::from_be_bytes([
-                    opt.data[0],
-                    opt.data[1],
-                    opt.data[2],
-                    opt.data[3],
-                ]))
+                Some(read_u32_be(&opt.data, 0))
             } else {
                 None
             }
@@ -397,7 +393,7 @@ impl Dhcpv6Message {
             .find(|o| o.code == super::options::OPT_ELAPSED_TIME)
             .and_then(|o| {
                 if o.data.len() >= 2 {
-                    Some(u16::from_be_bytes([o.data[0], o.data[1]]))
+                    Some(read_u16_be(&o.data, 0))
                 } else {
                     None
                 }
@@ -411,7 +407,7 @@ impl Dhcpv6Message {
             .find(|o| o.code == super::options::OPT_ORO)
             .map(|o| {
                 (0..o.data.len() / 2)
-                    .map(|i| u16::from_be_bytes([o.data[i * 2], o.data[i * 2 + 1]]))
+                    .map(|i| read_u16_be(&o.data, i * 2))
                     .collect()
             })
             .unwrap_or_default()

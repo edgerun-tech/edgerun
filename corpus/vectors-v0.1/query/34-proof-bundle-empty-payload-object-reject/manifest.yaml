@@ -1,0 +1,10 @@
+id: query/34-proof-bundle-empty-payload-object-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: proof bundle rejects empty payload_object ids
+tags:
+- query
+- proof
+- structural

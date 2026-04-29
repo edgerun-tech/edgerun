@@ -21,7 +21,7 @@ pub mod prelude {
 
 #[cfg(target_os = "none")]
 pub mod collections {
-    pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+    pub use alloc::collections::{BTreeMap, BTreeMap as HashMap, BTreeSet, BTreeSet as HashSet};
 }
 
 #[cfg(target_os = "none")]
@@ -43,6 +43,32 @@ pub mod ffi {
 pub mod fs {
     use crate::{io, path::PathBuf};
     use alloc::string::String;
+
+    #[derive(Debug)]
+    pub struct File;
+
+    pub struct OpenOptions;
+
+    impl OpenOptions {
+        #[must_use]
+        pub const fn new() -> Self {
+            Self
+        }
+
+        #[must_use]
+        pub const fn read(self, _read: bool) -> Self {
+            self
+        }
+
+        #[must_use]
+        pub const fn write(self, _write: bool) -> Self {
+            self
+        }
+
+        pub fn open<P>(self, _path: P) -> io::Result<File> {
+            Err(io::Error::new(io::ErrorKind::NotFound))
+        }
+    }
 
     pub struct ReadDir;
     pub struct DirEntry;
@@ -160,6 +186,18 @@ pub mod io {
 
 #[cfg(target_os = "none")]
 pub mod os {
+    pub mod fd {
+        pub trait AsRawFd {
+            fn as_raw_fd(&self) -> i32;
+        }
+
+        impl AsRawFd for crate::fs::File {
+            fn as_raw_fd(&self) -> i32 {
+                -1
+            }
+        }
+    }
+
     pub mod raw {
         #[allow(non_camel_case_types)]
         pub type c_char = i8;
@@ -170,6 +208,11 @@ pub mod os {
         #[allow(non_camel_case_types)]
         pub type c_ulong = usize;
     }
+}
+
+#[cfg(target_os = "none")]
+pub mod mem {
+    pub use core::mem::*;
 }
 
 #[cfg(target_os = "none")]
@@ -450,6 +493,43 @@ pub fn parse_bool_flag(text: Option<String>) -> Option<bool> {
         "1" | "y" | "yes" | "true" | "enabled" | "online" => Some(true),
         "0" | "n" | "no" | "false" | "disabled" | "offline" => Some(false),
         _ => None,
+    })
+}
+
+/// Parsed display mode fields from sysfs DRM/GPU mode lines.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SysfsDisplayMode {
+    pub width: u32,
+    pub height: u32,
+    pub refresh_millihz: u32,
+}
+
+/// Parse a sysfs display mode line such as `1920x1080`, `1920x1080@60`,
+/// `1920x1080i@60`, or `3840x2160@60Hz`.
+#[must_use]
+pub fn parse_display_mode_line(line: &str) -> Option<SysfsDisplayMode> {
+    let mut parts = line.split('x');
+    let width = parts.next()?.trim().parse().ok()?;
+    let rest = parts.next()?;
+    let mut rest_parts = rest.split(['i', 'p', '@']);
+    let height: u32 = rest_parts.next()?.trim().parse().ok()?;
+    let refresh = line
+        .split('@')
+        .nth(1)
+        .and_then(|value| {
+            value
+                .trim_end_matches('H')
+                .trim_end_matches('z')
+                .parse::<f32>()
+                .ok()
+        })
+        .map(|hz| (hz * 1000.0) as u32)
+        .unwrap_or(60_000);
+
+    Some(SysfsDisplayMode {
+        width,
+        height,
+        refresh_millihz: refresh,
     })
 }
 
@@ -842,6 +922,52 @@ mod tests {
     #[test]
     fn parse_bool_flag_none_on_none_input() {
         assert_eq!(parse_bool_flag(None), None);
+    }
+
+    // ----- parse_display_mode_line -----
+
+    #[test]
+    fn parse_display_mode_line_with_refresh() {
+        assert_eq!(
+            parse_display_mode_line("1920x1080@60"),
+            Some(SysfsDisplayMode {
+                width: 1920,
+                height: 1080,
+                refresh_millihz: 60_000,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_display_mode_line_without_refresh_defaults_to_60hz() {
+        assert_eq!(
+            parse_display_mode_line("1920x1080"),
+            Some(SysfsDisplayMode {
+                width: 1920,
+                height: 1080,
+                refresh_millihz: 60_000,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_display_mode_line_accepts_suffixes() {
+        assert_eq!(
+            parse_display_mode_line("3840x2160i@60Hz"),
+            Some(SysfsDisplayMode {
+                width: 3840,
+                height: 2160,
+                refresh_millihz: 60_000,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_display_mode_line_rejects_invalid_input() {
+        assert_eq!(parse_display_mode_line(""), None);
+        assert_eq!(parse_display_mode_line("invalid"), None);
+        assert_eq!(parse_display_mode_line("1920"), None);
+        assert_eq!(parse_display_mode_line("axb@60"), None);
     }
 
     // ----- parse_uevent_map -----

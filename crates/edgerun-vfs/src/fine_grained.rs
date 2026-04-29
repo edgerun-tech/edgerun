@@ -1,14 +1,14 @@
 //! Fine-grained locked VFS for concurrent writes to different files
 //!
-//! Uses DashMap for per-file locking, allowing concurrent writes
-//! to different files without a global RwLock.
+//! Uses host-side synchronization primitives to allow safe shared access
+//! from multiple threads without pulling in a concurrent-map dependency.
 //!
 //! Stores ALL files as `Vec<u8>` (bytes), including binary files.
 //! Text-only operations (`read_str`, `edit`, `grep`) transparently
 //! handle UTF-8 conversion and skip non-text files.
 //!
 //! **Known limitations**:
-//! - `read_str()` returns `String` (not `&str`) because DashMap guards
+//! - `read_str()` returns `String` (not `&str`) because lock guards
 //!   can't outlive the function call. Use `read()` for zero-copy via `Arc<Vec<u8>>`.
 
 use alloc::format;
@@ -16,8 +16,9 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use dashmap::DashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::grep::GrepMatch;
@@ -30,10 +31,10 @@ struct LockedFileContent {
 }
 
 pub struct FineGrainedVFS {
-    files: DashMap<PathBuf, Arc<LockedFileContent>>,
-    metadata: DashMap<PathBuf, FileMeta>,
-    original_hashes: DashMap<PathBuf, String>,
-    deleted: DashMap<PathBuf, ()>,
+    files: RwLock<HashMap<PathBuf, Arc<LockedFileContent>>>,
+    metadata: RwLock<HashMap<PathBuf, FileMeta>>,
+    original_hashes: RwLock<HashMap<PathBuf, String>>,
+    deleted: RwLock<HashSet<PathBuf>>,
     root: PathBuf,
     memory_usage: std::sync::atomic::AtomicUsize,
 }
@@ -42,10 +43,10 @@ impl FineGrainedVFS {
     /// Load entire directory into memory (ALL files, including binary).
     pub fn load<P: AsRef<Path>>(root: P) -> Result<Self, String> {
         let root = root.as_ref().to_path_buf();
-        let files = DashMap::new();
-        let metadata = DashMap::new();
-        let original_hashes = DashMap::new();
-        let deleted = DashMap::new();
+        let mut files = HashMap::new();
+        let mut metadata = HashMap::new();
+        let mut original_hashes = HashMap::new();
+        let deleted = HashSet::new();
         let mut memory_usage = 0usize;
 
         let file_count = Self::walk_directory(&root, &mut |path, content| {
@@ -81,10 +82,10 @@ impl FineGrainedVFS {
         })?;
 
         Ok(Self {
-            files,
-            metadata,
-            original_hashes,
-            deleted,
+            files: RwLock::new(files),
+            metadata: RwLock::new(metadata),
+            original_hashes: RwLock::new(original_hashes),
+            deleted: RwLock::new(deleted),
             root,
             memory_usage: std::sync::atomic::AtomicUsize::new(memory_usage),
         })
@@ -115,10 +116,12 @@ impl FineGrainedVFS {
     }
 
     fn compute_hash(content: &[u8]) -> String {
-        use sha1::{Digest, Sha1};
-        let mut hasher = Sha1::new();
-        hasher.update(content);
-        format!("{:x}", hasher.finalize())
+        let mut hash = 0xcbf29ce484222325u64;
+        for byte in content {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        format!("{hash:016x}")
     }
 
     fn get_mtime(path: &Path) -> u64 {
@@ -130,18 +133,24 @@ impl FineGrainedVFS {
 
     /// Read file bytes from memory (zero-copy via Arc if possible)
     pub fn read(&self, path: &Path) -> Option<Arc<Vec<u8>>> {
-        if self.deleted.contains_key(path) {
+        if self.deleted.read().ok()?.contains(path) {
             return None;
         }
-        self.files.get(path).map(|entry| entry.data.clone())
+        self.files
+            .read()
+            .ok()?
+            .get(path)
+            .map(|entry| entry.data.clone())
     }
 
     /// Read file as String (clones data). Returns None for binary or deleted files.
     pub fn read_str(&self, path: &Path) -> Option<String> {
-        if self.deleted.contains_key(path) {
+        if self.deleted.read().ok()?.contains(path) {
             return None;
         }
         self.files
+            .read()
+            .ok()?
             .get(path)
             .and_then(|entry| String::from_utf8(entry.data.to_vec()).ok())
     }
@@ -149,27 +158,36 @@ impl FineGrainedVFS {
     /// Check if file is text (valid UTF-8)
     pub fn is_text(&self, path: &Path) -> bool {
         self.files
-            .get(path)
-            .map(|entry| std::str::from_utf8(&entry.data).is_ok())
+            .read()
+            .ok()
+            .and_then(|files| {
+                files
+                    .get(path)
+                    .map(|entry| std::str::from_utf8(&entry.data).is_ok())
+            })
             .unwrap_or(false)
     }
 
     /// List all non-deleted files
     pub fn files(&self) -> Vec<PathBuf> {
-        self.files
-            .iter()
-            .filter(|entry| !self.deleted.contains_key(entry.key()))
-            .map(|entry| entry.key().clone())
+        let files = self.files.read().unwrap();
+        let deleted = self.deleted.read().unwrap();
+        files
+            .keys()
+            .filter(|path| !deleted.contains(*path))
+            .cloned()
             .collect()
     }
 
     /// Write bytes to file in memory
     pub fn write_bytes(&self, path: &Path, content: Vec<u8>) -> Result<(), String> {
         let path = path.to_path_buf();
-        self.deleted.remove(&path);
+        self.deleted
+            .write()
+            .map_err(|_| "deleted set lock poisoned".to_string())?
+            .remove(&path);
 
         let size = content.len();
-        let old_size = self.files.get(&path).map(|e| e.data.len()).unwrap_or(0);
         let hash = Self::compute_hash(&content);
 
         let new_content = Arc::new(LockedFileContent {
@@ -177,27 +195,33 @@ impl FineGrainedVFS {
             version: std::sync::atomic::AtomicU64::new(1),
         });
 
-        self.files.insert(path.clone(), new_content);
+        let old_size = self
+            .files
+            .write()
+            .map_err(|_| "file map lock poisoned".to_string())?
+            .insert(path.clone(), new_content)
+            .map(|e| e.data.len())
+            .unwrap_or(0);
 
-        self.metadata
-            .entry(path.clone())
-            .or_insert_with(|| FileMeta {
-                path: path.clone(),
-                size: 0,
-                hash: String::new(),
-                modified: 0,
-                is_dirty: true,
-            });
+        let mut metadata = self
+            .metadata
+            .write()
+            .map_err(|_| "metadata lock poisoned".to_string())?;
+        let meta = metadata.entry(path.clone()).or_insert_with(|| FileMeta {
+            path: path.clone(),
+            size: 0,
+            hash: String::new(),
+            modified: 0,
+            is_dirty: true,
+        });
 
-        if let Some(mut meta) = self.metadata.get_mut(&path) {
-            meta.size = size;
-            meta.hash = hash;
-            meta.modified = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            meta.is_dirty = true;
-        }
+        meta.size = size;
+        meta.hash = hash;
+        meta.modified = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        meta.is_dirty = true;
 
         self.memory_usage
             .fetch_sub(old_size, std::sync::atomic::Ordering::Relaxed);
@@ -219,13 +243,21 @@ impl FineGrainedVFS {
     {
         let path = path.to_path_buf();
 
-        if self.deleted.contains_key(&path) {
+        if self
+            .deleted
+            .read()
+            .map_err(|_| "deleted set lock poisoned".to_string())?
+            .contains(&path)
+        {
             return Err(format!("File {:?} was deleted", path));
         }
 
         let entry = self
             .files
+            .read()
+            .map_err(|_| "file map lock poisoned".to_string())?
             .get(&path)
+            .cloned()
             .ok_or_else(|| format!("File not found: {:?}", path))?;
 
         let mut text = String::from_utf8(entry.data.to_vec())
@@ -244,9 +276,17 @@ impl FineGrainedVFS {
             version: std::sync::atomic::AtomicU64::new(new_version),
         });
 
-        self.files.insert(path.clone(), new_entry);
+        self.files
+            .write()
+            .map_err(|_| "file map lock poisoned".to_string())?
+            .insert(path.clone(), new_entry);
 
-        if let Some(mut meta) = self.metadata.get_mut(&path) {
+        if let Some(meta) = self
+            .metadata
+            .write()
+            .map_err(|_| "metadata lock poisoned".to_string())?
+            .get_mut(&path)
+        {
             meta.size = size;
             meta.hash = hash;
             meta.modified = SystemTime::now()
@@ -268,11 +308,13 @@ impl FineGrainedVFS {
             None => return Vec::new(),
         };
 
-        self.files
+        let files = self.files.read().unwrap();
+        let deleted = self.deleted.read().unwrap();
+
+        files
             .iter()
-            .filter(|entry| !self.deleted.contains_key(entry.key()))
-            .filter_map(|entry| {
-                let path = entry.key();
+            .filter(|(path, _)| !deleted.contains(*path))
+            .filter_map(|(path, entry)| {
                 let text = String::from_utf8(entry.data.to_vec()).ok()?;
                 let mut matches = Vec::new();
                 for (line_num, line) in text.lines().enumerate() {
@@ -292,13 +334,16 @@ impl FineGrainedVFS {
 
     /// Get memory usage statistics
     pub fn memory_stats(&self) -> MemoryStats {
-        let file_count = self.files.len();
+        let files = self.files.read().unwrap();
+        let metadata = self.metadata.read().unwrap();
+        let deleted = self.deleted.read().unwrap();
+        let file_count = files.len();
         let memory_bytes = self.memory_usage.load(std::sync::atomic::Ordering::Relaxed);
 
         MemoryStats {
             file_count,
-            dirty_count: self.metadata.iter().filter(|entry| entry.is_dirty).count(),
-            deleted_count: self.deleted.len(),
+            dirty_count: metadata.values().filter(|entry| entry.is_dirty).count(),
+            deleted_count: deleted.len(),
             memory_bytes,
             memory_mb: memory_bytes as f64 / (1024.0 * 1024.0),
             avg_file_size: memory_bytes.checked_div(file_count).unwrap_or(0),
@@ -312,7 +357,7 @@ mod tests {
 
     #[test]
     fn test_concurrent_writes_different_files() {
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = crate::test_support::tempdir().unwrap();
         std::fs::write(tmp.path().join("file1.txt"), "initial1").unwrap();
         std::fs::write(tmp.path().join("file2.txt"), "initial2").unwrap();
 
@@ -342,7 +387,7 @@ mod tests {
 
     #[test]
     fn test_concurrent_edits_different_files() {
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = crate::test_support::tempdir().unwrap();
         std::fs::write(tmp.path().join("file1.txt"), "content1").unwrap();
         std::fs::write(tmp.path().join("file2.txt"), "content2").unwrap();
 
@@ -372,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_grep_matches_all_files() {
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = crate::test_support::tempdir().unwrap();
         for i in 0..100 {
             let content = format!("fn test_{}() {{ let x = {}; }}\n", i, i);
             std::fs::write(tmp.path().join(format!("file_{}.rs", i)), content).unwrap();
@@ -385,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_binary_file_handling() {
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = crate::test_support::tempdir().unwrap();
         std::fs::write(tmp.path().join("text.txt"), "hello world").unwrap();
         std::fs::write(tmp.path().join("binary.dat"), std::vec![0u8, 255, 128]).unwrap();
 

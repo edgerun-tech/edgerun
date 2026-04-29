@@ -50,6 +50,7 @@ pub trait AsyncWrite {
 
 pub trait AsyncBufRead: AsyncRead {
     fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<&[u8]>>;
+    fn consume(&mut self, _amt: usize) {}
 }
 
 pub trait AsyncReadExt: AsyncRead + Unpin {
@@ -267,6 +268,10 @@ impl AsyncBufRead for Cursor<alloc::vec::Vec<u8>> {
         let remaining = &this.data[this.pos..];
         Poll::Ready(Ok(remaining))
     }
+
+    fn consume(&mut self, amt: usize) {
+        self.pos = (self.pos + amt).min(self.data.len());
+    }
 }
 
 pub struct ReadFut<'a, R: Unpin> {
@@ -441,12 +446,16 @@ impl<R: AsyncRead + Unpin> BufReader<R> {
         &self.buf[..self.pos]
     }
 
-    pub fn consume(&mut self, amt: usize) {
+    fn consume_inner(&mut self, amt: usize) {
         let amt = amt.min(self.pos);
         self.pos -= amt;
         if self.pos > 0 {
             self.buf.copy_within(amt..amt + self.pos, 0);
         }
+    }
+
+    pub fn consume(&mut self, amt: usize) {
+        self.consume_inner(amt);
     }
 
     pub fn read_line(&mut self) -> BufReadLineFut<'_, R> {
@@ -477,6 +486,16 @@ impl<R: AsyncRead + Unpin> BufReader<R> {
     }
 }
 
+impl<R: AsyncRead + Unpin> AsyncBufRead for BufReader<R> {
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<&[u8]>> {
+        self.get_mut().fill_buf_poll(cx)
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.consume_inner(amt)
+    }
+}
+
 impl<R: AsyncRead + Unpin> AsyncRead for BufReader<R> {
     fn poll_read(
         self: Pin<&mut Self>,
@@ -487,7 +506,7 @@ impl<R: AsyncRead + Unpin> AsyncRead for BufReader<R> {
         if this.pos > 0 {
             let n = out.len().min(this.pos);
             out[..n].copy_from_slice(&this.buf[..n]);
-            this.consume(n);
+            this.consume_inner(n);
             return Poll::Ready(Ok(n));
         }
         Pin::new(&mut this.inner).poll_read(cx, out)
@@ -692,12 +711,25 @@ impl<B: AsyncBufRead + Unpin> Future for Lines<B> {
             match Pin::new(&mut this.buf).poll_fill_buf(cx) {
                 Poll::Ready(Ok(s)) => {
                     if let Some(i) = s.iter().position(|&b| b == b'\n') {
-                        return Poll::Ready(Ok(Some(
-                            alloc::string::String::from_utf8_lossy(&s[..i]).into(),
-                        )));
+                        let line_end = if i > 0 && s[i - 1] == b'\r' { i - 1 } else { i };
+                        let chunk = s[..line_end].to_vec();
+                        this.buf.consume(i + 1);
+                        this.line.extend_from_slice(&chunk);
+                        let line = alloc::string::String::from_utf8_lossy(&this.line).into();
+                        this.line.clear();
+                        return Poll::Ready(Ok(Some(line)));
+                    } else if s.is_empty() {
+                        if this.line.is_empty() {
+                            return Poll::Ready(Ok(None));
+                        }
+                        let line = alloc::string::String::from_utf8_lossy(&this.line).into();
+                        this.line.clear();
+                        return Poll::Ready(Ok(Some(line)));
                     } else {
-                        this.line.extend_from_slice(s);
-                        this.line.push(b'\n');
+                        let len = s.len();
+                        let chunk = s.to_vec();
+                        this.buf.consume(len);
+                        this.line.extend_from_slice(&chunk);
                     }
                 }
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),

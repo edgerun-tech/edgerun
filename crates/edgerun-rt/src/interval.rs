@@ -5,13 +5,14 @@ extern crate edgerun_platform;
 use crate::Instant;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, Waker};
 use core::time::Duration;
 
 pub struct Interval {
     duration: u64,
     next: u64,
     missed_tick_behavior: MissedTickBehavior,
+    waker: Option<Waker>,
 }
 
 impl Interval {
@@ -22,6 +23,7 @@ impl Interval {
             duration: duration_us,
             next,
             missed_tick_behavior: MissedTickBehavior::Burst,
+            waker: None,
         }
     }
 
@@ -83,11 +85,24 @@ impl Future for Interval {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if self.poll_next() {
-            cx.waker().wake_by_ref();
+            self.waker = None;
             Poll::Ready(())
         } else {
+            if self
+                .waker
+                .as_ref()
+                .map_or(true, |registered| !registered.will_wake(cx.waker()))
+            {
+                self.waker = Some(cx.waker().clone());
+            }
             Poll::Pending
         }
+    }
+}
+
+impl Drop for Interval {
+    fn drop(&mut self) {
+        self.waker = None;
     }
 }
 
@@ -101,5 +116,6 @@ pub fn interval_at(start: Instant, period: Duration) -> Interval {
         duration,
         next: start.deadline_tsc(),
         missed_tick_behavior: MissedTickBehavior::Burst,
+        waker: None,
     }
 }

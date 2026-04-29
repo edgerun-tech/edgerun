@@ -103,7 +103,6 @@ mod tests {
     use alloc::vec::Vec;
 
     use super::*;
-    use assert_matches::assert_matches;
     use edgerun_encoding::buf::Cursor;
 
     #[test]
@@ -164,6 +163,6 @@ mod tests {
     fn decode_too_short() {
         let buf = vec![0b0100_0011, b'b', b'a'];
         let mut read = Cursor::new(&buf);
-        assert_matches!(decode(6, &mut read), Err(Error::UnexpectedEnd));
+        assert_eq!(decode(6, &mut read), Err(Error::UnexpectedEnd));
     }
 }

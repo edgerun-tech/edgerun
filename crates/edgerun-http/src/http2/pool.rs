@@ -30,7 +30,7 @@ struct PoolKey {
 
 /// An HTTP/2 connection, wrapped for shared access.
 struct Http2Conn {
-    client: Option<AsyncClient>,
+    client: Arc<AsyncClient>,
     last_used: Instant,
 }
 
@@ -131,7 +131,7 @@ impl Http2Pool {
             self.connections.insert(
                 key.clone(),
                 Http2Conn {
-                    client: Some(client),
+                    client: Arc::new(client),
                     last_used: Instant::now(),
                 },
             );
@@ -146,11 +146,8 @@ impl Http2Pool {
         conn.last_used = Instant::now();
 
         let body = request.body().map(|b| b.to_vec());
-        let client = conn
+        let pending = conn
             .client
-            .as_mut()
-            .ok_or_else(|| Error::ProtocolError("connection has no client".into()))?;
-        let pending = client
             .request(&h2_headers, body)
             .await
             .map_err(|e| Error::ProtocolError(format!("HTTP/2 request failed: {e:?}")))?;
@@ -204,7 +201,7 @@ impl Http2Pool {
             p2.connections.insert(
                 key.clone(),
                 Http2Conn {
-                    client: Some(client),
+                    client: Arc::new(client),
                     last_used: Instant::now(),
                 },
             );
@@ -212,44 +209,24 @@ impl Http2Pool {
 
         let h2_headers = Self::build_h2_headers(request, &path_and_query, &host, true);
 
-        // Extract client, make request, put it back
-        let (body, mut client) = {
+        let (body, client) = {
             let mut p = pool.lock();
             let conn = p
                 .connections
                 .get_mut(&key)
                 .ok_or_else(|| Error::ProtocolError("connection not found".into()))?;
             conn.last_used = Instant::now();
-            (
-                request.body().map(|b| b.to_vec()),
-                conn.client
-                    .take()
-                    .ok_or_else(|| Error::ProtocolError("connection has no client".into()))?,
-            )
+            (request.body().map(|b| b.to_vec()), Arc::clone(&conn.client))
         };
 
-        let result = client
+        let pending = client
             .request(&h2_headers, body)
             .await
-            .map_err(|e| Error::ProtocolError(format!("HTTP/2 request failed: {e:?}")));
-
-        let response = match result {
-            Ok(pending) => pending
-                .into_full_response()
-                .await
-                .map_err(|e| Error::ProtocolError(format!("HTTP/2 response failed: {e:?}"))),
-            Err(e) => Err(e),
-        };
-
-        // Put client back
-        {
-            let mut p = pool.lock();
-            if let Some(conn) = p.connections.get_mut(&key) {
-                conn.client = Some(client);
-            }
-        }
-
-        response
+            .map_err(|e| Error::ProtocolError(format!("HTTP/2 request failed: {e:?}")))?;
+        pending
+            .into_full_response()
+            .await
+            .map_err(|e| Error::ProtocolError(format!("HTTP/2 response failed: {e:?}")))
     }
 
     fn build_h2_headers(
@@ -267,10 +244,15 @@ impl Http2Pool {
         headers.push((b":authority".to_vec(), host.as_bytes().to_vec()));
         headers.push((b":path".to_vec(), path.as_bytes().to_vec()));
         for (name, value) in request.headers().iter() {
+            if is_http2_forbidden_request_header(name.as_str(), value.as_str()) {
+                continue;
+            }
             // HTTP/2 requires lowercase header field names (RFC 9113 §8.2.1)
-            let name_lower = name.as_str().to_lowercase();
             headers.push((
-                name_lower.as_bytes().to_vec(),
+                name.as_str()
+                    .bytes()
+                    .map(|b| b.to_ascii_lowercase())
+                    .collect(),
                 value.as_str().as_bytes().to_vec(),
             ));
         }
@@ -303,6 +285,11 @@ impl Http2Pool {
         let tls = AsyncTlsStream::client(stream, host, &[b"h2"], Some(session_cache))
             .await
             .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {e}")))?;
+        if tls.alpn_protocol() != Some(b"h2".as_slice()) {
+            return Err(Error::ProtocolError(
+                "server did not negotiate HTTP/2 via ALPN".into(),
+            ));
+        }
 
         let client = AsyncClient::new(tls)
             .await
@@ -326,28 +313,23 @@ impl Http2Pool {
             dns_timeout,
             crate::runtime::spawn_blocking(move || {
                 use crate::runtime::net::ToSocketAddrs;
-                format!("{}:443", host_str).to_socket_addrs()
+                format!("{}:{}", host_str, port).to_socket_addrs()
             }),
         )
         .await
         {
-            let mut ipv4_fallback = None;
-            if let Ok(mut addrs) = addrs {
-                for addr in addrs.by_ref() {
-                    match addr.ip() {
-                        IpAddr::V6(_) => {
-                            return Self::connect_sock_static(connect_timeout, &addr).await
-                        }
-                        IpAddr::V4(_) => {
-                            if ipv4_fallback.is_none() {
-                                ipv4_fallback = Some(addr);
-                            }
-                        }
+            if let Ok(addrs) = addrs {
+                let addr_list: Vec<SocketAddr> = addrs.into_iter().collect();
+                for addr in addr_list.iter() {
+                    if let IpAddr::V4(_) = addr.ip() {
+                        return Self::connect_sock_static(connect_timeout, addr).await;
                     }
                 }
-            }
-            if let Some(addr) = ipv4_fallback {
-                return Self::connect_sock_static(connect_timeout, &addr).await;
+                for addr in addr_list.iter() {
+                    if let IpAddr::V6(_) = addr.ip() {
+                        return Self::connect_sock_static(connect_timeout, addr).await;
+                    }
+                }
             }
         }
 
@@ -389,7 +371,7 @@ impl Http2Pool {
         let fut = ConnectFuture::new(addr.to_string());
         match rt_timeout(connect_timeout, fut).await {
             Ok(Ok(stream)) => Ok(stream),
-            Ok(Err(e)) => Err(Error::Network(e.into())),
+            Ok(Err(e)) => Err(Error::Network(crate::runtime::io::Error::other(e))),
             Err(_) => Err(Error::Timeout),
         }
     }
@@ -409,8 +391,51 @@ impl Http2Pool {
     }
 }
 
+fn is_http2_forbidden_request_header(name: &str, value: &str) -> bool {
+    match name.to_ascii_lowercase().as_str() {
+        "connection" | "host" | "keep-alive" | "proxy-connection" | "transfer-encoding"
+        | "upgrade" => true,
+        "te" => !value.eq_ignore_ascii_case("trailers"),
+        _ => false,
+    }
+}
+
 impl Default for Http2Pool {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Method, Request};
+
+    #[test]
+    fn h2_header_bridge_drops_http1_connection_headers() {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("https://example.com/path?q=1")
+            .header("Connection", "close")
+            .header("Host", "example.com")
+            .header("Upgrade", "websocket")
+            .header("Accept", "*/*")
+            .build()
+            .unwrap();
+
+        let headers = Http2Pool::build_h2_headers(&request, "/path?q=1", "example.com", true);
+        let names = headers
+            .iter()
+            .map(|(name, _)| String::from_utf8_lossy(name).into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(names.contains(&":method".to_string()));
+        assert!(names.contains(&":scheme".to_string()));
+        assert!(names.contains(&":authority".to_string()));
+        assert!(names.contains(&":path".to_string()));
+        assert!(names.contains(&"accept".to_string()));
+        assert!(!names.contains(&"connection".to_string()));
+        assert!(!names.contains(&"host".to_string()));
+        assert!(!names.contains(&"upgrade".to_string()));
     }
 }

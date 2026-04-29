@@ -2,9 +2,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
 use edgerun_rt::RwLock;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ProviderMetrics {
     pub node_id: [u8; 32],
     pub timestamp: u64,
@@ -18,6 +17,23 @@ pub struct ProviderMetrics {
     pub network_bytes_received: u64,
     pub container_count: u32,
     pub active_deployments: u32,
+}
+
+edgerun_json::impl_json_struct! {
+    ProviderMetrics {
+        node_id: [u8; 32],
+        timestamp: u64,
+        cpu_cores_used: u32,
+        cpu_cores_available: u32,
+        memory_bytes_used: u64,
+        memory_bytes_available: u64,
+        storage_bytes_used: u64,
+        storage_bytes_available: u64,
+        network_bytes_sent: u64,
+        network_bytes_received: u64,
+        container_count: u32,
+        active_deployments: u32,
+    }
 }
 
 impl ProviderMetrics {

@@ -41,6 +41,12 @@ pub fn is_tchar(b: u8) -> bool {
     }
 }
 
+pub(crate) fn header_value_has_token(value: &str, token: &str) -> bool {
+    value
+        .split(',')
+        .any(|part| part.trim().eq_ignore_ascii_case(token))
+}
+
 impl fmt::Display for HeaderName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)

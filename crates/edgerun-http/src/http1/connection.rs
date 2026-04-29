@@ -6,7 +6,7 @@
 //! - `Connection: upgrade` signals protocol upgrade (e.g., WebSocket)
 
 use crate::http1::version::{ConnectionDefault, HttpVersion};
-use crate::HeaderMap;
+use crate::{header::header_value_has_token, HeaderMap};
 
 /// Connection header state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,10 +49,9 @@ pub fn determine_connection(headers: &HeaderMap, version: HttpVersion) -> Connec
 
 /// Parse a Connection header value into a ConnectionState
 fn parse_connection_value(value: &str) -> ConnectionState {
-    let lower = value.to_lowercase();
-    if lower.contains("upgrade") {
+    if header_value_has_token(value, "upgrade") {
         ConnectionState::Upgrade
-    } else if lower.contains("close") {
+    } else if header_value_has_token(value, "close") {
         ConnectionState::Close
     } else {
         // "keep-alive" or any other value → treat as keep-alive
@@ -117,5 +116,16 @@ mod tests {
         assert!(ConnectionState::Upgrade.is_upgrade());
         assert!(!ConnectionState::KeepAlive.is_upgrade());
         assert!(!ConnectionState::Close.is_upgrade());
+    }
+
+    #[test]
+    fn test_connection_tokens_are_exact() {
+        let mut headers = HeaderMap::new();
+        headers.insert("connection", "xclose").unwrap();
+
+        assert_eq!(
+            determine_connection(&headers, HttpVersion::Http11),
+            ConnectionState::KeepAlive
+        );
     }
 }

@@ -123,7 +123,7 @@ impl PendingRequest {
 /// HPACK encoding/decoding, flow control, and stream multiplexing.
 ///
 /// # Example
-/// ```ignore
+/// ```text
 /// let client = AsyncClient::new(tls_stream).await?;
 /// let mut headers = HeaderMap::new();
 /// headers.insert(":method", "GET")?;
@@ -204,7 +204,7 @@ impl AsyncClient {
     /// If `body` is `Some`, the body is sent as DATA frame(s) after HEADERS.
     /// For streaming uploads, use [`Self::request_stream`] instead.
     pub async fn request(
-        &mut self,
+        &self,
         headers: &[(Vec<u8>, Vec<u8>)],
         body: Option<Vec<u8>>,
     ) -> Result<PendingRequest> {
@@ -266,7 +266,7 @@ impl AsyncClient {
     /// chunk is sent, the caller should drop the sender to signal end-of-stream.
     ///
     /// # Example
-    /// ```ignore
+    /// ```text
     /// let (body_tx, body_rx) = mpsc::channel(8);
     /// let pending = client.request_stream(&headers, body_rx).await?;
     /// // Send body chunks concurrently:
@@ -276,7 +276,7 @@ impl AsyncClient {
     /// let resp = pending.into_full_response().await?;
     /// ```
     pub async fn request_stream(
-        &mut self,
+        &self,
         headers: &[(Vec<u8>, Vec<u8>)],
         body_rx: mpsc::Receiver<Vec<u8>>,
     ) -> Result<PendingRequest> {

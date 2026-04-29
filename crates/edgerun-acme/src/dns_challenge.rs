@@ -12,8 +12,6 @@ use crate::account::AccountKey;
 #[derive(Clone)]
 pub struct DnsChallenge {
     domain: String,
-    token: String,
-    thumbprint: String,
     txt_record_name: String,
     txt_record_value: String,
 }
@@ -32,8 +30,6 @@ impl DnsChallenge {
 
         Self {
             domain: domain.to_string(),
-            token: token.to_string(),
-            thumbprint,
             txt_record_name,
             txt_record_value: txt_value,
         }

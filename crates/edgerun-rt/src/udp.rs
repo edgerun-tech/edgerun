@@ -2,6 +2,13 @@
 
 extern crate alloc;
 
+use core::sync::atomic::{AtomicU16, Ordering};
+
+#[cfg(target_os = "none")]
+use crate::bare_async_net::{bare_udp_recv_from, bare_udp_send_to};
+
+static NEXT_UDP_PORT: AtomicU16 = AtomicU16::new(49152);
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SocketAddr(pub u32, pub u16);
 
@@ -64,7 +71,12 @@ impl UdpSocket {
     }
 
     pub fn bind(&mut self, addr: SocketAddr) -> Result<(), UdpError> {
-        self.local = addr;
+        let port = if addr.port() == 0 {
+            allocate_udp_port()
+        } else {
+            addr.port()
+        };
+        self.local = SocketAddr::new(addr.as_u32(), port);
         self.bound = true;
         Ok(())
     }
@@ -75,13 +87,42 @@ impl UdpSocket {
     }
 
     pub fn send_to(&self, buf: &[u8], addr: SocketAddr) -> Result<usize, UdpError> {
-        let _ = (buf, addr);
-        Ok(buf.len())
+        #[cfg(target_os = "none")]
+        {
+            let local = self
+                .local_addr()
+                .unwrap_or_else(|| SocketAddr::new(0, allocate_udp_port()));
+            return bare_udp_send_to(
+                local.ip_bytes(),
+                local.port(),
+                addr.ip_bytes(),
+                addr.port(),
+                buf,
+            )
+            .map_err(|_| UdpError);
+        }
+
+        #[cfg(not(target_os = "none"))]
+        {
+            let _ = (buf, addr);
+            Ok(buf.len())
+        }
     }
 
     pub fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr), UdpError> {
-        let _ = buf;
-        Err(UdpError)
+        #[cfg(target_os = "none")]
+        {
+            let local = self.local_addr().ok_or(UdpError)?;
+            let (len, src_ip, src_port) =
+                bare_udp_recv_from(local.ip_bytes(), local.port(), buf).map_err(|_| UdpError)?;
+            return Ok((len, SocketAddr::from_array(src_ip, src_port)));
+        }
+
+        #[cfg(not(target_os = "none"))]
+        {
+            let _ = buf;
+            Err(UdpError)
+        }
     }
 
     pub fn local_addr(&self) -> Option<SocketAddr> {
@@ -101,6 +142,16 @@ impl UdpSocket {
     }
 
     pub fn set_nonblocking(&self, _nonblocking: bool) {}
+}
+
+fn allocate_udp_port() -> u16 {
+    let port = NEXT_UDP_PORT.fetch_add(1, Ordering::AcqRel);
+    if port < 49152 {
+        NEXT_UDP_PORT.store(49153, Ordering::Release);
+        49152
+    } else {
+        port
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]

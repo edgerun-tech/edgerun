@@ -135,11 +135,26 @@ fn stream_action_completed_requires_result_object() {
 #[test]
 fn object_descriptor_and_header_must_match_object_id() {
     let semantic = match mapping([
-        ("descriptor", mapping([("object_id", ystr("obj-a"))])),
+        (
+            "descriptor",
+            mapping([
+                ("descriptor_version", yi64(1)),
+                ("object_id", ystr("obj-a")),
+                ("object_kind", ystr("OBJECT_KIND_PAYLOAD")),
+                ("object_schema_version", yi64(1)),
+                ("canonicalization_id", ystr("raw-bytes-v0")),
+                ("canonical_digest", ystr("digest-a")),
+                ("canonical_size", yi64(5)),
+            ]),
+        ),
         (
             "header",
             mapping([
+                ("header_version", yi64(1)),
+                ("representation_id", ystr("rep-1")),
+                ("representation_digest", ystr("digest-rep-1")),
                 ("stored_size", yi64(5)),
+                ("chunking_mode", ystr("CHUNKING_MODE_NONE")),
                 ("object", mapping([("object_id", ystr("obj-b"))])),
             ]),
         ),
@@ -189,6 +204,8 @@ fn query_proof_bundle_allowed_is_advisory_accept() {
     let semantic = match mapping([(
         "proof_bundle",
         mapping([
+            ("bundle_version", yi64(1)),
+            ("source_query_id", ystr("q-current")),
             ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
             ("payload_object", mapping([("object_id", ystr("obj-1"))])),
         ]),
@@ -196,10 +213,13 @@ fn query_proof_bundle_allowed_is_advisory_accept() {
         Value::Map(m) => m,
         _ => unreachable!(),
     };
-    let state = match mapping([(
-        "allowed_proof_payload_types",
-        seq([ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")]),
-    )]) {
+    let state = match mapping([
+        ("current_query_id", ystr("q-current")),
+        (
+            "allowed_proof_payload_types",
+            seq([ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")]),
+        ),
+    ]) {
         Value::Map(m) => m,
         _ => unreachable!(),
     };
@@ -237,11 +257,24 @@ fn network_session_accept_nonce_mismatch_rejected() {
 #[test]
 fn object_descriptor_header_manifest_consistent_accepts() {
     let semantic = match mapping([
-        ("descriptor", mapping([("object_id", ystr("obj-a"))])),
+        (
+            "descriptor",
+            mapping([
+                ("descriptor_version", yi64(1)),
+                ("object_id", ystr("obj-a")),
+                ("object_kind", ystr("OBJECT_KIND_PAYLOAD")),
+                ("object_schema_version", yi64(1)),
+                ("canonicalization_id", ystr("raw-bytes-v0")),
+                ("canonical_digest", ystr("digest-a")),
+                ("canonical_size", yi64(5)),
+            ]),
+        ),
         (
             "header",
             mapping([
+                ("header_version", yi64(1)),
                 ("representation_id", ystr("rep-1")),
+                ("representation_digest", ystr("digest-rep-1")),
                 ("stored_size", yi64(5)),
                 ("chunking_mode", ystr("CHUNKING_MODE_MANIFEST")),
                 ("object", mapping([("object_id", ystr("obj-a"))])),
@@ -250,6 +283,7 @@ fn object_descriptor_header_manifest_consistent_accepts() {
         (
             "chunk_manifest",
             mapping([
+                ("manifest_version", yi64(1)),
                 ("chunk_count", yi64(1)),
                 ("total_stored_size", yi64(5)),
                 ("object", mapping([("object_id", ystr("obj-a"))])),
@@ -261,6 +295,8 @@ fn object_descriptor_header_manifest_consistent_accepts() {
                     "entries",
                     seq([mapping([
                         ("representation_id", ystr("rep-1")),
+                        ("chunk_digest", ystr("digest-chunk-1")),
+                        ("offset", yi64(0)),
                         ("length", yi64(5)),
                     ])]),
                 ),
@@ -306,6 +342,7 @@ fn query_result_fragment_with_backing_is_advisory_accept() {
         mapping([
             ("query_id", ystr("q1")),
             ("responder", ystr("node-a")),
+            ("completeness", ystr("RESULT_COMPLETENESS_PARTIAL")),
             (
                 "object_refs",
                 seq([mapping([("object_id", ystr("obj-1"))])]),
@@ -329,11 +366,83 @@ fn query_result_fragment_with_backing_is_advisory_accept() {
 }
 
 #[test]
+fn query_request_missing_query_id_is_rejected() {
+    let semantic = match mapping([(
+        "query",
+        mapping([
+            ("requester", ystr("node-a")),
+            ("query_class", ystr("QUERY_CLASS_HEAD")),
+            ("target_scope", ystr("node:node-a")),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_controller_set", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_request_missing_target_scope_is_rejected() {
+    let semantic = match mapping([(
+        "query",
+        mapping([
+            ("requester", ystr("node-a")),
+            ("query_id", ystr("query-1")),
+            ("query_class", ystr("QUERY_CLASS_HEAD")),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_controller_set", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_request_zero_result_limit_is_rejected() {
+    let semantic = match mapping([(
+        "query",
+        mapping([
+            ("requester", ystr("node-a")),
+            ("query_id", ystr("query-1")),
+            ("query_class", ystr("QUERY_CLASS_HEAD")),
+            ("target_scope", ystr("node:node-a")),
+            ("result_limit", yi64(0)),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_controller_set", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
 fn network_reachability_hint_valid_accepts() {
     let semantic = match mapping([(
         "reachability_hint",
         mapping([
+            ("hint_version", Value::Int(1)),
+            ("subject_node", ystr("node-a")),
+            ("transport_class", ystr("TRANSPORT_CLASS_QUIC")),
             ("locator_payload", ystr("quic://127.0.0.1:443")),
+            ("directness", ystr("DIRECTNESS_DIRECT")),
             ("valid_after", ystr("2030-01-01T00:00:00Z")),
             ("valid_until", ystr("2030-01-01T00:05:00Z")),
             ("issuer", mapping([("fixture", ystr("node-a"))])),
@@ -443,7 +552,9 @@ fn control_transfer_with_valid_proof_commits() {
         "command",
         mapping([
             ("command_type", ystr("TRANSFER_CONTROL")),
+            ("command_id", ystr("ctrl-transfer")),
             ("issuer", ystr("controller-a")),
+            ("target_node", ystr("node-a")),
             ("from", ystr("controller-a")),
             ("to", ystr("controller-b")),
         ]),
@@ -452,6 +563,7 @@ fn control_transfer_with_valid_proof_commits() {
         _ => unreachable!(),
     };
     let state = match mapping([
+        ("local_node", ystr("node-a")),
         ("current_controller_set", seq([ystr("controller-a")])),
         (
             "control_policy",
@@ -488,6 +600,7 @@ fn snapshot_matching_local_head_is_trusted_accept() {
                     ("event_hash_hex", ystr("hash-3")),
                 ])]),
             ),
+            ("payload_object", ystr("snapshot-payload")),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -520,10 +633,14 @@ fn command_non_controller_without_delegation_is_rejected() {
     let semantic = match mapping([(
         "command",
         mapping([
+            ("envelope_version", yi64(1)),
+            ("command_version", yi64(1)),
             ("issuer", ystr("delegate-x")),
             ("target_node", ystr("node-a")),
             ("command_type", ystr("QUERY")),
             ("command_id", ystr("cmd-1")),
+            ("issued_at", ystr("2030-01-01T00:00:00Z")),
+            ("signature", Value::Map(BTreeMap::new())),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -546,11 +663,15 @@ fn command_replay_same_hash_is_duplicate() {
     let semantic = match mapping([(
         "command",
         mapping([
+            ("envelope_version", yi64(1)),
+            ("command_version", yi64(1)),
             ("issuer", ystr("controller-a")),
             ("target_node", ystr("node-a")),
             ("command_type", ystr("QUERY")),
             ("command_id", ystr("cmd-1")),
             ("command_hash_hex", ystr("hash-1")),
+            ("issued_at", ystr("2030-01-01T00:00:00Z")),
+            ("signature", Value::Map(BTreeMap::new())),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -576,11 +697,15 @@ fn command_different_hash_same_id_is_accepted() {
     let semantic = match mapping([(
         "command",
         mapping([
+            ("envelope_version", yi64(1)),
+            ("command_version", yi64(1)),
             ("issuer", ystr("controller-a")),
             ("target_node", ystr("node-a")),
             ("command_type", ystr("QUERY")),
             ("command_id", ystr("cmd-1")),
             ("command_hash_hex", ystr("hash-2")),
+            ("issued_at", ystr("2030-01-01T00:00:00Z")),
+            ("signature", Value::Map(BTreeMap::new())),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -613,6 +738,7 @@ fn snapshot_stale_missing_delta_is_deferred() {
                     ("event_hash_hex", ystr("hash-2")),
                 ])]),
             ),
+            ("payload_object", ystr("snapshot-payload")),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -656,6 +782,7 @@ fn snapshot_stale_with_full_deltas_is_accepted_stale() {
                     ("event_hash_hex", ystr("hash-2")),
                 ])]),
             ),
+            ("payload_object", ystr("snapshot-payload")),
         ]),
     )]) {
         Value::Map(m) => m,
@@ -685,6 +812,112 @@ fn snapshot_stale_with_full_deltas_is_accepted_stale() {
         derived.get("acceptance_class").and_then(Value::as_str),
         Some("accepted_stale")
     );
+}
+
+#[test]
+fn snapshot_checkpoint_base_with_head_is_accepted() {
+    let semantic = match mapping([(
+        "snapshot",
+        mapping([
+            ("producer", ystr("node-a")),
+            (
+                "base_checkpoints",
+                seq([mapping([
+                    ("checkpoint_id", ystr("checkpoint-1")),
+                    (
+                        "heads",
+                        seq([mapping([
+                            ("stream_id", ystr("stream-1")),
+                            ("seq", yi64(3)),
+                            ("event_hash_hex", ystr("hash-3")),
+                        ])]),
+                    ),
+                ])]),
+            ),
+            ("payload_object", ystr("snapshot-payload")),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([
+        ("trusted_snapshot_producers", seq([ystr("node-a")])),
+        (
+            "stream_heads",
+            mapping([(
+                "stream-1",
+                mapping([("seq", yi64(3)), ("event_hash_hex", ystr("hash-3"))]),
+            )]),
+        ),
+    ]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_snapshot_case(&semantic, &state, &TestVerifier, &no_hash);
+    let derived = result.derived.as_map().expect("derived map");
+    assert_eq!(result.verdict, Verdict::Accept);
+    assert_eq!(
+        derived.get("acceptance_class").and_then(Value::as_str),
+        Some("accepted_trusted")
+    );
+}
+
+#[test]
+fn snapshot_checkpoint_id_without_heads_defers_resolution() {
+    let semantic = match mapping([(
+        "snapshot",
+        mapping([
+            ("producer", ystr("node-a")),
+            (
+                "base_checkpoints",
+                seq([mapping([("checkpoint_id", ystr("checkpoint-1"))])]),
+            ),
+            ("payload_object", ystr("snapshot-payload")),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("trusted_snapshot_producers", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_snapshot_case(&semantic, &state, &TestVerifier, &no_hash);
+    let derived = result.derived.as_map().expect("derived map");
+    assert_eq!(result.verdict, Verdict::Defer);
+    assert_eq!(result.reason_code, Some(ReasonCode::MissingDependency));
+    assert_eq!(
+        derived.get("acceptance_class").and_then(Value::as_str),
+        Some("deferred_missing_checkpoint")
+    );
+}
+
+#[test]
+fn snapshot_missing_payload_object_is_rejected() {
+    let semantic = match mapping([(
+        "snapshot",
+        mapping([
+            ("producer", ystr("node-a")),
+            (
+                "base_heads",
+                seq([mapping([
+                    ("stream_id", ystr("stream-1")),
+                    ("seq", yi64(3)),
+                    ("event_hash_hex", ystr("hash-3")),
+                ])]),
+            ),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("trusted_snapshot_producers", seq([ystr("node-a")]))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_snapshot_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
 }
 
 #[test]
@@ -743,6 +976,7 @@ fn query_proof_bundle_mismatched_query_id_rejected() {
     let semantic = match mapping([(
         "proof_bundle",
         mapping([
+            ("bundle_version", yi64(1)),
             ("source_query_id", ystr("q-other")),
             ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
             ("payload_object", mapping([("object_id", ystr("obj-1"))])),
@@ -771,6 +1005,7 @@ fn query_proof_bundle_missing_local_payload_is_deferred() {
     let semantic = match mapping([(
         "proof_bundle",
         mapping([
+            ("bundle_version", yi64(1)),
             ("source_query_id", ystr("q-current")),
             ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
             (
@@ -802,12 +1037,245 @@ fn query_proof_bundle_missing_local_payload_is_deferred() {
 }
 
 #[test]
+fn query_proof_bundle_missing_source_query_id_is_rejected() {
+    let semantic = match mapping([(
+        "proof_bundle",
+        mapping([
+            ("bundle_version", yi64(1)),
+            ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
+            ("payload_object", mapping([("object_id", ystr("obj-1"))])),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([(
+        "allowed_proof_payload_types",
+        seq([ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_proof_bundle_missing_payload_type_is_rejected() {
+    let semantic = match mapping([(
+        "proof_bundle",
+        mapping([
+            ("bundle_version", yi64(1)),
+            ("source_query_id", ystr("q-current")),
+            ("payload_object", mapping([("object_id", ystr("obj-1"))])),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_proof_bundle_unsupported_version_is_rejected() {
+    let semantic = match mapping([(
+        "proof_bundle",
+        mapping([
+            ("bundle_version", yi64(2)),
+            ("source_query_id", ystr("q-current")),
+            ("payload_type", ystr("PROOF_PAYLOAD_TYPE_STREAM_HEADS")),
+            ("payload_object", mapping([("object_id", ystr("obj-1"))])),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::VersionUnsupported));
+}
+
+#[test]
 fn query_snapshot_set_proof_empty_is_rejected() {
     let semantic = match mapping([(
         "snapshot_set_proof",
         mapping([
             ("source_query_id", ystr("q-current")),
             ("snapshots", seq([])),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_snapshot_set_proof_missing_source_query_id_is_rejected() {
+    let semantic = match mapping([(
+        "snapshot_set_proof",
+        mapping([(
+            "snapshots",
+            seq([mapping([("snapshot_id", ystr("snap-1"))])]),
+        )]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = BTreeMap::new();
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_aggregate_descriptor_missing_source_query_id_is_rejected() {
+    let semantic = match mapping([(
+        "aggregate_descriptor",
+        mapping([(
+            "input_fragments",
+            seq([mapping([("object_id", ystr("frag-1"))])]),
+        )]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = BTreeMap::new();
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_aggregate_descriptor_missing_payload_object_is_rejected() {
+    let semantic = match mapping([(
+        "aggregate_descriptor",
+        mapping([
+            ("aggregate_id", ystr("agg-1")),
+            ("source_query_id", ystr("q-current")),
+            ("aggregator", ystr("node-a")),
+            ("aggregated_at", ystr("2030-01-01T00:00:00Z")),
+            (
+                "input_fragments",
+                seq([mapping([("object_id", ystr("frag-1"))])]),
+            ),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_aggregate_descriptor_empty_input_fragment_is_rejected() {
+    let semantic = match mapping([(
+        "aggregate_descriptor",
+        mapping([
+            ("aggregate_id", ystr("agg-1")),
+            ("source_query_id", ystr("q-current")),
+            ("aggregator", ystr("node-a")),
+            ("aggregated_at", ystr("2030-01-01T00:00:00Z")),
+            ("input_fragments", seq([mapping([("object_id", ystr(""))])])),
+            (
+                "payload_object",
+                mapping([("object_id", ystr("payload-1"))]),
+            ),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_result_fragment_missing_query_id_is_rejected() {
+    let semantic = match mapping([(
+        "result_fragment",
+        mapping([(
+            "object_refs",
+            seq([mapping([("object_id", ystr("obj-1"))])]),
+        )]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = BTreeMap::new();
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_result_fragment_missing_completeness_is_rejected() {
+    let semantic = match mapping([(
+        "result_fragment",
+        mapping([
+            ("query_id", ystr("q-current")),
+            ("responder", ystr("node-a")),
+            (
+                "object_refs",
+                seq([mapping([("object_id", ystr("obj-1"))])]),
+            ),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([("current_query_id", ystr("q-current"))]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let result = validate_query_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::StructuralInvalid));
+}
+
+#[test]
+fn query_result_fragment_event_ref_missing_seq_is_rejected() {
+    let semantic = match mapping([(
+        "result_fragment",
+        mapping([
+            ("query_id", ystr("q-current")),
+            ("responder", ystr("node-a")),
+            ("completeness", ystr("RESULT_COMPLETENESS_PARTIAL")),
+            (
+                "event_refs",
+                seq([mapping([
+                    ("stream_id", ystr("stream-a")),
+                    ("event_hash_hex", ystr("hash-1")),
+                ])]),
+            ),
         ]),
     )]) {
         Value::Map(m) => m,

@@ -5,6 +5,7 @@
 
 use edgerun_core::crypto::sha256;
 use edgerun_core::protocol::ProtocolRecord;
+use edgerun_core::util::now_prost_timestamp;
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
 use edgerun_proto::edgerun::v0::{
@@ -12,7 +13,6 @@ use edgerun_proto::edgerun::v0::{
     network::{SessionAccept, SessionHello},
 };
 use prost::Message;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Supported protocol versions.
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -140,7 +140,10 @@ fn sign_session_accept(
 }
 
 /// Verify a SessionHello's signature and extract the peer's node ID.
-pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str> {
+pub fn verify_session_hello(
+    hello: &SessionHello,
+    expected_target: Option<&NodeID>,
+) -> Result<NodeID, &'static str> {
     let Some(ref initiator) = hello.initiator else {
         return Err("missing_initiator");
     };
@@ -148,7 +151,9 @@ pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str
         return Err("bad_identity_id_length");
     }
 
-    let validation = edgerun_core::validators_proto::validate_session_hello(hello, None);
+    let expected_target_bytes = expected_target.map(|target| target.0.as_slice());
+    let validation =
+        edgerun_core::validators_proto::validate_session_hello(hello, expected_target_bytes);
     if validation.verdict != edgerun_core::result::Verdict::Accept {
         return Err(match validation.reason_code {
             Some(edgerun_core::result::ReasonCode::CryptoInvalid) => "invalid_signature",
@@ -244,13 +249,7 @@ pub fn decode_accept(bytes: &[u8]) -> Result<SessionAccept, prost::DecodeError> 
 
 /// Get current timestamp as protobuf Timestamp.
 pub fn now_timestamp() -> prost_types::Timestamp {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or(std::time::Duration::ZERO);
-    prost_types::Timestamp {
-        seconds: now.as_secs() as i64,
-        nanos: now.subsec_nanos() as i32,
-    }
+    now_prost_timestamp()
 }
 
 #[cfg(test)]
@@ -338,7 +337,7 @@ mod tests {
         let nonce = generate_nonce();
         let hello = build_session_hello(&signer.node_id(), None, &nonce, &signer).unwrap();
 
-        let result = verify_session_hello(&hello);
+        let result = verify_session_hello(&hello, None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), signer.node_id());
     }

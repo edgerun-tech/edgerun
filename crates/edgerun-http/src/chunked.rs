@@ -27,6 +27,13 @@ pub fn parse_body(data: &[u8]) -> Result<Vec<u8>, ChunkedError> {
     parse_body_with_trailers(data).map(|(body, _)| body)
 }
 
+pub fn has_chunked_transfer_coding(headers: &HeaderMap) -> bool {
+    headers
+        .get_all("transfer-encoding")
+        .iter()
+        .any(|value| crate::header::header_value_has_token(value.as_str(), "chunked"))
+}
+
 pub fn parse_body_with_trailers(mut data: &[u8]) -> Result<(Vec<u8>, HeaderMap), ChunkedError> {
     let mut body = Vec::new();
 
@@ -89,4 +96,29 @@ fn parse_trailers(data: &[u8]) -> Result<HeaderMap, ChunkedError> {
     }
 
     Ok(trailers)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_chunked_transfer_coding_without_allocating_lowercase_copy() {
+        let mut headers = HeaderMap::new();
+        headers
+            .insert("Transfer-Encoding", "gzip, Chunked")
+            .expect("valid header");
+
+        assert!(has_chunked_transfer_coding(&headers));
+    }
+
+    #[test]
+    fn transfer_coding_match_is_token_based() {
+        let mut headers = HeaderMap::new();
+        headers
+            .insert("Transfer-Encoding", "xchunked")
+            .expect("valid header");
+
+        assert!(!has_chunked_transfer_coding(&headers));
+    }
 }

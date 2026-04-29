@@ -5,7 +5,7 @@
 use crate::Scheduler;
 use alloc::format;
 use alloc::string::String;
-use edgerun_json::from_slice;
+use edgerun_json::from_json_slice;
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
 use edgerun_mesh::FrameType;
 use edgerun_solana::signers::Ed25519Signer;
@@ -35,8 +35,8 @@ impl Scheduler {
     }
 
     fn handle_metrics_report(&mut self, src: [u8; 32], payload: &[u8]) -> Result<(), String> {
-        let report: MetricsReportPayload =
-            from_slice(payload).map_err(|e| format!("Failed to deserialize metrics: {}", e))?;
+        let report: MetricsReportPayload = from_json_slice(payload)
+            .map_err(|e| format!("Failed to deserialize metrics: {}", e))?;
 
         let metrics = self.metrics_receiver.receive_from_mesh(src, &report)?;
 
@@ -52,7 +52,7 @@ impl Scheduler {
     fn handle_migration_complete(&mut self, _src: [u8; 32], payload: &[u8]) -> Result<(), String> {
         use edgerun_mesh::mesh_payload::MigrationCompletePayload;
 
-        let result: MigrationCompletePayload = from_slice(payload)
+        let result: MigrationCompletePayload = from_json_slice(payload)
             .map_err(|e| format!("Failed to deserialize migration result: {}", e))?;
 
         let name = String::from_utf8_lossy(&result.deployment_name);

@@ -7,18 +7,16 @@ use edgerun_bluetooth::{
     BluetoothScanner, BluetoothTransportKind,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_encoding::byteorder::{read_i16_le, read_i64_le, read_u16_le, read_u32_le};
 use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
-};
+use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::{
-    decode_optional_string_field, decode_string_field, encode_optional_string_field,
-    encode_string_field, stream_oriented_error,
+    decode_byte_field, decode_count_u32, decode_optional_string_field, decode_string_field,
+    decode_string_vec, encode_byte_field, encode_count_u32, encode_optional_string_field,
+    encode_string_field, encode_string_vec, stream_oriented_error,
 };
-use crate::protocol::{
-    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
-};
+use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 // --- Enum converters ---
 
@@ -38,7 +36,7 @@ fn bluetooth_address_kind_from_u8(v: u8) -> Result<BluetoothAddressKind, Capabil
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth address kind is invalid",
-            ))
+            ));
         }
     })
 }
@@ -61,7 +59,7 @@ fn bluetooth_transport_kind_from_u8(v: u8) -> Result<BluetoothTransportKind, Cap
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth transport kind is invalid",
-            ))
+            ));
         }
     })
 }
@@ -102,7 +100,7 @@ fn bluetooth_profile_from_u8(v: u8) -> Result<BluetoothProfile, CapabilityError>
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth profile is invalid",
-            ))
+            ));
         }
     })
 }
@@ -125,35 +123,13 @@ fn bluetooth_link_kind_from_u8(v: u8) -> Result<BluetoothLinkKind, CapabilityErr
         _ => {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth link kind is invalid",
-            ))
+            ));
         }
     })
 }
 
-fn encode_string_vec(values: &[String], out: &mut Vec<u8>) {
-    out.extend_from_slice(&(values.len() as u32).to_le_bytes());
-    for value in values {
-        encode_string_field(value, out);
-    }
-}
-
-fn decode_string_vec(bytes: &[u8], cursor: &mut usize) -> Result<Vec<String>, CapabilityError> {
-    if bytes.len() < *cursor + 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote string vector length missing",
-        ));
-    }
-    let count = u32::from_le_bytes(bytes[*cursor..*cursor + 4].try_into().unwrap()) as usize;
-    *cursor += 4;
-    let mut values = Vec::with_capacity(count);
-    for _ in 0..count {
-        values.push(decode_string_field(bytes, cursor)?);
-    }
-    Ok(values)
-}
-
 fn encode_profiles_vec(values: &[BluetoothProfile], out: &mut Vec<u8>) {
-    out.extend_from_slice(&(values.len() as u32).to_le_bytes());
+    encode_count_u32(values.len(), out);
     for value in values {
         out.push(bluetooth_profile_to_u8(*value));
     }
@@ -163,13 +139,7 @@ fn decode_profiles_vec(
     bytes: &[u8],
     cursor: &mut usize,
 ) -> Result<Vec<BluetoothProfile>, CapabilityError> {
-    if bytes.len() < *cursor + 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote bluetooth profile count missing",
-        ));
-    }
-    let count = u32::from_le_bytes(bytes[*cursor..*cursor + 4].try_into().unwrap()) as usize;
-    *cursor += 4;
+    let count = decode_count_u32(bytes, cursor, "remote bluetooth profile count missing")?;
     if bytes.len() < *cursor + count {
         return Err(CapabilityError::InvalidRequest(
             "remote bluetooth profiles payload too short",
@@ -187,7 +157,7 @@ fn decode_profiles_vec(
 
 pub fn encode_bluetooth_scan_result(scan: &BluetoothScanResult) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(&(scan.observations.len() as u32).to_le_bytes());
+    encode_count_u32(scan.observations.len(), &mut out);
     for observation in &scan.observations {
         encode_string_field(&observation.device_id, &mut out);
         out.push(bluetooth_transport_kind_to_u8(observation.transport_kind));
@@ -204,22 +174,19 @@ pub fn encode_bluetooth_scan_result(scan: &BluetoothScanResult) -> Vec<u8> {
         if let Some(class) = observation.classic_device_class {
             out.extend_from_slice(&class.to_le_bytes());
         }
-        out.extend_from_slice(&(observation.advertisement_data.len() as u32).to_le_bytes());
-        out.extend_from_slice(&observation.advertisement_data);
+        encode_byte_field(&observation.advertisement_data, &mut out);
         out.extend_from_slice(&observation.captured_at_unix_ms.to_le_bytes());
     }
     out
 }
 
 pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult, CapabilityError> {
-    if bytes.len() < 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote bluetooth scan payload too short",
-        ));
-    }
     let mut cursor = 0usize;
-    let count = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
-    cursor += 4;
+    let count = decode_count_u32(
+        bytes,
+        &mut cursor,
+        "remote bluetooth scan payload too short",
+    )?;
     let mut observations = Vec::with_capacity(count);
     for _ in 0..count {
         let device_id = decode_string_field(bytes, &mut cursor)?;
@@ -232,7 +199,7 @@ pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult,
         cursor += 1;
         let address_kind = bluetooth_address_kind_from_u8(bytes[cursor])?;
         cursor += 1;
-        let rssi_dbm = i16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
+        let rssi_dbm = read_i16_le(bytes, cursor);
         cursor += 2;
         if bytes.len() < cursor + 1 {
             return Err(CapabilityError::InvalidRequest(
@@ -247,7 +214,7 @@ pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult,
                     "remote bluetooth tx power payload too short",
                 ));
             }
-            let v = i16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
+            let v = read_i16_le(bytes, cursor);
             cursor += 2;
             Some(v)
         } else {
@@ -269,27 +236,19 @@ pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult,
                     "remote bluetooth classic class payload too short",
                 ));
             }
-            let v = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+            let v = read_u32_le(bytes, cursor);
             cursor += 4;
             Some(v)
         } else {
             None
         };
-        if bytes.len() < cursor + 4 {
-            return Err(CapabilityError::InvalidRequest(
-                "remote bluetooth advertisement length missing",
-            ));
-        }
-        let adv_len = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
-        cursor += 4;
-        if bytes.len() < cursor + adv_len + 8 {
+        let advertisement_data = decode_byte_field(bytes, &mut cursor)?;
+        if bytes.len() < cursor + 8 {
             return Err(CapabilityError::InvalidRequest(
                 "remote bluetooth advertisement payload too short",
             ));
         }
-        let advertisement_data = bytes[cursor..cursor + adv_len].to_vec();
-        cursor += adv_len;
-        let captured_at_unix_ms = i64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
+        let captured_at_unix_ms = read_i64_le(bytes, cursor);
         cursor += 8;
         observations.push(BluetoothBeaconObservation {
             device_id,
@@ -315,7 +274,7 @@ pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult,
 
 pub fn encode_bluetooth_connections(connections: &[BluetoothConnectionInfo]) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(&(connections.len() as u32).to_le_bytes());
+    encode_count_u32(connections.len(), &mut out);
     for connection in connections {
         encode_string_field(&connection.device_id, &mut out);
         out.push(bluetooth_transport_kind_to_u8(connection.transport_kind));
@@ -343,14 +302,12 @@ pub fn encode_bluetooth_connections(connections: &[BluetoothConnectionInfo]) -> 
 pub fn decode_bluetooth_connections(
     bytes: &[u8],
 ) -> Result<Vec<BluetoothConnectionInfo>, CapabilityError> {
-    if bytes.len() < 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote bluetooth connections payload too short",
-        ));
-    }
     let mut cursor = 0usize;
-    let count = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
-    cursor += 4;
+    let count = decode_count_u32(
+        bytes,
+        &mut cursor,
+        "remote bluetooth connections payload too short",
+    )?;
     let mut out = Vec::with_capacity(count);
     for _ in 0..count {
         let device_id = decode_string_field(bytes, &mut cursor)?;
@@ -367,7 +324,7 @@ pub fn decode_bluetooth_connections(
         cursor += 1;
         let outbound = bytes[cursor] != 0;
         cursor += 1;
-        let state = u16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
+        let state = read_u16_le(bytes, cursor);
         cursor += 2;
         let local_name = decode_optional_string_field(bytes, &mut cursor)?;
         let service_uuids = decode_string_vec(bytes, &mut cursor)?;
@@ -384,7 +341,7 @@ pub fn decode_bluetooth_connections(
             _ => {
                 return Err(CapabilityError::InvalidRequest(
                     "remote bluetooth trusted flag is invalid",
-                ))
+                ));
             }
         };
         cursor += 1;
@@ -395,7 +352,7 @@ pub fn decode_bluetooth_connections(
             _ => {
                 return Err(CapabilityError::InvalidRequest(
                     "remote bluetooth paired flag is invalid",
-                ))
+                ));
             }
         };
         cursor += 1;
@@ -448,13 +405,6 @@ where
         self.descriptor.clone()
     }
 
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
-    }
-
     fn invoke(
         &mut self,
         _session_id: &[u8],
@@ -502,13 +452,6 @@ where
 {
     fn descriptor(&self) -> CapabilityDescriptor {
         self.descriptor.clone()
-    }
-
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
     }
 
     fn invoke(

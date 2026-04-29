@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Hardware-backed signing abstraction and provider dispatch for Edgerun"
 
 [features]
 default = []
@@ -18,7 +19,6 @@ all-hardware = ["tpm", "android-keystore", "yubikey"]
 [dependencies]
 edgerun-core = { path = "../edgerun-core" }
 edgerun-biometrics = { path = "../edgerun-biometrics" }
-edgerun-crypto = { workspace = true, default-features = false }
 edgerun-tpm = { path = "../edgerun-tpm", optional = true }
 edgerun-android-keystore = { path = "../edgerun-android-keystore", optional = true }
 edgerun-yubikey = { path = "../edgerun-yubikey", optional = true }

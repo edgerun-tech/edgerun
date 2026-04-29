@@ -4,18 +4,22 @@ use crate::Instant;
 use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, Waker};
 use core::time::Duration;
 
 pub struct Sleep {
     deadline: Instant,
+    waker: Option<Waker>,
 }
 
 impl Unpin for Sleep {}
 
 impl Sleep {
     pub fn new(deadline: Instant) -> Self {
-        Self { deadline }
+        Self {
+            deadline,
+            waker: None,
+        }
     }
 
     pub fn after(delay: Duration) -> Self {
@@ -35,12 +39,26 @@ impl Future for Sleep {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.is_ready() {
+        let this = self.get_mut();
+        if this.is_ready() {
+            this.waker = None;
             Poll::Ready(())
         } else {
-            cx.waker().wake_by_ref();
+            if this
+                .waker
+                .as_ref()
+                .map_or(true, |registered| !registered.will_wake(cx.waker()))
+            {
+                this.waker = Some(cx.waker().clone());
+            }
             Poll::Pending
         }
+    }
+}
+
+impl Drop for Sleep {
+    fn drop(&mut self) {
+        self.waker = None;
     }
 }
 

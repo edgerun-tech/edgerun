@@ -81,7 +81,7 @@ fn object_get_mut<'a>(entries: &'a mut Map, key: &str) -> Option<&'a mut JsonVal
 
 pub fn object_index_or_insert<'a>(value: &'a mut JsonValue, key: &str) -> &'a mut JsonValue {
     if matches!(value, JsonValue::Null) {
-        *value = JsonValue::Object(Map::new());
+        *value = JsonValue::empty_object();
     }
     match value {
         JsonValue::Object(entries) => entries.get_or_insert_null(key),

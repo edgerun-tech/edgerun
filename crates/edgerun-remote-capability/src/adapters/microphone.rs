@@ -2,18 +2,15 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_encoding::byteorder::{read_i64_le, read_u16_le, read_u32_le};
 use edgerun_microphone::{
     AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
 };
 use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    CapabilitySessionAccept, CapabilitySessionEvent, CapabilitySessionOpen,
-};
+use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
-use crate::adapters::common::stream_oriented_error;
-use crate::protocol::{
-    accept_session_open_unchecked, RemoteCapabilityProvider, RemoteInvocationResult,
-};
+use crate::adapters::common::{decode_byte_field, encode_byte_field, stream_oriented_error};
+use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 /// Binary-encode microphone capture for remote transport.
 pub fn encode_microphone_capture(capture: &AudioCapture) -> Vec<u8> {
@@ -29,8 +26,7 @@ pub fn encode_microphone_capture(capture: &AudioCapture) -> Vec<u8> {
     };
     out.extend_from_slice(&format.to_le_bytes());
     out.extend_from_slice(&capture.started_at_unix_ms.to_le_bytes());
-    out.extend_from_slice(&(capture.bytes.len() as u32).to_le_bytes());
-    out.extend_from_slice(&capture.bytes);
+    encode_byte_field(&capture.bytes, &mut out);
     out
 }
 
@@ -41,12 +37,13 @@ pub fn decode_microphone_capture(bytes: &[u8]) -> Result<AudioCapture, Capabilit
             "remote microphone payload too short",
         ));
     }
-    let sample_rate_hz = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-    let channels = u16::from_le_bytes(bytes[4..6].try_into().unwrap());
-    let raw_format = u32::from_le_bytes(bytes[6..10].try_into().unwrap());
-    let started_at_unix_ms = i64::from_le_bytes(bytes[10..18].try_into().unwrap());
-    let len = u32::from_le_bytes(bytes[18..22].try_into().unwrap()) as usize;
-    if bytes.len() != 22 + len {
+    let sample_rate_hz = read_u32_le(bytes, 0);
+    let channels = read_u16_le(bytes, 4);
+    let raw_format = read_u32_le(bytes, 6);
+    let started_at_unix_ms = read_i64_le(bytes, 10);
+    let mut cursor = 18;
+    let capture_bytes = decode_byte_field(bytes, &mut cursor)?;
+    if bytes.len() != cursor {
         return Err(CapabilityError::InvalidRequest(
             "remote microphone payload length does not match encoded byte count",
         ));
@@ -63,7 +60,7 @@ pub fn decode_microphone_capture(bytes: &[u8]) -> Result<AudioCapture, Capabilit
         sample_rate_hz,
         channels,
         format,
-        bytes: bytes[22..].to_vec(),
+        bytes: capture_bytes,
         started_at_unix_ms,
     })
 }
@@ -91,13 +88,6 @@ where
 {
     fn descriptor(&self) -> CapabilityDescriptor {
         self.device.descriptor()
-    }
-
-    fn open_session(
-        &mut self,
-        open: &CapabilitySessionOpen,
-    ) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Ok(accept_session_open_unchecked(open))
     }
 
     fn invoke(

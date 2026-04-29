@@ -16,6 +16,8 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::str;
 
+use crate::byteorder::read_u64_le;
+
 /// Error type for string field operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StringFieldError {
@@ -36,6 +38,8 @@ impl core::fmt::Display for StringFieldError {
         }
     }
 }
+
+impl core::error::Error for StringFieldError {}
 
 /// Encode a string field with a 1-byte length prefix.
 ///
@@ -254,7 +258,75 @@ pub fn decode_bytes(bytes: &[u8], cursor: &mut usize) -> Result<Vec<u8>, StringF
     Ok(result)
 }
 
+// ─── u64-LE prefixed variants (for durable local binary records) ─────────────
+
+/// Encode bytes with an 8-byte little-endian length prefix.
+pub fn encode_bytes_u64(value: &[u8], out: &mut Vec<u8>) -> Result<(), StringFieldError> {
+    if value.len() > u64::MAX as usize {
+        return Err(StringFieldError::LengthExceedsInput);
+    }
+    out.extend_from_slice(&(value.len() as u64).to_le_bytes());
+    out.extend_from_slice(value);
+    Ok(())
+}
+
+/// Decode bytes with an 8-byte little-endian length prefix.
+pub fn decode_bytes_u64(bytes: &[u8], cursor: &mut usize) -> Result<Vec<u8>, StringFieldError> {
+    if bytes.len().saturating_sub(*cursor) < 8 {
+        return Err(StringFieldError::TruncatedInput);
+    }
+    let len = read_u64_le(bytes, *cursor) as usize;
+    *cursor += 8;
+    if bytes.len().saturating_sub(*cursor) < len {
+        return Err(StringFieldError::TruncatedInput);
+    }
+    let result = bytes[*cursor..*cursor + len].to_vec();
+    *cursor += len;
+    Ok(result)
+}
+
+/// Encode a UTF-8 string with an 8-byte little-endian length prefix.
+pub fn encode_string_field_u64(value: &str, out: &mut Vec<u8>) -> Result<(), StringFieldError> {
+    encode_bytes_u64(value.as_bytes(), out)
+}
+
+/// Decode a UTF-8 string with an 8-byte little-endian length prefix.
+pub fn decode_string_field_u64(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<String, StringFieldError> {
+    let field = decode_bytes_u64(bytes, cursor)?;
+    str::from_utf8(&field)
+        .map_err(|_| StringFieldError::InvalidUtf8)
+        .map(ToString::to_string)
+}
+
 // ─── u32-LE prefixed variants (for edgerun-remote-capability wire format) ─────
+
+/// Encode bytes with a 4-byte little-endian length prefix.
+pub fn encode_bytes_u32(value: &[u8], out: &mut Vec<u8>) -> Result<(), StringFieldError> {
+    if value.len() > u32::MAX as usize {
+        return Err(StringFieldError::LengthExceedsInput);
+    }
+    out.extend_from_slice(&(value.len() as u32).to_le_bytes());
+    out.extend_from_slice(value);
+    Ok(())
+}
+
+/// Decode bytes with a 4-byte little-endian length prefix.
+pub fn decode_bytes_u32(bytes: &[u8], cursor: &mut usize) -> Result<Vec<u8>, StringFieldError> {
+    if bytes.len().saturating_sub(*cursor) < 4 {
+        return Err(StringFieldError::TruncatedInput);
+    }
+    let len = crate::byteorder::read_u32_le(bytes, *cursor) as usize;
+    *cursor += 4;
+    if bytes.len().saturating_sub(*cursor) < len {
+        return Err(StringFieldError::TruncatedInput);
+    }
+    let result = bytes[*cursor..*cursor + len].to_vec();
+    *cursor += len;
+    Ok(result)
+}
 
 /// Encode a string field with a 4-byte little-endian length prefix.
 ///
@@ -376,6 +448,40 @@ pub fn decode_optional_string_field_u32(
     } else {
         Ok(None)
     }
+}
+
+/// Encode a vector of strings with a u32-LE count and u32-LE length-prefixed strings.
+pub fn encode_string_vec_u32(values: &[String], out: &mut Vec<u8>) -> Result<(), StringFieldError> {
+    if values.len() > u32::MAX as usize {
+        return Err(StringFieldError::LengthExceedsInput);
+    }
+    out.extend_from_slice(&(values.len() as u32).to_le_bytes());
+    for value in values {
+        encode_string_field_u32(value, out)?;
+    }
+    Ok(())
+}
+
+/// Decode a vector of strings with a u32-LE count and u32-LE length-prefixed strings.
+pub fn decode_string_vec_u32(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<Vec<String>, StringFieldError> {
+    if *cursor + 4 > bytes.len() {
+        return Err(StringFieldError::TruncatedInput);
+    }
+    let count = u32::from_le_bytes(
+        bytes[*cursor..*cursor + 4]
+            .try_into()
+            .map_err(|_| StringFieldError::TruncatedInput)?,
+    ) as usize;
+    *cursor += 4;
+
+    let mut values = Vec::with_capacity(count);
+    for _ in 0..count {
+        values.push(decode_string_field_u32(bytes, cursor)?);
+    }
+    Ok(values)
 }
 
 #[cfg(test)]
@@ -509,6 +615,63 @@ mod tests {
     }
 
     #[test]
+    fn test_u64_prefixed_string_and_bytes_roundtrip() {
+        let mut out = Vec::new();
+        encode_string_field_u64("hello", &mut out).unwrap();
+        encode_bytes_u64(b"world", &mut out).unwrap();
+
+        let mut cursor = 0;
+        assert_eq!(decode_string_field_u64(&out, &mut cursor).unwrap(), "hello");
+        assert_eq!(decode_bytes_u64(&out, &mut cursor).unwrap(), b"world");
+        assert_eq!(cursor, out.len());
+    }
+
+    #[test]
+    fn test_u64_prefixed_string_rejects_truncated_input() {
+        let mut cursor = 0;
+        assert!(matches!(
+            decode_string_field_u64(&[5, 0, 0], &mut cursor),
+            Err(StringFieldError::TruncatedInput)
+        ));
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&5u64.to_le_bytes());
+        data.extend_from_slice(b"he");
+        let mut cursor = 0;
+        assert!(matches!(
+            decode_bytes_u64(&data, &mut cursor),
+            Err(StringFieldError::TruncatedInput)
+        ));
+    }
+
+    #[test]
+    fn test_u32_prefixed_bytes_roundtrip() {
+        let mut out = Vec::new();
+        encode_bytes_u32(b"payload", &mut out).unwrap();
+        let mut cursor = 0;
+        assert_eq!(decode_bytes_u32(&out, &mut cursor).unwrap(), b"payload");
+        assert_eq!(cursor, out.len());
+    }
+
+    #[test]
+    fn test_u32_prefixed_bytes_rejects_truncated_input() {
+        let mut cursor = 0;
+        assert!(matches!(
+            decode_bytes_u32(&[5, 0, 0], &mut cursor),
+            Err(StringFieldError::TruncatedInput)
+        ));
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&5u32.to_le_bytes());
+        data.extend_from_slice(b"he");
+        let mut cursor = 0;
+        assert!(matches!(
+            decode_bytes_u32(&data, &mut cursor),
+            Err(StringFieldError::TruncatedInput)
+        ));
+    }
+
+    #[test]
     fn test_bytes_roundtrip() {
         let test_cases: Vec<Vec<u8>> =
             vec![vec![], vec![0x00], vec![0xff, 0xfe, 0xfd], vec![0u8; 200]];
@@ -586,5 +749,26 @@ mod tests {
         let s = decode_optional_string_field_u32(&data, &mut cursor).unwrap();
         assert_eq!(s, None);
         assert_eq!(cursor, 1);
+    }
+
+    #[test]
+    fn test_string_vec_u32_roundtrip() {
+        let values = vec!["one".to_string(), "".to_string(), "世界".to_string()];
+        let mut out = Vec::new();
+        encode_string_vec_u32(&values, &mut out).unwrap();
+
+        let mut cursor = 0;
+        let decoded = decode_string_vec_u32(&out, &mut cursor).unwrap();
+        assert_eq!(decoded, values);
+        assert_eq!(cursor, out.len());
+    }
+
+    #[test]
+    fn test_decode_string_vec_u32_rejects_truncated_count() {
+        let mut cursor = 0;
+        assert_eq!(
+            decode_string_vec_u32(&[0x01, 0x00, 0x00], &mut cursor),
+            Err(StringFieldError::TruncatedInput)
+        );
     }
 }

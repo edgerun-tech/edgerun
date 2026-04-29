@@ -8,6 +8,7 @@ use core::default::Default;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
 use core::write;
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be, read_u64_be};
 #[cfg(target_os = "none")]
 use edgerun_encoding::io::{Read, Write};
 #[cfg(not(target_os = "none"))]
@@ -589,19 +590,19 @@ fn read_exact_vec<T: Read>(stream: &mut T, len: usize) -> Result<Vec<u8>, BlockE
 fn read_u16<T: Read>(stream: &mut T) -> Result<u16, BlockError> {
     let mut bytes = [0_u8; 2];
     stream.read_exact(&mut bytes).map_err(BlockError::from)?;
-    Ok(u16::from_be_bytes(bytes))
+    Ok(read_u16_be(&bytes, 0))
 }
 
 fn read_u32<T: Read>(stream: &mut T) -> Result<u32, BlockError> {
     let mut bytes = [0_u8; 4];
     stream.read_exact(&mut bytes).map_err(BlockError::from)?;
-    Ok(u32::from_be_bytes(bytes))
+    Ok(read_u32_be(&bytes, 0))
 }
 
 fn read_u64<T: Read>(stream: &mut T) -> Result<u64, BlockError> {
     let mut bytes = [0_u8; 8];
     stream.read_exact(&mut bytes).map_err(BlockError::from)?;
-    Ok(u64::from_be_bytes(bytes))
+    Ok(read_u64_be(&bytes, 0))
 }
 
 #[cfg(test)]

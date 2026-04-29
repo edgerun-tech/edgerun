@@ -9,16 +9,17 @@ use alloc::vec::Vec;
 use core::str::FromStr;
 
 use super::frame::{Http3Frame, Http3FrameType};
-use super::qpack::{QpackDecoder, QpackEncoder};
-use super::quic::QuicConnection as QuicConn;
+use super::quic::{QuicConnectOptions, QuicConnection as QuicConn};
 use super::settings::Http3Settings;
 use super::stream::{Http3Stream, Http3StreamType};
 use super::stream_types;
+use super::varint::{quic_decode_varint, quic_encode_varint};
 use crate::header::HeaderMap;
 use crate::http3::error_codes;
 use crate::method::Method;
 use crate::status::StatusCode;
 use crate::uri::Uri;
+use edgerun_qpack::{QpackDecoder, QpackEncoder};
 
 /// HTTP/3 connection
 pub struct Http3Connection {
@@ -48,6 +49,8 @@ pub struct Http3Connection {
     pending_crypto: Vec<u8>,
     /// Receive buffers for streams (leftover bytes after HTTP/3 frame parsing)
     recv_buffers: BTreeMap<u64, Vec<u8>>,
+    /// Streams where the peer has sent FIN.
+    recv_fin_streams: BTreeMap<u64, bool>,
     /// Tracks which streams have already received HEADERS frames
     /// Key = stream_id, Value = true if HEADERS received
     stream_headers_received: BTreeMap<u64, bool>,
@@ -110,7 +113,14 @@ impl Http3Connection {
     /// Resolves the server hostname, establishes a QUIC connection with
     /// TLS 1.3 handshake, and sends the HTTP/3 connection preface.
     pub async fn connect(server_name: &str) -> Result<Self> {
-        let quic = QuicConn::connect(server_name).await?;
+        Self::connect_with_options(server_name, QuicConnectOptions::default()).await
+    }
+
+    pub async fn connect_with_options(
+        server_name: &str,
+        options: QuicConnectOptions,
+    ) -> Result<Self> {
+        let quic = QuicConn::connect_with_options(server_name, options).await?;
 
         let mut conn = Http3Connection {
             quic,
@@ -126,6 +136,7 @@ impl Http3Connection {
             control_stream_id: None,
             pending_crypto: Vec::new(),
             recv_buffers: BTreeMap::new(),
+            recv_fin_streams: BTreeMap::new(),
             stream_headers_received: BTreeMap::new(),
             stream_priorities: BTreeMap::new(),
             active_path: None,
@@ -162,6 +173,7 @@ impl Http3Connection {
             control_stream_id: None,
             pending_crypto: Vec::new(),
             recv_buffers: BTreeMap::new(),
+            recv_fin_streams: BTreeMap::new(),
             stream_headers_received: BTreeMap::new(),
             stream_priorities: BTreeMap::new(),
             active_path: None,
@@ -199,6 +211,7 @@ impl Http3Connection {
             control_stream_id: None,
             pending_crypto: Vec::new(),
             recv_buffers: BTreeMap::new(),
+            recv_fin_streams: BTreeMap::new(),
             stream_headers_received: BTreeMap::new(),
             stream_priorities: BTreeMap::new(),
             active_path: None,
@@ -224,7 +237,7 @@ impl Http3Connection {
         self.next_uni_stream_id += 4;
 
         let mut stream_data = Vec::new();
-        Self::encode_varint(stream_types::CONTROL, &mut stream_data);
+        quic_encode_varint(stream_types::CONTROL, &mut stream_data);
 
         let settings_frame = Http3Frame::Settings {
             entries: self.local_settings.to_entries(),
@@ -240,7 +253,7 @@ impl Http3Connection {
         let encoder_stream_id = self.next_uni_stream_id;
         self.next_uni_stream_id += 4;
         let mut encoder_data = Vec::new();
-        Self::encode_varint(stream_types::QPACK_ENCODER, &mut encoder_data);
+        quic_encode_varint(stream_types::QPACK_ENCODER, &mut encoder_data);
         if self.qpack_encoder.insert_count() == 0 && self.local_settings.max_table_capacity > 0 {
             let cap = self.local_settings.max_table_capacity as usize;
             if cap <= 31 {
@@ -264,7 +277,7 @@ impl Http3Connection {
         let decoder_stream_id = self.next_uni_stream_id;
         self.next_uni_stream_id += 4;
         let mut decoder_data = Vec::new();
-        Self::encode_varint(stream_types::QPACK_DECODER, &mut decoder_data);
+        quic_encode_varint(stream_types::QPACK_DECODER, &mut decoder_data);
         decoder_data.push(0x20);
         self.quic
             .send_stream_data(decoder_stream_id, &decoder_data, false)
@@ -367,6 +380,10 @@ impl Http3Connection {
 
         // Then collect any additional DATA frames
         loop {
+            if self.recv_fin_streams.contains_key(&stream_id) {
+                break;
+            }
+
             match self.poll_stream(stream_id).await? {
                 Some(Http3Frame::Data { payload }) => {
                     body.extend_from_slice(&payload);
@@ -425,10 +442,8 @@ impl Http3Connection {
         // Read from QUIC connection
         match self.quic.recv_stream_data().await {
             Ok(Some((stream_id, data, fin))) => {
-                // Handle stream closure
                 if fin {
-                    self.on_stream_closed(stream_id);
-                    return Ok(None);
+                    self.recv_fin_streams.insert(stream_id, true);
                 }
 
                 if data.is_empty() {
@@ -461,7 +476,7 @@ impl Http3Connection {
                     }
                     Some(stream_types::QPACK_DECODER) => {
                         // QPACK decoder stream: feed to encoder
-                        if let Ok((push_id, _)) = Http3Frame::decode_varint(&data) {
+                        if let Ok((push_id, _)) = quic_decode_varint(&data) {
                             self.qpack_encoder.set_known_received_count(push_id);
                         }
                         Ok(None)
@@ -498,7 +513,7 @@ impl Http3Connection {
             return Ok(None);
         }
 
-        match Http3Frame::decode_varint(&buf) {
+        match quic_decode_varint(&buf) {
             Ok((stream_type, varint_len)) => {
                 if buf.len() < varint_len {
                     return Ok(None); // Incomplete varint
@@ -520,7 +535,7 @@ impl Http3Connection {
                                 self.qpack_decoder.on_encoder_stream(&buf).ok();
                             }
                             stream_types::QPACK_DECODER => {
-                                if let Ok((push_id, _)) = Http3Frame::decode_varint(&buf) {
+                                if let Ok((push_id, _)) = quic_decode_varint(&buf) {
                                     self.qpack_encoder.set_known_received_count(push_id);
                                 }
                             }
@@ -701,6 +716,10 @@ impl Http3Connection {
         };
 
         loop {
+            if self.recv_fin_streams.contains_key(&stream_id) {
+                break;
+            }
+
             match self.poll_stream(stream_id).await? {
                 Some(Http3Frame::Data { payload }) => {
                     body.extend_from_slice(&payload);
@@ -803,13 +822,10 @@ impl Http3Connection {
         headers: &HeaderMap,
         encoder: &mut QpackEncoder,
     ) -> Result<Vec<u8>> {
-        // Collect pseudo-headers as owned Strings (needed for lifetime reasons)
-        let mut h3_headers: Vec<(String, String)> = Vec::new();
+        let mut h3_headers = Vec::new();
 
-        // :method
         h3_headers.push((":method".into(), method.as_str().into()));
 
-        // :scheme
         let scheme = match uri.scheme() {
             crate::uri::Scheme::Http => "http",
             crate::uri::Scheme::Https => "https",
@@ -817,7 +833,6 @@ impl Http3Connection {
         };
         h3_headers.push((":scheme".into(), scheme.into()));
 
-        // :authority (host:port)
         if let Some(host) = uri.host() {
             let authority = if let Some(port) = uri.port() {
                 format!("{}:{}", host, port)
@@ -836,21 +851,7 @@ impl Http3Connection {
         };
         h3_headers.push((":path".into(), path));
 
-        // Regular headers
-        for (name, value) in headers.iter() {
-            h3_headers.push((name.as_str().into(), value.as_str().into()));
-        }
-
-        // Convert to &[(&str, &str)] for encoder
-        let refs: Vec<(&str, &str)> = h3_headers
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let (header_block, _encoder_instructions) = encoder
-            .encode(&refs)
-            .map_err(|e| Http3Error::QpackError(e.to_string()))?;
-        Ok(header_block)
+        Self::encode_h3_headers(h3_headers, headers, encoder)
     }
 
     /// Encode a CONNECT request into a QPACK header block.
@@ -864,32 +865,16 @@ impl Http3Connection {
         headers: &HeaderMap,
         encoder: &mut QpackEncoder,
     ) -> Result<Vec<u8>> {
-        let mut h3_headers: Vec<(String, String)> = Vec::new();
+        let mut h3_headers = Vec::new();
 
-        // :method: CONNECT
         h3_headers.push((":method".into(), "CONNECT".into()));
-        // :authority
         h3_headers.push((":authority".into(), authority.into()));
 
-        // Optional :protocol for extended CONNECT (WebSocket, WebTransport)
         if let Some(proto) = protocol {
             h3_headers.push((":protocol".into(), proto.into()));
         }
 
-        // Regular headers
-        for (name, value) in headers.iter() {
-            h3_headers.push((name.as_str().into(), value.as_str().into()));
-        }
-
-        let refs: Vec<(&str, &str)> = h3_headers
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let (header_block, _encoder_instructions) = encoder
-            .encode(&refs)
-            .map_err(|e| Http3Error::QpackError(e.to_string()))?;
-        Ok(header_block)
+        Self::encode_h3_headers(h3_headers, headers, encoder)
     }
 
     /// Send a CONNECT request to establish a tunnel (RFC 9114 §4.4).
@@ -924,17 +909,33 @@ impl Http3Connection {
         headers: &HeaderMap,
         encoder: &mut QpackEncoder,
     ) -> Result<Vec<u8>> {
-        let mut h3_headers: Vec<(String, String)> = Vec::new();
+        let mut h3_headers = Vec::new();
 
-        // :status
         let status_str = status.as_str();
         h3_headers.push((":status".into(), status_str.into_owned()));
 
-        // Regular headers
+        Self::encode_h3_headers(h3_headers, headers, encoder)
+    }
+
+    fn encode_h3_headers(
+        mut h3_headers: Vec<(String, String)>,
+        headers: &HeaderMap,
+        encoder: &mut QpackEncoder,
+    ) -> Result<Vec<u8>> {
+        Self::append_regular_headers(&mut h3_headers, headers);
+        Self::encode_owned_headers(&h3_headers, encoder)
+    }
+
+    fn append_regular_headers(h3_headers: &mut Vec<(String, String)>, headers: &HeaderMap) {
         for (name, value) in headers.iter() {
             h3_headers.push((name.as_str().into(), value.as_str().into()));
         }
+    }
 
+    fn encode_owned_headers(
+        h3_headers: &[(String, String)],
+        encoder: &mut QpackEncoder,
+    ) -> Result<Vec<u8>> {
         let refs: Vec<(&str, &str)> = h3_headers
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
@@ -1068,22 +1069,8 @@ impl Http3Connection {
         let stream = Http3Stream::new(stream_id, Http3StreamType::Request);
         self.streams.insert(stream_id, stream);
 
-        let headers_frame = Http3Frame::Headers { header_block };
-        let frame_data = headers_frame.to_bytes();
-
-        self.quic
-            .send_stream_data(stream_id, &frame_data, body.is_none())
-            .await
-            .map_err(|e| format!("Failed to send headers: {}", e))?;
-
-        if let Some(body_data) = body {
-            let data_frame = Http3Frame::Data { payload: body_data };
-            let data_bytes = data_frame.to_bytes();
-            self.quic
-                .send_stream_data(stream_id, &data_bytes, true)
-                .await
-                .map_err(|e| format!("Failed to send data: {}", e))?;
-        }
+        self.send_headers_and_optional_body(stream_id, header_block, body)
+            .await?;
 
         Ok(stream_id)
     }
@@ -1095,26 +1082,64 @@ impl Http3Connection {
         header_block: Vec<u8>,
         body: Option<Vec<u8>>,
     ) -> Result<()> {
-        let headers_frame = Http3Frame::Headers { header_block };
-        let frame_data = headers_frame.to_bytes();
-
-        self.quic
-            .send_stream_data(stream_id, &frame_data, body.is_none())
-            .await
-            .map_err(|e| format!("Failed to send headers: {}", e))?;
-
-        if let Some(body_data) = body {
-            let data_frame = Http3Frame::Data { payload: body_data };
-            let data_bytes = data_frame.to_bytes();
-            self.quic
-                .send_stream_data(stream_id, &data_bytes, true)
-                .await
-                .map_err(|e| format!("Failed to send data: {}", e))?;
-        }
+        self.send_headers_and_optional_body(stream_id, header_block, body)
+            .await?;
 
         if let Some(stream) = self.streams.get_mut(&stream_id) {
             stream.half_close_local();
         }
+
+        Ok(())
+    }
+
+    async fn send_headers_and_optional_body(
+        &mut self,
+        stream_id: u64,
+        header_block: Vec<u8>,
+        body: Option<Vec<u8>>,
+    ) -> Result<()> {
+        self.send_frame_on_stream(
+            stream_id,
+            Http3Frame::Headers { header_block },
+            body.is_none(),
+        )
+        .await?;
+
+        if let Some(body_data) = body {
+            self.send_frame_on_stream(stream_id, Http3Frame::Data { payload: body_data }, true)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn send_frame_on_stream(
+        &mut self,
+        stream_id: u64,
+        frame: Http3Frame,
+        fin: bool,
+    ) -> Result<()> {
+        let frame_data = frame.to_bytes();
+        self.quic
+            .send_stream_data(stream_id, &frame_data, fin)
+            .await
+            .map_err(Http3Error::QuicError)
+    }
+
+    async fn send_control_frame_with_context(
+        &mut self,
+        frame: Http3Frame,
+        context: &str,
+    ) -> Result<()> {
+        let control_id = self
+            .control_stream_id
+            .ok_or_else(|| "No control stream established".to_string())?;
+        let frame_data = frame.to_bytes();
+
+        self.quic
+            .send_stream_data(control_id, &frame_data, false)
+            .await
+            .map_err(|e| format!("{}: {}", context, e))?;
 
         Ok(())
     }
@@ -1128,17 +1153,14 @@ impl Http3Connection {
         stream_id: u64,
         trailer_block: Vec<u8>,
     ) -> super::Result<()> {
-        // Trailers are sent as a HEADERS frame after DATA
-        // The server must have already sent the initial HEADERS + DATA
-        let headers_frame = Http3Frame::Headers {
-            header_block: trailer_block,
-        };
-        let frame_data = headers_frame.to_bytes();
-
-        self.quic
-            .send_stream_data(stream_id, &frame_data, false)
-            .await
-            .map_err(Http3Error::QuicError)
+        self.send_frame_on_stream(
+            stream_id,
+            Http3Frame::Headers {
+                header_block: trailer_block,
+            },
+            false,
+        )
+        .await
     }
 
     /// Receive HTTP/3 response trailers from the given stream.
@@ -1182,12 +1204,24 @@ impl Http3Connection {
             }
         }
 
-        match self.quic.recv_stream_data().await {
-            Ok(Some((recv_stream_id, data, _fin))) => {
-                let buf = self.recv_buffers.entry(recv_stream_id).or_default();
-                buf.extend_from_slice(&data);
+        loop {
+            if self.recv_fin_streams.contains_key(&stream_id) {
+                return Ok(None);
+            }
 
-                if recv_stream_id == stream_id {
+            match self.quic.recv_stream_data().await {
+                Ok(Some((recv_stream_id, data, fin))) => {
+                    if fin {
+                        self.recv_fin_streams.insert(recv_stream_id, true);
+                    }
+
+                    let buf = self.recv_buffers.entry(recv_stream_id).or_default();
+                    buf.extend_from_slice(&data);
+
+                    if recv_stream_id != stream_id {
+                        continue;
+                    }
+
                     match Http3Frame::from_bytes(buf) {
                         Ok((frame, consumed)) => {
                             buf.drain(..consumed);
@@ -1196,33 +1230,24 @@ impl Http3Connection {
                             }
                             return Ok(Some(frame));
                         }
-                        Err(_) => return Ok(None),
+                        Err(_) => continue,
                     }
                 }
-
-                Ok(None)
+                Ok(None) => return Ok(None),
+                Err(e) => return Err(Http3Error::QuicError(e)),
             }
-            Ok(None) => Ok(None),
-            Err(e) => Err(Http3Error::QuicError(e)),
         }
     }
 
     /// Send GOAWAY
     pub async fn goaway(&mut self, stream_id: u64) -> Result<()> {
         self.sent_goaway_id = stream_id;
-        let frame = Http3Frame::Goaway { stream_id };
-        let frame_data = frame.to_bytes();
-
         let control_id = self
             .control_stream_id
             .ok_or_else(|| "No control stream established".to_string())?;
 
-        self.quic
-            .send_stream_data(control_id, &frame_data, false)
+        self.send_frame_on_stream(control_id, Http3Frame::Goaway { stream_id }, false)
             .await
-            .map_err(Http3Error::QuicError)?;
-
-        Ok(())
     }
 
     /// Get stream by ID
@@ -1238,10 +1263,6 @@ impl Http3Connection {
     /// Get QPACK decoder
     pub fn qpack_decoder_mut(&mut self) -> &mut QpackDecoder {
         &mut self.qpack_decoder
-    }
-
-    fn encode_varint(value: u64, output: &mut Vec<u8>) {
-        edgerun_encoding::quic_varint::encode_varint(value, output)
     }
 
     // ------------------------------------------------------------------
@@ -1275,21 +1296,19 @@ impl Http3Connection {
             )));
         }
 
-        // Send PUSH_PROMISE on the request stream
-        let push_promise = Http3Frame::PushPromise {
-            push_id,
-            header_block: promised_headers.clone(),
-        };
-        let frame_data = push_promise.to_bytes();
-
-        self.quic
-            .send_stream_data(request_stream_id, &frame_data, false)
-            .await
-            .map_err(Http3Error::QuicError)?;
+        self.send_frame_on_stream(
+            request_stream_id,
+            Http3Frame::PushPromise {
+                push_id,
+                header_block: promised_headers.clone(),
+            },
+            false,
+        )
+        .await?;
 
         // Create the push stream with type varint prefix (RFC 9114 §6.2.4)
         let mut push_stream_data = Vec::new();
-        Self::encode_varint(stream_types::PUSH, &mut push_stream_data);
+        quic_encode_varint(stream_types::PUSH, &mut push_stream_data);
 
         self.quic
             .send_stream_data(push_stream_id, &push_stream_data, false)
@@ -1314,24 +1333,18 @@ impl Http3Connection {
         push_body: Vec<u8>,
         fin: bool,
     ) -> Result<()> {
-        // Send HEADERS frame on push stream
-        let headers_frame = Http3Frame::Headers {
-            header_block: push_headers,
-        };
-        let headers_data = headers_frame.to_bytes();
-        self.quic
-            .send_stream_data(push_stream_id, &headers_data, false)
-            .await
-            .map_err(Http3Error::QuicError)?;
+        self.send_frame_on_stream(
+            push_stream_id,
+            Http3Frame::Headers {
+                header_block: push_headers,
+            },
+            false,
+        )
+        .await?;
 
-        // Send DATA frame on push stream
         if !push_body.is_empty() {
-            let data_frame = Http3Frame::Data { payload: push_body };
-            let data_data = data_frame.to_bytes();
-            self.quic
-                .send_stream_data(push_stream_id, &data_data, fin)
-                .await
-                .map_err(Http3Error::QuicError)?;
+            self.send_frame_on_stream(push_stream_id, Http3Frame::Data { payload: push_body }, fin)
+                .await?;
         } else if fin {
             // No body, but close the stream
             self.quic
@@ -1345,36 +1358,20 @@ impl Http3Connection {
 
     /// Send a MAX_PUSH_ID frame to allow the server to push more responses.
     pub async fn send_max_push_id(&mut self, push_id: u64) -> Result<()> {
-        let frame = Http3Frame::MaxPushId { push_id };
-        let frame_data = frame.to_bytes();
-
-        let control_id = self
-            .control_stream_id
-            .ok_or_else(|| "No control stream established".to_string())?;
-
-        self.quic
-            .send_stream_data(control_id, &frame_data, false)
-            .await
-            .map_err(|e| format!("Failed to send MAX_PUSH_ID: {}", e))?;
-
-        Ok(())
+        self.send_control_frame_with_context(
+            Http3Frame::MaxPushId { push_id },
+            "Failed to send MAX_PUSH_ID",
+        )
+        .await
     }
 
     /// Cancel a server push stream.
     pub async fn cancel_push(&mut self, push_id: u64) -> Result<()> {
-        let frame = Http3Frame::CancelPush { push_id };
-        let frame_data = frame.to_bytes();
-
-        let control_id = self
-            .control_stream_id
-            .ok_or_else(|| "No control stream established".to_string())?;
-
-        self.quic
-            .send_stream_data(control_id, &frame_data, false)
-            .await
-            .map_err(|e| format!("Failed to send CANCEL_PUSH: {}", e))?;
-
-        Ok(())
+        self.send_control_frame_with_context(
+            Http3Frame::CancelPush { push_id },
+            "Failed to send CANCEL_PUSH",
+        )
+        .await
     }
 
     // ------------------------------------------------------------------
@@ -1402,7 +1399,7 @@ impl Http3Connection {
         }
 
         // Decode push ID varint
-        let (push_id, varint_len) = Http3Frame::decode_varint(&data)
+        let (push_id, varint_len) = quic_decode_varint(&data)
             .map_err(|e| Http3Error::ProtocolViolation(format!("Invalid push ID varint: {}", e)))?;
 
         if data.len() < varint_len {
@@ -1617,6 +1614,7 @@ impl Http3Connection {
 
         // Remove from receive buffers
         self.recv_buffers.remove(&stream_id);
+        self.recv_fin_streams.remove(&stream_id);
 
         // Remove from headers received tracking
         self.stream_headers_received.remove(&stream_id);
@@ -1709,6 +1707,7 @@ mod tests {
             control_stream_id: None,
             pending_crypto: Vec::new(),
             recv_buffers: BTreeMap::new(),
+            recv_fin_streams: BTreeMap::new(),
             stream_headers_received: BTreeMap::new(),
             stream_priorities: BTreeMap::new(),
             active_path: None,
@@ -1878,9 +1877,9 @@ mod tests {
         ];
         for value in values {
             let mut encoded = Vec::new();
-            Http3Connection::encode_varint(value, &mut encoded);
+            quic_encode_varint(value, &mut encoded);
 
-            let (decoded, len) = Http3Frame::decode_varint(&encoded).unwrap();
+            let (decoded, len) = quic_decode_varint(&encoded).unwrap();
             assert_eq!(decoded, value);
             assert_eq!(len, encoded.len());
         }

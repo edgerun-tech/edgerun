@@ -20,57 +20,22 @@ use alloc::vec::Vec;
 /// - `10` = 4 bytes total (30-bit value, max 1073741823)
 /// - `11` = 8 bytes total (62-bit value, max 2^62-1)
 pub fn quic_encode_varint(value: u64, output: &mut Vec<u8>) {
-    if value < 64 {
-        output.push(value as u8);
-    } else if value < 16384 {
-        output.push(((value >> 8) as u8) | 0x40);
-        output.push(value as u8);
-    } else if value < 1073741824 {
-        let bytes = (value as u32).to_be_bytes();
-        output.push(bytes[0] | 0x80);
-        output.push(bytes[1]);
-        output.push(bytes[2]);
-        output.push(bytes[3]);
-    } else {
-        let bytes = value.to_be_bytes();
-        output.push(bytes[0] | 0xC0);
-        output.extend_from_slice(&bytes[1..]);
-    }
+    edgerun_encoding::quic_varint::encode_varint(value, output)
 }
 
 /// Decode a QUIC varint (RFC 9000 §16).
 ///
 /// Returns `(value, bytes_consumed)`.
 pub fn quic_decode_varint(data: &[u8]) -> Result<(u64, usize), String> {
-    if data.is_empty() {
-        return Err("Empty varint".to_string());
+    edgerun_encoding::quic_varint::decode_varint(data).map_err(|e| e.to_string())
+}
+
+/// Decode a QUIC varint starting at `pos`.
+pub fn quic_decode_varint_at(data: &[u8], pos: usize) -> Result<(u64, usize), String> {
+    if pos >= data.len() {
+        return Err("Out of bounds".to_string());
     }
-    let first = data[0];
-    let len = match first >> 6 {
-        0 => 1,
-        1 => 2,
-        2 => 4,
-        3 => 8,
-        _ => unreachable!(),
-    };
-    if data.len() < len {
-        return Err("Incomplete varint".to_string());
-    }
-    let value = match len {
-        1 => (first & 0x3F) as u64,
-        2 => u16::from_be_bytes([first & 0x3F, data[1]]) as u64,
-        4 => {
-            let b = [first & 0x3F, data[1], data[2], data[3]];
-            u32::from_be_bytes(b) as u64
-        }
-        8 => {
-            let mut b: [u8; 8] = data[..8].try_into().unwrap();
-            b[0] &= 0x3F;
-            u64::from_be_bytes(b)
-        }
-        _ => unreachable!(),
-    };
-    Ok((value, len))
+    quic_decode_varint(&data[pos..])
 }
 
 // ─── QPACK integer (RFC 9204 §5 / RFC 7541 §5.1) ───────────────────────────
@@ -186,6 +151,13 @@ mod tests {
     fn test_quic_decode_too_short() {
         assert!(quic_decode_varint(&[]).is_err());
         assert!(quic_decode_varint(&[0x40]).is_err()); // 2-byte prefix, only 1 byte
+    }
+
+    #[test]
+    fn test_quic_decode_at_offset() {
+        let data = [0xff, 0x40, 0x40];
+        assert_eq!(quic_decode_varint_at(&data, 1).unwrap(), (64, 2));
+        assert!(quic_decode_varint_at(&data, data.len()).is_err());
     }
 
     #[test]

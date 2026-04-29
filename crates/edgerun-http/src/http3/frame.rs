@@ -4,6 +4,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use super::varint::{quic_decode_varint, quic_encode_varint};
+
 /// HTTP/3 frame types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Http3FrameType {
@@ -65,6 +67,8 @@ pub enum Http3Frame {
     Goaway { stream_id: u64 },
     /// STREAMS_BLOCKED frame
     StreamsBlocked { limit: u64 },
+    /// Unknown or reserved extension frame.
+    Unknown { frame_type: u64, payload: Vec<u8> },
 }
 
 impl Http3Frame {
@@ -79,6 +83,7 @@ impl Http3Frame {
             Http3Frame::MaxPushId { .. } => Http3FrameType::MaxPushId,
             Http3Frame::Goaway { .. } => Http3FrameType::Goaway,
             Http3Frame::StreamsBlocked { .. } => Http3FrameType::StreamsBlocked,
+            Http3Frame::Unknown { .. } => Http3FrameType::Reserved,
         }
     }
 
@@ -87,7 +92,11 @@ impl Http3Frame {
         let mut output = Vec::new();
 
         // Frame type (variable-length integer)
-        Self::encode_varint(self.frame_type() as u64, &mut output);
+        let frame_type = match self {
+            Http3Frame::Unknown { frame_type, .. } => *frame_type,
+            _ => self.frame_type() as u64,
+        };
+        quic_encode_varint(frame_type, &mut output);
 
         // Payload
         let payload = match self {
@@ -95,14 +104,14 @@ impl Http3Frame {
             Http3Frame::Headers { header_block } => header_block.clone(),
             Http3Frame::CancelPush { push_id } => {
                 let mut p = Vec::new();
-                Self::encode_varint(*push_id, &mut p);
+                quic_encode_varint(*push_id, &mut p);
                 p
             }
             Http3Frame::Settings { entries } => {
                 let mut p = Vec::new();
                 for &(id, value) in entries {
-                    Self::encode_varint(id, &mut p);
-                    Self::encode_varint(value, &mut p);
+                    quic_encode_varint(id, &mut p);
+                    quic_encode_varint(value, &mut p);
                 }
                 p
             }
@@ -111,29 +120,30 @@ impl Http3Frame {
                 header_block,
             } => {
                 let mut p = Vec::new();
-                Self::encode_varint(*push_id, &mut p);
+                quic_encode_varint(*push_id, &mut p);
                 p.extend_from_slice(header_block);
                 p
             }
             Http3Frame::MaxPushId { push_id } => {
                 let mut p = Vec::new();
-                Self::encode_varint(*push_id, &mut p);
+                quic_encode_varint(*push_id, &mut p);
                 p
             }
             Http3Frame::Goaway { stream_id } => {
                 let mut p = Vec::new();
-                Self::encode_varint(*stream_id, &mut p);
+                quic_encode_varint(*stream_id, &mut p);
                 p
             }
             Http3Frame::StreamsBlocked { limit } => {
                 let mut p = Vec::new();
-                Self::encode_varint(*limit, &mut p);
+                quic_encode_varint(*limit, &mut p);
                 p
             }
+            Http3Frame::Unknown { payload, .. } => payload.clone(),
         };
 
         // Frame length
-        Self::encode_varint(payload.len() as u64, &mut output);
+        quic_encode_varint(payload.len() as u64, &mut output);
         output.extend_from_slice(&payload);
 
         output
@@ -141,9 +151,9 @@ impl Http3Frame {
 
     /// Parse frame from bytes
     pub fn from_bytes(data: &[u8]) -> Result<(Self, usize), String> {
-        let (frame_type, ft_len) = Self::decode_varint(data).map_err(|e| e.to_string())?;
+        let (frame_type, ft_len) = quic_decode_varint(data).map_err(|e| e.to_string())?;
         let (payload_len, pl_len) =
-            Self::decode_varint(&data[ft_len..]).map_err(|e| e.to_string())?;
+            quic_decode_varint(&data[ft_len..]).map_err(|e| e.to_string())?;
         let header_len = ft_len + pl_len;
 
         if header_len + payload_len as usize > data.len() {
@@ -161,34 +171,33 @@ impl Http3Frame {
                 header_block: payload.to_vec(),
             },
             Some(Http3FrameType::CancelPush) => {
-                let (push_id, _) = Self::decode_varint(payload).map_err(|e| e.to_string())?;
+                let (push_id, _) = quic_decode_varint(payload).map_err(|e| e.to_string())?;
                 Http3Frame::CancelPush { push_id }
             }
             Some(Http3FrameType::Settings) => {
                 let mut entries = Vec::new();
                 let mut pos = 0;
                 while pos < payload.len() {
-                    let (id, n) =
-                        Self::decode_varint(&payload[pos..]).map_err(|e| e.to_string())?;
+                    let (id, n) = quic_decode_varint(&payload[pos..]).map_err(|e| e.to_string())?;
                     pos += n;
                     let (value, n) =
-                        Self::decode_varint(&payload[pos..]).map_err(|e| e.to_string())?;
+                        quic_decode_varint(&payload[pos..]).map_err(|e| e.to_string())?;
                     pos += n;
                     entries.push((id, value));
                 }
                 Http3Frame::Settings { entries }
             }
             Some(Http3FrameType::Goaway) => {
-                let (stream_id, _) = Self::decode_varint(payload).map_err(|e| e.to_string())?;
+                let (stream_id, _) = quic_decode_varint(payload).map_err(|e| e.to_string())?;
                 Http3Frame::Goaway { stream_id }
             }
             Some(Http3FrameType::MaxPushId) => {
-                let (push_id, _) = Self::decode_varint(payload).map_err(|e| e.to_string())?;
+                let (push_id, _) = quic_decode_varint(payload).map_err(|e| e.to_string())?;
                 Http3Frame::MaxPushId { push_id }
             }
             Some(Http3FrameType::PushPromise) => {
                 let (push_id, varint_len) =
-                    Self::decode_varint(payload).map_err(|e| e.to_string())?;
+                    quic_decode_varint(payload).map_err(|e| e.to_string())?;
                 let header_block = payload[varint_len..].to_vec();
                 Http3Frame::PushPromise {
                     push_id,
@@ -196,28 +205,18 @@ impl Http3Frame {
                 }
             }
             Some(Http3FrameType::StreamsBlocked) => {
-                let (limit, _) = Self::decode_varint(payload).map_err(|e| e.to_string())?;
+                let (limit, _) = quic_decode_varint(payload).map_err(|e| e.to_string())?;
                 Http3Frame::StreamsBlocked { limit }
             }
-            Some(_) | None => {
-                return Err(format!("Unknown or unsupported frame type: {}", frame_type));
+            Some(Http3FrameType::Reserved) | Some(Http3FrameType::Reserved2) | None => {
+                Http3Frame::Unknown {
+                    frame_type,
+                    payload: payload.to_vec(),
+                }
             }
         };
 
         Ok((frame, total_len))
-    }
-
-    fn encode_varint(value: u64, output: &mut Vec<u8>) {
-        edgerun_encoding::quic_varint::encode_varint(value, output)
-    }
-
-    pub(crate) fn decode_varint(data: &[u8]) -> Result<(u64, usize), crate::runtime::io::Error> {
-        edgerun_encoding::quic_varint::decode_varint(data).map_err(|e| {
-            crate::runtime::io::Error::new(
-                crate::runtime::io::ErrorKind::UnexpectedEof,
-                format!("{e}"),
-            )
-        })
     }
 }
 
@@ -289,5 +288,27 @@ mod tests {
         assert_eq!(Http3FrameType::from_u64(99), Some(Http3FrameType::Reserved));
         // 200 doesn't match any pattern
         assert!(Http3FrameType::from_u64(200).is_none());
+    }
+
+    #[test]
+    fn test_unknown_frame_roundtrip() {
+        let frame = Http3Frame::Unknown {
+            frame_type: 0x21,
+            payload: b"extension".to_vec(),
+        };
+        let bytes = frame.to_bytes();
+        let (parsed, consumed) = Http3Frame::from_bytes(&bytes).unwrap();
+
+        assert_eq!(consumed, bytes.len());
+        match parsed {
+            Http3Frame::Unknown {
+                frame_type,
+                payload,
+            } => {
+                assert_eq!(frame_type, 0x21);
+                assert_eq!(payload, b"extension");
+            }
+            _ => panic!("expected unknown frame"),
+        }
     }
 }

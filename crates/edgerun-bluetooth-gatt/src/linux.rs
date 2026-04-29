@@ -1,74 +1,12 @@
 use crate::error::{GattError, GattResult};
+use crate::l2cap::*;
 use crate::prelude::v1::*;
+use edgerun_encoding::byteorder::read_u16_le;
 use std::io;
 use std::mem::size_of;
 use std::os::fd::{AsRawFd, RawFd};
 use std::time::Duration;
 
-const AF_BLUETOOTH: i32 = 31;
-const SOCK_SEQPACKET: i32 = 5;
-const BTPROTO_L2CAP: i32 = 2;
-
-const ATT_PSM: u16 = 0x001F;
-const DEFAULT_MTU: u16 = 23;
-const MAX_MTU: u16 = 512;
-const LE_PSM: u16 = 0x002F;
-
-const OCF_L2CAP_CONN_REQ: u16 = 0x0401;
-const OCF_L2CAP_CONFIG_REQ: u16 = 0x0411;
-const OCF_L2CAP_DISCONN_REQ: u16 = 0x0403;
-const OCF_L2CAP_INFO_REQ: u16 = 0x040A;
-
-const HCI_EV_LE_META_EVENT: u8 = 0x3E;
-const HCI_EV_CONN_COMPLETE: u8 = 0x13;
-const HCI_EV_DISCONN_COMPLETE: u8 = 0x05;
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct SockAddrL2 {
-    l2_family: u16,
-    l2_cid: u16,
-    l2_bdaddr_type: u8,
-    l2_bdaddr: [u8; 6],
-    l2_psm: u16,
-}
-
-impl Default for SockAddrL2 {
-    fn default() -> Self {
-        Self {
-            l2_family: AF_BLUETOOTH as u16,
-            l2_cid: 0,
-            l2_bdaddr_type: 0,
-            l2_bdaddr: [0; 6],
-            l2_psm: 0,
-        }
-    }
-}
-
-impl SockAddrL2 {
-    fn for_device(addr: &[u8; 6], addr_type: u8, psm: u16) -> Self {
-        Self {
-            l2_family: AF_BLUETOOTH as u16,
-            l2_cid: 0,
-            l2_bdaddr_type: addr_type,
-            l2_bdaddr: *addr,
-            l2_psm: psm,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum L2capChannelState {
-    Closed,
-    Opening,
-    Open,
-    ConfigRequest,
-    ConfigResponse,
-    Connected,
-    Disconnecting,
-}
-
-#[derive(Clone)]
 pub struct L2capSocket {
     fd: RawFd,
     local_addr_type: u8,
@@ -76,6 +14,20 @@ pub struct L2capSocket {
     state: L2capChannelState,
     mtu: u16,
     remote_mtu: u16,
+}
+
+impl Clone for L2capSocket {
+    fn clone(&self) -> Self {
+        let fd = unsafe { dup(self.fd) };
+        Self {
+            fd,
+            local_addr_type: self.local_addr_type,
+            peer_addr: self.peer_addr,
+            state: self.state,
+            mtu: self.mtu,
+            remote_mtu: self.remote_mtu,
+        }
+    }
 }
 
 impl L2capSocket {
@@ -135,18 +87,39 @@ impl L2capSocket {
         self.bind_with_addr_type(addr_type)
     }
 
+    pub fn bind_att_any(&self) -> GattResult<()> {
+        let l2cap_addr = SockAddrL2 {
+            l2_cid: ATT_CID,
+            ..Default::default()
+        };
+
+        let rc = unsafe {
+            bind(
+                self.fd,
+                (&l2cap_addr as *const SockAddrL2).cast(),
+                size_of::<SockAddrL2>() as u32,
+            )
+        };
+
+        if rc < 0 {
+            return Err(GattError::from(io::Error::last_os_error()));
+        }
+        Ok(())
+    }
+
     pub fn set_local_addr_type(&mut self, addr_type: u8) {
         self.local_addr_type = addr_type;
     }
 
     pub fn connect_to_device(&mut self, device_addr: &str, addr_type: u8) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
+        self.bind_att_any()?;
         self.peer_addr = Some(bdaddr);
         self.state = L2capChannelState::Opening;
 
-        let l2cap_addr = SockAddrL2::for_device(&bdaddr, addr_type, ATT_PSM);
+        let l2cap_addr = SockAddrL2::for_att_device(&bdaddr, addr_type);
 
         let rc = unsafe {
             connect(
@@ -158,6 +131,11 @@ impl L2capSocket {
 
         if rc < 0 {
             let err = io::Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EINPROGRESS) {
+                self.wait_for_connect(10_000)?;
+                self.state = L2capChannelState::Open;
+                return Ok(());
+            }
             self.state = L2capChannelState::Closed;
             return Err(GattError::from(err));
         }
@@ -167,7 +145,7 @@ impl L2capSocket {
     }
 
     pub fn connect_with_le_psm(&mut self, device_addr: &str, addr_type: u8) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
         self.peer_addr = Some(bdaddr);
@@ -194,10 +172,11 @@ impl L2capSocket {
     }
 
     pub fn connect_device(&self, device_addr: &str, addr_type: u8) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
-        let l2cap_addr = SockAddrL2::for_device(&bdaddr, addr_type, ATT_PSM);
+        self.bind_att_any()?;
+        let l2cap_addr = SockAddrL2::for_att_device(&bdaddr, addr_type);
 
         let rc = unsafe {
             connect(
@@ -209,6 +188,9 @@ impl L2capSocket {
 
         if rc < 0 {
             let err = io::Error::last_os_error();
+            if err.raw_os_error() == Some(libc::EINPROGRESS) {
+                return self.wait_for_connect(10_000);
+            }
             match err.kind() {
                 io::ErrorKind::ConnectionRefused => Err(GattError::ConnectionRefused(
                     "device may not be in range or may reject connection".to_string(),
@@ -228,7 +210,7 @@ impl L2capSocket {
         addr_type: u8,
         psm: u16,
     ) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
         let l2cap_addr = SockAddrL2::for_device(&bdaddr, addr_type, psm);
@@ -251,7 +233,7 @@ impl L2capSocket {
     pub fn send_data(&self, data: &[u8], timeout_ms: i32) -> GattResult<()> {
         let mut pollfd = PollFd {
             fd: self.fd,
-            events: 0x0001,
+            events: 0x0004,
             revents: 0,
         };
 
@@ -365,6 +347,40 @@ impl L2capSocket {
             }
         }
     }
+
+    fn wait_for_connect(&self, timeout_ms: i32) -> GattResult<()> {
+        let mut pollfd = PollFd {
+            fd: self.fd,
+            events: 0x0004,
+            revents: 0,
+        };
+        let poll_rc = unsafe { poll(&mut pollfd, 1, timeout_ms) };
+        if poll_rc < 0 {
+            return Err(GattError::PollFailed("connect poll failed".to_string()));
+        }
+        if poll_rc == 0 {
+            return Err(GattError::Timeout(timeout_ms as u32));
+        }
+
+        let mut so_error: i32 = 0;
+        let mut len = size_of::<i32>() as libc::socklen_t;
+        let rc = unsafe {
+            libc::getsockopt(
+                self.fd,
+                libc::SOL_SOCKET,
+                libc::SO_ERROR,
+                (&mut so_error as *mut i32).cast(),
+                &mut len,
+            )
+        };
+        if rc < 0 {
+            return Err(GattError::from(io::Error::last_os_error()));
+        }
+        if so_error != 0 {
+            return Err(GattError::from(io::Error::from_raw_os_error(so_error)));
+        }
+        Ok(())
+    }
 }
 
 impl Drop for L2capSocket {
@@ -376,53 +392,8 @@ impl Drop for L2capSocket {
 unsafe impl Send for L2capSocket {}
 unsafe impl Sync for L2capSocket {}
 
-fn parse_bdaddr_string(addr: &str) -> Option<[u8; 6]> {
-    let parts: Vec<u8> = addr
-        .split(':')
-        .map(|p| u8::from_str_radix(p, 16).ok())
-        .collect::<Option<_>>()?;
-    if parts.len() != 6 {
-        return None;
-    }
-    let mut result = [0u8; 6];
-    result.copy_from_slice(&parts);
-    Some(result)
-}
-
-fn format_bdaddr_hex(bytes: &[u8]) -> String {
-    format!(
-        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
-    )
-}
-
-fn reverse_bdaddr(addr: &str) -> Option<[u8; 6]> {
-    parse_bdaddr_string(addr).map(|mut a| {
-        a.reverse();
-        a
-    })
-}
-
 pub fn format_bdaddr(bytes: &[u8]) -> String {
     format_bdaddr_hex(bytes)
-}
-
-unsafe extern "C" {
-    fn socket(domain: i32, ty: i32, protocol: i32) -> i32;
-    fn bind(fd: i32, addr: *const core::ffi::c_void, len: u32) -> i32;
-    fn connect(fd: i32, addr: *const core::ffi::c_void, len: u32) -> i32;
-    fn send(fd: i32, buf: *const core::ffi::c_void, len: usize, flags: i32) -> isize;
-    fn recv(fd: i32, buf: *mut core::ffi::c_void, len: usize, flags: i32) -> isize;
-    fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
-    fn close(fd: i32) -> i32;
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct PollFd {
-    fd: i32,
-    events: i16,
-    revents: i16,
 }
 
 pub struct AttProtocol {
@@ -478,7 +449,7 @@ impl AttProtocol {
             return Err(GattError::MtuExchangeFailed);
         }
 
-        let server_mtu = u16::from_le_bytes([resp[1], resp[2]]);
+        let server_mtu = read_u16_le(&resp, 1);
         self.mtu = std::cmp::min(client_mtu, server_mtu);
         Ok(self.mtu)
     }
@@ -555,111 +526,77 @@ impl AttProtocol {
         req.extend_from_slice(&handle.to_le_bytes());
         req.extend_from_slice(&offset.to_le_bytes());
         req.extend_from_slice(data);
-        self.socket.send_data(&req, 1000)
+        self.socket.send_data(&req, 1000)?;
+
+        let mut buf = vec![0u8; self.mtu as usize];
+        let n = self.socket.recv_data(&mut buf, 2000)?;
+        if n < 5 || buf[0] != 0x17 {
+            return if n > 1 {
+                Err(GattError::att_error_code(buf[1]))
+            } else {
+                Err(GattError::ParseError(
+                    "invalid prepare write response".into(),
+                ))
+            };
+        }
+        let response_handle = read_u16_le(&buf, 1);
+        let response_offset = read_u16_le(&buf, 3);
+        if response_handle != handle || response_offset != offset {
+            return Err(GattError::ParseError(
+                "prepare write response handle/offset mismatch".into(),
+            ));
+        }
+        Ok(())
     }
 
     pub fn execute_write(&mut self, commit: bool) -> GattResult<()> {
         let flag = if commit { 0x01 } else { 0x00 };
         let req = vec![0x18, flag];
-        self.socket.send_data(&req, 1000)
+        self.socket.send_data(&req, 1000)?;
+
+        let mut buf = vec![0u8; self.mtu as usize];
+        let n = self.socket.recv_data(&mut buf, 2000)?;
+        if n > 0 && buf[0] == 0x19 {
+            Ok(())
+        } else if n > 1 {
+            Err(GattError::att_error_code(buf[1]))
+        } else {
+            Err(GattError::ParseError(
+                "invalid execute write response".into(),
+            ))
+        }
     }
 
     pub fn handle_notification(&self, data: &[u8]) -> Option<(u16, Vec<u8>)> {
-        if data.len() < 3 || data[0] != 0x1b {
-            return None;
-        }
-        let handle = u16::from_le_bytes([data[1], data[2]]);
-        Some((handle, data[3..].to_vec()))
+        crate::att::handle_notification(data)
     }
 
     pub fn handle_indication(&self, data: &[u8]) -> Option<(u16, Vec<u8>)> {
-        if data.len() < 3 || data[0] != 0x1d {
-            return None;
-        }
-        let handle = u16::from_le_bytes([data[1], data[2]]);
-        Some((handle, data[3..].to_vec()))
+        crate::att::handle_indication(data)
     }
 
     pub fn handle_execute_write_response(&self, data: &[u8]) -> bool {
-        data.first() == Some(&0x19)
+        crate::att::handle_execute_write_response(data)
     }
 
     pub fn parse_read_by_group_response(&self, data: &[u8]) -> Vec<(u16, u16, Vec<u8>)> {
-        let mut results = Vec::new();
-        if data.len() < 2 || data[0] != 0x11 {
-            return results;
-        }
-        let format = data[1] as usize;
-        if format != 6 && format != 20 {
-            return results;
-        }
-        let entry_size = format;
-        let mut offset = 2;
-        while offset + entry_size <= data.len() {
-            let start = u16::from_le_bytes([data[offset], data[offset + 1]]);
-            let end = u16::from_le_bytes([data[offset + 2], data[offset + 3]]);
-            let uuid = data[offset + 4..offset + entry_size].to_vec();
-            results.push((start, end, uuid));
-            offset += entry_size;
-        }
-        results
+        crate::att::parse_read_by_group_response(data)
     }
 
     pub fn parse_read_by_type_response(&self, data: &[u8]) -> Vec<(u16, Vec<u8>)> {
-        let mut results = Vec::new();
-        if data.len() < 2 || data[0] != 0x09 {
-            return results;
-        }
-        let format = data[1] as usize;
-        if format < 7 {
-            return results;
-        }
-        let mut offset = 2;
-        while offset + format <= data.len() {
-            let handle = u16::from_le_bytes([data[offset], data[offset + 1]]);
-            let value = data[offset + 2..offset + format].to_vec();
-            results.push((handle, value));
-            offset += format;
-        }
-        results
+        crate::att::parse_read_by_type_response(data)
     }
 
     pub fn parse_find_information_response(&self, data: &[u8]) -> Vec<(u16, Vec<u8>)> {
-        let mut results = Vec::new();
-        if data.len() < 2 || data[0] != 0x05 {
-            return results;
-        }
-        let format = data[1];
-        let uuid_size = match format {
-            0x01 => 2,
-            0x02 => 16,
-            _ => return results,
-        };
-        let entry_size = 2 + uuid_size; // 2 bytes handle + uuid_size bytes
-        let mut offset = 2;
-        while offset + entry_size <= data.len() {
-            let handle = u16::from_le_bytes([data[offset], data[offset + 1]]);
-            let uuid = data[offset + 2..offset + entry_size].to_vec();
-            results.push((handle, uuid));
-            offset += entry_size;
-        }
-        results
+        crate::att::parse_find_information_response(data)
     }
 
     pub fn parse_error_response(&self, data: &[u8]) -> Option<(u16, u8)> {
-        if data.len() < 4 || data[0] != 0x01 {
-            return None;
-        }
-        let handle = u16::from_le_bytes([data[1], data[2]]);
-        let error_code = data[3];
-        Some((handle, error_code))
+        crate::att::parse_error_response(data)
     }
 
     pub fn parse_mtu_response(&self, data: &[u8]) -> Option<u16> {
-        if data.len() < 3 || data[0] != 0x03 {
-            return None;
-        }
-        Some(u16::from_le_bytes([data[1], data[2]]))
+        crate::att::parse_mtu_response(data)
     }
 }
 

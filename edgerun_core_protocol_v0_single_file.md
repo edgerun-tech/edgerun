@@ -1850,8 +1850,9 @@ States:
 Core rules:
 - target node must match local node
 - timing bounds must be respected
-- same `command_id` + same `command_hash` => `DUPLICATE`
-- same `command_id` + different hash => `REJECT`
+- same `command_hash` => `DUPLICATE`
+- `command_id` is an application-level idempotency hint only and MUST NOT be used as the replay key
+- different `command_hash` => distinct command, regardless of `command_id` value
 - authority must validate before policy can approve
 - node MUST decide before execution
 - node MUST NOT execute before `command_committed` is durable

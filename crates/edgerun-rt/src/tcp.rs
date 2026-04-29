@@ -79,7 +79,9 @@ impl TcpSocket {
         if self.state != TcpState::Established && self.state != TcpState::SynReceived {
             return Err(TcpError);
         }
-        let ip_len = (20 + 20 + data.len()) as u16;
+        let available = packet_data_capacity();
+        let to_send = data.len().min(available);
+        let ip_len = (20 + 20 + to_send) as u16;
         let mut packet = [0u8; 1514];
         let eth = stack.eth_header(dst_mac, ETH_TYPE_IPV4);
         eth.to_slice(&mut packet);
@@ -97,11 +99,11 @@ impl TcpSocket {
         };
         tcp.to_slice(&mut packet[34..]);
         let payload_start = 54;
-        if data.len() <= packet.len() - payload_start {
-            packet[payload_start..payload_start + data.len()].copy_from_slice(data);
+        if to_send > 0 {
+            packet[payload_start..payload_start + to_send].copy_from_slice(&data[..to_send]);
         }
-        self.seq += data.len() as u32;
-        Ok(data.len())
+        self.seq = self.seq.wrapping_add(to_send as u32);
+        Ok(to_send)
     }
 
     pub fn recv(&mut self, data: &mut [u8]) -> Result<usize, TcpError> {
@@ -136,6 +138,10 @@ impl TcpSocket {
     pub fn is_nonblocking(&self) -> bool {
         self.nonblocking
     }
+}
+
+fn packet_data_capacity() -> usize {
+    1514 - 54
 }
 
 impl Default for TcpSocket {

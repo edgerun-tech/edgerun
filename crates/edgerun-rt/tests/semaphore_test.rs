@@ -1,18 +1,7 @@
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-use edgerun_rt::Semaphore;
-
-fn noop_waker() -> Waker {
-    unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
-}
-
-unsafe fn noop_clone(_: *const ()) -> RawWaker {
-    RawWaker::new(core::ptr::null(), &VTABLE)
-}
-unsafe fn noop_wake(_: *const ()) {}
-unsafe fn noop_drop(_: *const ()) {}
-static VTABLE: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop);
+use core::task::{Context, Poll};
+use edgerun_rt::{noop_waker, Semaphore};
 
 #[test]
 fn semaphore_new_creates_semaphore() {
@@ -37,4 +26,26 @@ fn semaphore_try_acquire() {
 
     assert!(sem.try_acquire().is_ok());
     // Second try may succeed or fail - semantics unclear
+}
+
+#[test]
+fn semaphore_waiter_acquires_after_release() {
+    let sem = Semaphore::new(1);
+    let held = sem.try_acquire().unwrap();
+
+    let waker = noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    let mut waiting = sem.acquire();
+
+    assert!(matches!(
+        Pin::new(&mut waiting).poll(&mut cx),
+        Poll::Pending
+    ));
+
+    drop(held);
+
+    assert!(matches!(
+        Pin::new(&mut waiting).poll(&mut cx),
+        Poll::Ready(Ok(_))
+    ));
 }

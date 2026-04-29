@@ -4,11 +4,10 @@
 //! For production: frames go through the actual network transport
 //! (raw Ethernet, multicast, tunnels).
 
-use edgerun_hardware_signing::NodeID;
-use edgerun_mesh::{EventType, MeshFrame};
-use edgerun_core::protocol::CommandEnvelope;
-use std::collections::HashMap;
 use crate::MeshNode;
+use edgerun_hardware_signing::NodeID;
+use edgerun_mesh::MeshFrame;
+use std::collections::HashMap;
 
 /// A mesh network that connects multiple nodes together.
 ///
@@ -51,17 +50,25 @@ impl MeshNetwork {
     /// Returns the total number of frames processed.
     pub fn tick_all(&mut self) -> Result<usize, String> {
         let mut total = 0;
+
         for node in &mut self.nodes_vec {
-            total += node.tick()?;
+            for wire in node.drain_outbound_frames()? {
+                let frame = MeshFrame::from_wire(&wire).ok_or("invalid outbound wire frame")?;
+                self.pending_frames.push((frame.header.dest, wire));
+            }
         }
-        // Drain pending outbound frames and deliver to destination nodes
+
         let frames = std::mem::take(&mut self.pending_frames);
         for (dest, wire) in frames {
             if let Some(node) = self.get_node_mut(&dest) {
-                node.deliver_inbound_frame(&wire)?;
-                total += 1;
+                total += node.deliver_inbound_frame(&wire)?;
             }
         }
+
+        for node in &mut self.nodes_vec {
+            total += node.tick()?;
+        }
+
         Ok(total)
     }
 
@@ -86,10 +93,7 @@ impl MeshNetwork {
         let node = self
             .get_node_mut(node_id)
             .ok_or("node not found")?;
-        // Tick the node to sign pending frames
-        let _ = node.tick()?;
-        // Drain pending frames (they're already signed by tick())
-        Ok(Vec::new()) // In production, this would capture frames from the MeshLink
+        node.drain_outbound_frames()
     }
 }
 

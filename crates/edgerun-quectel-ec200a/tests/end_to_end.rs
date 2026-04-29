@@ -11,9 +11,21 @@ use edgerun_quectel_ec200a::{
     get_signal_quality, set_radio_function, Config, DtaNetwork, Ec200a, Model,
 };
 
+fn require_ec200a_hardware() -> bool {
+    if std::env::var_os("EC200A_E2E").is_some() {
+        true
+    } else {
+        eprintln!("set EC200A_E2E=1 to run tests against a real Quectel EC200A modem");
+        false
+    }
+}
+
 /// Test DTA network configuration and registration
 #[test]
 fn test_real_dta_network() {
+    if !require_ec200a_hardware() {
+        return;
+    }
     println!("=== Testing Real DTA Network ===");
 
     // Configure DTA network
@@ -60,6 +72,9 @@ fn test_real_dta_network() {
 /// Test signal quality retrieval
 #[test]
 fn test_real_signal_quality() {
+    if !require_ec200a_hardware() {
+        return;
+    }
     println!("=== Testing Signal Quality ===");
 
     match get_signal_quality() {
@@ -80,6 +95,9 @@ fn test_real_signal_quality() {
 /// Test network operator detection
 #[test]
 fn test_real_network_operator() {
+    if !require_ec200a_hardware() {
+        return;
+    }
     println!("=== Testing Network Operator ===");
 
     match get_network_operator() {
@@ -98,6 +116,9 @@ fn test_real_network_operator() {
 /// Test modem information retrieval
 #[test]
 fn test_real_modem_info() {
+    if !require_ec200a_hardware() {
+        return;
+    }
     println!("=== Testing Modem Information ===");
 
     match get_modem_info() {
@@ -116,6 +137,9 @@ fn test_real_modem_info() {
 /// Test IMSI retrieval
 #[test]
 fn test_real_imsi() {
+    if !require_ec200a_hardware() {
+        return;
+    }
     println!("=== Testing IMSI Retrieval ===");
 
     match get_imsi() {
@@ -136,6 +160,9 @@ fn test_real_imsi() {
 /// Test radio function control
 #[test]
 fn test_real_radio_function() {
+    if !require_ec200a_hardware() {
+        return;
+    }
     println!("=== Testing Radio Function Control ===");
 
     // Test full functionality
@@ -174,6 +201,9 @@ fn test_real_radio_function() {
 /// Complete end-to-end DTA network test
 #[test]
 fn test_complete_dta_lifecycle() {
+    if !require_ec200a_hardware() {
+        return;
+    }
     println!("=== Complete DTA Network Lifecycle Test ===");
 
     // Step 1: Power on and configure
@@ -274,6 +304,9 @@ fn test_complete_dta_lifecycle() {
 /// Test power cycling
 #[test]
 fn test_power_cycling() {
+    if !require_ec200a_hardware() {
+        return;
+    }
     println!("=== Testing Power Cycling ===");
 
     // Power off

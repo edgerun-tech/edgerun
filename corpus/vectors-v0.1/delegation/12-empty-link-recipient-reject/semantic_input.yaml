@@ -1,0 +1,12 @@
+brief:
+  issuer: agent_assistant
+  action: query
+  scope: timeline:last_7d
+delegation_chain:
+- issuer: user_alice
+  recipient: ''
+  capability:
+    kind: CAPABILITY_KIND_QUERY
+    actions:
+    - query
+    scope: timeline:last_7d

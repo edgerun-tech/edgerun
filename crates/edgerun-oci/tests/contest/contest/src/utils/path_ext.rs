@@ -14,7 +14,10 @@ pub enum PathBufExtError {
         source: std::path::StripPrefixError,
     },
     #[error("failed to canonicalize path {path:?}")]
-    Canonicalize { path: PathBuf, source: std::io::Error },
+    Canonicalize {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("failed to get current directory")]
     CurrentDir { source: std::io::Error },
 }

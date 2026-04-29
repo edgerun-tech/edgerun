@@ -98,11 +98,7 @@ pub fn timer_ticks() -> u64 {
 
     #[cfg(target_arch = "xtensa")]
     {
-        let ticks: u32;
-        unsafe {
-            core::arch::asm!("rsr CCOUNT", out("x0") ticks);
-        }
-        ticks as u64
+        crate::arch::xtensa::ccount() as u64
     }
 }
 

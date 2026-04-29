@@ -1,11 +1,11 @@
 use std::fs;
 
 use anyhow::{Context, Result, anyhow};
+use edgerun_json::json;
 use oci_spec::runtime::{
     LinuxBuilder, LinuxMemoryPolicyBuilder, MemoryPolicyFlagType, MemoryPolicyModeType,
     ProcessBuilder, Spec, SpecBuilder,
 };
-use serde_json::json;
 use test_framework::{Test, TestGroup, TestResult};
 
 use crate::utils::test_inside_container;
@@ -100,13 +100,14 @@ fn invalid_mode_string() -> TestResult {
 
     let res = test_inside_container(&spec, &CreateOptions::default(), &|bundle| {
         let cfg_path = bundle.join("config.json");
-        let mut v: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&cfg_path)?).context("parse config.json")?;
+        let mut v: edgerun_json::JsonValue =
+            crate::utils::json::parse(fs::read_to_string(&cfg_path)?)
+                .context("parse config.json")?;
         v["linux"]["memoryPolicy"] = json!({
             "mode": "INTERLEAVE",
             "nodes": "0"
         });
-        fs::write(&cfg_path, serde_json::to_vec_pretty(&v)?)?;
+        fs::write(&cfg_path, crate::utils::json::to_vec_pretty(v)?)?;
         Ok(())
     });
     match res {
@@ -126,14 +127,15 @@ fn invalid_flag_string() -> TestResult {
 
     let res = test_inside_container(&spec, &CreateOptions::default(), &|bundle| {
         let cfg_path = bundle.join("config.json");
-        let mut v: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&cfg_path)?).context("parse config.json")?;
+        let mut v: edgerun_json::JsonValue =
+            crate::utils::json::parse(fs::read_to_string(&cfg_path)?)
+                .context("parse config.json")?;
         v["linux"]["memoryPolicy"] = json!({
             "mode": "MPOL_PREFERRED",
             "nodes": "0",
             "flags": ["MPOL_F_RELATIVE_NODES", "badflag"]
         });
-        fs::write(&cfg_path, serde_json::to_vec_pretty(&v)?)?;
+        fs::write(&cfg_path, crate::utils::json::to_vec_pretty(v)?)?;
         Ok(())
     });
 
@@ -154,10 +156,11 @@ fn missing_mode_but_nodes_present() -> TestResult {
 
     let res = test_inside_container(&spec, &CreateOptions::default(), &|bundle| {
         let cfg_path = bundle.join("config.json");
-        let mut v: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&cfg_path)?).context("parse config.json")?;
+        let mut v: edgerun_json::JsonValue =
+            crate::utils::json::parse(fs::read_to_string(&cfg_path)?)
+                .context("parse config.json")?;
         v["linux"]["memoryPolicy"] = json!({ "nodes": "0-7" });
-        fs::write(&cfg_path, serde_json::to_vec_pretty(&v)?)?;
+        fs::write(&cfg_path, crate::utils::json::to_vec_pretty(v)?)?;
         Ok(())
     });
 
@@ -178,14 +181,15 @@ fn syscall_invalid_arguments() -> TestResult {
 
     let res = test_inside_container(&spec, &CreateOptions::default(), &|bundle| {
         let cfg_path = bundle.join("config.json");
-        let mut v: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&cfg_path)?).context("parse config.json")?;
+        let mut v: edgerun_json::JsonValue =
+            crate::utils::json::parse(fs::read_to_string(&cfg_path)?)
+                .context("parse config.json")?;
         v["linux"]["memoryPolicy"] = json!({
             "mode": "MPOL_DEFAULT",
             "nodes": "0-7",
             "flags": ["MPOL_F_NUMA_BALANCING", "MPOL_F_STATIC_NODES", "MPOL_F_RELATIVE_NODES"]
         });
-        fs::write(&cfg_path, serde_json::to_vec_pretty(&v)?)?;
+        fs::write(&cfg_path, crate::utils::json::to_vec_pretty(v)?)?;
         Ok(())
     });
 
@@ -206,14 +210,15 @@ fn bind_way_too_large_node_number() -> TestResult {
 
     let res = test_inside_container(&spec, &CreateOptions::default(), &|bundle| {
         let cfg_path = bundle.join("config.json");
-        let mut v: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&cfg_path)?).context("parse config.json")?;
+        let mut v: edgerun_json::JsonValue =
+            crate::utils::json::parse(fs::read_to_string(&cfg_path)?)
+                .context("parse config.json")?;
         v["linux"]["memoryPolicy"] = json!({
             "mode": "MPOL_BIND",
             "nodes": "0-9876543210",
             "flags": []
         });
-        fs::write(&cfg_path, serde_json::to_vec_pretty(&v)?)?;
+        fs::write(&cfg_path, crate::utils::json::to_vec_pretty(v)?)?;
         Ok(())
     });
 

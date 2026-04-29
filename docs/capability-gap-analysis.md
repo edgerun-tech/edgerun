@@ -71,7 +71,7 @@ contains a complete browser engine implementation.
 - **Ingress**: Rate limiting, duplicate screening (FNV-1a 64-bit)
 - **Conformance corpus**: 610 YAML test vectors across 11 suites
 - **Hardware signing abstraction**: Unified `MeshSigner` trait with TPM 2.0, YubiKey, Android Keystore, software backends
-- **edgerun-json**: Published crate (v1.0.149), zero-dep, up to 3.78x faster than serde_json on tape path
+- **edgerun-json**: Published crate (v1.0.149), zero-dep, with fast tape parsing for structural scans
 - **HTTP stack**: HTTP/1.1, HTTP/2, HTTP/3 with HPACK/QPACK, stream multiplexing, flow control
 - **DNS server**: Authoritative + recursive DNS with YAML config, hot-reload
 - **DHCPv6**: Full DHCPv6 implementation

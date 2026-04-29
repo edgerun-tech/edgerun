@@ -7,7 +7,8 @@
 //!
 //! ## From a sync function
 //! ```no_run
-//! use edgerun_http::http1::{Handler, into_handler, Request, Response, StatusCode};
+//! use edgerun_http::{StatusCode};
+//! use edgerun_http::http1::{Handler, into_handler, Request, Response};
 //!
 //! fn my_handler(req: Request) -> Response {
 //!     Response::new(StatusCode::OK)
@@ -18,7 +19,8 @@
 //!
 //! ## From an async function
 //! ```no_run
-//! use edgerun_http::http1::{Handler, into_handler_async, Request, Response, StatusCode};
+//! use edgerun_http::{StatusCode};
+//! use edgerun_http::http1::{Handler, into_handler_async, Request, Response};
 //!
 //! async fn my_async_handler(req: Request) -> Response {
 //!     Response::new(StatusCode::OK)
@@ -29,7 +31,8 @@
 //!
 //! ## From a closure
 //! ```no_run
-//! use edgerun_http::http1::{into_handler, Request, Response, StatusCode};
+//! use edgerun_http::{StatusCode};
+//! use edgerun_http::http1::{into_handler, Request, Response};
 //!
 //! let handler = into_handler(|req: Request| {
 //!     Response::new(StatusCode::OK)

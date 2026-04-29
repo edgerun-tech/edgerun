@@ -7,14 +7,13 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 
-
-[dev-dependencies]
-assert_matches = "1"
-proptest = "1"
 
 [features]
 default = []
 std = ["edgerun-encoding/std"]
 http-headers = []
+
+[lints]
+workspace = true

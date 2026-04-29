@@ -3,18 +3,22 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU64, Ordering};
+#[cfg(target_has_atomic = "64")]
+use core::sync::atomic::AtomicU64 as AtomicTick;
+#[cfg(not(target_has_atomic = "64"))]
+use core::sync::atomic::AtomicUsize as AtomicTick;
+use core::sync::atomic::Ordering;
 
-pub static TIMER_TICKS: AtomicU64 = AtomicU64::new(0);
+pub static TIMER_TICKS: AtomicTick = AtomicTick::new(0);
 
 #[inline]
 pub fn now() -> u64 {
-    TIMER_TICKS.load(Ordering::Relaxed)
+    TIMER_TICKS.load(Ordering::Relaxed) as u64
 }
 
 #[inline]
 pub fn set_now(ticks: u64) {
-    TIMER_TICKS.store(ticks, Ordering::Relaxed);
+    TIMER_TICKS.store(ticks as _, Ordering::Relaxed);
 }
 
 #[inline]

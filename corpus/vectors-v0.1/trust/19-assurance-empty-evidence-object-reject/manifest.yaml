@@ -1,0 +1,9 @@
+id: trust/19-assurance-empty-evidence-object-reject
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: assurance claim evidence object reference must carry an object id
+tags:
+- trust
+- validate_trust

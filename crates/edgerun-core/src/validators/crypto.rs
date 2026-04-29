@@ -14,6 +14,9 @@ pub fn validate_crypto_case(
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
+    if expected.is_empty() || !matches!(payload.get("signature"), Some(Value::Map(_))) {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    }
     if matches!(
         verifier.verify_signed_fixture(payload, &expected),
         Some(false)

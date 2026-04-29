@@ -1,0 +1,10 @@
+id: command/12-command-id-reuse-different-hash-accept
+suite: command
+validator: validate_command
+version: 1
+priority: mandatory
+description: same command_id with a different command_hash is a distinct command
+tags:
+- command
+- replay
+- validate_command

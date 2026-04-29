@@ -1,71 +1,10 @@
 use crate::error::{GattError, GattResult};
+use crate::l2cap::*;
 use crate::prelude::v1::*;
+use edgerun_encoding::byteorder::read_u16_le;
 use std::io;
 use std::mem::size_of;
 use std::os::fd::RawFd;
-
-const AF_BLUETOOTH: i32 = 31;
-const SOCK_SEQPACKET: i32 = 5;
-const BTPROTO_L2CAP: i32 = 2;
-
-const ATT_PSM: u16 = 0x001F;
-const DEFAULT_MTU: u16 = 23;
-const MAX_MTU: u16 = 512;
-const LE_PSM: u16 = 0x002F;
-
-const OCF_L2CAP_CONN_REQ: u16 = 0x0401;
-const OCF_L2CAP_CONFIG_REQ: u16 = 0x0411;
-const OCF_L2CAP_DISCONN_REQ: u16 = 0x0403;
-const OCF_L2CAP_INFO_REQ: u16 = 0x040A;
-
-const HCI_EV_LE_META_EVENT: u8 = 0x3E;
-const HCI_EV_CONN_COMPLETE: u8 = 0x13;
-const HCI_EV_DISCONN_COMPLETE: u8 = 0x05;
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct SockAddrL2 {
-    l2_family: u16,
-    l2_cid: u16,
-    l2_bdaddr_type: u8,
-    l2_bdaddr: [u8; 6],
-    l2_psm: u16,
-}
-
-impl Default for SockAddrL2 {
-    fn default() -> Self {
-        Self {
-            l2_family: AF_BLUETOOTH as u16,
-            l2_cid: 0,
-            l2_bdaddr_type: 0,
-            l2_bdaddr: [0; 6],
-            l2_psm: 0,
-        }
-    }
-}
-
-impl SockAddrL2 {
-    fn for_device(addr: &[u8; 6], addr_type: u8, psm: u16) -> Self {
-        Self {
-            l2_family: AF_BLUETOOTH as u16,
-            l2_cid: 0,
-            l2_bdaddr_type: addr_type,
-            l2_bdaddr: *addr,
-            l2_psm: psm,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum L2capChannelState {
-    Closed,
-    Opening,
-    Open,
-    ConfigRequest,
-    ConfigResponse,
-    Connected,
-    Disconnecting,
-}
 
 pub struct AsyncL2capSocket {
     fd: RawFd,
@@ -94,14 +33,35 @@ impl AsyncL2capSocket {
         })
     }
 
+    pub fn bind_att_any(&self) -> GattResult<()> {
+        let l2cap_addr = SockAddrL2 {
+            l2_cid: ATT_CID,
+            ..Default::default()
+        };
+
+        let rc = unsafe {
+            bind(
+                self.fd,
+                (&l2cap_addr as *const SockAddrL2).cast(),
+                size_of::<SockAddrL2>() as u32,
+            )
+        };
+
+        if rc < 0 {
+            return Err(GattError::from(io::Error::last_os_error()));
+        }
+        Ok(())
+    }
+
     pub async fn connect_to_device(&mut self, device_addr: &str, addr_type: u8) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
+        self.bind_att_any()?;
         self.peer_addr = Some(bdaddr);
         self.state = L2capChannelState::Opening;
 
-        let l2cap_addr = SockAddrL2::for_device(&bdaddr, addr_type, ATT_PSM);
+        let l2cap_addr = SockAddrL2::for_att_device(&bdaddr, addr_type);
 
         let rc = unsafe {
             connect(
@@ -126,7 +86,7 @@ impl AsyncL2capSocket {
         device_addr: &str,
         addr_type: u8,
     ) -> GattResult<()> {
-        let bdaddr = parse_bdaddr_string(device_addr)
+        let bdaddr = reverse_bdaddr(device_addr)
             .ok_or_else(|| GattError::InvalidAddress(device_addr.to_string()))?;
 
         self.peer_addr = Some(bdaddr);
@@ -223,37 +183,8 @@ impl Drop for AsyncL2capSocket {
 unsafe impl Send for AsyncL2capSocket {}
 unsafe impl Sync for AsyncL2capSocket {}
 
-fn parse_bdaddr_string(addr: &str) -> Option<[u8; 6]> {
-    let parts: Vec<u8> = addr
-        .split(':')
-        .map(|p| u8::from_str_radix(p, 16).ok())
-        .collect::<Option<_>>()?;
-    if parts.len() != 6 {
-        return None;
-    }
-    let mut result = [0u8; 6];
-    result.copy_from_slice(&parts);
-    Some(result)
-}
-
-fn format_bdaddr_hex(bytes: &[u8]) -> String {
-    format!(
-        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
-    )
-}
-
 pub fn format_bdaddr(bytes: &[u8]) -> String {
     format_bdaddr_hex(bytes)
-}
-
-unsafe extern "C" {
-    fn socket(domain: i32, ty: i32, protocol: i32) -> i32;
-    fn bind(fd: i32, addr: *const core::ffi::c_void, len: u32) -> i32;
-    fn connect(fd: i32, addr: *const core::ffi::c_void, len: u32) -> i32;
-    fn send(fd: i32, buf: *const core::ffi::c_void, len: usize, flags: i32) -> isize;
-    fn recv(fd: i32, buf: *mut core::ffi::c_void, len: usize, flags: i32) -> isize;
-    fn close(fd: i32) -> i32;
 }
 
 pub struct AsyncAttProtocol {
@@ -309,7 +240,7 @@ impl AsyncAttProtocol {
             return Err(GattError::MtuExchangeFailed);
         }
 
-        let server_mtu = u16::from_le_bytes([resp[1], resp[2]]);
+        let server_mtu = read_u16_le(&resp, 1);
         self.mtu = std::cmp::min(client_mtu, server_mtu);
         Ok(self.mtu)
     }
@@ -406,101 +337,35 @@ impl AsyncAttProtocol {
     }
 
     pub fn handle_notification(&self, data: &[u8]) -> Option<(u16, Vec<u8>)> {
-        if data.len() < 3 || data[0] != 0x1b {
-            return None;
-        }
-        let handle = u16::from_le_bytes([data[1], data[2]]);
-        Some((handle, data[3..].to_vec()))
+        crate::att::handle_notification(data)
     }
 
     pub fn handle_indication(&self, data: &[u8]) -> Option<(u16, Vec<u8>)> {
-        if data.len() < 3 || data[0] != 0x1d {
-            return None;
-        }
-        let handle = u16::from_le_bytes([data[1], data[2]]);
-        Some((handle, data[3..].to_vec()))
+        crate::att::handle_indication(data)
     }
 
     pub fn handle_execute_write_response(&self, data: &[u8]) -> bool {
-        data.first() == Some(&0x19)
+        crate::att::handle_execute_write_response(data)
     }
 
     pub fn parse_read_by_group_response(&self, data: &[u8]) -> Vec<(u16, u16, Vec<u8>)> {
-        let mut results = Vec::new();
-        if data.len() < 2 || data[0] != 0x11 {
-            return results;
-        }
-        let format = data[1] as usize;
-        if format != 6 && format != 20 {
-            return results;
-        }
-        let entry_size = format;
-        let mut offset = 2;
-        while offset + entry_size <= data.len() {
-            let start = u16::from_le_bytes([data[offset], data[offset + 1]]);
-            let end = u16::from_le_bytes([data[offset + 2], data[offset + 3]]);
-            let uuid = data[offset + 4..offset + entry_size].to_vec();
-            results.push((start, end, uuid));
-            offset += entry_size;
-        }
-        results
+        crate::att::parse_read_by_group_response(data)
     }
 
     pub fn parse_read_by_type_response(&self, data: &[u8]) -> Vec<(u16, Vec<u8>)> {
-        let mut results = Vec::new();
-        if data.len() < 2 || data[0] != 0x09 {
-            return results;
-        }
-        let format = data[1] as usize;
-        if format < 7 {
-            return results;
-        }
-        let mut offset = 2;
-        while offset + format <= data.len() {
-            let handle = u16::from_le_bytes([data[offset], data[offset + 1]]);
-            let value = data[offset + 2..offset + format].to_vec();
-            results.push((handle, value));
-            offset += format;
-        }
-        results
+        crate::att::parse_read_by_type_response(data)
     }
 
     pub fn parse_find_information_response(&self, data: &[u8]) -> Vec<(u16, Vec<u8>)> {
-        let mut results = Vec::new();
-        if data.len() < 2 || data[0] != 0x05 {
-            return results;
-        }
-        let format = data[1];
-        let uuid_size = match format {
-            0x01 => 2,
-            0x02 => 16,
-            _ => return results,
-        };
-        let entry_size = 2 + uuid_size;
-        let mut offset = 2;
-        while offset + entry_size <= data.len() {
-            let handle = u16::from_le_bytes([data[offset], data[offset + 1]]);
-            let uuid = data[offset + 2..offset + entry_size].to_vec();
-            results.push((handle, uuid));
-            offset += entry_size;
-        }
-        results
+        crate::att::parse_find_information_response(data)
     }
 
     pub fn parse_error_response(&self, data: &[u8]) -> Option<(u16, u8)> {
-        if data.len() < 4 || data[0] != 0x01 {
-            return None;
-        }
-        let handle = u16::from_le_bytes([data[1], data[2]]);
-        let error_code = data[3];
-        Some((handle, error_code))
+        crate::att::parse_error_response(data)
     }
 
     pub fn parse_mtu_response(&self, data: &[u8]) -> Option<u16> {
-        if data.len() < 3 || data[0] != 0x03 {
-            return None;
-        }
-        Some(u16::from_le_bytes([data[1], data[2]]))
+        crate::att::parse_mtu_response(data)
     }
 }
 

@@ -2,6 +2,8 @@ brief:
   command_type: QUERY
   target_node: node_phone
 command:
+  envelope_version: 1
+  command_version: 1
   issuer: user_alice
   target_node: node_phone
   command_type: QUERY

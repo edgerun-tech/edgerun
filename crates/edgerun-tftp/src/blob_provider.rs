@@ -34,11 +34,12 @@ pub type DecryptFn = Arc<dyn Fn(&[u8], &[u8]) -> io::Result<Vec<u8>> + Send + Sy
 ///
 /// # Setup
 /// ```no_run
-/// use edgerun_tftp::blob_provider::BlobTftpProvider;
+/// use std::sync::Arc;
+/// use edgerun_tftp::blob_provider::{BlobTftpProvider, DecryptFn};
 ///
 /// // You provide a decryptor function that knows how to decrypt blobs
-/// let decryptor: Box<dyn Fn(&[u8], &[u8]) -> edgerun_tftp::std::io::Result<Vec<u8>> + Send + Sync> =
-///     Box::new(|nonce, ciphertext| {
+/// let decryptor: DecryptFn =
+///     Arc::new(|nonce, ciphertext| {
 ///         // Your AES-GCM decryption here
 ///         Ok(Vec::new())
 ///     });

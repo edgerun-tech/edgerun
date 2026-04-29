@@ -3,6 +3,7 @@
 mod bluetooth;
 mod camera;
 mod common;
+mod display;
 mod input;
 mod microphone;
 mod speaker;
@@ -10,6 +11,7 @@ mod wifi;
 
 pub use bluetooth::{BluetoothConnectionRemoteAdapter, BluetoothRemoteAdapter};
 pub use camera::{CameraRemoteAdapter, PairedCameraRemoteAdapter};
+pub use display::DisplayRemoteAdapter;
 pub use input::InputRemoteAdapter;
 pub use microphone::MicrophoneRemoteAdapter;
 pub use speaker::SpeakerRemoteAdapter;
@@ -23,6 +25,10 @@ pub use bluetooth::{
 pub use camera::{
     decode_camera_capture, decode_paired_camera_frame, encode_camera_capture,
     encode_paired_camera_frame,
+};
+pub use display::{
+    decode_display_info, decode_display_update_request, encode_display_info,
+    encode_display_update_request,
 };
 pub use input::{decode_input_events, encode_input_events};
 pub use microphone::{decode_microphone_capture, encode_microphone_capture};

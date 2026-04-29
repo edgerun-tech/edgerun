@@ -52,6 +52,29 @@ pub fn percent_encode(s: &str) -> String {
     result
 }
 
+/// Percent-encode path segments while preserving `/` separators.
+///
+/// This is useful for URI paths where each segment must be escaped but the
+/// hierarchy separators must remain intact.
+pub fn percent_encode_path_segments(path: &str) -> String {
+    path.split('/')
+        .map(percent_encode)
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Percent-encode a value while preserving its first `:` separator.
+///
+/// This covers URI path values such as digest references where the colon is a
+/// structural separator rather than data inside either side.
+pub fn percent_encode_colon_pair(value: &str) -> String {
+    if let Some((left, right)) = value.split_once(':') {
+        alloc::format!("{}:{}", percent_encode(left), percent_encode(right))
+    } else {
+        percent_encode(value)
+    }
+}
+
 /// Percent-decode a string, handling `%XX` sequences and `+` as space.
 ///
 /// This is the inverse of `percent_encode`, with the additional handling
@@ -172,6 +195,27 @@ mod tests {
         assert_eq!(percent_encode("foo@bar.com"), "foo%40bar.com");
         assert_eq!(percent_encode("already-safe_123~"), "already-safe_123~");
         assert_eq!(percent_encode(""), "");
+    }
+
+    #[test]
+    fn test_percent_encode_path_segments() {
+        assert_eq!(
+            percent_encode_path_segments("library/alpine"),
+            "library/alpine"
+        );
+        assert_eq!(
+            percent_encode_path_segments("owner/repo name"),
+            "owner/repo%20name"
+        );
+    }
+
+    #[test]
+    fn test_percent_encode_colon_pair() {
+        assert_eq!(percent_encode_colon_pair("sha256:abcdef"), "sha256:abcdef");
+        assert_eq!(
+            percent_encode_colon_pair("tag with space"),
+            "tag%20with%20space"
+        );
     }
 
     #[test]

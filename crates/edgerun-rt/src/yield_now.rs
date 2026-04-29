@@ -5,7 +5,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 
 pub fn yieldnow() -> YieldNow {
-    YieldNow { yielded: false }
+    YieldNow::new()
 }
 
 pub struct YieldNow {
@@ -27,13 +27,12 @@ impl Default for YieldNow {
 impl Future for YieldNow {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
         if this.yielded {
             Poll::Ready(())
         } else {
             this.yielded = true;
-            cx.waker().wake_by_ref();
             Poll::Pending
         }
     }

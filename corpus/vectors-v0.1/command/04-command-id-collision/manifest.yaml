@@ -3,7 +3,7 @@ suite: command
 validator: validate_command
 version: 1
 priority: mandatory
-description: same command_id with different hash is rejected
+description: same command hash is duplicate; command_id is only an idempotency hint
 tags:
 - command
 - validate_command

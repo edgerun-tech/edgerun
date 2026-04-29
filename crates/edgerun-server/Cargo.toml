@@ -2,33 +2,46 @@
 name = "edgerun-server"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+publish.workspace = true
 description = "Unified multi-protocol server: HTTP, SMTP, IMAP, LMTP, DNS, DHCP, TFTP, Proxy"
 
 [[bin]]
 name = "http-server"
 path = "src/bin/http-server.rs"
-required-features = ["std"]
+required-features = ["std", "http3"]
+
+[[bin]]
+name = "edgerun-mail-server"
+path = "src/bin/edgerun-mail-server.rs"
+required-features = ["std", "smtp", "imap", "dns", "tls"]
 
 [dependencies]
-edgerun-http = { path = "../edgerun-http", default-features = false, features = ["connection-middleware", "http3"] }
+edgerun-http = { path = "../edgerun-http", default-features = false, features = ["connection-middleware", "server"] }
 edgerun-email = { path = "../edgerun-email", optional = true }
-edgerun-email-auth = { path = "../edgerun-email-auth", optional = true }
-edgerun-dns = { path = "../edgerun-dns", optional = true }
+edgerun-dns = { path = "../edgerun-dns", default-features = false, optional = true }
+edgerun-acme = { path = "../edgerun-acme", features = ["dns_challenge"] }
+edgerun-config = { path = "../edgerun-config" }
+edgerun-email-auth = { path = "../edgerun-email-auth" }
 edgerun-dhcp = { path = "../edgerun-dhcp", optional = true }
 edgerun-tftp = { path = "../edgerun-tftp", optional = true }
 edgerun-proxy = { path = "../edgerun-proxy", optional = true }
 edgerun-rt = { path = "../edgerun-rt" }
-edgerun-tls = { path = "../edgerun-tls" }
+edgerun-tls = { path = "../edgerun-tls", optional = true }
 edgerun-log = { path = "../edgerun-log" }
 
 [features]
 default = ["smtp", "imap", "lmtp", "dns", "dhcp", "tftp", "tls"]
 std = []
-smtp = ["dep:edgerun-email", "edgerun-email/tls", "dep:edgerun-email-auth", "edgerun-email/dkim"]
+smtp = ["dep:edgerun-email", "edgerun-email/tls", "edgerun-email/dkim"]
 imap = ["dep:edgerun-email", "edgerun-email/tls"]
 lmtp = ["dep:edgerun-email"]
 dns = ["dep:edgerun-dns"]
 dhcp = ["dep:edgerun-dhcp"]
 tftp = ["dep:edgerun-tftp", "edgerun-tftp/server"]
 proxy = ["dep:edgerun-proxy"]
-tls = []
+tls = ["dep:edgerun-tls", "edgerun-http/tls"]
+http3 = ["tls", "edgerun-http/http3"]
+
+[lints]
+workspace = true

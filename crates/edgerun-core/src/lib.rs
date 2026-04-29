@@ -11,7 +11,7 @@ macro_rules! println {
     };
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(all(not(target_os = "none"), feature = "conformance"))]
 macro_rules! eprintln {
     ($($arg:tt)*) => {
         std::eprintln!($($arg)*)
@@ -23,7 +23,7 @@ macro_rules! println {
     ($($arg:tt)*) => {};
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", feature = "conformance"))]
 macro_rules! eprintln {
     ($($arg:tt)*) => {};
 }
@@ -38,6 +38,7 @@ pub use std_compat::*;
 pub mod accounting;
 pub mod benchmark;
 pub mod command;
+#[cfg(feature = "conformance")]
 pub mod conformance;
 pub mod crypto;
 pub mod fixed_point;

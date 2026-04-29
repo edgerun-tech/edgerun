@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 use edgerun_crypto::p256::ecdsa::SigningKey;
-#[cfg(feature = "android-hardware")]
+#[cfg(all(feature = "android-hardware", target_os = "android"))]
 use edgerun_hardware_signing::AndroidKeystoreHardwareKeyAdapter;
 use edgerun_hardware_signing::{
     HardwareMeshSigner, MeshSigner, NodeID, TpmHardwareKeyAdapter, YubiKeyHardwareKeyAdapter,
@@ -159,7 +159,7 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
 
             edgerun_log::info!("using Android Keystore signer: alias={}", alias);
 
-            #[cfg(feature = "android-hardware")]
+            #[cfg(all(feature = "android-hardware", target_os = "android"))]
             {
                 // Initialize JVM context if not already done
                 edgerun_android_keystore::init_keystore_jvm().unwrap_or_else(|e| {
@@ -189,9 +189,11 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                 return Arc::new(mesh_signer);
             }
 
-            #[cfg(not(feature = "android-hardware"))]
+            #[cfg(not(all(feature = "android-hardware", target_os = "android")))]
             {
-                eprintln!("error: Android Keystore signer requested but android-hardware feature is not enabled");
+                eprintln!(
+                    "error: Android Keystore signer requested but real keystore support is only available on Android targets with android-hardware enabled"
+                );
                 std::process::exit(1);
             }
         }

@@ -430,7 +430,7 @@ impl<'a> Parser<'a> {
                 return Err(JsonParseError::ExpectedColon { index: self.index });
             }
             let value = self.parse_value()?;
-            entries.push((key, value));
+            entries.push_field(key, value);
             self.skip_whitespace();
             if self.try_consume_byte(b'}') {
                 break;

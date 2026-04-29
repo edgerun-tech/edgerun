@@ -2,5 +2,8 @@ aggregate_descriptor:
   aggregate_id: agg_01
   source_query_id: query_active
   aggregator: node_server
+  aggregated_at: '2030-01-01T00:00:00Z'
   input_fragments:
   - object_id: fragment_obj_1
+  payload_object:
+    object_id: aggregate_payload_1

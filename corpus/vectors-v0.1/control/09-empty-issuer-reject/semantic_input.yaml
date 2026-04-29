@@ -1,0 +1,9 @@
+brief:
+  command_type: ADD_CONTROLLER
+  new_controller: user_bob
+command:
+  command_type: ADD_CONTROLLER
+  new_controller: user_bob
+  issuer: ''
+  target_node: node_server
+  command_id: ctrl_09-empty-issuer-reject

@@ -3,7 +3,7 @@
 use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::middleware::Extensions;
-use crate::uri::Uri;
+use crate::uri::{Scheme, Uri};
 use crate::Result;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -108,12 +108,11 @@ impl Request {
         let body_start = terminator + 4;
         let body = if body_start < raw.len() {
             let body_str = &raw[body_start..];
-            if headers
-                .get("transfer-encoding")
-                .map(|v| v.as_str().to_ascii_lowercase().contains("chunked"))
-                .unwrap_or(false)
-            {
-                Some(parse_chunked_body(body_str.as_bytes())?)
+            if crate::chunked::has_chunked_transfer_coding(&headers) {
+                Some(
+                    crate::chunked::parse_body(body_str.as_bytes())
+                        .map_err(|err| crate::Error::InvalidRequest(err.to_string()))?,
+                )
             } else if let Some(cl) = headers.get("content-length") {
                 if let Ok(len) = cl.as_str().parse::<usize>() {
                     Some(body_str[..len.min(body_str.len())].as_bytes().to_vec())
@@ -178,18 +177,24 @@ impl Request {
         buf.extend_from_slice(self.uri.request_target().as_bytes());
         buf.extend_from_slice(b" HTTP/1.1\r\n");
 
+        let mut has_content_length = false;
         for (name, value) in self.headers.iter() {
+            if name.as_str().eq_ignore_ascii_case("content-length") {
+                has_content_length = true;
+            }
             buf.extend_from_slice(name.as_str().as_bytes());
             buf.extend_from_slice(b": ");
             buf.extend_from_slice(value.as_str().as_bytes());
             buf.extend_from_slice(b"\r\n");
         }
 
-        if let Some(ref body) = self.body {
-            let cl = body.len().to_string();
-            buf.extend_from_slice(b"Content-Length: ");
-            buf.extend_from_slice(cl.as_bytes());
-            buf.extend_from_slice(b"\r\n");
+        if !has_content_length {
+            if let Some(ref body) = self.body {
+                let cl = body.len().to_string();
+                buf.extend_from_slice(b"Content-Length: ");
+                buf.extend_from_slice(cl.as_bytes());
+                buf.extend_from_slice(b"\r\n");
+            }
         }
 
         buf.extend_from_slice(b"\r\n");
@@ -198,10 +203,6 @@ impl Request {
         }
         buf
     }
-}
-
-fn parse_chunked_body(input: &[u8]) -> Result<Vec<u8>> {
-    crate::chunked::parse_body(input).map_err(|err| crate::Error::InvalidRequest(err.to_string()))
 }
 
 impl fmt::Display for Request {
@@ -290,15 +291,12 @@ impl RequestBuilder {
         let mut headers = self.headers;
         if !headers.contains_key("Host") {
             if let Some(host) = uri.host() {
-                let host_header = match uri.port() {
-                    Some(port) => format!("{host}:{port}"),
-                    None => host.to_string(),
-                };
+                let host_header = host_header_value(&uri, host);
                 let _ = headers.insert("Host", &host_header);
             }
         }
         if !headers.contains_key("Connection") {
-            let _ = headers.insert("Connection", "close");
+            let _ = headers.insert("Connection", "keep-alive");
         }
         if !headers.contains_key("User-Agent") {
             let _ = headers.insert("User-Agent", "edgerun-browser/0.1");
@@ -314,6 +312,19 @@ impl RequestBuilder {
             body: self.body,
             extensions: self.extensions,
         })
+    }
+}
+
+fn host_header_value(uri: &Uri, host: &str) -> String {
+    let host = if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    };
+
+    match (uri.scheme(), uri.port()) {
+        (Scheme::Http, Some(80)) | (Scheme::Https, Some(443)) | (_, None) => host,
+        (_, Some(port)) => format!("{host}:{port}"),
     }
 }
 

@@ -16,6 +16,8 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
+#[cfg(feature = "http-compression")]
+use edgerun_encoding::crc32::crc32;
 
 /// Supported content encodings
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,12 +37,16 @@ pub enum ContentEncoding {
 impl ContentEncoding {
     /// Parse from Content-Encoding header value
     pub fn from_str(value: &str) -> Self {
-        match value.to_lowercase().as_str() {
-            "gzip" => ContentEncoding::Gzip,
-            "deflate" => ContentEncoding::Deflate,
-            "br" => ContentEncoding::Brotli,
-            "identity" => ContentEncoding::Identity,
-            _ => ContentEncoding::Unknown,
+        if value.eq_ignore_ascii_case("gzip") {
+            ContentEncoding::Gzip
+        } else if value.eq_ignore_ascii_case("deflate") {
+            ContentEncoding::Deflate
+        } else if value.eq_ignore_ascii_case("br") {
+            ContentEncoding::Brotli
+        } else if value.eq_ignore_ascii_case("identity") {
+            ContentEncoding::Identity
+        } else {
+            ContentEncoding::Unknown
         }
     }
 
@@ -236,19 +242,6 @@ fn skip_zero_terminated(data: &[u8], mut pos: usize) -> Option<usize> {
         }
     }
     None
-}
-
-#[cfg(feature = "http-compression")]
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xffff_ffffu32;
-    for &byte in data {
-        crc ^= byte as u32;
-        for _ in 0..8 {
-            let mask = 0u32.wrapping_sub(crc & 1);
-            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
-        }
-    }
-    !crc
 }
 
 #[cfg(feature = "http-compression")]

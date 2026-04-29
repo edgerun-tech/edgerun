@@ -196,7 +196,7 @@ impl GitAwarePersist {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
+    use crate::test_support::TempDir;
 
     #[test]
     fn test_edgekeep_exact_match() {

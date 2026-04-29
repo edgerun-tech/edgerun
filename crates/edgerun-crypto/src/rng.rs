@@ -6,7 +6,7 @@
 //! 3. no_std SHA-256 counter DRBG seeded from mixed entropy when available
 
 use core::num::NonZeroU32;
-use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use rand_core::{CryptoRng, Error as RandError, RngCore};
 use sha2::Digest;
@@ -20,11 +20,17 @@ const EXTERNAL_SOURCE_NONE: usize = 0;
 
 static EXTERNAL_SOURCE: AtomicUsize = AtomicUsize::new(EXTERNAL_SOURCE_NONE);
 static DRBG_INITIALIZED: AtomicBool = AtomicBool::new(false);
-static DRBG_COUNTER: AtomicU64 = AtomicU64::new(1);
-static DRBG_STATE_0: AtomicU64 = AtomicU64::new(0);
-static DRBG_STATE_1: AtomicU64 = AtomicU64::new(0);
-static DRBG_STATE_2: AtomicU64 = AtomicU64::new(0);
-static DRBG_STATE_3: AtomicU64 = AtomicU64::new(0);
+static DRBG_COUNTER: AtomicUsize = AtomicUsize::new(1);
+static DRBG_STATE: [AtomicUsize; 8] = [
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+];
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OsRng;
@@ -169,31 +175,25 @@ fn next_drbg_block() -> [u8; 32] {
 
 fn state_bytes() -> [u8; 32] {
     let mut out = [0u8; 32];
-    out[0..8].copy_from_slice(&DRBG_STATE_0.load(Ordering::Acquire).to_le_bytes());
-    out[8..16].copy_from_slice(&DRBG_STATE_1.load(Ordering::Acquire).to_le_bytes());
-    out[16..24].copy_from_slice(&DRBG_STATE_2.load(Ordering::Acquire).to_le_bytes());
-    out[24..32].copy_from_slice(&DRBG_STATE_3.load(Ordering::Acquire).to_le_bytes());
+    for (chunk, word) in out
+        .chunks_mut(core::mem::size_of::<usize>())
+        .zip(DRBG_STATE.iter())
+    {
+        chunk.copy_from_slice(&word.load(Ordering::Acquire).to_le_bytes());
+    }
     out
 }
 
 fn store_state(bytes: &[u8]) {
     debug_assert!(bytes.len() >= 32);
-    DRBG_STATE_0.store(
-        u64::from_le_bytes(bytes[0..8].try_into().unwrap()),
-        Ordering::Release,
-    );
-    DRBG_STATE_1.store(
-        u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
-        Ordering::Release,
-    );
-    DRBG_STATE_2.store(
-        u64::from_le_bytes(bytes[16..24].try_into().unwrap()),
-        Ordering::Release,
-    );
-    DRBG_STATE_3.store(
-        u64::from_le_bytes(bytes[24..32].try_into().unwrap()),
-        Ordering::Release,
-    );
+    for (chunk, word) in bytes[..32]
+        .chunks(core::mem::size_of::<usize>())
+        .zip(DRBG_STATE.iter())
+    {
+        let mut word_bytes = [0u8; core::mem::size_of::<usize>()];
+        word_bytes.copy_from_slice(chunk);
+        word.store(usize::from_le_bytes(word_bytes), Ordering::Release);
+    }
 }
 
 fn rand_error() -> RandError {

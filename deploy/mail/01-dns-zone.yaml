@@ -56,6 +56,11 @@ spec:
       type: TXT
       value: "v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@edgerun.tech"
       ttl: 3600
+    # DKIM public key for selector: mail
+    - name: mail._domainkey
+      type: TXT
+      value: "v=DKIM1; k=rsa; p=MIIBCgKCAQEAy+Enfug7AYUY+u5InnNMGM39BJsmkqkZFpx5HAUe7ffAPBJhVDIJI4OfcewD+04at3W8aXBx/ZYXxPVO2twqj5nIuKpJVAAeKCaJUuMCyciUtZ89bG61zHFtimMekY4YdSRUwN05Ukq1QfSKFz5FF0E7q7/+KlKATLb3lTtzMJK4olNIDj7EnzW2b9W9PIyyzsnjp/YRSL/u6YlZRWkAT62I8AqnpbegdXMt89aWJMkXF7cfR2TJCJb73qU/ACFYSd6asGWfsCFsDh3dtp8lwpJFwmDY2kUlv6HdN0Hp9NuiX+Ck7z+rrsH9YhVlKlQTtna++bjg2XVgS1rE0o0ogQIDAQAB"
+      ttl: 86400
 
 ---
 apiVersion: edgerun.io/v1alpha1

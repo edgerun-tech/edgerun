@@ -2,9 +2,9 @@ use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use edgerun_core::util::system_time_to_prost;
+use edgerun_core::util::now_prost_timestamp;
+use edgerun_encoding::byteorder::read_u64_be;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh_daemon::MeshDaemon;
 use edgerun_rt::CancellationToken;
@@ -290,7 +290,7 @@ fn send_command_to_peer_blocking(
     let mut header = [0u8; 8];
     stream.read_exact(&mut header)?;
 
-    let payload_len = u64::from_be_bytes(header) as usize;
+    let payload_len = read_u64_be(&header, 0) as usize;
     let mut payload = vec![0u8; payload_len];
     stream.read_exact(&mut payload)?;
 
@@ -321,7 +321,7 @@ pub async fn send_command_to_peer_async(
     )
     .await??;
 
-    let payload_len = u64::from_be_bytes(header) as usize;
+    let payload_len = read_u64_be(&header, 0) as usize;
     let mut payload = vec![0u8; payload_len];
     edgerun_rt::timeout(
         std::time::Duration::from_secs(30),
@@ -357,7 +357,7 @@ pub async fn send_query_to_peer(
     )
     .await??;
 
-    let payload_len = u64::from_be_bytes(header) as usize;
+    let payload_len = read_u64_be(&header, 0) as usize;
     let mut payload = vec![0u8; payload_len];
     edgerun_rt::timeout(
         std::time::Duration::from_secs(30),
@@ -510,7 +510,7 @@ pub async fn cmd_run(
             prev_event_hash: None,
             event_type: EventType::NodeGenesis as i32,
             event_version: 1,
-            recorded_at: Some(system_time_to_prost(SystemTime::now())),
+            recorded_at: Some(now_prost_timestamp()),
             effective_at: None,
             payload_object: Some(payload_object_ref),
             related_events: vec![],

@@ -98,7 +98,9 @@ impl HttpServer {
         addr: impl crate::runtime::net::ToSocketAddrs,
     ) -> crate::runtime::io::Result<BoundHttpServer> {
         let listener = bind_tcp_listener(addr)?;
-        let local_addr = listener.local_addr()?;
+        let local_addr = listener
+            .local_addr()
+            .map_err(crate::runtime::io::Error::other)?;
 
         #[cfg(feature = "http3")]
         let http3_server = if self.http3_enabled && self.tls_cert.is_some() {
@@ -201,8 +203,8 @@ impl BoundHttpServer {
             if tcp_shutdown.is_cancelled() {
                 break;
             }
-            match self.listener.accept().await {
-                Ok((stream, peer_addr)) => {
+            match timeout(Duration::from_millis(100), self.listener.accept()).await {
+                Ok(Ok((stream, peer_addr))) => {
                     let h = Arc::clone(&handler);
                     let ka = keep_alive;
                     let ms = max_size;
@@ -225,9 +227,12 @@ impl BoundHttpServer {
                         }
                     });
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     edgerun_log::error!("Accept error: {}", e);
                     sleep(Duration::from_millis(100)).await;
+                }
+                Err(_) => {
+                    continue;
                 }
             }
         }
@@ -243,7 +248,11 @@ impl BoundHttpServer {
     }
 
     pub async fn accept_one(&self) -> crate::runtime::io::Result<()> {
-        let (stream, _) = self.listener.accept().await?;
+        let (stream, _) = self
+            .listener
+            .accept()
+            .await
+            .map_err(crate::runtime::io::Error::other)?;
         let handler = Arc::clone(&self.handler);
         handle_connection(
             stream,
@@ -1215,52 +1224,31 @@ async fn write_response_head<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    reader
-        .write_all(
-            format!(
-                "HTTP/1.1 {} {}\r\n",
-                response.status().as_u16(),
-                response.status().reason()
-            )
-            .as_bytes(),
-        )
-        .await
-        .map_err(crate::runtime::bare_io)?;
-    for (name, value) in response.headers().iter() {
-        reader
-            .write_all(name.as_str().as_bytes())
-            .await
-            .map_err(crate::runtime::bare_io)?;
-        reader
-            .write_all(b": ")
-            .await
-            .map_err(crate::runtime::bare_io)?;
-        reader
-            .write_all(value.as_str().as_bytes())
-            .await
-            .map_err(crate::runtime::bare_io)?;
-        reader
-            .write_all(b"\r\n")
-            .await
-            .map_err(crate::runtime::bare_io)?;
-    }
-    if !response.headers().contains_key("Content-Length") {
-        let cl = if is_head { 0 } else { response.body().len() };
-        reader
-            .write_all(format!("Content-Length: {}\r\n", cl).as_bytes())
-            .await
-            .map_err(crate::runtime::bare_io)?;
-    }
-    reader
-        .write_all(b"\r\n")
-        .await
-        .map_err(crate::runtime::bare_io)?;
-    Ok(())
+    let content_length = if is_head { 0 } else { response.body().len() };
+    write_response_headers(reader, response, content_length).await
 }
 
 async fn write_response<S>(
     reader: &mut BufReader<S>,
     response: Response,
+) -> crate::runtime::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    write_response_headers(reader, &response, response.body().len()).await?;
+    if should_write_response_body(&response) {
+        reader
+            .write_all(response.body())
+            .await
+            .map_err(crate::runtime::bare_io)?;
+    }
+    Ok(())
+}
+
+async fn write_response_headers<S>(
+    reader: &mut BufReader<S>,
+    response: &Response,
+    content_length: usize,
 ) -> crate::runtime::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -1296,7 +1284,7 @@ where
     }
     if !response.headers().contains_key("Content-Length") {
         reader
-            .write_all(format!("Content-Length: {}\r\n", response.body().len()).as_bytes())
+            .write_all(format!("Content-Length: {}\r\n", content_length).as_bytes())
             .await
             .map_err(crate::runtime::bare_io)?;
     }
@@ -1304,15 +1292,12 @@ where
         .write_all(b"\r\n")
         .await
         .map_err(crate::runtime::bare_io)?;
-    if !response.body().is_empty()
+    Ok(())
+}
+
+fn should_write_response_body(response: &Response) -> bool {
+    !response.body().is_empty()
         && response.status().as_u16() != 204
         && response.status().as_u16() != 304
         && !response.status().is_informational()
-    {
-        reader
-            .write_all(response.body())
-            .await
-            .map_err(crate::runtime::bare_io)?;
-    }
-    Ok(())
 }

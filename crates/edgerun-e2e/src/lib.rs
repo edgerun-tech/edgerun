@@ -36,8 +36,10 @@ mod suite {
     use std::process::{Child, Command};
     use std::string::{String, ToString};
     use std::sync::atomic::{AtomicU16, Ordering};
+    use std::sync::{Mutex, MutexGuard, OnceLock};
     use std::time::Duration;
     use std::vec::Vec;
+    use std::{cell::RefCell, thread_local};
     use std::{format, println, vec};
 
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
@@ -120,6 +122,31 @@ mod suite {
             Ok(out)
         }
 
+        fn sign_message_var(&self, message: &[u8]) -> Result<[u8; MESH_SIGNATURE_LENGTH], String> {
+            let sig: edgerun_crypto::p256::ecdsa::Signature = self
+                .signing_key
+                .sign_prehash(message)
+                .map_err(|e| format!("sign failed: {e}"))?;
+            let (r, s) = sig.split_bytes();
+            let mut out = [0u8; MESH_SIGNATURE_LENGTH];
+            out[..32].copy_from_slice(&r);
+            out[32..].copy_from_slice(&s);
+            Ok(out)
+        }
+
+        fn sign_record(
+            &self,
+            sig_domain_tag: &str,
+            canonical_bytes: &[u8],
+        ) -> Result<[u8; MESH_SIGNATURE_LENGTH], String> {
+            let hash_domain =
+                edgerun_core::crypto::hash_domain_for_signature_domain(sig_domain_tag)
+                    .unwrap_or(sig_domain_tag);
+            let record_hash = edgerun_core::crypto::record_hash(hash_domain, canonical_bytes);
+            let sig_input = edgerun_core::crypto::signature_input(sig_domain_tag, &record_hash);
+            self.sign_message_var(&sig_input)
+        }
+
         fn private_key_hex(&self) -> String {
             edgerun_core::util::bytes_to_hex(&self.seed)
         }
@@ -132,6 +159,47 @@ mod suite {
     // ===========================================================================
     // edgerund process management
     // ===========================================================================
+
+    static DAEMON_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    static EDGERUND_BUILD: OnceLock<()> = OnceLock::new();
+
+    thread_local! {
+        static DAEMON_TEST_GUARD: RefCell<Option<MutexGuard<'static, ()>>> = RefCell::new(None);
+    }
+
+    fn serialize_daemon_test_thread() {
+        DAEMON_TEST_GUARD.with(|guard| {
+            if guard.borrow().is_none() {
+                let lock = DAEMON_TEST_LOCK.get_or_init(|| Mutex::new(()));
+                *guard.borrow_mut() = Some(lock.lock().expect("daemon test lock poisoned"));
+            }
+        });
+    }
+
+    fn probe_health_port(port: u16) -> bool {
+        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(100)) else {
+            return false;
+        };
+        let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
+        let _ = stream.set_write_timeout(Some(Duration::from_millis(200)));
+        if stream
+            .write_all(b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+            .is_err()
+        {
+            return false;
+        }
+        let mut buf = [0u8; 64];
+        matches!(stream.read(&mut buf), Ok(n) if core::str::from_utf8(&buf[..n]).is_ok_and(|s| s.starts_with("HTTP/1.1 200")))
+    }
+
+    fn probe_tcp_port(port: u16) -> bool {
+        TcpStream::connect_timeout(
+            &SocketAddr::from(([127, 0, 0, 1], port)),
+            Duration::from_millis(100),
+        )
+        .is_ok()
+    }
 
     struct EdgerundNode {
         process: Child,
@@ -202,16 +270,11 @@ signer:
                 .spawn()
                 .unwrap_or_else(|e| panic!("failed to start edgerund for '{}': {}", name, e));
 
-            // Wait for the daemon to start listening on health port
+            // Wait for both externally visible listeners to be ready.
             let mut retries = 0;
             while retries < 100 {
                 std::thread::sleep(Duration::from_millis(100));
-                if TcpStream::connect_timeout(
-                    &SocketAddr::from(([127, 0, 0, 1], health_port)),
-                    Duration::from_millis(100),
-                )
-                .is_ok()
-                {
+                if probe_health_port(health_port) && probe_tcp_port(listen_port) {
                     break;
                 }
                 retries += 1;
@@ -251,21 +314,40 @@ signer:
     }
 
     fn edgerund_binary_path() -> String {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let binary = format!("{}/../../target/debug/edgerund", manifest_dir);
-        if std::path::Path::new(&binary).exists() {
-            return binary;
+        serialize_daemon_test_thread();
+
+        EDGERUND_BUILD.get_or_init(|| {
+            let status = Command::new("cargo")
+                .arg("build")
+                .arg("-p")
+                .arg("edgerun-node")
+                .arg("--bin")
+                .arg("edgerund")
+                .arg("--features")
+                .arg("std")
+                .arg("--quiet")
+                .status()
+                .expect("failed to build edgerund");
+            assert!(status.success(), "edgerund build failed");
+        });
+
+        if let Ok(binary) = std::env::var("CARGO_BIN_EXE_edgerund") {
+            if std::path::Path::new(&binary).exists() {
+                return binary;
+            }
         }
-        // Build it
-        let status = Command::new("cargo")
-            .arg("build")
-            .arg("-p")
-            .arg("edgerun-node")
-            .arg("--quiet")
-            .status()
-            .expect("failed to build edgerund");
-        assert!(status.success(), "edgerund build failed");
-        binary
+
+        let current_exe = std::env::current_exe().expect("failed to resolve current test binary");
+        let target_debug_dir = current_exe
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("failed to resolve target debug dir from test binary");
+        let binary = target_debug_dir.join("edgerund");
+        if binary.exists() {
+            return binary.display().to_string();
+        }
+
+        panic!("edgerund binary was not found at {}", binary.display());
     }
 
     // ===========================================================================
@@ -273,7 +355,7 @@ signer:
     // ===========================================================================
 
     fn encode_frame(msg: &[u8]) -> Vec<u8> {
-        let mut frame = encode_varint(msg.len() as u64);
+        let mut frame = (msg.len() as u64).to_be_bytes().to_vec();
         frame.extend_from_slice(msg);
         frame
     }
@@ -309,10 +391,6 @@ signer:
         Some(payload)
     }
 
-    fn encode_varint(mut v: u64) -> Vec<u8> {
-        edgerun_core::varint::encode_varint(v)
-    }
-
     fn session_handshake(
         stream: &mut TcpStream,
         signer: &TestSigner,
@@ -339,18 +417,10 @@ signer:
             signature: None,
         };
 
-        let hello_bytes = SessionHello::encode_to_vec(&hello);
-        // Sign with domain separation: SHA-256(domain || 0x00 || SHA-256(hello_bytes))
-        let record_hash = edgerun_crypto::sha256(&hello_bytes);
-        let mut sig_input = Vec::with_capacity(28 + 1 + 32);
-        sig_input.extend_from_slice(edgerun_core::crypto::SIG_DOMAIN_SESSION_HELLO.as_bytes());
-        sig_input.push(0);
-        sig_input.extend_from_slice(&record_hash);
-        let digest = edgerun_crypto::sha256(&sig_input);
-        let mut digest_bytes = [0u8; 32];
-        digest_bytes.copy_from_slice(&digest);
+        let record = edgerun_core::protocol::ProtocolRecord::SessionHello(hello.clone());
+        let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
         let sig = signer
-            .sign_digest(&digest_bytes)
+            .sign_record(edgerun_core::crypto::SIG_DOMAIN_SESSION_HELLO, &canonical)
             .map_err(|e| e.to_string())?;
         let mut signed_hello = hello;
         signed_hello.signature = Some(edgerun_proto::edgerun::v0::common::Signature {
@@ -412,36 +482,44 @@ signer:
             "/"
         };
 
-        let mut stream = TcpStream::connect_timeout(
-            &host_port
-                .parse()
-                .map_err(|e| format!("Bad address: {}", e))?,
-            Duration::from_secs(5),
-        )
-        .map_err(|e| e.to_string())?;
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .map_err(|e| e.to_string())?;
+        let addr = host_port
+            .parse()
+            .map_err(|e| format!("Bad address: {}", e))?;
+        let mut last_err = String::new();
+        for _ in 0..50 {
+            let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(200))
+                .map_err(|e| e.to_string())?;
+            stream
+                .set_read_timeout(Some(Duration::from_millis(500)))
+                .map_err(|e| e.to_string())?;
+            stream
+                .set_write_timeout(Some(Duration::from_millis(500)))
+                .map_err(|e| e.to_string())?;
 
-        write!(
-            stream,
-            "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
-            path, host_port
-        )
-        .map_err(|e| e.to_string())?;
-
-        let mut reader = BufReader::new(stream);
-        let mut status_line = String::new();
-        reader
-            .read_line(&mut status_line)
-            .map_err(|e| e.to_string())?;
-
-        let parts: Vec<&str> = status_line.split_whitespace().collect();
-        if parts.len() >= 2 {
-            parts[1].parse::<u16>().map_err(|e| e.to_string())
-        } else {
-            Err(format!("Invalid status line: {}", status_line.trim()))
+            match write!(
+                stream,
+                "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+                path, host_port
+            ) {
+                Ok(()) => {
+                    let mut reader = BufReader::new(stream);
+                    let mut status_line = String::new();
+                    match reader.read_line(&mut status_line) {
+                        Ok(_) => {
+                            let parts: Vec<&str> = status_line.split_whitespace().collect();
+                            if parts.len() >= 2 {
+                                return parts[1].parse::<u16>().map_err(|e| e.to_string());
+                            }
+                            last_err = format!("Invalid status line: {}", status_line.trim());
+                        }
+                        Err(e) => last_err = e.to_string(),
+                    }
+                }
+                Err(e) => last_err = e.to_string(),
+            }
+            std::thread::sleep(Duration::from_millis(100));
         }
+        Err(last_err)
     }
 
     #[cfg(test)]

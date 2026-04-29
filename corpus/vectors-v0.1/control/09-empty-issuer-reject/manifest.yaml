@@ -1,0 +1,9 @@
+id: control/09-empty-issuer-reject
+suite: control
+validator: validate_control_change
+version: 1
+priority: mandatory
+description: control command with empty issuer is structurally invalid
+tags:
+- control
+- validate_control_change

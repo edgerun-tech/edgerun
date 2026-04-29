@@ -27,16 +27,11 @@
 //!
 //! | Feature | Description |
 //! |---------|-------------|
-//! | `alloc` (default) | Allocator support for no_std environments |
 //! | `std` | Standard library interop for reader/writer adapters and std errors |
-//! | `serde` | Serde Serialize/Deserialize support |
-//! | `indexmap` | Use indexmap for ordered maps |
-//! | `raw_value` | Raw value support (requires serde) |
 //!
 //! # Zero Dependencies
 //!
-//! By default, this crate has **zero runtime dependencies**. The `serde` feature
-//! is optional and enables typed serialization/deserialization.
+//! This crate has **zero runtime dependencies** by default.
 
 #![no_std]
 
@@ -68,54 +63,42 @@ pub mod yaml;
 #[cfg(feature = "yaml")]
 mod yaml_api;
 
+mod api;
 mod borrowed_value;
 mod error;
 mod index;
 pub mod io;
 mod json_macro;
 mod map;
+mod model;
 mod number;
 mod parse;
 mod partial_eq;
-#[cfg(feature = "raw_value")]
-mod raw;
-mod serde_api;
-#[cfg(feature = "serde")]
-mod serde_deserialize;
-#[cfg(feature = "serde")]
-mod serde_error;
-#[cfg(feature = "serde")]
-mod serde_serialize;
-#[cfg(feature = "serde")]
-mod serde_streaming_serialize;
 mod tape;
 mod util;
 mod value;
 
+pub use api::{
+    escape_json_string, from_slice, from_slice_as, from_str, from_str_as, from_value_as,
+    parse_json, parse_json_borrowed, parse_json_tape, to_string, to_string_pretty, to_vec,
+    to_vec_pretty,
+};
+pub use api::{from_reader, to_writer, to_writer_pretty};
 pub use borrowed_value::BorrowedJsonValue;
 pub use error::{JsonError, JsonParseError};
 pub use index::ValueIndex;
 pub use map::Map;
-pub use number::JsonNumber;
-pub use serde_api::{
-    escape_json_string, from_slice, from_str, parse_json, parse_json_borrowed, parse_json_tape,
-    to_string, to_string_pretty, to_vec, to_vec_pretty,
+pub use model::{
+    from_json_slice, from_json_str, from_json_value, to_json_string, to_json_value, to_json_vec,
+    FromJson, ToJson,
 };
-pub use serde_api::{from_reader, to_writer, to_writer_pretty};
-#[cfg(feature = "serde")]
-pub use serde_api::{from_value, to_value};
+pub use number::JsonNumber;
 pub use tape::{
     CompiledObjectSchema, CompiledRowSchema, CompiledTapeKey, CompiledTapeKeys, IndexedTapeObject,
     JsonTape, TapeObjectIndex, TapeToken, TapeTokenKind, TapeValue,
 };
-pub use value::{JsonValue, Number, Value};
+pub use value::{JsonValue, JsonValueError, Number, Value};
 
-#[cfg(feature = "raw_value")]
-pub use raw::{to_raw_value, RawValue};
-#[cfg(feature = "serde")]
-pub use serde_deserialize::JsonValueDeserializer;
-#[cfg(feature = "serde")]
-pub use serde_error::{Category, Error};
 #[cfg(feature = "toml")]
 pub use toml::{
     from_toml_str, json_to_toml, parse_toml_value, to_toml_string, toml_to_json, TomlError,
@@ -126,8 +109,156 @@ pub use yaml::{
     from_yaml_str, parse_yaml_value, to_yaml_string, YamlDeserializer, YamlError, YamlValue,
 };
 
-#[cfg(feature = "serde")]
-pub type Result<T, E = Error> = core::result::Result<T, E>;
+#[doc(hidden)]
+pub fn __json_error_message(message: &str) -> alloc::string::String {
+    alloc::string::String::from(message)
+}
+
+#[macro_export]
+macro_rules! impl_json_struct {
+    (@canonical_key [$first:expr $(, $rest:expr)* $(,)?]) => {
+        $first
+    };
+    (@canonical_key $key:expr) => {
+        $key
+    };
+    (@take_required $object:ident, [$($key:expr),+ $(,)?] => $ty:ty) => {
+        $object.take_required_any::<$ty>(&[$($key),+])
+    };
+    (@take_required $object:ident, $key:expr => $ty:ty) => {
+        $object.take_required::<$ty>($key)
+    };
+    (@take_optional $object:ident, [$($key:expr),+ $(,)?] => $ty:ty) => {
+        $object.take_optional_any::<$ty>(&[$($key),+])
+    };
+    (@take_optional $object:ident, $key:expr => $ty:ty) => {
+        $object.take_optional::<$ty>($key)
+    };
+    (
+        $ty:ty {
+            required { $($required_field:ident : $required_key:tt => $required_ty:ty),* $(,)? }
+            optional { $($optional_field:ident : $optional_key:tt => $optional_ty:ty),* $(,)? }
+        }
+    ) => {
+        impl $crate::ToJson for $ty {
+            fn to_json(&self) -> $crate::JsonValue {
+                let mut object = $crate::Map::new();
+                $(
+                    object.push_field(
+                        $crate::impl_json_struct!(@canonical_key $required_key),
+                        $crate::ToJson::to_json(&self.$required_field),
+                    );
+                )*
+                $(
+                    object.push_opt_field(
+                        $crate::impl_json_struct!(@canonical_key $optional_key),
+                        self.$optional_field
+                            .as_ref()
+                            .map($crate::ToJson::to_json),
+                    );
+                )*
+                object.into()
+            }
+        }
+
+        impl $crate::FromJson for $ty {
+            fn from_json(value: $crate::JsonValue) -> core::result::Result<Self, $crate::JsonValueError> {
+                let mut object = value.into_object(core::any::type_name::<$ty>())?;
+                Ok(Self {
+                    $(
+                        $required_field: $crate::impl_json_struct!(
+                            @take_required object, $required_key => $required_ty
+                        )?,
+                    )*
+                    $(
+                        $optional_field: $crate::impl_json_struct!(
+                            @take_optional object, $optional_key => $optional_ty
+                        )?,
+                    )*
+                })
+            }
+        }
+    };
+    (
+        $ty:ty {
+            $($field:ident : $field_ty:ty),* $(,)?
+        }
+    ) => {
+        $crate::impl_json_struct! {
+            $ty {
+                $($field : stringify!($field) => $field_ty),*
+            }
+        }
+    };
+    (
+        $ty:ty {
+            $($field:ident : $json_key:expr => $field_ty:ty),* $(,)?
+        }
+    ) => {
+        impl $crate::ToJson for $ty {
+            fn to_json(&self) -> $crate::JsonValue {
+                let mut object = $crate::Map::new();
+                $(
+                    object.push_field($json_key, $crate::ToJson::to_json(&self.$field));
+                )*
+                object.into()
+            }
+        }
+
+        impl $crate::FromJson for $ty {
+            fn from_json(value: $crate::JsonValue) -> core::result::Result<Self, $crate::JsonValueError> {
+                let mut object = match value {
+                    $crate::JsonValue::Object(object) => object,
+                    other => {
+                        let _ = other;
+                        return Err($crate::JsonValueError::WrongType(
+                            $crate::__json_error_message("expected JSON object")
+                        ));
+                    }
+                };
+                Ok(Self {
+                    $(
+                        $field: <$field_ty as $crate::FromJson>::from_json(
+                            object.remove($json_key).ok_or_else(|| {
+                                $crate::JsonValueError::WrongType(
+                                    $crate::__json_error_message("missing required JSON field")
+                                )
+                            })?
+                        )?,
+                    )*
+                })
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! impl_json_string_enum {
+    ($ty:ty { $($variant:ident => $value:expr),* $(,)? }) => {
+        impl $crate::ToJson for $ty {
+            fn to_json(&self) -> $crate::JsonValue {
+                $crate::JsonValue::String(
+                    match self {
+                        $(Self::$variant => $value,)*
+                    }
+                    .into(),
+                )
+            }
+        }
+
+        impl $crate::FromJson for $ty {
+            fn from_json(value: $crate::JsonValue) -> core::result::Result<Self, $crate::JsonValueError> {
+                let value = <alloc::string::String as $crate::FromJson>::from_json(value)?;
+                match value.as_str() {
+                    $($value => Ok(Self::$variant),)*
+                    _ => Err($crate::JsonValueError::WrongType(
+                        alloc::format!("unknown {} value `{value}`", stringify!($ty)),
+                    )),
+                }
+            }
+        }
+    };
+}
 
 #[cfg(test)]
 mod tests {
@@ -157,6 +288,170 @@ mod tests {
         assert_eq!(
             value.to_json_string().unwrap(),
             "{\"name\":\"node-1\",\"ok\":true,\"values\":[1,2,null]}"
+        );
+    }
+
+    #[test]
+    fn extracts_required_typed_object_fields() {
+        let value =
+            parse_json(r#"{"name":"node-1","ok":true,"n":7,"small":3,"ratio":1.5,"items":[1,2]}"#)
+                .unwrap();
+        let object = value.as_object().unwrap();
+
+        assert_eq!(value.required_str("name").unwrap(), "node-1");
+        assert_eq!(value.required_bool("ok").unwrap(), true);
+        assert_eq!(value.required_u64("n").unwrap(), 7);
+        assert_eq!(value.required_u32("small").unwrap(), 3);
+        assert_eq!(value.required_usize("small").unwrap(), 3);
+        assert_eq!(value.required_f64("ratio").unwrap(), 1.5);
+        assert_eq!(value.required_array("items").unwrap().len(), 2);
+        assert_eq!(object.required_str("name").unwrap(), "node-1");
+        assert_eq!(object.required_u32("small").unwrap(), 3);
+        assert!(value.required("missing").is_err());
+        assert!(value.required_str("n").is_err());
+    }
+
+    #[test]
+    fn converts_json_values_into_common_rust_types() {
+        let string_value = JsonValue::from("hello");
+        let text: &str = (&string_value).try_into().unwrap();
+        let owned: String = JsonValue::from("hello").try_into().unwrap();
+        let ok: bool = (&JsonValue::from(true)).try_into().unwrap();
+        let n: u64 = (&JsonValue::from(42u64)).try_into().unwrap();
+        let values: Vec<JsonValue> = JsonValue::array(vec![1u64.into()]).try_into().unwrap();
+        let object: Map = JsonValue::object(vec![("k", "v".into())])
+            .try_into()
+            .unwrap();
+
+        assert_eq!(text, "hello");
+        assert_eq!(owned, "hello");
+        assert!(ok);
+        assert_eq!(n, 42);
+        assert_eq!(values.len(), 1);
+        assert_eq!(object.required_str("k").unwrap(), "v");
+    }
+
+    #[test]
+    fn builds_and_reads_arrays_and_objects() {
+        let mut object = Map::with_capacity(3);
+        object.push_field("name", "edge");
+        object.push_field("n", 9u32);
+        object.push_opt_field("absent", Option::<bool>::None);
+        object.push_opt_field("present", Some(true));
+        object.push_field("items", JsonValue::array_from_iter([1u64, 2, 3]));
+        let value = JsonValue::Object(object);
+
+        assert_eq!(value.required_str("name").unwrap(), "edge");
+        assert_eq!(value.required_bool("present").unwrap(), true);
+        assert!(value.get("absent").is_none());
+        assert_eq!(
+            value
+                .required("items")
+                .unwrap()
+                .required_index_u64(1)
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            JsonValue::object_from_iter([("ok", true)])
+                .required_bool("ok")
+                .unwrap(),
+            true
+        );
+        let owner = String::from("owner");
+        assert_eq!(JsonValue::from(&owner).as_str(), Some("owner"));
+        let collected: Map = [("owner", owner.as_str()), ("mode", "manual")]
+            .into_iter()
+            .collect();
+        let mut extended = Map::new();
+        extended.extend([("count", 2u64), ("enabled", 1u64)]);
+        assert_eq!(collected.required_str("owner").unwrap(), "owner");
+        assert_eq!(extended.required_u64("count").unwrap(), 2);
+        assert!(JsonValue::empty_object().is_empty());
+        assert!(JsonValue::empty_array().is_empty());
+    }
+
+    #[test]
+    fn parses_custom_types() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct Node {
+            name: String,
+            online: bool,
+            seq: u64,
+        }
+
+        impl TryFrom<JsonValue> for Node {
+            type Error = JsonValueError;
+
+            fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+                Ok(Self {
+                    name: value.required_str("name")?.to_owned(),
+                    online: value.required_bool("online")?,
+                    seq: value.required_u64("seq")?,
+                })
+            }
+        }
+
+        let node: Node = from_str_as(r#"{"name":"edge-1","online":true,"seq":9}"#).unwrap();
+
+        assert_eq!(
+            node,
+            Node {
+                name: "edge-1".to_owned(),
+                online: true,
+                seq: 9,
+            }
+        );
+    }
+
+    #[test]
+    fn local_json_model_macro_maps_structs() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct Device {
+            id: String,
+            online: bool,
+            labels: Vec<String>,
+            note: Option<String>,
+        }
+
+        impl_json_struct! {
+            Device {
+                required {
+                    id: "deviceId" => String,
+                    online: "online" => bool,
+                    labels: "labels" => Vec<String>,
+                }
+                optional {
+                    note: "note" => String,
+                }
+            }
+        }
+
+        let device = Device {
+            id: String::from("dev-1"),
+            online: true,
+            labels: vec![String::from("edge"), String::from("lab")],
+            note: None,
+        };
+        let json = to_json_value(&device);
+        assert_eq!(json.required_str("deviceId").unwrap(), "dev-1");
+        assert!(json.get("note").is_none());
+
+        let decoded = from_json_value::<Device>(json!({
+            "deviceId": "dev-2",
+            "online": false,
+            "labels": ["field"],
+            "note": "cold"
+        }))
+        .unwrap();
+        assert_eq!(
+            decoded,
+            Device {
+                id: String::from("dev-2"),
+                online: false,
+                labels: vec![String::from("field")],
+                note: Some(String::from("cold")),
+            }
         );
     }
 
@@ -290,8 +585,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "serde"))]
-    fn serde_style_convenience_api_works() {
+    fn json_value_convenience_api_works() {
         let value = from_str(r#"{"ok":true,"n":7,"items":[1,2,3],"msg":"hello"}"#).unwrap();
         assert!(value.is_object());
         assert_eq!(value["ok"].as_bool(), Some(true));
@@ -314,29 +608,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn serde_style_convenience_api_works() {
-        let value: JsonValue =
-            from_str(r#"{"ok":true,"n":7,"items":[1,2,3],"msg":"hello"}"#).unwrap();
-        assert!(value.is_object());
-        assert_eq!(value["ok"].as_bool(), Some(true));
-        assert_eq!(value["n"].as_i64(), Some(7));
-        assert_eq!(value["msg"].as_str(), Some("hello"));
-        assert_eq!(value["items"][1].as_u64(), Some(2));
-        assert!(value["missing"].is_null());
-        assert_eq!(
-            to_string(&value).unwrap(),
-            r#"{"ok":true,"n":7,"items":[1,2,3],"msg":"hello"}"#
-        );
-        let arr: JsonValue = from_slice(br#"[1,true,"x"]"#).unwrap();
-        assert_eq!(arr[2].as_str(), Some("x"));
-        assert_eq!(
-            to_vec(&value).unwrap(),
-            value.to_json_string().unwrap().into_bytes()
-        );
-    }
-
-    #[test]
     fn json_macro_builds_values() {
         let value = json!({"ok": true, "items": [1, 2, null], "msg": "x"});
         assert_eq!(value["ok"].as_bool(), Some(true));
@@ -346,7 +617,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "serde"))]
     fn from_slice_rejects_invalid_utf8() {
         assert!(matches!(
             from_slice(&[0xff]),
@@ -355,7 +625,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "serde"))]
     fn pointer_take_and_pretty_helpers_work() {
         let mut value = from_str(r#"{"a":{"b":[10,20,{"~key/":"x"}]}}"#).unwrap();
         assert_eq!(
@@ -384,7 +653,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "serde"))]
     fn reader_writer_and_collection_helpers_work() {
         let value = from_reader(br#"{"a":1,"b":[true,false]}"# as &[u8]).unwrap();
         assert_eq!(value["a"].as_u64(), Some(1));
@@ -408,31 +676,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn reader_writer_and_collection_helpers_work() {
-        let value: JsonValue = from_reader(br#"{"a":1,"b":[true,false]}"# as &[u8]).unwrap();
-        assert_eq!(value["a"].as_u64(), Some(1));
-        assert_eq!(value["b"].len(), 2);
-        assert_eq!(
-            value["b"].get_index(1).and_then(JsonValue::as_bool),
-            Some(false)
-        );
-
-        let mut out = Vec::new();
-        to_writer(&mut out, &value).unwrap();
-        assert_eq!(
-            String::from_utf8(out).unwrap(),
-            value.to_json_string().unwrap()
-        );
-
-        let object = JsonValue::from_iter([("x", 1u64), ("y", 2u64)]);
-        assert_eq!(object["x"].as_u64(), Some(1));
-        let array = JsonValue::from_iter([1u64, 2u64, 3u64]);
-        assert_eq!(array.get_index(2).and_then(JsonValue::as_u64), Some(3));
-    }
-
-    #[test]
-    fn positive_signed_integer_construction_matches_serde_style() {
+    fn positive_signed_integer_construction_works() {
         let value = JsonValue::from(64i64);
         assert!(value.is_i64());
         assert!(value.is_u64());
@@ -457,7 +701,7 @@ mod tests {
     #[test]
     fn json_macro_expr_key_parity_works() {
         let code = 200;
-        let features = ["serde", "json"];
+        let features = ["native", "json"];
         let value = json!({
             "code": code,
             "success": code == 200,
@@ -465,7 +709,7 @@ mod tests {
         });
         assert_eq!(value["code"], 200);
         assert_eq!(value["success"], true);
-        assert_eq!(value["serde"], "json");
+        assert_eq!(value["native"], "json");
     }
 
     #[test]
@@ -573,7 +817,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_map_style_tests_work() {
+    fn map_style_tests_work() {
         let v: Value = from_str(r#"{"b":null,"a":null,"c":null}"#).unwrap();
         let keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
         assert_eq!(keys, vec!["b", "a", "c"]);
@@ -594,7 +838,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_value_doc_examples_get_and_index_work() {
+    fn value_doc_examples_get_and_index_work() {
         let object = json!({"A": 65, "B": 66, "C": 67});
         assert_eq!(*object.get("A").unwrap(), json!(65));
 
@@ -609,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_value_doc_examples_type_queries_work() {
+    fn value_doc_examples_type_queries_work() {
         let obj = json!({ "a": { "nested": true }, "b": ["an", "array"] });
         assert!(obj.is_object());
         assert!(obj["a"].is_object());
@@ -635,7 +879,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_value_doc_examples_accessors_work() {
+    fn value_doc_examples_accessors_work() {
         let v = json!({ "a": { "nested": true }, "b": ["an", "array"] });
         assert_eq!(v["a"].as_object().unwrap().len(), 1);
         assert_eq!(v["b"].as_array().unwrap().len(), 2);
@@ -656,7 +900,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_value_doc_examples_numeric_queries_work() {
+    fn value_doc_examples_numeric_queries_work() {
         let big = i64::MAX as u64 + 10;
         let v = json!({ "a": 64, "b": big, "c": 256.0 });
         assert!(v["a"].is_i64());
@@ -684,7 +928,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_value_doc_examples_pointer_and_take_work() {
+    fn value_doc_examples_pointer_and_take_work() {
         let data = json!({
             "x": {
                 "y": ["z", "zz"]
@@ -709,34 +953,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn serde_pure_json_parse_examples_work() {
-        assert_eq!(from_str::<JsonValue>("null").unwrap(), json!(null));
-        assert_eq!(from_str::<JsonValue>(" true ").unwrap(), json!(true));
-        assert_eq!(from_str::<JsonValue>(" false ").unwrap(), json!(false));
-        assert_eq!(from_str::<JsonValue>(r#""foo""#).unwrap(), json!("foo"));
-        assert_eq!(
-            from_str::<JsonValue>(r#""\uD83C\uDF95""#).unwrap(),
-            json!("🎕")
-        );
-        assert_eq!(from_str::<JsonValue>("[]").unwrap(), json!([]));
-        assert_eq!(
-            from_str::<JsonValue>("[1, [2, 3]]").unwrap(),
-            json!([1, [2, 3]])
-        );
-        assert_eq!(from_str::<JsonValue>("{}").unwrap(), json!({}));
-        assert_eq!(
-            from_str::<JsonValue>(r#"{"a": {"b": 3, "c": 4}}"#).unwrap(),
-            json!({"a": {"b": 3, "c": 4}})
-        );
-
-        let neg_zero: JsonValue = from_str("-0.0").unwrap();
-        let parsed = neg_zero.as_f64().unwrap();
-        assert!(parsed.is_sign_negative());
-    }
-
-    #[test]
-    #[cfg(not(feature = "serde"))]
     fn parser_regression_cases_work() {
         assert!(matches!(
             from_str("+"),

@@ -439,3 +439,53 @@ fn test_ack_ecn_frame_roundtrip() {
         panic!("Expected AckECN frame");
     }
 }
+
+#[test]
+fn test_stream_frame_rejects_truncated_declared_data() {
+    let bytes = vec![0x0e, 0x00, 0x00, 0x05, b'h', b'i'];
+    assert!(QuicFrame::from_bytes(&bytes).is_err());
+}
+
+#[test]
+fn test_ack_frame_rejects_truncated_ranges() {
+    let bytes = vec![
+        0x02, // ACK
+        0x0a, // largest_acknowledged
+        0x00, // ack_delay
+        0x01, // ack_range_count
+        0x00, // first_ack_range
+        0x00, // gap, missing additional range
+    ];
+    assert!(QuicFrame::from_bytes(&bytes).is_err());
+}
+
+#[test]
+fn test_ack_ecn_frame_rejects_truncated_ranges() {
+    let bytes = vec![
+        0x03, // ACK_ECN
+        0x0a, // largest_acknowledged
+        0x00, // ack_delay
+        0x01, // ack_range_count
+        0x00, // first_ack_range
+        0x00, // gap, missing additional range and ECN counts
+    ];
+    assert!(QuicFrame::from_bytes(&bytes).is_err());
+}
+
+#[test]
+fn test_new_token_rejects_truncated_token() {
+    let bytes = vec![0x07, 0x04, 0xde, 0xad];
+    assert!(QuicFrame::from_bytes(&bytes).is_err());
+}
+
+#[test]
+fn test_connection_close_rejects_truncated_reason() {
+    let bytes = vec![0x1c, 0x00, 0x01, 0x04, b'n', b'o'];
+    assert!(QuicFrame::from_bytes(&bytes).is_err());
+}
+
+#[test]
+fn test_application_close_rejects_truncated_reason() {
+    let bytes = vec![0x1d, 0x00, 0x04, b'n', b'o'];
+    assert!(QuicFrame::from_bytes(&bytes).is_err());
+}

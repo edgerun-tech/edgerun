@@ -10,7 +10,7 @@
 //!   Queries TXT at `_dmarc.domain` for policy, checks identifier alignment.
 //!
 //! # Usage
-//! ```ignore
+//! ```text
 //! use edgerun_email_auth::EmailAuthEvaluator;
 //! use edgerun_dns::client::DnsClient;
 //!

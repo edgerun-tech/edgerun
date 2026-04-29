@@ -7,7 +7,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::json::{OciLinux, OciProcess, OciRoot, OciSpec, OciUser};
+use crate::spec::{OciLinux, OciProcess, OciRoot, OciSpec, OciUser};
 
 /// Create a minimal OCI bundle from a rootfs directory and command.
 /// Create a minimal OCI bundle from a rootfs directory and command.
@@ -19,7 +19,7 @@ pub fn create_bundle(
 ) -> OciSpec {
     OciSpec {
         version: "1.0.2".into(),
-        platform: Some(crate::json::OciPlatform {
+        platform: Some(crate::spec::OciPlatform {
             os: Some(crate::host_os().into()),
             arch: Some(crate::host_arch().into()),
             os_version: None,

@@ -4,6 +4,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use super::varint::quic_decode_varint;
+
 /// HTTP/3 stream types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Http3StreamType {
@@ -128,11 +130,11 @@ impl Http3Stream {
             let mut pos = 0;
 
             // Read frame type
-            let (frame_type, ft_len) = Self::decode_varint(&data[pos..]).unwrap_or((0, 1));
+            let (frame_type, ft_len) = quic_decode_varint(&data[pos..]).unwrap_or((0, 1));
             pos += ft_len;
 
             // Read frame length
-            let (frame_len, fl_len) = Self::decode_varint(&data[pos..]).unwrap_or((0, 1));
+            let (frame_len, fl_len) = quic_decode_varint(&data[pos..]).unwrap_or((0, 1));
             pos += fl_len;
 
             self.current_frame_type = Some(frame_type);
@@ -179,10 +181,6 @@ impl Http3Stream {
         }
 
         frames
-    }
-
-    fn decode_varint(data: &[u8]) -> Result<(u64, usize), String> {
-        edgerun_encoding::quic_varint::decode_varint(data).map_err(|e| format!("{e}"))
     }
 }
 

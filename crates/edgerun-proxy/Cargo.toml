@@ -2,6 +2,8 @@
 name = "edgerun-proxy"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+publish.workspace = true
 description = "HTTP proxy server with CONNECT support for HTTPS tunneling"
 
 [dependencies]
@@ -10,3 +12,6 @@ edgerun-log = { path = "../edgerun-log" }
 
 [features]
 default = []
+
+[lints]
+workspace = true

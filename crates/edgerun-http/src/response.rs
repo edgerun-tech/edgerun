@@ -174,12 +174,12 @@ impl Response {
             || status.as_u16() == 304
         {
             Vec::new()
-        } else if headers
-            .get("transfer-encoding")
-            .map(|v| v.as_str().to_ascii_lowercase().contains("chunked"))
-            .unwrap_or(false)
-        {
-            parse_chunked_body(raw_body, &mut trailers)?
+        } else if crate::chunked::has_chunked_transfer_coding(&headers) {
+            let (body, parsed_trailers) =
+                crate::chunked::parse_body_with_trailers(raw_body.as_bytes())
+                    .map_err(|err| crate::Error::InvalidResponse(err.to_string()))?;
+            trailers = parsed_trailers;
+            body
         } else if let Some(cl) = headers.get("content-length") {
             let len = cl
                 .as_str()
@@ -198,11 +198,4 @@ impl Response {
             streaming: false,
         })
     }
-}
-
-fn parse_chunked_body(raw: &str, trailers: &mut HeaderMap) -> crate::Result<Vec<u8>> {
-    let (body, parsed_trailers) = crate::chunked::parse_body_with_trailers(raw.as_bytes())
-        .map_err(|err| crate::Error::InvalidResponse(err.to_string()))?;
-    *trailers = parsed_trailers;
-    Ok(body)
 }

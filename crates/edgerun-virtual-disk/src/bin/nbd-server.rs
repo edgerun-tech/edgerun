@@ -1,3 +1,6 @@
+mod common;
+
+use common::{parse_u32, parse_u64};
 use edgerun_virtual_disk::{
     BlockDeviceInfo, BlockError, FileBlockBackend, MemoryBlockBackend, MultiExportTcpNbdServer,
     NbdExport, NbdExportEntry, TcpNbdServer,
@@ -129,18 +132,6 @@ fn parse_multi_mem_exports(args: &[String]) -> Result<Vec<NbdExportEntry>, Block
         });
     }
     Ok(exports)
-}
-
-fn parse_u32(value: &str, field: &str) -> Result<u32, BlockError> {
-    value
-        .parse::<u32>()
-        .map_err(|err| BlockError::ProtocolError(format!("invalid {field}: {err}")))
-}
-
-fn parse_u64(value: &str, field: &str) -> Result<u64, BlockError> {
-    value
-        .parse::<u64>()
-        .map_err(|err| BlockError::ProtocolError(format!("invalid {field}: {err}")))
 }
 
 fn print_usage(program: &str) {

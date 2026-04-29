@@ -42,6 +42,44 @@ pub fn string_value(m: &BTreeMap<String, Value>, key: &str, fallback: &str) -> S
 pub fn number_value(m: &BTreeMap<String, Value>, key: &str, fallback: i64) -> i64 {
     get(m, key).and_then(Value::as_i64).unwrap_or(fallback)
 }
+pub fn version_field_error(m: &BTreeMap<String, Value>, key: &str) -> Option<ReasonCode> {
+    if !m.contains_key(key) || number_value(m, key, 0) == 0 {
+        Some(ReasonCode::StructuralInvalid)
+    } else if number_value(m, key, 0) != 1 {
+        Some(ReasonCode::VersionUnsupported)
+    } else {
+        None
+    }
+}
+pub fn object_ref_is_valid(value: Option<&Value>) -> bool {
+    value.is_none_or(object_ref_value_is_valid)
+}
+pub fn object_ref_value_is_valid(value: &Value) -> bool {
+    match value {
+        Value::Null => true,
+        Value::String(object_id) => !object_id.is_empty(),
+        Value::Map(map) => map
+            .get("object_id")
+            .and_then(Value::as_str)
+            .is_some_and(|object_id| !object_id.is_empty()),
+        _ => false,
+    }
+}
+pub fn event_hash_alias_value(map: &BTreeMap<String, Value>) -> String {
+    for key in [
+        "event_hash_hex",
+        "event_hash_fixture",
+        "event_hash",
+        "hash_hex",
+        "hash_fixture",
+    ] {
+        let value = string_value(map, key, "");
+        if !value.is_empty() {
+            return value;
+        }
+    }
+    String::new()
+}
 pub fn set_from_list(v: Option<&Value>) -> BTreeSet<String> {
     v.and_then(Value::as_seq)
         .map(|arr| {

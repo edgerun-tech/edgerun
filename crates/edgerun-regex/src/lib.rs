@@ -22,16 +22,22 @@ use alloc::vec::Vec;
 #[derive(Clone)]
 pub struct Regex {
     pattern: String,
-    is_anchored: bool,
+    anchored_start: bool,
+    anchored_end: bool,
 }
 
 impl Regex {
     /// Compile a pattern.
     pub fn new(pattern: &str) -> Option<Regex> {
-        let is_anchored = pattern.starts_with('^') || pattern.ends_with('$');
+        let anchored_start = pattern.starts_with('^');
+        let anchored_end = pattern.ends_with('$');
         Some(Regex {
-            pattern: pattern.trim_matches('^').trim_matches('$').to_string(),
-            is_anchored,
+            pattern: pattern
+                .trim_start_matches('^')
+                .trim_end_matches('$')
+                .to_string(),
+            anchored_start,
+            anchored_end,
         })
     }
 
@@ -43,18 +49,15 @@ impl Regex {
             return true;
         }
 
-        if self.is_anchored {
-            if self.pattern.starts_with('^') {
-                text.starts_with(p.trim_start_matches('^'))
-            } else if self.pattern.ends_with('$') {
-                text.ends_with(p.trim_end_matches('$'))
-            } else {
+        match (self.anchored_start, self.anchored_end) {
+            (true, true) => text == p,
+            (true, false) => text.starts_with(p),
+            (false, true) => text.ends_with(p),
+            (false, false) => {
+                // Simple contains for now
+                // TODO: handle .* and ?
                 text.contains(p)
             }
-        } else {
-            // Simple contains for now
-            // TODO: handle .* and ?
-            text.contains(p)
         }
     }
 }
@@ -101,6 +104,15 @@ mod tests {
     fn test_anchored() {
         let re = Regex::new("^error").unwrap();
         assert!(re.is_match("error start"));
+        assert!(!re.is_match("prefix error"));
+
+        let re = Regex::new("error$").unwrap();
+        assert!(re.is_match("ends with error"));
+        assert!(!re.is_match("error suffix"));
+
+        let re = Regex::new("^error$").unwrap();
+        assert!(re.is_match("error"));
+        assert!(!re.is_match("error suffix"));
         assert!(!re.is_match("prefix error"));
     }
 }

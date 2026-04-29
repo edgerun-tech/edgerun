@@ -30,6 +30,13 @@ impl PacketNumberState {
     }
 
     fn record_received(&mut self, pn: u64) {
+        if self
+            .received_packets
+            .iter()
+            .any(|&(recorded_pn, _)| recorded_pn == pn)
+        {
+            return;
+        }
         self.received_packets.push((pn, std::time::Instant::now()));
         if self.received_packets.len() > 256 {
             self.received_packets.drain(..128);
@@ -44,9 +51,11 @@ impl PacketNumberState {
 /// Sent packet metadata for loss detection (RFC 9002).
 #[derive(Debug, Clone)]
 pub struct SentPacket {
+    pub space: PacketNumberSpace,
     pub packet_number: u64,
     pub time_sent: std::time::Instant,
     pub size: usize,
+    pub packet_bytes: Option<Vec<u8>>,
     pub has_crypto: bool,
     pub acked: bool,
     pub lost: bool,
@@ -200,23 +209,30 @@ impl QuicTransport {
     /// Record that we received a packet in the given space.
     pub fn record_received_packet(&mut self, space: PacketNumberSpace, packet_number: u64) -> bool {
         let idx = space as usize;
-        if let Some(largest) = self.pn_state[idx].largest_received {
-            if packet_number <= largest {
-                return false;
-            }
+        if self.pn_state[idx]
+            .received_packets
+            .iter()
+            .any(|&(recorded_pn, _)| recorded_pn == packet_number)
+        {
+            return false;
         }
-        self.pn_state[idx].largest_received = Some(packet_number);
+        if self.pn_state[idx]
+            .largest_received
+            .map_or(true, |largest| packet_number > largest)
+        {
+            self.pn_state[idx].largest_received = Some(packet_number);
+        }
         self.pn_state[idx].record_received(packet_number);
         true
     }
 
     /// Expand a truncated packet number (RFC 9000 Appendix A.1).
     pub fn expand_packet_number(
-        &mut self,
+        &self,
         space: PacketNumberSpace,
         truncated_pn: u64,
         pn_length: usize,
-    ) -> Option<u64> {
+    ) -> u64 {
         debug_assert!((1..=4).contains(&pn_length));
         let idx = space as usize;
         let pn_nbits = (pn_length * 8) as u64;
@@ -224,28 +240,19 @@ impl QuicTransport {
         let pn_hwin = pn_win / 2;
         let pn_mask = pn_win - 1;
 
-        if self.pn_state[idx].largest_received.is_none() {
-            self.pn_state[idx].largest_received = Some(truncated_pn);
-            return Some(truncated_pn);
+        let expected = self.pn_state[idx]
+            .largest_received
+            .map(|largest| largest + 1)
+            .unwrap_or(0);
+        let mut candidate = (expected & !pn_mask) | truncated_pn;
+
+        if candidate + pn_hwin <= expected {
+            candidate = candidate.saturating_add(pn_win);
+        } else if candidate > expected + pn_hwin && candidate >= pn_win {
+            candidate -= pn_win;
         }
 
-        let largest = self.pn_state[idx].largest_received.unwrap();
-        let candidate = (largest & !pn_mask) | truncated_pn;
-
-        let expanded = if candidate > largest.saturating_add(pn_hwin) {
-            candidate.saturating_sub(pn_win)
-        } else if largest > candidate.saturating_add(pn_hwin) {
-            candidate + pn_win
-        } else {
-            candidate
-        };
-
-        if expanded <= largest {
-            return None;
-        }
-
-        self.pn_state[idx].largest_received = Some(expanded);
-        Some(expanded)
+        candidate
     }
 
     // -----------------------------------------------------------------------
@@ -267,7 +274,21 @@ impl QuicTransport {
             return None;
         }
 
-        let largest_acknowledged = sorted.last().unwrap().0;
+        let mut ranges = Vec::new();
+        let mut range_end = sorted.last().unwrap().0;
+        let mut range_start = range_end;
+        for &(pn, _) in sorted[..sorted.len() - 1].iter().rev() {
+            if pn + 1 == range_start {
+                range_start = pn;
+            } else {
+                ranges.push((range_start, range_end));
+                range_start = pn;
+                range_end = pn;
+            }
+        }
+        ranges.push((range_start, range_end));
+
+        let largest_acknowledged = ranges[0].1;
         let now = std::time::Instant::now();
 
         let ack_delay = sorted
@@ -279,20 +300,13 @@ impl QuicTransport {
         let ack_delay_us = ack_delay.as_micros() as u64;
         let ack_delay_encoded = ack_delay_us >> self.params.ack_delay_exponent;
 
+        let first_ack_range = ranges[0].1 - ranges[0].0;
         let mut ack_ranges = Vec::new();
-        let mut first_ack_range = 0;
-        let mut prev_pn = largest_acknowledged;
-
-        for i in (0..sorted.len() - 1).rev() {
-            let pn = sorted[i].0;
-            if prev_pn == pn + 1 {
-                first_ack_range += 1;
-            } else {
-                let gap = prev_pn - pn - 1;
-                ack_ranges.push((gap, first_ack_range));
-                first_ack_range = 0;
-            }
-            prev_pn = pn;
+        let mut previous_range_start = ranges[0].0;
+        for &(start, end) in ranges.iter().skip(1) {
+            let gap = previous_range_start.saturating_sub(end).saturating_sub(2);
+            ack_ranges.push((gap, end - start));
+            previous_range_start = start;
         }
 
         Some(QuicFrame::Ack {
@@ -369,10 +383,23 @@ impl QuicTransport {
         size: usize,
         has_crypto: bool,
     ) {
+        self.record_packet_sent_with_data(space, packet_number, size, has_crypto, None);
+    }
+
+    pub fn record_packet_sent_with_data(
+        &mut self,
+        space: PacketNumberSpace,
+        packet_number: u64,
+        size: usize,
+        has_crypto: bool,
+        packet_bytes: Option<Vec<u8>>,
+    ) {
         let packet = SentPacket {
+            space,
             packet_number,
             time_sent: std::time::Instant::now(),
             size,
+            packet_bytes,
             has_crypto,
 
             acked: false,
@@ -381,20 +408,6 @@ impl QuicTransport {
 
         self.congestion.bytes_in_flight += size as u64;
         self.sent_packets.push(packet);
-
-        let idx = space as usize;
-        self.pn_state[idx].packets_sent += 1;
-    }
-
-    /// Get the packet number range for a given space.
-    ///
-    /// Since each space starts at 0 and uses independent counters, we can
-    /// filter by checking which space's counter each PN belongs to.
-    fn pn_range_for_space(&self, space: PacketNumberSpace) -> (u64, u64) {
-        let idx = space as usize;
-        let max_pn = self.pn_state[idx].next;
-        // Floor is 0, ceiling is current next PN for this space
-        (0, max_pn)
     }
 
     pub fn on_ack_received(
@@ -429,22 +442,22 @@ impl QuicTransport {
             prev_end = range_start;
         }
 
-        // FIRST: Detect lost packets
-        self.detect_lost_packets(space);
-
-        // THEN: Track newly acked packets
+        // Track newly acked packets before loss detection so packet-threshold
+        // loss can see larger packets acknowledged by this ACK frame.
         let mut newly_acked_size = 0u64;
         let mut newly_acked_count = 0;
         for pkt in &mut self.sent_packets {
             if pkt.lost {
                 continue;
             }
-            if !pkt.acked && acked_pns.contains(&pkt.packet_number) {
+            if pkt.space == space && !pkt.acked && acked_pns.contains(&pkt.packet_number) {
                 pkt.acked = true;
                 newly_acked_size += pkt.size as u64;
                 newly_acked_count += 1;
             }
         }
+
+        self.detect_lost_packets(space);
 
         // Update congestion window (RFC 9002 §7)
         if newly_acked_count > 0 {
@@ -466,7 +479,7 @@ impl QuicTransport {
         // Exit recovery if we've acked past recovery start
         if let Some(recovery_start) = self.congestion.recovery_start_time {
             for pkt in &self.sent_packets {
-                if pkt.acked && pkt.time_sent > recovery_start {
+                if pkt.space == space && pkt.acked && pkt.time_sent > recovery_start {
                     self.congestion.recovery_start_time = None;
                     break;
                 }
@@ -477,7 +490,7 @@ impl QuicTransport {
         if let Some(acked_pkt) = self
             .sent_packets
             .iter()
-            .find(|p| p.packet_number == largest_acknowledged && p.acked)
+            .find(|p| p.space == space && p.packet_number == largest_acknowledged && p.acked)
         {
             let latest_rtt = acked_pkt.time_sent.elapsed();
             self.update_rtt(latest_rtt, ack_delay);
@@ -489,22 +502,12 @@ impl QuicTransport {
     }
 
     fn detect_lost_packets(&mut self, space: PacketNumberSpace) {
-        let idx = space as usize;
         let now = std::time::Instant::now();
 
         let time_threshold = self
             .smoothed_rtt
             .unwrap_or(self.rtt_estimate)
             .mul_f64(1.125);
-
-        // Only consider packets in this packet number space.
-        // Packets in the same space have contiguous packet numbers, so we can
-        // filter by checking the range: Initial [0, handshake_start),
-        // Handshake [handshake_start, app_start), AppData [app_start, ∞).
-        // For simplicity, we use the space index to filter — packets recorded
-        // with `record_packet_sent` for a given space have their PN tracked.
-        // Since we track all sent_packets in one flat list, filter by PN range.
-        let (pn_min, pn_max) = self.pn_range_for_space(space);
 
         let lost_pns: Vec<u64> = self
             .sent_packets
@@ -513,21 +516,19 @@ impl QuicTransport {
                 if pkt.acked || pkt.lost {
                     return None;
                 }
-                // Filter by packet number space
-                if pkt.packet_number < pn_min || pkt.packet_number >= pn_max {
+                if pkt.space != space {
                     return None;
                 }
 
-                let larger_acked = self.sent_packets.iter().any(|other| {
+                let packet_threshold_expired = self.sent_packets.iter().any(|other| {
                     other.acked
-                        && other.packet_number > pkt.packet_number
-                        && other.packet_number >= pn_min
-                        && other.packet_number < pn_max
+                        && other.space == space
+                        && other.packet_number >= pkt.packet_number.saturating_add(3)
                 });
 
                 let time_expired = now - pkt.time_sent > time_threshold;
 
-                if larger_acked || time_expired {
+                if packet_threshold_expired || time_expired {
                     Some(pkt.packet_number)
                 } else {
                     None
@@ -538,12 +539,14 @@ impl QuicTransport {
         let mut lost_size = 0u64;
         for pn in &lost_pns {
             for pkt in &mut self.sent_packets {
-                if pkt.packet_number == *pn && !pkt.lost {
+                if pkt.space == space && pkt.packet_number == *pn && !pkt.lost {
                     pkt.lost = true;
                     lost_size += pkt.size as u64;
 
                     if pkt.has_crypto {
-                        self.retransmit_queue.push(Vec::new());
+                        if let Some(packet_bytes) = pkt.packet_bytes.clone() {
+                            self.retransmit_queue.push(packet_bytes);
+                        }
                     }
                 }
             }
@@ -789,6 +792,197 @@ mod tests {
         assert_eq!(transport.next_packet_number(PacketNumberSpace::Initial), 0);
         assert_eq!(transport.next_packet_number(PacketNumberSpace::Initial), 1);
         assert_eq!(transport.next_packet_number(PacketNumberSpace::Initial), 2);
+    }
+
+    #[test]
+    fn test_expand_packet_number_does_not_mutate_receive_state() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 0xff));
+        assert_eq!(
+            transport.expand_packet_number(PacketNumberSpace::ApplicationData, 0, 1),
+            0x100
+        );
+
+        let ack = transport
+            .generate_ack_frame(PacketNumberSpace::ApplicationData)
+            .expect("ack frame");
+        match ack {
+            QuicFrame::Ack {
+                largest_acknowledged,
+                first_ack_range,
+                ..
+            } => {
+                assert_eq!(largest_acknowledged, 0xff);
+                assert_eq!(first_ack_range, 0);
+            }
+            _ => panic!("expected ACK frame"),
+        }
+    }
+
+    #[test]
+    fn test_expand_packet_number_allows_out_of_order_packets() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 0x101));
+        assert_eq!(
+            transport.expand_packet_number(PacketNumberSpace::ApplicationData, 0x100, 2),
+            0x100
+        );
+    }
+
+    #[test]
+    fn test_ack_generation_tracks_out_of_order_packets() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 10));
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 8));
+        assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, 9));
+        assert!(!transport.record_received_packet(PacketNumberSpace::ApplicationData, 8));
+
+        let ack = transport
+            .generate_ack_frame(PacketNumberSpace::ApplicationData)
+            .expect("ack frame");
+        match ack {
+            QuicFrame::Ack {
+                largest_acknowledged,
+                first_ack_range,
+                ack_range_count,
+                ack_ranges,
+                ..
+            } => {
+                assert_eq!(largest_acknowledged, 10);
+                assert_eq!(first_ack_range, 2);
+                assert_eq!(ack_range_count, 0);
+                assert!(ack_ranges.is_empty());
+            }
+            _ => panic!("expected ACK frame"),
+        }
+    }
+
+    #[test]
+    fn test_ack_generation_encodes_gapped_ranges() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        for pn in [1, 2, 5, 9, 10] {
+            assert!(transport.record_received_packet(PacketNumberSpace::ApplicationData, pn));
+        }
+
+        let ack = transport
+            .generate_ack_frame(PacketNumberSpace::ApplicationData)
+            .expect("ack frame");
+        match ack {
+            QuicFrame::Ack {
+                largest_acknowledged,
+                first_ack_range,
+                ack_range_count,
+                ack_ranges,
+                ..
+            } => {
+                assert_eq!(largest_acknowledged, 10);
+                assert_eq!(first_ack_range, 1);
+                assert_eq!(ack_range_count, 2);
+                assert_eq!(ack_ranges, vec![(2, 0), (1, 1)]);
+            }
+            _ => panic!("expected ACK frame"),
+        }
+    }
+
+    #[test]
+    fn test_ack_received_only_acks_matching_packet_number_space() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        transport.record_packet_sent(PacketNumberSpace::Initial, 0, 100, true);
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 0, 300, false);
+        assert_eq!(transport.bytes_in_flight(), 400);
+
+        transport.on_ack_received(
+            PacketNumberSpace::ApplicationData,
+            0,
+            0,
+            &[],
+            std::time::Duration::ZERO,
+        );
+
+        assert_eq!(transport.bytes_in_flight(), 100);
+        assert_eq!(transport.sent_packets.len(), 1);
+        assert_eq!(transport.sent_packets[0].space, PacketNumberSpace::Initial);
+        assert_eq!(transport.sent_packets[0].packet_number, 0);
+    }
+
+    #[test]
+    fn test_ack_received_detects_losses_from_new_ack() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 1, 100, false);
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 2, 100, false);
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 3, 100, false);
+        transport.record_packet_sent(PacketNumberSpace::ApplicationData, 4, 100, false);
+        assert_eq!(transport.bytes_in_flight(), 400);
+
+        transport.on_ack_received(
+            PacketNumberSpace::ApplicationData,
+            4,
+            0,
+            &[],
+            std::time::Duration::ZERO,
+        );
+
+        assert_eq!(transport.bytes_in_flight(), 200);
+        assert_eq!(transport.sent_packets.len(), 2);
+        assert!(transport
+            .sent_packets
+            .iter()
+            .any(|pkt| pkt.packet_number == 2));
+        assert!(transport
+            .sent_packets
+            .iter()
+            .any(|pkt| pkt.packet_number == 3));
+    }
+
+    #[test]
+    fn test_lost_crypto_packet_queues_original_bytes_for_retransmission() {
+        let local = ConnectionId::random();
+        let remote = ConnectionId::random();
+        let mut transport = QuicTransport::new(local, remote);
+
+        let packet_1 = vec![0xc0, 0, 0, 0, 1, 0x06];
+        transport.record_packet_sent_with_data(
+            PacketNumberSpace::Initial,
+            1,
+            packet_1.len(),
+            true,
+            Some(packet_1.clone()),
+        );
+        transport.record_packet_sent(PacketNumberSpace::Initial, 2, 100, true);
+        transport.record_packet_sent(PacketNumberSpace::Initial, 3, 100, true);
+        transport.record_packet_sent(PacketNumberSpace::Initial, 4, 100, true);
+
+        transport.on_ack_received(
+            PacketNumberSpace::Initial,
+            4,
+            0,
+            &[],
+            std::time::Duration::ZERO,
+        );
+
+        assert_eq!(transport.get_retransmit_queue(), &[packet_1]);
+        assert!(transport
+            .get_retransmit_queue()
+            .iter()
+            .all(|packet| !packet.is_empty()));
     }
 
     #[test]

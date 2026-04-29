@@ -10,15 +10,15 @@ pub mod time;
 pub use time::{Duration, Instant};
 
 pub mod executor;
-pub use executor::{pending, run_queue, runs};
+pub use runtime::{pending, run_queue, runs};
 
 pub mod timer;
 pub use timer::{elapsed_since, now, set_now, sleep_ms, sleep_us, TimerWheel};
 
 pub mod runtime;
 pub use runtime::{
-    block_on, shutdown, spawn, spawn_blocking, spawn_local, Builder, JoinError, JoinHandle,
-    JoinSet, Runtime, RuntimeHandle,
+    block_on, noop_waker, shutdown, spawn, spawn_blocking, spawn_local, Builder, JoinError,
+    JoinHandle, JoinSet, Runtime, RuntimeHandle,
 };
 
 pub mod timers;
@@ -34,9 +34,9 @@ pub use yield_now::{yieldnow, YieldNow};
 
 pub mod sync;
 pub use sync::{
-    AsyncMutex, AsyncMutexLock, Condvar, Mutex, MutexGuard, Permit, RwLock, RwLockReadGuard,
-    RwLockWriteGuard, Semaphore, SemaphoreAcquire, SemaphoreAcquireError, SemaphoreGuard,
-    SemaphoreTryAcquireError, SpinLock, SpinLockGuard,
+    AsyncMutex, AsyncMutexGuard, AsyncMutexLock, Condvar, Mutex, MutexGuard, Permit, RwLock,
+    RwLockReadGuard, RwLockWriteGuard, Semaphore, SemaphoreAcquire, SemaphoreAcquireError,
+    SemaphoreGuard, SemaphoreTryAcquireError, SpinLock, SpinLockGuard,
 };
 
 pub type SyncMutex<T> = Mutex<T>;
@@ -113,6 +113,8 @@ pub use error::Error;
 pub mod signal;
 pub use signal::{alarm, ctrl_c, usr1, usr2, CtrlC, Signal, SignalHandler, SignalKind};
 
+pub mod serial_mux;
+
 pub mod udp;
 pub use udp::{SocketAddr, UdpError, UdpSocket};
 pub type UdpAddr = SocketAddr;
@@ -127,7 +129,10 @@ pub use async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFut
 #[cfg(target_os = "none")]
 pub mod bare_async_net;
 #[cfg(target_os = "none")]
-pub use bare_async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture};
+pub use bare_async_net::{
+    install_bare_net_driver, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, BareNetDriver,
+    ConnectFuture,
+};
 
 pub mod ipv4;
 pub use ipv4::{Ipv4Addr, Ipv4Header, IP_DEFAULT_TTL, IP_VERSION};
@@ -141,27 +146,12 @@ pub use crc32::{crc32, Crc32};
 pub mod ring;
 pub use ring::RingBuffer;
 
-pub mod storage;
-pub use storage::{BlockDevice, SECTOR_SIZE};
-
-pub mod ahci;
-pub mod ata;
-pub mod fat;
 pub mod ip;
-pub mod nvme;
-pub mod pci;
-pub mod virtio_net;
 pub use ip::{
     checksum, echo_reply, ip_checksum, parse_packet, ArpCache, ArpHeader, EthHeader, IcmpHeader,
     IpAddr, IpHeader, IpStack, Network, TcpHeader, UdpHeader, ETH_TYPE_ARP, ETH_TYPE_IPV4,
     ICMP_ECHO_REPLY, ICMP_ECHO_REQUEST, IP_PROTO_ICMP, IP_PROTO_TCP, IP_PROTO_UDP,
 };
-
-pub mod dns;
-pub use dns::{DnsClient, DnsQuery, DnsRecord, DnsResponse, DnsResultCode, DnsType, DNS_MAX_NAME};
-
-pub mod tftp;
-pub use tftp::{TftpClient, TftpConfig, TftpState};
 
 pub mod log;
 pub use log::Level;

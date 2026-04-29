@@ -25,7 +25,7 @@ use super::record::{DnsRecordData, DnsRecordType};
 /// ```no_run
 /// use edgerun_dns::DnsClient;
 /// use edgerun_dns::record::DnsRecordType;
-/// use crate::compat::Runtime;
+/// use edgerun_rt::Runtime;
 ///
 /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 /// rt.block_on(async {

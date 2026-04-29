@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Capability and delegation data structures for Edgerun"
 
 [dependencies]
 edgerun-proto = { path = "../edgerun-proto" }

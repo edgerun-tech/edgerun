@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::string::ToString;
 use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
@@ -24,6 +25,11 @@ impl edgerun_email::server::ConnectionInterceptor for ConnectionInterceptorAdapt
         stream: Arc<AsyncTcpStream>,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         let handler = Arc::clone(&self.handler);
-        Box::pin(async move { handler.handle(peer, stream).await })
+        Box::pin(async move {
+            handler
+                .handle(peer, stream)
+                .await
+                .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))
+        })
     }
 }

@@ -164,14 +164,13 @@ NodeStore (facade)
 2. **Blob recipients optional in code, mandatory in spec** — §6.2 requires ≥1 recipient; code allows `&[]`.
 3. **No atomic CAS for head updates** — Spec requires `compare_and_set_head`; implementation does separate `put_event` + `set_head`.
 4. **Object descriptors not persisted** — `LogicalObjectDescriptor` created in `put_object()` but dropped (`_descriptor`).
-5. **`integrity_check_and_rebuild` is a stub** — Returns `Ok(0)` without rebuilding. Should call `self.rebuild_indexes()`.
-6. **Full-write persistence** — Every mutation calls `save()` which rewrites ALL `.bin` files. O(N) per write.
-7. **No atomic file writes** — `fs::write` directly; crash mid-write = corrupted `.bin`.
-8. **Fetch queue priority underflow** — Priority is `i64`, decremented on retry with no floor.
-9. **`FileIndex` not `Send`** — `RefCell` prevents multi-threaded access.
-10. **Stale doc comments** — References to "SQLite" remain from a previous migration to file-based indexes.
-11. **`events` HashMap is dead** — Written to file but never populated in the in-memory map.
-12. **`CredentialStore` not composed in `NodeStore`** — Methods are duplicated instead.
+5. **Full-write persistence** — Every mutation calls `save()` which rewrites ALL `.bin` files. O(N) per write.
+6. **No atomic file writes** — `fs::write` directly; crash mid-write = corrupted `.bin`.
+7. **Fetch queue priority underflow** — Priority is `i64`, decremented on retry with no floor.
+8. **`FileIndex` not `Send`** — `RefCell` prevents multi-threaded access.
+9. **Stale doc comments** — References to "SQLite" remain from a previous migration to file-based indexes.
+10. **`events` HashMap is dead** — Written to file but never populated in the in-memory map.
+11. **`CredentialStore` not composed in `NodeStore`** — Methods are duplicated instead.
 
 ---
 
@@ -325,20 +324,19 @@ edgerun-hardware-signing
 4. **Make stream append atomic** — Combine `put_event` + `set_head` into single atomic operation
 
 ### High Priority
-5. **Implement `integrity_check_and_rebuild`** — Call `self.rebuild_indexes()` instead of returning stub
-6. **Persist `LogicalObjectDescriptor`** — Store descriptors, don't drop them
-7. **Implement delegation chain validation** — Signature verification, continuity, attenuation checks (§18.5)
-8. **Implement command acceptance validation** — Full §18.6 state machine
-9. **Add atomic file writes** — Write-to-temp + rename for `.bin` files
+5. **Persist `LogicalObjectDescriptor`** — Store descriptors, don't drop them
+6. **Implement delegation chain validation** — Signature verification, continuity, attenuation checks (§18.5)
+7. **Implement command acceptance validation** — Full §18.6 state machine
+8. **Add atomic file writes** — Write-to-temp + rename for `.bin` files
 
 ### Medium Priority
-10. **Implement event-family rule dispatch** — §18.4 family check
-11. **Implement snapshot delta request** — §18.8 delta handling
-12. **Implement ingress screening** — §18.3 cheap-first screening order
-13. **Add minimum priority floor to fetch queue** — Prevent infinite priority decrement
+9. **Implement event-family rule dispatch** — §18.4 family check
+10. **Implement snapshot delta request** — §18.8 delta handling
+11. **Implement ingress screening** — §18.3 cheap-first screening order
+12. **Add minimum priority floor to fetch queue** — Prevent infinite priority decrement
 
 ### Low Priority
-14. **Clean up dead code** — Remove unused `events` HashMap, stale SQLite comments
-15. **Compose `CredentialStore` in `NodeStore`** — Eliminate method duplication
-16. **Add `validate_invocation`, `validate_request`, `validate_result`** — Missing proto validators
-17. **Add constraint builders for duration and rate_limit** — Missing `CapabilityConstraint` builders
+13. **Clean up dead code** — Remove unused `events` HashMap, stale SQLite comments
+14. **Compose `CredentialStore` in `NodeStore`** — Eliminate method duplication
+15. **Add `validate_invocation`, `validate_request`, `validate_result`** — Missing proto validators
+16. **Add constraint builders for duration and rate_limit** — Missing `CapabilityConstraint` builders

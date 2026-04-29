@@ -1,9 +1,9 @@
 use std::fs;
 
 use anyhow::{Context, Result, anyhow};
+use edgerun_json::{JsonValue as Value, json};
 use oci_spec::runtime::{ExecCPUAffinityBuilder, ProcessBuilder, Spec, SpecBuilder};
 use regex::Regex;
-use serde_json::{Value, json};
 use test_framework::{Test, TestGroup, TestResult, test_result};
 
 use crate::utils::{exec_container, start_container, test_outside_container};
@@ -47,7 +47,7 @@ fn test_cpu_affinity_only_initial_set_from_process_json() -> TestResult {
         let process_path = dir.join("process.json");
         if let Err(e) = fs::write(
             &process_path,
-            serde_json::to_vec_pretty(&process_json).unwrap(),
+            crate::utils::json::to_vec_pretty(process_json).unwrap(),
         ) {
             return TestResult::Failed(anyhow!("failed to write process.json: {}", e));
         }
@@ -91,7 +91,7 @@ fn test_cpu_affinity_initial_and_final_set_from_process_json() -> TestResult {
         let process_path = dir.join("process.json");
         if let Err(e) = fs::write(
             &process_path,
-            serde_json::to_vec_pretty(&process_json).unwrap(),
+            crate::utils::json::to_vec_pretty(process_json).unwrap(),
         ) {
             return TestResult::Failed(anyhow!("failed to write process.json: {}", e));
         }
@@ -194,7 +194,7 @@ pub fn create_process(
     cpu_affinity_initial: Option<&str>,
     cpu_affinity_final: Option<&str>,
 ) -> Value {
-    let mut exec_cpu_affinity = serde_json::Map::new();
+    let mut exec_cpu_affinity = edgerun_json::Map::new();
 
     if let Some(init) = cpu_affinity_initial {
         exec_cpu_affinity.insert("initial".to_string(), json!(init));

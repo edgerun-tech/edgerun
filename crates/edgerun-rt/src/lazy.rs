@@ -1,77 +1,179 @@
 //! Lazy static and once cell for bare-metal
 
 use core::cell::UnsafeCell;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::mem::MaybeUninit;
+use core::sync::atomic::{AtomicU8, Ordering};
+
+const UNINITIALIZED: u8 = 0;
+const INITIALIZING: u8 = 1;
+const INITIALIZED: u8 = 2;
+
+unsafe impl<T: Sync> Sync for LazyStatic<T> {}
+unsafe impl<T: Send> Send for LazyStatic<T> {}
 
 pub struct LazyStatic<T> {
-    data: UnsafeCell<Option<T>>,
-    done: AtomicBool,
+    data: UnsafeCell<MaybeUninit<T>>,
+    state: AtomicU8,
 }
 
 impl<T> LazyStatic<T> {
     pub const fn new() -> Self {
         Self {
-            data: UnsafeCell::new(None),
-            done: AtomicBool::new(false),
+            data: UnsafeCell::new(MaybeUninit::uninit()),
+            state: AtomicU8::new(UNINITIALIZED),
         }
     }
 
     pub fn get(&self, init: impl FnOnce() -> T) -> &T {
-        if !self.done.load(Ordering::Acquire) {
-            let value = init();
-            unsafe { *self.data.get() = Some(value) };
-            self.done.store(true, Ordering::Release);
+        loop {
+            if self.state.load(Ordering::Acquire) == INITIALIZED {
+                return unsafe { &*self.data.get().cast::<T>() };
+            }
+            match self.state.compare_exchange(
+                UNINITIALIZED,
+                INITIALIZING,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => {
+                    #[cfg(not(target_os = "none"))]
+                    let value = {
+                        use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+                        match catch_unwind(AssertUnwindSafe(init)) {
+                            Ok(value) => value,
+                            Err(err) => {
+                                self.state.store(UNINITIALIZED, Ordering::Release);
+                                resume_unwind(err);
+                            }
+                        }
+                    };
+                    #[cfg(target_os = "none")]
+                    let value = init();
+
+                    unsafe { (*self.data.get()).write(value) };
+                    self.state.store(INITIALIZED, Ordering::Release);
+                    return unsafe { &*self.data.get().cast::<T>() };
+                }
+                Err(_) => core::hint::spin_loop(),
+            }
         }
-        unsafe { (*self.data.get()).as_ref().unwrap() }
     }
 }
 
-impl<T> Default for LazyStatic<T> {
+impl<T: 'static> Default for LazyStatic<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
+unsafe impl<T: Sync> Sync for OnceCell<T> {}
+unsafe impl<T: Send> Send for OnceCell<T> {}
+
 pub struct OnceCell<T> {
-    data: UnsafeCell<Option<T>>,
+    data: UnsafeCell<MaybeUninit<T>>,
+    state: AtomicU8,
 }
 
 impl<T> OnceCell<T> {
     pub const fn new() -> Self {
         Self {
-            data: UnsafeCell::new(None),
+            data: UnsafeCell::new(MaybeUninit::uninit()),
+            state: AtomicU8::new(UNINITIALIZED),
         }
     }
 
     pub fn get(&self) -> Option<&T> {
-        unsafe { (*self.data.get()).as_ref() }
+        if self.state.load(Ordering::Acquire) != INITIALIZED {
+            return None;
+        }
+        Some(unsafe { &*self.data.get().cast::<T>() })
     }
 
     pub fn set(&self, value: T) -> Result<(), T> {
-        unsafe {
-            if (*self.data.get()).is_some() {
-                Err(value)
-            } else {
-                *self.data.get() = Some(value);
-                Ok(())
+        if self
+            .state
+            .compare_exchange(
+                UNINITIALIZED,
+                INITIALIZING,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
+        {
+            unsafe {
+                self.data.get().write(MaybeUninit::new(value));
             }
+            self.state.store(INITIALIZED, Ordering::Release);
+            Ok(())
+        } else {
+            Err(value)
         }
     }
 
     pub fn try_insert(&self, value: T) -> Result<&T, (&T, T)> {
-        if let Some(existing) = self.get() {
-            return Err((existing, value));
+        let mut pending = Some(value);
+
+        loop {
+            let value = pending.take().expect("value present");
+            match self.set(value) {
+                Ok(()) => return Ok(self.get().unwrap()),
+                Err(value) => match self.state.load(Ordering::Acquire) {
+                    INITIALIZING => {
+                        pending = Some(value);
+                        while self.state.load(Ordering::Acquire) == INITIALIZING {
+                            core::hint::spin_loop();
+                        }
+                    }
+                    INITIALIZED => return Err((self.get().expect("cell is initialized"), value)),
+                    UNINITIALIZED => {
+                        pending = Some(value);
+                    }
+                    _ => unreachable!(),
+                },
+            }
         }
-        let _ = self.set(value);
-        Ok(self.get().unwrap())
     }
 
     pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
-        if let Some(v) = self.get() {
-            return v;
+        loop {
+            if let Some(v) = self.get() {
+                return v;
+            }
+
+            if self
+                .state
+                .compare_exchange(
+                    UNINITIALIZED,
+                    INITIALIZING,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_ok()
+            {
+                #[cfg(not(target_os = "none"))]
+                let value = {
+                    use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+                    match catch_unwind(AssertUnwindSafe(init)) {
+                        Ok(value) => value,
+                        Err(err) => {
+                            self.state.store(UNINITIALIZED, Ordering::Release);
+                            resume_unwind(err);
+                        }
+                    }
+                };
+                #[cfg(target_os = "none")]
+                let value = init();
+                unsafe {
+                    self.data.get().write(MaybeUninit::new(value));
+                }
+                self.state.store(INITIALIZED, Ordering::Release);
+                return unsafe { &*self.data.get().cast::<T>() };
+            }
+
+            while self.state.load(Ordering::Acquire) == INITIALIZING {
+                core::hint::spin_loop();
+            }
         }
-        self.set(init()).ok();
-        self.get().unwrap()
     }
 }
 

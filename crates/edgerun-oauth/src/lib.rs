@@ -32,7 +32,9 @@
 //! );
 //! let client = OAuthClient::new(config);
 //! let creds = client.device_flow(&MyCallback).await.unwrap();
-//! println!("Access token: {}", creds.access_token);
+//! if let Some(token) = creds.bearer_token() {
+//!     println!("Access token: {token}");
+//! }
 //! # });
 //! ```
 //!
@@ -45,7 +47,7 @@
 //! let server = OAuthServer::new(config).unwrap();
 //!
 //! // Register a new client
-//! server.register_client("my-app", vec!["openid".into(), "email".into()]).await;
+//! server.register_client("my-app", vec!["openid".into(), "email".into()]);
 //!
 //! // The server exposes these endpoints:
 //! // GET  /.well-known/openid-configuration

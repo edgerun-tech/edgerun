@@ -9,54 +9,9 @@ extern crate std;
 extern crate self as std;
 
 #[cfg(target_os = "none")]
-pub mod collections {
-    pub use alloc::collections::BTreeMap;
-}
-
+pub use edgerun_linux_sysfs::prelude;
 #[cfg(target_os = "none")]
-pub mod fs {
-    pub use edgerun_linux_sysfs::fs::*;
-}
-
-#[cfg(target_os = "none")]
-pub mod io {
-    pub use edgerun_linux_sysfs::io::*;
-}
-
-#[cfg(target_os = "none")]
-pub mod path {
-    pub use edgerun_linux_sysfs::path::*;
-}
-
-#[cfg(target_os = "none")]
-pub mod option {
-    pub use core::option::*;
-}
-
-#[cfg(target_os = "none")]
-pub mod result {
-    pub use core::result::*;
-}
-
-#[cfg(target_os = "none")]
-pub mod string {
-    pub use alloc::string::*;
-}
-
-#[cfg(target_os = "none")]
-pub mod vec {
-    pub use alloc::vec::*;
-}
-
-pub mod prelude {
-    pub mod v1 {
-        pub use alloc::format;
-        pub use alloc::string::{String, ToString};
-        pub use alloc::vec;
-        pub use alloc::vec::Vec;
-        pub use core::prelude::rust_2024::*;
-    }
-}
+pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result, string, vec};
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_gpu::{
@@ -65,8 +20,8 @@ use edgerun_gpu::{
 };
 use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{
-    is_pci_address, link_name, parse_bool_flag, parse_hex_u16, parse_hex_u32, parse_hex_u8,
-    parse_i32, parse_u32, parse_uevent_map, read_trimmed,
+    is_pci_address, link_name, parse_bool_flag, parse_display_mode_line, parse_hex_u16,
+    parse_hex_u32, parse_hex_u8, parse_i32, parse_u32, parse_uevent_map, read_trimmed,
 };
 use std::collections::BTreeMap as HashMap;
 #[cfg(not(target_os = "none"))]
@@ -374,27 +329,10 @@ fn parse_connector_name(name: &str) -> Option<String> {
 }
 
 fn parse_mode_line(line: &str) -> Option<GpuDisplayMode> {
-    let mut parts = line.split('x');
-    let width = parts.next()?.trim().parse().ok()?;
-    let rest = parts.next()?;
-    let mut rest_parts = rest.split(['i', 'p', '@']);
-    let height: u32 = rest_parts.next()?.trim().parse().ok()?;
-    let refresh = line
-        .split('@')
-        .nth(1)
-        .and_then(|value| {
-            value
-                .trim_end_matches('H')
-                .trim_end_matches('z')
-                .parse::<f32>()
-                .ok()
-        })
-        .map(|hz| (hz * 1000.0) as u32)
-        .unwrap_or(60_000);
-    Some(GpuDisplayMode {
-        width,
-        height,
-        refresh_millihz: refresh,
+    parse_display_mode_line(line).map(|mode| GpuDisplayMode {
+        width: mode.width,
+        height: mode.height,
+        refresh_millihz: mode.refresh_millihz,
     })
 }
 

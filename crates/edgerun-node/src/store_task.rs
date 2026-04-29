@@ -558,10 +558,12 @@ fn config_controllers_from_signer(signer: &dyn MeshSigner) -> Vec<Vec<u8>> {
 mod tests {
     use super::*;
     use edgerun_core::protocol::{
-        canonical_bytes, IdentityRef, ProtocolRecord, QueryRequest, Signature,
+        canonical_bytes, IdentityRef, NodeRef, ProtocolRecord, QueryRequest, ScopeDescriptor,
+        Signature,
     };
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_proto::edgerun::v0::access::QueryClass;
+    use edgerun_proto::edgerun::v0::trust::ScopeKind;
 
     fn test_signing_key() -> SigningKey {
         SigningKey::from_bytes(&[42u8; 32].into()).unwrap()
@@ -581,7 +583,19 @@ mod tests {
                 identity_kind: Some(1),
                 key_hint: Some(key_hint(key)),
             }),
-            target_scope: None,
+            target_scope: Some(ScopeDescriptor {
+                scope_version: 1,
+                scope_kind: ScopeKind::Node as i32,
+                target_nodes: vec![NodeRef {
+                    node_id: b"target-node".to_vec(),
+                }],
+                target_streams: vec![],
+                target_object_kinds: vec![],
+                target_view_types: vec![],
+                target_domains: vec![],
+                time_bounds: None,
+                scope_metadata: None,
+            }),
             query_class: QueryClass::Head as i32,
             time_window: None,
             checkpoint_base: None,

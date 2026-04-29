@@ -4,17 +4,18 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Core Edgerun protocol types, validation, commands, and crypto-facing helpers"
 
 [dependencies]
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "p256"] }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
-edgerun-json = { path = "../edgerun-json", default-features = false, features = ["alloc", "yaml", "serde"] }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
+edgerun-json = { path = "../edgerun-json", default-features = false }
 prost.workspace = true
 prost-types.workspace = true
 
-[dev-dependencies]
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
+[features]
+conformance = ["edgerun-json/yaml"]
 
 [lints]
 workspace = true

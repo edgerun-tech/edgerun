@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
 use core::{debug_assert_eq, fmt, write};
+use edgerun_encoding::byteorder::{read_u16_le, read_u32_le, read_u64_le};
 #[cfg(target_os = "none")]
 use edgerun_encoding::io::{self, Read, Write};
 #[cfg(target_os = "none")]
@@ -908,7 +909,7 @@ fn read_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, BlockError> {
         }
         Err(err) => return Err(BlockError::from(err)),
     }
-    let len = u32::from_le_bytes(len_bytes) as usize;
+    let len = read_u32_le(&len_bytes, 0) as usize;
     if len > MAX_FRAME_SIZE {
         return Err(BlockError::ProtocolError(
             "frame exceeds maximum size".into(),
@@ -1020,7 +1021,7 @@ fn decode_request(payload: &[u8]) -> Result<BlockRequest, BlockError> {
         _ => {
             return Err(BlockError::ProtocolError(format!(
                 "unknown request tag {tag}"
-            )))
+            )));
         }
     };
     cursor.finish()?;
@@ -1107,7 +1108,7 @@ fn decode_response(payload: &[u8]) -> Result<BlockResponse, BlockError> {
                 flag => {
                     return Err(BlockError::ProtocolError(format!(
                         "invalid response request-id flag {flag}"
-                    )))
+                    )));
                 }
             };
             BlockResponse::Error {
@@ -1118,7 +1119,7 @@ fn decode_response(payload: &[u8]) -> Result<BlockResponse, BlockError> {
         _ => {
             return Err(BlockError::ProtocolError(format!(
                 "unknown response tag {tag}"
-            )))
+            )));
         }
     };
     cursor.finish()?;
@@ -1246,21 +1247,15 @@ impl<'a> Cursor<'a> {
     }
 
     fn read_u16(&mut self) -> Result<u16, BlockError> {
-        let mut bytes = [0_u8; 2];
-        bytes.copy_from_slice(self.read_exact(2)?);
-        Ok(u16::from_le_bytes(bytes))
+        Ok(read_u16_le(self.read_exact(2)?, 0))
     }
 
     fn read_u32(&mut self) -> Result<u32, BlockError> {
-        let mut bytes = [0_u8; 4];
-        bytes.copy_from_slice(self.read_exact(4)?);
-        Ok(u32::from_le_bytes(bytes))
+        Ok(read_u32_le(self.read_exact(4)?, 0))
     }
 
     fn read_u64(&mut self) -> Result<u64, BlockError> {
-        let mut bytes = [0_u8; 8];
-        bytes.copy_from_slice(self.read_exact(8)?);
-        Ok(u64::from_le_bytes(bytes))
+        Ok(read_u64_le(self.read_exact(8)?, 0))
     }
 
     fn read_bool(&mut self) -> Result<bool, BlockError> {

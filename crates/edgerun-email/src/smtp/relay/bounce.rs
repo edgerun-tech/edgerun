@@ -14,6 +14,8 @@ use crate::smtp::client::SmtpClient;
 use crate::smtp::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::smtp::types::response::EnhancedStatusCode;
 
+use super::now_secs;
+
 /// Configuration for the bounce sender.
 #[derive(Clone)]
 pub struct BounceConfig {
@@ -252,13 +254,6 @@ fn format_timestamp(ts: i64) -> String {
     // Simplified — just return a reasonable timestamp
     // For production, use chrono or time crate
     format!("{} GMT", secs)
-}
-
-fn now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

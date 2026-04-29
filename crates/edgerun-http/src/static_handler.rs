@@ -49,32 +49,35 @@ impl StaticHandler {
     }
 
     fn guess_mime_type(path: &Path) -> &'static str {
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
+        const MIME_TYPES: &[(&str, &str)] = &[
+            ("html", "text/html; charset=utf-8"),
+            ("htm", "text/html; charset=utf-8"),
+            ("css", "text/css; charset=utf-8"),
+            ("js", "application/javascript; charset=utf-8"),
+            ("json", "application/json; charset=utf-8"),
+            ("xml", "application/xml; charset=utf-8"),
+            ("txt", "text/plain; charset=utf-8"),
+            ("text", "text/plain; charset=utf-8"),
+            ("png", "image/png"),
+            ("jpg", "image/jpeg"),
+            ("jpeg", "image/jpeg"),
+            ("gif", "image/gif"),
+            ("svg", "image/svg+xml"),
+            ("ico", "image/x-icon"),
+            ("woff", "font/woff"),
+            ("woff2", "font/woff2"),
+            ("ttf", "font/ttf"),
+            ("eot", "application/vnd.ms-fontobject"),
+            ("pdf", "application/pdf"),
+            ("zip", "application/zip"),
+        ];
 
-        match ext.as_str() {
-            "html" | "htm" => "text/html; charset=utf-8",
-            "css" => "text/css; charset=utf-8",
-            "js" => "application/javascript; charset=utf-8",
-            "json" => "application/json; charset=utf-8",
-            "xml" => "application/xml; charset=utf-8",
-            "txt" | "text" => "text/plain; charset=utf-8",
-            "png" => "image/png",
-            "jpg" | "jpeg" => "image/jpeg",
-            "gif" => "image/gif",
-            "svg" => "image/svg+xml",
-            "ico" => "image/x-icon",
-            "woff" => "font/woff",
-            "woff2" => "font/woff2",
-            "ttf" => "font/ttf",
-            "eot" => "application/vnd.ms-fontobject",
-            "pdf" => "application/pdf",
-            "zip" => "application/zip",
-            _ => "application/octet-stream",
-        }
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+        MIME_TYPES
+            .iter()
+            .find_map(|(candidate, mime)| ext.eq_ignore_ascii_case(candidate).then_some(*mime))
+            .unwrap_or("application/octet-stream")
     }
 }
 

@@ -23,6 +23,10 @@ The v0 conformance suite covers the protocol families already fixed in the core 
 - control transfer validation
 - snapshot acceptance and delta application
 - object retrieval and representation validation
+- query request/result/proof handling
+- network session, relay, route, and reachability validation
+- trust assurance and revocation validation
+- crypto signature/hash fixture validation
 
 The suite does **not** yet attempt to certify:
 
@@ -124,7 +128,7 @@ Derived artifacts are optional in the first draft corpus and may initially be ge
 `manifest.yaml` MUST contain:
 
 - `id`: globally unique case id
-- `suite`: one of `canonical`, `stream`, `delegation`, `command`, `control`, `snapshot`, `object`
+- `suite`: one of `canonical`, `stream`, `delegation`, `command`, `control`, `snapshot`, `object`, `query`, `network`, `trust`, `crypto`
 - `validator`: exact validator or routine under test
 - `version`: corpus version for the case
 - `description`

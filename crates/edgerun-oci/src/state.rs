@@ -5,6 +5,7 @@
 //! When running rootless: `$XDG_RUNTIME_DIR/edgerun-oci/<id>/` or `$HOME/.local/state/edgerun-oci/<id>/`
 
 use crate::prelude::*;
+use crate::util::StringResultExt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -28,6 +29,11 @@ pub fn is_root() -> bool {
 /// and `setresuid(0)`, so even though `geteuid()` returns 0, we're still rootless.
 pub fn is_rootless() -> bool {
     std::env::var("_ERT_ROOTLESS_CHILD").is_ok()
+}
+
+/// Check if runtime behavior should use rootless assumptions.
+pub fn is_rootless_mode() -> bool {
+    !is_root() || is_rootless()
 }
 
 /// Resolve the default state directory based on whether we're rootless.
@@ -64,6 +70,14 @@ pub fn set_state_dir(dir: &str) {
     }
 }
 
+#[cfg(test)]
+fn clear_state_dir_override() {
+    let old = CUSTOM_STATE_DIR.swap(std::ptr::null_mut(), Ordering::Relaxed);
+    if !old.is_null() {
+        drop(unsafe { Box::from_raw(old as *mut String) });
+    }
+}
+
 /// Resolve the state directory base path.
 fn state_dir_base() -> std::borrow::Cow<'static, str> {
     let ptr = CUSTOM_STATE_DIR.load(Ordering::Relaxed);
@@ -75,18 +89,24 @@ fn state_dir_base() -> std::borrow::Cow<'static, str> {
     }
 }
 
+/// Return the current container state root directory.
+pub fn state_root_dir() -> PathBuf {
+    let base = state_dir_base();
+    PathBuf::from(base.as_ref())
+}
+
+use alloc::collections::BTreeMap;
+use edgerun_json::ToJson;
+
 /// Container state matching the OCI runtime spec JSON format.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ContainerState {
-    #[serde(rename = "ociVersion")]
     pub oci_version: String,
     pub id: String,
     pub status: String, // "creating" | "created" | "running" | "stopped"
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
     pub bundle: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub annotations: Option<alloc::collections::BTreeMap<String, String>>,
+    pub annotations: Option<BTreeMap<String, String>>,
 }
 
 /// Return the state directory for a container.
@@ -100,6 +120,11 @@ pub fn state_file_path(id: &str) -> PathBuf {
     container_state_dir(id).join("state.json")
 }
 
+/// Return the path to the effective runtime spec captured for this container.
+pub fn runtime_spec_path(id: &str) -> PathBuf {
+    container_state_dir(id).join("runtime-config.json")
+}
+
 /// Return the path to the start FIFO file.
 pub fn fifo_path(id: &str) -> PathBuf {
     container_state_dir(id).join("start.fifo")
@@ -109,21 +134,63 @@ pub fn fifo_path(id: &str) -> PathBuf {
 pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
     let dir = container_state_dir(id);
     fs::create_dir_all(&dir)?;
-    let json = edgerun_json::to_string_pretty(state)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let json = edgerun_json::to_string_pretty(&state.to_json())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
     fs::write(state_file_path(id), json)?;
+    Ok(())
+}
+
+/// Save the effective runtime OCI spec used to create the container.
+pub fn save_runtime_spec(spec: &crate::spec::OciSpec, id: &str) -> io::Result<()> {
+    let dir = container_state_dir(id);
+    fs::create_dir_all(&dir)?;
+    let json = spec.to_json_string_pretty();
+    fs::write(runtime_spec_path(id), json)?;
     Ok(())
 }
 
 /// Load container state from disk.
 pub fn load_state(id: &str) -> io::Result<ContainerState> {
     let data = fs::read_to_string(state_file_path(id))?;
-    edgerun_json::from_str(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    load_state_from_str(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+pub fn load_state_from_str(data: &str) -> Result<ContainerState, String> {
+    edgerun_json::from_json_str(data).string_err()
+}
+
+edgerun_json::impl_json_struct! {
+    ContainerState {
+        required {
+            oci_version: "ociVersion" => String,
+            id: "id" => String,
+            status: "status" => String,
+            bundle: "bundle" => String,
+        }
+        optional {
+            pid: "pid" => u32,
+            annotations: "annotations" => BTreeMap<String, String>,
+        }
+    }
 }
 
 /// Delete container state directory and all contents.
 pub fn delete_state(id: &str) {
-    let _ = fs::remove_dir_all(container_state_dir(id));
+    let _ = delete_state_with_result(id);
+}
+
+/// Delete container state directory and all contents, returning I/O errors.
+pub fn delete_state_with_result(id: &str) -> io::Result<()> {
+    let state_dir = container_state_dir(id);
+    if !state_dir.exists() {
+        return Ok(());
+    }
+    fs::remove_dir_all(state_dir).map_err(|e| {
+        io::Error::new(
+            e.kind(),
+            format!("failed to delete container state directory: {}", e),
+        )
+    })
 }
 
 /// Check if a container state exists.
@@ -132,190 +199,5 @@ pub fn state_exists(id: &str) -> bool {
 }
 
 #[cfg(all(test, not(target_os = "none")))]
-mod tests {
-    use super::*;
-    use std::sync::Mutex;
-
-    static STATE_LOCK: Mutex<()> = Mutex::new(());
-
-    fn tmp_state_dir() -> std::path::PathBuf {
-        static C: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = C.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let p = std::env::temp_dir().join(format!("oci_state_{}_{}", std::process::id(), n));
-        let _ = std::fs::remove_dir_all(&p);
-        std::fs::create_dir_all(&p).unwrap();
-        p
-    }
-
-    fn with_tmp_state_dir<F: FnOnce()>(f: F) {
-        let _lock = STATE_LOCK.lock().unwrap();
-        let dir = tmp_state_dir();
-        let dir_str = dir.to_string_lossy().to_string();
-        set_state_dir(&dir_str);
-        f();
-        let _ = std::fs::remove_dir_all(&dir);
-        set_state_dir(STATE_DIR);
-    }
-
-    #[test]
-    fn state_dir_default() {
-        let _lock = STATE_LOCK.lock().unwrap();
-        assert_eq!(state_dir_base().as_ref(), STATE_DIR);
-    }
-
-    #[test]
-    fn state_dir_custom() {
-        let _lock = STATE_LOCK.lock().unwrap();
-        let dir = tmp_state_dir();
-        let dir_str = dir.to_string_lossy().to_string();
-        set_state_dir(&dir_str);
-        assert_eq!(state_dir_base().as_ref(), dir_str);
-        set_state_dir(STATE_DIR);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn container_state_dir_path() {
-        let expected = if is_root() {
-            std::path::Path::new(STATE_DIR).join("my-container")
-        } else {
-            // Rootless: uses XDG_RUNTIME_DIR or HOME
-            std::path::Path::new(default_state_dir().as_str()).join("my-container")
-        };
-        assert_eq!(container_state_dir("my-container"), expected);
-    }
-
-    #[test]
-    fn state_file_path_format() {
-        let p = state_file_path("test-id");
-        assert!(p.to_string_lossy().ends_with("test-id/state.json"));
-    }
-
-    #[test]
-    fn fifo_path_format() {
-        let p = fifo_path("test-id");
-        assert!(p.to_string_lossy().ends_with("test-id/start.fifo"));
-    }
-
-    #[test]
-    fn state_save_and_load() {
-        with_tmp_state_dir(|| {
-            let state = ContainerState {
-                oci_version: "1.0.2".into(),
-                id: "test-1".into(),
-                status: "created".into(),
-                pid: Some(12345),
-                bundle: "/tmp/bundle".into(),
-                annotations: Some(alloc::collections::BTreeMap::from([(
-                    "key".into(),
-                    "value".into(),
-                )])),
-            };
-
-            save_state(&state, "test-1").unwrap();
-
-            let loaded = load_state("test-1").unwrap();
-            assert_eq!(loaded.oci_version, "1.0.2");
-            assert_eq!(loaded.id, "test-1");
-            assert_eq!(loaded.status, "created");
-            assert_eq!(loaded.pid, Some(12345));
-            assert_eq!(loaded.bundle, "/tmp/bundle");
-            assert_eq!(loaded.annotations.as_ref().unwrap()["key"], "value");
-        });
-    }
-
-    #[test]
-    fn state_exists_checks() {
-        with_tmp_state_dir(|| {
-            assert!(!state_exists("nonexistent"));
-
-            let state = ContainerState {
-                oci_version: "1.0.2".into(),
-                id: "exist-test".into(),
-                status: "created".into(),
-                pid: None,
-                bundle: "/tmp/b".into(),
-                annotations: None,
-            };
-            save_state(&state, "exist-test").unwrap();
-
-            assert!(state_exists("exist-test"));
-        });
-    }
-
-    #[test]
-    fn state_delete() {
-        with_tmp_state_dir(|| {
-            let state = ContainerState {
-                oci_version: "1.0.2".into(),
-                id: "del-test".into(),
-                status: "created".into(),
-                pid: None,
-                bundle: "/tmp/b".into(),
-                annotations: None,
-            };
-            save_state(&state, "del-test").unwrap();
-            assert!(state_exists("del-test"));
-
-            delete_state("del-test");
-            assert!(!state_exists("del-test"));
-        });
-    }
-
-    #[test]
-    fn state_delete_nonexistent_is_noop() {
-        with_tmp_state_dir(|| {
-            delete_state("does-not-exist");
-            // Should not panic
-        });
-    }
-
-    #[test]
-    fn state_load_nonexistent_fails() {
-        with_tmp_state_dir(|| {
-            let result = load_state("nonexistent");
-            assert!(result.is_err());
-        });
-    }
-
-    #[test]
-    fn state_status_transitions() {
-        with_tmp_state_dir(|| {
-            // Simulate lifecycle: creating → created → running → stopped
-            for status in &["creating", "created", "running", "stopped"] {
-                let state = ContainerState {
-                    oci_version: "1.0.2".into(),
-                    id: "lifecycle".into(),
-                    status: status.to_string(),
-                    pid: if *status == "creating" {
-                        None
-                    } else {
-                        Some(9999)
-                    },
-                    bundle: "/tmp/b".into(),
-                    annotations: None,
-                };
-                save_state(&state, "lifecycle").unwrap();
-                let loaded = load_state("lifecycle").unwrap();
-                assert_eq!(loaded.status, *status);
-            }
-        });
-    }
-
-    #[test]
-    fn is_root_when_root() {
-        // In test environment we're usually root (sudo)
-        let uid = unsafe { libc::getuid() };
-        assert_eq!(is_root(), uid == 0);
-    }
-
-    #[test]
-    fn default_state_dir_uses_xdg_when_not_root() {
-        // Only meaningful when not root — test is usually root, so just verify structure
-        if !is_root() {
-            let dir = default_state_dir();
-            // Should not be the root STATE_DIR
-            assert!(!dir.starts_with(STATE_DIR));
-        }
-    }
-}
+#[path = "../tests/unit_src/src/state_tests.rs"]
+mod tests;

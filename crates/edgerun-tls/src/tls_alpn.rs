@@ -10,8 +10,10 @@
 //! 4. ACME server validates the certificate contains correct challenge
 //!
 //! Usage:
-//! ```ignore
+//! ```rust
 //! use edgerun_tls::tls_alpn::ACME_TLS_ALPN_PROTOCOL;
+//!
+//! assert_eq!(ACME_TLS_ALPN_PROTOCOL, b"acme-tls/1");
 //! ```
 
 /// ACME TLS-ALPN-01 protocol identifier (RFC 8737)

@@ -90,7 +90,7 @@ scripts/qemu-unikernel-swtpm.sh
   `edgerun-yubikey`, `edgerun-android-keystore`
 - Service protocols: `edgerun-http`, `edgerun-tls`, `edgerun-quic`,
   `edgerun-dns`, `edgerun-dhcp`, `edgerun-dhcpv6`, `edgerun-email`,
-  `edgerun-server`, `edgerun-net`, `edgerun-proxy`
+  `edgerun-server`, `edgerun-proxy`
 - Runtime and bare metal: `edgerun-rt`, `edgerun-platform`,
   `edgerun-unikernel`, `edgerun-virtio`, `edgerun-rtl8125`, `edgerun-ipxe`,
   `edgerun-tftp`

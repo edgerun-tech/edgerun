@@ -1,9 +1,8 @@
 #![allow(clippy::all)]
 
+use aes_gcm::aead::consts::{U12, U16};
 use aes_gcm::aead::generic_array::GenericArray;
 use aes_gcm::{AeadInPlace, Aes128Gcm, Aes256Gcm, Key, KeyInit};
-use typenum::U12;
-use typenum::U16;
 
 #[derive(Clone)]
 enum AesGcmInner {

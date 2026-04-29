@@ -7,8 +7,8 @@ publish.workspace = true
 description = "no_std DNS server and client using edgerun-rt"
 
 [features]
-default = ["dhcp-client", "dnssec", "tsig"]
-dhcp = []
+default = []
+dhcp = ["dep:edgerun-dhcp"]
 dhcp-client = ["dhcp", "dep:edgerun-crypto"]
 dnssec = [
     "dep:edgerun-crypto",
@@ -21,8 +21,10 @@ tsig = ["dep:edgerun-crypto", "edgerun-crypto/hmac"]
 [dependencies]
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
+edgerun-dhcp = { path = "../edgerun-dhcp", optional = true }
+edgerun-tftp = { path = "../edgerun-tftp" }
 edgerun-crypto = { path = "../edgerun-crypto", default-features = false, optional = true }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"] }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false }
 
 [[test]]
 name = "dnssec_integration"

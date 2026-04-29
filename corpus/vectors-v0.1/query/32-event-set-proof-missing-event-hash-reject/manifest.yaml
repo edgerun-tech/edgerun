@@ -1,0 +1,10 @@
+id: query/32-event-set-proof-missing-event-hash-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: event set proof event refs require event hash
+tags:
+- query
+- proof
+- structural

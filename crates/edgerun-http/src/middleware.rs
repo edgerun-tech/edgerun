@@ -16,7 +16,7 @@
 //!
 //! ```
 //! use edgerun_http::middleware::{Chain, Middleware, Next};
-//! use edgerun_http::{Handler, Request, Response, StatusCode};
+//! use edgerun_http::{into_handler, Handler, Request, Response, StatusCode};
 //! use std::future::Future;
 //! use std::pin::Pin;
 //!
@@ -43,10 +43,12 @@
 //!                 .with_header("Access-Control-Allow-Origin", "*");
 //!         }
 //!         let mut resp = next.run(req).await;
-//!         resp.headers_mut().insert("Access-Control-Allow-Origin", "*");
+//!         let _ = resp.headers_mut().insert("Access-Control-Allow-Origin", "*");
 //!         resp
 //!     })
 //! });
+//!
+//! let my_handler = into_handler(|_| Response::text(StatusCode::new(200).unwrap(), "ok"));
 //!
 //! // Stack them (applied outside → in)
 //! let handler = Chain::new(my_handler)
@@ -89,7 +91,7 @@ use core::pin::Pin;
 /// }
 ///
 /// fn handler(req: Request) {
-///     let user_id: Option<&String> = req.extensions().get();
+///     let user_id: Option<String> = req.extensions().get();
 /// }
 /// ```
 #[derive(Clone)]
@@ -240,7 +242,7 @@ where
 /// Middlewares are applied **outside → in**: the first `.with()` is the
 /// outermost layer, the last `.with()` is closest to the handler.
 ///
-/// ```
+/// ```text
 /// let handler = edgerun_http::middleware::Chain::new(my_handler)
 ///     .with(cors())      // outermost
 ///     .with(logging())

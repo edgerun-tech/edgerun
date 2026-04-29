@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use edgerun_encoding::byteorder::read_u64_be;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use prost::Message;
 
@@ -167,10 +168,7 @@ where
         }
     }
 
-    let frame_len = match <[u8; 8]>::try_from(&resp_buf[..8]) {
-        Ok(arr) => u64::from_be_bytes(arr) as usize,
-        Err(_) => return None,
-    };
+    let frame_len = read_u64_be(&resp_buf, 0) as usize;
     if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
         return None;
     }
@@ -241,10 +239,7 @@ where
         }
     }
 
-    let frame_len = match <[u8; 8]>::try_from(&read_buf[..8]) {
-        Ok(arr) => u64::from_be_bytes(arr) as usize,
-        Err(_) => return None,
-    };
+    let frame_len = read_u64_be(read_buf, 0) as usize;
     if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
         return None;
     }
@@ -271,7 +266,7 @@ where
     };
 
     // Verify the SessionHello
-    let peer_node_id = match session::verify_session_hello(&hello) {
+    let peer_node_id = match session::verify_session_hello(&hello, Some(&ctx.node_id)) {
         Ok(id) => id,
         Err(e) => {
             edgerun_log::warn!("SessionHello verification failed: {}", e);
@@ -356,13 +351,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             }
         }
 
-        let frame_len = match <[u8; 8]>::try_from(&read_buf[..8]) {
-            Ok(arr) => u64::from_be_bytes(arr) as usize,
-            Err(_) => {
-                edgerun_log::warn!("TCP frame length header invalid");
-                return;
-            }
-        };
+        let frame_len = read_u64_be(&read_buf, 0) as usize;
         if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
             edgerun_log::warn!("TCP frame length invalid or too large");
             return;
@@ -398,11 +387,17 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             return;
         }
 
-        // Try SessionHello (in case peer sends another hello)
-        if let Ok(_hello) = edgerun_proto::edgerun::v0::network::SessionHello::decode(&payload[..])
-        {
-            edgerun_log::debug!("ignoring duplicate SessionHello");
-            continue;
+        // Try SessionHello (in case peer sends another hello). Prost decoding is
+        // permissive, so only treat the frame as a hello if required hello
+        // fields are actually present.
+        if let Ok(hello) = edgerun_proto::edgerun::v0::network::SessionHello::decode(&payload[..]) {
+            if hello.initiator.is_some()
+                && !hello.session_nonce.is_empty()
+                && !hello.supported_protocol_versions.is_empty()
+            {
+                edgerun_log::debug!("ignoring duplicate SessionHello");
+                continue;
+            }
         }
 
         // Try CommandEnvelope
@@ -535,14 +530,23 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             }
             match reply_rx.await {
                 Ok(StoreResponse::Ok(resp_payload)) => {
-                    let resp_frame = encode_tcp_frame(&resp_payload);
+                    let response = if resp_payload.is_empty() {
+                        b"ok".as_slice()
+                    } else {
+                        resp_payload.as_slice()
+                    };
+                    let resp_frame = encode_tcp_frame(response);
                     if writer.write_all(&resp_frame).await.is_err() {
                         return;
                     }
                 }
-                Ok(StoreResponse::Rejected(_reason)) => {
+                Ok(StoreResponse::Rejected(reason)) => {
                     edgerun_log::debug!("TCP message screened");
-                    return;
+                    let resp = format!("rejected: {:?}", reason);
+                    let resp_frame = encode_tcp_frame(resp.as_bytes());
+                    if writer.write_all(&resp_frame).await.is_err() {
+                        return;
+                    }
                 }
                 Err(_) => return,
             }
@@ -572,9 +576,13 @@ async fn handle_tcp_stream_common_with_session<R, W>(
                         return;
                     }
                 }
-                Ok(StoreResponse::Rejected(_reason)) => {
+                Ok(StoreResponse::Rejected(reason)) => {
                     edgerun_log::debug!("TCP query screened");
-                    return;
+                    let resp = format!("rejected: {:?}", reason);
+                    let resp_frame = encode_tcp_frame(resp.as_bytes());
+                    if writer.write_all(&resp_frame).await.is_err() {
+                        return;
+                    }
                 }
                 Err(_) => return,
             }

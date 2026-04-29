@@ -184,20 +184,17 @@ struct TokenEntry {
 /// # Example
 /// ```no_run
 /// use edgerun_oauth::{OAuthServer, ServerConfig};
-/// use edgerun_http::{HttpServer, Handler, Request, Response, StatusCode};
-/// use std::pin::Pin;
-/// use std::future::Future;
 ///
 /// # edgerun_rt::block_on(async {
 /// let config = ServerConfig::new("https://auth.example.com", "my-issuer");
 /// let oauth = OAuthServer::new(config).unwrap();
 ///
 /// // Register a client
-/// let client = oauth.register_client("my-app", vec!["openid".into(), "email".into()]).await;
+/// let client = oauth.register_client("my-app", vec!["openid".into(), "email".into()]);
 /// println!("client_id: {}", client.client_id);
 ///
-/// // Mount as an HttpServer handler
-/// HttpServer::new(oauth).bind("127.0.0.1:8080").await.unwrap().serve().await.unwrap();
+/// // `oauth` implements `edgerun_http::Handler` and can be mounted by
+/// // the HTTP server when the server feature is enabled.
 /// # });
 /// ```
 pub struct OAuthServer {
@@ -367,7 +364,7 @@ impl OAuthServer {
         let point = vk.to_encoded_point(false);
         let raw = point.as_bytes();
 
-        let mut fields = Vec::new();
+        let mut fields: Vec<(String, JsonValue)> = Vec::new();
         fields.push(("kty".into(), JsonValue::String("EC".into())));
         fields.push(("crv".into(), JsonValue::String("P-256".into())));
         fields.push(("alg".into(), JsonValue::String("ES256".into())));
@@ -387,7 +384,7 @@ impl OAuthServer {
         let jwk_raw: JsonValue = from_str(&jwk_json).unwrap_or(JsonValue::Object(Map::new()));
 
         let keys_arr = vec![jwk_raw];
-        let mut obj = Vec::new();
+        let mut obj: Vec<(String, JsonValue)> = Vec::new();
         obj.push(("keys".into(), JsonValue::Array(keys_arr)));
         let doc_json =
             to_string(&JsonValue::Object(Map::from_iter(obj))).unwrap_or_else(|_| "{}".into());
@@ -460,7 +457,7 @@ impl OAuthServer {
 
         self.device_store.store(grant);
 
-        let mut fields = Vec::new();
+        let mut fields: Vec<(String, JsonValue)> = Vec::new();
         fields.push(("device_code".into(), JsonValue::String(device_code)));
         fields.push(("user_code".into(), JsonValue::String(user_code)));
         fields.push((
@@ -801,7 +798,7 @@ impl OAuthServer {
             );
         }
 
-        let mut fields = Vec::new();
+        let mut fields: Vec<(String, JsonValue)> = Vec::new();
         fields.push((
             "sub".into(),
             JsonValue::String(entry.sub.clone().unwrap_or(entry.client_id.clone())),
@@ -845,7 +842,7 @@ impl OAuthServer {
 
         let entry = read_lock(&self.tokens).get(token).cloned();
 
-        let mut fields = Vec::new();
+        let mut fields: Vec<(String, JsonValue)> = Vec::new();
         if let Some(entry) = entry {
             if entry.exp < now {
                 fields.push(("active".into(), JsonValue::Bool(false)));
@@ -933,7 +930,7 @@ impl OAuthServer {
         );
         let header_b64 = base64url_nopad_encode(header_json.as_bytes());
 
-        let mut payload_fields = Vec::new();
+        let mut payload_fields: Vec<(String, JsonValue)> = Vec::new();
         payload_fields.push(("iss".into(), JsonValue::String(self.config.issuer.clone())));
         payload_fields.push(("sub".into(), JsonValue::String(client_id.to_string())));
         payload_fields.push(("aud".into(), JsonValue::String(client_id.to_string())));
@@ -985,7 +982,7 @@ impl OAuthServer {
         id_token: Option<&str>,
         expires_in: u64,
     ) -> Response {
-        let mut fields = Vec::new();
+        let mut fields: Vec<(String, JsonValue)> = Vec::new();
         fields.push((
             "access_token".into(),
             JsonValue::String(access_token.to_string()),
@@ -1006,7 +1003,7 @@ impl OAuthServer {
     }
 
     fn oauth_error(&self, error: &str, desc: &str, status: u16) -> Response {
-        let mut fields = Vec::new();
+        let mut fields: Vec<(String, JsonValue)> = Vec::new();
         fields.push(("error".into(), JsonValue::String(error.to_string())));
         fields.push((
             "error_description".into(),
@@ -1086,7 +1083,7 @@ impl Handler for OAuthServer {
 ///     fn handle(&self, req: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
 ///         Box::pin(async move {
 ///             // Extract claims from request extensions
-///             let claims: Option<Claims> = req.extensions().get::<Claims>().cloned();
+///             let claims: Option<Claims> = req.extensions().get::<Claims>();
 ///             match claims {
 ///                 Some(c) => Response::text(StatusCode::new(200).unwrap(), &format!("Hello, {}", c.sub)),
 ///                 None => Response::text(StatusCode::new(401).unwrap(), "unauthenticated"),

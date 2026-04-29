@@ -11,7 +11,7 @@ The crate tree implements that model across protocol validation, event storage,
 mesh transport, node daemons, services, hardware capability providers, and
 bare-metal runtime support. Most library crates are `no_std` or `alloc`-first
 and use local runtime/serialization/logging primitives rather than Tokio,
-serde_json, clap, or tracing.
+host JSON stacks, clap, or tracing.
 
 ## Protocol Model
 
@@ -46,8 +46,8 @@ type catalogs used by codegen experiments.
 | Mesh | `edgerun-mesh`, `edgerun-mesh-link`, `edgerun-mesh-session`, `edgerun-mesh-daemon`, `edgerun-mesh-capability` | Uses P-256 public keys as `NodeID`s, signs mesh frames, routes by identity, discovers peers over raw Ethernet/UDP/multicast/tunnel links, performs ECDH session handshakes with replay/rekey policy, and carries remote capability envelopes over mesh frames. |
 | Capabilities | `edgerun-capabilities`, `edgerun-capability-policy`, `edgerun-remote-capability` | Defines provider descriptors, selectors, requests, grants, invocations, results, revocations, policy decisions, session grant binding, signed capability messages, in-memory/TCP/Unix transports, and adapters for hardware capability traits. |
 | Hardware identity | `edgerun-hardware-signing`, `edgerun-tpm`, `edgerun-yubikey`, `edgerun-android-keystore` | Normalizes hardware-backed signing around ECDSA P-256 `NodeID`s; supports TPM raw commands, YubiKey PIV/APDU flows, Android Keystore adapters, assurance metadata, and provider-specific signature wrappers. |
-| Services | `edgerun-server`, `edgerun-http`, `edgerun-tls`, `edgerun-quic`, `edgerun-dns`, `edgerun-dhcp`, `edgerun-dhcpv6`, `edgerun-net`, `edgerun-email`, `edgerun-proxy`, `edgerun-oci` | Implements protocol/service stacks on top of `edgerun-rt`: HTTP/1/2/3, TLS 1.3, QUIC, DNS/DHCP/TFTP/PXE pieces, unified multi-protocol server plumbing, SMTP/IMAP/LMTP, CONNECT proxying, and OCI parsing/runtime/registry paths. |
-| Bare metal | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-ipxe`, `edgerun-tftp`, `edgerun-virtio`, `edgerun-rtl8125` | Provides a no_std async runtime, timers, channels, sync primitives, async I/O traits, TCP/UDP/IP/DNS/TFTP helpers, block devices, PCI/NVMe/AHCI/FAT/VirtIO pieces, platform primitives, and a freestanding unikernel binary. |
+| Services | `edgerun-server`, `edgerun-http`, `edgerun-tls`, `edgerun-quic`, `edgerun-dns`, `edgerun-dhcp`, `edgerun-dhcpv6`, `edgerun-email`, `edgerun-proxy`, `edgerun-oci` | Implements protocol/service stacks on top of `edgerun-rt`: HTTP/1/2/3, TLS 1.3, QUIC, DNS/DHCP/TFTP/PXE pieces, SMTP/IMAP/LMTP, CONNECT proxying, and OCI parsing/runtime/registry paths. |
+| Bare metal | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-ipxe`, `edgerun-tftp`, `edgerun-virtio`, `edgerun-rtl8125` | Provides a no_std async runtime, timers, channels, sync primitives, async I/O traits, TCP/UDP/IP primitives, platform primitives, VirtIO/RTL8125 drivers, TFTP boot support, and a freestanding unikernel binary. Dedicated crates own service protocols such as HTTP, DNS, TLS, QUIC, DHCP, and TFTP. |
 | Hardware adapters | `edgerun-linux-*`, `edgerun-alsa-*`, `edgerun-evdev-input`, `edgerun-v4l2-camera`, `edgerun-goodix-fingerprint`, `edgerun-mgmt-bluetooth`, `edgerun-amd-xdna`, `edgerun-quectel-ec200a` | Exposes Linux/sysfs/ioctl backed capability providers for network interfaces, WiFi, PCI, USB, GPU, CEC, power, ALSA capture/playback, evdev, V4L2, Goodix fingerprint, Bluetooth mgmt, AMD XDNA, and cellular modem control. |
 | Local support crates | `edgerun-json`, `edgerun-encoding`, `edgerun-hpack`, `edgerun-qpack`, `edgerun-crypto`, `edgerun-clap`, `edgerun-log`, `edgerun-vfs`, `edgerun-virtual-disk` | Provides no_std JSON/YAML/TOML paths, encoding utilities, HPACK/QPACK, the workspace crypto boundary, CLI parsing, logging, RAM-backed VFS/write-back tooling, virtual disks, NBD, and block protocols. |
 

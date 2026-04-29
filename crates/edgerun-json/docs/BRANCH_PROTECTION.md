@@ -93,8 +93,8 @@ cargo test
 # Run clippy
 cargo clippy --all-targets
 
-# Run benchmarks (optional)
-cargo bench
+# Run crate tests
+cargo test -p edgerun-json
 ```
 
 ### 4. Push and Create PR

@@ -3,6 +3,9 @@
 //! These tests verify that core HTTP types correctly enforce the rules specified
 //! in the relevant RFCs.
 
+use alloc::format;
+use alloc::string::ToString;
+
 use crate::header::{HeaderMap, HeaderName, HeaderValue};
 use crate::method::Method;
 use crate::status::StatusCode;
@@ -420,6 +423,37 @@ fn uri_default_ports() {
 fn uri_explicit_port_overrides_default() {
     let uri: Uri = "http://example.com:8080/".parse().unwrap();
     assert_eq!(uri.port().unwrap(), 8080);
+}
+
+#[test]
+fn request_host_header_omits_default_ports() {
+    let https = Request::builder()
+        .method(Method::GET)
+        .uri("https://example.com/path")
+        .build()
+        .unwrap();
+    assert_eq!(https.headers().get("Host").unwrap().as_str(), "example.com");
+
+    let http = Request::builder()
+        .method(Method::GET)
+        .uri("http://example.com/path")
+        .build()
+        .unwrap();
+    assert_eq!(http.headers().get("Host").unwrap().as_str(), "example.com");
+}
+
+#[test]
+fn request_host_header_keeps_non_default_port() {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("https://example.com:8443/path")
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        request.headers().get("Host").unwrap().as_str(),
+        "example.com:8443"
+    );
 }
 
 #[test]

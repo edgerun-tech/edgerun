@@ -64,14 +64,8 @@ cargo test
 # Specific test
 cargo test test_name
 
-# JSONTestSuite
-cargo test --test json_test_suite
-
 # Unicode tests
 cargo test --test unicode
-
-# Benchmarks
-cargo bench
 
 # Miri (memory safety)
 ./scripts/miri.sh
@@ -120,8 +114,6 @@ Install: `git config core.hooksPath .githooks`
 | `cargo fmt` | Formatting |
 | `cargo fmt --check` | Check formatting |
 | `cargo doc --open` | Build and open docs |
-| `cargo bench` | Run benchmarks |
-
 ---
 
 ## Project Structure
@@ -137,7 +129,8 @@ edgerun-json/
 │   ├── json_test_suite.rs
 │   ├── unicode.rs
 │   └── ...
-├── benches/
+├── src/bin/
+│   └── benchmark.rs
 ├── fuzz/
 ├── docs/
 │   ├── BRANCH_PROTECTION.md

@@ -6,6 +6,7 @@ use crate::device::TpmDevice;
 use crate::traits::{TpmSigningKey, TpmTransport};
 use crate::types::*;
 use crate::wire::encode_parsed_signature;
+use edgerun_encoding::byteorder::read_u32_be;
 
 // ---------------------------------------------------------------------------
 // TpmTransportSigningKey
@@ -310,7 +311,7 @@ mod tests {
                 return Err(TpmError::Protocol("command too short".into()));
             }
 
-            let command_code = u32::from_be_bytes([command[6], command[7], command[8], command[9]]);
+            let command_code = read_u32_be(command, 6);
             self.commands.lock().unwrap().push(command_code);
             match command_code {
                 TPM_CC_READ_PUBLIC => Ok(fake_read_public_response()),

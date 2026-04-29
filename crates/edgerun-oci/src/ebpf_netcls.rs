@@ -11,7 +11,7 @@ use std::io;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
-use crate::json::OciLinuxNetworkPriority;
+use crate::spec::OciLinuxNetworkPriority;
 use crate::syscalls::*;
 
 // For cgroup skb programs, context is struct __sk_buff:
@@ -72,14 +72,23 @@ pub fn setup_netcls_cgroup_ebpf(cgroup_path: &Path, class_id: u32) -> io::Result
 /// For each interface name → priority mapping, the program checks the
 /// outgoing interface index and sets the priority accordingly.
 ///
-/// Note: This is a simplified implementation. A full implementation would
-/// use a BPF map to store interface→priority mappings and look them up
-/// at runtime. Here we generate inline checks for each priority rule.
+/// This implementation resolves interface names as numeric ifindex strings at
+/// setup time and emits one inline compare path per rule.
 pub fn build_netprio_bpf_prog(priorities: &[OciLinuxNetworkPriority]) -> Vec<[u8; 8]> {
-    let mut insns: Vec<[u8; 8]> = Vec::new();
+    #[derive(Clone)]
+    enum SymInsn {
+        Raw([u8; 8]),
+        JmpNe { dst: u8, imm: i32, target: String },
+        Label(String),
+    }
+
+    let mut sym: Vec<SymInsn> = Vec::new();
+    let mut fwd_refs: Vec<(usize, String)> = Vec::new();
+
+    let mut usable_rules: Vec<(u32, u32)> = Vec::new();
 
     // Save context (r1 → r6)
-    insns.push(mov_reg(R6, R1));
+    sym.push(SymInsn::Raw(mov_reg(R6, R1)));
 
     // For cgroup skb programs, we can access:
     //   __sk_buff->ifindex at offset 0x08
@@ -96,30 +105,92 @@ pub fn build_netprio_bpf_prog(priorities: &[OciLinuxNetworkPriority]) -> Vec<[u8
     for p in priorities {
         // Parse ifindex from the name field (expected to be a number)
         let ifindex: u32 = p.name.parse().unwrap_or(0);
-        if ifindex == 0 {
-            continue; // Skip invalid entries
+        if ifindex != 0 {
+            usable_rules.push((ifindex, p.priority));
         }
+    }
+
+    // No usable rules means we cannot build a meaningful program.
+    if usable_rules.is_empty() {
+        return Vec::new();
+    }
+
+    for (rule_idx, (ifindex, priority)) in usable_rules.iter().enumerate() {
+        let skip_label = if rule_idx + 1 == usable_rules.len() {
+            "default".to_string()
+        } else {
+            format!("rule_{}", rule_idx + 1)
+        };
 
         // Load skb->ifindex
-        insns.push(ld_imm(bpf_size::BPF_W, R2, R6, SKB_IFINDEX_OFF));
+        sym.push(SymInsn::Raw(ld_imm(
+            bpf_size::BPF_W,
+            R2,
+            R6,
+            SKB_IFINDEX_OFF,
+        )));
 
         // Compare with expected ifindex
-        // if r2 != ifindex → skip to next rule
-        // We'll fix up the offset later
-        insns.push(jmp_imm(bpf_jmp::BPF_JNE, R2, ifindex as i32, 0));
-        // Track this forward reference
-        // We'll handle this with a simpler approach: generate all checks inline
+        // if r2 != ifindex → skip to next rule/default
+        sym.push(SymInsn::JmpNe {
+            dst: R2,
+            imm: *ifindex as i32,
+            target: skip_label,
+        });
 
         // Set skb->priority = p.priority
-        insns.push(mov_imm(R2, p.priority as i32));
-        insns.push(st_imm(bpf_size::BPF_W, R6, R2, SKB_PRIORITY_OFF));
-        insns.push(mov_imm(R0, BPF_ALLOW));
-        insns.push(exit());
+        sym.push(SymInsn::Raw(mov_imm(R2, *priority as i32)));
+        sym.push(SymInsn::Raw(st_imm(
+            bpf_size::BPF_W,
+            R6,
+            R2,
+            SKB_PRIORITY_OFF,
+        )));
+        sym.push(SymInsn::Raw(mov_imm(R0, BPF_ALLOW)));
+        sym.push(SymInsn::Raw(exit()));
+
+        // Label for next rule skip target
+        sym.push(SymInsn::Label(format!("rule_{}", rule_idx + 1)));
     }
 
     // Default: return BPF_OK (pass through without modification)
-    insns.push(mov_imm(R0, BPF_OK));
-    insns.push(exit());
+    sym.push(SymInsn::Label("default".to_string()));
+    sym.push(SymInsn::Raw(mov_imm(R0, BPF_OK)));
+    sym.push(SymInsn::Raw(exit()));
+
+    // Build label -> index map.
+    let mut label_map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut idx = 0;
+    for insn in &sym {
+        match insn {
+            SymInsn::Label(name) => {
+                label_map.insert(name.clone(), idx);
+            }
+            SymInsn::Raw(_) | SymInsn::JmpNe { .. } => idx += 1,
+        }
+    }
+
+    let mut insns: Vec<[u8; 8]> = Vec::new();
+    for insn in &sym {
+        match insn {
+            SymInsn::Raw(bytes) => insns.push(*bytes),
+            SymInsn::JmpNe { dst, imm, target } => {
+                insns.push(jmp_imm(bpf_jmp::BPF_JNE, *dst, *imm, 0));
+                fwd_refs.push((insns.len() - 1, target.clone()));
+            }
+            SymInsn::Label(_) => {}
+        }
+    }
+
+    for (insn_idx, target_label) in &fwd_refs {
+        let target_idx = label_map
+            .get(target_label)
+            .copied()
+            .unwrap_or_else(|| insns.len().saturating_sub(1));
+        let off = target_idx as isize - (*insn_idx as isize + 1);
+        let off = off.clamp(i16::MIN as isize, i16::MAX as isize) as i16;
+        insns[*insn_idx][2..4].copy_from_slice(&off.to_le_bytes());
+    }
 
     insns
 }
@@ -160,50 +231,5 @@ pub fn setup_netprio_cgroup_ebpf(
 // ===========================================================================
 
 #[cfg(all(test, not(target_os = "none")))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn build_netcls_bpf_prog_non_empty() {
-        let insns = build_netcls_bpf_prog(0x10001);
-        assert!(!insns.is_empty());
-        // mov_reg(1) + mov_imm(1) + st_imm(1) + mov_imm(1) + exit(1) = 5
-        assert_eq!(insns.len(), 5);
-    }
-
-    #[test]
-    fn build_netprio_bpf_prog_single() {
-        let priorities = vec![OciLinuxNetworkPriority {
-            name: "1".into(),
-            priority: 6,
-        }];
-        let insns = build_netprio_bpf_prog(&priorities);
-        assert!(!insns.is_empty());
-        assert!(insns.len() >= 5);
-    }
-
-    #[test]
-    fn build_netprio_bpf_prog_multiple() {
-        let priorities = vec![
-            OciLinuxNetworkPriority {
-                name: "1".into(),
-                priority: 6,
-            },
-            OciLinuxNetworkPriority {
-                name: "2".into(),
-                priority: 7,
-            },
-        ];
-        let insns = build_netprio_bpf_prog(&priorities);
-        assert!(!insns.is_empty());
-        assert!(insns.len() >= 8);
-    }
-
-    #[test]
-    fn st_imm_encoding() {
-        let insn = st_imm(bpf_size::BPF_W, R6, R2, SKB_PRIORITY_OFF);
-        assert_eq!(insn.len(), 8);
-        // BPF_STX | BPF_W | BPF_MEM = 0x03 | 0x00 | 0x60 = 0x63
-        assert_eq!(insn[0], 0x63);
-    }
-}
+#[path = "../tests/unit_src/src/ebpf_netcls_tests.rs"]
+mod tests;

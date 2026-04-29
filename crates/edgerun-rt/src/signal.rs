@@ -1,17 +1,21 @@
 //! Signal/interrupt handling for bare-metal
 
+use crate::sync::Mutex;
+use alloc::vec::Vec;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, Waker};
 
 pub struct Signal {
     raised: AtomicBool,
+    wakers: Mutex<Vec<Waker>>,
 }
 
 impl Signal {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             raised: AtomicBool::new(false),
+            wakers: Mutex::new(Vec::new()),
         }
     }
 
@@ -21,6 +25,13 @@ impl Signal {
 
     pub fn raise(&self) {
         self.raised.store(true, Ordering::Release);
+        let wakers = {
+            let mut guard = self.wakers.lock();
+            core::mem::take(&mut *guard)
+        };
+        for waker in wakers {
+            waker.wake();
+        }
     }
 
     pub fn clear(&self) {
@@ -35,7 +46,13 @@ impl core::future::Future for Signal {
         if self.raised() {
             Poll::Ready(())
         } else {
-            cx.waker().wake_by_ref();
+            let mut guard = self.wakers.lock();
+            if self.raised() {
+                return Poll::Ready(());
+            }
+            if !guard.iter().any(|waker| waker.will_wake(cx.waker())) {
+                guard.push(cx.waker().clone());
+            }
             Poll::Pending
         }
     }

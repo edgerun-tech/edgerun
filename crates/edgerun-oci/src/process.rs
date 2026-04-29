@@ -9,13 +9,14 @@ use std::fs;
 use std::io;
 use std::os::unix::io::AsRawFd;
 
-use crate::json::{OciIdMapping, OciLinuxDevice, OciRoot, OciSpec};
-use crate::rootfs::{apply_sysctl, set_rootfs_propagation, setup_rootfs};
+use crate::linux_catalog::{namespace_flag, rlimit_number};
+pub use crate::process_config::ContainerConfig;
+use crate::rootfs::{apply_sysctl, set_rootfs_propagation, setup_rootfs, setup_rootfs_rootless};
 #[allow(unused_imports)]
 use crate::seccomp::apply_seccomp_from_spec;
-use crate::syscalls::{
-    do_set_hostname, do_setns, do_setrlimit, do_umask, do_unshare, rlimit_name_to_int,
-};
+use crate::spec::OciSpec;
+use crate::syscalls::{do_set_hostname, do_setns, do_setrlimit, do_umask, do_unshare};
+use crate::terminal::{send_fd, setup_pty_stdio};
 use crate::userns::{
     apply_security_hardening, do_setgid, do_setuid, set_capabilities, set_supplementary_gids,
 };
@@ -38,288 +39,9 @@ pub fn validate_spec(spec: &OciSpec) -> io::Result<()> {
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))
 }
 
-/// Extract all container-relevant config from a spec into a flat struct
-/// that can be cloned into a `pre_exec` closure.
-pub struct ContainerConfig {
-    pub ns_flags: i32,
-    pub ns_paths: String,
-    pub uid_map: String,
-    pub gid_map: String,
-    pub hostname: String,
-    pub domainname: Option<String>,
-    pub no_new_privs: bool,
-    pub cap_effective: Option<Vec<String>>,
-    pub cap_permitted: Option<Vec<String>>,
-    pub cap_inheritable: Option<Vec<String>>,
-    pub cap_bounding: Option<Vec<String>>,
-    pub cap_ambient: Option<Vec<String>>,
-    pub rlimits: Vec<crate::json::OciRlimit>,
-    pub oom_score_adj: i64,
-    pub apparmor_profile: Option<String>,
-    pub selinux_label: Option<String>,
-    pub umask: Option<u32>,
-    pub root: OciRoot,
-    pub mounts: Option<Vec<crate::json::OciMount>>,
-    pub masked_paths: Option<Vec<String>>,
-    pub readonly_paths: Option<Vec<String>>,
-    pub devices_json: String,
-    pub rootfs_propagation: Option<String>,
-    pub sysctl: Option<alloc::collections::BTreeMap<String, String>>,
-    pub additional_gids: Vec<u32>,
-    pub uid: u32,
-    pub gid: u32,
-    pub seccomp: Option<crate::json::OciLinuxSeccomp>,
-    pub mount_label: Option<String>,
-    pub scheduler: Option<crate::json::OciScheduler>,
-    pub intel_rdt: Option<crate::json::OciLinuxIntelRdt>,
-    pub io_priority: Option<crate::json::OciIoPriority>,
-    pub terminal: bool,
-    pub bundle_path: String,
-}
-
-impl ContainerConfig {
-    /// Extract all config needed for pre_exec from an OCI spec.
-    pub fn from_spec(spec: &OciSpec) -> io::Result<Self> {
-        let root = spec
-            .root
-            .clone()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "no root in OCI spec"))?;
-
-        let linux = spec.linux.clone().unwrap_or_default();
-        let process = spec.process.clone().unwrap_or_default();
-        let user = process.user.clone().unwrap_or_default();
-
-        let ns_list = linux
-            .namespaces
-            .clone()
-            .unwrap_or_else(crate::default_namespaces);
-        let ns_flags = crate::namespace_flags(&ns_list);
-
-        // Validate namespace types — reject unknown types
-        for ns in &ns_list {
-            if ns.path.is_none()
-                && !crate::validate::KNOWN_NAMESPACES.contains(&ns.ns_type.as_str())
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("unknown namespace type: {}", ns.ns_type),
-                ));
-            }
-        }
-
-        let ns_paths = serialize_ns_paths(linux.namespaces.as_deref());
-        let uid_map = format_mapping(linux.uid_mappings.as_deref());
-        let gid_map = format_mapping(linux.gid_mappings.as_deref());
-
-        let caps = process.capabilities.clone().unwrap_or_default();
-
-        Ok(Self {
-            ns_flags,
-            ns_paths,
-            uid_map,
-            gid_map,
-            hostname: spec.hostname.clone().unwrap_or_else(|| "edgerun".into()),
-            domainname: spec.domainname.clone(),
-            no_new_privs: process.no_new_privileges.unwrap_or(true),
-            cap_effective: caps.effective,
-            cap_permitted: caps.permitted,
-            cap_inheritable: caps.inheritable,
-            cap_bounding: caps.bounding,
-            cap_ambient: caps.ambient,
-            rlimits: process.rlimits.clone().unwrap_or_default(),
-            oom_score_adj: process.oom_score_adj.unwrap_or(0),
-            apparmor_profile: process.apparmor_profile,
-            selinux_label: process.selinux_label,
-            umask: user.umask,
-            bundle_path: root.path.clone(),
-            root,
-            mounts: spec.mounts.clone(),
-            masked_paths: linux.masked_paths.clone(),
-            readonly_paths: linux.readonly_paths.clone(),
-            devices_json: serialize_devices(linux.devices.as_deref()),
-            rootfs_propagation: linux.rootfs_propagation.clone(),
-            sysctl: linux.sysctl.clone(),
-            additional_gids: user.additional_gids.unwrap_or_default(),
-            uid: user.uid.unwrap_or(0),
-            gid: user.gid.unwrap_or(0),
-            seccomp: linux.seccomp,
-            mount_label: linux.mount_label.clone(),
-            scheduler: process.scheduler.clone(),
-            intel_rdt: linux.intel_rdt.clone(),
-            io_priority: process.io_priority.clone(),
-            terminal: process.terminal.unwrap_or(false),
-        })
-    }
-
-    /// Returns true if PID namespace is unshared (not joined via path).
-    pub fn has_pid_ns(&self) -> bool {
-        (self.ns_flags & crate::syscalls::ns::NEWPID) != 0
-    }
-}
-
-// ===========================================================================
-// Serialization helpers
-// ===========================================================================
-
-fn serialize_devices(devices: Option<&[OciLinuxDevice]>) -> String {
-    match devices {
-        Some(devs) => edgerun_json::to_string(devs).unwrap_or_default(),
-        None => String::new(),
-    }
-}
-
-fn serialize_ns_paths(namespaces: Option<&[crate::json::OciNamespace]>) -> String {
-    match namespaces {
-        Some(ns) => ns
-            .iter()
-            .filter_map(|n| n.path.as_ref().map(|p| format!("{}:{}", n.ns_type, p)))
-            .collect::<Vec<_>>()
-            .join("\n"),
-        None => String::new(),
-    }
-}
-
-fn format_mapping(mappings: Option<&[OciIdMapping]>) -> String {
-    if let Some(maps) = mappings {
-        if !maps.is_empty() {
-            return maps
-                .iter()
-                .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
-                .collect();
-        }
-    }
-    // No explicit mappings — generate rootless defaults
-    default_rootless_mapping()
-}
-
-/// Generate a default uid/gid mapping for rootless mode.
-///
-/// Uses subuid/subgid ranges from /etc/subuid and /etc/subgid.
-/// The kernel only allows uid_map entries within the caller's configured subuid range.
-/// When running as root, maps container root to host nobody.
-///
-/// Follows the Podman mapping pattern:
-/// - Container UID 0 → host's real UID (size 1)
-/// - Container UID 1..N → subuid ranges
-fn default_rootless_mapping() -> String {
-    let uid = unsafe { libc::getuid() };
-    if uid == 0 {
-        // Root mode: map container root to host nobody (minimal mapping)
-        return "0 65534 1\n".to_string();
-    }
-
-    // Rootless: use subuid/subgid ranges — the kernel REQUIRES all mapped
-    // host UIDs to be within the caller's configured subuid range.
-    match crate::rootless::get_current_user_subuids() {
-        Ok(subuids) if !subuids.is_empty() => {
-            // Map container uid 0 to the host user's own UID,
-            // then container 1..N to the subuid ranges
-            let mut map = format!("0 {} 1\n", uid);
-            for range in &subuids {
-                // Container IDs start at 1 (0 is reserved for the user's own UID)
-                map.push_str(&format!("1 {} {}\n", range.start, range.count));
-            }
-            map
-        }
-        _ => {
-            // No subuid ranges — map only the host user's own UID (size 1).
-            // This works because the kernel allows mapping your own uid.
-            format!("0 {} 1\n", uid)
-        }
-    }
-}
-
-fn deserialize_devices(json: &str) -> Vec<OciLinuxDevice> {
-    if json.is_empty() {
-        return Vec::new();
-    }
-    edgerun_json::from_slice::<Vec<OciLinuxDevice>>(json.as_bytes()).unwrap_or_default()
-}
-
 /// Map an OCI namespace type string to the corresponding CLONE_NEW* flag.
 pub fn ns_type_to_flag(ns_type: &str) -> Option<i32> {
-    use crate::syscalls::ns;
-    match ns_type {
-        "mount" => Some(ns::NEWNS),
-        "cgroup" => Some(ns::NEWCGROUP),
-        "uts" => Some(ns::NEWUTS),
-        "ipc" => Some(ns::NEWIPC),
-        "user" => Some(ns::NEWUSER),
-        "pid" => Some(ns::NEWPID),
-        "network" => Some(ns::NEWNET),
-        _ => None,
-    }
-}
-
-// ===========================================================================
-// Terminal / PTY support
-// ===========================================================================
-
-/// Allocate a pseudo-terminal and connect it to stdin/stdout/stderr.
-///
-/// Opens `/dev/ptmx`, grants/unlocks the slave, then dups it to fds 0, 1, 2.
-/// The master fd is left open (it will be inherited by the exec'd workload).
-pub fn setup_terminal() -> io::Result<i32> {
-    use std::os::raw::c_char;
-    use std::os::raw::c_int;
-
-    extern "C" {
-        fn posix_openpt(flags: c_int) -> c_int;
-        fn grantpt(fd: c_int) -> c_int;
-        fn unlockpt(fd: c_int) -> c_int;
-        fn ptsname(fd: c_int) -> *const c_char;
-    }
-
-    // Open master PTY
-    let master_fd = unsafe { posix_openpt(libc::O_RDWR | libc::O_NOCTTY) };
-    if master_fd < 0 {
-        return Err(io::Error::last_os_error());
-    }
-
-    // Grant access to slave
-    if unsafe { grantpt(master_fd) } != 0 {
-        let err = io::Error::last_os_error();
-        unsafe { libc::close(master_fd) };
-        return Err(err);
-    }
-
-    // Unlock slave
-    if unsafe { unlockpt(master_fd) } != 0 {
-        let err = io::Error::last_os_error();
-        unsafe { libc::close(master_fd) };
-        return Err(err);
-    }
-
-    // Get slave path and open it
-    let slave_path = unsafe { ptsname(master_fd) };
-    if slave_path.is_null() {
-        let err = io::Error::last_os_error();
-        unsafe { libc::close(master_fd) };
-        return Err(err);
-    }
-
-    // Open slave PTY
-    let slave_fd = unsafe { libc::open(slave_path, libc::O_RDWR) };
-    if slave_fd < 0 {
-        let err = io::Error::last_os_error();
-        unsafe { libc::close(master_fd) };
-        return Err(err);
-    }
-
-    // Set controlling terminal
-    unsafe { libc::ioctl(slave_fd, libc::TIOCSCTTY as _, 0) };
-
-    // Dup slave to stdin/stdout/stderr
-    unsafe { libc::dup2(slave_fd, libc::STDIN_FILENO) };
-    unsafe { libc::dup2(slave_fd, libc::STDOUT_FILENO) };
-    unsafe { libc::dup2(slave_fd, libc::STDERR_FILENO) };
-
-    // Close original slave fd (stdin/stdout/stderr are now the slave)
-    if slave_fd > 2 {
-        unsafe { libc::close(slave_fd) };
-    }
-
-    Ok(master_fd)
+    namespace_flag(ns_type)
 }
 
 // ===========================================================================
@@ -334,42 +56,38 @@ pub fn setup_terminal() -> io::Result<i32> {
 /// - Security: no_new_privs, capabilities, seccomp, rlimits, OOM, AppArmor, umask
 /// - Rootfs: pivot_root, mounts, devices, sysctl, propagation
 /// - Drop privileges (gid, uid)
-pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
-    // 1. Unshare namespaces
+pub fn setup_container_child(
+    cfg: &ContainerConfig,
+    terminal_socket_fd: Option<i32>,
+) -> io::Result<()> {
     do_unshare(cfg.ns_flags)?;
-
-    // 2. Join explicit namespace paths
     join_explicit_namespaces(&cfg.ns_paths)?;
-
-    // 3. UID/GID mapping
     write_uid_map(&cfg.uid_map)?;
     write_gid_map(&cfg.gid_map)?;
+    setup_container_child_common(cfg, terminal_socket_fd, RootfsMode::Rooted)
+}
 
-    // 4. Hostname + domainname
+enum RootfsMode {
+    Rooted,
+    Rootless,
+}
+
+fn setup_container_child_common(
+    cfg: &ContainerConfig,
+    terminal_socket_fd: Option<i32>,
+    rootfs_mode: RootfsMode,
+) -> io::Result<()> {
     let _ = do_set_hostname(&cfg.hostname);
     if let Some(ref domainname) = cfg.domainname {
         let _ = do_set_domainname(domainname);
     }
 
-    // 5. Capabilities (MUST come before no_new_privs — capset can only reduce caps after nnp)
-    set_capabilities(
-        cfg.cap_effective.as_deref(),
-        cfg.cap_permitted.as_deref(),
-        cfg.cap_inheritable.as_deref(),
-        cfg.cap_bounding.as_deref(),
-        cfg.cap_ambient.as_deref(),
-    )?;
-
-    // 6. Security: no_new_privs + non-dumpable (after caps, before seccomp)
-    apply_security_hardening(cfg.no_new_privs)?;
-
-    // Seccomp is applied AFTER rootfs setup (step 13) because rootfs needs
+    // Security hardening and seccomp are applied AFTER rootfs setup because rootfs needs
     // mount/umount2/pivot_root syscalls that are NOT in the workload allow-list.
-    // It will be applied just before exec, after privilege drop.
+    // They will be applied just before exec, after runtime-only setup is done.
 
-    // 8. Resource limits
     for rl in &cfg.rlimits {
-        if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {
+        if let Some(resource) = rlimit_number(&rl.ns_type) {
             let _ = do_setrlimit(resource, rl.soft, rl.hard);
         } else {
             return Err(io::Error::new(
@@ -379,75 +97,83 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
         }
     }
 
-    // 8b. Scheduler configuration (OCI 1.0.2 process.scheduler)
     if let Some(ref sched) = cfg.scheduler {
         apply_scheduler(sched)?;
     }
 
-    // 8c. I/O priority (OCI 1.1.0)
     if let Some(ref ioprio) = cfg.io_priority {
         let _ = apply_io_priority(ioprio);
     }
 
-    // 9. OOM score — always write, even for 0 (spec requires it)
     let _ = fs::write("/proc/self/oom_score_adj", format!("{}", cfg.oom_score_adj));
 
-    // 10. AppArmor
     if let Some(ref profile) = cfg.apparmor_profile {
         let _ = fs::write("/proc/self/attr/apparmor/exec", format!("exec {}", profile));
     }
 
-    // 11. SELinux label
     if let Some(ref label) = cfg.selinux_label {
         let _ = fs::write("/proc/self/attr/exec", label.as_bytes());
     }
 
-    // 12. Umask
     if let Some(mask) = cfg.umask {
         do_umask(mask);
     }
 
-    // 13. Rootfs
-    let devices = deserialize_devices(&cfg.devices_json);
+    let devices = cfg.devices.as_slice();
     let mount_label = cfg.mount_label.as_deref();
-    setup_rootfs(
-        &cfg.root,
-        cfg.mounts.as_deref(),
-        cfg.masked_paths.as_deref(),
-        cfg.readonly_paths.as_deref(),
-        if devices.is_empty() {
-            None
-        } else {
-            Some(&devices)
-        },
-        mount_label,
-    )?;
-
-    // 14. Rootfs propagation
-    set_rootfs_propagation(cfg.rootfs_propagation.as_deref())?;
-
-    // 15. Sysctl
-    apply_sysctl(cfg.sysctl.as_ref())?;
-
-    // 15b. Terminal / PTY allocation (must happen after /dev is mounted and
-    // before privilege drop — posix_openpt and grantpt need root access)
-    if cfg.terminal {
-        setup_terminal()?;
+    let devices = if devices.is_empty() {
+        None
+    } else {
+        Some(devices)
+    };
+    match rootfs_mode {
+        RootfsMode::Rooted => setup_rootfs(
+            &cfg.root,
+            cfg.mounts.as_deref(),
+            cfg.masked_paths.as_deref(),
+            cfg.readonly_paths.as_deref(),
+            devices,
+            mount_label,
+        )?,
+        RootfsMode::Rootless => setup_rootfs_rootless(
+            &cfg.root,
+            cfg.mounts.as_deref(),
+            cfg.masked_paths.as_deref(),
+            cfg.readonly_paths.as_deref(),
+            devices,
+            mount_label,
+        )
+        .map_err(|error| io::Error::new(error.kind(), format!("setup rootfs failed: {error}")))?,
     }
 
-    // 16. Supplementary groups
+    set_rootfs_propagation(cfg.rootfs_propagation.as_deref())?;
+
+    apply_sysctl(cfg.sysctl.as_ref())?;
+
+    if cfg.terminal {
+        let master_fd = setup_pty_stdio()?;
+        if let Some(socket_fd) = terminal_socket_fd {
+            send_fd(socket_fd, master_fd)?;
+            unsafe { libc::close(master_fd) };
+        }
+    }
+
+    apply_security_hardening(cfg.no_new_privs)?;
+    set_capabilities(
+        cfg.cap_effective.as_deref(),
+        cfg.cap_permitted.as_deref(),
+        cfg.cap_inheritable.as_deref(),
+        cfg.cap_bounding.as_deref(),
+        cfg.cap_ambient.as_deref(),
+    )?;
+
     if !cfg.additional_gids.is_empty() {
         set_supplementary_gids(&cfg.additional_gids);
     }
 
-    // 17. Drop GID then UID
     do_setgid(cfg.gid)?;
     do_setuid(cfg.uid)?;
 
-    // 18. Seccomp — applied AFTER rootfs and privilege drop.
-    // Rootfs setup needs mount/umount2/pivot_root syscalls that are NOT in the
-    // workload allow-list. Seccomp requires no_new_privs (set at step 6).
-    // Returns Option<listener_fd> when NOTIFY action is used.
     let _listener_fd =
         apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
             io::Error::new(
@@ -458,10 +184,7 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
                 ),
             )
         })?;
-    // If NOTIFY is used, listener_fd is returned. The runtime doesn't handle
-    // seccomp user notifications — the fd is inherited by the workload.
 
-    // 19. Intel RDT (Resource Director Technology)
     if let Some(ref rdt) = cfg.intel_rdt {
         let _ = setup_intel_rdt(rdt);
     }
@@ -474,7 +197,7 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
 // ===========================================================================
 
 /// Apply real-time scheduling policy via sched_setattr syscall.
-fn apply_scheduler(sched: &crate::json::OciScheduler) -> io::Result<()> {
+fn apply_scheduler(sched: &crate::spec::OciScheduler) -> io::Result<()> {
     // Use sched_setattr syscall (x86_64=314, aarch64=274)
     // sched_attr struct layout:
     //   size: u32
@@ -572,7 +295,7 @@ fn apply_scheduler(sched: &crate::json::OciScheduler) -> io::Result<()> {
 }
 
 /// Apply Intel RDT configuration via resctrl filesystem.
-fn setup_intel_rdt(rdt: &crate::json::OciLinuxIntelRdt) -> io::Result<()> {
+fn setup_intel_rdt(rdt: &crate::spec::OciLinuxIntelRdt) -> io::Result<()> {
     // The resctrl filesystem is mounted at /sys/fs/resctrl
     let resctrl = std::path::Path::new("/sys/fs/resctrl");
     if !resctrl.exists() {
@@ -698,7 +421,7 @@ fn do_set_domainname(name: &str) -> io::Result<()> {
 /// - class 3: idle (lowest priority, runs only when nobody else needs disk)
 ///
 /// The encoded value is: (class << 13) | priority
-fn apply_io_priority(ioprio: &crate::json::OciIoPriority) -> io::Result<()> {
+fn apply_io_priority(ioprio: &crate::spec::OciIoPriority) -> io::Result<()> {
     // ioprio_set(which, who, ioprio)
     // which=1 = PRIO_PROCESS (current process), who=0 = self
     let priority = ioprio.priority.unwrap_or(4);
@@ -729,131 +452,56 @@ fn apply_io_priority(ioprio: &crate::json::OciIoPriority) -> io::Result<()> {
 /// This is called AFTER the parent has written uid/gid maps for the child.
 /// It unshares remaining namespaces and does all the rootfs/caps/seccomp setup,
 /// but skips uid/gid map writing (the parent already did that).
-pub fn setup_container_child_rootless(cfg: &ContainerConfig) -> io::Result<()> {
+pub fn setup_container_child_rootless(
+    cfg: &ContainerConfig,
+    terminal_socket_fd: Option<i32>,
+) -> io::Result<()> {
     use crate::syscalls::ns;
 
     // 1. Unshare remaining namespaces (exclude user and mount — clone already created these)
     let remaining_flags = cfg.ns_flags & !(ns::NEWUSER | ns::NEWNS);
     if remaining_flags != 0 {
-        do_unshare(remaining_flags)?;
+        do_unshare(remaining_flags).map_err(|error| {
+            io::Error::new(
+                error.kind(),
+                format!("unshare remaining namespaces 0x{remaining_flags:x} failed: {error}"),
+            )
+        })?;
+    }
+    if remaining_flags & ns::NEWPID != 0 {
+        fork_into_pid_namespace()?;
     }
 
     // 2. Join explicit namespace paths (skip user namespace — already joined via parent)
-    join_explicit_namespaces_non_user(&cfg.ns_paths)?;
+    join_explicit_namespaces_non_user(&cfg.ns_paths).map_err(|error| {
+        io::Error::new(error.kind(), format!("join namespaces failed: {error}"))
+    })?;
 
     // Skip uid/gid map writing — parent already wrote these via /proc/<pid>/
+    setup_container_child_common(cfg, terminal_socket_fd, RootfsMode::Rootless)
+}
 
-    // 3. Hostname + domainname
-    let _ = do_set_hostname(&cfg.hostname);
-    if let Some(ref domainname) = cfg.domainname {
-        let _ = do_set_domainname(domainname);
+fn fork_into_pid_namespace() -> io::Result<()> {
+    let child_pid = unsafe { libc::fork() };
+    if child_pid < 0 {
+        return Err(io::Error::last_os_error());
     }
 
-    // 4. Capabilities
-    set_capabilities(
-        cfg.cap_effective.as_deref(),
-        cfg.cap_permitted.as_deref(),
-        cfg.cap_inheritable.as_deref(),
-        cfg.cap_bounding.as_deref(),
-        cfg.cap_ambient.as_deref(),
-    )?;
-
-    // 5. Security: no_new_privs + non-dumpable
-    apply_security_hardening(cfg.no_new_privs)?;
-
-    // 6. Resource limits
-    for rl in &cfg.rlimits {
-        if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {
-            let _ = do_setrlimit(resource, rl.soft, rl.hard);
-        } else {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("invalid RLIMIT type: {}", rl.ns_type),
-            ));
+    if child_pid > 0 {
+        let mut status = 0i32;
+        let waited = unsafe { libc::waitpid(child_pid, &mut status as *mut i32, 0) };
+        if waited < 0 {
+            unsafe { libc::_exit(1) };
         }
-    }
-
-    // 6b. Scheduler configuration
-    if let Some(ref sched) = cfg.scheduler {
-        apply_scheduler(sched)?;
-    }
-
-    // 6c. I/O priority
-    if let Some(ref ioprio) = cfg.io_priority {
-        let _ = apply_io_priority(ioprio);
-    }
-
-    // 7. OOM score
-    let _ = fs::write("/proc/self/oom_score_adj", format!("{}", cfg.oom_score_adj));
-
-    // 8. AppArmor
-    if let Some(ref profile) = cfg.apparmor_profile {
-        let _ = fs::write("/proc/self/attr/apparmor/exec", format!("exec {}", profile));
-    }
-
-    // 9. SELinux label
-    if let Some(ref label) = cfg.selinux_label {
-        let _ = fs::write("/proc/self/attr/exec", label.as_bytes());
-    }
-
-    // 10. Umask
-    if let Some(mask) = cfg.umask {
-        do_umask(mask);
-    }
-
-    // 11. Rootfs
-    let devices = deserialize_devices(&cfg.devices_json);
-    let mount_label = cfg.mount_label.as_deref();
-    setup_rootfs(
-        &cfg.root,
-        cfg.mounts.as_deref(),
-        cfg.masked_paths.as_deref(),
-        cfg.readonly_paths.as_deref(),
-        if devices.is_empty() {
-            None
+        let code = if libc::WIFEXITED(status) {
+            libc::WEXITSTATUS(status)
         } else {
-            Some(&devices)
-        },
-        mount_label,
-    )?;
-
-    // 12. Rootfs propagation
-    set_rootfs_propagation(cfg.rootfs_propagation.as_deref())?;
-
-    // 13. Sysctl
-    apply_sysctl(cfg.sysctl.as_ref())?;
-
-    // 13b. Terminal / PTY allocation
-    if cfg.terminal {
-        setup_terminal()?;
+            128
+        };
+        unsafe { libc::_exit(code) };
     }
 
-    // 14. Supplementary groups
-    if !cfg.additional_gids.is_empty() {
-        set_supplementary_gids(&cfg.additional_gids);
-    }
-
-    // 15. Drop GID then UID
-    do_setgid(cfg.gid)?;
-    do_setuid(cfg.uid)?;
-
-    // 16. Seccomp
-    let _listener_fd =
-        apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "seccomp filter failed to apply: {}. Container startup aborted for security.",
-                    e
-                ),
-            )
-        })?;
-
-    // 17. Intel RDT
-    if let Some(ref rdt) = cfg.intel_rdt {
-        let _ = setup_intel_rdt(rdt);
-    }
-
+    std::env::set_var("_ERT_PIDNS_READY", "1");
     Ok(())
 }
 
@@ -896,229 +544,5 @@ fn join_explicit_namespaces_where(
 // ===========================================================================
 
 #[cfg(all(test, not(target_os = "none")))]
-mod tests {
-    use super::*;
-    use crate::json::{
-        OciCapabilities, OciLinuxSeccomp, OciNamespace, OciProcess, OciRlimit, OciRoot,
-        OciSeccompAction,
-    };
-
-    fn minimal_spec() -> OciSpec {
-        OciSpec {
-            version: "1.0.2".into(),
-            platform: None,
-            process: Some(OciProcess {
-                args: Some(vec!["/bin/true".into()]),
-                ..Default::default()
-            }),
-            root: Some(OciRoot {
-                path: "/rootfs".into(),
-                readonly: None,
-            }),
-            hostname: None,
-            linux: None,
-            mounts: None,
-            annotations: None,
-            domainname: None,
-        }
-    }
-
-    #[test]
-    fn validate_spec_accepts_minimal() {
-        assert!(validate_spec(&minimal_spec()).is_ok());
-    }
-
-    #[test]
-    fn validate_spec_rejects_missing_root() {
-        let mut spec = minimal_spec();
-        spec.root = None;
-        assert!(validate_spec(&spec)
-            .unwrap_err()
-            .to_string()
-            .contains("missing root"));
-    }
-
-    #[test]
-    fn validate_spec_rejects_missing_process() {
-        let mut spec = minimal_spec();
-        spec.process = None;
-        assert!(validate_spec(&spec)
-            .unwrap_err()
-            .to_string()
-            .contains("missing process"));
-    }
-
-    #[test]
-    fn validate_spec_rejects_empty_args() {
-        let mut spec = minimal_spec();
-        spec.process.as_mut().unwrap().args = Some(vec![]);
-        assert!(validate_spec(&spec)
-            .unwrap_err()
-            .to_string()
-            .contains("args must not be empty"));
-    }
-
-    #[test]
-    fn validate_spec_rejects_unknown_capability() {
-        let mut spec = minimal_spec();
-        spec.process.as_mut().unwrap().capabilities = Some(OciCapabilities {
-            effective: Some(vec!["CAP_BOGUS".into()]),
-            ..Default::default()
-        });
-        assert!(validate_spec(&spec)
-            .unwrap_err()
-            .to_string()
-            .contains("unknown capability: CAP_BOGUS"));
-    }
-
-    #[test]
-    fn validate_spec_accepts_valid_capability() {
-        let mut spec = minimal_spec();
-        spec.process.as_mut().unwrap().capabilities = Some(OciCapabilities {
-            effective: Some(vec!["CAP_NET_BIND_SERVICE".into()]),
-            ..Default::default()
-        });
-        assert!(validate_spec(&spec).is_ok());
-    }
-
-    #[test]
-    fn validate_spec_rejects_unknown_namespace() {
-        let mut spec = minimal_spec();
-        spec.linux = Some(crate::json::OciLinux {
-            namespaces: Some(vec![OciNamespace {
-                ns_type: "bogus".into(),
-                path: None,
-            }]),
-            ..Default::default()
-        });
-        assert!(validate_spec(&spec)
-            .unwrap_err()
-            .to_string()
-            .contains("unknown namespace type: bogus"));
-    }
-
-    #[test]
-    fn validate_spec_allows_path_based_namespace() {
-        let mut spec = minimal_spec();
-        spec.linux = Some(crate::json::OciLinux {
-            namespaces: Some(vec![OciNamespace {
-                ns_type: "custom".into(),
-                path: Some("/var/run/ns/custom".into()),
-            }]),
-            ..Default::default()
-        });
-        assert!(validate_spec(&spec).is_ok());
-    }
-
-    #[test]
-    fn validate_spec_rejects_unknown_rlimit() {
-        let mut spec = minimal_spec();
-        spec.linux = Some(crate::json::OciLinux {
-            ..Default::default()
-        });
-        spec.process.as_mut().unwrap().rlimits = Some(vec![OciRlimit {
-            ns_type: "RLIMIT_BOGUS".into(),
-            hard: 1024,
-            soft: 512,
-        }]);
-        assert!(validate_spec(&spec)
-            .unwrap_err()
-            .to_string()
-            .contains("unknown rlimit type: RLIMIT_BOGUS"));
-    }
-
-    #[test]
-    fn validate_spec_accepts_valid_seccomp_action() {
-        let mut spec = minimal_spec();
-        spec.linux = Some(crate::json::OciLinux {
-            seccomp: Some(OciLinuxSeccomp {
-                default_action: Some(OciSeccompAction::Allow),
-                ..Default::default()
-            }),
-            ..Default::default()
-        });
-        assert!(validate_spec(&spec).is_ok());
-    }
-
-    #[test]
-    fn host_os_is_linux() {
-        assert_eq!(host_os(), crate::validate::host_os());
-    }
-
-    #[test]
-    fn host_arch_is_known() {
-        let arch = host_arch();
-        assert!(matches!(
-            arch,
-            "amd64" | "arm64" | "riscv64" | "arm" | "unknown"
-        ));
-    }
-
-    #[test]
-    fn platform_matches_host_linux_amd64() {
-        use crate::json::OciPlatform;
-        let platform = OciPlatform {
-            os: Some(host_os().into()),
-            arch: Some(host_arch().into()),
-            os_version: None,
-            os_features: None,
-        };
-        assert!(platform.matches_host());
-    }
-
-    #[test]
-    fn platform_rejects_windows() {
-        use crate::json::OciPlatform;
-        let platform = OciPlatform {
-            os: Some("windows".into()),
-            arch: Some("amd64".into()),
-            os_version: None,
-            os_features: None,
-        };
-        assert!(!platform.matches_host());
-    }
-
-    #[test]
-    fn platform_rejects_wrong_arch() {
-        use crate::json::OciPlatform;
-        let platform = OciPlatform {
-            os: Some("linux".into()),
-            arch: Some("riscv64".into()),
-            os_version: None,
-            os_features: None,
-        };
-        // Only matches on actual riscv64 hardware
-        if cfg!(target_arch = "riscv64") {
-            assert!(platform.matches_host());
-        } else {
-            assert!(!platform.matches_host());
-        }
-    }
-
-    #[test]
-    fn platform_none_matches_host() {
-        // When no platform is specified, it should not block creation
-        // (the runtime allows None = no platform constraint)
-        use crate::json::OciPlatform;
-        let platform = OciPlatform {
-            os: None,
-            arch: None,
-            os_version: None,
-            os_features: None,
-        };
-        assert!(platform.matches_host());
-    }
-
-    #[test]
-    fn default_namespaces_includes_cgroup() {
-        let namespaces = crate::default_namespaces();
-        let has_cgroup = namespaces.iter().any(|ns| ns.ns_type == "cgroup");
-        assert!(has_cgroup, "default namespaces should include cgroup");
-    }
-
-    #[test]
-    fn container_config_has_terminal_field() {
-        let cfg = ContainerConfig::from_spec(&minimal_spec()).unwrap();
-        assert!(!cfg.terminal, "terminal should default to false");
-    }
-}
+#[path = "../tests/unit_src/src/process_tests.rs"]
+mod tests;

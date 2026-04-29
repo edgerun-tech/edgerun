@@ -685,11 +685,11 @@ mod tests {
 
     #[test]
     fn test_invalid_jwt_wrong_parts() {
-        // Valid base64url with valid JSON but missing required JWT fields
+        // Valid base64url with valid JSON but missing required JWT header fields.
         let header = base64url_nopad_encode(br#"{"a":1}"#);
         let payload = base64url_nopad_encode(br#"{"sub":"test"}"#);
         let jwt = format!("{header}.{payload}.sig");
-        assert!(IdToken::parse_unverified(&jwt).is_ok());
+        assert!(IdToken::parse_unverified(&jwt).is_err());
         assert!(IdToken::parse_unverified("only.two").is_err());
         assert!(IdToken::parse_unverified("one").is_err());
     }

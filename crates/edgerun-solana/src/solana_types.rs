@@ -1,9 +1,9 @@
 use crate::prelude::*;
-use serde::{Deserialize, Serialize};
+use edgerun_json::{FromJson, JsonValue, JsonValueError, ToJson};
 
 const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pubkey([u8; 32]);
 
 impl Pubkey {
@@ -27,6 +27,18 @@ impl Pubkey {
 impl Default for Pubkey {
     fn default() -> Self {
         Self::default()
+    }
+}
+
+impl ToJson for Pubkey {
+    fn to_json(&self) -> JsonValue {
+        self.0.to_json()
+    }
+}
+
+impl FromJson for Pubkey {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        Ok(Self(<[u8; 32]>::from_json(value)?))
     }
 }
 
@@ -116,6 +128,7 @@ fn base58_decode(input: &str) -> Result<Vec<u8>, &'static str> {
 pub enum AccountMeta {
     NonSigner { pubkey: Pubkey },
     Signer { pubkey: Pubkey },
+    Readonly { pubkey: Pubkey },
 }
 
 impl AccountMeta {
@@ -128,17 +141,23 @@ impl AccountMeta {
     }
 
     pub fn new_readonly(pubkey: Pubkey) -> Self {
-        Self::NonSigner { pubkey }
+        Self::Readonly { pubkey }
     }
 
     pub fn pubkey(&self) -> Pubkey {
         match self {
-            Self::NonSigner { pubkey } | Self::Signer { pubkey } => *pubkey,
+            Self::NonSigner { pubkey } | Self::Signer { pubkey } | Self::Readonly { pubkey } => {
+                *pubkey
+            }
         }
     }
 
     pub fn is_signer(&self) -> bool {
         matches!(self, Self::Signer { .. })
+    }
+
+    pub fn is_readonly(&self) -> bool {
+        matches!(self, Self::Readonly { .. })
     }
 }
 

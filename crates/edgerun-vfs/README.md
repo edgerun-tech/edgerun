@@ -118,7 +118,7 @@ vfs.persist()?;
 | Type | File | Purpose |
 |------|------|---------|
 | `VirtualFileSystem` | `vfs.rs` | BTreeMap-backed VFS with COW. Stores `Vec<u8>` (handles binary). Single-writer, multi-reader via `Arc<RwLock<>>`. |
-| `FineGrainedVFS` | `fine_grained.rs` | DashMap-backed VFS for concurrent writes. Also stores `Vec<u8>`. |
+| `FineGrainedVFS` | `fine_grained.rs` | Thread-safe VFS for concurrent reads and writes. Also stores `Vec<u8>`. |
 | `GitAwarePersist` | `git_aware.rs` | Reads .gitignore + .edgekeep to decide what syncs to disk. |
 
 ### Binary
@@ -182,7 +182,7 @@ Benchmarked on the full edgerun_core workspace (24,017 files / 1.98 GB):
 | Implementation | 8 readers, grep "fn " | Per reader |
 |---------------|----------------------|------------|
 | RwLock\<VFS\> | 32.80ms total | 4.10ms |
-| FineGrainedVFS (DashMap) | 1.688s total | 210.95ms |
+| FineGrainedVFS | 1.688s total | 210.95ms |
 | **RwLock speedup** | **51.4x** | - |
 
 | Operation | Concurrency | Throughput |
@@ -226,8 +226,7 @@ even when gitignored.
 ## Benchmarks
 
 ```bash
-cargo bench -p edgerun-vfs           # Micro-benchmarks
-cargo run --bin benchmark -- /path   # End-to-end vs disk comparison
+cargo run -p edgerun-vfs --features std --bin vfs-benchmark -- /path
 ```
 
 ## License

@@ -1,0 +1,9 @@
+id: network/34-relay-missing-payload-kind-reject
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: relay envelopes must declare their payload kind
+tags:
+- network
+- validate_network

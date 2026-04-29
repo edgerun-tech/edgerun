@@ -44,7 +44,12 @@ mod test_support;
 
 pub use blobs::{blob_file_path, BlobEntry, BlobKeySource, BlobStore, BlobStoreConfig};
 pub use block::BlockStreamStore;
-pub use block::{BlockEventLog, BlockStorage, InMemoryBlockDevice};
+pub use block::{
+    detect_partitions, probe_filesystem, BlockEventLog, BlockStorage, ExFatInfo, ExtInfo,
+    FatDirectoryEntry, FatError, FatInfo, FatReadOnly, FileSystemDetails, FileSystemKind,
+    FileSystemProbe, FileSystemProbeError, InMemoryBlockDevice, Iso9660Info, PartitionBlockDevice,
+    PartitionEntry, PartitionError, PartitionKind, PartitionTable, PartitionTableKind,
+};
 pub use core::{
     canonical_event_hash, derive_logical_object_id, derive_representation_id, DurableStreamWriter,
 };
@@ -56,4 +61,7 @@ pub use event_loop::{
 };
 pub use file_index::{EventIndexEntry, FetchEntry, FileIndex, ReplayEntry, WorkAccountingRecord};
 pub use mem::{MemContentStore, MemEventLog};
-pub use store::{CommandReplayResult, ControllerSet, NodeStore, NodeStoreConfig, ObjectResult};
+pub use store::{
+    CommandReplayResult, ControllerSet, NodeStore, NodeStoreConfig, ObjectResult,
+    WorkAccountingSink,
+};

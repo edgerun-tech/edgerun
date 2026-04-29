@@ -1,12 +1,59 @@
 //! edgerun-platform: Bare-metal platform abstraction
 
 #![no_std]
+#![cfg_attr(target_arch = "xtensa", feature(asm_experimental_arch))]
+#![cfg_attr(
+    all(
+        target_arch = "xtensa",
+        target_os = "none",
+        feature = "esp32s3-wifi-blob"
+    ),
+    feature(c_variadic)
+)]
 
+#[cfg(target_os = "none")]
+extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
 pub mod arch;
 pub mod cpu;
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+pub mod esp32s3;
+#[cfg(all(target_arch = "xtensa", target_os = "none", feature = "esp32s3-ble"))]
+pub mod esp32s3_ble;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-ble-stub"
+))]
+pub mod esp32s3_ble_stub;
+#[cfg(all(target_arch = "xtensa", target_os = "none"))]
+pub mod esp32s3_wifi;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+pub mod esp32s3_wifi_blob;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+mod esp32s3_wifi_blob_init;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-blob"
+))]
+mod esp32s3_wifi_blob_stubs;
+#[cfg(all(
+    target_arch = "xtensa",
+    target_os = "none",
+    feature = "esp32s3-wifi-mmio"
+))]
+pub mod esp32s3_wifi_mmio;
 pub mod irq;
 pub mod timer;
 pub mod tls;
@@ -25,11 +72,20 @@ pub use waker::make_ipi_waker;
 pub unsafe fn halt() -> ! {
     #[cfg(target_arch = "x86_64")]
     core::arch::asm!("hlt", options(noreturn));
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "xtensa")]
+    loop {
+        core::arch::asm!("waiti 0");
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "xtensa")))]
     loop {}
 }
 
 #[inline]
 pub unsafe fn yield_cpu() {
+    #[cfg(target_arch = "x86_64")]
     core::arch::asm!("pause");
+    #[cfg(target_arch = "xtensa")]
+    core::arch::asm!("nop");
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "xtensa")))]
+    core::hint::spin_loop();
 }

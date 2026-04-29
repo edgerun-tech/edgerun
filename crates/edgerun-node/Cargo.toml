@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Edgerun node orchestration, command dispatch, query, and daemon runtime"
 
 [[bin]]
 name = "edgerund"

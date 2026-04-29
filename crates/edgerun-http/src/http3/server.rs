@@ -12,7 +12,7 @@
 //!
 //! let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 //! rt.block_on(async {
-//!     let cert = generate_self_signed(&["localhost"]);
+//!     let cert = generate_self_signed(&["localhost"]).unwrap();
 //!     let server = Http3Server::bind("127.0.0.1:4433", cert).await.unwrap();
 //!     println!("HTTP/3 server listening on {}", server.local_addr().unwrap());
 //!
@@ -48,10 +48,9 @@ use alloc::vec::Vec;
 use edgerun_tls::certificate_gen::CertificateAndKey;
 
 use super::connection::Http3Connection;
-use super::qpack::{QpackDecoder, QpackEncoder};
 use super::quic::crypto::PacketProtection;
 use super::quic::frame::QuicFrame;
-use super::quic::packet::{PacketType, QuicPacket, QuicPacketHeader};
+use super::quic::packet::{self, PacketType, QuicPacket, QuicPacketHeader};
 use super::quic::ConnectionId;
 use super::quic::QuicConnection;
 use super::quic::QuicTlsServerHandshaker;
@@ -59,6 +58,7 @@ use super::quic::QUIC_VERSION_V1;
 use super::Http3Error;
 use crate::http3::settings::Http3Settings;
 use crate::runtime::sync::Mutex;
+use edgerun_qpack::{QpackDecoder, QpackEncoder};
 
 /// Per-client address validation state (RFC 9000 §8.1).
 ///
@@ -119,6 +119,26 @@ impl AddressValidationState {
     }
 }
 
+fn parse_long_header_dcid(data: &[u8]) -> Result<Vec<u8>, String> {
+    if data.len() < 6 {
+        return Err("Packet too short for long header DCID".to_string());
+    }
+    if data[0] & 0x80 == 0 {
+        return Err("Expected long header packet".to_string());
+    }
+
+    let dcid_len = data[5] as usize;
+    if dcid_len > 20 {
+        return Err("DCID length exceeds QUIC maximum".to_string());
+    }
+    let start = 6;
+    let end = start + dcid_len;
+    if end > data.len() {
+        return Err("DCID exceeds packet length".to_string());
+    }
+    Ok(data[start..end].to_vec())
+}
+
 /// HTTP/3 server listening on a UDP socket.
 pub struct Http3Server {
     /// Underlying UDP socket
@@ -148,7 +168,9 @@ impl Http3Server {
 
     /// Local address of the server.
     pub fn local_addr(&self) -> crate::runtime::io::Result<SocketAddr> {
-        Ok(self.socket.local_addr()?)
+        self.socket
+            .local_addr()
+            .map_err(crate::runtime::io::Error::other)
     }
 
     /// Accept the next incoming HTTP/3 connection.
@@ -217,9 +239,19 @@ impl Http3Server {
             return Err("Packet too short".to_string());
         }
 
+        let mut handshaker = QuicTlsServerHandshaker::new(self.cert_and_key.clone());
+        let dst_cid = parse_long_header_dcid(data)?;
+        let initial_keys = handshaker.initial_keys(&dst_cid);
+        let mut initial_protection = PacketProtection::new(&initial_keys);
+        let mut packet_bytes = data.to_vec();
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0)?;
+        initial_protection
+            .unprotect_header(&mut packet_bytes, pn_offset)
+            .map_err(|e| format!("Initial header protection failed: {}", e))?;
+
         // Parse packet to get header_to_bytes_aad()
-        let (pkt, _) =
-            QuicPacket::from_bytes(data).map_err(|e| format!("Parse packet failed: {}", e))?;
+        let (pkt, _) = QuicPacket::from_bytes(&packet_bytes)
+            .map_err(|e| format!("Parse packet failed: {}", e))?;
 
         // Use header_to_bytes_aad() - same method as client
         let aad = pkt.header_to_bytes_aad();
@@ -227,16 +259,12 @@ impl Http3Server {
         let dst_cid = pkt.header.dst_cid.clone();
         let src_cid = pkt.header.src_cid.clone();
 
-        let mut handshaker = QuicTlsServerHandshaker::new(self.cert_and_key.clone());
-        let initial_keys = handshaker.initial_keys(&dst_cid);
-        let mut initial_protection = PacketProtection::new(&initial_keys);
-
         let plaintext = initial_protection
             .unprotect(&aad, pkt.header.packet_number, &pkt.payload)
             .map_err(|e| format!("Decrypt failed: {}", e))?;
 
         // Try parsing as QUIC CRYPTO frame first (0x06)
-        let mut crypto_data = Self::parse_crypto_frame(&plaintext).map(|(d, _)| d);
+        let mut crypto_data = super::crypto_frame::parse_crypto_frame(&plaintext).map(|(d, _)| d);
 
         // If no QUIC CRYPTO frame, try treating raw TLS handshake data
         if crypto_data.is_none() && !plaintext.is_empty() {
@@ -373,6 +401,8 @@ impl Http3Server {
 
         // Build the transcript including client Finished
         let mut transcript_after = handshaker.transcript().to_vec();
+        transcript_after.extend_from_slice(&handshake_crypto);
+        transcript_after.extend_from_slice(&client_finished_data);
 
         // Derive application keys and build the handshake result
         // The server uses the client's DCID (our SCID) as the dcid for key derivation
@@ -381,16 +411,8 @@ impl Http3Server {
             .map_err(|e| format!("Failed to build handshake result: {}", e))?;
         handshaker.mark_complete();
 
-        // Create a QuicConnection from the server-side handshake result
-        // We need to extract the raw socket — we'll use mem::replace to take ownership
-        // Actually, we can't extract the socket from AsyncUdpSocket. Instead,
-        // we create the Http3Connection directly with the handshake result.
-        let quic_conn = QuicConnection::from_server(
-            // For the server, we use the same socket but with the client's address
-            // The QuicConnection needs a UdpSocket — we'll create one bound to 0
-            // and manage the actual I/O through the server's socket.
-            // For now, use a dummy socket — the server handles I/O directly.
-            Self::dummy_socket().map_err(|e| format!("Failed to create dummy socket: {}", e))?,
+        let quic_conn = QuicConnection::from_server_socket(
+            Arc::clone(&self.socket),
             client_addr.to_string(),
             ConnectionId::new(client_dcid),
             ConnectionId::new(client_scid),
@@ -403,14 +425,6 @@ impl Http3Server {
             .map_err(|e| format!("Failed to create server HTTP/3 connection: {}", e))?;
 
         Ok((conn, client_addr))
-    }
-
-    /// Create a dummy UDP socket for server-side connections.
-    ///
-    /// Server connections don't use the socket directly — I/O is handled
-    /// through the server's AsyncUdpSocket.
-    fn dummy_socket() -> crate::runtime::io::Result<crate::runtime::net::UdpSocket> {
-        crate::runtime::net::UdpSocket::bind("127.0.0.1:0")
     }
 
     /// Build Initial response packet (contains ServerHello).
@@ -439,10 +453,14 @@ impl Http3Server {
             .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
             .map_err(|e| format!("Initial encrypt failed: {}", e))?;
 
-        let mut packet = aad;
-        packet.extend_from_slice(&encrypted);
+        let mut packet_bytes = aad;
+        packet_bytes.extend_from_slice(&encrypted);
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0)?;
+        protection
+            .protect_header(&mut packet_bytes, pn_offset, packet.header.pn_length)
+            .map_err(|e| format!("Initial header protection failed: {}", e))?;
 
-        Ok(packet)
+        Ok(packet_bytes)
     }
 
     /// Build Handshake-level response packet (EE, Cert, CertVerify, Finished).
@@ -468,6 +486,7 @@ impl Http3Server {
                 token: Vec::new(),
                 pn_length: 4,
                 packet_number: 0,
+                key_phase: false,
                 payload_length: payload.len(),
             },
             payload,
@@ -478,10 +497,14 @@ impl Http3Server {
             .protect_with_packet_number(packet.header.packet_number, &aad, &packet.payload)
             .map_err(|e| format!("Handshake encrypt failed: {}", e))?;
 
-        let mut packet = aad;
-        packet.extend_from_slice(&encrypted);
+        let mut packet_bytes = aad;
+        packet_bytes.extend_from_slice(&encrypted);
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0)?;
+        protection
+            .protect_header(&mut packet_bytes, pn_offset, packet.header.pn_length)
+            .map_err(|e| format!("Handshake header protection failed: {}", e))?;
 
-        Ok(packet)
+        Ok(packet_bytes)
     }
 
     /// Wait for the client's Finished message in a Handshake packet.
@@ -510,7 +533,13 @@ impl Http3Server {
                 .await
                 .map_err(|e| format!("recv_from failed: {}", e))?;
 
-            let (pkt, _) = QuicPacket::from_bytes(&buf[..n])
+            let mut packet_bytes = buf[..n].to_vec();
+            let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0)?;
+            hs_protection
+                .unprotect_header(&mut packet_bytes, pn_offset)
+                .map_err(|e| format!("Handshake header protection failed: {}", e))?;
+
+            let (pkt, _) = QuicPacket::from_bytes(&packet_bytes)
                 .map_err(|e| format!("Packet parse error: {}", e))?;
 
             // Client sends Finished in Handshake-level packets
@@ -525,7 +554,7 @@ impl Http3Server {
                 .map_err(|e| format!("Handshake decrypt failed: {}", e))?;
 
             // Parse CRYPTO frame
-            if let Some((crypto_data, _)) = Self::parse_crypto_frame(&plaintext) {
+            if let Some((crypto_data, _)) = super::crypto_frame::parse_crypto_frame(&plaintext) {
                 // The client's Finished message is in this CRYPTO data
                 // Finished message: type(1) + length(3) + verify_data(32)
                 if crypto_data.len() >= 4 + expected_client_verify.len() {
@@ -545,42 +574,6 @@ impl Http3Server {
         Err("Client Finished not received after 20 attempts".into())
     }
 
-    /// Parse a CRYPTO frame from decrypted packet payload.
-    fn parse_crypto_frame(data: &[u8]) -> Option<(Vec<u8>, usize)> {
-        if data.is_empty() {
-            return None;
-        }
-
-        let frame_type = data[0];
-        if frame_type != 0x06 {
-            return None;
-        }
-
-        let mut pos = 1;
-        let (offset, n) = Self::decode_varint_at(data, pos).ok()?;
-        pos += n;
-        let _offset = offset;
-
-        let (length, n) = Self::decode_varint_at(data, pos).ok()?;
-        pos += n;
-
-        if pos + length as usize > data.len() {
-            return None;
-        }
-
-        let crypto_data = data[pos..pos + length as usize].to_vec();
-        Some((crypto_data, pos + length as usize))
-    }
-
-    fn decode_varint_at(data: &[u8], pos: usize) -> Result<(u64, usize), String> {
-        if pos >= data.len() {
-            return Err("Out of bounds".into());
-        }
-        let (value, len) = edgerun_encoding::quic_varint::decode_varint(&data[pos..])
-            .map_err(|e| format!("{e}"))?;
-        Ok((value, len))
-    }
-
     /// Run the HTTP/3 server, dispatching incoming requests to the given handler.
     ///
     /// This method loops indefinitely, accepting connections and spawning
@@ -595,11 +588,11 @@ impl Http3Server {
     /// use edgerun_http::{Handler, Request, Response, StatusCode, into_handler};
     /// use edgerun_tls::certificate_gen::generate_self_signed;
     /// use edgerun_rt::Runtime;
-    /// use crate::runtime::sync::Arc;
+    /// use edgerun_http::runtime::sync::Arc;
     ///
     /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
     /// rt.block_on(async {
-    ///     let cert = generate_self_signed(&["localhost"]);
+    ///     let cert = generate_self_signed(&["localhost"]).unwrap();
     ///     let server = Http3Server::bind("127.0.0.1:4433", cert).await.unwrap();
     ///     let handler = into_handler(|_req| {
     ///         Response::text(StatusCode::new(200).unwrap(), "Hello!")
@@ -620,25 +613,24 @@ impl Http3Server {
                 return Ok(());
             }
 
-            match self.accept().await {
-                Ok((mut conn, client_addr)) => {
-                    let handler = Arc::clone(&handler);
-                    crate::runtime::spawn(async move {
-                        if let Err(e) =
-                            Self::handle_connection(&mut conn, handler, client_addr).await
-                        {
-                            edgerun_log::warn!(
-                                "HTTP/3 connection error from {}: {}",
-                                client_addr,
-                                e
-                            );
-                        }
-                    });
+            match runtime::timeout(
+                crate::runtime::time::Duration::from_millis(100),
+                self.accept(),
+            )
+            .await
+            {
+                Ok(Ok((mut conn, client_addr))) => {
+                    if let Err(e) =
+                        Self::handle_connection(&mut conn, Arc::clone(&handler), client_addr).await
+                    {
+                        edgerun_log::warn!("HTTP/3 connection error from {}: {}", client_addr, e);
+                    }
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     edgerun_log::warn!("HTTP/3 accept error: {}", e);
                     crate::runtime::sleep(crate::runtime::time::Duration::from_millis(100)).await;
                 }
+                Err(_) => {}
             }
         }
     }
@@ -649,33 +641,35 @@ impl Http3Server {
         handler: Arc<dyn Handler>,
         _client_addr: SocketAddr,
     ) -> Result<(), String> {
-        loop {
-            let (stream_id, method, uri, headers) = match conn.accept_request().await {
-                Ok(Some(result)) => result,
+        let (stream_id, method, uri, headers) = loop {
+            match conn.accept_request().await {
+                Ok(Some(result)) => break result,
                 Ok(None) => continue,
                 Err(e) => return Err(format!("accept_request: {:?}", e)),
-            };
-
-            let body = conn
-                .recv_request_body(stream_id)
-                .await
-                .unwrap_or(None)
-                .unwrap_or_default();
-
-            let request = Request::new(method, uri, headers, Some(body));
-            let response = handler.handle(request).await;
-
-            let status = response.status();
-            let resp_headers = response.headers().clone();
-            let body = response.body().to_vec();
-
-            if let Err(e) = conn
-                .send_response(stream_id, status, &resp_headers, Some(body))
-                .await
-            {
-                return Err(format!("send_response: {:?}", e));
             }
+        };
+
+        let body = conn
+            .recv_request_body(stream_id)
+            .await
+            .unwrap_or(None)
+            .unwrap_or_default();
+
+        let request = Request::new(method, uri, headers, Some(body));
+        let response = handler.handle(request).await;
+
+        let status = response.status();
+        let resp_headers = response.headers().clone();
+        let body = response.body().to_vec();
+
+        if let Err(e) = conn
+            .send_response(stream_id, status, &resp_headers, Some(body))
+            .await
+        {
+            return Err(format!("send_response: {:?}", e));
         }
+
+        Ok(())
     }
 }
 
@@ -712,6 +706,12 @@ mod tests {
         let packet_bytes = server
             .build_initial_response(&client_dcid, &client_scid, &frame, &server_hs)
             .expect("build initial response");
+        let mut packet_bytes = packet_bytes;
+        let mut protection = PacketProtection::new(&client_hs.initial_keys(&client_dcid));
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0).expect("pn offset");
+        protection
+            .unprotect_header(&mut packet_bytes, pn_offset)
+            .expect("unprotect header");
         let (packet, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse packet");
 
         assert_eq!(consumed, packet_bytes.len());
@@ -719,7 +719,6 @@ mod tests {
         assert_eq!(packet.header.dst_cid, client_scid);
         assert_eq!(packet.header.src_cid, client_dcid);
 
-        let mut protection = PacketProtection::new(&client_hs.initial_keys(&packet.header.src_cid));
         let plaintext = protection
             .unprotect(
                 &packet.header_to_bytes_aad(),
@@ -812,6 +811,13 @@ mod tests {
         let packet_bytes = server
             .build_handshake_response(&client_dcid, &client_scid, &frame, &server_hs)
             .expect("build handshake response");
+        let mut packet_bytes = packet_bytes;
+        let mut protection =
+            PacketProtection::new(&client_hs.handshake_keys().expect("client handshake keys"));
+        let pn_offset = packet::get_packet_number_offset(&packet_bytes, 0).expect("pn offset");
+        protection
+            .unprotect_header(&mut packet_bytes, pn_offset)
+            .expect("unprotect header");
         let (packet, consumed) = QuicPacket::from_bytes(&packet_bytes).expect("parse packet");
 
         assert_eq!(consumed, packet_bytes.len());
@@ -819,8 +825,6 @@ mod tests {
         assert_eq!(packet.header.dst_cid, client_scid);
         assert_eq!(packet.header.src_cid, client_dcid);
 
-        let mut protection =
-            PacketProtection::new(&client_hs.handshake_keys().expect("client handshake keys"));
         let plaintext = protection
             .unprotect(
                 &packet.header_to_bytes_aad(),

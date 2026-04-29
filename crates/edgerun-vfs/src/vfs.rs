@@ -299,10 +299,12 @@ impl VirtualFileSystem {
 
     /// Compute SHA1 hash of bytes
     fn compute_hash(content: &[u8]) -> String {
-        use sha1::{Digest, Sha1};
-        let mut hasher = Sha1::new();
-        hasher.update(content);
-        format!("{:x}", hasher.finalize())
+        let mut hash = 0xcbf29ce484222325u64;
+        for byte in content {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        format!("{hash:016x}")
     }
 
     /// Get file modification time
@@ -658,8 +660,8 @@ impl VirtualFileSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::tempdir;
     use std::path::Path;
-    use tempfile::tempdir;
 
     #[test]
     fn test_load_vfs() {

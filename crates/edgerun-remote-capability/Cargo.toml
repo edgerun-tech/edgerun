@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Remote capability request and response protocol for Edgerun"
 
 [dependencies]
 edgerun-capability-policy = { path = "../edgerun-capability-policy" }
@@ -11,6 +12,7 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-camera-biometrics = { path = "../edgerun-camera-biometrics" }
 edgerun-biometrics = { path = "../edgerun-biometrics" }
 edgerun-bluetooth = { path = "../edgerun-bluetooth" }
+edgerun-display = { path = "../edgerun-display" }
 edgerun-input = { path = "../edgerun-input" }
 edgerun-microphone = { path = "../edgerun-microphone" }
 edgerun-speaker = { path = "../edgerun-speaker" }

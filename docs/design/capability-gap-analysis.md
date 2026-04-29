@@ -71,7 +71,7 @@ succeeds and reports 110 workspace packages/members, but the root
 - **Ingress**: Rate limiting, duplicate screening (FNV-1a 64-bit)
 - **Conformance corpus**: 610 YAML test vectors across 11 suites (canonical, command, control, crypto, delegation, network, object, query, snapshot, stream, trust)
 - **Hardware signing abstraction**: Unified `MeshSigner` trait with TPM, YubiKey, Android Keystore, software backends
-- **edgerun-json**: Published crate (v1.0.149), zero-dep, up to 3.78x faster than serde_json on tape path
+- **edgerun-json**: Published crate (v1.0.149), zero-dep, with fast tape parsing for structural scans
 
 ---
 

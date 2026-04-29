@@ -3,6 +3,7 @@
 use crate::dbus_types::*;
 use crate::prelude::v1::*;
 use alloc::collections::BTreeMap as HashMap;
+use edgerun_encoding::byteorder::{read_i32_le, read_u16_le, read_u32_le, read_u64_le};
 use std::io;
 
 // Consume one complete type from a signature string.
@@ -136,19 +137,19 @@ impl Rdr {
     }
     fn u16(&mut self) -> io::Result<u16> {
         let b = self.by(2)?;
-        Ok(u16::from_le_bytes([b[0], b[1]]))
+        Ok(read_u16_le(b, 0))
     }
     fn u32(&mut self) -> io::Result<u32> {
         let b = self.by(4)?;
-        Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        Ok(read_u32_le(b, 0))
     }
     fn i32(&mut self) -> io::Result<i32> {
         let b = self.by(4)?;
-        Ok(i32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        Ok(read_i32_le(b, 0))
     }
     fn u64(&mut self) -> io::Result<u64> {
         let b = self.by(8)?;
-        Ok(u64::from_le_bytes(b.try_into().unwrap()))
+        Ok(read_u64_le(b, 0))
     }
     fn sv(&mut self) -> io::Result<String> {
         let l = self.u32()? as usize;
@@ -522,9 +523,9 @@ pub fn decode_msg(data: &[u8]) -> io::Result<Msg> {
         _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "type")),
     };
     let fl = data[2];
-    let bl = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
-    let ser = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
-    let hfl = u32::from_le_bytes([data[12], data[13], data[14], data[15]]) as usize;
+    let bl = read_u32_le(data, 4) as usize;
+    let ser = read_u32_le(data, 8);
+    let hfl = read_u32_le(data, 12) as usize;
     let th = 16 + hfl;
     let ah = (th + 7) & !7;
     if ah + bl > data.len() {

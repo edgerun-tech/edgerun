@@ -7,6 +7,8 @@ use std::ffi::CString;
 use std::io;
 use std::os::raw::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
 
+use crate::linux_catalog::capability_number;
+
 // ===========================================================================
 // Raw syscall FFI
 // ===========================================================================
@@ -133,15 +135,23 @@ pub struct MountAttr {
     pub userns_fd: u64,
 }
 
+fn c_string(value: &str) -> io::Result<CString> {
+    CString::new(value).map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))
+}
+
+fn syscall_unit(ret: c_int) -> io::Result<()> {
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
 /// Open a mount tree at the given path.
 ///
 /// Returns a file descriptor referencing the mount. Use with `move_mount` or `mount_setattr`.
 pub fn do_open_tree(dirfd: c_int, pathname: &str, flags: c_uint) -> io::Result<c_int> {
-    let path_c =
-        CString::new(pathname).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    #[cfg(target_arch = "x86_64")]
-    let ret = unsafe { syscall(SYS_OPEN_TREE, dirfd, path_c.as_ptr(), flags) as c_int };
-    #[cfg(target_arch = "aarch64")]
+    let path_c = c_string(pathname)?;
     let ret = unsafe { syscall(SYS_OPEN_TREE, dirfd, path_c.as_ptr(), flags) as c_int };
     if ret < 0 {
         Err(io::Error::last_os_error())
@@ -161,10 +171,8 @@ pub fn do_move_mount(
     to_path: &str,
     flags: c_uint,
 ) -> io::Result<()> {
-    let from_c =
-        CString::new(from_path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let to_c = CString::new(to_path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    #[cfg(target_arch = "x86_64")]
+    let from_c = c_string(from_path)?;
+    let to_c = c_string(to_path)?;
     let ret = unsafe {
         syscall(
             SYS_MOVE_MOUNT,
@@ -175,22 +183,7 @@ pub fn do_move_mount(
             flags,
         ) as c_int
     };
-    #[cfg(target_arch = "aarch64")]
-    let ret = unsafe {
-        syscall(
-            SYS_MOVE_MOUNT,
-            from_dfd,
-            from_c.as_ptr(),
-            to_dfd,
-            to_c.as_ptr(),
-            flags,
-        ) as c_int
-    };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 /// Apply mount attributes recursively.
@@ -202,8 +195,7 @@ pub fn do_mount_setattr(
     attr: &MountAttr,
     flags: c_uint,
 ) -> io::Result<()> {
-    let path_c = CString::new(path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    #[cfg(target_arch = "x86_64")]
+    let path_c = c_string(path)?;
     let ret = unsafe {
         syscall(
             SYS_MOUNT_SETATTR,
@@ -214,22 +206,7 @@ pub fn do_mount_setattr(
             std::mem::size_of::<MountAttr>() as u64,
         ) as c_int
     };
-    #[cfg(target_arch = "aarch64")]
-    let ret = unsafe {
-        syscall(
-            SYS_MOUNT_SETATTR,
-            dirfd,
-            path_c.as_ptr(),
-            flags,
-            attr as *const _ as u64,
-            std::mem::size_of::<MountAttr>() as u64,
-        ) as c_int
-    };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 /// Seccomp syscall numbers per architecture.
@@ -293,11 +270,7 @@ pub fn do_unshare(flags: c_int) -> io::Result<()> {
     let ret = unsafe { syscall(272, flags) as c_int }; // __NR_unshare
     #[cfg(target_arch = "aarch64")]
     let ret = unsafe { syscall(97, flags) as c_int }; // __NR_unshare
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 pub fn do_mount(
@@ -307,10 +280,10 @@ pub fn do_mount(
     flags: c_ulong,
     data: &str,
 ) -> io::Result<()> {
-    let s = CString::new(source).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let t = CString::new(target).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let f = CString::new(fstype).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let d = CString::new(data).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let s = c_string(source)?;
+    let t = c_string(target)?;
+    let f = c_string(fstype)?;
+    let d = c_string(data)?;
     let ret = unsafe {
         mount(
             s.as_ptr(),
@@ -320,51 +293,31 @@ pub fn do_mount(
             d.as_ptr() as *const _,
         )
     };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 pub fn do_pivot_root(new_root: &str, put_old: &str) -> io::Result<()> {
-    let nr = CString::new(new_root).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let po = CString::new(put_old).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let nr = c_string(new_root)?;
+    let po = c_string(put_old)?;
     let ret = unsafe { pivot_root(nr.as_ptr(), po.as_ptr()) };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 pub fn do_umount2(target: &str, flags: c_int) -> io::Result<()> {
-    let t = CString::new(target).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let t = c_string(target)?;
     let ret = unsafe { umount2(t.as_ptr(), flags) };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 pub fn do_set_hostname(name: &str) -> io::Result<()> {
-    let n = CString::new(name).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let n = c_string(name)?;
     let ret = unsafe { sethostname(n.as_ptr(), n.as_bytes().len()) };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 pub fn do_prctl_set_no_new_privs() -> io::Result<()> {
     let ret = unsafe { prctl(prctl_const::SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 pub fn do_prctl_set_dumpable(dumpable: bool) -> io::Result<()> {
@@ -377,72 +330,20 @@ pub fn do_prctl_set_dumpable(dumpable: bool) -> io::Result<()> {
             0,
         )
     };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 /// Drop a capability from the bounding set using prctl(PR_CAPBSET_DROP).
 /// Returns Ok(()) on success, Err if the prctl call failed.
 pub fn do_prctl_cap_bset_drop(cap_name: &str) -> io::Result<()> {
-    let cap = cap_name_to_int(cap_name);
+    let cap = capability_number(cap_name).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid capability name: {}", cap_name),
+        )
+    })?;
     let ret = unsafe { prctl(prctl_const::PR_CAPBSET_DROP, cap as c_ulong, 0, 0, 0) };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-/// Convert a CAP_* string name to its integer value.
-/// Returns the numeric value for known capabilities, or u32::MAX for unknown.
-pub fn cap_name_to_int(name: &str) -> u32 {
-    match name.strip_prefix("CAP_").unwrap_or(name) {
-        "CHOWN" => 0,
-        "DAC_OVERRIDE" => 1,
-        "DAC_READ_SEARCH" => 2,
-        "FOWNER" => 3,
-        "FSETID" => 4,
-        "KILL" => 5,
-        "SETGID" => 6,
-        "SETUID" => 7,
-        "SETPCAP" => 8,
-        "LINUX_IMMUTABLE" => 9,
-        "NET_BIND_SERVICE" => 10,
-        "NET_BROADCAST" => 11,
-        "NET_ADMIN" => 12,
-        "NET_RAW" => 13,
-        "IPC_LOCK" => 14,
-        "IPC_OWNER" => 15,
-        "SYS_MODULE" => 16,
-        "SYS_RAWIO" => 17,
-        "SYS_CHROOT" => 18,
-        "SYS_PTRACE" => 19,
-        "SYS_PACCT" => 20,
-        "SYS_ADMIN" => 21,
-        "SYS_BOOT" => 22,
-        "SYS_NICE" => 23,
-        "SYS_RESOURCE" => 24,
-        "SYS_TIME" => 25,
-        "SYS_TTY_CONFIG" => 26,
-        "MKNOD" => 27,
-        "LEASE" => 28,
-        "AUDIT_WRITE" => 29,
-        "AUDIT_CONTROL" => 30,
-        "SETFCAP" => 31,
-        "MAC_OVERRIDE" => 32,
-        "MAC_ADMIN" => 33,
-        "SYSLOG" => 34,
-        "WAKE_ALARM" => 35,
-        "BLOCK_SUSPEND" => 36,
-        "AUDIT_READ" => 37,
-        "PERFMON" => 38,
-        "BPF" => 39,
-        "CHECKPOINT_RESTORE" => 40,
-        _ => u32::MAX, // Unknown — will cause error in caps_to_bitmask
-    }
+    syscall_unit(ret)
 }
 
 pub fn makedev(major: u64, minor: u64) -> c_uint {
@@ -456,29 +357,46 @@ pub fn makedev(major: u64, minor: u64) -> c_uint {
 ///
 /// This must be called BEFORE dropping privileges (setuid/setgid).
 pub fn do_capset(effective: u64, permitted: u64, inheritable: u64) -> io::Result<()> {
-    // cap_data structure for version 3:
-    // [0]: version (u32) = 0x20080522
-    // [1]: pid (i32) = 0 (current process)
-    // [2]: effective (u32)
-    // [3]: permitted (u32)
-    // [4]: inheritable low (u32)
-    // [5]: inheritable high (u32)
+    #[repr(C)]
+    struct CapHeader {
+        version: u32,
+        pid: i32,
+    }
+
+    #[repr(C)]
+    struct CapData {
+        effective: u32,
+        permitted: u32,
+        inheritable: u32,
+    }
+
     const CAP_VERSION: u32 = 0x20080522;
 
-    let mut data: [u32; 6] = [0; 6];
-    data[0] = CAP_VERSION;
-    data[1] = 0; // pid = current process
-    data[2] = effective as u32;
-    data[3] = permitted as u32;
-    data[4] = inheritable as u32;
-    data[5] = (inheritable >> 32) as u32;
+    let header = CapHeader {
+        version: CAP_VERSION,
+        pid: 0,
+    };
+    let data = [
+        CapData {
+            effective: effective as u32,
+            permitted: permitted as u32,
+            inheritable: inheritable as u32,
+        },
+        CapData {
+            effective: (effective >> 32) as u32,
+            permitted: (permitted >> 32) as u32,
+            inheritable: (inheritable >> 32) as u32,
+        },
+    ];
 
-    let ret = unsafe { syscall(CAPSET_SYSCALL_NR, &data as *const _ as *const c_void) as c_int };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    let ret = unsafe {
+        syscall(
+            CAPSET_SYSCALL_NR,
+            &header as *const _ as *const c_void,
+            data.as_ptr() as *const c_void,
+        ) as c_int
+    };
+    syscall_unit(ret)
 }
 
 /// Set/clear an ambient capability via prctl.
@@ -492,11 +410,7 @@ pub fn do_prctl_cap_ambient(action: c_int, cap: c_int) -> io::Result<()> {
             0,
         )
     };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 /// Set a resource limit using prlimit64 syscall.
@@ -528,11 +442,7 @@ pub fn do_setrlimit(resource: u32, soft: u64, hard: u64) -> io::Result<()> {
             std::ptr::null_mut::<u64>(),
         ) as c_int
     };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    syscall_unit(ret)
 }
 
 /// Set a namespace via setns syscall.
@@ -546,35 +456,7 @@ pub fn do_setns(fd: c_int, ns_type: c_int) -> io::Result<()> {
     let ret = unsafe { syscall(308, fd, ns_type) as c_int };
     #[cfg(target_arch = "aarch64")]
     let ret = unsafe { syscall(268, fd, ns_type) as c_int };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-/// Parse an RLIMIT_* name to its numeric constant.
-pub fn rlimit_name_to_int(name: &str) -> Option<u32> {
-    // RLIMIT_* constants on Linux (x86_64/aarch64)
-    match name.strip_prefix("RLIMIT_").unwrap_or(name) {
-        "CPU" => Some(0),
-        "FSIZE" => Some(1),
-        "DATA" => Some(2),
-        "STACK" => Some(3),
-        "CORE" => Some(4),
-        "RSS" => Some(5),
-        "NPROC" => Some(6),
-        "NOFILE" => Some(7),
-        "MEMLOCK" => Some(8),
-        "AS" => Some(9),
-        "LOCKS" => Some(10),
-        "SIGPENDING" => Some(11),
-        "MSGQUEUE" => Some(12),
-        "NICE" => Some(13),
-        "RTPRIO" => Some(14),
-        "RTTIME" => Some(15),
-        _ => None,
-    }
+    syscall_unit(ret)
 }
 
 // ===========================================================================
@@ -653,11 +535,11 @@ pub mod bpf_prog_type {
 pub mod bpf_attach_type {
     pub const BPF_CGROUP_INET_INGRESS: u32 = 0;
     pub const BPF_CGROUP_INET_EGRESS: u32 = 1;
-    pub const BPF_CGROUP_DEVICE: u32 = 14;
+    pub const BPF_CGROUP_DEVICE: u32 = 6;
 }
 
 /// eBPF return value for cgroup device programs (allow device access).
-pub const BPF_CGROUP_DEV_ALLOW: i32 = 0;
+pub const BPF_CGROUP_DEV_ALLOW: i32 = 1;
 
 /// Build an eBPF instruction (8 bytes, kernel bpf_insn format).
 ///
@@ -707,15 +589,16 @@ pub fn bpf_prog_load(
 ) -> std::io::Result<i32> {
     let insn_cnt = insns.len() as u32;
     let license_c = std::ffi::CString::new(license).unwrap();
+    let mut log_buf = vec![0u8; 64 * 1024];
 
     let attr = BpfProgLoadAttr {
         prog_type,
         insn_cnt,
         insns: insns.as_ptr() as u64,
         license: license_c.as_ptr() as u64,
-        log_level: 0,
-        log_size: 0,
-        log_buf: 0,
+        log_level: 1,
+        log_size: log_buf.len() as u32,
+        log_buf: log_buf.as_mut_ptr() as u64,
         kern_version: 0,
         prog_flags: 0,
         _padding: [0; 4],
@@ -730,7 +613,17 @@ pub fn bpf_prog_load(
         )
     };
     if ret < 0 {
-        Err(std::io::Error::last_os_error())
+        let error = std::io::Error::last_os_error();
+        let nul = log_buf.iter().position(|b| *b == 0).unwrap_or(log_buf.len());
+        let verifier_log = String::from_utf8_lossy(&log_buf[..nul]).trim().to_string();
+        if verifier_log.is_empty() {
+            Err(error)
+        } else {
+            Err(std::io::Error::new(
+                error.kind(),
+                format!("{}: {}", error, verifier_log),
+            ))
+        }
     } else {
         Ok(ret as i32)
     }
@@ -820,6 +713,11 @@ pub fn mov_reg(dst: u8, src: u8) -> [u8; 8] {
     ebpf_insn(0xbf, dst, src, 0, 0)
 }
 
+/// BPF_ALU64 | BPF_AND | BPF_K: dst &= imm
+pub fn and_imm(dst: u8, imm: i32) -> [u8; 8] {
+    ebpf_insn(0x57, dst, 0, 0, imm)
+}
+
 /// BPF_JMP | BPF_JNE | BPF_K: if dst != imm then jt else jf
 pub fn jmp_imm(jmp: u8, dst: u8, imm: i32, _jt: u8) -> [u8; 8] {
     ebpf_insn(0x05 | jmp, dst, 0, 0, imm)
@@ -852,43 +750,5 @@ pub const R2: u8 = 2;
 // ===========================================================================
 
 #[cfg(all(test, not(target_os = "none")))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn mount_attr_constants_are_correct() {
-        // Verify mount attr constants match kernel values
-        assert_eq!(mount_attr::RDONLY, 0x00000001);
-        assert_eq!(mount_attr::NOSUID, 0x00000002);
-        assert_eq!(mount_attr::NODEV, 0x00000004);
-        assert_eq!(mount_attr::NOEXEC, 0x00000008);
-        assert_eq!(mount_attr::REC, 0x00001000);
-        assert_eq!(mount_attr::IDMAP, 0x00100000);
-    }
-
-    #[test]
-    fn open_tree_constants_are_correct() {
-        assert_eq!(open_tree::CLOEXEC, 0x001);
-        assert_eq!(open_tree::CLONE, 0x002);
-    }
-
-    #[test]
-    fn move_mount_constants_are_correct() {
-        assert_eq!(move_mount::F_EMPTY_PATH, 0x0100);
-        assert_eq!(move_mount::T_EMPTY_PATH, 0x0200);
-    }
-
-    #[test]
-    fn mount_attr_struct_size() {
-        // MountAttr must be exactly 32 bytes (4 × u64)
-        assert_eq!(std::mem::size_of::<MountAttr>(), 32);
-    }
-
-    #[test]
-    fn new_mount_syscall_numbers_match() {
-        // open_tree, move_mount, mount_setattr have the same numbers on both archs
-        assert_eq!(SYS_OPEN_TREE, 428);
-        assert_eq!(SYS_MOVE_MOUNT, 429);
-        assert_eq!(SYS_MOUNT_SETATTR, 442);
-    }
-}
+#[path = "../tests/unit_src/src/syscalls_tests.rs"]
+mod tests;

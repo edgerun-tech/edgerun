@@ -1,3 +1,6 @@
+mod common;
+
+use common::{parse_u16, parse_u32};
 use edgerun_virtual_disk::{attach_nbd, detach_nbd, BlockError, LinuxNbdAttachSpec};
 use std::env;
 
@@ -58,18 +61,6 @@ fn run() -> Result<(), BlockError> {
             Ok(())
         }
     }
-}
-
-fn parse_u16(value: &str, field: &str) -> Result<u16, BlockError> {
-    value
-        .parse::<u16>()
-        .map_err(|err| BlockError::ProtocolError(format!("invalid {field}: {err}")))
-}
-
-fn parse_u32(value: &str, field: &str) -> Result<u32, BlockError> {
-    value
-        .parse::<u32>()
-        .map_err(|err| BlockError::ProtocolError(format!("invalid {field}: {err}")))
 }
 
 fn print_usage(program: &str) {

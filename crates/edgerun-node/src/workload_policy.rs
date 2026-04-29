@@ -141,6 +141,8 @@ pub fn load_policy_file(path: &std::path::Path) -> std::io::Result<WorkloadPolic
 
 use std::sync::Mutex;
 
+use edgerun_core::util::now_unix_micros_u64;
+
 /// Tracks recent workload submissions per requester for spam prevention.
 pub struct RateLimiter {
     /// Max workloads allowed per requester within the window.
@@ -165,10 +167,7 @@ impl RateLimiter {
     /// Check if a requester is within rate limits.
     /// If ok, records the submission. Returns true if allowed.
     pub fn check_and_record(&self, requester_id: &[u8]) -> bool {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("system time before UNIX epoch")
-            .as_micros() as u64;
+        let now = now_unix_micros_u64();
 
         let mut map = self.submissions.lock().expect("rate limit map poisoned");
         let entries = map.entry(requester_id.to_vec()).or_default();

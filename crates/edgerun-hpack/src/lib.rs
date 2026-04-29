@@ -16,7 +16,11 @@ use core::fmt;
 use core::iter;
 use core::slice;
 
+#[cfg(test)]
+extern crate std;
+
 #[cfg(all(feature = "interop_tests", not(target_os = "none")))]
+#[macro_use]
 #[allow(unused_imports)]
 extern crate rustc_serialize;
 

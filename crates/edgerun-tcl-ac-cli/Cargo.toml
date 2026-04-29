@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "Command-line tool for TCL air conditioner integration"
 
 [[bin]]
 name = "tcl-ac"
@@ -17,8 +18,7 @@ edgerun-bluetooth-gatt = { path = "../edgerun-bluetooth-gatt" }
 edgerun-mgmt-bluetooth = { path = "../edgerun-mgmt-bluetooth" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-clap = { path = "../edgerun-clap", features = ["std"] }
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
-edgerun-json = { path = "../edgerun-json", features = ["serde"] }
+edgerun-json = { path = "../edgerun-json", default-features = false }
 
 [features]
 std = []

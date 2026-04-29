@@ -29,15 +29,25 @@ impl Rng {
     }
 
     pub fn new_from_entropy() -> Self {
-        let mut seed: u64 = 0;
-        unsafe {
-            core::arch::asm!(
-                "rdtsc",
-                out("rax") seed,
-                out("rdx") _,
-            );
+        #[cfg(target_arch = "x86_64")]
+        {
+            let mut seed: u64 = 0;
+            unsafe {
+                core::arch::asm!(
+                    "rdtsc",
+                    out("rax") seed,
+                    out("rdx") _,
+                );
+            }
+            Self { state: seed }
         }
-        Self { state: seed }
+
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            Self {
+                state: 0xD1B5_4A32_D192_ED03,
+            }
+        }
     }
 
     pub fn next(&mut self) -> u32 {

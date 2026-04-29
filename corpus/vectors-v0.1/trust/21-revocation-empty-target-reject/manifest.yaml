@@ -1,0 +1,9 @@
+id: trust/21-revocation-empty-target-reject
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: revocation record with empty target reference is structurally invalid
+tags:
+- trust
+- validate_trust

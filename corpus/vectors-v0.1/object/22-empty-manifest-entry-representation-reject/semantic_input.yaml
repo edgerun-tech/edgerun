@@ -1,0 +1,19 @@
+descriptor:
+  descriptor_version: 1
+  object_id: obj_a
+  object_kind: OBJECT_KIND_PAYLOAD
+  object_schema_version: 1
+  canonicalization_id: raw-bytes-v0
+  canonical_digest: digest_a
+  canonical_size: 10
+chunk_manifest:
+  manifest_version: 1
+  object:
+    object_id: obj_a
+  chunk_count: 1
+  total_stored_size: 10
+  entries:
+  - representation_id: ''
+    chunk_digest: digest_chunk_1
+    offset: 0
+    length: 10

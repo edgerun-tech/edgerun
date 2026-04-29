@@ -1,0 +1,5 @@
+now: '2030-01-01T00:00:00Z'
+local_node: node_server
+supported_protocol_versions:
+- 1
+policy_profile: default-v0

@@ -1,9 +1,7 @@
 use std::path::Path;
 
-use anyhow::{Result, anyhow, bail};
-use serde_json::Value;
-
 use crate::utils::get_state;
+use anyhow::{Result, anyhow, bail};
 
 pub fn state(project_path: &Path, id: &str) -> Result<()> {
     match get_state(id, project_path) {
@@ -33,7 +31,7 @@ pub fn get_container_status(project_path: &Path, id: &str) -> Result<String> {
                 bail!("Error :\nstdout : {}\nstderr : {}", stdout, stderr)
             } else {
                 // Parse JSON to extract status
-                match serde_json::from_str::<Value>(&stdout) {
+                match crate::utils::json::parse(&stdout) {
                     Ok(value) => {
                         if let Some(status) = value.get("status")
                             && let Some(status_str) = status.as_str()

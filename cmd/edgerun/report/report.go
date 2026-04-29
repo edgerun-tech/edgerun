@@ -17,7 +17,7 @@ func Cmd() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "api-parity",
-		Short: "Generate edgerun-json vs serde_json API compatibility report",
+		Short: "Generate edgerun-json public API report",
 		RunE:  reportAPIParity,
 	})
 

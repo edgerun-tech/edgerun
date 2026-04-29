@@ -142,7 +142,12 @@ impl MeshNode {
         use edgerun_core::crypto::SIG_DOMAIN_MESH_FRAME;
         frame.header.src = self.node.identity();
         let preimage = frame.signed_preimage();
-        match self.signer.sign_record(SIG_DOMAIN_MESH_FRAME, &preimage) {
+        let record_hash = edgerun_core::crypto::sha256(&preimage);
+        let sig_input = edgerun_core::crypto::signature_input(SIG_DOMAIN_MESH_FRAME, &record_hash);
+        let digest = edgerun_core::crypto::sha256(&sig_input);
+        let mut digest_bytes = [0u8; 32];
+        digest_bytes.copy_from_slice(&digest);
+        match self.signer.sign_digest(&digest_bytes) {
             Ok(sig) => {
                 frame.signature = sig;
             }
@@ -156,14 +161,12 @@ impl MeshNode {
     /// Drains all pending outbound frames and returns them as raw wire data.
     /// These can be delivered to another node's `deliver_inbound_frame`.
     pub fn drain_outbound_frames(&mut self) -> Result<Vec<Vec<u8>>, String> {
-        // Sign and drain pending frames
-        self.mesh_link
-            .drain_pending_frames(&mut self.router)
-            .map_err(|e| format!("send failed: {}", e))?;
-        // The frames were already sent to the network — in tests, we need to capture them
-        // For now, this returns empty because the frames go to the void
-        // In production, the frames would go to the actual network transport
-        Ok(Vec::new())
+        Ok(self
+            .mesh_link
+            .drain_pending_frames_raw()
+            .into_iter()
+            .map(|frame| frame.to_wire())
+            .collect())
     }
 
     /// Delivers an inbound wire frame to this node for processing.
@@ -451,11 +454,12 @@ metadata:
         };
 
         node.send_command(dest, &command);
-        // The frame should be queued — drain_outbound_frames would send it
-        // but in test mode it returns empty since frames go to void
         let frames = node.drain_outbound_frames().unwrap();
-        // Frames go to the network void in tests, so this is empty
-        assert!(frames.is_empty() || frames.len() >= 0); // just verifying no crash
+        assert_eq!(frames.len(), 1);
+        let frame = MeshFrame::from_wire(&frames[0]).unwrap();
+        assert_eq!(frame.header.src, node.identity());
+        assert_eq!(frame.header.dest, dest);
+        assert!(frame.verify_signature());
     }
 
     #[test]

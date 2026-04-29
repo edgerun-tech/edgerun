@@ -5,7 +5,7 @@
 //!
 //! ## Quick start
 //!
-//! ```ignore
+//! ```text
 //! use edgerun_tpm::{LinuxTpmSigningKey, TpmHandle};
 //!
 //! let key = LinuxTpmSigningKey::new("/dev/tpmrm0", TpmHandle(0x8100_0001));

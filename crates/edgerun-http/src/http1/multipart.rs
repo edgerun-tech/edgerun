@@ -4,19 +4,19 @@
 //! and file uploads.
 //!
 //! # Usage
-//! ```ignore
-//! use edgerun_http::http1::multipart::MultipartParser;
+//! ```rust
+//! use edgerun_http::http1::multipart::parse_multipart;
 //!
-//! let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+//! let boundary = "boundary";
 //! let body = b"--boundary\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n--boundary--\r\n";
-//! let parts = MultipartParser::parse(body, boundary).unwrap();
+//! let parts = parse_multipart(body, boundary).unwrap();
 //! for part in parts {
-//!     println!("{}: {}", part.name, String::from_utf8_lossy(&part.data));
+//!     assert_eq!(part.name, "field");
+//!     assert_eq!(part.text(), Some("value"));
 //! }
 //! ```
 
 use alloc::collections::BTreeMap;
-use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
@@ -49,10 +49,10 @@ impl MultipartField {
 /// `boundary` is the boundary string from the Content-Type header
 ///   (e.g., "----WebKitFormBoundary7MA4YWxkTrZu0gW" — without the leading `--`)
 pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField>, MultipartError> {
-    let delimiter = format!("--{}", boundary);
-    let delimiter_bytes = delimiter.as_bytes();
-    let end_delimiter = format!("--{}--", boundary);
-    let end_delimiter_bytes = end_delimiter.as_bytes();
+    let mut delimiter = Vec::with_capacity(boundary.len() + 2);
+    delimiter.extend_from_slice(b"--");
+    delimiter.extend_from_slice(boundary.as_bytes());
+    let delimiter_bytes = delimiter.as_slice();
 
     let mut fields = Vec::new();
     let mut pos = 0;
@@ -70,7 +70,7 @@ pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField
         }
 
         // Check for end delimiter
-        if body[pos..].starts_with(end_delimiter_bytes) {
+        if is_end_boundary(body, delimiter_bytes, pos) {
             break;
         }
 
@@ -93,7 +93,7 @@ pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField
         let data_start = pos;
 
         // Look for \r\n--boundary or --boundary-- pattern
-        let next_boundary = find_next_boundary(body, delimiter_bytes, end_delimiter_bytes, pos)?;
+        let next_boundary = find_next_boundary(body, delimiter_bytes, pos)?;
         let data = body[data_start..next_boundary].to_vec();
 
         // Remove trailing CRLF from data if present
@@ -115,7 +115,7 @@ pub fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<MultipartField
         }
 
         // Check for end delimiter
-        if body[pos..].starts_with(end_delimiter_bytes) {
+        if is_end_boundary(body, delimiter_bytes, pos) {
             break;
         }
 
@@ -138,8 +138,8 @@ pub fn extract_boundary(content_type: &str) -> Option<String> {
 /// Check if Content-Type is multipart/form-data
 pub fn is_multipart(content_type: &str) -> bool {
     content_type
-        .to_lowercase()
-        .starts_with("multipart/form-data")
+        .get(..19)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("multipart/form-data"))
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +181,6 @@ fn skip_to_boundary(body: &[u8], delimiter: &[u8], start: usize) -> Result<usize
 fn find_next_boundary(
     body: &[u8],
     delimiter: &[u8],
-    end_delimiter: &[u8],
     start: usize,
 ) -> Result<usize, MultipartError> {
     // Search for regular delimiter first: \r\n--boundary
@@ -197,25 +196,13 @@ fn find_next_boundary(
         }
     }
 
-    // Then check for end delimiter: \r\n--boundary--
-    let crlf_end = b"\r\n";
-    for i in start
-        ..body
-            .len()
-            .saturating_sub(crlf_end.len() + end_delimiter.len() - 1)
-    {
-        if body[i..i + crlf_end.len()] == *crlf_end {
-            let after_crlf = i + crlf_end.len();
-            if body.len() >= after_crlf + end_delimiter.len()
-                && body[after_crlf..after_crlf + end_delimiter.len()] == *end_delimiter
-            {
-                return Ok(i);
-            }
-        }
-    }
-
     // Fallback: take rest of body
     Ok(body.len())
+}
+
+fn is_end_boundary(body: &[u8], delimiter: &[u8], pos: usize) -> bool {
+    body[pos..].starts_with(delimiter)
+        && body.get(pos + delimiter.len()..pos + delimiter.len() + 2) == Some(b"--")
 }
 
 fn skip_crlf(body: &[u8], start: usize) -> usize {
@@ -255,7 +242,7 @@ fn parse_headers(body: &[u8]) -> Result<(BTreeMap<String, String>, usize), Multi
             core::str::from_utf8(&body[pos..line_end]).map_err(|_| MultipartError::InvalidUtf8)?;
 
         if let Some(colon) = line.find(':') {
-            let name = line[..colon].trim().to_lowercase();
+            let name = ascii_lowercase(line[..colon].trim());
             let value = line[colon + 1..].trim().to_string();
             headers.insert(name, value);
         }
@@ -266,28 +253,28 @@ fn parse_headers(body: &[u8]) -> Result<(BTreeMap<String, String>, usize), Multi
     Ok((headers, pos))
 }
 
+fn ascii_lowercase(value: &str) -> String {
+    value
+        .bytes()
+        .map(|b| b.to_ascii_lowercase() as char)
+        .collect()
+}
+
 fn extract_param(header_value: &str, param_name: &str) -> Option<String> {
-    // Try quoted value first: name="value"
-    let pattern = format!("{}=\"", param_name);
-    if let Some(start) = header_value.find(&pattern) {
-        let value_start = start + pattern.len();
-        if let Some(end) = header_value[value_start..].find('"') {
-            return Some(header_value[value_start..value_start + end].to_string());
+    header_value.split(';').find_map(|part| {
+        let (name, value) = part.trim().split_once('=')?;
+        if !name.trim().eq_ignore_ascii_case(param_name) {
+            return None;
         }
-    }
 
-    // Try unquoted value: name=value
-    let pattern = format!("{}=", param_name);
-    if let Some(start) = header_value.find(&pattern) {
-        let value_start = start + pattern.len();
-        let value_end = header_value[value_start..]
-            .find(|c: char| c.is_whitespace() || c == ';')
-            .map(|i| value_start + i)
-            .unwrap_or(header_value.len());
-        return Some(header_value[value_start..value_end].to_string());
-    }
+        let value = value.trim();
+        if let Some(quoted) = value.strip_prefix('"') {
+            return quoted.find('"').map(|end| quoted[..end].to_string());
+        }
 
-    None
+        let end = value.find(char::is_whitespace).unwrap_or(value.len());
+        Some(value[..end].to_string())
+    })
 }
 
 fn strip_trailing_crlf(data: &[u8]) -> &[u8] {
@@ -381,6 +368,16 @@ mod tests {
         assert_eq!(
             extract_param(header, "boundary"),
             Some("myboundary".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_param_case_insensitive_name() {
+        let header = r#"form-data; Name="myfield"; FILENAME="myfile.txt""#;
+        assert_eq!(extract_param(header, "name"), Some("myfield".to_string()));
+        assert_eq!(
+            extract_param(header, "filename"),
+            Some("myfile.txt".to_string())
         );
     }
 }

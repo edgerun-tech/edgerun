@@ -6,7 +6,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll};
+use core::task::{Context, Poll, Waker};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener as StdTcpListener, TcpStream as StdTcpStream};
 use std::net::{ToSocketAddrs, UdpSocket as StdUdpSocket};
@@ -23,8 +23,26 @@ fn map_io_error(error: std::io::Error) -> IoError {
     }
 }
 
+fn register_and_wake_waker(slot: &mut Option<Waker>, cx: &Context<'_>) {
+    let needs_refresh =
+        !matches!(slot.as_ref(), Some(registered) if registered.will_wake(cx.waker()));
+    if needs_refresh {
+        *slot = Some(cx.waker().clone());
+    }
+    if let Some(waker) = slot.as_ref() {
+        waker.wake_by_ref();
+    }
+}
+
+fn clear_waker(slot: &mut Option<Waker>) {
+    slot.take();
+}
+
 pub struct AsyncTcpStream {
     inner: StdTcpStream,
+    read_waker: Option<Waker>,
+    write_waker: Option<Waker>,
+    flush_waker: Option<Waker>,
 }
 
 impl AsyncTcpStream {
@@ -32,6 +50,9 @@ impl AsyncTcpStream {
     pub fn from_fd(fd: RawFd) -> Self {
         Self {
             inner: unsafe { StdTcpStream::from_raw_fd(fd) },
+            read_waker: None,
+            write_waker: None,
+            flush_waker: None,
         }
     }
 
@@ -42,7 +63,12 @@ impl AsyncTcpStream {
 
     pub fn from_std(stream: StdTcpStream) -> std::io::Result<Self> {
         stream.set_nonblocking(true)?;
-        Ok(Self { inner: stream })
+        Ok(Self {
+            inner: stream,
+            read_waker: None,
+            write_waker: None,
+            flush_waker: None,
+        })
     }
 
     #[cfg(unix)]
@@ -69,10 +95,14 @@ impl AsyncRead for AsyncTcpStream {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<IoResult<usize>> {
-        match self.get_mut().inner.read(buf) {
-            Ok(n) => Poll::Ready(Ok(n)),
+        let this = self.get_mut();
+        match this.inner.read(buf) {
+            Ok(n) => {
+                clear_waker(&mut this.read_waker);
+                Poll::Ready(Ok(n))
+            }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                cx.waker().wake_by_ref();
+                register_and_wake_waker(&mut this.read_waker, cx);
                 Poll::Pending
             }
             Err(e) => Poll::Ready(Err(map_io_error(e))),
@@ -82,10 +112,14 @@ impl AsyncRead for AsyncTcpStream {
 
 impl AsyncWrite for AsyncTcpStream {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
-        match self.get_mut().inner.write(buf) {
-            Ok(n) => Poll::Ready(Ok(n)),
+        let this = self.get_mut();
+        match this.inner.write(buf) {
+            Ok(n) => {
+                clear_waker(&mut this.write_waker);
+                Poll::Ready(Ok(n))
+            }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                cx.waker().wake_by_ref();
+                register_and_wake_waker(&mut this.write_waker, cx);
                 Poll::Pending
             }
             Err(e) => Poll::Ready(Err(map_io_error(e))),
@@ -93,10 +127,14 @@ impl AsyncWrite for AsyncTcpStream {
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<IoResult<()>> {
-        match self.get_mut().inner.flush() {
-            Ok(()) => Poll::Ready(Ok(())),
+        let this = self.get_mut();
+        match this.inner.flush() {
+            Ok(()) => {
+                clear_waker(&mut this.flush_waker);
+                Poll::Ready(Ok(()))
+            }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                cx.waker().wake_by_ref();
+                register_and_wake_waker(&mut this.flush_waker, cx);
                 Poll::Pending
             }
             Err(e) => Poll::Ready(Err(map_io_error(e))),
@@ -162,6 +200,7 @@ impl AsyncWrite for Arc<AsyncTcpStream> {
 pub struct ConnectFuture {
     addrs: Vec<SocketAddr>,
     idx: usize,
+    waker: Option<Waker>,
 }
 
 impl ConnectFuture {
@@ -172,6 +211,7 @@ impl ConnectFuture {
                 .map(|addrs| addrs.collect())
                 .unwrap_or_default(),
             idx: 0,
+            waker: None,
         }
     }
 }
@@ -179,18 +219,23 @@ impl ConnectFuture {
 impl Future for ConnectFuture {
     type Output = std::io::Result<Arc<AsyncTcpStream>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        while let Some(addr) = self.addrs.get(self.idx).copied() {
-            self.idx += 1;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        while let Some(addr) = this.addrs.get(this.idx).copied() {
+            this.idx += 1;
             match StdTcpStream::connect(addr).and_then(AsyncTcpStream::from_std) {
-                Ok(stream) => return Poll::Ready(Ok(Arc::new(stream))),
+                Ok(stream) => {
+                    this.waker = None;
+                    return Poll::Ready(Ok(Arc::new(stream)));
+                }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    cx.waker().wake_by_ref();
+                    register_and_wake_waker(&mut this.waker, cx);
                     return Poll::Pending;
                 }
                 Err(_) => continue,
             }
         }
+        this.waker = None;
         Poll::Ready(Err(std::io::Error::new(
             std::io::ErrorKind::ConnectionRefused,
             "all addresses refused",
@@ -214,28 +259,42 @@ impl AsyncTcpListener {
     }
 
     pub fn accept(&self) -> AcceptFuture<'_> {
-        AcceptFuture { listener: self }
+        AcceptFuture {
+            listener: self,
+            waker: None,
+        }
     }
 }
 
 pub struct AcceptFuture<'a> {
     listener: &'a AsyncTcpListener,
+    waker: Option<Waker>,
 }
 
 impl Future for AcceptFuture<'_> {
     type Output = std::io::Result<(Arc<AsyncTcpStream>, SocketAddr)>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.listener.inner.accept() {
+        let this = self.get_mut();
+        match this.listener.inner.accept() {
             Ok((stream, addr)) => match AsyncTcpStream::from_std(stream) {
-                Ok(stream) => Poll::Ready(Ok((Arc::new(stream), addr))),
-                Err(e) => Poll::Ready(Err(e)),
+                Ok(stream) => {
+                    this.waker = None;
+                    Poll::Ready(Ok((Arc::new(stream), addr)))
+                }
+                Err(e) => {
+                    this.waker = None;
+                    Poll::Ready(Err(e))
+                }
             },
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                cx.waker().wake_by_ref();
+                register_and_wake_waker(&mut this.waker, cx);
                 Poll::Pending
             }
-            Err(e) => Poll::Ready(Err(e)),
+            Err(e) => {
+                this.waker = None;
+                Poll::Ready(Err(e))
+            }
         }
     }
 }
@@ -272,11 +331,27 @@ impl AsyncUdpSocket {
     }
 
     pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> std::io::Result<usize> {
-        self.inner.send_to(buf, target)
+        loop {
+            match self.inner.send_to(buf, target) {
+                Ok(n) => return Ok(n),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    crate::yieldnow().await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     pub async fn recv_from(&self, buf: &mut [u8]) -> std::io::Result<(usize, SocketAddr)> {
-        self.inner.recv_from(buf)
+        loop {
+            match self.inner.recv_from(buf) {
+                Ok(result) => return Ok(result),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    crate::yieldnow().await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     pub fn send(&self, buf: &[u8]) -> std::io::Result<usize> {

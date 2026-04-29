@@ -200,9 +200,11 @@ pub mod prelude {
 use crate::prelude::v1::*;
 
 pub mod async_ext;
+mod att;
 pub mod client;
 pub mod error;
 pub mod hci;
+mod l2cap;
 pub mod linux;
 
 pub use async_ext::{AsyncAttProtocol, AsyncL2capSocket};
@@ -215,6 +217,7 @@ use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
     CapabilityOperation, CapabilityProvider, CapabilityRole,
 };
+use edgerun_encoding::byteorder::{read_u16_le, read_u32_le};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GattAddressKind {
@@ -254,9 +257,9 @@ impl GattUuid {
     pub fn as_16(&self) -> Option<u16> {
         let cleaned = self.0.replace('-', "").to_lowercase();
         if cleaned.len() == 4 {
-            u16::from_str_radix(&cleaned, 16).ok()
-        } else if cleaned.len() == 36 && cleaned.starts_with("0000") {
-            u16::from_str_radix(&cleaned[4..8], 16).ok()
+            edgerun_encoding::hex::parse_hex_int(&cleaned)
+        } else if cleaned.len() == 32 && cleaned.starts_with("0000") {
+            edgerun_encoding::hex::parse_hex_int(&cleaned[4..8])
         } else {
             None
         }
@@ -264,8 +267,7 @@ impl GattUuid {
 
     pub fn from_hex(hex: &str) -> Option<Self> {
         let cleaned = hex.replace('-', "").to_lowercase();
-        if (cleaned.len() == 4 || cleaned.len() == 32)
-            && cleaned.chars().all(|c| c.is_ascii_hexdigit())
+        if matches!(cleaned.len(), 4 | 32) && edgerun_encoding::hex::hex_to_bytes(&cleaned).is_ok()
         {
             Some(Self(cleaned))
         } else {
@@ -547,11 +549,8 @@ pub fn default_gatt_descriptor(provider: &str, instance_id: &str) -> CapabilityD
 
 pub fn format_gatt_uuid(bytes: &[u8]) -> String {
     match bytes.len() {
-        2 => format!("{:04x}", u16::from_le_bytes([bytes[0], bytes[1]])),
-        4 => format!(
-            "{:04x}-0000-1000-8000-00805f9b34fb",
-            u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
-        ),
+        2 => format!("{:04x}", read_u16_le(bytes, 0)),
+        4 => format!("{:04x}-0000-1000-8000-00805f9b34fb", read_u32_le(bytes, 0)),
         16 => {
             let mut b = bytes.to_vec();
             b.reverse();

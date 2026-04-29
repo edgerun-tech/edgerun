@@ -18,8 +18,13 @@ spec:
   dns_server: "127.0.0.1:53"
   dkim_domain: edgerun.tech
   dkim_selector: mail
-  # DKIM private key from edgerun-storage credential (namespace: mail, name: dkim-private-key)
-  dkim_key_ref: ref+storage://mail/dkim-private-key
-  # TLS certificate from edgerun-storage credential (namespace: mail, name: tls-cert)
-  tls_cert_ref: ref+storage://mail/tls-cert
-  tls_key_ref: ref+storage://mail/tls-key
+  dkim_key_path: /etc/edgerun/mail/dkim-mail.private.pem
+  tls_cert: /etc/edgerun/mail/tls/fullchain.pem
+  tls_key: /etc/edgerun/mail/tls/privkey.pem
+  users:
+    - username: postmaster
+      domains:
+        - edgerun.tech
+    - username: admin
+      domains:
+        - edgerun.tech

@@ -1,0 +1,9 @@
+id: stream/17-empty-stream-id-reject
+suite: stream
+validator: validate_stream_append
+version: 1
+priority: mandatory
+description: event with empty stream id is structurally invalid
+tags:
+- stream
+- validate_stream_append

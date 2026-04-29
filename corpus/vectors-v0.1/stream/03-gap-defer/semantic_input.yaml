@@ -2,7 +2,9 @@ brief:
   candidate_event: action_completed
   seq: 3
 candidate_event:
+  envelope_version: 1
   event_type: EVENT_TYPE_ACTION_COMPLETED
+  event_version: 1
   seq: 3
   stream_id: '0x73747265616d2d6e6f64652d736572766572'
   prev_ref:

@@ -6,8 +6,10 @@
 use crate::prelude::*;
 use std::ffi::CString;
 use std::io;
-use std::os::raw::{c_char, c_int, c_long, c_uint};
+use std::os::raw::{c_int, c_long, c_uint};
 use std::path::Path;
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+compile_error!("CRIU integration in edgerun-oci supports only x86_64 and aarch64");
 
 #[derive(Clone, Copy)]
 #[repr(u32)]
@@ -69,6 +71,8 @@ pub struct CriuDumpOpts<'a> {
 }
 
 pub fn criu_dump(opts: &CriuDumpOpts) -> io::Result<()> {
+    validate_criu_request(opts.pid, opts.img, opts.work, true)?;
+
     let img_c = CString::new(opts.img.to_string_lossy().as_bytes())?;
 
     let mut work_c = None;
@@ -111,6 +115,7 @@ pub struct CriuRestoreOpts<'a> {
 }
 
 pub fn criu_restore(opts: &CriuRestoreOpts) -> io::Result<i32> {
+    validate_criu_request(opts.pid.unwrap_or(1), opts.img, None, false)?;
     let img_c = CString::new(opts.img.to_string_lossy().as_bytes())?;
 
     let mut status: i32 = 0;
@@ -130,4 +135,70 @@ pub fn criu_restore(opts: &CriuRestoreOpts) -> io::Result<i32> {
     }
 
     Ok(ret as i32)
+}
+
+fn validate_criu_request(
+    pid: i32,
+    img: &Path,
+    work: Option<&Path>,
+    allow_missing: bool,
+) -> io::Result<()> {
+    if pid <= 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "CRIU target PID must be > 0",
+        ));
+    }
+
+    if !img.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "CRIU image path must be absolute",
+        ));
+    }
+
+    if !allow_missing {
+        if !img.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("CRIU image path not found: {}", img.display()),
+            ));
+        }
+        if !img.is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("CRIU image path must be a directory: {}", img.display()),
+            ));
+        }
+    } else if img.exists() && !img.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("CRIU image path must be a directory: {}", img.display()),
+        ));
+    }
+
+    if let Some(work_path) = work {
+        if !work_path.is_absolute() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "CRIU work path must be absolute",
+            ));
+        }
+        if work_path.exists() && !work_path.is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "CRIU work path must be a directory: {}",
+                    work_path.display()
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+pub fn validate_criu_image_path(path: &Path) -> io::Result<()> {
+    validate_criu_request(1, path, None, true)?;
+    Ok(())
 }

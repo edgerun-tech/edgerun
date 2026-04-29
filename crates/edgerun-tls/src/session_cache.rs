@@ -23,6 +23,7 @@ use alloc::collections::BTreeMap as HashMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
 use edgerun_rt::Mutex;
 
 /// A cached session ticket from a NewSessionTicket message.
@@ -157,8 +158,8 @@ pub fn parse_new_session_ticket(data: &[u8]) -> Option<SessionTicket> {
         return None;
     }
 
-    let lifetime = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
-    let age_add = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+    let lifetime = read_u32_be(data, 0);
+    let age_add = read_u32_be(data, 4);
 
     // Skip ticket_nonce
     let nonce_len = data[8] as usize;
@@ -167,7 +168,7 @@ pub fn parse_new_session_ticket(data: &[u8]) -> Option<SessionTicket> {
         return None;
     }
 
-    let ticket_len = u16::from_be_bytes([data[pos], data[pos + 1]]) as usize;
+    let ticket_len = read_u16_be(data, pos) as usize;
     let ticket_start = pos + 2;
     if ticket_start + ticket_len > data.len() {
         return None;

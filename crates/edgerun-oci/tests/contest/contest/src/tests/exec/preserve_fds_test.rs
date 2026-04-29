@@ -46,14 +46,17 @@ pub(crate) fn preserve_fds_test() -> TestResult {
         // child processes, causing broken pipes or EPERM errors.
         unsafe {
             command.pre_exec(move || {
-                let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+                let borrowed = BorrowedFd::borrow_raw(fd);
                 let flags = FdFlag::from_bits_truncate(
                     fcntl(borrowed, FcntlArg::F_GETFD).expect("from_bits_truncate failed"),
                 );
-                fcntl(borrowed, FcntlArg::F_SETFD(flags & !FdFlag::FD_CLOEXEC)).expect("fcntl failed");
+                fcntl(borrowed, FcntlArg::F_SETFD(flags & !FdFlag::FD_CLOEXEC))
+                    .expect("fcntl failed");
                 // Use libc dup2 since nix 0.31 dup2 requires AsFd for target
                 let ret = libc::dup2(fd, 3);
-                if ret < 0 { panic!("dup2 failed: {}", std::io::Error::last_os_error()); }
+                if ret < 0 {
+                    panic!("dup2 failed: {}", std::io::Error::last_os_error());
+                }
                 Ok(())
             });
         }

@@ -157,7 +157,6 @@ impl VirtualAddressSpace {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::proptest;
 
     #[test]
     fn test_no_relative_index_when_empty() {
@@ -173,53 +172,64 @@ mod tests {
         assert_eq!(vas.relative(2), Err(Error::RelativeIndex(2)));
     }
 
-    proptest! {
-        #[test]
-        fn test_first_insertion_without_drop(
-            ref count in 1..2200usize
-        ) {
+    #[test]
+    fn test_first_insertion_without_drop() {
+        for count in 1..2200usize {
             let mut vas = VirtualAddressSpace::default();
             vas.add();
-            (1..*count).for_each(|_| { vas.add(); });
+            (1..count).for_each(|_| {
+                vas.add();
+            });
 
-            assert_eq!(vas.relative_base(*count, count - 1), Ok(0), "{:?}", vas);
+            assert_eq!(vas.relative_base(count, count - 1), Ok(0), "{:?}", vas);
         }
+    }
 
-        #[test]
-        fn test_first_insertion_with_drop(
-            ref count in 2..2200usize
-        ) {
+    #[test]
+    fn test_first_insertion_with_drop() {
+        for count in 2..2200usize {
             let mut vas = VirtualAddressSpace::default();
             vas.add();
-            (1..*count).for_each(|_| { vas.add(); });
-            (0..*count - 1).for_each(|_| vas.mark_dropped());
+            (1..count).for_each(|_| {
+                vas.add();
+            });
+            (0..count - 1).for_each(|_| vas.mark_dropped());
 
-            assert_eq!(vas.relative_base(*count, count - 1), Err(Error::RelativeIndex(count - 1)), "{:?}", vas);
+            assert_eq!(
+                vas.relative_base(count, count - 1),
+                Err(Error::RelativeIndex(count - 1)),
+                "{:?}",
+                vas
+            );
         }
+    }
 
-        #[test]
-        fn test_last_insertion_without_drop(
-            ref count in 1..2200usize
-        ) {
+    #[test]
+    fn test_last_insertion_without_drop() {
+        for count in 1..2200usize {
             let mut vas = VirtualAddressSpace::default();
-            (1..*count).for_each(|_| { vas.add(); });
+            (1..count).for_each(|_| {
+                vas.add();
+            });
             vas.add();
 
-            assert_eq!(vas.relative_base(*count, 0), Ok(count -1),
-                       "{:?}", vas);
+            assert_eq!(vas.relative_base(count, 0), Ok(count - 1), "{:?}", vas);
         }
+    }
 
-        #[test]
-        fn test_last_insertion_with_drop(
-            ref count in 2..2200usize
-        ) {
+    #[test]
+    fn test_last_insertion_with_drop() {
+        for count in 2..2200usize {
             let mut vas = VirtualAddressSpace::default();
-            (0..*count - 1).for_each(|_| { vas.add(); });
+            (0..count - 1).for_each(|_| {
+                vas.add();
+            });
             vas.add();
-            (0..*count - 1).for_each(|_| { vas.mark_dropped(); });
+            (0..count - 1).for_each(|_| {
+                vas.mark_dropped();
+            });
 
-            assert_eq!(vas.relative_base(*count, 0), Ok(0),
-                       "{:?}", vas);
+            assert_eq!(vas.relative_base(count, 0), Ok(0), "{:?}", vas);
         }
     }
 

@@ -7,17 +7,17 @@ publish.workspace = true
 description = "HTTP/1.1, HTTP/2, and HTTP/3 with HPACK/QPACK compression"
 
 [features]
-default = ["client", "server", "http1", "http2", "static-files", "http-compression", "http3", "tls"]
-std = []
+default = []
+std = ["edgerun-quic?/std"]
 client = ["http1", "http2", "runtime", "dep:edgerun-dns", "dep:edgerun-log"]
 connection-middleware = []
 http-compression = ["dep:brotli", "dep:miniz_oxide"]
 http1 = ["runtime", "dep:edgerun-encoding"]
-http2 = ["runtime", "dep:edgerun-hpack", "dep:edgerun-log"]
+http2 = ["runtime", "dep:edgerun-dns", "dep:edgerun-hpack", "dep:edgerun-log"]
 http3 = ["client", "server", "tls", "dep:edgerun-crypto", "dep:edgerun-quic", "dep:edgerun-qpack", "dep:edgerun-encoding", "dep:edgerun-log"]
 runtime = ["dep:edgerun-rt"]
 server = ["http1", "http2", "runtime", "dep:edgerun-log"]
-static-files = ["server"]
+static-files = ["std", "server"]
 tls = ["dep:edgerun-tls"]
 
 [dependencies]
@@ -26,28 +26,24 @@ edgerun-crypto = { path = "../edgerun-crypto", default-features = false, optiona
 edgerun-rt = { path = "../edgerun-rt", optional = true }
 edgerun-log = { path = "../edgerun-log", optional = true }
 edgerun-dns = { path = "../edgerun-dns", default-features = false, optional = true }
-edgerun-encoding = { path = "../edgerun-encoding", default-features = false, features = ["alloc"], optional = true }
+edgerun-encoding = { path = "../edgerun-encoding", default-features = false, optional = true }
 edgerun-hpack = { path = "../edgerun-hpack", optional = true }
 edgerun-qpack = { path = "../edgerun-qpack", optional = true }
 edgerun-quic = { path = "../edgerun-quic", optional = true }
 miniz_oxide = { workspace = true, optional = true }
 brotli = { workspace = true, optional = true }
 
-[dev-dependencies]
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
-edgerun-json = { workspace = true }
-
 [[test]]
 name = "http3_integration"
-required-features = ["http3"]
+required-features = ["std", "http3"]
 
 [[test]]
 name = "integration_unified"
-required-features = ["tls"]
+required-features = ["std", "client", "server", "tls", "http3"]
 
 [[test]]
 name = "tls_journey"
-required-features = ["tls"]
+required-features = ["std", "client", "server", "tls"]
 
 [lints]
 workspace = true

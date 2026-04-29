@@ -58,9 +58,9 @@ where
 
         sleep(Duration::from_millis(200)).await;
 
-        if let Err(e) = f(port).await {
-            eprintln!("[{}] test failed: {}", name, e);
-        }
+        f(port)
+            .await
+            .unwrap_or_else(|e| panic!("[{}] test failed: {}", name, e));
 
         shutdown.cancel();
         let _ = server_task.await;
@@ -68,10 +68,29 @@ where
 }
 
 #[test]
-#[ignore = "HTTP/3 UDP handshake requires real networking - disabled until handshake is fully working"]
+fn test_http3_default_rejects_unverified_cert() {
+    with_server("http3_rejects_unverified_cert", |port| async move {
+        let client = HttpClient::new().version(HttpVersion::Http3);
+        let result = client.get(&format!("https://127.0.0.1:{}/", port)).await;
+        let err = result.expect_err("default HTTP/3 client must reject unverified cert");
+        assert!(
+            err.to_string()
+                .contains("Server certificate validation failed")
+                || err
+                    .to_string()
+                    .contains("Strict QUIC CertificateVerify validation is not implemented"),
+            "unexpected error: {err}"
+        );
+        Ok(())
+    });
+}
+
+#[test]
 fn test_http3_basic_get() {
     with_server("http3_basic_get", |port| async move {
-        let client = HttpClient::new().version(HttpVersion::Http3);
+        let client = HttpClient::new()
+            .version(HttpVersion::Http3)
+            .danger_accept_invalid_http3_certs(true);
         let resp = client.get(&format!("https://127.0.0.1:{}/", port)).await?;
         assert_eq!(resp.status().as_u16(), 200);
         Ok(())
@@ -79,10 +98,11 @@ fn test_http3_basic_get() {
 }
 
 #[test]
-#[ignore = "HTTP/3 UDP handshake requires real networking - disabled until handshake is fully working"]
 fn test_http3_echo_post_body() {
     with_server("http3_echo_post", |port| async move {
-        let client = HttpClient::new().version(HttpVersion::Http3);
+        let client = HttpClient::new()
+            .version(HttpVersion::Http3)
+            .danger_accept_invalid_http3_certs(true);
         let resp = client
             .post(&format!("https://127.0.0.1:{}/", port), b"hello http3")
             .await?;
@@ -94,10 +114,11 @@ fn test_http3_echo_post_body() {
 }
 
 #[test]
-#[ignore = "HTTP/3 UDP handshake requires real networking - disabled until handshake is fully working"]
 fn test_http3_multiple_requests() {
     with_server("http3_multi", |port| async move {
-        let client = HttpClient::new().version(HttpVersion::Http3);
+        let client = HttpClient::new()
+            .version(HttpVersion::Http3)
+            .danger_accept_invalid_http3_certs(true);
 
         let resp1 = client
             .get(&format!("https://127.0.0.1:{}/path1", port))
@@ -122,7 +143,9 @@ fn test_http3_multiple_requests() {
 fn test_http3_large_body() {
     with_server("http3_large", |port| async move {
         let body = vec![0xAB; 64 * 1024];
-        let client = HttpClient::new().version(HttpVersion::Http3);
+        let client = HttpClient::new()
+            .version(HttpVersion::Http3)
+            .danger_accept_invalid_http3_certs(true);
         let resp = client
             .post(&format!("https://127.0.0.1:{}/", port), body.clone())
             .await?;

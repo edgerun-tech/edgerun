@@ -1,11 +1,22 @@
 //! HTTP/3 protocol (RFC 9114)
+//!
+//! Implemented status: this module has a working same-stack HTTP/3 client and
+//! server over the repository's QUIC code for local/integration use. QUIC
+//! packet payload protection, header protection, packet number expansion, and
+//! local key-update directionality are implemented in code. It is not a
+//! production Internet HTTP/3 stack yet: strict QUIC certificate validation,
+//! full PTO/retransmission behavior, complete congestion/loss recovery
+//! integration, 0-RTT replay policy, and broad third-party interoperability
+//! remain blocked by missing implementation or validation. Test and local
+//! self-signed endpoints must opt in with
+//! `HttpClient::danger_accept_invalid_http3_certs(true)`.
 
 use alloc::string::{String, ToString};
 use core::fmt;
 
 pub mod connection;
+pub(crate) mod crypto_frame;
 pub mod frame;
-pub mod qpack;
 pub mod quic;
 pub mod server;
 pub mod settings;
@@ -13,8 +24,8 @@ pub mod stream;
 pub mod varint;
 
 pub use connection::Http3Connection;
+pub use edgerun_qpack::{QpackDecoder, QpackEncoder};
 pub use frame::Http3Frame;
-pub use qpack::{QpackDecoder, QpackEncoder};
 pub use quic::QuicConnection;
 pub use server::Http3Server;
 pub use settings::Http3Settings;

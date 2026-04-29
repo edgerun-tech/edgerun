@@ -3,6 +3,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{compiler_fence, Ordering};
+use edgerun_encoding::byteorder::read_u32_be;
 
 use crate::acpi::AcpiTpm2Info;
 use crate::traits::{FixedTpmTransport, TpmTransport};
@@ -255,8 +256,7 @@ impl CrbTpmTransport {
             for _ in 0..self.timeout_polls {
                 unsafe { read_mmio_bytes(self.response_buffer, &mut header) };
 
-                let size =
-                    u32::from_be_bytes([header[2], header[3], header[4], header[5]]) as usize;
+                let size = read_u32_be(&header, 2) as usize;
                 if (HEADER_SIZE..=self.response_buffer_size).contains(&size) {
                     break 'wait_response size;
                 }
@@ -288,8 +288,7 @@ impl CrbTpmTransport {
             for _ in 0..self.timeout_polls {
                 unsafe { read_mmio_bytes(self.response_buffer, &mut header) };
 
-                let size =
-                    u32::from_be_bytes([header[2], header[3], header[4], header[5]]) as usize;
+                let size = read_u32_be(&header, 2) as usize;
                 if (HEADER_SIZE..=self.response_buffer_size).contains(&size) {
                     break 'wait_response size;
                 }

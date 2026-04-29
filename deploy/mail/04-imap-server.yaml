@@ -9,6 +9,10 @@ spec:
   bind_address: "0.0.0.0:143"
   imaps: true
   maildir_root: /var/lib/edgerun/mail/maildirs
-  # TLS certificate from edgerun-storage credential
-  tls_cert_ref: ref+storage://mail/tls-cert
-  tls_key_ref: ref+storage://mail/tls-key
+  tls_cert: /etc/edgerun/mail/tls/fullchain.pem
+  tls_key: /etc/edgerun/mail/tls/privkey.pem
+  users:
+    - username: postmaster
+      password: change-me
+    - username: admin
+      password: change-me

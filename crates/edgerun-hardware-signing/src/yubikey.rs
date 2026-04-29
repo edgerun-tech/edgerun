@@ -2,7 +2,7 @@
 //!
 //! Gate with `feature = "yubikey"`.
 
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 use edgerun_yubikey::{
     sign_record_with_yubikey_checked, YubiKeyAssuranceLevel, YubiKeySignatureAlgorithm,
@@ -72,7 +72,13 @@ fn provider_requirements_for_yubikey(
     requirements: &HardwareValidationRequirements,
 ) -> Result<Vec<YubiKeySignatureAlgorithm>, HardwareSigningError> {
     if requirements.allowed_algorithms.is_empty() {
-        return Ok(Vec::new());
+        return Ok(vec![
+            YubiKeySignatureAlgorithm::RsaPkcs1v15Sha256,
+            YubiKeySignatureAlgorithm::RsaPssSha256,
+            YubiKeySignatureAlgorithm::EcdsaP256Sha256,
+            YubiKeySignatureAlgorithm::EcdsaP384Sha384,
+            YubiKeySignatureAlgorithm::Eddsa,
+        ]);
     }
     requirements
         .allowed_algorithms
@@ -168,6 +174,7 @@ mod tests {
     struct FakeYubiKeyCustom {
         algorithm: YubiKeySignatureAlgorithm,
         assurance: YubiKeyAssuranceLevel,
+        public_key: Vec<u8>,
     }
 
     impl YubiKeySigningKey for FakeYubiKeyCustom {
@@ -175,7 +182,7 @@ mod tests {
             Ok(YubiKeyKeyInfo {
                 slot: "9a".into(),
                 algorithm: self.algorithm.clone(),
-                public_key: vec![10, 11, 12],
+                public_key: self.public_key.clone(),
                 attestation_chain: vec![],
                 serial_number: None,
                 assurance_level: self.assurance.clone(),
@@ -246,26 +253,28 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires YubiKey hardware"]
     fn sign_record_with_yubikey_provider_success() {
         let key = FakeYubiKey;
         let req = HardwareValidationRequirements::default();
         let sig = sign_record_with_yubikey_provider(&key, &req, "test:v0:sig", b"hash").unwrap();
-        assert_eq!(sig, b"hash");
+        assert_eq!(
+            sig,
+            crate::signature_input_for_record("test:v0:sig", b"hash")
+        );
     }
 
     #[test]
-    #[ignore = "requires YubiKey hardware"]
     fn yubikey_provider_with_custom_pk() {
         let mut pk = [0u8; MESH_PUBLIC_KEY_LENGTH];
         pk[0] = 0xDD;
         let key = FakeYubiKeyCustom {
             algorithm: YubiKeySignatureAlgorithm::EcdsaP256Sha256,
             assurance: YubiKeyAssuranceLevel::HardwareBacked,
+            public_key: pk.to_vec(),
         };
         let adapter = YubiKeyHardwareKeyAdapter::new(key);
         let info = adapter.key_info().unwrap();
-        assert_eq!(info.public_key, vec![10, 11, 12]);
+        assert_eq!(info.public_key, pk.to_vec());
         assert_eq!(
             info.assurance_level,
             HardwareAssuranceLevel::IsolatedHardware

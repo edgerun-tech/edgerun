@@ -18,22 +18,24 @@ const CURRENT_ARCH: u32 = AUDIT_ARCH_X86_64;
 const CURRENT_ARCH: u32 = AUDIT_ARCH_AARCH64;
 
 mod actions;
+mod allowlist;
 mod bpf;
 mod rules;
 mod syscall;
 
-use crate::json::{OciLinuxSeccomp, OciSeccompAction};
+use crate::spec::{OciLinuxSeccomp, OciSeccompAction};
 use crate::syscalls::{
     do_seccomp, SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC,
     SECCOMP_SET_MODE_FILTER,
 };
-use bpf::{bpf_insn, bpf_long_skip};
+use bpf::{bpf_insn, bpf_insn_j, bpf_long_skip, finish_bpf_program};
 pub use rules::{build_seccomp_prog, seccomp_bpf_prog};
 use std::io;
 use std::os::raw::c_void;
 pub use syscall::syscall_nr;
 
 #[cfg(all(test, not(target_os = "none")))]
+#[path = "../../tests/unit_src/seccomp/tests.rs"]
 mod tests;
 
 /// Requires prctl(PR_SET_NO_NEW_PRIVS, 1) first.

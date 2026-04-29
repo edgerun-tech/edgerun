@@ -3,6 +3,7 @@ name = "edgerun-json"
 version.workspace = true
 edition.workspace = true
 license = "MIT OR Apache-2.0"
+publish.workspace = true
 description = "A zero-dependency JSON crate with owned, borrowed, tape, and compiled-schema fast paths"
 readme = "README.md"
 repository = "https://github.com/Sylchi/edgerun-json"
@@ -12,37 +13,10 @@ categories = ["encoding", "parser-implementations"]
 rust-version.workspace = true
 
 [features]
-default = ["alloc"]
+default = []
 std = []
-alloc = []
-indexmap = []
-raw_value = ["serde"]
-preserve_order = ["indexmap"]
-serde = ["dep:serde_crate"]
-# Enable YAML serialization/deserialization (requires serde)
-yaml = ["serde"]
-# Enable TOML serialization/deserialization (requires serde)
-toml = ["serde"]
-# Compatibility testing feature - allows using this crate as serde_json drop-in
-compat_test = []
-# Enable serde_json comparison benchmarks (pulls in serde_json from crates.io)
-serde_json_bench = ["dep:serde_json_upstream", "serde"]
-
-[dependencies]
-serde_crate = { package = "serde", version = "1", default-features = false, features = ["alloc"], optional = true }
-
-[target.'cfg(not(target_os = "none"))'.dependencies]
-serde_json_upstream = { package = "serde_json", version = "1", optional = true }
-
-[dev-dependencies]
-serde_crate = { package = "serde", version = "1", features = ["derive"] }
-serde_json_upstream = { package = "serde_json", version = "1" }
-criterion = "0.8"
-
-[[bench]]
-name = "unified"
-required-features = ["serde_json_bench"]
-harness = false
+yaml = []
+toml = []
 
 [lints]
 workspace = true
