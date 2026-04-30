@@ -546,6 +546,8 @@ pub struct SmtpServerSpec {
     pub acme_enabled: bool,
     /// ACME directory URL or preset name.
     pub acme_directory: Option<String>,
+    /// ACME challenge type: "http-01" or "dns-01".
+    pub acme_challenge: Option<String>,
     /// ACME account contact email.
     pub acme_contact_email: Option<String>,
     /// Domains to include in the ACME certificate.
@@ -1633,6 +1635,7 @@ impl_config_json_struct! {
             users: "users" => Vec<MailUserSpec>,
             catch_all_user: "catch_all_user" => String,
             acme_directory: "acme_directory" => String,
+            acme_challenge: "acme_challenge" => String,
             acme_contact_email: "acme_contact_email" => String,
             acme_domains: "acme_domains" => Vec<String>,
             acme_account_key_path: "acme_account_key_path" => String,

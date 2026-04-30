@@ -25,7 +25,7 @@ use std::process;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig};
+use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig, HttpChallengeServer};
 use edgerun_acme::{ChallengeStatus, ChallengeType, DirectoryUrl, OrderStatus};
 use edgerun_blog::{BlogConfig, BlogHandler};
 use edgerun_config::edgerun_json::JsonValue;
@@ -976,9 +976,13 @@ async fn run(
 
     for spec in &smtp_specs {
         if spec.acme_enabled {
-            let Some(dns) = dns_server.as_ref() else {
-                return Err(invalid_config("ACME DNS-01 requires at least one DnsZone"));
-            };
+            let dns =
+                match acme_challenge_method(spec)? {
+                    AcmeChallengeMethod::Dns01 => Some(dns_server.as_ref().ok_or_else(|| {
+                        invalid_config("ACME DNS-01 requires at least one DnsZone")
+                    })?),
+                    AcmeChallengeMethod::Http01 => None,
+                };
             ensure_acme_certificate(spec, dns, &zones).await?;
         }
     }
@@ -1355,6 +1359,34 @@ impl Handler for HttpsRedirectHandler {
 const DNSSEC_RESIGN_INTERVAL_SECS: u64 = 12 * 60 * 60;
 const DNSSEC_RESIGN_POLL_SECS: u64 = 60;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AcmeChallengeMethod {
+    Http01,
+    Dns01,
+}
+
+fn acme_challenge_method(spec: &SmtpServerSpec) -> io::Result<AcmeChallengeMethod> {
+    let value = spec
+        .acme_challenge
+        .as_deref()
+        .unwrap_or("dns-01")
+        .to_ascii_lowercase();
+    match value.as_str() {
+        "http" | "http-01" => Ok(AcmeChallengeMethod::Http01),
+        "dns" | "dns-01" => Ok(AcmeChallengeMethod::Dns01),
+        other => Err(invalid_config(format!(
+            "unsupported ACME challenge type: {other}"
+        ))),
+    }
+}
+
+fn acme_challenge_name(method: AcmeChallengeMethod) -> &'static str {
+    match method {
+        AcmeChallengeMethod::Http01 => "http-01",
+        AcmeChallengeMethod::Dns01 => "dns-01",
+    }
+}
+
 async fn build_dns_server(
     server_spec: Option<&DnsServerSpec>,
     zone_specs: &[DnsZoneSpec],
@@ -1709,7 +1741,7 @@ fn add_zone_record(zone: &mut DnsZone, record: &ZoneRecord, origin: &str) -> io:
 
 async fn ensure_acme_certificate(
     spec: &SmtpServerSpec,
-    dns: &Arc<DnsServer>,
+    dns: Option<&Arc<DnsServer>>,
     zones: &[DnsZoneSpec],
 ) -> io::Result<()> {
     let cert_dir = PathBuf::from(
@@ -1761,6 +1793,22 @@ async fn ensure_acme_certificate(
     client.init().await.map_err(acme_io_error)?;
     client.create_account().await.map_err(acme_io_error)?;
     let order = client.create_order(&domains).await.map_err(acme_io_error)?;
+    let challenge_method = acme_challenge_method(spec)?;
+    let http_challenges = if challenge_method == AcmeChallengeMethod::Http01 {
+        let handler = HttpChallengeServer::new(client.thumbprint());
+        let server = HttpServer::new(handler.clone())
+            .bind("0.0.0.0:80")
+            .await
+            .map_err(to_io_error)?;
+        let shutdown = CancellationToken::new();
+        let token = shutdown.clone();
+        edgerun_rt::spawn(
+            async move { server.serve_with_shutdown(token).await.map_err(to_io_error) },
+        );
+        Some((handler, shutdown))
+    } else {
+        None
+    };
 
     let mut challenge_records = Vec::new();
     for auth_url in order.authorization_urls() {
@@ -1771,35 +1819,67 @@ async fn ensure_acme_certificate(
         if authorization.status == edgerun_acme::types::AuthorizationStatus::Valid {
             continue;
         }
+        let challenge_type = match challenge_method {
+            AcmeChallengeMethod::Http01 => ChallengeType::Http01,
+            AcmeChallengeMethod::Dns01 => ChallengeType::Dns01,
+        };
         let challenge = authorization
             .challenges
             .as_deref()
             .and_then(|challenges| {
                 challenges
                     .iter()
-                    .find(|challenge| challenge.challenge_type == ChallengeType::Dns01)
+                    .find(|challenge| challenge.challenge_type == challenge_type)
             })
-            .ok_or_else(|| invalid_config("ACME authorization has no dns-01 challenge"))?;
-        let token = challenge
-            .token
-            .as_deref()
-            .ok_or_else(|| invalid_config("ACME dns-01 challenge missing token"))?;
-        let domain = authorization.identifier.value.as_str();
-        let dns_manager = client.dns_manager();
-        let dns_challenge = dns_manager.create_challenge(domain, token);
-        challenge_records.push(ZoneRecord {
-            name: dns_challenge.record_name().to_string(),
-            record_type: "TXT".to_string(),
-            ttl: Some(60),
-            value: JsonValue::String(dns_challenge.record_value().to_string()),
-        });
-        publish_acme_challenge_records(dns, zones, &challenge_records).await?;
-        edgerun_rt::sleep(Duration::from_secs(20)).await;
+            .ok_or_else(|| {
+                invalid_config(format!(
+                    "ACME authorization has no {} challenge",
+                    acme_challenge_name(challenge_method)
+                ))
+            })?;
+        let token = challenge.token.as_deref().ok_or_else(|| {
+            invalid_config(format!(
+                "ACME {} challenge missing token",
+                acme_challenge_name(challenge_method)
+            ))
+        })?;
+        match challenge_method {
+            AcmeChallengeMethod::Http01 => {
+                let Some((handler, _shutdown)) = &http_challenges else {
+                    return Err(invalid_config("ACME HTTP-01 challenge server not running"));
+                };
+                handler.add_challenge(token);
+            }
+            AcmeChallengeMethod::Dns01 => {
+                let Some(dns) = dns else {
+                    return Err(invalid_config("ACME DNS-01 requires at least one DnsZone"));
+                };
+                let domain = authorization.identifier.value.as_str();
+                let dns_manager = client.dns_manager();
+                let dns_challenge = dns_manager.create_challenge(domain, token);
+                challenge_records.push(ZoneRecord {
+                    name: dns_challenge.record_name().to_string(),
+                    record_type: "TXT".to_string(),
+                    ttl: Some(60),
+                    value: JsonValue::String(dns_challenge.record_value().to_string()),
+                });
+                publish_acme_challenge_records(dns, zones, &challenge_records).await?;
+                edgerun_rt::sleep(Duration::from_secs(20)).await;
+            }
+        }
         client
             .validate_challenge(&challenge.url)
             .await
             .map_err(acme_io_error)?;
         wait_for_challenge(&client, &challenge.url).await?;
+        if let Some((handler, _shutdown)) = &http_challenges {
+            handler.remove_challenge(token);
+        }
+    }
+    if let Some((handler, shutdown)) = &http_challenges {
+        handler.clear_all();
+        shutdown.cancel();
+        edgerun_rt::sleep(Duration::from_millis(100)).await;
     }
 
     let mut ready_order = client
