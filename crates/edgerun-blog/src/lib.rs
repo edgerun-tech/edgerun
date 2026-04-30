@@ -1006,11 +1006,7 @@ fn render_dash_blog_index(
     let mut cards = String::new();
     for post in posts {
         cards.push_str(&format!(
-            "<button class=\"dash-card dash-card-button dash-post-card\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\" data-search-card data-topic=\"{}\" data-search-text=\"{}\"><span class=\"date\">{}</span><strong>{}</strong><span>{}</span><div class=\"tags\">{}</div></button>",
-            escape_attr(&localized_path(
-                language,
-                &format!("/posts/{}.html", post.path)
-            )),
+            "<button class=\"dash-card dash-card-button dash-post-card\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\" data-search-card data-topic=\"{}\" data-search-text=\"{}\"><span class=\"date\">{}</span><strong>{}</strong><span>{}</span><div class=\"tags\">{}</div></button>",
             escape_attr(&localized_path(
                 language,
                 &format!("/posts/{}.html", post.path)
@@ -1041,13 +1037,12 @@ fn render_dash_blog_index(
         .unwrap_or_else(|| "unknown age".to_string());
 
     Ok(format!(
-        "<div class=\"dash-blog\"><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><div class=\"dash-blog-actions\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><button class=\"dash-mail-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#feed\">{}</button></div></section><section class=\"dash-code-tools\" aria-label=\"Post tools\"><label><span>{}</span><input type=\"search\" data-workspace-search-scope placeholder=\"{}\"></label>{}</section><section class=\"dash-code-summary\" aria-label=\"Build log summary\"><div><span>Posts</span><strong>{post_count}</strong></div><div><span>Topics</span><strong>{tag_count}</strong></div><div><span>Latest post</span><strong>{}</strong></div><div><span>Commits</span><strong>{}</strong></div><div class=\"summary-wide\"><span>Last commit</span><strong title=\"{}\">{}</strong></div><div><span>Age</span><strong>{}</strong></div></section><section><h2>Posts</h2><div class=\"dash-grid\">{cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching posts.</p></div>",
+        "<div class=\"dash-blog\"><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><div class=\"dash-blog-actions\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\">{}</button><button class=\"dash-mail-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\">{}</button></div></section><section class=\"dash-code-tools\" aria-label=\"Post tools\"><label><span>{}</span><input type=\"search\" data-workspace-search-scope placeholder=\"{}\"></label>{}</section><section class=\"dash-code-summary\" aria-label=\"Build log summary\"><div><span>Posts</span><strong>{post_count}</strong></div><div><span>Topics</span><strong>{tag_count}</strong></div><div><span>Latest post</span><strong>{}</strong></div><div><span>Commits</span><strong>{}</strong></div><div class=\"summary-wide\"><span>Last commit</span><strong title=\"{}\">{}</strong></div><div><span>Age</span><strong>{}</strong></div></section><section><h2>Posts</h2><div class=\"dash-grid\">{cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching posts.</p></div>",
         escape_html(language.hero_eyebrow),
         escape_html(language.title),
-        escape_attr(&localized_path(language, "/about.html")),
-        escape_attr(&localized_path(language, "/about.html")),
+        escape_attr(&localized_path(language, "/about")),
         escape_html(language.about_label),
-        escape_attr(&localized_path(language, "/feed.xml")),
+        escape_attr(&localized_path(language, "/feed")),
         escape_html(language.feed_label),
         escape_html(language.search_label),
         escape_attr(language.search_label),
@@ -1070,9 +1065,7 @@ fn render_dash_post(
     let content = link_visible_crates_for_dash(&post.html, &visible_crates);
     let related = render_dash_related_posts(language, post, posts);
     format!(
-        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article>{}</div>",
-        escape_attr(&localized_path(language, "/")),
-        escape_attr(&localized_path(language, "/")),
+        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog\">{}</button><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}{}</div></article></div>",
         escape_html(language.back_label),
         escape_attr(&post.date),
         escape_html(&post.date),
@@ -1087,9 +1080,7 @@ fn render_dash_post(
 
 fn render_dash_about(language: Language, page: &Page) -> String {
     format!(
-        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><article class=\"article\" aria-labelledby=\"page-title\"><h1 id=\"page-title\">{}</h1><p class=\"summary\">{}</p><div class=\"content\">{}</div></article></div>",
-        escape_attr(&localized_path(language, "/")),
-        escape_attr(&localized_path(language, "/")),
+        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog\">{}</button><article class=\"article\" aria-labelledby=\"page-title\"><h1 id=\"page-title\">{}</h1><p class=\"summary\">{}</p><div class=\"content\">{}</div></article></div>",
         escape_html(language.back_label),
         escape_html(&page.title),
         escape_html(&page.summary),
@@ -1100,9 +1091,7 @@ fn render_dash_about(language: Language, page: &Page) -> String {
 fn render_dash_feed(config: &BlogConfig, language: Language) -> String {
     let feed_url = absolute_url(config, &localized_path(language, "/feed.xml"));
     format!(
-        "<div class=\"dash-blog\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><span>Atom feed remains a direct machine-readable endpoint.</span><a class=\"dash-mail-button\" href=\"{}\">{}</a></section></div>",
-        escape_attr(&localized_path(language, "/")),
-        escape_attr(&localized_path(language, "/")),
+        "<div class=\"dash-blog\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog\">{}</button><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><span>Atom feed remains a direct machine-readable endpoint.</span><a class=\"dash-mail-button\" href=\"{}\">{}</a></section></div>",
         escape_html(language.back_label),
         escape_html(language.feed_label),
         escape_html(language.feed_label),
@@ -1355,8 +1344,7 @@ fn render_dash_related_posts(language: Language, post: &Post, posts: &[Post]) ->
             .map(|(_, item)| {
                 let localized = localized_path(language, &format!("/posts/{}.html", item.path));
                 format!(
-                    "<button class=\"dash-card dash-card-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\"><span class=\"date\">{}</span><strong>{}</strong><small>{}</small></button>",
-                    escape_attr(&localized),
+                    "<button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\"><span class=\"date\">{}</span><strong>{}</strong><small>{}</small></button>",
                     escape_attr(&localized),
                     escape_html(&item.date),
                     escape_html(&item.title),

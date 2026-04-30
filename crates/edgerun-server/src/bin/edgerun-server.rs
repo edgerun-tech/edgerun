@@ -1433,9 +1433,9 @@ impl Handler for SiteRouter {
     }
 }
 
-fn redirect_to_dash_surface(surface: &str) -> Response {
+fn redirect_to_dash_surface(_surface: &str) -> Response {
     Response::text(StatusCode::new(308).unwrap(), "")
-        .with_header("Location", &format!("/#{surface}"))
+        .with_header("Location", "/")
         .with_header("Cache-Control", "no-store")
         .with_header("X-Content-Type-Options", "nosniff")
 }
@@ -1453,7 +1453,7 @@ fn render_dash_blog_surface() -> String {
     render_dash_surface(
         "Build Log",
         "blog.edgerun.tech",
-        "<div class=\"dash-grid\"><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#build-log\"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#about\"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#feed\"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></button></div>",
+        "<div class=\"dash-grid\"><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog\" data-search-text=\"\"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/about\" data-search-text=\"\"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/feed\" data-search-text=\"\"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></button></div>",
     )
 }
 
@@ -1461,7 +1461,7 @@ fn render_dash_code_surface() -> String {
     render_dash_surface(
         "Code",
         "git.edgerun.tech",
-        "<div class=\"dash-grid\"><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#code\"><strong>Repositories</strong><span>Browse released source surfaces.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#code/crates\"><strong>Crate explorer</strong><span>Navigate visible crates, metadata, APIs, and relationships.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#code/source\"><strong>Source tree</strong><span>Open the public source tree directly.</span></button></div>",
+        "<div class=\"dash-grid\"><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"code\" data-surface=\"code\" hx-get=\"/surface/git\" data-search-text=\"\"><strong>Repositories</strong><span>Browse released source surfaces.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"code\" data-surface=\"code\" hx-get=\"/surface/git/crates\" data-search-text=\"\"><strong>Crate explorer</strong><span>Navigate visible crates, metadata, APIs, and relationships.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"code\" data-surface=\"code\" hx-get=\"/surface/git/source\" data-search-text=\"\"><strong>Source tree</strong><span>Open the public source tree directly.</span></button></div>",
     )
 }
 
@@ -1475,7 +1475,7 @@ fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
         DASH_BODY,
         edgerun_web_ui::THEME_TOGGLE_JS,
         edgerun_web_ui::WORKSPACE_JS,
-        DASH_JS
+        DASH_COHESIVE_JS
     );
     let fallback_modules = [
         WorkspaceModule {
@@ -2257,60 +2257,82 @@ const DASH_BODY: &str = r##"
     <header class="dash-panels-header">
       <div>
         <p class="dash-eyebrow">Edgerun Workspace</p>
-        <h1>One dashboard for all services</h1>
+        <h1>One screen. All systems.</h1>
       </div>
-      <p>Mail, build log, code, apps, and global chat live in one place.</p>
+      <p>Build log, code, mail, apps, status, and chat in one continuous dashboard.</p>
     </header>
-    <section class="dash-layout">
-      <section class="dash-panel dash-workspace">
-        <div class="dash-workspace-head">
-          <div>
-            <p class="dash-workspace-kicker">Workspace Surface</p>
-            <h2 id="dashSurfaceTitle">Build Log</h2>
-          </div>
-          <div class="dash-workspace-meta">
-            <span id="dashSurfacePath">backend: /surface/blog</span>
-          </div>
+    <section class="dash-tools-grid">
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <h2>Global status</h2>
+          <span>Live metrics</span>
         </div>
-        <nav class="dash-rail" aria-label="Workspace sections">
-          <button class="dash-tab" type="button" data-surface="build-log" aria-selected="true">Build Log</button>
-          <button class="dash-tab" type="button" data-surface="code" aria-selected="false">Code</button>
-          <button class="dash-tab" type="button" data-surface="mail" aria-selected="false">Mail</button>
-          <button class="dash-tab" type="button" data-surface="apps" aria-selected="false">Apps</button>
-        </nav>
-        <div id="dashSurfaceSlot" class="dash-surface dash-surface-slot" data-active-surface="build-log">Loading workspace…</div>
+        <div class="dash-status-inline" data-dash-status>
+          <span>sessions <strong data-status-sessions>--</strong></span>
+          <span>req/s <strong data-status-rps>--</strong></span>
+          <span>mem <strong data-status-memory>--</strong></span>
+          <span>cpu <strong data-status-cpu>--</strong></span>
+          <span>bin <strong data-status-binary>--</strong></span>
+        </div>
+        <p><button type="button" class="dash-refresh-status" data-status-refresh>Refresh</button></p>
       </section>
-      <aside class="dash-side">
-        <section class="dash-panel dash-status-card">
-          <div class="dash-panel-head">
-            <h2>Global status</h2>
-            <span>Live metrics</span>
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <h2>Global chat</h2>
+          <span>Demo room</span>
+        </div>
+        <div class="dash-chat-shell">
+          <form id="dashChatForm" class="dash-chat-form" autocomplete="off">
+            <label for="dashChatName"><span>Name</span><input id="dashChatName" required maxlength="24" placeholder="your name"></label>
+            <label for="dashChatMessage"><span>Message</span><textarea id="dashChatMessage" required maxlength="800" placeholder="Say something to everyone"></textarea></label>
+            <button id="dashChatSend" type="submit">Post</button>
+          </form>
+          <p class="dash-chat-status" id="dashChatStatus" role="status"></p>
+          <div id="dashChatLog" class="dash-chat-log"></div>
+        </div>
+      </section>
+    </section>
+    <section class="dash-workspace" aria-label="Core services workspace">
+      <article class="dash-panel dash-module" data-surface-module="build-log">
+        <div class="dash-module-head">
+          <div>
+            <p class="dash-module-kicker">Build Log</p>
+            <h2>Build Log</h2>
           </div>
-          <div class="dash-status-inline" data-dash-status>
-            <span>sessions <strong data-status-sessions>--</strong></span>
-            <span>req/s <strong data-status-rps>--</strong></span>
-            <span>mem <strong data-status-memory>--</strong></span>
-            <span>cpu <strong data-status-cpu>--</strong></span>
-            <span>bin <strong data-status-binary>--</strong></span>
+          <span id="dashSurfacePathBuildLog" class="dash-surface-path">backend: /surface/blog</span>
+        </div>
+        <div id="dashSurfaceBuildLog" class="dash-surface" data-active-surface="build-log">Loading build log…</div>
+      </article>
+      <article class="dash-panel dash-module" data-surface-module="code">
+        <div class="dash-module-head">
+          <div>
+            <p class="dash-module-kicker">Code</p>
+            <h2>Code</h2>
           </div>
-          <p><button type="button" class="dash-refresh-status" data-status-refresh>Refresh</button></p>
-        </section>
-        <section class="dash-panel dash-chat-panel">
-          <div class="dash-panel-head">
-            <h2>Global chat</h2>
-            <span>Demo room</span>
+          <span id="dashSurfacePathCode" class="dash-surface-path">backend: /surface/git</span>
+        </div>
+        <div id="dashSurfaceCode" class="dash-surface" data-active-surface="code">Loading code…</div>
+      </article>
+      <article class="dash-panel dash-module" data-surface-module="mail">
+        <div class="dash-module-head">
+          <div>
+            <p class="dash-module-kicker">Mail</p>
+            <h2>Mail</h2>
           </div>
-          <div class="dash-chat-shell">
-            <form id="dashChatForm" class="dash-chat-form" autocomplete="off">
-              <label for="dashChatName"><span>Name</span><input id="dashChatName" required maxlength="24" placeholder="your name"></label>
-              <label for="dashChatMessage"><span>Message</span><textarea id="dashChatMessage" required maxlength="800" placeholder="Say something to everyone"></textarea></label>
-              <button id="dashChatSend" type="submit">Post</button>
-            </form>
-            <p class="dash-chat-status" id="dashChatStatus" role="status"></p>
-            <div id="dashChatLog" class="dash-chat-log"></div>
+          <span id="dashSurfacePathMail" class="dash-surface-path">backend: /surface/mail</span>
+        </div>
+        <div id="dashSurfaceMail" class="dash-surface" data-active-surface="mail">Loading mail…</div>
+      </article>
+      <article class="dash-panel dash-module" data-surface-module="apps">
+        <div class="dash-module-head">
+          <div>
+            <p class="dash-module-kicker">Apps</p>
+            <h2>Apps</h2>
           </div>
-        </section>
-      </aside>
+          <span id="dashSurfacePathApps" class="dash-surface-path">backend: /surface/apps</span>
+        </div>
+        <div id="dashSurfaceApps" class="dash-surface" data-active-surface="apps">Loading apps…</div>
+      </article>
     </section>
   </section>
 </main>
@@ -2323,22 +2345,18 @@ const DASH_STYLE: &str = r#"
 .dash-panels-header p{margin:0;color:var(--muted)}
 .dash-panels-header h1{margin:8px 0 0}
 .dash-panels-header .dash-eyebrow{font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:var(--accent)}
-.dash-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
-.dash-workspace{min-height:510px}
-.dash-workspace-head{display:grid;gap:4px}
-.dash-workspace-kicker{margin:0;font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:12px;color:var(--muted)}
-.dash-workspace-head h2{margin:0}
-.dash-workspace-meta{margin-top:4px}
-.dash-side{display:grid;gap:12px;position:sticky;top:calc(var(--topbar-h) + 16px)}
+.dash-tools-grid{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:14px}
+.dash-workspace{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));align-items:start}
 .dash-panel{display:grid;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 13px 34px color-mix(in srgb,var(--text) 6%,transparent)}
 .dash-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .dash-panel-head h2{margin:0;font-size:21px}
 .dash-panel-head span{color:var(--muted);font-size:13px}
-.dash-rail{display:flex;flex-wrap:wrap;gap:8px}
-.dash-tab{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:8px 12px;border-radius:999px;font:inherit;cursor:pointer}
-.dash-tab:hover{border-color:var(--accent)}
-.dash-tab[aria-selected=true]{background:color-mix(in srgb,var(--accent) 14%,var(--panel));border-color:var(--accent);font-weight:750}
-.dash-surface{min-height:430px;max-height:560px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.dash-module-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.dash-module-head h2{margin:0}
+.dash-module-kicker{margin:0;font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:12px;color:var(--muted)}
+.dash-surface-path{font-size:12px;color:var(--muted);background:color-mix(in srgb,var(--panel) 84%,transparent);padding:4px 10px;border-radius:999px;border:1px solid var(--line);display:inline-flex}
+.dash-surface{min-height:340px;max-height:560px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.dash-surface:focus-within{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:-2px}
 .dash-surface-empty{color:var(--muted);font-size:13px}
 .dash-surface .dash-surface-empty{background:color-mix(in srgb,var(--panel) 84%,transparent);padding:10px;border:1px dashed var(--line);border-radius:8px}
 .dash-surface .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
@@ -2365,7 +2383,7 @@ const DASH_STYLE: &str = r#"
 .dash-surface .dash-stage header{border-bottom:1px solid var(--line);padding:0 0 10px;margin:0 0 10px}
 .dash-surface .dash-stage header strong{font-size:16px}
 .dash-surface .dash-stage header span{color:var(--muted)}
-.dash-surface .content .related-posts{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
+.dash-surface .content .related-posts{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
 .dash-surface .content .related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin-top:12px}
 .dash-surface .content .related-posts article{margin:0;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 88%,var(--code));padding:10px}
 .dash-surface .content .related-posts article + article{margin-top:10px}
@@ -2392,11 +2410,9 @@ const DASH_STYLE: &str = r#"
 .dash-status-inline{display:flex;flex-wrap:wrap;gap:12px 14px;margin-top:6px;color:var(--muted);font-size:12px}
 .dash-status-inline span{display:inline-flex;align-items:baseline;gap:4px}
 .dash-status-inline strong{color:var(--text);font-weight:800}
-.dash-surface .related-posts{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
-.dash-surface .related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin-top:12px}
-.dash-surface .related-posts article{margin:0}
 body{--footer-h:30px}
-@media(max-width:1000px){.dash-layout{grid-template-columns:1fr}.dash-side{position:static}}
+@media(max-width:1200px){.dash-tools-grid{grid-template-columns:1fr}}
+@media(max-width:1000px){.dash-workspace{grid-template-columns:1fr}}
 @media(max-width:760px){.dash-shell{padding:10px}.dash-shell-inner{gap:12px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
 "#;
 
@@ -2837,6 +2853,363 @@ addEventListener('hashchange', () => {
 async function initDashboard() {
   bindSurfaceLinks();
   await openFromHash();
+  await refreshChatLog();
+  wireGlobalChat();
+  refreshDashStatus();
+  setInterval(refreshDashStatus, 5000);
+  setInterval(refreshChatLog, 8000);
+}
+
+initDashboard();
+"#;
+
+const DASH_COHESIVE_JS: &str = r#"
+const DASH_SURFACES = [
+  {
+    key: 'build-log',
+    label: 'Build Log',
+    pathPrefix: '/surface/blog',
+    slotId: 'dashSurfaceBuildLog',
+    pathId: 'dashSurfacePathBuildLog',
+    fallback: 'Build log is unavailable right now.',
+  },
+  {
+    key: 'code',
+    label: 'Code',
+    pathPrefix: '/surface/git',
+    slotId: 'dashSurfaceCode',
+    pathId: 'dashSurfacePathCode',
+    fallback: 'Code surface is unavailable right now.',
+  },
+  {
+    key: 'mail',
+    label: 'Mail',
+    pathPrefix: '/surface/mail',
+    slotId: 'dashSurfaceMail',
+    pathId: 'dashSurfacePathMail',
+    fallback: 'Mail surface is unavailable right now.',
+  },
+  {
+    key: 'apps',
+    label: 'Apps',
+    pathPrefix: '/surface/apps',
+    slotId: 'dashSurfaceApps',
+    pathId: 'dashSurfacePathApps',
+    fallback: 'Apps surface is unavailable right now.',
+  },
+];
+
+function normalizeSurfacePath(path) {
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function getSurfaceForKey(key) {
+  return DASH_SURFACES.find((surface) => surface.key === key);
+}
+
+function pathToSurfaceKey(path) {
+  if (!path) {
+    return null;
+  }
+  if (path.startsWith('/surface/blog')) {
+    return 'build-log';
+  }
+  if (path.startsWith('/surface/git')) {
+    return 'code';
+  }
+  if (path.startsWith('/surface/mail')) {
+    return 'mail';
+  }
+  if (path.startsWith('/surface/apps')) {
+    return 'apps';
+  }
+  return null;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '--';
+  }
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return (value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)) + ' ' + units[unit];
+}
+
+function extractSurfaceContent(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const wrapped = doc.querySelector('#surfaceSlot .dash-surface');
+  if (wrapped) {
+    return wrapped.innerHTML;
+  }
+  return doc.querySelector('.dash-surface')?.innerHTML || html;
+}
+
+function updateSurfacePath(surface, path) {
+  const pathNode = document.getElementById(surface.pathId);
+  if (pathNode) {
+    pathNode.textContent = `backend: ${path}`;
+  }
+}
+
+async function hydrateSurface(surface, path) {
+  if (!surface) {
+    return;
+  }
+  const fallback = surface.fallback;
+  const resolvedPath = normalizeSurfacePath(path || surface.pathPrefix);
+  const slot = document.getElementById(surface.slotId);
+  if (!slot) {
+    return;
+  }
+  slot.classList.remove('dash-surface-empty');
+  try {
+    const response = await fetch(resolvedPath, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error('surface unavailable');
+    }
+    const html = await response.text();
+    slot.innerHTML = `<div class="dash-surface-content">${extractSurfaceContent(html)}</div>`;
+    updateSurfacePath(surface, resolvedPath);
+  } catch (_error) {
+    slot.textContent = fallback;
+    slot.classList.add('dash-surface-empty');
+    updateSurfacePath(surface, resolvedPath);
+  }
+  bindSurfaceSearch(slot);
+}
+
+function bindSurfaceSearch(container) {
+  const input = container.querySelector('[data-workspace-search-scope]');
+  if (!input) {
+    return;
+  }
+  const cards = [...container.querySelectorAll('[data-search-card]')];
+  const empty = container.querySelector('[data-search-empty]');
+  if (!cards.length) {
+    return;
+  }
+  const apply = () => {
+    const term = input.value.trim().toLowerCase();
+    let visible = 0;
+    for (const card of cards) {
+      const haystack = (card.getAttribute('data-search-text') || '').toLowerCase();
+      const show = term.length === 0 || haystack.includes(term);
+      card.hidden = !show;
+      if (show) {
+        visible += 1;
+      }
+    }
+    if (empty) {
+      empty.hidden = visible > 0;
+    }
+  };
+  input.addEventListener('input', apply);
+  apply();
+}
+
+function resolveSurfaceFromClickTarget(target) {
+  const raw =
+    target.getAttribute('hx-get') ||
+    target.getAttribute('href');
+  if (!raw) {
+    return null;
+  }
+  if (raw.startsWith('#')) {
+    return null;
+  }
+  if (raw.startsWith('http')) {
+    const parsed = new URL(raw, location.origin);
+    if (parsed.origin !== location.origin) {
+      return null;
+    }
+    if (!parsed.pathname.startsWith('/surface/')) {
+      return null;
+    }
+    return {
+      key: pathToSurfaceKey(parsed.pathname),
+      path: parsed.pathname,
+    };
+  }
+  if (raw.startsWith('/surface/')) {
+    return { key: pathToSurfaceKey(raw), path: raw };
+  }
+  return null;
+}
+
+function bindSurfaceLinks() {
+  document.addEventListener('click', (event) => {
+  const button = event.target.closest('[hx-get], [href], [data-surface], [data-surface-module]');
+    if (!button) {
+      return;
+    }
+    const explicit = button.getAttribute('data-surface');
+    const container = button.closest('[data-surface-module]');
+    const resolved = resolveSurfaceFromClickTarget(button);
+    if (!resolved || !resolved.path || !resolved.key) {
+      return;
+    }
+    const surface =
+      getSurfaceForKey(explicit) ||
+      (container ? getSurfaceForKey(container.getAttribute('data-surface-module')) : null) ||
+      getSurfaceForKey(resolved.key);
+    if (!surface) {
+      return;
+    }
+    event.preventDefault();
+    const resolvedPath = normalizeSurfacePath(resolved.path);
+    hydrateSurface(surface, resolvedPath);
+  });
+}
+
+async function refreshDashStatus(options = {}) {
+  try {
+    const refresh = document.querySelector('[data-status-refresh]');
+    if (refresh && options.manual) {
+      refresh.disabled = true;
+      refresh.textContent = '...';
+    }
+    const response = await fetch('/status.json', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data.ok) return;
+    const sessions = document.querySelector('[data-status-sessions]');
+    const rps = document.querySelector('[data-status-rps]');
+    const memory = document.querySelector('[data-status-memory]');
+    const cpu = document.querySelector('[data-status-cpu]');
+    const binary = document.querySelector('[data-status-binary]');
+    if (sessions) sessions.textContent = String(data.sessions);
+    if (rps) rps.textContent = (Number(data.requests_per_second) || 0).toFixed(1);
+    if (memory) memory.textContent = formatBytes(data.memory_bytes);
+    if (cpu) cpu.textContent = (Number(data.cpu_percent) || 0).toFixed(1) + '%';
+    if (binary) binary.textContent = formatBytes(data.binary_bytes);
+  } catch (_error) {
+    // no-op on status refresh failure
+  } finally {
+    const refresh = document.querySelector('[data-status-refresh]');
+    if (refresh) {
+      refresh.disabled = false;
+      refresh.textContent = 'Refresh';
+    }
+  }
+}
+
+function chatMessageTemplate(message) {
+  const safeName = String(message.name || 'Guest');
+  const safeText = String(message.message || '');
+  return `<article class="dash-chat-entry"><header class="dash-chat-meta"><span class="dash-chat-name">${escapeHtml(safeName)}</span><time>${new Date((message.at || 0) * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</time></header><p class="dash-chat-text">${escapeHtml(safeText)}</p></article>`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (match) => {
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return map[match];
+  });
+}
+
+async function refreshChatLog() {
+  const status = document.getElementById('dashChatStatus');
+  const log = document.getElementById('dashChatLog');
+  if (!log) return;
+  try {
+    const response = await fetch('/api/chat', { cache: 'no-store' });
+    if (!response.ok) {
+      if (status) status.textContent = 'Unable to load chat messages.';
+      log.innerHTML = '';
+      return;
+    }
+    const data = await response.json();
+    const messages = (data && Array.isArray(data.messages)) ? data.messages : [];
+    if (messages.length === 0) {
+      log.innerHTML = '<p class="dash-surface-empty">No messages yet.</p>';
+      if (status) {
+        status.textContent = '';
+      }
+      return;
+    }
+    log.innerHTML = messages.map(chatMessageTemplate).join('');
+    log.scrollTop = log.scrollHeight;
+  } catch (_error) {
+    if (status) status.textContent = 'Unable to load chat messages.';
+  }
+}
+
+function wireGlobalChat() {
+  const form = document.getElementById('dashChatForm');
+  const status = document.getElementById('dashChatStatus');
+  const nameInput = document.getElementById('dashChatName');
+  const messageInput = document.getElementById('dashChatMessage');
+  const submit = document.getElementById('dashChatSend');
+  if (!form || !status || !nameInput || !messageInput || !submit) return;
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    submit.textContent = 'Sending…';
+    status.textContent = '';
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          name: nameInput.value,
+          message: messageInput.value,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result || result.ok !== true) {
+        status.textContent = result?.error || 'Post failed';
+        return;
+      }
+      nameInput.value = nameInput.value.trim();
+      messageInput.value = '';
+      await refreshChatLog();
+      status.textContent = 'Posted.';
+      setTimeout(() => {
+        status.textContent = '';
+      }, 1500);
+    } catch (_error) {
+      status.textContent = 'Could not send chat message.';
+    } finally {
+      submit.disabled = false;
+      submit.textContent = 'Post';
+    }
+  });
+}
+
+addEventListener('click', (event) => {
+  const refresh = event.target.closest('[data-status-refresh]');
+  if (!refresh) return;
+  event.preventDefault();
+  refreshDashStatus({ manual: true });
+});
+
+function initSurfaceDefaults() {
+  for (const surface of DASH_SURFACES) {
+    const slot = document.getElementById(surface.slotId);
+    if (!slot) continue;
+    updateSurfacePath(surface, surface.pathPrefix);
+  }
+}
+
+async function initDashboard() {
+  initSurfaceDefaults();
+  bindSurfaceLinks();
+  await Promise.all(
+    DASH_SURFACES.map((surface) => hydrateSurface(surface, surface.pathPrefix)),
+  );
   await refreshChatLog();
   wireGlobalChat();
   refreshDashStatus();
