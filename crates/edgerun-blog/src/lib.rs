@@ -968,7 +968,7 @@ fn render_index(config: &BlogConfig, language: Language, posts: &[Post]) -> Stri
     for post in posts {
         cards.push_str(&format!(
             "<article class=\"post-card\" data-search=\"{}\"><a href=\"{}\"><span class=\"date\">{}</span><h2>{}</h2><p>{}</p><div class=\"tags\">{}</div></a></article>",
-            escape_attr(&search_blob(post)),
+            escape_attr(&dash_search_blob(post)),
             escape_attr(&localized_path(language, &format!("/posts/{}.html", post.path))),
             escape_html(&post.date),
             escape_html(&post.title),
@@ -2588,7 +2588,7 @@ fn render_dash_topic_list(language: Language, posts: &[Post]) -> String {
     }
     tags.sort_by(|left, right| left.0.cmp(&right.0));
     let mut buttons = vec![format!(
-        "<button class=\"pill-button\" type=\"button\" data-topic-filter=\"\">{} <span>{}</span></button>",
+        "<button class=\"pill-button\" type=\"button\" data-topic-filter=\"\" aria-pressed=\"true\">{} <span>{}</span></button>",
         escape_html(language.all_label),
         posts.len()
     )];
@@ -2623,6 +2623,17 @@ fn search_blob(post: &Post) -> String {
         post.author,
         post.tags.join(" "),
         post.body
+    )
+    .to_lowercase()
+}
+
+fn dash_search_blob(post: &Post) -> String {
+    format!(
+        "{} {} {} {}",
+        post.title,
+        post.summary,
+        post.author,
+        post.tags.join(" ")
     )
     .to_lowercase()
 }
