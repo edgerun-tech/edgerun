@@ -1327,7 +1327,7 @@ impl SiteRouter {
             id,
             handle: handle.clone(),
             message: message.clone(),
-            sender_key,
+            sender_key: sender_key.clone(),
             posted_at: now,
         });
         state.register_sender(&sender_key, now);
