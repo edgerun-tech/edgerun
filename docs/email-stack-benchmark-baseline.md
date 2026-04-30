@@ -8,6 +8,11 @@ tags: [email, benchmarks, release]
 
 # Email Stack Benchmark Baseline
 
+Methodology: follow `docs/benchmarks/methodology.md` for publishable benchmark
+claims. Native Edgerun results must not be presented as direct throughput
+rankings against containerized comparison stacks. Those runs are deployment-mode
+or operator-experience evidence unless all stacks use the same isolation mode.
+
 This is the working draft for the public benchmark post. The goal is to compare
 Edgerun against common self-hosted email stacks on the same host, with the same
 measurement script, and with service scope stated explicitly.

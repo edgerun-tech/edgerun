@@ -14,7 +14,7 @@ cmd="${1:-}"
 stack="${2:-}"
 
 if [ -z "$cmd" ] || [ -z "$stack" ]; then
-    echo "usage: $0 build|run|bench-smtp|bench-imap|stop|notes STACK" >&2
+    echo "usage: $0 build|config|metrics|run|bench-smtp|bench-imap|stop|notes STACK" >&2
     echo "stacks: postfix exim opensmtpd dovecot stalwart" >&2
     exit 2
 fi
@@ -97,33 +97,31 @@ RUN apt-get update \
  && useradd -m -s /usr/sbin/nologin bench \
  && mkdir -p /home/bench/Maildir/{cur,new,tmp} \
  && chown -R bench:bench /home/bench/Maildir \
+ && printf 'bench:{PLAIN}bench:1000:1000::/home/bench::\n' > /etc/dovecot/users \
  && printf '%s\n' \
+      'dovecot_config_version = 2.4.0' \
+      'dovecot_storage_version = 2.4.0' \
       'protocols = imap' \
       'listen = *' \
       'mail_driver = maildir' \
       'mail_path = ~/Maildir' \
       'auth_allow_cleartext = yes' \
       'auth_mechanisms = plain login' \
-      'passdb static {' \
-      '  driver = static' \
-      '  fields {' \
-      '    password = bench' \
-      '  }' \
+      'passdb passwd-file {' \
+      '  default_password_scheme = plain' \
+      '  auth_username_format = %{user}' \
+      '  passwd_file_path = /etc/dovecot/users' \
       '}' \
-      'userdb static {' \
-      '  driver = static' \
-      '  fields {' \
-      '    uid = bench' \
-      '    gid = bench' \
-      '    home = /home/bench' \
-      '  }' \
+      'userdb passwd-file {' \
+      '  auth_username_format = %{user}' \
+      '  passwd_file_path = /etc/dovecot/users' \
       '}' \
       'service imap-login {' \
       '  inet_listener imap {' \
       '    port = 143' \
       '  }' \
       '}' \
-      > /etc/dovecot/local.conf
+      > /etc/dovecot/dovecot.conf
 EXPOSE 143
 CMD ["dovecot", "-F"]
 EOF
@@ -264,10 +262,93 @@ EOF
     esac
 }
 
+metrics() {
+    write_containerfile
+    config_lines="$(awk '
+        /postconf -e/ { n++ }
+        /^[[:space:]]*'\''[^'\'']+'\''[[:space:]]*\\/ { n++ }
+        END { print n + 0 }
+    ' "$work/Containerfile")"
+    case "$stack" in
+        postfix)
+            cat <<EOF
+stack=postfix
+shape=smtp_mta_only
+components=1
+container_base=debian:trixie-slim
+packages=postfix,ca-certificates
+config_lines=$config_lines
+services=postfix
+ports=smtp:25
+multitenancy_note=domain and mailbox policy live in MTA maps/config; IMAP/webmail require separate components.
+EOF
+            ;;
+        exim)
+            cat <<EOF
+stack=exim
+shape=smtp_mta_only
+components=1
+container_base=debian:trixie-slim
+packages=exim4-daemon-light,ca-certificates
+config_lines=$config_lines
+services=exim
+ports=smtp:25
+multitenancy_note=flexible router/transport model, but isolated tenant policy needs careful explicit config.
+EOF
+            ;;
+        opensmtpd)
+            cat <<EOF
+stack=opensmtpd
+shape=smtp_mta_only
+components=1
+container_base=debian:trixie-slim
+packages=opensmtpd,ca-certificates
+config_lines=$config_lines
+services=smtpd
+ports=smtp:25
+multitenancy_note=readable rule model; IMAP, webmail, and tenant mailbox access remain separate.
+EOF
+            ;;
+        dovecot)
+            cat <<EOF
+stack=dovecot
+shape=imap_only
+components=1
+container_base=debian:trixie-slim
+packages=dovecot-core,dovecot-imapd,ca-certificates
+config_lines=$config_lines
+services=dovecot
+ports=imap:143
+multitenancy_note=strong mailbox component; tenant isolation depends on auth/userdb/mail location design.
+EOF
+            ;;
+        stalwart)
+            cat <<EOF
+stack=stalwart
+shape=integrated_mail_server
+components=1
+container_base=stalwartlabs/stalwart:latest
+packages=image-provided
+config_lines=$config_lines
+services=stalwart
+ports=smtp:25,imap:143,admin:8080
+multitenancy_note=integrated domain/account model; fair benchmark needs automated tenant/domain bootstrap first.
+EOF
+            ;;
+    esac
+}
+
 case "$cmd" in
     build)
         write_containerfile
         podman build $podman_build_opts -t "$image" -f "$work/Containerfile" "$work"
+        ;;
+    config)
+        write_containerfile
+        cat "$work/Containerfile"
+        ;;
+    metrics)
+        metrics
         ;;
     run)
         run_stack

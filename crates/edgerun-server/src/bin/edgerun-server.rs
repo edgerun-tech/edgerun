@@ -132,7 +132,7 @@ fn main() {
         });
 
     rt.block_on(async move {
-        if let Err(error) = run(resources, options.blog, options.git).await {
+        if let Err(error) = run(resources, options.blog, options.git, options.webmail).await {
             eprintln!("edgerun-server: {error}");
             process::exit(1);
         }
@@ -146,6 +146,7 @@ fn print_usage(program: &str) {
          usage: {program} --send-system-report --config /etc/edgerun/server/server.yaml [--report-to admin@example.com]\n\
          usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/edgerun_core [--blog-content-dir docs/blog] [--blog-static-root /srv/blog/.generated]\n\
          usage: {program} --config /etc/edgerun/server/server.yaml --git-host git.edgerun.tech --git-root /srv/git\n\
+         options: --webmail-http-bind 0.0.0.0:80 --webmail-https-bind 0.0.0.0:443\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
 }
@@ -184,6 +185,13 @@ struct ServerOptions {
     config_path: PathBuf,
     blog: Option<BlogMount>,
     git: Option<GitMount>,
+    webmail: WebmailBind,
+}
+
+#[derive(Clone)]
+struct WebmailBind {
+    http: String,
+    https: String,
 }
 
 #[derive(Clone)]
@@ -221,6 +229,8 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
     let mut git_title = "Edgerun Git".to_string();
     let mut git_description = "Code released from the Edgerun project.".to_string();
     let mut git_base_url = String::new();
+    let mut webmail_http_bind = "0.0.0.0:80".to_string();
+    let mut webmail_https_bind = "0.0.0.0:443".to_string();
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -282,6 +292,14 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
                 git_base_url = args[i + 1].trim_end_matches('/').to_string();
                 i += 1;
             }
+            "--webmail-http-bind" if i + 1 < args.len() => {
+                webmail_http_bind = args[i + 1].clone();
+                i += 1;
+            }
+            "--webmail-https-bind" if i + 1 < args.len() => {
+                webmail_https_bind = args[i + 1].clone();
+                i += 1;
+            }
             other => return Err(format!("unknown argument: {other}")),
         }
         i += 1;
@@ -328,6 +346,10 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
         config_path,
         blog,
         git,
+        webmail: WebmailBind {
+            http: webmail_http_bind,
+            https: webmail_https_bind,
+        },
     })
 }
 
@@ -883,6 +905,7 @@ async fn run(
     resources: Vec<ConfigResource>,
     blog: Option<BlogMount>,
     git: Option<GitMount>,
+    webmail_bind: WebmailBind,
 ) -> io::Result<()> {
     let mut dns_servers = Vec::new();
     let mut zones = Vec::new();
@@ -949,7 +972,7 @@ async fn run(
         let site_handler = SiteRouter::new(web_handler, blog, git);
         if tls.is_some() {
             let http = HttpServer::new(HttpsRedirectHandler::new(webmail.hostname.clone()))
-                .bind("0.0.0.0:80")
+                .bind(webmail_bind.http.clone())
                 .await
                 .map_err(to_io_error)?;
             let token = shutdown.clone();
@@ -958,7 +981,7 @@ async fn run(
             }));
         } else {
             let http = HttpServer::new(site_handler.clone())
-                .bind("0.0.0.0:80")
+                .bind(webmail_bind.http.clone())
                 .await
                 .map_err(to_io_error)?;
             let token = shutdown.clone();
@@ -970,7 +993,7 @@ async fn run(
         if let Some(tls) = tls {
             let https = HttpServer::new(site_handler)
                 .with_tls(tls)
-                .bind("0.0.0.0:443")
+                .bind(webmail_bind.https.clone())
                 .await
                 .map_err(to_io_error)?;
             let token = shutdown.clone();

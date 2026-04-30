@@ -181,12 +181,12 @@ imap_dialog() {
     exec 3<>"/dev/tcp/$host/$port"
     IFS= read -r -t "$timeout" line <&3 || return 1
     printf '%s\n' "${line%$'\r'}"
-    printf 'a001 LOGIN "%s" "%s"\r\n' "$user" "$password" >&3
-    imap_read_until_tag a001
+    printf 'a001 LOGIN %s %s\r\n' "$user" "$password" >&3
+    imap_read_until_tag a001 || return 1
     printf 'a002 LIST "" "*"\r\n' >&3
-    imap_read_until_tag a002
+    imap_read_until_tag a002 || return 1
     printf 'a003 SELECT INBOX\r\n' >&3
-    imap_read_until_tag a003
+    imap_read_until_tag a003 || return 1
     printf 'a004 LOGOUT\r\n' >&3
     imap_read_until_tag a004 >/dev/null || true
     exec 3<&-
