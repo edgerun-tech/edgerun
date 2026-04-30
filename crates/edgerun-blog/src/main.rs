@@ -94,12 +94,14 @@ fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
     }
 
     let mut root = None;
+    let mut content_dir = PathBuf::from(".");
     let mut static_root = None;
     let mut output = None;
     let mut check = false;
     let mut bind = "127.0.0.1:8088".to_string();
-    let mut title = "Edgerun Blog".to_string();
-    let mut description = "Notes from the Edgerun project.".to_string();
+    let mut title = "EdgeRun Build Log".to_string();
+    let mut description =
+        "Feature-by-feature notes on building Edgerun from its source tree.".to_string();
     let mut base_url = String::new();
 
     let mut i = first;
@@ -110,6 +112,10 @@ fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
             }
             "--root" if i + 1 < args.len() => {
                 root = Some(PathBuf::from(&args[i + 1]));
+                i += 1;
+            }
+            "--content-dir" if i + 1 < args.len() => {
+                content_dir = PathBuf::from(&args[i + 1]);
                 i += 1;
             }
             "--out" if i + 1 < args.len() => {
@@ -143,6 +149,7 @@ fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
 
     let config = BlogConfig {
         root: root.ok_or_else(|| "missing --root /path/to/git/checkout".to_string())?,
+        content_dir,
         static_root,
         bind_addr: bind,
         title,
@@ -163,9 +170,9 @@ fn parse_args(args: &[String]) -> Result<BlogCommand, String> {
 
 fn print_usage(program: &str) {
     println!(
-        "usage:\n  {program} serve --root /srv/blog --bind 127.0.0.1:8088 [--static-root /srv/blog/.generated] \\
-         [--title 'Edgerun Blog'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n  {program} generate --root /srv/blog --out /srv/blog/.generated [--check] \\
-         [--title 'Edgerun Blog'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n\n\
+        "usage:\n  {program} serve --root /srv/edgerun_core --content-dir docs/blog --bind 127.0.0.1:8088 [--static-root /srv/blog/.generated] \\
+         [--title 'EdgeRun Build Log'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n  {program} generate --root /srv/edgerun_core --content-dir docs/blog --out /srv/blog/.generated [--check] \\
+         [--title 'EdgeRun Build Log'] [--description TEXT] [--base-url https://blog.edgerun.tech]\n\n\
          The command name is optional; omitted commands default to serve."
     );
 }

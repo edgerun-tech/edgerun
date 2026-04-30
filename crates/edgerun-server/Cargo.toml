@@ -28,6 +28,7 @@ edgerun-config = { version = "0.1", path = "../edgerun-config" }
 edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, features = ["p256"] }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 edgerun-email-auth = { version = "0.1", path = "../edgerun-email-auth" }
+edgerun-git = { version = "0.1", path = "../edgerun-git" }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", features = ["std"] }
 edgerun-url = { version = "0.1", path = "../edgerun-url" }
 edgerun-dhcp = { version = "0.1", path = "../edgerun-dhcp", optional = true }

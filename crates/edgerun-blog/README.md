@@ -3,10 +3,16 @@
 `edgerun-blog` is an implemented host-only static blog server/generator for a
 Git checkout. It has no authentication and no non-Edgerun crate dependencies.
 
-The crate scans Markdown and HTML files from the configured root at request
-time, or renders the same deterministic output into a static directory for a
-Git hook. It serves a simple organized layout, a client-side search index, and
-light/dark modes.
+The crate reads Git statistics from the configured repo root and scans Markdown
+and HTML files from a configured content directory inside that checkout. It can
+render the same deterministic output into a static directory for a Git hook. It
+serves a simple organized layout, a client-side search index, and light/dark
+modes.
+
+Content is mandatory in three languages. The configured content directory must
+contain matching `en`, `th`, and `et` subdirectories. English is the default and
+keeps the root URLs; Thai is emitted under `/th/`; Estonian is emitted under
+`/et/`. Post slugs and the about page must exist in all three languages.
 
 Baseline site files are implemented in code: `/about.html`, `/favicon.svg`,
 `/robots.txt`, `/sitemap.xml`, `/opensearch.xml`, `/site.webmanifest`,
@@ -27,8 +33,8 @@ tags: [email, release]
 ```
 
 The optional about page is sourced from `about.md`, `about.markdown`, or
-`about.html` in the checkout root. Its front matter must include `title` and
-`summary`.
+`about.html` in each language directory. Its front matter must include `title`
+and `summary`.
 
 Posts are intended to live in the same Git checkout as the code. Fenced code
 blocks can carry real source pointers:
@@ -48,10 +54,11 @@ Run it with:
 
 ```bash
 cargo run -p edgerun-blog -- serve \
-  --root /srv/blog \
+  --root /srv/edgerun_core \
+  --content-dir docs/blog \
   --static-root /srv/blog/.generated \
   --bind 127.0.0.1:8088 \
-  --title "Edgerun Blog" \
+  --title "EdgeRun Build Log" \
   --base-url https://blog.edgerun.tech
 ```
 
@@ -59,9 +66,10 @@ Generate static output with:
 
 ```bash
 cargo run -p edgerun-blog -- generate \
-  --root /srv/blog \
+  --root /srv/edgerun_core \
+  --content-dir docs/blog \
   --out /path/to/blog/.generated \
-  --title "Edgerun Blog" \
+  --title "EdgeRun Build Log" \
   --base-url https://blog.edgerun.tech
 ```
 
@@ -69,7 +77,8 @@ Check committed generated output with:
 
 ```bash
 cargo run -p edgerun-blog -- generate \
-  --root /srv/blog \
+  --root /srv/edgerun_core \
+  --content-dir docs/blog \
   --out /path/to/blog/.generated \
   --base-url https://blog.edgerun.tech \
   --check

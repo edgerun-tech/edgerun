@@ -673,6 +673,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-git"
+version = "0.1.1"
+dependencies = [
+ "edgerun-http",
+ "edgerun-log",
+ "edgerun-rt",
+]
+
+[[package]]
 name = "edgerun-glob"
 version = "0.1.1"
 
@@ -1244,6 +1253,7 @@ dependencies = [
  "edgerun-email",
  "edgerun-email-auth",
  "edgerun-encoding",
+ "edgerun-git",
  "edgerun-http",
  "edgerun-log",
  "edgerun-machine-report",

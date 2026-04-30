@@ -43,6 +43,7 @@ use edgerun_email::smtp::server::{MailHandler, MaildirStore, SmtpServer, SmtpSer
 use edgerun_email::smtp::types::MailEnvelope;
 use edgerun_email::smtp::ServerLimits;
 use edgerun_encoding::base64::{standard_decode, standard_encode_wrapped};
+use edgerun_git::{GitConfig, GitHandler};
 use edgerun_http::{Handler, HttpServer, Request, Response, StatusCode};
 use edgerun_machine_report::{gather_machine_report, render_machine_report, OutputFormat};
 use edgerun_rt::CancellationToken;
@@ -131,7 +132,7 @@ fn main() {
         });
 
     rt.block_on(async move {
-        if let Err(error) = run(resources, options.blog).await {
+        if let Err(error) = run(resources, options.blog, options.git).await {
             eprintln!("edgerun-server: {error}");
             process::exit(1);
         }
@@ -143,7 +144,8 @@ fn print_usage(program: &str) {
         "usage: {program} --config /etc/edgerun/server/server.yaml\n\
          usage: {program} --health-check --config /etc/edgerun/server/server.yaml\n\
          usage: {program} --send-system-report --config /etc/edgerun/server/server.yaml [--report-to admin@example.com]\n\
-         usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/blog [--blog-static-root /srv/blog/.generated]\n\
+         usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/edgerun_core [--blog-content-dir docs/blog] [--blog-static-root /srv/blog/.generated]\n\
+         usage: {program} --config /etc/edgerun/server/server.yaml --git-host git.edgerun.tech --git-root /srv/git\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
 }
@@ -181,13 +183,24 @@ fn count_resources(resources: &[ConfigResource]) -> (usize, usize, usize, usize)
 struct ServerOptions {
     config_path: PathBuf,
     blog: Option<BlogMount>,
+    git: Option<GitMount>,
 }
 
 #[derive(Clone)]
 struct BlogMount {
     host: String,
     root: PathBuf,
+    content_dir: PathBuf,
     static_root: Option<PathBuf>,
+    title: String,
+    description: String,
+    base_url: String,
+}
+
+#[derive(Clone)]
+struct GitMount {
+    host: String,
+    root: PathBuf,
     title: String,
     description: String,
     base_url: String,
@@ -197,10 +210,17 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
     let mut config = None;
     let mut blog_host = None;
     let mut blog_root = None;
+    let mut blog_content_dir = PathBuf::from(".");
     let mut blog_static_root = None;
-    let mut blog_title = "Edgerun Blog".to_string();
-    let mut blog_description = "Notes from the Edgerun project.".to_string();
+    let mut blog_title = "EdgeRun Build Log".to_string();
+    let mut blog_description =
+        "Feature-by-feature notes on building Edgerun from its source tree.".to_string();
     let mut blog_base_url = String::new();
+    let mut git_host = None;
+    let mut git_root = None;
+    let mut git_title = "Edgerun Git".to_string();
+    let mut git_description = "Code released from the Edgerun project.".to_string();
+    let mut git_base_url = String::new();
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -222,6 +242,10 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
                 blog_root = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
             }
+            "--blog-content-dir" if i + 1 < args.len() => {
+                blog_content_dir = PathBuf::from(&args[i + 1]);
+                i += 1;
+            }
             "--blog-static-root" if i + 1 < args.len() => {
                 blog_static_root = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
@@ -238,6 +262,26 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
                 blog_base_url = args[i + 1].trim_end_matches('/').to_string();
                 i += 1;
             }
+            "--git-host" if i + 1 < args.len() => {
+                git_host = Some(args[i + 1].clone());
+                i += 1;
+            }
+            "--git-root" if i + 1 < args.len() => {
+                git_root = Some(PathBuf::from(&args[i + 1]));
+                i += 1;
+            }
+            "--git-title" if i + 1 < args.len() => {
+                git_title = args[i + 1].clone();
+                i += 1;
+            }
+            "--git-description" if i + 1 < args.len() => {
+                git_description = args[i + 1].clone();
+                i += 1;
+            }
+            "--git-base-url" if i + 1 < args.len() => {
+                git_base_url = args[i + 1].trim_end_matches('/').to_string();
+                i += 1;
+            }
             other => return Err(format!("unknown argument: {other}")),
         }
         i += 1;
@@ -250,6 +294,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
         (Some(host), Some(root)) => Some(BlogMount {
             host,
             root,
+            content_dir: blog_content_dir,
             static_root: blog_static_root,
             title: blog_title,
             description: blog_description,
@@ -263,7 +308,27 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
             );
         }
     };
-    Ok(ServerOptions { config_path, blog })
+    let git = match (git_host, git_root) {
+        (Some(host), Some(root)) => Some(GitMount {
+            host,
+            root,
+            title: git_title,
+            description: git_description,
+            base_url: git_base_url,
+        }),
+        (None, None) => None,
+        _ => {
+            return Err(
+                "--git-host and --git-root must be provided together when enabling the git explorer"
+                    .to_string(),
+            );
+        }
+    };
+    Ok(ServerOptions {
+        config_path,
+        blog,
+        git,
+    })
 }
 
 fn run_health_check_from_args(args: &[String]) -> io::Result<()> {
@@ -814,7 +879,11 @@ fn smtp_health_auth_enabled(spec: &SmtpServerSpec, imap_specs: &[ImapServerSpec]
         .any(|user| smtp_user_password(user, imap_specs).is_some())
 }
 
-async fn run(resources: Vec<ConfigResource>, blog: Option<BlogMount>) -> io::Result<()> {
+async fn run(
+    resources: Vec<ConfigResource>,
+    blog: Option<BlogMount>,
+    git: Option<GitMount>,
+) -> io::Result<()> {
     let mut dns_servers = Vec::new();
     let mut zones = Vec::new();
     let mut smtp_specs = Vec::new();
@@ -877,7 +946,7 @@ async fn run(resources: Vec<ConfigResource>, blog: Option<BlogMount>) -> io::Res
     if let Some(webmail) = build_webmail_config(&smtp_specs, &imap_specs)? {
         let tls = load_tls_from_spec(webmail.tls_cert.as_deref(), webmail.tls_key.as_deref())?;
         let web_handler = WebmailHandler::new(webmail.clone());
-        let site_handler = SiteRouter::new(web_handler, blog);
+        let site_handler = SiteRouter::new(web_handler, blog, git);
         if tls.is_some() {
             let http = HttpServer::new(HttpsRedirectHandler::new(webmail.hostname.clone()))
                 .bind("0.0.0.0:80")
@@ -947,10 +1016,12 @@ struct SiteRouter {
     webmail: WebmailHandler,
     blog_host: Option<String>,
     blog: Option<BlogHandler>,
+    git_host: Option<String>,
+    git: Option<GitHandler>,
 }
 
 impl SiteRouter {
-    fn new(webmail: WebmailHandler, blog: Option<BlogMount>) -> Self {
+    fn new(webmail: WebmailHandler, blog: Option<BlogMount>, git: Option<GitMount>) -> Self {
         let (blog_host, blog) = match blog {
             Some(blog) => {
                 let base_url = if blog.base_url.is_empty() {
@@ -960,6 +1031,7 @@ impl SiteRouter {
                 };
                 let config = BlogConfig {
                     root: blog.root,
+                    content_dir: blog.content_dir,
                     static_root: blog.static_root,
                     bind_addr: String::new(),
                     title: blog.title,
@@ -973,10 +1045,33 @@ impl SiteRouter {
             }
             None => (None, None),
         };
+        let (git_host, git) = match git {
+            Some(git) => {
+                let base_url = if git.base_url.is_empty() {
+                    format!("https://{}", git.host)
+                } else {
+                    git.base_url
+                };
+                let config = GitConfig {
+                    root: git.root,
+                    bind_addr: String::new(),
+                    title: git.title,
+                    description: git.description,
+                    base_url,
+                };
+                (
+                    Some(normalize_host(&git.host)),
+                    Some(GitHandler::new(config)),
+                )
+            }
+            None => (None, None),
+        };
         Self {
             webmail,
             blog_host,
             blog,
+            git_host,
+            git,
         }
     }
 
@@ -985,6 +1080,11 @@ impl SiteRouter {
         if self.blog_host.as_deref() == host.as_deref() {
             if let Some(blog) = &self.blog {
                 return blog.handle_sync(request);
+            }
+        }
+        if self.git_host.as_deref() == host.as_deref() {
+            if let Some(git) = &self.git {
+                return git.handle_sync(request);
             }
         }
         self.webmail.handle_sync(request)

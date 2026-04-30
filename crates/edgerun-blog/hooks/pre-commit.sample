@@ -2,22 +2,25 @@
 set -eu
 
 BLOG_REPO=${BLOG_REPO:-$(git rev-parse --show-toplevel)}
-BLOG_PUBLIC=${BLOG_PUBLIC:-$BLOG_REPO/.generated}
+BLOG_CONTENT_DIR=${BLOG_CONTENT_DIR:-docs/blog}
+BLOG_PUBLIC=${BLOG_PUBLIC:-$BLOG_REPO/$BLOG_CONTENT_DIR/.generated}
 BLOG_BINARY=${BLOG_BINARY:-edgerun-blog}
 
 "$BLOG_BINARY" generate \
   --root "$BLOG_REPO" \
+  --content-dir "$BLOG_CONTENT_DIR" \
   --out "$BLOG_PUBLIC" \
-  --title "Edgerun Blog" \
-  --description "Notes from the Edgerun project." \
+  --title "EdgeRun Build Log" \
+  --description "Feature-by-feature notes on building Edgerun from its source tree." \
   --base-url https://blog.edgerun.tech
 
 git -C "$BLOG_REPO" add .generated
 
 "$BLOG_BINARY" generate \
   --root "$BLOG_REPO" \
+  --content-dir "$BLOG_CONTENT_DIR" \
   --out "$BLOG_PUBLIC" \
-  --title "Edgerun Blog" \
-  --description "Notes from the Edgerun project." \
+  --title "EdgeRun Build Log" \
+  --description "Feature-by-feature notes on building Edgerun from its source tree." \
   --base-url https://blog.edgerun.tech \
   --check

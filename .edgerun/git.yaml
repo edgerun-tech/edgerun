@@ -1,0 +1,9 @@
+# Repo explorer publication policy for git.edgerun.tech.
+# Repositories are hidden unless visible is true. Once visible, individual
+# folders/files are released by marker files:
+# - path/to/folder/.gitvisible publishes that folder subtree
+# - path/to/file.rs.gitvisible publishes exactly that file
+visible: false
+title: Edgerun Core
+description: Code released from the Edgerun project, one feature slice at a time.
+default_ref: HEAD
