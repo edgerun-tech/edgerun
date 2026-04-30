@@ -4,7 +4,6 @@ resolver = "2"
 members = [
   "crates/edgerun-glob",
   "crates/edgerun-git",
-  "crates/edgerun-web-ui",
   "crates/edgerun-regex",
   "crates/edgerun-rt",
   "crates/edgerun-ipxe",
@@ -25,8 +24,6 @@ members = [
   "crates/edgerun-audio-liveliness",
   "crates/edgerun-biometrics",
   "crates/edgerun-blog",
-  "crates/edgerun-dash-apps",
-  "crates/edgerun-dash-templates",
   "crates/edgerun-bench",
   "crates/edgerun-bluetooth",
   "crates/edgerun-bluetooth-gatt",

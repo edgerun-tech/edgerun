@@ -149,7 +149,7 @@ export function AuthOverlay({
               >
                 Get started
               </button>
-              {hasRegistered() && (
+              { (
                 <button
                   onClick={() => setScreen("lock")}
                   className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"

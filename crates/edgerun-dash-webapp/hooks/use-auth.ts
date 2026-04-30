@@ -83,7 +83,7 @@ export function useAuth() {
             { alg: -257, type: "public-key" },  // RS256
           ],
           authenticatorSelection: {
-            authenticatorAttachment: "platform",
+            authenticatorAttachment: "cross-platform",
             userVerification: "required",
             residentKey: "preferred",
           },
@@ -150,7 +150,7 @@ export function useAuth() {
       setIsLoading(false)
       return true
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Authentication failed"
+      const msg = "Authentication failed"
       setError(msg.includes("cancel") || msg.includes("abort") ? "Fingerprint scan cancelled." : msg)
       setIsLoading(false)
       return false

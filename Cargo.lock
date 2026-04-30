@@ -391,7 +391,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-log",
  "edgerun-rt",
- "edgerun-web-ui",
 ]
 
 [[package]]
@@ -501,23 +500,6 @@ dependencies = [
  "sha2",
  "signature",
  "x25519-dalek",
-]
-
-[[package]]
-name = "edgerun-dash-apps"
-version = "0.1.1"
-dependencies = [
- "edgerun-core",
- "edgerun-encoding",
- "edgerun-proto",
-]
-
-[[package]]
-name = "edgerun-dash-templates"
-version = "0.1.1"
-dependencies = [
- "edgerun-config",
- "edgerun-web-ui",
 ]
 
 [[package]]
@@ -705,7 +687,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-log",
  "edgerun-rt",
- "edgerun-web-ui",
 ]
 
 [[package]]
@@ -1276,7 +1257,6 @@ dependencies = [
  "edgerun-blog",
  "edgerun-config",
  "edgerun-crypto",
- "edgerun-dash-templates",
  "edgerun-dhcp",
  "edgerun-dns",
  "edgerun-email",
@@ -1291,7 +1271,6 @@ dependencies = [
  "edgerun-tftp",
  "edgerun-tls",
  "edgerun-url",
- "edgerun-web-ui",
 ]
 
 [[package]]
@@ -1476,10 +1455,6 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-rt",
 ]
-
-[[package]]
-name = "edgerun-web-ui"
-version = "0.1.1"
 
 [[package]]
 name = "edgerun-wifi"
