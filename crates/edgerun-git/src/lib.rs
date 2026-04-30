@@ -421,26 +421,7 @@ impl GitHandler {
     }
 
     fn visible_repos(&self) -> io::Result<Vec<Repo>> {
-        let mut repos = Vec::new();
-        for entry in fs::read_dir(&self.config.root)? {
-            let entry = entry?;
-            if !entry.file_type()?.is_dir() {
-                continue;
-            }
-            let dir_name = entry.file_name().to_string_lossy().to_string();
-            let name = dir_name
-                .strip_suffix(".git")
-                .unwrap_or(&dir_name)
-                .to_string();
-            if !safe_repo_name(&name) {
-                continue;
-            }
-            if let Some(repo) = load_repo(name, entry.path())? {
-                repos.push(repo);
-            }
-        }
-        repos.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
-        Ok(repos)
+        visible_repos(&self.config)
     }
 }
 
@@ -1555,6 +1536,29 @@ fn is_git_repo(path: &Path) -> bool {
     path.join(".git").exists() || (path.join("objects").exists() && path.join("HEAD").exists())
 }
 
+fn visible_repos(config: &GitConfig) -> io::Result<Vec<Repo>> {
+    let mut repos = Vec::new();
+    for entry in fs::read_dir(&config.root)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let dir_name = entry.file_name().to_string_lossy().to_string();
+        let name = dir_name
+            .strip_suffix(".git")
+            .unwrap_or(&dir_name)
+            .to_string();
+        if !safe_repo_name(&name) {
+            continue;
+        }
+        if let Some(repo) = load_repo(name, entry.path())? {
+            repos.push(repo);
+        }
+    }
+    repos.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    Ok(repos)
+}
+
 fn render_template(template: &str, values: &[(&str, String)]) -> String {
     let mut rendered = template.to_string();
     for (key, value) in values {
@@ -2121,6 +2125,8 @@ fn page_shell(config: &GitConfig, title: &str, description: &str, body: &str) ->
         label: "Repositories",
     }];
     let footer = edgerun_web_ui::render_common_footer("git", &local_links, "");
+    let header_center = render_git_header_search(config);
+    let header_actions = "<nav aria-label=\"Primary\"><a href=\"https://blog.edgerun.tech/\">Blog</a></nav><nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav>";
     edgerun_web_ui::render_page(&PageShell {
         lang: "en",
         title,
@@ -2132,11 +2138,20 @@ fn page_shell(config: &GitConfig, title: &str, description: &str, body: &str) ->
         brand_href: "/",
         brand_label: "Edgerun Git home",
         brand_text: &config.title,
-        header_extra: "<nav aria-label=\"Primary\"><a href=\"https://blog.edgerun.tech/\">Blog</a></nav><nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav>",
+        header_center: &header_center,
+        header_actions,
         footer: &footer,
         body,
         script_src: Some("/app.js"),
     })
+}
+
+fn render_git_header_search(config: &GitConfig) -> String {
+    let action = visible_repos(config)
+        .ok()
+        .and_then(|repos| repos.first().map(|repo| format!("/{}/crates", repo.name)))
+        .unwrap_or_else(|| "/".to_string());
+    edgerun_web_ui::render_header_search(&action, "search", "q", "Search crates", "Search crates")
 }
 
 fn html_response(body: String) -> Response {
