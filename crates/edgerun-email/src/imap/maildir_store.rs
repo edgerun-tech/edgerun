@@ -10,11 +10,11 @@
 use crate::prelude::*;
 use std::collections::HashMap;
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, RwLock};
-use std::time::SystemTime;
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, SystemTime};
 
 use crate::imap::message::StoreAction;
 use crate::imap::server::MailStore;
@@ -40,6 +40,9 @@ pub struct MaildirImapStore {
     next_uid: AtomicU32,
     /// Deleted message tracking per user: username -> set of paths.
     deleted: Arc<RwLock<HashMap<String, Vec<String>>>>,
+    /// Cached Maildir status keyed by user. Protected by a mutex so concurrent
+    /// SELECT/STATUS calls share one directory scan per Maildir generation.
+    status_cache: Arc<Mutex<HashMap<String, CachedMailboxStatus>>>,
 }
 
 impl MaildirImapStore {
@@ -51,6 +54,7 @@ impl MaildirImapStore {
             users: Arc::new(RwLock::new(HashMap::new())),
             next_uid: AtomicU32::new(1),
             deleted: Arc::new(RwLock::new(HashMap::new())),
+            status_cache: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -72,6 +76,108 @@ impl MaildirImapStore {
         self.root.join(username)
     }
 
+    fn status_path(&self, username: &str) -> PathBuf {
+        self.inbox_path(username).join(".edgerun").join("status")
+    }
+
+    fn status_lock_path(&self, username: &str) -> PathBuf {
+        self.inbox_path(username)
+            .join(".edgerun")
+            .join("status.lock")
+    }
+
+    fn acquire_status_lock(&self, username: &str) -> io::Result<MaildirStatusLock> {
+        let dir = self.inbox_path(username).join(".edgerun");
+        fs::create_dir_all(&dir)?;
+        let path = self.status_lock_path(username);
+        for _ in 0..5000 {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(_) => return Ok(MaildirStatusLock { path }),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "timed out waiting for Maildir status lock",
+        ))
+    }
+
+    fn read_indexed_mailbox_status(&self, user: &str) -> io::Result<Option<MailboxStatus>> {
+        let Ok(text) = fs::read_to_string(self.status_path(user)) else {
+            return Ok(None);
+        };
+        let mut parts = text.split_whitespace();
+        let Some(messages) = parts.next().and_then(|v| v.parse::<u32>().ok()) else {
+            return Ok(None);
+        };
+        let Some(recent) = parts.next().and_then(|v| v.parse::<u32>().ok()) else {
+            return Ok(None);
+        };
+        let Some(uid_next) = parts.next().and_then(|v| v.parse::<u32>().ok()) else {
+            return Ok(None);
+        };
+        Ok(Some(MailboxStatus {
+            messages,
+            recent,
+            uid_next,
+            uid_validity: 1,
+            uid_not_stored: 0,
+        }))
+    }
+
+    fn write_indexed_mailbox_status(&self, user: &str, status: MailboxStatus) -> io::Result<()> {
+        let dir = self.inbox_path(user).join(".edgerun");
+        fs::create_dir_all(&dir)?;
+        let ts = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp = dir.join(format!("status.tmp.{}.{}", std::process::id(), ts));
+        {
+            let mut file = fs::File::create(&tmp)?;
+            writeln!(
+                file,
+                "{} {} {}",
+                status.messages, status.recent, status.uid_next
+            )?;
+        }
+        fs::rename(tmp, self.status_path(user))
+    }
+
+    fn update_indexed_mailbox_status<F>(&self, user: &str, update: F) -> io::Result<MailboxStatus>
+    where
+        F: FnOnce(&mut MailboxStatus),
+    {
+        let _lock = self.acquire_status_lock(user)?;
+        let mut status = match self.read_indexed_mailbox_status(user)? {
+            Some(status) => status,
+            None => self.scan_mailbox_status_for_user(user)?,
+        };
+        update(&mut status);
+        self.write_indexed_mailbox_status(user, status.clone())?;
+        self.status_cache.lock().unwrap().remove(user);
+        Ok(status)
+    }
+
+    fn ensure_indexed_mailbox_status(&self, user: &str) -> io::Result<()> {
+        if self.status_path(user).exists() {
+            return Ok(());
+        }
+        let _lock = self.acquire_status_lock(user)?;
+        if self.status_path(user).exists() {
+            return Ok(());
+        }
+        let status = self.scan_mailbox_status_for_user(user)?;
+        self.write_indexed_mailbox_status(user, status)
+    }
+
     /// List all files in a Maildir subdirectory (new/ or cur/).
     fn list_maildir_files(&self, user: &str, subdir: &str) -> io::Result<Vec<PathBuf>> {
         let dir = self.inbox_path(user).join(subdir);
@@ -87,6 +193,71 @@ impl MaildirImapStore {
         }
         files.sort();
         Ok(files)
+    }
+
+    fn maildir_modified(&self, user: &str, subdir: &str) -> io::Result<SystemTime> {
+        let dir = self.inbox_path(user).join(subdir);
+        match fs::metadata(dir) {
+            Ok(metadata) => metadata.modified(),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(std::time::UNIX_EPOCH),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn count_maildir_files(&self, user: &str, subdir: &str) -> io::Result<u32> {
+        let dir = self.inbox_path(user).join(subdir);
+        if !dir.exists() {
+            return Ok(0);
+        }
+
+        let mut count = 0;
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    fn mailbox_status_for_user(&self, user: &str) -> io::Result<MailboxStatus> {
+        if let Some(status) = self.read_indexed_mailbox_status(user)? {
+            return Ok(status);
+        }
+
+        self.scan_mailbox_status_for_user(user)
+    }
+
+    fn scan_mailbox_status_for_user(&self, user: &str) -> io::Result<MailboxStatus> {
+        let new_modified = self.maildir_modified(user, "new")?;
+        let cur_modified = self.maildir_modified(user, "cur")?;
+        let mut cache = self.status_cache.lock().unwrap();
+
+        if let Some(cached) = cache.get(user) {
+            if cached.new_modified == new_modified && cached.cur_modified == cur_modified {
+                return Ok(cached.status.clone());
+            }
+        }
+
+        let new_count = self.count_maildir_files(user, "new")?;
+        let cur_count = self.count_maildir_files(user, "cur")?;
+        let count = new_count + cur_count;
+        let status = MailboxStatus {
+            messages: count,
+            recent: new_count,
+            uid_next: count + 1,
+            uid_validity: 1,
+            uid_not_stored: 0,
+        };
+        cache.insert(
+            user.to_string(),
+            CachedMailboxStatus {
+                new_modified,
+                cur_modified,
+                status: status.clone(),
+            },
+        );
+        Ok(status)
     }
 
     /// Get all messages for a user (new + cur).
@@ -179,6 +350,23 @@ enum MessageState {
     Cur,
 }
 
+#[derive(Debug, Clone)]
+struct CachedMailboxStatus {
+    new_modified: SystemTime,
+    cur_modified: SystemTime,
+    status: MailboxStatus,
+}
+
+struct MaildirStatusLock {
+    path: PathBuf,
+}
+
+impl Drop for MaildirStatusLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
 // ===========================================================================
 // MailStore Implementation
 // ===========================================================================
@@ -211,20 +399,7 @@ impl MailStore for MaildirImapStore {
             .unwrap_or(mailbox)
             .trim_end_matches('/');
 
-        let msgs = self.all_messages(user)?;
-        let count = msgs.len();
-        let unseen = msgs
-            .iter()
-            .filter(|(_, s)| matches!(s, MessageState::New))
-            .count();
-
-        Ok(Some(MailboxStatus {
-            messages: count as u32,
-            recent: unseen as u32,
-            uid_next: (count + 1) as u32,
-            uid_validity: 1,
-            uid_not_stored: 0,
-        }))
+        Ok(Some(self.mailbox_status_for_user(user)?))
     }
 
     fn select(&self, mailbox: &str) -> io::Result<Option<Mailbox>> {
@@ -234,24 +409,13 @@ impl MailStore for MaildirImapStore {
             .unwrap_or(mailbox)
             .trim_end_matches('/');
 
-        let msgs = self.all_messages(user)?;
-        let count = msgs.len();
-        let unseen = msgs
-            .iter()
-            .filter(|(_, s)| matches!(s, MessageState::New))
-            .count();
+        let status = self.mailbox_status_for_user(user)?;
 
         Ok(Some(Mailbox {
             name: "INBOX".to_string(),
             delimiter: None,
             attributes: vec![],
-            status: Some(MailboxStatus {
-                messages: count as u32,
-                recent: unseen as u32,
-                uid_next: (count + 1) as u32,
-                uid_validity: 1,
-                uid_not_stored: 0,
-            }),
+            status: Some(status),
         }))
     }
 
@@ -291,6 +455,7 @@ impl MailStore for MaildirImapStore {
 
         let idx = (seq_num - 1) as usize;
         let (path, state) = &msgs[idx];
+        self.ensure_indexed_mailbox_status(user)?;
         let uid = self.get_uid(path);
 
         let msg = Self::parse_message(path, seq_num, uid, state)?;
@@ -370,7 +535,7 @@ impl MailStore for MaildirImapStore {
         }
 
         let idx = (seq_num - 1) as usize;
-        let (path, _state) = &msgs[idx];
+        let (path, state) = &msgs[idx];
 
         // Handle \Deleted flag
         if flags.iter().any(|f| f == "\\Deleted") {
@@ -401,7 +566,12 @@ impl MailStore for MaildirImapStore {
         {
             let filename = path.file_name().unwrap().to_string_lossy().to_string();
             let cur_path = self.inbox_path(user).join("cur").join(&filename);
-            let _ = fs::rename(path, cur_path);
+            fs::rename(path, cur_path)?;
+            if matches!(state, MessageState::New) {
+                self.update_indexed_mailbox_status(user, |status| {
+                    status.recent = status.recent.saturating_sub(1);
+                })?;
+            }
         }
 
         Ok(vec![seq_num])
@@ -603,12 +773,19 @@ impl MailStore for MaildirImapStore {
 
         let msgs = self.all_messages(user)?;
         let mut expunged = Vec::new();
+        self.ensure_indexed_mailbox_status(user)?;
 
-        for (i, (path, _state)) in msgs.iter().enumerate() {
+        let mut removed = 0u32;
+        let mut removed_recent = 0u32;
+        for (i, (path, state)) in msgs.iter().enumerate() {
             if self.is_deleted(user, path) {
                 let seq = (i + 1) as u32;
                 let path_str = path.to_string_lossy().to_string();
                 fs::remove_file(path)?;
+                removed = removed.saturating_add(1);
+                if matches!(state, MessageState::New) {
+                    removed_recent = removed_recent.saturating_add(1);
+                }
 
                 // Remove from deleted list
                 if let Some(paths) = self.deleted.write().unwrap().get_mut(user) {
@@ -617,6 +794,13 @@ impl MailStore for MaildirImapStore {
 
                 expunged.push(seq);
             }
+        }
+
+        if removed > 0 {
+            self.update_indexed_mailbox_status(user, |status| {
+                status.messages = status.messages.saturating_sub(removed);
+                status.recent = status.recent.saturating_sub(removed_recent);
+            })?;
         }
 
         Ok(expunged)
@@ -646,11 +830,16 @@ impl MailStore for MaildirImapStore {
         let tmp_path = self.inbox_path(user).join("tmp").join(&filename);
         let new_path = self.inbox_path(user).join("new").join(&filename);
 
+        self.ensure_indexed_mailbox_status(user)?;
         fs::write(&tmp_path, data)?;
         fs::rename(&tmp_path, &new_path)?;
 
-        let msgs = self.all_messages(user)?;
-        Ok(msgs.len() as u32)
+        let status = self.update_indexed_mailbox_status(user, |status| {
+            status.messages = status.messages.saturating_add(1);
+            status.recent = status.recent.saturating_add(1);
+            status.uid_next = status.uid_next.saturating_add(1);
+        })?;
+        Ok(status.messages)
     }
 
     fn copy_messages(&self, mailbox: &str, sequence: &str, _dest: &str) -> io::Result<Vec<u32>> {
@@ -717,6 +906,24 @@ mod tests {
         dir
     }
 
+    fn create_user_maildir(root: &Path, user: &str) {
+        for subdir in ["tmp", "new", "cur", ".edgerun"] {
+            fs::create_dir_all(root.join(user).join(subdir)).unwrap();
+        }
+    }
+
+    fn read_status(root: &Path, user: &str) -> MailboxStatus {
+        let text = fs::read_to_string(root.join(user).join(".edgerun").join("status")).unwrap();
+        let mut parts = text.split_whitespace();
+        MailboxStatus {
+            messages: parts.next().unwrap().parse().unwrap(),
+            recent: parts.next().unwrap().parse().unwrap(),
+            uid_next: parts.next().unwrap().parse().unwrap(),
+            uid_validity: 1,
+            uid_not_stored: 0,
+        }
+    }
+
     #[test]
     fn test_create_store() {
         let dir = test_dir("create");
@@ -762,5 +969,105 @@ mod tests {
         assert_eq!(headers.get("From").unwrap(), "sender@example.com");
         assert_eq!(headers.get("To").unwrap(), "recipient@example.com");
         assert_eq!(headers.get("Subject").unwrap(), "Test");
+    }
+
+    #[test]
+    fn test_store_seen_updates_indexed_recent_count() {
+        let dir = test_dir("store_seen_index");
+        create_user_maildir(&dir, "ken");
+        fs::write(dir.join("ken/new/msg1"), b"Subject: one\r\n\r\nbody").unwrap();
+        fs::write(dir.join("ken/new/msg2"), b"Subject: two\r\n\r\nbody").unwrap();
+        fs::write(dir.join("ken/.edgerun/status"), b"2 2 3\n").unwrap();
+
+        let store = MaildirImapStore::new(&dir).unwrap();
+        store
+            .store("ken/INBOX", "1", &StoreAction::Add, &["\\Seen".to_string()])
+            .unwrap();
+
+        let status = read_status(&dir, "ken");
+        assert_eq!(status.messages, 2);
+        assert_eq!(status.recent, 1);
+        assert_eq!(status.uid_next, 3);
+        assert!(dir.join("ken/cur/msg1").exists());
+        assert!(!dir.join("ken/new/msg1").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_append_updates_indexed_status() {
+        let dir = test_dir("append_index");
+        create_user_maildir(&dir, "ken");
+        fs::write(dir.join("ken/.edgerun/status"), b"0 0 1\n").unwrap();
+
+        let store = MaildirImapStore::new(&dir).unwrap();
+        let messages = store
+            .append(
+                "ken/INBOX",
+                Flags::default(),
+                None,
+                b"Subject: appended\r\n\r\nbody",
+            )
+            .unwrap();
+
+        let status = read_status(&dir, "ken");
+        assert_eq!(messages, 1);
+        assert_eq!(status.messages, 1);
+        assert_eq!(status.recent, 1);
+        assert_eq!(status.uid_next, 2);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_append_creates_missing_index_without_double_counting() {
+        let dir = test_dir("append_missing_index");
+        create_user_maildir(&dir, "ken");
+
+        let store = MaildirImapStore::new(&dir).unwrap();
+        let messages = store
+            .append(
+                "ken/INBOX",
+                Flags::default(),
+                None,
+                b"Subject: appended\r\n\r\nbody",
+            )
+            .unwrap();
+
+        let status = read_status(&dir, "ken");
+        assert_eq!(messages, 1);
+        assert_eq!(status.messages, 1);
+        assert_eq!(status.recent, 1);
+        assert_eq!(status.uid_next, 2);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_expunge_updates_indexed_status() {
+        let dir = test_dir("expunge_index");
+        create_user_maildir(&dir, "ken");
+        fs::write(dir.join("ken/new/msg1"), b"Subject: one\r\n\r\nbody").unwrap();
+        fs::write(dir.join("ken/.edgerun/status"), b"1 1 2\n").unwrap();
+
+        let store = MaildirImapStore::new(&dir).unwrap();
+        store
+            .store(
+                "ken/INBOX",
+                "1",
+                &StoreAction::Add,
+                &["\\Deleted".to_string()],
+            )
+            .unwrap();
+        let expunged = store.expunge("ken/INBOX").unwrap();
+
+        let status = read_status(&dir, "ken");
+        assert_eq!(expunged, vec![1]);
+        assert_eq!(status.messages, 0);
+        assert_eq!(status.recent, 0);
+        assert_eq!(status.uid_next, 2);
+        assert!(!dir.join("ken/new/msg1").exists());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

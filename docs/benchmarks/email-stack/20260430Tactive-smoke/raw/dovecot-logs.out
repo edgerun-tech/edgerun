@@ -1,0 +1,1 @@
+$ podman logs --tail 240 edgerun-email-bench-dovecot

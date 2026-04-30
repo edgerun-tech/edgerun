@@ -1,0 +1,4 @@
+$ ./scripts/benchmark-email-podman.sh notes mox
+Mox: modern integrated mail server. The benchmark harness records image,
+version, and bootstrap evidence only until quickstart/domain/account setup is
+automated reproducibly for local-only SMTP/IMAP load tests.

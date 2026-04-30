@@ -1,0 +1,13 @@
+$ timeout 300 ./scripts/benchmark-email-podman.sh build edgerun
+STEP 1/5: FROM scratch
+STEP 2/5: COPY edgerun-server /edgerun-server
+--> 3840f709bad6
+STEP 3/5: COPY server.yaml /server.yaml
+--> d77856cf1903
+STEP 4/5: EXPOSE 25 143
+--> fe418ddcdd8e
+STEP 5/5: ENTRYPOINT ["/edgerun-server", "--config", "/server.yaml"]
+COMMIT localhost/edgerun-email-bench-edgerun:latest
+--> aa2a0ee5b88f
+Successfully tagged localhost/edgerun-email-bench-edgerun:latest
+aa2a0ee5b88f36e77aac40570d70aa2d3ddf86c47744cea3fd4b16f78ad8418a

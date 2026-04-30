@@ -1,0 +1,13 @@
+$ timeout 120 env EDGERUN_EMAIL_BENCH_COUNT=10 EDGERUN_EMAIL_BENCH_CONCURRENCY=1 ./scripts/benchmark-email-podman.sh bench-smtp stalwart
+mode=smtp
+target=127.0.0.1:2525
+requested=10
+concurrency=1
+ok=10
+fail=0
+elapsed_ms=15565
+throughput_ops_per_sec=0.64
+latency_avg_ms=1556.56
+latency_p50_ms=409.979
+latency_p95_ms=5111.022
+latency_p99_ms=5111.022

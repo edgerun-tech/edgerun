@@ -1,0 +1,2 @@
+$ podman stats --no-stream --format name={{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} block={{.BlockIO}} pids={{.PIDs}} edgerun-email-bench-dovecot
+name=edgerun-email-bench-dovecot cpu=1.74% mem=5.37MB / 65.1GB net=1.09kB / 1.016kB block=0B / 21.5kB pids=4

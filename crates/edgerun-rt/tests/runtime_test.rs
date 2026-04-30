@@ -21,7 +21,11 @@ fn runtime_block_on_with_await() {
 
 #[test]
 fn runtime_join_handles_work() {
-    let rt = Builder::new_multi_thread().build().unwrap();
+    let rt = Builder::new_multi_thread()
+        .worker_threads(2)
+        .build()
+        .unwrap();
+    assert_eq!(rt.worker_count(), 2);
 
     let result = rt.block_on(async {
         let h1 = rt.spawn(async { 1 });

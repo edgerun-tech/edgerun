@@ -1,0 +1,17 @@
+$ timeout 300 ./scripts/benchmark-email-podman.sh build mox
+STEP 1/5: FROM r.xmox.nl/mox:latest
+STEP 2/5: RUN mkdir -p /data
+--> Using cache 2e7ee428be1e8ec21c2a1c3c0b91ef2c3b13143803b0c6dae814b73601394adb
+--> 2e7ee428be1e
+STEP 3/5: RUN printf '%s\n'   '#!/bin/sh'   'set -eu'   'dir=/data/localserve'   'if [ ! -f "$dir/mox.conf" ]; then'   '  mox localserve -initonly -dir "$dir" -ip 0.0.0.0'   '  awk '\''BEGIN { skip = 0 } /^\t\tJunkFilter:/ { skip = 1; next } skip && /^\t\tNoFirstTimeSenderDelay:/ { skip = 0 } !skip { print }'\'' "$dir/domains.conf" > "$dir/domains.conf.tmp"'   '  mv "$dir/domains.conf.tmp" "$dir/domains.conf"'   'fi'   'exec mox localserve -dir "$dir"'   > /usr/local/bin/run-mox-localserve  && chmod +x /usr/local/bin/run-mox-localserve
+--> Using cache dfd9ae6d57b444444fa8d69e0033396d44410d44a8f509e02be729cfaefcf95b
+--> dfd9ae6d57b4
+STEP 4/5: EXPOSE 1025 1143 1080 1443
+--> Using cache 902dfda32b15f0ec1f59258e3b922eb993d518133e0ff2b682f41166513dd42c
+--> 902dfda32b15
+STEP 5/5: CMD ["/usr/local/bin/run-mox-localserve"]
+--> Using cache 6714018b22590e0b79a673f0896c8aebfa3cfd633858883fee26e4c8e4cb43ea
+COMMIT localhost/edgerun-email-bench-mox:latest
+--> 6714018b2259
+Successfully tagged localhost/edgerun-email-bench-mox:latest
+6714018b22590e0b79a673f0896c8aebfa3cfd633858883fee26e4c8e4cb43ea

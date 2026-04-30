@@ -1,0 +1,4 @@
+$ ./scripts/benchmark-email-podman.sh versions postfix
+mail_version = 3.10.5
+ca-certificates	20250419
+postfix	3.10.5-1~deb13u1

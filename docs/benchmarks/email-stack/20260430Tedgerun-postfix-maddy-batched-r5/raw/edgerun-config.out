@@ -1,0 +1,38 @@
+$ ./scripts/benchmark-email-podman.sh config edgerun
+FROM scratch
+COPY edgerun-server /edgerun-server
+COPY server.yaml /server.yaml
+EXPOSE 25 143
+ENTRYPOINT ["/edgerun-server", "--config", "/server.yaml"]
+
+# --- server.yaml ---
+apiVersion: edgerun.io/v1alpha1
+kind: SmtpServer
+metadata:
+  name: benchmark
+spec:
+  hostname: benchmark.local
+  bind_address: "0.0.0.0:25"
+  smtps: false
+  starttls: false
+  local_domains:
+    - example.test
+  maildir_root: /data/maildirs
+  relay_enabled: false
+  users:
+    - username: bench
+      domains:
+        - example.test
+---
+apiVersion: edgerun.io/v1alpha1
+kind: ImapServer
+metadata:
+  name: benchmark
+spec:
+  hostname: benchmark.local
+  bind_address: "0.0.0.0:143"
+  imaps: false
+  maildir_root: /data/maildirs
+  users:
+    - username: bench
+      password: bench

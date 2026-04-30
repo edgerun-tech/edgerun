@@ -1,0 +1,5 @@
+command=./scripts/benchmark-email-podman.sh stop dovecot 
+status=0
+started_ms=1777525516173
+ended_ms=1777525516353
+elapsed_ms=180

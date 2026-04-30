@@ -9,19 +9,19 @@ use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
 use core::write;
 use edgerun_encoding::byteorder::{read_u16_be, read_u32_be, read_u64_be};
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_encoding::io::{Read, Write};
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::fs::File;
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::io::{Read, Write};
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::os::fd::AsRawFd;
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::path::Path;
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::thread;
 
 const NBD_MAGIC: u64 = 0x4e42444d41474943;
@@ -297,14 +297,14 @@ fn serve_selected_export<T: Read + Write>(
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub struct TcpNbdServer<B> {
     listener: TcpListener,
     backend: Arc<B>,
     export: NbdExport,
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 impl<B: BlockBackend> TcpNbdServer<B> {
     pub fn bind(
         addr: impl ToSocketAddrs,
@@ -343,13 +343,13 @@ impl<B: BlockBackend> TcpNbdServer<B> {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub struct MultiExportTcpNbdServer {
     listener: TcpListener,
     exports: Vec<NbdExportEntry>,
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 impl MultiExportTcpNbdServer {
     pub fn bind(
         addr: impl ToSocketAddrs,
@@ -375,25 +375,25 @@ impl MultiExportTcpNbdServer {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 pub struct TcpNbdServer<B> {
     _backend: core::marker::PhantomData<B>,
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 pub struct MultiExportTcpNbdServer;
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 pub fn attach_nbd(_spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
     Err(BlockError::Unsupported)
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 pub fn detach_nbd<P>(_device: P) -> Result<(), BlockError> {
     Err(BlockError::Unsupported)
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 pub fn negotiate_nbd_export<T: Read + Write>(
     _stream: &mut T,
     _export_name: &str,
@@ -401,7 +401,7 @@ pub fn negotiate_nbd_export<T: Read + Write>(
     Err(BlockError::Unsupported)
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub fn attach_nbd(spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
     let mut stream =
         TcpStream::connect((spec.host.as_str(), spec.port)).map_err(BlockError::from)?;
@@ -446,7 +446,7 @@ pub fn attach_nbd(spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub fn detach_nbd(device: impl AsRef<Path>) -> Result<(), BlockError> {
     let device = File::options()
         .read(true)
@@ -460,7 +460,7 @@ pub fn detach_nbd(device: impl AsRef<Path>) -> Result<(), BlockError> {
     Ok(())
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub fn negotiate_nbd_export(
     stream: &mut TcpStream,
     export_name: &str,
@@ -511,12 +511,12 @@ fn map_nbd_error(error: &BlockError) -> u32 {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 unsafe extern "C" {
     fn ioctl(fd: i32, request: u64, ...) -> i32;
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 fn ioctl_noarg(fd: i32, request: u64) -> Result<(), BlockError> {
     let rc = unsafe { ioctl(fd, request) };
     if rc < 0 {
@@ -526,7 +526,7 @@ fn ioctl_noarg(fd: i32, request: u64) -> Result<(), BlockError> {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 fn ioctl_with_value(fd: i32, request: u64, value: u64) -> Result<(), BlockError> {
     let rc = unsafe { ioctl(fd, request, value) };
     if rc < 0 {

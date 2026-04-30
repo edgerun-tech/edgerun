@@ -7,21 +7,21 @@ use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
 use core::{debug_assert_eq, fmt, write};
 use edgerun_encoding::byteorder::{read_u16_le, read_u32_le, read_u64_le};
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_encoding::io::{self, Read, Write};
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_rt::Mutex;
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::fs::{self, File, OpenOptions};
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::io::{self, Read, Seek, SeekFrom, Write};
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::os::unix::net::{UnixListener, UnixStream};
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::path::Path;
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::sync::Mutex;
 
 pub const BLOCK_PROTOCOL_VERSION: u16 = 1;
@@ -166,12 +166,12 @@ impl BlockBackend for MemoryBlockBackend {
     fn read_blocks(&self, lba: u64, blocks: u32, out: &mut [u8]) -> Result<(), BlockError> {
         validate_transfer(&self.info, lba, blocks, out.len())?;
         let range = byte_range(&self.info, lba, blocks)?;
-        #[cfg(not(target_os = "none"))]
+        #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
         let data = self
             .data
             .lock()
             .map_err(|_| BlockError::BackendFailure("memory backend lock poisoned".into()))?;
-        #[cfg(target_os = "none")]
+        #[cfg(any(target_os = "none", target_arch = "wasm32"))]
         let data = self.data.lock();
         out.copy_from_slice(&data[range]);
         Ok(())
@@ -183,12 +183,12 @@ impl BlockBackend for MemoryBlockBackend {
         }
         validate_transfer(&self.info, lba, blocks, input.len())?;
         let range = byte_range(&self.info, lba, blocks)?;
-        #[cfg(not(target_os = "none"))]
+        #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
         let mut data = self
             .data
             .lock()
             .map_err(|_| BlockError::BackendFailure("memory backend lock poisoned".into()))?;
-        #[cfg(target_os = "none")]
+        #[cfg(any(target_os = "none", target_arch = "wasm32"))]
         let mut data = self.data.lock();
         data[range].copy_from_slice(input);
         Ok(())
@@ -204,12 +204,12 @@ impl BlockBackend for MemoryBlockBackend {
         }
         let len = checked_len_bytes(&self.info, blocks)?;
         let range = byte_range(&self.info, lba, blocks)?;
-        #[cfg(not(target_os = "none"))]
+        #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
         let mut data = self
             .data
             .lock()
             .map_err(|_| BlockError::BackendFailure("memory backend lock poisoned".into()))?;
-        #[cfg(target_os = "none")]
+        #[cfg(any(target_os = "none", target_arch = "wasm32"))]
         let mut data = self.data.lock();
         data[range].fill(0);
         debug_assert_eq!(len, checked_len_bytes(&self.info, blocks).unwrap_or(0));
@@ -221,14 +221,14 @@ impl BlockBackend for MemoryBlockBackend {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 #[derive(Debug)]
 pub struct FileBlockBackend {
     info: BlockDeviceInfo,
     file: Mutex<File>,
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 impl FileBlockBackend {
     pub fn open(
         path: impl AsRef<Path>,
@@ -268,7 +268,7 @@ impl FileBlockBackend {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 impl BlockBackend for FileBlockBackend {
     fn info(&self) -> BlockDeviceInfo {
         self.info.clone()
@@ -645,7 +645,7 @@ impl<T: Read + Write> BlockClient<T> {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 impl BlockClient<UnixStream> {
     pub fn connect_unix(path: impl AsRef<Path>) -> Result<Self, BlockError> {
         let stream = UnixStream::connect(path).map_err(BlockError::from)?;
@@ -653,7 +653,7 @@ impl BlockClient<UnixStream> {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 impl BlockClient<TcpStream> {
     pub fn connect_tcp(addr: impl ToSocketAddrs) -> Result<Self, BlockError> {
         let stream = TcpStream::connect(addr).map_err(BlockError::from)?;
@@ -693,13 +693,13 @@ impl<T: Read + Write, B: BlockBackend> BlockServer<T, B> {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub struct UnixBlockServer<B> {
     listener: UnixListener,
     backend: Arc<B>,
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 impl<B: BlockBackend> UnixBlockServer<B> {
     pub fn bind(path: impl AsRef<Path>, backend: B) -> Result<Self, BlockError> {
         Self::bind_shared(path, Arc::new(backend))
@@ -731,7 +731,7 @@ impl<B: BlockBackend> UnixBlockServer<B> {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 impl<B> Drop for UnixBlockServer<B> {
     fn drop(&mut self) {
         if let Ok(addr) = self.listener.local_addr() {
@@ -742,13 +742,13 @@ impl<B> Drop for UnixBlockServer<B> {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub struct TcpBlockServer<B> {
     listener: TcpListener,
     backend: Arc<B>,
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 impl<B: BlockBackend> TcpBlockServer<B> {
     pub fn bind(addr: impl ToSocketAddrs, backend: B) -> Result<Self, BlockError> {
         Self::bind_shared(addr, Arc::new(backend))
@@ -776,23 +776,23 @@ impl<B: BlockBackend> TcpBlockServer<B> {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 #[derive(Debug)]
 pub struct FileBlockBackend;
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 impl FileBlockBackend {
     pub fn open<P>(_path: P, _block_size: u32, _readonly: bool) -> Result<Self, BlockError> {
         Err(BlockError::Unsupported)
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 pub struct UnixBlockServer<B> {
     _backend: core::marker::PhantomData<B>,
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 pub struct TcpBlockServer<B> {
     _backend: core::marker::PhantomData<B>,
 }
@@ -815,6 +815,22 @@ pub fn send_response<W: Write>(writer: &mut W, response: &BlockResponse) -> Resu
 pub fn receive_response<R: Read>(reader: &mut R) -> Result<BlockResponse, BlockError> {
     let payload = read_frame(reader)?;
     decode_response(&payload)
+}
+
+pub fn encode_request_frame(request: &BlockRequest) -> Result<Vec<u8>, BlockError> {
+    frame_payload(&encode_request(request)?)
+}
+
+pub fn decode_request_frame(frame: &[u8]) -> Result<BlockRequest, BlockError> {
+    decode_request(&decode_frame(frame)?)
+}
+
+pub fn encode_response_frame(response: &BlockResponse) -> Result<Vec<u8>, BlockError> {
+    frame_payload(&encode_response(response)?)
+}
+
+pub fn decode_response_frame(frame: &[u8]) -> Result<BlockResponse, BlockError> {
+    decode_response(&decode_frame(frame)?)
 }
 
 pub fn checked_len_bytes(info: &BlockDeviceInfo, blocks: u32) -> Result<usize, BlockError> {
@@ -891,13 +907,18 @@ fn byte_range(
 }
 
 fn write_frame<W: Write>(writer: &mut W, payload: &[u8]) -> Result<(), BlockError> {
+    let frame = frame_payload(payload)?;
+    writer.write_all(&frame).map_err(BlockError::from)?;
+    writer.flush().map_err(BlockError::from)
+}
+
+fn frame_payload(payload: &[u8]) -> Result<Vec<u8>, BlockError> {
     let len = u32::try_from(payload.len())
         .map_err(|_| BlockError::ProtocolError("frame too large to encode".into()))?;
-    writer
-        .write_all(&len.to_le_bytes())
-        .map_err(BlockError::from)?;
-    writer.write_all(payload).map_err(BlockError::from)?;
-    writer.flush().map_err(BlockError::from)
+    let mut frame = Vec::with_capacity(4 + payload.len());
+    frame.extend_from_slice(&len.to_le_bytes());
+    frame.extend_from_slice(payload);
+    Ok(frame)
 }
 
 fn read_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, BlockError> {
@@ -924,6 +945,25 @@ fn read_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, BlockError> {
         }
     })?;
     Ok(payload)
+}
+
+fn decode_frame(frame: &[u8]) -> Result<Vec<u8>, BlockError> {
+    if frame.len() < 4 {
+        return Err(BlockError::ProtocolError("truncated frame header".into()));
+    }
+    let len = read_u32_le(frame, 0) as usize;
+    if len > MAX_FRAME_SIZE {
+        return Err(BlockError::ProtocolError(
+            "frame exceeds maximum size".into(),
+        ));
+    }
+    let end = 4_usize
+        .checked_add(len)
+        .ok_or_else(|| BlockError::ProtocolError("frame length overflow".into()))?;
+    if frame.len() != end {
+        return Err(BlockError::ProtocolError("frame length mismatch".into()));
+    }
+    Ok(frame[4..].to_vec())
 }
 
 fn encode_request(request: &BlockRequest) -> Result<Vec<u8>, BlockError> {
@@ -1340,6 +1380,24 @@ mod tests {
         let encoded = encode_response(&response).unwrap();
         let decoded = decode_response(&encoded).unwrap();
         assert_eq!(decoded, response);
+    }
+
+    #[test]
+    fn framed_request_response_roundtrip() {
+        let request = BlockRequest::Read {
+            request_id: 8,
+            lba: 1,
+            blocks: 1,
+        };
+        let request_frame = encode_request_frame(&request).unwrap();
+        assert_eq!(decode_request_frame(&request_frame).unwrap(), request);
+
+        let response = BlockResponse::ReadResult {
+            request_id: 8,
+            data: vec![0x88; 512],
+        };
+        let response_frame = encode_response_frame(&response).unwrap();
+        assert_eq!(decode_response_frame(&response_frame).unwrap(), response);
     }
 
     #[test]

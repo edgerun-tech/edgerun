@@ -93,6 +93,15 @@ find "$raw" -maxdepth 1 -name '*-metrics.out' -type f -print | sort | while IFS=
         "$stack" "$shape" "$components" "$base" "$packages" "$config_lines" "$services" "$ports"
 done
 
+printf '\n## Versions\n\n'
+find "$raw" -maxdepth 1 -name '*-versions.out' -type f -print | sort | while IFS= read -r file; do
+    stack="$(basename "$file" -versions.out)"
+    printf '### %s\n\n' "$stack"
+    printf '```text\n'
+    awk '$0 !~ /^\$/ { print }' "$file"
+    printf '```\n\n'
+done
+
 printf '\n## Images And Timing\n\n'
 printf '| Stack | Image bytes | Build ms | Run ms |\n'
 printf '| --- | ---: | ---: | ---: |\n'

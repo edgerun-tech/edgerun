@@ -9,7 +9,8 @@ fn ebpf_insn_is_8_bytes() {
 #[test]
 fn build_device_bpf_prog_single_rule() {
     let rules = vec![OciLinuxDeviceCgroup {
-        ns_type: "c".into(),
+        allow: Some(true),
+        ns_type: Some("c".into()),
         major: Some(1),
         minor: Some(3),
         access: Some("rwm".into()),
@@ -23,7 +24,8 @@ fn build_device_bpf_prog_single_rule() {
 #[test]
 fn build_device_bpf_prog_all_wildcards() {
     let rules = vec![OciLinuxDeviceCgroup {
-        ns_type: "a".into(),
+        allow: Some(true),
+        ns_type: Some("a".into()),
         major: None,
         minor: None,
         access: None,
@@ -38,13 +40,15 @@ fn build_device_bpf_prog_all_wildcards() {
 fn build_device_bpf_prog_multiple_rules() {
     let rules = vec![
         OciLinuxDeviceCgroup {
-            ns_type: "c".into(),
+            allow: Some(true),
+            ns_type: Some("c".into()),
             major: Some(1),
             minor: Some(3),
             access: Some("rw".into()),
         },
         OciLinuxDeviceCgroup {
-            ns_type: "b".into(),
+            allow: Some(true),
+            ns_type: Some("b".into()),
             major: Some(8),
             minor: None,
             access: Some("rwm".into()),
@@ -58,7 +62,8 @@ fn build_device_bpf_prog_multiple_rules() {
 #[test]
 fn build_device_bpf_prog_access_check() {
     let rules = vec![OciLinuxDeviceCgroup {
-        ns_type: "c".into(),
+        allow: Some(true),
+        ns_type: Some("c".into()),
         major: Some(1),
         minor: Some(5),
         access: Some("r".into()),

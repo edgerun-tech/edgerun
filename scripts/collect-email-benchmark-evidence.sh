@@ -43,7 +43,7 @@ if [ -x ./scripts/benchmark-email-stack.sh ]; then
     run_capture edgerun-live-stack ./scripts/benchmark-email-stack.sh --local
 fi
 
-for stack in postfix exim opensmtpd dovecot stalwart; do
+for stack in postfix opensmtpd dovecot maddy mox stalwart; do
     run_capture "$stack-notes" ./scripts/benchmark-email-podman.sh notes "$stack"
     run_capture "$stack-image" podman image inspect "localhost/edgerun-email-bench-$stack:latest" \
         --format '{{.Id}} {{.Created}} {{.Size}}'
@@ -60,6 +60,22 @@ for stack in postfix exim opensmtpd dovecot stalwart; do
             run_capture "$stack-logs" podman logs --tail 200 "edgerun-email-bench-$stack"
             run_capture "$stack-stop" ./scripts/benchmark-email-podman.sh stop "$stack"
             ;;
+        mox)
+            run_capture "$stack-run" ./scripts/benchmark-email-podman.sh run "$stack"
+            sleep 2
+            run_capture "$stack-ps" podman ps --filter "name=edgerun-email-bench-$stack" \
+                --format '{{.Names}} {{.Status}} {{.Ports}}'
+            run_capture "$stack-stats" podman stats --no-stream --format \
+                'name={{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} block={{.BlockIO}} pids={{.PIDs}}'
+            run_capture "$stack-smtp" env EDGERUN_EMAIL_BENCH_COUNT="${EDGERUN_EMAIL_BENCH_MOX_SMTP_COUNT:-100}" \
+                EDGERUN_EMAIL_BENCH_CONCURRENCY="${EDGERUN_EMAIL_BENCH_MOX_CONCURRENCY:-8}" \
+                ./scripts/benchmark-email-podman.sh bench-smtp "$stack"
+            run_capture "$stack-imap" env EDGERUN_EMAIL_BENCH_COUNT="${EDGERUN_EMAIL_BENCH_MOX_IMAP_COUNT:-100}" \
+                EDGERUN_EMAIL_BENCH_CONCURRENCY="${EDGERUN_EMAIL_BENCH_MOX_CONCURRENCY:-8}" \
+                ./scripts/benchmark-email-podman.sh bench-imap "$stack"
+            run_capture "$stack-logs" podman logs --tail 200 "edgerun-email-bench-$stack"
+            run_capture "$stack-stop" ./scripts/benchmark-email-podman.sh stop "$stack"
+            ;;
         stalwart)
             run_capture "$stack-run" ./scripts/benchmark-email-podman.sh run "$stack"
             sleep 5
@@ -67,6 +83,12 @@ for stack in postfix exim opensmtpd dovecot stalwart; do
                 --format '{{.Names}} {{.Status}} {{.Ports}}'
             run_capture "$stack-stats" podman stats --no-stream --format \
                 'name={{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} block={{.BlockIO}} pids={{.PIDs}}'
+            run_capture "$stack-smtp" env EDGERUN_EMAIL_BENCH_COUNT="${EDGERUN_EMAIL_BENCH_STALWART_SMTP_COUNT:-10}" \
+                EDGERUN_EMAIL_BENCH_CONCURRENCY="${EDGERUN_EMAIL_BENCH_STALWART_CONCURRENCY:-2}" \
+                ./scripts/benchmark-email-podman.sh bench-smtp "$stack"
+            run_capture "$stack-imap" env EDGERUN_EMAIL_BENCH_COUNT="${EDGERUN_EMAIL_BENCH_STALWART_IMAP_COUNT:-100}" \
+                EDGERUN_EMAIL_BENCH_CONCURRENCY="${EDGERUN_EMAIL_BENCH_STALWART_CONCURRENCY:-2}" \
+                ./scripts/benchmark-email-podman.sh bench-imap "$stack"
             run_capture "$stack-logs" podman logs --tail 200 "edgerun-email-bench-$stack"
             run_capture "$stack-stop" ./scripts/benchmark-email-podman.sh stop "$stack"
             ;;
@@ -95,8 +117,9 @@ Protocol workload:
   concurrency $concurrency, recipient bench@example.test.
 - IMAP: localhost high port 1143, $count login/list/select/logout sessions,
   concurrency $concurrency, user bench.
-- Stalwart: image/startup evidence only in this capture until first-run
-  domain/account/anti-relay configuration is automated.
+- Mox: localserve SMTP/IMAP evidence using mox@localhost; this is local
+  development/test mode, not production quickstart evidence.
+- Stalwart: automated v0.16 bootstrap/setup evidence plus SMTP/IMAP smoke.
 
 All raw command outputs are under \`raw/\`. stderr is stored next to stdout with
 the same base name and an \`.err\` suffix.

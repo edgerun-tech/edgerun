@@ -1,0 +1,2 @@
+$ podman ps --filter name=edgerun-email-bench-exim --format {{.Names}} {{.Status}} {{.Ports}}
+edgerun-email-bench-exim Up 2 seconds 127.0.0.1:2525->25/tcp

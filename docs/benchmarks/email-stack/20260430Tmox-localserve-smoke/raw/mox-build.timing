@@ -1,0 +1,5 @@
+command=./scripts/benchmark-email-podman.sh build mox 
+status=0
+started_ms=1777523738421
+ended_ms=1777523738607
+elapsed_ms=186

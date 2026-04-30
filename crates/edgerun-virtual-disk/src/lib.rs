@@ -1,12 +1,12 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 extern crate std;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub mod image;
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
 pub mod image {
     use alloc::string::{String, ToString};
     use core::{fmt, write};
@@ -141,6 +141,7 @@ pub use nbd::{
     NbdExportEntry, TcpNbdServer,
 };
 pub use remote::{
+    decode_request_frame, decode_response_frame, encode_request_frame, encode_response_frame,
     handle_request, send_request, send_response, validate_range, BlockBackend, BlockClient,
     BlockDeviceInfo, BlockError, BlockRequest, BlockResponse, BlockServer, FileBlockBackend,
     MemoryBlockBackend, RequestId, TcpBlockServer, UnixBlockServer, BLOCK_PROTOCOL_VERSION,

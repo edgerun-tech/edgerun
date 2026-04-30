@@ -1,0 +1,17 @@
+timestamp_ms stats
+1777523741084 name=edgerun-email-bench-mox cpu=2.66% mem=18.14MB / 65.1GB net=2.008kB / 1.49kB block=0B / 29.18kB pids=17
+1777523741607 name=edgerun-email-bench-mox cpu=11.52% mem=28.91MB / 65.1GB net=30.13kB / 20.58kB block=0B / 2.111MB pids=22
+1777523742131 name=edgerun-email-bench-mox cpu=19.90% mem=30.11MB / 65.1GB net=69.41kB / 45.95kB block=0B / 4.849MB pids=22
+1777523742655 name=edgerun-email-bench-mox cpu=20.70% mem=28.76MB / 65.1GB net=85.56kB / 56.93kB block=0B / 6.14MB pids=22
+1777523743178 name=edgerun-email-bench-mox cpu=18.23% mem=27.88MB / 65.1GB net=87.14kB / 58.11kB block=0B / 6.159MB pids=22
+1777523743700 name=edgerun-email-bench-mox cpu=16.87% mem=27.58MB / 65.1GB net=92.42kB / 61.93kB block=0B / 6.366MB pids=22
+1777523744225 name=edgerun-email-bench-mox cpu=15.19% mem=27.42MB / 65.1GB net=92.42kB / 61.93kB block=0B / 6.366MB pids=22
+1777523744747 name=edgerun-email-bench-mox cpu=13.81% mem=27.42MB / 65.1GB net=92.42kB / 62kB block=0B / 6.366MB pids=22
+1777523745272 name=edgerun-email-bench-mox cpu=12.66% mem=27.16MB / 65.1GB net=92.42kB / 62kB block=0B / 6.366MB pids=22
+1777523745798 name=edgerun-email-bench-mox cpu=11.69% mem=27.15MB / 65.1GB net=92.42kB / 62kB block=0B / 6.366MB pids=22
+1777523746324 name=edgerun-email-bench-mox cpu=10.86% mem=26.88MB / 65.1GB net=92.42kB / 62kB block=0B / 6.366MB pids=22
+1777523746848 name=edgerun-email-bench-mox cpu=10.13% mem=26.88MB / 65.1GB net=92.42kB / 62kB block=0B / 6.366MB pids=22
+1777523747373 name=edgerun-email-bench-mox cpu=11.37% mem=35.73MB / 65.1GB net=100.7kB / 67.7kB block=0B / 6.582MB pids=22
+1777523747899 name=edgerun-email-bench-mox cpu=15.12% mem=31.67MB / 65.1GB net=142.8kB / 95.39kB block=0B / 10.23MB pids=22
+1777523748421 name=edgerun-email-bench-mox cpu=20.45% mem=31.39MB / 65.1GB net=190.4kB / 128kB block=0B / 14.54MB pids=22
+1777523748944 name=edgerun-email-bench-mox cpu=26.14% mem=32.01MB / 65.1GB net=231.7kB / 154.4kB block=0B / 18.98MB pids=23

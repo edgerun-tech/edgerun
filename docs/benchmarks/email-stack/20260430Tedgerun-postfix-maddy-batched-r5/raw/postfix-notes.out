@@ -1,0 +1,5 @@
+$ ./scripts/benchmark-email-podman.sh notes postfix
+Postfix: medium difficulty. Debian package is easy, but it conflicts with other
+mail-transport-agent packages on a host. Local-only benchmark config needs
+main.cf changes to disable default/relay transport and reject relay attempts.
+IMAP requires Dovecot or another separate service for a comparable stack.

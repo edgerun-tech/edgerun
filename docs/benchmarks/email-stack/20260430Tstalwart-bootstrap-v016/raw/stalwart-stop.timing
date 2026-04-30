@@ -1,0 +1,5 @@
+command=./scripts/benchmark-email-podman.sh stop stalwart 
+status=0
+started_ms=1777524193237
+ended_ms=1777524194411
+elapsed_ms=1174

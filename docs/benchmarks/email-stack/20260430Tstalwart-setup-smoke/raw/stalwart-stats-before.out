@@ -1,0 +1,2 @@
+$ podman stats --no-stream --format name={{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} block={{.BlockIO}} pids={{.PIDs}} edgerun-email-bench-stalwart
+name=edgerun-email-bench-stalwart cpu=28.58% mem=313.1MB / 65.1GB net=11.93MB / 27.25kB block=0B / 0B pids=57

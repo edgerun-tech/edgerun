@@ -1,0 +1,5 @@
+command=./scripts/benchmark-email-podman.sh stop edgerun 
+status=0
+started_ms=1777526971179
+ended_ms=1777526981703
+elapsed_ms=10524

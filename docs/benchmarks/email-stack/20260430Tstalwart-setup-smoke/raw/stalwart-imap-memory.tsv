@@ -1,0 +1,6 @@
+timestamp_ms stats
+1777525315675 name=edgerun-email-bench-stalwart cpu=6.21% mem=345.7MB / 65.1GB net=13.56MB / 68.02kB block=0B / 0B pids=57
+1777525316198 name=edgerun-email-bench-stalwart cpu=8.90% mem=346.5MB / 65.1GB net=13.56MB / 68.02kB block=0B / 0B pids=57
+1777525316721 name=edgerun-email-bench-stalwart cpu=11.39% mem=325.8MB / 65.1GB net=13.56MB / 68.02kB block=0B / 0B pids=57
+1777525317244 name=edgerun-email-bench-stalwart cpu=13.68% mem=346.3MB / 65.1GB net=13.56MB / 68.02kB block=0B / 0B pids=57
+1777525317768 name=edgerun-email-bench-stalwart cpu=15.76% mem=346.2MB / 65.1GB net=13.56MB / 68.02kB block=0B / 0B pids=57

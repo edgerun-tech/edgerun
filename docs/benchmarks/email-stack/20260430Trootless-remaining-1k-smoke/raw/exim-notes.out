@@ -1,0 +1,5 @@
+$ ./scripts/benchmark-email-podman.sh notes exim
+Exim: medium/high difficulty. It is compact as an MTA, but the minimal config
+file is less obvious. Host install conflicts through mail-transport-agent.
+Local-only benchmark config must explicitly accept only local domains and deny
+external delivery.

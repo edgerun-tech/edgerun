@@ -1,0 +1,4 @@
+$ ./scripts/benchmark-email-podman.sh versions opensmtpd
+version: OpenSMTPD 7.6.0-portable
+ca-certificates	20250419
+opensmtpd	7.6.0p1-1

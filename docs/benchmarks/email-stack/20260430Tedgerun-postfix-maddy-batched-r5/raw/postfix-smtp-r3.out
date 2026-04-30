@@ -1,0 +1,13 @@
+$ timeout 180 env EDGERUN_EMAIL_BENCH_COUNT=10000 EDGERUN_EMAIL_BENCH_CONCURRENCY=32 ./scripts/benchmark-email-podman.sh bench-smtp postfix
+mode=smtp
+target=127.0.0.1:2525
+requested=10000
+concurrency=32
+ok=10000
+fail=0
+elapsed_ms=79301
+throughput_ops_per_sec=126.10
+latency_avg_ms=253.55
+latency_p50_ms=89.857
+latency_p95_ms=1084.636
+latency_p99_ms=1099.107

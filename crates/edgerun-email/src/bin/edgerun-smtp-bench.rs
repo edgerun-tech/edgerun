@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -22,6 +23,7 @@ fn main() -> Result<(), String> {
     let next = Arc::new(AtomicUsize::new(0));
     let failures = Arc::new(AtomicUsize::new(0));
     let latencies = Arc::new(Mutex::new(Vec::with_capacity(config.count)));
+    let errors = Arc::new(Mutex::new(BTreeMap::<String, usize>::new()));
     let started = Instant::now();
 
     let mut workers = Vec::new();
@@ -30,6 +32,7 @@ fn main() -> Result<(), String> {
         let next = Arc::clone(&next);
         let failures = Arc::clone(&failures);
         let latencies = Arc::clone(&latencies);
+        let errors = Arc::clone(&errors);
         workers.push(thread::spawn(move || loop {
             let index = next.fetch_add(1, Ordering::Relaxed);
             if index >= config.count {
@@ -44,8 +47,11 @@ fn main() -> Result<(), String> {
                         .expect("latency mutex poisoned")
                         .push(elapsed);
                 }
-                Err(_) => {
+                Err(error) => {
                     failures.fetch_add(1, Ordering::Relaxed);
+                    let key = sanitize_error(&error.to_string());
+                    let mut errors = errors.lock().expect("error mutex poisoned");
+                    *errors.entry(key).or_insert(0) += 1;
                 }
             }
         }));
@@ -90,6 +96,15 @@ fn main() -> Result<(), String> {
     println!("latency_p50_ms={:.3}", percentile_ms(&latencies, 0.50));
     println!("latency_p95_ms={:.3}", percentile_ms(&latencies, 0.95));
     println!("latency_p99_ms={:.3}", percentile_ms(&latencies, 0.99));
+    for (index, (message, count)) in errors
+        .lock()
+        .map_err(|_| "error mutex poisoned".to_string())?
+        .iter()
+        .take(8)
+        .enumerate()
+    {
+        println!("error_sample_{}={}x {}", index + 1, count, message);
+    }
     Ok(())
 }
 
@@ -238,6 +253,16 @@ fn percentile_ms(values: &[u128], percentile: f64) -> f64 {
     }
     let index = ((values.len() - 1) as f64 * percentile).floor() as usize;
     values[index] as f64 / 1000.0
+}
+
+fn sanitize_error(message: &str) -> String {
+    message
+        .chars()
+        .map(|c| match c {
+            '\r' | '\n' | '\t' => ' ',
+            _ => c,
+        })
+        .collect()
 }
 
 fn next_value(args: &mut impl Iterator<Item = String>, name: &str) -> Result<String, String> {

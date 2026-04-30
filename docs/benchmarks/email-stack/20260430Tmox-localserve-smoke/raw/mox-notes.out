@@ -1,0 +1,6 @@
+$ ./scripts/benchmark-email-podman.sh notes mox
+Mox: modern integrated mail server. The benchmark image uses Mox localserve,
+which is intended for local email software development and testing. It accepts
+local SMTP on port 1025 and exposes IMAP on port 1143 with the built-in
+mox@localhost account. Treat these measurements as localserve evidence until
+production quickstart/domain/account setup is automated reproducibly.

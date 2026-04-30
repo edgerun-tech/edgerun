@@ -1,0 +1,7 @@
+$ timeout 300 ./scripts/benchmark-email-podman.sh build stalwart
+STEP 1/1: FROM docker.io/stalwartlabs/stalwart:latest
+COMMIT localhost/edgerun-email-bench-stalwart:latest
+--> 99d431d474df
+Successfully tagged localhost/edgerun-email-bench-stalwart:latest
+Successfully tagged docker.io/stalwartlabs/stalwart:latest
+99d431d474dfe8787af8233c3ce61ea6e420babd636cfc326a60c9ee31749645

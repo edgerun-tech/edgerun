@@ -1445,6 +1445,7 @@ dependencies = [
 name = "edgerun-virtual-disk"
 version = "0.1.1"
 dependencies = [
+ "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-rt",
 ]

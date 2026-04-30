@@ -1,0 +1,17 @@
+$ timeout 300 ./scripts/benchmark-email-podman.sh build exim
+STEP 1/5: FROM docker.io/library/debian:trixie-slim
+STEP 2/5: ENV DEBIAN_FRONTEND=noninteractive
+--> Using cache f54baa91e3bda8d3b5504d7214bab66da8de9871c23394173d29c1f39f41ffac
+--> f54baa91e3bd
+STEP 3/5: RUN apt-get update  && apt-get install -y --no-install-recommends exim4-daemon-light ca-certificates  && rm -rf /var/lib/apt/lists/*  && useradd -m -s /usr/sbin/nologin bench  && mkdir -p /var/spool/mail  && printf '%s\n'       'primary_hostname = benchmark.local'       'domainlist local_domains = example.test'       'hostlist relay_from_hosts = 127.0.0.1 : 10.0.0.0/8 : 172.16.0.0/12 : 192.168.0.0/16'       'acl_smtp_rcpt = acl_check_rcpt'       'begin acl'       'acl_check_rcpt:'       '  accept domains = +local_domains'       '  deny message = external delivery disabled in benchmark'       'begin routers'       'local_user:'       '  driver = accept'       '  domains = +local_domains'       '  check_local_user'       '  transport = local_delivery'       'begin transports'       'local_delivery:'       '  driver = appendfile'       '  file = /var/spool/mail/$local_part'       '  delivery_date_add'       '  envelope_to_add'       '  return_path_add'       'begin retry'       'begin rewrite'       'begin authenticators'       > /etc/exim4/benchmark.conf
+--> Using cache 890df91638e45aae00d7274b430d2c19faf23c6fa8382a685878a4373b6fe1fa
+--> 890df91638e4
+STEP 4/5: EXPOSE 25
+--> Using cache 212e5e6de3464dce4cc5d3915663abc623d85b4cc4ca84dfd8b2af294f82f8e0
+--> 212e5e6de346
+STEP 5/5: CMD ["sh", "-c", "exim -bd -C /etc/exim4/benchmark.conf && tail -f /dev/null"]
+--> Using cache fa290807e62409812d3a1e878e59c8eb34582dada56a19629180bd391f56ad7b
+COMMIT localhost/edgerun-email-bench-exim:latest
+--> fa290807e624
+Successfully tagged localhost/edgerun-email-bench-exim:latest
+fa290807e62409812d3a1e878e59c8eb34582dada56a19629180bd391f56ad7b

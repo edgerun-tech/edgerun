@@ -1,0 +1,4 @@
+timestamp_ms stats
+1777525502572 name=edgerun-email-bench-postfix cpu=14.15% mem=10.78MB / 65.1GB net=918B / 542B block=0B / 0B pids=9
+1777525503093 name=edgerun-email-bench-postfix cpu=16.04% mem=19.38MB / 65.1GB net=918B / 542B block=0B / 1.319MB pids=16
+1777525503619 name=edgerun-email-bench-postfix cpu=16.48% mem=19.04MB / 65.1GB net=918B / 542B block=0B / 2.698MB pids=16

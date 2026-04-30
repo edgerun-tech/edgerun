@@ -1,0 +1,2 @@
+$ podman info --format rootless={{.Host.Security.Rootless}} graph={{.Store.GraphRoot}}
+rootless=true graph=/home/ken/.local/share/containers/storage

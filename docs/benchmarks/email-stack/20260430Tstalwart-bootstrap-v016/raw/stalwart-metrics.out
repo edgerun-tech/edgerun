@@ -1,0 +1,10 @@
+$ ./scripts/benchmark-email-podman.sh metrics stalwart
+stack=stalwart
+shape=integrated_mail_server
+components=1
+container_base=stalwartlabs/stalwart:latest
+packages=image-provided
+config_lines=0
+services=stalwart
+ports=smtp:25,imap:143,admin:8080
+multitenancy_note=integrated domain/account model; fair benchmark needs automated v0.16 setup through management API or stalwart-cli apply.

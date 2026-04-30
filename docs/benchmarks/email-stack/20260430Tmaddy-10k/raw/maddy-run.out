@@ -1,0 +1,3 @@
+$ timeout 300 ./scripts/benchmark-email-podman.sh run maddy
+CONTAINER ID  IMAGE                                       COMMAND               CREATED        STATUS        PORTS                                                                       NAMES
+486a38cdc612  localhost/edgerun-email-bench-maddy:latest  --config /data/ma...  2 seconds ago  Up 2 seconds  127.0.0.1:1143->143/tcp, 127.0.0.1:2525->25/tcp, 465/tcp, 587/tcp, 993/tcp  edgerun-email-bench-maddy

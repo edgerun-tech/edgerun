@@ -1,0 +1,241 @@
+$ podman logs --tail 240 edgerun-email-bench-postfix
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 50E3C1E0E8B8D: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: 5B6F91E0E8B89: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: 5BF791E0E8B93: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[171]: 507551E0E8B8C: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 507551E0E8B8C: removed
+Apr 30 05:05:03 benchmark postfix/local[171]: 50E3C1E0E8B8D: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0.01/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 50E3C1E0E8B8D: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[167]: 53B111E0E8B8E: message-id=<bench-66-Instant { tv_sec: 66374, tv_nsec: 400137237 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 53B111E0E8B8E: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[170]: 546481E0E8B92: message-id=<bench-67-Instant { tv_sec: 66374, tv_nsec: 403026222 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: 5EC971E0E8B8C: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[171]: 53B111E0E8B8E: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 53B111E0E8B8E: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 546481E0E8B92: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: 607A61E0E8B8D: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[171]: 546481E0E8B92: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 546481E0E8B92: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[165]: 5B6F91E0E8B89: message-id=<bench-68-Instant { tv_sec: 66374, tv_nsec: 431797895 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/cleanup[169]: 5BF791E0E8B93: message-id=<bench-69-Instant { tv_sec: 66374, tv_nsec: 434022941 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 5B6F91E0E8B89: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 5BF791E0E8B93: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: 6670D1E0E8B8E: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 9153A1E0E8B8A: to=<bench@example.test>, relay=local, delay=0.83, delays=0.05/0.01/0/0.77, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 9153A1E0E8B8A: removed
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: 67AE11E0E8B8A: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 5BF791E0E8B93: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0.01, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 5BF791E0E8B93: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[167]: 5EC971E0E8B8C: message-id=<bench-70-Instant { tv_sec: 66374, tv_nsec: 445747406 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 5EC971E0E8B8C: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: 69D5A1E0E8B92: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 5EC971E0E8B8C: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 5EC971E0E8B8C: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[170]: 607A61E0E8B8D: message-id=<bench-71-Instant { tv_sec: 66374, tv_nsec: 452643528 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 607A61E0E8B8D: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: 6B7941E0E8B8C: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 607A61E0E8B8D: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 607A61E0E8B8D: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[165]: 6670D1E0E8B8E: message-id=<bench-72-Instant { tv_sec: 66374, tv_nsec: 476981121 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 6670D1E0E8B8E: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[169]: 67AE11E0E8B8A: message-id=<bench-73-Instant { tv_sec: 66374, tv_nsec: 481925913 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: 71C211E0E8B8D: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 6670D1E0E8B8E: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 6670D1E0E8B8E: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 67AE11E0E8B8A: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: 733AE1E0E8B8E: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 67AE11E0E8B8A: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/cleanup[167]: 69D5A1E0E8B92: message-id=<bench-74-Instant { tv_sec: 66374, tv_nsec: 490781090 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 67AE11E0E8B8A: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 69D5A1E0E8B92: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: 74B701E0E8B8A: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 69D5A1E0E8B92: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 69D5A1E0E8B92: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[170]: 6B7941E0E8B8C: message-id=<bench-75-Instant { tv_sec: 66374, tv_nsec: 497522642 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 6B7941E0E8B8C: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: 76A8A1E0E8B92: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 6B7941E0E8B8C: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 6B7941E0E8B8C: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[165]: 71C211E0E8B8D: message-id=<bench-76-Instant { tv_sec: 66374, tv_nsec: 523319720 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 71C211E0E8B8D: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: 7D0CA1E0E8B8C: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[169]: 733AE1E0E8B8E: message-id=<bench-77-Instant { tv_sec: 66374, tv_nsec: 529294379 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: 71C211E0E8B8D: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 71C211E0E8B8D: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 733AE1E0E8B8E: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: 7E82E1E0E8B8D: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[167]: 74B701E0E8B8A: message-id=<bench-78-Instant { tv_sec: 66374, tv_nsec: 535421535 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: 733AE1E0E8B8E: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 733AE1E0E8B8E: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 74B701E0E8B8A: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: 7FFD01E0E8B8E: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 74B701E0E8B8A: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 74B701E0E8B8A: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[170]: 76A8A1E0E8B92: message-id=<bench-79-Instant { tv_sec: 66374, tv_nsec: 543377652 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 76A8A1E0E8B92: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: 819931E0E8B8A: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 76A8A1E0E8B92: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 76A8A1E0E8B92: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[165]: 7D0CA1E0E8B8C: message-id=<bench-80-Instant { tv_sec: 66374, tv_nsec: 569561387 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 7D0CA1E0E8B8C: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[169]: 7E82E1E0E8B8D: message-id=<bench-81-Instant { tv_sec: 66374, tv_nsec: 575527490 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: 8876D1E0E8B92: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 7D0CA1E0E8B8C: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 7D0CA1E0E8B8C: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 7E82E1E0E8B8D: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[167]: 7FFD01E0E8B8E: message-id=<bench-82-Instant { tv_sec: 66374, tv_nsec: 581521195 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: 8A0051E0E8B8C: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 7E82E1E0E8B8D: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 7E82E1E0E8B8D: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 7FFD01E0E8B8E: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: 8B77D1E0E8B8D: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[170]: 819931E0E8B8A: message-id=<bench-83-Instant { tv_sec: 66374, tv_nsec: 588194218 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: 7FFD01E0E8B8E: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 7FFD01E0E8B8E: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 819931E0E8B8A: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: 8CFBD1E0E8B8E: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 819931E0E8B8A: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 819931E0E8B8A: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[165]: 8876D1E0E8B92: message-id=<bench-84-Instant { tv_sec: 66374, tv_nsec: 616354020 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 8876D1E0E8B92: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: 939E01E0E8B8A: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[169]: 8A0051E0E8B8C: message-id=<bench-85-Instant { tv_sec: 66374, tv_nsec: 622547681 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: 8876D1E0E8B92: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 8876D1E0E8B92: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 8A0051E0E8B8C: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: 955051E0E8B92: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[167]: 8B77D1E0E8B8D: message-id=<bench-86-Instant { tv_sec: 66374, tv_nsec: 628571022 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: 8A0051E0E8B8C: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 8A0051E0E8B8C: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 8B77D1E0E8B8D: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[170]: 8CFBD1E0E8B8E: message-id=<bench-87-Instant { tv_sec: 66374, tv_nsec: 634771155 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: 96F151E0E8B8C: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 8B77D1E0E8B8D: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 8B77D1E0E8B8D: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 8CFBD1E0E8B8E: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: 9866C1E0E8B8D: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 8CFBD1E0E8B8E: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 8CFBD1E0E8B8E: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[165]: 939E01E0E8B8A: message-id=<bench-88-Instant { tv_sec: 66374, tv_nsec: 661990418 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 939E01E0E8B8A: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: 9EB7B1E0E8B8E: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 939E01E0E8B8A: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 939E01E0E8B8A: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[169]: 955051E0E8B92: message-id=<bench-89-Instant { tv_sec: 66374, tv_nsec: 668897872 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 955051E0E8B92: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: A06841E0E8B8A: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 955051E0E8B92: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 955051E0E8B92: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[167]: 96F151E0E8B8C: message-id=<bench-90-Instant { tv_sec: 66374, tv_nsec: 675612092 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 96F151E0E8B8C: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: A22D31E0E8B92: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[170]: 9866C1E0E8B8D: message-id=<bench-91-Instant { tv_sec: 66374, tv_nsec: 681582985 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: 96F151E0E8B8C: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 96F151E0E8B8C: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 9866C1E0E8B8D: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: A3A601E0E8B8C: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: 9866C1E0E8B8D: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 9866C1E0E8B8D: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[165]: 9EB7B1E0E8B8E: message-id=<bench-92-Instant { tv_sec: 66374, tv_nsec: 707428544 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 9EB7B1E0E8B8E: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: A9FFA1E0E8B8D: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[169]: A06841E0E8B8A: message-id=<bench-93-Instant { tv_sec: 66374, tv_nsec: 714365142 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: 9EB7B1E0E8B8E: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: 9EB7B1E0E8B8E: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: A06841E0E8B8A: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: AB8771E0E8B8E: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[167]: A22D31E0E8B92: message-id=<bench-94-Instant { tv_sec: 66374, tv_nsec: 721617986 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: A06841E0E8B8A: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: A06841E0E8B8A: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: A22D31E0E8B92: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: AD4C21E0E8B8A: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/cleanup[170]: A3A601E0E8B8C: message-id=<bench-95-Instant { tv_sec: 66374, tv_nsec: 727620998 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: A22D31E0E8B92: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: A22D31E0E8B92: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: A3A601E0E8B8C: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: connect from 4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: AED191E0E8B92: client=4ac6d5086fc2[192.168.1.42]
+Apr 30 05:05:03 benchmark postfix/local[172]: A3A601E0E8B8C: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: A3A601E0E8B8C: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[165]: A9FFA1E0E8B8D: message-id=<bench-96-Instant { tv_sec: 66374, tv_nsec: 753601561 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: A9FFA1E0E8B8D: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[161]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/cleanup[169]: AB8771E0E8B8E: message-id=<bench-97-Instant { tv_sec: 66374, tv_nsec: 759920248 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: A9FFA1E0E8B8D: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: A9FFA1E0E8B8D: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: AB8771E0E8B8E: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[166]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/local[172]: AB8771E0E8B8E: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: AB8771E0E8B8E: removed
+Apr 30 05:05:03 benchmark postfix/cleanup[167]: AD4C21E0E8B8A: message-id=<bench-98-Instant { tv_sec: 66374, tv_nsec: 767164335 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: AD4C21E0E8B8A: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[163]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/cleanup[170]: AED191E0E8B92: message-id=<bench-99-Instant { tv_sec: 66374, tv_nsec: 773376901 }@127.0.0.1>
+Apr 30 05:05:03 benchmark postfix/local[172]: AD4C21E0E8B8A: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: AD4C21E0E8B8A: removed
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: AED191E0E8B92: from=<bench@example.test>, size=1411, nrcpt=1 (queue active)
+Apr 30 05:05:03 benchmark postfix/smtpd[168]: disconnect from 4ac6d5086fc2[192.168.1.42] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 05:05:03 benchmark postfix/local[172]: AED191E0E8B92: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 05:05:03 benchmark postfix/qmgr[159]: AED191E0E8B92: removed

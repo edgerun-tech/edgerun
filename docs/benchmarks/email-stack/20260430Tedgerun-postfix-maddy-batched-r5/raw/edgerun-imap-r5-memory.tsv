@@ -1,0 +1,3 @@
+timestamp_ms stats
+1777530635324 name=edgerun-email-bench-edgerun cpu=106.90% mem=194.5MB / 65.1GB net=1.823MB / 7.541MB block=0B / 155.7MB pids=10
+1777530635857 name=edgerun-email-bench-edgerun cpu=106.77% mem=192.9MB / 65.1GB net=1.823MB / 7.551MB block=0B / 155.7MB pids=10

@@ -1,39 +1,87 @@
 ---
-title: Benchmark อีเมลของ Edgerun: SMTP ภายใน 10,000 ครั้ง
+title: Benchmark อีเมลของ Edgerun: สถานะปัจจุบันของ server
 date: 2026-04-30
 author: Ken
-summary: การวัดแบบทำซ้ำได้ครั้งแรกของเซิร์ฟเวอร์อีเมลแบบ all-in-one ของ Edgerun เทียบกับ Postfix, OpenSMTPD และ Exim.
+summary: การเปรียบเทียบแบบ rootless Podman ระหว่าง Edgerun, Maddy และ Postfix หลังจากปรับ runtime, SMTP/IMAP และ Maildir index.
 tags: [email, benchmarks, release]
 ---
-# Benchmark อีเมลของ Edgerun: SMTP ภายใน 10,000 ครั้ง
+# Benchmark อีเมลของ Edgerun: สถานะปัจจุบันของ server
 
-ตอนนี้ Edgerun รัน mail stack สำหรับ `edgerun.tech` ใน production แล้ว: SMTP, SMTPS, submission, IMAP, IMAPS, DNS, HTTPS, webmail, DKIM signing, queue handling, blog นี้ และ Git host ทั้งหมดอยู่ใน binary `edgerun-server` ตัวเดียวที่ strip แล้ว.
+ตอนนี้ Edgerun รัน mail stack สำหรับ `edgerun.tech` ใน production แล้ว: SMTP,
+SMTPS, submission, IMAP, IMAPS, DNS, HTTPS, webmail, DKIM signing, queue
+handling, blog นี้ และ Git host ทั้งหมดอยู่ใน binary `edgerun-server` ตัวเดียว
+ที่ strip แล้ว.
 
-Benchmark นี้ตั้งใจวัดเรื่องแคบ ๆ ก่อน: ส่ง SMTP ภายในเครื่อง 10,000 ข้อความ, concurrency 32, body 1 KiB, หนึ่ง connection ต่อหนึ่งข้อความ. ทุกอย่างอยู่บน localhost และ recipient เป็น local เท่านั้น ไม่มีการส่งอีเมลออกอินเทอร์เน็ต.
+Product claim คือ server ขนาดเล็กแบบ integrated สามารถแทนหลาย daemon ได้ใน
+deployment ขนาดเล็ก. Benchmark claim ต้องแคบกว่า: หลังจากปรับ runtime,
+SMTP/IMAP buffering และ Maildir index แล้ว Edgerun เร็วกว่า Maddy และ Postfix
+ที่วัดได้ใน local delivery workload นี้.
+
+## สิ่งที่เปลี่ยน
+
+ใน code ตอนนี้มี host multi-thread runtime, buffered SMTP/IMAP I/O,
+local delivery แบบ recipient batch, Maildir status sidecar สำหรับ IMAP
+`SELECT`, และ SMTP delivery status-index updates ที่ flush ประมาณทุก 500 ms.
+per-message Maildir `sync_all()` กลายเป็น strict mode ผ่าน
+`EDGERUN_MAILDIR_SYNC_DELIVERY=1`.
 
 ## ผลลัพธ์
 
-| Stack | OK/Fail | Throughput | p95 latency | Memory สูงสุดตอน load |
+Evidence ล่าสุดคือ rootless Podman run จำนวน 5 repetitions:
+
+`docs/benchmarks/email-stack/20260430Tedgerun-postfix-maddy-batched-r5/`
+
+ข้อจำกัดสำคัญ: ทั้ง 5 repetitions ใช้ container เดิมของแต่ละ stack ดังนั้น
+mailbox/spool state โตขึ้นระหว่างรอบ. นี่คือ sustained growing-state result
+ไม่ใช่ cold start อิสระ 5 ครั้ง.
+
+Median throughput จาก 5 repetitions:
+
+| Stack | SMTP median | IMAP median |
+| --- | ---: | ---: |
+| Edgerun | 527.03 ops/s | 216.92 ops/s |
+| Maddy | 255.45 ops/s | 81.10 ops/s |
+| Postfix | 126.10 ops/s | n/a |
+
+รอบแรกก่อน state สะสมมาก:
+
+| Stack | SMTP throughput | SMTP p95 | Peak memory / PIDs |
+| --- | ---: | ---: | --- |
+| Edgerun | 557.72 ops/s | 64.173 ms | 113.20 MB / 10 |
+| Maddy | 344.62 ops/s | 123.828 ms | 148.70 MB / 41 |
+| Postfix | 347.70 ops/s | 110.324 ms | 134.20 MB / 75 |
+
+## Footprint
+
+| Stack | Image size | Build time | Startup time | Process count |
 | --- | ---: | ---: | ---: | ---: |
-| Edgerun | 10000/0 | 342.71 ops/s | 140.577 ms | 3.58 MB RSS |
-| Postfix | 10000/0 | 351.69 ops/s | 141.674 ms | 94.02 MB container memory |
-| OpenSMTPD | 9976/24 | 176.01 ops/s | 227.632 ms | 17.91 MB container memory |
-| Exim | 2146/7854 | 27.41 ops/s | 1663.886 ms | 219.9 MB container memory |
+| Edgerun | 4,812,313 bytes | 797 ms | 2,199 ms | 10 |
+| Maddy | 58,114,573 bytes | 1,310 ms | 2,230 ms | 41-45 |
+| Postfix | 129,522,342 bytes | 14,198 ms | 2,186 ms | 75-76 |
 
-Postfix คือ comparison ที่ใกล้ที่สุดในรอบนี้. สำหรับ workload แบบ local SMTP accept, Edgerun อยู่ใกล้ Postfix มาก แต่ใช้ memory น้อยกว่ามาก. OpenSMTPD เป็น MTA ที่เล็กและ config อ่านง่าย แต่รอบนี้มี operation fail 24 ครั้ง และ tail latency สูงกว่า.
-
-ผลของ Exim ยังไม่ควรถูกอ่านว่าเป็นข้อสรุปเรื่องความสามารถของ Exim. มันเป็น finding เรื่อง configuration มากกว่า. config แบบ minimal rootless container ของเรารับได้แค่ 2,146 จาก 10,000 attempts และ memory/process count โตสูงมาก จึงต้อง tune เพิ่มก่อนจะเทียบอย่างยุติธรรม.
+Memory claim ยังต้องระวัง. Peak memory ของ Edgerun ใน SMTP run โตจาก
+113.20 MB เป็น 202.40 MB ตลอด 5 repetitions. Maddy โตจาก 148.70 MB เป็น
+249.20 MB และ Postfix โตจาก 134.20 MB เป็น 209.00 MB. Evidence ตอนนี้รองรับ
+claim เรื่อง image/process footprint ได้ชัด แต่ยังไม่ควร claim ว่า memory
+ต่ำสุดในทุกสภาพ.
 
 ## สิ่งที่สรุปได้
 
-สรุปแบบแคบได้ว่า local SMTP delivery path ของ Edgerun แข่งขันกับ Postfix ได้แล้วใน warmed 10k localhost workload และใช้ memory น้อยกว่ามาก.
+Claim ที่ publish ได้อย่างแคบ:
 
-แต่ยังไม่ใช่ข้อสรุปว่า Edgerun ชนะทุก mail-server workload. งานถัดไปควรวัด Stalwart ด้วย first-run config ที่ทำซ้ำได้, IMAP mailbox operations, webmail inbox/send, outbound STARTTLS delivery, concurrent idle connections และพฤติกรรมกับ client ที่ malformed หรือ slow.
+> Edgerun เป็น compact integrated mail stack ที่ควรพิจารณาสำหรับ operator ที่
+> ต้องการ SMTP, IMAP, web, DNS, DKIM, queue handling และ site hosting ใน service
+> ขนาดเล็กตัวเดียว. ใน rootless Podman local-delivery benchmark ล่าสุด Edgerun
+> มี SMTP throughput สูงกว่า Maddy และ Postfix, basic IMAP เร็วกว่า Maddy, และ
+> image/process footprint เล็กกว่ามาก.
 
-Raw evidence ถูก commit อยู่ใน source tree:
+ยังไม่ควร claim ว่า Edgerun ชนะทุก mail-server workload, realistic Dovecot
+IMAP, Mox หรือ Stalwart ใน production configuration. Exim ถูกถอดจาก active
+comparison เพราะเรายังไม่มี tuned harness result ที่ยุติธรรม.
 
-- `docs/benchmarks/email-stack/20260430Tscale-v2/`
-- `docs/benchmarks/email-stack/20260430Tscale-v3/`
-- `docs/benchmarks/email-stack/20260430Tbench-v1/`
+Raw evidence:
 
-นี่คือวิธีที่ควร publish: claim ให้แคบ, แนบ raw evidence, แล้วค่อย ๆ tighten server กับ workload ถัดไป.
+- `docs/benchmarks/email-stack/20260430Tedgerun-postfix-maddy-batched-r5/`
+- `docs/benchmarks/email-stack/20260430Tedgerun-postfix-maddy-batched/`
+- `docs/benchmarks/email-stack/20260430Tactive-smoke/`
+- `docs/benchmarks/email-stack/research-status-20260430.md`

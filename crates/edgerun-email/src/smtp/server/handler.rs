@@ -39,6 +39,31 @@ pub trait MailHandler: Send + Sync + 'static {
     /// Accept a complete mail transaction.
     fn accept_mail(&self, envelope: &MailEnvelope) -> io::Result<()>;
 
+    /// Accept a complete mail transaction for a selected recipient subset.
+    ///
+    /// The default implementation preserves existing backends by cloning only
+    /// when the caller requests a subset. Backends with filesystem or streaming
+    /// storage can override this to avoid cloning the message body on the SMTP
+    /// hot path.
+    fn accept_mail_for_recipients(
+        &self,
+        envelope: &MailEnvelope,
+        recipients: &[String],
+    ) -> io::Result<()> {
+        if recipients.len() == envelope.recipients.len()
+            && recipients
+                .iter()
+                .zip(envelope.recipients.iter())
+                .all(|(a, b)| a == b)
+        {
+            return self.accept_mail(envelope);
+        }
+
+        let mut scoped = envelope.clone();
+        scoped.recipients = recipients.to_vec();
+        self.accept_mail(&scoped)
+    }
+
     /// Authenticate a user via SASL mechanism.
     /// Default implementation returns `AuthResult::Unsupported`.
     fn authenticate(&self, _mechanism: &str, _credentials: &AuthCredentials) -> AuthResult {

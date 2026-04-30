@@ -14,7 +14,7 @@ use crate::rt::{
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
-use crate::server::{read_line, ConnectionInterceptor};
+use crate::server::ConnectionInterceptor;
 use crate::smtp::relay::bounce::BounceConfig;
 #[cfg(feature = "dkim")]
 use crate::smtp::relay::relay::sign_message_data;
@@ -179,6 +179,146 @@ impl AsyncWrite for SmtpTransport {
 }
 
 impl Unpin for SmtpTransport {}
+
+/// Buffered SMTP transport for per-session parsing.
+///
+/// SMTP commands and DATA bodies are line-oriented, while BDAT is byte-counted.
+/// Keeping one read buffer for both paths avoids a syscall per command byte and
+/// preserves bytes already received after a line terminator.
+struct BufferedSmtpTransport {
+    transport: Option<SmtpTransport>,
+    read_buf: Vec<u8>,
+    read_pos: usize,
+}
+
+impl BufferedSmtpTransport {
+    fn new(transport: SmtpTransport) -> Self {
+        Self {
+            transport: Some(transport),
+            read_buf: Vec::with_capacity(4096),
+            read_pos: 0,
+        }
+    }
+
+    fn is_tls(&self) -> bool {
+        self.transport
+            .as_ref()
+            .expect("SMTP transport missing")
+            .is_tls()
+    }
+
+    fn has_buffered_read_bytes(&self) -> bool {
+        self.read_pos < self.read_buf.len()
+    }
+
+    fn compact_read_buf(&mut self) {
+        if self.read_pos == 0 {
+            return;
+        }
+        if self.read_pos >= self.read_buf.len() {
+            self.read_buf.clear();
+            self.read_pos = 0;
+        } else if self.read_pos >= 4096 {
+            self.read_buf.drain(..self.read_pos);
+            self.read_pos = 0;
+        }
+    }
+
+    async fn read_line(&mut self) -> io::Result<Option<String>> {
+        loop {
+            if let Some(offset) = self.read_buf[self.read_pos..]
+                .iter()
+                .position(|&b| b == b'\n')
+            {
+                let line_end = self.read_pos + offset;
+                let mut bytes = &self.read_buf[self.read_pos..line_end];
+                if bytes.ends_with(b"\r") {
+                    bytes = &bytes[..bytes.len() - 1];
+                }
+                let line = String::from_utf8_lossy(bytes).to_string();
+                self.read_pos = line_end + 1;
+                self.compact_read_buf();
+                return Ok(Some(line));
+            }
+
+            self.compact_read_buf();
+            let mut chunk = [0u8; 4096];
+            let n = self
+                .transport
+                .as_mut()
+                .expect("SMTP transport missing")
+                .read(&mut chunk)
+                .await?;
+            if n == 0 {
+                if self.has_buffered_read_bytes() {
+                    let bytes = &self.read_buf[self.read_pos..];
+                    let line = String::from_utf8_lossy(bytes).to_string();
+                    self.read_buf.clear();
+                    self.read_pos = 0;
+                    return Ok(Some(line));
+                }
+                return Ok(None);
+            }
+            self.read_buf.extend_from_slice(&chunk[..n]);
+        }
+    }
+
+    async fn read_exact_buffered(&mut self, mut buf: &mut [u8]) -> io::Result<()> {
+        while !buf.is_empty() && self.has_buffered_read_bytes() {
+            let available = self.read_buf.len() - self.read_pos;
+            let to_copy = available.min(buf.len());
+            buf[..to_copy].copy_from_slice(&self.read_buf[self.read_pos..self.read_pos + to_copy]);
+            self.read_pos += to_copy;
+            self.compact_read_buf();
+            buf = &mut buf[to_copy..];
+        }
+
+        if !buf.is_empty() {
+            self.transport
+                .as_mut()
+                .expect("SMTP transport missing")
+                .read_exact(buf)
+                .await?;
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "tls")]
+    async fn upgrade_tls(&mut self, cert_and_key: &CertificateAndKey) -> io::Result<()> {
+        if self.has_buffered_read_bytes() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "cannot start TLS with buffered plaintext bytes",
+            ));
+        }
+
+        let old = self.transport.take().expect("SMTP transport missing");
+        self.transport = Some(old.upgrade_tls(cert_and_key).await?);
+        self.read_buf.clear();
+        self.read_pos = 0;
+        Ok(())
+    }
+}
+
+impl AsyncWrite for BufferedSmtpTransport {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(self.transport.as_mut().expect("SMTP transport missing")).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(self.transport.as_mut().expect("SMTP transport missing")).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(self.transport.as_mut().expect("SMTP transport missing")).poll_shutdown(cx)
+    }
+}
+
+impl Unpin for BufferedSmtpTransport {}
 
 // ===========================================================================
 // SMTP Server
@@ -442,6 +582,8 @@ async fn handle_connection(
     #[cfg(not(feature = "tls"))]
     let mut transport = SmtpTransport::Plain(stream);
 
+    let mut transport = BufferedSmtpTransport::new(transport);
+
     let greeting = SmtpResponse::service_ready(&config.domain);
     send_response(&mut transport, &greeting).await?;
 
@@ -482,7 +624,7 @@ async fn handle_connection(
         if pending_bdat_bytes > 0 {
             let to_read = pending_bdat_bytes.min(4096);
             let mut buf = vec![0u8; to_read];
-            transport.read_exact(&mut buf).await?;
+            transport.read_exact_buffered(&mut buf).await?;
             envelope.data.extend_from_slice(&buf);
             pending_bdat_bytes -= to_read;
 
@@ -561,7 +703,7 @@ async fn handle_connection(
             break;
         }
 
-        let line = match read_line(&mut transport).await? {
+        let line = match transport.read_line().await? {
             Some(l) => l,
             None => {
                 edgerun_log::info!("edgerun-smtp: {} disconnected", peer);
@@ -607,32 +749,42 @@ async fn handle_connection(
                     route_recipients(&envelope.recipients, &config.local_domains);
 
                 let delivery_ok = if !local_recipients.is_empty() {
-                    // Deliver local recipients
-                    let mut local_envelope = envelope.clone();
-                    local_envelope.recipients = local_recipients;
-
-                    // DKIM sign local delivery if configured
                     #[cfg(feature = "dkim")]
-                    if let Some(ref signer) = config.dkim_signer {
-                        match sign_message_data(signer, &envelope.data) {
-                            Ok(signed_data) => local_envelope.data = signed_data,
+                    let result = if let Some(ref signer) = config.dkim_signer {
+                        let mut local_envelope = envelope.clone();
+                        local_envelope.recipients = local_recipients.clone();
+                        match sign_message_data(signer, &local_envelope.data) {
+                            Ok(signed_data) => {
+                                local_envelope.data = signed_data;
+                            }
                             Err(e) => {
-                                edgerun_log::warn!("edgerun-smtp: local DKIM signing failed: {}, delivering unsigned", e);
+                                edgerun_log::warn!(
+                                    "edgerun-smtp: local DKIM signing failed: {}, delivering unsigned",
+                                    e
+                                );
                             }
                         }
-                    }
+                        handler.accept_mail(&local_envelope)
+                    } else {
+                        handler.accept_mail_for_recipients(&envelope, &local_recipients)
+                    };
 
-                    match handler.accept_mail(&local_envelope) {
+                    #[cfg(not(feature = "dkim"))]
+                    let result = handler.accept_mail_for_recipients(&envelope, &local_recipients);
+
+                    match result {
                         Ok(()) => {
                             edgerun_log::info!(
                                 "edgerun-smtp: mail delivered locally to {:?}",
-                                local_envelope.recipients,
+                                local_recipients,
                             );
                             true
                         }
                         Err(e) => {
                             edgerun_log::error!("edgerun-smtp: local delivery failed: {}", e);
-                            send_dsn_bounce(&handler, &local_envelope, &config, &e.to_string());
+                            let mut bounce_envelope = envelope.clone();
+                            bounce_envelope.recipients = local_recipients;
+                            send_dsn_bounce(&handler, &bounce_envelope, &config, &e.to_string());
                             false
                         }
                     }
@@ -823,8 +975,7 @@ async fn handle_connection(
                 {
                     if let Some(cert) = &config.tls_cert {
                         match transport.upgrade_tls(cert).await {
-                            Ok(new_transport) => {
-                                transport = new_transport;
+                            Ok(()) => {
                                 edgerun_log::info!("edgerun-smtp: STARTTLS handshake complete");
                             }
                             Err(e) => {
@@ -854,7 +1005,7 @@ async fn handle_connection(
 async fn handle_auth_response(
     line: &str,
     handler: &Arc<dyn MailHandler>,
-    transport: &mut SmtpTransport,
+    transport: &mut BufferedSmtpTransport,
     authenticated: &mut bool,
     auth_identity: &mut Option<String>,
     state: AuthExchangeState,
@@ -982,7 +1133,7 @@ async fn handle_command(
     handler: &Arc<dyn MailHandler>,
     config: &SmtpServerConfig,
     peer: &SocketAddr,
-    transport: &mut SmtpTransport,
+    transport: &mut BufferedSmtpTransport,
 ) -> io::Result<ControlFlow> {
     match cmd {
         SmtpCommand::Ehlo(domain) => {
@@ -1397,7 +1548,10 @@ async fn send_response_direct(
     Ok(())
 }
 
-async fn send_response(transport: &mut SmtpTransport, response: &SmtpResponse) -> io::Result<()> {
+async fn send_response(
+    transport: &mut BufferedSmtpTransport,
+    response: &SmtpResponse,
+) -> io::Result<()> {
     let formatted = response.format();
     transport.write_all(formatted.as_bytes()).await?;
     transport.flush().await?;
@@ -1405,7 +1559,7 @@ async fn send_response(transport: &mut SmtpTransport, response: &SmtpResponse) -
 }
 
 async fn send_multiline_response(
-    transport: &mut SmtpTransport,
+    transport: &mut BufferedSmtpTransport,
     code: SmtpResponseCode,
     lines: Vec<String>,
 ) -> io::Result<()> {

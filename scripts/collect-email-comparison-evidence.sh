@@ -12,10 +12,11 @@ smtp_count="${EDGERUN_EMAIL_STORY_SMTP_COUNT:-10000}"
 imap_count="${EDGERUN_EMAIL_STORY_IMAP_COUNT:-100}"
 concurrency="${EDGERUN_EMAIL_STORY_CONCURRENCY:-32}"
 edgerun_bin="${EDGERUN_EMAIL_STORY_EDGERUN_BIN:-}"
+smtp_bench_bin="${EDGERUN_EMAIL_STORY_SMTP_BENCH_BIN:-${EDGERUN_EMAIL_BENCH_SMTP_BENCH_BIN:-}}"
 protocol_timeout="${EDGERUN_EMAIL_STORY_PROTOCOL_TIMEOUT:-120}"
 setup_timeout="${EDGERUN_EMAIL_STORY_SETUP_TIMEOUT:-300}"
 include_native_edgerun="${EDGERUN_EMAIL_STORY_INCLUDE_NATIVE_EDGERUN:-0}"
-stacks="${EDGERUN_EMAIL_STORY_STACKS:-edgerun postfix opensmtpd exim dovecot stalwart}"
+stacks="${EDGERUN_EMAIL_STORY_STACKS:-edgerun postfix opensmtpd dovecot maddy mox stalwart}"
 repetitions="${EDGERUN_EMAIL_STORY_REPETITIONS:-1}"
 smtp_warmup_count="${EDGERUN_EMAIL_STORY_SMTP_WARMUP_COUNT:-0}"
 imap_warmup_count="${EDGERUN_EMAIL_STORY_IMAP_WARMUP_COUNT:-0}"
@@ -165,11 +166,17 @@ run_protocol_repetitions() {
     workload="$3"
     count="$4"
     warmup_count="$5"
+    stack_concurrency="$concurrency"
+    if [ "$stack" = "mox" ]; then
+        stack_concurrency="${EDGERUN_EMAIL_STORY_MOX_CONCURRENCY:-8}"
+    elif [ "$stack" = "stalwart" ]; then
+        stack_concurrency="${EDGERUN_EMAIL_STORY_STALWART_CONCURRENCY:-1}"
+    fi
     if [ "$warmup_count" != "0" ]; then
         run_capture "$base-warmup" \
             timeout "$protocol_timeout" \
             env EDGERUN_EMAIL_BENCH_COUNT="$warmup_count" \
-                EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
+                EDGERUN_EMAIL_BENCH_CONCURRENCY="$stack_concurrency" \
                 ./scripts/benchmark-email-podman.sh "$workload" "$stack"
     fi
     rep=1
@@ -181,7 +188,7 @@ run_protocol_repetitions() {
         fi
         run_sampled_protocol "$stack" "$name" \
             env EDGERUN_EMAIL_BENCH_COUNT="$count" \
-                EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
+                EDGERUN_EMAIL_BENCH_CONCURRENCY="$stack_concurrency" \
                 ./scripts/benchmark-email-podman.sh "$workload" "$stack"
         rep=$((rep + 1))
     done
@@ -190,8 +197,10 @@ run_protocol_repetitions() {
 stack_kind() {
     case "$1" in
         edgerun) printf 'smtp_imap' ;;
+        maddy) printf 'smtp_imap' ;;
         dovecot) printf 'imap' ;;
-        stalwart) printf 'bootstrap' ;;
+        mox) printf 'smtp_imap' ;;
+        stalwart) printf 'smtp_imap' ;;
         *) printf 'smtp' ;;
     esac
 }
@@ -199,10 +208,20 @@ stack_kind() {
 collect_stack() {
     stack="$1"
     kind="$(stack_kind "$stack")"
+    stack_smtp_count="$smtp_count"
+    stack_imap_count="$imap_count"
+    if [ "$stack" = "mox" ]; then
+        stack_smtp_count="${EDGERUN_EMAIL_STORY_MOX_SMTP_COUNT:-100}"
+        stack_imap_count="${EDGERUN_EMAIL_STORY_MOX_IMAP_COUNT:-100}"
+    elif [ "$stack" = "stalwart" ]; then
+        stack_smtp_count="${EDGERUN_EMAIL_STORY_STALWART_SMTP_COUNT:-10}"
+        stack_imap_count="${EDGERUN_EMAIL_STORY_STALWART_IMAP_COUNT:-100}"
+    fi
     run_capture "$stack-notes" ./scripts/benchmark-email-podman.sh notes "$stack"
     run_capture "$stack-config" ./scripts/benchmark-email-podman.sh config "$stack"
     run_capture "$stack-metrics" ./scripts/benchmark-email-podman.sh metrics "$stack"
     run_timed_capture "$stack-build" ./scripts/benchmark-email-podman.sh build "$stack"
+    run_capture "$stack-versions" ./scripts/benchmark-email-podman.sh versions "$stack"
     run_capture "$stack-image" podman image inspect "localhost/edgerun-email-bench-$stack:latest" \
         --format 'id={{.Id}} created={{.Created}} size={{.Size}}'
     run_timed_capture "$stack-run" ./scripts/benchmark-email-podman.sh run "$stack"
@@ -214,8 +233,8 @@ collect_stack() {
 
     case "$kind" in
         smtp_imap)
-            run_protocol_repetitions "$stack" "$stack-smtp" bench-smtp "$smtp_count" "$smtp_warmup_count"
-            run_protocol_repetitions "$stack" "$stack-imap" bench-imap "$imap_count" "$imap_warmup_count"
+            run_protocol_repetitions "$stack" "$stack-smtp" bench-smtp "$stack_smtp_count" "$smtp_warmup_count"
+            run_protocol_repetitions "$stack" "$stack-imap" bench-imap "$stack_imap_count" "$imap_warmup_count"
             ;;
         smtp)
             run_protocol_repetitions "$stack" "$stack-smtp" bench-smtp "$smtp_count" "$smtp_warmup_count"
@@ -244,6 +263,18 @@ find_edgerun_bin() {
         printf '%s\n' "target/x86_64-unknown-linux-musl/release/edgerun-server"
     elif [ -x target/release/edgerun-server ]; then
         printf '%s\n' "target/release/edgerun-server"
+    fi
+}
+
+find_smtp_bench_bin() {
+    if [ -n "$smtp_bench_bin" ]; then
+        printf '%s\n' "$smtp_bench_bin"
+    elif command -v edgerun-smtp-bench >/dev/null 2>&1; then
+        command -v edgerun-smtp-bench
+    elif [ -x target/x86_64-unknown-linux-musl/release/edgerun-smtp-bench ]; then
+        printf '%s\n' "target/x86_64-unknown-linux-musl/release/edgerun-smtp-bench"
+    elif [ -x target/release/edgerun-smtp-bench ]; then
+        printf '%s\n' "target/release/edgerun-smtp-bench"
     fi
 }
 
@@ -296,7 +327,7 @@ EOF
         printf 'shape=integrated_reference_server\n'
         printf 'components=1\n'
         printf 'binary=%s\n' "$bin"
-        stat -c 'binary_bytes=%s\n' "$bin" 2>/dev/null || true
+        stat -c 'binary_bytes=%s' "$bin" 2>/dev/null || true
         printf 'config_lines=%s\n' "$(awk 'NF && $1 !~ /^#/ { n++ } END { print n + 0 }' "$config")"
         printf 'services=smtp,imap\n'
         printf 'ports=smtp:2526,imap:1144\n'
@@ -320,14 +351,26 @@ EOF
     } > "$raw/native-edgerun-run.timing"
 
     if [ "$ready_status" = "0" ]; then
-        run_sampled_process_protocol "$server_pid" native-edgerun-smtp \
-            ./scripts/benchmark-email-protocol.sh smtp \
-                --host 127.0.0.1 \
-                --port 2526 \
-                --count "$smtp_count" \
-                --concurrency "$concurrency" \
-                --from bench@example.test \
-                --to bench@example.test
+        smtp_bench="$(find_smtp_bench_bin || true)"
+        if [ -n "$smtp_bench" ]; then
+            run_sampled_process_protocol "$server_pid" native-edgerun-smtp \
+                "$smtp_bench" \
+                    --host 127.0.0.1 \
+                    --port 2526 \
+                    --count "$smtp_count" \
+                    --concurrency "$concurrency" \
+                    --from bench@example.test \
+                    --to bench@example.test
+        else
+            run_sampled_process_protocol "$server_pid" native-edgerun-smtp \
+                ./scripts/benchmark-email-protocol.sh smtp \
+                    --host 127.0.0.1 \
+                    --port 2526 \
+                    --count "$smtp_count" \
+                    --concurrency "$concurrency" \
+                    --from bench@example.test \
+                    --to bench@example.test
+        fi
         run_sampled_process_protocol "$server_pid" native-edgerun-imap \
             ./scripts/benchmark-email-protocol.sh imap \
                 --host 127.0.0.1 \
@@ -373,6 +416,7 @@ operator-experience data before the prose is written:
 
 - generated benchmark config for each stack,
 - stack/component metrics from the harness,
+- package/server versions from each built image,
 - image footprint before and after the run,
 - build time through the rootless Podman harness,
 - run/start time through the rootless Podman harness,
@@ -396,11 +440,21 @@ Workload:
 - Measured repetitions per workload: $repetitions.
 - SMTP warmup operations before measured repetitions: $smtp_warmup_count.
 - IMAP warmup operations before measured repetitions: $imap_warmup_count.
-- Stalwart: bootstrap/startup evidence only until first-run domain/account and
-  anti-relay setup is automated reproducibly.
+- Mox: localserve SMTP/IMAP evidence. This is local development/test mode, not
+  production quickstart evidence. Defaults are
+  ${EDGERUN_EMAIL_STORY_MOX_SMTP_COUNT:-100} SMTP operations,
+  ${EDGERUN_EMAIL_STORY_MOX_IMAP_COUNT:-100} IMAP sessions, concurrency
+  ${EDGERUN_EMAIL_STORY_MOX_CONCURRENCY:-8}.
+- Stalwart: automated v0.16 bootstrap/setup evidence plus SMTP/IMAP smoke.
+  Defaults are
+  ${EDGERUN_EMAIL_STORY_STALWART_SMTP_COUNT:-10} SMTP operations,
+  ${EDGERUN_EMAIL_STORY_STALWART_IMAP_COUNT:-100} IMAP sessions, concurrency
+  ${EDGERUN_EMAIL_STORY_STALWART_CONCURRENCY:-2}.
 - Native Edgerun snapshot: disabled by default. Set
   EDGERUN_EMAIL_STORY_INCLUDE_NATIVE_EDGERUN=1 to collect it as production-shape
-  evidence, not as a direct performance comparator.
+  evidence, not as a direct performance comparator. Native SMTP uses
+  \`edgerun-smtp-bench\` when available and the shell protocol benchmark as a
+  fallback.
 - Stack selection: \`$stacks\`. Override with EDGERUN_EMAIL_STORY_STACKS to run
   one pair or one stack at a time.
 

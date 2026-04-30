@@ -1,0 +1,5 @@
+$ ./scripts/benchmark-email-podman.sh notes edgerun
+Edgerun: integrated reference server. The rootless benchmark image copies one
+static edgerun-server binary plus one server.yaml into a scratch image. SMTP and
+IMAP run in the same process, with no external package manager or sidecar
+services in this benchmark shape.

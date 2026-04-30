@@ -1,0 +1,2 @@
+$ podman image inspect localhost/edgerun-email-bench-dovecot:latest --format id={{.Id}} created={{.Created}} size={{.Size}}
+id=d529d54d394d5a2ebe3799596c66a8da9f7a86e03f7c64dcaf6338660d61e48e created=2026-04-30 02:23:25.845269522 +0000 UTC size=142802767

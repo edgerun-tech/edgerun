@@ -1,0 +1,3 @@
+$ timeout 300 ./scripts/benchmark-email-podman.sh run opensmtpd
+CONTAINER ID  IMAGE                                           COMMAND               CREATED        STATUS        PORTS                   NAMES
+1296913c0c49  localhost/edgerun-email-bench-opensmtpd:latest  smtpd -d -f /etc/...  2 seconds ago  Up 2 seconds  127.0.0.1:2525->25/tcp  edgerun-email-bench-opensmtpd

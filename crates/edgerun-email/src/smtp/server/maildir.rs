@@ -20,9 +20,8 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-
-use std::sync::RwLock;
+use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::time::Duration;
 
 use crate::smtp::server::dsn_generator::DsnBounce;
 use crate::smtp::server::handler::{AuthCredentials, AuthResult, MailHandler};
@@ -47,21 +46,39 @@ pub struct MaildirStore {
     auth_users: Arc<RwLock<HashMap<String, String>>>,
     /// Counter for unique message filenames.
     counter: AtomicU64,
+    /// Stable per-process token used in Maildir filenames.
+    ///
+    /// This is computed once at store creation. The old filename helper opened
+    /// a loopback TCP listener for every delivered message, which made local
+    /// delivery pay unnecessary socket setup cost on the SMTP hot path.
+    filename_host: String,
     /// Validated sender domains (simple allowlist).
     valid_senders: Arc<RwLock<Vec<String>>>,
+    /// In-process mailbox status delta index. SMTP delivery only appends new
+    /// messages, so batching those deltas avoids a lock/read/write cycle for
+    /// every accepted message while preserving the on-disk sidecar for IMAP.
+    status_index: Arc<MaildirStatusIndex>,
+    /// Whether to fsync each delivered message before the Maildir tmp->new
+    /// rename. Atomic delivery does not require this, but strict crash
+    /// durability can opt back in with EDGERUN_MAILDIR_SYNC_DELIVERY=1.
+    sync_delivery: bool,
 }
 
 impl MaildirStore {
     /// Create a new MaildirStore at the given root path.
     pub fn new(root: &Path) -> io::Result<Self> {
         fs::create_dir_all(root)?;
+        let status_index = MaildirStatusIndex::new(root.to_path_buf());
         Ok(Self {
             root: root.to_path_buf(),
             user_domains: Arc::new(RwLock::new(HashMap::new())),
             catch_all_user: Arc::new(RwLock::new(None)),
             auth_users: Arc::new(RwLock::new(HashMap::new())),
             counter: AtomicU64::new(0),
+            filename_host: filename_host_token(),
             valid_senders: Arc::new(RwLock::new(Vec::new())),
+            status_index,
+            sync_delivery: maildir_sync_delivery_enabled(),
         })
     }
 
@@ -75,6 +92,7 @@ impl MaildirStore {
         fs::create_dir_all(user_dir.join("new"))?;
         fs::create_dir_all(user_dir.join("cur"))?;
         fs::create_dir_all(user_dir.join("tmp"))?;
+        self.ensure_mailbox_status(username)?;
 
         self.user_domains.write().unwrap().insert(
             username.to_string(),
@@ -125,6 +143,29 @@ impl MaildirStore {
     /// Get the path to a user's Maildir.
     fn user_maildir(&self, username: &str) -> PathBuf {
         self.root.join(username)
+    }
+
+    fn ensure_mailbox_status(&self, username: &str) -> io::Result<()> {
+        self.status_index.ensure(username, || {
+            let stats = self.scan_mailbox_stats(username)?;
+            Ok(MailboxStatusCounters {
+                messages: stats.total_count as u32,
+                recent: stats.new_count as u32,
+                uid_next: stats.total_count as u32 + 1,
+            })
+        })
+    }
+
+    fn read_mailbox_status(&self, username: &str) -> io::Result<Option<MailboxStatusCounters>> {
+        self.status_index.read_effective(username)
+    }
+
+    fn increment_mailbox_status(&self, username: &str) -> io::Result<()> {
+        self.status_index.increment_delivery(username)
+    }
+
+    pub fn flush_mailbox_statuses(&self) -> io::Result<()> {
+        self.status_index.flush_all()
     }
 
     /// Extract username from a recipient address.
@@ -178,10 +219,12 @@ impl MaildirStore {
             .map(|d| d.as_micros())
             .unwrap_or(0);
         let counter = self.counter.fetch_add(1, Ordering::Relaxed);
-        let hostname = hostname();
         let pid = std::process::id();
 
-        format!("{}.M{}P{}.Q{}.edgerun", ts, hostname, pid, counter)
+        format!(
+            "{}.M{}P{}.Q{}.edgerun",
+            ts, self.filename_host, pid, counter
+        )
     }
 
     /// List messages in a user's mailbox.
@@ -239,6 +282,28 @@ impl MaildirStore {
 
     /// Get mailbox statistics for a user.
     pub fn mailbox_stats(&self, username: &str) -> io::Result<MailboxStats> {
+        let counters = match self.read_mailbox_status(username)? {
+            Some(counters) => counters,
+            None => {
+                self.ensure_mailbox_status(username)?;
+                self.read_mailbox_status(username)?.unwrap_or_default()
+            }
+        };
+        let total_size = self
+            .list_messages(username)?
+            .iter()
+            .filter_map(|m| m.path.metadata().ok().map(|m| m.len()))
+            .sum();
+
+        Ok(MailboxStats {
+            new_count: counters.recent as usize,
+            cur_count: counters.messages.saturating_sub(counters.recent) as usize,
+            total_count: counters.messages as usize,
+            total_size,
+        })
+    }
+
+    fn scan_mailbox_stats(&self, username: &str) -> io::Result<MailboxStats> {
         let user_dir = self.user_maildir(username);
 
         let new_count = fs::read_dir(user_dir.join("new"))
@@ -300,7 +365,15 @@ impl MailHandler for MaildirStore {
     }
 
     fn accept_mail(&self, envelope: &MailEnvelope) -> io::Result<()> {
-        for recipient in &envelope.recipients {
+        self.accept_mail_for_recipients(envelope, &envelope.recipients)
+    }
+
+    fn accept_mail_for_recipients(
+        &self,
+        envelope: &MailEnvelope,
+        recipients: &[String],
+    ) -> io::Result<()> {
+        for recipient in recipients {
             if let Some(username) = self.extract_user(recipient) {
                 // Write to tmp/ first, then rename to new/ (atomic delivery)
                 let tmp_path = self
@@ -315,10 +388,19 @@ impl MailHandler for MaildirStore {
                 // Write the message
                 let mut file = fs::File::create(&tmp_path)?;
                 file.write_all(&envelope.data)?;
-                file.sync_all()?;
+                if self.sync_delivery {
+                    file.sync_all()?;
+                }
 
                 // Atomic rename: tmp/ → new/
                 fs::rename(&tmp_path, &new_path)?;
+                if let Err(e) = self.increment_mailbox_status(&username) {
+                    edgerun_log::warn!(
+                        "edgerun-smtp: failed to update Maildir status index for {}: {}",
+                        username,
+                        e
+                    );
+                }
             }
         }
 
@@ -402,16 +484,276 @@ pub struct MailboxStats {
     pub total_size: u64,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct MailboxStatusCounters {
+    messages: u32,
+    recent: u32,
+    uid_next: u32,
+}
+
+#[derive(Debug, Default)]
+struct MailboxStatusDelta {
+    pending_deliveries: u32,
+}
+
+struct MaildirStatusIndex {
+    root: PathBuf,
+    entries: Mutex<HashMap<String, MailboxStatusDelta>>,
+    tmp_counter: AtomicU64,
+}
+
+impl MaildirStatusIndex {
+    fn new(root: PathBuf) -> Arc<Self> {
+        let index = Arc::new(Self {
+            root,
+            entries: Mutex::new(HashMap::new()),
+            tmp_counter: AtomicU64::new(0),
+        });
+        Self::spawn_flusher(&index);
+        index
+    }
+
+    fn spawn_flusher(index: &Arc<Self>) {
+        let weak = Arc::downgrade(index);
+        std::thread::Builder::new()
+            .name("edgerun-maildir-status-flush".to_string())
+            .spawn(move || status_flush_loop(weak))
+            .expect("failed to spawn Maildir status flusher");
+    }
+
+    fn user_maildir(&self, username: &str) -> PathBuf {
+        self.root.join(username)
+    }
+
+    fn status_dir(&self, username: &str) -> PathBuf {
+        self.user_maildir(username).join(".edgerun")
+    }
+
+    fn status_path(&self, username: &str) -> PathBuf {
+        self.status_dir(username).join("status")
+    }
+
+    fn status_lock_path(&self, username: &str) -> PathBuf {
+        self.status_dir(username).join("status.lock")
+    }
+
+    fn acquire_status_lock(&self, username: &str) -> io::Result<MaildirStatusLock> {
+        let dir = self.status_dir(username);
+        fs::create_dir_all(&dir)?;
+        let path = self.status_lock_path(username);
+        for _ in 0..5000 {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(_) => return Ok(MaildirStatusLock { path }),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "timed out waiting for Maildir status lock",
+        ))
+    }
+
+    fn ensure<F>(&self, username: &str, load: F) -> io::Result<()>
+    where
+        F: FnOnce() -> io::Result<MailboxStatusCounters>,
+    {
+        if self.status_path(username).exists() {
+            self.entries
+                .lock()
+                .unwrap()
+                .entry(username.to_string())
+                .or_default();
+            return Ok(());
+        }
+        let _lock = self.acquire_status_lock(username)?;
+        if !self.status_path(username).exists() {
+            self.write_disk_status(username, load()?)?;
+        }
+        self.entries
+            .lock()
+            .unwrap()
+            .entry(username.to_string())
+            .or_default();
+        Ok(())
+    }
+
+    fn read_effective(&self, username: &str) -> io::Result<Option<MailboxStatusCounters>> {
+        let mut status = match self.read_disk_status(username)? {
+            Some(status) => status,
+            None => return Ok(None),
+        };
+        let pending = self
+            .entries
+            .lock()
+            .unwrap()
+            .get(username)
+            .map(|entry| entry.pending_deliveries)
+            .unwrap_or(0);
+        status.messages = status.messages.saturating_add(pending);
+        status.recent = status.recent.saturating_add(pending);
+        status.uid_next = status.uid_next.saturating_add(pending);
+        Ok(Some(status))
+    }
+
+    fn increment_delivery(&self, username: &str) -> io::Result<()> {
+        let mut entries = self.entries.lock().unwrap();
+        let entry = entries.entry(username.to_string()).or_default();
+        entry.pending_deliveries = entry.pending_deliveries.saturating_add(1);
+        Ok(())
+    }
+
+    fn flush_all(&self) -> io::Result<()> {
+        let users = {
+            let entries = self.entries.lock().unwrap();
+            entries
+                .iter()
+                .filter(|(_, entry)| entry.pending_deliveries > 0)
+                .map(|(user, _)| user.clone())
+                .collect::<Vec<_>>()
+        };
+
+        for user in users {
+            self.flush_user(&user)?;
+        }
+        Ok(())
+    }
+
+    fn flush_user(&self, username: &str) -> io::Result<()> {
+        let pending = {
+            let mut entries = self.entries.lock().unwrap();
+            let Some(entry) = entries.get_mut(username) else {
+                return Ok(());
+            };
+            let pending = entry.pending_deliveries;
+            entry.pending_deliveries = 0;
+            pending
+        };
+        if pending == 0 {
+            return Ok(());
+        }
+
+        let result = (|| {
+            let _lock = self.acquire_status_lock(username)?;
+            let mut status = self.read_disk_status(username)?.unwrap_or_default();
+            status.messages = status.messages.saturating_add(pending);
+            status.recent = status.recent.saturating_add(pending);
+            status.uid_next = status.uid_next.saturating_add(pending);
+            self.write_disk_status(username, status)
+        })();
+
+        if result.is_err() {
+            let mut entries = self.entries.lock().unwrap();
+            let entry = entries.entry(username.to_string()).or_default();
+            entry.pending_deliveries = entry.pending_deliveries.saturating_add(pending);
+        }
+
+        result
+    }
+
+    fn read_disk_status(&self, username: &str) -> io::Result<Option<MailboxStatusCounters>> {
+        let Ok(text) = fs::read_to_string(self.status_path(username)) else {
+            return Ok(None);
+        };
+        let mut parts = text.split_whitespace();
+        let Some(messages) = parts.next().and_then(|v| v.parse::<u32>().ok()) else {
+            return Ok(None);
+        };
+        let Some(recent) = parts.next().and_then(|v| v.parse::<u32>().ok()) else {
+            return Ok(None);
+        };
+        let Some(uid_next) = parts.next().and_then(|v| v.parse::<u32>().ok()) else {
+            return Ok(None);
+        };
+        Ok(Some(MailboxStatusCounters {
+            messages,
+            recent,
+            uid_next,
+        }))
+    }
+
+    fn write_disk_status(&self, username: &str, status: MailboxStatusCounters) -> io::Result<()> {
+        let dir = self.status_dir(username);
+        fs::create_dir_all(&dir)?;
+        let path = self.status_path(username);
+        let tmp = dir.join(format!(
+            "status.tmp.{}.{}",
+            std::process::id(),
+            self.tmp_counter.fetch_add(1, Ordering::Relaxed)
+        ));
+        {
+            let mut file = fs::File::create(&tmp)?;
+            writeln!(
+                file,
+                "{} {} {}",
+                status.messages, status.recent, status.uid_next
+            )?;
+        }
+        fs::rename(tmp, path)
+    }
+}
+
+impl Drop for MaildirStatusIndex {
+    fn drop(&mut self) {
+        let _ = self.flush_all();
+    }
+}
+
+struct MaildirStatusLock {
+    path: PathBuf,
+}
+
+impl Drop for MaildirStatusLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
 // ===========================================================================
 // Helpers
 // ===========================================================================
 
-fn hostname() -> String {
-    std::net::TcpListener::bind("127.0.0.1:0")
+fn filename_host_token() -> String {
+    std::env::var("HOSTNAME")
         .ok()
-        .and_then(|l| l.local_addr().ok())
-        .map(|a| format!("{}", a))
+        .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "localhost".to_string())
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn status_flush_loop(index: Weak<MaildirStatusIndex>) {
+    while let Some(index) = index.upgrade() {
+        std::thread::sleep(Duration::from_millis(500));
+        if let Err(e) = index.flush_all() {
+            edgerun_log::warn!("edgerun-smtp: failed to flush Maildir status index: {}", e);
+        }
+    }
+}
+
+fn maildir_sync_delivery_enabled() -> bool {
+    std::env::var("EDGERUN_MAILDIR_SYNC_DELIVERY")
+        .ok()
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
 }
 
 fn auth_local_part(identity: &str) -> &str {
@@ -573,6 +915,30 @@ mod tests {
         assert_eq!(stats.cur_count, 0);
         assert_eq!(stats.total_count, 3);
         assert!(stats.total_size > 0);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_mailbox_status_batches_delivery_deltas_until_flush() {
+        let dir = test_dir("status_batch");
+        let store = MaildirStore::new(&dir).unwrap();
+        store.add_user("ken", &["edgerun.mail"]).unwrap();
+
+        let mut envelope = MailEnvelope::new("sender@gmail.com".to_string());
+        envelope.recipients.push("ken@edgerun.mail".to_string());
+        envelope.data = b"From: sender@gmail.com\r\nTo: ken@edgerun.mail\r\n\r\nHello".to_vec();
+
+        store.accept_mail(&envelope).unwrap();
+        let status_path = dir.join("ken/.edgerun/status");
+        assert_eq!(fs::read_to_string(&status_path).unwrap(), "0 0 1\n");
+
+        let stats = store.mailbox_stats("ken").unwrap();
+        assert_eq!(stats.new_count, 1);
+        assert_eq!(stats.total_count, 1);
+
+        store.flush_mailbox_statuses().unwrap();
+        assert_eq!(fs::read_to_string(&status_path).unwrap(), "1 1 2\n");
 
         let _ = fs::remove_dir_all(&dir);
     }

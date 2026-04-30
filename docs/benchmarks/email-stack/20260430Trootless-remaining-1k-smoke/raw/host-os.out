@@ -1,0 +1,2 @@
+$ sh -c . /etc/os-release && printf "%s %s\n" "$NAME" "$VERSION_ID"
+CachyOS Linux 

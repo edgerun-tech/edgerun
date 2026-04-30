@@ -1,0 +1,10 @@
+$ ./scripts/benchmark-email-podman.sh metrics stalwart
+stack=stalwart
+shape=integrated_mail_server
+components=1
+container_base=stalwartlabs/stalwart:latest
+packages=image-provided
+config_lines=0
+services=stalwart
+ports=smtp:25,imap:143,admin:8080
+multitenancy_note=integrated domain/account model; benchmark automation creates one local domain and account through stalwart-cli; SMTP currently needs low-concurrency handling for stable local evidence.

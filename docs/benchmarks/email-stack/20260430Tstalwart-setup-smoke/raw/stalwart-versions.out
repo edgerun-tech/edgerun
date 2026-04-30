@@ -1,0 +1,2 @@
+$ ./scripts/benchmark-email-podman.sh versions stalwart
+0.16.2

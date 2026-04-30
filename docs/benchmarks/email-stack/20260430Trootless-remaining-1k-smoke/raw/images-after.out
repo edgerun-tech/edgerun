@@ -1,0 +1,17 @@
+$ podman images --format {{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}
+localhost/edgerun-email-bench-edgerun:latest 896f70863cee 4.89 MB
+<none>:<none> 7a24682edd86 4.89 MB
+localhost/edgerun-email-bench-dovecot:latest d529d54d394d 143 MB
+<none>:<none> 172bf4220801 143 MB
+<none>:<none> 09bf0184c7e2 143 MB
+<none>:<none> a7a4990065d8 143 MB
+localhost/edgerun-email-bench-exim:latest fa290807e624 168 MB
+localhost/edgerun-email-bench-postfix:latest dd6964e96714 130 MB
+localhost/edgerun-email-bench-opensmtpd:latest f0c382611bc3 87.1 MB
+localhost/edgerun-email-bench-stalwart:latest 99d431d474df 283 MB
+docker.io/stalwartlabs/stalwart:latest 99d431d474df 283 MB
+localhost/edgerun-ci:local 7d8e612ecfd1 1.76 GB
+ghcr.io/catthehacker/ubuntu:act-latest 45ec6b6a9ab9 1.67 GB
+docker.io/library/debian:trixie-slim babdb8c14969 81.1 MB
+docker.io/library/alpine:3.19 83b2b6703a62 7.7 MB
+quay.io/podman/hello:latest 5dd467fce50b 787 kB

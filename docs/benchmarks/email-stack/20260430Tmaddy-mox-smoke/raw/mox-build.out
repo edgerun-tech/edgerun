@@ -1,0 +1,11 @@
+$ timeout 300 ./scripts/benchmark-email-podman.sh build mox
+STEP 1/3: FROM r.xmox.nl/mox:latest
+STEP 2/3: ENTRYPOINT ["sh", "-c"]
+--> Using cache f7db7f077753ad740e14ae860d4b8dcbea2d237d7c445b6e31a2171e98db471c
+--> f7db7f077753
+STEP 3/3: CMD ["mox version && tail -f /dev/null"]
+--> Using cache 0a435a0abd312de1edb07906b1a7836f62654d85946e4ca82d66f6c786fb47a0
+COMMIT localhost/edgerun-email-bench-mox:latest
+--> 0a435a0abd31
+Successfully tagged localhost/edgerun-email-bench-mox:latest
+0a435a0abd312de1edb07906b1a7836f62654d85946e4ca82d66f6c786fb47a0

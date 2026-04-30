@@ -1,0 +1,4 @@
+$ ./scripts/benchmark-email-podman.sh versions edgerun
+stack=edgerun
+source_version=0.1.1
+image_id=6dc24111b0e0a951db3b3751077bf18d706be2cfc27735b2c1b44f4973f2df00 image_created=2026-04-30 06:28:52.782149498 +0000 UTC image_size=4812313

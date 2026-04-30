@@ -187,6 +187,142 @@ impl AsyncWrite for ImapTransport {
 
 impl Unpin for ImapTransport {}
 
+struct BufferedImapTransport {
+    transport: Option<ImapTransport>,
+    read_buf: Vec<u8>,
+    read_pos: usize,
+}
+
+impl BufferedImapTransport {
+    fn new(transport: ImapTransport) -> Self {
+        Self {
+            transport: Some(transport),
+            read_buf: Vec::with_capacity(4096),
+            read_pos: 0,
+        }
+    }
+
+    #[cfg(feature = "tls")]
+    fn is_tls(&self) -> bool {
+        self.transport
+            .as_ref()
+            .expect("IMAP transport missing")
+            .is_tls()
+    }
+
+    fn has_buffered_read_bytes(&self) -> bool {
+        self.read_pos < self.read_buf.len()
+    }
+
+    fn compact_read_buf(&mut self) {
+        if self.read_pos == 0 {
+            return;
+        }
+        if self.read_pos >= self.read_buf.len() {
+            self.read_buf.clear();
+            self.read_pos = 0;
+        } else if self.read_pos >= 4096 {
+            self.read_buf.drain(..self.read_pos);
+            self.read_pos = 0;
+        }
+    }
+
+    async fn read_line(&mut self) -> io::Result<Option<String>> {
+        loop {
+            if let Some(offset) = self.read_buf[self.read_pos..]
+                .iter()
+                .position(|&b| b == b'\n')
+            {
+                let line_end = self.read_pos + offset;
+                let mut bytes = &self.read_buf[self.read_pos..line_end];
+                if bytes.ends_with(b"\r") {
+                    bytes = &bytes[..bytes.len() - 1];
+                }
+                let line = String::from_utf8_lossy(bytes).to_string();
+                self.read_pos = line_end + 1;
+                self.compact_read_buf();
+                return Ok(Some(line));
+            }
+
+            self.compact_read_buf();
+            let mut chunk = [0u8; 4096];
+            let n = self
+                .transport
+                .as_mut()
+                .expect("IMAP transport missing")
+                .read(&mut chunk)
+                .await?;
+            if n == 0 {
+                if self.has_buffered_read_bytes() {
+                    let bytes = &self.read_buf[self.read_pos..];
+                    let line = String::from_utf8_lossy(bytes).to_string();
+                    self.read_buf.clear();
+                    self.read_pos = 0;
+                    return Ok(Some(line));
+                }
+                return Ok(None);
+            }
+            self.read_buf.extend_from_slice(&chunk[..n]);
+        }
+    }
+
+    async fn read_exact_buffered(&mut self, mut buf: &mut [u8]) -> io::Result<()> {
+        while !buf.is_empty() && self.has_buffered_read_bytes() {
+            let available = self.read_buf.len() - self.read_pos;
+            let to_copy = available.min(buf.len());
+            buf[..to_copy].copy_from_slice(&self.read_buf[self.read_pos..self.read_pos + to_copy]);
+            self.read_pos += to_copy;
+            self.compact_read_buf();
+            buf = &mut buf[to_copy..];
+        }
+
+        if !buf.is_empty() {
+            self.transport
+                .as_mut()
+                .expect("IMAP transport missing")
+                .read_exact(buf)
+                .await?;
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "tls")]
+    async fn upgrade_tls(&mut self, cert_and_key: &CertificateAndKey) -> io::Result<()> {
+        if self.has_buffered_read_bytes() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "cannot start TLS with buffered plaintext bytes",
+            ));
+        }
+
+        let old = self.transport.take().expect("IMAP transport missing");
+        self.transport = Some(old.upgrade_tls(cert_and_key).await?);
+        self.read_buf.clear();
+        self.read_pos = 0;
+        Ok(())
+    }
+}
+
+impl AsyncWrite for BufferedImapTransport {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(self.transport.as_mut().expect("IMAP transport missing")).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(self.transport.as_mut().expect("IMAP transport missing")).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(self.transport.as_mut().expect("IMAP transport missing")).poll_shutdown(cx)
+    }
+}
+
+impl Unpin for BufferedImapTransport {}
+
 // ===========================================================================
 // Mail Store Trait
 // ===========================================================================
@@ -1774,6 +1910,8 @@ async fn handle_connection(
     let mut transport = ImapTransport::Plain(stream);
     let _ = imaps;
 
+    let mut transport = BufferedImapTransport::new(transport);
+
     // Send greeting
     let greeting = parser::format_greeting(CAPABILITIES);
     transport.write_all(greeting.as_bytes()).await?;
@@ -1786,7 +1924,7 @@ async fn handle_connection(
 
     // Command loop — read lines directly from transport
     loop {
-        let line = match read_imap_line(&mut transport).await {
+        let line = match transport.read_line().await {
             Ok(Some(line)) => line,
             Ok(None) => {
                 edgerun_log::info!("edgerun-imap: client {} disconnected", peer);
@@ -1837,15 +1975,8 @@ async fn handle_connection(
                 write_response(&mut transport, &resp).await?;
 
                 let cert = tls_cert.as_ref().unwrap();
-                let old = std::mem::replace(
-                    &mut transport,
-                    ImapTransport::Plain(
-                        AsyncTcpStream::from_raw(0), // placeholder, immediately replaced
-                    ),
-                );
-                match old.upgrade_tls(cert).await {
-                    Ok(new) => {
-                        transport = new;
+                match transport.upgrade_tls(cert).await {
+                    Ok(()) => {
                         edgerun_log::info!(
                             "edgerun-imap: STARTTLS handshake complete for {}",
                             peer
@@ -1938,30 +2069,11 @@ async fn handle_connection(
     }
 }
 
-/// Read a single IMAP line (until \r\n) from the transport.
-async fn read_imap_line(transport: &mut ImapTransport) -> io::Result<Option<String>> {
-    let mut buf = Vec::new();
-    loop {
-        let mut byte = [0u8; 1];
-        let n = transport.read(&mut byte).await?;
-        if n == 0 {
-            if buf.is_empty() {
-                return Ok(None);
-            }
-            return Ok(Some(String::from_utf8_lossy(&buf).to_string()));
-        }
-        if byte[0] == b'\n' {
-            if buf.ends_with(b"\r") {
-                buf.pop();
-            }
-            return Ok(Some(String::from_utf8_lossy(&buf).to_string()));
-        }
-        buf.push(byte[0]);
-    }
-}
-
 /// Write a response to the transport.
-async fn write_response(transport: &mut ImapTransport, resp: &ImapResponse) -> io::Result<()> {
+async fn write_response(
+    transport: &mut BufferedImapTransport,
+    resp: &ImapResponse,
+) -> io::Result<()> {
     let wire = resp.to_wire();
     transport.write_all(wire.as_bytes()).await?;
     transport.flush().await?;
@@ -1987,7 +2099,7 @@ async fn dispatch_command(
     authenticated_user: &mut Option<String>,
     store: &Arc<dyn MailStore>,
     domain: &str,
-    transport: &mut ImapTransport,
+    transport: &mut BufferedImapTransport,
 ) -> io::Result<ImapResponse> {
     match cmd {
         ImapCommand::Capability => {
@@ -2042,7 +2154,7 @@ async fn dispatch_command(
                 transport.write_all(b"+ \r\n").await?;
                 transport.flush().await?;
 
-                let creds = read_imap_line(transport).await?.unwrap_or_default();
+                let creds = transport.read_line().await?.unwrap_or_default();
                 if let Ok(bytes) = base64_decode(&creds) {
                     if let Ok(s) = std::str::from_utf8(&bytes) {
                         let parts: Vec<&str> = s.split('\0').collect();
@@ -2078,7 +2190,7 @@ async fn dispatch_command(
                 transport.write_all(b"+ VXNlcm5hbWU6\r\n").await?;
                 transport.flush().await?;
 
-                let username_b64 = read_imap_line(transport).await?.unwrap_or_default();
+                let username_b64 = transport.read_line().await?.unwrap_or_default();
                 let username = if let Ok(bytes) = base64_decode(&username_b64) {
                     String::from_utf8(bytes).map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidData, "invalid username")
@@ -2094,7 +2206,7 @@ async fn dispatch_command(
                 transport.write_all(b"+ UGFzc3dvcmQ6\r\n").await?;
                 transport.flush().await?;
 
-                let password_b64 = read_imap_line(transport).await?.unwrap_or_default();
+                let password_b64 = transport.read_line().await?.unwrap_or_default();
                 let password = if let Ok(bytes) = base64_decode(&password_b64) {
                     String::from_utf8(bytes).map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidData, "invalid password")
@@ -2512,7 +2624,7 @@ async fn dispatch_command(
             let data = read_imap_exact(transport, *literal_size).await?;
 
             // Consume trailing \r\n after literal data (it's a blank line)
-            read_imap_line(transport).await?;
+            transport.read_line().await?;
 
             // Parse flags if provided
             let msg_flags = flags
@@ -2574,7 +2686,7 @@ async fn dispatch_command(
 
             // Read lines until we get DONE
             loop {
-                let line = match read_imap_line(transport).await {
+                let line = match transport.read_line().await {
                     Ok(Some(l)) => l,
                     Ok(None) => {
                         edgerun_log::info!("edgerun-imap: client disconnected during IDLE");
@@ -2898,8 +3010,8 @@ fn parse_search_keys_simple(criteria: &[String]) -> Vec<crate::imap::types::Sear
 // ===========================================================================
 // Response Sender
 /// Read exactly `n` bytes from the transport (for APPEND literal data).
-async fn read_imap_exact(transport: &mut ImapTransport, n: usize) -> io::Result<Vec<u8>> {
+async fn read_imap_exact(transport: &mut BufferedImapTransport, n: usize) -> io::Result<Vec<u8>> {
     let mut buf = vec![0u8; n];
-    transport.read_exact(&mut buf).await?;
+    transport.read_exact_buffered(&mut buf).await?;
     Ok(buf)
 }

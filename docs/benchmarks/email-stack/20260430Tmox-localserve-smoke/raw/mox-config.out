@@ -1,0 +1,17 @@
+$ ./scripts/benchmark-email-podman.sh config mox
+FROM r.xmox.nl/mox:latest
+RUN mkdir -p /data
+RUN printf '%s\n' \
+  '#!/bin/sh' \
+  'set -eu' \
+  'dir=/data/localserve' \
+  'if [ ! -f "$dir/mox.conf" ]; then' \
+  '  mox localserve -initonly -dir "$dir" -ip 0.0.0.0' \
+  '  awk '\''BEGIN { skip = 0 } /^\t\tJunkFilter:/ { skip = 1; next } skip && /^\t\tNoFirstTimeSenderDelay:/ { skip = 0 } !skip { print }'\'' "$dir/domains.conf" > "$dir/domains.conf.tmp"' \
+  '  mv "$dir/domains.conf.tmp" "$dir/domains.conf"' \
+  'fi' \
+  'exec mox localserve -dir "$dir"' \
+  > /usr/local/bin/run-mox-localserve \
+ && chmod +x /usr/local/bin/run-mox-localserve
+EXPOSE 1025 1143 1080 1443
+CMD ["/usr/local/bin/run-mox-localserve"]

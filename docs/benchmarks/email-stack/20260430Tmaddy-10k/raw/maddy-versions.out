@@ -1,0 +1,2 @@
+$ ./scripts/benchmark-email-podman.sh versions maddy
+0.9.3 linux/amd64 go1.23.12

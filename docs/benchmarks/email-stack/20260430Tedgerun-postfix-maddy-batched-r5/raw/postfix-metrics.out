@@ -1,0 +1,10 @@
+$ ./scripts/benchmark-email-podman.sh metrics postfix
+stack=postfix
+shape=smtp_mta_only
+components=1
+container_base=debian:trixie-slim
+packages=postfix,ca-certificates
+config_lines=11
+services=postfix
+ports=smtp:25
+multitenancy_note=domain and mailbox policy live in MTA maps/config; IMAP/webmail require separate components.

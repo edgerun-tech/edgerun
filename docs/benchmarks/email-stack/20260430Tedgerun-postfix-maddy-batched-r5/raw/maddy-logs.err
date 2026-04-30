@@ -1,0 +1,240 @@
+smtp: accepted	{"msg_id":"881d6982"}
+smtp: accepted	{"msg_id":"67c57005"}
+smtp: accepted	{"msg_id":"662f1f7f"}
+smtp: incoming message	{"msg_id":"fc177b40","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55526"}
+smtp: RCPT ok	{"msg_id":"fc177b40","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"e8b99eb9","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55512"}
+smtp: RCPT ok	{"msg_id":"e8b99eb9","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"ee81f74b","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55532"}
+smtp: RCPT ok	{"msg_id":"ee81f74b","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"e5e39c1d"}
+smtp: incoming message	{"msg_id":"4e1d77b8","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55544"}
+smtp: RCPT ok	{"msg_id":"4e1d77b8","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"8e503145","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55540"}
+smtp: incoming message	{"msg_id":"979225ce","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55556"}
+smtp: incoming message	{"msg_id":"1f46c884","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55580"}
+smtp: accepted	{"msg_id":"cb50894c"}
+smtp: RCPT ok	{"msg_id":"8e503145","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"6d645f49","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55572"}
+smtp: RCPT ok	{"msg_id":"6d645f49","rcpt":"bench@example.test"}
+smtp: RCPT ok	{"msg_id":"1f46c884","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"5191d586","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55592"}
+smtp: RCPT ok	{"msg_id":"5191d586","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"44283f20","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55584"}
+smtp: RCPT ok	{"msg_id":"44283f20","rcpt":"bench@example.test"}
+smtp: RCPT ok	{"msg_id":"979225ce","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"2920efec"}
+smtp: accepted	{"msg_id":"6071255f"}
+smtp: accepted	{"msg_id":"9187fcaa"}
+smtp: incoming message	{"msg_id":"de53a901","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55598"}
+smtp: accepted	{"msg_id":"4036c3c3"}
+smtp: RCPT ok	{"msg_id":"de53a901","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"29d564e2","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55602"}
+smtp: RCPT ok	{"msg_id":"29d564e2","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"229ef23d","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55604"}
+smtp: incoming message	{"msg_id":"765b33f1","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55610"}
+smtp: RCPT ok	{"msg_id":"765b33f1","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"6fef265c"}
+smtp: accepted	{"msg_id":"1f66ff71"}
+smtp: RCPT ok	{"msg_id":"229ef23d","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"260e8bf5"}
+smtp: incoming message	{"msg_id":"9853a87b","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55630"}
+smtp: accepted	{"msg_id":"65e2f2ee"}
+smtp: RCPT ok	{"msg_id":"9853a87b","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"93145f98","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55642"}
+smtp: RCPT ok	{"msg_id":"93145f98","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"bac36dc8","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55618"}
+smtp: RCPT ok	{"msg_id":"bac36dc8","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"397f0e66","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55656"}
+smtp: RCPT ok	{"msg_id":"397f0e66","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"5f80bf80"}
+smtp: accepted	{"msg_id":"c418a28a"}
+smtp: accepted	{"msg_id":"fd2097c4"}
+smtp: incoming message	{"msg_id":"950a3674","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55662"}
+smtp: RCPT ok	{"msg_id":"950a3674","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"bd198458"}
+smtp: incoming message	{"msg_id":"327b2c48","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55672"}
+smtp: accepted	{"msg_id":"a7bc1eac"}
+smtp: RCPT ok	{"msg_id":"327b2c48","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"3d4f5ddd","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55680"}
+smtp: RCPT ok	{"msg_id":"3d4f5ddd","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"421e3730","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55698"}
+smtp: RCPT ok	{"msg_id":"421e3730","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"ba79f0c3"}
+smtp: accepted	{"msg_id":"6e8ec2c3"}
+smtp: incoming message	{"msg_id":"8cbfafd9","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55694"}
+smtp: RCPT ok	{"msg_id":"8cbfafd9","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"4171bc4a","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55712"}
+smtp: accepted	{"msg_id":"d422ba8c"}
+smtp: RCPT ok	{"msg_id":"4171bc4a","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"efbc31ec"}
+smtp: incoming message	{"msg_id":"789d5fe8","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55720"}
+smtp: RCPT ok	{"msg_id":"789d5fe8","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"b15137d0"}
+smtp: incoming message	{"msg_id":"8a0cb56c","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55718"}
+smtp: RCPT ok	{"msg_id":"8a0cb56c","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"d8efe294","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55746"}
+smtp: RCPT ok	{"msg_id":"d8efe294","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"34d39189","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55736"}
+smtp: RCPT ok	{"msg_id":"34d39189","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"956b12e3"}
+smtp: incoming message	{"msg_id":"cf8e66f4","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55748"}
+smtp: RCPT ok	{"msg_id":"cf8e66f4","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"b2aae3cf"}
+smtp: accepted	{"msg_id":"8cb2ee97"}
+smtp: incoming message	{"msg_id":"b67bc376","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55756"}
+smtp: RCPT ok	{"msg_id":"b67bc376","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"6d645f49"}
+smtp: accepted	{"msg_id":"fc177b40"}
+smtp: accepted	{"msg_id":"ee81f74b"}
+smtp: accepted	{"msg_id":"e8b99eb9"}
+smtp: incoming message	{"msg_id":"91eb441e","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55778"}
+smtp: incoming message	{"msg_id":"961d744d","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55766"}
+smtp: RCPT ok	{"msg_id":"91eb441e","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"1f46c884"}
+smtp: incoming message	{"msg_id":"93398f98","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55780"}
+smtp: RCPT ok	{"msg_id":"93398f98","rcpt":"bench@example.test"}
+smtp: RCPT ok	{"msg_id":"961d744d","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"819f5566"}
+smtp: incoming message	{"msg_id":"bde11433","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55798"}
+smtp: RCPT ok	{"msg_id":"bde11433","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"32e64239","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55784"}
+smtp: RCPT ok	{"msg_id":"32e64239","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"0df774a7","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55826"}
+smtp: incoming message	{"msg_id":"66d4199c","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55810"}
+smtp: RCPT ok	{"msg_id":"0df774a7","rcpt":"bench@example.test"}
+smtp: RCPT ok	{"msg_id":"66d4199c","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"93145f98"}
+smtp: incoming message	{"msg_id":"890c222d","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55840"}
+smtp: accepted	{"msg_id":"5191d586"}
+smtp: RCPT ok	{"msg_id":"890c222d","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"8e503145"}
+smtp: accepted	{"msg_id":"397f0e66"}
+smtp: accepted	{"msg_id":"de53a901"}
+smtp: accepted	{"msg_id":"44283f20"}
+smtp: accepted	{"msg_id":"979225ce"}
+smtp: incoming message	{"msg_id":"be4f81c0","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55878"}
+smtp: incoming message	{"msg_id":"3261f9d2","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55848"}
+smtp: RCPT ok	{"msg_id":"be4f81c0","rcpt":"bench@example.test"}
+smtp: RCPT ok	{"msg_id":"3261f9d2","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"d8408998","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55884"}
+smtp: RCPT ok	{"msg_id":"d8408998","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"9823a91c","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55864"}
+smtp: RCPT ok	{"msg_id":"9823a91c","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"bac36dc8"}
+smtp: incoming message	{"msg_id":"cd20b2c5","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55898"}
+smtp: accepted	{"msg_id":"950a3674"}
+smtp: accepted	{"msg_id":"9853a87b"}
+smtp: RCPT ok	{"msg_id":"cd20b2c5","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"765b33f1"}
+smtp: accepted	{"msg_id":"4171bc4a"}
+smtp: accepted	{"msg_id":"327b2c48"}
+smtp: accepted	{"msg_id":"8a0cb56c"}
+smtp: accepted	{"msg_id":"8cbfafd9"}
+smtp: incoming message	{"msg_id":"939816de","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55910"}
+smtp: accepted	{"msg_id":"421e3730"}
+smtp: RCPT ok	{"msg_id":"939816de","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"0327979d","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55932"}
+smtp: RCPT ok	{"msg_id":"0327979d","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"2ae74aa3","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55924"}
+smtp: RCPT ok	{"msg_id":"2ae74aa3","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"13824032","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55944"}
+smtp: RCPT ok	{"msg_id":"13824032","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"bd430d1b","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55964"}
+smtp: incoming message	{"msg_id":"ac127d35","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55982"}
+smtp: incoming message	{"msg_id":"bb4eb466","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55960"}
+smtp: incoming message	{"msg_id":"e6750fde","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55978"}
+smtp: accepted	{"msg_id":"4e1d77b8"}
+smtp: RCPT ok	{"msg_id":"bb4eb466","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"240dc5b6","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:55992"}
+smtp: RCPT ok	{"msg_id":"240dc5b6","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"576b72d0","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56000"}
+smtp: RCPT ok	{"msg_id":"576b72d0","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"3d4f5ddd"}
+smtp: incoming message	{"msg_id":"2986fdd9","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56012"}
+smtp: RCPT ok	{"msg_id":"bd430d1b","rcpt":"bench@example.test"}
+smtp: RCPT ok	{"msg_id":"e6750fde","rcpt":"bench@example.test"}
+smtp: RCPT ok	{"msg_id":"ac127d35","rcpt":"bench@example.test"}
+smtp: RCPT ok	{"msg_id":"2986fdd9","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"29d564e2"}
+smtp: accepted	{"msg_id":"229ef23d"}
+smtp: incoming message	{"msg_id":"030a6fb1","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56028"}
+smtp: RCPT ok	{"msg_id":"030a6fb1","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"8793d228","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56030"}
+smtp: incoming message	{"msg_id":"0fd8dea3","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56040"}
+smtp: RCPT ok	{"msg_id":"8793d228","rcpt":"bench@example.test"}
+smtp: RCPT ok	{"msg_id":"0fd8dea3","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"789d5fe8"}
+smtp: accepted	{"msg_id":"34d39189"}
+smtp: incoming message	{"msg_id":"ca9df92c","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56052"}
+smtp: incoming message	{"msg_id":"3e442b7c","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56056"}
+smtp: accepted	{"msg_id":"bde11433"}
+smtp: RCPT ok	{"msg_id":"3e442b7c","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"32e64239"}
+smtp: accepted	{"msg_id":"cf8e66f4"}
+smtp: RCPT ok	{"msg_id":"ca9df92c","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"91eb441e"}
+smtp: accepted	{"msg_id":"0df774a7"}
+smtp: accepted	{"msg_id":"66d4199c"}
+smtp: incoming message	{"msg_id":"6573dc71","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56100"}
+smtp: RCPT ok	{"msg_id":"6573dc71","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"961d744d"}
+smtp: incoming message	{"msg_id":"a0095a87","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56064"}
+smtp: RCPT ok	{"msg_id":"a0095a87","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"5cb11f56","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56080"}
+smtp: RCPT ok	{"msg_id":"5cb11f56","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"e6985f90","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56092"}
+smtp: RCPT ok	{"msg_id":"e6985f90","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"9bb490a2","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56098"}
+smtp: RCPT ok	{"msg_id":"9bb490a2","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"b690ab86","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56106"}
+smtp: RCPT ok	{"msg_id":"b690ab86","rcpt":"bench@example.test"}
+smtp: incoming message	{"msg_id":"180c86c5","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56118"}
+smtp: RCPT ok	{"msg_id":"180c86c5","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"b67bc376"}
+smtp: accepted	{"msg_id":"d8efe294"}
+smtp: incoming message	{"msg_id":"71a38105","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56126"}
+smtp: RCPT ok	{"msg_id":"71a38105","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"890c222d"}
+smtp: incoming message	{"msg_id":"837de8a6","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56130"}
+smtp: RCPT ok	{"msg_id":"837de8a6","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"9823a91c"}
+smtp: accepted	{"msg_id":"93398f98"}
+smtp: incoming message	{"msg_id":"595f3871","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56144"}
+smtp: RCPT ok	{"msg_id":"595f3871","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"3261f9d2"}
+smtp: incoming message	{"msg_id":"20db29c9","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56156"}
+smtp: RCPT ok	{"msg_id":"20db29c9","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"be4f81c0"}
+smtp: incoming message	{"msg_id":"0674d739","sender":"bench@example.test","src_host":"benchmark.local","src_ip":"192.168.1.42:56172"}
+smtp: RCPT ok	{"msg_id":"0674d739","rcpt":"bench@example.test"}
+smtp: accepted	{"msg_id":"240dc5b6"}
+smtp: accepted	{"msg_id":"13824032"}
+smtp: accepted	{"msg_id":"bb4eb466"}
+smtp: accepted	{"msg_id":"cd20b2c5"}
+smtp: accepted	{"msg_id":"2ae74aa3"}
+smtp: accepted	{"msg_id":"bd430d1b"}
+smtp: accepted	{"msg_id":"0327979d"}
+smtp: accepted	{"msg_id":"939816de"}
+smtp: accepted	{"msg_id":"d8408998"}
+smtp: accepted	{"msg_id":"576b72d0"}
+smtp: accepted	{"msg_id":"2986fdd9"}
+smtp: accepted	{"msg_id":"8793d228"}
+smtp: accepted	{"msg_id":"ac127d35"}
+smtp: accepted	{"msg_id":"0fd8dea3"}
+smtp: accepted	{"msg_id":"030a6fb1"}
+smtp: accepted	{"msg_id":"ca9df92c"}
+smtp: accepted	{"msg_id":"e6750fde"}
+smtp: accepted	{"msg_id":"3e442b7c"}
+smtp: accepted	{"msg_id":"6573dc71"}
+smtp: accepted	{"msg_id":"a0095a87"}
+smtp: accepted	{"msg_id":"b690ab86"}
+smtp: accepted	{"msg_id":"5cb11f56"}
+smtp: accepted	{"msg_id":"9bb490a2"}
+smtp: accepted	{"msg_id":"180c86c5"}
+smtp: accepted	{"msg_id":"71a38105"}
+smtp: accepted	{"msg_id":"e6985f90"}
+smtp: accepted	{"msg_id":"595f3871"}
+smtp: accepted	{"msg_id":"837de8a6"}
+smtp: accepted	{"msg_id":"0674d739"}
+smtp: accepted	{"msg_id":"20db29c9"}

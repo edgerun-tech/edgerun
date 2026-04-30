@@ -1,0 +1,240 @@
+4b8fa05e3c35907f mda delivery evpid=bc1a0f643e554c08 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa06065f3d785 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa062e56b888d smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa05de7dfb3a3 smtp message msgid=6d454380 size=1381 nrcpt=1 proto=ESMTP
+4b8fa05de7dfb3a3 smtp envelope evpid=6d454380b8c76066 from=<bench@example.test> to=<bench@example.test>
+4b8fa05de7dfb3a3 smtp disconnected reason=quit
+4b8fa06312214d71 mda delivery evpid=6d454380b8c76066 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa06065f3d785 smtp message msgid=a42ba692 size=1381 nrcpt=1 proto=ESMTP
+4b8fa06065f3d785 smtp envelope evpid=a42ba692063f9f09 from=<bench@example.test> to=<bench@example.test>
+4b8fa06065f3d785 smtp disconnected reason=quit
+4b8fa062e56b888d smtp message msgid=e915a697 size=1381 nrcpt=1 proto=ESMTP
+4b8fa062e56b888d smtp envelope evpid=e915a697cc9f7e41 from=<bench@example.test> to=<bench@example.test>
+4b8fa062e56b888d smtp disconnected reason=quit
+4b8fa0669efe661a mda delivery evpid=a42ba692063f9f09 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0669efe661a mda delivery evpid=e915a697cc9f7e41 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0657e996912 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0684e51a86d smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa06a18bc4989 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0657e996912 smtp message msgid=1ea30d2c size=1381 nrcpt=1 proto=ESMTP
+4b8fa0657e996912 smtp envelope evpid=1ea30d2c4125e133 from=<bench@example.test> to=<bench@example.test>
+4b8fa0657e996912 smtp disconnected reason=quit
+4b8fa0684e51a86d smtp message msgid=68e2b1f0 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0684e51a86d smtp envelope evpid=68e2b1f0e5a0696b from=<bench@example.test> to=<bench@example.test>
+4b8fa0684e51a86d smtp disconnected reason=quit
+4b8fa06bbf184fe7 mda delivery evpid=1ea30d2c4125e133 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa06bbf184fe7 mda delivery evpid=68e2b1f0e5a0696b from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa06a18bc4989 smtp message msgid=0ac9cb66 size=1381 nrcpt=1 proto=ESMTP
+4b8fa06a18bc4989 smtp envelope evpid=0ac9cb66622e6454 from=<bench@example.test> to=<bench@example.test>
+4b8fa06a18bc4989 smtp disconnected reason=quit
+4b8fa06d67ae9644 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0706b96726b mda delivery evpid=0ac9cb66622e6454 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa06f32d2063a smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0726b744425 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa06d67ae9644 smtp message msgid=5b3dfb7e size=1381 nrcpt=1 proto=ESMTP
+4b8fa06d67ae9644 smtp envelope evpid=5b3dfb7eac1cc305 from=<bench@example.test> to=<bench@example.test>
+4b8fa06d67ae9644 smtp disconnected reason=quit
+4b8fa0732c319988 mda delivery evpid=5b3dfb7eac1cc305 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa06f32d2063a smtp message msgid=943a2e0d size=1381 nrcpt=1 proto=ESMTP
+4b8fa06f32d2063a smtp envelope evpid=943a2e0d0dc64b09 from=<bench@example.test> to=<bench@example.test>
+4b8fa06f32d2063a smtp disconnected reason=quit
+4b8fa0726b744425 smtp message msgid=01f83ab4 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0726b744425 smtp envelope evpid=01f83ab40d6069a0 from=<bench@example.test> to=<bench@example.test>
+4b8fa0726b744425 smtp disconnected reason=quit
+4b8fa076c66242e7 mda delivery evpid=943a2e0d0dc64b09 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa076c66242e7 mda delivery evpid=01f83ab40d6069a0 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa075e500f1ff smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa07a005a4ef8 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa078d6398b48 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa075e500f1ff smtp message msgid=abc7868b size=1380 nrcpt=1 proto=ESMTP
+4b8fa075e500f1ff smtp envelope evpid=abc7868b25645a5b from=<bench@example.test> to=<bench@example.test>
+4b8fa075e500f1ff smtp disconnected reason=quit
+4b8fa07a005a4ef8 smtp message msgid=0b953920 size=1380 nrcpt=1 proto=ESMTP
+4b8fa07a005a4ef8 smtp envelope evpid=0b953920a874273a from=<bench@example.test> to=<bench@example.test>
+4b8fa07a005a4ef8 smtp disconnected reason=quit
+4b8fa078d6398b48 smtp message msgid=cf70dd23 size=1380 nrcpt=1 proto=ESMTP
+4b8fa078d6398b48 smtp envelope evpid=cf70dd23af91fab6 from=<bench@example.test> to=<bench@example.test>
+4b8fa078d6398b48 smtp disconnected reason=quit
+4b8fa07bb21ec450 mda delivery evpid=abc7868b25645a5b from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=1s result=Ok stat=Delivered
+4b8fa07bb21ec450 mda delivery evpid=0b953920a874273a from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=1s result=Ok stat=Delivered
+4b8fa07bb21ec450 mda delivery evpid=cf70dd23af91fab6 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=1s result=Ok stat=Delivered
+4b8fa07d2b5ed0af smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa07f998e4c86 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa08184a7c39c smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa07d2b5ed0af smtp message msgid=20c378e6 size=1381 nrcpt=1 proto=ESMTP
+4b8fa07d2b5ed0af smtp envelope evpid=20c378e66cb1000f from=<bench@example.test> to=<bench@example.test>
+4b8fa07d2b5ed0af smtp disconnected reason=quit
+4b8fa07f998e4c86 smtp message msgid=2338599d size=1381 nrcpt=1 proto=ESMTP
+4b8fa07f998e4c86 smtp envelope evpid=2338599d09fdbbc0 from=<bench@example.test> to=<bench@example.test>
+4b8fa07f998e4c86 smtp disconnected reason=quit
+4b8fa08184a7c39c smtp message msgid=19e9cc0a size=1381 nrcpt=1 proto=ESMTP
+4b8fa08184a7c39c smtp envelope evpid=19e9cc0a462c2105 from=<bench@example.test> to=<bench@example.test>
+4b8fa08184a7c39c smtp disconnected reason=quit
+4b8fa082021eb1da mda delivery evpid=20c378e66cb1000f from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa082021eb1da mda delivery evpid=2338599d09fdbbc0 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa082021eb1da mda delivery evpid=19e9cc0a462c2105 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0843a3bef39 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa08651d6b2a6 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa088f7c22a39 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0843a3bef39 smtp message msgid=f761e0ed size=1381 nrcpt=1 proto=ESMTP
+4b8fa0843a3bef39 smtp envelope evpid=f761e0edb60f4b27 from=<bench@example.test> to=<bench@example.test>
+4b8fa0843a3bef39 smtp disconnected reason=quit
+4b8fa089fdf1af1f mda delivery evpid=f761e0edb60f4b27 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa08651d6b2a6 smtp message msgid=fc020aea size=1381 nrcpt=1 proto=ESMTP
+4b8fa08651d6b2a6 smtp envelope evpid=fc020aea789c9893 from=<bench@example.test> to=<bench@example.test>
+4b8fa08651d6b2a6 smtp disconnected reason=quit
+4b8fa08cc803b050 mda delivery evpid=fc020aea789c9893 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa088f7c22a39 smtp message msgid=90bb3ea1 size=1381 nrcpt=1 proto=ESMTP
+4b8fa088f7c22a39 smtp envelope evpid=90bb3ea112632ff7 from=<bench@example.test> to=<bench@example.test>
+4b8fa088f7c22a39 smtp disconnected reason=quit
+4b8fa08fa7b02dd1 mda delivery evpid=90bb3ea112632ff7 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa08ddfc242f5 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa091c9006f48 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa08b7eaa9e5e smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa08ddfc242f5 smtp message msgid=e8136c5e size=1381 nrcpt=1 proto=ESMTP
+4b8fa08ddfc242f5 smtp envelope evpid=e8136c5ec217cb3c from=<bench@example.test> to=<bench@example.test>
+4b8fa08ddfc242f5 smtp disconnected reason=quit
+4b8fa0929f673caf mda delivery evpid=e8136c5ec217cb3c from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa094ee096036 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa091c9006f48 smtp message msgid=78d252aa size=1381 nrcpt=1 proto=ESMTP
+4b8fa091c9006f48 smtp envelope evpid=78d252aa964d618e from=<bench@example.test> to=<bench@example.test>
+4b8fa091c9006f48 smtp disconnected reason=quit
+4b8fa08b7eaa9e5e smtp message msgid=6ec711ab size=1381 nrcpt=1 proto=ESMTP
+4b8fa08b7eaa9e5e smtp envelope evpid=6ec711ab33600c35 from=<bench@example.test> to=<bench@example.test>
+4b8fa08b7eaa9e5e smtp disconnected reason=quit
+4b8fa095cea72dd9 mda delivery evpid=78d252aa964d618e from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa095cea72dd9 mda delivery evpid=6ec711ab33600c35 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0970916468d smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa094ee096036 smtp message msgid=29e24ddd size=1381 nrcpt=1 proto=ESMTP
+4b8fa094ee096036 smtp envelope evpid=29e24ddd8aba97ea from=<bench@example.test> to=<bench@example.test>
+4b8fa094ee096036 smtp disconnected reason=quit
+4b8fa09a333842f5 mda delivery evpid=29e24ddd8aba97ea from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0994af73333 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0970916468d smtp message msgid=ad96dc91 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0970916468d smtp envelope evpid=ad96dc9173e0e506 from=<bench@example.test> to=<bench@example.test>
+4b8fa0970916468d smtp disconnected reason=quit
+4b8fa09d4ae94c70 mda delivery evpid=ad96dc9173e0e506 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa09c761d572a smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0994af73333 smtp message msgid=4c5eda50 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0994af73333 smtp envelope evpid=4c5eda50fb11188b from=<bench@example.test> to=<bench@example.test>
+4b8fa0994af73333 smtp disconnected reason=quit
+4b8fa0a0bca2f3d4 mda delivery evpid=4c5eda50fb11188b from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa09c761d572a smtp message msgid=df6e3368 size=1381 nrcpt=1 proto=ESMTP
+4b8fa09c761d572a smtp envelope evpid=df6e33684b17c4c9 from=<bench@example.test> to=<bench@example.test>
+4b8fa09c761d572a smtp disconnected reason=quit
+4b8fa0a397c6e055 mda delivery evpid=df6e33684b17c4c9 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa09f57206049 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0a5df7697b5 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0a212ab6e4b smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa09f57206049 smtp message msgid=0b3875c5 size=1381 nrcpt=1 proto=ESMTP
+4b8fa09f57206049 smtp envelope evpid=0b3875c5f53c7ceb from=<bench@example.test> to=<bench@example.test>
+4b8fa09f57206049 smtp disconnected reason=quit
+4b8fa0a6ad6e4174 mda delivery evpid=0b3875c5f53c7ceb from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0a5df7697b5 smtp message msgid=4a7bf50b size=1381 nrcpt=1 proto=ESMTP
+4b8fa0a5df7697b5 smtp envelope evpid=4a7bf50b8bfde537 from=<bench@example.test> to=<bench@example.test>
+4b8fa0a5df7697b5 smtp disconnected reason=quit
+4b8fa0a9609a0db5 mda delivery evpid=4a7bf50b8bfde537 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0a212ab6e4b smtp message msgid=f9e2c40b size=1381 nrcpt=1 proto=ESMTP
+4b8fa0a212ab6e4b smtp envelope evpid=f9e2c40bb8a5664d from=<bench@example.test> to=<bench@example.test>
+4b8fa0a212ab6e4b smtp disconnected reason=quit
+4b8fa0ac7e60702e mda delivery evpid=f9e2c40bb8a5664d from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0a753856fa5 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0ab12094963 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0ae4b06772d smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0a753856fa5 smtp message msgid=97f88dc6 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0a753856fa5 smtp envelope evpid=97f88dc6babf770d from=<bench@example.test> to=<bench@example.test>
+4b8fa0a753856fa5 smtp disconnected reason=quit
+4b8fa0af9923e72e mda delivery evpid=97f88dc6babf770d from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0ab12094963 smtp message msgid=8917a4ff size=1381 nrcpt=1 proto=ESMTP
+4b8fa0ab12094963 smtp envelope evpid=8917a4ff2c4705ef from=<bench@example.test> to=<bench@example.test>
+4b8fa0ab12094963 smtp disconnected reason=quit
+4b8fa0b26af269aa mda delivery evpid=8917a4ff2c4705ef from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0ae4b06772d smtp message msgid=b758df22 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0ae4b06772d smtp envelope evpid=b758df2258af125a from=<bench@example.test> to=<bench@example.test>
+4b8fa0ae4b06772d smtp disconnected reason=quit
+4b8fa0b5e02dcf17 mda delivery evpid=b758df2258af125a from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0b1b01f3353 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0b415359943 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0b732370920 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0b1b01f3353 smtp message msgid=8bce550b size=1381 nrcpt=1 proto=ESMTP
+4b8fa0b1b01f3353 smtp envelope evpid=8bce550b080ac08d from=<bench@example.test> to=<bench@example.test>
+4b8fa0b1b01f3353 smtp disconnected reason=quit
+4b8fa0b415359943 smtp message msgid=c0ec0ba7 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0b415359943 smtp envelope evpid=c0ec0ba7f224e2f3 from=<bench@example.test> to=<bench@example.test>
+4b8fa0b415359943 smtp disconnected reason=quit
+4b8fa0b732370920 smtp message msgid=e514b0d8 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0b732370920 smtp envelope evpid=e514b0d8ded1649c from=<bench@example.test> to=<bench@example.test>
+4b8fa0b732370920 smtp disconnected reason=quit
+4b8fa0b8c1d3b639 mda delivery evpid=8bce550b080ac08d from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0b8c1d3b639 mda delivery evpid=e514b0d8ded1649c from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0b8c1d3b639 mda delivery evpid=c0ec0ba7f224e2f3 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0ba451a3972 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0bc09c0cf2f smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0be668bc829 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0ba451a3972 smtp message msgid=69325590 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0ba451a3972 smtp envelope evpid=693255902b6fecae from=<bench@example.test> to=<bench@example.test>
+4b8fa0bc09c0cf2f smtp message msgid=741eca46 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0bc09c0cf2f smtp envelope evpid=741eca4659835748 from=<bench@example.test> to=<bench@example.test>
+4b8fa0ba451a3972 smtp disconnected reason=quit
+4b8fa0bc09c0cf2f smtp disconnected reason=quit
+4b8fa0be668bc829 smtp message msgid=56b3a260 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0be668bc829 smtp envelope evpid=56b3a260add4c2bd from=<bench@example.test> to=<bench@example.test>
+4b8fa0be668bc829 smtp disconnected reason=quit
+4b8fa0bf84711fde mda delivery evpid=741eca4659835748 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0bf84711fde mda delivery evpid=693255902b6fecae from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0bf84711fde mda delivery evpid=56b3a260add4c2bd from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0c5106144a7 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0c3900a8bf9 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0c0eb131a44 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0c5106144a7 smtp message msgid=18ed37b5 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0c5106144a7 smtp envelope evpid=18ed37b56b460ea6 from=<bench@example.test> to=<bench@example.test>
+4b8fa0c5106144a7 smtp disconnected reason=quit
+4b8fa0c3900a8bf9 smtp message msgid=f4c21f0b size=1381 nrcpt=1 proto=ESMTP
+4b8fa0c3900a8bf9 smtp envelope evpid=f4c21f0b6b774c69 from=<bench@example.test> to=<bench@example.test>
+4b8fa0c3900a8bf9 smtp disconnected reason=quit
+4b8fa0c6bbd32520 mda delivery evpid=18ed37b56b460ea6 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0c6bbd32520 mda delivery evpid=f4c21f0b6b774c69 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0c0eb131a44 smtp message msgid=2e66ed1e size=1381 nrcpt=1 proto=ESMTP
+4b8fa0c0eb131a44 smtp envelope evpid=2e66ed1e44b38953 from=<bench@example.test> to=<bench@example.test>
+4b8fa0c0eb131a44 smtp disconnected reason=quit
+4b8fa0cb4d3a6aec mda delivery evpid=2e66ed1e44b38953 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0c8b4aeb375 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0ca097eafa7 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0cdb561bf5f smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0c8b4aeb375 smtp message msgid=f560ac5b size=1381 nrcpt=1 proto=ESMTP
+4b8fa0c8b4aeb375 smtp envelope evpid=f560ac5b980dbc6d from=<bench@example.test> to=<bench@example.test>
+4b8fa0c8b4aeb375 smtp disconnected reason=quit
+4b8fa0ca097eafa7 smtp message msgid=0bcd3996 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0ca097eafa7 smtp envelope evpid=0bcd39967d47d8a7 from=<bench@example.test> to=<bench@example.test>
+4b8fa0ca097eafa7 smtp disconnected reason=quit
+4b8fa0ce018fd2f2 mda delivery evpid=f560ac5b980dbc6d from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0cdb561bf5f smtp message msgid=f78da6a4 size=1381 nrcpt=1 proto=ESMTP
+4b8fa0cdb561bf5f smtp envelope evpid=f78da6a497e64db8 from=<bench@example.test> to=<bench@example.test>
+4b8fa0cdb561bf5f smtp disconnected reason=quit
+4b8fa0ce018fd2f2 mda delivery evpid=0bcd39967d47d8a7 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0ce018fd2f2 mda delivery evpid=f78da6a497e64db8 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0d0ef3115b9 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0d28a146d74 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0d49cecfc30 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0d0ef3115b9 smtp message msgid=5dbc21cd size=1380 nrcpt=1 proto=ESMTP
+4b8fa0d0ef3115b9 smtp envelope evpid=5dbc21cd9863f7b5 from=<bench@example.test> to=<bench@example.test>
+4b8fa0d0ef3115b9 smtp disconnected reason=quit
+4b8fa0d5ba57b16b mda delivery evpid=5dbc21cd9863f7b5 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=1s result=Ok stat=Delivered
+4b8fa0d28a146d74 smtp message msgid=2fa9ff39 size=1380 nrcpt=1 proto=ESMTP
+4b8fa0d28a146d74 smtp envelope evpid=2fa9ff3962e2d0c8 from=<bench@example.test> to=<bench@example.test>
+4b8fa0d28a146d74 smtp disconnected reason=quit
+4b8fa0d88f76784a mda delivery evpid=2fa9ff3962e2d0c8 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=1s result=Ok stat=Delivered
+4b8fa0d49cecfc30 smtp message msgid=96a95520 size=1380 nrcpt=1 proto=ESMTP
+4b8fa0d49cecfc30 smtp envelope evpid=96a9552047b94fdb from=<bench@example.test> to=<bench@example.test>
+4b8fa0d49cecfc30 smtp disconnected reason=quit
+4b8fa0daf7b5c6a5 mda delivery evpid=96a9552047b94fdb from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8fa0d7053684c5 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8fa0d7053684c5 smtp message msgid=b076482f size=1381 nrcpt=1 proto=ESMTP
+4b8fa0d7053684c5 smtp envelope evpid=b076482f371fb15b from=<bench@example.test> to=<bench@example.test>
+4b8fa0d7053684c5 smtp disconnected reason=quit
+4b8fa0dc18146ff3 mda delivery evpid=b076482f371fb15b from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered
+4b8f9fd239215573 smtp connected address=192.168.1.42 host=27c195b16e83
+4b8f9fd239215573 smtp message msgid=f4121169 size=1379 nrcpt=1 proto=ESMTP
+4b8f9fd239215573 smtp envelope evpid=f41211694e946817 from=<bench@example.test> to=<bench@example.test>
+4b8f9fd239215573 smtp disconnected reason=quit
+4b8fa0ded88d9f91 mda delivery evpid=f41211694e946817 from=<bench@example.test> to=<bench@example.test> rcpt=<bench@example.test> user=bench delay=0s result=Ok stat=Delivered

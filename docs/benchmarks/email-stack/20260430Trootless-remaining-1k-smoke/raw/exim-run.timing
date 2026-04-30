@@ -1,0 +1,5 @@
+command=./scripts/benchmark-email-podman.sh run exim 
+status=0
+started_ms=1777519590465
+ended_ms=1777519592660
+elapsed_ms=2195

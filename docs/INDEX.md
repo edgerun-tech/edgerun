@@ -37,6 +37,12 @@ component notes, generated spec snapshots, or older design documents.
 - [OCI runtime](oci-runtime/README.md)
 - [Virtual disk](virtual-disk/README.md)
 - [Remote capability](remote-capability/README.md)
+- [Benchmark methodology](benchmarks/methodology.md) - evidence classes,
+  isolation rules, workload rules, and publication guardrails.
+- [Email benchmark baseline](email-stack-benchmark-baseline.md) - host-only and
+  rootless-Podman benchmark plan and evidence references.
+- [Email stack research status](benchmarks/email-stack/research-status-20260430.md) -
+  current evidence reading, safe public claim wording, and next measurements.
 - [ESP32-S3 Wi-Fi MMIO bring-up](hardware/esp32s3-wifi-mmio.md) - bare-target
   no-blob Wi-Fi diagnostics and current blocker notes.
 - [Fuzzing](fuzz-README.md)

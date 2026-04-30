@@ -6,6 +6,8 @@ extern crate edgerun_platform;
 use crate::Error;
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
+#[cfg(not(target_os = "none"))]
+use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future::Future;
@@ -247,33 +249,127 @@ pub fn noop_waker() -> Waker {
 
 pub fn shutdown() {}
 
-pub struct Builder;
+pub struct Builder {
+    worker_threads: Option<usize>,
+    max_blocking_threads: Option<usize>,
+}
 
 impl Builder {
     pub fn new_multi_thread() -> Self {
-        Self
+        Self {
+            worker_threads: None,
+            max_blocking_threads: None,
+        }
     }
-    pub fn worker_threads(&mut self, _: usize) -> &mut Self {
+    pub fn worker_threads(&mut self, threads: usize) -> &mut Self {
+        self.worker_threads = Some(threads.max(1));
         self
     }
-    pub fn max_blocking_threads(&mut self, _: usize) -> &mut Self {
+    pub fn max_blocking_threads(&mut self, threads: usize) -> &mut Self {
+        self.max_blocking_threads = Some(threads.max(1));
         self
     }
     pub fn enable_all(&mut self) -> &mut Self {
         self
     }
     pub fn build(&self) -> Result<Runtime, Error> {
-        Ok(Runtime)
+        Ok(Runtime::new(
+            self.worker_threads.unwrap_or_else(default_worker_threads),
+        ))
     }
 }
 
-pub struct Runtime;
+#[cfg(not(target_os = "none"))]
+struct RuntimeWorkers {
+    stop: Arc<AtomicBool>,
+    handles: Vec<std::thread::JoinHandle<()>>,
+}
+
+pub struct Runtime {
+    #[cfg(not(target_os = "none"))]
+    workers: Option<RuntimeWorkers>,
+}
+
+fn default_worker_threads() -> usize {
+    #[cfg(not(target_os = "none"))]
+    {
+        if let Some(threads) = std::env::var("EDGERUN_RT_WORKER_THREADS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|threads| *threads > 0)
+        {
+            return threads;
+        }
+        std::thread::available_parallelism()
+            .map(|parallelism| parallelism.get())
+            .unwrap_or(1)
+    }
+
+    #[cfg(target_os = "none")]
+    {
+        1
+    }
+}
 
 impl Runtime {
+    fn new(worker_threads: usize) -> Self {
+        #[cfg(not(target_os = "none"))]
+        {
+            let stop = Arc::new(AtomicBool::new(false));
+            let mut handles = Vec::new();
+            for worker_id in 0..worker_threads.max(1) {
+                let stop = Arc::clone(&stop);
+                let handle = std::thread::Builder::new()
+                    .name(format!("edgerun-rt-{worker_id}"))
+                    .spawn(move || {
+                        while !stop.load(Ordering::Acquire) {
+                            if pending() == 0 {
+                                std::thread::sleep(std::time::Duration::from_micros(250));
+                                continue;
+                            }
+                            run_queue();
+                            unsafe { edgerun_platform::yield_cpu() };
+                            std::thread::sleep(std::time::Duration::from_micros(250));
+                        }
+                    })
+                    .expect("failed to spawn edgerun runtime worker");
+                handles.push(handle);
+            }
+            Self {
+                workers: Some(RuntimeWorkers { stop, handles }),
+            }
+        }
+
+        #[cfg(target_os = "none")]
+        {
+            let _ = worker_threads;
+            Self {}
+        }
+    }
+
     pub fn new_multi_thread() -> Builder {
         Builder::new_multi_thread()
     }
-    pub fn shutdown(&self) {}
+    pub fn worker_count(&self) -> usize {
+        #[cfg(not(target_os = "none"))]
+        {
+            self.workers
+                .as_ref()
+                .map(|workers| workers.handles.len())
+                .unwrap_or(0)
+        }
+
+        #[cfg(target_os = "none")]
+        {
+            1
+        }
+    }
+    pub fn shutdown(&self) {
+        #[cfg(not(target_os = "none"))]
+        if let Some(workers) = self.workers.as_ref() {
+            workers.stop.store(true, Ordering::Release);
+        }
+    }
     pub fn spawn<F>(&self, f: F) -> JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
@@ -308,6 +404,15 @@ impl Runtime {
 
 impl Drop for Runtime {
     fn drop(&mut self) {
+        #[cfg(not(target_os = "none"))]
+        if let Some(mut workers) = self.workers.take() {
+            workers.stop.store(true, Ordering::Release);
+            for handle in workers.handles.drain(..) {
+                let _ = handle.join();
+            }
+        }
+
+        #[cfg(target_os = "none")]
         self.shutdown();
     }
 }
