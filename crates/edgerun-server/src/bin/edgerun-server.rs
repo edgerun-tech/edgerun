@@ -1136,13 +1136,25 @@ impl SiteRouter {
             };
         }
         if self.blog_host.as_deref() == host.as_deref() {
-            if let Some(blog) = &self.blog {
-                return blog.handle_sync(request);
-            }
+            return match request.method().as_str() {
+                "GET" | "HEAD" => redirect_to_dash_surface("build-log"),
+                _ => method_not_allowed("GET, HEAD"),
+            };
         }
         if self.git_host.as_deref() == host.as_deref() {
-            if let Some(git) = &self.git {
-                return git.handle_sync(request);
+            return match request.method().as_str() {
+                "GET" | "HEAD" => redirect_to_dash_surface("code"),
+                _ => method_not_allowed("GET, HEAD"),
+            };
+        }
+        if host.as_deref() == Some(normalize_host(self.webmail.hostname()).as_str()) {
+            let target = request.uri().request_target();
+            let path = target.split('?').next().unwrap_or(target.as_str());
+            if path == "/" || path == "/index.html" {
+                return match request.method().as_str() {
+                    "GET" | "HEAD" => redirect_to_dash_surface("mail"),
+                    _ => method_not_allowed("GET, HEAD"),
+                };
             }
         }
         self.webmail.handle_sync(request)
@@ -1173,12 +1185,18 @@ fn dash_response(request: &Request) -> Response {
         )
 }
 
-fn render_dash_surface(label: &str, subtitle: &str, direct_href: &str, content: &str) -> String {
+fn redirect_to_dash_surface(surface: &str) -> Response {
+    Response::text(StatusCode::new(308).unwrap(), "")
+        .with_header("Location", &format!("https://dash.edgerun.tech/#{surface}"))
+        .with_header("Cache-Control", "no-store")
+        .with_header("X-Content-Type-Options", "nosniff")
+}
+
+fn render_dash_surface(label: &str, subtitle: &str, content: &str) -> String {
     format!(
-        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Workspace surface\"><header><div><strong id=\"surfaceTitle\">{}</strong><span id=\"surfaceUrl\">{}</span></div><a id=\"surfaceOpen\" href=\"{}\">Open directly</a></header><div class=\"dash-surface\">{}</div></section>",
+        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Workspace surface\"><header><div><strong id=\"surfaceTitle\">{}</strong><span id=\"surfaceUrl\">backend: {}</span></div></header><div class=\"dash-surface\">{}</div></section>",
         edgerun_web_ui::escape_html(label),
         edgerun_web_ui::escape_html(subtitle),
-        edgerun_web_ui::escape_attr(direct_href),
         content
     )
 }
@@ -1187,8 +1205,7 @@ fn render_dash_blog_surface() -> String {
     render_dash_surface(
         "Build Log",
         "blog.edgerun.tech",
-        "https://blog.edgerun.tech/",
-        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://blog.edgerun.tech/\"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></a><a class=\"dash-card\" href=\"https://blog.edgerun.tech/about.html\"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></a><a class=\"dash-card\" href=\"https://blog.edgerun.tech/feed.xml\"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></a></div>",
+        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#build-log\"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></a><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#about\"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></a><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#feed\"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></a></div>",
     )
 }
 
@@ -1196,8 +1213,7 @@ fn render_dash_code_surface() -> String {
     render_dash_surface(
         "Code",
         "git.edgerun.tech",
-        "https://git.edgerun.tech/",
-        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://git.edgerun.tech/\"><strong>Repositories</strong><span>Browse released source surfaces.</span></a><a class=\"dash-card\" href=\"https://git.edgerun.tech/edgerun_core/crates\"><strong>Crate explorer</strong><span>Navigate visible crates, metadata, APIs, and relationships.</span></a><a class=\"dash-card\" href=\"https://git.edgerun.tech/edgerun_core\"><strong>Source tree</strong><span>Open the public source tree directly.</span></a></div>",
+        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#code\"><strong>Repositories</strong><span>Browse released source surfaces.</span></a><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#crates\"><strong>Crate explorer</strong><span>Navigate visible crates, metadata, APIs, and relationships.</span></a><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#source\"><strong>Source tree</strong><span>Open the public source tree directly.</span></a></div>",
     )
 }
 
@@ -1277,8 +1293,8 @@ const DASH_BODY: &str = r##"
     <button class="dash-tab" type="button" hx-get="/surface/mail" hx-target="#surfaceSlot" hx-swap="outerHTML">Mail</button>
   </nav>
   <section id="surfaceSlot" class="dash-stage" aria-label="Workspace surface">
-    <header><div><strong id="surfaceTitle">Build Log</strong><span id="surfaceUrl">blog.edgerun.tech</span></div><a id="surfaceOpen" href="https://blog.edgerun.tech/">Open directly</a></header>
-    <div class="dash-surface"><div class="dash-grid"><a class="dash-card" href="https://blog.edgerun.tech/"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></a><a class="dash-card" href="https://blog.edgerun.tech/about.html"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></a><a class="dash-card" href="https://blog.edgerun.tech/feed.xml"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></a></div></div>
+    <header><div><strong id="surfaceTitle">Build Log</strong><span id="surfaceUrl">backend: blog.edgerun.tech</span></div></header>
+    <div class="dash-surface"><div class="dash-grid"><a class="dash-card" href="https://dash.edgerun.tech/#build-log"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></a><a class="dash-card" href="https://dash.edgerun.tech/#about"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></a><a class="dash-card" href="https://dash.edgerun.tech/#feed"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></a></div></div>
   </section>
 </main>
 "##;
@@ -1299,7 +1315,10 @@ const DASH_STYLE: &str = r#"
 
 const DASH_JS: &str = r#"
 const search=document.getElementById('workspaceSearch');
-search&&search.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();const q=search.value.trim();if(!q)return;location.href='https://git.edgerun.tech/edgerun_core/crates?q='+encodeURIComponent(q)});
+const dashSurfaceMap={'#build-log':'/surface/blog','#blog':'/surface/blog','#code':'/surface/git','#git':'/surface/git','#mail':'/surface/mail','#crates':'/surface/git','#source':'/surface/git','#about':'/surface/blog','#feed':'/surface/blog'};
+async function loadDashHash(){const path=dashSurfaceMap[location.hash];if(!path)return;const slot=document.querySelector('#surfaceSlot');if(!slot)return;const response=await fetch(path,{headers:workspaceHeaders(path)});if(!response.ok)return;slot.outerHTML=await response.text();document.querySelectorAll('.dash-tab[aria-current]').forEach(node=>node.removeAttribute('aria-current'));const tab=document.querySelector('[hx-get="'+path+'"]');if(tab)tab.setAttribute('aria-current','page')}
+addEventListener('hashchange',loadDashHash);loadDashHash();
+search&&search.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();const q=search.value.trim();if(!q)return;location.href='https://dash.edgerun.tech/#code?q='+encodeURIComponent(q)});
 "#;
 
 struct HttpsRedirectHandler {

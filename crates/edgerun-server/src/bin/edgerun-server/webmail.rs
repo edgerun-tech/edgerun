@@ -77,6 +77,10 @@ impl WebmailHandler {
         Self { config }
     }
 
+    pub(crate) fn hostname(&self) -> &str {
+        &self.config.hostname
+    }
+
     pub(crate) fn handle_sync(&self, request: Request) -> Response {
         let target = request.uri().request_target();
         let path = target.split('?').next().unwrap_or(target.as_str());
@@ -280,7 +284,7 @@ fn html_response(body: &str, embedded: bool) -> Response {
     if embedded {
         response.with_header(
             "Content-Security-Policy",
-            "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors https://dash.edgerun.tech https://blog.edgerun.tech https://git.edgerun.tech; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'",
+            "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors https://dash.edgerun.tech; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'",
         )
     } else {
         response
@@ -307,7 +311,7 @@ fn dash_html_response(body: &str) -> Response {
 
 fn dash_mail_response(content: &str) -> Response {
     dash_html_response(&format!(
-        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Mail workspace\"><header><div><strong id=\"surfaceTitle\">Mail</strong><span id=\"surfaceUrl\">mail.edgerun.tech</span></div><a id=\"surfaceOpen\" href=\"https://mail.edgerun.tech/\">Open directly</a></header><div class=\"dash-surface\">{}</div></section>",
+        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Mail workspace\"><header><div><strong id=\"surfaceTitle\">Mail</strong><span id=\"surfaceUrl\">backend: mail.edgerun.tech</span></div></header><div class=\"dash-surface\">{}</div></section>",
         content
     ))
 }
@@ -402,7 +406,7 @@ fn render_dash_mail_inbox(config: &WebmailConfig, notice: Option<&str>) -> io::R
             String::new()
         };
         list.push_str(&format!(
-            "<a class=\"dash-mail-item\" href=\"https://mail.edgerun.tech/\" hx-get=\"/surface/mail/message/{}\" hx-target=\"#dashMailDetail\" hx-swap=\"outerHTML\"><strong>{}</strong><span>{}</span><div class=\"dash-mail-meta\">{}<span>{}</span>{}{}</div><span class=\"dash-mail-preview\">{}</span></a>",
+            "<a class=\"dash-mail-item\" href=\"https://dash.edgerun.tech/#mail\" hx-get=\"/surface/mail/message/{}\" hx-target=\"#dashMailDetail\" hx-swap=\"outerHTML\"><strong>{}</strong><span>{}</span><div class=\"dash-mail-meta\">{}<span>{}</span>{}{}</div><span class=\"dash-mail-preview\">{}</span></a>",
             encoded,
             edgerun_web_ui::escape_html(&message.subject),
             edgerun_web_ui::escape_html(&message.from),
@@ -425,7 +429,7 @@ fn render_dash_mail_inbox(config: &WebmailConfig, notice: Option<&str>) -> io::R
         })
         .unwrap_or_default();
     Ok(format!(
-        "{}<div class=\"dash-mail-toolbar\"><a class=\"dash-mail-button\" href=\"https://mail.edgerun.tech/\" hx-get=\"/surface/mail/compose\" hx-target=\"#dashMailDetail\" hx-swap=\"outerHTML\">Compose</a><span>{} messages</span></div><div class=\"dash-mail\"><nav class=\"dash-mail-list\" aria-label=\"Messages\">{}</nav><article id=\"dashMailDetail\" class=\"dash-mail-detail\"><p class=\"dash-mail-empty\">Select a message, or compose a new one.</p></article></div>",
+        "{}<div class=\"dash-mail-toolbar\"><a class=\"dash-mail-button\" href=\"https://dash.edgerun.tech/#mail\" hx-get=\"/surface/mail/compose\" hx-target=\"#dashMailDetail\" hx-swap=\"outerHTML\">Compose</a><span>{} messages</span></div><div class=\"dash-mail\"><nav class=\"dash-mail-list\" aria-label=\"Messages\">{}</nav><article id=\"dashMailDetail\" class=\"dash-mail-detail\"><p class=\"dash-mail-empty\">Select a message, or compose a new one.</p></article></div>",
         notice,
         messages.len(),
         list
@@ -453,7 +457,7 @@ fn render_dash_mail_message(message: &DashMailDetail) -> String {
         )
     };
     format!(
-        "<article id=\"dashMailDetail\" class=\"dash-mail-detail\"><header><h2>{}</h2><div class=\"dash-mail-meta\"><span>From {}</span><span>To {}</span><span>{}</span></div></header>{}{}<div class=\"dash-mail-actions\"><a class=\"dash-mail-button\" href=\"https://mail.edgerun.tech/\" hx-get=\"/surface/mail/reply/{}\" hx-target=\"#dashMailDetail\" hx-swap=\"outerHTML\">Reply</a></div><pre class=\"dash-mail-body\">{}</pre></article>",
+        "<article id=\"dashMailDetail\" class=\"dash-mail-detail\"><header><h2>{}</h2><div class=\"dash-mail-meta\"><span>From {}</span><span>To {}</span><span>{}</span></div></header>{}{}<div class=\"dash-mail-actions\"><a class=\"dash-mail-button\" href=\"https://dash.edgerun.tech/#mail\" hx-get=\"/surface/mail/reply/{}\" hx-target=\"#dashMailDetail\" hx-swap=\"outerHTML\">Reply</a></div><pre class=\"dash-mail-body\">{}</pre></article>",
         edgerun_web_ui::escape_html(&message.subject),
         edgerun_web_ui::escape_html(&message.from),
         edgerun_web_ui::escape_html(&message.to),
@@ -482,7 +486,7 @@ fn render_dash_mail_compose(
         })
         .unwrap_or_default();
     format!(
-        "<article id=\"dashMailDetail\" class=\"dash-mail-detail\"><form class=\"dash-mail-compose\" data-dash-mail-compose action=\"/surface/mail/send\"><label>To<input name=\"to\" autocomplete=\"email\" value=\"{}\"></label><label>Subject<input name=\"subject\" value=\"{}\"></label><label>Message<textarea name=\"body\">{}</textarea></label><div class=\"dash-mail-actions\"><button class=\"dash-mail-button\" type=\"submit\">Send</button><a class=\"dash-mail-button\" href=\"https://mail.edgerun.tech/\" hx-get=\"/surface/mail\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">Cancel</a></div></form></article>",
+        "<article id=\"dashMailDetail\" class=\"dash-mail-detail\"><form class=\"dash-mail-compose\" data-dash-mail-compose action=\"/surface/mail/send\"><label>To<input name=\"to\" autocomplete=\"email\" value=\"{}\"></label><label>Subject<input name=\"subject\" value=\"{}\"></label><label>Message<textarea name=\"body\">{}</textarea></label><div class=\"dash-mail-actions\"><button class=\"dash-mail-button\" type=\"submit\">Send</button><a class=\"dash-mail-button\" href=\"https://dash.edgerun.tech/#mail\" hx-get=\"/surface/mail\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">Cancel</a></div></form></article>",
         edgerun_web_ui::escape_attr(to.unwrap_or_default()),
         edgerun_web_ui::escape_attr(subject.unwrap_or_default()),
         edgerun_web_ui::escape_html(&body),
