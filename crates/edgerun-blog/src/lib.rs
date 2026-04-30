@@ -223,6 +223,42 @@ impl BlogHandler {
         }
     }
 
+    pub fn render_dash_content(&self, surface_path: &str) -> io::Result<String> {
+        let tail = surface_path
+            .strip_prefix("/surface/blog")
+            .unwrap_or(surface_path);
+        let path = if tail.is_empty() { "/" } else { tail };
+        let (language, localized_path) = route_language(path);
+        let root = self.config.language_content_root(language);
+        match localized_path.as_str() {
+            "/" | "/index.html" => {
+                render_dash_blog_index(&self.config, language, &load_posts(&root)?)
+            }
+            "/about.html" | "/about" => {
+                let Some(page) = load_about_page(&root)? else {
+                    return Ok(
+                        "<p class=\"empty\">About page is not published yet.</p>".to_string()
+                    );
+                };
+                Ok(render_dash_about(language, &page))
+            }
+            "/feed.xml" | "/feed" => Ok(render_dash_feed(language)),
+            _ if localized_path.starts_with("/posts/") => {
+                let posts = load_posts(&root)?;
+                let slug = localized_path
+                    .trim_start_matches("/posts/")
+                    .trim_end_matches('/')
+                    .trim_end_matches(".html");
+                if let Some(post) = posts.iter().find(|post| post.path == slug) {
+                    Ok(render_dash_post(&self.config, language, post, &posts))
+                } else {
+                    Ok("<p class=\"empty\">Post not found.</p>".to_string())
+                }
+            }
+            _ => render_dash_blog_index(&self.config, language, &load_posts(&root)?),
+        }
+    }
+
     fn index_response(&self, language: Language) -> Response {
         match load_posts(&self.config.language_content_root(language)) {
             Ok(posts) => Response::html(
@@ -962,6 +998,117 @@ fn render_index(config: &BlogConfig, language: Language, posts: &[Post]) -> Stri
     )
 }
 
+fn render_dash_blog_index(
+    config: &BlogConfig,
+    language: Language,
+    posts: &[Post],
+) -> io::Result<String> {
+    let mut cards = String::new();
+    for post in posts {
+        cards.push_str(&format!(
+            "<button class=\"dash-card dash-card-button dash-post-card\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\" data-search-card data-topic=\"{}\" data-search-text=\"{}\"><span class=\"date\">{}</span><strong>{}</strong><span>{}</span><div class=\"tags\">{}</div></button>",
+            escape_attr(&localized_path(
+                language,
+                &format!("/posts/{}.html", post.path)
+            )),
+            escape_attr(&localized_path(
+                language,
+                &format!("/posts/{}.html", post.path)
+            )),
+            escape_attr(&post.tags.join(" ")),
+            escape_attr(&search_blob(post)),
+            escape_html(&post.date),
+            escape_html(&post.title),
+            escape_html(&post.summary),
+            render_tags(&post.tags)
+        ));
+    }
+    let stats = load_git_stats(&config.root);
+    let post_count = posts.len();
+    let tag_count = unique_tag_count(posts);
+    let last_post = posts
+        .first()
+        .map(|post| post.date.as_str())
+        .unwrap_or("unavailable");
+    let commit_count = stats.commit_count.as_deref().unwrap_or("unavailable");
+    let last_commit = stats
+        .last_commit_message
+        .as_deref()
+        .unwrap_or("unavailable");
+    let last_commit_age = stats
+        .last_commit_epoch
+        .map(relative_time)
+        .unwrap_or_else(|| "unknown age".to_string());
+
+    Ok(format!(
+        "<div class=\"dash-blog\"><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><div class=\"dash-blog-actions\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><button class=\"dash-mail-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#feed\">{}</button></div></section><section class=\"dash-code-tools\" aria-label=\"Post tools\"><label><span>{}</span><input type=\"search\" data-workspace-search-scope placeholder=\"{}\"></label>{}</section><section class=\"dash-code-summary\" aria-label=\"Build log summary\"><div><span>Posts</span><strong>{post_count}</strong></div><div><span>Topics</span><strong>{tag_count}</strong></div><div><span>Latest post</span><strong>{}</strong></div><div><span>Commits</span><strong>{}</strong></div><div><span>Last commit</span><strong>{}</strong></div><div><span>Age</span><strong>{}</strong></div></section><section><h2>Posts</h2><div class=\"dash-grid\">{cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching posts.</p></div>",
+        escape_html(language.hero_eyebrow),
+        escape_html(language.title),
+        escape_attr(&localized_path(language, "/about.html")),
+        escape_attr(&localized_path(language, "/about.html")),
+        escape_html(language.about_label),
+        escape_attr(&localized_path(language, "/feed.xml")),
+        escape_html(language.feed_label),
+        escape_html(language.search_label),
+        escape_attr(language.search_label),
+        render_dash_topic_list(language, posts),
+        escape_html(last_post),
+        escape_html(commit_count),
+        escape_html(last_commit),
+        escape_html(&last_commit_age)
+    ))
+}
+
+fn render_dash_post(
+    config: &BlogConfig,
+    language: Language,
+    post: &Post,
+    posts: &[Post],
+) -> String {
+    let visible_crates = load_visible_crates(&config.root);
+    let content = link_visible_crates_for_dash(&post.html, &visible_crates);
+    let related = render_dash_related_posts(language, post, posts);
+    format!(
+        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div>{}</article></div>",
+        escape_attr(&localized_path(language, "/")),
+        escape_attr(&localized_path(language, "/")),
+        escape_html(language.back_label),
+        escape_attr(&post.date),
+        escape_html(&post.date),
+        escape_html(&post.author),
+        escape_html(&post.title),
+        escape_html(&post.summary),
+        render_tags(&post.tags),
+        content,
+        related
+    )
+}
+
+fn render_dash_about(language: Language, page: &Page) -> String {
+    format!(
+        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><article class=\"article\" aria-labelledby=\"page-title\"><h1 id=\"page-title\">{}</h1><p class=\"summary\">{}</p><div class=\"content\">{}</div></article></div>",
+        escape_attr(&localized_path(language, "/")),
+        escape_attr(&localized_path(language, "/")),
+        escape_html(language.back_label),
+        escape_html(&page.title),
+        escape_html(&page.summary),
+        page.html
+    )
+}
+
+fn render_dash_feed(language: Language) -> String {
+    format!(
+        "<div class=\"dash-blog\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><span>Atom feed remains a direct machine-readable endpoint.</span><a class=\"dash-mail-button\" href=\"{}\">{}</a></section></div>",
+        escape_attr(&localized_path(language, "/")),
+        escape_attr(&localized_path(language, "/")),
+        escape_html(language.back_label),
+        escape_html(language.feed_label),
+        escape_html(language.feed_label),
+        escape_attr(&localized_path(language, "/feed.xml")),
+        escape_html(language.feed_label)
+    )
+}
+
 fn load_git_stats(root: &Path) -> GitStats {
     GitStats {
         commit_count: git_output(root, &["rev-list", "--count", "HEAD"]),
@@ -1166,6 +1313,56 @@ fn render_related_posts(language: Language, post: &Post, posts: &[Post]) -> Stri
     if cards.is_empty() {
         String::new()
     } else {
+        format!(
+            "<section class=\"related-posts\" aria-labelledby=\"related-posts-title\"><h2 id=\"related-posts-title\">{}</h2><div>{}</div></section>",
+            escape_html(language.related_label),
+            cards
+        )
+    }
+}
+
+fn render_dash_related_posts(language: Language, post: &Post, posts: &[Post]) -> String {
+    let mut related = posts
+        .iter()
+        .filter(|candidate| candidate.path != post.path)
+        .map(|candidate| {
+            let shared_tags = candidate
+                .tags
+                .iter()
+                .filter(|tag| post.tags.iter().any(|current| current == *tag))
+                .count();
+            (shared_tags, candidate)
+        })
+        .filter(|(shared, _)| *shared > 0)
+        .collect::<Vec<_>>();
+    related.sort_by(|left, right| right.0.cmp(&left.0));
+    if related.is_empty() {
+        related = posts
+            .iter()
+            .filter(|candidate| candidate.path != post.path)
+            .take(3)
+            .map(|candidate| (0, candidate))
+            .collect();
+    }
+    if related.is_empty() {
+        String::new()
+    } else {
+        let cards = related
+            .into_iter()
+            .take(3)
+            .map(|(_, item)| {
+                let localized = localized_path(language, &format!("/posts/{}.html", item.path));
+                format!(
+                    "<button class=\"dash-card dash-card-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\"><span class=\"date\">{}</span><strong>{}</strong><small>{}</small></button>",
+                    escape_attr(&localized),
+                    escape_attr(&localized),
+                    escape_html(&item.date),
+                    escape_html(&item.title),
+                    escape_html(&item.summary)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("");
         format!(
             "<section class=\"related-posts\" aria-labelledby=\"related-posts-title\"><h2 id=\"related-posts-title\">{}</h2><div>{}</div></section>",
             escape_html(language.related_label),
@@ -2027,6 +2224,14 @@ fn youtube_video_id(input: &str) -> Option<String> {
 }
 
 fn link_visible_crates(html: &str, crates: &[String]) -> String {
+    link_visible_crates_with(html, crates, false)
+}
+
+fn link_visible_crates_for_dash(html: &str, crates: &[String]) -> String {
+    link_visible_crates_with(html, crates, true)
+}
+
+fn link_visible_crates_with(html: &str, crates: &[String], dash: bool) -> String {
     if crates.is_empty() {
         return html.to_string();
     }
@@ -2037,7 +2242,7 @@ fn link_visible_crates(html: &str, crates: &[String]) -> String {
     while let Some(tag_start) = rest.find('<') {
         let text = &rest[..tag_start];
         if skipped_tags.is_empty() {
-            out.push_str(&link_crates_in_text(text, crates));
+            out.push_str(&link_crates_in_text(text, crates, dash));
         } else {
             out.push_str(text);
         }
@@ -2051,7 +2256,7 @@ fn link_visible_crates(html: &str, crates: &[String]) -> String {
         rest = &rest[tag_start + tag_end + 1..];
     }
     if skipped_tags.is_empty() {
-        out.push_str(&link_crates_in_text(rest, crates));
+        out.push_str(&link_crates_in_text(rest, crates, dash));
     } else {
         out.push_str(rest);
     }
@@ -2079,7 +2284,7 @@ fn update_skipped_tags(tag: &str, skipped_tags: &mut Vec<String>) {
     }
 }
 
-fn link_crates_in_text(text: &str, crates: &[String]) -> String {
+fn link_crates_in_text(text: &str, crates: &[String], dash: bool) -> String {
     let mut out = String::new();
     let mut rest = text;
     let mut previous = None;
@@ -2095,11 +2300,19 @@ fn link_crates_in_text(text: &str, crates: &[String]) -> String {
             }
         }
         if let Some(name) = matched {
-            out.push_str(&format!(
-                "<a class=\"crate-link\" href=\"https://git.edgerun.tech/edgerun_core/crates/{}\">{}</a>",
-                escape_attr(name),
-                escape_html(name)
-            ));
+            if dash {
+                out.push_str(&format!(
+                    "<a class=\"crate-link\" href=\"#code/edgerun_core/crates/{}\">{}</a>",
+                    escape_attr(name),
+                    escape_html(name)
+                ));
+            } else {
+                out.push_str(&format!(
+                    "<a class=\"crate-link\" href=\"https://git.edgerun.tech/edgerun_core/crates/{}\">{}</a>",
+                    escape_attr(name),
+                    escape_html(name)
+                ));
+            }
             rest = &rest[name.len()..];
             previous = name.chars().last();
         } else {
@@ -2360,6 +2573,46 @@ fn render_topic_list(language: Language, posts: &[Post]) -> String {
         )
     }));
     format!("<div class=\"topic-list\">{}</div>", buttons.join(""))
+}
+
+fn render_dash_topic_list(language: Language, posts: &[Post]) -> String {
+    let mut tags = Vec::<(String, usize)>::new();
+    for post in posts {
+        for tag in &post.tags {
+            if let Some((_, count)) = tags.iter_mut().find(|(seen, _)| seen == tag) {
+                *count += 1;
+            } else {
+                tags.push((tag.clone(), 1));
+            }
+        }
+    }
+    tags.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut buttons = vec![format!(
+        "<button class=\"pill-button\" type=\"button\" data-topic-filter=\"\">{} <span>{}</span></button>",
+        escape_html(language.all_label),
+        posts.len()
+    )];
+    buttons.extend(tags.iter().map(|(tag, count)| {
+        format!(
+            "<button class=\"pill-button\" type=\"button\" data-topic-filter=\"{}\">{} <span>{}</span></button>",
+            escape_attr(tag),
+            escape_html(tag),
+            count
+        )
+    }));
+    format!("<div class=\"pill-row\">{}</div>", buttons.join(""))
+}
+
+fn unique_tag_count(posts: &[Post]) -> usize {
+    let mut tags = Vec::<&str>::new();
+    for post in posts {
+        for tag in &post.tags {
+            if !tags.iter().any(|seen| *seen == tag) {
+                tags.push(tag);
+            }
+        }
+    }
+    tags.len()
 }
 
 fn search_blob(post: &Post) -> String {
