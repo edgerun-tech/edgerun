@@ -1070,7 +1070,7 @@ fn render_dash_post(
     let content = link_visible_crates_for_dash(&post.html, &visible_crates);
     let related = render_dash_related_posts(language, post, posts);
     format!(
-        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div>{}</article></div>",
+        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article>{}</div>",
         escape_attr(&localized_path(language, "/")),
         escape_attr(&localized_path(language, "/")),
         escape_html(language.back_label),
@@ -1238,11 +1238,11 @@ fn render_post(config: &BlogConfig, language: Language, post: &Post, posts: &[Po
         &format!("/posts/{}.html", post.path),
         &PageMeta::post(config, language, post),
         &format!(
-            "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><div class=\"article-stack\"><a class=\"back\" href=\"{}\">{}</a><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div>{}</article></div><aside aria-label=\"{}\"><h2>{}</h2><nav class=\"recent\" aria-label=\"{}\">{}</nav></aside></main>",
-            escape_attr(&localized_path(language, "/")),
-            escape_html(language.back_label),
-            escape_attr(&post.date),
-            escape_html(&post.date),
+        "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><div class=\"article-stack\"><a class=\"back\" href=\"{}\">{}</a><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article>{}</div><aside aria-label=\"{}\"><h2>{}</h2><nav class=\"recent\" aria-label=\"{}\">{}</nav></aside></main>",
+        escape_attr(&localized_path(language, "/")),
+        escape_html(language.back_label),
+        escape_attr(&post.date),
+        escape_html(&post.date),
             escape_html(&post.author),
             escape_html(&post.title),
             escape_html(&post.summary),
