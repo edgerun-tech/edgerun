@@ -163,3 +163,24 @@ The next benchmark pass should add load scenarios:
 The release claim should stay narrow until those numbers exist: Edgerun has an
 excellent idle footprint for the implemented feature set, and the next work is
 to prove the same discipline under load.
+
+## Evidence References
+
+The first reproducible evidence bundle is committed under
+`docs/benchmarks/email-stack/20260430Tbench-v1/`.
+
+- Summary: `docs/benchmarks/email-stack/20260430Tbench-v1/SUMMARY.md`
+- Raw Edgerun production footprint:
+  `docs/benchmarks/email-stack/20260430Tbench-v1/raw/edgerun-live-stack.out`
+- Raw Edgerun isolated SMTP result:
+  `docs/benchmarks/email-stack/20260430Tbench-v1/raw/edgerun-smtp-only.out`
+- Raw Postfix SMTP result:
+  `docs/benchmarks/email-stack/20260430Tbench-v1/raw/postfix-smtp.out`
+- Raw Exim SMTP result:
+  `docs/benchmarks/email-stack/20260430Tbench-v1/raw/exim-smtp.out`
+- Raw OpenSMTPD SMTP result:
+  `docs/benchmarks/email-stack/20260430Tbench-v1/raw/opensmtpd-smtp.out`
+- Raw Dovecot IMAP result:
+  `docs/benchmarks/email-stack/20260430Tbench-v1/raw/dovecot-imap.out`
+- Raw Stalwart bootstrap/startup evidence:
+  `docs/benchmarks/email-stack/20260430Tbench-v1/raw/stalwart-run.out`

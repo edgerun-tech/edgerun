@@ -1,0 +1,135 @@
+$ ./scripts/benchmark-email-stack.sh --local
+# Email Stack Benchmark Snapshot
+
+host_os=Debian GNU/Linux 13
+kernel=Linux 6.12.74+deb13+1-amd64 x86_64 GNU/Linux
+captured_at=2026-04-30T00:39:02Z
+uptime=17:39:02 up 15:46,  2 users,  load average: 0.19, 0.13, 0.12
+
+# Service memory
+
+## Edgerun all-in-one server
+unit=edgerun-server.service
+active=active
+MainPID=28089
+MemoryCurrent=1011712
+MemoryPeak=4620288
+TasksCurrent=1
+ActiveState=active
+SubState=running
+  28089       1 edgerun-server   4396   5168       41:56 /usr/local/bin/edgerun-server --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/blog --blog-static-root /srv/blog/.generated --blog-title Edgerun Blog --blog-base-url https://blog.edgerun.tech --git-host git.edgerun.tech --git-root /srv/git --git-title Edgerun Git --git-base-url https://git.edgerun.tech
+smaps_rollup=unreadable
+
+## Postfix MTA
+unit=postfix.service
+active=inactive
+MainPID=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+TasksCurrent=[not set]
+ActiveState=inactive
+SubState=dead
+
+## Dovecot IMAP/LMTP
+unit=dovecot.service
+active=inactive
+MainPID=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+TasksCurrent=[not set]
+ActiveState=inactive
+SubState=dead
+
+## Exim MTA
+unit=exim4.service
+active=inactive
+MainPID=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+TasksCurrent=[not set]
+ActiveState=inactive
+SubState=dead
+
+## OpenSMTPD MTA
+unit=opensmtpd.service
+active=inactive
+MainPID=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+TasksCurrent=[not set]
+ActiveState=inactive
+SubState=dead
+
+## OpenSMTPD alternate unit
+unit=smtpd.service
+active=inactive
+MainPID=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+TasksCurrent=[not set]
+ActiveState=inactive
+SubState=dead
+
+## Stalwart Mail Server
+unit=stalwart-mail.service
+active=inactive
+MainPID=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+TasksCurrent=[not set]
+ActiveState=inactive
+SubState=dead
+
+## Stalwart alternate unit
+unit=stalwart.service
+active=inactive
+MainPID=0
+MemoryCurrent=[not set]
+MemoryPeak=[not set]
+TasksCurrent=[not set]
+ActiveState=inactive
+SubState=dead
+
+# Installed binary sizes
+
+## binary: edgerun-server
+path=/usr/local/bin/edgerun-server
+/usr/local/bin/edgerun-server: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=74628d15d297e783fdbdd8a8a2c9c626af704d0f, stripped
+binary_bytes=4686560
+
+## binary: edgerun-mailq
+path=/usr/local/bin/edgerun-mailq
+/usr/local/bin/edgerun-mailq: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=efeeaa8724c30cc0eb9d34a281c22b5e288279f8, stripped
+binary_bytes=606912
+
+## binary: edgerun-smtp-probe
+path=/usr/local/bin/edgerun-smtp-probe
+/usr/local/bin/edgerun-smtp-probe: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=f64a008a8e6ec47877fe385e4b57dcac9dc3fa33, stripped
+binary_bytes=692960
+
+## binary: postfix
+postfix=not_installed
+
+## binary: postfix master
+master=not_installed
+
+## binary: dovecot
+dovecot=not_installed
+
+## binary: exim
+exim=not_installed
+
+## binary: exim4
+exim4=not_installed
+
+## binary: opensmtpd
+smtpd=not_installed
+
+## binary: stalwart-mail
+stalwart-mail=not_installed
+
+## binary: stalwart
+stalwart=not_installed
+
+# Listening mail/http processes
+State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess

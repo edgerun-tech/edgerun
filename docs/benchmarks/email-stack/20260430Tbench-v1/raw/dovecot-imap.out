@@ -1,0 +1,13 @@
+$ ./scripts/benchmark-email-podman.sh bench-imap dovecot
+mode=imap
+target=127.0.0.1:1143
+requested=50
+concurrency=4
+ok=50
+fail=0
+elapsed_ms=55135
+throughput_ops_per_sec=0.91
+latency_avg_ms=3821.82
+latency_p50_ms=3932
+latency_p95_ms=4816
+latency_p99_ms=5053

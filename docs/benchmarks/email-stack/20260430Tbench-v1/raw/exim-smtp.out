@@ -1,0 +1,13 @@
+$ ./scripts/benchmark-email-podman.sh bench-smtp exim
+mode=smtp
+target=127.0.0.1:2525
+requested=50
+concurrency=4
+ok=50
+fail=0
+elapsed_ms=4724
+throughput_ops_per_sec=10.58
+latency_avg_ms=321.52
+latency_p50_ms=312
+latency_p95_ms=384
+latency_p99_ms=387

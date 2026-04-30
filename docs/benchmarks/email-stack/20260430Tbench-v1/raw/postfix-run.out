@@ -1,0 +1,3 @@
+$ ./scripts/benchmark-email-podman.sh run postfix
+CONTAINER ID  IMAGE                                         COMMAND           CREATED        STATUS        PORTS                   NAMES
+86d11f22fec9  localhost/edgerun-email-bench-postfix:latest  postfix start-fg  2 seconds ago  Up 2 seconds  127.0.0.1:2525->25/tcp  edgerun-email-bench-postfix

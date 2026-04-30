@@ -1,0 +1,201 @@
+$ podman logs --tail 200 edgerun-email-bench-postfix
+Apr 30 00:39:07 benchmark postfix/smtpd[166]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/cleanup[170]: BA4066A2CC: message-id=<bench-22-1777509547753229693@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/cleanup[171]: BAD526A2CD: message-id=<bench-23-1777509547752816293@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/local[173]: B921B6A2C9: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: B921B6A2C9: removed
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: BAD526A2CD: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: BA4066A2CC: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/smtpd[161]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/smtpd[163]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/local[175]: BAD526A2CD: to=<bench@example.test>, relay=local, delay=0.05, delays=0.04/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: BAD526A2CD: removed
+Apr 30 00:39:07 benchmark postfix/cleanup[172]: BB2726A2D1: message-id=<bench-24-1777509547753968407@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: BB2726A2D1: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/local[173]: BA4066A2CC: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: BA4066A2CC: removed
+Apr 30 00:39:07 benchmark postfix/smtpd[169]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/local[175]: BB2726A2D1: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: BB2726A2D1: removed
+Apr 30 00:39:07 benchmark postfix/smtpd[166]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[161]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[163]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[169]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[169]: CC4EA6A2C9: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[166]: CC6996A2CC: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[161]: CCA346A2CD: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[163]: CCFE06A2D1: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/cleanup[168]: CC4EA6A2C9: message-id=<bench-26-1777509547827942287@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: CC4EA6A2C9: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/smtpd[169]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/local[173]: CC4EA6A2C9: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/cleanup[172]: CCFE06A2D1: message-id=<bench-27-1777509547825186653@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/cleanup[170]: CC6996A2CC: message-id=<bench-25-1777509547821230592@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: CC4EA6A2C9: removed
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: CCFE06A2D1: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: CC6996A2CC: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/cleanup[171]: CCA346A2CD: message-id=<bench-28-1777509547825320670@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/smtpd[163]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/smtpd[166]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: CCA346A2CD: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/local[175]: CCFE06A2D1: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: CCFE06A2D1: removed
+Apr 30 00:39:07 benchmark postfix/local[173]: CC6996A2CC: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/smtpd[161]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: CC6996A2CC: removed
+Apr 30 00:39:07 benchmark postfix/local[175]: CCA346A2CD: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0.01/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: CCA346A2CD: removed
+Apr 30 00:39:07 benchmark postfix/smtpd[169]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[163]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[166]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[163]: DDEA36A2C9: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[169]: DE7386A2CC: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[161]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[166]: DED9E6A2CD: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[161]: DFBF26A2D1: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/cleanup[170]: DE7386A2CC: message-id=<bench-29-1777509547897889619@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: DE7386A2CC: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/smtpd[169]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/local[173]: DE7386A2CC: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/cleanup[168]: DDEA36A2C9: message-id=<bench-30-1777509547900774952@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/cleanup[172]: DED9E6A2CD: message-id=<bench-31-1777509547899811386@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/cleanup[171]: DFBF26A2D1: message-id=<bench-32-1777509547903619478@127.0.0.1>
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: DE7386A2CC: removed
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: DFBF26A2D1: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/smtpd[163]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: DED9E6A2CD: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/smtpd[166]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/smtpd[161]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: DDEA36A2C9: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:07 benchmark postfix/local[175]: DFBF26A2D1: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: DFBF26A2D1: removed
+Apr 30 00:39:07 benchmark postfix/local[173]: DED9E6A2CD: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: DED9E6A2CD: removed
+Apr 30 00:39:07 benchmark postfix/local[175]: DDEA36A2C9: to=<bench@example.test>, relay=local, delay=0.06, delays=0.06/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:07 benchmark postfix/qmgr[159]: DDEA36A2C9: removed
+Apr 30 00:39:07 benchmark postfix/smtpd[169]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[166]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[163]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[161]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[163]: F22606A2C9: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[161]: F24316A2CC: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[169]: F275D6A2CD: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:07 benchmark postfix/smtpd[166]: F2DDD6A2D1: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/cleanup[168]: F24316A2CC: message-id=<bench-34-1777509547979408201@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/cleanup[170]: F22606A2C9: message-id=<bench-36-1777509547977991517@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/cleanup[172]: F2DDD6A2D1: message-id=<bench-35-1777509547978061565@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/cleanup[171]: F275D6A2CD: message-id=<bench-33-1777509547978677105@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: F22606A2C9: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: F275D6A2CD: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: F24316A2CC: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: F2DDD6A2D1: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/local[173]: F22606A2C9: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: F22606A2C9: removed
+Apr 30 00:39:08 benchmark postfix/local[175]: F275D6A2CD: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: F275D6A2CD: removed
+Apr 30 00:39:08 benchmark postfix/local[173]: F24316A2CC: to=<bench@example.test>, relay=local, delay=0.06, delays=0.06/0.01/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: F24316A2CC: removed
+Apr 30 00:39:08 benchmark postfix/local[175]: F2DDD6A2D1: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0.01/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: F2DDD6A2D1: removed
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: 109226A2C9: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: 11F016A2CC: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: 1263A6A2CD: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: 1265E6A2D1: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/cleanup[168]: 109226A2C9: message-id=<bench-38-1777509548058137483@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 109226A2C9: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/local[173]: 109226A2C9: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 109226A2C9: removed
+Apr 30 00:39:08 benchmark postfix/cleanup[170]: 11F016A2CC: message-id=<bench-40-1777509548060917845@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/cleanup[172]: 1263A6A2CD: message-id=<bench-39-1777509548060075631@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/cleanup[171]: 1265E6A2D1: message-id=<bench-37-1777509548058880811@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 1263A6A2CD: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 1265E6A2D1: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 11F016A2CC: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/local[175]: 1263A6A2CD: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 1263A6A2CD: removed
+Apr 30 00:39:08 benchmark postfix/local[173]: 1265E6A2D1: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0.01/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 1265E6A2D1: removed
+Apr 30 00:39:08 benchmark postfix/local[175]: 11F016A2CC: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0.01/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 11F016A2CC: removed
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: 235D06A2C9: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: 241CA6A2CC: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: 24A176A2CD: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: 24FF36A2D1: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/cleanup[168]: 235D06A2C9: message-id=<bench-42-1777509548134161200@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 235D06A2C9: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/local[173]: 235D06A2C9: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 235D06A2C9: removed
+Apr 30 00:39:08 benchmark postfix/cleanup[170]: 241CA6A2CC: message-id=<bench-41-1777509548132479091@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 241CA6A2CC: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/cleanup[171]: 24A176A2CD: message-id=<bench-44-1777509548134281753@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/cleanup[172]: 24FF36A2D1: message-id=<bench-43-1777509548135559662@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/local[175]: 241CA6A2CC: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 241CA6A2CC: removed
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 24A176A2CD: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 24FF36A2D1: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/local[173]: 24A176A2CD: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 24A176A2CD: removed
+Apr 30 00:39:08 benchmark postfix/local[175]: 24FF36A2D1: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 24FF36A2D1: removed
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: 353716A2C9: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: 367CF6A2CC: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: 36AE66A2CD: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: 3752D6A2D1: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/cleanup[168]: 353716A2C9: message-id=<bench-45-1777509548207386883@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 353716A2C9: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/cleanup[170]: 367CF6A2CC: message-id=<bench-46-1777509548208630440@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 367CF6A2CC: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/local[173]: 353716A2C9: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 353716A2C9: removed
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/cleanup[171]: 36AE66A2CD: message-id=<bench-47-1777509548210184126@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/cleanup[172]: 3752D6A2D1: message-id=<bench-48-1777509548211759829@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/local[175]: 367CF6A2CC: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 367CF6A2CC: removed
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 36AE66A2CD: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 3752D6A2D1: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[169]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/smtpd[163]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/local[173]: 36AE66A2CD: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 36AE66A2CD: removed
+Apr 30 00:39:08 benchmark postfix/local[175]: 3752D6A2D1: to=<bench@example.test>, relay=local, delay=0.06, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 3752D6A2D1: removed
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: connect from racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: 46D946A2C9: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: 46E516A2CC: client=racknerd-44263d6127.0.0.1[172.245.67.49]
+Apr 30 00:39:08 benchmark postfix/cleanup[168]: 46D946A2C9: message-id=<bench-50-1777509548283428894@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/cleanup[170]: 46E516A2CC: message-id=<bench-49-1777509548283263612@127.0.0.1>
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 46E516A2CC: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 46D946A2C9: from=<bench@example.test>, size=1396, nrcpt=1 (queue active)
+Apr 30 00:39:08 benchmark postfix/smtpd[161]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/smtpd[166]: disconnect from racknerd-44263d6127.0.0.1[172.245.67.49] ehlo=1 mail=1 rcpt=1 data=1 quit=1 commands=5
+Apr 30 00:39:08 benchmark postfix/local[173]: 46E516A2CC: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 46E516A2CC: removed
+Apr 30 00:39:08 benchmark postfix/local[175]: 46D946A2C9: to=<bench@example.test>, relay=local, delay=0.05, delays=0.05/0/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 00:39:08 benchmark postfix/qmgr[159]: 46D946A2C9: removed

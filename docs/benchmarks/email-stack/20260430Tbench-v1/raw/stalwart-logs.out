@@ -1,0 +1,1 @@
+$ podman logs --tail 200 edgerun-email-bench-stalwart

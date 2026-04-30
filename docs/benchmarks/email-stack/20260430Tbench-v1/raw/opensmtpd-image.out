@@ -1,0 +1,2 @@
+$ podman image inspect localhost/edgerun-email-bench-opensmtpd:latest --format {{.Id}} {{.Created}} {{.Size}}
+bc2dbf68a2b8af08e31da6120e292d3ee847ed3b59572d2862ca2f4c96f03f5a 2026-04-30 00:18:39.974721854 +0000 UTC 87111344

@@ -165,7 +165,7 @@ RUN apt-get update \
       'begin authenticators' \
       > /etc/exim4/benchmark.conf
 EXPOSE 25
-CMD ["exim", "-bd", "-oX", "0.0.0.0::25", "-C", "/etc/exim4/benchmark.conf", "-d-all+pid"]
+CMD ["sh", "-c", "exim -bd -C /etc/exim4/benchmark.conf && tail -f /dev/null"]
 EOF
 }
 
@@ -215,6 +215,10 @@ run_stack() {
     esac
     sleep 2
     podman ps --filter "name=$name"
+    if ! podman ps --filter "name=$name" --format '{{.Names}}' | grep -qx "$name"; then
+        podman logs "$name" 2>&1 || true
+        return 1
+    fi
 }
 
 notes() {

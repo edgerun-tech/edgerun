@@ -1,0 +1,13 @@
+$ ./scripts/benchmark-email-podman.sh bench-smtp opensmtpd
+mode=smtp
+target=127.0.0.1:2525
+requested=50
+concurrency=4
+ok=50
+fail=0
+elapsed_ms=1423
+throughput_ops_per_sec=35.14
+latency_avg_ms=80.72
+latency_p50_ms=67
+latency_p95_ms=104
+latency_p99_ms=112

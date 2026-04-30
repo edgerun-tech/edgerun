@@ -41,7 +41,7 @@ show_smaps_rollup() {
             sub(":", "", key)
             printf "proc_%s_kb=%s\n", tolower(key), $2
         }
-    ' "/proc/$pid/smaps_rollup"
+    ' "/proc/$pid/smaps_rollup" 2>/dev/null || kv smaps_rollup unreadable
 }
 
 show_unit() {
