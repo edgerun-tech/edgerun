@@ -978,10 +978,16 @@ async fn run(
         if spec.acme_enabled {
             let dns =
                 match acme_challenge_method(spec)? {
-                    AcmeChallengeMethod::Dns01 => Some(dns_server.as_ref().ok_or_else(|| {
+                    ChallengeType::Dns01 => Some(dns_server.as_ref().ok_or_else(|| {
                         invalid_config("ACME DNS-01 requires at least one DnsZone")
                     })?),
-                    AcmeChallengeMethod::Http01 => None,
+                    ChallengeType::Http01 => None,
+                    other => {
+                        return Err(invalid_config(format!(
+                            "unsupported ACME challenge type: {}",
+                            acme_challenge_name(&other)
+                        )))
+                    }
                 };
             ensure_acme_certificate(spec, dns, &zones).await?;
         }
@@ -1359,31 +1365,27 @@ impl Handler for HttpsRedirectHandler {
 const DNSSEC_RESIGN_INTERVAL_SECS: u64 = 12 * 60 * 60;
 const DNSSEC_RESIGN_POLL_SECS: u64 = 60;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AcmeChallengeMethod {
-    Http01,
-    Dns01,
-}
-
-fn acme_challenge_method(spec: &SmtpServerSpec) -> io::Result<AcmeChallengeMethod> {
+fn acme_challenge_method(spec: &SmtpServerSpec) -> io::Result<ChallengeType> {
     let value = spec
         .acme_challenge
         .as_deref()
         .unwrap_or("dns-01")
         .to_ascii_lowercase();
     match value.as_str() {
-        "http" | "http-01" => Ok(AcmeChallengeMethod::Http01),
-        "dns" | "dns-01" => Ok(AcmeChallengeMethod::Dns01),
+        "http" | "http-01" => Ok(ChallengeType::Http01),
+        "dns" | "dns-01" => Ok(ChallengeType::Dns01),
         other => Err(invalid_config(format!(
             "unsupported ACME challenge type: {other}"
         ))),
     }
 }
 
-fn acme_challenge_name(method: AcmeChallengeMethod) -> &'static str {
+fn acme_challenge_name(method: &ChallengeType) -> &str {
     match method {
-        AcmeChallengeMethod::Http01 => "http-01",
-        AcmeChallengeMethod::Dns01 => "dns-01",
+        ChallengeType::Http01 => "http-01",
+        ChallengeType::Dns01 => "dns-01",
+        ChallengeType::TlsAlpn01 => "tls-alpn-01",
+        ChallengeType::Other(value) => value.as_str(),
     }
 }
 
@@ -1794,7 +1796,7 @@ async fn ensure_acme_certificate(
     client.create_account().await.map_err(acme_io_error)?;
     let order = client.create_order(&domains).await.map_err(acme_io_error)?;
     let challenge_method = acme_challenge_method(spec)?;
-    let http_challenges = if challenge_method == AcmeChallengeMethod::Http01 {
+    let http_challenges = if challenge_method == ChallengeType::Http01 {
         let handler = HttpChallengeServer::new(client.thumbprint());
         let server = HttpServer::new(handler.clone())
             .bind("0.0.0.0:80")
@@ -1819,38 +1821,34 @@ async fn ensure_acme_certificate(
         if authorization.status == edgerun_acme::types::AuthorizationStatus::Valid {
             continue;
         }
-        let challenge_type = match challenge_method {
-            AcmeChallengeMethod::Http01 => ChallengeType::Http01,
-            AcmeChallengeMethod::Dns01 => ChallengeType::Dns01,
-        };
         let challenge = authorization
             .challenges
             .as_deref()
             .and_then(|challenges| {
                 challenges
                     .iter()
-                    .find(|challenge| challenge.challenge_type == challenge_type)
+                    .find(|challenge| challenge.challenge_type == challenge_method)
             })
             .ok_or_else(|| {
                 invalid_config(format!(
                     "ACME authorization has no {} challenge",
-                    acme_challenge_name(challenge_method)
+                    acme_challenge_name(&challenge_method)
                 ))
             })?;
         let token = challenge.token.as_deref().ok_or_else(|| {
             invalid_config(format!(
                 "ACME {} challenge missing token",
-                acme_challenge_name(challenge_method)
+                acme_challenge_name(&challenge_method)
             ))
         })?;
         match challenge_method {
-            AcmeChallengeMethod::Http01 => {
+            ChallengeType::Http01 => {
                 let Some((handler, _shutdown)) = &http_challenges else {
                     return Err(invalid_config("ACME HTTP-01 challenge server not running"));
                 };
                 handler.add_challenge(token);
             }
-            AcmeChallengeMethod::Dns01 => {
+            ChallengeType::Dns01 => {
                 let Some(dns) = dns else {
                     return Err(invalid_config("ACME DNS-01 requires at least one DnsZone"));
                 };
@@ -1866,6 +1864,7 @@ async fn ensure_acme_certificate(
                 publish_acme_challenge_records(dns, zones, &challenge_records).await?;
                 edgerun_rt::sleep(Duration::from_secs(20)).await;
             }
+            _ => return Err(invalid_config("unsupported ACME challenge type")),
         }
         client
             .validate_challenge(&challenge.url)
