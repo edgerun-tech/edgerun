@@ -23,6 +23,11 @@ memory, binary size, process accounting, and active listeners for Edgerun and
 other installed mail stacks. It intentionally does not install packages or pull
 external benchmark dependencies.
 
+Host-only protocol benchmarking: `scripts/benchmark-email-protocol.sh` measures
+SMTP local delivery throughput and latency, plus basic IMAP login/list/select
+latency, using only loopback/local-recipient traffic. It does not send internet
+mail and should be aimed at isolated benchmark ports, not public MX ports.
+
 Currently out of scope for this benchmark: spam/content filtering and antivirus
 pipelines. Those are important production features, but including them here
 would make the comparison about filtering policy and databases rather than the
@@ -82,6 +87,67 @@ For a publishable comparison, each stack should be measured on the same VM
 class after boot, after service restart, and after a small warmup. The post
 should publish raw output for each run and summarize only like-for-like service
 scope.
+
+Measure protocol throughput and latency without sending spam:
+
+```sh
+scripts/benchmark-email-protocol.sh smtp \
+  --host 127.0.0.1 \
+  --port 2525 \
+  --count 1000 \
+  --concurrency 8 \
+  --from bench@example.test \
+  --to bench@example.test \
+  --message-bytes 1024
+```
+
+Measure IMAP command latency against a local benchmark account:
+
+```sh
+scripts/benchmark-email-protocol.sh imap \
+  --host 127.0.0.1 \
+  --port 1143 \
+  --count 500 \
+  --concurrency 4 \
+  --user bench \
+  --password bench
+```
+
+For competing stacks, installation/configuration difficulty should be recorded
+as part of the result: packages needed, whether MTA packages conflict, how many
+services must be configured, whether alternate localhost ports are easy to use,
+how local-only delivery is enforced, how IMAP authentication is configured, and
+how much configuration is needed before the benchmark can run without relaying
+mail externally.
+
+Use rootless Podman for the comparison stacks, one stack at a time:
+
+```sh
+scripts/benchmark-email-podman.sh build postfix
+scripts/benchmark-email-podman.sh run postfix
+scripts/benchmark-email-podman.sh bench-smtp postfix
+scripts/benchmark-email-podman.sh stop postfix
+```
+
+The same runner supports `postfix`, `exim`, `opensmtpd`, `dovecot`, and
+`stalwart`. It binds only localhost high ports by default: SMTP on `2525`, IMAP
+on `1143`, and Stalwart admin on `18080`. This avoids production port conflicts
+and avoids installing mutually conflicting MTA packages on the host.
+
+The Stalwart target uses the current official container image documented by
+Stalwart Labs: `stalwartlabs/stalwart:latest`. The older
+`stalwartlabs/mail-server` image should not be used for new benchmark work.
+
+Record configuration difficulty alongside throughput:
+
+| Stack | Initial Difficulty | Configuration Notes |
+| --- | --- | --- |
+| Edgerun | Low | One YAML resource for SMTP and one for IMAP; local-only mode is `relay_enabled: false`. |
+| Postfix | Medium | Easy package install, but host package conflicts through `mail-transport-agent`; comparable IMAP requires Dovecot. |
+| Exim | Medium/high | Compact MTA, but minimal local-only config is less obvious; host package conflicts through `mail-transport-agent`. |
+| OpenSMTPD | Low/medium | Small readable SMTP config; IMAP requires a separate service. |
+| Dovecot | Medium | IMAP only; needs explicit Maildir, passdb, and userdb config for isolated benchmark accounts. |
+| Stalwart | Medium | Integrated Rust mail server; container startup is easy, but fair benchmarking needs first-run domain/account/anti-relay setup. |
 
 ## Next Measurements
 
