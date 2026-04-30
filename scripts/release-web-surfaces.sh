@@ -18,6 +18,7 @@ REMOTE="origin"
 REMOTE_REPO="/srv/git/edgerun_core.git"
 REMOTE_CHECKOUT="/srv/edgerun_core"
 REMOTE_BLOG_OUT="/srv/blog/.generated"
+DASH_MODULES_ROOT="/srv/dash/modules"
 SERVICE="edgerun-server"
 BLOG_TITLE="EdgeRun Build Log"
 BLOG_DESCRIPTION="Feature-by-feature notes on building Edgerun from its source tree."
@@ -44,6 +45,7 @@ Options:
   --remote-repo PATH       bare repo path on server (default: /srv/git/edgerun_core.git)
   --checkout PATH          server checkout path (default: /srv/edgerun_core)
   --blog-out PATH          generated blog output path (default: /srv/blog/.generated)
+  --dash-modules-root PATH dashboard Wasm module path (default: /srv/dash/modules)
   --service NAME           systemd service name (default: edgerun-server)
   --dash-host HOST         dashboard host (default: dash.edgerun.tech)
   --skip-push              do not push before deploying
@@ -85,6 +87,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --blog-out)
             REMOTE_BLOG_OUT="$2"
+            shift 2
+            ;;
+        --dash-modules-root)
+            DASH_MODULES_ROOT="$2"
             shift 2
             ;;
         --service)
@@ -153,6 +159,7 @@ printf 'building release binaries locally\n'
     CARGO_TARGET_DIR="$TARGET_DIR" cargo build --release -p edgerun-server --bin edgerun-server --features std,smtp,imap,dns,tls
     CARGO_TARGET_DIR="$TARGET_DIR" cargo build --release -p edgerun-blog --bin edgerun-blog
     CARGO_TARGET_DIR="$TARGET_DIR" cargo build --release -p edgerun-git --bin edgerun-git
+    CARGO_TARGET_DIR="$TARGET_DIR" cargo build --release -p edgerun-dash-apps --target wasm32-unknown-unknown
 )
 
 binary_path() {
@@ -173,17 +180,26 @@ binary_path() {
 SERVER_BIN="$(binary_path edgerun-server)"
 BLOG_BIN="$(binary_path edgerun-blog)"
 GIT_BIN="$(binary_path edgerun-git)"
+DASH_APPS_WASM="$TARGET_DIR/wasm32-unknown-unknown/release/edgerun_dash_apps.wasm"
+if [ ! -f "$DASH_APPS_WASM" ]; then
+    printf 'could not find built wasm module: %s\n' "$DASH_APPS_WASM" >&2
+    exit 1
+fi
 
 printf 'copying built artifacts to %s:/tmp\n' "$HOST"
-scp "$SERVER_BIN" "$BLOG_BIN" "$GIT_BIN" "$HOST:/tmp/"
+scp "$SERVER_BIN" "$BLOG_BIN" "$GIT_BIN" "$DASH_APPS_WASM" "$HOST:/tmp/"
 
 printf 'installing and restarting on %s without remote compilation\n' "$HOST"
 ssh "$HOST" \
-    "BRANCH='$BRANCH' REMOTE_REPO='$REMOTE_REPO' REMOTE_CHECKOUT='$REMOTE_CHECKOUT' REMOTE_BLOG_OUT='$REMOTE_BLOG_OUT' SERVICE='$SERVICE' BLOG_TITLE='$BLOG_TITLE' BLOG_DESCRIPTION='$BLOG_DESCRIPTION' BLOG_BASE_URL='$BLOG_BASE_URL' BLOG_HOST='$BLOG_HOST' GIT_HOST='$GIT_HOST' GIT_TITLE='$GIT_TITLE' GIT_BASE_URL='$GIT_BASE_URL' DASH_HOST='$DASH_HOST' sh -s" <<'REMOTE'
+    "BRANCH='$BRANCH' REMOTE_REPO='$REMOTE_REPO' REMOTE_CHECKOUT='$REMOTE_CHECKOUT' REMOTE_BLOG_OUT='$REMOTE_BLOG_OUT' DASH_MODULES_ROOT='$DASH_MODULES_ROOT' SERVICE='$SERVICE' BLOG_TITLE='$BLOG_TITLE' BLOG_DESCRIPTION='$BLOG_DESCRIPTION' BLOG_BASE_URL='$BLOG_BASE_URL' BLOG_HOST='$BLOG_HOST' GIT_HOST='$GIT_HOST' GIT_TITLE='$GIT_TITLE' GIT_BASE_URL='$GIT_BASE_URL' DASH_HOST='$DASH_HOST' sh -s" <<'REMOTE'
 set -eu
 sudo install -m 0755 /tmp/edgerun-server /usr/local/bin/edgerun-server
 sudo install -m 0755 /tmp/edgerun-blog /usr/local/bin/edgerun-blog
 sudo install -m 0755 /tmp/edgerun-git /usr/local/bin/edgerun-git
+sudo install -d -m 0755 "$DASH_MODULES_ROOT"
+sudo install -m 0644 /tmp/edgerun_dash_apps.wasm "$DASH_MODULES_ROOT/mail.wasm"
+sudo install -m 0644 /tmp/edgerun_dash_apps.wasm "$DASH_MODULES_ROOT/git.wasm"
+sudo install -m 0644 /tmp/edgerun_dash_apps.wasm "$DASH_MODULES_ROOT/blog.wasm"
 cd "$REMOTE_CHECKOUT"
 sudo git fetch "$REMOTE_REPO" "$BRANCH"
 sudo git reset --hard FETCH_HEAD
@@ -207,7 +223,7 @@ sudo mkdir -p /etc/systemd/system/"$SERVICE".service.d
 sudo tee /etc/systemd/system/"$SERVICE".service.d/web-surfaces.conf >/dev/null <<EOF
 [Service]
 ExecStart=
-ExecStart=/usr/local/bin/edgerun-server --config /etc/edgerun/server/server.yaml --blog-host $BLOG_HOST --blog-root $REMOTE_CHECKOUT --blog-content-dir docs/blog --blog-static-root $REMOTE_BLOG_OUT --blog-title "$BLOG_TITLE" --blog-description "$BLOG_DESCRIPTION" --blog-base-url $BLOG_BASE_URL --git-host $GIT_HOST --git-root /srv/git --git-title "$GIT_TITLE" --git-base-url $GIT_BASE_URL --dash-host $DASH_HOST
+ExecStart=/usr/local/bin/edgerun-server --config /etc/edgerun/server/server.yaml --blog-host $BLOG_HOST --blog-root $REMOTE_CHECKOUT --blog-content-dir docs/blog --blog-static-root $REMOTE_BLOG_OUT --blog-title "$BLOG_TITLE" --blog-description "$BLOG_DESCRIPTION" --blog-base-url $BLOG_BASE_URL --git-host $GIT_HOST --git-root /srv/git --git-title "$GIT_TITLE" --git-base-url $GIT_BASE_URL --dash-host $DASH_HOST --dash-modules-root $DASH_MODULES_ROOT
 EOF
 sudo systemctl daemon-reload
 sudo systemctl restart "$SERVICE"

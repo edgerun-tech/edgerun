@@ -25,6 +25,7 @@ members = [
   "crates/edgerun-audio-liveliness",
   "crates/edgerun-biometrics",
   "crates/edgerun-blog",
+  "crates/edgerun-dash-apps",
   "crates/edgerun-bench",
   "crates/edgerun-bluetooth",
   "crates/edgerun-bluetooth-gatt",

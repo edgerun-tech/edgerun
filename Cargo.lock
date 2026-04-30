@@ -504,6 +504,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-dash-apps"
+version = "0.1.1"
+
+[[package]]
 name = "edgerun-dhcp"
 version = "0.1.1"
 dependencies = [

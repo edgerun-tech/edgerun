@@ -141,6 +141,7 @@ fn main() {
             options.dash_host,
             options.webmail,
             options.analytics_log_dir,
+            options.dash_modules_root,
         )
         .await
         {
@@ -157,7 +158,7 @@ fn print_usage(program: &str) {
          usage: {program} --send-system-report --config /etc/edgerun/server/server.yaml [--report-to admin@example.com]\n\
          usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/edgerun_core [--blog-content-dir docs/blog] [--blog-static-root /srv/blog/.generated]\n\
          usage: {program} --config /etc/edgerun/server/server.yaml --git-host git.edgerun.tech --git-root /srv/git [--dash-host dash.edgerun.tech]\n\
-         options: --webmail-http-bind 0.0.0.0:80 --webmail-https-bind 0.0.0.0:443 --analytics-log-dir /var/lib/edgerun/analytics\n\
+         options: --webmail-http-bind 0.0.0.0:80 --webmail-https-bind 0.0.0.0:443 --analytics-log-dir /var/lib/edgerun/analytics --dash-modules-root /srv/dash/modules\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
 }
@@ -201,6 +202,7 @@ struct ServerOptions {
     dash_host: Option<String>,
     webmail: WebmailBind,
     analytics_log_dir: Option<PathBuf>,
+    dash_modules_root: PathBuf,
 }
 
 #[derive(Clone)]
@@ -248,6 +250,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
     let mut webmail_http_bind = "0.0.0.0:80".to_string();
     let mut webmail_https_bind = "0.0.0.0:443".to_string();
     let mut analytics_log_dir = None;
+    let mut dash_modules_root = PathBuf::from("/srv/dash/modules");
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -325,6 +328,10 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
                 analytics_log_dir = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
             }
+            "--dash-modules-root" if i + 1 < args.len() => {
+                dash_modules_root = PathBuf::from(&args[i + 1]);
+                i += 1;
+            }
             other => return Err(format!("unknown argument: {other}")),
         }
         i += 1;
@@ -377,6 +384,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
             https: webmail_https_bind,
         },
         analytics_log_dir,
+        dash_modules_root,
     })
 }
 
@@ -935,6 +943,7 @@ async fn run(
     dash_host: Option<String>,
     webmail_bind: WebmailBind,
     analytics_log_dir: Option<PathBuf>,
+    dash_modules_root: PathBuf,
 ) -> io::Result<()> {
     let mut dns_servers = Vec::new();
     let mut zones = Vec::new();
@@ -1011,7 +1020,14 @@ async fn run(
     if let Some(webmail) = build_webmail_config(&smtp_specs, &imap_specs)? {
         let tls = load_tls_from_spec(webmail.tls_cert.as_deref(), webmail.tls_key.as_deref())?;
         let web_handler = WebmailHandler::new(webmail.clone());
-        let site_router = SiteRouter::new(web_handler, blog, git, dash_host, browser_apps);
+        let site_router = SiteRouter::new(
+            web_handler,
+            blog,
+            git,
+            dash_host,
+            browser_apps,
+            dash_modules_root,
+        );
         let site_handler: Arc<dyn Handler> = if let Some(log_dir) = analytics_log_dir {
             eprintln!(
                 "edgerun-server: analytics enabled log_dir={}",
@@ -1097,6 +1113,7 @@ struct SiteRouter {
     git_host: Option<String>,
     git: Option<GitHandler>,
     browser_apps: Vec<BrowserAppSpec>,
+    dash_modules_root: PathBuf,
 }
 
 impl SiteRouter {
@@ -1106,6 +1123,7 @@ impl SiteRouter {
         git: Option<GitMount>,
         dash_host: Option<String>,
         browser_apps: Vec<BrowserAppSpec>,
+        dash_modules_root: PathBuf,
     ) -> Self {
         let (blog_host, blog) = match blog {
             Some(blog) => {
@@ -1159,6 +1177,7 @@ impl SiteRouter {
             git_host,
             git,
             browser_apps,
+            dash_modules_root,
         }
     }
 
@@ -1167,6 +1186,12 @@ impl SiteRouter {
         if self.dash_host.as_deref() == host.as_deref() {
             let target = request.uri().request_target();
             let path = target.split('?').next().unwrap_or(target.as_str());
+            if path.starts_with("/modules/") {
+                return match request.method().as_str() {
+                    "GET" | "HEAD" => self.serve_dash_module(path),
+                    _ => method_not_allowed("GET, HEAD"),
+                };
+            }
             if path.starts_with("/surface/mail") {
                 return self.webmail.handle_dash_mail(request);
             }
@@ -1240,6 +1265,33 @@ impl SiteRouter {
                 "Permissions-Policy",
                 "camera=(), microphone=(), geolocation=()",
             )
+    }
+
+    fn serve_dash_module(&self, path: &str) -> Response {
+        let Some(name) = path.strip_prefix("/modules/") else {
+            return Response::not_found();
+        };
+        if name.is_empty()
+            || name.contains('/')
+            || name.contains('\\')
+            || name.contains("..")
+            || !name.ends_with(".wasm")
+        {
+            return Response::not_found()
+                .with_header("Cache-Control", "no-store")
+                .with_header("X-Content-Type-Options", "nosniff");
+        }
+
+        match std::fs::read(self.dash_modules_root.join(name)) {
+            Ok(bytes) => Response::new(StatusCode::OK)
+                .with_header("Content-Type", "application/wasm")
+                .with_header("Cache-Control", "public, max-age=31536000, immutable")
+                .with_header("X-Content-Type-Options", "nosniff")
+                .with_body(bytes),
+            Err(_) => Response::not_found()
+                .with_header("Cache-Control", "no-store")
+                .with_header("X-Content-Type-Options", "nosniff"),
+        }
     }
 }
 

@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-dash-apps"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Tiny first-party Wasm app modules for the Edgerun dashboard"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
