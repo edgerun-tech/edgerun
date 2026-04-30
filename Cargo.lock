@@ -385,15 +385,6 @@ name = "edgerun-biometrics"
 version = "0.1.1"
 
 [[package]]
-name = "edgerun-blog"
-version = "0.1.1"
-dependencies = [
- "edgerun-http",
- "edgerun-log",
- "edgerun-rt",
-]
-
-[[package]]
 name = "edgerun-bluetooth"
 version = "0.1.1"
 dependencies = [
@@ -678,15 +669,6 @@ name = "edgerun-fingerprint"
 version = "0.1.1"
 dependencies = [
  "edgerun-biometrics",
-]
-
-[[package]]
-name = "edgerun-git"
-version = "0.1.1"
-dependencies = [
- "edgerun-http",
- "edgerun-log",
- "edgerun-rt",
 ]
 
 [[package]]
@@ -1254,7 +1236,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-acme",
  "edgerun-analytics",
- "edgerun-blog",
  "edgerun-config",
  "edgerun-crypto",
  "edgerun-dhcp",
@@ -1262,7 +1243,6 @@ dependencies = [
  "edgerun-email",
  "edgerun-email-auth",
  "edgerun-encoding",
- "edgerun-git",
  "edgerun-http",
  "edgerun-log",
  "edgerun-machine-report",

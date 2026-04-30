@@ -6,6 +6,8 @@
 
 #[path = "edgerun-server/webmail.rs"]
 mod webmail;
+#[path = "edgerun-server/edgerun_web_ui.rs"]
+mod edgerun_web_ui;
 
 use webmail::{
     build_webmail_config, http_date_now, method_not_allowed, normalize_crlf, sanitize_header,
@@ -29,11 +31,16 @@ use std::time::{Duration, Instant as StdInstant, SystemTime, UNIX_EPOCH};
 use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig, HttpChallengeServer};
 use edgerun_acme::{ChallengeStatus, ChallengeType, DirectoryUrl, OrderStatus};
 use edgerun_analytics::{AnalyticsConfig, AnalyticsHandler};
-use edgerun_blog::{BlogConfig, BlogHandler};
 use edgerun_config::edgerun_json::JsonValue;
 use edgerun_config::{
     BrowserAppSpec, ConfigResource, DnsServerSpec, DnsZoneSpec, DnssecConfig, ImapServerSpec,
     MailUserSpec, SmtpServerSpec, ZoneRecord,
+};
+use edgerun_dash_templates::{
+    default_browser_apps, full_style, render_app_catalog, render_apps_surface, render_status_footer,
+    render_surface, selector_for_surface,
+    theme_toggle_js, workspace_modules_from_config, DASH_BODY, DASH_COHESIVE_JS, DASH_STYLE,
+    WORKSPACE_JS,
 };
 use edgerun_dns::{
     DnsMessage, DnsRecord, DnsRecordData, DnsRecordType, DnsResponseCode, DnsServer,
@@ -45,20 +52,14 @@ use edgerun_email::smtp::server::{MailHandler, MaildirStore, SmtpServer, SmtpSer
 use edgerun_email::smtp::types::MailEnvelope;
 use edgerun_email::smtp::ServerLimits;
 use edgerun_encoding::base64::{standard_decode, standard_encode_wrapped};
-use edgerun_git::{GitConfig, GitHandler};
 use edgerun_http::{Handler, HttpServer, Request, Response, StatusCode};
 use edgerun_machine_report::{gather_machine_report, render_machine_report, OutputFormat};
 use edgerun_rt::CancellationToken;
 use edgerun_tls::CertificateAndKey;
-use edgerun_web_ui::{PageShell, WorkspaceModule};
-use edgerun_dash_templates::{
-    DASH_BODY, DASH_COHESIVE_JS, DASH_STYLE, WORKSPACE_JS,
-    full_style, theme_toggle_js,
-    selector_for_surface,
-    render_surface,
-    render_blog_surface, render_code_surface, render_status_footer,
-    render_apps_surface, render_app_catalog,
-    default_browser_apps, workspace_modules_from_config,
+use crate::edgerun_web_ui::{
+    default_browser_apps, full_style, render_app_catalog, render_apps_surface, render_status_footer,
+    render_surface, selector_for_surface, theme_toggle_js, workspace_modules_from_config, DASH_BODY,
+    DASH_COHESIVE_JS, DASH_STYLE, WORKSPACE_JS, PageShell, WorkspaceModule,
 };
 
 fn main() {
@@ -146,8 +147,6 @@ fn main() {
     rt.block_on(async move {
         if let Err(error) = run(
             resources,
-            options.blog,
-            options.git,
             options.dash_host,
             options.webmail,
             options.analytics_log_dir,
@@ -166,8 +165,6 @@ fn print_usage(program: &str) {
         "usage: {program} --config /etc/edgerun/server/server.yaml\n\
          usage: {program} --health-check --config /etc/edgerun/server/server.yaml\n\
          usage: {program} --send-system-report --config /etc/edgerun/server/server.yaml [--report-to admin@example.com]\n\
-         usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/edgerun_core [--blog-content-dir docs/blog] [--blog-static-root /srv/blog/.generated]\n\
-         usage: {program} --config /etc/edgerun/server/server.yaml --git-host git.edgerun.tech --git-root /srv/git [--dash-host dash.edgerun.tech]\n\
          options: --webmail-http-bind 0.0.0.0:80 --webmail-https-bind 0.0.0.0:443 --analytics-log-dir /var/lib/edgerun/analytics --dash-modules-root /srv/dash/modules\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
@@ -207,8 +204,6 @@ fn count_resources(resources: &[ConfigResource]) -> (usize, usize, usize, usize,
 #[derive(Clone)]
 struct ServerOptions {
     config_path: PathBuf,
-    blog: Option<BlogMount>,
-    git: Option<GitMount>,
     dash_host: Option<String>,
     webmail: WebmailBind,
     analytics_log_dir: Option<PathBuf>,
@@ -221,41 +216,8 @@ struct WebmailBind {
     https: String,
 }
 
-#[derive(Clone)]
-struct BlogMount {
-    host: String,
-    root: PathBuf,
-    content_dir: PathBuf,
-    static_root: Option<PathBuf>,
-    title: String,
-    description: String,
-    base_url: String,
-}
-
-#[derive(Clone)]
-struct GitMount {
-    host: String,
-    root: PathBuf,
-    title: String,
-    description: String,
-    base_url: String,
-}
-
 fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
     let mut config = None;
-    let mut blog_host = None;
-    let mut blog_root = None;
-    let mut blog_content_dir = PathBuf::from(".");
-    let mut blog_static_root = None;
-    let mut blog_title = "EdgeRun Build Log".to_string();
-    let mut blog_description =
-        "Feature-by-feature notes on building Edgerun from its source tree.".to_string();
-    let mut blog_base_url = String::new();
-    let mut git_host = None;
-    let mut git_root = None;
-    let mut git_title = "Edgerun Git".to_string();
-    let mut git_description = "Code released from the Edgerun project.".to_string();
-    let mut git_base_url = String::new();
     let mut dash_host = None;
     let mut webmail_http_bind = "0.0.0.0:80".to_string();
     let mut webmail_https_bind = "0.0.0.0:443".to_string();
@@ -272,54 +234,6 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
             }
             "--config" | "-c" if i + 1 < args.len() => {
                 config = Some(PathBuf::from(&args[i + 1]));
-                i += 1;
-            }
-            "--blog-host" if i + 1 < args.len() => {
-                blog_host = Some(args[i + 1].clone());
-                i += 1;
-            }
-            "--blog-root" if i + 1 < args.len() => {
-                blog_root = Some(PathBuf::from(&args[i + 1]));
-                i += 1;
-            }
-            "--blog-content-dir" if i + 1 < args.len() => {
-                blog_content_dir = PathBuf::from(&args[i + 1]);
-                i += 1;
-            }
-            "--blog-static-root" if i + 1 < args.len() => {
-                blog_static_root = Some(PathBuf::from(&args[i + 1]));
-                i += 1;
-            }
-            "--blog-title" if i + 1 < args.len() => {
-                blog_title = args[i + 1].clone();
-                i += 1;
-            }
-            "--blog-description" if i + 1 < args.len() => {
-                blog_description = args[i + 1].clone();
-                i += 1;
-            }
-            "--blog-base-url" if i + 1 < args.len() => {
-                blog_base_url = args[i + 1].trim_end_matches('/').to_string();
-                i += 1;
-            }
-            "--git-host" if i + 1 < args.len() => {
-                git_host = Some(args[i + 1].clone());
-                i += 1;
-            }
-            "--git-root" if i + 1 < args.len() => {
-                git_root = Some(PathBuf::from(&args[i + 1]));
-                i += 1;
-            }
-            "--git-title" if i + 1 < args.len() => {
-                git_title = args[i + 1].clone();
-                i += 1;
-            }
-            "--git-description" if i + 1 < args.len() => {
-                git_description = args[i + 1].clone();
-                i += 1;
-            }
-            "--git-base-url" if i + 1 < args.len() => {
-                git_base_url = args[i + 1].trim_end_matches('/').to_string();
                 i += 1;
             }
             "--dash-host" if i + 1 < args.len() => {
@@ -350,44 +264,8 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
         "missing --config /path/to/server.yaml\nusage: edgerun-server --config /etc/edgerun/server/server.yaml"
             .to_string()
     })?;
-    let blog = match (blog_host, blog_root) {
-        (Some(host), Some(root)) => Some(BlogMount {
-            host,
-            root,
-            content_dir: blog_content_dir,
-            static_root: blog_static_root,
-            title: blog_title,
-            description: blog_description,
-            base_url: blog_base_url,
-        }),
-        (None, None) => None,
-        _ => {
-            return Err(
-                "--blog-host and --blog-root must be provided together when enabling the blog"
-                    .to_string(),
-            );
-        }
-    };
-    let git = match (git_host, git_root) {
-        (Some(host), Some(root)) => Some(GitMount {
-            host,
-            root,
-            title: git_title,
-            description: git_description,
-            base_url: git_base_url,
-        }),
-        (None, None) => None,
-        _ => {
-            return Err(
-                "--git-host and --git-root must be provided together when enabling the git explorer"
-                    .to_string(),
-            );
-        }
-    };
     Ok(ServerOptions {
         config_path,
-        blog,
-        git,
         dash_host,
         webmail: WebmailBind {
             http: webmail_http_bind,
@@ -948,8 +826,6 @@ fn smtp_health_auth_enabled(spec: &SmtpServerSpec, imap_specs: &[ImapServerSpec]
 
 async fn run(
     resources: Vec<ConfigResource>,
-    blog: Option<BlogMount>,
-    git: Option<GitMount>,
     dash_host: Option<String>,
     webmail_bind: WebmailBind,
     analytics_log_dir: Option<PathBuf>,
@@ -1032,8 +908,6 @@ async fn run(
         let web_handler = WebmailHandler::new(webmail.clone());
         let site_router = SiteRouter::new(
             web_handler,
-            blog,
-            git,
             dash_host,
             browser_apps,
             dash_modules_root,
@@ -1118,10 +992,6 @@ async fn run(
 struct SiteRouter {
     webmail: WebmailHandler,
     dash_host: Option<String>,
-    blog_host: Option<String>,
-    blog: Option<BlogHandler>,
-    git_host: Option<String>,
-    git: Option<GitHandler>,
     browser_apps: Vec<BrowserAppSpec>,
     dash_modules_root: PathBuf,
     host_stats: Arc<Mutex<HostStatsCache>>,
@@ -1132,63 +1002,13 @@ struct SiteRouter {
 impl SiteRouter {
     fn new(
         webmail: WebmailHandler,
-        blog: Option<BlogMount>,
-        git: Option<GitMount>,
         dash_host: Option<String>,
         browser_apps: Vec<BrowserAppSpec>,
         dash_modules_root: PathBuf,
     ) -> Self {
-        let (blog_host, blog) = match blog {
-            Some(blog) => {
-                let base_url = if blog.base_url.is_empty() {
-                    format!("https://{}", blog.host)
-                } else {
-                    blog.base_url
-                };
-                let config = BlogConfig {
-                    root: blog.root,
-                    content_dir: blog.content_dir,
-                    static_root: blog.static_root,
-                    bind_addr: String::new(),
-                    title: blog.title,
-                    description: blog.description,
-                    base_url,
-                };
-                (
-                    Some(normalize_host(&blog.host)),
-                    Some(BlogHandler::new(config)),
-                )
-            }
-            None => (None, None),
-        };
-        let (git_host, git) = match git {
-            Some(git) => {
-                let base_url = if git.base_url.is_empty() {
-                    format!("https://{}", git.host)
-                } else {
-                    git.base_url
-                };
-                let config = GitConfig {
-                    root: git.root,
-                    bind_addr: String::new(),
-                    title: git.title,
-                    description: git.description,
-                    base_url,
-                };
-                (
-                    Some(normalize_host(&git.host)),
-                    Some(GitHandler::new(config)),
-                )
-            }
-            None => (None, None),
-        };
         Self {
             webmail,
             dash_host: dash_host.map(|host| normalize_host(&host)),
-            blog_host,
-            blog,
-            git_host,
-            git,
             browser_apps,
             dash_modules_root,
             host_stats: Arc::new(Mutex::new(HostStatsCache::default())),
@@ -1209,6 +1029,9 @@ impl SiteRouter {
                     _ => method_not_allowed("GET, HEAD"),
                 };
             }
+            if path.starts_with("/api/node/provision") {
+                return self.handle_dash_node_provision(request);
+            }
             if path == "/status.json" {
                 return match request.method().as_str() {
                     "GET" | "HEAD" => self.dash_status_response(),
@@ -1223,18 +1046,6 @@ impl SiteRouter {
             }
             return match request.method().as_str() {
                 "GET" | "HEAD" => self.dash_response(&request),
-                _ => method_not_allowed("GET, HEAD"),
-            };
-        }
-        if self.blog_host.as_deref() == host.as_deref() {
-            return match request.method().as_str() {
-                "GET" | "HEAD" => redirect_to_dash_surface("build-log"),
-                _ => method_not_allowed("GET, HEAD"),
-            };
-        }
-        if self.git_host.as_deref() == host.as_deref() {
-            return match request.method().as_str() {
-                "GET" | "HEAD" => redirect_to_dash_surface("code"),
                 _ => method_not_allowed("GET, HEAD"),
             };
         }
@@ -1256,6 +1067,13 @@ impl SiteRouter {
             "GET" | "HEAD" => self.dash_chat_list(),
             "POST" => self.dash_chat_post(&request),
             _ => method_not_allowed("GET, HEAD, POST"),
+        }
+    }
+
+    fn handle_dash_node_provision(&self, request: Request) -> Response {
+        match request.method().as_str() {
+            "POST" => self.dash_node_provision_post(&request),
+            _ => method_not_allowed("POST"),
         }
     }
 
@@ -1355,36 +1173,94 @@ impl SiteRouter {
         .with_header("X-Content-Type-Options", "nosniff")
     }
 
+    fn dash_node_provision_post(&self, request: &Request) -> Response {
+        let body = request.body().unwrap_or_default();
+        let payload: JsonValue = match edgerun_config::edgerun_json::from_json_slice(body) {
+            Ok(value) => value,
+            Err(error) => {
+                return dash_chat_error_response(
+                    StatusCode::new(400).unwrap(),
+                    &format!("invalid JSON: {error}"),
+                );
+            }
+        };
+
+        let node_id = get_json_string(payload.get("node_id"), "node_id").unwrap_or_default();
+        let pin = get_json_string(payload.get("pin"), "pin").unwrap_or_default();
+        let passphrase = get_json_string(payload.get("passphrase"), "passphrase")
+            .or_else(|| get_json_string(payload.get("password"), "password"))
+            .unwrap_or_default();
+        let target = get_json_string(payload.get("target"), "target")
+            .map_or_else(|| "127.0.0.1:35630".to_string(), |value| value);
+        let skip_checks = payload.get("skip_checks").and_then(JsonValue::as_bool).unwrap_or(false);
+        let is_local_target = is_local_host_target(&target);
+
+        if node_id.is_empty() {
+            return dash_chat_error_response(
+                StatusCode::new(400).unwrap(),
+                "missing required field: node_id",
+            );
+        }
+        if skip_checks && !is_local_target {
+            return dash_chat_error_response(
+                StatusCode::new(400).unwrap(),
+                "skip_checks is only allowed for localhost targets",
+            );
+        }
+        if !skip_checks {
+            if pin.is_empty() {
+                return dash_chat_error_response(
+                    StatusCode::new(400).unwrap(),
+                    "missing required field: pin",
+                );
+            }
+            if passphrase.is_empty() {
+                return dash_chat_error_response(
+                    StatusCode::new(400).unwrap(),
+                    "missing required field: passphrase",
+                );
+            }
+            if passphrase.len() < 8 {
+                return dash_chat_error_response(
+                    StatusCode::new(400).unwrap(),
+                    "passphrase must be at least 8 characters",
+                );
+            }
+        }
+
+        match forward_node_provision_request(&target, &node_id, &pin, &passphrase, skip_checks) {
+            Ok(status) => {
+                let status = edgerun_config::edgerun_json::escape_json_string(&status);
+                Response::json(
+                    StatusCode::OK,
+                    &format!(r#"{{"ok":true,"status":"{status}"}}"#),
+                )
+                .with_header("Cache-Control", "no-store")
+                .with_header("X-Content-Type-Options", "nosniff")
+            }
+            Err(error) => {
+                dash_chat_error_response(StatusCode::new(502).unwrap(), &error.to_string())
+            }
+        }
+    }
+
     fn dash_response(&self, request: &Request) -> Response {
         let target = request.uri().request_target();
         let path = target.split('?').next().unwrap_or(target.as_str());
         let body = match path {
             "/apps/catalog.json" => {
-                return Response::text(
-                    StatusCode::OK,
-                    &render_app_catalog(&self.browser_apps),
-                )
-                .with_header("Content-Type", "application/json")
-                .with_header("Cache-Control", "no-store")
-                .with_header("X-Content-Type-Options", "nosniff");
+                return Response::text(StatusCode::OK, &render_app_catalog(&self.browser_apps))
+                    .with_header("Content-Type", "application/json")
+                    .with_header("Cache-Control", "no-store")
+                    .with_header("X-Content-Type-Options", "nosniff");
             }
-            path if path == "/surface/apps" || path.starts_with("/surface/apps/") => render_surface(
-                "Apps",
-                "browser node",
-                &render_apps_surface(&self.browser_apps),
-            ),
-            path if path == "/surface/blog" || path.starts_with("/surface/blog/") => self
-                .blog
-                .as_ref()
-                .and_then(|blog| blog.render_dash_content(path).ok())
-                .map(|content| render_surface("Build Log", "blog.edgerun.tech", &content))
-                .unwrap_or_else(render_dash_blog_surface),
-            path if path == "/surface/git" || path.starts_with("/surface/git/") => self
-                .git
-                .as_ref()
-                .and_then(|git| git.render_dash_content(path).ok())
-                .map(|content| render_surface("Code", "git.edgerun.tech", &content))
-                .unwrap_or_else(render_dash_code_surface),
+            path if path == "/surface/apps" || path.starts_with("/surface/apps/") => {
+                render_surface(
+                    "Apps",
+                    "browser node",
+                    &render_apps_surface(&self.browser_apps),
+                )
+            }
             _ => render_dash_html(&self.browser_apps),
         };
         Response::html(StatusCode::OK, &body)
@@ -1449,14 +1325,6 @@ fn redirect_to_dash_surface(_surface: &str) -> Response {
         .with_header("X-Content-Type-Options", "nosniff")
 }
 
-fn render_dash_blog_surface() -> String {
-    render_blog_surface()
-}
-
-fn render_dash_code_surface() -> String {
-    render_code_surface()
-}
-
 fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
     let header_center = "";
     let header_actions = "";
@@ -1472,13 +1340,18 @@ fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
     let configured_modules = workspace_modules_from_config(configured_apps);
     let fallback = default_browser_apps();
     let modules: Vec<WorkspaceModule<'_>> = if configured_modules.is_empty() {
-        fallback.iter().map(|app| WorkspaceModule {
-            app_id: app.app_id.as_str(),
-            title: app.title.as_str(),
-            surface: app.surfaces.first().map(|s| s.as_str()).unwrap_or(""),
-            selector: selector_for_surface(app.surfaces.first().map(|s| s.as_str()).unwrap_or("")),
-            wasm: app.module.url.as_str(),
-        }).collect()
+        fallback
+            .iter()
+            .map(|app| WorkspaceModule {
+                app_id: app.app_id.as_str(),
+                title: app.title.as_str(),
+                surface: app.surfaces.first().map(|s| s.as_str()).unwrap_or(""),
+                selector: selector_for_surface(
+                    app.surfaces.first().map(|s| s.as_str()).unwrap_or(""),
+                ),
+                wasm: app.module.url.as_str(),
+            })
+            .collect()
     } else {
         configured_modules
     };
@@ -1547,15 +1420,9 @@ impl DashChatState {
             return Some("message too long");
         }
         if message.chars().filter(|c| c.is_ascii_uppercase()).count() > 0 {
-            let letters = message
-                .chars()
-                .filter(|c| c.is_ascii_alphabetic())
-                .count() as u32;
+            let letters = message.chars().filter(|c| c.is_ascii_alphabetic()).count() as u32;
             if letters > 16 {
-                let caps = message
-                    .chars()
-                    .filter(|c| c.is_ascii_uppercase())
-                    .count() as u32;
+                let caps = message.chars().filter(|c| c.is_ascii_uppercase()).count() as u32;
                 if caps > (letters * 8) / 10 {
                     return Some("too much uppercase");
                 }
@@ -1610,11 +1477,11 @@ impl DashChatState {
                 }
             }
         }
-        if self
-            .messages
-            .iter()
-            .any(|item| item.sender_key == sender_key && item.message == message && now.saturating_sub(item.posted_at) <= 120)
-        {
+        if self.messages.iter().any(|item| {
+            item.sender_key == sender_key
+                && item.message == message
+                && now.saturating_sub(item.posted_at) <= 120
+        }) {
             return Some("duplicate message");
         }
         None
@@ -1687,6 +1554,89 @@ fn dash_chat_error_response(status: StatusCode, error: &str) -> Response {
     )
     .with_header("Cache-Control", "no-store")
     .with_header("X-Content-Type-Options", "nosniff")
+}
+
+fn get_json_string(value: Option<&JsonValue>, _key: &str) -> Option<String> {
+    value
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .map(ToString::to_string)
+        .filter(|value| !value.is_empty())
+}
+
+fn is_local_host_target(raw_target: &str) -> bool {
+    let trimmed = raw_target.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let target = trimmed
+        .trim_start_matches("http://")
+        .trim_start_matches("https://");
+    let host = if target.starts_with('[') {
+        target
+            .strip_prefix('[')
+            .and_then(|value| value.split_once(']'))
+            .map(|(host, _)| host.to_lowercase())
+            .unwrap_or_default()
+    } else {
+        target
+            .split_once(':')
+            .map(|(host, _)| host.to_lowercase())
+            .unwrap_or_else(|| target.to_lowercase())
+    };
+    host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "0:0:0:0:0:0:0:1"
+}
+
+fn forward_node_provision_request(
+    target: &str,
+    node_id: &str,
+    pin: &str,
+    passphrase: &str,
+    skip_checks: bool,
+) -> Result<String, String> {
+    use std::io::{Read, Write};
+
+    let mut stream = TcpStream::connect(target)
+        .map_err(|error| format!("failed to connect to node at {target}: {error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .map_err(|error| format!("failed to configure node socket timeout: {error}"))?;
+
+    let escaped_pin = edgerun_config::edgerun_json::escape_json_string(pin);
+    let escaped_password = edgerun_config::edgerun_json::escape_json_string(passphrase);
+    let escaped_node_id = edgerun_config::edgerun_json::escape_json_string(node_id);
+    let escaped_skip_checks = if skip_checks { "true" } else { "false" };
+    let payload = format!(
+        "{{\"type\":\"provision\",\"pin\":\"{escaped_pin}\",\"password\":\"{escaped_password}\",\"passphrase\":\"{escaped_password}\",\"skip_checks\":{escaped_skip_checks},\"node_id\":\"{escaped_node_id}\"}}"
+    );
+
+    stream
+        .write_all(payload.as_bytes())
+        .map_err(|error| format!("failed to send provisioning request: {error}"))?;
+    stream
+        .flush()
+        .map_err(|error| format!("failed to flush provisioning request: {error}"))?;
+
+    let mut response = [0u8; 512];
+    let n = stream
+        .read(&mut response)
+        .map_err(|error| format!("failed to read provisioning response: {error}"))?;
+    if n == 0 {
+        return Err("node returned empty provisioning response".to_string());
+    }
+
+    let response_text = String::from_utf8_lossy(&response[..n]).to_string();
+    let response_value: JsonValue =
+        edgerun_config::edgerun_json::from_json_slice(response_text.as_bytes())
+            .map_err(|error| format!("invalid provisioning response from node: {error}"))?;
+    let status = get_json_string(response_value.get("status"), "status")
+        .unwrap_or_else(|| response_text.clone());
+    if status == "provisioning_accepted" || status == "ok" || status == "provisioned" {
+        return Ok(status);
+    }
+    let error = get_json_string(response_value.get("error"), "error")
+        .unwrap_or_else(|| format!("node provisioning rejected ({status})"));
+    Err(error)
 }
 
 fn chat_sender_key(request: &Request) -> String {
@@ -2013,9 +1963,7 @@ fn count_established_sockets_file(path: &str, inodes: &[String]) -> usize {
         .count()
 }
 
-
 // App surface rendering is now in edgerun-dash-templates.
-
 
 fn request_host(request: &Request) -> Option<String> {
     request
@@ -2028,9 +1976,7 @@ fn normalize_host(host: &str) -> String {
     host.split(':').next().unwrap_or(host).to_ascii_lowercase()
 }
 
-
 // CSS, JS, and HTML templates are now in the edgerun-dash-templates crate.
-
 
 struct HttpsRedirectHandler {
     hostname: String,

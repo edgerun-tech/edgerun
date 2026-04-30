@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { EdgerunLogo } from "./edgerun-logo"
 import { Globe } from "./globe"
-import type { AuthState } from "@/hooks/use-auth"
+import type { AuthState, NodeProvisionInput } from "@/hooks/use-auth"
 
 interface AuthOverlayProps {
   authState: AuthState
@@ -13,7 +13,7 @@ interface AuthOverlayProps {
   error: string | null
   hasRegistered: () => boolean
   webAuthnAvailable: boolean
-  onRegister: (name: string) => Promise<boolean>
+  onRegister: (name: string, nodeProvision?: NodeProvisionInput) => Promise<boolean>
   onAuthenticate: () => Promise<boolean>
   onClearError: () => void
 }
@@ -75,7 +75,15 @@ export function AuthOverlay({
 }: AuthOverlayProps) {
   const [screen, setScreen] = useState<Screen>("welcome")
   const [nameInput, setNameInput] = useState("")
+  const [nodeIdInput, setNodeIdInput] = useState("")
+  const [nodeTargetInput, setNodeTargetInput] = useState("127.0.0.1:35630")
+  const [pairingPinInput, setPairingPinInput] = useState("")
+  const [passphraseInput, setPassphraseInput] = useState("")
   const [scanState, setScanState] = useState<"idle" | "scanning" | "success" | "fail">("idle")
+
+  const isLocalTarget = /^((localhost)|(127\.0\.0\.1)|(\[?::1\]?))(?::[0-9]{1,5})?$/.test(
+    nodeTargetInput.trim(),
+  )
 
   // Decide initial screen
   useEffect(() => {
@@ -105,10 +113,25 @@ export function AuthOverlay({
   const handleRegister = async () => {
     if (!nameInput.trim()) return
     onClearError()
+    const nodeProvision: NodeProvisionInput | undefined = webAuthnAvailable
+      ? {
+          nodeId: nodeIdInput,
+          nodeTarget: nodeTargetInput,
+          pairingPin: pairingPinInput,
+          passphrase: passphraseInput,
+        }
+      : undefined
+
     setScanState("scanning")
-    const ok = await onRegister(nameInput.trim())
+    const ok = await onRegister(nameInput.trim(), nodeProvision)
     setScanState(ok ? "success" : "fail")
   }
+
+  const canRegister = nameInput.trim().length > 0 && (!webAuthnAvailable || (
+    nodeIdInput.trim().length > 0 &&
+    (isLocalTarget || pairingPinInput.trim().length > 0) &&
+    (isLocalTarget || passphraseInput.length >= 8)
+  ))
 
   const scanColor = {
     idle: "text-muted-foreground",
@@ -180,10 +203,51 @@ export function AuthOverlay({
                 onKeyDown={(e) => e.key === "Enter" && handleRegister()}
               />
 
+              {webAuthnAvailable && (
+                <>
+                  <input
+                    type="text"
+                    value={nodeIdInput}
+                    onChange={(e) => setNodeIdInput(e.target.value)}
+                    placeholder="Node ID"
+                    className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    onKeyDown={(e) => e.key === "Enter" && handleRegister()}
+                  />
+
+                  <input
+                    type="text"
+                    value={nodeTargetInput}
+                    onChange={(e) => setNodeTargetInput(e.target.value)}
+                    placeholder="Node target (e.g. 127.0.0.1:35630)"
+                    className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    onKeyDown={(e) => e.key === "Enter" && handleRegister()}
+                  />
+
+                  <input
+                    type="text"
+                    value={pairingPinInput}
+                    onChange={(e) => setPairingPinInput(e.target.value)}
+                    placeholder="Pairing PIN"
+                    className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    onKeyDown={(e) => e.key === "Enter" && handleRegister()}
+                  />
+
+                  <input
+                    type="password"
+                    value={passphraseInput}
+                    onChange={(e) => setPassphraseInput(e.target.value)}
+                    placeholder="Passphrase (min 8 chars)"
+                    minLength={8}
+                    className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    onKeyDown={(e) => e.key === "Enter" && handleRegister()}
+                  />
+                </>
+              )}
+
               {/* Fingerprint button */}
               <button
                 onClick={handleRegister}
-                disabled={isLoading || !nameInput.trim()}
+                disabled={isLoading || !canRegister}
                 className={cn(
                   "group flex flex-col items-center gap-3 rounded-xl border p-5 transition-all w-full",
                   "border-border bg-secondary/30 hover:border-primary/50 hover:bg-primary/5",

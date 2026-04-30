@@ -84,19 +84,6 @@ currently valid or has less than 14 days remaining.
 | IMAP | 993 | IMAPS (implicit TLS) |
 | DNS | 53 | UDP/TCP |
 
-## Blog Surface
-
-`blog.edgerun.tech` is implemented in code by `edgerun-blog` and mounted into
-`edgerun-server` with `--blog-host blog.edgerun.tech --blog-root /srv/blog`.
-The blog can also generate deterministic static output from that Git checkout
-with `edgerun-blog generate`; the service can prefer that output with
-`--blog-static-root /srv/blog/.generated` while keeping live rendering as a
-fallback. Generation should happen on developer machines before push, and the
-generated `.generated/` tree should be part of the pushed blog revision. The
-sample developer-side hook lives at `crates/edgerun-blog/hooks/pre-commit.sample`.
-The content root is a host Git checkout scanned at request time; there is no
-build step and no authentication.
-
 ## Dash Browser Apps
 
 `dash.edgerun.tech` is implemented in code as the human-facing workspace. The

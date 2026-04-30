@@ -780,6 +780,7 @@ pub async fn cmd_run(
                 node_id,
                 signer_cfg.public_key_hex.clone(),
                 signer_cfg.pairing_pin.clone(),
+                Some(path.clone()),
                 provision_cancel,
             ));
             edgerun_log::info!("Provisioning listener started on :35630");

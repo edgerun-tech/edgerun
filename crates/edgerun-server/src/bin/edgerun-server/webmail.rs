@@ -12,7 +12,7 @@ use edgerun_config::{ImapServerSpec, SmtpServerSpec};
 use edgerun_email::smtp::types::MailEnvelope;
 use edgerun_encoding::base64::{standard_decode, standard_encode_wrapped};
 use edgerun_http::{Handler, Request, Response, StatusCode};
-use edgerun_web_ui::{FooterLink, PageShell};
+use crate::edgerun_web_ui::{FooterLink, PageShell};
 
 #[derive(Clone)]
 pub(crate) struct WebmailConfig {
@@ -1302,8 +1302,8 @@ fn render_webmail_html() -> String {
     let body = format!(
         "{}<script>{}{}{} </script>",
         WEBMAIL_BODY,
-        edgerun_web_ui::THEME_TOGGLE_JS,
-        edgerun_web_ui::WORKSPACE_JS,
+        edgerun_web_ui::theme_toggle_js(),
+        edgerun_web_ui::workspace_js(),
         WEBMAIL_SCRIPT
     );
     edgerun_web_ui::render_page(&PageShell {
