@@ -1148,9 +1148,9 @@ fn dash_response(request: &Request) -> Response {
     let target = request.uri().request_target();
     let path = target.split('?').next().unwrap_or(target.as_str());
     let body = match path {
-        "/surface/blog" => render_dash_surface("Build Log", "https://blog.edgerun.tech/"),
-        "/surface/git" => render_dash_surface("Code", "https://git.edgerun.tech/"),
-        "/surface/mail" => render_dash_surface("Mail", "https://mail.edgerun.tech/?workspace=1"),
+        "/surface/blog" => render_dash_blog_surface(),
+        "/surface/git" => render_dash_code_surface(),
+        "/surface/mail" => render_dash_mail_surface(),
         _ => render_dash_html(),
     };
     Response::html(StatusCode::OK, &body)
@@ -1163,20 +1163,40 @@ fn dash_response(request: &Request) -> Response {
         )
 }
 
-fn render_dash_surface(label: &str, url: &str) -> String {
-    let host = url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://")
-        .split('/')
-        .next()
-        .unwrap_or(url);
+fn render_dash_surface(label: &str, subtitle: &str, direct_href: &str, content: &str) -> String {
     format!(
-        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Workspace surface\"><header><div><strong id=\"surfaceTitle\">{}</strong><span id=\"surfaceUrl\">{}</span></div><a id=\"surfaceOpen\" href=\"{}\">Open directly</a></header><iframe id=\"surfaceFrame\" title=\"{}\" src=\"{}\"></iframe></section>",
+        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Workspace surface\"><header><div><strong id=\"surfaceTitle\">{}</strong><span id=\"surfaceUrl\">{}</span></div><a id=\"surfaceOpen\" href=\"{}\">Open directly</a></header><div class=\"dash-surface\">{}</div></section>",
         edgerun_web_ui::escape_html(label),
-        edgerun_web_ui::escape_html(host),
-        edgerun_web_ui::escape_attr(url),
-        edgerun_web_ui::escape_attr(label),
-        edgerun_web_ui::escape_attr(url)
+        edgerun_web_ui::escape_html(subtitle),
+        edgerun_web_ui::escape_attr(direct_href),
+        content
+    )
+}
+
+fn render_dash_blog_surface() -> String {
+    render_dash_surface(
+        "Build Log",
+        "blog.edgerun.tech",
+        "https://blog.edgerun.tech/",
+        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://blog.edgerun.tech/\"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></a><a class=\"dash-card\" href=\"https://blog.edgerun.tech/about.html\"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></a><a class=\"dash-card\" href=\"https://blog.edgerun.tech/feed.xml\"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></a></div>",
+    )
+}
+
+fn render_dash_code_surface() -> String {
+    render_dash_surface(
+        "Code",
+        "git.edgerun.tech",
+        "https://git.edgerun.tech/",
+        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://git.edgerun.tech/\"><strong>Repositories</strong><span>Browse released source surfaces.</span></a><a class=\"dash-card\" href=\"https://git.edgerun.tech/edgerun_core/crates\"><strong>Crate explorer</strong><span>Navigate visible crates, metadata, APIs, and relationships.</span></a><a class=\"dash-card\" href=\"https://git.edgerun.tech/edgerun_core\"><strong>Source tree</strong><span>Open the public source tree directly.</span></a></div>",
+    )
+}
+
+fn render_dash_mail_surface() -> String {
+    render_dash_surface(
+        "Mail",
+        "mail.edgerun.tech",
+        "https://mail.edgerun.tech/",
+        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://mail.edgerun.tech/\"><strong>Open mail</strong><span>Use the standalone mail surface until native dash mail fragments land.</span></a><a class=\"dash-card\" href=\"mailto:ken@edgerun.tech\"><strong>Contact</strong><span>The reliable way to reach Ken.</span></a><a class=\"dash-card\" href=\"https://mail.edgerun.tech/\"><strong>Inbox</strong><span>Read and reply from the current mail UI.</span></a></div>",
     )
 }
 
@@ -1254,7 +1274,7 @@ const DASH_BODY: &str = r##"
   </nav>
   <section id="surfaceSlot" class="dash-stage" aria-label="Workspace surface">
     <header><div><strong id="surfaceTitle">Build Log</strong><span id="surfaceUrl">blog.edgerun.tech</span></div><a id="surfaceOpen" href="https://blog.edgerun.tech/">Open directly</a></header>
-    <iframe id="surfaceFrame" title="Build Log" src="https://blog.edgerun.tech/"></iframe>
+    <div class="dash-surface"><div class="dash-grid"><a class="dash-card" href="https://blog.edgerun.tech/"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></a><a class="dash-card" href="https://blog.edgerun.tech/about.html"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></a><a class="dash-card" href="https://blog.edgerun.tech/feed.xml"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></a></div></div>
   </section>
 </main>
 "##;
@@ -1267,13 +1287,13 @@ const DASH_STYLE: &str = r#"
 .dash-stage{min-width:0;display:grid;grid-template-rows:56px 1fr}
 .dash-stage header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--panel)}
 .dash-stage header div{display:grid;line-height:1.2}.dash-stage header span{color:var(--muted);font-size:12px}.dash-stage header a{color:var(--muted);text-decoration:none}.dash-stage header a:hover{color:var(--accent)}
-.dash-stage iframe{width:100%;height:100%;border:0;background:var(--bg)}
+.dash-surface{overflow:auto;padding:24px}.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:980px}.dash-card{min-height:140px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:18px;text-decoration:none}.dash-card:hover{border-color:var(--accent)}.dash-card span{color:var(--muted)}.dash-card-button{text-align:left;font:inherit;cursor:pointer}
 @media(max-width:760px){.dash{grid-template-columns:1fr;grid-template-rows:auto 1fr}.dash-rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;overflow:auto}.dash-tab{white-space:nowrap}.dash-stage header{padding:0 12px}}
 "#;
 
 const DASH_JS: &str = r#"
 const search=document.getElementById('workspaceSearch');
-search&&search.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();const q=search.value.trim();if(!q)return;const target='https://git.edgerun.tech/edgerun_core/crates?q='+encodeURIComponent(q);const frame=document.getElementById('surfaceFrame'),title=document.getElementById('surfaceTitle'),url=document.getElementById('surfaceUrl'),open=document.getElementById('surfaceOpen');frame.src=target;frame.title='Code search';title.textContent='Code search';url.textContent='git.edgerun.tech';open.href=target});
+search&&search.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();const q=search.value.trim();if(!q)return;location.href='https://git.edgerun.tech/edgerun_core/crates?q='+encodeURIComponent(q)});
 "#;
 
 struct HttpsRedirectHandler {
