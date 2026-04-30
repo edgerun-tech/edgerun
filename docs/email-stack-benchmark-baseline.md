@@ -18,6 +18,9 @@ like-for-like containerized evidence.
 Current focused rootless evidence:
 `docs/benchmarks/email-stack/20260430Trootless-edgerun-postfix-10k/`.
 
+Use `scripts/summarize-email-evidence.sh <bundle>` to render raw evidence into
+reviewable Markdown tables without hand-copying individual output files.
+
 This is the working draft for the public benchmark post. The goal is to compare
 Edgerun against common self-hosted email stacks on the same host, with the same
 measurement script, and with service scope stated explicitly.

@@ -7,15 +7,32 @@ set -eu
 
 out="${1:-docs/benchmarks/email-stack/$(date -u '+%Y%m%dTstory-v1')}"
 raw="$out/raw"
-mkdir -p "$raw"
 
 smtp_count="${EDGERUN_EMAIL_STORY_SMTP_COUNT:-10000}"
 imap_count="${EDGERUN_EMAIL_STORY_IMAP_COUNT:-100}"
 concurrency="${EDGERUN_EMAIL_STORY_CONCURRENCY:-32}"
 edgerun_bin="${EDGERUN_EMAIL_STORY_EDGERUN_BIN:-}"
-protocol_timeout="${EDGERUN_EMAIL_STORY_PROTOCOL_TIMEOUT:-300}"
+protocol_timeout="${EDGERUN_EMAIL_STORY_PROTOCOL_TIMEOUT:-120}"
+setup_timeout="${EDGERUN_EMAIL_STORY_SETUP_TIMEOUT:-300}"
 include_native_edgerun="${EDGERUN_EMAIL_STORY_INCLUDE_NATIVE_EDGERUN:-0}"
 stacks="${EDGERUN_EMAIL_STORY_STACKS:-edgerun postfix opensmtpd exim dovecot stalwart}"
+repetitions="${EDGERUN_EMAIL_STORY_REPETITIONS:-1}"
+smtp_warmup_count="${EDGERUN_EMAIL_STORY_SMTP_WARMUP_COUNT:-0}"
+imap_warmup_count="${EDGERUN_EMAIL_STORY_IMAP_WARMUP_COUNT:-0}"
+allow_long_timeout="${EDGERUN_EMAIL_STORY_ALLOW_LONG_TIMEOUT:-0}"
+
+case "$protocol_timeout" in
+    ''|*[!0-9]*) echo "EDGERUN_EMAIL_STORY_PROTOCOL_TIMEOUT must be numeric" >&2; exit 2 ;;
+esac
+case "$setup_timeout" in
+    ''|*[!0-9]*) echo "EDGERUN_EMAIL_STORY_SETUP_TIMEOUT must be numeric" >&2; exit 2 ;;
+esac
+if [ "$protocol_timeout" -gt 300 ] && [ "$allow_long_timeout" != "1" ]; then
+    echo "refusing protocol timeout above 300s; set EDGERUN_EMAIL_STORY_ALLOW_LONG_TIMEOUT=1 for intentionally long runs" >&2
+    exit 2
+fi
+
+mkdir -p "$raw"
 
 now_ms() {
     printf '%s\n' "$(($(date +%s%N) / 1000000))"
@@ -48,8 +65,8 @@ run_timed_capture() {
     status=0
     start="$(now_ms)"
     {
-        write_command_header "$@"
-        "$@"
+        write_command_header timeout "$setup_timeout" "$@"
+        timeout "$setup_timeout" "$@"
     } > "$raw/$name.out" 2> "$raw/$name.err" || status="$?"
     end="$(now_ms)"
     status="${status:-0}"
@@ -142,6 +159,34 @@ run_sampled_protocol() {
     wait "$sample_pid" 2>/dev/null || true
 }
 
+run_protocol_repetitions() {
+    stack="$1"
+    base="$2"
+    workload="$3"
+    count="$4"
+    warmup_count="$5"
+    if [ "$warmup_count" != "0" ]; then
+        run_capture "$base-warmup" \
+            timeout "$protocol_timeout" \
+            env EDGERUN_EMAIL_BENCH_COUNT="$warmup_count" \
+                EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
+                ./scripts/benchmark-email-podman.sh "$workload" "$stack"
+    fi
+    rep=1
+    while [ "$rep" -le "$repetitions" ]; do
+        if [ "$repetitions" = "1" ]; then
+            name="$base"
+        else
+            name="$base-r$rep"
+        fi
+        run_sampled_protocol "$stack" "$name" \
+            env EDGERUN_EMAIL_BENCH_COUNT="$count" \
+                EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
+                ./scripts/benchmark-email-podman.sh "$workload" "$stack"
+        rep=$((rep + 1))
+    done
+}
+
 stack_kind() {
     case "$1" in
         edgerun) printf 'smtp_imap' ;;
@@ -169,26 +214,14 @@ collect_stack() {
 
     case "$kind" in
         smtp_imap)
-            run_sampled_protocol "$stack" "$stack-smtp" \
-                env EDGERUN_EMAIL_BENCH_COUNT="$smtp_count" \
-                    EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
-                    ./scripts/benchmark-email-podman.sh bench-smtp "$stack"
-            run_sampled_protocol "$stack" "$stack-imap" \
-                env EDGERUN_EMAIL_BENCH_COUNT="$imap_count" \
-                    EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
-                    ./scripts/benchmark-email-podman.sh bench-imap "$stack"
+            run_protocol_repetitions "$stack" "$stack-smtp" bench-smtp "$smtp_count" "$smtp_warmup_count"
+            run_protocol_repetitions "$stack" "$stack-imap" bench-imap "$imap_count" "$imap_warmup_count"
             ;;
         smtp)
-            run_sampled_protocol "$stack" "$stack-smtp" \
-                env EDGERUN_EMAIL_BENCH_COUNT="$smtp_count" \
-                    EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
-                    ./scripts/benchmark-email-podman.sh bench-smtp "$stack"
+            run_protocol_repetitions "$stack" "$stack-smtp" bench-smtp "$smtp_count" "$smtp_warmup_count"
             ;;
         imap)
-            run_sampled_protocol "$stack" "$stack-imap" \
-                env EDGERUN_EMAIL_BENCH_COUNT="$imap_count" \
-                    EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
-                    ./scripts/benchmark-email-podman.sh bench-imap "$stack"
+            run_protocol_repetitions "$stack" "$stack-imap" bench-imap "$imap_count" "$imap_warmup_count"
             ;;
         bootstrap)
             run_capture "$stack-logs-bootstrap" podman logs --tail 240 "edgerun-email-bench-$stack"
@@ -357,6 +390,12 @@ Workload:
   $concurrency, benchmark user bench.
 - Protocol commands have a $protocol_timeout second wall-clock cap. A timeout is
   recorded as exit status 124 in the corresponding raw output.
+- Setup commands have a $setup_timeout second wall-clock cap.
+- Protocol timeouts above 300 seconds are refused unless
+  EDGERUN_EMAIL_STORY_ALLOW_LONG_TIMEOUT=1 is set.
+- Measured repetitions per workload: $repetitions.
+- SMTP warmup operations before measured repetitions: $smtp_warmup_count.
+- IMAP warmup operations before measured repetitions: $imap_warmup_count.
 - Stalwart: bootstrap/startup evidence only until first-run domain/account and
   anti-relay setup is automated reproducibly.
 - Native Edgerun snapshot: disabled by default. Set

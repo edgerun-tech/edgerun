@@ -82,6 +82,10 @@ Default IMAP workload:
 Timeouts and failures are data. Do not hide them. If a stack times out, publish
 the timeout, logs, partial metrics, and resource samples.
 
+Long benchmark runs must be intentional. The email evidence collector defaults
+to short protocol caps and refuses protocol timeouts above five minutes unless
+the run explicitly opts in with `EDGERUN_EMAIL_STORY_ALLOW_LONG_TIMEOUT=1`.
+
 ## Metrics To Publish
 
 For performance results:
