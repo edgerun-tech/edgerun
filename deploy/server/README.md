@@ -8,6 +8,7 @@
 | `02-dns-zone-dkim.yaml` | DKIM public key DNS record (selector: mail) |
 | `03-smtp-server.yaml` | SMTP server config (implemented: port 25 MX, port 465 SMTPS submission, port 587 STARTTLS submission, relay) |
 | `04-imap-server.yaml` | IMAP server config (port 143, IMAPS) |
+| `05-browser-apps.yaml` | Browser-node app catalog and policy for Dash surfaces |
 | `edgerun-server.service` | Host-only systemd unit with boot target enablement, failure restart, and sandboxing |
 | `edgerun-server-health.service` | Host-only systemd oneshot health check using `edgerun-server --health-check` |
 | `edgerun-server-health.timer` | Host-only systemd timer that runs the health check every 15 minutes |
@@ -95,6 +96,17 @@ generated `.generated/` tree should be part of the pushed blog revision. The
 sample developer-side hook lives at `crates/edgerun-blog/hooks/pre-commit.sample`.
 The content root is a host Git checkout scanned at request time; there is no
 build step and no authentication.
+
+## Dash Browser Apps
+
+`dash.edgerun.tech` is implemented in code as the human-facing workspace. The
+`BrowserApp` and `BrowserNodePolicy` resources in `05-browser-apps.yaml` are
+protocol/design configuration material that describe browser-loadable Wasm
+agents and the capability selectors they request. Current Dash request handling
+is implemented in code as server-rendered HTML fragments; Wasm app loading is
+the next implementation step. When no `BrowserApp` resources are configured,
+the server exposes default Build Log, Code, and Mail app catalog entries so the
+workspace remains navigable.
 
 ## systemd
 

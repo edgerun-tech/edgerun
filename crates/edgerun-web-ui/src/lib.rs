@@ -30,6 +30,8 @@ pub struct PageShell<'a> {
 }
 
 pub struct WorkspaceModule<'a> {
+    pub app_id: &'a str,
+    pub title: &'a str,
     pub surface: &'a str,
     pub selector: &'a str,
     pub wasm: &'a str,
@@ -81,7 +83,9 @@ fn render_workspace_modules(modules: &[WorkspaceModule<'_>]) -> String {
             out.push(',');
         }
         out.push_str(&format!(
-            "{{\"surface\":\"{}\",\"selector\":\"{}\",\"wasm\":\"{}\"}}",
+            "{{\"app_id\":\"{}\",\"title\":\"{}\",\"surface\":\"{}\",\"selector\":\"{}\",\"wasm\":\"{}\"}}",
+            escape_json(module.app_id),
+            escape_json(module.title),
             escape_json(module.surface),
             escape_json(module.selector),
             escape_json(module.wasm)

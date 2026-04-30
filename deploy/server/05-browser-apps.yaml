@@ -1,0 +1,73 @@
+---
+apiVersion: edgerun.io/v1alpha1
+kind: BrowserApp
+metadata:
+  name: mail
+  namespace: edgerun-server
+spec:
+  app_id: edgerun.mail
+  title: Mail
+  module:
+    url: /modules/mail.wasm
+  surfaces:
+    - mail
+  required_capabilities:
+    - selector: mail://edgerun.tech/*
+      operations:
+        - query
+        - read
+        - send
+      constraints:
+        - require-user-presence
+---
+apiVersion: edgerun.io/v1alpha1
+kind: BrowserApp
+metadata:
+  name: code
+  namespace: edgerun-server
+spec:
+  app_id: edgerun.git
+  title: Code
+  module:
+    url: /modules/git.wasm
+  surfaces:
+    - git
+  required_capabilities:
+    - selector: git://edgerun_core/*
+      operations:
+        - query
+        - read
+      constraints: []
+---
+apiVersion: edgerun.io/v1alpha1
+kind: BrowserApp
+metadata:
+  name: build-log
+  namespace: edgerun-server
+spec:
+  app_id: edgerun.blog
+  title: Build Log
+  module:
+    url: /modules/blog.wasm
+  surfaces:
+    - blog
+  required_capabilities:
+    - selector: blog://edgerun.tech/*
+      operations:
+        - query
+        - read
+      constraints: []
+---
+apiVersion: edgerun.io/v1alpha1
+kind: BrowserNodePolicy
+metadata:
+  name: default
+  namespace: edgerun-server
+spec:
+  name: default
+  allowed_apps:
+    - edgerun.mail
+    - edgerun.git
+    - edgerun.blog
+  prompt_capabilities:
+    - mail://edgerun.tech/*

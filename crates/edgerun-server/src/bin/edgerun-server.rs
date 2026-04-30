@@ -30,8 +30,8 @@ use edgerun_acme::{ChallengeStatus, ChallengeType, DirectoryUrl, OrderStatus};
 use edgerun_blog::{BlogConfig, BlogHandler};
 use edgerun_config::edgerun_json::JsonValue;
 use edgerun_config::{
-    ConfigResource, DnsServerSpec, DnsZoneSpec, DnssecConfig, ImapServerSpec, MailUserSpec,
-    SmtpServerSpec, ZoneRecord,
+    BrowserAppSpec, ConfigResource, DnsServerSpec, DnsZoneSpec, DnssecConfig, ImapServerSpec,
+    MailUserSpec, SmtpServerSpec, ZoneRecord,
 };
 use edgerun_dns::{
     DnsMessage, DnsRecord, DnsRecordData, DnsRecordType, DnsResponseCode, DnsServer,
@@ -66,9 +66,9 @@ fn main() {
     if args.iter().any(|arg| arg == "--check-config") {
         match load_resources_from_args(&args) {
             Ok(resources) => {
-                let (dns, zones, smtp, imap) = count_resources(&resources);
+                let (dns, zones, smtp, imap, browser_apps) = count_resources(&resources);
                 println!(
-                    "dns_servers={dns} dns_zones={zones} smtp_servers={smtp} imap_servers={imap}"
+                    "dns_servers={dns} dns_zones={zones} smtp_servers={smtp} imap_servers={imap} browser_apps={browser_apps}"
                 );
                 for resource in &resources {
                     if let ConfigResource::DnsZone(zone) = resource {
@@ -172,21 +172,23 @@ fn load_resources(config_path: &Path) -> Result<Vec<ConfigResource>, String> {
         .map_err(|error| format!("failed to parse {}: {error}", config_path.display()))
 }
 
-fn count_resources(resources: &[ConfigResource]) -> (usize, usize, usize, usize) {
+fn count_resources(resources: &[ConfigResource]) -> (usize, usize, usize, usize, usize) {
     let mut dns = 0;
     let mut zones = 0;
     let mut smtp = 0;
     let mut imap = 0;
+    let mut browser_apps = 0;
     for resource in resources {
         match resource {
             ConfigResource::DnsServer(_) => dns += 1,
             ConfigResource::DnsZone(_) => zones += 1,
             ConfigResource::SmtpServer(_) => smtp += 1,
             ConfigResource::ImapServer(_) => imap += 1,
+            ConfigResource::BrowserApp(_) => browser_apps += 1,
             _ => {}
         }
     }
-    (dns, zones, smtp, imap)
+    (dns, zones, smtp, imap, browser_apps)
 }
 
 #[derive(Clone)]
@@ -928,6 +930,7 @@ async fn run(
     let mut zones = Vec::new();
     let mut smtp_specs = Vec::new();
     let mut imap_specs = Vec::new();
+    let mut browser_apps = Vec::new();
 
     for resource in resources {
         match resource {
@@ -935,15 +938,17 @@ async fn run(
             ConfigResource::DnsZone(spec) => zones.push(spec),
             ConfigResource::SmtpServer(spec) => smtp_specs.push(spec),
             ConfigResource::ImapServer(spec) => imap_specs.push(spec),
+            ConfigResource::BrowserApp(spec) => browser_apps.push(spec),
             _ => {}
         }
     }
     eprintln!(
-        "edgerun-server: config dns_servers={} dns_zones={} smtp_servers={} imap_servers={}",
+        "edgerun-server: config dns_servers={} dns_zones={} smtp_servers={} imap_servers={} browser_apps={}",
         dns_servers.len(),
         zones.len(),
         smtp_specs.len(),
-        imap_specs.len()
+        imap_specs.len(),
+        browser_apps.len()
     );
 
     let shutdown = CancellationToken::new();
@@ -996,7 +1001,7 @@ async fn run(
     if let Some(webmail) = build_webmail_config(&smtp_specs, &imap_specs)? {
         let tls = load_tls_from_spec(webmail.tls_cert.as_deref(), webmail.tls_key.as_deref())?;
         let web_handler = WebmailHandler::new(webmail.clone());
-        let site_handler = SiteRouter::new(web_handler, blog, git, dash_host);
+        let site_handler = SiteRouter::new(web_handler, blog, git, dash_host, browser_apps);
         if tls.is_some() {
             let http = HttpServer::new(HttpsRedirectHandler::new(webmail.hostname.clone()))
                 .bind(webmail_bind.http.clone())
@@ -1069,6 +1074,7 @@ struct SiteRouter {
     blog: Option<BlogHandler>,
     git_host: Option<String>,
     git: Option<GitHandler>,
+    browser_apps: Vec<BrowserAppSpec>,
 }
 
 impl SiteRouter {
@@ -1077,6 +1083,7 @@ impl SiteRouter {
         blog: Option<BlogMount>,
         git: Option<GitMount>,
         dash_host: Option<String>,
+        browser_apps: Vec<BrowserAppSpec>,
     ) -> Self {
         let (blog_host, blog) = match blog {
             Some(blog) => {
@@ -1129,6 +1136,7 @@ impl SiteRouter {
             blog,
             git_host,
             git,
+            browser_apps,
         }
     }
 
@@ -1174,6 +1182,15 @@ impl SiteRouter {
         let target = request.uri().request_target();
         let path = target.split('?').next().unwrap_or(target.as_str());
         let body = match path {
+            "/apps/catalog.json" => {
+                return Response::text(
+                    StatusCode::OK,
+                    &render_browser_app_catalog(&self.browser_apps),
+                )
+                .with_header("Content-Type", "application/json")
+                .with_header("Cache-Control", "no-store")
+                .with_header("X-Content-Type-Options", "nosniff");
+            }
             path if path == "/surface/blog" || path.starts_with("/surface/blog/") => self
                 .blog
                 .as_ref()
@@ -1186,7 +1203,7 @@ impl SiteRouter {
                 .and_then(|git| git.render_dash_content(path).ok())
                 .map(|content| render_dash_surface("Code", "git.edgerun.tech", &content))
                 .unwrap_or_else(render_dash_code_surface),
-            _ => render_dash_html(),
+            _ => render_dash_html(&self.browser_apps),
         };
         Response::html(StatusCode::OK, &body)
             .with_header("Cache-Control", "no-store")
@@ -1237,7 +1254,7 @@ fn render_dash_code_surface() -> String {
     )
 }
 
-fn render_dash_html() -> String {
+fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
     let header_center = edgerun_web_ui::render_header_search_input(
         "workspaceSearch",
         "Search workspace",
@@ -1257,23 +1274,35 @@ fn render_dash_html() -> String {
         edgerun_web_ui::WORKSPACE_JS,
         DASH_JS
     );
-    let modules = [
+    let fallback_modules = [
         WorkspaceModule {
+            app_id: "edgerun.mail",
+            title: "Mail",
             surface: "mail",
             selector: "er-mail-surface",
             wasm: "/modules/mail.wasm",
         },
         WorkspaceModule {
+            app_id: "edgerun.git",
+            title: "Code",
             surface: "git",
             selector: "er-git-surface",
             wasm: "/modules/git.wasm",
         },
         WorkspaceModule {
+            app_id: "edgerun.blog",
+            title: "Build Log",
             surface: "blog",
             selector: "er-blog-surface",
             wasm: "/modules/blog.wasm",
         },
     ];
+    let configured_modules = workspace_modules_from_config(configured_apps);
+    let modules = if configured_modules.is_empty() {
+        &fallback_modules[..]
+    } else {
+        &configured_modules[..]
+    };
     edgerun_web_ui::render_page(&PageShell {
         lang: "en",
         title: "Edgerun Dash",
@@ -1290,8 +1319,150 @@ fn render_dash_html() -> String {
         footer: &footer,
         body: &body,
         script_src: None,
-        workspace_modules: &modules,
+        workspace_modules: modules,
     })
+}
+
+fn workspace_modules_from_config(apps: &[BrowserAppSpec]) -> Vec<WorkspaceModule<'_>> {
+    let mut modules = Vec::new();
+    for app in apps {
+        for surface in &app.surfaces {
+            modules.push(WorkspaceModule {
+                app_id: app.app_id.as_str(),
+                title: app.title.as_str(),
+                surface: surface.as_str(),
+                selector: selector_for_surface(surface),
+                wasm: app.module.url.as_str(),
+            });
+        }
+    }
+    modules
+}
+
+fn selector_for_surface(surface: &str) -> &'static str {
+    match surface {
+        "mail" => "er-mail-surface",
+        "git" | "code" => "er-git-surface",
+        "blog" | "build-log" => "er-blog-surface",
+        _ => "er-app-surface",
+    }
+}
+
+fn render_browser_app_catalog(configured_apps: &[BrowserAppSpec]) -> String {
+    let fallback = default_browser_apps();
+    let apps = if configured_apps.is_empty() {
+        &fallback[..]
+    } else {
+        configured_apps
+    };
+    let mut out = String::from("{\"apps\":[");
+    for (index, app) in apps.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push_str(&format!(
+            "{{\"app_id\":\"{}\",\"title\":\"{}\",\"module\":{{\"url\":\"{}\"",
+            edgerun_web_ui::escape_json(&app.app_id),
+            edgerun_web_ui::escape_json(&app.title),
+            edgerun_web_ui::escape_json(&app.module.url)
+        ));
+        if let Some(sha256) = &app.module.sha256 {
+            out.push_str(&format!(
+                ",\"sha256\":\"{}\"",
+                edgerun_web_ui::escape_json(sha256)
+            ));
+        }
+        out.push_str("},\"surfaces\":[");
+        for (surface_index, surface) in app.surfaces.iter().enumerate() {
+            if surface_index > 0 {
+                out.push(',');
+            }
+            out.push('"');
+            out.push_str(&edgerun_web_ui::escape_json(surface));
+            out.push('"');
+        }
+        out.push_str("],\"required_capabilities\":");
+        render_browser_capabilities(&mut out, &app.required_capabilities);
+        out.push_str(",\"optional_capabilities\":");
+        render_browser_capabilities(&mut out, &app.optional_capabilities);
+        out.push('}');
+    }
+    out.push_str("]}");
+    out
+}
+
+fn render_browser_capabilities(
+    out: &mut String,
+    capabilities: &[edgerun_config::BrowserAppCapabilitySpec],
+) {
+    out.push('[');
+    for (index, capability) in capabilities.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push_str(&format!(
+            "{{\"selector\":\"{}\",\"operations\":[",
+            edgerun_web_ui::escape_json(&capability.selector)
+        ));
+        for (operation_index, operation) in capability.operations.iter().enumerate() {
+            if operation_index > 0 {
+                out.push(',');
+            }
+            out.push('"');
+            out.push_str(&edgerun_web_ui::escape_json(operation));
+            out.push('"');
+        }
+        out.push_str("],\"constraints\":[");
+        for (constraint_index, constraint) in capability.constraints.iter().enumerate() {
+            if constraint_index > 0 {
+                out.push(',');
+            }
+            out.push('"');
+            out.push_str(&edgerun_web_ui::escape_json(constraint));
+            out.push('"');
+        }
+        out.push_str("]}");
+    }
+    out.push(']');
+}
+
+fn default_browser_apps() -> Vec<BrowserAppSpec> {
+    use edgerun_config::{BrowserAppModuleSpec, BrowserAppSpec};
+    vec![
+        BrowserAppSpec {
+            app_id: "edgerun.mail".to_string(),
+            title: "Mail".to_string(),
+            module: BrowserAppModuleSpec {
+                url: "/modules/mail.wasm".to_string(),
+                sha256: None,
+            },
+            surfaces: vec!["mail".to_string()],
+            required_capabilities: Vec::new(),
+            optional_capabilities: Vec::new(),
+        },
+        BrowserAppSpec {
+            app_id: "edgerun.git".to_string(),
+            title: "Code".to_string(),
+            module: BrowserAppModuleSpec {
+                url: "/modules/git.wasm".to_string(),
+                sha256: None,
+            },
+            surfaces: vec!["git".to_string()],
+            required_capabilities: Vec::new(),
+            optional_capabilities: Vec::new(),
+        },
+        BrowserAppSpec {
+            app_id: "edgerun.blog".to_string(),
+            title: "Build Log".to_string(),
+            module: BrowserAppModuleSpec {
+                url: "/modules/blog.wasm".to_string(),
+                sha256: None,
+            },
+            surfaces: vec!["blog".to_string()],
+            required_capabilities: Vec::new(),
+            optional_capabilities: Vec::new(),
+        },
+    ]
 }
 
 fn request_host(request: &Request) -> Option<String> {
