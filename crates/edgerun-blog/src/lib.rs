@@ -118,6 +118,7 @@ struct Language {
     last_commit_label: &'static str,
     back_label: &'static str,
     recent_label: &'static str,
+    related_label: &'static str,
     search_label: &'static str,
     feed_label: &'static str,
 }
@@ -138,6 +139,7 @@ const LANGUAGES: &[Language] = &[
         last_commit_label: "Last commit",
         back_label: "Back to posts",
         recent_label: "Recent",
+        related_label: "Related articles",
         search_label: "Search posts",
         feed_label: "Feed",
     },
@@ -156,6 +158,7 @@ const LANGUAGES: &[Language] = &[
         last_commit_label: "คอมมิตล่าสุด",
         back_label: "กลับไปที่โพสต์",
         recent_label: "ล่าสุด",
+        related_label: "บทความที่เกี่ยวข้อง",
         search_label: "ค้นหาโพสต์",
         feed_label: "ฟีด",
     },
@@ -174,6 +177,7 @@ const LANGUAGES: &[Language] = &[
         last_commit_label: "Viimane commit",
         back_label: "Tagasi postituste juurde",
         recent_label: "Viimased",
+        related_label: "Seotud artiklid",
         search_label: "Otsi postitusi",
         feed_label: "Voog",
     },
@@ -967,6 +971,26 @@ fn load_git_stats(root: &Path) -> GitStats {
     }
 }
 
+fn load_visible_crates(root: &Path) -> Vec<String> {
+    let mut names = Vec::new();
+    let crates_root = root.join("crates");
+    if let Ok(entries) = fs::read_dir(&crates_root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.join(".gitvisible").exists() {
+                continue;
+            }
+            if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+                if name.starts_with("edgerun-") && !names.iter().any(|existing| existing == name) {
+                    names.push(name.to_string());
+                }
+            }
+        }
+    }
+    names.sort_by_key(|name| core::cmp::Reverse(name.len()));
+    names
+}
+
 fn git_output(root: &Path, args: &[&str]) -> Option<String> {
     let output = Command::new("git")
         .arg("-c")
@@ -1041,6 +1065,9 @@ fn relative_time(epoch_seconds: u64) -> String {
 }
 
 fn render_post(config: &BlogConfig, language: Language, post: &Post, posts: &[Post]) -> String {
+    let visible_crates = load_visible_crates(&config.root);
+    let content = link_visible_crates(&post.html, &visible_crates);
+    let related = render_related_posts(language, post, posts);
     let nav = posts
         .iter()
         .take(8)
@@ -1062,7 +1089,7 @@ fn render_post(config: &BlogConfig, language: Language, post: &Post, posts: &[Po
         &format!("/posts/{}.html", post.path),
         &PageMeta::post(config, language, post),
         &format!(
-            "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><div class=\"article-stack\"><a class=\"back\" href=\"{}\">{}</a><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article></div><aside aria-label=\"{}\"><h2>{}</h2><nav class=\"recent\" aria-label=\"{}\">{}</nav></aside></main>",
+            "<main id=\"content\" class=\"article-layout\" tabindex=\"-1\"><div class=\"article-stack\"><a class=\"back\" href=\"{}\">{}</a><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div>{}</article></div><aside aria-label=\"{}\"><h2>{}</h2><nav class=\"recent\" aria-label=\"{}\">{}</nav></aside></main>",
             escape_attr(&localized_path(language, "/")),
             escape_html(language.back_label),
             escape_attr(&post.date),
@@ -1071,13 +1098,80 @@ fn render_post(config: &BlogConfig, language: Language, post: &Post, posts: &[Po
             escape_html(&post.title),
             escape_html(&post.summary),
             render_tags(&post.tags),
-            post.html,
+            content,
+            related,
             escape_attr(language.recent_label),
             escape_html(language.recent_label),
             escape_attr(language.recent_label),
             nav
         ),
     )
+}
+
+fn render_related_posts(language: Language, post: &Post, posts: &[Post]) -> String {
+    let mut related = posts
+        .iter()
+        .filter(|candidate| candidate.path != post.path)
+        .map(|candidate| {
+            let shared_tags = candidate
+                .tags
+                .iter()
+                .filter(|tag| post.tags.iter().any(|current| current == *tag))
+                .count();
+            let text_match = usize::from(
+                post.body.contains(&candidate.title) || candidate.body.contains(&post.title),
+            );
+            (shared_tags * 2 + text_match, candidate)
+        })
+        .filter(|(score, _)| *score > 0)
+        .collect::<Vec<_>>();
+
+    related.sort_by(|(left_score, left), (right_score, right)| {
+        right_score
+            .cmp(left_score)
+            .then_with(|| right.date.cmp(&left.date))
+    });
+
+    let items = if related.is_empty() {
+        posts
+            .iter()
+            .filter(|candidate| candidate.path != post.path)
+            .take(3)
+            .collect::<Vec<_>>()
+    } else {
+        related
+            .into_iter()
+            .take(3)
+            .map(|(_, item)| item)
+            .collect::<Vec<_>>()
+    };
+
+    let cards = items
+        .into_iter()
+        .map(|item| {
+            format!(
+                "<article><a href=\"{}\"><span>{}</span><strong>{}</strong><small>{}</small></a></article>",
+                escape_attr(&localized_path(
+                    language,
+                    &format!("/posts/{}.html", item.path)
+                )),
+                escape_html(&item.date),
+                escape_html(&item.title),
+                escape_html(&item.summary)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    if cards.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<section class=\"related-posts\" aria-labelledby=\"related-posts-title\"><h2 id=\"related-posts-title\">{}</h2><div>{}</div></section>",
+            escape_html(language.related_label),
+            cards
+        )
+    }
 }
 
 fn render_about(config: &BlogConfig, language: Language, page: &Page) -> String {
@@ -1925,6 +2019,106 @@ fn youtube_video_id(input: &str) -> Option<String> {
     }
 }
 
+fn link_visible_crates(html: &str, crates: &[String]) -> String {
+    if crates.is_empty() {
+        return html.to_string();
+    }
+
+    let mut out = String::new();
+    let mut rest = html;
+    let mut skipped_tags = Vec::<String>::new();
+    while let Some(tag_start) = rest.find('<') {
+        let text = &rest[..tag_start];
+        if skipped_tags.is_empty() {
+            out.push_str(&link_crates_in_text(text, crates));
+        } else {
+            out.push_str(text);
+        }
+        let Some(tag_end) = rest[tag_start..].find('>') else {
+            out.push_str(&rest[tag_start..]);
+            return out;
+        };
+        let tag = &rest[tag_start..tag_start + tag_end + 1];
+        update_skipped_tags(tag, &mut skipped_tags);
+        out.push_str(tag);
+        rest = &rest[tag_start + tag_end + 1..];
+    }
+    if skipped_tags.is_empty() {
+        out.push_str(&link_crates_in_text(rest, crates));
+    } else {
+        out.push_str(rest);
+    }
+    out
+}
+
+fn update_skipped_tags(tag: &str, skipped_tags: &mut Vec<String>) {
+    let trimmed = tag.trim_start_matches('<').trim_start();
+    let closing = trimmed.starts_with('/');
+    let name = trimmed
+        .trim_start_matches('/')
+        .split(|ch: char| ch == '>' || ch == '/' || ch.is_ascii_whitespace())
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !matches!(name.as_str(), "a" | "code" | "pre" | "script" | "style") {
+        return;
+    }
+    if closing {
+        if let Some(index) = skipped_tags.iter().rposition(|tag| tag == &name) {
+            skipped_tags.remove(index);
+        }
+    } else if !tag.ends_with("/>") {
+        skipped_tags.push(name);
+    }
+}
+
+fn link_crates_in_text(text: &str, crates: &[String]) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    let mut previous = None;
+    while !rest.is_empty() {
+        let mut matched = None;
+        for name in crates {
+            if rest.starts_with(name)
+                && has_left_text_boundary(previous)
+                && has_right_text_boundary(rest, name.len())
+            {
+                matched = Some(name.as_str());
+                break;
+            }
+        }
+        if let Some(name) = matched {
+            out.push_str(&format!(
+                "<a class=\"crate-link\" href=\"https://git.edgerun.tech/edgerun_core/crates/{}\">{}</a>",
+                escape_attr(name),
+                escape_html(name)
+            ));
+            rest = &rest[name.len()..];
+            previous = name.chars().last();
+        } else {
+            let ch = rest.chars().next().unwrap_or_default();
+            out.push(ch);
+            rest = &rest[ch.len_utf8()..];
+            previous = Some(ch);
+        }
+    }
+    out
+}
+
+fn has_left_text_boundary(previous: Option<char>) -> bool {
+    previous
+        .map(|ch| !(ch.is_ascii_alphanumeric() || ch == '-' || ch == '_'))
+        .unwrap_or(true)
+}
+
+fn has_right_text_boundary(rest: &str, matched_len: usize) -> bool {
+    rest[matched_len..]
+        .chars()
+        .next()
+        .map(|ch| !(ch.is_ascii_alphanumeric() || ch == '-' || ch == '_'))
+        .unwrap_or(true)
+}
+
 fn close_ul(html: &mut String, in_ul: &mut bool) {
     if *in_ul {
         html.push_str("</ul>");
@@ -2361,7 +2555,7 @@ for(const btn of topicButtons){btn.addEventListener('click',()=>{if(search){sear
 "#;
 
 const BLOG_STYLE: &str = r#"
-.topbar{display:grid;grid-template-columns:max-content minmax(220px,560px) 1fr max-content}.topbar nav{grid-column:4}.header-search{position:relative;min-width:0}.header-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.header-search input{width:100%;min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 44px 10px 13px}.header-search input:focus{border-color:var(--accent)}.header-search button{position:absolute;right:4px;top:4px;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}.header-search button:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}.header-search svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}button,input{font:inherit}.repo-stats{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr);gap:12px;max-width:760px;margin:28px 0 0}.repo-stats div{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}.repo-stats dt{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.repo-stats dd{margin:4px 0 0;font-weight:800;overflow-wrap:anywhere}.repo-stats .message{font-weight:650;color:var(--text)}.repo-stats .message span{color:var(--muted);font-weight:750;white-space:nowrap}.layout{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,720px);gap:40px;align-items:start;margin:0;padding:34px clamp(18px,4vw,56px) 80px}.article-layout{display:grid;grid-template-columns:minmax(0,780px) 220px;gap:42px;align-items:start;max-width:1060px;margin:0 auto;padding:44px 18px 90px}.article-layout-single{display:block;max-width:820px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.topic-list button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}.topic-list span{color:var(--muted);font-size:13px;font-weight:750}.posts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;max-width:720px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article-stack{display:grid;gap:14px}.article{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(28px,5vw,52px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{justify-self:start;color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.video-embed,.bench-chart{margin:28px 0}.video-embed iframe{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:8px;background:var(--code)}.bench-chart{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 86%,var(--code));padding:12px}.bench-chart svg{display:block;min-width:720px;width:100%;height:auto}.bench-chart rect{fill:var(--accent)}.bench-chart circle{fill:var(--accent-2)}.bench-chart line{stroke:var(--line);stroke-width:2}.bench-chart text{fill:var(--text);font:13px/1.3 ui-sans-serif,system-ui,sans-serif}.bench-chart text:first-of-type{font-weight:800;font-size:18px}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.content table{width:100%;border-collapse:collapse;margin:24px 0;display:block;overflow-x:auto}.content th,.content td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}.content th{background:color-mix(in srgb,var(--accent) 10%,var(--panel));font-weight:800}.content tr:nth-child(even) td{background:color-mix(in srgb,var(--panel) 78%,var(--code))}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.muted{color:var(--muted)}.site-footer{display:flex;gap:18px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding:22px clamp(18px,4vw,56px);color:var(--muted)}.site-footer a{text-decoration:none}.language-links{display:flex;gap:10px;margin-left:auto}.language-links a{font-weight:750;text-transform:uppercase}.language-links a[aria-current=true]{color:var(--accent)}
+.topbar{display:grid;grid-template-columns:max-content minmax(220px,560px) 1fr max-content}.topbar nav{grid-column:4}.header-search{position:relative;min-width:0}.header-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.header-search input{width:100%;min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 44px 10px 13px}.header-search input:focus{border-color:var(--accent)}.header-search button{position:absolute;right:4px;top:4px;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}.header-search button:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}.header-search svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}button,input{font:inherit}.repo-stats{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr);gap:12px;max-width:760px;margin:28px 0 0}.repo-stats div{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}.repo-stats dt{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.repo-stats dd{margin:4px 0 0;font-weight:800;overflow-wrap:anywhere}.repo-stats .message{font-weight:650;color:var(--text)}.repo-stats .message span{color:var(--muted);font-weight:750;white-space:nowrap}.layout{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,720px);gap:40px;align-items:start;margin:0;padding:34px clamp(18px,4vw,56px) 80px}.article-layout{display:grid;grid-template-columns:minmax(0,780px) 220px;gap:42px;align-items:start;max-width:1060px;margin:0 auto;padding:44px 18px 90px}.article-layout-single{display:block;max-width:820px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.topic-list button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}.topic-list span{color:var(--muted);font-size:13px;font-weight:750}.posts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;max-width:720px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article-stack{display:grid;gap:14px}.article{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(28px,5vw,52px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{justify-self:start;color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.video-embed,.bench-chart{margin:28px 0}.video-embed iframe{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:8px;background:var(--code)}.bench-chart{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 86%,var(--code));padding:12px}.bench-chart svg{display:block;min-width:720px;width:100%;height:auto}.bench-chart rect{fill:var(--accent)}.bench-chart circle{fill:var(--accent-2)}.bench-chart line{stroke:var(--line);stroke-width:2}.bench-chart text{fill:var(--text);font:13px/1.3 ui-sans-serif,system-ui,sans-serif}.bench-chart text:first-of-type{font-weight:800;font-size:18px}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.content table{width:100%;border-collapse:collapse;margin:24px 0;display:block;overflow-x:auto}.content th,.content td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}.content th{background:color-mix(in srgb,var(--accent) 10%,var(--panel));font-weight:800}.content tr:nth-child(even) td{background:color-mix(in srgb,var(--panel) 78%,var(--code))}.crate-link{color:var(--accent);font-weight:750;text-decoration:none}.crate-link:hover{text-decoration:underline}.related-posts{margin-top:42px;border-top:1px solid var(--line);padding-top:24px}.related-posts h2{margin:0 0 14px;font-size:20px}.related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}.related-posts article{border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 88%,var(--code))}.related-posts a{display:grid;gap:6px;padding:14px;text-decoration:none}.related-posts span{color:var(--accent-2);font-size:13px;font-weight:800}.related-posts strong{line-height:1.2}.related-posts small{color:var(--muted);font-size:13px}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.muted{color:var(--muted)}.site-footer{display:flex;gap:18px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding:22px clamp(18px,4vw,56px);color:var(--muted)}.site-footer a{text-decoration:none}.language-links{display:flex;gap:10px;margin-left:auto}.language-links a{font-weight:750;text-transform:uppercase}.language-links a[aria-current=true]{color:var(--accent)}
 @media(max-width:900px){.article-layout{grid-template-columns:1fr;max-width:820px}.article-layout aside{order:-1}.recent{display:flex;flex-wrap:wrap;gap:14px}}@media(max-width:760px){.hero,.layout{grid-template-columns:1fr}.hero{padding-top:42px}.repo-stats{grid-template-columns:1fr}.posts{grid-template-columns:1fr}.article{padding:24px}}
 @media(max-width:600px){body{overflow-x:hidden}.topbar{position:static;display:flex;flex-wrap:wrap;gap:12px;padding:12px 14px}.brand{flex:1 1 auto}.topbar nav{flex:0 0 auto;margin-left:auto}.header-search{order:2;flex:1 0 100%;width:100%}.layout,.article-layout{padding-left:18px;padding-right:18px}.posts,.post-card{min-width:0}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
@@ -2385,6 +2579,54 @@ mod tests {
         let html = markdown_to_html("Run `edgerun-server` before [open](https://example.com).");
         assert!(html.contains("<code>edgerun-server</code>"));
         assert!(html.contains("<a href=\"https://example.com\">open</a>"));
+    }
+
+    #[test]
+    fn links_visible_crate_mentions_outside_code() {
+        let html = "<p>Use edgerun-blog with <code>edgerun-git</code>.</p>";
+        let linked = link_visible_crates(
+            html,
+            &["edgerun-blog".to_string(), "edgerun-git".to_string()],
+        );
+        assert!(
+            linked.contains("href=\"https://git.edgerun.tech/edgerun_core/crates/edgerun-blog\"")
+        );
+        assert!(linked.contains("<code>edgerun-git</code>"));
+        assert!(
+            !link_visible_crates("<p>myedgerun-blog fork</p>", &["edgerun-blog".to_string()])
+                .contains("crate-link")
+        );
+    }
+
+    #[test]
+    fn renders_related_posts_with_recent_fallback() {
+        let post = Post {
+            title: "Current".to_string(),
+            path: "current".to_string(),
+            source_path: PathBuf::new(),
+            summary: "Current summary".to_string(),
+            date: "2026-04-30".to_string(),
+            author: "Ken".to_string(),
+            tags: vec!["one".to_string()],
+            body: "Current body".to_string(),
+            html: String::new(),
+            missing_front_matter: Vec::new(),
+        };
+        let other = Post {
+            title: "Other".to_string(),
+            path: "other".to_string(),
+            source_path: PathBuf::new(),
+            summary: "Other summary".to_string(),
+            date: "2026-04-29".to_string(),
+            author: "Ken".to_string(),
+            tags: vec!["two".to_string()],
+            body: "Other body".to_string(),
+            html: String::new(),
+            missing_front_matter: Vec::new(),
+        };
+        let html = render_related_posts(default_language(), &post, &[post.clone(), other]);
+        assert!(html.contains("Related articles"));
+        assert!(html.contains("/posts/other.html"));
     }
 
     #[test]
