@@ -101,12 +101,15 @@ build step and no authentication.
 
 `dash.edgerun.tech` is implemented in code as the human-facing workspace. The
 `BrowserApp` and `BrowserNodePolicy` resources in `05-browser-apps.yaml` are
-protocol/design configuration material that describe browser-loadable Wasm
-agents and the capability selectors they request. Current Dash request handling
-is implemented in code as server-rendered HTML fragments; Wasm app loading is
-the next implementation step. When no `BrowserApp` resources are configured,
-the server exposes default Build Log, Code, and Mail app catalog entries so the
-workspace remains navigable.
+implemented configuration material that describe browser-loadable Wasm agents
+and the capability selectors they request. Dash serves same-origin modules from
+`/modules/*.wasm`; the first app module emits canonical Edgerun v0
+`CapabilityDescriptor` and `QueryRequest` records through the browser-node host
+imports. Current surface rendering is still server-rendered HTML fragments, but
+the browser app boundary now carries protocol records instead of an ad hoc app
+format. When no `BrowserApp` resources are configured, the server exposes
+default Build Log, Code, and Mail app catalog entries so the workspace remains
+navigable.
 
 ## systemd
 

@@ -11,5 +11,10 @@ description = "Tiny first-party Wasm app modules for the Edgerun dashboard"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[dependencies]
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
+
 [lints]
 workspace = true

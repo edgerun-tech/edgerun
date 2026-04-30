@@ -128,6 +128,10 @@ pub const HASH_DOMAIN_RELAY_ENVELOPE: &str = "edgerun:v0:hash:relay-envelope";
 pub const HASH_DOMAIN_IDENTITY_RECORD: &str = "edgerun:v0:hash:identity-record";
 /// Domain tag for hashing an assurance claim.
 pub const HASH_DOMAIN_ASSURANCE_CLAIM: &str = "edgerun:v0:hash:assurance-claim";
+/// Domain tag for hashing a query request.
+pub const HASH_DOMAIN_QUERY_REQUEST: &str = "edgerun:v0:hash:query-request";
+/// Domain tag for hashing a capability descriptor.
+pub const HASH_DOMAIN_CAPABILITY_DESCRIPTOR: &str = "edgerun:v0:hash:capability-descriptor";
 /// Domain tag for hashing a logical object descriptor.
 pub const HASH_DOMAIN_LOGICAL_OBJECT_DESCRIPTOR: &str = "edgerun:v0:hash:logical-object-descriptor";
 /// Domain tag for hashing a stored representation header.
@@ -218,6 +222,7 @@ pub fn hash_domain_for_signature_domain(sig_domain_tag: &str) -> Option<&'static
         SIG_DOMAIN_RELAY_ENVELOPE => Some(HASH_DOMAIN_RELAY_ENVELOPE),
         SIG_DOMAIN_IDENTITY_RECORD => Some(HASH_DOMAIN_IDENTITY_RECORD),
         SIG_DOMAIN_ASSURANCE_CLAIM => Some(HASH_DOMAIN_ASSURANCE_CLAIM),
+        SIG_DOMAIN_QUERY_REQUEST => Some(HASH_DOMAIN_QUERY_REQUEST),
         _ => None,
     }
 }
