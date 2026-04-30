@@ -22,8 +22,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant as StdInstant, SystemTime, UNIX_EPOCH};
 
 use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig, HttpChallengeServer};
 use edgerun_acme::{ChallengeStatus, ChallengeType, DirectoryUrl, OrderStatus};
@@ -49,7 +50,7 @@ use edgerun_http::{Handler, HttpServer, Request, Response, StatusCode};
 use edgerun_machine_report::{gather_machine_report, render_machine_report, OutputFormat};
 use edgerun_rt::CancellationToken;
 use edgerun_tls::CertificateAndKey;
-use edgerun_web_ui::{FooterLink, PageShell, WorkspaceModule};
+use edgerun_web_ui::{PageShell, WorkspaceModule};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -1114,6 +1115,8 @@ struct SiteRouter {
     git: Option<GitHandler>,
     browser_apps: Vec<BrowserAppSpec>,
     dash_modules_root: PathBuf,
+    host_stats: Arc<Mutex<HostStatsCache>>,
+    request_count: Arc<AtomicU64>,
 }
 
 impl SiteRouter {
@@ -1178,10 +1181,13 @@ impl SiteRouter {
             git,
             browser_apps,
             dash_modules_root,
+            host_stats: Arc::new(Mutex::new(HostStatsCache::default())),
+            request_count: Arc::new(AtomicU64::new(0)),
         }
     }
 
     fn handle_sync(&self, request: Request) -> Response {
+        self.request_count.fetch_add(1, Ordering::Relaxed);
         let host = request_host(&request);
         if self.dash_host.as_deref() == host.as_deref() {
             let target = request.uri().request_target();
@@ -1189,6 +1195,12 @@ impl SiteRouter {
             if path.starts_with("/modules/") {
                 return match request.method().as_str() {
                     "GET" | "HEAD" => self.serve_dash_module(path),
+                    _ => method_not_allowed("GET, HEAD"),
+                };
+            }
+            if path == "/status.json" {
+                return match request.method().as_str() {
+                    "GET" | "HEAD" => self.dash_status_response(),
                     _ => method_not_allowed("GET, HEAD"),
                 };
             }
@@ -1293,6 +1305,17 @@ impl SiteRouter {
                 .with_header("X-Content-Type-Options", "nosniff"),
         }
     }
+
+    fn dash_status_response(&self) -> Response {
+        let request_count = self.request_count.load(Ordering::Relaxed);
+        let body = match self.host_stats.lock() {
+            Ok(mut cache) => render_host_status_json(&mut cache, request_count),
+            Err(_) => String::from("{\"ok\":false,\"error\":\"status cache unavailable\"}"),
+        };
+        Response::json(StatusCode::OK, &body)
+            .with_header("Cache-Control", "no-store")
+            .with_header("X-Content-Type-Options", "nosniff")
+    }
 }
 
 impl Handler for SiteRouter {
@@ -1340,11 +1363,7 @@ fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
         "Search workspace",
     );
     let header_actions = edgerun_web_ui::render_workspace_actions("dash", "");
-    let local_links = [FooterLink {
-        href: "mailto:ken@edgerun.tech",
-        label: "Contact",
-    }];
-    let footer = edgerun_web_ui::render_common_footer("dash", &local_links, "");
+    let footer = render_dash_status_footer();
     let style = format!("{}{}", edgerun_web_ui::BASE_STYLE, DASH_STYLE);
     let body = format!(
         "{}<script>{}{}{}</script>",
@@ -1400,6 +1419,269 @@ fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
         script_src: None,
         workspace_modules: modules,
     })
+}
+
+fn render_dash_status_footer() -> String {
+    String::from(
+        "<footer class=\"site-footer dash-status-footer\" aria-label=\"Server status\"><div class=\"dash-status\" data-dash-status><span>sessions <strong data-status-sessions>--</strong></span><span>req/s <strong data-status-rps>--</strong></span><span>mem <strong data-status-memory>--</strong></span><span>cpu <strong data-status-cpu>--</strong></span><span>bin <strong data-status-binary>--</strong></span><button type=\"button\" data-status-refresh title=\"Refresh status\">Refresh</button></div></footer>",
+    )
+}
+
+#[derive(Default)]
+struct HostStatsCache {
+    previous: Option<HostStatsSample>,
+    previous_request_count: Option<u64>,
+    previous_request_time: Option<StdInstant>,
+}
+
+#[derive(Clone)]
+struct HostStatsSample {
+    total_ticks: u64,
+    cpu_count: u64,
+    processes: Vec<HostProcessStats>,
+}
+
+#[derive(Clone)]
+struct HostProcessStats {
+    role: &'static str,
+    pid: u32,
+    cpu_ticks: u64,
+    memory_bytes: u64,
+    binary_bytes: u64,
+}
+
+fn render_host_status_json(cache: &mut HostStatsCache, request_count: u64) -> String {
+    match collect_host_stats_sample() {
+        Ok(sample) => {
+            let cpu_percent = host_cpu_percent(cache.previous.as_ref(), &sample);
+            let now = StdInstant::now();
+            let rps = match (cache.previous_request_count, cache.previous_request_time) {
+                (Some(previous_count), Some(previous_time)) => {
+                    let elapsed = now.duration_since(previous_time).as_secs_f64();
+                    if elapsed > 0.0 {
+                        request_count.saturating_sub(previous_count) as f64 / elapsed
+                    } else {
+                        0.0
+                    }
+                }
+                _ => 0.0,
+            };
+            let sessions = count_process_sessions("edgerun-server").unwrap_or(0);
+            let memory_bytes: u64 = sample
+                .processes
+                .iter()
+                .map(|process| process.memory_bytes)
+                .sum();
+            let binary_bytes: u64 = sample
+                .processes
+                .iter()
+                .map(|process| process.binary_bytes)
+                .sum();
+            let mut processes = String::new();
+            for (index, process) in sample.processes.iter().enumerate() {
+                if index > 0 {
+                    processes.push(',');
+                }
+                processes.push_str(&format!(
+                    "{{\"role\":\"{}\",\"pid\":{},\"memory_bytes\":{},\"binary_bytes\":{}}}",
+                    process.role, process.pid, process.memory_bytes, process.binary_bytes
+                ));
+            }
+            cache.previous = Some(sample);
+            cache.previous_request_count = Some(request_count);
+            cache.previous_request_time = Some(now);
+            format!(
+                "{{\"ok\":true,\"sessions\":{},\"requests_total\":{},\"requests_per_second\":{:.2},\"memory_bytes\":{},\"cpu_percent\":{:.2},\"binary_bytes\":{},\"processes\":[{}]}}",
+                sessions, request_count, rps, memory_bytes, cpu_percent, binary_bytes, processes
+            )
+        }
+        Err(error) => format!(
+            "{{\"ok\":false,\"error\":\"{}\"}}",
+            edgerun_web_ui::escape_json(&error.to_string())
+        ),
+    }
+}
+
+fn collect_host_stats_sample() -> io::Result<HostStatsSample> {
+    let (total_ticks, cpu_count) = read_total_cpu_ticks()?;
+    let mut processes = Vec::new();
+    if let Some(process) = read_process_stats("edgerun-server", "server") {
+        processes.push(process);
+    }
+    if let Some(process) = read_process_stats("edgerun-dns", "dns") {
+        processes.push(process);
+    }
+    Ok(HostStatsSample {
+        total_ticks,
+        cpu_count,
+        processes,
+    })
+}
+
+fn host_cpu_percent(previous: Option<&HostStatsSample>, current: &HostStatsSample) -> f64 {
+    let Some(previous) = previous else {
+        return 0.0;
+    };
+    let total_delta = current.total_ticks.saturating_sub(previous.total_ticks);
+    if total_delta == 0 {
+        return 0.0;
+    }
+    let current_ticks: u64 = current
+        .processes
+        .iter()
+        .map(|process| process.cpu_ticks)
+        .sum();
+    let previous_ticks: u64 = previous
+        .processes
+        .iter()
+        .map(|process| process.cpu_ticks)
+        .sum();
+    let process_delta = current_ticks.saturating_sub(previous_ticks);
+    (process_delta as f64 * current.cpu_count.max(1) as f64 * 100.0) / total_delta as f64
+}
+
+fn read_process_stats(name: &'static str, role: &'static str) -> Option<HostProcessStats> {
+    let pid = find_process_pid(name)?;
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let close = stat.rfind(") ")?;
+    let fields: Vec<&str> = stat[close + 2..].split_whitespace().collect();
+    let utime = fields.get(11)?.parse::<u64>().ok()?;
+    let stime = fields.get(12)?.parse::<u64>().ok()?;
+    let memory_bytes = read_status_rss_bytes(pid).unwrap_or(0);
+    let binary_bytes = process_binary_size(pid);
+    Some(HostProcessStats {
+        role,
+        pid,
+        cpu_ticks: utime + stime,
+        memory_bytes,
+        binary_bytes,
+    })
+}
+
+fn process_binary_size(pid: u32) -> u64 {
+    std::fs::read_link(format!("/proc/{pid}/exe"))
+        .ok()
+        .and_then(|path| std::fs::metadata(path).ok())
+        .map(|metadata| metadata.len())
+        .or_else(|| {
+            let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+            let first = cmdline.split(|byte| *byte == 0).next()?;
+            if first.is_empty() {
+                return None;
+            }
+            let path = String::from_utf8_lossy(first);
+            std::fs::metadata(path.as_ref())
+                .ok()
+                .map(|metadata| metadata.len())
+        })
+        .unwrap_or(0)
+}
+
+fn find_process_pid(name: &str) -> Option<u32> {
+    let entries = std::fs::read_dir("/proc").ok()?;
+    let mut pids = Vec::new();
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(pid_text) = file_name.to_str() else {
+            continue;
+        };
+        let Ok(pid) = pid_text.parse::<u32>() else {
+            continue;
+        };
+        let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).unwrap_or_default();
+        let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+        let cmdline = String::from_utf8_lossy(&cmdline).replace('\0', " ");
+        if comm.trim() == name || cmdline.contains(name) {
+            pids.push(pid);
+        }
+    }
+    pids.into_iter().min()
+}
+
+fn read_status_rss_bytes(pid: u32) -> Option<u64> {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    for line in status.lines() {
+        if let Some(value) = line.strip_prefix("VmRSS:") {
+            let kb = value.split_whitespace().next()?.parse::<u64>().ok()?;
+            return Some(kb * 1024);
+        }
+    }
+    None
+}
+
+fn read_total_cpu_ticks() -> io::Result<(u64, u64)> {
+    let stat = std::fs::read_to_string("/proc/stat")?;
+    let mut total = 0u64;
+    let mut cpu_count = 0u64;
+    for line in stat.lines() {
+        if let Some(rest) = line.strip_prefix("cpu ") {
+            total = rest
+                .split_whitespace()
+                .filter_map(|value| value.parse::<u64>().ok())
+                .sum();
+        } else if line
+            .as_bytes()
+            .get(0..3)
+            .map(|prefix| prefix == b"cpu")
+            .unwrap_or(false)
+            && line
+                .as_bytes()
+                .get(3)
+                .map(|byte| byte.is_ascii_digit())
+                .unwrap_or(false)
+        {
+            cpu_count += 1;
+        }
+    }
+    Ok((total, cpu_count.max(1)))
+}
+
+fn count_process_sessions(name: &str) -> io::Result<usize> {
+    let Some(pid) = find_process_pid(name) else {
+        return Ok(0);
+    };
+    let inodes = process_socket_inodes(pid)?;
+    Ok(count_established_sockets(&inodes))
+}
+
+fn process_socket_inodes(pid: u32) -> io::Result<Vec<String>> {
+    let mut inodes = Vec::new();
+    for entry in std::fs::read_dir(format!("/proc/{pid}/fd"))?.flatten() {
+        let Ok(target) = std::fs::read_link(entry.path()) else {
+            continue;
+        };
+        let text = target.to_string_lossy();
+        if let Some(inode) = text
+            .strip_prefix("socket:[")
+            .and_then(|value| value.strip_suffix(']'))
+        {
+            inodes.push(inode.to_string());
+        }
+    }
+    Ok(inodes)
+}
+
+fn count_established_sockets(inodes: &[String]) -> usize {
+    count_established_sockets_file("/proc/net/tcp", inodes)
+        + count_established_sockets_file("/proc/net/tcp6", inodes)
+}
+
+fn count_established_sockets_file(path: &str, inodes: &[String]) -> usize {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return 0;
+    };
+    content
+        .lines()
+        .skip(1)
+        .filter(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            fields.get(3) == Some(&"01")
+                && fields
+                    .get(9)
+                    .map(|inode| inodes.iter().any(|candidate| candidate == inode))
+                    .unwrap_or(false)
+        })
+        .count()
 }
 
 fn workspace_modules_from_config(apps: &[BrowserAppSpec]) -> Vec<WorkspaceModule<'_>> {
@@ -1641,11 +1923,15 @@ const DASH_STYLE: &str = r#"
 	@media(max-width:760px){.dash{grid-template-columns:1fr;grid-template-rows:auto 1fr}.dash-rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;overflow:auto}.dash-tab{white-space:nowrap}.dash-stage header{padding:0 12px}}
 	@media(max-width:900px){.dash-mail{grid-template-columns:1fr}.dash-mail-list{max-height:320px}}
 	.dash{background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 88%,var(--panel)) 0,var(--bg) 260px)}.dash-rail{gap:10px}.dash-tab{display:flex;align-items:center}.dash-tab:hover,.dash-tab[aria-current=page]{box-shadow:inset 3px 0 0 var(--accent)}.dash-stage header{position:sticky;top:0;z-index:3}.dash-stage header strong{font-size:15px}.dash-surface{padding:clamp(18px,3vw,30px)}.dash-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));max-width:1120px;gap:14px}.dash-card{min-height:148px;box-shadow:0 12px 34px color-mix(in srgb,var(--text) 6%,transparent);transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease}.dash-post-card{min-height:184px}.dash-card:hover{transform:translateY(-2px);box-shadow:0 18px 44px color-mix(in srgb,var(--text) 10%,transparent)}.dash-card strong{font-size:20px;line-height:1.2}.dash-card small{line-height:1.35}.dash-blog,.dash-code{max-width:1220px}.dash-blog .dash-code-hero,.dash-code-hero{border-bottom:1px solid var(--line);padding-bottom:16px}.dash-code-hero h2{max-width:900px;font-size:clamp(38px,4.4vw,58px)}.dash-code-summary div{background:color-mix(in srgb,var(--panel) 92%,var(--code));box-shadow:0 8px 24px color-mix(in srgb,var(--text) 5%,transparent)}.dash-code-columns article,.dash-mail-list,.dash-mail-detail,.dash-mail-login{box-shadow:0 10px 28px color-mix(in srgb,var(--text) 5%,transparent)}.dash-article{max-width:920px}.dash-article .article{box-shadow:0 14px 42px color-mix(in srgb,var(--text) 7%,transparent)}.dash-article .content{font-size:17px;line-height:1.7}.dash-article .content h2{font-size:clamp(24px,3vw,32px);margin-top:38px}.dash-article .content p,.dash-article .content ul,.dash-article .content ol{max-width:740px}.dash-article table{font-size:15px}.dash-link-button,.dash-mail-button,.pill-button{transition:border-color .15s ease,color .15s ease,background .15s ease}.dash-link-button:hover,.dash-mail-button:hover{background:color-mix(in srgb,var(--accent) 9%,var(--panel))}.dash-mail-item{transition:background .15s ease}.dash-mail-detail h2{font-size:clamp(22px,3vw,32px)}
+	body{--footer-h:30px}.dash-status-footer{min-height:30px;height:30px;display:flex;align-items:center;justify-content:center;padding:0 14px;overflow:hidden}.dash-status{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;white-space:nowrap;font-size:12px;line-height:1}.dash-status span{display:inline-flex;align-items:baseline;gap:5px;color:var(--muted)}.dash-status strong{color:var(--text);font-weight:800}.dash-status button{height:22px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:0 8px;font:inherit;cursor:pointer}.dash-status button:hover,.dash-status button:focus-visible{border-color:var(--accent);color:var(--accent)}
 	@media(max-width:760px){.dash-stage{grid-template-rows:auto 1fr}.dash-stage header{min-height:52px}.dash-surface{padding:16px}.dash-card{min-height:132px}.dash-article .article{box-shadow:none;padding:22px}.dash-code-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-code-summary .summary-wide{grid-column:1/-1}}
+	@media(max-width:760px){.dash-status-footer{justify-content:flex-start}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
 "#;
 
 const DASH_JS: &str = r#"
 const search=document.getElementById('workspaceSearch');
+function formatBytes(bytes){if(!Number.isFinite(bytes)||bytes<=0)return'--';const units=['B','KB','MB','GB'];let value=bytes;let unit=0;while(value>=1024&&unit<units.length-1){value/=1024;unit++}return(value>=10||unit===0?value.toFixed(0):value.toFixed(1))+' '+units[unit]}
+async function refreshDashStatus(options={}){try{const refresh=document.querySelector('[data-status-refresh]');if(refresh&&options.manual){refresh.disabled=true;refresh.textContent='...'}if(options.manual){await Promise.allSettled([fetch('/status.json?probe=1',{headers:{Accept:'application/json'},cache:'no-store'}),fetch('/apps/catalog.json?probe=1',{headers:{Accept:'application/json'},cache:'no-store'}),fetch('/surface/blog?probe=1',{headers:workspaceHeaders('/surface/blog'),cache:'no-store'})])}const response=await fetch('/status.json',{headers:{Accept:'application/json'},cache:'no-store'});if(!response.ok)return;const data=await response.json();if(!data.ok)return;const sessions=document.querySelector('[data-status-sessions]');const rps=document.querySelector('[data-status-rps]');const memory=document.querySelector('[data-status-memory]');const cpu=document.querySelector('[data-status-cpu]');const binary=document.querySelector('[data-status-binary]');if(sessions)sessions.textContent=String(data.sessions);if(rps)rps.textContent=(Number(data.requests_per_second)||0).toFixed(1);if(memory)memory.textContent=formatBytes(data.memory_bytes);if(cpu)cpu.textContent=(Number(data.cpu_percent)||0).toFixed(1)+'%';if(binary)binary.textContent=formatBytes(data.binary_bytes)}catch(_error){}finally{const refresh=document.querySelector('[data-status-refresh]');if(refresh){refresh.disabled=false;refresh.textContent='Refresh'}}}
 function dashRoute(){const raw=location.hash||'#build-log';const [hash,query='']=raw.split('?');let path={'#build-log':'/surface/blog','#blog':'/surface/blog','#mail':'/surface/mail','#apps':'/surface/apps','#about':'/surface/blog/about.html','#feed':'/surface/blog/feed.xml'}[hash];if(!path&&(hash==='#code'||hash==='#git'||hash==='#crates'||hash==='#source'))path='/surface/git';if(!path&&hash.startsWith('#code/'))path='/surface/git/'+hash.slice(6);if(!path&&hash.startsWith('#build-log/'))path='/surface/blog/'+hash.slice(11);return{path,query:new URLSearchParams(query)}}
 function filterDashCards(value){const q=(value||'').trim().toLowerCase();const cards=[...document.querySelectorAll('[data-search-card]')];let visible=0;cards.forEach(card=>{const topic=card.getAttribute('data-topic')||'';const topicFilter=document.querySelector('[data-topic-filter][aria-pressed="true"]')?.getAttribute('data-topic-filter')||'';const topicHit=!topicFilter||topic.split(/\s+/).includes(topicFilter);const textHit=!q||(card.getAttribute('data-search-text')||card.textContent||'').toLowerCase().includes(q);const hit=topicHit&&textHit;card.hidden=!hit;if(hit)visible++});const empty=document.querySelector('[data-search-empty]');if(empty)empty.hidden=visible!==0||(!q&&!document.querySelector('[data-topic-filter][aria-pressed="true"]:not([data-topic-filter=""])'))}
 function wireDashSearch(initial){document.querySelectorAll('[data-workspace-search-scope]').forEach(input=>{input.value=initial||'';filterDashCards(input.value);input.addEventListener('input',()=>filterDashCards(input.value))})}
@@ -1653,7 +1939,9 @@ async function loadDashHash(){const route=dashRoute();if(!route.path)return;cons
 addEventListener('hashchange',loadDashHash);addEventListener('popstate',loadDashHash);loadDashHash();
 document.addEventListener('input',event=>{if(event.target.matches('[data-workspace-search-scope]'))filterDashCards(event.target.value)});
 document.addEventListener('click',event=>{const trigger=event.target.closest('[data-topic-filter]');if(!trigger)return;document.querySelectorAll('[data-topic-filter]').forEach(node=>node.setAttribute('aria-pressed',node===trigger?'true':'false'));filterDashCards(document.querySelector('[data-workspace-search-scope]')?.value||'')});
+document.addEventListener('click',event=>{const trigger=event.target.closest('[data-status-refresh]');if(!trigger)return;event.preventDefault();refreshDashStatus({manual:true})});
 search&&search.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();const q=search.value.trim();if(!q)return;location.hash='#code?q='+encodeURIComponent(q)});
+refreshDashStatus();setInterval(refreshDashStatus,5000);
 "#;
 
 struct HttpsRedirectHandler {

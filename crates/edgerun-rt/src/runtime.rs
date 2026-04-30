@@ -21,6 +21,8 @@ static TASK_QUEUE: crate::sync::Mutex<VecDeque<TaskFuture>> =
     crate::sync::Mutex::new(VecDeque::new());
 static PENDING_TASKS: AtomicUsize = AtomicUsize::new(0);
 static RUN_COUNT: AtomicU32 = AtomicU32::new(0);
+#[cfg(not(target_os = "none"))]
+const HOST_WORKER_TICK: std::time::Duration = std::time::Duration::from_millis(20);
 
 pub fn spawn<F>(f: F) -> JoinHandle<F::Output>
 where
@@ -324,12 +326,12 @@ impl Runtime {
                     .spawn(move || {
                         while !stop.load(Ordering::Acquire) {
                             if pending() == 0 {
-                                std::thread::sleep(std::time::Duration::from_micros(250));
+                                std::thread::sleep(HOST_WORKER_TICK);
                                 continue;
                             }
                             run_queue();
                             unsafe { edgerun_platform::yield_cpu() };
-                            std::thread::sleep(std::time::Duration::from_micros(250));
+                            std::thread::sleep(HOST_WORKER_TICK);
                         }
                     })
                     .expect("failed to spawn edgerun runtime worker");

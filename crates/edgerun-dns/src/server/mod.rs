@@ -241,6 +241,10 @@ impl DnsServer {
     /// This method returns immediately; [`DnsServer::run()`] will return shortly after.
     pub async fn shutdown(&self) {
         *self.shutdown_flag.write().await = true;
+        self.tcp_listener.unblock_accept();
+        if let Some(listener) = &self.tcp_listener_ipv6 {
+            listener.unblock_accept();
+        }
         edgerun_log::info!("edgerun-dns: shutdown requested");
     }
 

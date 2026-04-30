@@ -30,17 +30,10 @@ pub async fn tcp_accept_loop_with_shutdown(
     state: ServerState,
     rate_limiter: RateLimiter,
     shutdown: Arc<crate::compat::RwLock<bool>>,
-) -> ! {
+) {
     loop {
-        // Check shutdown flag before accepting
-        if *shutdown.read().await {
-            edgerun_log::info!("edgerun-dns: TCP loop shutting down");
-            // Wait a bit for existing connections to drain
-            crate::compat::sleep(crate::std::time::Duration::from_millis(100)).await;
-        }
-
-        match listener.accept().await {
-            Ok((stream, peer)) => {
+        match listener.accept_until_shutdown(&shutdown).await {
+            Ok(Some((stream, peer))) => {
                 let state = state.clone();
                 let rate_limiter = rate_limiter.clone();
                 crate::compat::spawn(async move {
@@ -50,6 +43,10 @@ pub async fn tcp_accept_loop_with_shutdown(
                         edgerun_log::warn!("edgerun-dns: TCP error from {}: {}", peer, e);
                     }
                 });
+            }
+            Ok(None) => {
+                edgerun_log::info!("edgerun-dns: TCP loop shutting down");
+                return;
             }
             Err(e) => {
                 edgerun_log::warn!("edgerun-dns: TCP accept error: {}", e);

@@ -12,6 +12,8 @@ We have an enormous amount of compute available. For normal human needs, the wor
 
 Edgerun is an experiment in taking responsibility for more of the stack again: identity, networking, storage, email, sites, code publishing, and the operational tools around them. Not because every abstraction is bad, but because abstractions should be small enough to inspect, cheap enough to run, and honest about the costs they impose.
 
+We are dogfooding it now. Edgerun is running on Edgerun itself: the production mail service, webmail surface, dashboard, build log, DNS records, and controlled code explorer are served by Edgerun components rather than a separate hosted platform. That does not mean every planned capability is public or finished. It means the parts being written about here are already carrying the project’s own day-to-day traffic.
+
 The goal is to find out how far we can reduce our dependence on huge, polluting datacenters by moving toward efficient peer-to-peer systems and software that can run close to the people using it. That means fewer mandatory platforms, less idle machinery, less hidden complexity, and more systems that can be understood by one person or a small group.
 
 This started as a practical exploration, not a finished manifesto. In this video I was still experimenting with Kubernetes for the idea, before pushing harder on the question of how much of that machinery should exist at all:

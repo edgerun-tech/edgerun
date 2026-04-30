@@ -19,6 +19,9 @@ use host_std::net::{TcpListener as StdTcpListener, TcpStream as StdTcpStream};
 
 pub use edgerun_rt::{sleep, spawn, timeout, Duration, Instant};
 
+#[cfg(not(target_os = "none"))]
+const HOST_UDP_IDLE_TICK: host_std::time::Duration = host_std::time::Duration::from_millis(500);
+
 pub struct RwLock<T>(edgerun_rt::RwLock<T>);
 
 impl<T> RwLock<T> {
@@ -73,8 +76,23 @@ impl AsyncUdpSocket {
     #[cfg(not(target_os = "none"))]
     pub fn bind(addr: &str) -> io::Result<Self> {
         let socket = StdUdpSocket::bind(addr).map_err(map_host_io)?;
-        socket.set_nonblocking(true).map_err(map_host_io)?;
+        socket
+            .set_read_timeout(Some(HOST_UDP_IDLE_TICK))
+            .map_err(map_host_io)?;
+        socket
+            .set_write_timeout(Some(HOST_UDP_IDLE_TICK))
+            .map_err(map_host_io)?;
         Ok(Self(socket))
+    }
+
+    #[cfg(target_os = "none")]
+    pub fn set_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "none"))]
+    pub fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        self.0.set_read_timeout(timeout).map_err(map_host_io)
     }
 
     #[cfg(target_os = "none")]
@@ -97,14 +115,9 @@ impl AsyncUdpSocket {
 
     #[cfg(not(target_os = "none"))]
     pub async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        loop {
-            match self.0.recv_from(buf) {
-                Ok((size, addr)) => return Ok((size, to_compat_addr(addr))),
-                Err(error) if error.kind() == host_std::io::ErrorKind::WouldBlock => {
-                    edgerun_rt::sleep(edgerun_rt::Duration::from_millis(1)).await;
-                }
-                Err(error) => return Err(map_host_io(error)),
-            }
+        match self.0.recv_from(buf) {
+            Ok((size, addr)) => Ok((size, to_compat_addr(addr))),
+            Err(error) => Err(map_host_io(error)),
         }
     }
 
@@ -117,20 +130,15 @@ impl AsyncUdpSocket {
 
     #[cfg(not(target_os = "none"))]
     pub async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
-        loop {
-            match self.0.send_to(buf, addr) {
-                Ok(value) => return Ok(value),
-                Err(error) if error.kind() == host_std::io::ErrorKind::WouldBlock => {
-                    edgerun_rt::sleep(edgerun_rt::Duration::from_millis(1)).await;
-                }
-                Err(error) => return Err(map_host_io(error)),
-            }
+        match self.0.send_to(buf, addr) {
+            Ok(value) => Ok(value),
+            Err(error) => Err(map_host_io(error)),
         }
     }
 
     pub fn poll_recv_from(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<(usize, SocketAddr)>> {
         #[cfg(target_os = "none")]
@@ -144,10 +152,6 @@ impl AsyncUdpSocket {
         {
             match self.0.recv_from(buf) {
                 Ok((size, addr)) => Poll::Ready(Ok((size, to_compat_addr(addr)))),
-                Err(error) if error.kind() == host_std::io::ErrorKind::WouldBlock => {
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
                 Err(error) => Poll::Ready(Err(map_host_io(error))),
             }
         }
@@ -155,7 +159,7 @@ impl AsyncUdpSocket {
 
     pub fn poll_send_to(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
         buf: &[u8],
         addr: SocketAddr,
     ) -> Poll<io::Result<usize>> {
@@ -169,10 +173,6 @@ impl AsyncUdpSocket {
         {
             match self.0.send_to(buf, addr) {
                 Ok(value) => Poll::Ready(Ok(value)),
-                Err(error) if error.kind() == host_std::io::ErrorKind::WouldBlock => {
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
                 Err(error) => Poll::Ready(Err(map_host_io(error))),
             }
         }
@@ -204,7 +204,6 @@ impl AsyncTcpListener {
     #[cfg(not(target_os = "none"))]
     pub fn bind(addr: &str) -> io::Result<Self> {
         let listener = StdTcpListener::bind(addr).map_err(map_host_io)?;
-        listener.set_nonblocking(true).map_err(map_host_io)?;
         Ok(Self(listener))
     }
 
@@ -223,17 +222,57 @@ impl AsyncTcpListener {
 
     #[cfg(not(target_os = "none"))]
     pub async fn accept(&self) -> io::Result<(Arc<AsyncTcpStream>, SocketAddr)> {
+        match self.0.accept() {
+            Ok((stream, peer)) => Ok((Arc::new(AsyncTcpStream(stream)), to_compat_addr(peer))),
+            Err(error) => Err(map_host_io(error)),
+        }
+    }
+
+    #[cfg(target_os = "none")]
+    pub fn set_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "none"))]
+    pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+        self.0.set_nonblocking(nonblocking).map_err(map_host_io)
+    }
+
+    #[cfg(not(target_os = "none"))]
+    pub fn local_addr_result(&self) -> io::Result<SocketAddr> {
+        self.0.local_addr().map(to_compat_addr).map_err(map_host_io)
+    }
+
+    #[cfg(target_os = "none")]
+    pub fn local_addr_result(&self) -> io::Result<SocketAddr> {
+        self.local_addr()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "listener not bound"))
+    }
+
+    #[cfg(not(target_os = "none"))]
+    pub fn unblock_accept(&self) {
+        if let Ok(addr) = self.0.local_addr() {
+            let _ = StdTcpStream::connect(addr);
+        }
+    }
+
+    #[cfg(target_os = "none")]
+    pub fn unblock_accept(&self) {}
+
+    pub async fn accept_until_shutdown(
+        &self,
+        shutdown: &crate::compat::RwLock<bool>,
+    ) -> io::Result<Option<(Arc<AsyncTcpStream>, SocketAddr)>> {
         loop {
-            match self.0.accept() {
-                Ok((stream, peer)) => {
-                    stream.set_nonblocking(true).map_err(map_host_io)?;
-                    return Ok((Arc::new(AsyncTcpStream(stream)), to_compat_addr(peer)));
-                }
-                Err(error) if error.kind() == host_std::io::ErrorKind::WouldBlock => {
-                    edgerun_rt::sleep(edgerun_rt::Duration::from_millis(1)).await;
-                }
-                Err(error) => return Err(map_host_io(error)),
+            if *shutdown.read().await {
+                return Ok(None);
             }
+
+            let accepted = self.accept().await?;
+            if *shutdown.read().await {
+                return Ok(None);
+            }
+            return Ok(Some(accepted));
         }
     }
 
@@ -348,4 +387,29 @@ pub fn to_bare_addr(addr: SocketAddr) -> edgerun_rt::SocketAddr {
 
 pub fn from_bare_addr(addr: edgerun_rt::SocketAddr) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::from(addr.ip_bytes())), addr.port())
+}
+
+#[cfg(all(test, not(target_os = "none")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn udp_recv_idle_waits_for_host_timeout() {
+        let socket = AsyncUdpSocket::bind("127.0.0.1:0").unwrap();
+        let started = host_std::time::Instant::now();
+        let result = edgerun_rt::block_on(async {
+            let mut buf = [0u8; 64];
+            socket.recv_from(&mut buf).await
+        });
+
+        let kind = result.unwrap_err().kind();
+        assert!(
+            matches!(kind, io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock),
+            "unexpected idle UDP recv error kind: {kind:?}"
+        );
+        assert!(
+            started.elapsed() >= host_std::time::Duration::from_millis(400),
+            "idle UDP recv returned before the host socket timeout"
+        );
+    }
 }

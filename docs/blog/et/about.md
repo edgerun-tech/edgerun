@@ -12,6 +12,8 @@ Meil on maailmas tohutult arvutusressurssi. Tavaliste inimeste vajaduste jaoks o
 
 Edgerun on katse võtta rohkem vastutust stack'i eest tagasi: identity, networking, storage, email, sites, code publishing ja nende ümber olevad operatsioonitööriistad. Mitte sellepärast, et iga abstraktsioon oleks halb, vaid sellepärast, et abstraktsioonid peaksid olema piisavalt väikesed, et neid kontrollida, piisavalt odavad, et neid käitada, ja ausad kulude suhtes, mida nad tekitavad.
 
+Me dogfood'ime seda nüüd päriselt. Edgerun töötab Edgeruni enda peal: production mail service, webmail surface, dashboard, build log, DNS records ja kontrollitud code explorer on teenindatud Edgeruni komponentidega, mitte eraldi hosted platformiga. See ei tähenda, et kõik planeeritud võimekused oleksid public või valmis. See tähendab, et need osad, millest siin kirjutame, kannavad juba projekti enda igapäevast liiklust.
+
 Eesmärk on välja selgitada, kui palju saame vähendada sõltuvust suurtest, saastavatest andmekeskustest, liikudes tõhusamate peer-to-peer süsteemide ja inimeste lähedal töötava tarkvara poole. See tähendab vähem kohustuslikke platvorme, vähem jõude seisvat riistvara, vähem peidetud keerukust ja rohkem süsteeme, millest üks inimene või väike grupp päriselt aru saab.
 
 See algas praktilise uurimisena, mitte valmis manifestina. Selles videos katsetasin selle idee jaoks veel Kubernetes'ega, enne kui hakkasin tugevamalt küsima, kui palju sellist masinavärki üldse olemas peaks olema:

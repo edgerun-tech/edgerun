@@ -15,6 +15,8 @@ use std::os::fd::{FromRawFd, IntoRawFd, RawFd};
 
 use crate::io::{AsyncRead, AsyncWrite, IoError, Result as IoResult};
 
+const HOST_NET_POLL_TICK: std::time::Duration = std::time::Duration::from_millis(20);
+
 fn map_io_error(error: std::io::Error) -> IoError {
     match error.kind() {
         std::io::ErrorKind::UnexpectedEof => IoError::UnexpectedEof,
@@ -30,6 +32,7 @@ fn register_and_wake_waker(slot: &mut Option<Waker>, cx: &Context<'_>) {
         *slot = Some(cx.waker().clone());
     }
     if let Some(waker) = slot.as_ref() {
+        std::thread::sleep(HOST_NET_POLL_TICK);
         waker.wake_by_ref();
     }
 }
@@ -41,7 +44,7 @@ fn register_and_wake_waker_after_brief_pause(slot: &mut Option<Waker>, cx: &Cont
         *slot = Some(cx.waker().clone());
     }
     if let Some(waker) = slot.as_ref() {
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        std::thread::sleep(HOST_NET_POLL_TICK);
         waker.wake_by_ref();
     }
 }

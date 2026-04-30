@@ -277,6 +277,7 @@ pub async fn forward_query(
     use crate::std::net::SocketAddr;
 
     let socket = AsyncUdpSocket::bind("0.0.0.0:0")?;
+    socket.set_read_timeout(Some(crate::std::time::Duration::from_secs(5)))?;
     let target: SocketAddr = upstream_addr.parse().map_err(|_| {
         crate::std::io::Error::new(
             crate::std::io::ErrorKind::InvalidInput,

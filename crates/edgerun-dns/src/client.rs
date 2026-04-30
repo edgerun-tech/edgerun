@@ -12,7 +12,6 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use core::pin::Pin;
 
 use crate::compat::AsyncUdpSocket;
 
@@ -236,13 +235,15 @@ impl DnsClient {
         let msg = DnsMessage::query(id, name.to_string(), qtype);
         let wire = msg.to_wire();
 
-        // Send the query — async, non-blocking.
-        poll_send_to(&mut self.socket, &wire, self.server).await?;
+        self.socket.set_read_timeout(Some(self.timeout))?;
 
-        // Read response with timeout — async, non-blocking.
-        let response = crate::compat::timeout(self.timeout, poll_recv(&mut self.socket))
+        self.socket.send_to(&wire, self.server).await?;
+
+        let mut buf = [0u8; 4096];
+        let (n, _src) = crate::compat::timeout(self.timeout, self.socket.recv_from(&mut buf))
             .await
             .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "DNS query timed out"))??;
+        let response = &buf[..n];
 
         let response = DnsMessage::from_wire(&response)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -263,26 +264,6 @@ impl DnsClient {
 
         Ok(response)
     }
-}
-
-// ---------------------------------------------------------------------------
-// Async helpers
-// ---------------------------------------------------------------------------
-
-async fn poll_send_to(
-    socket: &mut AsyncUdpSocket,
-    buf: &[u8],
-    target: SocketAddr,
-) -> io::Result<usize> {
-    use core::future::poll_fn;
-    poll_fn(|cx| Pin::new(&mut *socket).poll_send_to(cx, buf, target)).await
-}
-
-async fn poll_recv(socket: &mut AsyncUdpSocket) -> io::Result<Vec<u8>> {
-    use core::future::poll_fn;
-    let mut buf = [0u8; 4096];
-    let (n, _src) = poll_fn(|cx| Pin::new(&mut *socket).poll_recv_from(cx, &mut buf)).await?;
-    Ok(buf[..n].to_vec())
 }
 
 // ---------------------------------------------------------------------------

@@ -34,6 +34,14 @@ pub async fn udp_recv_loop_with_rate_limiting(
 
         let (n, src) = match socket.recv_from(&mut buf).await {
             Ok(v) => v,
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    crate::std::io::ErrorKind::TimedOut | crate::std::io::ErrorKind::WouldBlock
+                ) =>
+            {
+                continue;
+            }
             Err(e) => {
                 edgerun_log::warn!("edgerun-dns: UDP recv error: {}", e);
                 crate::compat::sleep(crate::std::time::Duration::from_millis(10)).await;

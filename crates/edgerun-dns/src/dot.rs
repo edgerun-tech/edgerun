@@ -105,6 +105,7 @@ impl DotServer {
     /// Signal shutdown.
     pub async fn shutdown(&self) {
         *self.shutdown_flag.write().await = true;
+        self.tcp_listener.unblock_accept();
     }
 }
 
@@ -118,13 +119,8 @@ async fn dot_accept_loop(
 ) -> io::Result<()> {
     let cert_and_key = cert_and_key.clone();
     loop {
-        if *shutdown.read().await {
-            edgerun_log::info!("edgerun-dns: DoT loop shutting down");
-            crate::compat::sleep(crate::std::time::Duration::from_millis(100)).await;
-        }
-
-        match listener.accept().await {
-            Ok((stream, peer)) => {
+        match listener.accept_until_shutdown(&shutdown).await {
+            Ok(Some((stream, peer))) => {
                 let state = state.clone();
                 let rate_limiter = rate_limiter.clone();
                 let cert_and_key = cert_and_key.clone();
@@ -136,6 +132,10 @@ async fn dot_accept_loop(
                         edgerun_log::warn!("edgerun-dns: DoT error from {}: {}", peer, e);
                     }
                 });
+            }
+            Ok(None) => {
+                edgerun_log::info!("edgerun-dns: DoT loop shutting down");
+                return Ok(());
             }
             Err(e) => {
                 edgerun_log::warn!("edgerun-dns: DoT accept error: {}", e);
