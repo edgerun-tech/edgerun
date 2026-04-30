@@ -1,0 +1,12 @@
+mode=smtp
+target=127.0.0.1:2525
+requested=10000
+concurrency=32
+ok=9976
+fail=24
+elapsed_ms=56677
+throughput_ops_per_sec=176.01
+latency_avg_ms=155.28
+latency_p50_ms=115.178
+latency_p95_ms=227.632
+latency_p99_ms=1151.597

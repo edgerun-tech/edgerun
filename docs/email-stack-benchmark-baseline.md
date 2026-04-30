@@ -177,8 +177,16 @@ Edgerun accepted 10,000/10,000 messages at 342.71 ops/s with 3,580 kB peak RSS;
 Postfix accepted 10,000/10,000 at 351.69 ops/s with roughly 90 MB container
 memory during load.
 
+The follow-up comparator bundle is committed under
+`docs/benchmarks/email-stack/20260430Tscale-v3/`. It adds sampled 10k SMTP runs
+for OpenSMTPD and Exim. OpenSMTPD accepted 9,976/10,000 messages at 176.01
+ops/s with 17.91 MB peak container memory. Exim accepted 2,146/10,000 attempts
+with the current minimal config while peaking at 219.9 MB and 141 PIDs, so it is
+tracked as a tuning/configuration finding rather than a fair completed result.
+
 - Summary: `docs/benchmarks/email-stack/20260430Tbench-v1/SUMMARY.md`
 - Scale summary: `docs/benchmarks/email-stack/20260430Tscale-v2/SUMMARY.md`
+- Comparator summary: `docs/benchmarks/email-stack/20260430Tscale-v3/SUMMARY.md`
 - Raw Edgerun production footprint:
   `docs/benchmarks/email-stack/20260430Tbench-v1/raw/edgerun-live-stack.out`
 - Raw Edgerun 10k SMTP result:
@@ -189,6 +197,14 @@ memory during load.
   `docs/benchmarks/email-stack/20260430Tscale-v2/raw/postfix-10k-sampled-smtp.out`
 - Raw Postfix 10k memory samples:
   `docs/benchmarks/email-stack/20260430Tscale-v2/raw/postfix-10k-sampled-memory.tsv`
+- Raw OpenSMTPD 10k SMTP result:
+  `docs/benchmarks/email-stack/20260430Tscale-v3/raw/opensmtpd-10k-sampled-smtp.out`
+- Raw OpenSMTPD 10k memory samples:
+  `docs/benchmarks/email-stack/20260430Tscale-v3/raw/opensmtpd-10k-sampled-memory.tsv`
+- Raw Exim 10k SMTP result:
+  `docs/benchmarks/email-stack/20260430Tscale-v3/raw/exim-10k-sampled-smtp.out`
+- Raw Exim 10k memory samples:
+  `docs/benchmarks/email-stack/20260430Tscale-v3/raw/exim-10k-sampled-memory.tsv`
 - Raw Edgerun isolated SMTP result:
   `docs/benchmarks/email-stack/20260430Tbench-v1/raw/edgerun-smtp-only.out`
 - Raw Postfix SMTP result:
