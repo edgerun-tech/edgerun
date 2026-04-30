@@ -693,6 +693,13 @@ fn parse_public_api_line(line: &str) -> Option<(String, String)> {
         let Some(after_kind) = rest.strip_prefix(kind) else {
             continue;
         };
+        if !after_kind
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_ascii_whitespace())
+        {
+            continue;
+        }
         let name = after_kind.trim_start();
         let name = name
             .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
@@ -1807,6 +1814,7 @@ mod tests {
             parse_public_api_line("pub(crate) struct Mailbox;"),
             Some(("struct".to_string(), "Mailbox".to_string()))
         );
+        assert!(parse_public_api_line("pub static_root: Option<PathBuf>,").is_none());
         assert!(parse_public_api_line("fn private() {}").is_none());
     }
 
