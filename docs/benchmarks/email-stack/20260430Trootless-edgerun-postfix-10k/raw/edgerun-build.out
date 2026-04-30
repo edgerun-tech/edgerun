@@ -1,0 +1,17 @@
+$ ./scripts/benchmark-email-podman.sh build edgerun
+STEP 1/5: FROM scratch
+STEP 2/5: COPY edgerun-server /edgerun-server
+--> Using cache 0db4cb0de139a673c6de2635cf5f131acfe704a9c213787712da013ee1657d58
+--> 0db4cb0de139
+STEP 3/5: COPY server.yaml /server.yaml
+--> Using cache 12a9a87a9179dfe48dacd615169688f6096ccd91c4a80e6b24f00f1dce537f5f
+--> 12a9a87a9179
+STEP 4/5: EXPOSE 25 143
+--> Using cache 6ee786dd6e1972c8f86d397dc5dcb312cc4b92cd4d5d2556ef927613c1e3a412
+--> 6ee786dd6e19
+STEP 5/5: ENTRYPOINT ["/edgerun-server", "--config", "/server.yaml"]
+--> Using cache 896f70863ceed18b5b77af1adfe7ddcb7f50ec98aeafa91c766761e54af7e8a7
+COMMIT localhost/edgerun-email-bench-edgerun:latest
+--> 896f70863cee
+Successfully tagged localhost/edgerun-email-bench-edgerun:latest
+896f70863ceed18b5b77af1adfe7ddcb7f50ec98aeafa91c766761e54af7e8a7

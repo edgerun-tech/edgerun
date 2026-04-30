@@ -12,6 +12,11 @@ Methodology: follow `docs/benchmarks/methodology.md` for publishable benchmark
 claims. Native Edgerun results must not be presented as direct throughput
 rankings against containerized comparison stacks. Those runs are deployment-mode
 or operator-experience evidence unless all stacks use the same isolation mode.
+The rootless Podman harness now includes an Edgerun container path for
+like-for-like containerized evidence.
+
+Current focused rootless evidence:
+`docs/benchmarks/email-stack/20260430Trootless-edgerun-postfix-10k/`.
 
 This is the working draft for the public benchmark post. The goal is to compare
 Edgerun against common self-hosted email stacks on the same host, with the same

@@ -1,0 +1,8 @@
+timestamp_ms stats
+1777518263428 name=edgerun-email-bench-edgerun cpu=25.42% mem=26.98MB / 65.1GB net=1.673MB / 1.512MB block=0B / 248.1MB pids=1
+1777518263960 name=edgerun-email-bench-edgerun cpu=25.79% mem=27.46MB / 65.1GB net=1.673MB / 1.512MB block=0B / 248.1MB pids=1
+1777518264481 name=edgerun-email-bench-edgerun cpu=26.11% mem=28.06MB / 65.1GB net=1.673MB / 1.512MB block=0B / 248.1MB pids=1
+1777518265003 name=edgerun-email-bench-edgerun cpu=26.51% mem=27.32MB / 65.1GB net=1.673MB / 1.512MB block=0B / 248.1MB pids=1
+1777518265525 name=edgerun-email-bench-edgerun cpu=26.82% mem=27.44MB / 65.1GB net=1.673MB / 1.512MB block=0B / 248.1MB pids=1
+1777518266049 name=edgerun-email-bench-edgerun cpu=27.22% mem=27.74MB / 65.1GB net=1.673MB / 1.512MB block=0B / 248.1MB pids=1
+1777518266570 name=edgerun-email-bench-edgerun cpu=27.48% mem=25.99MB / 65.1GB net=1.673MB / 1.512MB block=0B / 248.1MB pids=1

@@ -5,22 +5,23 @@ set -eu
 # It avoids host package conflicts and binds only localhost high ports.
 #
 # Usage:
-#   scripts/benchmark-email-podman.sh build postfix
-#   scripts/benchmark-email-podman.sh run postfix
-#   scripts/benchmark-email-podman.sh bench-smtp postfix
-#   scripts/benchmark-email-podman.sh stop postfix
+#   scripts/benchmark-email-podman.sh build edgerun
+#   scripts/benchmark-email-podman.sh run edgerun
+#   scripts/benchmark-email-podman.sh bench-smtp edgerun
+#   scripts/benchmark-email-podman.sh bench-imap edgerun
+#   scripts/benchmark-email-podman.sh stop edgerun
 
 cmd="${1:-}"
 stack="${2:-}"
 
 if [ -z "$cmd" ] || [ -z "$stack" ]; then
     echo "usage: $0 build|config|metrics|run|bench-smtp|bench-imap|stop|notes STACK" >&2
-    echo "stacks: postfix exim opensmtpd dovecot stalwart" >&2
+    echo "stacks: edgerun postfix exim opensmtpd dovecot stalwart" >&2
     exit 2
 fi
 
 case "$stack" in
-    postfix|exim|opensmtpd|dovecot|stalwart) ;;
+    edgerun|postfix|exim|opensmtpd|dovecot|stalwart) ;;
     *) echo "unknown stack: $stack" >&2; exit 2 ;;
 esac
 
@@ -39,8 +40,70 @@ bench_count="${EDGERUN_EMAIL_BENCH_COUNT:-100}"
 bench_concurrency="${EDGERUN_EMAIL_BENCH_CONCURRENCY:-4}"
 podman_build_opts="${EDGERUN_EMAIL_BENCH_PODMAN_BUILD_OPTS:---isolation chroot}"
 podman_run_opts="${EDGERUN_EMAIL_BENCH_PODMAN_RUN_OPTS:---cgroup-manager=cgroupfs}"
+edgerun_bin="${EDGERUN_EMAIL_BENCH_EDGERUN_BIN:-}"
 
 mkdir -p "$work"
+
+find_edgerun_bin() {
+    if [ -n "$edgerun_bin" ]; then
+        printf '%s\n' "$edgerun_bin"
+    elif command -v edgerun-server >/dev/null 2>&1; then
+        command -v edgerun-server
+    elif [ -x target/x86_64-unknown-linux-musl/release/edgerun-server ]; then
+        printf '%s\n' "target/x86_64-unknown-linux-musl/release/edgerun-server"
+    elif [ -x target/release/edgerun-server ]; then
+        printf '%s\n' "target/release/edgerun-server"
+    else
+        return 1
+    fi
+}
+
+write_edgerun() {
+    bin="$(find_edgerun_bin)" || {
+        echo "edgerun-server binary not found; build edgerun-server first or set EDGERUN_EMAIL_BENCH_EDGERUN_BIN" >&2
+        exit 1
+    }
+    cp "$bin" "$work/edgerun-server"
+    cat > "$work/server.yaml" <<'EOF'
+apiVersion: edgerun.io/v1alpha1
+kind: SmtpServer
+metadata:
+  name: benchmark
+spec:
+  hostname: benchmark.local
+  bind_address: "0.0.0.0:25"
+  smtps: false
+  starttls: false
+  local_domains:
+    - example.test
+  maildir_root: /data/maildirs
+  relay_enabled: false
+  users:
+    - username: bench
+      domains:
+        - example.test
+---
+apiVersion: edgerun.io/v1alpha1
+kind: ImapServer
+metadata:
+  name: benchmark
+spec:
+  hostname: benchmark.local
+  bind_address: "0.0.0.0:143"
+  imaps: false
+  maildir_root: /data/maildirs
+  users:
+    - username: bench
+      password: bench
+EOF
+    cat > "$work/Containerfile" <<'EOF'
+FROM scratch
+COPY edgerun-server /edgerun-server
+COPY server.yaml /server.yaml
+EXPOSE 25 143
+ENTRYPOINT ["/edgerun-server", "--config", "/server.yaml"]
+EOF
+}
 
 write_postfix() {
     cat > "$work/Containerfile" <<'EOF'
@@ -175,6 +238,7 @@ EOF
 
 write_containerfile() {
     case "$stack" in
+        edgerun) write_edgerun ;;
         postfix) write_postfix ;;
         exim) write_exim ;;
         opensmtpd) write_opensmtpd ;;
@@ -190,6 +254,12 @@ stop_stack() {
 run_stack() {
     stop_stack
     case "$stack" in
+        edgerun)
+            podman run -d --name "$name" --replace \
+                $podman_run_opts \
+                -p "127.0.0.1:$smtp_port:25" \
+                -p "127.0.0.1:$imap_port:143" "$image" >/dev/null
+            ;;
         dovecot)
             podman run -d --name "$name" --replace \
                 $podman_run_opts \
@@ -221,6 +291,14 @@ run_stack() {
 
 notes() {
     case "$stack" in
+        edgerun)
+            cat <<'EOF'
+Edgerun: integrated reference server. The rootless benchmark image copies one
+static edgerun-server binary plus one server.yaml into a scratch image. SMTP and
+IMAP run in the same process, with no external package manager or sidecar
+services in this benchmark shape.
+EOF
+            ;;
         postfix)
             cat <<'EOF'
 Postfix: medium difficulty. Debian package is easy, but it conflicts with other
@@ -264,12 +342,34 @@ EOF
 
 metrics() {
     write_containerfile
-    config_lines="$(awk '
-        /postconf -e/ { n++ }
-        /^[[:space:]]*'\''[^'\'']+'\''[[:space:]]*\\/ { n++ }
-        END { print n + 0 }
-    ' "$work/Containerfile")"
+    if [ "$stack" = "edgerun" ]; then
+        config_lines="$(awk 'NF && $1 !~ /^#/ { n++ } END { print n + 0 }' "$work/server.yaml")"
+    else
+        config_lines="$(awk '
+            /postconf -e/ { n++ }
+            /^[[:space:]]*'\''[^'\'']+'\''[[:space:]]*\\/ { n++ }
+            END { print n + 0 }
+        ' "$work/Containerfile")"
+    fi
     case "$stack" in
+        edgerun)
+            binary_bytes=0
+            if bin="$(find_edgerun_bin 2>/dev/null)"; then
+                binary_bytes="$(stat -c '%s' "$bin" 2>/dev/null || printf '0')"
+            fi
+            cat <<EOF
+stack=edgerun
+shape=integrated_reference_server
+components=1
+container_base=scratch
+packages=none
+binary_bytes=$binary_bytes
+config_lines=$config_lines
+services=edgerun-server
+ports=smtp:25,imap:143
+multitenancy_note=single process with explicit local domains and per-user mailbox roots; tenant policy should become a first-class config dimension before broad hosting claims.
+EOF
+            ;;
         postfix)
             cat <<EOF
 stack=postfix
@@ -346,6 +446,10 @@ case "$cmd" in
     config)
         write_containerfile
         cat "$work/Containerfile"
+        if [ "$stack" = "edgerun" ]; then
+            printf '\n# --- server.yaml ---\n'
+            cat "$work/server.yaml"
+        fi
         ;;
     metrics)
         metrics

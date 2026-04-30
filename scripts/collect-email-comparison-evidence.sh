@@ -14,6 +14,8 @@ imap_count="${EDGERUN_EMAIL_STORY_IMAP_COUNT:-100}"
 concurrency="${EDGERUN_EMAIL_STORY_CONCURRENCY:-32}"
 edgerun_bin="${EDGERUN_EMAIL_STORY_EDGERUN_BIN:-}"
 protocol_timeout="${EDGERUN_EMAIL_STORY_PROTOCOL_TIMEOUT:-300}"
+include_native_edgerun="${EDGERUN_EMAIL_STORY_INCLUDE_NATIVE_EDGERUN:-0}"
+stacks="${EDGERUN_EMAIL_STORY_STACKS:-edgerun postfix opensmtpd exim dovecot stalwart}"
 
 now_ms() {
     printf '%s\n' "$(($(date +%s%N) / 1000000))"
@@ -142,6 +144,7 @@ run_sampled_protocol() {
 
 stack_kind() {
     case "$1" in
+        edgerun) printf 'smtp_imap' ;;
         dovecot) printf 'imap' ;;
         stalwart) printf 'bootstrap' ;;
         *) printf 'smtp' ;;
@@ -165,6 +168,16 @@ collect_stack() {
         "edgerun-email-bench-$stack"
 
     case "$kind" in
+        smtp_imap)
+            run_sampled_protocol "$stack" "$stack-smtp" \
+                env EDGERUN_EMAIL_BENCH_COUNT="$smtp_count" \
+                    EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
+                    ./scripts/benchmark-email-podman.sh bench-smtp "$stack"
+            run_sampled_protocol "$stack" "$stack-imap" \
+                env EDGERUN_EMAIL_BENCH_COUNT="$imap_count" \
+                    EDGERUN_EMAIL_BENCH_CONCURRENCY="$concurrency" \
+                    ./scripts/benchmark-email-podman.sh bench-imap "$stack"
+            ;;
         smtp)
             run_sampled_protocol "$stack" "$stack-smtp" \
                 env EDGERUN_EMAIL_BENCH_COUNT="$smtp_count" \
@@ -201,13 +214,13 @@ find_edgerun_bin() {
     fi
 }
 
-collect_edgerun() {
+collect_native_edgerun_snapshot() {
     bin="$(find_edgerun_bin || true)"
     if [ -z "$bin" ]; then
-        printf 'edgerun-server binary not found; build edgerun-server before collecting isolated Edgerun evidence\n' > "$raw/edgerun-skipped.out"
+        printf 'edgerun-server binary not found; build edgerun-server before collecting native Edgerun snapshot\n' > "$raw/native-edgerun-skipped.out"
         return
     fi
-    work="$out/edgerun-work"
+    work="$out/native-edgerun-work"
     maildir="$work/maildirs"
     queue="$work/queue"
     config="$work/server.yaml"
@@ -244,7 +257,7 @@ spec:
     - username: bench
       password: bench
 EOF
-    cp "$config" "$raw/edgerun-config.out"
+    cp "$config" "$raw/native-edgerun-config.out"
     {
         printf 'stack=edgerun\n'
         printf 'shape=integrated_reference_server\n'
@@ -255,13 +268,13 @@ EOF
         printf 'services=smtp,imap\n'
         printf 'ports=smtp:2526,imap:1144\n'
         printf 'multitenancy_note=single process with explicit local domains and per-user mailbox roots; tenant policy should become a first-class config dimension before broad hosting claims.\n'
-    } > "$raw/edgerun-metrics.out"
+    } > "$raw/native-edgerun-metrics.out"
 
     start="$(now_ms)"
     "$bin" --config "$config" \
         --webmail-http-bind 127.0.0.1:18081 \
         --webmail-https-bind 127.0.0.1:18443 \
-        > "$raw/edgerun-server.out" 2> "$raw/edgerun-server.err" &
+        > "$raw/native-edgerun-server.out" 2> "$raw/native-edgerun-server.err" &
     server_pid="$!"
     ready_status=0
     wait_tcp 127.0.0.1 2526 || ready_status="$?"
@@ -271,10 +284,10 @@ EOF
         printf 'command=%s --config %s --webmail-http-bind 127.0.0.1:18081 --webmail-https-bind 127.0.0.1:18443\n' "$bin" "$config"
         printf 'status=%s\nstarted_ms=%s\nended_ms=%s\nelapsed_ms=%s\npid=%s\n' \
             "$ready_status" "$start" "$end" "$((end - start))" "$server_pid"
-    } > "$raw/edgerun-run.timing"
+    } > "$raw/native-edgerun-run.timing"
 
     if [ "$ready_status" = "0" ]; then
-        run_sampled_process_protocol "$server_pid" edgerun-smtp \
+        run_sampled_process_protocol "$server_pid" native-edgerun-smtp \
             ./scripts/benchmark-email-protocol.sh smtp \
                 --host 127.0.0.1 \
                 --port 2526 \
@@ -282,7 +295,7 @@ EOF
                 --concurrency "$concurrency" \
                 --from bench@example.test \
                 --to bench@example.test
-        run_sampled_process_protocol "$server_pid" edgerun-imap \
+        run_sampled_process_protocol "$server_pid" native-edgerun-imap \
             ./scripts/benchmark-email-protocol.sh imap \
                 --host 127.0.0.1 \
                 --port 1144 \
@@ -292,7 +305,7 @@ EOF
                 --password bench
     fi
 
-    ps -o pid=,ppid=,comm=,rss=,vsz=,etime=,args= -p "$server_pid" > "$raw/edgerun-ps.out" 2> "$raw/edgerun-ps.err" || true
+    ps -o pid=,ppid=,comm=,rss=,vsz=,etime=,args= -p "$server_pid" > "$raw/native-edgerun-ps.out" 2> "$raw/native-edgerun-ps.err" || true
     kill "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
 }
@@ -307,9 +320,11 @@ if [ -x ./scripts/benchmark-email-stack.sh ]; then
     run_capture edgerun-live-stack ./scripts/benchmark-email-stack.sh --local
 fi
 
-collect_edgerun
+if [ "$include_native_edgerun" = "1" ]; then
+    collect_native_edgerun_snapshot
+fi
 
-for stack in postfix opensmtpd exim dovecot stalwart; do
+for stack in $stacks; do
     collect_stack "$stack"
 done
 
@@ -334,7 +349,9 @@ operator-experience data before the prose is written:
 
 Workload:
 
-- SMTP stacks: $smtp_count local-only loopback deliveries, concurrency
+- Edgerun rootless Podman: $smtp_count local-only SMTP loopback deliveries and
+  $imap_count IMAP login/list/select/logout sessions, concurrency $concurrency.
+- SMTP-only stacks: $smtp_count local-only loopback deliveries, concurrency
   $concurrency, recipient bench@example.test, no external delivery.
 - Dovecot IMAP: $imap_count login/list/select/logout sessions, concurrency
   $concurrency, benchmark user bench.
@@ -342,6 +359,11 @@ Workload:
   recorded as exit status 124 in the corresponding raw output.
 - Stalwart: bootstrap/startup evidence only until first-run domain/account and
   anti-relay setup is automated reproducibly.
+- Native Edgerun snapshot: disabled by default. Set
+  EDGERUN_EMAIL_STORY_INCLUDE_NATIVE_EDGERUN=1 to collect it as production-shape
+  evidence, not as a direct performance comparator.
+- Stack selection: \`$stacks\`. Override with EDGERUN_EMAIL_STORY_STACKS to run
+  one pair or one stack at a time.
 
 All command stdout/stderr files are under \`raw/\`. Timing metadata is stored in
 \`raw/*.timing\`.

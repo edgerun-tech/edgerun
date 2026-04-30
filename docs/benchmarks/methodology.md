@@ -192,8 +192,9 @@ The earlier email evidence is useful, but its claims must be narrowed:
 - The 10k SMTP numbers are still useful for finding Edgerun hot paths and
   comparator setup behavior.
 - The next publishable comparison needs either all stacks native or all stacks
-  containerized.
+  containerized. The default email collector uses rootless Podman for Edgerun
+  and the comparison stacks so those results can support like-for-like
+  containerized claims.
 - Operator-experience evidence should be collected separately and presented as
   a setup story, including install time, config decisions, failures, and
   multitenancy implications.
-
