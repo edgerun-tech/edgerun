@@ -2254,57 +2254,17 @@ fn normalize_host(host: &str) -> String {
 const DASH_BODY: &str = r##"
 <main id="content" class="dash-shell">
   <section class="dash-shell-inner">
-    <section class="dash-workspace" id="dashWorkspace" aria-label="Core services workspace">
-      <article class="dash-panel dash-module" data-surface-module="build-log" data-module-key="build-log">
-        <div class="dash-module-head">
-          <div>
-            <h2>Build Log</h2>
-          </div>
-          <div class="dash-module-controls">
-            <span class="dash-module-drag-handle" title="Drag to rearrange" aria-hidden="true">⋮⋮</span>
-            <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="build-log" aria-label="Minimize Build Log">▁</button>
-            <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="build-log" aria-label="Maximize Build Log">▢</button>
-          </div>
-        </div>
+      <section class="dash-workspace" id="dashWorkspace" aria-label="Core services workspace">
+      <article class="dash-module" data-surface-module="build-log" data-module-key="build-log">
         <div id="dashSurfaceBuildLog" class="dash-surface" data-active-surface="build-log">Loading build log…</div>
       </article>
-      <article class="dash-panel dash-module" data-surface-module="code" data-module-key="code">
-        <div class="dash-module-head">
-          <div>
-            <h2>Code</h2>
-          </div>
-          <div class="dash-module-controls">
-            <span class="dash-module-drag-handle" title="Drag to rearrange" aria-hidden="true">⋮⋮</span>
-            <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="code" aria-label="Minimize Code">▁</button>
-            <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="code" aria-label="Maximize Code">▢</button>
-          </div>
-        </div>
+      <article class="dash-module" data-surface-module="code" data-module-key="code">
         <div id="dashSurfaceCode" class="dash-surface" data-active-surface="code">Loading code…</div>
       </article>
-      <article class="dash-panel dash-module" data-surface-module="mail" data-module-key="mail">
-        <div class="dash-module-head">
-          <div>
-            <h2>Mail</h2>
-          </div>
-          <div class="dash-module-controls">
-            <span class="dash-module-drag-handle" title="Drag to rearrange" aria-hidden="true">⋮⋮</span>
-            <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="mail" aria-label="Minimize Mail">▁</button>
-            <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="mail" aria-label="Maximize Mail">▢</button>
-          </div>
-        </div>
+      <article class="dash-module" data-surface-module="mail" data-module-key="mail">
         <div id="dashSurfaceMail" class="dash-surface" data-active-surface="mail">Loading mail…</div>
       </article>
-      <article class="dash-panel dash-module" data-surface-module="apps" data-module-key="apps">
-        <div class="dash-module-head">
-          <div>
-            <h2>Apps</h2>
-          </div>
-          <div class="dash-module-controls">
-            <span class="dash-module-drag-handle" title="Drag to rearrange" aria-hidden="true">⋮⋮</span>
-            <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="apps" aria-label="Minimize Apps">▁</button>
-            <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="apps" aria-label="Maximize Apps">▢</button>
-          </div>
-        </div>
+      <article class="dash-module" data-surface-module="apps" data-module-key="apps">
         <div id="dashSurfaceApps" class="dash-surface" data-active-surface="apps">Loading apps…</div>
       </article>
     </section>
@@ -2326,22 +2286,11 @@ const DASH_STYLE: &str = r#"
 .dash-panels-header h1{margin:8px 0 0}
 .dash-panels-header .dash-eyebrow{font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:var(--accent)}
 .dash-tools-grid{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:14px}
-.dash-panel{display:grid;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 13px 34px color-mix(in srgb,var(--text) 6%,transparent)}
-.dash-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.dash-panel-head h2{margin:0;font-size:21px}
-.dash-panel-head span{color:var(--muted);font-size:13px}
-.dash-module-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.dash-module-head h2{margin:0}
-.dash-module-kicker{margin:0;font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:12px;color:var(--muted)}
-.dash-module-controls{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.dash-module-drag-handle{border-radius:999px;line-height:1;user-select:none;cursor:grab}
-.dash-module-button{font-size:14px}
 .dash-module-minimized{background:color-mix(in srgb,var(--panel) 80%,transparent)}
 .dash-module-minimized .dash-surface{display:none}
 .dash-module-minimized .dash-surface-path{display:none}
-.dash-module-minimized .dash-module-head{margin-bottom:0}
 .dash-surface-path{font-size:12px;color:var(--muted);background:color-mix(in srgb,var(--panel) 84%,transparent);padding:4px 10px;border-radius:999px;border:1px solid var(--line);display:inline-flex}
-.dash-surface{min-height:340px;max-height:560px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.dash-surface{height:100%;overflow:auto;padding:12px;border:0;border-radius:0;background:var(--bg)}
 .dash-surface:focus-within{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:-2px}
 .dash-surface-empty{color:var(--muted);font-size:13px}
 .dash-surface .dash-surface-empty{background:color-mix(in srgb,var(--panel) 84%,transparent);padding:10px;border:1px dashed var(--line);border-radius:8px}
@@ -2393,7 +2342,6 @@ body{--footer-h:42px;--topbar-h:0px}
 .topbar{display:none!important}
 .dash-panels-header,
 .dash-tools-grid,
-.dash-module-kicker,
 .dash-module-minimized .dash-surface-path{display:none!important}
 .dash-shell{
   min-height:calc(100vh - var(--footer-h));
@@ -2411,7 +2359,7 @@ body{--footer-h:42px;--topbar-h:0px}
   position:relative;
   min-height:calc(100vh - 188px);
   height:calc(100vh - 188px);
-  overflow:auto;
+  overflow:hidden;
 }
 .dash-workspace::before{
   content:'';
@@ -2430,18 +2378,18 @@ body{--footer-h:42px;--topbar-h:0px}
   max-height:calc(100vh - 210px);
   width:min(380px, calc(100vw - 22px));
   height:min(420px, calc(100vh - 210px));
-  display:grid;
+  display:block;
   gap:0;
-  padding:14px 16px;
+  padding:0;
   background:var(--panel);
   border:1px solid var(--line);
   border-radius:14px;
   box-shadow:0 13px 34px color-mix(in srgb,var(--text) 8%,transparent);
   z-index:10;
-  user-select:none;
+  user-select:auto;
   transition:transform .18s ease, box-shadow .18s ease, width .14s ease, height .14s ease, left .14s ease, top .14s ease;
   resize:both;
-  overflow:auto;
+  overflow:hidden;
 }
 .dash-module.dash-module-dragging{
   opacity:.65;
@@ -2454,14 +2402,9 @@ body{--footer-h:42px;--topbar-h:0px}
 .dash-workspace.dash-maximized .dash-module.dash-module-maximized{display:block; inset:10px; left:10px; top:10px; width:calc(100vw - 34px); height:calc(100vh - 204px)}
 .dash-module.dash-module-minimized{height:56px;overflow:hidden}
 .dash-module.dash-module-maximized{inset:10px; left:10px; top:10px; width:calc(100vw - 34px); height:calc(100vh - 204px)}
-.dash-module.dash-module-maximized .dash-surface{height:calc(100% - 66px)}
-.dash-module.dash-module-maximized .dash-module-head{position:sticky; top:0; padding-bottom:8px; border-bottom:1px solid var(--line)}
-.dash-module.dash-module-maximized .dash-module-controls{gap:8px}
-.dash-module.dash-module-maximized .dash-module-controls .dash-module-button[data-module-action='maximize']{
-  text-indent:0.5px;
-}
+.dash-module.dash-module-maximized .dash-surface{height:100%}
 .dash-module:not(.dash-module-maximized) .dash-surface{
-  max-height:calc(100% - 78px);
+  height:100%;
 }
 .dash-module.is-dragging{
   cursor:grabbing;
@@ -2481,9 +2424,10 @@ body{--footer-h:42px;--topbar-h:0px}
   padding:10px;
   border:1px solid color-mix(in srgb,var(--line) 80%,transparent);
   border-radius:999px;
-  background:color-mix(in srgb,var(--panel) 78%,transparent);
+  background:transparent;
   backdrop-filter:blur(6px);
   z-index:20;
+  box-shadow:none;
 }
 .dash-dock-button{
   --dash-icon-scale: 1;
@@ -2530,8 +2474,6 @@ body{--footer-h:42px;--topbar-h:0px}
   padding:0;
   cursor:pointer;
 }
-.dash-module-button,
-.dash-module-drag-handle,
 .dash-chat-panel-button,
 .dash-status button,
 .dash-status-refresh,
@@ -2550,19 +2492,13 @@ body{--footer-h:42px;--topbar-h:0px}
   cursor:pointer;
   line-height:1;
 }
-.dash-module-button{font-size:14px;}
-.dash-module-drag-handle{font-size:12px}
 .dash-chat-panel-button,
 .dash-status-refresh{font-size:13px;}
 .dash-chat-bubble{font-size:18px;line-height:1}
-.dash-module-button:hover,
-.dash-module-drag-handle:hover,
 .dash-chat-panel-button:hover,
 .dash-status button:hover,
 .dash-status-refresh:hover,
 .dash-chat-bubble:hover,
-.dash-module-button:focus-visible,
-.dash-module-drag-handle:focus-visible,
 .dash-chat-panel-button:focus-visible,
 .dash-status button:focus-visible,
 .dash-status-refresh:focus-visible,
@@ -2660,6 +2596,37 @@ body{--footer-h:42px;--topbar-h:0px}
   display:block;
   transform:scale(0.95);
 }
+.dash-module-context-menu{
+  position:fixed;
+  min-width:176px;
+  display:none;
+  gap:6px;
+  padding:6px;
+  border:1px solid color-mix(in srgb,var(--line) 72%,transparent);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--panel) 96%,transparent);
+  backdrop-filter:blur(8px);
+  box-shadow:0 14px 34px color-mix(in srgb,var(--text) 18%,transparent);
+  z-index:45;
+  user-select:none;
+}
+.dash-module-context-menu.is-open{display:grid}
+.dash-module-context-menu button{
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:var(--text);
+  font:inherit;
+  padding:9px 10px;
+  text-align:left;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  cursor:pointer;
+}
+.dash-module-context-menu button:hover{
+  background:color-mix(in srgb,var(--panel) 88%,transparent);
+}
 @keyframes dash-spin{
   to{transform:rotate(360deg)}
 }
@@ -2671,7 +2638,7 @@ body{--footer-h:42px;--topbar-h:0px}
     max-width:100%;
   }
 }
-@media(max-width:760px){.dash-shell{padding:10px 10px 96px}.dash-shell-inner{gap:12px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
+@media(max-width:760px){.dash-shell{padding:10px 10px 96px}.dash-shell-inner{gap:12px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
 "#;
 
 const DASH_COHESIVE_JS: &str = r#"
@@ -2960,22 +2927,93 @@ function refreshDockButtonState() {
 
 function setModuleMinimized(module, minimized) {
   if (!module) return;
-  const key = module.dataset.moduleKey || 'module';
-  const button = module.querySelector('[data-module-action="minimize"]');
   if (minimized) {
     module.classList.add('dash-module-minimized');
-    if (button) {
-      button.textContent = '▢';
-      button.setAttribute('aria-label', `Restore ${key}`);
-    }
   } else {
     module.classList.remove('dash-module-minimized');
-    if (button) {
-      button.textContent = '▁';
-      button.setAttribute('aria-label', `Minimize ${key}`);
-    }
   }
   refreshDockButtonState();
+}
+
+function isInteractiveSurfaceTarget(target) {
+  if (!target) {
+    return false;
+  }
+  return !!target.closest(
+    'a, button, input, textarea, select, option, label, .dash-chat-panel-button, [data-chat-action], [data-surface], [href], [data-module-context-action]',
+  );
+}
+
+function ensureModuleContextMenu() {
+  const existing = document.getElementById('dashModuleContextMenu');
+  if (existing) {
+    return existing;
+  }
+  const menu = document.createElement('section');
+  menu.id = 'dashModuleContextMenu';
+  menu.className = 'dash-module-context-menu';
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(menu);
+  return menu;
+}
+
+function hideModuleContextMenu() {
+  const menu = document.getElementById('dashModuleContextMenu');
+  if (!menu) return;
+  menu.classList.remove('is-open');
+  menu.setAttribute('aria-hidden', 'true');
+}
+
+function clampMenuPosition(event) {
+  const viewportHeight = Math.max(0, window.innerHeight - 12);
+  const viewportWidth = Math.max(0, window.innerWidth - 12);
+  const menu = ensureModuleContextMenu();
+  const rect = menu.getBoundingClientRect();
+  const estimatedWidth = Math.max(170, rect.width || 170);
+  const estimatedHeight = Math.max(150, rect.height || 150);
+  return {
+    left: clamp(event.clientX, 12, viewportWidth - estimatedWidth),
+    top: clamp(event.clientY, 12, viewportHeight - estimatedHeight),
+  };
+}
+
+async function applyModuleContextAction(module, action) {
+  const key = getModuleKeyFromElement(module);
+  const surface = getSurfaceForKey(key);
+  if (!key) return;
+  const maximized = currentMaximizedModule();
+  if (action === 'open') {
+    if (module.classList.contains('dash-module-minimized')) {
+      setModuleMinimized(module, false);
+    }
+    focusModule(module);
+    if (maximized && maximized !== key) {
+      setMaximizedModule('');
+    }
+    if (surface) {
+      await hydrateSurface(surface, surface.pathPrefix);
+    }
+    return;
+  }
+  if (action === 'minimize') {
+    const shouldMinimize = !module.classList.contains('dash-module-minimized');
+    setModuleMinimized(module, shouldMinimize);
+    if (shouldMinimize && maximized === key) {
+      setMaximizedModule('');
+    }
+    return;
+  }
+  if (action === 'maximize') {
+    setMaximizedModule(maximized === key ? '' : key);
+    focusModule(module);
+    return;
+  }
+  if (action === 'refresh') {
+    if (surface) {
+      await hydrateSurface(surface, surface.pathPrefix);
+    }
+  }
 }
 
 function setMaximizedModule(key) {
@@ -3443,31 +3481,80 @@ function wireChatDock() {
 }
 
 function wireModuleControls() {
-  document.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-module-action]');
+  const workspace = getWorkspaceRoot();
+  if (!workspace) return;
+  const menu = ensureModuleContextMenu();
+  menu.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-module-context-action]');
     if (!button) return;
-    event.preventDefault();
-    const key = button.getAttribute('data-module-key');
+    const action = button.getAttribute('data-module-context-action');
+    const key = button.getAttribute('data-module-context-key');
     const module = getModuleByKey(key);
-    if (!module) return;
-    const action = button.getAttribute('data-module-action');
-    if (action === 'minimize') {
-      focusModule(module);
-      const wasMinimized = module.classList.contains('dash-module-minimized');
-      setModuleMinimized(module, !wasMinimized);
-      if (!wasMinimized && currentMaximizedModule() === key) {
-        setMaximizedModule('');
-      }
-      persistWorkspaceState();
-      refreshDockButtonState();
+    if (!module) {
+      hideModuleContextMenu();
       return;
     }
-    if (action === 'maximize') {
-      focusModule(module);
-      const maximized = currentMaximizedModule();
-      setMaximizedModule(maximized === key ? '' : key);
+    event.preventDefault();
+    applyModuleContextAction(module, action).finally(() => {
+      hideModuleContextMenu();
+      persistWorkspaceState();
+      refreshDockButtonState();
+    });
+  });
+
+  workspace.addEventListener('contextmenu', async (event) => {
+    const module = event.target.closest('.dash-module');
+    if (!module) return;
+    if (isInteractiveSurfaceTarget(event.target)) {
+      return;
+    }
+    event.preventDefault();
+    focusModule(module);
+    const key = getModuleKeyFromElement(module);
+    const minimized = module.classList.contains('dash-module-minimized');
+    const maximized = currentMaximizedModule() === key;
+    const items = [
+      {
+        action: 'open',
+        icon: '🡹',
+        label: module.classList.contains('dash-module-minimized') ? 'Restore' : 'Open',
+      },
+      { action: 'refresh', icon: '↻', label: 'Refresh content' },
+      { action: minimized ? 'open' : 'minimize', icon: minimized ? '📌' : '▾', label: minimized ? 'Unminimize' : 'Minimize' },
+      { action: 'maximize', icon: maximized ? '⤢' : '▣', label: maximized ? 'Restore layout' : 'Maximize' },
+    ];
+    const entryHtml = items
+      .map(
+        (entry) =>
+          `<button type="button" role="menuitem" data-module-context-key="${key}" data-module-context-action="${entry.action}" aria-label="${entry.label}"><span>${entry.icon}</span>${entry.label}</button>`,
+      )
+      .join('');
+    menu.innerHTML = entryHtml;
+    menu.setAttribute('aria-hidden', 'false');
+    menu.classList.add('is-open');
+    const menuPosition = clampMenuPosition(event);
+    menu.style.left = `${menuPosition.left}px`;
+    menu.style.top = `${menuPosition.top}px`;
+  });
+
+  addEventListener('click', (event) => {
+    if (!menu.classList.contains('is-open')) {
+      return;
+    }
+    const isMenu = event.target.closest('#dashModuleContextMenu');
+    if (isMenu) {
+      return;
+    }
+    hideModuleContextMenu();
+  });
+
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      hideModuleContextMenu();
     }
   });
+  addEventListener('scroll', hideModuleContextMenu);
+  addEventListener('resize', hideModuleContextMenu);
 }
 
 function wireWorkspaceDock() {
@@ -3578,16 +3665,11 @@ function wireModuleDragReorder() {
   };
 
   const onPointerDown = (event) => {
-    const handle = event.target.closest('.dash-module-drag-handle');
-    if (!handle) {
-      const module = event.target.closest('.dash-module');
+    const module = event.target.closest('.dash-module');
+    if (!module || event.button !== 0 || isInteractiveSurfaceTarget(event.target) || currentMaximizedModule()) {
       if (module) {
         focusModule(module);
       }
-      return;
-    }
-    const module = handle.closest('.dash-module');
-    if (!module || currentMaximizedModule()) {
       return;
     }
     event.preventDefault();
