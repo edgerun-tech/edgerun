@@ -9,7 +9,7 @@
 :root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--panel2:#f1eadc;--ink:#1c2430;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent2:#8b3f2f;--danger:#b42342;--code:#eee6d8}
 :root[data-theme=dark]{--bg:#101418;--panel:#171d22;--panel2:#232b31;--ink:#f2ede4;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent2:#dfa06b;--danger:#fb7185;--code:#232b31}
 *{box-sizing:border-box}body{margin:0;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
-.app{height:100vh;display:grid;grid-template-columns:minmax(280px,380px) 1fr}
+.app{min-height:calc(100vh - 61px);display:grid;grid-template-columns:minmax(280px,380px) 1fr}
 .list{border-right:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;min-width:0}
 .top{min-height:56px;display:grid;grid-template-columns:1fr auto;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
 .brand{font-weight:700;font-size:16px}.who{color:var(--muted);font-size:12px;align-self:center;text-align:right}.mail-count{color:var(--muted);font-size:12px}
@@ -33,7 +33,8 @@ label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:
 input,textarea,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px;font:inherit;background:var(--bg);color:var(--ink)}
 input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:var(--accent)}textarea{min-height:190px;resize:vertical}.row{display:flex;gap:8px;align-items:center}.status{color:var(--muted);font-size:13px;min-width:82px}.status.warn{color:var(--accent2)}.grow{flex:1}.attachments{display:flex;flex-wrap:wrap;gap:6px}.chip,.attachment{border:1px solid var(--line);border-radius:6px;background:var(--code);color:var(--muted);padding:5px 8px;font-size:12px}.attachment{display:inline-flex;align-items:center;gap:7px;color:var(--ink);text-decoration:none;margin:0 6px 6px 0}.chip button{border:0;background:transparent;color:var(--muted);padding:0;margin-left:6px;width:auto;height:auto}.attach-input{display:none}
 .spin svg{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:45vh 55vh}.list{border-right:0;border-bottom:1px solid var(--line)}.content{padding:16px}}
+.site-footer{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:18px;align-items:center;border-top:1px solid var(--line);padding:16px clamp(18px,4vw,56px);color:var(--muted)}.site-footer nav{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.site-footer a{text-decoration:none;color:inherit}.site-footer a:hover{color:var(--accent)}.site-footer a[aria-current=page]{color:var(--accent);font-weight:800}.footer-primary{font-weight:800}.footer-local{justify-content:end}
+@media(max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:45vh 55vh}.list{border-right:0;border-bottom:1px solid var(--line)}.content{padding:16px}.site-footer{grid-template-columns:1fr}.footer-local{justify-content:flex-start}}
 </style>
 </head>
 <body>
@@ -82,6 +83,10 @@ input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:v
     <article id="content" class="content"><div class="empty">Select a message</div></article>
   </section>
 </main>
+<footer class="site-footer">
+  <nav class="footer-primary" aria-label="Edgerun surfaces"><a href="https://blog.edgerun.tech/">Build Log</a><a href="https://git.edgerun.tech/">Code</a><a href="https://mail.edgerun.tech/" aria-current="page">Mail</a></nav>
+  <nav class="footer-local" aria-label="Page links"><a href="mailto:ken@edgerun.tech">Contact</a></nav>
+</footer>
 <script>
 const root=document.documentElement;
 const storedTheme=localStorage.getItem('theme');

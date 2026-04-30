@@ -19,7 +19,7 @@ use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
 use edgerun_http::{Handler, Request, Response, StatusCode};
-use edgerun_web_ui::PageShell;
+use edgerun_web_ui::{FooterLink, PageShell};
 use std::fs;
 use std::io;
 use std::io::Write;
@@ -2015,6 +2015,11 @@ fn render_path_crumbs(repo: &Repo, rev: &str, rel_path: &str) -> String {
 
 fn page_shell(config: &GitConfig, title: &str, description: &str, body: &str) -> String {
     let style = git_style();
+    let local_links = [FooterLink {
+        href: "/",
+        label: "Repositories",
+    }];
+    let footer = edgerun_web_ui::render_common_footer("git", &local_links, "");
     edgerun_web_ui::render_page(&PageShell {
         lang: "en",
         title,
@@ -2027,7 +2032,7 @@ fn page_shell(config: &GitConfig, title: &str, description: &str, body: &str) ->
         brand_label: "Edgerun Git home",
         brand_text: &config.title,
         header_extra: "<nav aria-label=\"Primary\"><a href=\"https://blog.edgerun.tech/\">Blog</a></nav><nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav>",
-        footer: "",
+        footer: &footer,
         body,
         script_src: Some("/app.js"),
     })

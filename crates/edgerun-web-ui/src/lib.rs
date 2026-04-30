@@ -5,6 +5,11 @@ extern crate alloc;
 use alloc::format;
 use alloc::string::{String, ToString};
 
+pub struct FooterLink<'a> {
+    pub href: &'a str,
+    pub label: &'a str,
+}
+
 pub struct PageShell<'a> {
     pub lang: &'a str,
     pub title: &'a str,
@@ -51,6 +56,46 @@ pub fn render_page(shell: &PageShell<'_>) -> String {
         shell.body,
         shell.footer,
         script
+    )
+}
+
+pub fn render_common_footer(
+    current_surface: &str,
+    local_links: &[FooterLink<'_>],
+    trailing_html: &str,
+) -> String {
+    let surface_links = [
+        ("blog", "Build Log", "https://blog.edgerun.tech/"),
+        ("git", "Code", "https://git.edgerun.tech/"),
+        ("mail", "Mail", "https://mail.edgerun.tech/"),
+    ];
+    let mut surfaces = String::new();
+    for (surface, label, href) in surface_links {
+        surfaces.push_str(&format!(
+            "<a href=\"{}\"{}>{}</a>",
+            escape_attr(href),
+            if surface == current_surface {
+                " aria-current=\"page\""
+            } else {
+                ""
+            },
+            escape_html(label)
+        ));
+    }
+    let mut local = String::new();
+    for link in local_links {
+        local.push_str(&format!(
+            "<a href=\"{}\">{}</a>",
+            escape_attr(link.href),
+            escape_html(link.label)
+        ));
+    }
+    if local.is_empty() {
+        local.push_str("<span>Project surfaces</span>");
+    }
+    format!(
+        "<footer class=\"site-footer\"><nav class=\"footer-primary\" aria-label=\"Edgerun surfaces\">{surfaces}</nav><nav class=\"footer-local\" aria-label=\"Page links\">{local}</nav>{}</footer>",
+        trailing_html
     )
 }
 
@@ -103,5 +148,5 @@ if(!customElements.get('er-theme-toggle')){customElements.define('er-theme-toggl
 pub const BASE_STYLE: &str = r#"
 :root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent-2:#8b3f2f;--code:#eee6d8}
 :root[data-theme=dark]{--bg:#101418;--panel:#171d22;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent-2:#dfa06b;--code:#232b31}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:flex;gap:14px;align-items:center;padding:12px clamp(14px,3vw,44px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none;white-space:nowrap}.topbar nav{display:flex;align-items:center;justify-content:end}.topbar nav a{color:var(--muted);text-decoration:none}.hero{padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:760px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:flex;gap:14px;align-items:center;padding:12px clamp(14px,3vw,44px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none;white-space:nowrap}.topbar nav{display:flex;align-items:center;justify-content:end}.topbar nav a{color:var(--muted);text-decoration:none}.hero{padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:760px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}.site-footer{display:grid;grid-template-columns:max-content minmax(0,1fr) max-content;gap:18px;align-items:center;border-top:1px solid var(--line);padding:22px clamp(18px,4vw,56px);color:var(--muted)}.site-footer nav,.language-links{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.site-footer a{text-decoration:none}.site-footer a:hover{color:var(--accent)}.site-footer a[aria-current=page],.site-footer a[aria-current=true]{color:var(--accent);font-weight:800}.footer-primary{font-weight:800}.footer-local{justify-content:center}.language-links{justify-content:end;text-transform:uppercase}.language-links a{font-weight:750}@media(max-width:720px){.site-footer{grid-template-columns:1fr}.footer-local,.language-links{justify-content:flex-start}}
 "#;
