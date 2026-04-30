@@ -14,7 +14,8 @@ BLOG_BINARY=${BLOG_BINARY:-edgerun-blog}
   --description "Feature-by-feature notes on building Edgerun from its source tree." \
   --base-url https://blog.edgerun.tech
 
-git -C "$BLOG_REPO" add .generated
+BLOG_PUBLIC_REL=$(realpath --relative-to "$BLOG_REPO" "$BLOG_PUBLIC")
+git -C "$BLOG_REPO" add "$BLOG_PUBLIC_REL"
 
 "$BLOG_BINARY" generate \
   --root "$BLOG_REPO" \

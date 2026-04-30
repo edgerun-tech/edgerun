@@ -10,3 +10,8 @@ GIT_METADATA_DIR=${GIT_METADATA_DIR:-$GIT_REPO/.edgerun/git/crates}
   --out "$GIT_METADATA_DIR"
 
 git -C "$GIT_REPO" add .edgerun/git/crates
+
+"$GIT_BINARY" generate \
+  --repo "$GIT_REPO" \
+  --out "$GIT_METADATA_DIR" \
+  --check

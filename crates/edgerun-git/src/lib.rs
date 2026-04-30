@@ -133,6 +133,13 @@ struct CrateMetadata {
 }
 
 #[derive(Clone, Debug)]
+struct GeneratedCrateFile {
+    name: String,
+    path: PathBuf,
+    text: String,
+}
+
+#[derive(Clone, Debug)]
 struct RustSource {
     path: String,
     text: String,
@@ -452,9 +459,58 @@ pub fn start_git(config: GitConfig) -> Pin<Box<dyn Future<Output = io::Result<()
 /// The generated files are catalog material intended to be committed by a
 /// developer-side git hook. Serving can then stay cheap and deterministic.
 pub fn generate_crate_metadata(repo_root: &Path, out_dir: &Path) -> io::Result<usize> {
-    let crates_dir = repo_root.join("crates");
+    let files = build_crate_metadata_files(repo_root, out_dir)?;
     fs::create_dir_all(out_dir)?;
-    let mut generated = 0usize;
+    remove_stale_metadata_files(out_dir, &files)?;
+    for generated in &files {
+        let mut file = fs::File::create(&generated.path)?;
+        file.write_all(generated.text.as_bytes())?;
+    }
+    Ok(files.len())
+}
+
+pub fn check_crate_metadata(repo_root: &Path, out_dir: &Path) -> io::Result<usize> {
+    let files = build_crate_metadata_files(repo_root, out_dir)?;
+    let mut stale = Vec::new();
+    for generated in &files {
+        match fs::read_to_string(&generated.path) {
+            Ok(existing) if existing == generated.text => {}
+            Ok(_) => stale.push(generated.path.display().to_string()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                stale.push(generated.path.display().to_string())
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    if out_dir.exists() {
+        for entry in fs::read_dir(out_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("txt") {
+                continue;
+            }
+            if !files.iter().any(|generated| generated.path == path) {
+                stale.push(path.display().to_string());
+            }
+        }
+    }
+    if stale.is_empty() {
+        Ok(files.len())
+    } else {
+        stale.sort();
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("stale generated crate metadata: {}", stale.join(", ")),
+        ))
+    }
+}
+
+fn build_crate_metadata_files(
+    repo_root: &Path,
+    out_dir: &Path,
+) -> io::Result<Vec<GeneratedCrateFile>> {
+    let crates_dir = repo_root.join("crates");
+    let mut files = Vec::new();
     for entry in fs::read_dir(crates_dir)? {
         let entry = entry?;
         if !entry.file_type()?.is_dir() {
@@ -486,12 +542,31 @@ pub fn generate_crate_metadata(repo_root: &Path, out_dir: &Path) -> io::Result<u
         }
         let sources = read_rust_sources_from_fs(repo_root, &rel_path)?;
         let metadata = analyze_rust_sources(sources);
-        let path = out_dir.join(format!("{name}.txt"));
-        let mut file = fs::File::create(path)?;
-        file.write_all(serialize_crate_metadata(&name, &metadata).as_bytes())?;
-        generated += 1;
+        files.push(GeneratedCrateFile {
+            path: out_dir.join(format!("{name}.txt")),
+            text: serialize_crate_metadata(&name, &metadata),
+            name,
+        });
     }
-    Ok(generated)
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(files)
+}
+
+fn remove_stale_metadata_files(out_dir: &Path, files: &[GeneratedCrateFile]) -> io::Result<()> {
+    if !out_dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(out_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("txt") {
+            continue;
+        }
+        if !files.iter().any(|generated| generated.path == path) {
+            fs::remove_file(path)?;
+        }
+    }
+    Ok(())
 }
 
 fn load_repo(name: String, path: PathBuf) -> io::Result<Option<Repo>> {
@@ -2423,6 +2498,41 @@ mod tests {
         assert!(component.contains("<dt>Calls</dt><dd>1</dd>"));
         assert!(component.contains("Open crate page"));
         assert!(component.contains("target=\"_top\""));
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn generated_crate_metadata_check_detects_stale_files() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("edgerun-git-generate-test-{stamp}"));
+        let repo_path = base.join("demo");
+        let out = repo_path.join(".edgerun/git/crates");
+        fs::create_dir_all(repo_path.join("crates/edgerun-demo/src")).unwrap();
+        fs::write(repo_path.join("crates/edgerun-demo/.gitvisible"), "").unwrap();
+        fs::write(
+            repo_path.join("crates/edgerun-demo/Cargo.toml"),
+            "[package]\nname = \"edgerun-demo\"\n",
+        )
+        .unwrap();
+        fs::write(
+            repo_path.join("crates/edgerun-demo/src/lib.rs"),
+            "pub fn run_demo() { helper(); }\nfn helper() {}\n",
+        )
+        .unwrap();
+
+        assert_eq!(generate_crate_metadata(&repo_path, &out).unwrap(), 1);
+        assert_eq!(check_crate_metadata(&repo_path, &out).unwrap(), 1);
+
+        fs::write(
+            repo_path.join("crates/edgerun-demo/src/lib.rs"),
+            "pub fn run_demo() {}\n",
+        )
+        .unwrap();
+        let error = check_crate_metadata(&repo_path, &out).unwrap_err();
+        assert!(error.to_string().contains("stale generated crate metadata"));
         let _ = fs::remove_dir_all(base);
     }
 

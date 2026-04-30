@@ -1,11 +1,15 @@
 use std::path::PathBuf;
 use std::process;
 
-use edgerun_git::{generate_crate_metadata, start_git, GitConfig};
+use edgerun_git::{check_crate_metadata, generate_crate_metadata, start_git, GitConfig};
 
 enum AppCommand {
     Serve(GitConfig),
-    Generate { repo: PathBuf, out: PathBuf },
+    Generate {
+        repo: PathBuf,
+        out: PathBuf,
+        check: bool,
+    },
 }
 
 fn main() {
@@ -24,7 +28,12 @@ fn main() {
     };
     match command {
         AppCommand::Serve(config) => serve(config),
-        AppCommand::Generate { repo, out } => match generate_crate_metadata(&repo, &out) {
+        AppCommand::Generate { repo, out, check } => match if check {
+            check_crate_metadata(&repo, &out)
+        } else {
+            generate_crate_metadata(&repo, &out)
+        } {
+            Ok(count) if check => println!("checked crate metadata for {count} crate(s)"),
             Ok(count) => println!("generated crate metadata for {count} crate(s)"),
             Err(error) => {
                 eprintln!("edgerun-git generate: {error}");
@@ -109,6 +118,7 @@ fn parse_serve_args(args: &[String]) -> Result<GitConfig, String> {
 fn parse_generate_args(args: &[String]) -> Result<AppCommand, String> {
     let mut repo = None;
     let mut out = None;
+    let mut check = false;
     let mut i = 2;
     while i < args.len() {
         match args[i].as_str() {
@@ -120,6 +130,9 @@ fn parse_generate_args(args: &[String]) -> Result<AppCommand, String> {
                 out = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
             }
+            "--check" => {
+                check = true;
+            }
             other => return Err(format!("unknown or incomplete argument: {other}")),
         }
         i += 1;
@@ -129,14 +142,14 @@ fn parse_generate_args(args: &[String]) -> Result<AppCommand, String> {
         None => std::env::current_dir().map_err(|error| format!("failed to get cwd: {error}"))?,
     };
     let out = out.unwrap_or_else(|| repo.join(".edgerun/git/crates"));
-    Ok(AppCommand::Generate { repo, out })
+    Ok(AppCommand::Generate { repo, out, check })
 }
 
 fn print_usage(program: &str) {
     println!(
         "usage: {program} serve --root /srv/git --bind 127.0.0.1:8089 \
          [--title 'Edgerun Git'] [--description TEXT] [--base-url https://git.edgerun.tech]\n\n\
-         usage: {program} generate [--repo /path/to/checkout] [--out .edgerun/git/crates]\n\n\
+         usage: {program} generate [--repo /path/to/checkout] [--out .edgerun/git/crates] [--check]\n\n\
          Repositories are hidden unless they contain .edgerun/git.yaml with visible: true. \
          The generate command writes host-only crate catalog metadata for visible crates."
     );
