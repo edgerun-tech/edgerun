@@ -147,6 +147,83 @@ impl WebmailHandler {
             _ => Response::not_found(),
         }
     }
+
+    pub(crate) fn handle_dash_mail(&self, request: Request) -> Response {
+        let target = request.uri().request_target();
+        let path = target.split('?').next().unwrap_or(target.as_str());
+        if !authorized(&request, &self.config) {
+            return match request.method().as_str() {
+                "GET" | "HEAD" => dash_mail_response(&render_dash_mail_login()),
+                _ => unauthorized(),
+            };
+        }
+        match (request.method().as_str(), path) {
+            ("GET" | "HEAD", "/surface/mail") => match render_dash_mail_inbox(&self.config, None) {
+                Ok(body) => dash_mail_response(&body),
+                Err(error) => dash_mail_response(&render_dash_mail_error(&error.to_string())),
+            },
+            ("GET" | "HEAD", "/surface/mail/compose") => {
+                dash_mail_detail_response(&render_dash_mail_compose(None, None, None))
+            }
+            ("GET" | "HEAD", path) if path.starts_with("/surface/mail/reply/") => {
+                let id = percent_decode(&path["/surface/mail/reply/".len()..]);
+                match dash_mail_detail(&self.config, &id) {
+                    Ok(message) => dash_mail_detail_response(&render_dash_mail_compose(
+                        Some(&reply_recipient(&message.from)),
+                        Some(&reply_subject(&message.subject)),
+                        Some(&message.body),
+                    )),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => Response::not_found(),
+                    Err(error) => {
+                        dash_mail_detail_response(&render_dash_mail_error(&error.to_string()))
+                    }
+                }
+            }
+            ("GET" | "HEAD", path) if path.starts_with("/surface/mail/message/") => {
+                let id = percent_decode(&path["/surface/mail/message/".len()..]);
+                let _ = apply_message_action(&self.config, &id, "read");
+                match dash_mail_detail(&self.config, &id) {
+                    Ok(message) => dash_mail_detail_response(&render_dash_mail_message(&message)),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => Response::not_found(),
+                    Err(error) => {
+                        dash_mail_detail_response(&render_dash_mail_error(&error.to_string()))
+                    }
+                }
+            }
+            ("POST", "/surface/mail/send") => match send_webmail_message(&self.config, &request) {
+                Ok(()) => {
+                    match render_dash_mail_inbox(&self.config, Some("Message queued for delivery."))
+                    {
+                        Ok(body) => dash_mail_response(&body),
+                        Err(error) => {
+                            dash_mail_response(&render_dash_mail_error(&error.to_string()))
+                        }
+                    }
+                }
+                Err(error) => {
+                    dash_mail_detail_response(&render_dash_mail_error(&error.to_string()))
+                }
+            },
+            ("POST", path) if path.starts_with("/surface/mail/message/") => {
+                let rest = &path["/surface/mail/message/".len()..];
+                let Some((id, action)) = rest.rsplit_once('/') else {
+                    return Response::not_found();
+                };
+                let id = percent_decode(id);
+                match apply_message_action(&self.config, &id, action) {
+                    Ok(()) => match render_dash_mail_inbox(&self.config, None) {
+                        Ok(body) => dash_mail_response(&body),
+                        Err(error) => {
+                            dash_mail_response(&render_dash_mail_error(&error.to_string()))
+                        }
+                    },
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => Response::not_found(),
+                    Err(error) => dash_mail_response(&render_dash_mail_error(&error.to_string())),
+                }
+            }
+            _ => Response::not_found(),
+        }
+    }
 }
 
 impl Handler for WebmailHandler {
@@ -192,7 +269,10 @@ fn html_response(body: &str, embedded: bool) -> Response {
         .with_header("Cache-Control", "no-store")
         .with_header("X-Content-Type-Options", "nosniff")
         .with_header("Referrer-Policy", "no-referrer")
-        .with_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        .with_header(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()",
+        )
         .with_header(
             "Strict-Transport-Security",
             "max-age=31536000; includeSubDomains",
@@ -216,6 +296,216 @@ fn json_response(body: &str) -> Response {
     Response::json(StatusCode::OK, body)
         .with_header("Cache-Control", "no-store")
         .with_header("X-Content-Type-Options", "nosniff")
+}
+
+fn dash_html_response(body: &str) -> Response {
+    Response::html(StatusCode::OK, body)
+        .with_header("Cache-Control", "no-store")
+        .with_header("X-Content-Type-Options", "nosniff")
+        .with_header("Referrer-Policy", "no-referrer")
+}
+
+fn dash_mail_response(content: &str) -> Response {
+    dash_html_response(&format!(
+        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Mail workspace\"><header><div><strong id=\"surfaceTitle\">Mail</strong><span id=\"surfaceUrl\">mail.edgerun.tech</span></div><a id=\"surfaceOpen\" href=\"https://mail.edgerun.tech/\">Open directly</a></header><div class=\"dash-surface\">{}</div></section>",
+        content
+    ))
+}
+
+fn dash_mail_detail_response(content: &str) -> Response {
+    dash_html_response(content)
+}
+
+#[derive(Clone)]
+struct DashMailSummary {
+    id: String,
+    from: String,
+    subject: String,
+    date: String,
+    unread: bool,
+    warning: Option<String>,
+    attachment_count: usize,
+    preview: String,
+}
+
+struct DashMailDetail {
+    id: String,
+    from: String,
+    to: String,
+    subject: String,
+    date: String,
+    warning: Option<String>,
+    attachments: Vec<MailAttachment>,
+    body: String,
+}
+
+fn dash_mail_summaries(config: &WebmailConfig) -> io::Result<Vec<DashMailSummary>> {
+    let mut messages = Vec::new();
+    collect_maildir_entries(config, "new", &mut messages)?;
+    collect_maildir_entries(config, "cur", &mut messages)?;
+    messages.sort_by(|a, b| b.modified.cmp(&a.modified));
+    messages.truncate(100);
+    let mut summaries = Vec::new();
+    for message in messages {
+        let raw = std::fs::read_to_string(&message.path).unwrap_or_default();
+        summaries.push(DashMailSummary {
+            id: message.id,
+            from: header_value(&raw, "From").unwrap_or_default(),
+            subject: header_value(&raw, "Subject").unwrap_or_else(|| "(no subject)".to_string()),
+            date: header_value(&raw, "Date").unwrap_or_default(),
+            unread: message.state == "new",
+            warning: auth_warning_reason(&raw),
+            attachment_count: message_attachments(&raw).len(),
+            preview: message_preview(&raw),
+        });
+    }
+    Ok(summaries)
+}
+
+fn dash_mail_detail(config: &WebmailConfig, id: &str) -> io::Result<DashMailDetail> {
+    let path = find_maildir_message(config, id)?;
+    let raw = std::fs::read_to_string(path)?;
+    Ok(DashMailDetail {
+        id: id.to_string(),
+        from: header_value(&raw, "From").unwrap_or_default(),
+        to: header_value(&raw, "To").unwrap_or_default(),
+        subject: header_value(&raw, "Subject").unwrap_or_else(|| "(no subject)".to_string()),
+        date: header_value(&raw, "Date").unwrap_or_default(),
+        warning: auth_warning_reason(&raw),
+        attachments: message_attachments(&raw),
+        body: message_body(&raw),
+    })
+}
+
+fn render_dash_mail_login() -> String {
+    "<form class=\"dash-mail-login\" data-mail-login><strong>Unlock mail</strong><label>Username<input name=\"username\" autocomplete=\"username\" value=\"ken\"></label><label>Password<input name=\"password\" type=\"password\" autocomplete=\"current-password\"></label><button class=\"dash-mail-button\" type=\"submit\">Unlock mail</button></form>".to_string()
+}
+
+fn render_dash_mail_inbox(config: &WebmailConfig, notice: Option<&str>) -> io::Result<String> {
+    let messages = dash_mail_summaries(config)?;
+    let mut list = String::new();
+    for message in &messages {
+        let encoded = percent_encode(&message.id);
+        let unread = if message.unread {
+            "<span class=\"dash-mail-unread\">Unread</span>"
+        } else {
+            ""
+        };
+        let warning = if message.warning.is_some() {
+            "<span>Warning</span>"
+        } else {
+            ""
+        };
+        let attachments = if message.attachment_count > 0 {
+            format!("<span>{} attachments</span>", message.attachment_count)
+        } else {
+            String::new()
+        };
+        list.push_str(&format!(
+            "<a class=\"dash-mail-item\" href=\"https://mail.edgerun.tech/\" hx-get=\"/surface/mail/message/{}\" hx-target=\"#dashMailDetail\" hx-swap=\"outerHTML\"><strong>{}</strong><span>{}</span><div class=\"dash-mail-meta\">{}<span>{}</span>{}{}</div><span class=\"dash-mail-preview\">{}</span></a>",
+            encoded,
+            edgerun_web_ui::escape_html(&message.subject),
+            edgerun_web_ui::escape_html(&message.from),
+            unread,
+            edgerun_web_ui::escape_html(&message.date),
+            warning,
+            attachments,
+            edgerun_web_ui::escape_html(&message.preview),
+        ));
+    }
+    if list.is_empty() {
+        list.push_str("<p class=\"dash-mail-empty\">No messages yet.</p>");
+    }
+    let notice = notice
+        .map(|value| {
+            format!(
+                "<p class=\"dash-mail-warning\">{}</p>",
+                edgerun_web_ui::escape_html(value)
+            )
+        })
+        .unwrap_or_default();
+    Ok(format!(
+        "{}<div class=\"dash-mail-toolbar\"><a class=\"dash-mail-button\" href=\"https://mail.edgerun.tech/\" hx-get=\"/surface/mail/compose\" hx-target=\"#dashMailDetail\" hx-swap=\"outerHTML\">Compose</a><span>{} messages</span></div><div class=\"dash-mail\"><nav class=\"dash-mail-list\" aria-label=\"Messages\">{}</nav><article id=\"dashMailDetail\" class=\"dash-mail-detail\"><p class=\"dash-mail-empty\">Select a message, or compose a new one.</p></article></div>",
+        notice,
+        messages.len(),
+        list
+    ))
+}
+
+fn render_dash_mail_message(message: &DashMailDetail) -> String {
+    let encoded = percent_encode(&message.id);
+    let warning = message
+        .warning
+        .as_ref()
+        .map(|value| {
+            format!(
+                "<p class=\"dash-mail-warning\">{}</p>",
+                edgerun_web_ui::escape_html(value)
+            )
+        })
+        .unwrap_or_default();
+    let attachments = if message.attachments.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<p class=\"dash-mail-meta\">{} attachments</p>",
+            message.attachments.len()
+        )
+    };
+    format!(
+        "<article id=\"dashMailDetail\" class=\"dash-mail-detail\"><header><h2>{}</h2><div class=\"dash-mail-meta\"><span>From {}</span><span>To {}</span><span>{}</span></div></header>{}{}<div class=\"dash-mail-actions\"><a class=\"dash-mail-button\" href=\"https://mail.edgerun.tech/\" hx-get=\"/surface/mail/reply/{}\" hx-target=\"#dashMailDetail\" hx-swap=\"outerHTML\">Reply</a></div><pre class=\"dash-mail-body\">{}</pre></article>",
+        edgerun_web_ui::escape_html(&message.subject),
+        edgerun_web_ui::escape_html(&message.from),
+        edgerun_web_ui::escape_html(&message.to),
+        edgerun_web_ui::escape_html(&message.date),
+        warning,
+        attachments,
+        encoded,
+        edgerun_web_ui::escape_html(&message.body),
+    )
+}
+
+fn render_dash_mail_compose(
+    to: Option<&str>,
+    subject: Option<&str>,
+    quoted: Option<&str>,
+) -> String {
+    let body = quoted
+        .map(|value| {
+            let mut out = String::from("\n\n");
+            for line in value.lines().take(120) {
+                out.push_str("> ");
+                out.push_str(line);
+                out.push('\n');
+            }
+            out
+        })
+        .unwrap_or_default();
+    format!(
+        "<article id=\"dashMailDetail\" class=\"dash-mail-detail\"><form class=\"dash-mail-compose\" data-dash-mail-compose action=\"/surface/mail/send\"><label>To<input name=\"to\" autocomplete=\"email\" value=\"{}\"></label><label>Subject<input name=\"subject\" value=\"{}\"></label><label>Message<textarea name=\"body\">{}</textarea></label><div class=\"dash-mail-actions\"><button class=\"dash-mail-button\" type=\"submit\">Send</button><a class=\"dash-mail-button\" href=\"https://mail.edgerun.tech/\" hx-get=\"/surface/mail\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">Cancel</a></div></form></article>",
+        edgerun_web_ui::escape_attr(to.unwrap_or_default()),
+        edgerun_web_ui::escape_attr(subject.unwrap_or_default()),
+        edgerun_web_ui::escape_html(&body),
+    )
+}
+
+fn render_dash_mail_error(message: &str) -> String {
+    format!(
+        "<article id=\"dashMailDetail\" class=\"dash-mail-detail\"><p class=\"dash-mail-warning\">{}</p></article>",
+        edgerun_web_ui::escape_html(message)
+    )
+}
+
+fn reply_recipient(from: &str) -> String {
+    sanitize_header(from)
+}
+
+fn reply_subject(subject: &str) -> String {
+    if subject.to_ascii_lowercase().starts_with("re:") {
+        subject.to_string()
+    } else {
+        format!("Re: {subject}")
+    }
 }
 
 fn svg_response(body: &str) -> Response {
@@ -900,6 +1190,18 @@ fn percent_decode(value: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).to_string()
+}
+
+fn percent_encode(value: &str) -> String {
+    let mut out = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'~') {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
 }
 
 fn hex_value(value: u8) -> Option<u8> {

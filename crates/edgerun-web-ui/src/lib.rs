@@ -74,9 +74,8 @@ fn render_workspace_modules(modules: &[WorkspaceModule<'_>]) -> String {
     if modules.is_empty() {
         return String::new();
     }
-    let mut out = String::from(
-        "<script type=\"application/json\" id=\"edgerun-workspace-modules\">[",
-    );
+    let mut out =
+        String::from("<script type=\"application/json\" id=\"edgerun-workspace-modules\">[");
     for (index, module) in modules.iter().enumerate() {
         if index > 0 {
             out.push(',');
@@ -222,8 +221,11 @@ if(!customElements.get('er-theme-toggle')){customElements.define('er-theme-toggl
 "#;
 
 pub const WORKSPACE_JS: &str = r#"
-document.addEventListener('click',async event=>{const trigger=event.target.closest('[hx-get]');if(!trigger)return;event.preventDefault();const target=document.querySelector(trigger.getAttribute('hx-target')||'');if(!target)return;const response=await fetch(trigger.getAttribute('hx-get'),{headers:{'HX-Request':'true'}});if(!response.ok)return;const html=await response.text();const swap=trigger.getAttribute('hx-swap')||'innerHTML';if(swap==='outerHTML')target.outerHTML=html;else target.innerHTML=html;document.querySelectorAll('[hx-get][aria-current]').forEach(node=>node.removeAttribute('aria-current'));trigger.setAttribute('aria-current','page')});
-document.addEventListener('click',async event=>{const trigger=event.target.closest('[data-workspace-mail]');if(!trigger)return;const slot=document.querySelector('#surfaceSlot');if(!slot){location.href='https://dash.edgerun.tech/';return}event.preventDefault();const response=await fetch('/surface/mail',{headers:{'HX-Request':'true'}});if(!response.ok)return;slot.outerHTML=await response.text();document.querySelectorAll('[hx-get][aria-current]').forEach(node=>node.removeAttribute('aria-current'));const mailTab=document.querySelector('[hx-get="/surface/mail"]');if(mailTab)mailTab.setAttribute('aria-current','page')});
+const workspaceHeaders=path=>{const headers={'HX-Request':'true'};const auth=sessionStorage.getItem('dashMailAuth');if(auth&&path&&path.startsWith('/surface/mail'))headers.Authorization='Basic '+auth;return headers};
+document.addEventListener('click',async event=>{const trigger=event.target.closest('[hx-get]');if(!trigger)return;event.preventDefault();const target=document.querySelector(trigger.getAttribute('hx-target')||'');if(!target)return;const path=trigger.getAttribute('hx-get');const response=await fetch(path,{headers:workspaceHeaders(path)});if(!response.ok)return;const html=await response.text();const swap=trigger.getAttribute('hx-swap')||'innerHTML';if(swap==='outerHTML')target.outerHTML=html;else target.innerHTML=html;if(trigger.classList.contains('dash-tab')){document.querySelectorAll('.dash-tab[aria-current]').forEach(node=>node.removeAttribute('aria-current'));trigger.setAttribute('aria-current','page')}});
+document.addEventListener('click',async event=>{const trigger=event.target.closest('[data-workspace-mail]');if(!trigger)return;const slot=document.querySelector('#surfaceSlot');if(!slot){location.href='https://dash.edgerun.tech/';return}event.preventDefault();const response=await fetch('/surface/mail',{headers:workspaceHeaders('/surface/mail')});if(!response.ok)return;slot.outerHTML=await response.text();document.querySelectorAll('.dash-tab[aria-current]').forEach(node=>node.removeAttribute('aria-current'));const mailTab=document.querySelector('[hx-get="/surface/mail"]');if(mailTab)mailTab.setAttribute('aria-current','page')});
+document.addEventListener('submit',async event=>{const form=event.target.closest('[data-mail-login]');if(!form)return;event.preventDefault();const data=new FormData(form);sessionStorage.setItem('dashMailAuth',btoa((data.get('username')||'')+':'+(data.get('password')||'')));const slot=document.querySelector('#surfaceSlot');if(!slot)return;const response=await fetch('/surface/mail',{headers:workspaceHeaders('/surface/mail')});if(response.ok)slot.outerHTML=await response.text()});
+document.addEventListener('submit',async event=>{const form=event.target.closest('[data-dash-mail-compose]');if(!form)return;event.preventDefault();const slot=document.querySelector('#surfaceSlot');if(!slot)return;const payload={to:form.elements.to.value,subject:form.elements.subject.value,body:form.elements.body.value,attachments:[]};const response=await fetch(form.getAttribute('action'),{method:'POST',headers:{...workspaceHeaders(form.getAttribute('action')),'Content-Type':'application/json'},body:JSON.stringify(payload)});if(response.ok)slot.outerHTML=await response.text()});
 "#;
 
 pub const BASE_STYLE: &str = r#"

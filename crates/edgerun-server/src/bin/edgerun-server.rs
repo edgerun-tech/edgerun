@@ -133,8 +133,14 @@ fn main() {
         });
 
     rt.block_on(async move {
-        if let Err(error) =
-            run(resources, options.blog, options.git, options.dash_host, options.webmail).await
+        if let Err(error) = run(
+            resources,
+            options.blog,
+            options.git,
+            options.dash_host,
+            options.webmail,
+        )
+        .await
         {
             eprintln!("edgerun-server: {error}");
             process::exit(1);
@@ -1119,6 +1125,11 @@ impl SiteRouter {
     fn handle_sync(&self, request: Request) -> Response {
         let host = request_host(&request);
         if self.dash_host.as_deref() == host.as_deref() {
+            let target = request.uri().request_target();
+            let path = target.split('?').next().unwrap_or(target.as_str());
+            if path.starts_with("/surface/mail") {
+                return self.webmail.handle_dash_mail(request);
+            }
             return match request.method().as_str() {
                 "GET" | "HEAD" => dash_response(&request),
                 _ => method_not_allowed("GET, HEAD"),
@@ -1150,7 +1161,6 @@ fn dash_response(request: &Request) -> Response {
     let body = match path {
         "/surface/blog" => render_dash_blog_surface(),
         "/surface/git" => render_dash_code_surface(),
-        "/surface/mail" => render_dash_mail_surface(),
         _ => render_dash_html(),
     };
     Response::html(StatusCode::OK, &body)
@@ -1191,18 +1201,12 @@ fn render_dash_code_surface() -> String {
     )
 }
 
-fn render_dash_mail_surface() -> String {
-    render_dash_surface(
-        "Mail",
-        "mail.edgerun.tech",
-        "https://mail.edgerun.tech/",
-        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://mail.edgerun.tech/\"><strong>Open mail</strong><span>Use the standalone mail surface until native dash mail fragments land.</span></a><a class=\"dash-card\" href=\"mailto:ken@edgerun.tech\"><strong>Contact</strong><span>The reliable way to reach Ken.</span></a><a class=\"dash-card\" href=\"https://mail.edgerun.tech/\"><strong>Inbox</strong><span>Read and reply from the current mail UI.</span></a></div>",
-    )
-}
-
 fn render_dash_html() -> String {
-    let header_center =
-        edgerun_web_ui::render_header_search_input("workspaceSearch", "Search workspace", "Search workspace");
+    let header_center = edgerun_web_ui::render_header_search_input(
+        "workspaceSearch",
+        "Search workspace",
+        "Search workspace",
+    );
     let header_actions = edgerun_web_ui::render_workspace_actions("dash", "");
     let local_links = [FooterLink {
         href: "mailto:ken@edgerun.tech",
@@ -1287,9 +1291,11 @@ const DASH_STYLE: &str = r#"
 .dash-stage{min-width:0;display:grid;grid-template-rows:56px 1fr}
 .dash-stage header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--panel)}
 .dash-stage header div{display:grid;line-height:1.2}.dash-stage header span{color:var(--muted);font-size:12px}.dash-stage header a{color:var(--muted);text-decoration:none}.dash-stage header a:hover{color:var(--accent)}
-.dash-surface{overflow:auto;padding:24px}.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:980px}.dash-card{min-height:140px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:18px;text-decoration:none}.dash-card:hover{border-color:var(--accent)}.dash-card span{color:var(--muted)}.dash-card-button{text-align:left;font:inherit;cursor:pointer}
-@media(max-width:760px){.dash{grid-template-columns:1fr;grid-template-rows:auto 1fr}.dash-rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;overflow:auto}.dash-tab{white-space:nowrap}.dash-stage header{padding:0 12px}}
-"#;
+	.dash-surface{overflow:auto;padding:24px}.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:980px}.dash-card{min-height:140px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:18px;text-decoration:none}.dash-card:hover{border-color:var(--accent)}.dash-card span{color:var(--muted)}.dash-card-button{text-align:left;font:inherit;cursor:pointer}
+	.dash-mail{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);gap:14px;min-height:520px}.dash-mail-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}.dash-mail-button{height:40px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);display:inline-flex;align-items:center;gap:8px;padding:0 12px;text-decoration:none;cursor:pointer}.dash-mail-button:hover{border-color:var(--accent);color:var(--accent)}.dash-mail-list,.dash-mail-detail,.dash-mail-login{border:1px solid var(--line);border-radius:8px;background:var(--panel)}.dash-mail-list{overflow:auto}.dash-mail-item{display:grid;gap:4px;padding:13px 14px;border-bottom:1px solid var(--line);text-decoration:none}.dash-mail-item:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}.dash-mail-item[aria-current=true]{border-left:3px solid var(--accent);padding-left:11px}.dash-mail-item strong{line-height:1.25}.dash-mail-item span,.dash-mail-meta,.dash-mail-preview,.dash-mail-empty,.dash-mail-toolbar span{color:var(--muted)}.dash-mail-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:13px}.dash-mail-unread{color:var(--accent);font-weight:800}.dash-mail-detail{min-width:0;padding:18px;overflow:auto}.dash-mail-detail header{display:block;padding:0 0 14px;border:0;background:transparent}.dash-mail-detail h2{margin:0 0 8px;font-size:26px;line-height:1.15}.dash-mail-body{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}.dash-mail-warning{margin:12px 0;padding:10px 12px;border:1px solid var(--accent-2);border-radius:8px;color:var(--accent-2)}.dash-mail-login{max-width:460px;padding:18px;display:grid;gap:12px}.dash-mail-login label,.dash-mail-compose label{display:grid;gap:6px;color:var(--muted);font-weight:750}.dash-mail-login input,.dash-mail-compose input,.dash-mail-compose textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:10px 12px;font:inherit}.dash-mail-compose{display:grid;gap:12px}.dash-mail-compose textarea{min-height:220px;resize:vertical}.dash-mail-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+	@media(max-width:760px){.dash{grid-template-columns:1fr;grid-template-rows:auto 1fr}.dash-rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;overflow:auto}.dash-tab{white-space:nowrap}.dash-stage header{padding:0 12px}}
+	@media(max-width:900px){.dash-mail{grid-template-columns:1fr}.dash-mail-list{max-height:320px}}
+	"#;
 
 const DASH_JS: &str = r#"
 const search=document.getElementById('workspaceSearch');
