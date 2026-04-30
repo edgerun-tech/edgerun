@@ -1,16 +1,29 @@
 ---
 title: About Edgerun
-summary: Why Edgerun exists, the architecture we are building, and what is already running in production.
+summary: Onboarding overview, architecture, and the operating philosophy behind this platform.
 ---
 # About Edgerun
 
-Edgerun started from a practical constraint: we wanted a production service
-running from a single Git checkout, with a small operational surface and clear
-boundaries of trust.
+Edgerun started from a practical constraint: a platform should run from one
+source checkout, with a clear trust boundary and one coherent operating model.
 
-Edgerun is not trying to be “more abstract.” It is trying to make every
-abstraction explicit: what is stored, who can issue commands, and why a node
-accepted a command as authoritative.
+If you are onboarding, use this mental model:
+
+- Event logs carry authority.
+- Commands are only authoritative after the target node validates and commits
+  them.
+- Capabilities and policy determine who can do what.
+- All operator surfaces (build log, git, mail, status, apps) share the same
+  trust root.
+
+## What Edgerun is about
+
+Edgerun is not a separate admin layer or a random CMS. It is an attempt to keep
+the architecture aligned across what users can see, what services run, and what
+the node accepts as real.
+
+If a claim appears in this build log, it should map to either config, code, or a
+committed operational artifact from the running system.
 
 ## Core architecture
 
@@ -20,48 +33,48 @@ The current model is identity-first and event-first:
 - commands are authoritative only after the target node validates and records
   commit/reject events;
 - objects are immutable, while derived state lives in indexes and snapshots;
-- capability delegation is explicit and always attenuated so children cannot expand
-  parent privilege;
+- capability delegation is explicit and attenuated;
 - access is query-based and policy-checked;
 - networking routes through identity.
 
-This gives us a useful property: if a node can replay its event stream, it can
-reconstruct expected state without manually maintained mutable “truth” fields.
+This model is already serving real workloads in this deployment.
 
 ## What is real today
 
-We are dogfooding this architecture now:
-
 - `edgerun-server` runs production email (SMTP/IMAP/SMTPS/IMAPS), DNS, HTTPS,
-  webmail, and hosted surfaces.
-- the build log and code surface are published through the same operational model
-  instead of a separate CMS stack;
-- `edgerun-blog` publishes notes from Markdown in this repository and shares
-  metadata with the runtime surfaces;
+  and the runtime web surfaces.
+- the build log (this page), source surface, and mail surface are published from
+  the same server process.
 - `edgerun-git` exposes a controlled public slice of source code and crate
   metadata.
+- `edgerun-blog` publishes notes from Markdown and code state in the same
+  deployment boundary.
 
-The claim is not feature-completeness. The claim is that core pieces are already
-carrying real deployment traffic.
+## What new avenues this opens up
+
+- one dashboard to browse service status, code and blog surfaces,
+- a unified transparency path between claims, evidence, and configuration,
+- simpler app integration by using browser app surfaces and capability descriptors,
+- and a path for operators to own runtime and content from one place.
+
+## For people reading this first
+
+Start with:
+
+1. [Edgerun onboarding](/surface/blog/posts/edgerun-onboarding.html)
+2. [Build your first Edgerun app](/surface/blog/posts/build-your-own-edgerun-app.html)
+3. [Latest posts and release notes](/surface/blog)
 
 ## Philosophy
 
-1. Make trust and authority explicit in data, not implicit in tooling.
-2. Keep operational complexity inside the stack boundary, not in hidden
-   management platforms.
-3. Keep the path from claim to code short: if a behavior is real, the source should
-   be reachable from the same deployment context.
-4. Prioritise reproducibility and recovery over short-term convenience.
+1. Make trust and authority explicit in data.
+2. Keep operational complexity inside the stack boundary.
+3. Keep the path from claim to code short.
+4. Prefer reproducibility over convenience when the platform claims matter.
 
-In practice that means fewer ad hoc integrations, fewer opaque dependencies, and
-more predictable runtime behavior.
+Contact is still by email at
+[ken@edgerun.tech](mailto:ken@edgerun.tech).
 
-I still share earlier exploratory notes here, because this remains iterative:
+The blog and content are meant to stay grounded: every post should be tied to
+actual checked-in code paths, live state, and real deployment behavior.
 
-https://www.youtube.com/watch?v=AIMdIAoiR80
-
-Contact is by email at [ken@edgerun.tech](mailto:ken@edgerun.tech).
-
-The blog documents pieces as they become public. The code explorer is wired to
-expose those same pieces so posts can link to real commits and real files instead
-of abstract claims.

@@ -233,6 +233,17 @@ document.addEventListener('click',async event=>{const trigger=event.target.close
 document.addEventListener('click',async event=>{const trigger=event.target.closest('[data-workspace-mail]');if(!trigger)return;const slot=document.querySelector('#surfaceSlot');if(!slot){location.href='https://dash.edgerun.tech/#mail';return}event.preventDefault();const response=await fetch('/surface/mail',{headers:workspaceHeaders('/surface/mail')});if(!response.ok)return;slot.outerHTML=await response.text();if(location.hash!=='#mail')history.pushState(null,'','#mail');document.querySelectorAll('.dash-tab[aria-current]').forEach(node=>node.removeAttribute('aria-current'));const mailTab=document.querySelector('[hx-get="/surface/mail"]');if(mailTab)mailTab.setAttribute('aria-current','page')});
 document.addEventListener('submit',async event=>{const form=event.target.closest('[data-mail-login]');if(!form)return;event.preventDefault();const data=new FormData(form);sessionStorage.setItem('dashMailAuth',btoa((data.get('username')||'')+':'+(data.get('password')||'')));const slot=document.querySelector('#surfaceSlot');if(!slot)return;const response=await fetch('/surface/mail',{headers:workspaceHeaders('/surface/mail')});if(response.ok)slot.outerHTML=await response.text()});
 document.addEventListener('submit',async event=>{const form=event.target.closest('[data-dash-mail-compose]');if(!form)return;event.preventDefault();const slot=document.querySelector('#surfaceSlot');if(!slot)return;const payload={to:form.elements.to.value,subject:form.elements.subject.value,body:form.elements.body.value,attachments:[]};const response=await fetch(form.getAttribute('action'),{method:'POST',headers:{...workspaceHeaders(form.getAttribute('action')),'Content-Type':'application/json'},body:JSON.stringify(payload)});if(response.ok)slot.outerHTML=await response.text()});
+(function () {
+  const fallback = (name) => {
+    if (typeof window[name] !== 'function') {
+      window[name] = () => {};
+    }
+  };
+  fallback('wireModuleControls');
+  fallback('wireWorkspaceDock');
+  fallback('wireModuleDragReorder');
+  fallback('wireChatDock');
+})();
 "#;
 
 pub const BASE_STYLE: &str = r#"

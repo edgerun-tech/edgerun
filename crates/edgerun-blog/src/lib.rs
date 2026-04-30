@@ -1043,13 +1043,9 @@ fn render_dash_blog_index(
     let topic_chart = render_dash_topic_chart(posts, 7);
 
     Ok(format!(
-        "<div class=\"dash-blog\"><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><div class=\"dash-code-tools\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\">{}</button><button class=\"dash-mail-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\">{}</button></div></section><section class=\"dash-code-tools\" aria-label=\"Post tools\"><label><span>{}</span><input type=\"search\" data-workspace-search-scope placeholder=\"{}\"></label>{}</section><section class=\"dash-code-summary\" aria-label=\"Build log summary\"><div><span>Posts</span><strong>{}</strong></div><div><span>Topics</span><strong>{}</strong></div><div><span>Latest post</span><strong>{}</strong></div><div><span>Commits</span><strong>{}</strong></div><div class=\"summary-wide\"><span>Last commit</span><strong title=\"{}\">{}</strong></div><div><span>Age</span><strong>{}</strong></div></section><section class=\"dash-analytics\" aria-label=\"Build log analytics\">{}{}</section><section><h2>Posts</h2><p class=\"dash-search-count\" data-search-count>{} {}</p><div class=\"dash-grid\">{cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching posts.</p></div>",
+        "<div class=\"dash-blog\"><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><div class=\"dash-code-tools\"><div class=\"dash-quick-links\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/about\">About Edgerun</button><button class=\"dash-mail-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/posts/edgerun-onboarding.html\">Onboarding guide</button><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/posts/build-your-own-edgerun-app.html\">Build your first app</button></div></div></section><section class=\"dash-code-tools\" aria-label=\"Post tools\"><label><span>{}</span><input type=\"search\" data-workspace-search-scope placeholder=\"{}\"></label>{}</section><section class=\"dash-code-summary\" aria-label=\"Build log summary\"><div><span>Posts</span><strong>{}</strong></div><div><span>Topics</span><strong>{}</strong></div><div><span>Latest post</span><strong>{}</strong></div><div><span>Commits</span><strong>{}</strong></div><div class=\"summary-wide\"><span>Last commit</span><strong title=\"{}\">{}</strong></div><div><span>Age</span><strong>{}</strong></div></section><section class=\"dash-analytics\" aria-label=\"Build log analytics\">{}{}</section><section><h2>Posts</h2><p class=\"dash-search-count\" data-search-count>{} {}</p><div class=\"dash-grid\">{cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching posts.</p></div>",
         escape_html(language.hero_eyebrow),
         escape_html(language.title),
-        escape_attr(&localized_path(language, "/about")),
-        escape_html(language.about_label),
-        escape_attr(&localized_path(language, "/feed")),
-        escape_html(language.feed_label),
         escape_html(language.search_label),
         escape_attr(language.search_label),
         render_dash_topic_list(language, posts),
@@ -1079,8 +1075,9 @@ fn render_dash_month_chart(posts: &[Post]) -> String {
         .map(|(month, count)| {
             let width = (count.saturating_mul(100) / max.max(1)).max(12);
             format!(
-                "<article class=\"dash-stat-row\"><span class=\"dash-stat-label\">{}</span><span class=\"dash-stat-track\"><span class=\"dash-stat-fill\" style=\"--dash-stat-fill:{}%\"></span></span><strong>{}</strong></article>",
+                "<article class=\"dash-stat-row\"><div class=\"dash-stat-label-wrap\"><span class=\"dash-stat-label\">{}</span><span class=\"dash-stat-meta\">{} posts</span></div><span class=\"dash-stat-track\"><span class=\"dash-stat-fill\" style=\"--dash-stat-fill:{}%\"></span></span><strong>{}</strong></article>",
                 escape_html(&month),
+                count,
                 width,
                 count
             )
@@ -1106,8 +1103,9 @@ fn render_dash_topic_chart(posts: &[Post], top: usize) -> String {
         .map(|(tag, count)| {
             let width = (count.saturating_mul(100) / max.max(1)).max(12);
             format!(
-                "<article class=\"dash-stat-row\"><span class=\"dash-stat-label\">{}</span><span class=\"dash-stat-track\"><span class=\"dash-stat-fill\" style=\"--dash-stat-fill:{}%\"></span></span><strong>{}</strong></article>",
+                "<article class=\"dash-stat-row\"><div class=\"dash-stat-label-wrap\"><span class=\"dash-stat-label\">{}</span><span class=\"dash-stat-meta\">{} posts</span></div><span class=\"dash-stat-track\"><span class=\"dash-stat-fill\" style=\"--dash-stat-fill:{}%\"></span></span><strong>{}</strong></article>",
                 escape_html(&tag),
+                count,
                 width,
                 count
             )
@@ -1129,9 +1127,9 @@ fn render_dash_post(
     let content = link_visible_crates_for_dash(&post.html, &visible_crates);
     let related = render_dash_related_posts(language, post, posts);
     let content = if related.is_empty() {
-        content
+        format!("<div class=\"dash-article-content\">{}</div>", content)
     } else {
-        format!("{content}\n{related}")
+        format!("<div class=\"dash-article-content\">{}</div>{}", content, related)
     };
     format!(
         "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog\">{}</button><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article></div>",
@@ -1412,7 +1410,7 @@ fn render_dash_related_posts(language: Language, post: &Post, posts: &[Post]) ->
             .map(|(_, item)| {
                 let localized = localized_path(language, &format!("/posts/{}.html", item.path));
                 format!(
-                    "<button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\"><span class=\"date\">{}</span><strong>{}</strong><small>{}</small></button>",
+                    "<article class=\"dash-related-post\"><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\"><span class=\"date\">{}</span><strong>{}</strong><small>{}</small></button></article>",
                     escape_attr(&localized),
                     escape_html(&item.date),
                     escape_html(&item.title),
@@ -3015,34 +3013,48 @@ body{background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 92%,var(--pan
 "#;
 
 const BLOG_DASH_STYLE: &str = r#"
-.dash-blog{max-width:1180px;margin:0 auto;padding:34px clamp(16px,4vw,56px) 90px;display:grid;gap:20px}
+.dash-blog{max-width:1180px;margin:0 auto;padding:32px clamp(16px,4vw,56px) 90px;display:grid;gap:24px}
 .dash-code-hero{display:grid;gap:8px}
 .dash-code-tools{display:grid;gap:12px}
 .dash-code-tools label{display:grid;gap:6px;color:var(--muted);font-weight:750}
+.dash-code-tools label span{font-size:12px}
 .dash-code-tools input{width:100%;min-height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 12px}
-.dash-code-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
-.dash-code-summary>div{min-height:88px;border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;align-content:center;background:color-mix(in srgb,var(--panel) 92%,var(--code))}
+.dash-quick-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.dash-quick-links button{height:42px;display:inline-flex;align-items:center;justify-content:center;padding:0 12px}
+.dash-code-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.dash-code-summary>div{min-height:88px;border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;align-content:center;background:color-mix(in srgb,var(--panel) 92%,var(--code))}
 .dash-code-summary span{color:var(--muted);font-size:13px}
 .dash-code-summary strong{font-size:28px;line-height:1}
 .dash-code-summary .summary-wide{grid-column:1/-1}
 .dash-analytics{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
 .dash-chart-card{border:1px solid var(--line);border-radius:10px;padding:14px;background:color-mix(in srgb,var(--panel) 90%,var(--code));display:grid;gap:10px}
 .dash-chart-card h3{margin:0;font-size:18px}
-.dash-stat-chart{display:grid;gap:10px}
-.dash-stat-row{display:grid;grid-template-columns:72px 1fr auto;gap:10px;align-items:center}
-.dash-stat-label{color:var(--muted);font-size:12px;white-space:nowrap}
-.dash-stat-track{height:10px;border-radius:999px;background:color-mix(in srgb,var(--line) 85%,transparent);overflow:hidden}
-.dash-stat-fill{--dash-stat-fill:12%;display:block;height:100%;width:var(--dash-stat-fill);background:var(--accent);border-radius:999px}
+.dash-stat-chart{display:grid;gap:12px}
+.dash-stat-row{display:grid;grid-template-columns:96px 1fr auto;gap:10px;align-items:center}
+.dash-stat-label-wrap{display:grid;gap:4px}
+.dash-stat-label{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-stat-meta{font-size:11px;color:var(--accent-2)}
+.dash-stat-track{height:12px;border-radius:999px;background:color-mix(in srgb,var(--line) 85%,transparent);overflow:hidden}
+.dash-stat-fill{--dash-stat-fill:12%;display:block;height:100%;width:var(--dash-stat-fill);background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 20%,var(--accent-2)),var(--accent));border-radius:999px}
 .dash-stat-row strong{font-size:14px}
-.dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;align-items:stretch}
-.dash-grid .dash-card-button,.dash-grid .dash-card,.dash-grid .dash-post-card{display:block;border:1px solid var(--line);border-radius:10px;background:var(--panel);text-decoration:none;color:inherit;padding:16px;min-height:190px}
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px;align-items:stretch}
+.dash-grid .dash-card-button,.dash-grid .dash-card,.dash-grid .dash-post-card{display:grid;border:1px solid var(--line);border-radius:10px;background:var(--panel);text-decoration:none;color:inherit;padding:16px;min-height:190px;gap:8px;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
 .dash-grid .dash-card-button{cursor:pointer}
-.dash-grid .dash-card-button:hover,.dash-grid .dash-card:hover{transform:translateY(-1px);border-color:var(--accent)}
-.dash-grid .dash-card strong,.dash-grid .dash-card-button strong{display:block;font-size:21px;line-height:1.15;margin:10px 0 7px}
-.dash-grid .dash-card span,.dash-grid .dash-card small{color:var(--muted)}
+.dash-grid .dash-card-button:hover,.dash-grid .dash-card:hover{transform:translateY(-1px);border-color:var(--accent);box-shadow:0 10px 22px color-mix(in srgb,var(--text) 8%,transparent)}
+.dash-grid .dash-card strong,.dash-grid .dash-card-button strong{display:block;font-size:21px;line-height:1.15}
+.dash-grid .dash-card p,.dash-grid .dash-card span,.dash-grid .dash-card small,.dash-grid .dash-card-button p,.dash-grid .dash-card-button span,.dash-grid .dash-card-button small{color:var(--muted)}
+.dash-grid .dash-card-date,.dash-grid .dash-card-button .date{color:var(--accent-2);font-size:14px;font-weight:750}
 .dash-search-empty,[data-search-count]{color:var(--muted)}
-.article .content .related-posts{margin-top:28px}
-.related-posts>div{gap:14px}
+.dash-article .content{display:grid;gap:18px}
+.dash-article-content{display:grid;gap:18px}
+.article .content .related-posts{margin-top:38px;padding-top:24px;border-top:1px solid var(--line)}
+.article .content .related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px;margin-top:14px}
+.article .content .related-posts article{margin:0}
+.article .content .dash-related-post{border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--panel) 88%,var(--code))}
+.article .content .dash-related-post button{width:100%;min-height:0;padding:12px;display:grid;gap:8px;background:transparent;border:0}
+.dash-code-tools .dash-link-button,
+.dash-code-tools .dash-mail-button,
+.dash-quick-links button{min-height:42px;border-radius:8px}
 @media(max-width:900px){.dash-code-summary{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));}.dash-grid .dash-card-button,.dash-grid .dash-card{min-height:168px}}
 "#;
 

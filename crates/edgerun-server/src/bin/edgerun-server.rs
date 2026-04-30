@@ -1442,9 +1442,9 @@ fn redirect_to_dash_surface(_surface: &str) -> Response {
 
 fn render_dash_surface(label: &str, subtitle: &str, content: &str) -> String {
     format!(
-        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Workspace surface\"><header><div><strong id=\"surfaceTitle\">{}</strong><span id=\"surfaceUrl\">{}</span></div></header><div class=\"dash-surface\">{}</div></section>",
-        edgerun_web_ui::escape_html(label),
-        edgerun_web_ui::escape_html(subtitle),
+        "<section class=\"dash-stage\" aria-label=\"Workspace surface\"><div class=\"dash-surface\" data-dash-surface-root data-surface-title=\"{}\" data-surface-subtitle=\"{}\">{}</div></section>",
+        edgerun_web_ui::escape_attr(label),
+        edgerun_web_ui::escape_attr(subtitle),
         content
     )
 }
@@ -1453,7 +1453,7 @@ fn render_dash_blog_surface() -> String {
     render_dash_surface(
         "Build Log",
         "blog.edgerun.tech",
-        "<div class=\"dash-grid\"><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog\" data-search-text=\"\"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/about\" data-search-text=\"\"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/feed\" data-search-text=\"\"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></button></div>",
+        "<div class=\"dash-quick-links\"><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/posts/edgerun-onboarding.html\" data-search-text=\"\"><strong>Onboarding</strong><span>Start with architecture, capabilities, and workflow.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/posts/build-your-own-edgerun-app.html\" data-search-text=\"\"><strong>Build your own app</strong><span>Step-by-step guide for real app onboarding.</span></button><div class=\"dash-code-tools\" aria-label=\"Blog tools\"><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog\" data-search-text=\"\"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/about\" data-search-text=\"\"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog/feed\" data-search-text=\"\"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></button></div></div>",
     )
 }
 
@@ -2307,6 +2307,8 @@ const DASH_STYLE: &str = r#"
 .dash-surface .dash-code-tools label{display:grid;gap:4px}
 .dash-surface .dash-code-tools span{font-size:12px;color:var(--muted)}
 .dash-surface .dash-code-tools input{font:inherit;width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+.dash-surface .dash-quick-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.dash-surface .dash-quick-links .dash-card-button{display:block;padding:12px}
 .dash-surface .dash-code-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
 .dash-surface .dash-code-summary div{display:grid;padding:10px 12px;background:color-mix(in srgb,var(--panel) 86%,var(--code));border:1px solid var(--line);border-radius:8px}
 .dash-surface .dash-code-summary span{color:var(--muted);font-size:12px}
@@ -3122,12 +3124,12 @@ function formatBytes(bytes) {
   return (value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)) + ' ' + units[unit];
 }
 
-function extractSurfaceContent(html) {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const wrapped = doc.querySelector('#surfaceSlot .dash-surface');
-  if (wrapped) {
-    return wrapped.innerHTML;
-  }
+  function extractSurfaceContent(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const wrapped = doc.querySelector('[data-dash-surface-root]') || doc.querySelector('#surfaceSlot .dash-surface');
+    if (wrapped) {
+      return wrapped.innerHTML;
+    }
   return doc.querySelector('.dash-surface')?.innerHTML || html;
 }
 
