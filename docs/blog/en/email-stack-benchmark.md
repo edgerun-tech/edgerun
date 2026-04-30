@@ -1,25 +1,27 @@
 ---
-title: Edgerun email benchmark: 10,000 local SMTP deliveries
+title: Edgerun email benchmark: where the reference server already stands
 date: 2026-04-30
 author: Ken
-summary: A first reproducible benchmark of Edgerun's all-in-one email server against Postfix, OpenSMTPD, and Exim.
+summary: A reproducible 10k SMTP benchmark, plus the setup and component tradeoffs behind Edgerun, Postfix, OpenSMTPD, Exim, Dovecot, and Stalwart.
 tags: [email, benchmarks, release]
 ---
-# Edgerun email benchmark: 10,000 local SMTP deliveries
+# Edgerun email benchmark: where the reference server already stands
 
-Edgerun now runs the production mail stack for `edgerun.tech`: SMTP, SMTPS, submission, IMAP, IMAPS, DNS, HTTPS, webmail, DKIM signing, queue handling, this blog, and the Git host are served by one stripped `edgerun-server` binary.
+Edgerun now runs the production mail stack for `edgerun.tech`. SMTP, SMTPS, submission, IMAP, IMAPS, DNS, HTTPS, webmail, DKIM signing, queue handling, this blog, and the Git host are all served by one stripped `edgerun-server` binary.
 
-Before making broader claims, I wanted a simple benchmark that avoids internet mail entirely. The test sends only loopback SMTP traffic to a local recipient, so it does not create spam, does not depend on remote providers, and can be reproduced one stack at a time.
+That is the interesting claim: not that Edgerun is already the fastest possible mail server, but that a small all-in-one reference server can be competitive with mature Unix mail tools while carrying much less operational surface area.
+
+This first benchmark is intentionally narrow. It sends only loopback SMTP traffic to a local recipient, so it does not create spam, does not depend on remote providers, and can be reproduced one stack at a time.
 
 ## What was tested
 
-Implemented in code today: Edgerun's SMTP server accepts local mail into a Maildir-backed mailbox and exposes the same mail through IMAP/webmail. For this benchmark, the isolated SMTP service was run on a high localhost port with relay disabled.
+Implemented in code today: Edgerun accepts SMTP mail into a Maildir-backed mailbox and exposes the same mail through IMAP and webmail. For this benchmark, the isolated SMTP service was run on a high localhost port with relay disabled.
 
 Host-only benchmark tooling: the comparison stacks are run in rootless Podman containers, one at a time, also on localhost high ports. The workload is 10,000 SMTP messages, 32 concurrent clients, 1 KiB body, one connection per message, local recipient only.
 
-Out of scope for this pass: spam/content filtering, antivirus, outbound internet delivery, Stalwart's fair first-run account/domain setup, and full IMAP/webmail load testing.
+Out of scope for this pass: spam/content filtering, antivirus, outbound internet delivery, Stalwart's fair first-run account/domain setup, and full IMAP/webmail load testing. Those are future benchmark dimensions, not hidden wins.
 
-## Results
+## Throughput and memory
 
 | Stack | OK/Fail | Throughput | p95 latency | Peak memory during load |
 | --- | ---: | ---: | ---: | ---: |
@@ -28,11 +30,73 @@ Out of scope for this pass: spam/content filtering, antivirus, outbound internet
 | OpenSMTPD | 9976/24 | 176.01 ops/s | 227.632 ms | 17.91 MB container memory |
 | Exim | 2146/7854 | 27.41 ops/s | 1663.886 ms | 219.9 MB container memory |
 
-The Postfix result is the closest throughput comparison. On this local-only SMTP accept workload, Edgerun is effectively tied with Postfix while using a much smaller memory footprint. Postfix is mature and fast, but it reaches that result with a larger multi-process service model. Edgerun stays in one process and peaks around 3.6 MB RSS in the isolated run.
+<figure class="bench-chart">
+<svg viewBox="0 0 760 330" role="img" aria-labelledby="smtp-chart-title smtp-chart-desc">
+<text id="smtp-chart-title" x="24" y="32">10k local SMTP delivery: throughput versus memory</text>
+<text id="smtp-chart-desc" x="24" y="54">Bars show accepted SMTP messages per second. Right-side markers show peak memory during load.</text>
+<line x1="150" y1="280" x2="690" y2="280"></line>
+<line x1="150" y1="72" x2="150" y2="280"></line>
+<text x="145" y="304">0</text>
+<text x="284" y="304">100</text>
+<text x="438" y="304">200</text>
+<text x="592" y="304">300 ops/s</text>
+<line x1="303" y1="276" x2="303" y2="284"></line>
+<line x1="457" y1="276" x2="457" y2="284"></line>
+<line x1="611" y1="276" x2="611" y2="284"></line>
+<text x="24" y="103">Edgerun</text>
+<rect x="150" y="82" width="528" height="28"></rect>
+<circle cx="159" cy="96" r="5"></circle>
+<text x="690" y="102">342.71 ops/s, 3.58 MB</text>
+<text x="24" y="153">Postfix</text>
+<rect x="150" y="132" width="540" height="28"></rect>
+<circle cx="380" cy="146" r="5"></circle>
+<text x="690" y="152">351.69 ops/s, 94.02 MB</text>
+<text x="24" y="203">OpenSMTPD</text>
+<rect x="150" y="182" width="270" height="28"></rect>
+<circle cx="194" cy="196" r="5"></circle>
+<text x="690" y="202">176.01 ops/s, 17.91 MB</text>
+<text x="24" y="253">Exim</text>
+<rect x="150" y="232" width="42" height="28"></rect>
+<circle cx="690" cy="246" r="5"></circle>
+<text x="690" y="252">27.41 ops/s, 219.9 MB</text>
+<text x="24" y="323">Bar length: throughput. Dot position: memory, normalized to the largest observed value.</text>
+</svg>
+</figure>
 
-OpenSMTPD is a useful smaller-MTA comparison. Its configuration is pleasant, but this 10k run had 24 failed operations and a much higher tail latency.
+The closest apples-to-apples throughput comparison is Postfix. On this local-only SMTP accept workload, Edgerun and Postfix are effectively tied: Postfix is 2.6% faster, while Edgerun uses about 3.8% of the memory captured for the Postfix container.
+
+OpenSMTPD remains an important small-MTA comparison. Its configuration is readable, but this 10k run had 24 failed operations and higher tail latency.
 
 The Exim result should not be read as an Exim capacity claim. It is a configuration finding. The minimal rootless container setup accepted only 2,146 of 10,000 attempts while memory and process count climbed sharply. That target needs more tuning before it is a fair completed comparator.
+
+## What you have to assemble
+
+Performance is only one axis. Mail servers are also operational systems: you need SMTP, IMAP, TLS, identities, DNS records, queues, logs, web access, and safe defaults. The comparison looks different once the stack shape is visible.
+
+| Stack shape | Components in this evidence | What it provides here | What is still separate or not yet benchmarked |
+| --- | ---: | --- | --- |
+| Edgerun production service | 1 binary | SMTP, SMTPS, submission, IMAP, IMAPS, DNS, HTTPS, webmail, blog, Git host, DKIM, queue handling | Spam/content filtering intentionally out of scope |
+| Edgerun isolated SMTP | 1 binary | Local SMTP delivery into Maildir | Full production listeners disabled for the SMTP-only benchmark |
+| Postfix-only | 1 MTA package | SMTP accept and local delivery | IMAP/webmail require Dovecot or another service |
+| Postfix + Dovecot | 2 server packages | Traditional SMTP plus IMAP shape | Webmail, DNS, TLS automation, and policy still separate |
+| OpenSMTPD-only | 1 MTA package | SMTP accept and local Maildir delivery | IMAP/webmail require separate services |
+| Exim-only | 1 MTA package | SMTP accept and local spool delivery | IMAP/webmail require separate services; current config needs tuning |
+| Stalwart | 1 integrated container image | Modern integrated mail target, startup captured | Fair SMTP/IMAP benchmark blocked on reproducible first-run domain/account setup |
+
+## Setup surface
+
+This table uses the benchmark harness configs, not upstream manuals. "Knobs" means the explicit settings we had to write for the local-only benchmark path.
+
+| Stack | Download footprint captured | Install/start path in harness | Explicit local-only knobs | Setup difficulty observed |
+| --- | ---: | --- | ---: | --- |
+| Edgerun | 4.6 MB stripped `edgerun-server` | Copy one release binary plus one server config | low single-file config | Low once built; no external runtime dependency |
+| Postfix | 130 MB benchmark image | Debian slim + `postfix` + `postconf` changes | 9 `postconf` values | Medium: easy package, but host MTA conflicts and relay safety matter |
+| OpenSMTPD | 87.1 MB benchmark image | Debian slim + `opensmtpd` + `/etc/smtpd.conf` | 4 SMTP policy lines | Low/medium: small readable config, separate IMAP required |
+| Exim | 168 MB benchmark image | Debian slim + `exim4-daemon-light` + custom config | about 20 config lines | Medium/high: compact MTA, less obvious minimal safe config |
+| Dovecot | 143 MB benchmark image | Debian slim + `dovecot-core`/`dovecot-imapd` | about 25 IMAP/auth/Maildir lines | Medium: good IMAP component, needs explicit users/auth for repeatable tests |
+| Stalwart | 283 MB image | `stalwartlabs/stalwart:latest` with SMTP/IMAP/admin ports | not yet automated | Medium pending automation: starts easily, benchmark-safe first-run setup still missing |
+
+Cold download and install time is not in the current evidence bundle. That should be added to the harness as wall-clock timing around image pull/build and first successful listener readiness. The captured footprint already shows the operational shape: Edgerun deploys as a small stripped binary; the comparison containers are useful for reproducibility, but they include distribution and package-manager mass.
 
 ## What surprised me
 
@@ -48,7 +112,7 @@ Raw evidence is committed with the source tree:
 
 - Edgerun and Postfix sampled 10k run: `docs/benchmarks/email-stack/20260430Tscale-v2/`
 - OpenSMTPD and Exim sampled 10k run: `docs/benchmarks/email-stack/20260430Tscale-v3/`
-- First smoke-test evidence bundle: `docs/benchmarks/email-stack/20260430Tbench-v1/`
+- First smoke-test, image footprint, setup notes, Dovecot, and Stalwart bootstrap evidence: `docs/benchmarks/email-stack/20260430Tbench-v1/`
 
 The current benchmark harness is host-only tooling. It uses the in-tree SMTP benchmark client and rootless Podman for comparison stacks. It binds only localhost ports and uses local-only recipients.
 
@@ -56,6 +120,6 @@ The current benchmark harness is host-only tooling. It uses the in-tree SMTP ben
 
 This is enough to publish a narrow claim: Edgerun's SMTP local-delivery path is already competitive with Postfix on a warmed 10k localhost workload while using far less memory.
 
-It is not enough to claim victory over complete mail stacks. The next evidence should cover Stalwart with reproducible first-run configuration, IMAP mailbox operations, webmail inbox/send paths, outbound STARTTLS delivery, concurrent idle clients, and malformed or slow-client behavior.
+It is not enough to claim victory over complete mail stacks. The next evidence should cover cold download/install/readiness time, Stalwart with reproducible first-run configuration, IMAP mailbox operations, webmail inbox/send paths, outbound STARTTLS delivery, concurrent idle clients, malformed or slow-client behavior, and the cost of enabling optional policy layers.
 
 That is the right shape for the project: make the claim small, publish the raw evidence, then keep tightening the server against the next workload.
