@@ -147,6 +147,13 @@ impl GitHandler {
                     Ok(not_found_response(&self.config.title))
                 }
             }
+            "components" => {
+                if segments.len() == 4 && segments[2] == "crates" {
+                    self.crate_component_response(&repo, &segments[3])
+                } else {
+                    Ok(not_found_response(&self.config.title))
+                }
+            }
             "src" | "tree" => {
                 let rev = segments
                     .get(2)
@@ -295,6 +302,24 @@ impl GitHandler {
             repo,
             info,
             &crates,
+        )))
+    }
+
+    fn crate_component_response(&self, repo: &Repo, component_name: &str) -> io::Result<Response> {
+        let Some(crate_name) = component_name.strip_suffix(".html") else {
+            return Ok(not_found_response(&self.config.title));
+        };
+        if !safe_repo_name(crate_name) {
+            return Ok(not_found_response(&self.config.title));
+        }
+        let crates = visible_crates(repo)?;
+        let Some(info) = crates.iter().find(|info| info.name == crate_name) else {
+            return Ok(not_found_response(&self.config.title));
+        };
+        Ok(component_response(render_crate_component_document(
+            &self.config,
+            repo,
+            info,
         )))
     }
 
@@ -848,6 +873,12 @@ fn render_crate_page(
     let dependents = render_crate_links(repo, &info.dependents);
     let rfcs = render_rfc_links(repo, &repo.default_ref, &info.rfcs);
     let tree = render_dependency_tree(repo, info, crates, 0, &mut Vec::new());
+    let embed_url = absolute_site_url(config, &crate_component_path(repo, &info.name));
+    let embed_title = format!("{} crate status", info.name);
+    let embed_code = format!(
+        "<iframe src=\"{}\" title=\"{}\" loading=\"lazy\"></iframe>",
+        embed_url, embed_title
+    );
     let result = info
         .test_result
         .as_deref()
@@ -858,7 +889,7 @@ fn render_crate_page(
         &format!("{} | {}", info.name, config.title),
         &info.description,
         &format!(
-            "<main id=\"content\" class=\"repo crate-page\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a><span>/</span><a href=\"/{}/crates\">crates</a></nav><header class=\"repo-head\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><a class=\"commit-link\" href=\"/{}/src/{}/{}\">Source</a></header><section class=\"crate-grid\"><article class=\"crate-panel\"><h2>Features</h2>{}</article><article class=\"crate-panel\"><h2>Related crates</h2><h3>Depends on</h3>{}<h3>Used by</h3>{}</article><article class=\"crate-panel\"><h2>Tests</h2><p><strong>{}</strong> test declarations found.</p><pre class=\"commit\"><code>{}</code></pre></article><article class=\"crate-panel\"><h2>Related RFCs</h2>{}</article><article class=\"crate-panel wide\"><h2>Dependency tree</h2>{}</article></section></main>",
+            "<main id=\"content\" class=\"repo crate-page\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a><span>/</span><a href=\"/{}/crates\">crates</a></nav><header class=\"repo-head\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><a class=\"commit-link\" href=\"/{}/src/{}/{}\">Source</a></header><section class=\"crate-grid\"><article class=\"crate-panel\"><h2>Features</h2>{}</article><article class=\"crate-panel\"><h2>Related crates</h2><h3>Depends on</h3>{}<h3>Used by</h3>{}</article><article class=\"crate-panel\"><h2>Tests</h2><p><strong>{}</strong> test declarations found.</p><pre class=\"commit\"><code>{}</code></pre></article><article class=\"crate-panel\"><h2>Related RFCs</h2>{}</article><article class=\"crate-panel wide\"><h2>Dependency tree</h2>{}</article><article class=\"crate-panel wide\"><h2>Embeddable status</h2><p class=\"muted\">Use this iframe in build-log posts when the post should point at the live crate surface.</p><pre class=\"commit\"><code>{}</code></pre></article></section></main>",
             escape_attr(&repo.name),
             escape_html(&repo.title),
             escape_attr(&repo.name),
@@ -873,9 +904,65 @@ fn render_crate_page(
             info.test_count,
             result,
             rfcs,
-            tree
+            tree,
+            escape_html(&embed_code)
         ),
     )
+}
+
+fn render_crate_component_document(config: &GitConfig, repo: &Repo, info: &CrateInfo) -> String {
+    let path = crate_component_path(repo, &info.name);
+    let canonical = absolute_site_url(config, &path);
+    let style = git_style();
+    let body = render_crate_component_card(repo, info);
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\"><meta name=\"theme-color\" content=\"#146c63\"><meta name=\"referrer\" content=\"strict-origin-when-cross-origin\"><title>{}</title><meta name=\"description\" content=\"{}\"><link rel=\"canonical\" href=\"{}\"><style>{}</style></head><body class=\"component-body\">{}</body></html>",
+        escape_html(&format!("{} crate status", info.name)),
+        escape_attr(&info.description),
+        escape_attr(&canonical),
+        style,
+        body
+    )
+}
+
+fn render_crate_component_card(repo: &Repo, info: &CrateInfo) -> String {
+    let test_result = crate_test_summary(info);
+    format!(
+        "<article class=\"crate-component\" aria-label=\"{} crate status\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><dl class=\"component-stats\"><div><dt>Features</dt><dd>{}</dd></div><div><dt>Tests</dt><dd>{}</dd></div><div><dt>Depends on</dt><dd>{}</dd></div><div><dt>Used by</dt><dd>{}</dd></div></dl><p class=\"component-result\">{}</p><p class=\"component-actions\"><a target=\"_top\" href=\"/{}/crates/{}\">Open crate page</a><a target=\"_top\" href=\"/{}/src/{}/{}\">Source</a></p></article>",
+        escape_attr(&info.name),
+        escape_html(&info.name),
+        escape_html(&info.description),
+        info.features.len(),
+        info.test_count,
+        info.workspace_deps.len(),
+        info.dependents.len(),
+        escape_html(&test_result),
+        escape_attr(&repo.name),
+        escape_attr(&info.name),
+        escape_attr(&repo.name),
+        escape_attr(&repo.default_ref),
+        escape_attr(&info.rel_path)
+    )
+}
+
+fn crate_test_summary(info: &CrateInfo) -> String {
+    info.test_result
+        .as_deref()
+        .and_then(|result| result.lines().find(|line| !line.trim().is_empty()))
+        .map(|line| line.trim().to_string())
+        .unwrap_or_else(|| "No recorded test run yet.".to_string())
+}
+
+fn crate_component_path(repo: &Repo, crate_name: &str) -> String {
+    format!("/{}/components/crates/{}.html", repo.name, crate_name)
+}
+
+fn absolute_site_url(config: &GitConfig, path: &str) -> String {
+    if config.base_url.is_empty() {
+        path.to_string()
+    } else {
+        format!("{}{}", config.base_url.trim_end_matches('/'), path)
+    }
 }
 
 fn render_pills(values: &[String], empty: &str) -> String {
@@ -1126,6 +1213,12 @@ fn html_response(body: String) -> Response {
         .with_header("X-Content-Type-Options", "nosniff")
 }
 
+fn component_response(body: String) -> Response {
+    Response::html(StatusCode::OK, &body)
+        .with_header("Cache-Control", "public, max-age=60")
+        .with_header("X-Content-Type-Options", "nosniff")
+}
+
 fn css_response() -> Response {
     Response::new(StatusCode::OK)
         .with_header("Content-Type", "text/css; charset=utf-8")
@@ -1325,6 +1418,7 @@ fn git_style() -> String {
 
 const GIT_STYLE: &str = r#"
 .repos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}.repo-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.repo-card a{display:block;min-height:180px;padding:22px;text-decoration:none}.repo-card h2{margin:0 0 10px;font-size:26px;line-height:1.15}.repo-card p{color:var(--muted)}.repo-card span,.commit-link{color:var(--accent);font-weight:800}.crate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.crate-panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.crate-panel h2{margin:0 0 12px;font-size:22px}.crate-panel h3{margin:16px 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.crate-panel.wide{grid-column:1/-1}.pills{display:flex;flex-wrap:wrap;gap:8px}.pills span{border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--muted)}.link-list{display:grid;gap:8px;margin:0;padding-left:18px}.link-list a{color:var(--accent);font-weight:750;text-decoration:none}.link-list span{display:block;color:var(--muted)}.crate-panel ol{margin:8px 0 0 22px}.crate-panel li{margin:5px 0}.crate-panel li a{color:var(--accent);font-weight:750;text-decoration:none}.repo{max-width:1180px;margin:0 auto;padding:34px 18px 80px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);margin-bottom:18px}.crumbs a{color:var(--accent);text-decoration:none}.repo-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:22px}.repo-head h1{margin:0;font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:0}.repo-head p{color:var(--muted)}.commit-link{border:1px solid var(--line);border-radius:8px;padding:9px 12px;text-decoration:none;background:var(--panel);white-space:nowrap}.tree-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}.tree-list li{display:grid;grid-template-columns:1fr 90px;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}.tree-list li:first-child{border-top:0}.tree-list a{text-decoration:none;font-weight:700}.tree-list span{color:var(--muted)}.code{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:block}.code tbody{display:table;width:100%}.code tr:target{background:color-mix(in srgb,var(--accent) 14%,transparent)}.code th{width:1%;min-width:54px;padding:0 12px;text-align:right;color:var(--muted);border-right:1px solid var(--line);user-select:none}.code th a{text-decoration:none;color:inherit}.code td{padding:0 12px;white-space:pre;overflow:auto}.code code,.commit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}.commit{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}@media(max-width:760px){.repos,.crate-grid{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}}
+.component-body{margin:0;padding:0;background:transparent}.crate-component{min-height:100vh;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:18px}.crate-component h1{margin:0;font-size:28px;line-height:1.05;letter-spacing:0}.crate-component p{margin:8px 0;color:var(--muted)}.component-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:16px 0}.component-stats div{border:1px solid var(--line);border-radius:8px;padding:8px;background:color-mix(in srgb,var(--panel) 82%,var(--code))}.component-stats dt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}.component-stats dd{margin:2px 0 0;font-weight:800}.component-result{border-left:3px solid var(--accent);padding-left:10px}.component-actions{display:flex;gap:12px;flex-wrap:wrap}.component-actions a{color:var(--accent);font-weight:800;text-decoration:none}@media(max-width:560px){.component-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 "#;
 #[cfg(test)]
 mod tests {
@@ -1528,15 +1622,17 @@ mod tests {
         assert_eq!(crates[0].name, "edgerun-demo");
         assert_eq!(crates[0].features, ["default", "std"]);
         assert_eq!(crates[0].test_count, 1);
-        let html = render_crate_page(
-            &GitConfig::new(base.join("repos")),
-            &repo,
-            &crates[0],
-            &crates,
-        );
+        let mut config = GitConfig::new(base.join("repos"));
+        config.base_url = "https://git.example.test".to_string();
+        let html = render_crate_page(&config, &repo, &crates[0], &crates);
         assert!(html.contains("Workspace crate"));
         assert!(html.contains("edgerun-demo"));
         assert!(!html.contains("edgerun-hidden"));
+        assert!(html.contains("https://git.example.test/demo/components/crates/edgerun-demo.html"));
+        let component = render_crate_component_document(&config, &repo, &crates[0]);
+        assert!(component.contains("edgerun-demo crate status"));
+        assert!(component.contains("Open crate page"));
+        assert!(component.contains("target=\"_top\""));
         let _ = fs::remove_dir_all(base);
     }
 
