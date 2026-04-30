@@ -1624,6 +1624,7 @@ fn render_crate_page(
     let dependents = render_crate_links(repo, &info.dependents);
     let api = render_api_items(repo, &repo.default_ref, info);
     let call_graph = render_call_graph(repo, &repo.default_ref, info);
+    let crate_nav = render_crate_navigation(repo, info, crates);
     let rfcs = render_rfc_links(repo, &repo.default_ref, &info.rfcs);
     let tree = format!(
         "<ol class=\"dependency-tree\">{}</ol>",
@@ -1646,16 +1647,18 @@ fn render_crate_page(
         &format!("{} | {}", info.name, config.title),
         &info.description,
         &format!(
-            "<main id=\"content\" class=\"repo crate-page\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a><span>/</span><a href=\"/{}/crates\">crates</a></nav><header class=\"repo-head\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><nav class=\"repo-actions\" aria-label=\"Crate actions\"><a class=\"commit-link\" href=\"/{}/src/{}/{}\">Source</a><a class=\"commit-link\" href=\"{}\">Report vulnerability</a></nav></header><nav class=\"section-nav\" aria-label=\"Crate sections\"><a href=\"#api\">API</a><a href=\"#calls\">Calls</a><a href=\"#related\">Related</a><a href=\"#tests\">Tests</a><a href=\"#rfcs\">RFCs</a><a href=\"#embed\">Embed</a></nav><section class=\"crate-grid\"><article class=\"crate-panel\"><h2>Features</h2>{}</article><article class=\"crate-panel\" id=\"related\"><h2>Related crates</h2><h3>Depends on</h3>{}<h3>Used by</h3>{}</article><article class=\"crate-panel\" id=\"tests\"><h2>Tests</h2><p><strong>{}</strong> test declarations found.</p><pre class=\"commit\"><code>{}</code></pre></article><article class=\"crate-panel\" id=\"rfcs\"><h2>Related RFCs</h2>{}</article><article class=\"crate-panel wide\"><h2>Dependency tree</h2>{}</article><article class=\"crate-panel wide\" id=\"api\"><h2>API surface</h2>{}</article><article class=\"crate-panel wide\" id=\"calls\"><h2>Call graph</h2>{}</article><article class=\"crate-panel wide\" id=\"embed\"><h2>Embeddable status</h2><p class=\"muted\">Use this iframe in build-log posts when the post should point at the live crate surface.</p><pre class=\"commit\"><code>{}</code></pre></article></section></main>",
+            "<main id=\"content\" class=\"repo crate-page\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a><span>/</span><a href=\"/{}/crates\">crates</a></nav><header class=\"repo-head\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><nav class=\"repo-actions\" aria-label=\"Crate actions\"><a class=\"commit-link\" href=\"/{}/crates\">All crates</a><a class=\"commit-link\" href=\"/{}/src/{}/{}\">Source</a><a class=\"commit-link\" href=\"{}\">Report vulnerability</a></nav></header><nav class=\"section-nav\" aria-label=\"Crate sections\"><a href=\"#api\">API</a><a href=\"#calls\">Calls</a><a href=\"#related\">Related</a><a href=\"#tests\">Tests</a><a href=\"#rfcs\">RFCs</a><a href=\"#embed\">Embed</a></nav>{}<section class=\"crate-grid\"><article class=\"crate-panel\"><h2>Features</h2>{}</article><article class=\"crate-panel\" id=\"related\"><h2>Related crates</h2><h3>Depends on</h3>{}<h3>Used by</h3>{}</article><article class=\"crate-panel\" id=\"tests\"><h2>Tests</h2><p><strong>{}</strong> test declarations found.</p><pre class=\"commit\"><code>{}</code></pre></article><article class=\"crate-panel\" id=\"rfcs\"><h2>Related RFCs</h2>{}</article><article class=\"crate-panel wide\"><h2>Dependency tree</h2>{}</article><article class=\"crate-panel wide\" id=\"api\"><h2>API surface</h2>{}</article><article class=\"crate-panel wide\" id=\"calls\"><h2>Call graph</h2>{}</article><article class=\"crate-panel wide\" id=\"embed\"><h2>Embeddable status</h2><p class=\"muted\">Use this iframe in build-log posts when the post should point at the live crate surface.</p><pre class=\"commit\"><code>{}</code></pre></article></section></main>",
             escape_attr(&repo.name),
             escape_html(&repo.title),
             escape_attr(&repo.name),
             escape_html(&info.name),
             escape_html(&info.description),
             escape_attr(&repo.name),
+            escape_attr(&repo.name),
             escape_attr(&repo.default_ref),
             escape_attr(&info.rel_path),
             escape_attr(&vulnerability_href),
+            crate_nav,
             features,
             deps,
             dependents,
@@ -1765,6 +1768,44 @@ fn render_crate_links(repo: &Repo, names: &[String]) -> String {
             ))
             .collect::<Vec<_>>()
             .join("")
+    )
+}
+
+fn render_crate_navigation(repo: &Repo, info: &CrateInfo, crates: &[CrateInfo]) -> String {
+    let Some(index) = crates
+        .iter()
+        .position(|candidate| candidate.name == info.name)
+    else {
+        return String::new();
+    };
+    let previous = index.checked_sub(1).and_then(|value| crates.get(value));
+    let next = crates.get(index + 1);
+    let previous_html = previous
+        .map(|crate_info| {
+            format!(
+                "<a href=\"/{}/crates/{}\"><span>Previous crate</span><strong>{}</strong></a>",
+                escape_attr(&repo.name),
+                escape_attr(&crate_info.name),
+                escape_html(&crate_info.name)
+            )
+        })
+        .unwrap_or_else(|| "<span class=\"disabled\">First crate</span>".to_string());
+    let next_html = next
+        .map(|crate_info| {
+            format!(
+                "<a href=\"/{}/crates/{}\"><span>Next crate</span><strong>{}</strong></a>",
+                escape_attr(&repo.name),
+                escape_attr(&crate_info.name),
+                escape_html(&crate_info.name)
+            )
+        })
+        .unwrap_or_else(|| "<span class=\"disabled\">Last crate</span>".to_string());
+    format!(
+        "<nav class=\"crate-neighbor-nav\" aria-label=\"Crate navigation\">{}<a class=\"all\" href=\"/{}/crates\"><span>Explorer</span><strong>{} crates</strong></a>{}</nav>",
+        previous_html,
+        escape_attr(&repo.name),
+        crates.len(),
+        next_html
     )
 }
 
@@ -2275,7 +2316,7 @@ if(crateSearch){crateSearch.addEventListener('input',()=>applyCrateSearch(crateS
 
 const GIT_STYLE: &str = r#"
 .repos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}.repo-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.repo-card a{display:block;min-height:180px;padding:22px;text-decoration:none}.repo-card h2{margin:0 0 10px;font-size:26px;line-height:1.15}.repo-card p{color:var(--muted)}.repo-card span,.commit-link{color:var(--accent);font-weight:800}.crate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.crate-panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.crate-panel h2{margin:0 0 12px;font-size:22px}.crate-panel h3{margin:16px 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.crate-panel.wide{grid-column:1/-1}.pills{display:flex;flex-wrap:wrap;gap:8px}.pills span{border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--muted)}.link-list{display:grid;gap:8px;margin:0;padding-left:18px}.link-list a{color:var(--accent);font-weight:750;text-decoration:none}.link-list span{display:block;color:var(--muted)}.crate-panel ol{margin:8px 0 0 22px}.dependency-tree{padding-left:20px}.crate-panel li{margin:5px 0}.crate-panel li a{color:var(--accent);font-weight:750;text-decoration:none}.repo{max-width:1180px;margin:0 auto;padding:34px 18px 80px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);margin-bottom:18px}.crumbs a{color:var(--accent);text-decoration:none}.repo-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:22px}.repo-head h1{margin:0;font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:0}.repo-head p{color:var(--muted)}.commit-link{border:1px solid var(--line);border-radius:8px;padding:9px 12px;text-decoration:none;background:var(--panel);white-space:nowrap}.tree-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}.tree-list li{display:grid;grid-template-columns:1fr 90px;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}.tree-list li:first-child{border-top:0}.tree-list a{text-decoration:none;font-weight:700}.tree-list span{color:var(--muted)}.code{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:block}.code tbody{display:table;width:100%}.code tr:target{background:color-mix(in srgb,var(--accent) 14%,transparent)}.code th{width:1%;min-width:54px;padding:0 12px;text-align:right;color:var(--muted);border-right:1px solid var(--line);user-select:none}.code th a{text-decoration:none;color:inherit}.code td{padding:0 12px;white-space:pre;overflow:auto}.code code,.commit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}.commit{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}@media(max-width:760px){.repos,.crate-grid{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}}
-.crate-search{display:grid;grid-template-columns:minmax(220px,420px) max-content;gap:10px;align-items:center;max-width:620px;margin-top:22px}.crate-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.crate-search input{min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 13px;font:inherit}.crate-search span{color:var(--muted);font-weight:750}.repo-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.section-nav{display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 22px}.section-nav a{border:1px solid var(--line);border-radius:999px;padding:5px 10px;color:var(--muted);font-weight:750;text-decoration:none}.section-nav a:hover{border-color:var(--accent);color:var(--accent)}.api-list,.call-list{display:grid;gap:8px;list-style:none;margin:0;padding:0}.api-list li{display:grid;grid-template-columns:70px minmax(0,1fr) minmax(0,1.4fr);gap:10px;align-items:baseline;border-bottom:1px solid var(--line);padding:7px 0}.api-list span,.call-list span{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase}.api-list a,.call-list a{color:var(--accent);font-weight:800;text-decoration:none}.api-list small,.call-list small{color:var(--muted);overflow-wrap:anywhere}.call-list li{display:grid;grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr) 80px;gap:10px;align-items:baseline;border-bottom:1px solid var(--line);padding:7px 0}@media(max-width:760px){.crate-search{grid-template-columns:1fr}.repo-actions{justify-content:flex-start}.api-list li,.call-list li{grid-template-columns:1fr}.api-list span,.call-list span{font-size:11px}}
+.crate-search{display:grid;grid-template-columns:minmax(220px,420px) max-content;gap:10px;align-items:center;max-width:620px;margin-top:22px}.crate-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.crate-search input{min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 13px;font:inherit}.crate-search span{color:var(--muted);font-weight:750}.repo-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.section-nav{display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 14px}.section-nav a{border:1px solid var(--line);border-radius:999px;padding:5px 10px;color:var(--muted);font-weight:750;text-decoration:none}.section-nav a:hover{border-color:var(--accent);color:var(--accent)}.crate-neighbor-nav{display:grid;grid-template-columns:1fr max-content 1fr;gap:10px;margin:0 0 22px}.crate-neighbor-nav a,.crate-neighbor-nav .disabled{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px;text-decoration:none}.crate-neighbor-nav a:hover{border-color:var(--accent)}.crate-neighbor-nav .all{text-align:center}.crate-neighbor-nav a:last-child{text-align:right}.crate-neighbor-nav span{display:block;color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase}.crate-neighbor-nav strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.crate-neighbor-nav .disabled{color:var(--muted)}.api-list,.call-list{display:grid;gap:8px;list-style:none;margin:0;padding:0}.api-list li{display:grid;grid-template-columns:70px minmax(0,1fr) minmax(0,1.4fr);gap:10px;align-items:baseline;border-bottom:1px solid var(--line);padding:7px 0}.api-list span,.call-list span{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase}.api-list a,.call-list a{color:var(--accent);font-weight:800;text-decoration:none}.api-list small,.call-list small{color:var(--muted);overflow-wrap:anywhere}.call-list li{display:grid;grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr) 80px;gap:10px;align-items:baseline;border-bottom:1px solid var(--line);padding:7px 0}@media(max-width:760px){.crate-search{grid-template-columns:1fr}.repo-actions{justify-content:flex-start}.crate-neighbor-nav{grid-template-columns:1fr}.crate-neighbor-nav .all,.crate-neighbor-nav a:last-child{text-align:left}.api-list li,.call-list li{grid-template-columns:1fr}.api-list span,.call-list span{font-size:11px}}
 .component-body{margin:0;padding:0;background:transparent}.crate-component{min-height:100vh;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:18px}.crate-component h1{margin:0;font-size:28px;line-height:1.05;letter-spacing:0}.crate-component p{margin:8px 0;color:var(--muted)}.component-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:8px;margin:16px 0}.component-stats div{border:1px solid var(--line);border-radius:8px;padding:8px;background:color-mix(in srgb,var(--panel) 82%,var(--code))}.component-stats dt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}.component-stats dd{margin:2px 0 0;font-weight:800}.component-result{border-left:3px solid var(--accent);padding-left:10px}.component-actions{display:flex;gap:12px;flex-wrap:wrap}.component-actions a{color:var(--accent);font-weight:800;text-decoration:none}
 "#;
 #[cfg(test)]
