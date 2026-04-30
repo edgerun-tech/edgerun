@@ -423,6 +423,26 @@ impl GitHandler {
     fn visible_repos(&self) -> io::Result<Vec<Repo>> {
         visible_repos(&self.config)
     }
+
+    pub fn render_dash_content(&self, surface_path: &str) -> io::Result<String> {
+        let tail = surface_path
+            .strip_prefix("/surface/git")
+            .unwrap_or(surface_path);
+        let segments = route_segments(tail)?;
+        let repos = self.visible_repos()?;
+        if let Some(repo_name) = segments.first() {
+            if let Some(repo) = repos.iter().find(|repo| &repo.name == repo_name) {
+                let crates = visible_crates(repo)?;
+                if segments.len() == 3 && segments[1] == "crates" {
+                    if let Some(info) = crates.iter().find(|info| info.name == segments[2]) {
+                        return Ok(render_dash_crate(repo, info, &crates));
+                    }
+                }
+                return Ok(render_dash_repo(repo, &crates));
+            }
+        }
+        render_dash_git_index(&repos)
+    }
 }
 
 impl Handler for GitHandler {
@@ -1772,6 +1792,201 @@ fn render_crate_component_card(repo: &Repo, info: &CrateInfo) -> String {
             ("default_ref", escape_attr(&repo.default_ref)),
             ("crate_path", escape_attr(&info.rel_path)),
         ],
+    )
+}
+
+fn render_dash_git_index(repos: &[Repo]) -> io::Result<String> {
+    if repos.is_empty() {
+        return Ok("<p class=\"empty\">No repositories are public yet.</p>".to_string());
+    }
+    let mut repo_cards = String::new();
+    let mut repo_count = 0usize;
+    let mut crate_count = 0usize;
+    let mut api_total = 0usize;
+    let mut call_total = 0usize;
+    let mut test_total = 0usize;
+    let mut rfc_total = 0usize;
+    for repo in repos {
+        let crates = visible_crates(repo)?;
+        repo_count += 1;
+        crate_count += crates.len();
+        api_total += crates
+            .iter()
+            .map(|info| info.api_items.len())
+            .sum::<usize>();
+        call_total += crates
+            .iter()
+            .map(|info| info.call_edges.len())
+            .sum::<usize>();
+        test_total += crates.iter().map(|info| info.test_count).sum::<usize>();
+        rfc_total += crates.iter().map(|info| info.rfcs.len()).sum::<usize>();
+        repo_cards.push_str(&format!(
+            "<button class=\"dash-card dash-card-button\" type=\"button\" hx-get=\"/surface/git/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\"><strong>{}</strong><span>{}</span><small>{} crates - {}</small></button>",
+            escape_attr(&repo.name),
+            escape_html(&repo.title),
+            escape_html(&repo.description),
+            crates.len(),
+            escape_html(&repo.default_ref)
+        ));
+    }
+    Ok(format!(
+        "<div class=\"dash-code\"><section class=\"dash-code-summary\" aria-label=\"Code summary\"><div><span>Repos</span><strong>{repo_count}</strong></div><div><span>Crates</span><strong>{crate_count}</strong></div><div><span>API items</span><strong>{api_total}</strong></div><div><span>Call edges</span><strong>{call_total}</strong></div><div><span>Tests</span><strong>{test_total}</strong></div><div><span>RFCs</span><strong>{rfc_total}</strong></div></section><section><h2>Released repositories</h2><div class=\"dash-grid\">{repo_cards}</div></section></div>"
+    ))
+}
+
+fn render_dash_repo(repo: &Repo, crates: &[CrateInfo]) -> String {
+    let api_total: usize = crates.iter().map(|info| info.api_items.len()).sum();
+    let call_total: usize = crates.iter().map(|info| info.call_edges.len()).sum();
+    let test_total: usize = crates.iter().map(|info| info.test_count).sum();
+    let rfc_total: usize = crates.iter().map(|info| info.rfcs.len()).sum();
+    let crate_cards = if crates.is_empty() {
+        "<p class=\"empty\">No crates are public yet.</p>".to_string()
+    } else {
+        crates
+            .iter()
+            .map(|info| {
+                let test_result = crate_test_summary(info);
+                format!(
+                    "<button class=\"dash-card dash-card-button dash-crate-card\" type=\"button\" hx-get=\"/surface/git/{}/crates/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\"><strong>{}</strong><span>{}</span><small>{} API - {} calls - {} tests</small><small>{}</small></button>",
+                    escape_attr(&repo.name),
+                    escape_attr(&info.name),
+                    escape_html(&info.name),
+                    escape_html(&info.description),
+                    info.api_items.len(),
+                    info.call_edges.len(),
+                    info.test_count,
+                    escape_html(&test_result)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    };
+    format!(
+        "<div class=\"dash-code\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/git\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">Back to repositories</button><section class=\"dash-code-hero\"><p>Released code</p><h2>{}</h2><span>{}</span></section><section class=\"dash-code-summary\" aria-label=\"{} summary\"><div><span>Crates</span><strong>{}</strong></div><div><span>API items</span><strong>{api_total}</strong></div><div><span>Call edges</span><strong>{call_total}</strong></div><div><span>Tests</span><strong>{test_total}</strong></div><div><span>RFCs</span><strong>{rfc_total}</strong></div><div><span>Ref</span><strong>{}</strong></div></section><section><h2>Crate explorer</h2><div class=\"dash-grid\">{crate_cards}</div></section></div>",
+        escape_html(&repo.title),
+        escape_html(&repo.description),
+        escape_attr(&repo.title),
+        crates.len(),
+        escape_html(&repo.default_ref)
+    )
+}
+
+fn render_dash_crate(repo: &Repo, info: &CrateInfo, crates: &[CrateInfo]) -> String {
+    let features = render_dash_pills(&info.features, "No declared features.");
+    let deps = render_dash_pills(&info.workspace_deps, "No visible workspace dependencies.");
+    let dependents = render_dash_pills(&info.dependents, "No visible dependents.");
+    let rfcs = if info.rfcs.is_empty() {
+        "<p class=\"empty\">No related RFCs recorded.</p>".to_string()
+    } else {
+        info.rfcs
+            .iter()
+            .map(|rfc| {
+                format!(
+                    "<li><strong>{}</strong><span>{}</span><small>{}</small></li>",
+                    escape_html(&rfc.title),
+                    escape_html(&rfc.completeness),
+                    escape_html(&rfc.path)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    };
+    let api = render_dash_api_items(&info.api_items);
+    let call_graph = render_dash_call_edges(&info.call_edges);
+    let sibling_nav = crates
+        .iter()
+        .filter(|other| other.name != info.name)
+        .take(8)
+        .map(|other| {
+            format!(
+                "<button class=\"pill-button\" type=\"button\" hx-get=\"/surface/git/{}/crates/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">{}</button>",
+                escape_attr(&repo.name),
+                escape_attr(&other.name),
+                escape_html(&other.name)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    let test_result = crate_test_summary(info);
+    let vulnerability_href = vulnerability_report_href(&info.name);
+    format!(
+        "<div class=\"dash-code\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/git/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">Back to crate explorer</button><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><span>{}</span><a class=\"dash-mail-button\" href=\"{}\">Report vulnerability</a></section><section class=\"dash-code-summary\" aria-label=\"{} crate summary\"><div><span>Features</span><strong>{}</strong></div><div><span>API items</span><strong>{}</strong></div><div><span>Call edges</span><strong>{}</strong></div><div><span>Tests</span><strong>{}</strong></div><div><span>Deps</span><strong>{}</strong></div><div><span>RFCs</span><strong>{}</strong></div></section><section class=\"dash-code-columns\"><article><h3>Features</h3>{features}</article><article><h3>Workspace dependencies</h3>{deps}</article><article><h3>Visible dependents</h3>{dependents}</article><article><h3>Last test run</h3><p>{}</p></article></section><section class=\"dash-code-columns\"><article><h3>API surface</h3>{api}</article><article><h3>Call graph</h3>{call_graph}</article></section><section><h3>Related RFCs</h3><ul class=\"dash-code-list\">{rfcs}</ul></section><section><h3>Nearby crates</h3><div class=\"pill-row\">{sibling_nav}</div></section></div>",
+        escape_attr(&repo.name),
+        escape_html(&info.rel_path),
+        escape_html(&info.name),
+        escape_html(&info.description),
+        escape_attr(&vulnerability_href),
+        escape_attr(&info.name),
+        info.features.len(),
+        info.api_items.len(),
+        info.call_edges.len(),
+        info.test_count,
+        info.workspace_deps.len(),
+        info.rfcs.len(),
+        escape_html(&test_result)
+    )
+}
+
+fn render_dash_pills(values: &[String], empty: &str) -> String {
+    if values.is_empty() {
+        return format!("<p class=\"empty\">{}</p>", escape_html(empty));
+    }
+    format!(
+        "<div class=\"pill-row\">{}</div>",
+        values
+            .iter()
+            .map(|value| format!("<span>{}</span>", escape_html(value)))
+            .collect::<Vec<_>>()
+            .join("")
+    )
+}
+
+fn render_dash_api_items(items: &[ApiItem]) -> String {
+    if items.is_empty() {
+        return "<p class=\"empty\">No generated API catalog yet.</p>".to_string();
+    }
+    format!(
+        "<ul class=\"dash-code-list\">{}</ul>",
+        items
+            .iter()
+            .take(24)
+            .map(|item| {
+                format!(
+                    "<li><strong>{} {}</strong><span>{}:{}</span></li>",
+                    escape_html(&item.kind),
+                    escape_html(&item.name),
+                    escape_html(&item.path),
+                    item.line
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    )
+}
+
+fn render_dash_call_edges(edges: &[CallEdge]) -> String {
+    if edges.is_empty() {
+        return "<p class=\"empty\">No generated call graph yet.</p>".to_string();
+    }
+    format!(
+        "<ul class=\"dash-code-list\">{}</ul>",
+        edges
+            .iter()
+            .take(24)
+            .map(|edge| {
+                format!(
+                    "<li><strong>{} -> {}</strong><span>{}:{} - {}:{}</span><small>{} call sites</small></li>",
+                    escape_html(&edge.caller),
+                    escape_html(&edge.callee),
+                    escape_html(&edge.caller_path),
+                    edge.caller_line,
+                    escape_html(&edge.callee_path),
+                    edge.callee_line,
+                    edge.count
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
     )
 }
 

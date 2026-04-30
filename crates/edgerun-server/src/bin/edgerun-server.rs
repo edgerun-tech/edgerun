@@ -1141,7 +1141,7 @@ impl SiteRouter {
                 return self.webmail.handle_dash_mail(request);
             }
             return match request.method().as_str() {
-                "GET" | "HEAD" => dash_response(&request),
+                "GET" | "HEAD" => self.dash_response(&request),
                 _ => method_not_allowed("GET, HEAD"),
             };
         }
@@ -1169,30 +1169,35 @@ impl SiteRouter {
         }
         self.webmail.handle_sync(request)
     }
+
+    fn dash_response(&self, request: &Request) -> Response {
+        let target = request.uri().request_target();
+        let path = target.split('?').next().unwrap_or(target.as_str());
+        let body = match path {
+            "/surface/blog" => render_dash_blog_surface(),
+            path if path == "/surface/git" || path.starts_with("/surface/git/") => self
+                .git
+                .as_ref()
+                .and_then(|git| git.render_dash_content(path).ok())
+                .map(|content| render_dash_surface("Code", "git.edgerun.tech", &content))
+                .unwrap_or_else(render_dash_code_surface),
+            _ => render_dash_html(),
+        };
+        Response::html(StatusCode::OK, &body)
+            .with_header("Cache-Control", "no-store")
+            .with_header("X-Content-Type-Options", "nosniff")
+            .with_header("Referrer-Policy", "strict-origin-when-cross-origin")
+            .with_header(
+                "Permissions-Policy",
+                "camera=(), microphone=(), geolocation=()",
+            )
+    }
 }
 
 impl Handler for SiteRouter {
     fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         Box::pin(async move { self.handle_sync(request) })
     }
-}
-
-fn dash_response(request: &Request) -> Response {
-    let target = request.uri().request_target();
-    let path = target.split('?').next().unwrap_or(target.as_str());
-    let body = match path {
-        "/surface/blog" => render_dash_blog_surface(),
-        "/surface/git" => render_dash_code_surface(),
-        _ => render_dash_html(),
-    };
-    Response::html(StatusCode::OK, &body)
-        .with_header("Cache-Control", "no-store")
-        .with_header("X-Content-Type-Options", "nosniff")
-        .with_header("Referrer-Policy", "strict-origin-when-cross-origin")
-        .with_header(
-            "Permissions-Policy",
-            "camera=(), microphone=(), geolocation=()",
-        )
 }
 
 fn redirect_to_dash_surface(surface: &str) -> Response {
@@ -1318,6 +1323,7 @@ const DASH_STYLE: &str = r#"
 .dash-stage header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--panel)}
 .dash-stage header div{display:grid;line-height:1.2}.dash-stage header span{color:var(--muted);font-size:12px}.dash-stage header a{color:var(--muted);text-decoration:none}.dash-stage header a:hover{color:var(--accent)}
 	.dash-surface{overflow:auto;padding:24px}.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:980px}.dash-card{min-height:140px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:18px;text-decoration:none}.dash-card:hover{border-color:var(--accent)}.dash-card span{color:var(--muted)}.dash-card-button{text-align:left;font:inherit;cursor:pointer}
+	.dash-code{display:grid;gap:24px;max-width:1180px}.dash-code h2,.dash-code h3{margin:0 0 12px}.dash-code-hero{display:grid;gap:10px;max-width:760px}.dash-code-hero p{margin:0;color:var(--accent);font-weight:800;text-transform:uppercase;letter-spacing:0}.dash-code-hero h2{font-size:clamp(34px,6vw,72px);line-height:.98}.dash-code-hero span{color:var(--muted);font-size:20px}.dash-code-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}.dash-code-summary div{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:14px}.dash-code-summary span{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;font-weight:800;letter-spacing:0}.dash-code-summary strong{font-size:24px}.dash-code-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.dash-code-columns article{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:16px}.dash-code-list{margin:0;padding:0;list-style:none;display:grid;gap:8px}.dash-code-list li{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px;display:grid;gap:4px}.dash-code-list span,.dash-code-list small,.dash-crate-card small{color:var(--muted)}.dash-link-button,.pill-button{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:9px 12px;font:inherit;font-weight:750;cursor:pointer;justify-self:start}.dash-link-button:hover,.pill-button:hover{border-color:var(--accent);color:var(--accent)}.pill-row{display:flex;gap:8px;flex-wrap:wrap}.pill-row span,.pill-button{border-radius:999px}
 	.dash-mail{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);gap:14px;min-height:520px}.dash-mail-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}.dash-mail-button{height:40px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);display:inline-flex;align-items:center;gap:8px;padding:0 12px;text-decoration:none;cursor:pointer}.dash-mail-button:hover{border-color:var(--accent);color:var(--accent)}.dash-mail-list,.dash-mail-detail,.dash-mail-login{border:1px solid var(--line);border-radius:8px;background:var(--panel)}.dash-mail-list{overflow:auto}.dash-mail-item{display:grid;gap:4px;padding:13px 14px;border-bottom:1px solid var(--line);text-decoration:none}.dash-mail-item:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}.dash-mail-item[aria-current=true]{border-left:3px solid var(--accent);padding-left:11px}.dash-mail-item strong{line-height:1.25}.dash-mail-item span,.dash-mail-meta,.dash-mail-preview,.dash-mail-empty,.dash-mail-toolbar span{color:var(--muted)}.dash-mail-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:13px}.dash-mail-unread{color:var(--accent);font-weight:800}.dash-mail-detail{min-width:0;padding:18px;overflow:auto}.dash-mail-detail header{display:block;padding:0 0 14px;border:0;background:transparent}.dash-mail-detail h2{margin:0 0 8px;font-size:26px;line-height:1.15}.dash-mail-body{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}.dash-mail-warning{margin:12px 0;padding:10px 12px;border:1px solid var(--accent-2);border-radius:8px;color:var(--accent-2)}.dash-mail-login{max-width:460px;padding:18px;display:grid;gap:12px}.dash-mail-login label,.dash-mail-compose label{display:grid;gap:6px;color:var(--muted);font-weight:750}.dash-mail-login input,.dash-mail-compose input,.dash-mail-compose textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:10px 12px;font:inherit}.dash-mail-compose{display:grid;gap:12px}.dash-mail-compose textarea{min-height:220px;resize:vertical}.dash-mail-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 	@media(max-width:760px){.dash{grid-template-columns:1fr;grid-template-rows:auto 1fr}.dash-rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;overflow:auto}.dash-tab{white-space:nowrap}.dash-stage header{padding:0 12px}}
 	@media(max-width:900px){.dash-mail{grid-template-columns:1fr}.dash-mail-list{max-height:320px}}
