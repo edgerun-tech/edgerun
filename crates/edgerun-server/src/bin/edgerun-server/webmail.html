@@ -8,12 +8,12 @@
 <style>
 :root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--panel2:#f1eadc;--ink:#1c2430;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent2:#8b3f2f;--danger:#b42342;--code:#eee6d8}
 :root[data-theme=dark]{--bg:#101418;--panel:#171d22;--panel2:#232b31;--ink:#f2ede4;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent2:#dfa06b;--danger:#fb7185;--code:#232b31}
-*{box-sizing:border-box}body{margin:0;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
-.app{min-height:calc(100vh - 61px);display:grid;grid-template-columns:minmax(280px,380px) 1fr}
+*{box-sizing:border-box}body{--topbar-h:76px;--footer-h:68px;margin:0;padding:var(--topbar-h) 0 var(--footer-h);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+.topbar{position:fixed;top:0;left:0;right:0;z-index:20;min-height:var(--topbar-h);display:grid;grid-template-columns:minmax(140px,1fr) minmax(220px,560px) minmax(140px,1fr);gap:14px;align-items:center;padding:12px clamp(14px,3vw,44px);background:color-mix(in srgb,var(--bg) 92%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}
+.topbar-brand{min-width:0}.topbar-center{min-width:0;justify-self:center;width:100%}.topbar-actions{min-width:0;display:flex;gap:14px;align-items:center;justify-content:flex-end}.brand{font-weight:800;font-size:16px;text-decoration:none;white-space:nowrap}.topbar nav{display:flex;gap:14px;align-items:center;justify-content:end}.topbar nav a{color:var(--muted);text-decoration:none}.topbar nav a:hover{color:var(--accent)}
+.header-search{position:relative;min-width:0;width:100%}.header-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.header-search input{width:100%;min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 44px 10px 13px;font:inherit}.header-search input:focus{border-color:var(--accent);outline:2px solid rgba(45,212,191,.28)}.header-search svg{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:20px;height:20px;color:var(--muted);stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}.mail-count{color:var(--muted);font-size:12px;white-space:nowrap}.who{color:var(--muted);font-size:12px;white-space:nowrap}
+.app{height:calc(100vh - var(--topbar-h) - var(--footer-h));min-height:0;display:grid;grid-template-columns:minmax(280px,380px) 1fr}
 .list{border-right:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;min-width:0}
-.top{min-height:56px;display:grid;grid-template-columns:1fr auto;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
-.brand{font-weight:700;font-size:16px}.who{color:var(--muted);font-size:12px;align-self:center;text-align:right}.mail-count{color:var(--muted);font-size:12px}
-.search{grid-column:1/3;position:relative}.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--muted);stroke:currentColor;fill:none;stroke-width:2}.search input{padding-left:34px;height:34px}
 button{border:1px solid var(--line);background:var(--panel2);border-radius:6px;padding:8px 10px;cursor:pointer;color:var(--ink);transition:background .12s ease,border-color .12s ease,opacity .12s ease}
 button:hover:not(:disabled){border-color:var(--accent)}button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:650}button.danger:hover:not(:disabled){border-color:var(--danger);color:var(--danger)}button:disabled{opacity:.38;cursor:not-allowed}
 .icon{width:32px;height:32px;padding:0;display:inline-grid;place-items:center}.icon svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.copy{font-size:13px}
@@ -33,8 +33,8 @@ label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:
 input,textarea,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px;font:inherit;background:var(--bg);color:var(--ink)}
 input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:var(--accent)}textarea{min-height:190px;resize:vertical}.row{display:flex;gap:8px;align-items:center}.status{color:var(--muted);font-size:13px;min-width:82px}.status.warn{color:var(--accent2)}.grow{flex:1}.attachments{display:flex;flex-wrap:wrap;gap:6px}.chip,.attachment{border:1px solid var(--line);border-radius:6px;background:var(--code);color:var(--muted);padding:5px 8px;font-size:12px}.attachment{display:inline-flex;align-items:center;gap:7px;color:var(--ink);text-decoration:none;margin:0 6px 6px 0}.chip button{border:0;background:transparent;color:var(--muted);padding:0;margin-left:6px;width:auto;height:auto}.attach-input{display:none}
 .spin svg{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-.site-footer{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:18px;align-items:center;border-top:1px solid var(--line);padding:16px clamp(18px,4vw,56px);color:var(--muted)}.site-footer nav{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.site-footer a{text-decoration:none;color:inherit}.site-footer a:hover{color:var(--accent)}.site-footer a[aria-current=page]{color:var(--accent);font-weight:800}.footer-primary{font-weight:800}.footer-local{justify-content:end}
-@media(max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:45vh 55vh}.list{border-right:0;border-bottom:1px solid var(--line)}.content{padding:16px}.site-footer{grid-template-columns:1fr}.footer-local{justify-content:flex-start}}
+.site-footer{position:fixed;left:0;right:0;bottom:0;z-index:20;min-height:var(--footer-h);display:grid;grid-template-columns:max-content minmax(0,1fr);gap:18px;align-items:center;border-top:1px solid var(--line);padding:16px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(12px);color:var(--muted)}.site-footer nav{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.site-footer a{text-decoration:none;color:inherit}.site-footer a:hover{color:var(--accent)}.site-footer a[aria-current=page]{color:var(--accent);font-weight:800}.footer-primary{font-weight:800}.footer-local{justify-content:end}
+@media(max-width:760px){body{--topbar-h:128px;--footer-h:108px}.topbar{grid-template-columns:minmax(0,1fr) max-content}.topbar-center{grid-column:1/-1;grid-row:2}.topbar-actions{grid-column:2;grid-row:1}.who{display:none}.app{grid-template-columns:1fr;grid-template-rows:45% 55%}.list{border-right:0;border-bottom:1px solid var(--line)}.content{padding:16px}.site-footer{grid-template-columns:1fr;gap:8px}.footer-local{justify-content:flex-start}}
 </style>
 </head>
 <body>
@@ -53,9 +53,13 @@ input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:v
 <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
 <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.4 11.6-8.8 8.8a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
 </svg>
+<header class="topbar">
+  <div class="topbar-brand"><a class="brand" href="/" aria-label="Edgerun Mail home">Edgerun Mail</a></div>
+  <div class="topbar-center"><div class="header-search" role="search"><label for="search">Search mail</label><input id="search" type="search" placeholder="Search mail" autocomplete="off"><svg aria-hidden="true"><use href="#i-search"/></svg></div></div>
+  <div class="topbar-actions"><span id="mailCount" class="mail-count"></span><span class="who">ken@edgerun.tech</span><er-theme-toggle></er-theme-toggle></div>
+</header>
 <main class="app">
   <section class="list">
-    <div class="top"><div><div class="brand">Edgerun Mail</div><div id="mailCount" class="mail-count"></div></div><div class="who">ken@edgerun.tech</div><div class="search"><svg><use href="#i-search"/></svg><input id="search" placeholder="Search mail" autocomplete="off"></div></div>
     <div id="messages" class="messages"></div>
   </section>
   <section class="pane">
@@ -67,7 +71,6 @@ input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:v
       <button id="markUnread" class="icon" title="Mark unread" aria-label="Mark unread" disabled><svg><use href="#i-mail"/></svg></button>
       <button id="deleteMsg" class="icon danger" title="Delete" aria-label="Delete" disabled><svg><use href="#i-trash"/></svg></button>
       <div id="status" class="status"></div><div class="grow"></div>
-      <er-theme-toggle></er-theme-toggle>
       <button id="logout" class="icon" title="Log out" aria-label="Log out"><svg><use href="#i-log-out"/></svg></button>
     </div>
     <form id="compose" class="compose">
@@ -91,7 +94,7 @@ input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:v
 const root=document.documentElement;
 const storedTheme=localStorage.getItem('theme');
 if(storedTheme){root.dataset.theme=storedTheme}
-if(!customElements.get('er-theme-toggle')){customElements.define('er-theme-toggle',class extends HTMLElement{connectedCallback(){this.attachShadow({mode:'open'}).innerHTML='<style>button{width:32px;height:32px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--ink);cursor:pointer;font:inherit}button:hover{border-color:var(--accent)}</style><button type="button" aria-label="Toggle color theme">◐</button>';this.shadowRoot.querySelector('button').onclick=()=>{const next=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=next;localStorage.setItem('theme',next)}}})}
+if(!customElements.get('er-theme-toggle')){customElements.define('er-theme-toggle',class extends HTMLElement{connectedCallback(){this.attachShadow({mode:'open'}).innerHTML='<style>button{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);cursor:pointer;font:24px/1 system-ui}button:hover{border-color:var(--accent)}</style><button type="button"></button>';const btn=this.shadowRoot.querySelector('button');const current=()=>root.dataset.theme||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");const render=()=>{const dark=current()==="dark";btn.textContent=dark?"☾":"☀";btn.title=dark?"Dark mode: switch to light mode":"Light mode: switch to dark mode";btn.setAttribute("aria-label",btn.title)};btn.onclick=()=>{const next=current()==="dark"?"light":"dark";root.dataset.theme=next;localStorage.setItem("theme",next);render()};render()}})}
 const messagesEl=document.getElementById('messages'),content=document.getElementById('content'),statusEl=document.getElementById('status'),mailCount=document.getElementById('mailCount');
 const refreshBtn=document.getElementById('refresh'),composeBtn=document.getElementById('composeBtn'),replyMsg=document.getElementById('replyMsg'),composeEl=document.getElementById('compose'),searchEl=document.getElementById('search'),filePick=document.getElementById('filePick'),composeAttachments=document.getElementById('composeAttachments');
 const markRead=document.getElementById('markRead'),markUnread=document.getElementById('markUnread'),deleteMsg=document.getElementById('deleteMsg'),logout=document.getElementById('logout'),attachBtn=document.getElementById('attachBtn'),cancelBtn=document.getElementById('cancel'),sendBtn=document.getElementById('sendBtn');
