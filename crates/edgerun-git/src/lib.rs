@@ -81,6 +81,26 @@ struct TreeEntry {
     name: String,
 }
 
+#[derive(Clone, Debug)]
+struct CrateInfo {
+    name: String,
+    rel_path: String,
+    description: String,
+    features: Vec<String>,
+    workspace_deps: Vec<String>,
+    dependents: Vec<String>,
+    test_count: usize,
+    test_result: Option<String>,
+    rfcs: Vec<RfcLink>,
+}
+
+#[derive(Clone, Debug)]
+struct RfcLink {
+    path: String,
+    title: String,
+    completeness: String,
+}
+
 impl GitHandler {
     pub fn new(config: GitConfig) -> Self {
         Self { config }
@@ -116,6 +136,15 @@ impl GitHandler {
             return self.repo_response(&repo, &repo.default_ref, "");
         }
         match segments[1].as_str() {
+            "crates" => {
+                if segments.len() == 2 {
+                    self.crates_response(&repo)
+                } else if segments.len() == 3 {
+                    self.crate_response(&repo, &segments[2])
+                } else {
+                    Ok(not_found_response(&self.config.title))
+                }
+            }
             "src" | "tree" => {
                 let rev = segments
                     .get(2)
@@ -240,6 +269,31 @@ impl GitHandler {
             .with_header("Cache-Control", "public, max-age=300")
             .with_header("X-Content-Type-Options", "nosniff")
             .with_body(bytes))
+    }
+
+    fn crates_response(&self, repo: &Repo) -> io::Result<Response> {
+        let crates = visible_crates(repo)?;
+        Ok(html_response(render_crates_index(
+            &self.config,
+            repo,
+            &crates,
+        )))
+    }
+
+    fn crate_response(&self, repo: &Repo, crate_name: &str) -> io::Result<Response> {
+        if !safe_repo_name(crate_name) {
+            return Ok(not_found_response(&self.config.title));
+        }
+        let crates = visible_crates(repo)?;
+        let Some(info) = crates.iter().find(|info| info.name == crate_name) else {
+            return Ok(not_found_response(&self.config.title));
+        };
+        Ok(html_response(render_crate_page(
+            &self.config,
+            repo,
+            info,
+            &crates,
+        )))
     }
 
     fn robots_response(&self) -> Response {
@@ -422,6 +476,212 @@ fn git_tree(repo: &Path, rev: &str, rel_path: &str) -> io::Result<Vec<TreeEntry>
     Ok(entries)
 }
 
+fn visible_crates(repo: &Repo) -> io::Result<Vec<CrateInfo>> {
+    let mut crates = Vec::new();
+    for entry in git_tree(&repo.path, &repo.default_ref, "crates")? {
+        if entry.kind != "tree" || !safe_repo_name(&entry.name) {
+            continue;
+        }
+        let rel_path = format!("crates/{}", entry.name);
+        if !path_is_public(repo, &rel_path) {
+            continue;
+        }
+        let manifest_path = format!("{rel_path}/Cargo.toml");
+        let Ok(manifest) = git_output(
+            &repo.path,
+            &["show", &format!("{}:{manifest_path}", repo.default_ref)],
+        ) else {
+            continue;
+        };
+        crates.push(crate_info_from_manifest(repo, &rel_path, &manifest)?);
+    }
+
+    let names = crates
+        .iter()
+        .map(|info| info.name.clone())
+        .collect::<Vec<_>>();
+    for index in 0..crates.len() {
+        let name = crates[index].name.clone();
+        crates[index].dependents = crates
+            .iter()
+            .filter(|other| other.workspace_deps.iter().any(|dep| dep == &name))
+            .map(|other| other.name.clone())
+            .collect();
+        crates[index]
+            .workspace_deps
+            .retain(|dep| names.iter().any(|name| name == dep));
+    }
+
+    crates.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(crates)
+}
+
+fn crate_info_from_manifest(repo: &Repo, rel_path: &str, manifest: &str) -> io::Result<CrateInfo> {
+    let name = manifest_string_value(manifest, "name")
+        .unwrap_or_else(|| rel_path.rsplit('/').next().unwrap_or("unknown").to_string());
+    let description = manifest_string_value(manifest, "description").unwrap_or_default();
+    let features = manifest_table_keys(manifest, "features");
+    let workspace_deps = workspace_dependency_names(manifest);
+    let test_count = count_crate_tests(repo, rel_path)?;
+    let test_result = load_crate_test_result(repo, &name).ok();
+    let rfcs = related_rfcs(repo, &name, rel_path)?;
+    Ok(CrateInfo {
+        name,
+        rel_path: rel_path.to_string(),
+        description,
+        features,
+        workspace_deps,
+        dependents: Vec::new(),
+        test_count,
+        test_result,
+        rfcs,
+    })
+}
+
+fn manifest_string_value(manifest: &str, key: &str) -> Option<String> {
+    manifest.lines().find_map(|line| {
+        let line = line.split('#').next().unwrap_or("").trim();
+        let (left, right) = line.split_once('=')?;
+        if left.trim() == key {
+            Some(trim_quotes(right.trim()).to_string())
+        } else {
+            None
+        }
+    })
+}
+
+fn manifest_table_keys(manifest: &str, table: &str) -> Vec<String> {
+    let mut keys = Vec::new();
+    let mut in_table = false;
+    for line in manifest.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        if line.starts_with('[') && line.ends_with(']') {
+            in_table = line == format!("[{table}]");
+            continue;
+        }
+        if !in_table || line.is_empty() {
+            continue;
+        }
+        if let Some((key, _)) = line.split_once('=') {
+            keys.push(key.trim().to_string());
+        }
+    }
+    keys.sort();
+    keys
+}
+
+fn workspace_dependency_names(manifest: &str) -> Vec<String> {
+    let mut deps = Vec::new();
+    let mut in_deps = false;
+    for line in manifest.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        if line.starts_with('[') && line.ends_with(']') {
+            in_deps = matches!(
+                line,
+                "[dependencies]" | "[dev-dependencies]" | "[build-dependencies]"
+            );
+            continue;
+        }
+        if !in_deps || line.is_empty() {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim().starts_with("edgerun-") && value.contains("path") {
+            deps.push(key.trim().to_string());
+        }
+    }
+    deps.sort();
+    deps.dedup();
+    deps
+}
+
+fn count_crate_tests(repo: &Repo, rel_path: &str) -> io::Result<usize> {
+    let files = git_output(
+        &repo.path,
+        &["ls-tree", "-r", "--name-only", &repo.default_ref, rel_path],
+    )?;
+    let mut count = 0;
+    for file in files.lines().filter(|file| file.ends_with(".rs")) {
+        let Ok(source) = git_output(
+            &repo.path,
+            &["show", &format!("{}:{file}", repo.default_ref)],
+        ) else {
+            continue;
+        };
+        count += source.matches("#[test]").count();
+        count += source.matches("#[tokio::test]").count();
+    }
+    Ok(count)
+}
+
+fn load_crate_test_result(repo: &Repo, name: &str) -> io::Result<String> {
+    for path in [
+        format!(".edgerun/test-results/{name}.txt"),
+        format!("target/edgerun-test-results/{name}.txt"),
+    ] {
+        if let Ok(result) = git_output(
+            &repo.path,
+            &["show", &format!("{}:{path}", repo.default_ref)],
+        ) {
+            return Ok(result.trim().to_string());
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::NotFound, "no test result"))
+}
+
+fn related_rfcs(repo: &Repo, crate_name: &str, rel_path: &str) -> io::Result<Vec<RfcLink>> {
+    let files = match git_output(
+        &repo.path,
+        &[
+            "ls-tree",
+            "-r",
+            "--name-only",
+            &repo.default_ref,
+            "docs/rfc",
+        ],
+    ) {
+        Ok(files) => files,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let mut rfcs = Vec::new();
+    for file in files.lines().filter(|file| file.ends_with(".md")) {
+        let Ok(text) = git_output(
+            &repo.path,
+            &["show", &format!("{}:{file}", repo.default_ref)],
+        ) else {
+            continue;
+        };
+        if !text.contains(crate_name) && !text.contains(rel_path) {
+            continue;
+        }
+        rfcs.push(RfcLink {
+            path: file.to_string(),
+            title: first_markdown_heading(&text).unwrap_or_else(|| file.to_string()),
+            completeness: checklist_completeness(&text),
+        });
+    }
+    rfcs.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(rfcs)
+}
+
+fn first_markdown_heading(text: &str) -> Option<String> {
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix("# ").map(str::trim))
+        .map(ToString::to_string)
+}
+
+fn checklist_completeness(text: &str) -> String {
+    let done = text.matches("[x]").count() + text.matches("[X]").count();
+    let open = text.matches("[ ]").count();
+    if done + open == 0 {
+        "referenced".to_string()
+    } else {
+        format!("{done}/{} checklist items", done + open)
+    }
+}
+
 fn load_gitvisible_paths(repo: &Path, rev: &str) -> io::Result<Vec<String>> {
     let output = match git_output(repo, &["ls-tree", "-r", "--name-only", rev]) {
         Ok(output) => output,
@@ -536,6 +796,170 @@ fn render_index(config: &GitConfig, repos: &[Repo]) -> String {
             escape_html(&config.description),
             items
         ),
+    )
+}
+
+fn render_crates_index(config: &GitConfig, repo: &Repo, crates: &[CrateInfo]) -> String {
+    let items = if crates.is_empty() {
+        "<p class=\"empty\">No crates are public yet.</p>".to_string()
+    } else {
+        crates
+            .iter()
+            .map(|info| {
+                format!(
+                    "<article class=\"repo-card crate-card\"><a href=\"/{}/crates/{}\"><h2>{}</h2><p>{}</p><span>{} features · {} tests</span></a></article>",
+                    escape_attr(&repo.name),
+                    escape_attr(&info.name),
+                    escape_html(&info.name),
+                    escape_html(&info.description),
+                    info.features.len(),
+                    info.test_count
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    };
+    page_shell(
+        config,
+        &format!("{} crates | {}", repo.title, config.title),
+        &repo.description,
+        &format!(
+            "<main id=\"content\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a></nav><section class=\"hero\"><p class=\"eyebrow\">Crate explorer</p><h1>{} crates</h1><p>Workspace crates that have been released through this repository's visibility policy.</p></section><section class=\"repos\" aria-label=\"Crates\">{}</section></main>",
+            escape_attr(&repo.name),
+            escape_html(&repo.title),
+            escape_html(&repo.title),
+            items
+        ),
+    )
+}
+
+fn render_crate_page(
+    config: &GitConfig,
+    repo: &Repo,
+    info: &CrateInfo,
+    crates: &[CrateInfo],
+) -> String {
+    let features = render_pills(&info.features, "No declared features.");
+    let deps = render_crate_links(repo, &info.workspace_deps);
+    let dependents = render_crate_links(repo, &info.dependents);
+    let rfcs = render_rfc_links(repo, &repo.default_ref, &info.rfcs);
+    let tree = render_dependency_tree(repo, info, crates, 0, &mut Vec::new());
+    let result = info
+        .test_result
+        .as_deref()
+        .map(|value| escape_html(value))
+        .unwrap_or_else(|| "No recorded test run yet.".to_string());
+    page_shell(
+        config,
+        &format!("{} | {}", info.name, config.title),
+        &info.description,
+        &format!(
+            "<main id=\"content\" class=\"repo crate-page\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a><span>/</span><a href=\"/{}/crates\">crates</a></nav><header class=\"repo-head\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><a class=\"commit-link\" href=\"/{}/src/{}/{}\">Source</a></header><section class=\"crate-grid\"><article class=\"crate-panel\"><h2>Features</h2>{}</article><article class=\"crate-panel\"><h2>Related crates</h2><h3>Depends on</h3>{}<h3>Used by</h3>{}</article><article class=\"crate-panel\"><h2>Tests</h2><p><strong>{}</strong> test declarations found.</p><pre class=\"commit\"><code>{}</code></pre></article><article class=\"crate-panel\"><h2>Related RFCs</h2>{}</article><article class=\"crate-panel wide\"><h2>Dependency tree</h2>{}</article></section></main>",
+            escape_attr(&repo.name),
+            escape_html(&repo.title),
+            escape_attr(&repo.name),
+            escape_html(&info.name),
+            escape_html(&info.description),
+            escape_attr(&repo.name),
+            escape_attr(&repo.default_ref),
+            escape_attr(&info.rel_path),
+            features,
+            deps,
+            dependents,
+            info.test_count,
+            result,
+            rfcs,
+            tree
+        ),
+    )
+}
+
+fn render_pills(values: &[String], empty: &str) -> String {
+    if values.is_empty() {
+        return format!("<p class=\"empty\">{}</p>", escape_html(empty));
+    }
+    format!(
+        "<div class=\"pills\">{}</div>",
+        values
+            .iter()
+            .map(|value| format!("<span>{}</span>", escape_html(value)))
+            .collect::<Vec<_>>()
+            .join("")
+    )
+}
+
+fn render_crate_links(repo: &Repo, names: &[String]) -> String {
+    if names.is_empty() {
+        return "<p class=\"empty\">None yet.</p>".to_string();
+    }
+    format!(
+        "<ul class=\"link-list\">{}</ul>",
+        names
+            .iter()
+            .map(|name| format!(
+                "<li><a href=\"/{}/crates/{}\">{}</a></li>",
+                escape_attr(&repo.name),
+                escape_attr(name),
+                escape_html(name)
+            ))
+            .collect::<Vec<_>>()
+            .join("")
+    )
+}
+
+fn render_rfc_links(repo: &Repo, rev: &str, rfcs: &[RfcLink]) -> String {
+    if rfcs.is_empty() {
+        return "<p class=\"empty\">No RFC mentions found yet.</p>".to_string();
+    }
+    format!(
+        "<ul class=\"link-list\">{}</ul>",
+        rfcs.iter()
+            .map(|rfc| format!(
+                "<li><a href=\"/{}/src/{}/{}\">{}</a><span>{}</span></li>",
+                escape_attr(&repo.name),
+                escape_attr(rev),
+                escape_attr(&rfc.path),
+                escape_html(&rfc.title),
+                escape_html(&rfc.completeness)
+            ))
+            .collect::<Vec<_>>()
+            .join("")
+    )
+}
+
+fn render_dependency_tree(
+    repo: &Repo,
+    info: &CrateInfo,
+    crates: &[CrateInfo],
+    depth: usize,
+    seen: &mut Vec<String>,
+) -> String {
+    if depth > 5 || seen.iter().any(|name| name == &info.name) {
+        return format!(
+            "<li>{} <span>cycle or depth limit</span></li>",
+            escape_html(&info.name)
+        );
+    }
+    seen.push(info.name.clone());
+    let children = info
+        .workspace_deps
+        .iter()
+        .filter_map(|dep| crates.iter().find(|candidate| candidate.name == *dep))
+        .map(|dep| render_dependency_tree(repo, dep, crates, depth + 1, seen))
+        .collect::<Vec<_>>()
+        .join("");
+    let _ = seen.pop();
+    let child_html = if children.is_empty() {
+        String::new()
+    } else {
+        format!("<ol>{children}</ol>")
+    };
+    format!(
+        "<li><a href=\"/{}/crates/{}\">{}</a>{}</li>",
+        escape_attr(&repo.name),
+        escape_attr(&info.name),
+        escape_html(&info.name),
+        child_html
     )
 }
 
@@ -879,7 +1303,7 @@ fn to_io_error(error: edgerun_http::io::Error) -> io::Error {
 }
 
 const STYLE: &str = r#"
-:root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-2:#8b3f2f;--code:#eee6d8}:root[data-theme=dark]{--bg:#101418;--panel:#171d22;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-2:#dfa06b;--code:#232b31}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:12px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none}.topbar nav a{color:var(--muted);text-decoration:none}.hero{padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:760px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.repos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}.repo-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.repo-card a{display:block;min-height:180px;padding:22px;text-decoration:none}.repo-card h2{margin:0 0 10px;font-size:26px;line-height:1.15}.repo-card p{color:var(--muted)}.repo-card span,.commit-link{color:var(--accent);font-weight:800}.repo{max-width:1180px;margin:0 auto;padding:34px 18px 80px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);margin-bottom:18px}.crumbs a{color:var(--accent);text-decoration:none}.repo-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:22px}.repo-head h1{margin:0;font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:0}.repo-head p{color:var(--muted)}.commit-link{border:1px solid var(--line);border-radius:8px;padding:9px 12px;text-decoration:none;background:var(--panel);white-space:nowrap}.tree-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}.tree-list li{display:grid;grid-template-columns:1fr 90px;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}.tree-list li:first-child{border-top:0}.tree-list a{text-decoration:none;font-weight:700}.tree-list span{color:var(--muted)}.code{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:block}.code tbody{display:table;width:100%}.code tr:target{background:color-mix(in srgb,var(--accent) 14%,transparent)}.code th{width:1%;min-width:54px;padding:0 12px;text-align:right;color:var(--muted);border-right:1px solid var(--line);user-select:none}.code th a{text-decoration:none;color:inherit}.code td{padding:0 12px;white-space:pre;overflow:auto}.code code,.commit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}.commit{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}@media(max-width:760px){.repos{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}}
+:root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-2:#8b3f2f;--code:#eee6d8}:root[data-theme=dark]{--bg:#101418;--panel:#171d22;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-2:#dfa06b;--code:#232b31}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:12px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none}.topbar nav a{color:var(--muted);text-decoration:none}.hero{padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:760px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.repos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}.repo-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.repo-card a{display:block;min-height:180px;padding:22px;text-decoration:none}.repo-card h2{margin:0 0 10px;font-size:26px;line-height:1.15}.repo-card p{color:var(--muted)}.repo-card span,.commit-link{color:var(--accent);font-weight:800}.crate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.crate-panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.crate-panel h2{margin:0 0 12px;font-size:22px}.crate-panel h3{margin:16px 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.crate-panel.wide{grid-column:1/-1}.pills{display:flex;flex-wrap:wrap;gap:8px}.pills span{border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--muted)}.link-list{display:grid;gap:8px;margin:0;padding-left:18px}.link-list a{color:var(--accent);font-weight:750;text-decoration:none}.link-list span{display:block;color:var(--muted)}.crate-panel ol{margin:8px 0 0 22px}.crate-panel li{margin:5px 0}.crate-panel li a{color:var(--accent);font-weight:750;text-decoration:none}.repo{max-width:1180px;margin:0 auto;padding:34px 18px 80px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);margin-bottom:18px}.crumbs a{color:var(--accent);text-decoration:none}.repo-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:22px}.repo-head h1{margin:0;font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:0}.repo-head p{color:var(--muted)}.commit-link{border:1px solid var(--line);border-radius:8px;padding:9px 12px;text-decoration:none;background:var(--panel);white-space:nowrap}.tree-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}.tree-list li{display:grid;grid-template-columns:1fr 90px;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}.tree-list li:first-child{border-top:0}.tree-list a{text-decoration:none;font-weight:700}.tree-list span{color:var(--muted)}.code{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:block}.code tbody{display:table;width:100%}.code tr:target{background:color-mix(in srgb,var(--accent) 14%,transparent)}.code th{width:1%;min-width:54px;padding:0 12px;text-align:right;color:var(--muted);border-right:1px solid var(--line);user-select:none}.code th a{text-decoration:none;color:inherit}.code td{padding:0 12px;white-space:pre;overflow:auto}.code code,.commit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}.commit{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}@media(max-width:760px){.repos,.crate-grid{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}}
 "#;
 
 #[cfg(test)]
@@ -1041,6 +1465,58 @@ mod tests {
         let repo = load_repo("demo".to_string(), repo_path).unwrap().unwrap();
         assert_eq!(repo.public_paths, ["README.md", "src"]);
         assert!(path_is_public(&repo, "src/lib.rs"));
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn visible_crates_require_public_crate_directory() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("edgerun-git-crate-test-{stamp}"));
+        let repo_path = base.join("demo");
+        fs::create_dir_all(repo_path.join(".edgerun")).unwrap();
+        fs::create_dir_all(repo_path.join("crates/edgerun-demo/src")).unwrap();
+        fs::create_dir_all(repo_path.join("crates/edgerun-hidden/src")).unwrap();
+        fs::write(repo_path.join(".edgerun/git.yaml"), "visible: true\n").unwrap();
+        fs::write(
+            repo_path.join("crates/edgerun-demo/Cargo.toml"),
+            "[package]\nname = \"edgerun-demo\"\ndescription = \"Demo crate\"\n[features]\ndefault = []\nstd = []\n[dependencies]\nedgerun-http = { path = \"../edgerun-http\" }\n",
+        )
+        .unwrap();
+        fs::write(
+            repo_path.join("crates/edgerun-demo/src/lib.rs"),
+            "#[test]\nfn demo() {}\n",
+        )
+        .unwrap();
+        fs::write(repo_path.join("crates/edgerun-demo/.gitvisible"), "").unwrap();
+        fs::write(
+            repo_path.join("crates/edgerun-hidden/Cargo.toml"),
+            "[package]\nname = \"edgerun-hidden\"\n",
+        )
+        .unwrap();
+        git_ok(&repo_path, &["init"]);
+        git_ok(&repo_path, &["config", "user.email", "test@example.com"]);
+        git_ok(&repo_path, &["config", "user.name", "Test"]);
+        git_ok(&repo_path, &["add", "."]);
+        git_ok(&repo_path, &["commit", "-m", "init"]);
+
+        let repo = load_repo("demo".to_string(), repo_path).unwrap().unwrap();
+        let crates = visible_crates(&repo).unwrap();
+        assert_eq!(crates.len(), 1);
+        assert_eq!(crates[0].name, "edgerun-demo");
+        assert_eq!(crates[0].features, ["default", "std"]);
+        assert_eq!(crates[0].test_count, 1);
+        let html = render_crate_page(
+            &GitConfig::new(base.join("repos")),
+            &repo,
+            &crates[0],
+            &crates,
+        );
+        assert!(html.contains("Workspace crate"));
+        assert!(html.contains("edgerun-demo"));
+        assert!(!html.contains("edgerun-hidden"));
         let _ = fs::remove_dir_all(base);
     }
 
