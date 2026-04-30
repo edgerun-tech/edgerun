@@ -2291,43 +2291,75 @@ const DASH_BODY: &str = r##"
           <div id="dashChatLog" class="dash-chat-log"></div>
         </div>
       </section>
+      <section class="dash-panel dash-dock" id="dashDock" aria-label="Surface launcher dock">
+        <div class="dash-panel-head">
+          <h2>App dock</h2>
+          <span>Launch or restore</span>
+        </div>
+        <div class="dash-dock-grid">
+          <button class="dash-dock-button" type="button" data-dock-module="build-log" aria-label="Open Build Log">Build Log</button>
+          <button class="dash-dock-button" type="button" data-dock-module="code" aria-label="Open Code">Code</button>
+          <button class="dash-dock-button" type="button" data-dock-module="mail" aria-label="Open Mail">Mail</button>
+          <button class="dash-dock-button" type="button" data-dock-module="apps" aria-label="Open Apps">Apps</button>
+        </div>
+      </section>
     </section>
-    <section class="dash-workspace" aria-label="Core services workspace">
-      <article class="dash-panel dash-module" data-surface-module="build-log">
+    <section class="dash-workspace" id="dashWorkspace" aria-label="Core services workspace">
+      <article class="dash-panel dash-module" data-surface-module="build-log" data-module-key="build-log" draggable="true">
         <div class="dash-module-head">
           <div>
             <p class="dash-module-kicker">Build Log</p>
             <h2>Build Log</h2>
           </div>
+          <div class="dash-module-controls">
+            <span class="dash-module-drag-handle" title="Drag to rearrange" aria-hidden="true">⋮⋮</span>
+            <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="build-log" aria-label="Minimize Build Log">▁</button>
+            <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="build-log" aria-label="Maximize Build Log">▢</button>
+          </div>
           <span id="dashSurfacePathBuildLog" class="dash-surface-path">backend: /surface/blog</span>
         </div>
         <div id="dashSurfaceBuildLog" class="dash-surface" data-active-surface="build-log">Loading build log…</div>
       </article>
-      <article class="dash-panel dash-module" data-surface-module="code">
+      <article class="dash-panel dash-module" data-surface-module="code" data-module-key="code" draggable="true">
         <div class="dash-module-head">
           <div>
             <p class="dash-module-kicker">Code</p>
             <h2>Code</h2>
           </div>
+          <div class="dash-module-controls">
+            <span class="dash-module-drag-handle" title="Drag to rearrange" aria-hidden="true">⋮⋮</span>
+            <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="code" aria-label="Minimize Code">▁</button>
+            <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="code" aria-label="Maximize Code">▢</button>
+          </div>
           <span id="dashSurfacePathCode" class="dash-surface-path">backend: /surface/git</span>
         </div>
         <div id="dashSurfaceCode" class="dash-surface" data-active-surface="code">Loading code…</div>
       </article>
-      <article class="dash-panel dash-module" data-surface-module="mail">
+      <article class="dash-panel dash-module" data-surface-module="mail" data-module-key="mail" draggable="true">
         <div class="dash-module-head">
           <div>
             <p class="dash-module-kicker">Mail</p>
             <h2>Mail</h2>
           </div>
+          <div class="dash-module-controls">
+            <span class="dash-module-drag-handle" title="Drag to rearrange" aria-hidden="true">⋮⋮</span>
+            <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="mail" aria-label="Minimize Mail">▁</button>
+            <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="mail" aria-label="Maximize Mail">▢</button>
+          </div>
           <span id="dashSurfacePathMail" class="dash-surface-path">backend: /surface/mail</span>
         </div>
         <div id="dashSurfaceMail" class="dash-surface" data-active-surface="mail">Loading mail…</div>
       </article>
-      <article class="dash-panel dash-module" data-surface-module="apps">
+      <article class="dash-panel dash-module" data-surface-module="apps" data-module-key="apps" draggable="true">
         <div class="dash-module-head">
           <div>
             <p class="dash-module-kicker">Apps</p>
             <h2>Apps</h2>
+          </div>
+          <div class="dash-module-controls">
+            <span class="dash-module-drag-handle" title="Drag to rearrange" aria-hidden="true">⋮⋮</span>
+            <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="apps" aria-label="Minimize Apps">▁</button>
+            <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="apps" aria-label="Maximize Apps">▢</button>
           </div>
           <span id="dashSurfacePathApps" class="dash-surface-path">backend: /surface/apps</span>
         </div>
@@ -2346,14 +2378,28 @@ const DASH_STYLE: &str = r#"
 .dash-panels-header h1{margin:8px 0 0}
 .dash-panels-header .dash-eyebrow{font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:var(--accent)}
 .dash-tools-grid{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:14px}
-.dash-workspace{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));align-items:start}
+.dash-workspace{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));align-items:start;transition:gap .2s ease}
+.dash-workspace[data-maximized-module]{grid-template-columns:1fr}
+.dash-workspace.dash-maximized .dash-module{display:none}
+.dash-workspace.dash-maximized .dash-module.dash-module-maximized{display:grid;grid-column:1/-1;min-height:72vh}
 .dash-panel{display:grid;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 13px 34px color-mix(in srgb,var(--text) 6%,transparent)}
 .dash-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .dash-panel-head h2{margin:0;font-size:21px}
 .dash-panel-head span{color:var(--muted);font-size:13px}
+.dash-module{position:relative;min-height:220px;user-select:none}
+.dash-module.dash-module-dragging{opacity:.65;box-shadow:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent),0 12px 24px color-mix(in srgb,var(--text) 18%,transparent)}
 .dash-module-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .dash-module-head h2{margin:0}
 .dash-module-kicker{margin:0;font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:12px;color:var(--muted)}
+.dash-module-controls{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.dash-module-button{height:28px;min-width:28px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--muted);font:inherit;font-size:14px;line-height:1;padding:0 7px;cursor:pointer}
+.dash-module-button:hover{color:var(--text);border-color:var(--accent)}
+.dash-module-drag-handle{display:inline-flex;height:28px;min-width:28px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:13px;cursor:grab;justify-content:center;align-items:center;user-select:none}
+.dash-module-drag-handle:active{cursor:grabbing}
+.dash-module-minimized{background:color-mix(in srgb,var(--panel) 80%,transparent)}
+.dash-module-minimized .dash-surface{display:none}
+.dash-module-minimized .dash-surface-path{display:none}
+.dash-module-minimized .dash-module-head{margin-bottom:0}
 .dash-surface-path{font-size:12px;color:var(--muted);background:color-mix(in srgb,var(--panel) 84%,transparent);padding:4px 10px;border-radius:999px;border:1px solid var(--line);display:inline-flex}
 .dash-surface{min-height:340px;max-height:560px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
 .dash-surface:focus-within{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:-2px}
@@ -2401,6 +2447,13 @@ const DASH_STYLE: &str = r#"
 .dash-chat-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--muted);font-size:12px}
 .dash-chat-name{font-weight:800;color:var(--text)}
 .dash-chat-text{line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.dash-chat-log .dash-chat-entry + .dash-chat-entry{margin-top:10px}
+.dash-chat-log .dash-chat-entry{line-height:1.4}
+.dash-dock .dash-panel-head{margin-bottom:8px}
+.dash-dock-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.dash-dock-button{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:10px;height:40px;font:inherit;cursor:pointer}
+.dash-dock-button:hover{border-color:var(--accent);color:var(--accent)}
+.dash-dock-button.is-restored{background:color-mix(in srgb,var(--accent) 12%,var(--bg))}
 .dash-status-footer{min-height:30px;height:30px;display:flex;align-items:center;justify-content:center;padding:0 14px;overflow:hidden}
 .dash-status{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;white-space:nowrap;font-size:12px;line-height:1}
 .dash-status span{display:inline-flex;align-items:baseline;gap:5px;color:var(--muted)}
@@ -2411,7 +2464,7 @@ const DASH_STYLE: &str = r#"
 .dash-status-inline span{display:inline-flex;align-items:baseline;gap:4px}
 .dash-status-inline strong{color:var(--text);font-weight:800}
 body{--footer-h:30px}
-@media(max-width:1200px){.dash-tools-grid{grid-template-columns:1fr}}
+@media(max-width:1200px){.dash-tools-grid{grid-template-columns:1fr}.dash-dock-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1000px){.dash-workspace{grid-template-columns:1fr}}
 @media(max-width:760px){.dash-shell{padding:10px}.dash-shell-inner{gap:12px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
 "#;
@@ -2794,48 +2847,107 @@ async function refreshChatLog() {
   }
 }
 
-function wireGlobalChat() {
-  const form = document.getElementById('dashChatForm');
-  const status = document.getElementById('dashChatStatus');
-  const nameInput = document.getElementById('dashChatName');
-  const messageInput = document.getElementById('dashChatMessage');
-  const submit = document.getElementById('dashChatSend');
-  if (!form || !status || !nameInput || !messageInput || !submit) return;
-  form.addEventListener('submit', async (event) => {
+function wireModuleControls() {
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-module-action]');
+    if (!button) return;
     event.preventDefault();
-    submit.disabled = true;
-    submit.textContent = 'Sending…';
-    status.textContent = '';
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          name: nameInput.value,
-          message: messageInput.value,
-        }),
-      });
-      const result = await response.json();
-      if (!response.ok || !result || result.ok !== true) {
-        status.textContent = result?.error || 'Post failed';
-        return;
+    const key = button.getAttribute('data-module-key');
+    const module = getModuleByKey(key);
+    if (!module) return;
+    const action = button.getAttribute('data-module-action');
+    if (action === 'minimize') {
+      const wasMinimized = module.classList.contains('dash-module-minimized');
+      setModuleMinimized(module, !wasMinimized);
+      if (!wasMinimized && currentMaximizedModule() === key) {
+        setMaximizedModule('');
       }
-      nameInput.value = nameInput.value.trim();
-      messageInput.value = '';
-      await refreshChatLog();
-      status.textContent = 'Posted.';
-      setTimeout(() => {
-        status.textContent = '';
-      }, 1500);
-    } catch (_error) {
-      status.textContent = 'Could not send chat message.';
-    } finally {
-      submit.disabled = false;
-      submit.textContent = 'Post';
+      persistWorkspaceState();
+      return;
     }
+    if (action === 'maximize') {
+      const maximized = currentMaximizedModule();
+      setMaximizedModule(maximized === key ? '' : key);
+    }
+  });
+}
+
+function wireWorkspaceDock() {
+  const dock = document.getElementById('dashDock');
+  if (!dock) return;
+  dock.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-dock-module]');
+    if (!button) return;
+    event.preventDefault();
+    const key = button.getAttribute('data-dock-module');
+    const surface = getSurfaceForKey(key);
+    const module = getModuleByKey(key);
+    if (!surface || !module) {
+      return;
+    }
+    if (module.classList.contains('dash-module-minimized')) {
+      setModuleMinimized(module, false);
+      persistWorkspaceState();
+    }
+    setMaximizedModule('');
+    module.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    await hydrateSurface(surface, surface.pathPrefix);
+  });
+}
+
+function wireModuleDragReorder() {
+  const workspace = getWorkspaceRoot();
+  if (!workspace) return;
+  let dragging = null;
+
+  const canDrag = (event) => event.target.closest('.dash-module-drag-handle') !== null;
+
+  const onDragStart = (event) => {
+    const module = event.currentTarget;
+    if (!module || currentMaximizedModule() || !canDrag(event)) {
+      if (module) {
+        event.preventDefault();
+      }
+      return;
+    }
+    dragging = module;
+    module.classList.add('dash-module-dragging');
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', module.dataset.moduleKey || '');
+    }
+  };
+
+  const onDragEnd = () => {
+    if (!dragging) return;
+    dragging.classList.remove('dash-module-dragging');
+    dragging = null;
+    persistWorkspaceState();
+    refreshDockButtonState();
+  };
+
+  const onDragOver = (event) => {
+    event.preventDefault();
+    if (!dragging || !workspace.contains(dragging)) {
+      return;
+    }
+    const module = event.target.closest('.dash-module');
+    if (!module || module === dragging || !workspace.contains(module)) {
+      return;
+    }
+    const rect = module.getBoundingClientRect();
+    const next = event.clientY > rect.top + rect.height / 2;
+    workspace.insertBefore(dragging, next ? module.nextSibling : module);
+  };
+
+  for (const module of getWorkspaceModules()) {
+    module.addEventListener('dragstart', onDragStart);
+    module.addEventListener('dragend', onDragEnd);
+  }
+  workspace.addEventListener('dragover', onDragOver);
+  workspace.addEventListener('drop', (event) => {
+    event.preventDefault();
+    onDragEnd();
   });
 }
 
@@ -2899,12 +3011,192 @@ const DASH_SURFACES = [
   },
 ];
 
-function normalizeSurfacePath(path) {
-  return path.startsWith('/') ? path : `/${path}`;
+const DASH_WORKSPACE_STATE_KEY = 'edgerun-dashboard-workspace-v1';
+const DASH_CHAT_MIN_DELAY_MS = 2400;
+const DASH_CHAT_DUP_WINDOW_MS = 12000;
+const DASH_CHAT_REPEAT_WINDOW_LIMIT = 4;
+const DASH_CHAT_MESSAGE_MAX = 800;
+
+function getWorkspaceRoot() {
+  return document.getElementById('dashWorkspace');
 }
 
 function getSurfaceForKey(key) {
   return DASH_SURFACES.find((surface) => surface.key === key);
+}
+
+function getModuleByKey(key) {
+  const workspace = getWorkspaceRoot();
+  if (!workspace || !key) {
+    return null;
+  }
+  return workspace.querySelector(`[data-surface-module="${key}"]`);
+}
+
+function getWorkspaceModules() {
+  const workspace = getWorkspaceRoot();
+  if (!workspace) {
+    return [];
+  }
+  return [...workspace.querySelectorAll('[data-surface-module]')];
+}
+
+function getModuleKeyFromElement(element) {
+  return element ? element.getAttribute('data-surface-module') : null;
+}
+
+function currentMaximizedModule() {
+  const workspace = getWorkspaceRoot();
+  return workspace?.getAttribute('data-maximized-module') || '';
+}
+
+function loadWorkspaceState() {
+  try {
+    const raw = localStorage.getItem(DASH_WORKSPACE_STATE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const state = JSON.parse(raw);
+    return state && typeof state === 'object' ? state : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function persistWorkspaceState() {
+  const workspace = getWorkspaceRoot();
+  if (!workspace) return;
+  const modules = getWorkspaceModules();
+  const state = {
+    order: modules.map((module) => module.dataset.moduleKey).filter(Boolean),
+    minimized: modules
+      .filter((module) => module.classList.contains('dash-module-minimized'))
+      .map((module) => module.dataset.moduleKey)
+      .filter(Boolean),
+    maximized: workspace.getAttribute('data-maximized-module') || '',
+  };
+  try {
+    localStorage.setItem(DASH_WORKSPACE_STATE_KEY, JSON.stringify(state));
+  } catch (_error) {
+    // ignore persistence failures
+  }
+}
+
+function applyModuleOrder(order) {
+  const workspace = getWorkspaceRoot();
+  if (!workspace || !Array.isArray(order)) {
+    return;
+  }
+  const modules = getWorkspaceModules();
+  const byKey = new Map(modules.map((module) => [module.dataset.moduleKey, module]));
+  const seen = new Set();
+  for (const key of order) {
+    const module = byKey.get(key);
+    if (!module || seen.has(key)) {
+      continue;
+    }
+    workspace.appendChild(module);
+    seen.add(key);
+  }
+  for (const module of modules) {
+    if (!seen.has(module.dataset.moduleKey)) {
+      workspace.appendChild(module);
+    }
+  }
+}
+
+function refreshDockButtonState() {
+  const buttons = document.querySelectorAll('.dash-dock-button[data-dock-module]');
+  for (const button of buttons) {
+    const key = button.getAttribute('data-dock-module');
+    const module = getModuleByKey(key);
+    if (!module) {
+      continue;
+    }
+    button.classList.toggle('is-restored', !module.classList.contains('dash-module-minimized'));
+  }
+}
+
+function setModuleMinimized(module, minimized) {
+  if (!module) return;
+  const key = module.dataset.moduleKey || 'module';
+  const button = module.querySelector('[data-module-action="minimize"]');
+  if (minimized) {
+    module.classList.add('dash-module-minimized');
+    if (button) {
+      button.textContent = '▢';
+      button.setAttribute('aria-label', `Restore ${key}`);
+    }
+  } else {
+    module.classList.remove('dash-module-minimized');
+    if (button) {
+      button.textContent = '▁';
+      button.setAttribute('aria-label', `Minimize ${key}`);
+    }
+  }
+  refreshDockButtonState();
+}
+
+function setMaximizedModule(key) {
+  const workspace = getWorkspaceRoot();
+  if (!workspace) return;
+  const modules = getWorkspaceModules();
+  workspace.classList.remove('dash-maximized');
+  workspace.removeAttribute('data-maximized-module');
+  for (const module of modules) {
+    module.classList.remove('dash-module-maximized');
+  }
+  if (!key) {
+    refreshDockButtonState();
+    persistWorkspaceState();
+    return;
+  }
+  const module = getModuleByKey(key);
+  if (!module) return;
+  setModuleMinimized(module, false);
+  module.classList.add('dash-module-maximized');
+  workspace.classList.add('dash-maximized');
+  workspace.setAttribute('data-maximized-module', key);
+  refreshDockButtonState();
+  persistWorkspaceState();
+}
+
+function hydrateAll() {
+  return Promise.all(
+    DASH_SURFACES.map((surface) => hydrateSurface(surface, surface.pathPrefix)),
+  );
+}
+
+function applyWorkspaceState(rawState) {
+  const workspace = getWorkspaceRoot();
+  if (!workspace) return;
+  const state = rawState || {};
+  const available = DASH_SURFACES.map((surface) => surface.key);
+  const order = Array.isArray(state.order) ? state.order.filter((key) => available.includes(key)) : [];
+  if (order.length === available.length) {
+    applyModuleOrder(order);
+  }
+  const minimized = new Set(
+    Array.isArray(state.minimized) ? state.minimized.filter((key) => available.includes(key)) : [],
+  );
+  for (const module of getWorkspaceModules()) {
+    setModuleMinimized(module, minimized.has(module.dataset.moduleKey));
+  }
+  const maximized = typeof state.maximized === 'string' ? state.maximized : '';
+  if (maximized && available.includes(maximized)) {
+    setMaximizedModule(maximized);
+  } else {
+    setMaximizedModule('');
+  }
+  refreshDockButtonState();
+}
+
+function initWorkspaceState() {
+  applyWorkspaceState(loadWorkspaceState());
+}
+
+function normalizeSurfacePath(path) {
+  return path.startsWith('/') ? path : `/${path}`;
 }
 
 function pathToSurfaceKey(path) {
@@ -3043,19 +3335,19 @@ function resolveSurfaceFromClickTarget(target) {
 
 function bindSurfaceLinks() {
   document.addEventListener('click', (event) => {
-  const button = event.target.closest('[hx-get], [href], [data-surface], [data-surface-module]');
+    const button = event.target.closest('[hx-get], [href], [data-surface]');
     if (!button) {
       return;
     }
-    const explicit = button.getAttribute('data-surface');
-    const container = button.closest('[data-surface-module]');
     const resolved = resolveSurfaceFromClickTarget(button);
     if (!resolved || !resolved.path || !resolved.key) {
       return;
     }
+    const container = button.closest('[data-surface-module]');
+    const explicit = button.getAttribute('data-surface');
+    const moduleKey = explicit || getModuleKeyFromElement(container);
     const surface =
-      getSurfaceForKey(explicit) ||
-      (container ? getSurfaceForKey(container.getAttribute('data-surface-module')) : null) ||
+      getSurfaceForKey(moduleKey) ||
       getSurfaceForKey(resolved.key);
     if (!surface) {
       return;
@@ -3150,9 +3442,63 @@ function wireGlobalChat() {
   const nameInput = document.getElementById('dashChatName');
   const messageInput = document.getElementById('dashChatMessage');
   const submit = document.getElementById('dashChatSend');
+  const chatState = {
+    lastPostTs: 0,
+    messageHistory: new Map(),
+  };
+
+  function isLikelySpam(name, message) {
+    const normalizedName = String(name || '').trim().toLowerCase();
+    const normalizedMessage = String(message || '').trim();
+    if (!normalizedName || !normalizedMessage) {
+      return 'Name and message are required.';
+    }
+    if (normalizedName.length > 24) {
+      return 'Name is too long.';
+    }
+    if (normalizedMessage.length > DASH_CHAT_MESSAGE_MAX) {
+      return `Message must be under ${DASH_CHAT_MESSAGE_MAX} characters.`;
+    }
+    if (/(.)\1{12,}/.test(normalizedMessage)) {
+      return 'Please avoid repetitive characters.';
+    }
+    const now = Date.now();
+    if (now - chatState.lastPostTs < DASH_CHAT_MIN_DELAY_MS) {
+      return 'Please wait before posting again.';
+    }
+    const history = (chatState.messageHistory.get(normalizedName) || []).filter(
+      (entry) => now - entry.time < DASH_CHAT_DUP_WINDOW_MS,
+    );
+    if (history.length >= DASH_CHAT_REPEAT_WINDOW_LIMIT) {
+      if (history.some((entry) => entry.message === normalizedMessage)) {
+        return 'This looks spammy. Please adjust message.';
+      }
+      if (history.length > DASH_CHAT_REPEAT_WINDOW_LIMIT) {
+        return 'Posting too frequently from this name.';
+      }
+    }
+    if (history.some((entry) => entry.message === normalizedMessage)) {
+      return 'You already posted this message just now.';
+    }
+    history.push({
+      message: normalizedMessage,
+      time: now,
+    });
+    chatState.messageHistory.set(normalizedName, history);
+    chatState.lastPostTs = now;
+    return '';
+  }
+
   if (!form || !status || !nameInput || !messageInput || !submit) return;
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    const name = nameInput.value.trim();
+    const message = messageInput.value.trim();
+    const reason = isLikelySpam(name, message);
+    if (reason) {
+      status.textContent = reason;
+      return;
+    }
     submit.disabled = true;
     submit.textContent = 'Sending…';
     status.textContent = '';
@@ -3164,8 +3510,8 @@ function wireGlobalChat() {
           Accept: 'application/json',
         },
         body: JSON.stringify({
-          name: nameInput.value,
-          message: messageInput.value,
+          name,
+          message,
         }),
       });
       const result = await response.json();
@@ -3173,7 +3519,7 @@ function wireGlobalChat() {
         status.textContent = result?.error || 'Post failed';
         return;
       }
-      nameInput.value = nameInput.value.trim();
+      nameInput.value = name;
       messageInput.value = '';
       await refreshChatLog();
       status.textContent = 'Posted.';
@@ -3205,11 +3551,13 @@ function initSurfaceDefaults() {
 }
 
 async function initDashboard() {
+  initWorkspaceState();
   initSurfaceDefaults();
   bindSurfaceLinks();
-  await Promise.all(
-    DASH_SURFACES.map((surface) => hydrateSurface(surface, surface.pathPrefix)),
-  );
+  wireModuleControls();
+  wireWorkspaceDock();
+  wireModuleDragReorder();
+  await hydrateAll();
   await refreshChatLog();
   wireGlobalChat();
   refreshDashStatus();
