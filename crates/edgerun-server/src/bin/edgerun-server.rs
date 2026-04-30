@@ -1442,7 +1442,7 @@ fn redirect_to_dash_surface(_surface: &str) -> Response {
 
 fn render_dash_surface(label: &str, subtitle: &str, content: &str) -> String {
     format!(
-        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Workspace surface\"><header><div><strong id=\"surfaceTitle\">{}</strong><span id=\"surfaceUrl\">backend: {}</span></div></header><div class=\"dash-surface\">{}</div></section>",
+        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Workspace surface\"><header><div><strong id=\"surfaceTitle\">{}</strong><span id=\"surfaceUrl\">{}</span></div></header><div class=\"dash-surface\">{}</div></section>",
         edgerun_web_ui::escape_html(label),
         edgerun_web_ui::escape_html(subtitle),
         content
@@ -1467,7 +1467,7 @@ fn render_dash_code_surface() -> String {
 
 fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
     let header_center = "";
-    let header_actions = "<nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav>";
+    let header_actions = "";
     let footer = render_dash_status_footer();
     let style = format!("{}{}", edgerun_web_ui::BASE_STYLE, DASH_STYLE);
     let body = format!(
@@ -1528,7 +1528,7 @@ fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
 
 fn render_dash_status_footer() -> String {
     String::from(
-        "<footer class=\"site-footer dash-status-footer\" aria-label=\"Server status\"><div class=\"dash-status\" data-dash-status><span>sessions <strong data-status-sessions>--</strong></span><span>req/s <strong data-status-rps>--</strong></span><span>mem <strong data-status-memory>--</strong></span><span>cpu <strong data-status-cpu>--</strong></span><span>bin <strong data-status-binary>--</strong></span><button type=\"button\" data-status-refresh title=\"Refresh status\">Refresh</button></div></footer>",
+        "<footer class=\"site-footer dash-status-footer\" aria-label=\"Server status\"><div class=\"dash-status\" data-dash-status><span>sessions <strong data-status-sessions>--</strong></span><span>req/s <strong data-status-rps>--</strong></span><span>mem <strong data-status-memory>--</strong></span><span>cpu <strong data-status-cpu>--</strong></span><span>bin <strong data-status-binary>--</strong></span><div class=\"dash-status-actions\"><button type=\"button\" class=\"dash-status-refresh\" data-status-refresh title=\"Refresh status\" aria-label=\"Refresh status\"><span aria-hidden=\"true\">⟳</span></button><span class=\"dash-status-theme\"><er-theme-toggle></er-theme-toggle></span></div></div></footer>",
     )
 }
 
@@ -2254,47 +2254,10 @@ fn normalize_host(host: &str) -> String {
 const DASH_BODY: &str = r##"
 <main id="content" class="dash-shell">
   <section class="dash-shell-inner">
-    <header class="dash-panels-header">
-      <div>
-        <p class="dash-eyebrow">Edgerun Workspace</p>
-        <h1>One screen. All systems.</h1>
-      </div>
-      <p>Build log, code, mail, apps, status, and chat in one continuous dashboard.</p>
-    </header>
-    <section class="dash-tools-grid">
-      <section class="dash-panel">
-        <div class="dash-panel-head">
-          <h2>Global chat</h2>
-          <span>Demo room</span>
-        </div>
-        <div class="dash-chat-shell">
-          <form id="dashChatForm" class="dash-chat-form" autocomplete="off">
-            <label for="dashChatName"><span>Name</span><input id="dashChatName" required maxlength="24" placeholder="your name"></label>
-            <label for="dashChatMessage"><span>Message</span><textarea id="dashChatMessage" required maxlength="800" placeholder="Say something to everyone"></textarea></label>
-            <button id="dashChatSend" type="submit">Post</button>
-          </form>
-          <p class="dash-chat-status" id="dashChatStatus" role="status"></p>
-          <div id="dashChatLog" class="dash-chat-log"></div>
-        </div>
-      </section>
-      <section class="dash-panel dash-dock" id="dashDock" aria-label="Surface launcher dock">
-        <div class="dash-panel-head">
-          <h2>App dock</h2>
-          <span>Launch or restore</span>
-        </div>
-        <div class="dash-dock-grid">
-          <button class="dash-dock-button" type="button" data-dock-module="build-log" aria-label="Open Build Log">Build Log</button>
-          <button class="dash-dock-button" type="button" data-dock-module="code" aria-label="Open Code">Code</button>
-          <button class="dash-dock-button" type="button" data-dock-module="mail" aria-label="Open Mail">Mail</button>
-          <button class="dash-dock-button" type="button" data-dock-module="apps" aria-label="Open Apps">Apps</button>
-        </div>
-      </section>
-    </section>
     <section class="dash-workspace" id="dashWorkspace" aria-label="Core services workspace">
       <article class="dash-panel dash-module" data-surface-module="build-log" data-module-key="build-log" draggable="true">
         <div class="dash-module-head">
           <div>
-            <p class="dash-module-kicker">Build Log</p>
             <h2>Build Log</h2>
           </div>
           <div class="dash-module-controls">
@@ -2302,14 +2265,12 @@ const DASH_BODY: &str = r##"
             <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="build-log" aria-label="Minimize Build Log">▁</button>
             <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="build-log" aria-label="Maximize Build Log">▢</button>
           </div>
-          <span id="dashSurfacePathBuildLog" class="dash-surface-path">backend: /surface/blog</span>
         </div>
         <div id="dashSurfaceBuildLog" class="dash-surface" data-active-surface="build-log">Loading build log…</div>
       </article>
       <article class="dash-panel dash-module" data-surface-module="code" data-module-key="code" draggable="true">
         <div class="dash-module-head">
           <div>
-            <p class="dash-module-kicker">Code</p>
             <h2>Code</h2>
           </div>
           <div class="dash-module-controls">
@@ -2317,14 +2278,12 @@ const DASH_BODY: &str = r##"
             <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="code" aria-label="Minimize Code">▁</button>
             <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="code" aria-label="Maximize Code">▢</button>
           </div>
-          <span id="dashSurfacePathCode" class="dash-surface-path">backend: /surface/git</span>
         </div>
         <div id="dashSurfaceCode" class="dash-surface" data-active-surface="code">Loading code…</div>
       </article>
       <article class="dash-panel dash-module" data-surface-module="mail" data-module-key="mail" draggable="true">
         <div class="dash-module-head">
           <div>
-            <p class="dash-module-kicker">Mail</p>
             <h2>Mail</h2>
           </div>
           <div class="dash-module-controls">
@@ -2332,14 +2291,12 @@ const DASH_BODY: &str = r##"
             <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="mail" aria-label="Minimize Mail">▁</button>
             <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="mail" aria-label="Maximize Mail">▢</button>
           </div>
-          <span id="dashSurfacePathMail" class="dash-surface-path">backend: /surface/mail</span>
         </div>
         <div id="dashSurfaceMail" class="dash-surface" data-active-surface="mail">Loading mail…</div>
       </article>
       <article class="dash-panel dash-module" data-surface-module="apps" data-module-key="apps" draggable="true">
         <div class="dash-module-head">
           <div>
-            <p class="dash-module-kicker">Apps</p>
             <h2>Apps</h2>
           </div>
           <div class="dash-module-controls">
@@ -2347,10 +2304,38 @@ const DASH_BODY: &str = r##"
             <button class="dash-module-button" type="button" data-module-action="minimize" data-module-key="apps" aria-label="Minimize Apps">▁</button>
             <button class="dash-module-button" type="button" data-module-action="maximize" data-module-key="apps" aria-label="Maximize Apps">▢</button>
           </div>
-          <span id="dashSurfacePathApps" class="dash-surface-path">backend: /surface/apps</span>
         </div>
         <div id="dashSurfaceApps" class="dash-surface" data-active-surface="apps">Loading apps…</div>
       </article>
+    </section>
+    <section id="dashDock" class="dash-dock" aria-label="Surface launcher dock">
+      <button class="dash-dock-button" type="button" data-dock-module="build-log" title="Build Log" aria-label="Open Build Log">🛠</button>
+      <button class="dash-dock-button" type="button" data-dock-module="code" title="Code" aria-label="Open Code">💻</button>
+      <button class="dash-dock-button" type="button" data-dock-module="mail" title="Mail" aria-label="Open Mail">✉</button>
+      <button class="dash-dock-button" type="button" data-dock-module="apps" title="Apps" aria-label="Open Apps">◎</button>
+    </section>
+    <section id="dashChatDock" class="dash-chat-dock is-open" aria-label="Global chat dock">
+      <button id="dashChatBubble" class="dash-chat-bubble" type="button" data-chat-action="open" title="Open chat" aria-label="Open global chat">
+        <span aria-hidden="true">💬</span>
+      </button>
+      <section id="dashChatPanel" class="dash-chat-panel">
+        <header class="dash-chat-panel-head">
+          <h2>Global chat</h2>
+          <div class="dash-chat-panel-controls">
+            <button id="dashChatMinimize" class="dash-chat-panel-button" type="button" data-chat-action="minimize" aria-label="Minimize chat">▁</button>
+            <button id="dashChatClose" class="dash-chat-panel-button" type="button" data-chat-action="close" aria-label="Close chat">×</button>
+          </div>
+        </header>
+        <div class="dash-chat-shell">
+          <form id="dashChatForm" class="dash-chat-form" autocomplete="off">
+            <label for="dashChatName"><span>Name</span><input id="dashChatName" required maxlength="24" placeholder="your name"></label>
+            <label for="dashChatMessage"><span>Message</span><textarea id="dashChatMessage" required maxlength="800" placeholder="Say something to everyone"></textarea></label>
+            <button id="dashChatSend" type="submit" aria-label="Post message">Post</button>
+          </form>
+          <p class="dash-chat-status" id="dashChatStatus" role="status"></p>
+          <div id="dashChatLog" class="dash-chat-log"></div>
+        </div>
+      </section>
     </section>
   </section>
 </main>
@@ -2446,7 +2431,185 @@ const DASH_STYLE: &str = r#"
 .dash-status strong{color:var(--text);font-weight:800}
 .dash-status button{height:22px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:0 8px;font:inherit;cursor:pointer}
 .dash-status button:hover,.dash-status button:focus-visible{border-color:var(--accent);color:var(--accent)}
-body{--footer-h:30px}
+body{--footer-h:42px;--topbar-h:0px}
+.topbar{display:none!important}
+.dash-panels-header,
+.dash-tools-grid,
+.dash-module-kicker,
+.dash-module-minimized .dash-surface-path{display:none!important}
+.dash-shell{
+  min-height:calc(100vh - var(--footer-h));
+  background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 92%,var(--panel)) 0,var(--bg) 220px);
+  padding:12px;
+}
+.dash-shell-inner{
+  margin:0;
+  display:block;
+  gap:0;
+}
+.dash-workspace{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  gap:12px;
+  align-items:start;
+  min-height:calc(100vh - 188px);
+}
+.dash-workspace[data-maximized-module]{grid-template-columns:1fr}
+.dash-workspace.dash-maximized .dash-module{display:none}
+.dash-workspace.dash-maximized .dash-module.dash-module-maximized{display:grid;grid-column:1/-1;min-height:72vh}
+.dash-module{user-select:none;transition:transform .18s ease, box-shadow .18s ease}
+.dash-module .dash-surface{max-height:min(520px, calc(100vh - 320px));}
+.dash-module.dash-module-minimized{height:54px;overflow:hidden}
+.dash-module.dash-module-minimized .dash-module-controls .dash-module-button[data-module-action='minimize']{transform:scale(0.94)}
+.dash-dock{
+  position:fixed;
+  left:50%;
+  bottom:calc(var(--footer-h) + 14px);
+  transform:translateX(-50%);
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding:10px;
+  border:1px solid color-mix(in srgb,var(--line) 80%,transparent);
+  border-radius:999px;
+  background:color-mix(in srgb,var(--panel) 82%,transparent);
+  backdrop-filter:blur(6px);
+  z-index:20;
+}
+.dash-dock-button{
+  width:46px;
+  height:46px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:var(--panel);
+  color:var(--text);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.dash-dock-button:hover,
+.dash-dock-button:focus-visible{
+  border-color:var(--accent);
+  transform:translateY(-1px) scale(1.03);
+}
+.dash-dock-button.is-restored{
+  border-color:color-mix(in srgb,var(--accent) 45%,var(--line));
+  box-shadow:0 8px 18px color-mix(in srgb,var(--accent) 24%,transparent);
+}
+.dash-chat-dock{
+  position:fixed;
+  right:16px;
+  bottom:calc(var(--footer-h) + 12px);
+  z-index:24;
+  display:flex;
+  align-items:flex-end;
+}
+.dash-chat-bubble{
+  width:48px;
+  height:48px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:var(--panel);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 14px 26px color-mix(in srgb,var(--text) 12%,transparent);
+  cursor:pointer;
+}
+.dash-chat-bubble:hover,
+.dash-chat-bubble:focus-visible{
+  border-color:var(--accent);
+  transform:scale(1.03);
+}
+.dash-chat-bubble span{line-height:1;font-size:21px}
+.dash-chat-panel{
+  width:min(390px, calc(100vw - 24px));
+  margin-right:10px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:var(--panel);
+  padding:12px;
+  display:grid;
+  gap:10px;
+  max-height:calc(100vh - 200px);
+  box-shadow:0 13px 28px color-mix(in srgb,var(--text) 18%,transparent);
+  transition:max-height .25s ease, opacity .2s ease, transform .25s ease;
+}
+.dash-chat-panel.dash-chat-closed{
+  display:none;
+}
+.dash-chat-panel.dash-chat-minimized{
+  max-height:56px;
+  overflow:hidden;
+}
+.dash-chat-panel.dash-chat-minimized .dash-chat-shell,
+.dash-chat-panel.dash-chat-minimized .dash-chat-status{
+  display:none;
+}
+.dash-chat-panel-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.dash-chat-panel-head h2{
+  margin:0;
+  font-size:16px;
+}
+.dash-chat-panel-controls{
+  display:flex;
+  gap:8px;
+}
+.dash-chat-panel-button{
+  width:24px;
+  height:24px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:var(--bg);
+  color:var(--muted);
+  cursor:pointer;
+  padding:0;
+}
+.dash-status-footer{
+  min-height:42px;
+  height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 12px;
+  overflow:hidden;
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:0;
+  z-index:30;
+}
+.dash-status{width:100%;display:flex;align-items:center;gap:14px;white-space:nowrap;font-size:12px;line-height:1;min-width:0}
+.dash-status span{display:inline-flex;align-items:baseline;gap:5px;color:var(--muted)}
+.dash-status strong{color:var(--text);font-weight:800}
+.dash-status-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+.dash-status-refresh{
+  width:30px;
+  height:30px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--panel);
+  color:var(--muted);
+  cursor:pointer;
+}
+.dash-status-refresh span{line-height:1;font-size:16px}
+.dash-status-refresh.is-loading span{animation:dash-spin 1s linear infinite}
+.dash-status-theme er-theme-toggle{
+  display:block;
+  transform:scale(0.95);
+}
+@keyframes dash-spin{
+  to{transform:rotate(360deg)}
+}
 @media(max-width:1200px){.dash-tools-grid{grid-template-columns:1fr}.dash-dock-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1000px){.dash-workspace{grid-template-columns:1fr}}
 @media(max-width:760px){.dash-shell{padding:10px}.dash-shell-inner{gap:12px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
@@ -2459,7 +2622,6 @@ const DASH_SURFACES = [
     label: 'Build Log',
     pathPrefix: '/surface/blog',
     slotId: 'dashSurfaceBuildLog',
-    pathId: 'dashSurfacePathBuildLog',
     fallback: 'Build log is unavailable right now.',
   },
   {
@@ -2467,7 +2629,6 @@ const DASH_SURFACES = [
     label: 'Code',
     pathPrefix: '/surface/git',
     slotId: 'dashSurfaceCode',
-    pathId: 'dashSurfacePathCode',
     fallback: 'Code surface is unavailable right now.',
   },
   {
@@ -2475,7 +2636,6 @@ const DASH_SURFACES = [
     label: 'Mail',
     pathPrefix: '/surface/mail',
     slotId: 'dashSurfaceMail',
-    pathId: 'dashSurfacePathMail',
     fallback: 'Mail surface is unavailable right now.',
   },
   {
@@ -2483,12 +2643,12 @@ const DASH_SURFACES = [
     label: 'Apps',
     pathPrefix: '/surface/apps',
     slotId: 'dashSurfaceApps',
-    pathId: 'dashSurfacePathApps',
     fallback: 'Apps surface is unavailable right now.',
   },
 ];
 
 const DASH_WORKSPACE_STATE_KEY = 'edgerun-dashboard-workspace-v1';
+const DASH_CHAT_STATE_KEY = 'edgerun-dashboard-chat-state-v1';
 const DASH_CHAT_MIN_DELAY_MS = 2400;
 const DASH_CHAT_DUP_WINDOW_MS = 12000;
 const DASH_CHAT_REPEAT_WINDOW_LIMIT = 4;
@@ -2718,13 +2878,6 @@ function extractSurfaceContent(html) {
   return doc.querySelector('.dash-surface')?.innerHTML || html;
 }
 
-function updateSurfacePath(surface, path) {
-  const pathNode = document.getElementById(surface.pathId);
-  if (pathNode) {
-    pathNode.textContent = `backend: ${path}`;
-  }
-}
-
 async function hydrateSurface(surface, path) {
   if (!surface) {
     return;
@@ -2743,11 +2896,9 @@ async function hydrateSurface(surface, path) {
     }
     const html = await response.text();
     slot.innerHTML = `<div class="dash-surface-content">${extractSurfaceContent(html)}</div>`;
-    updateSurfacePath(surface, resolvedPath);
   } catch (_error) {
     slot.textContent = fallback;
     slot.classList.add('dash-surface-empty');
-    updateSurfacePath(surface, resolvedPath);
   }
   bindSurfaceSearch(slot);
 }
@@ -2841,15 +2992,15 @@ async function refreshDashStatus(options = {}) {
       node.textContent = text;
     }
   };
-  const setRefreshState = (disabled, text) => {
+  const setRefreshState = (disabled) => {
     for (const node of document.querySelectorAll('[data-status-refresh]')) {
       node.disabled = disabled;
-      node.textContent = text;
+      node.classList.toggle('is-loading', disabled);
     }
   };
   try {
     if (options.manual) {
-      setRefreshState(true, '...');
+      setRefreshState(true);
     }
     const response = await fetch('/status.json', { cache: 'no-store' });
     if (!response.ok) return;
@@ -2863,7 +3014,7 @@ async function refreshDashStatus(options = {}) {
   } catch (_error) {
     // no-op on status refresh failure
   } finally {
-    setRefreshState(false, 'Refresh');
+    setRefreshState(false);
   }
 }
 
@@ -3012,6 +3163,70 @@ function wireGlobalChat() {
   });
 }
 
+function getChatDockState() {
+  try {
+    const raw = localStorage.getItem(DASH_CHAT_STATE_KEY);
+    if (raw === 'open' || raw === 'minimized' || raw === 'closed') {
+      return raw;
+    }
+  } catch (_error) {
+    // ignore
+  }
+  return 'open';
+}
+
+function setChatDockState(state) {
+  const dock = document.getElementById('dashChatDock');
+  const panel = document.getElementById('dashChatPanel');
+  if (!dock || !panel) return;
+  const normalized = state === 'minimized' || state === 'closed' ? state : 'open';
+  dock.classList.remove('is-open', 'is-minimized', 'is-closed');
+  panel.classList.remove('dash-chat-minimized', 'dash-chat-closed');
+  if (normalized === 'open') {
+    dock.classList.add('is-open');
+  }
+  if (normalized === 'minimized') {
+    dock.classList.add('is-minimized');
+    panel.classList.add('dash-chat-minimized');
+  }
+  if (normalized === 'closed') {
+    dock.classList.add('is-closed');
+    panel.classList.add('dash-chat-closed');
+  }
+  try {
+    localStorage.setItem(DASH_CHAT_STATE_KEY, normalized);
+  } catch (_error) {
+    // ignore
+  }
+}
+
+function wireChatDock() {
+  const dock = document.getElementById('dashChatDock');
+  if (!dock) return;
+  dock.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-chat-action]');
+    if (!button) return;
+    event.preventDefault();
+    const action = button.getAttribute('data-chat-action');
+    if (action === 'open') {
+      setChatDockState('open');
+      return;
+    }
+    if (action === 'minimize') {
+      setChatDockState('minimized');
+      return;
+    }
+    if (action === 'close') {
+      setChatDockState('closed');
+      return;
+    }
+  });
+  if (!document.getElementById('dashChatPanel')) {
+    return;
+  }
+  setChatDockState(getChatDockState());
+}
+
 function wireModuleControls() {
   document.addEventListener('click', (event) => {
     const button = event.target.closest('[data-module-action]');
@@ -3123,17 +3338,8 @@ addEventListener('click', (event) => {
   refreshDashStatus({ manual: true });
 });
 
-function initSurfaceDefaults() {
-  for (const surface of DASH_SURFACES) {
-    const slot = document.getElementById(surface.slotId);
-    if (!slot) continue;
-    updateSurfacePath(surface, surface.pathPrefix);
-  }
-}
-
 async function initDashboard() {
   initWorkspaceState();
-  initSurfaceDefaults();
   bindSurfaceLinks();
   if (typeof wireModuleControls === 'function') {
     wireModuleControls();
@@ -3143,6 +3349,9 @@ async function initDashboard() {
   }
   if (typeof wireModuleDragReorder === 'function') {
     wireModuleDragReorder();
+  }
+  if (typeof wireChatDock === 'function') {
+    wireChatDock();
   }
   await hydrateAll();
   await refreshChatLog();
