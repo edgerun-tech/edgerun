@@ -105,11 +105,13 @@ implemented configuration material that describe browser-loadable Wasm agents
 and the capability selectors they request. Dash serves same-origin modules from
 `/modules/*.wasm`; the first app module emits canonical Edgerun v0
 `CapabilityDescriptor` and `QueryRequest` records through the browser-node host
-imports. Current surface rendering is still server-rendered HTML fragments, but
-the browser app boundary now carries protocol records instead of an ad hoc app
-format. When no `BrowserApp` resources are configured, the server exposes
-default Build Log, Code, and Mail app catalog entries so the workspace remains
-navigable.
+imports. Browser-local app state is exposed as a capability-scoped
+`vfs://browser/<app-id>/...` path backed by the browser node, so Wasm apps can
+use a filesystem-shaped interface without bypassing grants. Current surface
+rendering is still server-rendered HTML fragments, but the browser app boundary
+now carries protocol records instead of an ad hoc app format. When no
+`BrowserApp` resources are configured, the server exposes default Build Log,
+Code, and Mail app catalog entries so the workspace remains navigable.
 
 ## systemd
 

@@ -18,10 +18,15 @@ extern "C" {
     fn log(ptr: *const u8, len: usize);
     fn capability_request(ptr: *const u8, len: usize) -> i32;
     fn query(ptr: *const u8, len: usize) -> i32;
+    fn storage_get(ptr: *const u8, len: usize) -> i32;
+    fn storage_put(ptr: *const u8, len: usize) -> i32;
 }
 
 const ABI_VERSION: u32 = 1;
 const APP_IDENTITY: &[u8] = b"browser-node:dash:edgerun-dash-apps";
+const BOOTSTRAP_VFS_WRITE: &str =
+    r#"{"path":"/state/bootstrap.json","text":"{\"node\":\"browser\",\"status\":\"started\"}"}"#;
+const BOOTSTRAP_VFS_READ: &str = r#"{"path":"/state/bootstrap.json"}"#;
 
 #[no_mangle]
 pub extern "C" fn edgerun_app_start() {
@@ -52,6 +57,9 @@ pub extern "C" fn edgerun_app_start() {
         bytes_to_hex(&query_bytes)
     );
     emit_query(&query_message);
+
+    emit_storage_put(BOOTSTRAP_VFS_WRITE);
+    emit_storage_get(BOOTSTRAP_VFS_READ);
 }
 
 #[no_mangle]
@@ -82,6 +90,7 @@ fn app_capability() -> CapabilityDescriptor {
             target_domains: vec![
                 "blog://edgerun.tech/*".into(),
                 "git://edgerun_core/*".into(),
+                "vfs://browser/*".into(),
             ],
             time_bounds: None,
             scope_metadata: None,
@@ -137,5 +146,17 @@ fn emit_capability_request(message: &str) {
 fn emit_query(message: &str) {
     unsafe {
         let _ = query(message.as_ptr(), message.len());
+    }
+}
+
+fn emit_storage_put(message: &str) {
+    unsafe {
+        let _ = storage_put(message.as_ptr(), message.len());
+    }
+}
+
+fn emit_storage_get(message: &str) {
+    unsafe {
+        let _ = storage_get(message.as_ptr(), message.len());
     }
 }
