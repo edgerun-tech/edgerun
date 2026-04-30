@@ -13,15 +13,12 @@ See benchmark mõõdab kitsast asja: 10 000 kohalikku SMTP sõnumit, 32 samaaegs
 
 ## Tulemused
 
-<table>
-<thead><tr><th>Stack</th><th>OK/Fail</th><th>Läbilase</th><th>p95 latency</th><th>Tippmälu koormuse ajal</th></tr></thead>
-<tbody>
-<tr><td>Edgerun</td><td>10000/0</td><td>342.71 ops/s</td><td>140.577 ms</td><td>3.58 MB RSS</td></tr>
-<tr><td>Postfix</td><td>10000/0</td><td>351.69 ops/s</td><td>141.674 ms</td><td>94.02 MB container memory</td></tr>
-<tr><td>OpenSMTPD</td><td>9976/24</td><td>176.01 ops/s</td><td>227.632 ms</td><td>17.91 MB container memory</td></tr>
-<tr><td>Exim</td><td>2146/7854</td><td>27.41 ops/s</td><td>1663.886 ms</td><td>219.9 MB container memory</td></tr>
-</tbody>
-</table>
+| Stack | OK/Fail | Läbilase | p95 latency | Tippmälu koormuse ajal |
+| --- | ---: | ---: | ---: | ---: |
+| Edgerun | 10000/0 | 342.71 ops/s | 140.577 ms | 3.58 MB RSS |
+| Postfix | 10000/0 | 351.69 ops/s | 141.674 ms | 94.02 MB container memory |
+| OpenSMTPD | 9976/24 | 176.01 ops/s | 227.632 ms | 17.91 MB container memory |
+| Exim | 2146/7854 | 27.41 ops/s | 1663.886 ms | 219.9 MB container memory |
 
 Postfix on selles testis kõige lähem võrdlus. Edgerun on kohalikul SMTP accept workload'il sisuliselt samas klassis, kuid kasutab palju vähem mälu. OpenSMTPD on väiksem ja meeldivalt seadistatav, aga selles jooksus oli 24 ebaõnnestunud operatsiooni ja kehvem tail latency.
 

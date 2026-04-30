@@ -21,15 +21,12 @@ Out of scope for this pass: spam/content filtering, antivirus, outbound internet
 
 ## Results
 
-<table>
-<thead><tr><th>Stack</th><th>OK/Fail</th><th>Throughput</th><th>p95 latency</th><th>Peak memory during load</th></tr></thead>
-<tbody>
-<tr><td>Edgerun</td><td>10000/0</td><td>342.71 ops/s</td><td>140.577 ms</td><td>3.58 MB RSS</td></tr>
-<tr><td>Postfix</td><td>10000/0</td><td>351.69 ops/s</td><td>141.674 ms</td><td>94.02 MB container memory</td></tr>
-<tr><td>OpenSMTPD</td><td>9976/24</td><td>176.01 ops/s</td><td>227.632 ms</td><td>17.91 MB container memory</td></tr>
-<tr><td>Exim</td><td>2146/7854</td><td>27.41 ops/s</td><td>1663.886 ms</td><td>219.9 MB container memory</td></tr>
-</tbody>
-</table>
+| Stack | OK/Fail | Throughput | p95 latency | Peak memory during load |
+| --- | ---: | ---: | ---: | ---: |
+| Edgerun | 10000/0 | 342.71 ops/s | 140.577 ms | 3.58 MB RSS |
+| Postfix | 10000/0 | 351.69 ops/s | 141.674 ms | 94.02 MB container memory |
+| OpenSMTPD | 9976/24 | 176.01 ops/s | 227.632 ms | 17.91 MB container memory |
+| Exim | 2146/7854 | 27.41 ops/s | 1663.886 ms | 219.9 MB container memory |
 
 The Postfix result is the closest throughput comparison. On this local-only SMTP accept workload, Edgerun is effectively tied with Postfix while using a much smaller memory footprint. Postfix is mature and fast, but it reaches that result with a larger multi-process service model. Edgerun stays in one process and peaks around 3.6 MB RSS in the isolated run.
 

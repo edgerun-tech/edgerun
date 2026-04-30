@@ -13,15 +13,12 @@ Benchmark นี้ตั้งใจวัดเรื่องแคบ ๆ �
 
 ## ผลลัพธ์
 
-<table>
-<thead><tr><th>Stack</th><th>OK/Fail</th><th>Throughput</th><th>p95 latency</th><th>Memory สูงสุดตอน load</th></tr></thead>
-<tbody>
-<tr><td>Edgerun</td><td>10000/0</td><td>342.71 ops/s</td><td>140.577 ms</td><td>3.58 MB RSS</td></tr>
-<tr><td>Postfix</td><td>10000/0</td><td>351.69 ops/s</td><td>141.674 ms</td><td>94.02 MB container memory</td></tr>
-<tr><td>OpenSMTPD</td><td>9976/24</td><td>176.01 ops/s</td><td>227.632 ms</td><td>17.91 MB container memory</td></tr>
-<tr><td>Exim</td><td>2146/7854</td><td>27.41 ops/s</td><td>1663.886 ms</td><td>219.9 MB container memory</td></tr>
-</tbody>
-</table>
+| Stack | OK/Fail | Throughput | p95 latency | Memory สูงสุดตอน load |
+| --- | ---: | ---: | ---: | ---: |
+| Edgerun | 10000/0 | 342.71 ops/s | 140.577 ms | 3.58 MB RSS |
+| Postfix | 10000/0 | 351.69 ops/s | 141.674 ms | 94.02 MB container memory |
+| OpenSMTPD | 9976/24 | 176.01 ops/s | 227.632 ms | 17.91 MB container memory |
+| Exim | 2146/7854 | 27.41 ops/s | 1663.886 ms | 219.9 MB container memory |
 
 Postfix คือ comparison ที่ใกล้ที่สุดในรอบนี้. สำหรับ workload แบบ local SMTP accept, Edgerun อยู่ใกล้ Postfix มาก แต่ใช้ memory น้อยกว่ามาก. OpenSMTPD เป็น MTA ที่เล็กและ config อ่านง่าย แต่รอบนี้มี operation fail 24 ครั้ง และ tail latency สูงกว่า.
 

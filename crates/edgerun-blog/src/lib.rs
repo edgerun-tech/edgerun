@@ -1484,8 +1484,10 @@ fn markdown_to_html(input: &str) -> String {
     let mut code_has_figure = false;
     let mut in_ul = false;
     let mut in_ol = false;
-    for line in input.lines() {
-        let trimmed = line.trim_end();
+    let lines = input.lines().collect::<Vec<_>>();
+    let mut index = 0;
+    while index < lines.len() {
+        let trimmed = lines[index].trim_end();
         if trimmed.starts_with("```") {
             flush_blocks(&mut html, &mut paragraph, &mut in_ul, &mut in_ol);
             if in_code {
@@ -1501,18 +1503,34 @@ fn markdown_to_html(input: &str) -> String {
                 html.push_str(&code_block_open(info));
                 in_code = true;
             }
+            index += 1;
             continue;
         }
         if in_code {
             html.push_str(&escape_html(trimmed));
             html.push('\n');
+            index += 1;
             continue;
         }
         if trimmed.is_empty() {
             flush_blocks(&mut html, &mut paragraph, &mut in_ul, &mut in_ol);
+            index += 1;
             continue;
         }
-        if let Some((level, text)) = heading(trimmed) {
+        if is_table_row(trimmed)
+            && lines
+                .get(index + 1)
+                .is_some_and(|line| is_table_separator(line.trim()))
+        {
+            flush_blocks(&mut html, &mut paragraph, &mut in_ul, &mut in_ol);
+            let (table, next_index) = render_markdown_table(&lines, index);
+            html.push_str(&table);
+            index = next_index;
+            continue;
+        } else if is_trusted_html_block_line(trimmed) {
+            flush_blocks(&mut html, &mut paragraph, &mut in_ul, &mut in_ol);
+            html.push_str(trimmed);
+        } else if let Some((level, text)) = heading(trimmed) {
             flush_blocks(&mut html, &mut paragraph, &mut in_ul, &mut in_ol);
             html.push_str(&format!("<h{level}>{}</h{level}>", inline_markdown(text)));
         } else if let Some(item) = trimmed
@@ -1548,6 +1566,7 @@ fn markdown_to_html(input: &str) -> String {
             }
             paragraph.push_str(trimmed);
         }
+        index += 1;
     }
     flush_blocks(&mut html, &mut paragraph, &mut in_ul, &mut in_ol);
     if in_code {
@@ -1557,6 +1576,160 @@ fn markdown_to_html(input: &str) -> String {
         }
     }
     html
+}
+
+fn render_markdown_table(lines: &[&str], start: usize) -> (String, usize) {
+    let headers = parse_table_cells(lines[start].trim());
+    let alignments = parse_table_alignments(lines[start + 1].trim(), headers.len());
+    let mut html = String::from("<table><thead><tr>");
+    for (index, header) in headers.iter().enumerate() {
+        html.push_str(&table_cell(
+            "th",
+            header,
+            alignments.get(index).copied().flatten(),
+        ));
+    }
+    html.push_str("</tr></thead><tbody>");
+
+    let mut index = start + 2;
+    while let Some(line) = lines.get(index) {
+        let trimmed = line.trim();
+        if !is_table_row(trimmed) || is_table_separator(trimmed) {
+            break;
+        }
+        let cells = parse_table_cells(trimmed);
+        html.push_str("<tr>");
+        for cell_index in 0..headers.len() {
+            let cell = cells.get(cell_index).map(String::as_str).unwrap_or("");
+            html.push_str(&table_cell(
+                "td",
+                cell,
+                alignments.get(cell_index).copied().flatten(),
+            ));
+        }
+        html.push_str("</tr>");
+        index += 1;
+    }
+    html.push_str("</tbody></table>");
+    (html, index)
+}
+
+fn table_cell(tag: &str, value: &str, alignment: Option<TableAlignment>) -> String {
+    let align_attr = alignment
+        .map(|alignment| format!(" style=\"text-align:{}\"", alignment.as_css()))
+        .unwrap_or_default();
+    format!(
+        "<{tag}{align_attr}>{}</{tag}>",
+        inline_markdown(value.trim())
+    )
+}
+
+#[derive(Clone, Copy)]
+enum TableAlignment {
+    Left,
+    Center,
+    Right,
+}
+
+impl TableAlignment {
+    fn as_css(self) -> &'static str {
+        match self {
+            TableAlignment::Left => "left",
+            TableAlignment::Center => "center",
+            TableAlignment::Right => "right",
+        }
+    }
+}
+
+fn parse_table_alignments(line: &str, len: usize) -> Vec<Option<TableAlignment>> {
+    let mut alignments = parse_table_cells(line)
+        .into_iter()
+        .map(|cell| {
+            let cell = cell.trim();
+            let left = cell.starts_with(':');
+            let right = cell.ends_with(':');
+            match (left, right) {
+                (true, true) => Some(TableAlignment::Center),
+                (true, false) => Some(TableAlignment::Left),
+                (false, true) => Some(TableAlignment::Right),
+                (false, false) => None,
+            }
+        })
+        .collect::<Vec<_>>();
+    alignments.resize(len, None);
+    alignments
+}
+
+fn parse_table_cells(line: &str) -> Vec<String> {
+    let trimmed = line.trim().trim_matches('|');
+    let mut cells = Vec::new();
+    let mut cell = String::new();
+    let mut escaped = false;
+    for ch in trimmed.chars() {
+        if escaped {
+            cell.push(ch);
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else if ch == '|' {
+            cells.push(cell.trim().to_string());
+            cell.clear();
+        } else {
+            cell.push(ch);
+        }
+    }
+    cells.push(cell.trim().to_string());
+    cells
+}
+
+fn is_table_row(line: &str) -> bool {
+    line.contains('|') && parse_table_cells(line).len() >= 2
+}
+
+fn is_table_separator(line: &str) -> bool {
+    let cells = parse_table_cells(line);
+    cells.len() >= 2
+        && cells.iter().all(|cell| {
+            let stripped = cell.trim().trim_matches(':').trim();
+            stripped.len() >= 3 && stripped.chars().all(|ch| ch == '-')
+        })
+}
+
+fn is_trusted_html_block_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    if !trimmed.starts_with('<') {
+        return false;
+    }
+    let tag_source = trimmed.trim_start_matches('<').trim_start_matches('/');
+    let tag = trimmed
+        .trim_start_matches('<')
+        .trim_start_matches('/')
+        .split(|ch: char| ch == '>' || ch == '/' || ch.is_ascii_whitespace())
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if tag_source.starts_with('!') || tag_source.starts_with('?') || tag.is_empty() {
+        return false;
+    }
+    matches!(
+        tag.as_str(),
+        "aside"
+            | "blockquote"
+            | "caption"
+            | "details"
+            | "div"
+            | "figcaption"
+            | "figure"
+            | "section"
+            | "summary"
+            | "table"
+            | "tbody"
+            | "td"
+            | "tfoot"
+            | "th"
+            | "thead"
+            | "tr"
+    )
 }
 
 fn code_block_open(info: &str) -> String {
@@ -1960,7 +2133,7 @@ fn search_blob(post: &Post) -> String {
 fn is_content_file(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|ext| ext.to_str()),
-        Some("md") | Some("markdown") | Some("html")
+        Some("md") | Some("markdown") | Some("mdx") | Some("html")
     )
 }
 
@@ -2160,7 +2333,7 @@ for(const btn of topicButtons){btn.addEventListener('click',()=>{if(search){sear
 const STYLE: &str = r#"
 :root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent-2:#8b3f2f;--code:#eee6d8}
 :root[data-theme=dark]{--bg:#101418;--panel:#171d22;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent-2:#dfa06b;--code:#232b31}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:max-content minmax(220px,560px) 1fr max-content;gap:14px;align-items:center;padding:12px clamp(14px,3vw,44px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none;white-space:nowrap}.topbar nav{grid-column:4;display:flex;align-items:center;justify-content:end}.header-search{position:relative;min-width:0}.header-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.header-search input{width:100%;min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 44px 10px 13px}.header-search input:focus{border-color:var(--accent)}.header-search button{position:absolute;right:4px;top:4px;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}.header-search button:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}.header-search svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}button,input{font:inherit}.hero{padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:720px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.repo-stats{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr);gap:12px;max-width:760px;margin:28px 0 0}.repo-stats div{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}.repo-stats dt{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.repo-stats dd{margin:4px 0 0;font-weight:800;overflow-wrap:anywhere}.repo-stats .message{font-weight:650;color:var(--text)}.repo-stats .message span{color:var(--muted);font-weight:750;white-space:nowrap}.layout{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,720px);gap:40px;align-items:start;margin:0;padding:34px clamp(18px,4vw,56px) 80px}.article-layout{display:grid;grid-template-columns:minmax(0,780px) 220px;gap:42px;align-items:start;max-width:1060px;margin:0 auto;padding:44px 18px 90px}.article-layout-single{display:block;max-width:820px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.topic-list button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}.topic-list span{color:var(--muted);font-size:13px;font-weight:750}.posts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;max-width:720px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article-stack{display:grid;gap:14px}.article{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(28px,5vw,52px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{justify-self:start;color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.video-embed{margin:28px 0}.video-embed iframe{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:8px;background:var(--code)}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.empty{max-width:720px;margin:80px auto;padding:0 18px}.muted{color:var(--muted)}.site-footer{display:flex;gap:18px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding:22px clamp(18px,4vw,56px);color:var(--muted)}.site-footer a{text-decoration:none}.language-links{display:flex;gap:10px;margin-left:auto}.language-links a{font-weight:750;text-transform:uppercase}.language-links a[aria-current=true]{color:var(--accent)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:max-content minmax(220px,560px) 1fr max-content;gap:14px;align-items:center;padding:12px clamp(14px,3vw,44px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none;white-space:nowrap}.topbar nav{grid-column:4;display:flex;align-items:center;justify-content:end}.header-search{position:relative;min-width:0}.header-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.header-search input{width:100%;min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 44px 10px 13px}.header-search input:focus{border-color:var(--accent)}.header-search button{position:absolute;right:4px;top:4px;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}.header-search button:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}.header-search svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}button,input{font:inherit}.hero{padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:720px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.repo-stats{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr);gap:12px;max-width:760px;margin:28px 0 0}.repo-stats div{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}.repo-stats dt{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.repo-stats dd{margin:4px 0 0;font-weight:800;overflow-wrap:anywhere}.repo-stats .message{font-weight:650;color:var(--text)}.repo-stats .message span{color:var(--muted);font-weight:750;white-space:nowrap}.layout{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,720px);gap:40px;align-items:start;margin:0;padding:34px clamp(18px,4vw,56px) 80px}.article-layout{display:grid;grid-template-columns:minmax(0,780px) 220px;gap:42px;align-items:start;max-width:1060px;margin:0 auto;padding:44px 18px 90px}.article-layout-single{display:block;max-width:820px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.topic-list button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}.topic-list span{color:var(--muted);font-size:13px;font-weight:750}.posts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;max-width:720px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article-stack{display:grid;gap:14px}.article{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(28px,5vw,52px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{justify-self:start;color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.video-embed{margin:28px 0}.video-embed iframe{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:8px;background:var(--code)}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.content table{width:100%;border-collapse:collapse;margin:24px 0;display:block;overflow-x:auto}.content th,.content td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}.content th{background:color-mix(in srgb,var(--accent) 10%,var(--panel));font-weight:800}.content tr:nth-child(even) td{background:color-mix(in srgb,var(--panel) 78%,var(--code))}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.empty{max-width:720px;margin:80px auto;padding:0 18px}.muted{color:var(--muted)}.site-footer{display:flex;gap:18px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding:22px clamp(18px,4vw,56px);color:var(--muted)}.site-footer a{text-decoration:none}.language-links{display:flex;gap:10px;margin-left:auto}.language-links a{font-weight:750;text-transform:uppercase}.language-links a[aria-current=true]{color:var(--accent)}
 @media(max-width:900px){.article-layout{grid-template-columns:1fr;max-width:820px}.article-layout aside{order:-1}.recent{display:flex;flex-wrap:wrap;gap:14px}}@media(max-width:760px){.hero,.layout{grid-template-columns:1fr}.hero{padding-top:42px}.repo-stats{grid-template-columns:1fr}.posts{grid-template-columns:1fr}.article{padding:24px}}
 @media(max-width:600px){body{overflow-x:hidden}.topbar{position:static;display:flex;flex-wrap:wrap;gap:12px;padding:12px 14px}.brand{flex:1 1 auto}.topbar nav{flex:0 0 auto;margin-left:auto}.header-search{order:2;flex:1 0 100%;width:100%}.layout,.article-layout{padding-left:18px;padding-right:18px}.posts,.post-card{min-width:0}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
@@ -2177,6 +2350,29 @@ mod tests {
         assert!(html.contains("<h1>Title</h1>"));
         assert!(html.contains("<a href=\"https://example.com\">site</a>"));
         assert!(html.contains("<ul><li>one</li><li>two</li></ul>"));
+    }
+
+    #[test]
+    fn renders_markdown_tables() {
+        let html = markdown_to_html(
+            "| Stack | Ops |\n| --- | ---: |\n| Edgerun | 342.71 |\n| Postfix | 351.69 |",
+        );
+        assert!(html.contains("<table><thead><tr>"));
+        assert!(html.contains("<th>Stack</th>"));
+        assert!(html.contains("<th style=\"text-align:right\">Ops</th>"));
+        assert!(html.contains("<td style=\"text-align:right\">342.71</td>"));
+    }
+
+    #[test]
+    fn passes_trusted_html_blocks() {
+        let html = markdown_to_html("<table>\n<tr><td>OK</td></tr>\n</table>");
+        assert!(html.contains("<table><tr><td>OK</td></tr></table>"));
+        assert!(!html.contains("&lt;/table&gt;"));
+    }
+
+    #[test]
+    fn treats_mdx_as_content() {
+        assert!(is_content_file(Path::new("post.mdx")));
     }
 
     #[test]
