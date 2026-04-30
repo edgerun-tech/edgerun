@@ -383,6 +383,7 @@ dependencies = [
  "edgerun-http",
  "edgerun-log",
  "edgerun-rt",
+ "edgerun-web-ui",
 ]
 
 [[package]]
@@ -679,6 +680,7 @@ dependencies = [
  "edgerun-http",
  "edgerun-log",
  "edgerun-rt",
+ "edgerun-web-ui",
 ]
 
 [[package]]
@@ -1445,6 +1447,10 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-rt",
 ]
+
+[[package]]
+name = "edgerun-web-ui"
+version = "0.1.1"
 
 [[package]]
 name = "edgerun-wifi"

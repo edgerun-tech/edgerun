@@ -4,6 +4,7 @@ resolver = "2"
 members = [
   "crates/edgerun-glob",
   "crates/edgerun-git",
+  "crates/edgerun-web-ui",
   "crates/edgerun-regex",
   "crates/edgerun-rt",
   "crates/edgerun-ipxe",

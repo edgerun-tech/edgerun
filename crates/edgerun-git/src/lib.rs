@@ -19,6 +19,7 @@ use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
 use edgerun_http::{Handler, Request, Response, StatusCode};
+use edgerun_web_ui::PageShell;
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -121,6 +122,7 @@ impl GitHandler {
             "/favicon.svg" => return Ok(favicon_response()),
             "/robots.txt" => return Ok(self.robots_response()),
             "/style.css" => return Ok(css_response()),
+            "/app.js" => return Ok(js_response()),
             _ => {}
         }
 
@@ -1099,14 +1101,23 @@ fn render_path_crumbs(repo: &Repo, rev: &str, rel_path: &str) -> String {
 }
 
 fn page_shell(config: &GitConfig, title: &str, description: &str, body: &str) -> String {
-    format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\"><meta name=\"theme-color\" content=\"#243b53\"><meta name=\"referrer\" content=\"strict-origin-when-cross-origin\"><title>{}</title><meta name=\"description\" content=\"{}\"><link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"><style>{}</style></head><body><a class=\"skip-link\" href=\"#content\">Skip to content</a><header class=\"topbar\"><a class=\"brand\" href=\"/\">{}</a><nav aria-label=\"Primary\"><a href=\"https://blog.edgerun.tech/\">Blog</a></nav></header>{}</body></html>",
-        escape_html(title),
-        escape_attr(description),
-        STYLE,
-        escape_html(&config.title),
-        body
-    )
+    let style = git_style();
+    edgerun_web_ui::render_page(&PageShell {
+        lang: "en",
+        title,
+        description,
+        theme_color: "#146c63",
+        generator: "edgerun-git",
+        extra_head: "<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\">",
+        style: &style,
+        brand_href: "/",
+        brand_label: "Edgerun Git home",
+        brand_text: &config.title,
+        header_extra: "<nav aria-label=\"Primary\"><a href=\"https://blog.edgerun.tech/\">Blog</a></nav><nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav>",
+        footer: "",
+        body,
+        script_src: Some("/app.js"),
+    })
 }
 
 fn html_response(body: String) -> Response {
@@ -1120,7 +1131,15 @@ fn css_response() -> Response {
         .with_header("Content-Type", "text/css; charset=utf-8")
         .with_header("Cache-Control", "public, max-age=31536000, immutable")
         .with_header("X-Content-Type-Options", "nosniff")
-        .with_body(STYLE)
+        .with_body(git_style())
+}
+
+fn js_response() -> Response {
+    Response::new(StatusCode::OK)
+        .with_header("Content-Type", "application/javascript; charset=utf-8")
+        .with_header("Cache-Control", "public, max-age=31536000, immutable")
+        .with_header("X-Content-Type-Options", "nosniff")
+        .with_body(edgerun_web_ui::THEME_TOGGLE_JS)
 }
 
 fn favicon_response() -> Response {
@@ -1128,7 +1147,7 @@ fn favicon_response() -> Response {
         .with_header("Content-Type", "image/svg+xml")
         .with_header("Cache-Control", "public, max-age=31536000, immutable")
         .with_header("X-Content-Type-Options", "nosniff")
-        .with_body("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><text x=\"32\" y=\"45\" text-anchor=\"middle\" font-size=\"42\">⌘</text></svg>")
+        .with_body(edgerun_web_ui::FAVICON_COMMAND_SVG)
 }
 
 fn not_found_response(site_title: &str) -> Response {
@@ -1289,25 +1308,24 @@ fn path_title(path: &str) -> &str {
 }
 
 fn escape_html(input: &str) -> String {
-    input
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+    edgerun_web_ui::escape_html(input)
 }
 
 fn escape_attr(input: &str) -> String {
-    escape_html(input)
+    edgerun_web_ui::escape_attr(input)
 }
 
 fn to_io_error(error: edgerun_http::io::Error) -> io::Error {
     io::Error::other(error.to_string())
 }
 
-const STYLE: &str = r#"
-:root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-2:#8b3f2f;--code:#eee6d8}:root[data-theme=dark]{--bg:#101418;--panel:#171d22;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-2:#dfa06b;--code:#232b31}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:12px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none}.topbar nav a{color:var(--muted);text-decoration:none}.hero{padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:760px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.repos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}.repo-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.repo-card a{display:block;min-height:180px;padding:22px;text-decoration:none}.repo-card h2{margin:0 0 10px;font-size:26px;line-height:1.15}.repo-card p{color:var(--muted)}.repo-card span,.commit-link{color:var(--accent);font-weight:800}.crate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.crate-panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.crate-panel h2{margin:0 0 12px;font-size:22px}.crate-panel h3{margin:16px 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.crate-panel.wide{grid-column:1/-1}.pills{display:flex;flex-wrap:wrap;gap:8px}.pills span{border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--muted)}.link-list{display:grid;gap:8px;margin:0;padding-left:18px}.link-list a{color:var(--accent);font-weight:750;text-decoration:none}.link-list span{display:block;color:var(--muted)}.crate-panel ol{margin:8px 0 0 22px}.crate-panel li{margin:5px 0}.crate-panel li a{color:var(--accent);font-weight:750;text-decoration:none}.repo{max-width:1180px;margin:0 auto;padding:34px 18px 80px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);margin-bottom:18px}.crumbs a{color:var(--accent);text-decoration:none}.repo-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:22px}.repo-head h1{margin:0;font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:0}.repo-head p{color:var(--muted)}.commit-link{border:1px solid var(--line);border-radius:8px;padding:9px 12px;text-decoration:none;background:var(--panel);white-space:nowrap}.tree-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}.tree-list li{display:grid;grid-template-columns:1fr 90px;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}.tree-list li:first-child{border-top:0}.tree-list a{text-decoration:none;font-weight:700}.tree-list span{color:var(--muted)}.code{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:block}.code tbody{display:table;width:100%}.code tr:target{background:color-mix(in srgb,var(--accent) 14%,transparent)}.code th{width:1%;min-width:54px;padding:0 12px;text-align:right;color:var(--muted);border-right:1px solid var(--line);user-select:none}.code th a{text-decoration:none;color:inherit}.code td{padding:0 12px;white-space:pre;overflow:auto}.code code,.commit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}.commit{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}@media(max-width:760px){.repos,.crate-grid{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}}
-"#;
+fn git_style() -> String {
+    format!("{}\n{}", edgerun_web_ui::BASE_STYLE, GIT_STYLE)
+}
 
+const GIT_STYLE: &str = r#"
+.repos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}.repo-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.repo-card a{display:block;min-height:180px;padding:22px;text-decoration:none}.repo-card h2{margin:0 0 10px;font-size:26px;line-height:1.15}.repo-card p{color:var(--muted)}.repo-card span,.commit-link{color:var(--accent);font-weight:800}.crate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.crate-panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.crate-panel h2{margin:0 0 12px;font-size:22px}.crate-panel h3{margin:16px 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.crate-panel.wide{grid-column:1/-1}.pills{display:flex;flex-wrap:wrap;gap:8px}.pills span{border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--muted)}.link-list{display:grid;gap:8px;margin:0;padding-left:18px}.link-list a{color:var(--accent);font-weight:750;text-decoration:none}.link-list span{display:block;color:var(--muted)}.crate-panel ol{margin:8px 0 0 22px}.crate-panel li{margin:5px 0}.crate-panel li a{color:var(--accent);font-weight:750;text-decoration:none}.repo{max-width:1180px;margin:0 auto;padding:34px 18px 80px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);margin-bottom:18px}.crumbs a{color:var(--accent);text-decoration:none}.repo-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:22px}.repo-head h1{margin:0;font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:0}.repo-head p{color:var(--muted)}.commit-link{border:1px solid var(--line);border-radius:8px;padding:9px 12px;text-decoration:none;background:var(--panel);white-space:nowrap}.tree-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}.tree-list li{display:grid;grid-template-columns:1fr 90px;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}.tree-list li:first-child{border-top:0}.tree-list a{text-decoration:none;font-weight:700}.tree-list span{color:var(--muted)}.code{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:block}.code tbody{display:table;width:100%}.code tr:target{background:color-mix(in srgb,var(--accent) 14%,transparent)}.code th{width:1%;min-width:54px;padding:0 12px;text-align:right;color:var(--muted);border-right:1px solid var(--line);user-select:none}.code th a{text-decoration:none;color:inherit}.code td{padding:0 12px;white-space:pre;overflow:auto}.code code,.commit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}.commit{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}@media(max-width:760px){.repos,.crate-grid{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}}
+"#;
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -21,6 +21,7 @@ use alloc::vec::Vec;
 use core::future::Future;
 use core::pin::Pin;
 use edgerun_http::{Handler, Request, Response, StatusCode};
+use edgerun_web_ui::PageShell;
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -505,7 +506,10 @@ fn build_generated_site(
     sites: &[LanguageSite],
 ) -> GeneratedPlan {
     let mut files = Vec::new();
-    files.push(generated_file(output.join("favicon.svg"), FAVICON_SVG));
+    files.push(generated_file(
+        output.join("favicon.svg"),
+        edgerun_web_ui::FAVICON_COMPASS_SVG,
+    ));
     files.push(generated_file(
         output.join("robots.txt"),
         render_robots(config),
@@ -522,8 +526,8 @@ fn build_generated_site(
         output.join("site.webmanifest"),
         render_manifest(config),
     ));
-    files.push(generated_file(output.join("style.css"), STYLE));
-    files.push(generated_file(output.join("app.js"), APP_JS));
+    files.push(generated_file(output.join("style.css"), blog_style()));
+    files.push(generated_file(output.join("app.js"), blog_js()));
 
     for site in sites {
         let root = language_output_root(output, site.language);
@@ -1187,11 +1191,7 @@ fn page_shell(
     meta: &PageMeta,
     body: &str,
 ) -> String {
-    let mut head = format!(
-        "<meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\"><meta name=\"theme-color\" content=\"#146c63\"><meta name=\"referrer\" content=\"strict-origin-when-cross-origin\"><meta name=\"generator\" content=\"edgerun-blog\"><title>{}</title><meta name=\"description\" content=\"{}\">",
-        escape_html(&meta.title),
-        escape_attr(&meta.description)
-    );
+    let mut head = String::new();
     if meta.noindex {
         head.push_str("<meta name=\"robots\" content=\"noindex,nofollow\">");
     }
@@ -1232,7 +1232,7 @@ fn page_shell(
         "<script type=\"application/ld+json\">{}</script>",
         render_json_ld(language, meta)
     ));
-    let script_src = format!("/app.js?v={}", asset_version(APP_JS));
+    let script_src = format!("/app.js?v={}", asset_version(&blog_js()));
     for alternate in LANGUAGES.iter().copied() {
         head.push_str(&format!(
             "<link rel=\"alternate\" hreflang=\"{}\" href=\"{}\">",
@@ -1247,31 +1247,43 @@ fn page_shell(
             &localized_path(default_language(), route)
         ))
     ));
-    head.push_str(&format!(
-        "<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"><link rel=\"manifest\" href=\"/site.webmanifest\"><link rel=\"search\" type=\"application/opensearchdescription+xml\" href=\"/opensearch.xml\"><link rel=\"alternate\" type=\"application/atom+xml\" href=\"/feed.xml\"><style>{}</style>",
-        STYLE
-    ));
+    head.push_str("<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\"><link rel=\"manifest\" href=\"/site.webmanifest\"><link rel=\"search\" type=\"application/opensearchdescription+xml\" href=\"/opensearch.xml\"><link rel=\"alternate\" type=\"application/atom+xml\" href=\"/feed.xml\">");
     let language_links = render_language_links(language, route);
-    format!(
-        "<!doctype html><html lang=\"{}\"><head>{}</head><body><a class=\"skip-link\" href=\"#content\">Skip to content</a><header class=\"topbar\"><a class=\"brand\" href=\"{}\" aria-label=\"{} home\">{}</a><form class=\"header-search\" role=\"search\" action=\"{}\" method=\"get\"><label for=\"search\">{}</label><input id=\"search\" name=\"q\" type=\"search\" placeholder=\"{}\" autocomplete=\"off\"><button type=\"submit\" title=\"{}\" aria-label=\"{}\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"7\"></circle><path d=\"m16 16 4 4\"></path></svg></button></form><nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav></header>{}<footer class=\"site-footer\"><a href=\"{}\">{}</a><a href=\"{}\">{}</a>{}</footer><script src=\"{}\" defer></script></body></html>",
-        escape_attr(language.html_lang),
-        head,
-        escape_attr(&localized_path(language, "/")),
-        escape_attr(language.title),
-        escape_html(language.title),
+    let header_extra = format!(
+        "<form class=\"header-search\" role=\"search\" action=\"{}\" method=\"get\"><label for=\"search\">{}</label><input id=\"search\" name=\"q\" type=\"search\" placeholder=\"{}\" autocomplete=\"off\"><button type=\"submit\" title=\"{}\" aria-label=\"{}\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"7\"></circle><path d=\"m16 16 4 4\"></path></svg></button></form><nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav>",
         escape_attr(&localized_path(language, "/")),
         escape_html(language.search_label),
         escape_attr(language.search_label),
         escape_attr(language.search_label),
-        escape_attr(language.search_label),
-        body,
+        escape_attr(language.search_label)
+    );
+    let footer = format!(
+        "<footer class=\"site-footer\"><a href=\"{}\">{}</a><a href=\"{}\">{}</a>{}</footer>",
         escape_attr(&localized_path(language, "/about.html")),
         escape_html(language.about_label),
         escape_attr(&localized_path(language, "/feed.xml")),
         escape_html(language.feed_label),
-        language_links,
-        escape_attr(&script_src)
-    )
+        language_links
+    );
+    let style = blog_style();
+    let brand_href = localized_path(language, "/");
+    let brand_label = format!("{} home", language.title);
+    edgerun_web_ui::render_page(&PageShell {
+        lang: language.html_lang,
+        title: &meta.title,
+        description: &meta.description,
+        theme_color: "#146c63",
+        generator: "edgerun-blog",
+        extra_head: &head,
+        style: &style,
+        brand_href: &brand_href,
+        brand_label: &brand_label,
+        brand_text: language.title,
+        header_extra: &header_extra,
+        footer: &footer,
+        body,
+        script_src: Some(&script_src),
+    })
 }
 
 fn render_search_json(posts: &[Post]) -> String {
@@ -1716,15 +1728,23 @@ fn is_trusted_html_block_line(line: &str) -> bool {
         "aside"
             | "blockquote"
             | "caption"
+            | "circle"
             | "details"
             | "div"
             | "figcaption"
             | "figure"
+            | "g"
+            | "line"
+            | "path"
+            | "polyline"
+            | "rect"
             | "section"
             | "summary"
+            | "svg"
             | "table"
             | "tbody"
             | "td"
+            | "text"
             | "tfoot"
             | "th"
             | "thead"
@@ -2138,30 +2158,15 @@ fn is_content_file(path: &Path) -> bool {
 }
 
 fn escape_html(input: &str) -> String {
-    input
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
+    edgerun_web_ui::escape_html(input)
 }
 
 fn escape_attr(input: &str) -> String {
-    escape_html(input).replace('"', "&quot;")
+    edgerun_web_ui::escape_attr(input)
 }
 
 fn escape_json(input: &str) -> String {
-    let mut out = String::new();
-    for ch in input.chars() {
-        match ch {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            ch if ch.is_control() => {}
-            ch => out.push(ch),
-        }
-    }
-    out
+    edgerun_web_ui::escape_json(input)
 }
 
 fn not_found_response(title: &str) -> Response {
@@ -2273,7 +2278,7 @@ fn favicon_response() -> Response {
         .with_header("Content-Type", "image/svg+xml")
         .with_header("Cache-Control", "public, max-age=86400")
         .with_header("X-Content-Type-Options", "nosniff")
-        .with_body(FAVICON_SVG)
+        .with_body(edgerun_web_ui::FAVICON_COMPASS_SVG)
 }
 
 fn manifest_response(config: &BlogConfig) -> Response {
@@ -2297,7 +2302,7 @@ fn css_response() -> Response {
         .with_header("Content-Type", "text/css; charset=utf-8")
         .with_header("Cache-Control", "public, max-age=300")
         .with_header("X-Content-Type-Options", "nosniff")
-        .with_body(STYLE)
+        .with_body(blog_style())
 }
 
 fn js_response() -> Response {
@@ -2305,20 +2310,22 @@ fn js_response() -> Response {
         .with_header("Content-Type", "application/javascript; charset=utf-8")
         .with_header("Cache-Control", "public, max-age=300")
         .with_header("X-Content-Type-Options", "nosniff")
-        .with_body(APP_JS)
+        .with_body(blog_js())
 }
 
 fn to_io_error(error: edgerun_http::io::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, error.to_string())
 }
 
-const FAVICON_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="76" font-size="76">🧭</text></svg>"#;
+fn blog_js() -> String {
+    format!("{}\n{}", edgerun_web_ui::THEME_TOGGLE_JS, BLOG_JS)
+}
 
-const APP_JS: &str = r#"
-const root=document.documentElement;
-const stored=localStorage.getItem('theme');
-if(stored){root.dataset.theme=stored}
-if(!customElements.get('er-theme-toggle')){customElements.define('er-theme-toggle',class extends HTMLElement{connectedCallback(){this.attachShadow({mode:'open'}).innerHTML='<style>button{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;font:24px/1 system-ui}button:hover{border-color:var(--accent)}</style><button type="button"></button>';const btn=this.shadowRoot.querySelector('button');const current=()=>root.dataset.theme||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');const render=()=>{const dark=current()==='dark';btn.textContent=dark?'☾':'☀';btn.title=dark?'Dark mode: switch to light mode':'Light mode: switch to dark mode';btn.setAttribute('aria-label',btn.title)};btn.onclick=()=>{const next=current()==='dark'?'light':'dark';root.dataset.theme=next;localStorage.setItem('theme',next);render()};render()}})}
+fn blog_style() -> String {
+    format!("{}\n{}", edgerun_web_ui::BASE_STYLE, BLOG_STYLE)
+}
+
+const BLOG_JS: &str = r#"
 const search=document.getElementById('search');
 const cards=[...document.querySelectorAll('.post-card')];
 const count=document.getElementById('search-count');
@@ -2330,10 +2337,8 @@ if(search&&initialQuery){search.value=initialQuery;applyFilter(initialQuery)}
 for(const btn of topicButtons){btn.addEventListener('click',()=>{if(search){search.value=btn.dataset.topic;applyFilter(btn.dataset.topic);search.focus()}})}
 "#;
 
-const STYLE: &str = r#"
-:root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent-2:#8b3f2f;--code:#eee6d8}
-:root[data-theme=dark]{--bg:#101418;--panel:#171d22;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent-2:#dfa06b;--code:#232b31}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.skip-link{position:absolute;left:12px;top:-60px;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}.skip-link:focus{top:12px}.topbar{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:max-content minmax(220px,560px) 1fr max-content;gap:14px;align-items:center;padding:12px clamp(14px,3vw,44px);background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}.brand{font-weight:800;text-decoration:none;white-space:nowrap}.topbar nav{grid-column:4;display:flex;align-items:center;justify-content:end}.header-search{position:relative;min-width:0}.header-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.header-search input{width:100%;min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 44px 10px 13px}.header-search input:focus{border-color:var(--accent)}.header-search button{position:absolute;right:4px;top:4px;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}.header-search button:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}.header-search svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}button,input{font:inherit}.hero{padding:64px clamp(18px,4vw,56px) 42px;border-bottom:1px solid var(--line)}.hero h1{margin:0;font-size:clamp(42px,7vw,82px);line-height:.95;letter-spacing:0}.hero p{max-width:720px;color:var(--muted);font-size:19px}.eyebrow{margin:0 0 12px;color:var(--accent);font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.08em}.repo-stats{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr);gap:12px;max-width:760px;margin:28px 0 0}.repo-stats div{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}.repo-stats dt{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.repo-stats dd{margin:4px 0 0;font-weight:800;overflow-wrap:anywhere}.repo-stats .message{font-weight:650;color:var(--text)}.repo-stats .message span{color:var(--muted);font-weight:750;white-space:nowrap}.layout{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,720px);gap:40px;align-items:start;margin:0;padding:34px clamp(18px,4vw,56px) 80px}.article-layout{display:grid;grid-template-columns:minmax(0,780px) 220px;gap:42px;align-items:start;max-width:1060px;margin:0 auto;padding:44px 18px 90px}.article-layout-single{display:block;max-width:820px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.topic-list button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}.topic-list span{color:var(--muted);font-size:13px;font-weight:750}.posts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;max-width:720px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article-stack{display:grid;gap:14px}.article{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(28px,5vw,52px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{justify-self:start;color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.video-embed{margin:28px 0}.video-embed iframe{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:8px;background:var(--code)}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.content table{width:100%;border-collapse:collapse;margin:24px 0;display:block;overflow-x:auto}.content th,.content td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}.content th{background:color-mix(in srgb,var(--accent) 10%,var(--panel));font-weight:800}.content tr:nth-child(even) td{background:color-mix(in srgb,var(--panel) 78%,var(--code))}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.empty{max-width:720px;margin:80px auto;padding:0 18px}.muted{color:var(--muted)}.site-footer{display:flex;gap:18px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding:22px clamp(18px,4vw,56px);color:var(--muted)}.site-footer a{text-decoration:none}.language-links{display:flex;gap:10px;margin-left:auto}.language-links a{font-weight:750;text-transform:uppercase}.language-links a[aria-current=true]{color:var(--accent)}
+const BLOG_STYLE: &str = r#"
+.topbar{display:grid;grid-template-columns:max-content minmax(220px,560px) 1fr max-content}.topbar nav{grid-column:4}.header-search{position:relative;min-width:0}.header-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.header-search input{width:100%;min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 44px 10px 13px}.header-search input:focus{border-color:var(--accent)}.header-search button{position:absolute;right:4px;top:4px;width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}.header-search button:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}.header-search svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}button,input{font:inherit}.repo-stats{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr);gap:12px;max-width:760px;margin:28px 0 0}.repo-stats div{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}.repo-stats dt{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.repo-stats dd{margin:4px 0 0;font-weight:800;overflow-wrap:anywhere}.repo-stats .message{font-weight:650;color:var(--text)}.repo-stats .message span{color:var(--muted);font-weight:750;white-space:nowrap}.layout{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,720px);gap:40px;align-items:start;margin:0;padding:34px clamp(18px,4vw,56px) 80px}.article-layout{display:grid;grid-template-columns:minmax(0,780px) 220px;gap:42px;align-items:start;max-width:1060px;margin:0 auto;padding:44px 18px 90px}.article-layout-single{display:block;max-width:820px}aside{color:var(--muted)}aside h2{margin:0 0 12px;color:var(--text);font-size:15px;text-transform:uppercase;letter-spacing:.08em}.topic-list{display:flex;flex-wrap:wrap;gap:8px}.topic-list button{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;padding:7px 10px;cursor:pointer}.topic-list button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}.topic-list span{color:var(--muted);font-size:13px;font-weight:750}.posts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;max-width:720px}.post-card{min-height:220px;background:var(--panel);border:1px solid var(--line);border-radius:8px;transition:transform .15s ease,border-color .15s ease}.post-card:hover{transform:translateY(-2px);border-color:var(--accent)}.post-card a{display:flex;min-height:100%;flex-direction:column;padding:22px;text-decoration:none}.date{color:var(--accent-2);font-size:14px;font-weight:750}.post-card h2{margin:12px 0 10px;font-size:24px;line-height:1.15;letter-spacing:0}.post-card p{margin:0 0 20px;color:var(--muted)}.tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.tags span{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:13px}.article-stack{display:grid;gap:14px}.article{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(28px,5vw,52px)}.article h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:10px 0 14px;letter-spacing:0}.summary{font-size:20px;color:var(--muted)}.back{justify-self:start;color:var(--accent);font-weight:800;text-decoration:none}.content{margin-top:32px}.content h1,.content h2,.content h3{line-height:1.15;margin:32px 0 10px;letter-spacing:0}.content p{margin:14px 0}.video-embed{margin:28px 0}.video-embed iframe{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:8px;background:var(--code)}.content pre{overflow:auto;background:var(--code);border-radius:8px;padding:16px}.code-ref{margin:22px 0}.code-ref figcaption{border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel);color:var(--muted);font-size:13px;padding:8px 12px}.code-ref figcaption a{color:var(--accent);font-weight:750;text-decoration:none}.code-ref pre{margin:0;border-radius:0 0 8px 8px}.content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.content blockquote{margin:22px 0;padding:4px 0 4px 18px;border-left:4px solid var(--accent);color:var(--muted)}.content table{width:100%;border-collapse:collapse;margin:24px 0;display:block;overflow-x:auto}.content th,.content td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}.content th{background:color-mix(in srgb,var(--accent) 10%,var(--panel));font-weight:800}.content tr:nth-child(even) td{background:color-mix(in srgb,var(--panel) 78%,var(--code))}.recent{display:grid;gap:10px}.recent a{color:var(--muted);text-decoration:none}.muted{color:var(--muted)}.site-footer{display:flex;gap:18px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding:22px clamp(18px,4vw,56px);color:var(--muted)}.site-footer a{text-decoration:none}.language-links{display:flex;gap:10px;margin-left:auto}.language-links a{font-weight:750;text-transform:uppercase}.language-links a[aria-current=true]{color:var(--accent)}
 @media(max-width:900px){.article-layout{grid-template-columns:1fr;max-width:820px}.article-layout aside{order:-1}.recent{display:flex;flex-wrap:wrap;gap:14px}}@media(max-width:760px){.hero,.layout{grid-template-columns:1fr}.hero{padding-top:42px}.repo-stats{grid-template-columns:1fr}.posts{grid-template-columns:1fr}.article{padding:24px}}
 @media(max-width:600px){body{overflow-x:hidden}.topbar{position:static;display:flex;flex-wrap:wrap;gap:12px;padding:12px 14px}.brand{flex:1 1 auto}.topbar nav{flex:0 0 auto;margin-left:auto}.header-search{order:2;flex:1 0 100%;width:100%}.layout,.article-layout{padding-left:18px;padding-right:18px}.posts,.post-card{min-width:0}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
@@ -2368,6 +2373,15 @@ mod tests {
         let html = markdown_to_html("<table>\n<tr><td>OK</td></tr>\n</table>");
         assert!(html.contains("<table><tr><td>OK</td></tr></table>"));
         assert!(!html.contains("&lt;/table&gt;"));
+    }
+
+    #[test]
+    fn passes_trusted_svg_blocks() {
+        let html = markdown_to_html(
+            "<svg viewBox=\"0 0 10 10\">\n<rect x=\"1\" y=\"1\" width=\"8\" height=\"8\"></rect>\n</svg>",
+        );
+        assert!(html.contains("<svg viewBox=\"0 0 10 10\"><rect"));
+        assert!(!html.contains("&lt;svg"));
     }
 
     #[test]
