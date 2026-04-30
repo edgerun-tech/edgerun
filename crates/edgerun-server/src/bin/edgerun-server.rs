@@ -1359,7 +1359,7 @@ impl SiteRouter {
                 .with_header("Cache-Control", "no-store")
                 .with_header("X-Content-Type-Options", "nosniff");
             }
-            "/surface/apps" => render_dash_surface(
+            path if path == "/surface/apps" || path.starts_with("/surface/apps/") => render_dash_surface(
                 "Apps",
                 "browser node",
                 &render_browser_apps_surface(&self.browser_apps),
@@ -2253,7 +2253,7 @@ fn normalize_host(host: &str) -> String {
 
 const DASH_BODY: &str = r##"
 <main id="content" class="dash-shell">
-  <section class="dash-panels">
+  <section class="dash-shell-inner">
     <header class="dash-panels-header">
       <div>
         <p class="dash-eyebrow">Edgerun Workspace</p>
@@ -2261,52 +2261,56 @@ const DASH_BODY: &str = r##"
       </div>
       <p>Mail, build log, code, apps, and global chat live in one place.</p>
     </header>
-    <section class="dash-panels-row">
-      <section class="dash-panel" data-surface="build-log">
-        <div class="dash-panel-head">
-          <h2>Build Log</h2>
-          <span>Focus: build-log</span>
+    <section class="dash-layout">
+      <section class="dash-panel dash-workspace">
+        <div class="dash-workspace-head">
+          <div>
+            <p class="dash-workspace-kicker">Workspace Surface</p>
+            <h2 id="dashSurfaceTitle">Build Log</h2>
+          </div>
+          <div class="dash-workspace-meta">
+            <span id="dashSurfacePath">backend: /surface/blog</span>
+          </div>
         </div>
-        <div id="dashSurfaceBlog" class="dash-surface" data-surface-path="/surface/blog">Loading build log…</div>
+        <nav class="dash-rail" aria-label="Workspace sections">
+          <button class="dash-tab" type="button" data-surface="build-log" aria-selected="true">Build Log</button>
+          <button class="dash-tab" type="button" data-surface="code" aria-selected="false">Code</button>
+          <button class="dash-tab" type="button" data-surface="mail" aria-selected="false">Mail</button>
+          <button class="dash-tab" type="button" data-surface="apps" aria-selected="false">Apps</button>
+        </nav>
+        <div id="dashSurfaceSlot" class="dash-surface dash-surface-slot" data-active-surface="build-log">Loading workspace…</div>
       </section>
-      <section class="dash-panel" data-surface="code">
-        <div class="dash-panel-head">
-          <h2>Code</h2>
-          <span>Focus: code</span>
-        </div>
-        <div id="dashSurfaceCode" class="dash-surface" data-surface-path="/surface/git">Loading code…</div>
-      </section>
-    </section>
-    <section class="dash-panels-row">
-      <section class="dash-panel" data-surface="mail">
-        <div class="dash-panel-head">
-          <h2>Mail</h2>
-          <span>Focus: mail</span>
-        </div>
-        <div id="dashSurfaceMail" class="dash-surface" data-surface-path="/surface/mail">Loading mail…</div>
-      </section>
-      <section class="dash-panel" data-surface="apps">
-        <div class="dash-panel-head">
-          <h2>Apps</h2>
-          <span>Focus: apps</span>
-        </div>
-        <div id="dashSurfaceApps" class="dash-surface" data-surface-path="/surface/apps">Loading apps…</div>
-      </section>
-    </section>
-    <section class="dash-panel dash-chat-panel">
-      <div class="dash-panel-head">
-        <h2>Global chat</h2>
-        <span>Demo room</span>
-      </div>
-      <div class="dash-chat-shell">
-        <form id="dashChatForm" class="dash-chat-form" autocomplete="off">
-          <label for="dashChatName"><span>Name</span><input id="dashChatName" required maxlength="24" placeholder="your name"></label>
-          <label for="dashChatMessage"><span>Message</span><textarea id="dashChatMessage" required maxlength="800" placeholder="Say something to everyone"></textarea></label>
-          <button id="dashChatSend" type="submit">Post</button>
-        </form>
-        <p class="dash-chat-status" id="dashChatStatus" role="status"></p>
-        <div id="dashChatLog" class="dash-chat-log"></div>
-      </div>
+      <aside class="dash-side">
+        <section class="dash-panel dash-status-card">
+          <div class="dash-panel-head">
+            <h2>Global status</h2>
+            <span>Live metrics</span>
+          </div>
+          <div class="dash-status-inline" data-dash-status>
+            <span>sessions <strong data-status-sessions>--</strong></span>
+            <span>req/s <strong data-status-rps>--</strong></span>
+            <span>mem <strong data-status-memory>--</strong></span>
+            <span>cpu <strong data-status-cpu>--</strong></span>
+            <span>bin <strong data-status-binary>--</strong></span>
+          </div>
+          <p><button type="button" class="dash-refresh-status" data-status-refresh>Refresh</button></p>
+        </section>
+        <section class="dash-panel dash-chat-panel">
+          <div class="dash-panel-head">
+            <h2>Global chat</h2>
+            <span>Demo room</span>
+          </div>
+          <div class="dash-chat-shell">
+            <form id="dashChatForm" class="dash-chat-form" autocomplete="off">
+              <label for="dashChatName"><span>Name</span><input id="dashChatName" required maxlength="24" placeholder="your name"></label>
+              <label for="dashChatMessage"><span>Message</span><textarea id="dashChatMessage" required maxlength="800" placeholder="Say something to everyone"></textarea></label>
+              <button id="dashChatSend" type="submit">Post</button>
+            </form>
+            <p class="dash-chat-status" id="dashChatStatus" role="status"></p>
+            <div id="dashChatLog" class="dash-chat-log"></div>
+          </div>
+        </section>
+      </aside>
     </section>
   </section>
 </main>
@@ -2314,18 +2318,29 @@ const DASH_BODY: &str = r##"
 
 const DASH_STYLE: &str = r#"
 .dash-shell{min-height:calc(100vh - var(--topbar-h) - var(--footer-h));background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 90%,var(--panel)) 0,var(--bg) 220px);padding:16px}
-.dash-panels{max-width:1320px;margin:0 auto;display:grid;gap:18px}
-.dash-panels-header{display:grid;gap:6px;padding:0 2px 8px;border-bottom:1px solid var(--line)}
+.dash-shell-inner{max-width:1320px;margin:0 auto;display:grid;gap:18px}
+.dash-panels-header{display:grid;gap:6px;padding:0 2px 10px;border-bottom:1px solid var(--line)}
 .dash-panels-header p{margin:0;color:var(--muted)}
 .dash-panels-header h1{margin:8px 0 0}
 .dash-panels-header .dash-eyebrow{font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:var(--accent)}
-.dash-panels-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.dash-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.dash-workspace{min-height:510px}
+.dash-workspace-head{display:grid;gap:4px}
+.dash-workspace-kicker{margin:0;font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:12px;color:var(--muted)}
+.dash-workspace-head h2{margin:0}
+.dash-workspace-meta{margin-top:4px}
+.dash-side{display:grid;gap:12px;position:sticky;top:calc(var(--topbar-h) + 16px)}
 .dash-panel{display:grid;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 13px 34px color-mix(in srgb,var(--text) 6%,transparent)}
 .dash-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .dash-panel-head h2{margin:0;font-size:21px}
 .dash-panel-head span{color:var(--muted);font-size:13px}
-.dash-surface{min-height:220px;max-height:460px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.dash-rail{display:flex;flex-wrap:wrap;gap:8px}
+.dash-tab{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:8px 12px;border-radius:999px;font:inherit;cursor:pointer}
+.dash-tab:hover{border-color:var(--accent)}
+.dash-tab[aria-selected=true]{background:color-mix(in srgb,var(--accent) 14%,var(--panel));border-color:var(--accent);font-weight:750}
+.dash-surface{min-height:430px;max-height:560px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .dash-surface-empty{color:var(--muted);font-size:13px}
+.dash-surface .dash-surface-empty{background:color-mix(in srgb,var(--panel) 84%,transparent);padding:10px;border:1px dashed var(--line);border-radius:8px}
 .dash-surface .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
 .dash-surface .dash-card{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px;display:block;text-decoration:none;color:var(--text)}
 .dash-surface .dash-card:hover{border-color:var(--accent)}
@@ -2345,15 +2360,15 @@ const DASH_STYLE: &str = r#"
 .dash-surface .dash-code-summary strong{font-size:22px}
 .dash-search-empty{color:var(--muted);margin:2px 4px 0}
 .dash-surface .dash-stage .dash-card-button{width:100%}
-.dash-surface .dash-surface-empty{background:color-mix(in srgb,var(--panel) 84%,transparent);padding:10px;border:1px dashed var(--line);border-radius:8px}
-.dash-surface .related-posts{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
-.dash-surface .related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin-top:12px}
-.dash-surface .related-posts article{margin:0;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 88%,var(--code));padding:10px}
 .dash-surface .dash-surface-content{display:block}
 .dash-surface .dash-stage{background:transparent}
 .dash-surface .dash-stage header{border-bottom:1px solid var(--line);padding:0 0 10px;margin:0 0 10px}
 .dash-surface .dash-stage header strong{font-size:16px}
 .dash-surface .dash-stage header span{color:var(--muted)}
+.dash-surface .content .related-posts{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
+.dash-surface .content .related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin-top:12px}
+.dash-surface .content .related-posts article{margin:0;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 88%,var(--code));padding:10px}
+.dash-surface .content .related-posts article + article{margin-top:10px}
 .dash-chat-shell{display:grid;gap:10px}
 .dash-chat-form{display:grid;gap:8px}
 .dash-chat-form label{display:grid;gap:6px}
@@ -2372,30 +2387,58 @@ const DASH_STYLE: &str = r#"
 .dash-status{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;white-space:nowrap;font-size:12px;line-height:1}
 .dash-status span{display:inline-flex;align-items:baseline;gap:5px;color:var(--muted)}
 .dash-status strong{color:var(--text);font-weight:800}
-.dash-status button{height:22px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:0 8px;font:inherit;cursor:pointer}
-.dash-status button:hover,.dash-status button:focus-visible{border-color:var(--accent);color:var(--accent)}
-.related-posts{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
-.related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin-top:12px}
-.related-posts article{margin:0}
+.dash-status button,.dash-refresh-status{height:22px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:0 8px;font:inherit;cursor:pointer}
+.dash-status button:hover,.dash-status button:focus-visible,.dash-refresh-status:hover{border-color:var(--accent);color:var(--accent)}
+.dash-status-inline{display:flex;flex-wrap:wrap;gap:12px 14px;margin-top:6px;color:var(--muted);font-size:12px}
+.dash-status-inline span{display:inline-flex;align-items:baseline;gap:4px}
+.dash-status-inline strong{color:var(--text);font-weight:800}
+.dash-surface .related-posts{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
+.dash-surface .related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin-top:12px}
+.dash-surface .related-posts article{margin:0}
 body{--footer-h:30px}
-@media(max-width:900px){.dash-panels-row{grid-template-columns:1fr}}
-@media(max-width:760px){.dash-shell{padding:10px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
+@media(max-width:1000px){.dash-layout{grid-template-columns:1fr}.dash-side{position:static}}
+@media(max-width:760px){.dash-shell{padding:10px}.dash-shell-inner{gap:12px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
 "#;
 
 const DASH_JS: &str = r#"
 const DASH_SURFACES = [
   {
-    id: 'dashSurfaceBlog',
+    key: 'build-log',
+    label: 'Build Log',
     pathPrefix: '/surface/blog',
     fallback: 'Build log is unavailable right now.',
+    backend: 'blog.edgerun.tech',
   },
-  { id: 'dashSurfaceCode', pathPrefix: '/surface/git', fallback: 'Code surface is unavailable right now.' },
-  { id: 'dashSurfaceMail', pathPrefix: '/surface/mail', fallback: 'Mail surface is unavailable right now.' },
-  { id: 'dashSurfaceApps', pathPrefix: '/surface/apps', fallback: 'Apps surface is unavailable right now.' },
+  {
+    key: 'code',
+    label: 'Code',
+    pathPrefix: '/surface/git',
+    fallback: 'Code surface is unavailable right now.',
+    backend: 'git.edgerun.tech',
+  },
+  {
+    key: 'mail',
+    label: 'Mail',
+    pathPrefix: '/surface/mail',
+    fallback: 'Mail surface is unavailable right now.',
+    backend: 'backend: mail.edgerun.tech',
+  },
+  {
+    key: 'apps',
+    label: 'Apps',
+    pathPrefix: '/surface/apps',
+    fallback: 'Apps surface is unavailable right now.',
+    backend: 'browser node',
+  },
 ];
 
 function normalizeSurfaceSuffix(path) {
   return path.replace(/^\/+/, '');
+}
+
+function hashPathSuffix(raw) {
+  const value = normalizeSurfaceSuffix(raw || '');
+  return value ? `/${value}` : '';
 }
 
 function normalizeFallbackPath(prefix, path) {
@@ -2405,36 +2448,89 @@ function normalizeFallbackPath(prefix, path) {
   return prefix + '/' + normalizeSurfaceSuffix(path);
 }
 
-function surfacePathToSlot(path) {
+function surfacePathToSurfaceKey(path) {
   if (path.startsWith('/surface/blog')) {
-    return 'dashSurfaceBlog';
+    return 'build-log';
   }
   if (path.startsWith('/surface/git')) {
-    return 'dashSurfaceCode';
+    return 'code';
   }
   if (path.startsWith('/surface/mail')) {
-    return 'dashSurfaceMail';
+    return 'mail';
   }
   if (path.startsWith('/surface/apps')) {
-    return 'dashSurfaceApps';
+    return 'apps';
   }
   return null;
 }
 
-function surfacePathToHash(path) {
-  if (path.startsWith('/surface/blog')) {
-    return '#build-log' + normalizeFallbackPath('', path.replace('/surface/blog', ''));
+function surfaceToHashPrefix(surface) {
+  if (surface === 'build-log') {
+    return '#build-log';
   }
-  if (path.startsWith('/surface/git')) {
-    return '#code' + normalizeFallbackPath('', path.replace('/surface/git', ''));
+  if (surface === 'code') {
+    return '#code';
   }
-  if (path.startsWith('/surface/mail')) {
+  if (surface === 'mail') {
     return '#mail';
   }
-  if (path.startsWith('/surface/apps')) {
+  if (surface === 'apps') {
     return '#apps';
   }
+  return '#build-log';
+}
+
+function surfacePathToHash(path) {
+  if (path.startsWith('/surface/blog')) {
+    return surfaceToHashPrefix('build-log') + hashPathSuffix(path.replace('/surface/blog', ''));
+  }
+  if (path.startsWith('/surface/git')) {
+    return surfaceToHashPrefix('code') + hashPathSuffix(path.replace('/surface/git', ''));
+  }
+  if (path.startsWith('/surface/mail')) {
+    return surfaceToHashPrefix('mail') + hashPathSuffix(path.replace('/surface/mail', ''));
+  }
+  if (path.startsWith('/surface/apps')) {
+    return surfaceToHashPrefix('apps') + hashPathSuffix(path.replace('/surface/apps', ''));
+  }
   return null;
+}
+
+function getSurfaceForKey(key) {
+  return DASH_SURFACES.find((item) => item.key === key);
+}
+
+function makeSurfacePath(key, suffix) {
+  const surface = getSurfaceForKey(key);
+  if (!surface) {
+    return '/surface/blog';
+  }
+  if (!suffix) {
+    return surface.pathPrefix;
+  }
+  return normalizeFallbackPath(surface.pathPrefix, suffix);
+}
+
+function setWorkspaceContext(key) {
+  const surface = getSurfaceForKey(key) || DASH_SURFACES[0];
+  const title = document.getElementById('dashSurfaceTitle');
+  const path = document.getElementById('dashSurfacePath');
+  const workspace = document.getElementById('dashSurfaceSlot');
+  if (title) {
+    title.textContent = surface.label;
+  }
+  if (path) {
+    path.textContent = `backend: ${surface.backend}`;
+  }
+  if (workspace) {
+    workspace.setAttribute('data-active-surface', surface.key);
+  }
+  document.querySelectorAll('[data-surface]').forEach((button) => {
+    button.setAttribute(
+      'aria-selected',
+      button.getAttribute('data-surface') === surface.key ? 'true' : 'false',
+    );
+  });
 }
 
 function formatBytes(bytes) {
@@ -2460,11 +2556,21 @@ function extractSurfaceContent(html) {
   return doc.querySelector('.dash-surface')?.innerHTML || html;
 }
 
-async function hydrateSurface(slotId, path, fallback) {
-  const slot = document.getElementById(slotId);
+async function hydrateSurface(path, fallback, sourceKey) {
+  const slot = document.getElementById('dashSurfaceSlot');
   if (!slot) {
     return;
   }
+  const activeKey = sourceKey || surfacePathToSurfaceKey(path);
+  if (!activeKey) {
+    return;
+  }
+  const surface = getSurfaceForKey(activeKey);
+  if (!surface) {
+    return;
+  }
+  setWorkspaceContext(activeKey);
+  slot.classList.remove('dash-surface-empty');
   try {
     const response = await fetch(path, { cache: 'no-store' });
     if (!response.ok) {
@@ -2473,49 +2579,45 @@ async function hydrateSurface(slotId, path, fallback) {
     const html = await response.text();
     slot.innerHTML = `<div class="dash-surface-content">${extractSurfaceContent(html)}</div>`;
   } catch (_error) {
-    slot.textContent = fallback;
+    slot.textContent = fallback || surface.fallback;
     slot.classList.add('dash-surface-empty');
   }
   bindSurfaceSearch(slot);
 }
 
-async function hydrateSurfaces() {
-  await Promise.all(
-    DASH_SURFACES.map((item) => hydrateSurface(item.id, item.pathPrefix, item.fallback)),
-  );
-  document.querySelectorAll('.dash-surface').forEach((slot) => bindSurfaceSearch(slot));
-}
-
 function surfaceHashToPath(raw) {
   if (!raw) {
-    return null;
+    return '/surface/blog';
   }
   if (!raw.startsWith('#')) {
     if (raw.startsWith('/surface/')) {
       return raw;
     }
-    return null;
+    return '/surface/blog';
   }
-  const hash = raw.toLowerCase();
-  if (hash.startsWith('#build-log')) {
-    return normalizeFallbackPath('/surface/blog', hash.slice('#build-log'.length));
+  const hash = raw.slice(1);
+  const [rawHead, ...rawRest] = hash.split('/');
+  const head = rawHead.toLowerCase();
+  const suffix = hashPathSuffix(rawRest.join('/'));
+  if (head === 'build-log' || head === 'blog') {
+    return normalizeFallbackPath('/surface/blog', suffix);
   }
-  if (hash === '#feed') {
+  if (head === 'code') {
+    return normalizeFallbackPath('/surface/git', suffix);
+  }
+  if (head === 'mail') {
+    return normalizeFallbackPath('/surface/mail', suffix);
+  }
+  if (head === 'apps') {
+    return normalizeFallbackPath('/surface/apps', suffix);
+  }
+  if (head === 'feed') {
     return '/surface/blog/feed';
   }
-  if (hash === '#about') {
+  if (head === 'about') {
     return '/surface/blog/about';
   }
-  if (hash === '#mail') {
-    return '/surface/mail';
-  }
-  if (hash.startsWith('#code')) {
-    return normalizeFallbackPath('/surface/git', hash.slice('#code'.length));
-  }
-  if (hash.startsWith('#apps')) {
-    return '/surface/apps';
-  }
-  return null;
+  return '/surface/blog';
 }
 
 function syncHashFromSurface(path) {
@@ -2525,13 +2627,15 @@ function syncHashFromSurface(path) {
   }
 }
 
-function openFromHash() {
-  const path = surfaceHashToPath(location.hash);
-  const slotId = path ? surfacePathToSlot(path) : null;
-  const surface = DASH_SURFACES.find((entry) => entry.id === slotId);
-  if (path && slotId && surface) {
-    hydrateSurface(slotId, path, surface.fallback).then(() => syncHashFromSurface(path));
+async function openFromHash() {
+  const path = surfaceHashToPath(location.hash || '#build-log');
+  const surfaceKey = surfacePathToSurfaceKey(path);
+  const surface = getSurfaceForKey(surfaceKey);
+  if (!path || !surface) {
+    return;
   }
+  await hydrateSurface(path, surface.fallback, surface.key);
+  syncHashFromSurface(path);
 }
 
 function bindSurfaceSearch(container) {
@@ -2565,8 +2669,20 @@ function bindSurfaceSearch(container) {
 
 function bindSurfaceLinks() {
   document.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-dash-hash], [hx-get]');
+    const button = event.target.closest('[data-dash-hash], [hx-get], [data-surface]');
     if (!button) {
+      return;
+    }
+    if (button.matches('[data-surface]')) {
+      event.preventDefault();
+      const surfaceKey = button.getAttribute('data-surface') || 'build-log';
+      const surface = getSurfaceForKey(surfaceKey);
+      if (!surface) {
+        return;
+      }
+      hydrateSurface(surface.pathPrefix, surface.fallback, surface.key).then(() => {
+        syncHashFromSurface(surface.pathPrefix);
+      });
       return;
     }
     const raw = button.getAttribute('data-dash-hash') || button.getAttribute('hx-get');
@@ -2574,12 +2690,13 @@ function bindSurfaceLinks() {
     if (!path) {
       return;
     }
-    const slotId = surfacePathToSlot(path);
-    if (!slotId) {
+    const surfaceKey = surfacePathToSurfaceKey(path);
+    if (!surfaceKey) {
       return;
     }
     event.preventDefault();
-    hydrateSurface(slotId, path, 'Unable to open this section.').then(() => syncHashFromSurface(path));
+    const surface = getSurfaceForKey(surfaceKey);
+    hydrateSurface(path, surface?.fallback || 'Unable to open this section.', surfaceKey).then(() => syncHashFromSurface(path));
   });
 }
 
@@ -2719,10 +2836,7 @@ addEventListener('hashchange', () => {
 
 async function initDashboard() {
   bindSurfaceLinks();
-  await hydrateSurfaces();
-  if (location.hash) {
-    openFromHash();
-  }
+  await openFromHash();
   await refreshChatLog();
   wireGlobalChat();
   refreshDashStatus();
