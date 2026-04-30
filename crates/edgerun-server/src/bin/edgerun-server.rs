@@ -1272,9 +1272,9 @@ fn normalize_host(host: &str) -> String {
 const DASH_BODY: &str = r##"
 <main id="content" class="dash">
   <nav class="dash-rail" aria-label="Workspace surfaces">
-    <button class="dash-tab" type="button" hx-get="/surface/blog" hx-target="#surfaceSlot" aria-current="page">Build Log</button>
-    <button class="dash-tab" type="button" hx-get="/surface/git" hx-target="#surfaceSlot">Code</button>
-    <button class="dash-tab" type="button" hx-get="/surface/mail" hx-target="#surfaceSlot">Mail</button>
+    <button class="dash-tab" type="button" hx-get="/surface/blog" hx-target="#surfaceSlot" hx-swap="outerHTML" aria-current="page">Build Log</button>
+    <button class="dash-tab" type="button" hx-get="/surface/git" hx-target="#surfaceSlot" hx-swap="outerHTML">Code</button>
+    <button class="dash-tab" type="button" hx-get="/surface/mail" hx-target="#surfaceSlot" hx-swap="outerHTML">Mail</button>
   </nav>
   <section id="surfaceSlot" class="dash-stage" aria-label="Workspace surface">
     <header><div><strong id="surfaceTitle">Build Log</strong><span id="surfaceUrl">blog.edgerun.tech</span></div><a id="surfaceOpen" href="https://blog.edgerun.tech/">Open directly</a></header>
