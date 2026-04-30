@@ -1528,7 +1528,7 @@ fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
 
 fn render_dash_status_footer() -> String {
     String::from(
-        "<footer class=\"site-footer dash-status-footer\" aria-label=\"Server status\"><div class=\"dash-status\" data-dash-status><span>sessions <strong data-status-sessions>--</strong></span><span>req/s <strong data-status-rps>--</strong></span><span>mem <strong data-status-memory>--</strong></span><span>cpu <strong data-status-cpu>--</strong></span><span>bin <strong data-status-binary>--</strong></span><div class=\"dash-status-actions\"><button type=\"button\" class=\"dash-status-refresh\" data-status-refresh title=\"Refresh status\" aria-label=\"Refresh status\"><span aria-hidden=\"true\">⟳</span></button><span class=\"dash-status-theme\"><er-theme-toggle></er-theme-toggle></span></div></div></footer>",
+        "<footer class=\"site-footer dash-status-footer\" aria-label=\"Server status\"><div class=\"dash-status\" data-dash-status><span>sessions <strong data-status-sessions>--</strong></span><span>req/s <strong data-status-rps>--</strong></span><span>mem <strong data-status-memory>--</strong></span><span>cpu <strong data-status-cpu>--</strong></span><span>bin <strong data-status-binary>--</strong></span><div class=\"dash-status-actions\"><section id=\"dashChatDock\" class=\"dash-chat-dock is-open\" aria-label=\"Global chat dock\"><button id=\"dashChatBubble\" class=\"dash-chat-bubble\" type=\"button\" data-chat-action=\"open\" title=\"Open chat\" aria-label=\"Open global chat\"><span aria-hidden=\"true\">💬</span></button><section id=\"dashChatPanel\" class=\"dash-chat-panel\"><header class=\"dash-chat-panel-head\"><h2>Global chat</h2><div class=\"dash-chat-panel-controls\"><button id=\"dashChatMinimize\" class=\"dash-chat-panel-button\" type=\"button\" data-chat-action=\"minimize\" aria-label=\"Minimize chat\">▁</button><button id=\"dashChatClose\" class=\"dash-chat-panel-button\" type=\"button\" data-chat-action=\"close\" aria-label=\"Close chat\">×</button></div></header><div class=\"dash-chat-shell\"><form id=\"dashChatForm\" class=\"dash-chat-form\" autocomplete=\"off\"><label for=\"dashChatName\"><span>Name</span><input id=\"dashChatName\" required maxlength=\"24\" placeholder=\"your name\"></label><label for=\"dashChatMessage\"><span>Message</span><textarea id=\"dashChatMessage\" required maxlength=\"800\" placeholder=\"Say something to everyone\"></textarea></label><button id=\"dashChatSend\" type=\"submit\" aria-label=\"Post message\">Post</button></form><p class=\"dash-chat-status\" id=\"dashChatStatus\" role=\"status\"></p><div id=\"dashChatLog\" class=\"dash-chat-log\"></div></div></section></section><button type=\"button\" class=\"dash-status-refresh\" data-status-refresh title=\"Refresh status\" aria-label=\"Refresh status\"><span aria-hidden=\"true\">⟳</span></button><span class=\"dash-status-theme\"><er-theme-toggle></er-theme-toggle></span></div></div></footer>",
     )
 }
 
@@ -2314,29 +2314,6 @@ const DASH_BODY: &str = r##"
       <button class="dash-dock-button" type="button" data-dock-module="mail" title="Mail" aria-label="Open Mail">✉</button>
       <button class="dash-dock-button" type="button" data-dock-module="apps" title="Apps" aria-label="Open Apps">◎</button>
     </section>
-    <section id="dashChatDock" class="dash-chat-dock is-open" aria-label="Global chat dock">
-      <button id="dashChatBubble" class="dash-chat-bubble" type="button" data-chat-action="open" title="Open chat" aria-label="Open global chat">
-        <span aria-hidden="true">💬</span>
-      </button>
-      <section id="dashChatPanel" class="dash-chat-panel">
-        <header class="dash-chat-panel-head">
-          <h2>Global chat</h2>
-          <div class="dash-chat-panel-controls">
-            <button id="dashChatMinimize" class="dash-chat-panel-button" type="button" data-chat-action="minimize" aria-label="Minimize chat">▁</button>
-            <button id="dashChatClose" class="dash-chat-panel-button" type="button" data-chat-action="close" aria-label="Close chat">×</button>
-          </div>
-        </header>
-        <div class="dash-chat-shell">
-          <form id="dashChatForm" class="dash-chat-form" autocomplete="off">
-            <label for="dashChatName"><span>Name</span><input id="dashChatName" required maxlength="24" placeholder="your name"></label>
-            <label for="dashChatMessage"><span>Message</span><textarea id="dashChatMessage" required maxlength="800" placeholder="Say something to everyone"></textarea></label>
-            <button id="dashChatSend" type="submit" aria-label="Post message">Post</button>
-          </form>
-          <p class="dash-chat-status" id="dashChatStatus" role="status"></p>
-          <div id="dashChatLog" class="dash-chat-log"></div>
-        </div>
-      </section>
-    </section>
   </section>
 </main>
 "##;
@@ -2349,24 +2326,15 @@ const DASH_STYLE: &str = r#"
 .dash-panels-header h1{margin:8px 0 0}
 .dash-panels-header .dash-eyebrow{font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:var(--accent)}
 .dash-tools-grid{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:14px}
-.dash-workspace{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));align-items:start;transition:gap .2s ease}
-.dash-workspace[data-maximized-module]{grid-template-columns:1fr}
-.dash-workspace.dash-maximized .dash-module{display:none}
-.dash-workspace.dash-maximized .dash-module.dash-module-maximized{display:grid;grid-column:1/-1;min-height:72vh}
 .dash-panel{display:grid;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 13px 34px color-mix(in srgb,var(--text) 6%,transparent)}
 .dash-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .dash-panel-head h2{margin:0;font-size:21px}
 .dash-panel-head span{color:var(--muted);font-size:13px}
-.dash-module{position:relative;min-height:220px;user-select:none}
-.dash-module.dash-module-dragging{opacity:.65;box-shadow:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent),0 12px 24px color-mix(in srgb,var(--text) 18%,transparent)}
+.dash-module.dash-module-dragging{opacity:.65;box-shadow:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent),0 12px 24px color-mix(in srgb,var(--text) 18%,transparent);cursor:grabbing}
 .dash-module-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .dash-module-head h2{margin:0}
 .dash-module-kicker{margin:0;font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:12px;color:var(--muted)}
 .dash-module-controls{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.dash-module-button{height:28px;min-width:28px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--muted);font:inherit;font-size:14px;line-height:1;padding:0 7px;cursor:pointer}
-.dash-module-button:hover{color:var(--text);border-color:var(--accent)}
-.dash-module-drag-handle{display:inline-flex;height:28px;min-width:28px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:13px;cursor:grab;justify-content:center;align-items:center;user-select:none}
-.dash-module-drag-handle:active{cursor:grabbing}
 .dash-module-minimized{background:color-mix(in srgb,var(--panel) 80%,transparent)}
 .dash-module-minimized .dash-surface{display:none}
 .dash-module-minimized .dash-surface-path{display:none}
@@ -2420,17 +2388,6 @@ const DASH_STYLE: &str = r#"
 .dash-chat-text{line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
 .dash-chat-log .dash-chat-entry + .dash-chat-entry{margin-top:10px}
 .dash-chat-log .dash-chat-entry{line-height:1.4}
-.dash-dock .dash-panel-head{margin-bottom:8px}
-.dash-dock-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.dash-dock-button{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:10px;height:40px;font:inherit;cursor:pointer}
-.dash-dock-button:hover{border-color:var(--accent);color:var(--accent)}
-.dash-dock-button.is-restored{background:color-mix(in srgb,var(--accent) 12%,var(--bg))}
-.dash-status-footer{min-height:30px;height:30px;display:flex;align-items:center;justify-content:center;padding:0 14px;overflow:hidden}
-.dash-status{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;white-space:nowrap;font-size:12px;line-height:1}
-.dash-status span{display:inline-flex;align-items:baseline;gap:5px;color:var(--muted)}
-.dash-status strong{color:var(--text);font-weight:800}
-.dash-status button{height:22px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:0 8px;font:inherit;cursor:pointer}
-.dash-status button:hover,.dash-status button:focus-visible{border-color:var(--accent);color:var(--accent)}
 body{--footer-h:42px;--topbar-h:0px}
 .topbar{display:none!important}
 .dash-panels-header,
@@ -2440,7 +2397,7 @@ body{--footer-h:42px;--topbar-h:0px}
 .dash-shell{
   min-height:calc(100vh - var(--footer-h));
   background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 92%,var(--panel)) 0,var(--bg) 220px);
-  padding:12px;
+  padding:12px 12px 88px;
 }
 .dash-shell-inner{
   margin:0;
@@ -2448,19 +2405,30 @@ body{--footer-h:42px;--topbar-h:0px}
   gap:0;
 }
 .dash-workspace{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
   gap:12px;
-  align-items:start;
   min-height:calc(100vh - 188px);
 }
-.dash-workspace[data-maximized-module]{grid-template-columns:1fr}
 .dash-workspace.dash-maximized .dash-module{display:none}
-.dash-workspace.dash-maximized .dash-module.dash-module-maximized{display:grid;grid-column:1/-1;min-height:72vh}
-.dash-module{user-select:none;transition:transform .18s ease, box-shadow .18s ease}
-.dash-module .dash-surface{max-height:min(520px, calc(100vh - 320px));}
+.dash-workspace.dash-maximized .dash-module.dash-module-maximized{display:block; flex:1 1 100%;min-height:72vh}
+.dash-module{
+  flex:1 1 min(380px, 100%);
+  user-select:none;
+  transition:transform .18s ease, box-shadow .18s ease;
+  resize:both;
+  overflow:auto;
+  min-width:min(320px,100%);
+  min-height:300px;
+  max-width:min(100vw - 22px, 760px);
+  max-height:calc(100vh - 210px);
+  position:relative;
+}
+.dash-module .dash-surface{max-height:min(520px, calc(100vh - 360px));}
 .dash-module.dash-module-minimized{height:54px;overflow:hidden}
 .dash-module.dash-module-minimized .dash-module-controls .dash-module-button[data-module-action='minimize']{transform:scale(0.94)}
+.dash-module:active{cursor:grab}
 .dash-dock{
   position:fixed;
   left:50%;
@@ -2472,60 +2440,109 @@ body{--footer-h:42px;--topbar-h:0px}
   padding:10px;
   border:1px solid color-mix(in srgb,var(--line) 80%,transparent);
   border-radius:999px;
-  background:color-mix(in srgb,var(--panel) 82%,transparent);
+  background:color-mix(in srgb,var(--panel) 78%,transparent);
   backdrop-filter:blur(6px);
   z-index:20;
 }
 .dash-dock-button{
-  width:46px;
-  height:46px;
+  --dash-icon-scale: 1;
+  --dash-icon-dy: 0px;
+  --dash-icon-size: 22px;
+  width:34px;
+  height:34px;
   border-radius:999px;
-  border:1px solid var(--line);
-  background:var(--panel);
+  border:1px solid color-mix(in srgb,var(--line) 70%,transparent);
+  background:transparent;
   color:var(--text);
   display:flex;
   align-items:center;
   justify-content:center;
   cursor:pointer;
+  font-size:var(--dash-icon-size);
+  line-height:1;
+  padding:0;
+  transform:translateY(var(--dash-icon-dy)) scale(var(--dash-icon-scale));
+  transition:transform .18s ease,border-color .18s ease;
 }
 .dash-dock-button:hover,
 .dash-dock-button:focus-visible{
   border-color:var(--accent);
-  transform:translateY(-1px) scale(1.03);
+  transform:translateY(calc(var(--dash-icon-dy) - 1px)) scale(calc(var(--dash-icon-scale) * 1.01));
 }
 .dash-dock-button.is-restored{
-  border-color:color-mix(in srgb,var(--accent) 45%,var(--line));
+  border-color:color-mix(in srgb,var(--accent) 45%,transparent);
   box-shadow:0 8px 18px color-mix(in srgb,var(--accent) 24%,transparent);
 }
+.dash-icon-button{
+  height:30px;
+  width:30px;
+  min-width:30px;
+  border:1px solid color-mix(in srgb,var(--line) 60%,transparent);
+  border-radius:999px;
+  background:transparent;
+  color:var(--muted);
+  font-size:14px;
+  line-height:1;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  cursor:pointer;
+}
+.dash-module-button,
+.dash-module-drag-handle,
+.dash-chat-panel-button,
+.dash-status button,
+.dash-status-refresh,
+.dash-chat-bubble{
+  height:30px;
+  width:30px;
+  min-width:30px;
+  border:1px solid color-mix(in srgb,var(--line) 70%,transparent);
+  border-radius:999px;
+  background:transparent;
+  color:var(--muted);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  cursor:pointer;
+  line-height:1;
+}
+.dash-module-button{font-size:14px;}
+.dash-module-drag-handle{font-size:12px;cursor:grab;user-select:none}
+.dash-chat-panel-button,
+.dash-status-refresh{font-size:13px;}
+.dash-chat-bubble{font-size:18px;line-height:1}
+.dash-module-button:hover,
+.dash-module-drag-handle:hover,
+.dash-chat-panel-button:hover,
+.dash-status button:hover,
+.dash-status-refresh:hover,
+.dash-chat-bubble:hover,
+.dash-module-button:focus-visible,
+.dash-module-drag-handle:focus-visible,
+.dash-chat-panel-button:focus-visible,
+.dash-status button:focus-visible,
+.dash-status-refresh:focus-visible,
+.dash-chat-bubble:focus-visible{
+  color:var(--text);
+  border-color:var(--accent);
+}
 .dash-chat-dock{
-  position:fixed;
-  right:16px;
-  bottom:calc(var(--footer-h) + 12px);
-  z-index:24;
-  display:flex;
+  position:relative;
+  display:inline-flex;
   align-items:flex-end;
 }
 .dash-chat-bubble{
-  width:48px;
-  height:48px;
-  border-radius:999px;
-  border:1px solid var(--line);
-  background:var(--panel);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  box-shadow:0 14px 26px color-mix(in srgb,var(--text) 12%,transparent);
-  cursor:pointer;
+  box-shadow:0 10px 24px color-mix(in srgb,var(--text) 12%,transparent);
 }
-.dash-chat-bubble:hover,
-.dash-chat-bubble:focus-visible{
-  border-color:var(--accent);
-  transform:scale(1.03);
-}
-.dash-chat-bubble span{line-height:1;font-size:21px}
+.dash-chat-bubble span{line-height:1}
 .dash-chat-panel{
+  position:absolute;
+  right:0;
+  bottom:calc(100% + 10px);
   width:min(390px, calc(100vw - 24px));
-  margin-right:10px;
   border:1px solid var(--line);
   border-radius:14px;
   background:var(--panel);
@@ -2536,15 +2553,17 @@ body{--footer-h:42px;--topbar-h:0px}
   box-shadow:0 13px 28px color-mix(in srgb,var(--text) 18%,transparent);
   transition:max-height .25s ease, opacity .2s ease, transform .25s ease;
 }
-.dash-chat-panel.dash-chat-closed{
+.dash-chat-dock:not(.is-open) .dash-chat-panel,
+.dash-chat-dock.is-minimized .dash-chat-panel{
   display:none;
 }
-.dash-chat-panel.dash-chat-minimized{
-  max-height:56px;
-  overflow:hidden;
+.dash-chat-dock .dash-chat-panel{
+  transform-origin:100% 100%;
 }
-.dash-chat-panel.dash-chat-minimized .dash-chat-shell,
-.dash-chat-panel.dash-chat-minimized .dash-chat-status{
+.dash-chat-dock.is-open .dash-chat-panel{
+  display:grid;
+}
+.dash-chat-panel.dash-chat-closed{
   display:none;
 }
 .dash-chat-panel-head{
@@ -2562,14 +2581,7 @@ body{--footer-h:42px;--topbar-h:0px}
   gap:8px;
 }
 .dash-chat-panel-button{
-  width:24px;
-  height:24px;
-  border-radius:999px;
-  border:1px solid var(--line);
-  background:var(--bg);
-  color:var(--muted);
-  cursor:pointer;
-  padding:0;
+  border-color:color-mix(in srgb,var(--line) 70%,transparent);
 }
 .dash-status-footer{
   min-height:42px;
@@ -2578,7 +2590,7 @@ body{--footer-h:42px;--topbar-h:0px}
   align-items:center;
   justify-content:center;
   padding:0 12px;
-  overflow:hidden;
+  overflow:visible;
   position:fixed;
   left:0;
   right:0;
@@ -2588,18 +2600,16 @@ body{--footer-h:42px;--topbar-h:0px}
 .dash-status{width:100%;display:flex;align-items:center;gap:14px;white-space:nowrap;font-size:12px;line-height:1;min-width:0}
 .dash-status span{display:inline-flex;align-items:baseline;gap:5px;color:var(--muted)}
 .dash-status strong{color:var(--text);font-weight:800}
-.dash-status-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+.dash-status-actions{margin-left:auto;display:flex;align-items:flex-end;gap:12px;position:relative}
 .dash-status-refresh{
   width:30px;
   height:30px;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  border:1px solid var(--line);
+  border:1px solid color-mix(in srgb,var(--line) 70%,transparent);
   border-radius:10px;
-  background:var(--panel);
   color:var(--muted);
-  cursor:pointer;
 }
 .dash-status-refresh span{line-height:1;font-size:16px}
 .dash-status-refresh.is-loading span{animation:dash-spin 1s linear infinite}
@@ -2611,8 +2621,8 @@ body{--footer-h:42px;--topbar-h:0px}
   to{transform:rotate(360deg)}
 }
 @media(max-width:1200px){.dash-tools-grid{grid-template-columns:1fr}.dash-dock-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:1000px){.dash-workspace{grid-template-columns:1fr}}
-@media(max-width:760px){.dash-shell{padding:10px}.dash-shell-inner{gap:12px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
+@media(max-width:1000px){.dash-workspace{display:block}}
+@media(max-width:760px){.dash-shell{padding:10px 10px 96px}.dash-shell-inner{gap:12px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
 "#;
 
 const DASH_COHESIVE_JS: &str = r#"
@@ -3172,7 +3182,7 @@ function getChatDockState() {
   } catch (_error) {
     // ignore
   }
-  return 'open';
+  return 'closed';
 }
 
 function setChatDockState(state) {
@@ -3256,6 +3266,15 @@ function wireModuleControls() {
 function wireWorkspaceDock() {
   const dock = document.getElementById('dashDock');
   if (!dock) return;
+  const buttons = [...dock.querySelectorAll('.dash-dock-button')];
+
+  function resetDockIcons() {
+    for (const button of buttons) {
+      button.style.setProperty('--dash-icon-scale', '1');
+      button.style.setProperty('--dash-icon-dy', '0px');
+    }
+  }
+
   dock.addEventListener('click', async (event) => {
     const button = event.target.closest('[data-dock-module]');
     if (!button) return;
@@ -3274,6 +3293,30 @@ function wireWorkspaceDock() {
     module.scrollIntoView({ behavior: 'smooth', block: 'start' });
     await hydrateSurface(surface, surface.pathPrefix);
   });
+
+  dock.addEventListener('pointermove', (event) => {
+    if (buttons.length === 0) {
+      return;
+    }
+    const dockRect = dock.getBoundingClientRect();
+    const cursorX = event.clientX;
+    for (const dockButton of buttons) {
+      const buttonRect = dockButton.getBoundingClientRect();
+      const centerX = buttonRect.left + buttonRect.width / 2;
+      const distance = Math.abs(cursorX - centerX);
+      const radius = Math.max(dockRect.width / 2, 180);
+      const intensity = Math.max(0, 1 - distance / radius);
+      const scale = 1 + (intensity * 0.46);
+      const up = (intensity * 10) - 2;
+      dockButton.style.setProperty('--dash-icon-scale', `${scale}`);
+      dockButton.style.setProperty('--dash-icon-dy', `${up * -1}px`);
+    }
+  });
+
+  dock.addEventListener('pointerleave', resetDockIcons);
+  if (window.matchMedia && window.matchMedia('(hover: none)').matches) {
+    resetDockIcons();
+  }
 }
 
 function wireModuleDragReorder() {
