@@ -88,11 +88,20 @@ struct CrateInfo {
     rel_path: String,
     description: String,
     features: Vec<String>,
+    api_items: Vec<ApiItem>,
     workspace_deps: Vec<String>,
     dependents: Vec<String>,
     test_count: usize,
     test_result: Option<String>,
     rfcs: Vec<RfcLink>,
+}
+
+#[derive(Clone, Debug)]
+struct ApiItem {
+    kind: String,
+    name: String,
+    path: String,
+    line: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -548,6 +557,7 @@ fn crate_info_from_manifest(repo: &Repo, rel_path: &str, manifest: &str) -> io::
         .unwrap_or_else(|| rel_path.rsplit('/').next().unwrap_or("unknown").to_string());
     let description = manifest_string_value(manifest, "description").unwrap_or_default();
     let features = manifest_table_keys(manifest, "features");
+    let api_items = extract_public_api(repo, rel_path)?;
     let workspace_deps = workspace_dependency_names(manifest);
     let test_count = count_crate_tests(repo, rel_path)?;
     let test_result = load_crate_test_result(repo, &name).ok();
@@ -557,6 +567,7 @@ fn crate_info_from_manifest(repo: &Repo, rel_path: &str, manifest: &str) -> io::
         rel_path: rel_path.to_string(),
         description,
         features,
+        api_items,
         workspace_deps,
         dependents: Vec::new(),
         test_count,
@@ -622,6 +633,76 @@ fn workspace_dependency_names(manifest: &str) -> Vec<String> {
     deps.sort();
     deps.dedup();
     deps
+}
+
+fn extract_public_api(repo: &Repo, rel_path: &str) -> io::Result<Vec<ApiItem>> {
+    let files = git_output(
+        &repo.path,
+        &["ls-tree", "-r", "--name-only", &repo.default_ref, rel_path],
+    )?;
+    let mut items = Vec::new();
+    for file in files.lines().filter(|file| file.ends_with(".rs")) {
+        let Ok(source) = git_output(
+            &repo.path,
+            &["show", &format!("{}:{file}", repo.default_ref)],
+        ) else {
+            continue;
+        };
+        for (index, line) in source.lines().enumerate() {
+            let Some((kind, name)) = parse_public_api_line(line) else {
+                continue;
+            };
+            items.push(ApiItem {
+                kind,
+                name,
+                path: file.to_string(),
+                line: index + 1,
+            });
+        }
+    }
+    items.sort_by(|a, b| {
+        a.path
+            .cmp(&b.path)
+            .then_with(|| a.line.cmp(&b.line))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    Ok(items)
+}
+
+fn parse_public_api_line(line: &str) -> Option<(String, String)> {
+    let trimmed = line.trim_start();
+    let rest = trimmed
+        .strip_prefix("pub ")
+        .or_else(|| trimmed.strip_prefix("pub(crate) "))
+        .or_else(|| trimmed.strip_prefix("pub(super) "))
+        .or_else(|| trimmed.strip_prefix("pub(in "))?;
+    let rest = if trimmed.starts_with("pub(in ") {
+        rest.split_once(") ")?.1
+    } else {
+        rest
+    };
+    let mut rest = rest;
+    for prefix in ["async ", "unsafe ", "const "] {
+        if let Some(value) = rest.strip_prefix(prefix) {
+            rest = value;
+        }
+    }
+    for kind in [
+        "fn", "struct", "enum", "trait", "type", "const", "static", "mod",
+    ] {
+        let Some(after_kind) = rest.strip_prefix(kind) else {
+            continue;
+        };
+        let name = after_kind.trim_start();
+        let name = name
+            .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+            .next()
+            .unwrap_or("");
+        if !name.is_empty() {
+            return Some((kind.to_string(), name.to_string()));
+        }
+    }
+    None
 }
 
 fn count_crate_tests(repo: &Repo, rel_path: &str) -> io::Result<usize> {
@@ -836,12 +917,16 @@ fn render_crates_index(config: &GitConfig, repo: &Repo, crates: &[CrateInfo]) ->
             .iter()
             .map(|info| {
                 format!(
-                    "<article class=\"repo-card crate-card\"><a href=\"/{}/crates/{}\"><h2>{}</h2><p>{}</p><span>{} features · {} tests</span></a></article>",
+                    "<article class=\"repo-card crate-card\" data-crate-search=\"{} {} {}\"><a href=\"/{}/crates/{}\"><h2>{}</h2><p>{}</p><span>{} features · {} API items · {} tests</span></a></article>",
+                    escape_attr(&info.name),
+                    escape_attr(&info.description),
+                    escape_attr(&info.workspace_deps.join(" ")),
                     escape_attr(&repo.name),
                     escape_attr(&info.name),
                     escape_html(&info.name),
                     escape_html(&info.description),
                     info.features.len(),
+                    info.api_items.len(),
                     info.test_count
                 )
             })
@@ -853,10 +938,11 @@ fn render_crates_index(config: &GitConfig, repo: &Repo, crates: &[CrateInfo]) ->
         &format!("{} crates | {}", repo.title, config.title),
         &repo.description,
         &format!(
-            "<main id=\"content\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a></nav><section class=\"hero\"><p class=\"eyebrow\">Crate explorer</p><h1>{} crates</h1><p>Workspace crates that have been released through this repository's visibility policy.</p></section><section class=\"repos\" aria-label=\"Crates\">{}</section></main>",
+            "<main id=\"content\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a></nav><section class=\"hero\"><p class=\"eyebrow\">Crate explorer</p><h1>{} crates</h1><p>Workspace crates that have been released through this repository's visibility policy.</p><form class=\"crate-search\" role=\"search\"><label for=\"crate-search\">Search crates</label><input id=\"crate-search\" type=\"search\" placeholder=\"Search crates\" autocomplete=\"off\"><span id=\"crate-search-count\">{} crates</span></form></section><section class=\"repos\" aria-label=\"Crates\">{}</section></main>",
             escape_attr(&repo.name),
             escape_html(&repo.title),
             escape_html(&repo.title),
+            crates.len(),
             items
         ),
     )
@@ -871,6 +957,7 @@ fn render_crate_page(
     let features = render_pills(&info.features, "No declared features.");
     let deps = render_crate_links(repo, &info.workspace_deps);
     let dependents = render_crate_links(repo, &info.dependents);
+    let api = render_api_items(repo, &repo.default_ref, info);
     let rfcs = render_rfc_links(repo, &repo.default_ref, &info.rfcs);
     let tree = format!(
         "<ol class=\"dependency-tree\">{}</ol>",
@@ -882,6 +969,7 @@ fn render_crate_page(
         "<iframe src=\"{}\" title=\"{}\" loading=\"lazy\"></iframe>",
         embed_url, embed_title
     );
+    let vulnerability_href = vulnerability_report_href(&info.name);
     let result = info
         .test_result
         .as_deref()
@@ -892,7 +980,7 @@ fn render_crate_page(
         &format!("{} | {}", info.name, config.title),
         &info.description,
         &format!(
-            "<main id=\"content\" class=\"repo crate-page\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a><span>/</span><a href=\"/{}/crates\">crates</a></nav><header class=\"repo-head\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><a class=\"commit-link\" href=\"/{}/src/{}/{}\">Source</a></header><section class=\"crate-grid\"><article class=\"crate-panel\"><h2>Features</h2>{}</article><article class=\"crate-panel\"><h2>Related crates</h2><h3>Depends on</h3>{}<h3>Used by</h3>{}</article><article class=\"crate-panel\"><h2>Tests</h2><p><strong>{}</strong> test declarations found.</p><pre class=\"commit\"><code>{}</code></pre></article><article class=\"crate-panel\"><h2>Related RFCs</h2>{}</article><article class=\"crate-panel wide\"><h2>Dependency tree</h2>{}</article><article class=\"crate-panel wide\"><h2>Embeddable status</h2><p class=\"muted\">Use this iframe in build-log posts when the post should point at the live crate surface.</p><pre class=\"commit\"><code>{}</code></pre></article></section></main>",
+            "<main id=\"content\" class=\"repo crate-page\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a><span>/</span><a href=\"/{}/crates\">crates</a></nav><header class=\"repo-head\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><nav class=\"repo-actions\" aria-label=\"Crate actions\"><a class=\"commit-link\" href=\"/{}/src/{}/{}\">Source</a><a class=\"commit-link\" href=\"{}\">Report vulnerability</a></nav></header><nav class=\"section-nav\" aria-label=\"Crate sections\"><a href=\"#api\">API</a><a href=\"#related\">Related</a><a href=\"#tests\">Tests</a><a href=\"#rfcs\">RFCs</a><a href=\"#embed\">Embed</a></nav><section class=\"crate-grid\"><article class=\"crate-panel\"><h2>Features</h2>{}</article><article class=\"crate-panel\" id=\"related\"><h2>Related crates</h2><h3>Depends on</h3>{}<h3>Used by</h3>{}</article><article class=\"crate-panel\" id=\"tests\"><h2>Tests</h2><p><strong>{}</strong> test declarations found.</p><pre class=\"commit\"><code>{}</code></pre></article><article class=\"crate-panel\" id=\"rfcs\"><h2>Related RFCs</h2>{}</article><article class=\"crate-panel wide\"><h2>Dependency tree</h2>{}</article><article class=\"crate-panel wide\" id=\"api\"><h2>API surface</h2>{}</article><article class=\"crate-panel wide\" id=\"embed\"><h2>Embeddable status</h2><p class=\"muted\">Use this iframe in build-log posts when the post should point at the live crate surface.</p><pre class=\"commit\"><code>{}</code></pre></article></section></main>",
             escape_attr(&repo.name),
             escape_html(&repo.title),
             escape_attr(&repo.name),
@@ -901,6 +989,7 @@ fn render_crate_page(
             escape_attr(&repo.name),
             escape_attr(&repo.default_ref),
             escape_attr(&info.rel_path),
+            escape_attr(&vulnerability_href),
             features,
             deps,
             dependents,
@@ -908,6 +997,7 @@ fn render_crate_page(
             result,
             rfcs,
             tree,
+            api,
             escape_html(&embed_code)
         ),
     )
@@ -931,11 +1021,12 @@ fn render_crate_component_document(config: &GitConfig, repo: &Repo, info: &Crate
 fn render_crate_component_card(repo: &Repo, info: &CrateInfo) -> String {
     let test_result = crate_test_summary(info);
     format!(
-        "<article class=\"crate-component\" aria-label=\"{} crate status\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><dl class=\"component-stats\"><div><dt>Features</dt><dd>{}</dd></div><div><dt>Tests</dt><dd>{}</dd></div><div><dt>Depends on</dt><dd>{}</dd></div><div><dt>Used by</dt><dd>{}</dd></div></dl><p class=\"component-result\">{}</p><p class=\"component-actions\"><a target=\"_top\" href=\"/{}/crates/{}\">Open crate page</a><a target=\"_top\" href=\"/{}/src/{}/{}\">Source</a></p></article>",
+        "<article class=\"crate-component\" aria-label=\"{} crate status\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><dl class=\"component-stats\"><div><dt>Features</dt><dd>{}</dd></div><div><dt>API</dt><dd>{}</dd></div><div><dt>Tests</dt><dd>{}</dd></div><div><dt>Depends on</dt><dd>{}</dd></div><div><dt>Used by</dt><dd>{}</dd></div></dl><p class=\"component-result\">{}</p><p class=\"component-actions\"><a target=\"_top\" href=\"/{}/crates/{}\">Open crate page</a><a target=\"_top\" href=\"/{}/src/{}/{}\">Source</a></p></article>",
         escape_attr(&info.name),
         escape_html(&info.name),
         escape_html(&info.description),
         info.features.len(),
+        info.api_items.len(),
         info.test_count,
         info.workspace_deps.len(),
         info.dependents.len(),
@@ -968,6 +1059,14 @@ fn absolute_site_url(config: &GitConfig, path: &str) -> String {
     }
 }
 
+fn vulnerability_report_href(crate_name: &str) -> String {
+    format!(
+        "mailto:ken@edgerun.tech?subject={}&body={}",
+        query_escape(&format!("Security report for {crate_name}")),
+        query_escape("Please describe the affected crate, impact, reproduction steps, and whether this should be handled privately before public disclosure.")
+    )
+}
+
 fn render_pills(values: &[String], empty: &str) -> String {
     if values.is_empty() {
         return format!("<p class=\"empty\">{}</p>", escape_html(empty));
@@ -995,6 +1094,32 @@ fn render_crate_links(repo: &Repo, names: &[String]) -> String {
                 escape_attr(&repo.name),
                 escape_attr(name),
                 escape_html(name)
+            ))
+            .collect::<Vec<_>>()
+            .join("")
+    )
+}
+
+fn render_api_items(repo: &Repo, rev: &str, info: &CrateInfo) -> String {
+    if info.api_items.is_empty() {
+        return "<p class=\"empty\">No public Rust items found in released source yet.</p>"
+            .to_string();
+    }
+    format!(
+        "<ul class=\"api-list\">{}</ul>",
+        info.api_items
+            .iter()
+            .take(80)
+            .map(|item| format!(
+                "<li><span>{}</span><a href=\"/{}/src/{}/{}#L{}\">{}</a><small>{}:{}</small></li>",
+                escape_html(&item.kind),
+                escape_attr(&repo.name),
+                escape_attr(rev),
+                escape_attr(&item.path),
+                item.line,
+                escape_html(&item.name),
+                escape_html(&item.path),
+                item.line
             ))
             .collect::<Vec<_>>()
             .join("")
@@ -1235,7 +1360,7 @@ fn js_response() -> Response {
         .with_header("Content-Type", "application/javascript; charset=utf-8")
         .with_header("Cache-Control", "public, max-age=31536000, immutable")
         .with_header("X-Content-Type-Options", "nosniff")
-        .with_body(edgerun_web_ui::THEME_TOGGLE_JS)
+        .with_body(git_js())
 }
 
 fn favicon_response() -> Response {
@@ -1411,6 +1536,20 @@ fn escape_attr(input: &str) -> String {
     edgerun_web_ui::escape_attr(input)
 }
 
+fn query_escape(input: &str) -> String {
+    let mut out = String::new();
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char)
+            }
+            b' ' => out.push_str("%20"),
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
 fn to_io_error(error: edgerun_http::io::Error) -> io::Error {
     io::Error::other(error.to_string())
 }
@@ -1419,9 +1558,22 @@ fn git_style() -> String {
     format!("{}\n{}", edgerun_web_ui::BASE_STYLE, GIT_STYLE)
 }
 
+fn git_js() -> String {
+    format!("{}\n{}", edgerun_web_ui::THEME_TOGGLE_JS, GIT_JS)
+}
+
+const GIT_JS: &str = r#"
+const crateSearch=document.getElementById('crate-search');
+const crateCards=[...document.querySelectorAll('[data-crate-search]')];
+const crateCount=document.getElementById('crate-search-count');
+function applyCrateSearch(value){const query=value.trim().toLowerCase();let shown=0;for(const card of crateCards){const match=!query||card.dataset.crateSearch.toLowerCase().includes(query);card.hidden=!match;if(match)shown++}if(crateCount){crateCount.textContent=shown+' crates'}}
+if(crateSearch){crateSearch.addEventListener('input',()=>applyCrateSearch(crateSearch.value))}
+"#;
+
 const GIT_STYLE: &str = r#"
 .repos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}.repo-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.repo-card a{display:block;min-height:180px;padding:22px;text-decoration:none}.repo-card h2{margin:0 0 10px;font-size:26px;line-height:1.15}.repo-card p{color:var(--muted)}.repo-card span,.commit-link{color:var(--accent);font-weight:800}.crate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.crate-panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.crate-panel h2{margin:0 0 12px;font-size:22px}.crate-panel h3{margin:16px 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.crate-panel.wide{grid-column:1/-1}.pills{display:flex;flex-wrap:wrap;gap:8px}.pills span{border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--muted)}.link-list{display:grid;gap:8px;margin:0;padding-left:18px}.link-list a{color:var(--accent);font-weight:750;text-decoration:none}.link-list span{display:block;color:var(--muted)}.crate-panel ol{margin:8px 0 0 22px}.dependency-tree{padding-left:20px}.crate-panel li{margin:5px 0}.crate-panel li a{color:var(--accent);font-weight:750;text-decoration:none}.repo{max-width:1180px;margin:0 auto;padding:34px 18px 80px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);margin-bottom:18px}.crumbs a{color:var(--accent);text-decoration:none}.repo-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:22px}.repo-head h1{margin:0;font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:0}.repo-head p{color:var(--muted)}.commit-link{border:1px solid var(--line);border-radius:8px;padding:9px 12px;text-decoration:none;background:var(--panel);white-space:nowrap}.tree-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}.tree-list li{display:grid;grid-template-columns:1fr 90px;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}.tree-list li:first-child{border-top:0}.tree-list a{text-decoration:none;font-weight:700}.tree-list span{color:var(--muted)}.code{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:block}.code tbody{display:table;width:100%}.code tr:target{background:color-mix(in srgb,var(--accent) 14%,transparent)}.code th{width:1%;min-width:54px;padding:0 12px;text-align:right;color:var(--muted);border-right:1px solid var(--line);user-select:none}.code th a{text-decoration:none;color:inherit}.code td{padding:0 12px;white-space:pre;overflow:auto}.code code,.commit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}.commit{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}@media(max-width:760px){.repos,.crate-grid{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}}
-.component-body{margin:0;padding:0;background:transparent}.crate-component{min-height:100vh;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:18px}.crate-component h1{margin:0;font-size:28px;line-height:1.05;letter-spacing:0}.crate-component p{margin:8px 0;color:var(--muted)}.component-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:16px 0}.component-stats div{border:1px solid var(--line);border-radius:8px;padding:8px;background:color-mix(in srgb,var(--panel) 82%,var(--code))}.component-stats dt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}.component-stats dd{margin:2px 0 0;font-weight:800}.component-result{border-left:3px solid var(--accent);padding-left:10px}.component-actions{display:flex;gap:12px;flex-wrap:wrap}.component-actions a{color:var(--accent);font-weight:800;text-decoration:none}@media(max-width:560px){.component-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.crate-search{display:grid;grid-template-columns:minmax(220px,420px) max-content;gap:10px;align-items:center;max-width:620px;margin-top:22px}.crate-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.crate-search input{min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 13px;font:inherit}.crate-search span{color:var(--muted);font-weight:750}.repo-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.section-nav{display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 22px}.section-nav a{border:1px solid var(--line);border-radius:999px;padding:5px 10px;color:var(--muted);font-weight:750;text-decoration:none}.section-nav a:hover{border-color:var(--accent);color:var(--accent)}.api-list{display:grid;gap:8px;list-style:none;margin:0;padding:0}.api-list li{display:grid;grid-template-columns:70px minmax(0,1fr) minmax(0,1.4fr);gap:10px;align-items:baseline;border-bottom:1px solid var(--line);padding:7px 0}.api-list span{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase}.api-list a{color:var(--accent);font-weight:800;text-decoration:none}.api-list small{color:var(--muted);overflow-wrap:anywhere}@media(max-width:760px){.crate-search{grid-template-columns:1fr}.repo-actions{justify-content:flex-start}.api-list li{grid-template-columns:1fr}.api-list span{font-size:11px}}
+.component-body{margin:0;padding:0;background:transparent}.crate-component{min-height:100vh;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:18px}.crate-component h1{margin:0;font-size:28px;line-height:1.05;letter-spacing:0}.crate-component p{margin:8px 0;color:var(--muted)}.component-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:8px;margin:16px 0}.component-stats div{border:1px solid var(--line);border-radius:8px;padding:8px;background:color-mix(in srgb,var(--panel) 82%,var(--code))}.component-stats dt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}.component-stats dd{margin:2px 0 0;font-weight:800}.component-result{border-left:3px solid var(--accent);padding-left:10px}.component-actions{display:flex;gap:12px;flex-wrap:wrap}.component-actions a{color:var(--accent);font-weight:800;text-decoration:none}
 "#;
 #[cfg(test)]
 mod tests {
@@ -1604,7 +1756,7 @@ mod tests {
         .unwrap();
         fs::write(
             repo_path.join("crates/edgerun-demo/src/lib.rs"),
-            "#[test]\nfn demo() {}\n",
+            "pub struct Demo;\npub async fn run_demo() {}\n#[test]\nfn demo() {}\n",
         )
         .unwrap();
         fs::write(repo_path.join("crates/edgerun-demo/.gitvisible"), "").unwrap();
@@ -1624,19 +1776,38 @@ mod tests {
         assert_eq!(crates.len(), 1);
         assert_eq!(crates[0].name, "edgerun-demo");
         assert_eq!(crates[0].features, ["default", "std"]);
+        assert_eq!(crates[0].api_items.len(), 2);
         assert_eq!(crates[0].test_count, 1);
         let mut config = GitConfig::new(base.join("repos"));
         config.base_url = "https://git.example.test".to_string();
         let html = render_crate_page(&config, &repo, &crates[0], &crates);
         assert!(html.contains("Workspace crate"));
+        assert!(html.contains("API surface"));
+        assert!(html.contains("run_demo"));
+        assert!(html.contains("Report vulnerability"));
+        assert!(html.contains("Security%20report%20for%20edgerun-demo"));
         assert!(html.contains("edgerun-demo"));
         assert!(!html.contains("edgerun-hidden"));
         assert!(html.contains("https://git.example.test/demo/components/crates/edgerun-demo.html"));
         let component = render_crate_component_document(&config, &repo, &crates[0]);
         assert!(component.contains("edgerun-demo crate status"));
+        assert!(component.contains("<dt>API</dt><dd>2</dd>"));
         assert!(component.contains("Open crate page"));
         assert!(component.contains("target=\"_top\""));
         let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn parses_public_api_lines() {
+        assert_eq!(
+            parse_public_api_line("pub fn send_mail() {}"),
+            Some(("fn".to_string(), "send_mail".to_string()))
+        );
+        assert_eq!(
+            parse_public_api_line("pub(crate) struct Mailbox;"),
+            Some(("struct".to_string(), "Mailbox".to_string()))
+        );
+        assert!(parse_public_api_line("fn private() {}").is_none());
     }
 
     #[test]
