@@ -12,7 +12,7 @@ use webmail::{
     unique_webmail_id, WebmailHandler,
 };
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fs::OpenOptions;
 use std::future::Future;
 use std::io;
@@ -1116,6 +1116,7 @@ struct SiteRouter {
     browser_apps: Vec<BrowserAppSpec>,
     dash_modules_root: PathBuf,
     host_stats: Arc<Mutex<HostStatsCache>>,
+    chat_state: Arc<Mutex<DashChatState>>,
     request_count: Arc<AtomicU64>,
 }
 
@@ -1182,6 +1183,7 @@ impl SiteRouter {
             browser_apps,
             dash_modules_root,
             host_stats: Arc::new(Mutex::new(HostStatsCache::default())),
+            chat_state: Arc::new(Mutex::new(DashChatState::default())),
             request_count: Arc::new(AtomicU64::new(0)),
         }
     }
@@ -1203,6 +1205,9 @@ impl SiteRouter {
                     "GET" | "HEAD" => self.dash_status_response(),
                     _ => method_not_allowed("GET, HEAD"),
                 };
+            }
+            if path.starts_with("/api/chat") {
+                return self.handle_dash_chat(request);
             }
             if path.starts_with("/surface/mail") {
                 return self.webmail.handle_dash_mail(request);
@@ -1235,6 +1240,110 @@ impl SiteRouter {
             }
         }
         self.webmail.handle_sync(request)
+    }
+
+    fn handle_dash_chat(&self, request: Request) -> Response {
+        match request.method().as_str() {
+            "GET" | "HEAD" => self.dash_chat_list(),
+            "POST" => self.dash_chat_post(&request),
+            _ => method_not_allowed("GET, HEAD, POST"),
+        }
+    }
+
+    fn dash_chat_list(&self) -> Response {
+        let Ok(state) = self.chat_state.lock() else {
+            return Response::json(
+                StatusCode::new(500).unwrap(),
+                r#"{"ok":false,"error":"chat state unavailable"}"#,
+            )
+            .with_header("Cache-Control", "no-store")
+            .with_header("X-Content-Type-Options", "nosniff");
+        };
+        let mut messages = String::new();
+        for (index, message) in state.messages.iter().enumerate() {
+            if index > 0 {
+                messages.push(',');
+            }
+            messages.push_str(&message.to_json());
+        }
+        let body = format!(r#"{{"ok":true,"messages":[{}]}}"#, messages);
+        Response::json(StatusCode::OK, &body)
+            .with_header("Cache-Control", "no-store")
+            .with_header("X-Content-Type-Options", "nosniff")
+    }
+
+    fn dash_chat_post(&self, request: &Request) -> Response {
+        let body = request.body().unwrap_or_default();
+        let payload: JsonValue = match edgerun_config::edgerun_json::from_json_slice(body) {
+            Ok(value) => value,
+            Err(error) => {
+                return dash_chat_error_response(
+                    StatusCode::new(400).unwrap(),
+                    &format!("invalid JSON: {error}"),
+                );
+            }
+        };
+        let raw_handle = payload
+            .get("name")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("Guest")
+            .trim();
+        let raw_message = payload
+            .get("message")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("")
+            .trim();
+        let handle = sanitize_chat_input(raw_handle, 24);
+        let message = sanitize_chat_input(raw_message, 800);
+        let sender_key = chat_sender_key(request);
+        let now = chat_unix_now();
+        if let Some(reason) = apply_chat_heuristics(&handle, &message, &sender_key, now) {
+            return dash_chat_error_response(
+                StatusCode::new(403).unwrap(),
+                &format!("message blocked: {reason}"),
+            );
+        }
+
+        let mut state = match self.chat_state.lock() {
+            Ok(state) => state,
+            Err(error) => {
+                return dash_chat_error_response(
+                    StatusCode::new(500).unwrap(),
+                    &format!("chat unavailable: {error}"),
+                );
+            }
+        };
+
+        if let Some(reason) = state.apply_heuristics(&handle, &message, &sender_key, now) {
+            return dash_chat_error_response(
+                StatusCode::new(403).unwrap(),
+                &format!("message blocked: {reason}"),
+            );
+        }
+
+        let id = state.next_id.saturating_add(1);
+        state.next_id = id;
+        state.messages.push_back(DashChatMessage {
+            id,
+            handle: handle.clone(),
+            message: message.clone(),
+            sender_key,
+            posted_at: now,
+        });
+        state.register_sender(&sender_key, now);
+        state.prune(now);
+        Response::json(
+            StatusCode::OK,
+            &format!(
+                r#"{{"ok":true,"message":{{"id":{},"name":"{}","message":"{}","at":{}}}}}"#,
+                id,
+                edgerun_web_ui::escape_json(&handle),
+                edgerun_web_ui::escape_json(&message),
+                now
+            ),
+        )
+        .with_header("Cache-Control", "no-store")
+        .with_header("X-Content-Type-Options", "nosniff")
     }
 
     fn dash_response(&self, request: &Request) -> Response {
@@ -1326,7 +1435,7 @@ impl Handler for SiteRouter {
 
 fn redirect_to_dash_surface(surface: &str) -> Response {
     Response::text(StatusCode::new(308).unwrap(), "")
-        .with_header("Location", &format!("https://dash.edgerun.tech/#{surface}"))
+        .with_header("Location", &format!("/#{surface}"))
         .with_header("Cache-Control", "no-store")
         .with_header("X-Content-Type-Options", "nosniff")
 }
@@ -1344,7 +1453,7 @@ fn render_dash_blog_surface() -> String {
     render_dash_surface(
         "Build Log",
         "blog.edgerun.tech",
-        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#build-log\"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></a><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#about\"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></a><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#feed\"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></a></div>",
+        "<div class=\"dash-grid\"><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#build-log\"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#about\"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#feed\"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></button></div>",
     )
 }
 
@@ -1352,17 +1461,13 @@ fn render_dash_code_surface() -> String {
     render_dash_surface(
         "Code",
         "git.edgerun.tech",
-        "<div class=\"dash-grid\"><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#code\"><strong>Repositories</strong><span>Browse released source surfaces.</span></a><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#crates\"><strong>Crate explorer</strong><span>Navigate visible crates, metadata, APIs, and relationships.</span></a><a class=\"dash-card\" href=\"https://dash.edgerun.tech/#source\"><strong>Source tree</strong><span>Open the public source tree directly.</span></a></div>",
+        "<div class=\"dash-grid\"><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#code\"><strong>Repositories</strong><span>Browse released source surfaces.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#code/crates\"><strong>Crate explorer</strong><span>Navigate visible crates, metadata, APIs, and relationships.</span></button><button class=\"dash-card dash-card-button\" type=\"button\" data-dash-hash=\"#code/source\"><strong>Source tree</strong><span>Open the public source tree directly.</span></button></div>",
     )
 }
 
 fn render_dash_html(configured_apps: &[BrowserAppSpec]) -> String {
-    let header_center = edgerun_web_ui::render_header_search_input(
-        "workspaceSearch",
-        "Search workspace",
-        "Search workspace",
-    );
-    let header_actions = edgerun_web_ui::render_workspace_actions("dash", "");
+    let header_center = "";
+    let header_actions = "<nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav>";
     let footer = render_dash_status_footer();
     let style = format!("{}{}", edgerun_web_ui::BASE_STYLE, DASH_STYLE);
     let body = format!(
@@ -1432,6 +1537,260 @@ struct HostStatsCache {
     previous: Option<HostStatsSample>,
     previous_request_count: Option<u64>,
     previous_request_time: Option<StdInstant>,
+}
+
+#[derive(Default)]
+struct DashChatState {
+    next_id: u64,
+    messages: VecDeque<DashChatMessage>,
+    sender_timestamps: HashMap<String, VecDeque<u64>>,
+}
+
+#[derive(Clone)]
+struct DashChatMessage {
+    id: u64,
+    handle: String,
+    message: String,
+    sender_key: String,
+    posted_at: u64,
+}
+
+impl DashChatState {
+    fn apply_heuristics(
+        &mut self,
+        handle: &str,
+        message: &str,
+        sender_key: &str,
+        now: u64,
+    ) -> Option<&'static str> {
+        self.prune_old_sender_history(now);
+        if message.is_empty() {
+            return Some("empty message");
+        }
+        if message.len() > 800 {
+            return Some("message too long");
+        }
+        if handle.len() > 24 {
+            return Some("name too long");
+        }
+        if message.to_ascii_lowercase().split_whitespace().count() > 260 {
+            return Some("message too long");
+        }
+        if message.chars().filter(|c| c.is_ascii_uppercase()).count() > 0 {
+            let letters = message
+                .chars()
+                .filter(|c| c.is_ascii_alphabetic())
+                .count() as u32;
+            if letters > 16 {
+                let caps = message
+                    .chars()
+                    .filter(|c| c.is_ascii_uppercase())
+                    .count() as u32;
+                if caps > (letters * 8) / 10 {
+                    return Some("too much uppercase");
+                }
+            }
+        }
+        let lower = message.to_ascii_lowercase();
+        if lower.contains("http://")
+            || lower.contains("https://")
+            || lower.contains("www.")
+            || lower.contains("bit.ly")
+        {
+            let links = lower.matches("http://").count()
+                + lower.matches("https://").count()
+                + lower.matches("www.").count()
+                + lower.matches("bit.ly").count();
+            if links > 2 {
+                return Some("too many links");
+            }
+        }
+        let spam_terms = [
+            "free",
+            "earn",
+            "guaranteed",
+            "casino",
+            "crypto",
+            "bitcoin",
+            "viagra",
+            "pharma",
+            "loan",
+            "lottery",
+            "click",
+            "subscribe",
+            "win money",
+        ];
+        for term in spam_terms {
+            if lower.contains(term) && lower.len() > 160 {
+                return Some("spam pattern detected");
+            }
+        }
+
+        if let Some(timestamps) = self.sender_timestamps.get(sender_key) {
+            let recent = timestamps
+                .iter()
+                .take_while(|timestamp| now.saturating_sub(**timestamp) <= 45)
+                .count();
+            if recent >= 6 {
+                return Some("too many messages from this sender");
+            }
+            if let Some(previous) = timestamps.back() {
+                if now.saturating_sub(*previous) < 4 {
+                    return Some("send a bit slower");
+                }
+            }
+        }
+        if self
+            .messages
+            .iter()
+            .any(|item| item.sender_key == sender_key && item.message == message && now.saturating_sub(item.posted_at) <= 120)
+        {
+            return Some("duplicate message");
+        }
+        None
+    }
+
+    fn register_sender(&mut self, sender_key: &str, now: u64) {
+        self.sender_timestamps
+            .entry(sender_key.to_string())
+            .or_default()
+            .push_back(now);
+    }
+
+    fn prune_old_sender_history(&mut self, now: u64) {
+        self.sender_timestamps.retain(|_, timestamps| {
+            while let Some(ts) = timestamps.front() {
+                if now.saturating_sub(*ts) > 120 {
+                    timestamps.pop_front();
+                } else {
+                    break;
+                }
+            }
+            !timestamps.is_empty()
+        });
+    }
+
+    fn prune(&mut self, now: u64) {
+        while self.messages.len() > 150 {
+            self.messages.pop_front();
+        }
+        while let Some(message) = self.messages.front() {
+            if now.saturating_sub(message.posted_at) > 4 * 60 * 60 {
+                self.messages.pop_front();
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn to_json(&self) -> String {
+        let mut out = String::new();
+        for (index, message) in self.messages.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            out.push_str(&message.to_json());
+        }
+        out
+    }
+}
+
+impl DashChatMessage {
+    fn to_json(&self) -> String {
+        format!(
+            r#"{{"id":{},"name":"{}","message":"{}","at":{}}}"#,
+            self.id,
+            edgerun_web_ui::escape_json(&self.handle),
+            edgerun_web_ui::escape_json(&self.message),
+            self.posted_at
+        )
+    }
+}
+
+fn dash_chat_error_response(status: StatusCode, error: &str) -> Response {
+    Response::json(
+        status,
+        &format!(
+            r#"{{"ok":false,"error":"{}"}}"#,
+            edgerun_web_ui::escape_json(error)
+        ),
+    )
+    .with_header("Cache-Control", "no-store")
+    .with_header("X-Content-Type-Options", "nosniff")
+}
+
+fn chat_sender_key(request: &Request) -> String {
+    request
+        .headers()
+        .get("x-forwarded-for")
+        .or_else(|| request.headers().get("X-Forwarded-For"))
+        .or_else(|| request.headers().get("X-Real-IP"))
+        .and_then(|value| value.as_str().split(',').next().map(str::trim))
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| "anonymous".to_string())
+}
+
+fn sanitize_chat_input(value: &str, max_len: usize) -> String {
+    let mut cleaned = String::new();
+    for c in value.chars().filter(|c| !c.is_control()) {
+        cleaned.push(c);
+    }
+    while cleaned.len() > max_len {
+        cleaned.pop();
+    }
+    cleaned.trim().to_string()
+}
+
+fn chat_unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
+fn apply_chat_heuristics(
+    handle: &str,
+    message: &str,
+    sender_key: &str,
+    now: u64,
+) -> Option<&'static str> {
+    if handle.is_empty() {
+        return Some("name required");
+    }
+    if handle == "Guest" && sender_key == "anonymous" {
+        return Some("please provide a display name");
+    }
+    if message.len() < 2 {
+        return Some("message too short");
+    }
+    if handle.contains('\n') {
+        return Some("invalid formatting");
+    }
+    if message.contains('\n') && message.len() > 700 {
+        return Some("control formatting");
+    }
+    if message.len() > 800 {
+        return Some("message too long");
+    }
+    if message
+        .chars()
+        .filter(|value| value.is_ascii_control())
+        .next()
+        .is_some()
+    {
+        return Some("invalid characters");
+    }
+    if now == 0 {
+        return Some("clock unavailable");
+    }
+    if sender_key.is_empty() {
+        return Some("sender unavailable");
+    }
+    if handle.chars().all(char::is_whitespace) {
+        return Some("name required");
+    }
+    None
 }
 
 #[derive(Clone)]
@@ -1893,55 +2252,485 @@ fn normalize_host(host: &str) -> String {
 }
 
 const DASH_BODY: &str = r##"
-<main id="content" class="dash">
-  <nav class="dash-rail" aria-label="Workspace surfaces">
-    <button class="dash-tab" type="button" hx-get="/surface/blog" hx-target="#surfaceSlot" hx-swap="outerHTML" aria-current="page">Build Log</button>
-    <button class="dash-tab" type="button" hx-get="/surface/git" hx-target="#surfaceSlot" hx-swap="outerHTML">Code</button>
-    <button class="dash-tab" type="button" hx-get="/surface/mail" hx-target="#surfaceSlot" hx-swap="outerHTML">Mail</button>
-    <button class="dash-tab" type="button" hx-get="/surface/apps" hx-target="#surfaceSlot" hx-swap="outerHTML">Apps</button>
-  </nav>
-  <section id="surfaceSlot" class="dash-stage" aria-label="Workspace surface">
-    <header><div><strong id="surfaceTitle">Build Log</strong><span id="surfaceUrl">backend: blog.edgerun.tech</span></div></header>
-    <div class="dash-surface"><div class="dash-grid"><a class="dash-card" href="https://dash.edgerun.tech/#build-log"><strong>Latest posts</strong><span>Follow feature-by-feature work as it lands.</span></a><a class="dash-card" href="https://dash.edgerun.tech/#about"><strong>About Edgerun</strong><span>The philosophy and direction behind the project.</span></a><a class="dash-card" href="https://dash.edgerun.tech/#feed"><strong>Feed</strong><span>Subscribe to release notes and build notes.</span></a></div></div>
+<main id="content" class="dash-shell">
+  <section class="dash-panels">
+    <header class="dash-panels-header">
+      <div>
+        <p class="dash-eyebrow">Edgerun Workspace</p>
+        <h1>One dashboard for all services</h1>
+      </div>
+      <p>Mail, build log, code, apps, and global chat live in one place.</p>
+    </header>
+    <section class="dash-panels-row">
+      <section class="dash-panel" data-surface="build-log">
+        <div class="dash-panel-head">
+          <h2>Build Log</h2>
+          <span>Focus: build-log</span>
+        </div>
+        <div id="dashSurfaceBlog" class="dash-surface" data-surface-path="/surface/blog">Loading build log…</div>
+      </section>
+      <section class="dash-panel" data-surface="code">
+        <div class="dash-panel-head">
+          <h2>Code</h2>
+          <span>Focus: code</span>
+        </div>
+        <div id="dashSurfaceCode" class="dash-surface" data-surface-path="/surface/git">Loading code…</div>
+      </section>
+    </section>
+    <section class="dash-panels-row">
+      <section class="dash-panel" data-surface="mail">
+        <div class="dash-panel-head">
+          <h2>Mail</h2>
+          <span>Focus: mail</span>
+        </div>
+        <div id="dashSurfaceMail" class="dash-surface" data-surface-path="/surface/mail">Loading mail…</div>
+      </section>
+      <section class="dash-panel" data-surface="apps">
+        <div class="dash-panel-head">
+          <h2>Apps</h2>
+          <span>Focus: apps</span>
+        </div>
+        <div id="dashSurfaceApps" class="dash-surface" data-surface-path="/surface/apps">Loading apps…</div>
+      </section>
+    </section>
+    <section class="dash-panel dash-chat-panel">
+      <div class="dash-panel-head">
+        <h2>Global chat</h2>
+        <span>Demo room</span>
+      </div>
+      <div class="dash-chat-shell">
+        <form id="dashChatForm" class="dash-chat-form" autocomplete="off">
+          <label for="dashChatName"><span>Name</span><input id="dashChatName" required maxlength="24" placeholder="your name"></label>
+          <label for="dashChatMessage"><span>Message</span><textarea id="dashChatMessage" required maxlength="800" placeholder="Say something to everyone"></textarea></label>
+          <button id="dashChatSend" type="submit">Post</button>
+        </form>
+        <p class="dash-chat-status" id="dashChatStatus" role="status"></p>
+        <div id="dashChatLog" class="dash-chat-log"></div>
+      </div>
+    </section>
   </section>
 </main>
 "##;
 
 const DASH_STYLE: &str = r#"
-.dash{height:calc(100vh - var(--topbar-h) - var(--footer-h));min-height:0;display:grid;grid-template-columns:220px minmax(0,1fr);background:var(--bg)}
-.dash-rail{border-right:1px solid var(--line);padding:18px;display:flex;flex-direction:column;gap:8px;background:var(--panel)}
-.dash-tab{height:42px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);text-align:left;padding:0 12px;cursor:pointer;font-weight:750}
-.dash-tab:hover,.dash-tab[aria-current=page]{border-color:var(--line);background:var(--bg);color:var(--accent)}
-.dash-stage{min-width:0;display:grid;grid-template-rows:56px 1fr}
-.dash-stage header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--panel)}
-.dash-stage header div{display:grid;line-height:1.2}.dash-stage header span{color:var(--muted);font-size:12px}.dash-stage header a{color:var(--muted);text-decoration:none}.dash-stage header a:hover{color:var(--accent)}
-	.dash-surface{overflow:auto;padding:24px}.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:980px}.dash-card{min-height:140px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:18px;text-decoration:none}.dash-card:hover{border-color:var(--accent)}.dash-card span{color:var(--muted)}.dash-card-button{text-align:left;font:inherit;cursor:pointer}
-	.dash-blog{display:grid;gap:18px;max-width:1180px}.dash-blog-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.dash-post-card{min-height:190px}.dash-post-card .date{color:var(--accent-2);font-weight:800}.dash-article{max-width:860px}.dash-article .article{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(24px,4vw,44px)}
-	.dash-code{display:grid;gap:18px;max-width:1180px}.dash-code h2,.dash-code h3{margin:0 0 12px}.dash-code-hero{display:grid;gap:10px;max-width:760px}.dash-code-hero p{margin:0;color:var(--accent);font-weight:800;text-transform:uppercase;letter-spacing:0}.dash-code-hero h2{font-size:clamp(34px,5vw,64px);line-height:1}.dash-code-hero span{color:var(--muted);font-size:20px}.dash-code-tools label{display:grid;gap:6px;max-width:520px;color:var(--muted);font-weight:750}.dash-code-tools input{height:42px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:0 12px;font:inherit}.dash-code-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:start}.dash-code-summary div{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}.dash-code-summary .summary-wide{grid-column:span 2}.dash-code-summary span{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;font-weight:800;letter-spacing:0}.dash-code-summary strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:23px;line-height:1.15}.dash-code-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.dash-code-columns article{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:16px}.dash-code-list{margin:0;padding:0;list-style:none;display:grid;gap:8px}.dash-code-list li{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px;display:grid;gap:4px}.dash-code-list span,.dash-code-list small,.dash-crate-card small,.dash-search-empty{color:var(--muted)}.dash-link-button,.pill-button{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:9px 12px;font:inherit;font-weight:750;cursor:pointer;justify-self:start}.dash-link-button:hover,.pill-button:hover,.pill-button[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}.pill-button[aria-pressed=true]{background:color-mix(in srgb,var(--accent) 10%,var(--panel))}.pill-row{display:flex;gap:8px;flex-wrap:wrap}.pill-row span,.pill-button{border-radius:999px}
-	.dash-app-card{justify-content:flex-start}.dash-app-card .pill-row{margin-top:auto}.dash-app-card .pill-row span{border:1px solid var(--line);background:var(--bg);color:var(--muted);padding:5px 9px;font-size:13px;overflow-wrap:anywhere}
-	.dash-mail{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);gap:14px;min-height:520px}.dash-mail-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}.dash-mail-button{height:40px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);display:inline-flex;align-items:center;gap:8px;padding:0 12px;text-decoration:none;cursor:pointer}.dash-mail-button:hover{border-color:var(--accent);color:var(--accent)}.dash-mail-list,.dash-mail-detail,.dash-mail-login{border:1px solid var(--line);border-radius:8px;background:var(--panel)}.dash-mail-list{overflow:auto}.dash-mail-item{display:grid;gap:4px;padding:13px 14px;border-bottom:1px solid var(--line);text-decoration:none;transition:background .15s ease,border-color .15s ease,transform .15s ease}.dash-mail-item:hover{background:color-mix(in srgb,var(--accent) 8%,transparent);border-color:var(--line);transform:translateY(-1px)}.dash-mail-item[aria-current=true]{border-left:3px solid var(--accent);padding-left:11px}.dash-mail-item strong{line-height:1.25}.dash-mail-item span,.dash-mail-meta,.dash-mail-preview,.dash-mail-empty,.dash-mail-toolbar span{color:var(--muted)}.dash-mail-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:13px}.dash-mail-unread{color:var(--accent);font-weight:800}.dash-mail-detail{min-width:0;padding:18px;overflow:auto}.dash-mail-detail header{display:block;padding:0 0 14px;border:0;background:transparent}.dash-mail-detail h2{margin:0 0 8px;font-size:26px;line-height:1.15}.dash-mail-body{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}.dash-mail-warning{margin:12px 0;padding:10px 12px;border:1px solid var(--accent-2);border-radius:8px;color:var(--accent-2)}.dash-mail-login{max-width:460px;padding:18px;display:grid;gap:12px}.dash-mail-login label,.dash-mail-compose label{display:grid;gap:6px;color:var(--muted);font-weight:750}.dash-mail-login input,.dash-mail-compose input,.dash-mail-compose textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:10px 12px;font:inherit}.dash-mail-compose{display:grid;gap:12px}.dash-mail-compose textarea{min-height:220px;resize:vertical}.dash-mail-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-	@media(max-width:760px){.dash{grid-template-columns:1fr;grid-template-rows:auto 1fr}.dash-rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;overflow:auto}.dash-tab{white-space:nowrap}.dash-stage header{padding:0 12px}}
-	@media(max-width:900px){.dash-mail{grid-template-columns:1fr}.dash-mail-list{max-height:320px}}
-.dash{background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 88%,var(--panel)) 0,var(--bg) 260px)}.dash-rail{gap:10px}.dash-tab{display:flex;align-items:center}.dash-tab:hover,.dash-tab[aria-current=page]{box-shadow:inset 3px 0 0 var(--accent)}.dash-stage header{position:sticky;top:0;z-index:3}.dash-stage header strong{font-size:15px}.dash-surface{padding:clamp(18px,3vw,30px)}.dash-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));max-width:1120px;gap:14px}.dash-card{min-height:148px;box-shadow:0 12px 34px color-mix(in srgb,var(--text) 6%,transparent);transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease}.dash-post-card{min-height:184px}.dash-card:hover{transform:translateY(-2px);box-shadow:0 18px 44px color-mix(in srgb,var(--text) 10%,transparent)}.dash-card strong{font-size:20px;line-height:1.2}.dash-card small{line-height:1.35}.dash-blog,.dash-code{max-width:1220px}.dash-blog .dash-code-hero,.dash-code-hero{border-bottom:1px solid var(--line);padding-bottom:16px}.dash-code-hero h2{max-width:900px;font-size:clamp(38px,4.4vw,58px)}.dash-code-summary div{background:color-mix(in srgb,var(--panel) 92%,var(--code));box-shadow:0 8px 24px color-mix(in srgb,var(--text) 5%,transparent)}.dash-code-columns article,.dash-mail-list,.dash-mail-detail,.dash-mail-login{box-shadow:0 10px 28px color-mix(in srgb,var(--text) 5%,transparent)}.dash-article{max-width:920px}.dash-article .article{box-shadow:0 14px 42px color-mix(in srgb,var(--text) 7%,transparent)}.dash-article .content{font-size:17px;line-height:1.7}.dash-article .content h2{font-size:clamp(24px,3vw,32px);margin-top:38px}.dash-article .content p,.dash-article .content ul,.dash-article .content ol{max-width:740px}.dash-article table{font-size:15px}.related-posts{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}.related-posts h2{margin:0 0 14px;font-size:20px}.related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:16px}.related-posts article{border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 88%,var(--code));transition:border-color .2s ease,transform .2s ease}.related-posts a{display:grid;gap:6px;padding:14px;text-decoration:none}.related-posts a:hover{border-color:var(--accent);transform:translateY(-1px)}.dash-link-button,.dash-mail-button,.pill-button{transition:border-color .15s ease,color .15s ease,background .15s ease}.dash-link-button:hover,.dash-mail-button:hover{background:color-mix(in srgb,var(--accent) 9%,var(--panel))}.dash-mail-item{transition:background .15s ease,border-color .15s ease,transform .15s ease}.dash-mail-detail h2{font-size:clamp(22px,3vw,32px)}
-	body{--footer-h:30px}.dash-status-footer{min-height:30px;height:30px;display:flex;align-items:center;justify-content:center;padding:0 14px;overflow:hidden}.dash-status{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;white-space:nowrap;font-size:12px;line-height:1}.dash-status span{display:inline-flex;align-items:baseline;gap:5px;color:var(--muted)}.dash-status strong{color:var(--text);font-weight:800}.dash-status button{height:22px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:0 8px;font:inherit;cursor:pointer}.dash-status button:hover,.dash-status button:focus-visible{border-color:var(--accent);color:var(--accent)}
-	@media(max-width:760px){.dash-stage{grid-template-rows:auto 1fr}.dash-stage header{min-height:52px}.dash-surface{padding:16px}.dash-card{min-height:132px}.dash-article .article{box-shadow:none;padding:22px}.dash-code-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-code-summary .summary-wide{grid-column:1/-1}}
-	@media(max-width:760px){.dash-status-footer{justify-content:flex-start}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
+.dash-shell{min-height:calc(100vh - var(--topbar-h) - var(--footer-h));background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 90%,var(--panel)) 0,var(--bg) 220px);padding:16px}
+.dash-panels{max-width:1320px;margin:0 auto;display:grid;gap:18px}
+.dash-panels-header{display:grid;gap:6px;padding:0 2px 8px;border-bottom:1px solid var(--line)}
+.dash-panels-header p{margin:0;color:var(--muted)}
+.dash-panels-header h1{margin:8px 0 0}
+.dash-panels-header .dash-eyebrow{font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:var(--accent)}
+.dash-panels-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.dash-panel{display:grid;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 13px 34px color-mix(in srgb,var(--text) 6%,transparent)}
+.dash-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.dash-panel-head h2{margin:0;font-size:21px}
+.dash-panel-head span{color:var(--muted);font-size:13px}
+.dash-surface{min-height:220px;max-height:460px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.dash-surface-empty{color:var(--muted);font-size:13px}
+.dash-surface .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.dash-surface .dash-card{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px;display:block;text-decoration:none;color:var(--text)}
+.dash-surface .dash-card:hover{border-color:var(--accent)}
+.dash-surface .dash-card span{color:var(--muted)}
+.dash-surface .dash-card-button{all:unset;display:block;cursor:pointer;text-align:left}
+.dash-surface .dash-card-button:hover{border-color:var(--accent)}
+.dash-surface .dash-code{display:grid;gap:12px}
+.dash-surface .dash-code-hero{display:grid;gap:8px}
+.dash-surface .dash-code-hero h2{margin:0}
+.dash-surface .dash-code-tools{display:grid;gap:8px}
+.dash-surface .dash-code-tools label{display:grid;gap:4px}
+.dash-surface .dash-code-tools span{font-size:12px;color:var(--muted)}
+.dash-surface .dash-code-tools input{font:inherit;width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+.dash-surface .dash-code-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.dash-surface .dash-code-summary div{display:grid;padding:10px 12px;background:color-mix(in srgb,var(--panel) 86%,var(--code));border:1px solid var(--line);border-radius:8px}
+.dash-surface .dash-code-summary span{color:var(--muted);font-size:12px}
+.dash-surface .dash-code-summary strong{font-size:22px}
+.dash-search-empty{color:var(--muted);margin:2px 4px 0}
+.dash-surface .dash-stage .dash-card-button{width:100%}
+.dash-surface .dash-surface-empty{background:color-mix(in srgb,var(--panel) 84%,transparent);padding:10px;border:1px dashed var(--line);border-radius:8px}
+.dash-surface .related-posts{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
+.dash-surface .related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin-top:12px}
+.dash-surface .related-posts article{margin:0;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 88%,var(--code));padding:10px}
+.dash-surface .dash-surface-content{display:block}
+.dash-surface .dash-stage{background:transparent}
+.dash-surface .dash-stage header{border-bottom:1px solid var(--line);padding:0 0 10px;margin:0 0 10px}
+.dash-surface .dash-stage header strong{font-size:16px}
+.dash-surface .dash-stage header span{color:var(--muted)}
+.dash-chat-shell{display:grid;gap:10px}
+.dash-chat-form{display:grid;gap:8px}
+.dash-chat-form label{display:grid;gap:6px}
+.dash-chat-form span{font-size:12px;font-weight:750;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.dash-chat-form input,.dash-chat-form textarea{font:inherit;width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+.dash-chat-form textarea{min-height:100px;resize:vertical}
+.dash-chat-form button{justify-self:end;width:110px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font:inherit;color:var(--text);cursor:pointer}
+.dash-chat-form button:hover{border-color:var(--accent);color:var(--accent)}
+.dash-chat-status{margin:0;min-height:18px;font-size:12px;color:var(--muted)}
+.dash-chat-log{display:grid;gap:10px;min-height:180px;max-height:260px;overflow:auto;padding-right:2px}
+.dash-chat-entry{padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);display:grid;gap:6px}
+.dash-chat-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--muted);font-size:12px}
+.dash-chat-name{font-weight:800;color:var(--text)}
+.dash-chat-text{line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.dash-status-footer{min-height:30px;height:30px;display:flex;align-items:center;justify-content:center;padding:0 14px;overflow:hidden}
+.dash-status{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;white-space:nowrap;font-size:12px;line-height:1}
+.dash-status span{display:inline-flex;align-items:baseline;gap:5px;color:var(--muted)}
+.dash-status strong{color:var(--text);font-weight:800}
+.dash-status button{height:22px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:0 8px;font:inherit;cursor:pointer}
+.dash-status button:hover,.dash-status button:focus-visible{border-color:var(--accent);color:var(--accent)}
+.related-posts{margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
+.related-posts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px;margin-top:12px}
+.related-posts article{margin:0}
+body{--footer-h:30px}
+@media(max-width:900px){.dash-panels-row{grid-template-columns:1fr}}
+@media(max-width:760px){.dash-shell{padding:10px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
 "#;
 
 const DASH_JS: &str = r#"
-const search=document.getElementById('workspaceSearch');
-function formatBytes(bytes){if(!Number.isFinite(bytes)||bytes<=0)return'--';const units=['B','KB','MB','GB'];let value=bytes;let unit=0;while(value>=1024&&unit<units.length-1){value/=1024;unit++}return(value>=10||unit===0?value.toFixed(0):value.toFixed(1))+' '+units[unit]}
-async function refreshDashStatus(options={}){try{const refresh=document.querySelector('[data-status-refresh]');if(refresh&&options.manual){refresh.disabled=true;refresh.textContent='...'}if(options.manual){await Promise.allSettled([fetch('/status.json?probe=1',{headers:{Accept:'application/json'},cache:'no-store'}),fetch('/apps/catalog.json?probe=1',{headers:{Accept:'application/json'},cache:'no-store'}),fetch('/surface/blog?probe=1',{headers:workspaceHeaders('/surface/blog'),cache:'no-store'})])}const response=await fetch('/status.json',{headers:{Accept:'application/json'},cache:'no-store'});if(!response.ok)return;const data=await response.json();if(!data.ok)return;const sessions=document.querySelector('[data-status-sessions]');const rps=document.querySelector('[data-status-rps]');const memory=document.querySelector('[data-status-memory]');const cpu=document.querySelector('[data-status-cpu]');const binary=document.querySelector('[data-status-binary]');if(sessions)sessions.textContent=String(data.sessions);if(rps)rps.textContent=(Number(data.requests_per_second)||0).toFixed(1);if(memory)memory.textContent=formatBytes(data.memory_bytes);if(cpu)cpu.textContent=(Number(data.cpu_percent)||0).toFixed(1)+'%';if(binary)binary.textContent=formatBytes(data.binary_bytes)}catch(_error){}finally{const refresh=document.querySelector('[data-status-refresh]');if(refresh){refresh.disabled=false;refresh.textContent='Refresh'}}}
-function dashRoute(){const raw=location.hash||'#build-log';const [hash,query='']=raw.split('?');let path={'#build-log':'/surface/blog','#blog':'/surface/blog','#mail':'/surface/mail','#apps':'/surface/apps','#about':'/surface/blog/about.html','#feed':'/surface/blog/feed.xml'}[hash];if(!path&&(hash==='#code'||hash==='#git'||hash==='#crates'||hash==='#source'))path='/surface/git';if(!path&&hash.startsWith('#code/'))path='/surface/git/'+hash.slice(6);if(!path&&hash.startsWith('#build-log/'))path='/surface/blog/'+hash.slice(11);return{path,query:new URLSearchParams(query)}}
-function filterDashCards(value){const q=(value||'').trim().toLowerCase();const cards=[...document.querySelectorAll('[data-search-card]')];let visible=0;cards.forEach(card=>{const topic=card.getAttribute('data-topic')||'';const topicFilter=document.querySelector('[data-topic-filter][aria-pressed="true"]')?.getAttribute('data-topic-filter')||'';const topicHit=!topicFilter||topic.split(/\s+/).includes(topicFilter);const textHit=!q||(card.getAttribute('data-search-text')||card.textContent||'').toLowerCase().includes(q);const hit=topicHit&&textHit;card.hidden=!hit;if(hit)visible++});const empty=document.querySelector('[data-search-empty]');if(empty)empty.hidden=visible!==0||(!q&&!document.querySelector('[data-topic-filter][aria-pressed="true"]:not([data-topic-filter=""])'))}
-function wireDashSearch(initial){document.querySelectorAll('[data-workspace-search-scope]').forEach(input=>{input.value=initial||'';filterDashCards(input.value);input.addEventListener('input',()=>filterDashCards(input.value))})}
-async function loadDashHash(){const route=dashRoute();if(!route.path)return;const slot=document.querySelector('#surfaceSlot');if(!slot)return;const response=await fetch(route.path,{headers:workspaceHeaders(route.path)});if(!response.ok)return;slot.outerHTML=await response.text();document.querySelectorAll('.dash-tab[aria-current]').forEach(node=>node.removeAttribute('aria-current'));const tab=document.querySelector(route.path.startsWith('/surface/git')?'[hx-get="/surface/git"]':route.path.startsWith('/surface/blog')?'[hx-get="/surface/blog"]':route.path.startsWith('/surface/mail')?'[hx-get="/surface/mail"]':'[hx-get="'+route.path+'"]');if(tab)tab.setAttribute('aria-current','page');wireDashSearch(route.query.get('q')||'');if(window.edgerunNode)edgerunNode.activateSurface(route.path.startsWith('/surface/git')?'git':route.path.startsWith('/surface/blog')?'blog':route.path.startsWith('/surface/mail')?'mail':route.path.startsWith('/surface/apps')?'apps':'')}
-addEventListener('hashchange',loadDashHash);addEventListener('popstate',loadDashHash);loadDashHash();
-document.addEventListener('input',event=>{if(event.target.matches('[data-workspace-search-scope]'))filterDashCards(event.target.value)});
-document.addEventListener('click',event=>{const trigger=event.target.closest('[data-topic-filter]');if(!trigger)return;document.querySelectorAll('[data-topic-filter]').forEach(node=>node.setAttribute('aria-pressed',node===trigger?'true':'false'));filterDashCards(document.querySelector('[data-workspace-search-scope]')?.value||'')});
-document.addEventListener('click',event=>{const trigger=event.target.closest('[data-status-refresh]');if(!trigger)return;event.preventDefault();refreshDashStatus({manual:true})});
-search&&search.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();const q=search.value.trim();if(!q)return;location.hash='#code?q='+encodeURIComponent(q)});
-refreshDashStatus();setInterval(refreshDashStatus,5000);
+const DASH_SURFACES = [
+  {
+    id: 'dashSurfaceBlog',
+    pathPrefix: '/surface/blog',
+    fallback: 'Build log is unavailable right now.',
+  },
+  { id: 'dashSurfaceCode', pathPrefix: '/surface/git', fallback: 'Code surface is unavailable right now.' },
+  { id: 'dashSurfaceMail', pathPrefix: '/surface/mail', fallback: 'Mail surface is unavailable right now.' },
+  { id: 'dashSurfaceApps', pathPrefix: '/surface/apps', fallback: 'Apps surface is unavailable right now.' },
+];
+
+function normalizeSurfaceSuffix(path) {
+  return path.replace(/^\/+/, '');
+}
+
+function normalizeFallbackPath(prefix, path) {
+  if (!path) {
+    return prefix;
+  }
+  return prefix + '/' + normalizeSurfaceSuffix(path);
+}
+
+function surfacePathToSlot(path) {
+  if (path.startsWith('/surface/blog')) {
+    return 'dashSurfaceBlog';
+  }
+  if (path.startsWith('/surface/git')) {
+    return 'dashSurfaceCode';
+  }
+  if (path.startsWith('/surface/mail')) {
+    return 'dashSurfaceMail';
+  }
+  if (path.startsWith('/surface/apps')) {
+    return 'dashSurfaceApps';
+  }
+  return null;
+}
+
+function surfacePathToHash(path) {
+  if (path.startsWith('/surface/blog')) {
+    return '#build-log' + normalizeFallbackPath('', path.replace('/surface/blog', ''));
+  }
+  if (path.startsWith('/surface/git')) {
+    return '#code' + normalizeFallbackPath('', path.replace('/surface/git', ''));
+  }
+  if (path.startsWith('/surface/mail')) {
+    return '#mail';
+  }
+  if (path.startsWith('/surface/apps')) {
+    return '#apps';
+  }
+  return null;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '--';
+  }
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return (value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)) + ' ' + units[unit];
+}
+
+function extractSurfaceContent(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const wrapped = doc.querySelector('#surfaceSlot .dash-surface');
+  if (wrapped) {
+    return wrapped.innerHTML;
+  }
+  return doc.querySelector('.dash-surface')?.innerHTML || html;
+}
+
+async function hydrateSurface(slotId, path, fallback) {
+  const slot = document.getElementById(slotId);
+  if (!slot) {
+    return;
+  }
+  try {
+    const response = await fetch(path, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error('surface unavailable');
+    }
+    const html = await response.text();
+    slot.innerHTML = `<div class="dash-surface-content">${extractSurfaceContent(html)}</div>`;
+  } catch (_error) {
+    slot.textContent = fallback;
+    slot.classList.add('dash-surface-empty');
+  }
+  bindSurfaceSearch(slot);
+}
+
+async function hydrateSurfaces() {
+  await Promise.all(
+    DASH_SURFACES.map((item) => hydrateSurface(item.id, item.pathPrefix, item.fallback)),
+  );
+  document.querySelectorAll('.dash-surface').forEach((slot) => bindSurfaceSearch(slot));
+}
+
+function surfaceHashToPath(raw) {
+  if (!raw) {
+    return null;
+  }
+  if (!raw.startsWith('#')) {
+    if (raw.startsWith('/surface/')) {
+      return raw;
+    }
+    return null;
+  }
+  const hash = raw.toLowerCase();
+  if (hash.startsWith('#build-log')) {
+    return normalizeFallbackPath('/surface/blog', hash.slice('#build-log'.length));
+  }
+  if (hash === '#feed') {
+    return '/surface/blog/feed';
+  }
+  if (hash === '#about') {
+    return '/surface/blog/about';
+  }
+  if (hash === '#mail') {
+    return '/surface/mail';
+  }
+  if (hash.startsWith('#code')) {
+    return normalizeFallbackPath('/surface/git', hash.slice('#code'.length));
+  }
+  if (hash.startsWith('#apps')) {
+    return '/surface/apps';
+  }
+  return null;
+}
+
+function syncHashFromSurface(path) {
+  const target = surfacePathToHash(path);
+  if (target && location.hash !== target) {
+    history.replaceState(null, '', target);
+  }
+}
+
+function openFromHash() {
+  const path = surfaceHashToPath(location.hash);
+  const slotId = path ? surfacePathToSlot(path) : null;
+  const surface = DASH_SURFACES.find((entry) => entry.id === slotId);
+  if (path && slotId && surface) {
+    hydrateSurface(slotId, path, surface.fallback).then(() => syncHashFromSurface(path));
+  }
+}
+
+function bindSurfaceSearch(container) {
+  const input = container.querySelector('[data-workspace-search-scope]');
+  if (!input) {
+    return;
+  }
+  const cards = [...container.querySelectorAll('[data-search-card]')];
+  const empty = container.querySelector('[data-search-empty]');
+  if (!cards.length) {
+    return;
+  }
+  const apply = () => {
+    const term = input.value.trim().toLowerCase();
+    let visible = 0;
+    for (const card of cards) {
+      const haystack = (card.getAttribute('data-search-text') || '').toLowerCase();
+      const show = term.length === 0 || haystack.includes(term);
+      card.hidden = !show;
+      if (show) {
+        visible += 1;
+      }
+    }
+    if (empty) {
+      empty.hidden = visible > 0;
+    }
+  };
+  input.addEventListener('input', apply);
+  apply();
+}
+
+function bindSurfaceLinks() {
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-dash-hash], [hx-get]');
+    if (!button) {
+      return;
+    }
+    const raw = button.getAttribute('data-dash-hash') || button.getAttribute('hx-get');
+    const path = surfaceHashToPath(raw || '');
+    if (!path) {
+      return;
+    }
+    const slotId = surfacePathToSlot(path);
+    if (!slotId) {
+      return;
+    }
+    event.preventDefault();
+    hydrateSurface(slotId, path, 'Unable to open this section.').then(() => syncHashFromSurface(path));
+  });
+}
+
+async function refreshDashStatus(options = {}) {
+  try {
+    const refresh = document.querySelector('[data-status-refresh]');
+    if (refresh && options.manual) {
+      refresh.disabled = true;
+      refresh.textContent = '...';
+    }
+    const response = await fetch('/status.json', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data.ok) return;
+    const sessions = document.querySelector('[data-status-sessions]');
+    const rps = document.querySelector('[data-status-rps]');
+    const memory = document.querySelector('[data-status-memory]');
+    const cpu = document.querySelector('[data-status-cpu]');
+    const binary = document.querySelector('[data-status-binary]');
+    if (sessions) sessions.textContent = String(data.sessions);
+    if (rps) rps.textContent = (Number(data.requests_per_second) || 0).toFixed(1);
+    if (memory) memory.textContent = formatBytes(data.memory_bytes);
+    if (cpu) cpu.textContent = (Number(data.cpu_percent) || 0).toFixed(1) + '%';
+    if (binary) binary.textContent = formatBytes(data.binary_bytes);
+  } catch (_error) {
+    // no-op on status refresh failure
+  } finally {
+    const refresh = document.querySelector('[data-status-refresh]');
+    if (refresh) {
+      refresh.disabled = false;
+      refresh.textContent = 'Refresh';
+    }
+  }
+}
+
+function chatMessageTemplate(message) {
+  const safeName = String(message.name || 'Guest');
+  const safeText = String(message.message || '');
+  return `<article class="dash-chat-entry"><header class="dash-chat-meta"><span class="dash-chat-name">${escapeHtml(safeName)}</span><time>${new Date((message.at || 0) * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</time></header><p class="dash-chat-text">${escapeHtml(safeText)}</p></article>`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (match) => {
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return map[match];
+  });
+}
+
+async function refreshChatLog() {
+  const status = document.getElementById('dashChatStatus');
+  const log = document.getElementById('dashChatLog');
+  if (!log) return;
+  try {
+    const response = await fetch('/api/chat', { cache: 'no-store' });
+    if (!response.ok) {
+      if (status) status.textContent = 'Unable to load chat messages.';
+      log.innerHTML = '';
+      return;
+    }
+    const data = await response.json();
+    const messages = (data && Array.isArray(data.messages)) ? data.messages : [];
+    if (messages.length === 0) {
+      log.innerHTML = '<p class="dash-surface-empty">No messages yet.</p>';
+      if (status) {
+        status.textContent = '';
+      }
+      return;
+    }
+    log.innerHTML = messages.map(chatMessageTemplate).join('');
+    log.scrollTop = log.scrollHeight;
+  } catch (_error) {
+    if (status) status.textContent = 'Unable to load chat messages.';
+  }
+}
+
+function wireGlobalChat() {
+  const form = document.getElementById('dashChatForm');
+  const status = document.getElementById('dashChatStatus');
+  const nameInput = document.getElementById('dashChatName');
+  const messageInput = document.getElementById('dashChatMessage');
+  const submit = document.getElementById('dashChatSend');
+  if (!form || !status || !nameInput || !messageInput || !submit) return;
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    submit.textContent = 'Sending…';
+    status.textContent = '';
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          name: nameInput.value,
+          message: messageInput.value,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result || result.ok !== true) {
+        status.textContent = result?.error || 'Post failed';
+        return;
+      }
+      nameInput.value = nameInput.value.trim();
+      messageInput.value = '';
+      await refreshChatLog();
+      status.textContent = 'Posted.';
+      setTimeout(() => {
+        status.textContent = '';
+      }, 1500);
+    } catch (_error) {
+      status.textContent = 'Could not send chat message.';
+    } finally {
+      submit.disabled = false;
+      submit.textContent = 'Post';
+    }
+  });
+}
+
+addEventListener('click', (event) => {
+  const refresh = event.target.closest('[data-status-refresh]');
+  if (!refresh) return;
+  event.preventDefault();
+  refreshDashStatus({ manual: true });
+});
+
+addEventListener('hashchange', () => {
+  openFromHash();
+});
+
+async function initDashboard() {
+  bindSurfaceLinks();
+  await hydrateSurfaces();
+  if (location.hash) {
+    openFromHash();
+  }
+  await refreshChatLog();
+  wireGlobalChat();
+  refreshDashStatus();
+  setInterval(refreshDashStatus, 5000);
+  setInterval(refreshChatLog, 8000);
+}
+
+initDashboard();
 "#;
 
 struct HttpsRedirectHandler {
