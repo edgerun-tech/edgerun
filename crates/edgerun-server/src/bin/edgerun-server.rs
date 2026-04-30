@@ -2255,7 +2255,7 @@ const DASH_BODY: &str = r##"
 <main id="content" class="dash-shell">
   <section class="dash-shell-inner">
     <section class="dash-workspace" id="dashWorkspace" aria-label="Core services workspace">
-      <article class="dash-panel dash-module" data-surface-module="build-log" data-module-key="build-log" draggable="true">
+      <article class="dash-panel dash-module" data-surface-module="build-log" data-module-key="build-log">
         <div class="dash-module-head">
           <div>
             <h2>Build Log</h2>
@@ -2268,7 +2268,7 @@ const DASH_BODY: &str = r##"
         </div>
         <div id="dashSurfaceBuildLog" class="dash-surface" data-active-surface="build-log">Loading build log…</div>
       </article>
-      <article class="dash-panel dash-module" data-surface-module="code" data-module-key="code" draggable="true">
+      <article class="dash-panel dash-module" data-surface-module="code" data-module-key="code">
         <div class="dash-module-head">
           <div>
             <h2>Code</h2>
@@ -2281,7 +2281,7 @@ const DASH_BODY: &str = r##"
         </div>
         <div id="dashSurfaceCode" class="dash-surface" data-active-surface="code">Loading code…</div>
       </article>
-      <article class="dash-panel dash-module" data-surface-module="mail" data-module-key="mail" draggable="true">
+      <article class="dash-panel dash-module" data-surface-module="mail" data-module-key="mail">
         <div class="dash-module-head">
           <div>
             <h2>Mail</h2>
@@ -2294,7 +2294,7 @@ const DASH_BODY: &str = r##"
         </div>
         <div id="dashSurfaceMail" class="dash-surface" data-active-surface="mail">Loading mail…</div>
       </article>
-      <article class="dash-panel dash-module" data-surface-module="apps" data-module-key="apps" draggable="true">
+      <article class="dash-panel dash-module" data-surface-module="apps" data-module-key="apps">
         <div class="dash-module-head">
           <div>
             <h2>Apps</h2>
@@ -2320,7 +2320,7 @@ const DASH_BODY: &str = r##"
 
 const DASH_STYLE: &str = r#"
 .dash-shell{min-height:calc(100vh - var(--topbar-h) - var(--footer-h));background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 90%,var(--panel)) 0,var(--bg) 220px);padding:16px}
-.dash-shell-inner{max-width:1320px;margin:0 auto;display:grid;gap:18px}
+.dash-shell-inner{max-width:none;margin:0 auto;display:grid;gap:18px}
 .dash-panels-header{display:grid;gap:6px;padding:0 2px 10px;border-bottom:1px solid var(--line)}
 .dash-panels-header p{margin:0;color:var(--muted)}
 .dash-panels-header h1{margin:8px 0 0}
@@ -2330,11 +2330,12 @@ const DASH_STYLE: &str = r#"
 .dash-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .dash-panel-head h2{margin:0;font-size:21px}
 .dash-panel-head span{color:var(--muted);font-size:13px}
-.dash-module.dash-module-dragging{opacity:.65;box-shadow:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent),0 12px 24px color-mix(in srgb,var(--text) 18%,transparent);cursor:grabbing}
 .dash-module-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .dash-module-head h2{margin:0}
 .dash-module-kicker{margin:0;font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:12px;color:var(--muted)}
 .dash-module-controls{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.dash-module-drag-handle{border-radius:999px;line-height:1;user-select:none;cursor:grab}
+.dash-module-button{font-size:14px}
 .dash-module-minimized{background:color-mix(in srgb,var(--panel) 80%,transparent)}
 .dash-module-minimized .dash-surface{display:none}
 .dash-module-minimized .dash-surface-path{display:none}
@@ -2401,34 +2402,74 @@ body{--footer-h:42px;--topbar-h:0px}
 }
 .dash-shell-inner{
   margin:0;
+  width:100%;
+  max-width:none;
   display:block;
   gap:0;
 }
 .dash-workspace{
-  display:flex;
-  flex-wrap:wrap;
-  align-items:flex-start;
-  gap:12px;
+  position:relative;
   min-height:calc(100vh - 188px);
+  height:calc(100vh - 188px);
+  overflow:auto;
 }
-.dash-workspace.dash-maximized .dash-module{display:none}
-.dash-workspace.dash-maximized .dash-module.dash-module-maximized{display:block; flex:1 1 100%;min-height:72vh}
+.dash-workspace::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background:radial-gradient(1200px 340px at 18% -2%, color-mix(in srgb,var(--panel) 72%,transparent), transparent 72%), radial-gradient(980px 260px at 84% 20%, color-mix(in srgb,var(--panel) 66%,transparent), transparent 78%);
+  z-index:-1;
+}
 .dash-module{
-  flex:1 1 min(380px, 100%);
+  position:absolute;
+  box-sizing:border-box;
+  min-width:320px;
+  min-height:230px;
+  max-width:clamp(320px, min(85vw, 760px), 760px);
+  max-height:calc(100vh - 210px);
+  width:min(380px, calc(100vw - 22px));
+  height:min(420px, calc(100vh - 210px));
+  display:grid;
+  gap:0;
+  padding:14px 16px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  box-shadow:0 13px 34px color-mix(in srgb,var(--text) 8%,transparent);
+  z-index:10;
   user-select:none;
-  transition:transform .18s ease, box-shadow .18s ease;
+  transition:transform .18s ease, box-shadow .18s ease, width .14s ease, height .14s ease, left .14s ease, top .14s ease;
   resize:both;
   overflow:auto;
-  min-width:min(320px,100%);
-  min-height:300px;
-  max-width:min(100vw - 22px, 760px);
-  max-height:calc(100vh - 210px);
-  position:relative;
 }
-.dash-module .dash-surface{max-height:min(520px, calc(100vh - 360px));}
-.dash-module.dash-module-minimized{height:54px;overflow:hidden}
-.dash-module.dash-module-minimized .dash-module-controls .dash-module-button[data-module-action='minimize']{transform:scale(0.94)}
-.dash-module:active{cursor:grab}
+.dash-module.dash-module-dragging{
+  opacity:.65;
+  box-shadow:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent),0 12px 24px color-mix(in srgb,var(--text) 18%,transparent);
+}
+.dash-module:active{
+  cursor:grab;
+}
+.dash-workspace.dash-maximized .dash-module{display:none}
+.dash-workspace.dash-maximized .dash-module.dash-module-maximized{display:block; inset:10px; left:10px; top:10px; width:calc(100vw - 34px); height:calc(100vh - 204px)}
+.dash-module.dash-module-minimized{height:56px;overflow:hidden}
+.dash-module.dash-module-maximized{inset:10px; left:10px; top:10px; width:calc(100vw - 34px); height:calc(100vh - 204px)}
+.dash-module.dash-module-maximized .dash-surface{height:calc(100% - 66px)}
+.dash-module.dash-module-maximized .dash-module-head{position:sticky; top:0; padding-bottom:8px; border-bottom:1px solid var(--line)}
+.dash-module.dash-module-maximized .dash-module-controls{gap:8px}
+.dash-module.dash-module-maximized .dash-module-controls .dash-module-button[data-module-action='maximize']{
+  text-indent:0.5px;
+}
+.dash-module:not(.dash-module-maximized) .dash-surface{
+  max-height:calc(100% - 78px);
+}
+.dash-module.is-dragging{
+  cursor:grabbing;
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent),0 18px 36px color-mix(in srgb,var(--text) 15%,transparent);
+}
+.dash-module.dash-module-focused{
+  z-index:20;
+}
 .dash-dock{
   position:fixed;
   left:50%;
@@ -2510,7 +2551,7 @@ body{--footer-h:42px;--topbar-h:0px}
   line-height:1;
 }
 .dash-module-button{font-size:14px;}
-.dash-module-drag-handle{font-size:12px;cursor:grab;user-select:none}
+.dash-module-drag-handle{font-size:12px}
 .dash-chat-panel-button,
 .dash-status-refresh{font-size:13px;}
 .dash-chat-bubble{font-size:18px;line-height:1}
@@ -2533,6 +2574,7 @@ body{--footer-h:42px;--topbar-h:0px}
   position:relative;
   display:inline-flex;
   align-items:flex-end;
+  margin-right:2px;
 }
 .dash-chat-bubble{
   box-shadow:0 10px 24px color-mix(in srgb,var(--text) 12%,transparent);
@@ -2541,7 +2583,7 @@ body{--footer-h:42px;--topbar-h:0px}
 .dash-chat-panel{
   position:absolute;
   right:0;
-  bottom:calc(100% + 10px);
+  bottom:calc(100% + 12px);
   width:min(390px, calc(100vw - 24px));
   border:1px solid var(--line);
   border-radius:14px;
@@ -2552,16 +2594,17 @@ body{--footer-h:42px;--topbar-h:0px}
   max-height:calc(100vh - 200px);
   box-shadow:0 13px 28px color-mix(in srgb,var(--text) 18%,transparent);
   transition:max-height .25s ease, opacity .2s ease, transform .25s ease;
+  transform-origin:100% 100%;
 }
 .dash-chat-dock:not(.is-open) .dash-chat-panel,
 .dash-chat-dock.is-minimized .dash-chat-panel{
   display:none;
 }
-.dash-chat-dock .dash-chat-panel{
-  transform-origin:100% 100%;
-}
 .dash-chat-dock.is-open .dash-chat-panel{
   display:grid;
+}
+.dash-chat-dock.is-closed .dash-chat-panel{
+  display:none;
 }
 .dash-chat-panel.dash-chat-closed{
   display:none;
@@ -2621,7 +2664,13 @@ body{--footer-h:42px;--topbar-h:0px}
   to{transform:rotate(360deg)}
 }
 @media(max-width:1200px){.dash-tools-grid{grid-template-columns:1fr}.dash-dock-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:1000px){.dash-workspace{display:block}}
+@media(max-width:1000px){
+  .dash-workspace{display:block}
+  .dash-module{
+    width:calc(100vw - 24px);
+    max-width:100%;
+  }
+}
 @media(max-width:760px){.dash-shell{padding:10px 10px 96px}.dash-shell-inner{gap:12px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
 "#;
 
@@ -2663,6 +2712,141 @@ const DASH_CHAT_MIN_DELAY_MS = 2400;
 const DASH_CHAT_DUP_WINDOW_MS = 12000;
 const DASH_CHAT_REPEAT_WINDOW_LIMIT = 4;
 const DASH_CHAT_MESSAGE_MAX = 800;
+const DASH_MODULE_MIN_WIDTH = 260;
+const DASH_MODULE_MIN_HEIGHT = 220;
+const DASH_WORKSPACE_PADDING = 12;
+const DASH_MODULE_EDGE_GAP = 12;
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function clampModuleGeometry(left, top, width, height, workspace = getWorkspaceRoot()) {
+  if (!workspace) {
+    return null;
+  }
+  const workspaceWidth = Math.max(0, workspace.clientWidth - DASH_WORKSPACE_PADDING * 2);
+  const workspaceHeight = Math.max(0, workspace.clientHeight - DASH_WORKSPACE_PADDING * 2);
+  const safeWidth = clamp(
+    width,
+    DASH_MODULE_MIN_WIDTH,
+    Math.max(DASH_MODULE_MIN_WIDTH, workspaceWidth),
+  );
+  const safeHeight = clamp(
+    height,
+    DASH_MODULE_MIN_HEIGHT,
+    Math.max(DASH_MODULE_MIN_HEIGHT, workspaceHeight),
+  );
+  const maxLeft = Math.max(
+    DASH_WORKSPACE_PADDING,
+    workspace.clientWidth - safeWidth - DASH_WORKSPACE_PADDING,
+  );
+  const maxTop = Math.max(
+    DASH_WORKSPACE_PADDING,
+    workspace.clientHeight - safeHeight - DASH_WORKSPACE_PADDING,
+  );
+  return {
+    left: clamp(left, DASH_WORKSPACE_PADDING, maxLeft),
+    top: clamp(top, DASH_WORKSPACE_PADDING, maxTop),
+    width: safeWidth,
+    height: safeHeight,
+  };
+}
+
+function parseGeometry(raw = {}, fallback = {}) {
+  const toNumber = (value) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const left = toNumber(raw.left);
+  const top = toNumber(raw.top);
+  const width = toNumber(raw.width);
+  const height = toNumber(raw.height);
+  if (left === null || top === null || width === null || height === null) {
+    return null;
+  }
+  return { left, top, width, height };
+}
+
+function applyModuleGeometry(module, geometry) {
+  if (!module || !geometry) {
+    return;
+  }
+  const clamped = clampModuleGeometry(
+    geometry.left,
+    geometry.top,
+    geometry.width,
+    geometry.height,
+  );
+  if (!clamped) {
+    return;
+  }
+  module.style.left = `${clamped.left}px`;
+  module.style.top = `${clamped.top}px`;
+  module.style.width = `${clamped.width}px`;
+  module.style.height = `${clamped.height}px`;
+}
+
+function getModuleGeometry(module) {
+  if (!module) {
+    return null;
+  }
+  return parseGeometry({
+    left: module.style.left,
+    top: module.style.top,
+    width: module.style.width,
+    height: module.style.height,
+  });
+}
+
+function applyDefaultLayout() {
+  const workspace = getWorkspaceRoot();
+  if (!workspace) return;
+  const modules = getWorkspaceModules();
+  if (!modules.length) {
+    return;
+  }
+  const width = Math.max(0, workspace.clientWidth - DASH_WORKSPACE_PADDING * 2);
+  const columns = width >= 980 ? 2 : 1;
+  const moduleWidth = clamp(
+    columns === 2 ? (width - DASH_MODULE_EDGE_GAP) / 2 : width,
+    DASH_MODULE_MIN_WIDTH,
+    Math.min(520, width),
+  );
+  const moduleHeight = clamp(
+    Math.max(DASH_MODULE_MIN_HEIGHT, Math.floor(workspace.clientHeight * 0.43)),
+    DASH_MODULE_MIN_HEIGHT,
+    460,
+  );
+  for (const module of modules) {
+    const geometry = getModuleGeometry(module);
+    if (geometry) {
+      applyModuleGeometry(module, geometry);
+      continue;
+    }
+    const index = modules.indexOf(module);
+    const left = DASH_WORKSPACE_PADDING + (index % columns) * (moduleWidth + DASH_MODULE_EDGE_GAP);
+    const top = DASH_WORKSPACE_PADDING + Math.floor(index / columns) * (moduleHeight + DASH_MODULE_EDGE_GAP);
+    applyModuleGeometry(module, { left, top, width: moduleWidth, height: moduleHeight });
+  }
+}
+
+function focusModule(module) {
+  if (!module) return;
+  const workspace = getWorkspaceRoot();
+  if (!workspace) return;
+  let topLayer = 1000;
+  for (const next of getWorkspaceModules()) {
+    if (next === module) continue;
+    const z = Number.parseInt(next.style.zIndex, 10);
+    if (Number.isFinite(z) && z > topLayer) {
+      topLayer = z;
+    }
+    next.classList.remove('dash-module-focused');
+  }
+  module.style.zIndex = String(topLayer + 1);
+  module.classList.add('dash-module-focused');
+}
 
 function getWorkspaceRoot() {
   return document.getElementById('dashWorkspace');
@@ -2714,6 +2898,15 @@ function persistWorkspaceState() {
   const workspace = getWorkspaceRoot();
   if (!workspace) return;
   const modules = getWorkspaceModules();
+  const geometry = {};
+  for (const module of modules) {
+    const key = module.dataset.moduleKey;
+    if (!key) continue;
+    const moduleGeometry = getModuleGeometry(module);
+    if (moduleGeometry) {
+      geometry[key] = moduleGeometry;
+    }
+  }
   const state = {
     order: modules.map((module) => module.dataset.moduleKey).filter(Boolean),
     minimized: modules
@@ -2721,6 +2914,7 @@ function persistWorkspaceState() {
       .map((module) => module.dataset.moduleKey)
       .filter(Boolean),
     maximized: workspace.getAttribute('data-maximized-module') || '',
+    geometry,
   };
   try {
     localStorage.setItem(DASH_WORKSPACE_STATE_KEY, JSON.stringify(state));
@@ -2829,6 +3023,17 @@ function applyWorkspaceState(rawState) {
   for (const module of getWorkspaceModules()) {
     setModuleMinimized(module, minimized.has(module.dataset.moduleKey));
   }
+  const savedGeometry =
+    state.geometry && typeof state.geometry === 'object' ? state.geometry : {};
+  for (const module of getWorkspaceModules()) {
+    const key = module.dataset.moduleKey;
+    const rawGeometry = key ? parseGeometry(savedGeometry[key] || {}) : null;
+    if (!key || !rawGeometry) {
+      continue;
+    }
+    applyModuleGeometry(module, rawGeometry);
+  }
+  applyDefaultLayout();
   const maximized = typeof state.maximized === 'string' ? state.maximized : '';
   if (maximized && available.includes(maximized)) {
     setMaximizedModule(maximized);
@@ -3182,7 +3387,7 @@ function getChatDockState() {
   } catch (_error) {
     // ignore
   }
-  return 'closed';
+  return 'minimized';
 }
 
 function setChatDockState(state) {
@@ -3247,6 +3452,7 @@ function wireModuleControls() {
     if (!module) return;
     const action = button.getAttribute('data-module-action');
     if (action === 'minimize') {
+      focusModule(module);
       const wasMinimized = module.classList.contains('dash-module-minimized');
       setModuleMinimized(module, !wasMinimized);
       if (!wasMinimized && currentMaximizedModule() === key) {
@@ -3257,6 +3463,7 @@ function wireModuleControls() {
       return;
     }
     if (action === 'maximize') {
+      focusModule(module);
       const maximized = currentMaximizedModule();
       setMaximizedModule(maximized === key ? '' : key);
     }
@@ -3287,9 +3494,17 @@ function wireWorkspaceDock() {
     }
     if (module.classList.contains('dash-module-minimized')) {
       setModuleMinimized(module, false);
-      persistWorkspaceState();
+      focusModule(module);
+      await hydrateSurface(surface, surface.pathPrefix);
+      return;
     }
-    setMaximizedModule('');
+    const maximized = currentMaximizedModule();
+    if (maximized === key) {
+      setMaximizedModule('');
+    } else {
+      setMaximizedModule(key);
+    }
+    focusModule(module);
     module.scrollIntoView({ behavior: 'smooth', block: 'start' });
     await hydrateSurface(surface, surface.pathPrefix);
   });
@@ -3323,54 +3538,96 @@ function wireModuleDragReorder() {
   const workspace = getWorkspaceRoot();
   if (!workspace) return;
   let dragging = null;
+  let pointerId = null;
+  let pointerStartX = 0;
+  let pointerStartY = 0;
+  let startLeft = 0;
+  let startTop = 0;
 
-  const canDrag = (event) => event.target.closest('.dash-module-drag-handle') !== null;
-
-  const onDragStart = (event) => {
-    const module = event.currentTarget;
-    if (!module || currentMaximizedModule() || !canDrag(event)) {
-      if (module) {
-        event.preventDefault();
-      }
+  const onPointerMove = (event) => {
+    if (!dragging || event.pointerId !== pointerId) {
       return;
     }
-    dragging = module;
-    module.classList.add('dash-module-dragging');
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', module.dataset.moduleKey || '');
-    }
+    const moduleWidth = dragging.clientWidth;
+    const moduleHeight = dragging.clientHeight;
+    const left = startLeft + (event.clientX - pointerStartX);
+    const top = startTop + (event.clientY - pointerStartY);
+    const clamped = clampModuleGeometry(left, top, moduleWidth, moduleHeight, workspace);
+    if (!clamped) return;
+    dragging.style.left = `${clamped.left}px`;
+    dragging.style.top = `${clamped.top}px`;
   };
 
-  const onDragEnd = () => {
-    if (!dragging) return;
+  const stopDragging = (event) => {
+    if (!dragging || event.pointerId !== pointerId) {
+      return;
+    }
     dragging.classList.remove('dash-module-dragging');
+    dragging.classList.remove('is-dragging');
+    try {
+      dragging.releasePointerCapture(pointerId);
+    } catch (_error) {
+      // ignore
+    }
     dragging = null;
+    pointerId = null;
+    removeEventListener('pointermove', onPointerMove);
+    removeEventListener('pointerup', stopDragging);
+    removeEventListener('pointercancel', stopDragging);
     persistWorkspaceState();
   };
 
-  const onDragOver = (event) => {
+  const onPointerDown = (event) => {
+    const handle = event.target.closest('.dash-module-drag-handle');
+    if (!handle) {
+      const module = event.target.closest('.dash-module');
+      if (module) {
+        focusModule(module);
+      }
+      return;
+    }
+    const module = handle.closest('.dash-module');
+    if (!module || currentMaximizedModule()) {
+      return;
+    }
     event.preventDefault();
-    if (!dragging || !workspace.contains(dragging)) {
-      return;
+    dragging = module;
+    pointerId = event.pointerId;
+    pointerStartX = event.clientX;
+    pointerStartY = event.clientY;
+    startLeft = module.offsetLeft;
+    startTop = module.offsetTop;
+    dragging.classList.add('dash-module-dragging');
+    dragging.classList.add('is-dragging');
+    focusModule(dragging);
+    try {
+      dragging.setPointerCapture(pointerId);
+    } catch (_error) {
+      // ignore
     }
-    const module = event.target.closest('.dash-module');
-    if (!module || module === dragging || !workspace.contains(module)) {
-      return;
-    }
-    const rect = module.getBoundingClientRect();
-    const next = event.clientY > rect.top + rect.height / 2;
-    workspace.insertBefore(dragging, next ? module.nextSibling : module);
+    addEventListener('pointermove', onPointerMove);
+    addEventListener('pointerup', stopDragging);
+    addEventListener('pointercancel', stopDragging);
   };
 
+  const observer = new ResizeObserver(() => {
+    if (!dragging) {
+      persistWorkspaceState();
+    }
+  });
+
   for (const module of getWorkspaceModules()) {
-    module.addEventListener('dragstart', onDragStart);
-    module.addEventListener('dragend', onDragEnd);
+    module.addEventListener('pointerdown', onPointerDown);
+    observer.observe(module);
   }
-  workspace.addEventListener('dragover', onDragOver);
-  workspace.addEventListener('drop', (event) => {
-    event.preventDefault();
-    onDragEnd();
+  addEventListener('resize', () => {
+    for (const module of getWorkspaceModules()) {
+      const geometry = getModuleGeometry(module);
+      if (geometry) {
+        applyModuleGeometry(module, geometry);
+      }
+    }
+    persistWorkspaceState();
   });
 }
 
