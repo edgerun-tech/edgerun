@@ -1041,7 +1041,7 @@ fn render_dash_blog_index(
         .unwrap_or_else(|| "unknown age".to_string());
 
     Ok(format!(
-        "<div class=\"dash-blog\"><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><div class=\"dash-blog-actions\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><button class=\"dash-mail-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#feed\">{}</button></div></section><section class=\"dash-code-tools\" aria-label=\"Post tools\"><label><span>{}</span><input type=\"search\" data-workspace-search-scope placeholder=\"{}\"></label>{}</section><section class=\"dash-code-summary\" aria-label=\"Build log summary\"><div><span>Posts</span><strong>{post_count}</strong></div><div><span>Topics</span><strong>{tag_count}</strong></div><div><span>Latest post</span><strong>{}</strong></div><div><span>Commits</span><strong>{}</strong></div><div><span>Last commit</span><strong>{}</strong></div><div><span>Age</span><strong>{}</strong></div></section><section><h2>Posts</h2><div class=\"dash-grid\">{cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching posts.</p></div>",
+        "<div class=\"dash-blog\"><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><div class=\"dash-blog-actions\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><button class=\"dash-mail-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#feed\">{}</button></div></section><section class=\"dash-code-tools\" aria-label=\"Post tools\"><label><span>{}</span><input type=\"search\" data-workspace-search-scope placeholder=\"{}\"></label>{}</section><section class=\"dash-code-summary\" aria-label=\"Build log summary\"><div><span>Posts</span><strong>{post_count}</strong></div><div><span>Topics</span><strong>{tag_count}</strong></div><div><span>Latest post</span><strong>{}</strong></div><div><span>Commits</span><strong>{}</strong></div><div class=\"summary-wide\"><span>Last commit</span><strong title=\"{}\">{}</strong></div><div><span>Age</span><strong>{}</strong></div></section><section><h2>Posts</h2><div class=\"dash-grid\">{cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching posts.</p></div>",
         escape_html(language.hero_eyebrow),
         escape_html(language.title),
         escape_attr(&localized_path(language, "/about.html")),
@@ -1054,6 +1054,7 @@ fn render_dash_blog_index(
         render_dash_topic_list(language, posts),
         escape_html(last_post),
         escape_html(commit_count),
+        escape_attr(last_commit),
         escape_html(last_commit),
         escape_html(&last_commit_age)
     ))
@@ -2816,7 +2817,12 @@ fn blog_js() -> String {
 }
 
 fn blog_style() -> String {
-    format!("{}\n{}", edgerun_web_ui::BASE_STYLE, BLOG_STYLE)
+    format!(
+        "{}\n{}\n{}",
+        edgerun_web_ui::BASE_STYLE,
+        BLOG_STYLE,
+        BLOG_UX_STYLE
+    )
 }
 
 const BLOG_JS: &str = r#"
@@ -2836,6 +2842,21 @@ const BLOG_STYLE: &str = r#"
 @media(max-width:900px){.article-layout{grid-template-columns:1fr;max-width:820px}.article-layout aside{order:-1}.recent{display:flex;flex-wrap:wrap;gap:14px}}@media(max-width:760px){.hero,.layout{grid-template-columns:1fr}.hero{padding-top:42px}.repo-stats{grid-template-columns:1fr}.posts{grid-template-columns:1fr}.article{padding:24px}}
 @media(max-width:600px){body{overflow-x:hidden}.layout,.article-layout{padding-left:18px;padding-right:18px}.posts,.post-card{min-width:0}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+"#;
+
+const BLOG_UX_STYLE: &str = r#"
+body{background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 92%,var(--panel)) 0,var(--bg) 260px)}
+.topbar{box-shadow:0 1px 0 color-mix(in srgb,var(--line) 80%,transparent)}
+.brand{letter-spacing:0}.hero{display:grid;grid-template-columns:minmax(0,940px);justify-content:center;padding:54px clamp(18px,5vw,64px) 36px}.hero h1{max-width:900px;font-size:clamp(40px,6vw,76px)}.hero p{max-width:760px}.hero .inline-link{font-weight:800;color:var(--accent);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--accent) 45%,transparent)}
+.repo-stats{grid-template-columns:repeat(2,minmax(0,1fr));max-width:780px}.repo-stats div{background:color-mix(in srgb,var(--panel) 92%,var(--code));box-shadow:0 10px 28px color-mix(in srgb,var(--text) 7%,transparent)}
+.layout{grid-template-columns:minmax(190px,250px) minmax(0,1fr);max-width:1180px;margin:0 auto;padding-top:42px}.layout aside{position:sticky;top:calc(var(--topbar-h) + 22px);border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 90%,transparent);padding:16px}
+.posts{max-width:none;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:18px}.post-card{min-height:236px;box-shadow:0 12px 34px color-mix(in srgb,var(--text) 6%,transparent)}.post-card:hover{box-shadow:0 18px 44px color-mix(in srgb,var(--text) 10%,transparent)}.post-card a{padding:24px}.post-card h2{font-size:25px}.post-card p{line-height:1.5}
+.tags span,.topic-list button{background:color-mix(in srgb,var(--panel) 82%,var(--code))}.topic-list button:hover{border-color:var(--accent);color:var(--accent)}
+.article-layout{grid-template-columns:minmax(0,820px) 230px;max-width:1120px;padding-top:48px}.article{box-shadow:0 14px 42px color-mix(in srgb,var(--text) 7%,transparent)}.article h1{max-width:760px}.summary{max-width:720px;line-height:1.45}.content{font-size:17px;line-height:1.72}.content h2{font-size:clamp(24px,3vw,34px);margin-top:42px}.content h3{font-size:22px}.content p,.content ul,.content ol{max-width:720px}.content ul,.content ol{padding-left:24px}.content li{margin:7px 0}.content blockquote{max-width:760px;background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:0 8px 8px 0;padding:14px 18px}.content table{border-radius:8px}.content th{white-space:nowrap}.content code{background:color-mix(in srgb,var(--code) 80%,transparent);border-radius:5px;padding:1px 4px}.content pre code{background:transparent;padding:0}
+.back{display:inline-flex;align-items:center;min-height:38px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:0 12px}.back:hover{border-color:var(--accent)}
+.recent{border-left:1px solid var(--line);padding-left:14px}.recent a:hover{color:var(--accent)}.related-posts article:hover{border-color:var(--accent)}
+@media(max-width:900px){.layout aside{position:static}.article-layout{padding-top:28px}.recent{border-left:0;padding-left:0}.article-layout aside{padding:0 4px}}
+@media(max-width:760px){.hero{padding-top:34px}.layout{padding-top:24px}.layout aside{padding:14px}.repo-stats{grid-template-columns:1fr}.article{box-shadow:none}.content{font-size:16px}.content table{font-size:14px}.site-footer{position:static}body{padding-bottom:0}}
 "#;
 
 #[cfg(test)]
