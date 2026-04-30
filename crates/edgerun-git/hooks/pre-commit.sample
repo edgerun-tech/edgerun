@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+GIT_REPO=${GIT_REPO:-$(git rev-parse --show-toplevel)}
+GIT_BINARY=${GIT_BINARY:-edgerun-git}
+GIT_METADATA_DIR=${GIT_METADATA_DIR:-$GIT_REPO/.edgerun/git/crates}
+
+"$GIT_BINARY" generate \
+  --repo "$GIT_REPO" \
+  --out "$GIT_METADATA_DIR"
+
+git -C "$GIT_REPO" add .edgerun/git/crates

@@ -22,6 +22,7 @@ use edgerun_http::{Handler, Request, Response, StatusCode};
 use edgerun_web_ui::PageShell;
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
@@ -121,6 +122,33 @@ struct FunctionDef {
     name: String,
     path: String,
     line: usize,
+    body_start: usize,
+    body_end: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+struct CrateMetadata {
+    api_items: Vec<ApiItem>,
+    call_edges: Vec<CallEdge>,
+}
+
+#[derive(Clone, Debug)]
+struct RustSource {
+    path: String,
+    text: String,
+}
+
+#[derive(Clone, Debug)]
+struct RustToken {
+    kind: RustTokenKind,
+    line: usize,
+    index: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RustTokenKind {
+    Ident(String),
+    Punct(char),
 }
 
 #[derive(Clone, Debug)]
@@ -419,6 +447,53 @@ pub fn start_git(config: GitConfig) -> Pin<Box<dyn Future<Output = io::Result<()
     })
 }
 
+/// Generate host-only crate surface metadata for public crates in a checkout.
+///
+/// The generated files are catalog material intended to be committed by a
+/// developer-side git hook. Serving can then stay cheap and deterministic.
+pub fn generate_crate_metadata(repo_root: &Path, out_dir: &Path) -> io::Result<usize> {
+    let crates_dir = repo_root.join("crates");
+    fs::create_dir_all(out_dir)?;
+    let mut generated = 0usize;
+    for entry in fs::read_dir(crates_dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let crate_dir = entry.path();
+        if !crate_dir.join(DIR_VISIBILITY_MARKER).exists() {
+            continue;
+        }
+        let manifest_path = crate_dir.join("Cargo.toml");
+        let manifest = match fs::read_to_string(&manifest_path) {
+            Ok(manifest) => manifest,
+            Err(_) => continue,
+        };
+        let Some(name) = manifest_string_value(&manifest, "name") else {
+            continue;
+        };
+        if !safe_repo_name(&name) {
+            continue;
+        }
+        let rel_path = crate_dir
+            .strip_prefix(repo_root)
+            .ok()
+            .and_then(|path| path.to_str())
+            .unwrap_or("")
+            .replace('\\', "/");
+        if rel_path.is_empty() {
+            continue;
+        }
+        let sources = read_rust_sources_from_fs(repo_root, &rel_path)?;
+        let metadata = analyze_rust_sources(sources);
+        let path = out_dir.join(format!("{name}.txt"));
+        let mut file = fs::File::create(path)?;
+        file.write_all(serialize_crate_metadata(&name, &metadata).as_bytes())?;
+        generated += 1;
+    }
+    Ok(generated)
+}
+
 fn load_repo(name: String, path: PathBuf) -> io::Result<Option<Repo>> {
     if !is_git_repo(&path) {
         return Ok(None);
@@ -576,8 +651,17 @@ fn crate_info_from_manifest(repo: &Repo, rel_path: &str, manifest: &str) -> io::
         .unwrap_or_else(|| rel_path.rsplit('/').next().unwrap_or("unknown").to_string());
     let description = manifest_string_value(manifest, "description").unwrap_or_default();
     let features = manifest_table_keys(manifest, "features");
-    let api_items = extract_public_api(repo, rel_path)?;
-    let call_edges = extract_call_graph(repo, rel_path)?;
+    let generated = load_generated_crate_metadata(repo, &name)?;
+    let api_items = if generated.api_items.is_empty() {
+        extract_public_api(repo, rel_path)?
+    } else {
+        generated.api_items
+    };
+    let call_edges = if generated.call_edges.is_empty() {
+        extract_call_graph(repo, rel_path)?
+    } else {
+        generated.call_edges
+    };
     let workspace_deps = workspace_dependency_names(manifest);
     let test_count = count_crate_tests(repo, rel_path)?;
     let test_result = load_crate_test_result(repo, &name).ok();
@@ -657,11 +741,19 @@ fn workspace_dependency_names(manifest: &str) -> Vec<String> {
 }
 
 fn extract_public_api(repo: &Repo, rel_path: &str) -> io::Result<Vec<ApiItem>> {
+    Ok(analyze_rust_sources(read_rust_sources_from_git(repo, rel_path)?).api_items)
+}
+
+fn extract_call_graph(repo: &Repo, rel_path: &str) -> io::Result<Vec<CallEdge>> {
+    Ok(analyze_rust_sources(read_rust_sources_from_git(repo, rel_path)?).call_edges)
+}
+
+fn read_rust_sources_from_git(repo: &Repo, rel_path: &str) -> io::Result<Vec<RustSource>> {
     let files = git_output(
         &repo.path,
         &["ls-tree", "-r", "--name-only", &repo.default_ref, rel_path],
     )?;
-    let mut items = Vec::new();
+    let mut out = Vec::new();
     for file in files.lines().filter(|file| file.ends_with(".rs")) {
         let Ok(source) = git_output(
             &repo.path,
@@ -669,136 +761,135 @@ fn extract_public_api(repo: &Repo, rel_path: &str) -> io::Result<Vec<ApiItem>> {
         ) else {
             continue;
         };
-        for (index, line) in source.lines().enumerate() {
-            let Some((kind, name)) = parse_public_api_line(line) else {
-                continue;
-            };
-            items.push(ApiItem {
-                kind,
-                name,
-                path: file.to_string(),
-                line: index + 1,
-            });
+        out.push(RustSource {
+            path: file.to_string(),
+            text: source,
+        });
+    }
+    Ok(out)
+}
+
+fn read_rust_sources_from_fs(repo_root: &Path, rel_path: &str) -> io::Result<Vec<RustSource>> {
+    let mut out = Vec::new();
+    collect_rust_sources(repo_root, &repo_root.join(rel_path), &mut out)?;
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
+fn collect_rust_sources(repo_root: &Path, dir: &Path, out: &mut Vec<RustSource>) -> io::Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            collect_rust_sources(repo_root, &path, out)?;
+            continue;
+        }
+        if path.extension().and_then(|value| value.to_str()) != Some("rs") {
+            continue;
+        }
+        let Ok(rel_path) = path.strip_prefix(repo_root) else {
+            continue;
+        };
+        let Some(rel_path) = rel_path.to_str() else {
+            continue;
+        };
+        out.push(RustSource {
+            path: rel_path.replace('\\', "/"),
+            text: fs::read_to_string(path)?,
+        });
+    }
+    Ok(())
+}
+
+fn analyze_rust_sources(sources: Vec<RustSource>) -> CrateMetadata {
+    let mut metadata = CrateMetadata::default();
+    let mut functions = Vec::new();
+    let mut token_sets = Vec::new();
+    for source in sources {
+        let stripped = strip_cfg_test_modules(&source.text);
+        let tokens = rust_tokens(&stripped);
+        metadata
+            .api_items
+            .extend(parse_api_items(&source.path, &tokens));
+        functions.extend(parse_functions(&source.path, &tokens));
+        token_sets.push((source.path, tokens));
+    }
+    let mut unique_function_names = Vec::new();
+    for function in &functions {
+        if !unique_function_names
+            .iter()
+            .any(|name| name == &function.name)
+            && functions
+                .iter()
+                .filter(|candidate| candidate.name == function.name)
+                .count()
+                == 1
+        {
+            unique_function_names.push(function.name.clone());
         }
     }
-    items.sort_by(|a, b| {
+    for (path, tokens) in &token_sets {
+        let file_functions = functions
+            .iter()
+            .filter(|function| function.path == *path)
+            .collect::<Vec<_>>();
+        for caller in file_functions {
+            for token in tokens
+                .iter()
+                .filter(|token| token.index > caller.body_start && token.index < caller.body_end)
+            {
+                let RustTokenKind::Ident(name) = &token.kind else {
+                    continue;
+                };
+                if name == &caller.name || !token_is_followed_by_punct(tokens, token.index, '(') {
+                    continue;
+                }
+                if !unique_function_names.iter().any(|unique| unique == name) {
+                    continue;
+                }
+                let Some(callee) = functions.iter().find(|function| function.name == *name) else {
+                    continue;
+                };
+                add_call_edge(&mut metadata.call_edges, caller, callee);
+            }
+        }
+    }
+    metadata.api_items.sort_by(|a, b| {
         a.path
             .cmp(&b.path)
             .then_with(|| a.line.cmp(&b.line))
             .then_with(|| a.name.cmp(&b.name))
     });
-    Ok(items)
-}
-
-fn parse_public_api_line(line: &str) -> Option<(String, String)> {
-    let trimmed = line.trim_start();
-    let rest = trimmed
-        .strip_prefix("pub ")
-        .or_else(|| trimmed.strip_prefix("pub(crate) "))
-        .or_else(|| trimmed.strip_prefix("pub(super) "))
-        .or_else(|| trimmed.strip_prefix("pub(in "))?;
-    let rest = if trimmed.starts_with("pub(in ") {
-        rest.split_once(") ")?.1
-    } else {
-        rest
-    };
-    let mut rest = rest;
-    for prefix in ["async ", "unsafe ", "const "] {
-        if let Some(value) = rest.strip_prefix(prefix) {
-            rest = value;
-        }
-    }
-    for kind in [
-        "fn", "struct", "enum", "trait", "type", "const", "static", "mod",
-    ] {
-        let Some(after_kind) = rest.strip_prefix(kind) else {
-            continue;
-        };
-        if !after_kind
-            .chars()
-            .next()
-            .is_some_and(|ch| ch.is_ascii_whitespace())
-        {
-            continue;
-        }
-        let name = after_kind.trim_start();
-        let name = name
-            .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
-            .next()
-            .unwrap_or("");
-        if !name.is_empty() {
-            return Some((kind.to_string(), name.to_string()));
-        }
-    }
-    None
-}
-
-fn extract_call_graph(repo: &Repo, rel_path: &str) -> io::Result<Vec<CallEdge>> {
-    let files = git_output(
-        &repo.path,
-        &["ls-tree", "-r", "--name-only", &repo.default_ref, rel_path],
-    )?;
-    let mut sources = Vec::new();
-    let mut functions = Vec::new();
-    for file in files.lines().filter(|file| file.ends_with(".rs")) {
-        let Ok(source) = git_output(
-            &repo.path,
-            &["show", &format!("{}:{file}", repo.default_ref)],
-        ) else {
-            continue;
-        };
-        for (index, line) in source.lines().enumerate() {
-            if let Some(name) = parse_function_line(line) {
-                functions.push(FunctionDef {
-                    name,
-                    path: file.to_string(),
-                    line: index + 1,
-                });
-            }
-        }
-        sources.push((file.to_string(), source));
-    }
-
-    let mut edges = Vec::<CallEdge>::new();
-    for (path, source) in sources {
-        let mut current = None::<FunctionDef>;
-        let mut depth = 0isize;
-        for (index, raw_line) in source.lines().enumerate() {
-            let line_number = index + 1;
-            let line = raw_line.split("//").next().unwrap_or(raw_line);
-            if let Some(name) = parse_function_line(line) {
-                current = Some(FunctionDef {
-                    name,
-                    path: path.clone(),
-                    line: line_number,
-                });
-                depth = 0;
-            }
-            if let Some(caller) = current.clone() {
-                for callee in &functions {
-                    if callee.name == caller.name || !contains_call_to(line, &callee.name) {
-                        continue;
-                    }
-                    add_call_edge(&mut edges, &caller, callee);
-                }
-                depth += line.matches('{').count() as isize;
-                depth -= line.matches('}').count() as isize;
-                if depth <= 0 && line.contains('}') {
-                    current = None;
-                    depth = 0;
-                }
-            }
-        }
-    }
-
-    edges.sort_by(|a, b| {
+    metadata.call_edges.sort_by(|a, b| {
         a.caller
             .cmp(&b.caller)
             .then_with(|| a.callee.cmp(&b.callee))
             .then_with(|| a.caller_path.cmp(&b.caller_path))
             .then_with(|| a.caller_line.cmp(&b.caller_line))
     });
-    Ok(edges)
+    metadata
+}
+
+fn strip_cfg_test_modules(source: &str) -> String {
+    let mut out = String::new();
+    let mut cfg_test_pending = false;
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("#[cfg(test)]") {
+            cfg_test_pending = true;
+            continue;
+        }
+        if cfg_test_pending && trimmed.starts_with("mod tests") {
+            break;
+        }
+        if cfg_test_pending {
+            out.push_str("#[cfg(test)]\n");
+            cfg_test_pending = false;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
 }
 
 fn add_call_edge(edges: &mut Vec<CallEdge>, caller: &FunctionDef, callee: &FunctionDef) {
@@ -822,49 +913,385 @@ fn add_call_edge(edges: &mut Vec<CallEdge>, caller: &FunctionDef, callee: &Funct
     });
 }
 
-fn parse_function_line(line: &str) -> Option<String> {
-    let mut rest = line.trim_start();
-    if let Some(value) = rest.strip_prefix("pub ") {
-        rest = value;
-    } else if let Some(value) = rest.strip_prefix("pub(crate) ") {
-        rest = value;
-    } else if let Some(value) = rest.strip_prefix("pub(super) ") {
-        rest = value;
-    } else if rest.starts_with("pub(in ") {
-        rest = rest.split_once(") ")?.1;
+fn parse_api_items(path: &str, tokens: &[RustToken]) -> Vec<ApiItem> {
+    let mut items = Vec::new();
+    let mut index = 0usize;
+    while index < tokens.len() {
+        if !token_is_ident(tokens, index, "pub") {
+            index += 1;
+            continue;
+        }
+        let mut cursor = skip_visibility(tokens, index + 1);
+        while token_is_modifier(tokens, cursor) {
+            cursor += 1;
+        }
+        let Some(kind) = token_ident(tokens, cursor) else {
+            index += 1;
+            continue;
+        };
+        if !matches!(
+            kind,
+            "fn" | "struct" | "enum" | "trait" | "type" | "const" | "static" | "mod"
+        ) {
+            index += 1;
+            continue;
+        }
+        let Some(name) = token_ident(tokens, cursor + 1) else {
+            index += 1;
+            continue;
+        };
+        items.push(ApiItem {
+            kind: kind.to_string(),
+            name: name.to_string(),
+            path: path.to_string(),
+            line: tokens[index].line,
+        });
+        index = cursor + 2;
     }
-    for prefix in ["async ", "unsafe ", "const "] {
-        if let Some(value) = rest.strip_prefix(prefix) {
-            rest = value;
+    items
+}
+
+fn parse_functions(path: &str, tokens: &[RustToken]) -> Vec<FunctionDef> {
+    let mut functions = Vec::new();
+    let mut index = 0usize;
+    while index < tokens.len() {
+        if !token_is_ident(tokens, index, "fn") {
+            index += 1;
+            continue;
+        }
+        let Some(name) = token_ident(tokens, index + 1) else {
+            index += 1;
+            continue;
+        };
+        let Some(open_brace) = find_punct(tokens, index + 2, '{') else {
+            index += 1;
+            continue;
+        };
+        let Some(close_brace) = matching_brace(tokens, open_brace) else {
+            index += 1;
+            continue;
+        };
+        functions.push(FunctionDef {
+            name: name.to_string(),
+            path: path.to_string(),
+            line: tokens[index].line,
+            body_start: open_brace,
+            body_end: close_brace,
+        });
+        index = close_brace + 1;
+    }
+    functions
+}
+
+fn rust_tokens(source: &str) -> Vec<RustToken> {
+    let mut tokens = Vec::new();
+    let mut chars = source.char_indices().peekable();
+    let mut line = 1usize;
+    while let Some((_, ch)) = chars.next() {
+        if ch == '\n' {
+            line += 1;
+            continue;
+        }
+        if ch.is_whitespace() {
+            continue;
+        }
+        if ch == '/' && chars.peek().is_some_and(|(_, next)| *next == '/') {
+            for (_, next) in chars.by_ref() {
+                if next == '\n' {
+                    line += 1;
+                    break;
+                }
+            }
+            continue;
+        }
+        if ch == '/' && chars.peek().is_some_and(|(_, next)| *next == '*') {
+            let _ = chars.next();
+            let mut prev = '\0';
+            for (_, next) in chars.by_ref() {
+                if next == '\n' {
+                    line += 1;
+                }
+                if prev == '*' && next == '/' {
+                    break;
+                }
+                prev = next;
+            }
+            continue;
+        }
+        if ch == '\'' {
+            let mut lookahead = chars.clone();
+            let next = lookahead.next().map(|(_, next)| next);
+            let after_next = lookahead.next().map(|(_, next)| next);
+            if next.is_some_and(is_ident_start) && after_next != Some('\'') {
+                continue;
+            }
+        }
+        if ch == '"' || ch == '\'' {
+            skip_quoted(ch, &mut chars, &mut line);
+            continue;
+        }
+        if ch == 'r'
+            && chars
+                .peek()
+                .is_some_and(|(_, next)| *next == '"' || *next == '#')
+        {
+            skip_raw_string(&mut chars, &mut line);
+            continue;
+        }
+        if is_ident_start(ch) {
+            let mut ident = String::new();
+            ident.push(ch);
+            while let Some((_, next)) = chars.peek().copied() {
+                if !is_ident_continue(next) {
+                    break;
+                }
+                ident.push(next);
+                let _ = chars.next();
+            }
+            let index = tokens.len();
+            tokens.push(RustToken {
+                kind: RustTokenKind::Ident(ident),
+                line,
+                index,
+            });
+            continue;
+        }
+        if "{}()[];:,.<>!&|=+-*/#".contains(ch) {
+            let index = tokens.len();
+            tokens.push(RustToken {
+                kind: RustTokenKind::Punct(ch),
+                line,
+                index,
+            });
         }
     }
-    let after_fn = rest.strip_prefix("fn ")?;
-    let name = after_fn
-        .trim_start()
-        .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
-        .next()
-        .unwrap_or("");
-    if name.is_empty() {
-        None
-    } else {
-        Some(name.to_string())
+    tokens
+}
+
+fn skip_quoted(
+    quote: char,
+    chars: &mut core::iter::Peekable<core::str::CharIndices<'_>>,
+    line: &mut usize,
+) {
+    let mut escaped = false;
+    for (_, ch) in chars.by_ref() {
+        if ch == '\n' {
+            *line += 1;
+        }
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == quote {
+            break;
+        }
     }
 }
 
-fn contains_call_to(line: &str, function_name: &str) -> bool {
-    let needle = format!("{function_name}(");
-    let mut rest = line;
-    while let Some(index) = rest.find(&needle) {
-        let before = rest[..index].chars().last();
-        let boundary = before
-            .map(|ch| !(ch.is_ascii_alphanumeric() || ch == '_'))
-            .unwrap_or(true);
-        if boundary {
-            return true;
-        }
-        rest = &rest[index + function_name.len()..];
+fn skip_raw_string(chars: &mut core::iter::Peekable<core::str::CharIndices<'_>>, line: &mut usize) {
+    let mut hashes = 0usize;
+    while let Some((_, '#')) = chars.peek().copied() {
+        hashes += 1;
+        let _ = chars.next();
     }
-    false
+    if !matches!(chars.peek(), Some((_, '"'))) {
+        return;
+    }
+    let _ = chars.next();
+    let mut saw_quote = false;
+    let mut closing_hashes = 0usize;
+    for (_, ch) in chars.by_ref() {
+        if ch == '\n' {
+            *line += 1;
+        }
+        if ch == '"' {
+            if hashes == 0 {
+                break;
+            }
+            saw_quote = true;
+            closing_hashes = 0;
+            continue;
+        }
+        if saw_quote && ch == '#' {
+            closing_hashes += 1;
+            if closing_hashes == hashes {
+                break;
+            }
+        } else {
+            saw_quote = false;
+            closing_hashes = 0;
+        }
+    }
+}
+
+fn is_ident_start(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphabetic()
+}
+
+fn is_ident_continue(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphanumeric()
+}
+
+fn skip_visibility(tokens: &[RustToken], mut index: usize) -> usize {
+    if !token_is_punct(tokens, index, '(') {
+        return index;
+    }
+    let mut depth = 0isize;
+    while index < tokens.len() {
+        if token_is_punct(tokens, index, '(') {
+            depth += 1;
+        } else if token_is_punct(tokens, index, ')') {
+            depth -= 1;
+            if depth == 0 {
+                return index + 1;
+            }
+        }
+        index += 1;
+    }
+    index
+}
+
+fn token_is_modifier(tokens: &[RustToken], index: usize) -> bool {
+    matches!(
+        token_ident(tokens, index),
+        Some("async" | "unsafe" | "const" | "extern")
+    )
+}
+
+fn token_is_ident(tokens: &[RustToken], index: usize, expected: &str) -> bool {
+    token_ident(tokens, index) == Some(expected)
+}
+
+fn token_ident(tokens: &[RustToken], index: usize) -> Option<&str> {
+    let token = tokens.get(index)?;
+    let RustTokenKind::Ident(value) = &token.kind else {
+        return None;
+    };
+    Some(value)
+}
+
+fn token_is_punct(tokens: &[RustToken], index: usize, expected: char) -> bool {
+    matches!(
+        tokens.get(index).map(|token| &token.kind),
+        Some(RustTokenKind::Punct(value)) if *value == expected
+    )
+}
+
+fn token_is_followed_by_punct(tokens: &[RustToken], index: usize, expected: char) -> bool {
+    token_is_punct(tokens, index + 1, expected)
+}
+
+fn find_punct(tokens: &[RustToken], mut index: usize, expected: char) -> Option<usize> {
+    while index < tokens.len() {
+        if token_is_punct(tokens, index, ';') {
+            return None;
+        }
+        if token_is_punct(tokens, index, expected) {
+            return Some(index);
+        }
+        index += 1;
+    }
+    None
+}
+
+fn matching_brace(tokens: &[RustToken], open_index: usize) -> Option<usize> {
+    let mut depth = 0isize;
+    for index in open_index..tokens.len() {
+        if token_is_punct(tokens, index, '{') {
+            depth += 1;
+        } else if token_is_punct(tokens, index, '}') {
+            depth -= 1;
+            if depth == 0 {
+                return Some(index);
+            }
+        }
+    }
+    None
+}
+
+fn serialize_crate_metadata(crate_name: &str, metadata: &CrateMetadata) -> String {
+    let mut out = String::new();
+    out.push_str("# generated by edgerun-git generate; do not edit\n");
+    out.push_str("# kind: generated type/catalog material; target: host-only\n");
+    out.push_str(&format!("crate\t{crate_name}\n"));
+    for item in &metadata.api_items {
+        out.push_str(&format!(
+            "api\t{}\t{}\t{}\t{}\n",
+            item.kind, item.name, item.path, item.line
+        ));
+    }
+    for edge in &metadata.call_edges {
+        out.push_str(&format!(
+            "call\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            edge.caller,
+            edge.callee,
+            edge.caller_path,
+            edge.caller_line,
+            edge.callee_path,
+            edge.callee_line,
+            edge.count
+        ));
+    }
+    out
+}
+
+fn load_generated_crate_metadata(repo: &Repo, crate_name: &str) -> io::Result<CrateMetadata> {
+    let path = format!(".edgerun/git/crates/{crate_name}.txt");
+    let text = match git_output(
+        &repo.path,
+        &["show", &format!("{}:{path}", repo.default_ref)],
+    ) {
+        Ok(text) => text,
+        Err(_) => return Ok(CrateMetadata::default()),
+    };
+    Ok(parse_crate_metadata(&text))
+}
+
+fn parse_crate_metadata(text: &str) -> CrateMetadata {
+    let mut metadata = CrateMetadata::default();
+    for line in text.lines() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let parts = line.split('\t').collect::<Vec<_>>();
+        match parts.as_slice() {
+            ["api", kind, name, path, line] => {
+                let Ok(line) = line.parse::<usize>() else {
+                    continue;
+                };
+                metadata.api_items.push(ApiItem {
+                    kind: (*kind).to_string(),
+                    name: (*name).to_string(),
+                    path: (*path).to_string(),
+                    line,
+                });
+            }
+            ["call", caller, callee, caller_path, caller_line, callee_path, callee_line, count] => {
+                let (Ok(caller_line), Ok(callee_line), Ok(count)) = (
+                    caller_line.parse::<usize>(),
+                    callee_line.parse::<usize>(),
+                    count.parse::<usize>(),
+                ) else {
+                    continue;
+                };
+                metadata.call_edges.push(CallEdge {
+                    caller: (*caller).to_string(),
+                    callee: (*callee).to_string(),
+                    caller_path: (*caller_path).to_string(),
+                    caller_line,
+                    callee_path: (*callee_path).to_string(),
+                    callee_line,
+                    count,
+                });
+            }
+            _ => {}
+        }
+    }
+    metadata
 }
 
 fn count_crate_tests(repo: &Repo, rel_path: &str) -> io::Result<usize> {
@@ -2000,31 +2427,38 @@ mod tests {
     }
 
     #[test]
-    fn parses_public_api_lines() {
-        assert_eq!(
-            parse_public_api_line("pub fn send_mail() {}"),
-            Some(("fn".to_string(), "send_mail".to_string()))
+    fn parses_public_api_from_tokens() {
+        let tokens = rust_tokens(
+            "pub fn send_mail() {}\npub(crate) struct Mailbox;\npub static_root: Option<PathBuf>;\nfn private() {}\n",
         );
+        let items = parse_api_items("src/lib.rs", &tokens)
+            .into_iter()
+            .map(|item| (item.kind, item.name))
+            .collect::<Vec<_>>();
         assert_eq!(
-            parse_public_api_line("pub(crate) struct Mailbox;"),
-            Some(("struct".to_string(), "Mailbox".to_string()))
+            items,
+            [
+                ("fn".to_string(), "send_mail".to_string()),
+                ("struct".to_string(), "Mailbox".to_string())
+            ]
         );
-        assert!(parse_public_api_line("pub static_root: Option<PathBuf>,").is_none());
-        assert!(parse_public_api_line("fn private() {}").is_none());
     }
 
     #[test]
-    fn parses_function_lines_and_calls() {
-        assert_eq!(
-            parse_function_line("pub async fn run_demo() {}").as_deref(),
-            Some("run_demo")
-        );
-        assert_eq!(
-            parse_function_line("fn helper(value: u8) -> u8 { value }").as_deref(),
-            Some("helper")
-        );
-        assert!(contains_call_to("let x = helper();", "helper"));
-        assert!(!contains_call_to("let x = other_helper();", "helper"));
+    fn parses_functions_and_calls_from_tokens() {
+        let metadata = analyze_rust_sources(vec![RustSource {
+            path: "src/lib.rs".to_string(),
+            text: "pub async fn run_demo() { let _ = \"helper()\"; helper(); }\nfn helper(value: u8) -> u8 { value }\nfn other_helper() {}\n"
+                .to_string(),
+        }]);
+        assert!(metadata
+            .call_edges
+            .iter()
+            .any(|edge| edge.caller == "run_demo" && edge.callee == "helper"));
+        assert!(!metadata
+            .call_edges
+            .iter()
+            .any(|edge| edge.caller == "run_demo" && edge.callee == "other_helper"));
     }
 
     #[test]
