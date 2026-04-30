@@ -335,6 +335,15 @@ impl GitHandler {
         if !path_is_public(repo, rel_path) {
             return Ok(not_found_response(&self.config.title));
         }
+        let kind = git_output(
+            &repo.path,
+            &["cat-file", "-t", &format!("{rev}:{rel_path}")],
+        )
+        .ok()
+        .map(|value| value.trim().to_string());
+        if kind.as_deref() != Some("blob") {
+            return Ok(not_found_response(&self.config.title));
+        }
         let bytes = git_output_bytes(&repo.path, &["show", &format!("{rev}:{rel_path}")])?;
         Ok(Response::new(StatusCode::OK)
             .with_header("Content-Type", "text/plain; charset=utf-8")
@@ -1546,15 +1555,27 @@ fn is_git_repo(path: &Path) -> bool {
     path.join(".git").exists() || (path.join("objects").exists() && path.join("HEAD").exists())
 }
 
+fn render_template(template: &str, values: &[(&str, String)]) -> String {
+    let mut rendered = template.to_string();
+    for (key, value) in values {
+        rendered = rendered.replace(&format!("{{{{{key}}}}}"), value);
+    }
+    rendered
+}
+
 fn render_index(config: &GitConfig, repos: &[Repo]) -> String {
     let mut items = String::new();
     for repo in repos {
-        items.push_str(&format!(
-            "<article class=\"repo-card\"><a href=\"/{}/\"><h2>{}</h2><p>{}</p><span>{}</span></a></article>",
-            escape_attr(&repo.name),
-            escape_html(&repo.title),
-            escape_html(&repo.description),
-            escape_html(&repo.default_ref)
+        items.push_str(&render_template(
+            include_str!("../templates/repo-card.html"),
+            &[
+                ("repo_name", escape_attr(&repo.name)),
+                ("repo_title", escape_html(&repo.title)),
+                ("repo_title_attr", escape_attr(&repo.title)),
+                ("repo_description", escape_html(&repo.description)),
+                ("default_ref", escape_html(&repo.default_ref)),
+                ("default_ref_attr", escape_attr(&repo.default_ref)),
+            ],
         ));
     }
     if items.is_empty() {
@@ -1564,11 +1585,13 @@ fn render_index(config: &GitConfig, repos: &[Repo]) -> String {
         config,
         &config.title,
         &config.description,
-        &format!(
-            "<main id=\"content\"><section class=\"hero\"><p class=\"eyebrow\">Released code</p><h1>{}</h1><p>{}</p></section><section class=\"repos\" aria-label=\"Repositories\">{}</section></main>",
-            escape_html(&config.title),
-            escape_html(&config.description),
-            items
+        &render_template(
+            include_str!("../templates/index.html"),
+            &[
+                ("title", escape_html(&config.title)),
+                ("description", escape_html(&config.description)),
+                ("repositories", items),
+            ],
         ),
     )
 }
@@ -1602,13 +1625,14 @@ fn render_crates_index(config: &GitConfig, repo: &Repo, crates: &[CrateInfo]) ->
         config,
         &format!("{} crates | {}", repo.title, config.title),
         &repo.description,
-        &format!(
-            "<main id=\"content\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a></nav><section class=\"hero\"><p class=\"eyebrow\">Crate explorer</p><h1>{} crates</h1><p>Workspace crates that have been released through this repository's visibility policy.</p><form class=\"crate-search\" role=\"search\"><label for=\"crate-search\">Search crates</label><input id=\"crate-search\" type=\"search\" placeholder=\"Search crates\" autocomplete=\"off\"><span id=\"crate-search-count\">{} crates</span></form></section><section class=\"repos\" aria-label=\"Crates\">{}</section></main>",
-            escape_attr(&repo.name),
-            escape_html(&repo.title),
-            escape_html(&repo.title),
-            crates.len(),
-            items
+        &render_template(
+            include_str!("../templates/crates-index.html"),
+            &[
+                ("repo_name", escape_attr(&repo.name)),
+                ("repo_title", escape_html(&repo.title)),
+                ("crate_count", crates.len().to_string()),
+                ("crates", items),
+            ],
         ),
     )
 }
@@ -1646,29 +1670,28 @@ fn render_crate_page(
         config,
         &format!("{} | {}", info.name, config.title),
         &info.description,
-        &format!(
-            "<main id=\"content\" class=\"repo crate-page\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a><span>/</span><a href=\"/{}/crates\">crates</a></nav><header class=\"repo-head\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><nav class=\"repo-actions\" aria-label=\"Crate actions\"><a class=\"commit-link\" href=\"/{}/crates\">All crates</a><a class=\"commit-link\" href=\"/{}/src/{}/{}\">Source</a><a class=\"commit-link\" href=\"{}\">Report vulnerability</a></nav></header><nav class=\"section-nav\" aria-label=\"Crate sections\"><a href=\"#api\">API</a><a href=\"#calls\">Calls</a><a href=\"#related\">Related</a><a href=\"#tests\">Tests</a><a href=\"#rfcs\">RFCs</a><a href=\"#embed\">Embed</a></nav>{}<section class=\"crate-grid\"><article class=\"crate-panel\"><h2>Features</h2>{}</article><article class=\"crate-panel\" id=\"related\"><h2>Related crates</h2><h3>Depends on</h3>{}<h3>Used by</h3>{}</article><article class=\"crate-panel\" id=\"tests\"><h2>Tests</h2><p><strong>{}</strong> test declarations found.</p><pre class=\"commit\"><code>{}</code></pre></article><article class=\"crate-panel\" id=\"rfcs\"><h2>Related RFCs</h2>{}</article><article class=\"crate-panel wide\"><h2>Dependency tree</h2>{}</article><article class=\"crate-panel wide\" id=\"api\"><h2>API surface</h2>{}</article><article class=\"crate-panel wide\" id=\"calls\"><h2>Call graph</h2>{}</article><article class=\"crate-panel wide\" id=\"embed\"><h2>Embeddable status</h2><p class=\"muted\">Use this iframe in build-log posts when the post should point at the live crate surface.</p><pre class=\"commit\"><code>{}</code></pre></article></section></main>",
-            escape_attr(&repo.name),
-            escape_html(&repo.title),
-            escape_attr(&repo.name),
-            escape_html(&info.name),
-            escape_html(&info.description),
-            escape_attr(&repo.name),
-            escape_attr(&repo.name),
-            escape_attr(&repo.default_ref),
-            escape_attr(&info.rel_path),
-            escape_attr(&vulnerability_href),
-            crate_nav,
-            features,
-            deps,
-            dependents,
-            info.test_count,
-            result,
-            rfcs,
-            tree,
-            api,
-            call_graph,
-            escape_html(&embed_code)
+        &render_template(
+            include_str!("../templates/crate-page.html"),
+            &[
+                ("repo_name", escape_attr(&repo.name)),
+                ("repo_title", escape_html(&repo.title)),
+                ("default_ref", escape_attr(&repo.default_ref)),
+                ("crate_name", escape_html(&info.name)),
+                ("crate_description", escape_html(&info.description)),
+                ("crate_path", escape_attr(&info.rel_path)),
+                ("vulnerability_href", escape_attr(&vulnerability_href)),
+                ("crate_navigation", crate_nav),
+                ("features", features),
+                ("dependencies", deps),
+                ("dependents", dependents),
+                ("test_count", info.test_count.to_string()),
+                ("test_result", result),
+                ("rfcs", rfcs),
+                ("dependency_tree", tree),
+                ("api", api),
+                ("call_graph", call_graph),
+                ("embed_code", escape_html(&embed_code)),
+            ],
         ),
     )
 }
@@ -1678,35 +1701,37 @@ fn render_crate_component_document(config: &GitConfig, repo: &Repo, info: &Crate
     let canonical = absolute_site_url(config, &path);
     let style = git_style();
     let body = render_crate_component_card(repo, info);
-    format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\"><meta name=\"theme-color\" content=\"#146c63\"><meta name=\"referrer\" content=\"strict-origin-when-cross-origin\"><title>{}</title><meta name=\"description\" content=\"{}\"><link rel=\"canonical\" href=\"{}\"><style>{}</style></head><body class=\"component-body\">{}</body></html>",
-        escape_html(&format!("{} crate status", info.name)),
-        escape_attr(&info.description),
-        escape_attr(&canonical),
-        style,
-        body
+    render_template(
+        include_str!("../templates/crate-component.html"),
+        &[
+            ("title", escape_html(&format!("{} crate status", info.name))),
+            ("description", escape_attr(&info.description)),
+            ("canonical", escape_attr(&canonical)),
+            ("style", style),
+            ("body", body),
+        ],
     )
 }
 
 fn render_crate_component_card(repo: &Repo, info: &CrateInfo) -> String {
     let test_result = crate_test_summary(info);
-    format!(
-        "<article class=\"crate-component\" aria-label=\"{} crate status\"><div><p class=\"eyebrow\">Workspace crate</p><h1>{}</h1><p>{}</p></div><dl class=\"component-stats\"><div><dt>Features</dt><dd>{}</dd></div><div><dt>API</dt><dd>{}</dd></div><div><dt>Calls</dt><dd>{}</dd></div><div><dt>Tests</dt><dd>{}</dd></div><div><dt>Depends on</dt><dd>{}</dd></div><div><dt>Used by</dt><dd>{}</dd></div></dl><p class=\"component-result\">{}</p><p class=\"component-actions\"><a target=\"_top\" href=\"/{}/crates/{}\">Open crate page</a><a target=\"_top\" href=\"/{}/src/{}/{}\">Source</a></p></article>",
-        escape_attr(&info.name),
-        escape_html(&info.name),
-        escape_html(&info.description),
-        info.features.len(),
-        info.api_items.len(),
-        info.call_edges.len(),
-        info.test_count,
-        info.workspace_deps.len(),
-        info.dependents.len(),
-        escape_html(&test_result),
-        escape_attr(&repo.name),
-        escape_attr(&info.name),
-        escape_attr(&repo.name),
-        escape_attr(&repo.default_ref),
-        escape_attr(&info.rel_path)
+    render_template(
+        include_str!("../templates/crate-component-card.html"),
+        &[
+            ("crate_name", escape_html(&info.name)),
+            ("crate_name_attr", escape_attr(&info.name)),
+            ("crate_description", escape_html(&info.description)),
+            ("feature_count", info.features.len().to_string()),
+            ("api_count", info.api_items.len().to_string()),
+            ("call_count", info.call_edges.len().to_string()),
+            ("test_count", info.test_count.to_string()),
+            ("dependency_count", info.workspace_deps.len().to_string()),
+            ("dependent_count", info.dependents.len().to_string()),
+            ("test_result", escape_html(&test_result)),
+            ("repo_name", escape_attr(&repo.name)),
+            ("default_ref", escape_attr(&repo.default_ref)),
+            ("crate_path", escape_attr(&info.rel_path)),
+        ],
     )
 }
 
@@ -1954,18 +1979,17 @@ fn render_tree(
         config,
         &format!("{} | {}", repo.title, config.title),
         &repo.description,
-        &format!(
-            "<main id=\"content\" class=\"repo\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a>{}</nav><header class=\"repo-head\"><div><p class=\"eyebrow\">{}</p><h1>{}</h1><p>{}</p></div><a class=\"commit-link\" href=\"/{}/commit/{}\">{}</a></header><ol class=\"tree-list\">{}</ol></main>",
-            escape_attr(&repo.name),
-            escape_html(&repo.title),
-            render_path_crumbs(repo, rev, rel_path),
-            escape_html(rev),
-            escape_html(path_title(rel_path)),
-            escape_html(&repo.description),
-            escape_attr(&repo.name),
-            escape_attr(rev),
-            escape_html(rev),
-            rows
+        &render_template(
+            include_str!("../templates/tree.html"),
+            &[
+                ("repo_name", escape_attr(&repo.name)),
+                ("repo_title", escape_html(&repo.title)),
+                ("path_crumbs", render_path_crumbs(repo, rev, rel_path)),
+                ("rev", escape_html(rev)),
+                ("path_title", escape_html(path_title(rel_path))),
+                ("repo_description", escape_html(&repo.description)),
+                ("entries", rows),
+            ],
         ),
     )
 }
@@ -1985,18 +2009,18 @@ fn render_blob(config: &GitConfig, repo: &Repo, rev: &str, rel_path: &str, bytes
         config,
         &format!("{} | {}", rel_path, config.title),
         &repo.description,
-        &format!(
-            "<main id=\"content\" class=\"repo\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a>{}</nav><header class=\"repo-head\"><div><p class=\"eyebrow\">{}</p><h1>{}</h1><p>{}</p></div><a class=\"commit-link\" href=\"/{}/raw/{}/{}\">Raw</a></header>{}</main>",
-            escape_attr(&repo.name),
-            escape_html(&repo.title),
-            render_path_crumbs(repo, rev, rel_path),
-            escape_html(rev),
-            escape_html(rel_path),
-            escape_html(&repo.description),
-            escape_attr(&repo.name),
-            escape_attr(rev),
-            escape_attr(rel_path),
-            body
+        &render_template(
+            include_str!("../templates/blob.html"),
+            &[
+                ("repo_name", escape_attr(&repo.name)),
+                ("repo_title", escape_html(&repo.title)),
+                ("path_crumbs", render_path_crumbs(repo, rev, rel_path)),
+                ("rev", escape_html(rev)),
+                ("path", escape_html(rel_path)),
+                ("path_attr", escape_attr(rel_path)),
+                ("repo_description", escape_html(&repo.description)),
+                ("body", body),
+            ],
         ),
     )
 }
@@ -2006,14 +2030,14 @@ fn render_commit(config: &GitConfig, repo: &Repo, rev: &str, commit: &str) -> St
         config,
         &format!("{} commit | {}", repo.title, config.title),
         &repo.description,
-        &format!(
-            "<main id=\"content\" class=\"repo\"><nav class=\"crumbs\"><a href=\"/\">Repositories</a><span>/</span><a href=\"/{}/\">{}</a></nav><header class=\"repo-head\"><div><p class=\"eyebrow\">Commit</p><h1>{}</h1></div><a class=\"commit-link\" href=\"/{}/src/{}\">Browse tree</a></header><pre class=\"commit\"><code>{}</code></pre></main>",
-            escape_attr(&repo.name),
-            escape_html(&repo.title),
-            escape_html(rev),
-            escape_attr(&repo.name),
-            escape_attr(rev),
-            escape_html(commit)
+        &render_template(
+            include_str!("../templates/commit.html"),
+            &[
+                ("repo_name", escape_attr(&repo.name)),
+                ("repo_title", escape_html(&repo.title)),
+                ("rev", escape_html(rev)),
+                ("commit", escape_html(commit)),
+            ],
         ),
     )
 }
@@ -2299,26 +2323,20 @@ fn to_io_error(error: edgerun_http::io::Error) -> io::Error {
 }
 
 fn git_style() -> String {
-    format!("{}\n{}", edgerun_web_ui::BASE_STYLE, GIT_STYLE)
+    format!(
+        "{}\n{}",
+        edgerun_web_ui::BASE_STYLE,
+        include_str!("../templates/style.css")
+    )
 }
 
 fn git_js() -> String {
-    format!("{}\n{}", edgerun_web_ui::THEME_TOGGLE_JS, GIT_JS)
+    format!(
+        "{}\n{}",
+        edgerun_web_ui::THEME_TOGGLE_JS,
+        include_str!("../templates/app.js")
+    )
 }
-
-const GIT_JS: &str = r#"
-const crateSearch=document.getElementById('crate-search');
-const crateCards=[...document.querySelectorAll('[data-crate-search]')];
-const crateCount=document.getElementById('crate-search-count');
-function applyCrateSearch(value){const query=value.trim().toLowerCase();let shown=0;for(const card of crateCards){const match=!query||card.dataset.crateSearch.toLowerCase().includes(query);card.hidden=!match;if(match)shown++}if(crateCount){crateCount.textContent=shown+' crates'}}
-if(crateSearch){crateSearch.addEventListener('input',()=>applyCrateSearch(crateSearch.value))}
-"#;
-
-const GIT_STYLE: &str = r#"
-.repos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:1180px;margin:0 auto;padding:34px 18px 80px}.repo-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.repo-card a{display:block;min-height:180px;padding:22px;text-decoration:none}.repo-card h2{margin:0 0 10px;font-size:26px;line-height:1.15}.repo-card p{color:var(--muted)}.repo-card span,.commit-link{color:var(--accent);font-weight:800}.crate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.crate-panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}.crate-panel h2{margin:0 0 12px;font-size:22px}.crate-panel h3{margin:16px 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.crate-panel.wide{grid-column:1/-1}.pills{display:flex;flex-wrap:wrap;gap:8px}.pills span{border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--muted)}.link-list{display:grid;gap:8px;margin:0;padding-left:18px}.link-list a{color:var(--accent);font-weight:750;text-decoration:none}.link-list span{display:block;color:var(--muted)}.crate-panel ol{margin:8px 0 0 22px}.dependency-tree{padding-left:20px}.crate-panel li{margin:5px 0}.crate-panel li a{color:var(--accent);font-weight:750;text-decoration:none}.repo{max-width:1180px;margin:0 auto;padding:34px 18px 80px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);margin-bottom:18px}.crumbs a{color:var(--accent);text-decoration:none}.repo-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:22px}.repo-head h1{margin:0;font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:0}.repo-head p{color:var(--muted)}.commit-link{border:1px solid var(--line);border-radius:8px;padding:9px 12px;text-decoration:none;background:var(--panel);white-space:nowrap}.tree-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}.tree-list li{display:grid;grid-template-columns:1fr 90px;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}.tree-list li:first-child{border-top:0}.tree-list a{text-decoration:none;font-weight:700}.tree-list span{color:var(--muted)}.code{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:block}.code tbody{display:table;width:100%}.code tr:target{background:color-mix(in srgb,var(--accent) 14%,transparent)}.code th{width:1%;min-width:54px;padding:0 12px;text-align:right;color:var(--muted);border-right:1px solid var(--line);user-select:none}.code th a{text-decoration:none;color:inherit}.code td{padding:0 12px;white-space:pre;overflow:auto}.code code,.commit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}.commit{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}.empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}@media(max-width:760px){.repos,.crate-grid{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}}
-.crate-search{display:grid;grid-template-columns:minmax(220px,420px) max-content;gap:10px;align-items:center;max-width:620px;margin-top:22px}.crate-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.crate-search input{min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 13px;font:inherit}.crate-search span{color:var(--muted);font-weight:750}.repo-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.section-nav{display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 14px}.section-nav a{border:1px solid var(--line);border-radius:999px;padding:5px 10px;color:var(--muted);font-weight:750;text-decoration:none}.section-nav a:hover{border-color:var(--accent);color:var(--accent)}.crate-neighbor-nav{display:grid;grid-template-columns:1fr max-content 1fr;gap:10px;margin:0 0 22px}.crate-neighbor-nav a,.crate-neighbor-nav .disabled{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 12px;text-decoration:none}.crate-neighbor-nav a:hover{border-color:var(--accent)}.crate-neighbor-nav .all{text-align:center}.crate-neighbor-nav a:last-child{text-align:right}.crate-neighbor-nav span{display:block;color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase}.crate-neighbor-nav strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.crate-neighbor-nav .disabled{color:var(--muted)}.api-list,.call-list{display:grid;gap:8px;list-style:none;margin:0;padding:0}.api-list li{display:grid;grid-template-columns:70px minmax(0,1fr) minmax(0,1.4fr);gap:10px;align-items:baseline;border-bottom:1px solid var(--line);padding:7px 0}.api-list span,.call-list span{color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase}.api-list a,.call-list a{color:var(--accent);font-weight:800;text-decoration:none}.api-list small,.call-list small{color:var(--muted);overflow-wrap:anywhere}.call-list li{display:grid;grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr) 80px;gap:10px;align-items:baseline;border-bottom:1px solid var(--line);padding:7px 0}@media(max-width:760px){.crate-search{grid-template-columns:1fr}.repo-actions{justify-content:flex-start}.crate-neighbor-nav{grid-template-columns:1fr}.crate-neighbor-nav .all,.crate-neighbor-nav a:last-child{text-align:left}.api-list li,.call-list li{grid-template-columns:1fr}.api-list span,.call-list span{font-size:11px}}
-.component-body{margin:0;padding:0;background:transparent}.crate-component{min-height:100vh;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:18px}.crate-component h1{margin:0;font-size:28px;line-height:1.05;letter-spacing:0}.crate-component p{margin:8px 0;color:var(--muted)}.component-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:8px;margin:16px 0}.component-stats div{border:1px solid var(--line);border-radius:8px;padding:8px;background:color-mix(in srgb,var(--panel) 82%,var(--code))}.component-stats dt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}.component-stats dd{margin:2px 0 0;font-weight:800}.component-result{border-left:3px solid var(--accent);padding-left:10px}.component-actions{display:flex;gap:12px;flex-wrap:wrap}.component-actions a{color:var(--accent);font-weight:800;text-decoration:none}
-"#;
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2478,6 +2496,40 @@ mod tests {
         let repo = load_repo("demo".to_string(), repo_path).unwrap().unwrap();
         assert_eq!(repo.public_paths, ["README.md", "src"]);
         assert!(path_is_public(&repo, "src/lib.rs"));
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn raw_route_serves_only_public_blobs() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("edgerun-git-raw-test-{stamp}"));
+        let repo_path = base.join("demo");
+        fs::create_dir_all(repo_path.join(".edgerun")).unwrap();
+        fs::create_dir_all(repo_path.join("src")).unwrap();
+        fs::write(repo_path.join(".edgerun/git.yaml"), "visible: true\n").unwrap();
+        fs::write(repo_path.join("src/.gitvisible"), "").unwrap();
+        fs::write(repo_path.join("src/lib.rs"), "pub fn demo() {}\n").unwrap();
+        git_ok(&repo_path, &["init"]);
+        git_ok(&repo_path, &["config", "user.email", "test@example.com"]);
+        git_ok(&repo_path, &["config", "user.name", "Test"]);
+        git_ok(&repo_path, &["add", "."]);
+        git_ok(&repo_path, &["commit", "-m", "init"]);
+
+        let handler = GitHandler::new(GitConfig::new(&base));
+        let raw_file = handler.handle_sync(
+            Request::from_http("GET /demo/raw/HEAD/src/lib.rs HTTP/1.1\r\nHost: example\r\n\r\n")
+                .unwrap(),
+        );
+        assert_eq!(raw_file.status(), StatusCode::OK);
+        assert_eq!(raw_file.body(), b"pub fn demo() {}\n");
+
+        let raw_dir = handler.handle_sync(
+            Request::from_http("GET /demo/raw/HEAD/src HTTP/1.1\r\nHost: example\r\n\r\n").unwrap(),
+        );
+        assert_eq!(raw_dir.status(), StatusCode::NOT_FOUND);
         let _ = fs::remove_dir_all(base);
     }
 

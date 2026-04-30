@@ -1,0 +1,15 @@
+<main id="content" class="repo">
+  <nav class="crumbs"><a href="/">Repositories</a><span>/</span><a href="/{{repo_name}}/">{{repo_title}}</a>{{path_crumbs}}</nav>
+  <header class="repo-head">
+    <div>
+      <p class="eyebrow">{{rev}}</p>
+      <h1>{{path}}</h1>
+      <p>{{repo_description}}</p>
+    </div>
+    <nav class="repo-actions" aria-label="File actions">
+      <a class="commit-link" href="/{{repo_name}}/crates">Crates</a>
+      <a class="commit-link" href="/{{repo_name}}/raw/{{rev}}/{{path_attr}}">Raw</a>
+    </nav>
+  </header>
+  {{body}}
+</main>

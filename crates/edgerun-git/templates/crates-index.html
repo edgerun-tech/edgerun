@@ -1,0 +1,14 @@
+<main id="content">
+  <nav class="crumbs"><a href="/">Repositories</a><span>/</span><a href="/{{repo_name}}/">{{repo_title}}</a></nav>
+  <section class="hero">
+    <p class="eyebrow">Crate explorer</p>
+    <h1>{{repo_title}} crates</h1>
+    <p>Workspace crates that have been released through this repository's visibility policy.</p>
+    <form class="crate-search" role="search">
+      <label for="crate-search">Search crates</label>
+      <input id="crate-search" type="search" placeholder="Search crates" autocomplete="off">
+      <span id="crate-search-count">{{crate_count}} crates</span>
+    </form>
+  </section>
+  <section class="repos" aria-label="Crates">{{crates}}</section>
+</main>
