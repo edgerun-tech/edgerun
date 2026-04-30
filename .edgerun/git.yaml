@@ -3,7 +3,7 @@
 # folders/files are released by marker files:
 # - path/to/folder/.gitvisible publishes that folder subtree
 # - path/to/file.rs.gitvisible publishes exactly that file
-visible: false
+visible: true
 title: Edgerun Core
 description: Code released from the Edgerun project, one feature slice at a time.
 default_ref: HEAD
