@@ -1821,7 +1821,11 @@ fn render_dash_git_index(repos: &[Repo]) -> io::Result<String> {
         test_total += crates.iter().map(|info| info.test_count).sum::<usize>();
         rfc_total += crates.iter().map(|info| info.rfcs.len()).sum::<usize>();
         repo_cards.push_str(&format!(
-            "<button class=\"dash-card dash-card-button\" type=\"button\" hx-get=\"/surface/git/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\"><strong>{}</strong><span>{}</span><small>{} crates - {}</small></button>",
+            "<button class=\"dash-card dash-card-button\" type=\"button\" hx-get=\"/surface/git/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#code/{}\" data-search-card data-search-text=\"{} {} {}\"><strong>{}</strong><span>{}</span><small>{} crates - {}</small></button>",
+            escape_attr(&repo.name),
+            escape_attr(&repo.name),
+            escape_attr(&repo.title),
+            escape_attr(&repo.description),
             escape_attr(&repo.name),
             escape_html(&repo.title),
             escape_html(&repo.description),
@@ -1830,7 +1834,7 @@ fn render_dash_git_index(repos: &[Repo]) -> io::Result<String> {
         ));
     }
     Ok(format!(
-        "<div class=\"dash-code\"><section class=\"dash-code-summary\" aria-label=\"Code summary\"><div><span>Repos</span><strong>{repo_count}</strong></div><div><span>Crates</span><strong>{crate_count}</strong></div><div><span>API items</span><strong>{api_total}</strong></div><div><span>Call edges</span><strong>{call_total}</strong></div><div><span>Tests</span><strong>{test_total}</strong></div><div><span>RFCs</span><strong>{rfc_total}</strong></div></section><section><h2>Released repositories</h2><div class=\"dash-grid\">{repo_cards}</div></section></div>"
+        "<div class=\"dash-code\"><section class=\"dash-code-tools\" aria-label=\"Code tools\"><label><span>Filter code</span><input type=\"search\" data-workspace-search-scope placeholder=\"Search repositories and crates\"></label></section><section class=\"dash-code-summary\" aria-label=\"Code summary\"><div><span>Repos</span><strong>{repo_count}</strong></div><div><span>Crates</span><strong>{crate_count}</strong></div><div><span>API items</span><strong>{api_total}</strong></div><div><span>Call edges</span><strong>{call_total}</strong></div><div><span>Tests</span><strong>{test_total}</strong></div><div><span>RFCs</span><strong>{rfc_total}</strong></div></section><section><h2>Released repositories</h2><div class=\"dash-grid\">{repo_cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching code surfaces.</p></div>"
     ))
 }
 
@@ -1847,9 +1851,15 @@ fn render_dash_repo(repo: &Repo, crates: &[CrateInfo]) -> String {
             .map(|info| {
                 let test_result = crate_test_summary(info);
                 format!(
-                    "<button class=\"dash-card dash-card-button dash-crate-card\" type=\"button\" hx-get=\"/surface/git/{}/crates/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\"><strong>{}</strong><span>{}</span><small>{} API - {} calls - {} tests</small><small>{}</small></button>",
+                    "<button class=\"dash-card dash-card-button dash-crate-card\" type=\"button\" hx-get=\"/surface/git/{}/crates/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#code/{}/crates/{}\" data-search-card data-search-text=\"{} {} {} {}\"><strong>{}</strong><span>{}</span><small>{} API - {} calls - {} tests</small><small>{}</small></button>",
                     escape_attr(&repo.name),
                     escape_attr(&info.name),
+                    escape_attr(&repo.name),
+                    escape_attr(&info.name),
+                    escape_attr(&info.name),
+                    escape_attr(&info.description),
+                    escape_attr(&info.rel_path),
+                    escape_attr(&info.workspace_deps.join(" ")),
                     escape_html(&info.name),
                     escape_html(&info.description),
                     info.api_items.len(),
@@ -1862,7 +1872,7 @@ fn render_dash_repo(repo: &Repo, crates: &[CrateInfo]) -> String {
             .join("")
     };
     format!(
-        "<div class=\"dash-code\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/git\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">Back to repositories</button><section class=\"dash-code-hero\"><p>Released code</p><h2>{}</h2><span>{}</span></section><section class=\"dash-code-summary\" aria-label=\"{} summary\"><div><span>Crates</span><strong>{}</strong></div><div><span>API items</span><strong>{api_total}</strong></div><div><span>Call edges</span><strong>{call_total}</strong></div><div><span>Tests</span><strong>{test_total}</strong></div><div><span>RFCs</span><strong>{rfc_total}</strong></div><div><span>Ref</span><strong>{}</strong></div></section><section><h2>Crate explorer</h2><div class=\"dash-grid\">{crate_cards}</div></section></div>",
+        "<div class=\"dash-code\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/git\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#code\">Back to repositories</button><section class=\"dash-code-hero\"><p>Released code</p><h2>{}</h2><span>{}</span></section><section class=\"dash-code-tools\" aria-label=\"Crate tools\"><label><span>Filter crates</span><input type=\"search\" data-workspace-search-scope placeholder=\"Search visible crates\"></label></section><section class=\"dash-code-summary\" aria-label=\"{} summary\"><div><span>Crates</span><strong>{}</strong></div><div><span>API items</span><strong>{api_total}</strong></div><div><span>Call edges</span><strong>{call_total}</strong></div><div><span>Tests</span><strong>{test_total}</strong></div><div><span>RFCs</span><strong>{rfc_total}</strong></div><div><span>Ref</span><strong>{}</strong></div></section><section><h2>Crate explorer</h2><div class=\"dash-grid\">{crate_cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching crates.</p></div>",
         escape_html(&repo.title),
         escape_html(&repo.description),
         escape_attr(&repo.title),
@@ -1902,7 +1912,9 @@ fn render_dash_crate(repo: &Repo, info: &CrateInfo, crates: &[CrateInfo]) -> Str
         .take(8)
         .map(|other| {
             format!(
-                "<button class=\"pill-button\" type=\"button\" hx-get=\"/surface/git/{}/crates/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">{}</button>",
+                "<button class=\"pill-button\" type=\"button\" hx-get=\"/surface/git/{}/crates/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#code/{}/crates/{}\">{}</button>",
+                escape_attr(&repo.name),
+                escape_attr(&other.name),
                 escape_attr(&repo.name),
                 escape_attr(&other.name),
                 escape_html(&other.name)
@@ -1913,7 +1925,8 @@ fn render_dash_crate(repo: &Repo, info: &CrateInfo, crates: &[CrateInfo]) -> Str
     let test_result = crate_test_summary(info);
     let vulnerability_href = vulnerability_report_href(&info.name);
     format!(
-        "<div class=\"dash-code\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/git/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">Back to crate explorer</button><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><span>{}</span><a class=\"dash-mail-button\" href=\"{}\">Report vulnerability</a></section><section class=\"dash-code-summary\" aria-label=\"{} crate summary\"><div><span>Features</span><strong>{}</strong></div><div><span>API items</span><strong>{}</strong></div><div><span>Call edges</span><strong>{}</strong></div><div><span>Tests</span><strong>{}</strong></div><div><span>Deps</span><strong>{}</strong></div><div><span>RFCs</span><strong>{}</strong></div></section><section class=\"dash-code-columns\"><article><h3>Features</h3>{features}</article><article><h3>Workspace dependencies</h3>{deps}</article><article><h3>Visible dependents</h3>{dependents}</article><article><h3>Last test run</h3><p>{}</p></article></section><section class=\"dash-code-columns\"><article><h3>API surface</h3>{api}</article><article><h3>Call graph</h3>{call_graph}</article></section><section><h3>Related RFCs</h3>{rfcs_section}</section><section><h3>Nearby crates</h3><div class=\"pill-row\">{sibling_nav}</div></section></div>",
+        "<div class=\"dash-code\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/git/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#code/{}\">Back to crate explorer</button><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><span>{}</span><a class=\"dash-mail-button\" href=\"{}\">Report vulnerability</a></section><section class=\"dash-code-summary\" aria-label=\"{} crate summary\"><div><span>Features</span><strong>{}</strong></div><div><span>API items</span><strong>{}</strong></div><div><span>Call edges</span><strong>{}</strong></div><div><span>Tests</span><strong>{}</strong></div><div><span>Deps</span><strong>{}</strong></div><div><span>RFCs</span><strong>{}</strong></div></section><section class=\"dash-code-columns\"><article><h3>Features</h3>{features}</article><article><h3>Workspace dependencies</h3>{deps}</article><article><h3>Visible dependents</h3>{dependents}</article><article><h3>Last test run</h3><p>{}</p></article></section><section class=\"dash-code-columns\"><article><h3>API surface</h3>{api}</article><article><h3>Call graph</h3>{call_graph}</article></section><section><h3>Related RFCs</h3>{rfcs_section}</section><section><h3>Nearby crates</h3><div class=\"pill-row\">{sibling_nav}</div></section></div>",
+        escape_attr(&repo.name),
         escape_attr(&repo.name),
         escape_html(&info.rel_path),
         escape_html(&info.name),
