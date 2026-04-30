@@ -45,6 +45,7 @@ pub use importers::{import_corefile, import_dnsmasq, ImportError};
 pub use parser::{parse_and_validate, parse_config_file, to_yaml_all, ConfigError, ConfigState};
 pub use projector::{ConfigEvent, ConfigOp, ConfigProjector};
 pub use types::{
+    BrowserAppCapabilitySpec, BrowserAppModuleSpec, BrowserAppSpec, BrowserNodePolicySpec,
     ConfigResource, Container, ContainerPort, ContainerRestartPolicy, ContainerSpec, DhcpPoolSpec,
     DhcpReservation, DhcpServerSpec, DnsForwarderSpec, DnsServerSpec, DnsZoneSpec, DnssecConfig,
     EnvVar, ForwardingRuleSpec, GatewayListener, GatewaySpec, GatewayTlsConfig, HttpRouteBackend,

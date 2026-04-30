@@ -121,6 +121,8 @@ pub enum ConfigResource {
     SmtpServer(SmtpServerSpec),
     ImapServer(ImapServerSpec),
     Node(NodeSpec),
+    BrowserApp(BrowserAppSpec),
+    BrowserNodePolicy(BrowserNodePolicySpec),
     Container(ContainerSpec),
     Deployment(DeploymentSpec),
     Secret(SecretSpec),
@@ -150,6 +152,8 @@ impl ConfigResource {
             Self::SmtpServer(r) => &r.hostname,
             Self::ImapServer(r) => &r.hostname,
             Self::Node(_) => "unnamed-node",
+            Self::BrowserApp(r) => &r.app_id,
+            Self::BrowserNodePolicy(r) => &r.name,
             Self::Container(_) => "unnamed-container",
             Self::Deployment(r) => &r.name,
             Self::Secret(_) => "unnamed-secret",
@@ -179,6 +183,8 @@ impl ConfigResource {
             Self::SmtpServer(_) => "SmtpServer",
             Self::ImapServer(_) => "ImapServer",
             Self::Node(_) => "Node",
+            Self::BrowserApp(_) => "BrowserApp",
+            Self::BrowserNodePolicy(_) => "BrowserNodePolicy",
             Self::Container(_) => "Container",
             Self::Deployment(_) => "Deployment",
             Self::Secret(_) => "Secret",
@@ -624,6 +630,62 @@ pub struct NodeTaint {
     pub effect: String,
     /// Time when taint expires.
     pub time_added: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Browser node and Wasm agent config
+// ---------------------------------------------------------------------------
+
+/// Browser-loadable Wasm agent exposed through the dashboard node.
+#[derive(Debug, Clone)]
+pub struct BrowserAppSpec {
+    /// Stable application identifier, for example `edgerun.mail`.
+    pub app_id: String,
+    /// Human-readable title for launchers and surfaces.
+    pub title: String,
+    /// Wasm module reference and integrity metadata.
+    pub module: BrowserAppModuleSpec,
+    /// Workspace surfaces this app can occupy, for example `mail`.
+    pub surfaces: Vec<String>,
+    /// Capability selectors required before the app can run usefully.
+    pub required_capabilities: Vec<BrowserAppCapabilitySpec>,
+    /// Capability selectors the app can use if granted.
+    pub optional_capabilities: Vec<BrowserAppCapabilitySpec>,
+}
+
+/// Wasm module location and content identity.
+#[derive(Debug, Clone)]
+pub struct BrowserAppModuleSpec {
+    /// Module URL, normally same-origin under `/apps/...`.
+    pub url: String,
+    /// Optional expected SHA-256 digest encoded by deployment tooling.
+    pub sha256: Option<String>,
+}
+
+/// Declarative capability selector requested by a browser app.
+#[derive(Debug, Clone)]
+pub struct BrowserAppCapabilitySpec {
+    /// Capability selector or URI-like scope, for example `mail://edgerun.tech/*`.
+    pub selector: String,
+    /// Requested operations such as `query`, `read`, `write`, `send`.
+    pub operations: Vec<String>,
+    /// Additional constraint labels to map onto protocol constraints.
+    pub constraints: Vec<String>,
+}
+
+/// Local policy for browser-hosted Edgerun nodes.
+#[derive(Debug, Clone)]
+pub struct BrowserNodePolicySpec {
+    /// Policy name.
+    pub name: String,
+    /// Browser app ids allowed by this policy. Empty means no explicit allowlist.
+    pub allowed_apps: Vec<String>,
+    /// Browser app ids denied by this policy.
+    pub denied_apps: Vec<String>,
+    /// Capability selectors that require explicit user approval.
+    pub prompt_capabilities: Vec<String>,
+    /// Capability selectors denied before app-level grants are considered.
+    pub denied_capabilities: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1699,6 +1761,58 @@ impl_config_json_struct! {
         required { key: "key" => String, effect: "effect" => String }
         optional { value: "value" => String, time_added: "time_added" => String }
         default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    BrowserAppSpec {
+        required {
+            app_id: "app_id" => String,
+            title: "title" => String,
+            module: "module" => BrowserAppModuleSpec,
+        }
+        optional {}
+        default {
+            surfaces: "surfaces" => Vec<String>,
+            required_capabilities: "required_capabilities" => Vec<BrowserAppCapabilitySpec>,
+            optional_capabilities: "optional_capabilities" => Vec<BrowserAppCapabilitySpec>,
+        }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    BrowserAppModuleSpec {
+        required { url: "url" => String }
+        optional { sha256: "sha256" => String }
+        default {}
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    BrowserAppCapabilitySpec {
+        required { selector: "selector" => String }
+        optional {}
+        default {
+            operations: "operations" => Vec<String>,
+            constraints: "constraints" => Vec<String>,
+        }
+        default_with {}
+    }
+}
+
+impl_config_json_struct! {
+    BrowserNodePolicySpec {
+        required { name: "name" => String }
+        optional {}
+        default {
+            allowed_apps: "allowed_apps" => Vec<String>,
+            denied_apps: "denied_apps" => Vec<String>,
+            prompt_capabilities: "prompt_capabilities" => Vec<String>,
+            denied_capabilities: "denied_capabilities" => Vec<String>,
+        }
         default_with {}
     }
 }

@@ -60,6 +60,12 @@ pub fn parse_config_file(yaml: &str) -> Result<Vec<ConfigResource>, ConfigError>
                 "Node" => {
                     deserialize_resource::<crate::types::NodeSpec>(spec).map(ConfigResource::Node)
                 }
+                "BrowserApp" => deserialize_resource::<crate::types::BrowserAppSpec>(spec)
+                    .map(ConfigResource::BrowserApp),
+                "BrowserNodePolicy" => {
+                    deserialize_resource::<crate::types::BrowserNodePolicySpec>(spec)
+                        .map(ConfigResource::BrowserNodePolicy)
+                }
                 "Container" => deserialize_resource::<crate::types::ContainerSpec>(spec)
                     .map(ConfigResource::Container),
                 "Deployment" => deserialize_resource::<crate::types::DeploymentSpec>(spec)
@@ -152,6 +158,8 @@ fn resource_to_json(res: &ConfigResource) -> edgerun_json::JsonValue {
         ConfigResource::SmtpServer(spec) => edgerun_json::ToJson::to_json(spec),
         ConfigResource::ImapServer(spec) => edgerun_json::ToJson::to_json(spec),
         ConfigResource::Node(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::BrowserApp(spec) => edgerun_json::ToJson::to_json(spec),
+        ConfigResource::BrowserNodePolicy(spec) => edgerun_json::ToJson::to_json(spec),
         ConfigResource::Deployment(spec) => edgerun_json::ToJson::to_json(spec),
         ConfigResource::Container(spec) => edgerun_json::ToJson::to_json(spec),
         ConfigResource::Secret(spec) => edgerun_json::ToJson::to_json(spec),
@@ -190,6 +198,8 @@ pub struct ConfigState {
     pub smtp_servers: Vec<crate::types::SmtpServerSpec>,
     pub imap_servers: Vec<crate::types::ImapServerSpec>,
     pub nodes: Vec<crate::types::NodeSpec>,
+    pub browser_apps: Vec<crate::types::BrowserAppSpec>,
+    pub browser_node_policies: Vec<crate::types::BrowserNodePolicySpec>,
     pub containers: Vec<crate::types::ContainerSpec>,
     pub deployments: Vec<crate::types::DeploymentSpec>,
     pub secrets: Vec<crate::types::SecretSpec>,
@@ -220,6 +230,10 @@ impl ConfigState {
                 ConfigResource::SmtpServer(spec) => state.smtp_servers.push(spec.clone()),
                 ConfigResource::ImapServer(spec) => state.imap_servers.push(spec.clone()),
                 ConfigResource::Node(spec) => state.nodes.push(spec.clone()),
+                ConfigResource::BrowserApp(spec) => state.browser_apps.push(spec.clone()),
+                ConfigResource::BrowserNodePolicy(spec) => {
+                    state.browser_node_policies.push(spec.clone())
+                }
                 ConfigResource::Container(spec) => state.containers.push(spec.clone()),
                 ConfigResource::Deployment(spec) => state.deployments.push(spec.clone()),
                 ConfigResource::Secret(spec) => state.secrets.push(spec.clone()),
@@ -384,6 +398,20 @@ kind: Node
 spec:
   roles: [worker]
 ---
+kind: BrowserApp
+spec:
+  app_id: edgerun.mail
+  title: Mail
+  module:
+    url: /apps/mail/app.wasm
+  surfaces: [mail]
+---
+kind: BrowserNodePolicy
+spec:
+  name: default
+  allowed_apps: [edgerun.mail]
+  prompt_capabilities: [mail://edgerun.tech/*]
+---
 kind: Container
 spec:
   image: hello-world:latest
@@ -425,7 +453,7 @@ spec:
     fn parses_all_native_config_resource_kinds_without_serde() {
         let resources = parse_config_file(ALL_NATIVE_RESOURCE_KINDS).unwrap();
         let parsed_kinds: Vec<&str> = resources.iter().map(ConfigResource::kind).collect();
-        assert_eq!(resources.len(), 23, "parsed kinds: {parsed_kinds:?}");
+        assert_eq!(resources.len(), 25, "parsed kinds: {parsed_kinds:?}");
 
         assert!(matches!(resources[0], ConfigResource::DnsServer(_)));
         assert!(matches!(resources[1], ConfigResource::DnsZone(_)));
@@ -441,15 +469,20 @@ spec:
         assert!(matches!(resources[11], ConfigResource::SmtpServer(_)));
         assert!(matches!(resources[12], ConfigResource::ImapServer(_)));
         assert!(matches!(resources[13], ConfigResource::Node(_)));
-        assert!(matches!(resources[14], ConfigResource::Container(_)));
-        assert!(matches!(resources[15], ConfigResource::Deployment(_)));
-        assert!(matches!(resources[16], ConfigResource::Secret(_)));
-        assert!(matches!(resources[17], ConfigResource::Peer(_)));
-        assert!(matches!(resources[18], ConfigResource::Gateway(_)));
-        assert!(matches!(resources[19], ConfigResource::Service(_)));
-        assert!(matches!(resources[20], ConfigResource::HttpRoute(_)));
-        assert!(matches!(resources[21], ConfigResource::TcpRoute(_)));
-        assert!(matches!(resources[22], ConfigResource::TlsRoute(_)));
+        assert!(matches!(resources[14], ConfigResource::BrowserApp(_)));
+        assert!(matches!(
+            resources[15],
+            ConfigResource::BrowserNodePolicy(_)
+        ));
+        assert!(matches!(resources[16], ConfigResource::Container(_)));
+        assert!(matches!(resources[17], ConfigResource::Deployment(_)));
+        assert!(matches!(resources[18], ConfigResource::Secret(_)));
+        assert!(matches!(resources[19], ConfigResource::Peer(_)));
+        assert!(matches!(resources[20], ConfigResource::Gateway(_)));
+        assert!(matches!(resources[21], ConfigResource::Service(_)));
+        assert!(matches!(resources[22], ConfigResource::HttpRoute(_)));
+        assert!(matches!(resources[23], ConfigResource::TcpRoute(_)));
+        assert!(matches!(resources[24], ConfigResource::TlsRoute(_)));
     }
 
     #[test]
@@ -487,5 +520,40 @@ spec:
 
         assert_eq!(state.dhcp_pools.len(), 1);
         assert_eq!(state.dhcp_servers.len(), 1);
+    }
+
+    #[test]
+    fn parses_browser_app_capability_requests() {
+        let resources = parse_config_file(
+            r#"
+kind: BrowserApp
+spec:
+  app_id: edgerun.mail
+  title: Mail
+  module:
+    url: /apps/mail/app.wasm
+    sha256: abc123
+  surfaces: [mail]
+  required_capabilities:
+    - selector: mail://edgerun.tech/*
+      operations: [query, read, send]
+      constraints: [require-user-presence]
+"#,
+        )
+        .unwrap();
+
+        let ConfigResource::BrowserApp(app) = &resources[0] else {
+            panic!("expected BrowserApp");
+        };
+        assert_eq!(app.app_id, "edgerun.mail");
+        assert_eq!(app.module.url, "/apps/mail/app.wasm");
+        assert_eq!(app.module.sha256.as_deref(), Some("abc123"));
+        assert_eq!(app.required_capabilities.len(), 1);
+        assert_eq!(
+            app.required_capabilities[0].selector,
+            "mail://edgerun.tech/*"
+        );
+        assert_eq!(app.required_capabilities[0].operations.len(), 3);
+        assert_eq!(app.required_capabilities[0].constraints.len(), 1);
     }
 }
