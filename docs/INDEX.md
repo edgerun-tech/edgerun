@@ -50,6 +50,7 @@ current status.
 
 - [Machine daemon](design/machine_daemon.md)
 - [Compute marketplace](design/compute-marketplace.md)
+- [Browser nodes and Wasm agents](design/browser-nodes.md)
 - [Capability gap analysis](design/capability-gap-analysis.md)
 - [Android hardware](design/android-hardware.md)
 - [Goodix Framework 13 hardware test](design/goodix_framework13_hardware_test.md)
