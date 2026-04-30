@@ -754,6 +754,8 @@ fn git_output(repo: &Path, args: &[&str]) -> io::Result<String> {
 
 fn git_output_bytes(repo: &Path, args: &[&str]) -> io::Result<Vec<u8>> {
     let output = Command::new("git")
+        .arg("-c")
+        .arg(format!("safe.directory={}", repo.display()))
         .arg("-C")
         .arg(repo)
         .args(args)
