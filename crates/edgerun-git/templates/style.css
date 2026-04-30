@@ -45,10 +45,29 @@
 .code code,.commit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}
 .commit{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}
 .empty{max-width:720px;margin:80px auto;padding:0 18px;color:var(--muted)}
-.crate-search{display:grid;grid-template-columns:minmax(220px,420px) max-content;gap:10px;align-items:center;max-width:620px;margin-top:22px}
-.crate-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.crate-search input{min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 13px;font:inherit}
-.crate-search span{color:var(--muted);font-weight:750}
+.crate-explorer{display:grid;gap:18px;padding:30px clamp(18px,4vw,56px) 80px}
+.crate-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:0}
+.crate-summary div{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}
+.crate-summary dt,.crate-metrics dt{color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.crate-summary dd,.crate-metrics dd{margin:2px 0 0;font-weight:850;font-size:22px;line-height:1.1}
+.crate-toolbar{display:grid;grid-template-columns:minmax(240px,1fr) minmax(150px,210px) max-content;gap:10px;align-items:center;max-width:980px}
+.crate-toolbar label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.crate-toolbar input,.crate-toolbar select{min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 13px;font:inherit}
+.crate-toolbar span{color:var(--muted);font-weight:750;white-space:nowrap}
+.crate-list{display:grid;gap:10px;max-width:1180px}
+.crate-row{display:grid;grid-template-columns:minmax(260px,1.25fr) minmax(420px,1fr) minmax(120px,160px);gap:18px;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:16px}
+.crate-row h2{margin:0 0 6px;font-size:22px;line-height:1.15}
+.crate-row h2 a{text-decoration:none}
+.crate-row p{margin:0;color:var(--muted)}
+.crate-row-links{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+.crate-row-links a{color:var(--accent);font-weight:800;text-decoration:none}
+.crate-metrics{display:grid;grid-template-columns:repeat(6,minmax(56px,1fr));gap:8px;margin:0}
+.crate-metrics div{min-width:0;border-left:1px solid var(--line);padding-left:10px}
+.crate-status{display:grid;gap:8px;justify-items:start}
+.status-pill{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-size:12px;font-weight:850;text-transform:uppercase}
+.status-pill.recorded{border-color:color-mix(in srgb,var(--accent) 60%,var(--line));color:var(--accent)}
+.status-pill.missing{color:var(--muted)}
+.crate-status small{color:var(--muted);font-weight:750}
 .repo-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 .section-nav{display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 14px}
 .section-nav a{border:1px solid var(--line);border-radius:999px;padding:5px 10px;color:var(--muted);font-weight:750;text-decoration:none}
@@ -78,4 +97,6 @@
 .component-result{border-left:3px solid var(--accent);padding-left:10px}
 .component-actions{display:flex;gap:12px;flex-wrap:wrap}
 .component-actions a{color:var(--accent);font-weight:800;text-decoration:none}
-@media(max-width:760px){.repos,.crate-grid{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}.crate-search{grid-template-columns:1fr}.repo-actions{justify-content:flex-start}.crate-neighbor-nav{grid-template-columns:1fr}.crate-neighbor-nav .all,.crate-neighbor-nav a:last-child{text-align:left}.api-list li,.call-list li{grid-template-columns:1fr}.api-list span,.call-list span{font-size:11px}}
+@media(max-width:980px){.crate-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.crate-row{grid-template-columns:1fr}.crate-metrics div{border-left:0;border-top:1px solid var(--line);padding:8px 0 0}}
+@media(max-width:760px){.repos,.crate-grid{grid-template-columns:1fr}.repo-head{display:block}.commit-link{display:inline-block;margin-top:8px}.crate-toolbar{grid-template-columns:1fr}.crate-toolbar span{white-space:normal}.repo-actions{justify-content:flex-start}.crate-neighbor-nav{grid-template-columns:1fr}.crate-neighbor-nav .all,.crate-neighbor-nav a:last-child{text-align:left}.api-list li,.call-list li{grid-template-columns:1fr}.api-list span,.call-list span{font-size:11px}}
+@media(max-width:560px){.crate-summary,.crate-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

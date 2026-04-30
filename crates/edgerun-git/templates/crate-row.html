@@ -1,0 +1,23 @@
+<article class="crate-row" data-crate-search="{{search_text}}" data-name="{{crate_name_attr}}" data-api="{{api_count}}" data-calls="{{call_count}}" data-tests="{{test_count}}" data-deps="{{dependency_count}}">
+  <div class="crate-main">
+    <h2><a href="/{{repo_name}}/crates/{{crate_name_attr}}">{{crate_name}}</a></h2>
+    <p>{{crate_description}}</p>
+    <div class="crate-row-links">
+      <a href="/{{repo_name}}/crates/{{crate_name_attr}}">Open crate</a>
+      <a href="/{{repo_name}}/src/{{default_ref}}/{{crate_path}}">Source</a>
+      <a href="/{{repo_name}}/components/crates/{{crate_name_attr}}.html">Component</a>
+    </div>
+  </div>
+  <dl class="crate-metrics">
+    <div><dt>API</dt><dd>{{api_count}}</dd></div>
+    <div><dt>Calls</dt><dd>{{call_count}}</dd></div>
+    <div><dt>Tests</dt><dd>{{test_count}}</dd></div>
+    <div><dt>Deps</dt><dd>{{dependency_count}}</dd></div>
+    <div><dt>Used by</dt><dd>{{dependent_count}}</dd></div>
+    <div><dt>RFCs</dt><dd>{{rfc_count}}</dd></div>
+  </dl>
+  <div class="crate-status">
+    <span class="{{test_class}}">{{test_status}}</span>
+    <small>{{feature_count}} features</small>
+  </div>
+</article>

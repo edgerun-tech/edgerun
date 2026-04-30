@@ -1603,24 +1603,55 @@ fn render_crates_index(config: &GitConfig, repo: &Repo, crates: &[CrateInfo]) ->
         crates
             .iter()
             .map(|info| {
-                format!(
-                    "<article class=\"repo-card crate-card\" data-crate-search=\"{} {} {}\"><a href=\"/{}/crates/{}\"><h2>{}</h2><p>{}</p><span>{} features · {} API items · {} calls · {} tests</span></a></article>",
-                    escape_attr(&info.name),
-                    escape_attr(&info.description),
-                    escape_attr(&info.workspace_deps.join(" ")),
-                    escape_attr(&repo.name),
-                    escape_attr(&info.name),
-                    escape_html(&info.name),
-                    escape_html(&info.description),
-                    info.features.len(),
-                    info.api_items.len(),
-                    info.call_edges.len(),
-                    info.test_count
+                let test_status = if info.test_result.is_some() {
+                    "Test run recorded"
+                } else {
+                    "No test run"
+                };
+                let test_class = if info.test_result.is_some() {
+                    "status-pill recorded"
+                } else {
+                    "status-pill missing"
+                };
+                render_template(
+                    include_str!("../templates/crate-row.html"),
+                    &[
+                        (
+                            "search_text",
+                            escape_attr(&format!(
+                                "{} {} {} {}",
+                                info.name,
+                                info.description,
+                                info.workspace_deps.join(" "),
+                                info.dependents.join(" ")
+                            )),
+                        ),
+                        ("repo_name", escape_attr(&repo.name)),
+                        ("default_ref", escape_attr(&repo.default_ref)),
+                        ("crate_name", escape_html(&info.name)),
+                        ("crate_name_attr", escape_attr(&info.name)),
+                        ("crate_description", escape_html(&info.description)),
+                        ("crate_path", escape_attr(&info.rel_path)),
+                        ("feature_count", info.features.len().to_string()),
+                        ("api_count", info.api_items.len().to_string()),
+                        ("call_count", info.call_edges.len().to_string()),
+                        ("test_count", info.test_count.to_string()),
+                        ("dependency_count", info.workspace_deps.len().to_string()),
+                        ("dependent_count", info.dependents.len().to_string()),
+                        ("rfc_count", info.rfcs.len().to_string()),
+                        ("test_status", test_status.to_string()),
+                        ("test_class", test_class.to_string()),
+                    ],
                 )
             })
             .collect::<Vec<_>>()
             .join("")
     };
+    let api_total: usize = crates.iter().map(|info| info.api_items.len()).sum();
+    let call_total: usize = crates.iter().map(|info| info.call_edges.len()).sum();
+    let test_total: usize = crates.iter().map(|info| info.test_count).sum();
+    let dependency_total: usize = crates.iter().map(|info| info.workspace_deps.len()).sum();
+    let rfc_total: usize = crates.iter().map(|info| info.rfcs.len()).sum();
     page_shell(
         config,
         &format!("{} crates | {}", repo.title, config.title),
@@ -1631,6 +1662,11 @@ fn render_crates_index(config: &GitConfig, repo: &Repo, crates: &[CrateInfo]) ->
                 ("repo_name", escape_attr(&repo.name)),
                 ("repo_title", escape_html(&repo.title)),
                 ("crate_count", crates.len().to_string()),
+                ("api_total", api_total.to_string()),
+                ("call_total", call_total.to_string()),
+                ("test_total", test_total.to_string()),
+                ("dependency_total", dependency_total.to_string()),
+                ("rfc_total", rfc_total.to_string()),
                 ("crates", items),
             ],
         ),
