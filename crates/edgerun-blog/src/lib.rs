@@ -923,7 +923,7 @@ fn render_index(config: &BlogConfig, language: Language, posts: &[Post]) -> Stri
     let mut cards = String::new();
     for post in posts {
         cards.push_str(&format!(
-            "<article class=\"post-card\" data-search=\"{}\"><a href=\"/posts/{}.html\"><span class=\"date\">{}</span><h2>{}</h2><p>{}</p><div class=\"tags\">{}</div></a></article>",
+            "<article class=\"post-card\" data-search=\"{}\"><a href=\"{}\"><span class=\"date\">{}</span><h2>{}</h2><p>{}</p><div class=\"tags\">{}</div></a></article>",
             escape_attr(&search_blob(post)),
             escape_attr(&localized_path(language, &format!("/posts/{}.html", post.path))),
             escape_html(&post.date),
@@ -1042,7 +1042,7 @@ fn render_post(config: &BlogConfig, language: Language, post: &Post, posts: &[Po
         .take(8)
         .map(|item| {
             format!(
-                "<a href=\"/posts/{}.html\">{}</a>",
+                "<a href=\"{}\">{}</a>",
                 escape_attr(&localized_path(
                     language,
                     &format!("/posts/{}.html", item.path)
@@ -2285,6 +2285,9 @@ mod tests {
         let post_html = fs::read_to_string(output.join("posts/hello.html")).unwrap();
         assert_eq!(post_html.matches("<h1").count(), 1);
         assert!(!post_html.contains("aria-describedby=\"search-count\""));
+        let et_index = fs::read_to_string(output.join("et/index.html")).unwrap();
+        assert!(et_index.contains("href=\"/et/posts/hello.html\""));
+        assert!(!et_index.contains("/posts//et/posts/hello.html.html"));
 
         let _ = fs::remove_dir_all(base);
     }
