@@ -1020,7 +1020,6 @@ fn render_dash_blog_index(
         ));
     }
     let stats = load_git_stats(&config.root);
-    let post_count = posts.len();
     let tag_count = unique_tag_count(posts);
     let last_post = posts
         .first()
@@ -1035,9 +1034,16 @@ fn render_dash_blog_index(
         .last_commit_epoch
         .map(relative_time)
         .unwrap_or_else(|| "unknown age".to_string());
+    let post_count_label = if posts.len() == 1 {
+        "post".to_string()
+    } else {
+        "posts".to_string()
+    };
+    let month_chart = render_dash_month_chart(posts);
+    let topic_chart = render_dash_topic_chart(posts, 7);
 
     Ok(format!(
-        "<div class=\"dash-blog\"><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><div class=\"dash-blog-actions\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\">{}</button><button class=\"dash-mail-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\">{}</button></div></section><section class=\"dash-code-tools\" aria-label=\"Post tools\"><label><span>{}</span><input type=\"search\" data-workspace-search-scope placeholder=\"{}\"></label>{}</section><section class=\"dash-code-summary\" aria-label=\"Build log summary\"><div><span>Posts</span><strong>{post_count}</strong></div><div><span>Topics</span><strong>{tag_count}</strong></div><div><span>Latest post</span><strong>{}</strong></div><div><span>Commits</span><strong>{}</strong></div><div class=\"summary-wide\"><span>Last commit</span><strong title=\"{}\">{}</strong></div><div><span>Age</span><strong>{}</strong></div></section><section><h2>Posts</h2><div class=\"dash-grid\">{cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching posts.</p></div>",
+        "<div class=\"dash-blog\"><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><div class=\"dash-code-tools\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\">{}</button><button class=\"dash-mail-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog{}\">{}</button></div></section><section class=\"dash-code-tools\" aria-label=\"Post tools\"><label><span>{}</span><input type=\"search\" data-workspace-search-scope placeholder=\"{}\"></label>{}</section><section class=\"dash-code-summary\" aria-label=\"Build log summary\"><div><span>Posts</span><strong>{}</strong></div><div><span>Topics</span><strong>{}</strong></div><div><span>Latest post</span><strong>{}</strong></div><div><span>Commits</span><strong>{}</strong></div><div class=\"summary-wide\"><span>Last commit</span><strong title=\"{}\">{}</strong></div><div><span>Age</span><strong>{}</strong></div></section><section class=\"dash-analytics\" aria-label=\"Build log analytics\">{}{}</section><section><h2>Posts</h2><p class=\"dash-search-count\" data-search-count>{} {}</p><div class=\"dash-grid\">{cards}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching posts.</p></div>",
         escape_html(language.hero_eyebrow),
         escape_html(language.title),
         escape_attr(&localized_path(language, "/about")),
@@ -1047,12 +1053,70 @@ fn render_dash_blog_index(
         escape_html(language.search_label),
         escape_attr(language.search_label),
         render_dash_topic_list(language, posts),
+        posts.len(),
+        tag_count,
         escape_html(last_post),
         escape_html(commit_count),
         escape_attr(last_commit),
         escape_html(last_commit),
-        escape_html(&last_commit_age)
+        escape_html(&last_commit_age),
+        month_chart,
+        topic_chart,
+        posts.len(),
+        post_count_label,
     ))
+}
+
+fn render_dash_month_chart(posts: &[Post]) -> String {
+    let months = collect_month_counts(posts, 8);
+    if months.is_empty() {
+        return "<section class=\"dash-chart-card\"><h3>Posts by month</h3><p class=\"muted\">No post date metadata available yet.</p></section>"
+            .to_string();
+    }
+    let max = months.iter().map(|(_, count)| *count).max().unwrap_or(1);
+    let rows = months
+        .into_iter()
+        .map(|(month, count)| {
+            let width = (count.saturating_mul(100) / max.max(1)).max(12);
+            format!(
+                "<article class=\"dash-stat-row\"><span class=\"dash-stat-label\">{}</span><span class=\"dash-stat-track\"><span class=\"dash-stat-fill\" style=\"--dash-stat-fill:{}%\"></span></span><strong>{}</strong></article>",
+                escape_html(&month),
+                width,
+                count
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    format!(
+        "<section class=\"dash-chart-card\" aria-label=\"Posts by month\"><h3>Posts by month</h3><div class=\"dash-stat-chart\">{rows}</div></section>"
+    )
+}
+
+fn render_dash_topic_chart(posts: &[Post], top: usize) -> String {
+    let mut tags = collect_tag_counts(posts);
+    if tags.is_empty() {
+        return "<section class=\"dash-chart-card\"><h3>Tag distribution</h3><p class=\"muted\">No tags have been added yet.</p></section>"
+            .to_string();
+    }
+    tags.sort_by(|left, right| right.1.cmp(&left.1).then(left.0.cmp(&right.0)));
+    let max = tags.iter().map(|(_, count)| *count).max().unwrap_or(1);
+    let rows = tags
+        .into_iter()
+        .take(top)
+        .map(|(tag, count)| {
+            let width = (count.saturating_mul(100) / max.max(1)).max(12);
+            format!(
+                "<article class=\"dash-stat-row\"><span class=\"dash-stat-label\">{}</span><span class=\"dash-stat-track\"><span class=\"dash-stat-fill\" style=\"--dash-stat-fill:{}%\"></span></span><strong>{}</strong></article>",
+                escape_html(&tag),
+                width,
+                count
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    format!(
+        "<section class=\"dash-chart-card\" aria-label=\"Tag distribution\"><h3>Tag distribution</h3><div class=\"dash-stat-chart\">{rows}</div></section>"
+    )
 }
 
 fn render_dash_post(
@@ -1064,8 +1128,13 @@ fn render_dash_post(
     let visible_crates = load_visible_crates(&config.root);
     let content = link_visible_crates_for_dash(&post.html, &visible_crates);
     let related = render_dash_related_posts(language, post, posts);
+    let content = if related.is_empty() {
+        content
+    } else {
+        format!("{content}\n{related}")
+    };
     format!(
-        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog\">{}</button><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}{}</div></article></div>",
+        "<div class=\"dash-blog dash-article\"><button class=\"dash-link-button\" type=\"button\" data-surface-module=\"build-log\" data-surface=\"build-log\" hx-get=\"/surface/blog\">{}</button><article class=\"article\" aria-labelledby=\"post-title\"><p class=\"date\"><time datetime=\"{}\">{}</time> by <span class=\"author\">{}</span></p><h1 id=\"post-title\">{}</h1><p class=\"summary\">{}</p><div class=\"tags\">{}</div><div class=\"content\">{}</div></article></div>",
         escape_html(language.back_label),
         escape_attr(&post.date),
         escape_html(&post.date),
@@ -1074,7 +1143,6 @@ fn render_dash_post(
         escape_html(&post.summary),
         render_tags(&post.tags),
         content,
-        related
     )
 }
 
@@ -2538,17 +2606,7 @@ fn render_tags(tags: &[String]) -> String {
 }
 
 fn render_topic_list(language: Language, posts: &[Post]) -> String {
-    let mut tags = Vec::<(String, usize)>::new();
-    for post in posts {
-        for tag in &post.tags {
-            if let Some((_, count)) = tags.iter_mut().find(|(seen, _)| seen == tag) {
-                *count += 1;
-            } else {
-                tags.push((tag.clone(), 1));
-            }
-        }
-    }
-    tags.sort_by(|left, right| left.0.cmp(&right.0));
+    let tags = collect_tag_counts(posts);
     let mut buttons = vec![format!(
         "<button type=\"button\" data-topic=\"\" aria-pressed=\"true\">{} <span>{}</span></button>",
         escape_html(language.all_label),
@@ -2566,17 +2624,7 @@ fn render_topic_list(language: Language, posts: &[Post]) -> String {
 }
 
 fn render_dash_topic_list(language: Language, posts: &[Post]) -> String {
-    let mut tags = Vec::<(String, usize)>::new();
-    for post in posts {
-        for tag in &post.tags {
-            if let Some((_, count)) = tags.iter_mut().find(|(seen, _)| seen == tag) {
-                *count += 1;
-            } else {
-                tags.push((tag.clone(), 1));
-            }
-        }
-    }
-    tags.sort_by(|left, right| left.0.cmp(&right.0));
+    let tags = collect_tag_counts(posts);
     let mut buttons = vec![format!(
         "<button class=\"pill-button\" type=\"button\" data-topic-filter=\"\" aria-pressed=\"true\">{} <span>{}</span></button>",
         escape_html(language.all_label),
@@ -2594,15 +2642,58 @@ fn render_dash_topic_list(language: Language, posts: &[Post]) -> String {
 }
 
 fn unique_tag_count(posts: &[Post]) -> usize {
-    let mut tags = Vec::<&str>::new();
+    collect_tag_counts(posts).len()
+}
+
+fn collect_tag_counts(posts: &[Post]) -> Vec<(String, usize)> {
+    let mut tags = Vec::<(String, usize)>::new();
     for post in posts {
         for tag in &post.tags {
-            if !tags.iter().any(|seen| *seen == tag) {
-                tags.push(tag);
+            if let Some((_, count)) = tags.iter_mut().find(|(seen, _)| seen == tag) {
+                *count += 1;
+            } else {
+                tags.push((tag.clone(), 1));
             }
         }
     }
-    tags.len()
+    tags.sort_by(|left, right| left.0.cmp(&right.0));
+    tags
+}
+
+fn collect_month_counts(posts: &[Post], limit: usize) -> Vec<(String, usize)> {
+    let mut counts = Vec::<(String, usize)>::new();
+    for post in posts {
+        let Some(month) = post_month(&post.date) else {
+            continue;
+        };
+        if let Some((_, count)) = counts.iter_mut().find(|(entry, _)| entry == &month) {
+            *count += 1;
+            continue;
+        }
+        if counts.len() >= limit {
+            continue;
+        }
+        counts.push((month, 1));
+    }
+    counts.sort_by(|left, right| right.0.cmp(&left.0));
+    if counts.len() > limit {
+        counts.truncate(limit);
+    }
+    counts
+}
+
+fn post_month(value: &str) -> Option<String> {
+    let mut parts = value.splitn(3, '-');
+    let year = parts.next()?;
+    let month = parts.next()?;
+    if year.len() != 4
+        || !year.chars().all(|ch| ch.is_ascii_digit())
+        || month.len() != 2
+        || !month.chars().all(|ch| ch.is_ascii_digit())
+    {
+        return None;
+    }
+    Some(format!("{}-{}", year, month))
 }
 
 fn search_blob(post: &Post) -> String {
@@ -2806,23 +2897,99 @@ fn blog_js() -> String {
 
 fn blog_style() -> String {
     format!(
-        "{}\n{}\n{}",
+        "{}\n{}\n{}\n{}",
         edgerun_web_ui::BASE_STYLE,
         BLOG_STYLE,
-        BLOG_UX_STYLE
+        BLOG_UX_STYLE,
+        BLOG_DASH_STYLE
     )
 }
 
 const BLOG_JS: &str = r#"
-const search=document.getElementById('search');
-const cards=[...document.querySelectorAll('.post-card')];
-const count=document.getElementById('search-count');
-const topicButtons=[...document.querySelectorAll('[data-topic]')];
-function applyFilter(term){const q=term.trim().toLowerCase();let shown=0;for(const card of cards){const ok=!q||card.dataset.search.includes(q);card.hidden=!ok;if(ok)shown++}if(count){count.textContent=shown+' post'+(shown===1?'':'s')}for(const btn of topicButtons){btn.setAttribute('aria-pressed',btn.dataset.topic.toLowerCase()===q?'true':'false')}}
-if(search){search.addEventListener('input',e=>applyFilter(e.target.value))}
-const initialQuery=new URLSearchParams(location.search).get('q');
-if(search&&initialQuery){search.value=initialQuery;applyFilter(initialQuery)}
-for(const btn of topicButtons){btn.addEventListener('click',()=>{if(search){search.value=btn.dataset.topic;applyFilter(btn.dataset.topic);search.focus()}})}
+const searchInputs=[...document.querySelectorAll('#search, [data-workspace-search-scope]')];
+const allCards=[...document.querySelectorAll('.post-card, .dash-post-card[data-search-card]')].map((card)=>({
+  card,
+  text:(card.dataset.searchText||card.dataset.search||'').toLowerCase(),
+  topics:(card.dataset.topic||'').toLowerCase()
+}));
+const searchCounter=document.getElementById('search-count');
+const dashboardCounters=[...document.querySelectorAll('[data-search-count]')];
+const emptyMessages=[...document.querySelectorAll('[data-search-empty]')];
+const topicButtons=[...document.querySelectorAll('[data-topic], [data-topic-filter]')];
+let activeTopic='';
+
+function updateButtons(topic){
+  const normalized = (topic||'').toLowerCase();
+  for(const button of topicButtons){
+    const candidate=(button.dataset.topic||button.dataset.topicFilter||'').toLowerCase();
+    button.setAttribute('aria-pressed', candidate===normalized ? 'true':'false');
+  }
+}
+
+function matchTopics(topicList, topic){
+  if(!topic) return true;
+  if(!topicList) return false;
+  return topicList===topic || topicList.split(' ').includes(topic);
+}
+
+function applyFilter(raw){
+  const query=(raw||'').trim().toLowerCase();
+  let shown=0;
+  for(const item of allCards){
+    const termMatch=!query || item.text.includes(query);
+    const topicMatch=matchTopics(item.topics, activeTopic);
+    const visible=termMatch && topicMatch;
+    item.card.hidden=!visible;
+    if(visible) shown += 1;
+  }
+  const counterLabel=shown === 1 ? ' post' : ' posts';
+  if(searchCounter){ searchCounter.textContent=shown+' '+counterLabel; }
+  for(const counter of dashboardCounters){ counter.textContent=shown+' '+counterLabel; }
+  if(emptyMessages.length){
+    for(const node of emptyMessages){ node.hidden=shown!==0; }
+  }
+  return shown;
+}
+
+function primaryInput(){
+  return searchInputs.length ? searchInputs[0] : null;
+}
+
+function syncFromInput(event){
+  const source = event.target;
+  if(source && source.matches('[data-workspace-search-scope]')){ activeTopic=''; }
+  const value = source ? (source.value || '') : '';
+  applyFilter(value);
+}
+
+for(const input of searchInputs){
+  input.addEventListener('input', syncFromInput);
+}
+
+const initialQuery=(new URLSearchParams(location.search)).get('q');
+if(initialQuery && searchInputs.length){
+  for(const input of searchInputs){ input.value=initialQuery; }
+  applyFilter(initialQuery);
+} else {
+  applyFilter('');
+}
+
+for(const button of topicButtons){
+  button.addEventListener('click',()=>{
+    const topic=(button.dataset.topic||button.dataset.topicFilter||'').toLowerCase();
+    activeTopic=topic;
+    updateButtons(activeTopic);
+    const input = primaryInput();
+    if(input){
+      input.value=topic;
+      applyFilter(input.value);
+      if(input.focus) input.focus();
+    } else {
+      applyFilter('');
+    }
+  });
+}
+updateButtons('');
 "#;
 
 const BLOG_STYLE: &str = r#"
@@ -2845,6 +3012,38 @@ body{background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 92%,var(--pan
 .recent{border-left:1px solid var(--line);padding-left:14px}.recent a:hover{color:var(--accent)}.related-posts article:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 8px 24px color-mix(in srgb,var(--text) 8%,transparent)}
 @media(max-width:900px){.layout aside{position:static}.article-layout{padding-top:28px}.recent{border-left:0;padding-left:0}.article-layout aside{padding:0 4px}}
 @media(max-width:760px){.hero{padding-top:34px}.layout{padding-top:24px}.layout aside{padding:14px}.repo-stats{grid-template-columns:1fr}.article{box-shadow:none}.content{font-size:16px}.content table{font-size:14px}.site-footer{position:static}body{padding-bottom:0}}
+"#;
+
+const BLOG_DASH_STYLE: &str = r#"
+.dash-blog{max-width:1180px;margin:0 auto;padding:34px clamp(16px,4vw,56px) 90px;display:grid;gap:20px}
+.dash-code-hero{display:grid;gap:8px}
+.dash-code-tools{display:grid;gap:12px}
+.dash-code-tools label{display:grid;gap:6px;color:var(--muted);font-weight:750}
+.dash-code-tools input{width:100%;min-height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 12px}
+.dash-code-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.dash-code-summary>div{min-height:88px;border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;align-content:center;background:color-mix(in srgb,var(--panel) 92%,var(--code))}
+.dash-code-summary span{color:var(--muted);font-size:13px}
+.dash-code-summary strong{font-size:28px;line-height:1}
+.dash-code-summary .summary-wide{grid-column:1/-1}
+.dash-analytics{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.dash-chart-card{border:1px solid var(--line);border-radius:10px;padding:14px;background:color-mix(in srgb,var(--panel) 90%,var(--code));display:grid;gap:10px}
+.dash-chart-card h3{margin:0;font-size:18px}
+.dash-stat-chart{display:grid;gap:10px}
+.dash-stat-row{display:grid;grid-template-columns:72px 1fr auto;gap:10px;align-items:center}
+.dash-stat-label{color:var(--muted);font-size:12px;white-space:nowrap}
+.dash-stat-track{height:10px;border-radius:999px;background:color-mix(in srgb,var(--line) 85%,transparent);overflow:hidden}
+.dash-stat-fill{--dash-stat-fill:12%;display:block;height:100%;width:var(--dash-stat-fill);background:var(--accent);border-radius:999px}
+.dash-stat-row strong{font-size:14px}
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;align-items:stretch}
+.dash-grid .dash-card-button,.dash-grid .dash-card,.dash-grid .dash-post-card{display:block;border:1px solid var(--line);border-radius:10px;background:var(--panel);text-decoration:none;color:inherit;padding:16px;min-height:190px}
+.dash-grid .dash-card-button{cursor:pointer}
+.dash-grid .dash-card-button:hover,.dash-grid .dash-card:hover{transform:translateY(-1px);border-color:var(--accent)}
+.dash-grid .dash-card strong,.dash-grid .dash-card-button strong{display:block;font-size:21px;line-height:1.15;margin:10px 0 7px}
+.dash-grid .dash-card span,.dash-grid .dash-card small{color:var(--muted)}
+.dash-search-empty,[data-search-count]{color:var(--muted)}
+.article .content .related-posts{margin-top:28px}
+.related-posts>div{gap:14px}
+@media(max-width:900px){.dash-code-summary{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));}.dash-grid .dash-card-button,.dash-grid .dash-card{min-height:168px}}
 "#;
 
 #[cfg(test)]

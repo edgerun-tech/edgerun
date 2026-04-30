@@ -2264,20 +2264,6 @@ const DASH_BODY: &str = r##"
     <section class="dash-tools-grid">
       <section class="dash-panel">
         <div class="dash-panel-head">
-          <h2>Global status</h2>
-          <span>Live metrics</span>
-        </div>
-        <div class="dash-status-inline" data-dash-status>
-          <span>sessions <strong data-status-sessions>--</strong></span>
-          <span>req/s <strong data-status-rps>--</strong></span>
-          <span>mem <strong data-status-memory>--</strong></span>
-          <span>cpu <strong data-status-cpu>--</strong></span>
-          <span>bin <strong data-status-binary>--</strong></span>
-        </div>
-        <p><button type="button" class="dash-refresh-status" data-status-refresh>Refresh</button></p>
-      </section>
-      <section class="dash-panel">
-        <div class="dash-panel-head">
           <h2>Global chat</h2>
           <span>Demo room</span>
         </div>
@@ -2458,521 +2444,12 @@ const DASH_STYLE: &str = r#"
 .dash-status{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;white-space:nowrap;font-size:12px;line-height:1}
 .dash-status span{display:inline-flex;align-items:baseline;gap:5px;color:var(--muted)}
 .dash-status strong{color:var(--text);font-weight:800}
-.dash-status button,.dash-refresh-status{height:22px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:0 8px;font:inherit;cursor:pointer}
-.dash-status button:hover,.dash-status button:focus-visible,.dash-refresh-status:hover{border-color:var(--accent);color:var(--accent)}
-.dash-status-inline{display:flex;flex-wrap:wrap;gap:12px 14px;margin-top:6px;color:var(--muted);font-size:12px}
-.dash-status-inline span{display:inline-flex;align-items:baseline;gap:4px}
-.dash-status-inline strong{color:var(--text);font-weight:800}
+.dash-status button{height:22px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:0 8px;font:inherit;cursor:pointer}
+.dash-status button:hover,.dash-status button:focus-visible{border-color:var(--accent);color:var(--accent)}
 body{--footer-h:30px}
 @media(max-width:1200px){.dash-tools-grid{grid-template-columns:1fr}.dash-dock-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1000px){.dash-workspace{grid-template-columns:1fr}}
 @media(max-width:760px){.dash-shell{padding:10px}.dash-shell-inner{gap:12px}.dash-panel{padding:12px}.dash-surface{max-height:420px}.dash-status{justify-content:flex-start;overflow-x:auto;gap:12px}}
-"#;
-
-const DASH_JS: &str = r#"
-const DASH_SURFACES = [
-  {
-    key: 'build-log',
-    label: 'Build Log',
-    pathPrefix: '/surface/blog',
-    fallback: 'Build log is unavailable right now.',
-    backend: 'blog.edgerun.tech',
-  },
-  {
-    key: 'code',
-    label: 'Code',
-    pathPrefix: '/surface/git',
-    fallback: 'Code surface is unavailable right now.',
-    backend: 'git.edgerun.tech',
-  },
-  {
-    key: 'mail',
-    label: 'Mail',
-    pathPrefix: '/surface/mail',
-    fallback: 'Mail surface is unavailable right now.',
-    backend: 'backend: mail.edgerun.tech',
-  },
-  {
-    key: 'apps',
-    label: 'Apps',
-    pathPrefix: '/surface/apps',
-    fallback: 'Apps surface is unavailable right now.',
-    backend: 'browser node',
-  },
-];
-
-function normalizeSurfaceSuffix(path) {
-  return path.replace(/^\/+/, '');
-}
-
-function hashPathSuffix(raw) {
-  const value = normalizeSurfaceSuffix(raw || '');
-  return value ? `/${value}` : '';
-}
-
-function normalizeFallbackPath(prefix, path) {
-  if (!path) {
-    return prefix;
-  }
-  return prefix + '/' + normalizeSurfaceSuffix(path);
-}
-
-function surfacePathToSurfaceKey(path) {
-  if (path.startsWith('/surface/blog')) {
-    return 'build-log';
-  }
-  if (path.startsWith('/surface/git')) {
-    return 'code';
-  }
-  if (path.startsWith('/surface/mail')) {
-    return 'mail';
-  }
-  if (path.startsWith('/surface/apps')) {
-    return 'apps';
-  }
-  return null;
-}
-
-function surfaceToHashPrefix(surface) {
-  if (surface === 'build-log') {
-    return '#build-log';
-  }
-  if (surface === 'code') {
-    return '#code';
-  }
-  if (surface === 'mail') {
-    return '#mail';
-  }
-  if (surface === 'apps') {
-    return '#apps';
-  }
-  return '#build-log';
-}
-
-function surfacePathToHash(path) {
-  if (path.startsWith('/surface/blog')) {
-    return surfaceToHashPrefix('build-log') + hashPathSuffix(path.replace('/surface/blog', ''));
-  }
-  if (path.startsWith('/surface/git')) {
-    return surfaceToHashPrefix('code') + hashPathSuffix(path.replace('/surface/git', ''));
-  }
-  if (path.startsWith('/surface/mail')) {
-    return surfaceToHashPrefix('mail') + hashPathSuffix(path.replace('/surface/mail', ''));
-  }
-  if (path.startsWith('/surface/apps')) {
-    return surfaceToHashPrefix('apps') + hashPathSuffix(path.replace('/surface/apps', ''));
-  }
-  return null;
-}
-
-function getSurfaceForKey(key) {
-  return DASH_SURFACES.find((item) => item.key === key);
-}
-
-function makeSurfacePath(key, suffix) {
-  const surface = getSurfaceForKey(key);
-  if (!surface) {
-    return '/surface/blog';
-  }
-  if (!suffix) {
-    return surface.pathPrefix;
-  }
-  return normalizeFallbackPath(surface.pathPrefix, suffix);
-}
-
-function setWorkspaceContext(key) {
-  const surface = getSurfaceForKey(key) || DASH_SURFACES[0];
-  const title = document.getElementById('dashSurfaceTitle');
-  const path = document.getElementById('dashSurfacePath');
-  const workspace = document.getElementById('dashSurfaceSlot');
-  if (title) {
-    title.textContent = surface.label;
-  }
-  if (path) {
-    path.textContent = `backend: ${surface.backend}`;
-  }
-  if (workspace) {
-    workspace.setAttribute('data-active-surface', surface.key);
-  }
-  document.querySelectorAll('[data-surface]').forEach((button) => {
-    button.setAttribute(
-      'aria-selected',
-      button.getAttribute('data-surface') === surface.key ? 'true' : 'false',
-    );
-  });
-}
-
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '--';
-  }
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return (value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)) + ' ' + units[unit];
-}
-
-function extractSurfaceContent(html) {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const wrapped = doc.querySelector('#surfaceSlot .dash-surface');
-  if (wrapped) {
-    return wrapped.innerHTML;
-  }
-  return doc.querySelector('.dash-surface')?.innerHTML || html;
-}
-
-async function hydrateSurface(path, fallback, sourceKey) {
-  const slot = document.getElementById('dashSurfaceSlot');
-  if (!slot) {
-    return;
-  }
-  const activeKey = sourceKey || surfacePathToSurfaceKey(path);
-  if (!activeKey) {
-    return;
-  }
-  const surface = getSurfaceForKey(activeKey);
-  if (!surface) {
-    return;
-  }
-  setWorkspaceContext(activeKey);
-  slot.classList.remove('dash-surface-empty');
-  try {
-    const response = await fetch(path, { cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error('surface unavailable');
-    }
-    const html = await response.text();
-    slot.innerHTML = `<div class="dash-surface-content">${extractSurfaceContent(html)}</div>`;
-  } catch (_error) {
-    slot.textContent = fallback || surface.fallback;
-    slot.classList.add('dash-surface-empty');
-  }
-  bindSurfaceSearch(slot);
-}
-
-function surfaceHashToPath(raw) {
-  if (!raw) {
-    return '/surface/blog';
-  }
-  if (!raw.startsWith('#')) {
-    if (raw.startsWith('/surface/')) {
-      return raw;
-    }
-    return '/surface/blog';
-  }
-  const hash = raw.slice(1);
-  const [rawHead, ...rawRest] = hash.split('/');
-  const head = rawHead.toLowerCase();
-  const suffix = hashPathSuffix(rawRest.join('/'));
-  if (head === 'build-log' || head === 'blog') {
-    return normalizeFallbackPath('/surface/blog', suffix);
-  }
-  if (head === 'code') {
-    return normalizeFallbackPath('/surface/git', suffix);
-  }
-  if (head === 'mail') {
-    return normalizeFallbackPath('/surface/mail', suffix);
-  }
-  if (head === 'apps') {
-    return normalizeFallbackPath('/surface/apps', suffix);
-  }
-  if (head === 'feed') {
-    return '/surface/blog/feed';
-  }
-  if (head === 'about') {
-    return '/surface/blog/about';
-  }
-  return '/surface/blog';
-}
-
-function syncHashFromSurface(path) {
-  const target = surfacePathToHash(path);
-  if (target && location.hash !== target) {
-    history.replaceState(null, '', target);
-  }
-}
-
-async function openFromHash() {
-  const path = surfaceHashToPath(location.hash || '#build-log');
-  const surfaceKey = surfacePathToSurfaceKey(path);
-  const surface = getSurfaceForKey(surfaceKey);
-  if (!path || !surface) {
-    return;
-  }
-  await hydrateSurface(path, surface.fallback, surface.key);
-  syncHashFromSurface(path);
-}
-
-function bindSurfaceSearch(container) {
-  const input = container.querySelector('[data-workspace-search-scope]');
-  if (!input) {
-    return;
-  }
-  const cards = [...container.querySelectorAll('[data-search-card]')];
-  const empty = container.querySelector('[data-search-empty]');
-  if (!cards.length) {
-    return;
-  }
-  const apply = () => {
-    const term = input.value.trim().toLowerCase();
-    let visible = 0;
-    for (const card of cards) {
-      const haystack = (card.getAttribute('data-search-text') || '').toLowerCase();
-      const show = term.length === 0 || haystack.includes(term);
-      card.hidden = !show;
-      if (show) {
-        visible += 1;
-      }
-    }
-    if (empty) {
-      empty.hidden = visible > 0;
-    }
-  };
-  input.addEventListener('input', apply);
-  apply();
-}
-
-function bindSurfaceLinks() {
-  document.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-dash-hash], [hx-get], [data-surface]');
-    if (!button) {
-      return;
-    }
-    if (button.matches('[data-surface]')) {
-      event.preventDefault();
-      const surfaceKey = button.getAttribute('data-surface') || 'build-log';
-      const surface = getSurfaceForKey(surfaceKey);
-      if (!surface) {
-        return;
-      }
-      hydrateSurface(surface.pathPrefix, surface.fallback, surface.key).then(() => {
-        syncHashFromSurface(surface.pathPrefix);
-      });
-      return;
-    }
-    const raw = button.getAttribute('data-dash-hash') || button.getAttribute('hx-get');
-    const path = surfaceHashToPath(raw || '');
-    if (!path) {
-      return;
-    }
-    const surfaceKey = surfacePathToSurfaceKey(path);
-    if (!surfaceKey) {
-      return;
-    }
-    event.preventDefault();
-    const surface = getSurfaceForKey(surfaceKey);
-    hydrateSurface(path, surface?.fallback || 'Unable to open this section.', surfaceKey).then(() => syncHashFromSurface(path));
-  });
-}
-
-async function refreshDashStatus(options = {}) {
-  try {
-    const refresh = document.querySelector('[data-status-refresh]');
-    if (refresh && options.manual) {
-      refresh.disabled = true;
-      refresh.textContent = '...';
-    }
-    const response = await fetch('/status.json', { cache: 'no-store' });
-    if (!response.ok) return;
-    const data = await response.json();
-    if (!data.ok) return;
-    const sessions = document.querySelector('[data-status-sessions]');
-    const rps = document.querySelector('[data-status-rps]');
-    const memory = document.querySelector('[data-status-memory]');
-    const cpu = document.querySelector('[data-status-cpu]');
-    const binary = document.querySelector('[data-status-binary]');
-    if (sessions) sessions.textContent = String(data.sessions);
-    if (rps) rps.textContent = (Number(data.requests_per_second) || 0).toFixed(1);
-    if (memory) memory.textContent = formatBytes(data.memory_bytes);
-    if (cpu) cpu.textContent = (Number(data.cpu_percent) || 0).toFixed(1) + '%';
-    if (binary) binary.textContent = formatBytes(data.binary_bytes);
-  } catch (_error) {
-    // no-op on status refresh failure
-  } finally {
-    const refresh = document.querySelector('[data-status-refresh]');
-    if (refresh) {
-      refresh.disabled = false;
-      refresh.textContent = 'Refresh';
-    }
-  }
-}
-
-function chatMessageTemplate(message) {
-  const safeName = String(message.name || 'Guest');
-  const safeText = String(message.message || '');
-  return `<article class="dash-chat-entry"><header class="dash-chat-meta"><span class="dash-chat-name">${escapeHtml(safeName)}</span><time>${new Date((message.at || 0) * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</time></header><p class="dash-chat-text">${escapeHtml(safeText)}</p></article>`;
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (match) => {
-    const map = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    };
-    return map[match];
-  });
-}
-
-async function refreshChatLog() {
-  const status = document.getElementById('dashChatStatus');
-  const log = document.getElementById('dashChatLog');
-  if (!log) return;
-  try {
-    const response = await fetch('/api/chat', { cache: 'no-store' });
-    if (!response.ok) {
-      if (status) status.textContent = 'Unable to load chat messages.';
-      log.innerHTML = '';
-      return;
-    }
-    const data = await response.json();
-    const messages = (data && Array.isArray(data.messages)) ? data.messages : [];
-    if (messages.length === 0) {
-      log.innerHTML = '<p class="dash-surface-empty">No messages yet.</p>';
-      if (status) {
-        status.textContent = '';
-      }
-      return;
-    }
-    log.innerHTML = messages.map(chatMessageTemplate).join('');
-    log.scrollTop = log.scrollHeight;
-  } catch (_error) {
-    if (status) status.textContent = 'Unable to load chat messages.';
-  }
-}
-
-function wireModuleControls() {
-  document.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-module-action]');
-    if (!button) return;
-    event.preventDefault();
-    const key = button.getAttribute('data-module-key');
-    const module = getModuleByKey(key);
-    if (!module) return;
-    const action = button.getAttribute('data-module-action');
-    if (action === 'minimize') {
-      const wasMinimized = module.classList.contains('dash-module-minimized');
-      setModuleMinimized(module, !wasMinimized);
-      if (!wasMinimized && currentMaximizedModule() === key) {
-        setMaximizedModule('');
-      }
-      persistWorkspaceState();
-      return;
-    }
-    if (action === 'maximize') {
-      const maximized = currentMaximizedModule();
-      setMaximizedModule(maximized === key ? '' : key);
-    }
-  });
-}
-
-function wireWorkspaceDock() {
-  const dock = document.getElementById('dashDock');
-  if (!dock) return;
-  dock.addEventListener('click', async (event) => {
-    const button = event.target.closest('[data-dock-module]');
-    if (!button) return;
-    event.preventDefault();
-    const key = button.getAttribute('data-dock-module');
-    const surface = getSurfaceForKey(key);
-    const module = getModuleByKey(key);
-    if (!surface || !module) {
-      return;
-    }
-    if (module.classList.contains('dash-module-minimized')) {
-      setModuleMinimized(module, false);
-      persistWorkspaceState();
-    }
-    setMaximizedModule('');
-    module.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    await hydrateSurface(surface, surface.pathPrefix);
-  });
-}
-
-function wireModuleDragReorder() {
-  const workspace = getWorkspaceRoot();
-  if (!workspace) return;
-  let dragging = null;
-
-  const canDrag = (event) => event.target.closest('.dash-module-drag-handle') !== null;
-
-  const onDragStart = (event) => {
-    const module = event.currentTarget;
-    if (!module || currentMaximizedModule() || !canDrag(event)) {
-      if (module) {
-        event.preventDefault();
-      }
-      return;
-    }
-    dragging = module;
-    module.classList.add('dash-module-dragging');
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', module.dataset.moduleKey || '');
-    }
-  };
-
-  const onDragEnd = () => {
-    if (!dragging) return;
-    dragging.classList.remove('dash-module-dragging');
-    dragging = null;
-    persistWorkspaceState();
-    refreshDockButtonState();
-  };
-
-  const onDragOver = (event) => {
-    event.preventDefault();
-    if (!dragging || !workspace.contains(dragging)) {
-      return;
-    }
-    const module = event.target.closest('.dash-module');
-    if (!module || module === dragging || !workspace.contains(module)) {
-      return;
-    }
-    const rect = module.getBoundingClientRect();
-    const next = event.clientY > rect.top + rect.height / 2;
-    workspace.insertBefore(dragging, next ? module.nextSibling : module);
-  };
-
-  for (const module of getWorkspaceModules()) {
-    module.addEventListener('dragstart', onDragStart);
-    module.addEventListener('dragend', onDragEnd);
-  }
-  workspace.addEventListener('dragover', onDragOver);
-  workspace.addEventListener('drop', (event) => {
-    event.preventDefault();
-    onDragEnd();
-  });
-}
-
-addEventListener('click', (event) => {
-  const refresh = event.target.closest('[data-status-refresh]');
-  if (!refresh) return;
-  event.preventDefault();
-  refreshDashStatus({ manual: true });
-});
-
-addEventListener('hashchange', () => {
-  openFromHash();
-});
-
-async function initDashboard() {
-  bindSurfaceLinks();
-  await openFromHash();
-  await refreshChatLog();
-  wireGlobalChat();
-  refreshDashStatus();
-  setInterval(refreshDashStatus, 5000);
-  setInterval(refreshChatLog, 8000);
-}
-
-initDashboard();
 "#;
 
 const DASH_COHESIVE_JS: &str = r#"
@@ -3359,34 +2836,34 @@ function bindSurfaceLinks() {
 }
 
 async function refreshDashStatus(options = {}) {
+  const setText = (selector, text) => {
+    for (const node of document.querySelectorAll(selector)) {
+      node.textContent = text;
+    }
+  };
+  const setRefreshState = (disabled, text) => {
+    for (const node of document.querySelectorAll('[data-status-refresh]')) {
+      node.disabled = disabled;
+      node.textContent = text;
+    }
+  };
   try {
-    const refresh = document.querySelector('[data-status-refresh]');
-    if (refresh && options.manual) {
-      refresh.disabled = true;
-      refresh.textContent = '...';
+    if (options.manual) {
+      setRefreshState(true, '...');
     }
     const response = await fetch('/status.json', { cache: 'no-store' });
     if (!response.ok) return;
     const data = await response.json();
     if (!data.ok) return;
-    const sessions = document.querySelector('[data-status-sessions]');
-    const rps = document.querySelector('[data-status-rps]');
-    const memory = document.querySelector('[data-status-memory]');
-    const cpu = document.querySelector('[data-status-cpu]');
-    const binary = document.querySelector('[data-status-binary]');
-    if (sessions) sessions.textContent = String(data.sessions);
-    if (rps) rps.textContent = (Number(data.requests_per_second) || 0).toFixed(1);
-    if (memory) memory.textContent = formatBytes(data.memory_bytes);
-    if (cpu) cpu.textContent = (Number(data.cpu_percent) || 0).toFixed(1) + '%';
-    if (binary) binary.textContent = formatBytes(data.binary_bytes);
+    setText('[data-status-sessions]', String(data.sessions));
+    setText('[data-status-rps]', (Number(data.requests_per_second) || 0).toFixed(1));
+    setText('[data-status-memory]', formatBytes(data.memory_bytes));
+    setText('[data-status-cpu]', (Number(data.cpu_percent) || 0).toFixed(1) + '%');
+    setText('[data-status-binary]', formatBytes(data.binary_bytes));
   } catch (_error) {
     // no-op on status refresh failure
   } finally {
-    const refresh = document.querySelector('[data-status-refresh]');
-    if (refresh) {
-      refresh.disabled = false;
-      refresh.textContent = 'Refresh';
-    }
+    setRefreshState(false, 'Refresh');
   }
 }
 
@@ -3535,6 +3012,110 @@ function wireGlobalChat() {
   });
 }
 
+function wireModuleControls() {
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-module-action]');
+    if (!button) return;
+    event.preventDefault();
+    const key = button.getAttribute('data-module-key');
+    const module = getModuleByKey(key);
+    if (!module) return;
+    const action = button.getAttribute('data-module-action');
+    if (action === 'minimize') {
+      const wasMinimized = module.classList.contains('dash-module-minimized');
+      setModuleMinimized(module, !wasMinimized);
+      if (!wasMinimized && currentMaximizedModule() === key) {
+        setMaximizedModule('');
+      }
+      persistWorkspaceState();
+      refreshDockButtonState();
+      return;
+    }
+    if (action === 'maximize') {
+      const maximized = currentMaximizedModule();
+      setMaximizedModule(maximized === key ? '' : key);
+    }
+  });
+}
+
+function wireWorkspaceDock() {
+  const dock = document.getElementById('dashDock');
+  if (!dock) return;
+  dock.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-dock-module]');
+    if (!button) return;
+    event.preventDefault();
+    const key = button.getAttribute('data-dock-module');
+    const surface = getSurfaceForKey(key);
+    const module = getModuleByKey(key);
+    if (!surface || !module) {
+      return;
+    }
+    if (module.classList.contains('dash-module-minimized')) {
+      setModuleMinimized(module, false);
+      persistWorkspaceState();
+    }
+    setMaximizedModule('');
+    module.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    await hydrateSurface(surface, surface.pathPrefix);
+  });
+}
+
+function wireModuleDragReorder() {
+  const workspace = getWorkspaceRoot();
+  if (!workspace) return;
+  let dragging = null;
+
+  const canDrag = (event) => event.target.closest('.dash-module-drag-handle') !== null;
+
+  const onDragStart = (event) => {
+    const module = event.currentTarget;
+    if (!module || currentMaximizedModule() || !canDrag(event)) {
+      if (module) {
+        event.preventDefault();
+      }
+      return;
+    }
+    dragging = module;
+    module.classList.add('dash-module-dragging');
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', module.dataset.moduleKey || '');
+    }
+  };
+
+  const onDragEnd = () => {
+    if (!dragging) return;
+    dragging.classList.remove('dash-module-dragging');
+    dragging = null;
+    persistWorkspaceState();
+  };
+
+  const onDragOver = (event) => {
+    event.preventDefault();
+    if (!dragging || !workspace.contains(dragging)) {
+      return;
+    }
+    const module = event.target.closest('.dash-module');
+    if (!module || module === dragging || !workspace.contains(module)) {
+      return;
+    }
+    const rect = module.getBoundingClientRect();
+    const next = event.clientY > rect.top + rect.height / 2;
+    workspace.insertBefore(dragging, next ? module.nextSibling : module);
+  };
+
+  for (const module of getWorkspaceModules()) {
+    module.addEventListener('dragstart', onDragStart);
+    module.addEventListener('dragend', onDragEnd);
+  }
+  workspace.addEventListener('dragover', onDragOver);
+  workspace.addEventListener('drop', (event) => {
+    event.preventDefault();
+    onDragEnd();
+  });
+}
+
 addEventListener('click', (event) => {
   const refresh = event.target.closest('[data-status-refresh]');
   if (!refresh) return;
@@ -3554,9 +3135,15 @@ async function initDashboard() {
   initWorkspaceState();
   initSurfaceDefaults();
   bindSurfaceLinks();
-  wireModuleControls();
-  wireWorkspaceDock();
-  wireModuleDragReorder();
+  if (typeof wireModuleControls === 'function') {
+    wireModuleControls();
+  }
+  if (typeof wireWorkspaceDock === 'function') {
+    wireWorkspaceDock();
+  }
+  if (typeof wireModuleDragReorder === 'function') {
+    wireModuleDragReorder();
+  }
   await hydrateAll();
   await refreshChatLog();
   wireGlobalChat();
@@ -3565,7 +3152,11 @@ async function initDashboard() {
   setInterval(refreshChatLog, 8000);
 }
 
-initDashboard();
+if (document.readyState === 'loading') {
+  addEventListener('DOMContentLoaded', initDashboard);
+} else {
+  initDashboard();
+}
 "#;
 
 struct HttpsRedirectHandler {
