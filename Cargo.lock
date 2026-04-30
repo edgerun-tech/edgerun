@@ -513,6 +513,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-dash-templates"
+version = "0.1.1"
+dependencies = [
+ "edgerun-config",
+ "edgerun-web-ui",
+]
+
+[[package]]
 name = "edgerun-dhcp"
 version = "0.1.1"
 dependencies = [
@@ -1268,6 +1276,7 @@ dependencies = [
  "edgerun-blog",
  "edgerun-config",
  "edgerun-crypto",
+ "edgerun-dash-templates",
  "edgerun-dhcp",
  "edgerun-dns",
  "edgerun-email",
