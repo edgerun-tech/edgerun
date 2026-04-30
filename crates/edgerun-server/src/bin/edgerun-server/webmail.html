@@ -1,43 +1,3 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Edgerun Mail</title>
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="76" font-size="76">📧</text></svg>'>
-<style>
-:root{color-scheme:light dark;--bg:#f7f3eb;--panel:#fffdf8;--panel2:#f1eadc;--ink:#1c2430;--text:#1c2430;--muted:#627084;--line:#d8cfc0;--accent:#146c63;--accent-ink:#f4fffb;--accent2:#8b3f2f;--danger:#b42342;--code:#eee6d8}
-:root[data-theme=dark]{--bg:#101418;--panel:#171d22;--panel2:#232b31;--ink:#f2ede4;--text:#f2ede4;--muted:#a5b2bf;--line:#2b353d;--accent:#6fc7b8;--accent-ink:#06201d;--accent2:#dfa06b;--danger:#fb7185;--code:#232b31}
-*{box-sizing:border-box}body{--topbar-h:76px;--footer-h:68px;margin:0;padding:var(--topbar-h) 0 var(--footer-h);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
-.topbar{position:fixed;top:0;left:0;right:0;z-index:20;min-height:var(--topbar-h);display:grid;grid-template-columns:minmax(140px,1fr) minmax(220px,560px) minmax(140px,1fr);gap:14px;align-items:center;padding:12px clamp(14px,3vw,44px);background:color-mix(in srgb,var(--bg) 92%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}
-.topbar-brand{min-width:0}.topbar-center{min-width:0;justify-self:center;width:100%}.topbar-actions{min-width:0;display:flex;gap:14px;align-items:center;justify-content:flex-end}.brand{font-weight:800;font-size:16px;text-decoration:none;white-space:nowrap}.topbar nav{display:flex;gap:14px;align-items:center;justify-content:end}.topbar nav a{color:var(--muted);text-decoration:none}.topbar nav a:hover{color:var(--accent)}
-.header-search{position:relative;min-width:0;width:100%}.header-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.header-search input{width:100%;min-width:0;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:10px 44px 10px 13px;font:inherit}.header-search input:focus{border-color:var(--accent);outline:2px solid rgba(45,212,191,.28)}.header-search svg{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:20px;height:20px;color:var(--muted);stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}.mail-count{color:var(--muted);font-size:12px;white-space:nowrap}.who{color:var(--muted);font-size:12px;white-space:nowrap}
-.app{height:calc(100vh - var(--topbar-h) - var(--footer-h));min-height:0;display:grid;grid-template-columns:minmax(280px,380px) 1fr}
-.list{border-right:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;min-width:0}
-button{border:1px solid var(--line);background:var(--panel2);border-radius:6px;padding:8px 10px;cursor:pointer;color:var(--ink);transition:background .12s ease,border-color .12s ease,opacity .12s ease}
-button:hover:not(:disabled){border-color:var(--accent)}button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:650}button.danger:hover:not(:disabled){border-color:var(--danger);color:var(--danger)}button:disabled{opacity:.38;cursor:not-allowed}
-.icon{width:32px;height:32px;padding:0;display:inline-grid;place-items:center}.icon svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.copy{font-size:13px}
-.messages{overflow:auto;min-height:0}.item{padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .12s ease,opacity .12s ease;display:grid;grid-template-columns:22px 1fr;gap:2px 8px}
-.item:hover,.item.active,.item.checked{background:color-mix(in srgb,var(--accent) 12%,var(--panel))}.item.pending{opacity:.55}.item.unread .from,.item.unread .subject{font-weight:750}.item:not(.unread) .from,.item:not(.unread) .subject{font-weight:450}.pick{grid-row:1/4;align-self:start;margin:2px 0 0;width:auto}.from{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.subject{margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.preview{margin-top:4px;color:var(--muted);font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.paperclip{color:var(--muted);margin-left:5px}.paperclip svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-2px}
-.warn{color:var(--accent2);font-weight:700;margin-right:5px}.item .warn{font-size:13px}.warn svg,.warning svg{stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-2px}
-.pane{min-width:0;display:grid;grid-template-rows:auto 1fr;background:var(--panel)}
-.actions{height:56px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line)}
-.content{overflow:auto;padding:22px;max-width:980px;width:100%}.empty{color:var(--muted);margin-top:20vh;text-align:center}
-h1{font-size:22px;margin:0 0 8px}.meta{color:var(--muted);margin-bottom:18px;display:grid;gap:3px}
-.meta-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.warning{border:1px solid var(--accent2);background:color-mix(in srgb,var(--accent2) 12%,var(--panel));color:var(--accent2);border-radius:6px;padding:9px 10px;margin:0 0 14px}
-pre{white-space:pre-wrap;word-break:break-word;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);border:1px solid var(--line);border-radius:6px;padding:14px}
-.compose{display:none;padding:16px;border-bottom:1px solid var(--line);background:var(--panel)}.compose.open{display:grid;gap:10px}
-.compose-grid{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:center}.compose-grid textarea,.compose-grid .attach-row{grid-column:1/3}
-label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
-input,textarea,select{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px;font:inherit;background:var(--bg);color:var(--ink)}
-input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:var(--accent)}textarea{min-height:190px;resize:vertical}.row{display:flex;gap:8px;align-items:center}.status{color:var(--muted);font-size:13px;min-width:82px}.status.warn{color:var(--accent2)}.grow{flex:1}.attachments{display:flex;flex-wrap:wrap;gap:6px}.chip,.attachment{border:1px solid var(--line);border-radius:6px;background:var(--code);color:var(--muted);padding:5px 8px;font-size:12px}.attachment{display:inline-flex;align-items:center;gap:7px;color:var(--ink);text-decoration:none;margin:0 6px 6px 0}.chip button{border:0;background:transparent;color:var(--muted);padding:0;margin-left:6px;width:auto;height:auto}.attach-input{display:none}
-.spin svg{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-.site-footer{position:fixed;left:0;right:0;bottom:0;z-index:20;min-height:var(--footer-h);display:grid;grid-template-columns:max-content minmax(0,1fr) max-content;gap:18px;align-items:center;border-top:1px solid var(--line);padding:16px clamp(18px,4vw,56px);background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(12px);color:var(--muted)}.site-footer nav{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.site-footer a{text-decoration:none;color:inherit}.site-footer a:hover{color:var(--accent)}.site-footer a[aria-current=page]{color:var(--accent);font-weight:800}.footer-primary{font-weight:800}.footer-local{justify-content:center}
-@media(max-width:760px){body{--topbar-h:128px;--footer-h:108px}.topbar{grid-template-columns:minmax(0,1fr) max-content}.topbar-center{grid-column:1/-1;grid-row:2}.topbar-actions{grid-column:2;grid-row:1}.who{display:none}.app{grid-template-columns:1fr;grid-template-rows:45% 55%}.list{border-right:0;border-bottom:1px solid var(--line)}.content{padding:16px}.site-footer{grid-template-columns:1fr;gap:8px}.footer-local{justify-content:flex-start}}
-</style>
-</head>
-<body>
 <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
 <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/><path d="M3 12A9 9 0 0 1 18.4 5.6L21 8"/><path d="M21 3v5h-5"/></symbol>
 <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
@@ -50,14 +10,8 @@ input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:v
 <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
 <symbol id="i-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></symbol>
 <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
-<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
 <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.4 11.6-8.8 8.8a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
 </svg>
-<header class="topbar">
-  <div class="topbar-brand"><a class="brand" href="/" aria-label="Edgerun Mail home">Edgerun Mail</a></div>
-  <div class="topbar-center"><div class="header-search" role="search"><label for="search">Search mail</label><input id="search" type="search" placeholder="Search mail" autocomplete="off"><svg aria-hidden="true"><use href="#i-search"/></svg></div></div>
-  <div class="topbar-actions"><span id="mailCount" class="mail-count"></span><span class="who">ken@edgerun.tech</span><er-theme-toggle></er-theme-toggle></div>
-</header>
 <main class="app">
   <section class="list">
     <div id="messages" class="messages"></div>
@@ -86,56 +40,3 @@ input:focus,textarea:focus{outline:2px solid rgba(45,212,191,.28);border-color:v
     <article id="content" class="content"><div class="empty">Select a message</div></article>
   </section>
 </main>
-<footer class="site-footer">
-  <nav class="footer-primary" aria-label="Edgerun surfaces"><a href="https://blog.edgerun.tech/">Build Log</a><a href="https://git.edgerun.tech/">Code</a><a href="https://mail.edgerun.tech/" aria-current="page">Mail</a></nav>
-  <nav class="footer-local" aria-label="Page links"><a href="mailto:ken@edgerun.tech">Contact</a></nav>
-</footer>
-<script>
-const root=document.documentElement;
-const storedTheme=localStorage.getItem('theme');
-if(storedTheme){root.dataset.theme=storedTheme}
-if(!customElements.get('er-theme-toggle')){customElements.define('er-theme-toggle',class extends HTMLElement{connectedCallback(){this.attachShadow({mode:'open'}).innerHTML='<style>button{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);cursor:pointer;font:24px/1 system-ui}button:hover{border-color:var(--accent)}</style><button type="button"></button>';const btn=this.shadowRoot.querySelector('button');const current=()=>root.dataset.theme||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");const render=()=>{const dark=current()==="dark";btn.textContent=dark?"☾":"☀";btn.title=dark?"Dark mode: switch to light mode":"Light mode: switch to dark mode";btn.setAttribute("aria-label",btn.title)};btn.onclick=()=>{const next=current()==="dark"?"light":"dark";root.dataset.theme=next;localStorage.setItem("theme",next);render()};render()}})}
-const messagesEl=document.getElementById('messages'),content=document.getElementById('content'),statusEl=document.getElementById('status'),mailCount=document.getElementById('mailCount');
-const refreshBtn=document.getElementById('refresh'),composeBtn=document.getElementById('composeBtn'),replyMsg=document.getElementById('replyMsg'),composeEl=document.getElementById('compose'),searchEl=document.getElementById('search'),filePick=document.getElementById('filePick'),composeAttachments=document.getElementById('composeAttachments');
-const markRead=document.getElementById('markRead'),markUnread=document.getElementById('markUnread'),deleteMsg=document.getElementById('deleteMsg'),logout=document.getElementById('logout'),attachBtn=document.getElementById('attachBtn'),cancelBtn=document.getElementById('cancel'),sendBtn=document.getElementById('sendBtn');
-const toEl=document.getElementById('to'),subjectEl=document.getElementById('subject'),bodyEl=document.getElementById('body');
-let selected='',messages=[],checked=new Set(),draftAttachments=[],loading=false,sending=false,statusTimer=0,openedMessage=null;
-function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function flash(s,warn){clearTimeout(statusTimer);statusEl.textContent=s||'';statusEl.classList.toggle('warn',!!warn);if(s)statusTimer=setTimeout(()=>{statusEl.textContent='';statusEl.classList.remove('warn')},1800)}
-function fmtSize(n){return n>1048576?(n/1048576).toFixed(1)+' MB':n>1024?Math.round(n/1024)+' KB':n+' B'}
-function copyText(v){navigator.clipboard&&navigator.clipboard.writeText(v||'');flash('Copied')}
-async function api(path,opts){const r=await fetch(path,opts);if(r.status===401){statusEl.textContent='Login required';throw new Error('auth');}if(!r.ok)throw new Error(await r.text());return r.json();}
-function selectedMsg(){return messages.find(m=>m.id===selected)}
-function actionIds(){return checked.size?[...checked]:(selected?[selected]:[])}
-function setActionState(){const ids=actionIds(),items=ids.map(id=>messages.find(m=>m.id===id)).filter(Boolean);replyMsg.disabled=!selected;markRead.disabled=!items.some(m=>m.unread);markUnread.disabled=!items.some(m=>!m.unread);deleteMsg.disabled=!items.length}
-function filteredMessages(){const q=searchEl.value.trim().toLowerCase();if(!q)return messages;return messages.filter(m=>[m.from,m.to,m.subject,m.preview,m.date].some(v=>(v||'').toLowerCase().includes(q)))}
-function updateDraftStore(){localStorage.setItem('webmailDraft',JSON.stringify({to:toEl.value,subject:subjectEl.value,body:bodyEl.value,attachments:draftAttachments}))}
-function restoreDraft(){try{const raw=localStorage.getItem('webmailDraft');if(!raw)return;const draft=JSON.parse(raw);toEl.value=draft.to||'';subjectEl.value=draft.subject||'';bodyEl.value=draft.body||'';draftAttachments=Array.isArray(draft.attachments)?draft.attachments:[];renderDraftAttachments()}catch(e){}}
-function clearDraft(){toEl.value=subjectEl.value=bodyEl.value='';draftAttachments=[];renderDraftAttachments();localStorage.removeItem('webmailDraft')}
-function openCompose(){composeEl.classList.add('open');toEl.focus()}
-function closeCompose(){if(toEl.value||subjectEl.value||bodyEl.value||draftAttachments.length){updateDraftStore()}composeEl.classList.remove('open')}
-function renderList(){const unread=messages.filter(m=>m.unread).length;document.title=(unread?`(${unread}) `:'')+'Edgerun Mail';mailCount.textContent=`${messages.length} total · ${unread} unread`;const visible=filteredMessages();messagesEl.innerHTML=visible.map(m=>`<div class="item ${m.unread?'unread':''} ${m.pending?'pending':''} ${m.id===selected?'active':''} ${checked.has(m.id)?'checked':''}" data-id="${encodeURIComponent(m.id)}"><input class="pick" type="checkbox" aria-label="Select message" ${checked.has(m.id)?'checked':''}><div class="from">${m.warning?'<span class="warn" title="'+esc(m.warningReason)+'"><svg width="13" height="13"><use href="#i-alert"/></svg></span>':''}${esc(m.from||'(unknown)')}${m.attachmentCount?'<span class="paperclip" title="'+m.attachmentCount+' attachment(s)"><svg><use href="#i-paperclip"/></svg></span>':''}</div><div class="subject">${esc(m.subject)}</div><div class="preview">${esc(m.preview)}</div></div>`).join('')||'<div class="empty">'+(messages.length?'No matches':'No mail')+'</div>';setActionState()}
-async function load(silent){if(loading)return;loading=true;refreshBtn.classList.add('spin');try{const data=await api('/api/messages');const pending=new Map(messages.filter(m=>m.pending).map(m=>[m.id,m]));messages=data.messages.map(m=>pending.get(m.id)||m);if(selected&&!messages.some(m=>m.id===selected)){selected='';openedMessage=null;content.innerHTML='<div class="empty">Select a message</div>'}renderList();if(!silent)flash('Updated')}catch(e){if(!silent)flash(e.message,true)}finally{loading=false;refreshBtn.classList.remove('spin')}}
-messagesEl.onclick=e=>{const item=e.target.closest('.item');if(!item)return;const id=decodeURIComponent(item.dataset.id);if(e.target.closest('.pick')){checked.has(id)?checked.delete(id):checked.add(id);renderList();return}openMsg(id);};
-async function openMsg(id){selected=id;openedMessage=null;const local=messages.find(m=>m.id===id);if(local&&local.unread){local.unread=false;renderList();api('/api/message/'+encodeURIComponent(id)+'/read',{method:'POST'}).catch(()=>{local.unread=true;renderList();flash('Could not mark read',true)})}else renderList();content.innerHTML='<div class="empty">Loading...</div>';try{const m=await api('/api/message/'+encodeURIComponent(id));if(selected!==id)return;openedMessage=m;const attachments=(m.attachments||[]).map(a=>`<a class="attachment" href="/api/message/${encodeURIComponent(id)}/attachment/${a.index}" download="${esc(a.name)}"><svg width="15" height="15"><use href="#i-paperclip"/></svg>${esc(a.name)} <span>${fmtSize(a.size)}</span></a>`).join('');content.innerHTML=`<h1>${m.warning?'<span class="warn" title="'+esc(m.warningReason)+'"><svg width="18" height="18"><use href="#i-alert"/></svg></span>':''}${esc(m.subject)}</h1>${m.warning?'<div class="warning"><svg width="16" height="16"><use href="#i-alert"/></svg> '+esc(m.warningReason)+'</div>':''}<div class="meta"><div class="meta-line">From: <span>${esc(m.from)}</span><button class="icon copy" data-copy="${esc(m.from)}" title="Copy sender" aria-label="Copy sender"><svg><use href="#i-copy"/></svg></button></div><div class="meta-line">To: <span>${esc(m.to)}</span><button class="icon copy" data-copy="${esc(m.to)}" title="Copy recipient" aria-label="Copy recipient"><svg><use href="#i-copy"/></svg></button></div><div>${esc(m.date)}</div></div>${attachments?'<div class="attachments">'+attachments+'</div>':''}<pre>${esc(m.body||m.raw)}</pre>`;setActionState()}catch(e){content.innerHTML='<div class="empty">Could not open message</div>';flash(e.message,true)}}
-document.addEventListener('click',e=>{const b=e.target.closest('.copy');if(b)copyText(b.dataset.copy||'')});
-refreshBtn.onclick=()=>load(false);
-searchEl.oninput=renderList;
-composeBtn.onclick=()=>openCompose();
-replyMsg.onclick=async()=>{let m=openedMessage;if(!m&&selected)m=await api('/api/message/'+encodeURIComponent(selected));if(!m)return;toEl.value=(m.from||'').replace(/^.*<([^>]+)>.*$/,'$1');subjectEl.value=/^re:/i.test(m.subject||'')?m.subject:'Re: '+(m.subject||'');bodyEl.value=`\n\nOn ${m.date||'the original message'}, ${m.from||'sender'} wrote:\n`+(m.body||'').split('\n').map(line=>'> '+line).join('\n');draftAttachments=[];renderDraftAttachments();updateDraftStore();openCompose()};
-cancelBtn.onclick=closeCompose;
-async function action(name){const ids=actionIds();if(!ids.length)return;const old=messages.map(m=>({...m}));if(name==='delete'){messages=messages.filter(m=>!ids.includes(m.id));checked.clear();selected='';content.innerHTML='<div class="empty">Select a message</div>'}else messages.forEach(m=>{if(ids.includes(m.id)){m.pending=true;m.unread=name==='unread'}});renderList();try{await Promise.all(ids.map(id=>api('/api/message/'+encodeURIComponent(id)+'/'+name,{method:'POST'})));flash(name==='delete'?'Deleted':name==='read'?'Marked read':'Marked unread');load(true)}catch(e){messages=old;renderList();flash(e.message,true)}}
-markRead.onclick=()=>action('read');markUnread.onclick=()=>action('unread');deleteMsg.onclick=()=>{const n=actionIds().length;if(n&&confirm('Delete '+n+' message'+(n>1?'s':'')+'?'))action('delete')};
-logout.onclick=async()=>{selected='';content.innerHTML='<div class="empty">Logged out</div>';messagesEl.innerHTML='';statusEl.textContent='Logged out';try{await fetch('/api/messages',{headers:{Authorization:'Basic '+btoa('logout:logout')}})}catch(e){}};
-function renderDraftAttachments(){composeAttachments.innerHTML=draftAttachments.map((a,i)=>`<span class="chip"><svg width="13" height="13"><use href="#i-paperclip"/></svg> ${esc(a.name)} ${fmtSize(a.size)} <button type="button" data-idx="${i}" title="Remove attachment" aria-label="Remove attachment">×</button></span>`).join('')}
-attachBtn.onclick=()=>filePick.click();
-composeAttachments.onclick=e=>{const b=e.target.closest('button');if(b){draftAttachments.splice(Number(b.dataset.idx),1);renderDraftAttachments();updateDraftStore()}};
-filePick.onchange=async()=>{for(const file of filePick.files){const data=await new Promise((ok,bad)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=bad;r.readAsDataURL(file)});draftAttachments.push({name:file.name,contentType:file.type||'application/octet-stream',size:file.size,data})}filePick.value='';renderDraftAttachments();updateDraftStore();flash('Attached')};
-[toEl,subjectEl,bodyEl].forEach(el=>el.addEventListener('input',updateDraftStore));
-composeEl.onsubmit=async e=>{e.preventDefault();if(sending)return;sending=true;sendBtn.disabled=true;const draft={to:toEl.value,subject:subjectEl.value,body:bodyEl.value,attachments:draftAttachments.map(({name,contentType,data})=>({name,contentType,data}))};flash('Sending...');composeEl.classList.remove('open');try{await api('/api/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(draft)});clearDraft();flash('Sent');load(true)}catch(err){composeEl.classList.add('open');flash(err.message,true)}finally{sending=false;sendBtn.disabled=false}};
-restoreDraft();
-load(false).catch(err=>flash(err.message,true));
-setInterval(()=>{if(!document.hidden)load(true)},10000);
-</script>
-</body>
-</html>

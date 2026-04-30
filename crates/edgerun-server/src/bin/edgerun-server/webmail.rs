@@ -12,6 +12,7 @@ use edgerun_config::{ImapServerSpec, SmtpServerSpec};
 use edgerun_email::smtp::types::MailEnvelope;
 use edgerun_encoding::base64::{standard_decode, standard_encode_wrapped};
 use edgerun_http::{Handler, Request, Response, StatusCode};
+use edgerun_web_ui::{FooterLink, PageShell};
 
 #[derive(Clone)]
 pub(crate) struct WebmailConfig {
@@ -80,7 +81,7 @@ impl WebmailHandler {
         let path = request.uri().request_target();
         if path == "/" || path == "/index.html" {
             return match request.method().as_str() {
-                "GET" | "HEAD" => html_response(WEBMAIL_HTML),
+                "GET" | "HEAD" => html_response(&render_webmail_html()),
                 _ => method_not_allowed("GET, HEAD"),
             };
         }
@@ -972,7 +973,44 @@ pub(crate) fn http_date_now() -> String {
     edgerun_encoding::rfc2822::format_rfc2822_utc(seconds)
 }
 
-const WEBMAIL_HTML: &str = include_str!("webmail.html");
+fn render_webmail_html() -> String {
+    let header_center =
+        edgerun_web_ui::render_header_search_input("search", "Search mail", "Search mail");
+    let header_actions = "<span id=\"mailCount\" class=\"mail-count\"></span><span class=\"who\">ken@edgerun.tech</span><er-theme-toggle></er-theme-toggle>";
+    let local_links = [FooterLink {
+        href: "mailto:ken@edgerun.tech",
+        label: "Contact",
+    }];
+    let footer = edgerun_web_ui::render_common_footer("mail", &local_links, "");
+    let style = format!("{}{}", edgerun_web_ui::BASE_STYLE, WEBMAIL_STYLE);
+    let body = format!(
+        "{}<script>{}{}</script>",
+        WEBMAIL_BODY,
+        edgerun_web_ui::THEME_TOGGLE_JS,
+        WEBMAIL_SCRIPT
+    );
+    edgerun_web_ui::render_page(&PageShell {
+        lang: "en",
+        title: "Edgerun Mail",
+        description: "Private Edgerun webmail.",
+        theme_color: "#146c63",
+        generator: "edgerun-server",
+        extra_head: "<link rel=\"icon\" href='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><text y=\"76\" font-size=\"76\">📧</text></svg>'>",
+        style: &style,
+        brand_href: "/",
+        brand_label: "Edgerun Mail home",
+        brand_text: "Edgerun Mail",
+        header_center: &header_center,
+        header_actions,
+        footer: &footer,
+        body: &body,
+        script_src: None,
+    })
+}
+
+const WEBMAIL_STYLE: &str = include_str!("webmail.css");
+const WEBMAIL_BODY: &str = include_str!("webmail.html");
+const WEBMAIL_SCRIPT: &str = include_str!("webmail.js");
 
 const BIMI_LOGO_SVG: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" width="256" height="256" viewBox="0 0 256 256">

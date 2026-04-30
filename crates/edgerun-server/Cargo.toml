@@ -37,6 +37,7 @@ edgerun-proxy = { version = "0.1", path = "../edgerun-proxy", optional = true }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-tls = { version = "0.1", path = "../edgerun-tls", optional = true }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-web-ui = { version = "0.1", path = "../edgerun-web-ui" }
 
 [features]
 default = ["smtp", "imap", "lmtp", "dns", "dhcp", "tftp", "tls"]
