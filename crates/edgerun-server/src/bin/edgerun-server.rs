@@ -48,6 +48,7 @@ use edgerun_http::{Handler, HttpServer, Request, Response, StatusCode};
 use edgerun_machine_report::{gather_machine_report, render_machine_report, OutputFormat};
 use edgerun_rt::CancellationToken;
 use edgerun_tls::CertificateAndKey;
+use edgerun_web_ui::{FooterLink, PageShell, WorkspaceModule};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -132,7 +133,9 @@ fn main() {
         });
 
     rt.block_on(async move {
-        if let Err(error) = run(resources, options.blog, options.git, options.webmail).await {
+        if let Err(error) =
+            run(resources, options.blog, options.git, options.dash_host, options.webmail).await
+        {
             eprintln!("edgerun-server: {error}");
             process::exit(1);
         }
@@ -145,7 +148,7 @@ fn print_usage(program: &str) {
          usage: {program} --health-check --config /etc/edgerun/server/server.yaml\n\
          usage: {program} --send-system-report --config /etc/edgerun/server/server.yaml [--report-to admin@example.com]\n\
          usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/edgerun_core [--blog-content-dir docs/blog] [--blog-static-root /srv/blog/.generated]\n\
-         usage: {program} --config /etc/edgerun/server/server.yaml --git-host git.edgerun.tech --git-root /srv/git\n\
+         usage: {program} --config /etc/edgerun/server/server.yaml --git-host git.edgerun.tech --git-root /srv/git [--dash-host dash.edgerun.tech]\n\
          options: --webmail-http-bind 0.0.0.0:80 --webmail-https-bind 0.0.0.0:443\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
@@ -185,6 +188,7 @@ struct ServerOptions {
     config_path: PathBuf,
     blog: Option<BlogMount>,
     git: Option<GitMount>,
+    dash_host: Option<String>,
     webmail: WebmailBind,
 }
 
@@ -229,6 +233,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
     let mut git_title = "Edgerun Git".to_string();
     let mut git_description = "Code released from the Edgerun project.".to_string();
     let mut git_base_url = String::new();
+    let mut dash_host = None;
     let mut webmail_http_bind = "0.0.0.0:80".to_string();
     let mut webmail_https_bind = "0.0.0.0:443".to_string();
     let mut i = 1;
@@ -292,6 +297,10 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
                 git_base_url = args[i + 1].trim_end_matches('/').to_string();
                 i += 1;
             }
+            "--dash-host" if i + 1 < args.len() => {
+                dash_host = Some(args[i + 1].clone());
+                i += 1;
+            }
             "--webmail-http-bind" if i + 1 < args.len() => {
                 webmail_http_bind = args[i + 1].clone();
                 i += 1;
@@ -346,6 +355,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
         config_path,
         blog,
         git,
+        dash_host,
         webmail: WebmailBind {
             http: webmail_http_bind,
             https: webmail_https_bind,
@@ -905,6 +915,7 @@ async fn run(
     resources: Vec<ConfigResource>,
     blog: Option<BlogMount>,
     git: Option<GitMount>,
+    dash_host: Option<String>,
     webmail_bind: WebmailBind,
 ) -> io::Result<()> {
     let mut dns_servers = Vec::new();
@@ -969,7 +980,7 @@ async fn run(
     if let Some(webmail) = build_webmail_config(&smtp_specs, &imap_specs)? {
         let tls = load_tls_from_spec(webmail.tls_cert.as_deref(), webmail.tls_key.as_deref())?;
         let web_handler = WebmailHandler::new(webmail.clone());
-        let site_handler = SiteRouter::new(web_handler, blog, git);
+        let site_handler = SiteRouter::new(web_handler, blog, git, dash_host);
         if tls.is_some() {
             let http = HttpServer::new(HttpsRedirectHandler::new(webmail.hostname.clone()))
                 .bind(webmail_bind.http.clone())
@@ -1037,6 +1048,7 @@ async fn run(
 #[derive(Clone)]
 struct SiteRouter {
     webmail: WebmailHandler,
+    dash_host: Option<String>,
     blog_host: Option<String>,
     blog: Option<BlogHandler>,
     git_host: Option<String>,
@@ -1044,7 +1056,12 @@ struct SiteRouter {
 }
 
 impl SiteRouter {
-    fn new(webmail: WebmailHandler, blog: Option<BlogMount>, git: Option<GitMount>) -> Self {
+    fn new(
+        webmail: WebmailHandler,
+        blog: Option<BlogMount>,
+        git: Option<GitMount>,
+        dash_host: Option<String>,
+    ) -> Self {
         let (blog_host, blog) = match blog {
             Some(blog) => {
                 let base_url = if blog.base_url.is_empty() {
@@ -1091,6 +1108,7 @@ impl SiteRouter {
         };
         Self {
             webmail,
+            dash_host: dash_host.map(|host| normalize_host(&host)),
             blog_host,
             blog,
             git_host,
@@ -1100,6 +1118,12 @@ impl SiteRouter {
 
     fn handle_sync(&self, request: Request) -> Response {
         let host = request_host(&request);
+        if self.dash_host.as_deref() == host.as_deref() {
+            return match request.method().as_str() {
+                "GET" | "HEAD" => dash_response(),
+                _ => method_not_allowed("GET, HEAD"),
+            };
+        }
         if self.blog_host.as_deref() == host.as_deref() {
             if let Some(blog) = &self.blog {
                 return blog.handle_sync(request);
@@ -1120,6 +1144,71 @@ impl Handler for SiteRouter {
     }
 }
 
+fn dash_response() -> Response {
+    Response::html(StatusCode::OK, &render_dash_html())
+        .with_header("Cache-Control", "no-store")
+        .with_header("X-Content-Type-Options", "nosniff")
+        .with_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        .with_header(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()",
+        )
+}
+
+fn render_dash_html() -> String {
+    let header_center =
+        edgerun_web_ui::render_header_search_input("workspaceSearch", "Search workspace", "Search workspace");
+    let header_actions = edgerun_web_ui::render_workspace_actions("dash", "");
+    let local_links = [FooterLink {
+        href: "mailto:ken@edgerun.tech",
+        label: "Contact",
+    }];
+    let footer = edgerun_web_ui::render_common_footer("dash", &local_links, "");
+    let style = format!("{}{}", edgerun_web_ui::BASE_STYLE, DASH_STYLE);
+    let body = format!(
+        "{}<script>{}{}{}</script>",
+        DASH_BODY,
+        edgerun_web_ui::THEME_TOGGLE_JS,
+        edgerun_web_ui::WORKSPACE_JS,
+        DASH_JS
+    );
+    let modules = [
+        WorkspaceModule {
+            surface: "mail",
+            selector: "er-mail-surface",
+            wasm: "/modules/mail.wasm",
+        },
+        WorkspaceModule {
+            surface: "git",
+            selector: "er-git-surface",
+            wasm: "/modules/git.wasm",
+        },
+        WorkspaceModule {
+            surface: "blog",
+            selector: "er-blog-surface",
+            wasm: "/modules/blog.wasm",
+        },
+    ];
+    edgerun_web_ui::render_page(&PageShell {
+        lang: "en",
+        title: "Edgerun Dash",
+        description: "Persistent Edgerun workspace.",
+        theme_color: "#146c63",
+        generator: "edgerun-server",
+        extra_head: "<link rel=\"icon\" href='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><text y=\"76\" font-size=\"76\">⌘</text></svg>'>",
+        style: &style,
+        brand_href: "/",
+        brand_label: "Edgerun Dash home",
+        brand_text: "Edgerun Dash",
+        header_center: &header_center,
+        header_actions: &header_actions,
+        footer: &footer,
+        body: &body,
+        script_src: None,
+        workspace_modules: &modules,
+    })
+}
+
 fn request_host(request: &Request) -> Option<String> {
     request
         .headers()
@@ -1130,6 +1219,38 @@ fn request_host(request: &Request) -> Option<String> {
 fn normalize_host(host: &str) -> String {
     host.split(':').next().unwrap_or(host).to_ascii_lowercase()
 }
+
+const DASH_BODY: &str = r#"
+<main id="content" class="dash">
+  <nav class="dash-rail" aria-label="Workspace surfaces">
+    <button class="dash-tab active" type="button" data-surface-url="https://blog.edgerun.tech/" data-surface-label="Build Log">Build Log</button>
+    <button class="dash-tab" type="button" data-surface-url="https://git.edgerun.tech/" data-surface-label="Code">Code</button>
+    <button class="dash-tab" type="button" data-workspace-mail>Mail</button>
+  </nav>
+  <section class="dash-stage" aria-label="Workspace surface">
+    <header><div><strong id="surfaceTitle">Build Log</strong><span id="surfaceUrl">blog.edgerun.tech</span></div><a id="surfaceOpen" href="https://blog.edgerun.tech/">Open directly</a></header>
+    <iframe id="surfaceFrame" title="Build Log" src="https://blog.edgerun.tech/"></iframe>
+  </section>
+</main>
+"#;
+
+const DASH_STYLE: &str = r#"
+.dash{height:calc(100vh - var(--topbar-h) - var(--footer-h));min-height:0;display:grid;grid-template-columns:220px minmax(0,1fr);background:var(--bg)}
+.dash-rail{border-right:1px solid var(--line);padding:18px;display:flex;flex-direction:column;gap:8px;background:var(--panel)}
+.dash-tab{height:42px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);text-align:left;padding:0 12px;cursor:pointer;font-weight:750}
+.dash-tab:hover,.dash-tab.active{border-color:var(--line);background:var(--bg);color:var(--accent)}
+.dash-stage{min-width:0;display:grid;grid-template-rows:56px 1fr}
+.dash-stage header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+.dash-stage header div{display:grid;line-height:1.2}.dash-stage header span{color:var(--muted);font-size:12px}.dash-stage header a{color:var(--muted);text-decoration:none}.dash-stage header a:hover{color:var(--accent)}
+.dash-stage iframe{width:100%;height:100%;border:0;background:var(--bg)}
+@media(max-width:760px){.dash{grid-template-columns:1fr;grid-template-rows:auto 1fr}.dash-rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;overflow:auto}.dash-tab{white-space:nowrap}.dash-stage header{padding:0 12px}}
+"#;
+
+const DASH_JS: &str = r#"
+const frame=document.getElementById('surfaceFrame'),title=document.getElementById('surfaceTitle'),url=document.getElementById('surfaceUrl'),open=document.getElementById('surfaceOpen'),search=document.getElementById('workspaceSearch');
+document.querySelectorAll('[data-surface-url]').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('.dash-tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');const next=tab.dataset.surfaceUrl;const label=tab.dataset.surfaceLabel;frame.src=next;frame.title=label;title.textContent=label;url.textContent=new URL(next).host;open.href=next}));
+search&&search.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();const q=search.value.trim();if(!q)return;const target='https://git.edgerun.tech/edgerun_core/crates?q='+encodeURIComponent(q);frame.src=target;frame.title='Code search';title.textContent='Code search';url.textContent='git.edgerun.tech';open.href=target});
+"#;
 
 struct HttpsRedirectHandler {
     hostname: String,

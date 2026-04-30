@@ -1,3 +1,4 @@
+if(new URLSearchParams(location.search).get('workspace')==='1'){document.documentElement.dataset.workspace='embedded'}
 const messagesEl=document.getElementById('messages'),content=document.getElementById('content'),statusEl=document.getElementById('status'),mailCount=document.getElementById('mailCount');
 const refreshBtn=document.getElementById('refresh'),composeBtn=document.getElementById('composeBtn'),replyMsg=document.getElementById('replyMsg'),composeEl=document.getElementById('compose'),searchEl=document.getElementById('search'),filePick=document.getElementById('filePick'),composeAttachments=document.getElementById('composeAttachments');
 const markRead=document.getElementById('markRead'),markUnread=document.getElementById('markUnread'),deleteMsg=document.getElementById('deleteMsg'),logout=document.getElementById('logout'),attachBtn=document.getElementById('attachBtn'),cancelBtn=document.getElementById('cancel'),sendBtn=document.getElementById('sendBtn');

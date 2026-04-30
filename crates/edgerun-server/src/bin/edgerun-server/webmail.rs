@@ -78,10 +78,12 @@ impl WebmailHandler {
     }
 
     pub(crate) fn handle_sync(&self, request: Request) -> Response {
-        let path = request.uri().request_target();
+        let target = request.uri().request_target();
+        let path = target.split('?').next().unwrap_or(target.as_str());
+        let embedded = target.contains("workspace=1");
         if path == "/" || path == "/index.html" {
             return match request.method().as_str() {
-                "GET" | "HEAD" => html_response(&render_webmail_html()),
+                "GET" | "HEAD" => html_response(&render_webmail_html(), embedded),
                 _ => method_not_allowed("GET, HEAD"),
             };
         }
@@ -100,7 +102,7 @@ impl WebmailHandler {
         if path.starts_with("/api/") && !authorized(&request, &self.config) {
             return unauthorized();
         }
-        match (request.method().as_str(), path.as_str()) {
+        match (request.method().as_str(), path) {
             ("GET", "/api/messages") => match list_webmail_messages(&self.config) {
                 Ok(body) => json_response(&body),
                 Err(error) => server_error(&error.to_string()),
@@ -185,21 +187,29 @@ pub(crate) fn method_not_allowed(allow: &str) -> Response {
         .with_header("X-Content-Type-Options", "nosniff")
 }
 
-fn html_response(body: &str) -> Response {
-    Response::html(StatusCode::OK, body)
+fn html_response(body: &str, embedded: bool) -> Response {
+    let response = Response::html(StatusCode::OK, body)
         .with_header("Cache-Control", "no-store")
         .with_header("X-Content-Type-Options", "nosniff")
-        .with_header("X-Frame-Options", "DENY")
         .with_header("Referrer-Policy", "no-referrer")
         .with_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         .with_header(
             "Strict-Transport-Security",
             "max-age=31536000; includeSubDomains",
+        );
+    if embedded {
+        response.with_header(
+            "Content-Security-Policy",
+            "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors https://dash.edgerun.tech https://blog.edgerun.tech https://git.edgerun.tech; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'",
         )
-        .with_header(
+    } else {
+        response
+            .with_header("X-Frame-Options", "DENY")
+            .with_header(
             "Content-Security-Policy",
             "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'",
         )
+    }
 }
 
 fn json_response(body: &str) -> Response {
@@ -984,9 +994,10 @@ fn render_webmail_html() -> String {
     let footer = edgerun_web_ui::render_common_footer("mail", &local_links, "");
     let style = format!("{}{}", edgerun_web_ui::BASE_STYLE, WEBMAIL_STYLE);
     let body = format!(
-        "{}<script>{}{}</script>",
+        "{}<script>{}{}{} </script>",
         WEBMAIL_BODY,
         edgerun_web_ui::THEME_TOGGLE_JS,
+        edgerun_web_ui::WORKSPACE_JS,
         WEBMAIL_SCRIPT
     );
     edgerun_web_ui::render_page(&PageShell {
@@ -1005,6 +1016,7 @@ fn render_webmail_html() -> String {
         footer: &footer,
         body: &body,
         script_src: None,
+        workspace_modules: &[],
     })
 }
 

@@ -22,6 +22,11 @@ SERVICE="edgerun-server"
 BLOG_TITLE="EdgeRun Build Log"
 BLOG_DESCRIPTION="Feature-by-feature notes on building Edgerun from its source tree."
 BLOG_BASE_URL="https://blog.edgerun.tech"
+DASH_HOST="dash.edgerun.tech"
+BLOG_HOST="blog.edgerun.tech"
+GIT_HOST="git.edgerun.tech"
+GIT_TITLE="Edgerun Git"
+GIT_BASE_URL="https://git.edgerun.tech"
 
 usage() {
     cat <<'USAGE'
@@ -40,6 +45,7 @@ Options:
   --checkout PATH          server checkout path (default: /srv/edgerun_core)
   --blog-out PATH          generated blog output path (default: /srv/blog/.generated)
   --service NAME           systemd service name (default: edgerun-server)
+  --dash-host HOST         dashboard host (default: dash.edgerun.tech)
   --skip-push              do not push before deploying
   -h, --help               show this help
 
@@ -83,6 +89,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --service)
             SERVICE="$2"
+            shift 2
+            ;;
+        --dash-host)
+            DASH_HOST="$2"
             shift 2
             ;;
         --skip-push)
@@ -169,7 +179,7 @@ scp "$SERVER_BIN" "$BLOG_BIN" "$GIT_BIN" "$HOST:/tmp/"
 
 printf 'installing and restarting on %s without remote compilation\n' "$HOST"
 ssh "$HOST" \
-    "BRANCH='$BRANCH' REMOTE_REPO='$REMOTE_REPO' REMOTE_CHECKOUT='$REMOTE_CHECKOUT' REMOTE_BLOG_OUT='$REMOTE_BLOG_OUT' SERVICE='$SERVICE' BLOG_TITLE='$BLOG_TITLE' BLOG_DESCRIPTION='$BLOG_DESCRIPTION' BLOG_BASE_URL='$BLOG_BASE_URL' sh -s" <<'REMOTE'
+    "BRANCH='$BRANCH' REMOTE_REPO='$REMOTE_REPO' REMOTE_CHECKOUT='$REMOTE_CHECKOUT' REMOTE_BLOG_OUT='$REMOTE_BLOG_OUT' SERVICE='$SERVICE' BLOG_TITLE='$BLOG_TITLE' BLOG_DESCRIPTION='$BLOG_DESCRIPTION' BLOG_BASE_URL='$BLOG_BASE_URL' BLOG_HOST='$BLOG_HOST' GIT_HOST='$GIT_HOST' GIT_TITLE='$GIT_TITLE' GIT_BASE_URL='$GIT_BASE_URL' DASH_HOST='$DASH_HOST' sh -s" <<'REMOTE'
 set -eu
 sudo install -m 0755 /tmp/edgerun-server /usr/local/bin/edgerun-server
 sudo install -m 0755 /tmp/edgerun-blog /usr/local/bin/edgerun-blog
@@ -193,6 +203,13 @@ sudo -u edgerun-server /usr/local/bin/edgerun-blog generate \
     --description "$BLOG_DESCRIPTION" \
     --base-url "$BLOG_BASE_URL" \
     --check
+sudo mkdir -p /etc/systemd/system/"$SERVICE".service.d
+sudo tee /etc/systemd/system/"$SERVICE".service.d/web-surfaces.conf >/dev/null <<EOF
+[Service]
+ExecStart=
+ExecStart=/usr/local/bin/edgerun-server --config /etc/edgerun/server/server.yaml --blog-host $BLOG_HOST --blog-root $REMOTE_CHECKOUT --blog-content-dir docs/blog --blog-static-root $REMOTE_BLOG_OUT --blog-title "$BLOG_TITLE" --blog-description "$BLOG_DESCRIPTION" --blog-base-url $BLOG_BASE_URL --git-host $GIT_HOST --git-root /srv/git --git-title "$GIT_TITLE" --git-base-url $GIT_BASE_URL --dash-host $DASH_HOST
+EOF
+sudo systemctl daemon-reload
 sudo systemctl restart "$SERVICE"
 systemctl is-active "$SERVICE"
 REMOTE

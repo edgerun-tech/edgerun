@@ -1350,7 +1350,7 @@ fn page_shell(
         language.search_label,
         language.search_label,
     );
-    let header_actions = "<nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav>";
+    let header_actions = edgerun_web_ui::render_workspace_actions("blog", "");
     let about_path = localized_path(language, "/about.html");
     let feed_path = localized_path(language, "/feed.xml");
     let local_links = [
@@ -1379,10 +1379,11 @@ fn page_shell(
         brand_label: &brand_label,
         brand_text: language.title,
         header_center: &header_center,
-        header_actions,
+        header_actions: &header_actions,
         footer: &footer,
         body,
         script_src: Some(&script_src),
+        workspace_modules: &[],
     })
 }
 
@@ -2541,7 +2542,12 @@ fn to_io_error(error: edgerun_http::io::Error) -> io::Error {
 }
 
 fn blog_js() -> String {
-    format!("{}\n{}", edgerun_web_ui::THEME_TOGGLE_JS, BLOG_JS)
+    format!(
+        "{}\n{}\n{}",
+        edgerun_web_ui::THEME_TOGGLE_JS,
+        edgerun_web_ui::WORKSPACE_JS,
+        BLOG_JS
+    )
 }
 
 fn blog_style() -> String {

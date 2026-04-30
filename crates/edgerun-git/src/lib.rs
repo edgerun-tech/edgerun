@@ -2126,7 +2126,10 @@ fn page_shell(config: &GitConfig, title: &str, description: &str, body: &str) ->
     }];
     let footer = edgerun_web_ui::render_common_footer("git", &local_links, "");
     let header_center = render_git_header_search(config);
-    let header_actions = "<nav aria-label=\"Primary\"><a href=\"https://blog.edgerun.tech/\">Blog</a></nav><nav aria-label=\"Theme\"><er-theme-toggle></er-theme-toggle></nav>";
+    let header_actions = edgerun_web_ui::render_workspace_actions(
+        "git",
+        "<nav aria-label=\"Primary\"><a href=\"https://blog.edgerun.tech/\">Blog</a></nav>",
+    );
     edgerun_web_ui::render_page(&PageShell {
         lang: "en",
         title,
@@ -2139,10 +2142,11 @@ fn page_shell(config: &GitConfig, title: &str, description: &str, body: &str) ->
         brand_label: "Edgerun Git home",
         brand_text: &config.title,
         header_center: &header_center,
-        header_actions,
+        header_actions: &header_actions,
         footer: &footer,
         body,
         script_src: Some("/app.js"),
+        workspace_modules: &[],
     })
 }
 
@@ -2383,8 +2387,9 @@ fn git_style() -> String {
 
 fn git_js() -> String {
     format!(
-        "{}\n{}",
+        "{}\n{}\n{}",
         edgerun_web_ui::THEME_TOGGLE_JS,
+        edgerun_web_ui::WORKSPACE_JS,
         include_str!("../templates/app.js")
     )
 }
