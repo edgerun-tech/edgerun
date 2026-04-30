@@ -1120,7 +1120,7 @@ impl SiteRouter {
         let host = request_host(&request);
         if self.dash_host.as_deref() == host.as_deref() {
             return match request.method().as_str() {
-                "GET" | "HEAD" => dash_response(),
+                "GET" | "HEAD" => dash_response(&request),
                 _ => method_not_allowed("GET, HEAD"),
             };
         }
@@ -1144,8 +1144,16 @@ impl Handler for SiteRouter {
     }
 }
 
-fn dash_response() -> Response {
-    Response::html(StatusCode::OK, &render_dash_html())
+fn dash_response(request: &Request) -> Response {
+    let target = request.uri().request_target();
+    let path = target.split('?').next().unwrap_or(target.as_str());
+    let body = match path {
+        "/surface/blog" => render_dash_surface("Build Log", "https://blog.edgerun.tech/"),
+        "/surface/git" => render_dash_surface("Code", "https://git.edgerun.tech/"),
+        "/surface/mail" => render_dash_surface("Mail", "https://mail.edgerun.tech/?workspace=1"),
+        _ => render_dash_html(),
+    };
+    Response::html(StatusCode::OK, &body)
         .with_header("Cache-Control", "no-store")
         .with_header("X-Content-Type-Options", "nosniff")
         .with_header("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -1153,6 +1161,23 @@ fn dash_response() -> Response {
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=()",
         )
+}
+
+fn render_dash_surface(label: &str, url: &str) -> String {
+    let host = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or(url);
+    format!(
+        "<section id=\"surfaceSlot\" class=\"dash-stage\" aria-label=\"Workspace surface\"><header><div><strong id=\"surfaceTitle\">{}</strong><span id=\"surfaceUrl\">{}</span></div><a id=\"surfaceOpen\" href=\"{}\">Open directly</a></header><iframe id=\"surfaceFrame\" title=\"{}\" src=\"{}\"></iframe></section>",
+        edgerun_web_ui::escape_html(label),
+        edgerun_web_ui::escape_html(host),
+        edgerun_web_ui::escape_attr(url),
+        edgerun_web_ui::escape_attr(label),
+        edgerun_web_ui::escape_attr(url)
+    )
 }
 
 fn render_dash_html() -> String {
@@ -1220,25 +1245,25 @@ fn normalize_host(host: &str) -> String {
     host.split(':').next().unwrap_or(host).to_ascii_lowercase()
 }
 
-const DASH_BODY: &str = r#"
+const DASH_BODY: &str = r##"
 <main id="content" class="dash">
   <nav class="dash-rail" aria-label="Workspace surfaces">
-    <button class="dash-tab active" type="button" data-surface-url="https://blog.edgerun.tech/" data-surface-label="Build Log">Build Log</button>
-    <button class="dash-tab" type="button" data-surface-url="https://git.edgerun.tech/" data-surface-label="Code">Code</button>
-    <button class="dash-tab" type="button" data-workspace-mail>Mail</button>
+    <button class="dash-tab" type="button" hx-get="/surface/blog" hx-target="#surfaceSlot" aria-current="page">Build Log</button>
+    <button class="dash-tab" type="button" hx-get="/surface/git" hx-target="#surfaceSlot">Code</button>
+    <button class="dash-tab" type="button" hx-get="/surface/mail" hx-target="#surfaceSlot">Mail</button>
   </nav>
-  <section class="dash-stage" aria-label="Workspace surface">
+  <section id="surfaceSlot" class="dash-stage" aria-label="Workspace surface">
     <header><div><strong id="surfaceTitle">Build Log</strong><span id="surfaceUrl">blog.edgerun.tech</span></div><a id="surfaceOpen" href="https://blog.edgerun.tech/">Open directly</a></header>
     <iframe id="surfaceFrame" title="Build Log" src="https://blog.edgerun.tech/"></iframe>
   </section>
 </main>
-"#;
+"##;
 
 const DASH_STYLE: &str = r#"
 .dash{height:calc(100vh - var(--topbar-h) - var(--footer-h));min-height:0;display:grid;grid-template-columns:220px minmax(0,1fr);background:var(--bg)}
 .dash-rail{border-right:1px solid var(--line);padding:18px;display:flex;flex-direction:column;gap:8px;background:var(--panel)}
 .dash-tab{height:42px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);text-align:left;padding:0 12px;cursor:pointer;font-weight:750}
-.dash-tab:hover,.dash-tab.active{border-color:var(--line);background:var(--bg);color:var(--accent)}
+.dash-tab:hover,.dash-tab[aria-current=page]{border-color:var(--line);background:var(--bg);color:var(--accent)}
 .dash-stage{min-width:0;display:grid;grid-template-rows:56px 1fr}
 .dash-stage header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--panel)}
 .dash-stage header div{display:grid;line-height:1.2}.dash-stage header span{color:var(--muted);font-size:12px}.dash-stage header a{color:var(--muted);text-decoration:none}.dash-stage header a:hover{color:var(--accent)}
@@ -1247,9 +1272,8 @@ const DASH_STYLE: &str = r#"
 "#;
 
 const DASH_JS: &str = r#"
-const frame=document.getElementById('surfaceFrame'),title=document.getElementById('surfaceTitle'),url=document.getElementById('surfaceUrl'),open=document.getElementById('surfaceOpen'),search=document.getElementById('workspaceSearch');
-document.querySelectorAll('[data-surface-url]').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('.dash-tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');const next=tab.dataset.surfaceUrl;const label=tab.dataset.surfaceLabel;frame.src=next;frame.title=label;title.textContent=label;url.textContent=new URL(next).host;open.href=next}));
-search&&search.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();const q=search.value.trim();if(!q)return;const target='https://git.edgerun.tech/edgerun_core/crates?q='+encodeURIComponent(q);frame.src=target;frame.title='Code search';title.textContent='Code search';url.textContent='git.edgerun.tech';open.href=target});
+const search=document.getElementById('workspaceSearch');
+search&&search.addEventListener('keydown',event=>{if(event.key!=='Enter')return;event.preventDefault();const q=search.value.trim();if(!q)return;const target='https://git.edgerun.tech/edgerun_core/crates?q='+encodeURIComponent(q);const frame=document.getElementById('surfaceFrame'),title=document.getElementById('surfaceTitle'),url=document.getElementById('surfaceUrl'),open=document.getElementById('surfaceOpen');frame.src=target;frame.title='Code search';title.textContent='Code search';url.textContent='git.edgerun.tech';open.href=target});
 "#;
 
 struct HttpsRedirectHandler {
