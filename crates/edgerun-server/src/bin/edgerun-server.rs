@@ -27,6 +27,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig, HttpChallengeServer};
 use edgerun_acme::{ChallengeStatus, ChallengeType, DirectoryUrl, OrderStatus};
+use edgerun_analytics::{AnalyticsConfig, AnalyticsHandler};
 use edgerun_blog::{BlogConfig, BlogHandler};
 use edgerun_config::edgerun_json::JsonValue;
 use edgerun_config::{
@@ -139,6 +140,7 @@ fn main() {
             options.git,
             options.dash_host,
             options.webmail,
+            options.analytics_log_dir,
         )
         .await
         {
@@ -155,7 +157,7 @@ fn print_usage(program: &str) {
          usage: {program} --send-system-report --config /etc/edgerun/server/server.yaml [--report-to admin@example.com]\n\
          usage: {program} --config /etc/edgerun/server/server.yaml --blog-host blog.edgerun.tech --blog-root /srv/edgerun_core [--blog-content-dir docs/blog] [--blog-static-root /srv/blog/.generated]\n\
          usage: {program} --config /etc/edgerun/server/server.yaml --git-host git.edgerun.tech --git-root /srv/git [--dash-host dash.edgerun.tech]\n\
-         options: --webmail-http-bind 0.0.0.0:80 --webmail-https-bind 0.0.0.0:443\n\
+         options: --webmail-http-bind 0.0.0.0:80 --webmail-https-bind 0.0.0.0:443 --analytics-log-dir /var/lib/edgerun/analytics\n\
          usage: {program} --init-material --domain edgerun.tech --selector mail --out-dir /etc/edgerun/server"
     );
 }
@@ -198,6 +200,7 @@ struct ServerOptions {
     git: Option<GitMount>,
     dash_host: Option<String>,
     webmail: WebmailBind,
+    analytics_log_dir: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -244,6 +247,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
     let mut dash_host = None;
     let mut webmail_http_bind = "0.0.0.0:80".to_string();
     let mut webmail_https_bind = "0.0.0.0:443".to_string();
+    let mut analytics_log_dir = None;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -317,6 +321,10 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
                 webmail_https_bind = args[i + 1].clone();
                 i += 1;
             }
+            "--analytics-log-dir" if i + 1 < args.len() => {
+                analytics_log_dir = Some(PathBuf::from(&args[i + 1]));
+                i += 1;
+            }
             other => return Err(format!("unknown argument: {other}")),
         }
         i += 1;
@@ -368,6 +376,7 @@ fn parse_server_options(args: &[String]) -> Result<ServerOptions, String> {
             http: webmail_http_bind,
             https: webmail_https_bind,
         },
+        analytics_log_dir,
     })
 }
 
@@ -925,6 +934,7 @@ async fn run(
     git: Option<GitMount>,
     dash_host: Option<String>,
     webmail_bind: WebmailBind,
+    analytics_log_dir: Option<PathBuf>,
 ) -> io::Result<()> {
     let mut dns_servers = Vec::new();
     let mut zones = Vec::new();
@@ -1001,7 +1011,19 @@ async fn run(
     if let Some(webmail) = build_webmail_config(&smtp_specs, &imap_specs)? {
         let tls = load_tls_from_spec(webmail.tls_cert.as_deref(), webmail.tls_key.as_deref())?;
         let web_handler = WebmailHandler::new(webmail.clone());
-        let site_handler = SiteRouter::new(web_handler, blog, git, dash_host, browser_apps);
+        let site_router = SiteRouter::new(web_handler, blog, git, dash_host, browser_apps);
+        let site_handler: Arc<dyn Handler> = if let Some(log_dir) = analytics_log_dir {
+            eprintln!(
+                "edgerun-server: analytics enabled log_dir={}",
+                log_dir.display()
+            );
+            Arc::new(AnalyticsHandler::new(
+                site_router,
+                AnalyticsConfig::new(log_dir),
+            ))
+        } else {
+            Arc::new(site_router)
+        };
         if tls.is_some() {
             let http = HttpServer::new(HttpsRedirectHandler::new(webmail.hostname.clone()))
                 .bind(webmail_bind.http.clone())
@@ -1012,7 +1034,7 @@ async fn run(
                 http.serve_with_shutdown(token).await.map_err(to_io_error)
             }));
         } else {
-            let http = HttpServer::new(site_handler.clone())
+            let http = HttpServer::new(Arc::clone(&site_handler))
                 .bind(webmail_bind.http.clone())
                 .await
                 .map_err(to_io_error)?;
@@ -1191,6 +1213,11 @@ impl SiteRouter {
                 .with_header("Cache-Control", "no-store")
                 .with_header("X-Content-Type-Options", "nosniff");
             }
+            "/surface/apps" => render_dash_surface(
+                "Apps",
+                "browser node",
+                &render_browser_apps_surface(&self.browser_apps),
+            ),
             path if path == "/surface/blog" || path.starts_with("/surface/blog/") => self
                 .blog
                 .as_ref()
@@ -1426,6 +1453,61 @@ fn render_browser_capabilities(
     out.push(']');
 }
 
+fn render_browser_apps_surface(configured_apps: &[BrowserAppSpec]) -> String {
+    let fallback = default_browser_apps();
+    let apps = if configured_apps.is_empty() {
+        &fallback[..]
+    } else {
+        configured_apps
+    };
+    let mut cards = String::new();
+    for app in apps {
+        let surfaces = if app.surfaces.is_empty() {
+            String::from("No surfaces")
+        } else {
+            app.surfaces.join(", ")
+        };
+        let capabilities = render_capability_pills(app);
+        cards.push_str(&format!(
+            "<article class=\"dash-card dash-app-card\" data-search-card data-search-text=\"{} {} {}\"><strong>{}</strong><span>{}</span><small>{}</small>{}</article>",
+            edgerun_web_ui::escape_attr(&app.app_id),
+            edgerun_web_ui::escape_attr(&app.title),
+            edgerun_web_ui::escape_attr(&surfaces),
+            edgerun_web_ui::escape_html(&app.title),
+            edgerun_web_ui::escape_html(&app.app_id),
+            edgerun_web_ui::escape_html(&surfaces),
+            capabilities
+        ));
+    }
+    format!(
+        "<div class=\"dash-code\"><section class=\"dash-code-hero\"><p>Browser node</p><h2>Apps</h2><span>Configured Wasm agents and the capability selectors they request.</span></section><section class=\"dash-code-tools\" aria-label=\"App tools\"><label><span>Filter apps</span><input type=\"search\" data-workspace-search-scope placeholder=\"Search apps and capabilities\"></label></section><section class=\"dash-code-summary\" aria-label=\"App summary\"><div><span>Apps</span><strong>{}</strong></div><div><span>Modules</span><strong>{}</strong></div><div><span>Required caps</span><strong>{}</strong></div><div><span>Optional caps</span><strong>{}</strong></div></section><section><h2>Installed apps</h2><div class=\"dash-grid\">{}</div></section><p class=\"dash-search-empty\" data-search-empty hidden>No matching apps.</p></div>",
+        apps.len(),
+        apps.iter().filter(|app| !app.module.url.is_empty()).count(),
+        apps.iter().map(|app| app.required_capabilities.len()).sum::<usize>(),
+        apps.iter().map(|app| app.optional_capabilities.len()).sum::<usize>(),
+        cards
+    )
+}
+
+fn render_capability_pills(app: &BrowserAppSpec) -> String {
+    let mut out = String::from("<div class=\"pill-row\">");
+    for capability in app
+        .required_capabilities
+        .iter()
+        .chain(app.optional_capabilities.iter())
+    {
+        out.push_str(&format!(
+            "<span>{}</span>",
+            edgerun_web_ui::escape_html(&capability.selector)
+        ));
+    }
+    if app.required_capabilities.is_empty() && app.optional_capabilities.is_empty() {
+        out.push_str("<span>No requested capabilities</span>");
+    }
+    out.push_str("</div>");
+    out
+}
+
 fn default_browser_apps() -> Vec<BrowserAppSpec> {
     use edgerun_config::{BrowserAppModuleSpec, BrowserAppSpec};
     vec![
@@ -1482,6 +1564,7 @@ const DASH_BODY: &str = r##"
     <button class="dash-tab" type="button" hx-get="/surface/blog" hx-target="#surfaceSlot" hx-swap="outerHTML" aria-current="page">Build Log</button>
     <button class="dash-tab" type="button" hx-get="/surface/git" hx-target="#surfaceSlot" hx-swap="outerHTML">Code</button>
     <button class="dash-tab" type="button" hx-get="/surface/mail" hx-target="#surfaceSlot" hx-swap="outerHTML">Mail</button>
+    <button class="dash-tab" type="button" hx-get="/surface/apps" hx-target="#surfaceSlot" hx-swap="outerHTML">Apps</button>
   </nav>
   <section id="surfaceSlot" class="dash-stage" aria-label="Workspace surface">
     <header><div><strong id="surfaceTitle">Build Log</strong><span id="surfaceUrl">backend: blog.edgerun.tech</span></div></header>
@@ -1501,6 +1584,7 @@ const DASH_STYLE: &str = r#"
 	.dash-surface{overflow:auto;padding:24px}.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:980px}.dash-card{min-height:140px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:18px;text-decoration:none}.dash-card:hover{border-color:var(--accent)}.dash-card span{color:var(--muted)}.dash-card-button{text-align:left;font:inherit;cursor:pointer}
 	.dash-blog{display:grid;gap:24px;max-width:1180px}.dash-blog-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.dash-post-card{min-height:240px}.dash-post-card .date{color:var(--accent-2);font-weight:800}.dash-article{max-width:860px}.dash-article .article{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:clamp(24px,4vw,44px)}
 	.dash-code{display:grid;gap:24px;max-width:1180px}.dash-code h2,.dash-code h3{margin:0 0 12px}.dash-code-hero{display:grid;gap:10px;max-width:760px}.dash-code-hero p{margin:0;color:var(--accent);font-weight:800;text-transform:uppercase;letter-spacing:0}.dash-code-hero h2{font-size:clamp(34px,6vw,72px);line-height:.98}.dash-code-hero span{color:var(--muted);font-size:20px}.dash-code-tools label{display:grid;gap:6px;max-width:520px;color:var(--muted);font-weight:750}.dash-code-tools input{height:42px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:0 12px;font:inherit}.dash-code-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}.dash-code-summary div{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:14px}.dash-code-summary span{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;font-weight:800;letter-spacing:0}.dash-code-summary strong{font-size:24px}.dash-code-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.dash-code-columns article{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:16px}.dash-code-list{margin:0;padding:0;list-style:none;display:grid;gap:8px}.dash-code-list li{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px;display:grid;gap:4px}.dash-code-list span,.dash-code-list small,.dash-crate-card small,.dash-search-empty{color:var(--muted)}.dash-link-button,.pill-button{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);padding:9px 12px;font:inherit;font-weight:750;cursor:pointer;justify-self:start}.dash-link-button:hover,.pill-button:hover,.pill-button[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}.pill-button[aria-pressed=true]{background:color-mix(in srgb,var(--accent) 10%,var(--panel))}.pill-row{display:flex;gap:8px;flex-wrap:wrap}.pill-row span,.pill-button{border-radius:999px}
+	.dash-app-card{justify-content:flex-start}.dash-app-card .pill-row{margin-top:auto}.dash-app-card .pill-row span{border:1px solid var(--line);background:var(--bg);color:var(--muted);padding:5px 9px;font-size:13px;overflow-wrap:anywhere}
 	.dash-mail{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);gap:14px;min-height:520px}.dash-mail-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}.dash-mail-button{height:40px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);display:inline-flex;align-items:center;gap:8px;padding:0 12px;text-decoration:none;cursor:pointer}.dash-mail-button:hover{border-color:var(--accent);color:var(--accent)}.dash-mail-list,.dash-mail-detail,.dash-mail-login{border:1px solid var(--line);border-radius:8px;background:var(--panel)}.dash-mail-list{overflow:auto}.dash-mail-item{display:grid;gap:4px;padding:13px 14px;border-bottom:1px solid var(--line);text-decoration:none}.dash-mail-item:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}.dash-mail-item[aria-current=true]{border-left:3px solid var(--accent);padding-left:11px}.dash-mail-item strong{line-height:1.25}.dash-mail-item span,.dash-mail-meta,.dash-mail-preview,.dash-mail-empty,.dash-mail-toolbar span{color:var(--muted)}.dash-mail-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:13px}.dash-mail-unread{color:var(--accent);font-weight:800}.dash-mail-detail{min-width:0;padding:18px;overflow:auto}.dash-mail-detail header{display:block;padding:0 0 14px;border:0;background:transparent}.dash-mail-detail h2{margin:0 0 8px;font-size:26px;line-height:1.15}.dash-mail-body{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}.dash-mail-warning{margin:12px 0;padding:10px 12px;border:1px solid var(--accent-2);border-radius:8px;color:var(--accent-2)}.dash-mail-login{max-width:460px;padding:18px;display:grid;gap:12px}.dash-mail-login label,.dash-mail-compose label{display:grid;gap:6px;color:var(--muted);font-weight:750}.dash-mail-login input,.dash-mail-compose input,.dash-mail-compose textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);padding:10px 12px;font:inherit}.dash-mail-compose{display:grid;gap:12px}.dash-mail-compose textarea{min-height:220px;resize:vertical}.dash-mail-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 	@media(max-width:760px){.dash{grid-template-columns:1fr;grid-template-rows:auto 1fr}.dash-rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;overflow:auto}.dash-tab{white-space:nowrap}.dash-stage header{padding:0 12px}}
 	@media(max-width:900px){.dash-mail{grid-template-columns:1fr}.dash-mail-list{max-height:320px}}
@@ -1508,10 +1592,10 @@ const DASH_STYLE: &str = r#"
 
 const DASH_JS: &str = r#"
 const search=document.getElementById('workspaceSearch');
-function dashRoute(){const raw=location.hash||'#build-log';const [hash,query='']=raw.split('?');let path={'#build-log':'/surface/blog','#blog':'/surface/blog','#mail':'/surface/mail','#about':'/surface/blog/about.html','#feed':'/surface/blog/feed.xml'}[hash];if(!path&&(hash==='#code'||hash==='#git'||hash==='#crates'||hash==='#source'))path='/surface/git';if(!path&&hash.startsWith('#code/'))path='/surface/git/'+hash.slice(6);if(!path&&hash.startsWith('#build-log/'))path='/surface/blog/'+hash.slice(11);return{path,query:new URLSearchParams(query)}}
+function dashRoute(){const raw=location.hash||'#build-log';const [hash,query='']=raw.split('?');let path={'#build-log':'/surface/blog','#blog':'/surface/blog','#mail':'/surface/mail','#apps':'/surface/apps','#about':'/surface/blog/about.html','#feed':'/surface/blog/feed.xml'}[hash];if(!path&&(hash==='#code'||hash==='#git'||hash==='#crates'||hash==='#source'))path='/surface/git';if(!path&&hash.startsWith('#code/'))path='/surface/git/'+hash.slice(6);if(!path&&hash.startsWith('#build-log/'))path='/surface/blog/'+hash.slice(11);return{path,query:new URLSearchParams(query)}}
 function filterDashCards(value){const q=(value||'').trim().toLowerCase();const cards=[...document.querySelectorAll('[data-search-card]')];let visible=0;cards.forEach(card=>{const topic=card.getAttribute('data-topic')||'';const topicFilter=document.querySelector('[data-topic-filter][aria-pressed="true"]')?.getAttribute('data-topic-filter')||'';const topicHit=!topicFilter||topic.split(/\s+/).includes(topicFilter);const textHit=!q||(card.getAttribute('data-search-text')||card.textContent||'').toLowerCase().includes(q);const hit=topicHit&&textHit;card.hidden=!hit;if(hit)visible++});const empty=document.querySelector('[data-search-empty]');if(empty)empty.hidden=visible!==0||(!q&&!document.querySelector('[data-topic-filter][aria-pressed="true"]:not([data-topic-filter=""])'))}
 function wireDashSearch(initial){document.querySelectorAll('[data-workspace-search-scope]').forEach(input=>{input.value=initial||'';filterDashCards(input.value);input.addEventListener('input',()=>filterDashCards(input.value))})}
-async function loadDashHash(){const route=dashRoute();if(!route.path)return;const slot=document.querySelector('#surfaceSlot');if(!slot)return;const response=await fetch(route.path,{headers:workspaceHeaders(route.path)});if(!response.ok)return;slot.outerHTML=await response.text();document.querySelectorAll('.dash-tab[aria-current]').forEach(node=>node.removeAttribute('aria-current'));const tab=document.querySelector(route.path.startsWith('/surface/git')?'[hx-get="/surface/git"]':'[hx-get="'+route.path+'"]');if(tab)tab.setAttribute('aria-current','page');wireDashSearch(route.query.get('q')||'')}
+async function loadDashHash(){const route=dashRoute();if(!route.path)return;const slot=document.querySelector('#surfaceSlot');if(!slot)return;const response=await fetch(route.path,{headers:workspaceHeaders(route.path)});if(!response.ok)return;slot.outerHTML=await response.text();document.querySelectorAll('.dash-tab[aria-current]').forEach(node=>node.removeAttribute('aria-current'));const tab=document.querySelector(route.path.startsWith('/surface/git')?'[hx-get="/surface/git"]':route.path.startsWith('/surface/blog')?'[hx-get="/surface/blog"]':route.path.startsWith('/surface/mail')?'[hx-get="/surface/mail"]':'[hx-get="'+route.path+'"]');if(tab)tab.setAttribute('aria-current','page');wireDashSearch(route.query.get('q')||'');if(window.edgerunNode)edgerunNode.activateSurface(route.path.startsWith('/surface/git')?'git':route.path.startsWith('/surface/blog')?'blog':route.path.startsWith('/surface/mail')?'mail':route.path.startsWith('/surface/apps')?'apps':'')}
 addEventListener('hashchange',loadDashHash);addEventListener('popstate',loadDashHash);loadDashHash();
 document.addEventListener('input',event=>{if(event.target.matches('[data-workspace-search-scope]'))filterDashCards(event.target.value)});
 document.addEventListener('click',event=>{const trigger=event.target.closest('[data-topic-filter]');if(!trigger)return;document.querySelectorAll('[data-topic-filter]').forEach(node=>node.setAttribute('aria-pressed',node===trigger?'true':'false'));filterDashCards(document.querySelector('[data-workspace-search-scope]')?.value||'')});

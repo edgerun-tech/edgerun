@@ -22,17 +22,12 @@ delivery workload.
 
 Implemented in code:
 
-- the host runtime now uses a multi-threaded worker pool instead of running the
-  benchmark service as a single host worker;
+- the host runtime now uses a multi-threaded worker pool instead of running the benchmark service as a single host worker;
 - SMTP and IMAP sessions use buffered transport I/O;
-- local SMTP delivery accepts a recipient batch instead of repeating the same
-  message work per recipient;
-- IMAP mailbox status is maintained through a Maildir sidecar index instead of
-  rescanning every message for each `SELECT`;
-- SMTP delivery batches status-index updates and flushes them about every
-  500 ms;
-- per-message Maildir file sync is now strict-mode opt-in through
-  `EDGERUN_MAILDIR_SYNC_DELIVERY=1`.
+- local SMTP delivery accepts a recipient batch instead of repeating the same message work per recipient;
+- IMAP mailbox status is maintained through a Maildir sidecar index instead of rescanning every message for each `SELECT`;
+- SMTP delivery batches status-index updates and flushes them about every 500 ms;
+- per-message Maildir file sync is now strict-mode opt-in through `EDGERUN_MAILDIR_SYNC_DELIVERY=1`.
 
 The durability policy matters. The benchmarked default still writes each
 message through Maildir `tmp/` and atomically renames into `new/`, but it no
@@ -127,11 +122,7 @@ out of date.
 
 The current evidence says something stronger but still bounded:
 
-> Edgerun is a compact integrated mail stack worth considering for operators
-> who want SMTP, IMAP, web, DNS, DKIM, queue handling, and site hosting in one
-> small service. In the latest rootless Podman local-delivery benchmark,
-> Edgerun delivered higher SMTP throughput than Maddy and Postfix, faster
-> basic IMAP than Maddy, and a much smaller image and process footprint.
+> Edgerun is a compact integrated mail stack worth considering for operators who want SMTP, IMAP, web, DNS, DKIM, queue handling, and site hosting in one small service. In the latest rootless Podman local-delivery benchmark, Edgerun delivered higher SMTP throughput than Maddy and Postfix, faster basic IMAP than Maddy, and a much smaller image and process footprint.
 
 Avoid broader claims for now:
 
@@ -144,15 +135,10 @@ Avoid broader claims for now:
 
 Raw evidence is committed with the source tree:
 
-- latest five-run Edgerun/Maddy/Postfix result:
-  `docs/benchmarks/email-stack/20260430Tedgerun-postfix-maddy-batched-r5/`
-- single paired run after batching:
-  `docs/benchmarks/email-stack/20260430Tedgerun-postfix-maddy-batched/`
-- active smoke coverage for Edgerun, Postfix, OpenSMTPD, Dovecot, Maddy, Mox,
-  and Stalwart:
-  `docs/benchmarks/email-stack/20260430Tactive-smoke/`
-- research status and comparator notes:
-  `docs/benchmarks/email-stack/research-status-20260430.md`
+- latest five-run Edgerun/Maddy/Postfix result: `docs/benchmarks/email-stack/20260430Tedgerun-postfix-maddy-batched-r5/`
+- single paired run after batching: `docs/benchmarks/email-stack/20260430Tedgerun-postfix-maddy-batched/`
+- active smoke coverage for Edgerun, Postfix, OpenSMTPD, Dovecot, Maddy, Mox, and Stalwart: `docs/benchmarks/email-stack/20260430Tactive-smoke/`
+- research status and comparator notes: `docs/benchmarks/email-stack/research-status-20260430.md`
 
 The next work is to add independent cold-start repetitions, connection-reuse
 SMTP, populated-mailbox IMAP fetch/search tests, disk I/O counters, CPU samples,

@@ -317,6 +317,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-analytics"
+version = "0.1.1"
+dependencies = [
+ "edgerun-http",
+ "edgerun-log",
+]
+
+[[package]]
 name = "edgerun-android-hardware"
 version = "0.1.1"
 dependencies = [
@@ -1247,6 +1255,7 @@ name = "edgerun-server"
 version = "0.1.1"
 dependencies = [
  "edgerun-acme",
+ "edgerun-analytics",
  "edgerun-blog",
  "edgerun-config",
  "edgerun-crypto",

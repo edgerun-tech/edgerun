@@ -20,6 +20,7 @@ members = [
   "crates/edgerun-amd-xdna",
   "crates/edgerun-android-hardware",
   "crates/edgerun-android-keystore",
+  "crates/edgerun-analytics",
   "crates/edgerun-audio-calibration",
   "crates/edgerun-audio-liveliness",
   "crates/edgerun-biometrics",

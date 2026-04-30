@@ -69,11 +69,7 @@ claim เรื่อง image/process footprint ได้ชัด แต่ย
 
 Claim ที่ publish ได้อย่างแคบ:
 
-> Edgerun เป็น compact integrated mail stack ที่ควรพิจารณาสำหรับ operator ที่
-> ต้องการ SMTP, IMAP, web, DNS, DKIM, queue handling และ site hosting ใน service
-> ขนาดเล็กตัวเดียว. ใน rootless Podman local-delivery benchmark ล่าสุด Edgerun
-> มี SMTP throughput สูงกว่า Maddy และ Postfix, basic IMAP เร็วกว่า Maddy, และ
-> image/process footprint เล็กกว่ามาก.
+> Edgerun เป็น compact integrated mail stack ที่ควรพิจารณาสำหรับ operator ที่ต้องการ SMTP, IMAP, web, DNS, DKIM, queue handling และ site hosting ใน service ขนาดเล็กตัวเดียว. ใน rootless Podman local-delivery benchmark ล่าสุด Edgerun มี SMTP throughput สูงกว่า Maddy และ Postfix, basic IMAP เร็วกว่า Maddy, และ image/process footprint เล็กกว่ามาก.
 
 ยังไม่ควร claim ว่า Edgerun ชนะทุก mail-server workload, realistic Dovecot
 IMAP, Mox หรือ Stalwart ใน production configuration. Exim ถูกถอดจาก active

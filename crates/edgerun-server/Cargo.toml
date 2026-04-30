@@ -23,6 +23,7 @@ edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = f
 edgerun-email = { version = "0.1", path = "../edgerun-email", optional = true }
 edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false, optional = true }
 edgerun-acme = { version = "0.1", path = "../edgerun-acme", features = ["dns_challenge"] }
+edgerun-analytics = { version = "0.1", path = "../edgerun-analytics" }
 edgerun-blog = { version = "0.1", path = "../edgerun-blog" }
 edgerun-config = { version = "0.1", path = "../edgerun-config" }
 edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, features = ["p256"] }

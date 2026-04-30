@@ -68,12 +68,7 @@ väiksem memory" väidet.
 
 Kitsas publishitav väide:
 
-> Edgerun on kompaktne integreeritud mail stack, mida tasub kaaluda, kui
-> operaator tahab SMTP, IMAP, web'i, DNS'i, DKIM'i, queue handling'ut ja site
-> hosting'ut ühes väikeses teenuses. Värskeimas rootless Podmani kohaliku
-> delivery benchmarkis oli Edgerun SMTP-s kiirem kui Maddy ja Postfix, IMAP-i
-> basic smoke'is kiirem kui Maddy ning image/process footprint oli palju
-> väiksem.
+> Edgerun on kompaktne integreeritud mail stack, mida tasub kaaluda, kui operaator tahab SMTP, IMAP, web'i, DNS'i, DKIM'i, queue handling'ut ja site hosting'ut ühes väikeses teenuses. Värskeimas rootless Podmani kohaliku delivery benchmarkis oli Edgerun SMTP-s kiirem kui Maddy ja Postfix, IMAP-i basic smoke'is kiirem kui Maddy ning image/process footprint oli palju väiksem.
 
 Veel ei tohiks väita, et Edgerun võidab kõiki mail-serveri workload'e,
 realistlikku Dovecot IMAP-i, Moxi või Stalwarti production konfiguratsiooni.
