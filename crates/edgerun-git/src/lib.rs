@@ -1875,21 +1875,24 @@ fn render_dash_crate(repo: &Repo, info: &CrateInfo, crates: &[CrateInfo]) -> Str
     let features = render_dash_pills(&info.features, "No declared features.");
     let deps = render_dash_pills(&info.workspace_deps, "No visible workspace dependencies.");
     let dependents = render_dash_pills(&info.dependents, "No visible dependents.");
-    let rfcs = if info.rfcs.is_empty() {
+    let rfcs_section = if info.rfcs.is_empty() {
         "<p class=\"empty\">No related RFCs recorded.</p>".to_string()
     } else {
-        info.rfcs
-            .iter()
-            .map(|rfc| {
-                format!(
-                    "<li><strong>{}</strong><span>{}</span><small>{}</small></li>",
-                    escape_html(&rfc.title),
-                    escape_html(&rfc.completeness),
-                    escape_html(&rfc.path)
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("")
+        format!(
+            "<ul class=\"dash-code-list\">{}</ul>",
+            info.rfcs
+                .iter()
+                .map(|rfc| {
+                    format!(
+                        "<li><strong>{}</strong><span>{}</span><small>{}</small></li>",
+                        escape_html(&rfc.title),
+                        escape_html(&rfc.completeness),
+                        escape_html(&rfc.path)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("")
+        )
     };
     let api = render_dash_api_items(&info.api_items);
     let call_graph = render_dash_call_edges(&info.call_edges);
@@ -1910,7 +1913,7 @@ fn render_dash_crate(repo: &Repo, info: &CrateInfo, crates: &[CrateInfo]) -> Str
     let test_result = crate_test_summary(info);
     let vulnerability_href = vulnerability_report_href(&info.name);
     format!(
-        "<div class=\"dash-code\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/git/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">Back to crate explorer</button><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><span>{}</span><a class=\"dash-mail-button\" href=\"{}\">Report vulnerability</a></section><section class=\"dash-code-summary\" aria-label=\"{} crate summary\"><div><span>Features</span><strong>{}</strong></div><div><span>API items</span><strong>{}</strong></div><div><span>Call edges</span><strong>{}</strong></div><div><span>Tests</span><strong>{}</strong></div><div><span>Deps</span><strong>{}</strong></div><div><span>RFCs</span><strong>{}</strong></div></section><section class=\"dash-code-columns\"><article><h3>Features</h3>{features}</article><article><h3>Workspace dependencies</h3>{deps}</article><article><h3>Visible dependents</h3>{dependents}</article><article><h3>Last test run</h3><p>{}</p></article></section><section class=\"dash-code-columns\"><article><h3>API surface</h3>{api}</article><article><h3>Call graph</h3>{call_graph}</article></section><section><h3>Related RFCs</h3><ul class=\"dash-code-list\">{rfcs}</ul></section><section><h3>Nearby crates</h3><div class=\"pill-row\">{sibling_nav}</div></section></div>",
+        "<div class=\"dash-code\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/git/{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\">Back to crate explorer</button><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><span>{}</span><a class=\"dash-mail-button\" href=\"{}\">Report vulnerability</a></section><section class=\"dash-code-summary\" aria-label=\"{} crate summary\"><div><span>Features</span><strong>{}</strong></div><div><span>API items</span><strong>{}</strong></div><div><span>Call edges</span><strong>{}</strong></div><div><span>Tests</span><strong>{}</strong></div><div><span>Deps</span><strong>{}</strong></div><div><span>RFCs</span><strong>{}</strong></div></section><section class=\"dash-code-columns\"><article><h3>Features</h3>{features}</article><article><h3>Workspace dependencies</h3>{deps}</article><article><h3>Visible dependents</h3>{dependents}</article><article><h3>Last test run</h3><p>{}</p></article></section><section class=\"dash-code-columns\"><article><h3>API surface</h3>{api}</article><article><h3>Call graph</h3>{call_graph}</article></section><section><h3>Related RFCs</h3>{rfcs_section}</section><section><h3>Nearby crates</h3><div class=\"pill-row\">{sibling_nav}</div></section></div>",
         escape_attr(&repo.name),
         escape_html(&info.rel_path),
         escape_html(&info.name),
