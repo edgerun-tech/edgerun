@@ -528,7 +528,7 @@ async fn handle_connection(
                     }
                 };
                 #[cfg(feature = "dkim")]
-                if delivery_ok {
+                if delivery_ok && !peer.ip().is_loopback() {
                     // Evaluate SPF/DKIM/DMARC in background
                     let handler_clone = Arc::clone(&handler);
                     let envelope_clone = envelope.clone();
@@ -683,7 +683,7 @@ async fn handle_connection(
                     )
                     .await?;
                     #[cfg(feature = "dkim")]
-                    {
+                    if !peer.ip().is_loopback() {
                         let handler_clone = Arc::clone(&handler);
                         let envelope_clone = envelope.clone();
                         let config_clone = config.clone();

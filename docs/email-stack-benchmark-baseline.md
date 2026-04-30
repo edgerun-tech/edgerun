@@ -151,7 +151,8 @@ Record configuration difficulty alongside throughput:
 
 ## Next Measurements
 
-The next benchmark pass should add load scenarios:
+The next benchmark pass should add load scenarios beyond the current 10k SMTP
+accept baseline:
 
 - SMTP accept of small local messages.
 - SMTP outbound delivery with STARTTLS.
@@ -169,9 +170,25 @@ to prove the same discipline under load.
 The first reproducible evidence bundle is committed under
 `docs/benchmarks/email-stack/20260430Tbench-v1/`.
 
+The first warmed SMTP scale bundle is committed under
+`docs/benchmarks/email-stack/20260430Tscale-v2/`. It uses 10,000 local-only SMTP
+deliveries at concurrency 32 and samples memory during load. In that run,
+Edgerun accepted 10,000/10,000 messages at 342.71 ops/s with 3,580 kB peak RSS;
+Postfix accepted 10,000/10,000 at 351.69 ops/s with roughly 90 MB container
+memory during load.
+
 - Summary: `docs/benchmarks/email-stack/20260430Tbench-v1/SUMMARY.md`
+- Scale summary: `docs/benchmarks/email-stack/20260430Tscale-v2/SUMMARY.md`
 - Raw Edgerun production footprint:
   `docs/benchmarks/email-stack/20260430Tbench-v1/raw/edgerun-live-stack.out`
+- Raw Edgerun 10k SMTP result:
+  `docs/benchmarks/email-stack/20260430Tscale-v2/raw/edgerun-10k-sampled-smtp.out`
+- Raw Edgerun 10k memory samples:
+  `docs/benchmarks/email-stack/20260430Tscale-v2/raw/edgerun-10k-sampled-memory.tsv`
+- Raw Postfix 10k SMTP result:
+  `docs/benchmarks/email-stack/20260430Tscale-v2/raw/postfix-10k-sampled-smtp.out`
+- Raw Postfix 10k memory samples:
+  `docs/benchmarks/email-stack/20260430Tscale-v2/raw/postfix-10k-sampled-memory.tsv`
 - Raw Edgerun isolated SMTP result:
   `docs/benchmarks/email-stack/20260430Tbench-v1/raw/edgerun-smtp-only.out`
 - Raw Postfix SMTP result:

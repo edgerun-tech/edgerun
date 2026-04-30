@@ -1,0 +1,101 @@
+Apr 30 01:02:03 benchmark postfix/local[434]: B0CAB6B632: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B0CAB6B632: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: B02E46B62F: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B02E46B62F: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: AF9E06B62B: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: AF9E06B62B: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: AFC6B6B62D: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: AFC6B6B62D: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: B09326B630: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B09326B630: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: AFDC26B62E: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: AFDC26B62E: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: B0E016B633: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B0E016B633: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: B2D066A916: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B2D066A916: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: B4FCE6A3AF: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B4FCE6A3AF: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: B60536A8F5: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B60536A8F5: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: B58666A8FC: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B58666A8FC: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: B82936A900: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B82936A900: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: B887F6A8EE: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B887F6A8EE: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: B84816A901: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B84816A901: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: B97816B631: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: B97816B631: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: BAB4D6A91B: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BAB4D6A91B: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: BD3F66A8FD: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BD3F66A8FD: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: BEE656B637: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BEE656B637: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: BEF3C6B638: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BEF3C6B638: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: BD2646A3AD: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BD2646A3AD: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: BF0266B63A: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BF0266B63A: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: BEBFD6B636: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BEBFD6B636: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: C283A6A90B: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C283A6A90B: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: C23CF6A8F8: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C23CF6A8F8: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: BEA306B635: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BEA306B635: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: C09326A8EF: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C09326A8EF: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: BE7656A3AA: to=<bench@example.test>, relay=local, delay=21, delays=0.08/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BE7656A3AA: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: BE90C6B634: to=<bench@example.test>, relay=local, delay=21, delays=0.08/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: BE90C6B634: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: C2C4E6B639: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C2C4E6B639: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: C61986A8FB: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C61986A8FB: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: C661B6A90F: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C661B6A90F: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: C667F6B63B: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C667F6B63B: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: C6E386B63C: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C6E386B63C: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: C6E0C6A906: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C6E0C6A906: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: C7B5B6A8FF: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: C7B5B6A8FF: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: CBFE66A905: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CBFE66A905: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: CBA6E6A8FA: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CBA6E6A8FA: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: CBA4F6A3B6: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CBA4F6A3B6: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: CBBD26A903: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CBBD26A903: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: D029F6B642: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: D029F6B642: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: CF3376B640: to=<bench@example.test>, relay=local, delay=21, delays=0.05/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CF3376B640: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: CE44E6A90D: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CE44E6A90D: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: CF0686B63F: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CF0686B63F: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: D02256B641: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: D02256B641: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: CEAF46B63D: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CEAF46B63D: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: CD8C16A919: to=<bench@example.test>, relay=local, delay=21, delays=0.08/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CD8C16A919: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: CEDE56A91E: to=<bench@example.test>, relay=local, delay=21, delays=0.08/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CEDE56A91E: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: CEFC56B63E: to=<bench@example.test>, relay=local, delay=21, delays=0.08/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: CEFC56B63E: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: D3C4E6A909: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: D3C4E6A909: removed
+Apr 30 01:02:03 benchmark postfix/local[428]: D20EF6A908: to=<bench@example.test>, relay=local, delay=21, delays=0.06/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)
+Apr 30 01:02:03 benchmark postfix/qmgr[159]: D20EF6A908: removed
+Apr 30 01:02:03 benchmark postfix/local[434]: D156E6A3AC: to=<bench@example.test>, relay=local, delay=21, delays=0.07/21/0/0, dsn=2.0.0, status=sent (delivered to mailbox)

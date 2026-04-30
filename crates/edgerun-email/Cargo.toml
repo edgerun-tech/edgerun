@@ -18,6 +18,11 @@ name = "edgerun-smtp-probe"
 path = "src/bin/edgerun-smtp-probe.rs"
 required-features = ["std", "tls"]
 
+[[bin]]
+name = "edgerun-smtp-bench"
+path = "src/bin/edgerun-smtp-bench.rs"
+required-features = ["std"]
+
 [features]
 default = ["dkim"]
 tls = ["dep:edgerun-tls"]
