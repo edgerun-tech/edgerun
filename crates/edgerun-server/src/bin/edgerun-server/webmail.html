@@ -18,14 +18,19 @@
   </section>
   <section class="pane">
     <div class="actions">
-      <button id="composeBtn" class="icon primary" title="Compose" aria-label="Compose"><svg><use href="#i-edit"/></svg></button>
-      <button id="replyMsg" class="icon" title="Reply" aria-label="Reply" disabled><svg><use href="#i-reply"/></svg></button>
-      <button id="refresh" class="icon" title="Refresh" aria-label="Refresh"><svg><use href="#i-refresh"/></svg></button>
-      <button id="markRead" class="icon" title="Mark read" aria-label="Mark read" disabled><svg><use href="#i-mail-open"/></svg></button>
-      <button id="markUnread" class="icon" title="Mark unread" aria-label="Mark unread" disabled><svg><use href="#i-mail"/></svg></button>
-      <button id="deleteMsg" class="icon danger" title="Delete" aria-label="Delete" disabled><svg><use href="#i-trash"/></svg></button>
-      <div id="status" class="status"></div><div class="grow"></div>
-      <button id="logout" class="icon" title="Log out" aria-label="Log out"><svg><use href="#i-log-out"/></svg></button>
+      <div class="action-group">
+        <button id="composeBtn" class="action-btn primary" type="button" title="Compose" aria-label="Compose"><svg><use href="#i-edit"/></svg><span class="action-label">Compose</span></button>
+        <button id="replyMsg" class="action-btn" type="button" title="Reply" aria-label="Reply" disabled><svg><use href="#i-reply"/></svg><span class="action-label">Reply</span></button>
+      </div>
+      <div class="action-group">
+        <button id="refresh" class="action-btn" type="button" title="Refresh" aria-label="Refresh"><svg><use href="#i-refresh"/></svg><span class="action-label">Refresh</span></button>
+        <button id="markRead" class="action-btn" type="button" title="Mark read" aria-label="Mark read" disabled><svg><use href="#i-mail-open"/></svg><span class="action-label">Read</span></button>
+        <button id="markUnread" class="action-btn" type="button" title="Mark unread" aria-label="Mark unread" disabled><svg><use href="#i-mail"/></svg><span class="action-label">Unread</span></button>
+        <button id="deleteMsg" class="action-btn danger" type="button" title="Delete" aria-label="Delete" disabled><svg><use href="#i-trash"/></svg><span class="action-label">Delete</span></button>
+      </div>
+      <div id="status" class="status"></div>
+      <div class="grow"></div>
+      <button id="logout" class="action-btn" type="button" title="Log out" aria-label="Log out"><svg><use href="#i-log-out"/></svg><span class="action-label">Log out</span></button>
     </div>
     <form id="compose" class="compose">
       <div class="compose-grid">
@@ -33,9 +38,17 @@
         <label for="to">To</label><input id="to" placeholder="recipient@example.com" autocomplete="off">
         <label for="subject">Subject</label><input id="subject" placeholder="Subject" autocomplete="off">
         <textarea id="body" placeholder="Message"></textarea>
-        <div class="attach-row"><input id="filePick" class="attach-input" type="file" multiple><button id="attachBtn" class="icon" type="button" title="Attach files" aria-label="Attach files"><svg><use href="#i-paperclip"/></svg></button><div id="composeAttachments" class="attachments"></div></div>
+        <div class="attach-row">
+          <input id="filePick" class="attach-input" type="file" multiple>
+          <button id="attachBtn" class="action-btn" type="button" title="Attach files" aria-label="Attach files"><svg><use href="#i-paperclip"/></svg><span class="action-label">Attach</span></button>
+          <div id="composeAttachments" class="attachments"></div>
+        </div>
       </div>
-      <div class="row"><button id="sendBtn" class="icon primary" type="submit" title="Send" aria-label="Send"><svg><use href="#i-send"/></svg></button><button id="cancel" class="icon" type="button" title="Cancel" aria-label="Cancel"><svg><use href="#i-x"/></svg></button><div class="grow"></div></div>
+      <div class="row">
+        <button id="sendBtn" class="action-btn primary" type="submit" title="Send" aria-label="Send"><svg><use href="#i-send"/></svg><span class="action-label">Send</span></button>
+        <button id="cancel" class="action-btn" type="button" title="Cancel" aria-label="Cancel"><svg><use href="#i-x"/></svg><span class="action-label">Cancel</span></button>
+        <div class="grow"></div>
+      </div>
     </form>
     <article id="content" class="content"><div class="empty">Select a message</div></article>
   </section>
