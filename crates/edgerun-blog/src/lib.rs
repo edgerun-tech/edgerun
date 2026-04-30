@@ -242,7 +242,7 @@ impl BlogHandler {
                 };
                 Ok(render_dash_about(language, &page))
             }
-            "/feed.xml" | "/feed" => Ok(render_dash_feed(language)),
+            "/feed.xml" | "/feed" => Ok(render_dash_feed(&self.config, language)),
             _ if localized_path.starts_with("/posts/") => {
                 let posts = load_posts(&root)?;
                 let slug = localized_path
@@ -968,7 +968,7 @@ fn render_index(config: &BlogConfig, language: Language, posts: &[Post]) -> Stri
     for post in posts {
         cards.push_str(&format!(
             "<article class=\"post-card\" data-search=\"{}\"><a href=\"{}\"><span class=\"date\">{}</span><h2>{}</h2><p>{}</p><div class=\"tags\">{}</div></a></article>",
-            escape_attr(&dash_search_blob(post)),
+            escape_attr(&search_blob(post)),
             escape_attr(&localized_path(language, &format!("/posts/{}.html", post.path))),
             escape_html(&post.date),
             escape_html(&post.title),
@@ -1016,7 +1016,7 @@ fn render_dash_blog_index(
                 &format!("/posts/{}.html", post.path)
             )),
             escape_attr(&post.tags.join(" ")),
-            escape_attr(&search_blob(post)),
+            escape_attr(&dash_search_blob(post)),
             escape_html(&post.date),
             escape_html(&post.title),
             escape_html(&post.summary),
@@ -1096,7 +1096,8 @@ fn render_dash_about(language: Language, page: &Page) -> String {
     )
 }
 
-fn render_dash_feed(language: Language) -> String {
+fn render_dash_feed(config: &BlogConfig, language: Language) -> String {
+    let feed_url = absolute_url(config, &localized_path(language, "/feed.xml"));
     format!(
         "<div class=\"dash-blog\"><button class=\"dash-link-button\" type=\"button\" hx-get=\"/surface/blog{}\" hx-target=\"#surfaceSlot\" hx-swap=\"outerHTML\" data-dash-hash=\"#build-log{}\">{}</button><section class=\"dash-code-hero\"><p>{}</p><h2>{}</h2><span>Atom feed remains a direct machine-readable endpoint.</span><a class=\"dash-mail-button\" href=\"{}\">{}</a></section></div>",
         escape_attr(&localized_path(language, "/")),
@@ -1104,7 +1105,7 @@ fn render_dash_feed(language: Language) -> String {
         escape_html(language.back_label),
         escape_html(language.feed_label),
         escape_html(language.feed_label),
-        escape_attr(&localized_path(language, "/feed.xml")),
+        escape_attr(&feed_url),
         escape_html(language.feed_label)
     )
 }
