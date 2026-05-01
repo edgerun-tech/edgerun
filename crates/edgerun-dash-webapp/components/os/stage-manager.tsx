@@ -52,15 +52,18 @@ export function StageManager({
       style={{ scrollbarWidth: "none" }}
     >
       {stripWindows.map((win) => (
-        <button
+        <div
           key={win.id}
           onClick={(e) => handleClick(e, win.id)}
           className={cn(
             "group relative flex h-[68px] w-[76px] flex-shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border border-[var(--window-border)] bg-[var(--window-bg)]/70 backdrop-blur-md transition-all duration-200",
             "hover:border-primary/40 hover:bg-[var(--window-header)] hover:shadow-lg",
-            "active:scale-95"
+            "active:scale-95 cursor-pointer"
           )}
           title={win.title}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleClick(e as unknown as React.MouseEvent, win.id) }}
         >
           {/* App icon */}
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary/60 text-muted-foreground transition-colors group-hover:text-foreground">
@@ -77,7 +80,7 @@ export function StageManager({
           >
             ×
           </button>
-        </button>
+        </div>
       ))}
 
       {/* Add-window hint when strip is empty but stage mode on */}

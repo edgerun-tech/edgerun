@@ -328,7 +328,7 @@ pub fn execute_query(
     }
 
     let proof_objects =
-        build_query_proof_objects(query, store, &event_refs, &snapshot_refs, &object_refs);
+        build_query_proof_objects(query, store, &event_refs, &snapshot_refs, &object_refs, signer);
 
     let mut fragment = QueryResultFragment {
         fragment_version: 1,
@@ -636,6 +636,7 @@ fn build_query_proof_objects(
     event_refs: &[edgerun_proto::edgerun::v0::common::EventRef],
     snapshot_refs: &[edgerun_proto::edgerun::v0::common::SnapshotRef],
     object_refs: &[edgerun_proto::edgerun::v0::common::ObjectRef],
+    signer: &dyn MeshSigner,
 ) -> Vec<edgerun_proto::edgerun::v0::common::ObjectRef> {
     use edgerun_core::validators::{
         validate_event_set_proof, validate_object_assertion_proof, validate_snapshot_set_proof,
@@ -1201,7 +1202,7 @@ mod tests {
             signature: None,
         };
 
-        let proof_objects = build_query_proof_objects(&query, &mut store, &[], &[], &[]);
+        let proof_objects = build_query_proof_objects(&query, &mut store, &[], &[], &[], &signer);
 
         assert!(proof_objects.is_empty());
     }

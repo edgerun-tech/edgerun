@@ -9,7 +9,8 @@
 use crate::config::{parse_config, NodeConfig};
 use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::{command_hash, validate_command, CommandValidationContext};
-use edgerun_core::encrypted_envelope::{validate_encrypted_envelope, EncryptedEnvelope};
+use edgerun_core::encrypted_envelope::validate_encrypted_envelope;
+use edgerun_proto::edgerun::v0::common::EncryptedEnvelope;
 use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
 use edgerun_core::result::Verdict;
 use edgerun_core::util::{
@@ -428,7 +429,6 @@ pub fn dispatch_command(
         Some(
             CommandType::StoreObject
                 | CommandType::ExecuteWorkload
-                | CommandType::PutObject
         )
     );
 
@@ -777,7 +777,7 @@ fn dispatch_install_app(
         }
     };
 
-    let package_bytes = match install_payload.package_object {
+    let package_bytes = match install_payload.app_package {
         Some(ref obj) => {
             match store.get_blob(&obj.object_id) {
                 Ok(bytes) => bytes,
@@ -789,7 +789,7 @@ fn dispatch_install_app(
                         signer,
                         controllers,
                         false,
-                        &format!("package_object_not_found: {}", e),
+                        &format!("app_package_not_found: {}", e),
                         Vec::new(),
                         None,
                     );
@@ -804,41 +804,7 @@ fn dispatch_install_app(
                 signer,
                 controllers,
                 false,
-                "package_object_required",
-                Vec::new(),
-                None,
-            );
-        }
-    };
-
-    let wasm_bytes = match install_payload.wasm_object {
-        Some(ref obj) => {
-            match store.get_blob(&obj.object_id) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    return record_and_respond(
-                        command,
-                        store,
-                        stream_id,
-                        signer,
-                        controllers,
-                        false,
-                        &format!("wasm_object_not_found: {}", e),
-                        Vec::new(),
-                        None,
-                    );
-                }
-            }
-        }
-        None => {
-            return record_and_respond(
-                command,
-                store,
-                stream_id,
-                signer,
-                controllers,
-                false,
-                "wasm_object_required",
+                "app_package_required",
                 Vec::new(),
                 None,
             );
@@ -852,18 +818,20 @@ fn dispatch_install_app(
     };
 
     edgerun_log::info!(
-        "install_app: name={}, entry={}, domain={}",
-        install_payload.name,
-        install_payload.entry,
+        "install_app: domain={}",
         domain
     );
 
-    let package_object_id = edgerun_storage::hash_sha256(&package_bytes);
+    let package_object_id = edgerun_crypto::sha256(&package_bytes);
 
     let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        app_name: install_payload.name.clone(),
-        status_code: 0,
-        message: "app_registered".to_string(),
+        payload_version: 1,
+        command: command_ref_from(command),
+        issuer: command.issuer.clone(),
+        decision: 1,
+        decision_basis: None,
+        reason_code: String::new(),
+        effect_summary_object: None,
         result_object: Some(edgerun_proto::edgerun::v0::common::ObjectRef {
             object_id: package_object_id.to_vec(),
             object_kind: Some(edgerun_proto::edgerun::v0::common::ObjectKind::AppPackage as i32),
@@ -931,34 +899,34 @@ fn dispatch_uninstall_app(
         }
     };
 
-    let app_name = if uninstall_payload.app_name.is_empty() {
-        match &uninstall_payload.package_object {
-            Some(obj) => edgerun_core::util::bytes_to_hex(&obj.object_id),
-            None => {
-                return record_and_respond(
-                    command,
-                    store,
-                    stream_id,
-                    signer,
-                    controllers,
-                    false,
-                    "app_name_or_package_required",
-                    Vec::new(),
-                    None,
-                );
-            }
+    let app_id = match &uninstall_payload.app_package {
+        Some(obj) => edgerun_core::util::bytes_to_hex(&obj.object_id),
+        None => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "app_package_required",
+                Vec::new(),
+                None,
+            );
         }
-    } else {
-        uninstall_payload.app_name.clone()
     };
 
-    edgerun_log::info!("uninstall_app: name={}", app_name);
+    edgerun_log::info!("uninstall_app: id={} reason={}", app_id, uninstall_payload.reason);
 
     let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        app_name: app_name.clone(),
-        status_code: 0,
-        message: "app_uninstalled".to_string(),
-        result_object: uninstall_payload.package_object.clone(),
+        payload_version: 1,
+        command: command_ref_from(command),
+        issuer: command.issuer.clone(),
+        decision: 1,
+        decision_basis: None,
+        reason_code: String::new(),
+        effect_summary_object: None,
+        result_object: uninstall_payload.app_package.clone(),
     };
 
     let response_bytes = result_payload.encode_to_vec();
@@ -973,7 +941,7 @@ fn dispatch_uninstall_app(
         "",
         response_bytes,
         None,
-        uninstall_payload.package_object.clone(),
+        uninstall_payload.app_package.clone(),
     )
 }
 
@@ -1359,6 +1327,8 @@ fn dispatch_query_node_state(
         bootstrap_complete
     );
 
+    let snapshot_ref = snapshot_object.ok();
+
     let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
         payload_version: 1,
         command: None,
@@ -1367,7 +1337,7 @@ fn dispatch_query_node_state(
         decision_basis: None,
         reason_code: String::new(),
         effect_summary_object: None,
-        result_object: snapshot_object.ok(),
+        result_object: snapshot_ref.clone(),
     };
 
     let response_bytes = result_payload.encode_to_vec();
@@ -1382,7 +1352,7 @@ fn dispatch_query_node_state(
         "",
         response_bytes,
         None,
-        snapshot_object.ok(),
+        snapshot_ref,
     )
 }
 
@@ -1495,7 +1465,7 @@ fn dispatch_request_user_presence(
     let request_bytes = Message::encode_to_vec(&request_payload);
     let request_obj = store.put_object(
         &request_bytes,
-        edgerun_proto::edgerun::v0::common::ObjectKind::EventData as i32,
+        edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
         &[stream_id.to_vec()],
     );
 
@@ -1510,7 +1480,7 @@ fn dispatch_request_user_presence(
     let granted_bytes = Message::encode_to_vec(&granted_payload);
     let granted_obj = store.put_object(
         &granted_bytes,
-        edgerun_proto::edgerun::v0::common::ObjectKind::EventData as i32,
+        edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
         &[stream_id.to_vec()],
     );
 
@@ -1519,10 +1489,10 @@ fn dispatch_request_user_presence(
         command: None,
         issuer: command.issuer.clone(),
         decision: 1,
-        decision_basis: granted_obj.clone(),
+        decision_basis: granted_obj.as_ref().ok().cloned(),
         reason_code: String::new(),
-        effect_summary_object: request_obj.clone(),
-        result_object: granted_obj,
+        effect_summary_object: request_obj.as_ref().ok().cloned(),
+        result_object: granted_obj.ok(),
     };
 
     let response_bytes = result_payload.encode_to_vec();
@@ -1625,15 +1595,13 @@ fn dispatch_request_signature(
     }
 
     let node_id = signer.node_id();
-    let public_key = signer.public_key_bytes();
+    let public_key = signer.node_id().0.to_vec();
 
-    let mut hasher = edgerun_crypto::sha2::Sha256::new();
-    edgerun_crypto::sha2::Digest::update(&mut hasher, &req.payload);
-    let message_hash = hasher.finalize();
+    let message_hash = edgerun_crypto::sha256(&req.payload);
 
-    let signature_result = signer.sign(&message_hash);
+    let signature_result = signer.sign_digest(&message_hash);
     let signature_bytes = match signature_result {
-        Ok(sig) => sig,
+        Ok(sig) => sig.to_vec(),
         Err(e) => {
             return record_and_respond(
                 command,
@@ -1664,7 +1632,7 @@ fn dispatch_request_signature(
     let request_bytes = Message::encode_to_vec(&request_payload);
     let request_obj = store.put_object(
         &request_bytes,
-        edgerun_proto::edgerun::v0::common::ObjectKind::EventData as i32,
+        edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
         &[stream_id.to_vec()],
     );
 
@@ -1680,7 +1648,7 @@ fn dispatch_request_signature(
     let response_obj_bytes = Message::encode_to_vec(&response_payload);
     let response_obj = store.put_object(
         &response_obj_bytes,
-        edgerun_proto::edgerun::v0::common::ObjectKind::EventData as i32,
+        edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
         &[stream_id.to_vec()],
     );
 
@@ -1689,10 +1657,10 @@ fn dispatch_request_signature(
         command: None,
         issuer: command.issuer.clone(),
         decision: 1,
-        decision_basis: response_obj.clone(),
+        decision_basis: response_obj.as_ref().ok().cloned(),
         reason_code: String::new(),
-        effect_summary_object: request_obj.clone(),
-        result_object: response_obj,
+        effect_summary_object: request_obj.as_ref().ok().cloned(),
+        result_object: response_obj.ok(),
     };
 
     let response_bytes = result_payload.encode_to_vec();
@@ -2886,7 +2854,7 @@ fn cache_cert(
     // Also store as an object so it's recoverable from the event stream
     // via the command that triggered the re-benchmark.
     let cert_bytes = cert.to_bytes();
-    if let Err(e) = store.put_object(&cert_bytes, 0, &[local_node_id.to_vec()]) {
+    if let Err(e) = store.put_object(&cert_bytes, 0, &[signer.node_id().0.to_vec()]) {
         edgerun_log::warn!("failed to store cert as object: {}", e);
     }
 }

@@ -11,10 +11,12 @@ interface TopBarProps {
   ramUsage: { used: number; total: number }
   isConnected: boolean
   username?: string
+  isGuest?: boolean
   onLock?: () => void
+  onSignIn?: () => void
 }
 
-export function TopBar({ nodeCount, activeSessions, ramUsage, isConnected, username, onLock }: TopBarProps) {
+export function TopBar({ nodeCount, activeSessions, ramUsage, isConnected, username, isGuest, onLock, onSignIn }: TopBarProps) {
   const [time, setTime] = useState<Date | null>(null)
 
   useEffect(() => {
@@ -112,7 +114,20 @@ export function TopBar({ nodeCount, activeSessions, ramUsage, isConnected, usern
         </div>
 
         {/* User + Lock */}
-        {username && onLock && (
+        {isGuest && onSignIn && (
+          <>
+            <div className="h-4 w-px bg-border" />
+            <button
+              onClick={onSignIn}
+              title="Set up identity to unlock all features"
+              className="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs text-[var(--status-warning)] transition-colors hover:bg-secondary"
+            >
+              <span className="font-mono">Guest</span>
+              <Lock className="h-3 w-3" />
+            </button>
+          </>
+        )}
+        {username && !isGuest && onLock && (
           <>
             <div className="h-4 w-px bg-border" />
             <button

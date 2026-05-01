@@ -778,6 +778,18 @@ pub fn render(root: UINode) -> Response {
     }
 }
 
+/// Render raw JSX/HTML from WASM. The host sanitizes and renders in a
+/// sandboxed iframe with Tailwind CSS. No JS execution — event handlers
+/// become data-action attributes routed back to WASM.
+pub fn render_jsx(jsx: impl Into<String>) -> Response {
+    let body = jsx.into();
+    Response {
+        status: 200,
+        body: body.into_bytes(),
+        content_type: Some(String::from("application/x-edgerun-jsx-v0+html")),
+    }
+}
+
 /// Serialize a UINode tree to bytes with a custom status code.
 pub fn render_with_status(status: u16, root: UINode) -> Response {
     let mut bytes = Vec::new();

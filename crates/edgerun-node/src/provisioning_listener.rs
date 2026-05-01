@@ -2,8 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use edgerun_config::edgerun_json::escape_json_string;
-use edgerun_config::edgerun_json::JsonValue;
+use edgerun_json::{escape_json_string, Value as JsonValue};
 use edgerun_hardware_signing::NodeID;
 use edgerun_rt::CancellationToken;
 use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
@@ -111,7 +110,7 @@ pub(crate) async fn handle_provisioning_connection(
     let request = String::from_utf8_lossy(&buf[..n]).to_string();
     edgerun_log::debug!("Provisioning request: {request}");
 
-    let payload: JsonValue = match edgerun_config::edgerun_json::from_json_slice(request.as_bytes())
+    let payload: JsonValue = match edgerun_json::from_json_slice(request.as_bytes())
     {
         Ok(payload) => payload,
         Err(error) => {

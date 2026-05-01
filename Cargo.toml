@@ -32,7 +32,6 @@ members = [
   "crates/edgerun-capabilities",
   "crates/edgerun-capability-policy",
   "crates/edgerun-cec",
-  "crates/edgerun-config",
   "crates/edgerun-core",
   "crates/edgerun-crypto",
   "crates/edgerun-dhcp",

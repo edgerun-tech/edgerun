@@ -10,7 +10,6 @@ description = "Edgerun scheduling primitives for marketplace workloads"
 
 [dependencies]
 edgerun-solana = { version = "0.1", path = "../edgerun-solana" }
-edgerun-config = { version = "0.1", path = "../edgerun-config" }
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-error.workspace = true

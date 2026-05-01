@@ -103,7 +103,7 @@ pub fn resolve_from_secret_service(
     let coll = format!("/org/freedesktop/secrets/collections/{}", namespace);
 
     // Use the backend to look up the credential
-    let backend = edgerun_secret_service::Backend::new_noop(data_root.to_path_buf(), vec![0u8; 32]).ok()?;
+    let backend = edgerun_secret_service::Backend::new_noop(data_root.to_path_buf()).ok()?;
     let (secret_bytes, _meta) = backend.get(&coll, registry_host).ok()??;
 
     // Secret is stored as "username:password"

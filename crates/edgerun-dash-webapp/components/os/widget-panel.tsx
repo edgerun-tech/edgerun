@@ -322,18 +322,20 @@ function AcWidget() {
   const startAngle = -220 * (Math.PI / 180)
   const endAngle = 40 * (Math.PI / 180)
   const angle = startAngle + pct * (endAngle - startAngle)
-  const arcSweep = endAngle - startAngle
-  // Full track arc
-  const tx1 = ARC_CX + ARC_R * Math.cos(startAngle)
-  const ty1 = ARC_CY + ARC_R * Math.sin(startAngle)
-  const tx2 = ARC_CX + ARC_R * Math.cos(endAngle)
-  const ty2 = ARC_CY + ARC_R * Math.sin(endAngle)
-  // Filled arc
-  const fx1 = ARC_CX + ARC_R * Math.cos(startAngle)
-  const fy1 = ARC_CY + ARC_R * Math.sin(startAngle)
-  const fx2 = ARC_CX + ARC_R * Math.cos(angle)
-  const fy2 = ARC_CY + ARC_R * Math.sin(angle)
   const largeArc = pct > 0.5 ? 1 : 0
+
+  const toPathCoord = (v: number) => v.toFixed(2)
+
+  // Full track arc
+  const tx1 = toPathCoord(ARC_CX + ARC_R * Math.cos(startAngle))
+  const ty1 = toPathCoord(ARC_CY + ARC_R * Math.sin(startAngle))
+  const tx2 = toPathCoord(ARC_CX + ARC_R * Math.cos(endAngle))
+  const ty2 = toPathCoord(ARC_CY + ARC_R * Math.sin(endAngle))
+  // Filled arc
+  const fx1 = toPathCoord(ARC_CX + ARC_R * Math.cos(startAngle))
+  const fy1 = toPathCoord(ARC_CY + ARC_R * Math.sin(startAngle))
+  const fx2 = toPathCoord(ARC_CX + ARC_R * Math.cos(angle))
+  const fy2 = toPathCoord(ARC_CY + ARC_R * Math.sin(angle))
 
   return (
     <div className="widget-card">

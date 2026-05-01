@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react"
 
-export type AuthState = "unauthenticated" | "authenticated" | "locked"
+export type AuthState = "guest" | "unauthenticated" | "authenticated" | "locked"
 
 export type NodeProvisionInput = {
   nodeId: string
@@ -204,7 +204,7 @@ async function provisionNode(input: NodeProvisionInput): Promise<void> {
 }
 
 export function useAuth() {
-  const [authState, setAuthState] = useState<AuthState>("unauthenticated")
+  const [authState, setAuthState] = useState<AuthState>("guest")
   const [username, setUsername] = useState<string>("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -322,9 +322,10 @@ export function useAuth() {
 
     const credIdB64 = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null
     if (!credIdB64) {
-      setError("No registered credential found. Please sign up first.")
+      // No credential — enter guest mode instead of error
+      setAuthState("guest")
       setIsLoading(false)
-      return false
+      return true
     }
 
     if (!webAuthnAvailable || credIdB64 === "fallback-credential") {
@@ -362,6 +363,12 @@ export function useAuth() {
     }
   }, [webAuthnAvailable])
 
+  /** Continue as guest — no identity setup required */
+  const continueAsGuest = useCallback(() => {
+    setAuthState("guest")
+    setUsername("")
+  }, [])
+
   /** Lock the session */
   const lock = useCallback(() => {
     setAuthState("locked")
@@ -389,6 +396,7 @@ export function useAuth() {
     hasRegistered,
     register,
     authenticate,
+    continueAsGuest,
     lock,
     signOut,
     clearError,

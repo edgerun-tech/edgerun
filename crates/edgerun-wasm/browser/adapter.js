@@ -308,7 +308,7 @@ export class BrowserAdapter {
       });
     }
 
-    if (len >= 10) {
+    if (data.length >= 10) {
       const ctLen = new DataView(data.buffer, data.byteOffset, data.byteLength)
         .getUint32(2, true);
       const ctStart = 6;

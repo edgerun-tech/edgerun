@@ -1514,16 +1514,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-config"
-version = "0.1.1"
-dependencies = [
- "edgerun-dhcpv6",
- "edgerun-encoding",
- "edgerun-error",
- "edgerun-json",
-]
-
-[[package]]
 name = "edgerun-core"
 version = "0.1.1"
 dependencies = [
@@ -2277,7 +2267,6 @@ version = "0.1.0"
 name = "edgerun-scheduler"
 version = "0.1.1"
 dependencies = [
- "edgerun-config",
  "edgerun-error",
  "edgerun-json",
  "edgerun-mesh",
@@ -2323,7 +2312,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-acme",
  "edgerun-analytics",
- "edgerun-config",
  "edgerun-crypto",
  "edgerun-dhcp",
  "edgerun-dns",

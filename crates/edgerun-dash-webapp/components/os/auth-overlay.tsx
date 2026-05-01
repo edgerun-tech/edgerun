@@ -15,6 +15,7 @@ interface AuthOverlayProps {
   webAuthnAvailable: boolean
   onRegister: (name: string, nodeProvision?: NodeProvisionInput) => Promise<boolean>
   onAuthenticate: () => Promise<boolean>
+  onContinueAsGuest: () => void
   onClearError: () => void
 }
 
@@ -71,6 +72,7 @@ export function AuthOverlay({
   webAuthnAvailable,
   onRegister,
   onAuthenticate,
+  onContinueAsGuest,
   onClearError,
 }: AuthOverlayProps) {
   const [screen, setScreen] = useState<Screen>("welcome")
@@ -171,6 +173,12 @@ export function AuthOverlay({
                 className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 active:scale-[0.98]"
               >
                 Get started
+              </button>
+              <button
+                onClick={onContinueAsGuest}
+                className="w-full rounded-lg border border-border bg-secondary/50 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary active:scale-[0.98]"
+              >
+                Continue as Guest
               </button>
               { (
                 <button
