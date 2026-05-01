@@ -20,6 +20,11 @@ dnssec = [
 ]
 tsig = ["dep:edgerun-crypto", "edgerun-crypto/hmac"]
 
+[[bin]]
+name = "edgerun-dns"
+path = "src/main.rs"
+required-features = ["dnssec"]
+
 [dependencies]
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }

@@ -95,7 +95,6 @@ members = [
   "crates/edgerun-server",
   "crates/edgerun-email",
   "crates/edgerun-email-auth",
-  "crates/edgerun-mail-web",
   "crates/edgerun-speaker",
   "crates/edgerun-storage",
   "crates/edgerun-stream",
@@ -113,6 +112,7 @@ members = [
   "crates/edgerun-clap-derive",
   "crates/edgerun-scheduler",
   "crates/edgerun-marketplace-cli",
+  "crates/edgerun-wasm",
 ]
 
 [workspace.package]
