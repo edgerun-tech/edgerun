@@ -39,6 +39,7 @@ edgerun-input = { version = "0.1", path = "../edgerun-input" }
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 edgerun-virtio = { version = "0.1", path = "../edgerun-virtio" }
 edgerun-rtl8125 = { version = "0.1", path = "../edgerun-rtl8125" }
+edgerun-event = { version = "0.1", path = "../edgerun-event", features = ["virtio"] }
 
 [target.'cfg(target_arch = "xtensa")'.dependencies]
 edgerun-wifi = { version = "0.1", path = "../edgerun-wifi", optional = true }

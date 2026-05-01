@@ -510,8 +510,13 @@ pub fn dispatch_command(
             dispatch_custom_command(command, store, stream_id, signer, controllers)
         }
         x if x == CommandType::UpdateConfig as i32 => {
-            // Update configuration via event store
             dispatch_update_config(command, store, stream_id, signer, controllers)
+        }
+        x if x == CommandType::InstallApp as i32 => {
+            dispatch_install_app(command, store, stream_id, signer, controllers)
+        }
+        x if x == CommandType::UninstallApp as i32 => {
+            dispatch_uninstall_app(command, store, stream_id, signer, controllers)
         }
         _ => {
             // Spec §11.1: unknown values in authority-critical enums MUST cause rejection.
@@ -639,6 +644,251 @@ fn dispatch_update_config(
         response,
         None,
         patch_object,
+    )
+}
+
+fn dispatch_install_app(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    use edgerun_proto::edgerun::v0::stream::InstallAppPayload;
+
+    let payload_bytes = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
+        _ => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_install_app_payload",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let install_payload = match InstallAppPayload::decode(payload_bytes.as_slice()) {
+        Ok(p) => p,
+        Err(e) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("invalid_install_app_payload: {}", e),
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let package_bytes = match install_payload.package_object {
+        Some(ref obj) => {
+            match store.get_blob(&obj.object_id) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    return record_and_respond(
+                        command,
+                        store,
+                        stream_id,
+                        signer,
+                        controllers,
+                        false,
+                        &format!("package_object_not_found: {}", e),
+                        Vec::new(),
+                        None,
+                    );
+                }
+            }
+        }
+        None => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "package_object_required",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let wasm_bytes = match install_payload.wasm_object {
+        Some(ref obj) => {
+            match store.get_blob(&obj.object_id) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    return record_and_respond(
+                        command,
+                        store,
+                        stream_id,
+                        signer,
+                        controllers,
+                        false,
+                        &format!("wasm_object_not_found: {}", e),
+                        Vec::new(),
+                        None,
+                    );
+                }
+            }
+        }
+        None => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "wasm_object_required",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let domain = if install_payload.domain.is_empty() {
+        "default".to_string()
+    } else {
+        install_payload.domain.clone()
+    };
+
+    edgerun_log::info!(
+        "install_app: name={}, entry={}, domain={}",
+        install_payload.name,
+        install_payload.entry,
+        domain
+    );
+
+    let package_object_id = edgerun_storage::hash_sha256(&package_bytes);
+
+    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
+        app_name: install_payload.name.clone(),
+        status_code: 0,
+        message: "app_registered".to_string(),
+        result_object: Some(edgerun_proto::edgerun::v0::common::ObjectRef {
+            object_id: package_object_id.to_vec(),
+            object_kind: Some(edgerun_proto::edgerun::v0::common::ObjectKind::AppPackage as i32),
+        }),
+    };
+
+    let response_bytes = result_payload.encode_to_vec();
+
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response_bytes,
+        None,
+        Some(result_payload.result_object.unwrap()),
+    )
+}
+
+fn dispatch_uninstall_app(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    use edgerun_proto::edgerun::v0::stream::UninstallAppPayload;
+
+    let payload_bytes = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
+        _ => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_uninstall_app_payload",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let uninstall_payload = match UninstallAppPayload::decode(payload_bytes.as_slice()) {
+        Ok(p) => p,
+        Err(e) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("invalid_uninstall_app_payload: {}", e),
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let app_name = if uninstall_payload.app_name.is_empty() {
+        match &uninstall_payload.package_object {
+            Some(obj) => edgerun_core::util::bytes_to_hex(&obj.object_id),
+            None => {
+                return record_and_respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    false,
+                    "app_name_or_package_required",
+                    Vec::new(),
+                    None,
+                );
+            }
+        }
+    } else {
+        uninstall_payload.app_name.clone()
+    };
+
+    edgerun_log::info!("uninstall_app: name={}", app_name);
+
+    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
+        app_name: app_name.clone(),
+        status_code: 0,
+        message: "app_uninstalled".to_string(),
+        result_object: uninstall_payload.package_object.clone(),
+    };
+
+    let response_bytes = result_payload.encode_to_vec();
+
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response_bytes,
+        None,
+        uninstall_payload.package_object.clone(),
     )
 }
 

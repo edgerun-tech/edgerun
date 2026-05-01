@@ -401,6 +401,8 @@ pub enum CommandType {
     CreateRevocation = 11,
     StoreAndForward = 12,
     UpdateConfig = 13,
+    InstallApp = 14,
+    UninstallApp = 15,
     PutSecret = 1001,
     DeleteSecret = 1002,
     ListSecrets = 1003,
@@ -426,6 +428,8 @@ impl CommandType {
             Self::CreateRevocation => "COMMAND_TYPE_CREATE_REVOCATION",
             Self::StoreAndForward => "COMMAND_TYPE_STORE_AND_FORWARD",
             Self::UpdateConfig => "COMMAND_TYPE_UPDATE_CONFIG",
+            Self::InstallApp => "COMMAND_TYPE_INSTALL_APP",
+            Self::UninstallApp => "COMMAND_TYPE_UNINSTALL_APP",
             Self::PutSecret => "COMMAND_TYPE_PUT_SECRET",
             Self::DeleteSecret => "COMMAND_TYPE_DELETE_SECRET",
             Self::ListSecrets => "COMMAND_TYPE_LIST_SECRETS",
@@ -448,6 +452,8 @@ impl CommandType {
             "COMMAND_TYPE_CREATE_REVOCATION" => Some(Self::CreateRevocation),
             "COMMAND_TYPE_STORE_AND_FORWARD" => Some(Self::StoreAndForward),
             "COMMAND_TYPE_UPDATE_CONFIG" => Some(Self::UpdateConfig),
+            "COMMAND_TYPE_INSTALL_APP" => Some(Self::InstallApp),
+            "COMMAND_TYPE_UNINSTALL_APP" => Some(Self::UninstallApp),
             "COMMAND_TYPE_PUT_SECRET" => Some(Self::PutSecret),
             "COMMAND_TYPE_DELETE_SECRET" => Some(Self::DeleteSecret),
             "COMMAND_TYPE_LIST_SECRETS" => Some(Self::ListSecrets),
@@ -456,3 +462,77 @@ impl CommandType {
     }
 }
 // @@protoc_insertion_point(module)
+
+// ===========================================================================
+// WASM Application packaging — manually added (proto-v0:AppPackage:1)
+// ===========================================================================
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AppPackage {
+    #[prost(uint32, tag = "1")]
+    pub version: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub entry: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub wasm_object: ::core::option::Option<super::common::ObjectRef>,
+    #[prost(btree_map = "string, string", tag = "5")]
+    pub routes: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(btree_map = "string, message", tag = "6")]
+    pub assets: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        super::common::ObjectRef,
+    >,
+    #[prost(message, repeated, tag = "7")]
+    pub required_capabilities: ::prost::alloc::vec::Vec<super::trust::CapabilityDescriptor>,
+    #[prost(message, optional, tag = "8")]
+    pub metadata: ::core::option::Option<super::common::ObjectRef>,
+}
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallAppPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    #[prost(message, optional, tag = "2")]
+    pub app_package: ::core::option::Option<super::common::ObjectRef>,
+    #[prost(string, tag = "3")]
+    pub domain: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "4")]
+    pub delegation_chain: ::prost::alloc::vec::Vec<super::trust::DelegationRecord>,
+}
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UninstallAppPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    #[prost(message, optional, tag = "2")]
+    pub app_package: ::core::option::Option<super::common::ObjectRef>,
+    #[prost(string, tag = "3")]
+    pub reason: ::prost::alloc::string::String,
+}
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AppExecutionPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    #[prost(message, optional, tag = "2")]
+    pub app_package: ::core::option::Option<super::common::ObjectRef>,
+    #[prost(message, repeated, tag = "3")]
+    pub granted_capabilities: ::prost::alloc::vec::Vec<super::trust::CapabilityDescriptor>,
+    #[prost(oneof = "app_execution_payload::Outcome", tags = "4, 5")]
+    pub outcome: ::core::option::Option<app_execution_payload::Outcome>,
+}
+
+pub mod app_execution_payload {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Outcome {
+        #[prost(message, tag = "4")]
+        ResultObject(super::super::common::ObjectRef),
+        #[prost(string, tag = "5")]
+        ErrorReason(::prost::alloc::string::String),
+    }
+}

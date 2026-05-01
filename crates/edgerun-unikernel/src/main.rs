@@ -5832,7 +5832,51 @@ pub unsafe extern "C" fn kernel_main() -> ! {
         logged_icmp: false,
     });
 
+    rt::log::log(1, "Starting virtio event loop");
+    let mut event_queue = edgerun_event::EventQueue::<32>::new();
+    let mut virtio_loop = edgerun_event::VirtioEventLoop::new(&mut event_queue);
+    if let BareNic::Virtio(virtio_net) = &mut net {
+        virtio_loop.net = Some(virtio_net);
+    }
+
+    let mut event_count: u32 = 0;
     loop {
+        let events = virtio_loop.poll_many(8);
+        if events > 0 {
+            event_count += events as u32;
+            while let Some(event) = virtio_loop.pop_event() {
+                match event.event_type {
+                    edgerun_event::EventType::Network => {
+                        if let Some(subtype) = event.network_subtype() {
+                            match subtype {
+                                edgerun_event::NetworkSubtype::Connected => {
+                                    rt::log::log(1, "Event: net connected");
+                                }
+                                edgerun_event::NetworkSubtype::Received => {
+                                    if let Some(payload) = event.network_payload() {
+                                        rt::log::log(1, "Event: net rx bytes");
+                                        let _ = payload;
+                                    }
+                                }
+                                edgerun_event::NetworkSubtype::Disconnected => {
+                                    rt::log::log(1, "Event: net disconnected");
+                                }
+                                edgerun_event::NetworkSubtype::Error => {
+                                    rt::log::log(1, "Event: net error");
+                                }
+                            }
+                        }
+                    }
+                    edgerun_event::EventType::Disk => {
+                        rt::log::log(1, "Event: disk");
+                    }
+                    edgerun_event::EventType::Timer => {
+                        rt::log::log(1, "Event: timer");
+                    }
+                }
+            }
+        }
+
         core::arch::asm!("hlt");
     }
 }

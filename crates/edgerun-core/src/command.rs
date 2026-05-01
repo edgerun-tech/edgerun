@@ -752,6 +752,8 @@ fn required_capability_for_command(command_type: i32) -> Option<(i32, &'static s
         Ct::PutSecret => Some((Ck::DecryptDomain as i32, "put_secret")),
         Ct::DeleteSecret => Some((Ck::DecryptDomain as i32, "delete_secret")),
         Ct::ListSecrets => Some((Ck::DecryptDomain as i32, "list_secrets")),
+        Ct::InstallApp => Some((Ck::ExecuteWorkload as i32, "install_app")),
+        Ct::UninstallApp => Some((Ck::ExecuteWorkload as i32, "uninstall_app")),
     }
 }
 

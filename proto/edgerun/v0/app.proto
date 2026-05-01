@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package edgerun.v0.app;
+
+import "edgerun/v0/common.proto";
+import "edgerun/v0/trust.proto";
+
+// Execution context for a WASM app instance.
+message ExecutionContext {
+  uint32 version = 1;
+
+  // The AppPackage being executed
+  edgerun.v0.common.ObjectRef app_package = 2;
+
+  // Instance ID for this execution (unique per invocation)
+  bytes instance_id = 3;
+
+  // Capabilities granted for this execution
+  // MUST be: intersect(app.required_capabilities, node_policy, delegation_chain)
+  repeated edgerun.v0.trust.CapabilityDescriptor granted_capabilities = 4;
+
+  // Execution class constraint
+  edgerun.v0.common.ExecutionClass execution_class = 5;
+
+  // Domain scope for this execution
+  string domain = 6;
+}
+
+// WASM host capability operations — these are checked against
+// granted_capabilities before allowing the operation.
+message CapabilityCheck {
+  enum Operation {
+    OPERATION_UNSPECIFIED = 0;
+    OPERATION_READ_BLOB = 1;
+    OPERATION_WRITE_BLOB = 2;
+    OPERATION_SEND_MESSAGE = 3;
+    OPERATION_NETWORK_BIND = 4;
+    OPERATION_NETWORK_CONNECT = 5;
+    OPERATION_STORAGE_ACCESS = 6;
+    OPERATION_EXECUTION = 7;
+  }
+
+  Operation operation = 1;
+
+  // Optional scope constraint for the operation
+  optional edgerun.v0.trust.ScopeDescriptor scope = 2;
+}
+
+// Result of a capability check
+message CapabilityResult {
+  enum Decision {
+    DECISION_UNSPECIFIED = 0;
+    DECISION_GRANTED = 1;
+    DECISION_DENIED = 2;
+  }
+
+  Decision decision = 1;
+  string reason = 2;
+}

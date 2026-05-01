@@ -1,0 +1,26 @@
+[package]
+name = "edgerun-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun native app — eframe (egui+winit+wgpu) + WASM runtime"
+
+[[bin]]
+name = "edgerun-app"
+path = "src/main.rs"
+
+[dependencies]
+edgerun-ui = { workspace = true }
+edgerun-proto = { workspace = true }
+wasmtime = { workspace = true }
+eframe = { workspace = true }
+anyhow = "1.0"
+clap = { version = "4", features = ["derive"] }
+prost = { workspace = true }
+prost-types = { workspace = true }
+
+[lints]
+workspace = true

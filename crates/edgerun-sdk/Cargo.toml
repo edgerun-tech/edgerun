@@ -1,0 +1,17 @@
+[package]
+name = "edgerun-sdk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun SDK for building WASM execution units"
+
+[dependencies]
+edgerun-sdk-macro = { path = "../edgerun-sdk-macro" }
+edgerun-proto = { workspace = true }
+prost = { workspace = true }
+
+[lints]
+workspace = true

@@ -56,9 +56,11 @@ enum CommandType {
   COMMAND_TYPE_CREATE_REVOCATION = 11;
   COMMAND_TYPE_STORE_AND_FORWARD = 12;
   COMMAND_TYPE_UPDATE_CONFIG = 13;
+  COMMAND_TYPE_INSTALL_APP = 14;
+  COMMAND_TYPE_UNINSTALL_APP = 15;
   // Extension range: implementations MAY add command types starting here.
   // Unknown extension types MUST be rejected unless local policy explicitly allows them.
-  reserved 14 to 999;
+  reserved 16 to 999;
   reserved "COMMAND_TYPE_CUSTOM";
   // Implementation-specific extensions start at 1000.
   // These are NOT part of the core protocol. Receivers MUST reject unknown
@@ -194,6 +196,79 @@ message CollectionCreatedPayload {
 message CollectionDeletedPayload {
   uint32 payload_version = 1;
   string collection_name = 2;
-  // Number of items that were in the collection
   uint32 items_removed = 3;
+}
+
+// ===========================================================================
+// WASM Application packaging
+//
+// AppPackage is a protocol-native object that declares executable behavior
+// AND required capabilities. Apps are immutable, content-addressed, and
+// capability-constrained.
+//
+// Canonicalization ID: "proto-v0:AppPackage:1"
+// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || protobuf_encode(AppPackage))
+// ===========================================================================
+
+message AppPackage {
+  uint32 version = 1;
+
+  string name = 2;
+
+  // WASM entry point function name (e.g. "on_request", "run")
+  string entry = 3;
+
+  // ObjectRef pointing to the WASM binary (stored as a separate object)
+  edgerun.v0.common.ObjectRef wasm_object = 4;
+
+  // Route patterns mapped to this app (e.g. "/api/*" -> entry handler)
+  map<string, string> routes = 5;
+
+  // Additional asset objects (styles, templates, static files)
+  map<string, edgerun.v0.common.ObjectRef> assets = 6;
+
+  // REQUIRED: capability requirements — the app declares ALL capabilities
+  // it needs to function. The runtime MUST NOT grant capabilities implicitly.
+  repeated edgerun.v0.trust.CapabilityDescriptor required_capabilities = 7;
+
+  // Optional metadata object (description, author, version info, etc.)
+  edgerun.v0.common.ObjectRef metadata = 8;
+}
+
+message InstallAppPayload {
+  uint32 payload_version = 1;
+
+  // ObjectRef to the AppPackage object
+  edgerun.v0.common.ObjectRef app_package = 2;
+
+  // Domain or scope under which the app is installed
+  string domain = 3;
+
+  // Optional delegation context for capability resolution
+  repeated edgerun.v0.trust.DelegationRecord delegation_chain = 4;
+}
+
+message UninstallAppPayload {
+  uint32 payload_version = 1;
+
+  // ObjectRef to the AppPackage object being uninstalled
+  edgerun.v0.common.ObjectRef app_package = 2;
+
+  string reason = 3;
+}
+
+message AppExecutionPayload {
+  uint32 payload_version = 1;
+
+  // ObjectRef to the AppPackage being executed
+  edgerun.v0.common.ObjectRef app_package = 2;
+
+  // Effective capabilities that were granted for this execution
+  repeated edgerun.v0.trust.CapabilityDescriptor granted_capabilities = 3;
+
+  // Execution result or error
+  oneof outcome {
+    edgerun.v0.common.ObjectRef result_object = 4;
+    string error_reason = 5;
+  }
 }

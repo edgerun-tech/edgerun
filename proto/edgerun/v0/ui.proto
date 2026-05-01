@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package edgerun.v0.ui;
+
+// UINode is the deterministic, platform-agnostic UI description.
+// It is produced by WASM and rendered by native (egui) or browser (DOM) adapters.
+//
+// Canonical encoding = prost::Message::encode() directly.
+// Object ID = SHA256("edgerun:v0:object" || 0x00 || "proto-v0:UINode:1" || 0x00 || protobuf_encode(UINode))
+
+message UINode {
+  // Semantic node type: "text", "button", "column", "row", "spacer", "heading", "input", "image"
+  string type = 1;
+
+  // Key-value properties. Renderers interpret these per node type.
+  map<string, string> props = 2;
+
+  // Child nodes. Layout nodes (column, row) use these; leaf nodes leave empty.
+  repeated UINode children = 3;
+
+  // Action identifier sent back to WASM on user interaction.
+  optional string action = 4;
+}
+
+// UIActionEvent carries a user interaction back to the WASM runtime.
+message UIActionEvent {
+  uint32 event_version = 1;
+  string action = 2;
+  optional string node_path = 3;
+  optional string context = 4;
+}
+
+// UIRenderRequest — sent from renderer to request a fresh UI tree.
+message UIRenderRequest {
+  uint32 request_version = 1;
+  optional string last_action = 2;
+  optional uint64 state_version = 3;
+}

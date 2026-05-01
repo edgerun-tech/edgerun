@@ -15,6 +15,9 @@ pub use edgerun_proto::edgerun::v0::{
         CostLimit, FederatedAggregateDescriptor, QueryRequest, QueryResultFragment,
         SnapshotDescriptor,
     },
+    app::{
+        CapabilityCheck, CapabilityResult, ExecutionContext,
+    },
     common::{
         CommandRef, DelegationRef, Digest, EventRef, HeadRef, IdentityRef, NodeRef, ObjectRef,
         RateLimit, RepresentationRef, RevocationRef, Signature, SnapshotRef, StreamRef, TimeWindow,
@@ -23,15 +26,17 @@ pub use edgerun_proto::edgerun::v0::{
     network::{ReachabilityHint, RelayEnvelope, RouteAdvertisement, SessionAccept, SessionHello},
     object::{ChunkEntry, ChunkManifest, LogicalObjectDescriptor, StoredRepresentationHeader},
     stream::{
-        ActionLifecyclePayload, CollectionCreatedPayload, CollectionDeletedPayload,
-        CommandEnvelope, CommandResultPayload, CommandSentPayload, EventEnvelope,
-        NodeGenesisPayload, SecretDeletePayload, SecretPutPayload,
+        ActionLifecyclePayload, AppExecutionPayload, AppPackage, CollectionCreatedPayload,
+        CollectionDeletedPayload, CommandEnvelope, CommandResultPayload, CommandSentPayload,
+        EventEnvelope, InstallAppPayload, NodeGenesisPayload, SecretDeletePayload, SecretPutPayload,
+        UninstallAppPayload,
     },
     trust::{
         AggregateTrustPolicy, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor,
         ConstraintSet, DelegationRecord, RevocationRecord, RouteSelectionPolicy,
         RouteTrustAssignment, RouteTrustAssignments, ScopeDescriptor,
     },
+    ui::{UINode, UIActionEvent, UIRenderRequest},
 };
 
 // Proof types
@@ -117,6 +122,16 @@ pub enum ProtocolRecord {
     AggregateSummaryProof(AggregateSummaryProof),
     TrustPolicyProof(TrustPolicyProof),
     ProofBundle(ProofBundle),
+    AppPackage(AppPackage),
+    InstallAppPayload(InstallAppPayload),
+    UninstallAppPayload(UninstallAppPayload),
+    AppExecutionPayload(AppExecutionPayload),
+    ExecutionContext(ExecutionContext),
+    CapabilityCheck(CapabilityCheck),
+    CapabilityResultMsg(CapabilityResult),
+    UINode(UINode),
+    UIActionEvent(UIActionEvent),
+    UIRenderRequest(UIRenderRequest),
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +189,9 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> Vec<u8> {
             CommandSentPayload, CommandResultPayload, ActionLifecyclePayload,
             SecretPutPayload, SecretDeletePayload,
             CollectionCreatedPayload, CollectionDeletedPayload,
+            InstallAppPayload, UninstallAppPayload, AppExecutionPayload,
+            AppPackage, ExecutionContext, CapabilityCheck, CapabilityResultMsg,
+            UINode, UIActionEvent, UIRenderRequest,
             LogicalObjectDescriptor, StoredRepresentationHeader, ChunkEntry,
             ChunkManifest, AggregateTrustPolicy, RouteTrustAssignment,
             RouteTrustAssignments, RouteSelectionPolicy, AssuranceRequirement,

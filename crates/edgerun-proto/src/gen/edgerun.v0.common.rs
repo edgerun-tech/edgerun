@@ -286,6 +286,8 @@ pub enum ObjectKind {
     Command = 6,
     Proof = 7,
     DerivedView = 8,
+    AppPackage = 9,
+    UiTree = 10,
 }
 impl ObjectKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -303,6 +305,8 @@ impl ObjectKind {
             Self::Command => "OBJECT_KIND_COMMAND",
             Self::Proof => "OBJECT_KIND_PROOF",
             Self::DerivedView => "OBJECT_KIND_DERIVED_VIEW",
+            Self::AppPackage => "OBJECT_KIND_APP_PACKAGE",
+            Self::UiTree => "OBJECT_KIND_UI_TREE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -317,6 +321,8 @@ impl ObjectKind {
             "OBJECT_KIND_COMMAND" => Some(Self::Command),
             "OBJECT_KIND_PROOF" => Some(Self::Proof),
             "OBJECT_KIND_DERIVED_VIEW" => Some(Self::DerivedView),
+            "OBJECT_KIND_APP_PACKAGE" => Some(Self::AppPackage),
+            "OBJECT_KIND_UI_TREE" => Some(Self::UiTree),
             _ => None,
         }
     }

@@ -107,12 +107,18 @@ members = [
   "crates/edgerun-virtual-disk",
   "crates/edgerun-wifi",
   "crates/edgerun-yubikey",
-  "crates/edgerun-vfs",
+   "crates/edgerun-vfs",
+   "crates/edgerun-ui",
+   "crates/edgerun-app",
   "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
   "crates/edgerun-scheduler",
   "crates/edgerun-marketplace-cli",
   "crates/edgerun-wasm",
+  "crates/edgerun-sdk",
+  "crates/edgerun-sdk-macro",
+  "crates/edgerun-example",
+  "crates/edgerun-event",
 ]
 
 [workspace.package]
@@ -194,6 +200,7 @@ edgerun-regex = { version = "0.1", path = "crates/edgerun-regex" }
 edgerun-email = { version = "0.1", path = "crates/edgerun-email" }
 edgerun-log = { version = "0.1", path = "crates/edgerun-log" }
 edgerun-rt = { version = "0.1", path = "crates/edgerun-rt" }
+edgerun-ui = { version = "0.1", path = "crates/edgerun-ui" }
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { version = "0.1", path = "crates/edgerun-crypto", default-features = false }
     # edgerun-json native JSON APIs
@@ -202,6 +209,13 @@ edgerun-error = { version = "0.1", path = "crates/edgerun-error" }
 # Browser deps
 edgerun-display = { version = "0.1", path = "crates/edgerun-display" }
 edgerun-gpu = { version = "0.1", path = "crates/edgerun-gpu" }
+edgerun-clap = { version = "0.1", path = "crates/edgerun-clap" }
+edgerun-clap-derive = { version = "0.1", path = "crates/edgerun-clap-derive" }
+edgerun-wasm = { version = "0.1", path = "crates/edgerun-wasm" }
+edgerun-virtio = { version = "0.1", path = "crates/edgerun-virtio" }
+edgerun-event = { version = "0.1", path = "crates/edgerun-event" }
+edgerun-sdk = { version = "0.1", path = "crates/edgerun-sdk" }
+edgerun-sdk-macro = { version = "0.1", path = "crates/edgerun-sdk-macro" }
 # edgerun-wgpu = { path = "crates/edgerun-wgpu" }
 # edgerun-rasterizer = { path = "crates/edgerun-rasterizer" }
 # edgerun-css-cascade = { path = "crates/edgerun-css-cascade" }
@@ -213,6 +227,9 @@ libc = "0.2"
 prost = { version = "0.14", default-features = false, features = ["derive"] }
 prost-types = { version = "0.14", default-features = false }
 der = { version = "0.8", features = ["heapless"] }
+wasmtime = "29"
+wasmparser = "0.224"
+eframe = "0.32"
 
 [patch.crates-io]
 const-oid = { path = "crates/edgerun-crypto/vendor/const-oid-0.9" }

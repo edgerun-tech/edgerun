@@ -12,6 +12,9 @@ pub mod edgerun {
         pub mod access {
             core::include!("gen/edgerun.v0.access.rs");
         }
+        pub mod app {
+            core::include!("gen/edgerun.v0.app.rs");
+        }
         pub mod capability {
             core::include!("gen/edgerun.v0.capability.rs");
         }
@@ -35,6 +38,9 @@ pub mod edgerun {
         }
         pub mod trust {
             core::include!("gen/edgerun.v0.trust.rs");
+        }
+        pub mod ui {
+            core::include!("gen/edgerun.v0.ui.rs");
         }
     }
 }

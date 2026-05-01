@@ -1,8 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use quote::ToTokens;
 use syn::{
-    parse_macro_input, Attribute, Data, DeriveInput, Field, Fields, Lit, Meta, MetaList, Variant,
+    parse_macro_input, Attribute, Data, DeriveInput, Field, Fields, Lit, Meta, Variant,
 };
 
 fn to_kebab_case(s: &str) -> String {
@@ -20,172 +19,215 @@ fn to_kebab_case(s: &str) -> String {
     result
 }
 
-#[allow(clippy::type_complexity)]
-fn parse_arg_attrs(
-    field: &Field,
-) -> (
-    Option<char>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    bool,
-    Option<usize>,
-    Option<char>,
-) {
-    let mut short = None;
-    let mut long = None;
-    let mut help = None;
-    let mut default = None;
-    let mut is_subcommand = false;
-    let mut num_args = None;
-    let mut value_delimiter = None;
-
+fn parse_arg_attrs(field: &Field) -> ArgAttrs {
+    let mut attrs = ArgAttrs::default();
     for attr in &field.attrs {
-        if attr.path().is_ident("arg") {
-            if let Meta::List(list) = &attr.meta {
-                let mut tokens = list.tokens.clone().into_iter().peekable();
-                while let Some(token) = tokens.next() {
-                    if let proc_macro2::TokenTree::Ident(ident) = token {
-                        let ident_str = ident.to_string();
-                        if ident_str == "subcommand" {
-                            is_subcommand = true;
-                        } else if ident_str == "short"
-                            || ident_str == "long"
-                            || ident_str == "help"
-                            || ident_str == "default_value"
-                            || ident_str == "num_args"
-                            || ident_str == "value_delimiter"
-                        {
-                            let mut value_tokens = proc_macro2::TokenStream::new();
-                            while let Some(t) = tokens.peek() {
-                                if let proc_macro2::TokenTree::Punct(p) = t {
-                                    if p.as_char() == '=' {
-                                        tokens.next();
-                                        break;
-                                    }
-                                }
-                                value_tokens.extend([tokens.next().unwrap()]);
-                            }
-                            if ident_str == "short" {
-                                if let Ok(Lit::Char(c)) = syn::parse2::<Lit>(value_tokens) {
-                                    short = Some(c.value());
-                                }
-                            } else if ident_str == "long" {
-                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
-                                    long = Some(s.value());
-                                }
-                            } else if ident_str == "help" {
-                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
-                                    help = Some(s.value());
-                                }
-                            } else if ident_str == "default_value" {
-                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
-                                    default = Some(s.value());
-                                }
-                            } else if ident_str == "num_args" {
-                                if let Ok(Lit::Int(i)) = syn::parse2::<Lit>(value_tokens) {
-                                    num_args = Some(i.base10_parse().unwrap_or(1));
-                                }
-                            } else if ident_str == "value_delimiter" {
-                                if let Ok(Lit::Char(c)) = syn::parse2::<Lit>(value_tokens) {
-                                    value_delimiter = Some(c.value());
-                                }
+        if !attr.path().is_ident("arg") {
+            continue;
+        }
+        if let Meta::List(list) = &attr.meta {
+            let mut tokens = list.tokens.clone().into_iter().peekable();
+            while let Some(token) = tokens.next() {
+                if let proc_macro2::TokenTree::Ident(ident) = token {
+                    let ident_str = ident.to_string();
+                    match ident_str.as_str() {
+                        "subcommand" => attrs.is_subcommand = true,
+                        "short" => {
+                            let val = collect_value(&mut tokens);
+                            if let Ok(Lit::Char(c)) = syn::parse2::<Lit>(val) {
+                                attrs.short = Some(c.value());
                             }
                         }
+                        "long" => {
+                            let val = collect_value(&mut tokens);
+                            if val.is_empty() {
+                                attrs.long = Some(String::new());
+                            } else if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(val) {
+                                attrs.long = Some(s.value());
+                            }
+                        }
+                        "help" => {
+                            let val = collect_value(&mut tokens);
+                            if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(val) {
+                                attrs.help = Some(s.value());
+                            }
+                        }
+                        "default_value" => {
+                            let val = collect_value(&mut tokens);
+                            if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(val) {
+                                attrs.default_value = Some(s.value());
+                            }
+                        }
+                        "num_args" => {
+                            let val = collect_value(&mut tokens);
+                            if let Ok(Lit::Int(i)) = syn::parse2::<Lit>(val) {
+                                attrs.num_args = Some(i.base10_parse().unwrap_or(1));
+                            }
+                        }
+                        "value_delimiter" => {
+                            let val = collect_value(&mut tokens);
+                            if let Ok(Lit::Char(c)) = syn::parse2::<Lit>(val) {
+                                attrs.value_delimiter = Some(c.value());
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
         }
     }
-    (
-        short,
-        long,
-        help,
-        default,
-        is_subcommand,
-        num_args,
-        value_delimiter,
-    )
+    attrs
 }
 
-fn parse_global_command_attrs(attrs: &[Attribute]) -> (Option<String>, Option<String>) {
-    let mut version = None;
-    let mut author = None;
-
-    for attr in attrs {
-        if attr.path().is_ident("command") {
-            if let Meta::List(list) = &attr.meta {
-                let mut tokens = list.tokens.clone().into_iter().peekable();
-                while let Some(token) = tokens.next() {
-                    if let proc_macro2::TokenTree::Ident(ident) = token {
-                        let ident_str = ident.to_string();
-                        if ident_str == "version" || ident_str == "author" {
-                            let mut value_tokens = proc_macro2::TokenStream::new();
-                            while let Some(t) = tokens.peek() {
-                                if let proc_macro2::TokenTree::Punct(p) = t {
-                                    if p.as_char() == '=' {
-                                        tokens.next();
-                                        break;
-                                    }
-                                }
-                                value_tokens.extend([tokens.next().unwrap()]);
-                            }
-                            if ident_str == "version" {
-                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
-                                    version = Some(s.value());
-                                }
-                            } else if ident_str == "author" {
-                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
-                                    author = Some(s.value());
-                                }
-                            }
-                        }
-                    }
-                }
+fn collect_value(tokens: &mut std::iter::Peekable<proc_macro2::token_stream::IntoIter>) -> proc_macro2::TokenStream {
+    let mut val = proc_macro2::TokenStream::new();
+    while let Some(t) = tokens.peek() {
+        if let proc_macro2::TokenTree::Punct(p) = t {
+            if p.as_char() == ',' {
+                break;
+            }
+            if p.as_char() == '=' {
+                tokens.next();
+                break;
             }
         }
+        val.extend([tokens.next().unwrap()]);
     }
-    (version, author)
+    val
 }
 
-fn parse_command_attrs(attrs: &[Attribute]) -> (Option<String>, Option<String>) {
+#[derive(Default)]
+struct ArgAttrs {
+    short: Option<char>,
+    long: Option<String>,
+    help: Option<String>,
+    default_value: Option<String>,
+    is_subcommand: bool,
+    num_args: Option<usize>,
+    value_delimiter: Option<char>,
+}
+
+fn parse_struct_command_attrs(attrs: &[Attribute]) -> (Option<String>, Option<String>) {
     let mut name = None;
     let mut about = None;
-
     for attr in attrs {
-        if attr.path().is_ident("command") {
-            if let Meta::List(list) = &attr.meta {
-                let mut tokens = list.tokens.clone().into_iter().peekable();
-                while let Some(token) = tokens.next() {
-                    if let proc_macro2::TokenTree::Ident(ident) = token {
-                        let ident_str = ident.to_string();
-                        if ident_str == "name" || ident_str == "about" {
-                            let mut value_tokens = proc_macro2::TokenStream::new();
-                            while let Some(t) = tokens.peek() {
-                                if let proc_macro2::TokenTree::Punct(p) = t {
-                                    if p.as_char() == '=' {
-                                        tokens.next();
-                                        break;
-                                    }
-                                }
-                                value_tokens.extend([tokens.next().unwrap()]);
-                            }
-                            if ident_str == "name" {
-                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
-                                    name = Some(s.value());
-                                }
-                            } else if ident_str == "name" || ident_str == "about" {
-                                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(value_tokens) {
-                                    about = Some(s.value());
-                                }
+        if !attr.path().is_ident("command") {
+            continue;
+        }
+        if let Meta::List(list) = &attr.meta {
+            let mut tokens = list.tokens.clone().into_iter().peekable();
+            while let Some(token) = tokens.next() {
+                if let proc_macro2::TokenTree::Ident(ident) = token {
+                    let ident_str = ident.to_string();
+                    match ident_str.as_str() {
+                        "name" => {
+                            let val = collect_value(&mut tokens);
+                            if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(val) {
+                                name = Some(s.value());
                             }
                         }
+                        "about" => {
+                            let val = collect_value(&mut tokens);
+                            if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(val) {
+                                about = Some(s.value());
+                            }
+                        }
+                        "version" | "author" => {
+                            collect_value(&mut tokens);
+                        }
+                        _ => {}
                     }
                 }
             }
         }
     }
     (name, about)
+}
+
+fn is_option_type(field: &Field) -> bool {
+    if let syn::Type::Path(tp) = &field.ty {
+        if let Some(seg) = tp.path.segments.last() {
+            return seg.ident == "Option";
+        }
+    }
+    false
+}
+
+fn is_bool_type(field: &Field) -> bool {
+    if let syn::Type::Path(tp) = &field.ty {
+        if let Some(seg) = tp.path.segments.last() {
+            return seg.ident == "bool" && seg.arguments.is_empty();
+        }
+    }
+    false
+}
+
+fn extract_inner_option_type(field: &Field) -> Option<syn::Type> {
+    if let syn::Type::Path(tp) = &field.ty {
+        if let Some(seg) = tp.path.segments.last() {
+            if seg.ident == "Option" {
+                if let syn::PathArguments::AngleBracketed(ab) = &seg.arguments {
+                    if let Some(syn::GenericArgument::Type(inner)) = ab.args.first() {
+                        return Some(inner.clone());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn build_arg_expr(field_name: &str, attrs: &ArgAttrs, is_bool: bool) -> proc_macro2::TokenStream {
+    let arg_long = if attrs.long.as_deref() == Some("") {
+        to_kebab_case(field_name)
+    } else {
+        attrs.long.clone().unwrap_or_else(|| to_kebab_case(field_name))
+    };
+    let mut arg = quote! { edgerun_clap::cli::Arg::new(#field_name).long(#arg_long) };
+    if is_bool {
+        arg = quote! { #arg.action(edgerun_clap::cli::Action::StoreTrue) };
+    }
+    if attrs.is_subcommand {
+        arg = quote! { #arg.subcommand() };
+    }
+    if let Some(s) = attrs.short {
+        arg = quote! { #arg.short(#s) };
+    }
+    if let Some(h) = &attrs.help {
+        arg = quote! { #arg.help(#h) };
+    }
+    if let Some(d) = &attrs.default_value {
+        arg = quote! { #arg.default_value(#d) };
+    }
+    if let Some(n) = attrs.num_args {
+        arg = quote! { #arg.num_args(#n) };
+    }
+    if let Some(delim) = attrs.value_delimiter {
+        arg = quote! { #arg.value_delimiter(#delim) };
+    }
+    arg
+}
+
+fn build_field_load(field: &Field) -> proc_macro2::TokenStream {
+    let ident = field.ident.as_ref().unwrap();
+    let field_name = ident.to_string();
+
+    if is_bool_type(field) {
+        return quote! {
+            #ident: matches.get_flag(#field_name)
+        };
+    }
+
+    if is_option_type(field) {
+        let inner_ty = extract_inner_option_type(field).unwrap_or_else(|| field.ty.clone());
+        return quote! {
+            #ident: matches.get_one::<#inner_ty>(#field_name)
+        };
+    }
+
+    quote! {
+        #ident: matches.get_one::<String>(#field_name).unwrap_or_default()
+    }
 }
 
 #[proc_macro_attribute]
@@ -202,21 +244,18 @@ pub fn arg(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn derive_parser(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let cmd_name = to_kebab_case(&name.to_string());
 
     let gen = match &input.data {
         Data::Enum(e) => {
             let variants: Vec<_> = e.variants.iter().collect();
-
-            let variant_cmds: Vec<_> = variants.iter()
+            let variant_cmds: Vec<_> = variants
+                .iter()
                 .map(|v| {
                     let var_ident = &v.ident;
                     let var_name = v.ident.to_string();
-                    let (name, about) = parse_command_attrs(&v.attrs);
-                    let cmd_name = name.unwrap_or_else(|| to_kebab_case(&var_name));
-                    let cmd_about = about;
+                    let (cmd_name, cmd_about) = parse_struct_command_attrs(&v.attrs);
+                    let cmd_name = cmd_name.unwrap_or_else(|| to_kebab_case(&var_name));
 
                     let fields: Vec<_> = if let Fields::Named(named) = &v.fields {
                         named.named.iter().collect()
@@ -224,46 +263,22 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                         vec![]
                     };
 
-                    let arg_builds: Vec<_> = fields.iter()
+                    let arg_builds: Vec<_> = fields
+                        .iter()
                         .map(|f| {
                             let field_name = f.ident.as_ref().unwrap().to_string();
-                            let (short, long, help, default, is_subcommand, num_args, value_delimiter) = parse_arg_attrs(f);
-                            let arg_long = long.unwrap_or_else(|| to_kebab_case(&field_name));
-                            let mut arg = quote! { edgerun_clap::cli::Arg::new(#field_name).long(#arg_long) };
-                            if is_subcommand {
-                                arg = quote! { #arg.subcommand() };
-                            }
-                            if let Some(s) = short {
-                                arg = quote! { #arg.short(#s) };
-                            }
-                            if let Some(h) = help {
-                                arg = quote! { #arg.help(#h) };
-                            }
-                            if let Some(d) = default {
-                                arg = quote! { #arg.default_value(#d) };
-                            }
-                            if let Some(n) = num_args {
-                                arg = quote! { #arg.num_args(#n) };
-                            }
-                            if let Some(delim) = value_delimiter {
-                                arg = quote! { #arg.value_delimiter(#delim) };
-                            }
-                            arg
+                            let attrs = parse_arg_attrs(f);
+                            let is_bool = is_bool_type(f);
+                            build_arg_expr(&field_name, &attrs, is_bool)
                         })
                         .collect();
+
+                    let field_loads: Vec<_> =
+                        fields.iter().map(|f| build_field_load(f)).collect();
 
                     let from_body = if fields.is_empty() {
                         quote! { Self::#var_ident }
                     } else {
-                        let field_loads: Vec<_> = fields.iter()
-                            .map(|f| {
-                                let ident = f.ident.as_ref().unwrap();
-                                let field_name = ident.to_string();
-                                quote! {
-                                    #ident: matches.get_one::<String>(#field_name).cloned().unwrap_or_default()
-                                }
-                            })
-                            .collect();
                         quote! { Self::#var_ident { #(#field_loads),* } }
                     };
 
@@ -271,14 +286,8 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                 })
                 .collect();
 
-            let subcommand_names: Vec<_> = variant_cmds
-                .iter()
-                .map(|(n, _, _, _, _)| n.as_str())
-                .collect();
-            let subcommand_bodies: Vec<_> = variant_cmds
-                .iter()
-                .map(|(_, _, _, body, _)| quote! { #body })
-                .collect();
+            let subcommand_names: Vec<_> =
+                variant_cmds.iter().map(|(n, _, _, _, _)| n.as_str()).collect();
             let subcommand_idents: Vec<_> = variant_cmds
                 .iter()
                 .map(|(_, _, _, _, i)| quote! { Self::#i })
@@ -301,7 +310,7 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
             quote! {
                 impl #impl_generics edgerun_clap::Parser for #name #ty_generics #where_clause {
                     fn command() -> edgerun_clap::cli::Command {
-                        let mut cmd = edgerun_clap::cli::Command::new(#cmd_name);
+                        let mut cmd = edgerun_clap::cli::Command::new(#name);
                         #(
                             cmd = cmd.subcommand(#subcommands_build);
                         )*
@@ -321,7 +330,7 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
 
                 impl #impl_generics edgerun_clap::cli::Subcommand for #name #ty_generics #where_clause {
                     fn name() -> &'static str {
-                        #cmd_name
+                        #name
                     }
                 }
             }
@@ -333,53 +342,71 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                 vec![]
             };
 
-            let (version, author) = parse_global_command_attrs(&input.attrs);
+            let (cmd_name_override, about_override) = parse_struct_command_attrs(&input.attrs);
+            let cmd_name = cmd_name_override.unwrap_or_else(|| to_kebab_case(&name.to_string()));
+
             let mut cmd = quote! { edgerun_clap::cli::Command::new(#cmd_name) };
-            if let Some(v) = version {
-                cmd = quote! { #cmd.version(#v) };
-            }
-            if let Some(a) = author {
-                cmd = quote! { #cmd.author(#a) };
+            if let Some(ab) = about_override {
+                cmd = quote! { #cmd.about(#ab) };
             }
 
+            let mut positional_idx: usize = 0;
             let arg_builds: Vec<_> = fields
                 .iter()
                 .map(|f| {
                     let field_name = f.ident.as_ref().unwrap().to_string();
-                    let (short, long, help, default, is_subcommand, num_args, value_delimiter) =
-                        parse_arg_attrs(f);
-                    let arg_long = long.unwrap_or_else(|| to_kebab_case(&field_name));
-                    let mut arg =
-                        quote! { edgerun_clap::cli::Arg::new(#field_name).long(#arg_long) };
-                    if is_subcommand {
-                        arg = quote! { #arg.subcommand() };
+                    let attrs = parse_arg_attrs(f);
+                    let is_bool = is_bool_type(f);
+
+                    let is_positional = attrs.short.is_none()
+                        && attrs.long.is_none()
+                        && !is_bool
+                        && !attrs.is_subcommand;
+
+                    if is_positional {
+                        let idx = positional_idx;
+                        positional_idx += 1;
+                        let mut arg = quote! { edgerun_clap::cli::Arg::new(#field_name).positional() };
+                        if let Some(h) = &attrs.help {
+                            arg = quote! { #arg.help(#h) };
+                        }
+                        if let Some(d) = &attrs.default_value {
+                            arg = quote! { #arg.default_value(#d) };
+                        }
+                        arg
+                    } else {
+                        build_arg_expr(&field_name, &attrs, is_bool)
                     }
-                    if let Some(s) = short {
-                        arg = quote! { #arg.short(#s) };
-                    }
-                    if let Some(h) = help {
-                        arg = quote! { #arg.help(#h) };
-                    }
-                    if let Some(d) = default {
-                        arg = quote! { #arg.default_value(#d) };
-                    }
-                    if let Some(n) = num_args {
-                        arg = quote! { #arg.num_args(#n) };
-                    }
-                    if let Some(delim) = value_delimiter {
-                        arg = quote! { #arg.value_delimiter(#delim) };
-                    }
-                    arg
                 })
                 .collect();
 
+            positional_idx = 0;
             let field_loads: Vec<_> = fields
                 .iter()
                 .map(|f| {
-                    let ident = f.ident.as_ref().unwrap();
-                    let field_name = ident.to_string();
-                    quote! {
-                        #ident: matches.get_one::<String>(#field_name).cloned().unwrap_or_default()
+                    let attrs = parse_arg_attrs(f);
+                    let is_bool = is_bool_type(f);
+                    let is_positional = attrs.short.is_none()
+                        && attrs.long.is_none()
+                        && !is_bool
+                        && !attrs.is_subcommand;
+
+                    if is_positional {
+                        let ident = f.ident.as_ref().unwrap();
+                        let idx = positional_idx;
+                        positional_idx += 1;
+                        if is_option_type(f) {
+                            let inner_ty = extract_inner_option_type(f).unwrap_or_else(|| f.ty.clone());
+                            quote! {
+                                #ident: matches.get_positional(#idx).map(|s| s.parse::<#inner_ty>().unwrap())
+                            }
+                        } else {
+                            quote! {
+                                #ident: matches.get_positional(#idx).map(String::from).unwrap_or_default()
+                            }
+                        }
+                    } else {
+                        build_field_load(f)
                     }
                 })
                 .collect();
@@ -396,9 +423,7 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
 
                     fn from(matches: &edgerun_clap::cli::ArgMatches) -> Self {
                         Self {
-                            #(
-                                #field_loads,
-                            )*
+                            #(#field_loads),*
                         }
                     }
                 }
@@ -408,9 +433,8 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
             quote! {
                 impl #impl_generics edgerun_clap::Parser for #name #ty_generics #where_clause {
                     fn command() -> edgerun_clap::cli::Command {
-                        edgerun_clap::cli::Command::new(#cmd_name)
+                        edgerun_clap::cli::Command::new(#name)
                     }
-
                     fn from(_matches: &edgerun_clap::cli::ArgMatches) -> Self {
                         Self
                     }
@@ -426,7 +450,6 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
 pub fn derive_subcommand(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let cmd_name = to_kebab_case(&name.to_string());
 

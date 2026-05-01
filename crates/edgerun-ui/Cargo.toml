@@ -1,0 +1,17 @@
+[package]
+name = "edgerun-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun UI renderers — native (egui) and browser (DOM)"
+
+[dependencies]
+edgerun-proto = { workspace = true }
+prost = { workspace = true }
+egui = "0.32"
+
+[lints]
+workspace = true

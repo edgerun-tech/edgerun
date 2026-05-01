@@ -251,6 +251,21 @@ impl Command {
         }
 
         matches.positional = positional_values;
+
+        let mut positional_idx: usize = 0;
+        for arg in &self.args {
+            if let Some(ref default) = arg.default_value {
+                if arg.is_positional {
+                    if positional_idx >= matches.positional.len() {
+                        matches.positional.push(default.clone());
+                    }
+                    positional_idx += 1;
+                } else if !matches.map.contains_key(&arg.name) {
+                    matches.map.insert(arg.name.clone(), Value::String(default.clone()));
+                }
+            }
+        }
+
         matches
     }
 
@@ -492,18 +507,25 @@ impl ArgMatches {
     where
         <T as core::str::FromStr>::Err: core::fmt::Debug,
     {
-        self.map.get(name).and_then(|v| match v {
-            Value::String(s) => s.parse().ok(),
-            Value::Number(n) => n.to_string().parse().ok(),
-            Value::Bool(b) => {
-                if *b {
-                    Some(T::from_str("true").ok()?)
-                } else {
-                    None
+        if let Some(v) = self.map.get(name) {
+            match v {
+                Value::String(s) => {
+                    let result = s.parse::<T>();
+                    result.ok()
                 }
+                Value::Number(n) => n.to_string().parse().ok(),
+                Value::Bool(b) => {
+                    if *b {
+                        Some(T::from_str("true").ok()?)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
             }
-            _ => None,
-        })
+        } else {
+            None
+        }
     }
 
     fn push_value(&mut self, name: &str, value: String) {

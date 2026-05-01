@@ -24,6 +24,8 @@ enum ObjectKind {
   OBJECT_KIND_COMMAND = 6;
   OBJECT_KIND_PROOF = 7;
   OBJECT_KIND_DERIVED_VIEW = 8;
+  OBJECT_KIND_APP_PACKAGE = 9;
+  OBJECT_KIND_UI_TREE = 10;
 }
 
 enum AssuranceClass {
