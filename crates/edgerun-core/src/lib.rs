@@ -41,6 +41,7 @@ pub mod command;
 #[cfg(feature = "conformance")]
 pub mod conformance;
 pub mod crypto;
+pub mod encrypted_envelope;
 pub mod fixed_point;
 pub mod protocol;
 pub mod result;

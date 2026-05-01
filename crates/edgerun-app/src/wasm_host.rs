@@ -1,8 +1,11 @@
 use crate::app_principal::AppKeyPair;
 use anyhow::{Context, Result};
+use edgerun_core::encrypted_envelope::{
+    validate_encrypted_envelope, looks_like_encrypted_envelope,
+};
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_proto::edgerun::v0::{
-    common::{IdentityRef, NodeRef},
+    common::{EncryptedEnvelope, IdentityRef, NodeRef},
     stream::{
         AddBootstrapNodePayload, AddReachabilityHintPayload, AppIntent, CommandEnvelope,
         CommandType, CreateIdentityPayload, ImportIdentityPayload, QueryNodeStatePayload,
@@ -89,7 +92,7 @@ impl WasmRuntime {
                     .and_then(|e| e.into_memory())
                     .expect("No memory export");
                 let mem_data = mem.data(&caller);
-                let safe_read = |p: i32, l: i32| -> String {
+                let safe_read_str = |p: i32, l: i32| -> String {
                     let start = p as usize;
                     let end = start.saturating_add(l as usize);
                     if end > mem_data.len() {
@@ -98,19 +101,41 @@ impl WasmRuntime {
                         String::from_utf8_lossy(&mem_data[start..end]).to_string()
                     }
                 };
-                let target_str = safe_read(target_ptr, target_len);
-                let payload_str = safe_read(payload_ptr, payload_len);
+                let safe_read_bytes = |p: i32, l: i32| -> Vec<u8> {
+                    let start = p as usize;
+                    let end = start.saturating_add(l as usize);
+                    if end > mem_data.len() {
+                        Vec::new()
+                    } else {
+                        mem_data[start..end].to_vec()
+                    }
+                };
+                let payload_str = safe_read_str(payload_ptr, payload_len);
+                let payload_bytes = safe_read_bytes(payload_ptr, payload_len);
 
                 let host = caller.data_mut();
 
                 if let Some(cmd) = interpret_send_message(&payload_str) {
                     host.pending_commands.lock().unwrap().push(cmd);
                 } else {
+                    let env = match EncryptedEnvelope::decode(payload_bytes.as_slice()) {
+                        Ok(e) => e,
+                        Err(_) => {
+                            eprintln!("send_message REJECTED: not a valid EncryptedEnvelope");
+                            return -1;
+                        }
+                    };
+
+                    if let Err(reason) = validate_encrypted_envelope(&env) {
+                        eprintln!("send_message REJECTED: {}", reason);
+                        return -1;
+                    }
+
                     let cmd = build_command(
                         host,
                         CommandType::StoreObject,
-                        payload_str.into_bytes(),
-                        target_str,
+                        Message::encode_to_vec(&env),
+                        String::new(),
                     );
                     host.pending_commands.lock().unwrap().push(cmd);
                 }

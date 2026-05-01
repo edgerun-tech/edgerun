@@ -108,10 +108,11 @@ pub struct Backend {
     blobs: BlobStore,
     index: FileIndex,
     record_event: SecretEventRecorder,
+    node_id: Vec<u8>,
 }
 
 impl Backend {
-    pub fn new(data_root: PathBuf, record_event: SecretEventRecorder) -> io::Result<Self> {
+    pub fn new(data_root: PathBuf, record_event: SecretEventRecorder, node_id: Vec<u8>) -> io::Result<Self> {
         let pk = derive_key_from_path(&data_root);
 
         let blob_cfg = BlobStoreConfig {
@@ -131,6 +132,7 @@ impl Backend {
             blobs,
             index,
             record_event,
+            node_id,
         })
     }
 

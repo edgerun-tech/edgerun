@@ -404,6 +404,182 @@ pub struct NodeStateSnapshot {
     #[prost(bool, tag = "6")]
     pub bootstrap_complete: bool,
 }
+// ===========================================================================
+// App Principal & Intent
+//
+// Apps are first-class principals that sign their own intents but MUST NOT
+// write streams. Only the node identity can commit state.
+//
+// Canonicalization ID: "proto-v0:AppPrincipal:1"
+// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || protobuf_encode(AppPrincipal))
+// ===========================================================================
+
+/// AppPrincipal: a protocol-level identity for an installed app.
+/// AppPrincipals are valid delegation recipients and can appear in
+/// capability scopes, but they are NOT stream writers.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AppPrincipal {
+    /// Stable identifier for the app (SHA256 of AppPackage or assigned)
+    #[prost(bytes = "vec", tag = "1")]
+    pub app_id: ::prost::alloc::vec::Vec<u8>,
+    /// App public key (uncompressed P-256 = 65 bytes)
+    #[prost(bytes = "vec", tag = "2")]
+    pub public_key: ::prost::alloc::vec::Vec<u8>,
+    /// Optional ObjectRef pointing to metadata (name, version, publisher)
+    #[prost(message, optional, tag = "3")]
+    pub metadata_object: ::core::option::Option<super::common::ObjectRef>,
+}
+/// AppIntent: a signed action declaration from an app principal.
+/// The intent proves the app authorized the specific payload.
+/// Signature MUST be over canonical protobuf encoding of (app_id || payload).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AppIntent {
+    /// AppPrincipal app_id
+    #[prost(bytes = "vec", tag = "1")]
+    pub app_id: ::prost::alloc::vec::Vec<u8>,
+    /// Deterministic payload (the action or command the app intends)
+    #[prost(bytes = "vec", tag = "2")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
+    /// ECDSA P-256 signature over canonical bytes of (app_id || payload)
+    #[prost(bytes = "vec", tag = "3")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+}
+// ===========================================================================
+// CommandEnvelope — updated to carry AppIntent (field 17)
+// ===========================================================================
+// message CommandEnvelope {
+//    ...existing fields...
+//    bytes app_intent = 17;  // serialized AppIntent
+// }
+
+// ===========================================================================
+// User Authority Acquisition
+//
+// WASM apps MUST NOT have direct access to private keys or authority.
+// All sensitive actions MUST go through explicit user approval flows.
+// These payloads are used for both events and command payloads.
+// ===========================================================================
+
+/// UserPresenceRequestPayload: emitted when an app requests user presence.
+/// The node shows a UI prompt to the user with the given reason.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UserPresenceRequestPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// App that is requesting presence
+    #[prost(bytes = "vec", tag = "2")]
+    pub app_id: ::prost::alloc::vec::Vec<u8>,
+    /// Human-readable reason for the request
+    #[prost(string, tag = "3")]
+    pub reason: ::prost::alloc::string::String,
+    /// Session identifier this presence is tied to
+    #[prost(bytes = "vec", tag = "4")]
+    pub session_id: ::prost::alloc::vec::Vec<u8>,
+    /// Maximum time the presence token is valid (seconds from request time)
+    #[prost(uint32, tag = "5")]
+    pub ttl_seconds: u32,
+}
+/// UserPresenceGrantedPayload: emitted when the user confirms presence.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UserPresenceGrantedPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// Opaque short-lived presence token
+    #[prost(bytes = "vec", tag = "2")]
+    pub presence_token: ::prost::alloc::vec::Vec<u8>,
+    /// App that requested presence
+    #[prost(bytes = "vec", tag = "3")]
+    pub app_id: ::prost::alloc::vec::Vec<u8>,
+    /// Session identifier
+    #[prost(bytes = "vec", tag = "4")]
+    pub session_id: ::prost::alloc::vec::Vec<u8>,
+    /// Expiration timestamp (Unix micros)
+    #[prost(int64, tag = "5")]
+    pub expires_at: i64,
+}
+/// SignatureRequestPayload: emitted when an app requests the node to sign.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SignatureRequestPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// App requesting the signature
+    #[prost(bytes = "vec", tag = "2")]
+    pub app_id: ::prost::alloc::vec::Vec<u8>,
+    /// Deterministic payload to be signed
+    #[prost(bytes = "vec", tag = "3")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
+    /// Human-readable description of what is being signed
+    #[prost(string, tag = "4")]
+    pub human_readable: ::prost::alloc::string::String,
+    /// Action identifier (e.g. "create_delegation", "store_object")
+    #[prost(string, tag = "5")]
+    pub action: ::prost::alloc::string::String,
+    /// Session identifier
+    #[prost(bytes = "vec", tag = "6")]
+    pub session_id: ::prost::alloc::vec::Vec<u8>,
+    /// Presence token proving user approved this action
+    #[prost(bytes = "vec", tag = "7")]
+    pub presence_token: ::prost::alloc::vec::Vec<u8>,
+}
+/// SignatureResponsePayload: emitted after the node signs on behalf of the app.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SignatureResponsePayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// App that requested the signature
+    #[prost(bytes = "vec", tag = "2")]
+    pub app_id: ::prost::alloc::vec::Vec<u8>,
+    /// The original payload that was signed
+    #[prost(bytes = "vec", tag = "3")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
+    /// ECDSA P-256 signature (DER-encoded)
+    #[prost(bytes = "vec", tag = "4")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    /// Node public key used for signing (uncompressed P-256 = 65 bytes)
+    #[prost(bytes = "vec", tag = "5")]
+    pub signing_key: ::prost::alloc::vec::Vec<u8>,
+    /// Session identifier
+    #[prost(bytes = "vec", tag = "6")]
+    pub session_id: ::prost::alloc::vec::Vec<u8>,
+}
+// Command payloads for user authority acquisition
+
+/// REQUEST_USER_PRESENCE: command to request user presence confirmation.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RequestUserPresencePayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// Human-readable reason shown to user
+    #[prost(string, tag = "2")]
+    pub reason: ::prost::alloc::string::String,
+    /// Session identifier
+    #[prost(bytes = "vec", tag = "3")]
+    pub session_id: ::prost::alloc::vec::Vec<u8>,
+    /// Token TTL in seconds
+    #[prost(uint32, tag = "4")]
+    pub ttl_seconds: u32,
+}
+/// REQUEST_SIGNATURE: command to request the node sign a payload.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RequestSignaturePayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// Deterministic payload to sign
+    #[prost(bytes = "vec", tag = "2")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
+    /// Human-readable description
+    #[prost(string, tag = "3")]
+    pub human_readable: ::prost::alloc::string::String,
+    /// Action identifier
+    #[prost(string, tag = "4")]
+    pub action: ::prost::alloc::string::String,
+    /// Session identifier
+    #[prost(bytes = "vec", tag = "5")]
+    pub session_id: ::prost::alloc::vec::Vec<u8>,
+    /// Presence token (must be valid and unexpired)
+    #[prost(bytes = "vec", tag = "6")]
+    pub presence_token: ::prost::alloc::vec::Vec<u8>,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum EventType {
@@ -424,6 +600,11 @@ pub enum EventType {
     SecretDelete = 13,
     CollectionCreated = 14,
     CollectionDeleted = 15,
+    /// User authority acquisition events
+    UserPresenceRequest = 17,
+    UserPresenceGranted = 18,
+    SignatureRequest = 19,
+    SignatureResponse = 20,
 }
 impl EventType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -448,6 +629,10 @@ impl EventType {
             Self::SecretDelete => "EVENT_TYPE_SECRET_DELETE",
             Self::CollectionCreated => "EVENT_TYPE_COLLECTION_CREATED",
             Self::CollectionDeleted => "EVENT_TYPE_COLLECTION_DELETED",
+            Self::UserPresenceRequest => "EVENT_TYPE_USER_PRESENCE_REQUEST",
+            Self::UserPresenceGranted => "EVENT_TYPE_USER_PRESENCE_GRANTED",
+            Self::SignatureRequest => "EVENT_TYPE_SIGNATURE_REQUEST",
+            Self::SignatureResponse => "EVENT_TYPE_SIGNATURE_RESPONSE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -469,6 +654,10 @@ impl EventType {
             "EVENT_TYPE_SECRET_DELETE" => Some(Self::SecretDelete),
             "EVENT_TYPE_COLLECTION_CREATED" => Some(Self::CollectionCreated),
             "EVENT_TYPE_COLLECTION_DELETED" => Some(Self::CollectionDeleted),
+            "EVENT_TYPE_USER_PRESENCE_REQUEST" => Some(Self::UserPresenceRequest),
+            "EVENT_TYPE_USER_PRESENCE_GRANTED" => Some(Self::UserPresenceGranted),
+            "EVENT_TYPE_SIGNATURE_REQUEST" => Some(Self::SignatureRequest),
+            "EVENT_TYPE_SIGNATURE_RESPONSE" => Some(Self::SignatureResponse),
             _ => None,
         }
     }
@@ -568,6 +757,12 @@ pub enum CommandType {
     AddBootstrapNode = 1006,
     AddReachabilityHint = 1007,
     QueryNodeState = 1008,
+    /// User authority acquisition commands (1010..1011)
+    /// These allow WASM apps to request user presence and node signing
+    /// through the protocol. All signing MUST go through the node; apps
+    /// MUST NOT have direct access to private keys.
+    RequestUserPresence = 1010,
+    RequestSignature = 1011,
 }
 impl CommandType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -600,6 +795,8 @@ impl CommandType {
             Self::AddBootstrapNode => "COMMAND_TYPE_ADD_BOOTSTRAP_NODE",
             Self::AddReachabilityHint => "COMMAND_TYPE_ADD_REACHABILITY_HINT",
             Self::QueryNodeState => "COMMAND_TYPE_QUERY_NODE_STATE",
+            Self::RequestUserPresence => "COMMAND_TYPE_REQUEST_USER_PRESENCE",
+            Self::RequestSignature => "COMMAND_TYPE_REQUEST_SIGNATURE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -629,6 +826,8 @@ impl CommandType {
             "COMMAND_TYPE_ADD_BOOTSTRAP_NODE" => Some(Self::AddBootstrapNode),
             "COMMAND_TYPE_ADD_REACHABILITY_HINT" => Some(Self::AddReachabilityHint),
             "COMMAND_TYPE_QUERY_NODE_STATE" => Some(Self::QueryNodeState),
+            "COMMAND_TYPE_REQUEST_USER_PRESENCE" => Some(Self::RequestUserPresence),
+            "COMMAND_TYPE_REQUEST_SIGNATURE" => Some(Self::RequestSignature),
             _ => None,
         }
     }

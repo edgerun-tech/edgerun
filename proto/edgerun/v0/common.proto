@@ -161,3 +161,66 @@ message SnapshotRef {
   bytes snapshot_id = 1;
   optional bytes object_id = 2;
 }
+
+// ===========================================================================
+// EncryptedEnvelope — strict E2E encryption with ECDH key exchange
+//
+// ALL private data MUST be:
+// - encrypted using ECDH P-256 key agreement + AEAD payload encryption
+// - ephemeral key per message (forward secrecy)
+// - recipient-bound with per-recipient wrapped message keys
+// - signature-protected
+//
+// Encryption model:
+//   1. Generate ephemeral ECDH key pair
+//   2. Generate random message key K_msg
+//   3. For each recipient: K_wrapped = AEAD(ECDH(shared_secret), K_msg)
+//   4. Ciphertext = AEAD(K_msg, plaintext)
+//   5. Sign: sender || recipients || ephemeral_pub || nonce || ciphertext
+//
+// Domain separation: "edgerun:v0:hash:encrypted-envelope"
+// ===========================================================================
+
+enum CipherSuite {
+  CIPHER_SUITE_UNSPECIFIED = 0;
+  CIPHER_SUITE_XCHACHA20_POLY1305 = 1;
+  CIPHER_SUITE_AES256_GCM = 2;
+}
+
+// Per-recipient wrapped message key
+message RecipientKey {
+  // Recipient identity public key (uncompressed P-256, 65 bytes)
+  bytes identity = 1;
+  // AEAD-encrypted message key, wrapped with ECDH-derived key
+  bytes encrypted_key = 2;
+  // Nonce used for wrapping the message key
+  bytes key_nonce = 3;
+}
+
+message EncryptedEnvelope {
+  uint32 version = 1;
+
+  // Sender identity key (uncompressed P-256 public key, 65 bytes)
+  bytes sender = 2;
+
+  // Recipient keys — each contains identity + wrapped message key
+  repeated RecipientKey recipients = 3;
+
+  // Ephemeral ECDH public key (uncompressed P-256, 65 bytes)
+  bytes ephemeral_pubkey = 4;
+
+  // Cipher used for payload encryption
+  CipherSuite cipher = 5;
+
+  // Nonce for payload AEAD encryption
+  bytes nonce = 6;
+
+  // AEAD ciphertext (includes embedded tag for most ciphers)
+  bytes ciphertext = 7;
+
+  // Explicit authentication tag (for ciphers that separate it)
+  bytes tag = 8;
+
+  // ECDSA P-256 signature over (sender || recipients || ephemeral_pub || nonce || ciphertext)
+  bytes signature = 9;
+}

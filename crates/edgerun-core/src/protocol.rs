@@ -19,8 +19,9 @@ pub use edgerun_proto::edgerun::v0::{
         CapabilityCheck, CapabilityResult, ExecutionContext,
     },
     common::{
-        CommandRef, DelegationRef, Digest, EventRef, HeadRef, IdentityRef, NodeRef, ObjectRef,
-        RateLimit, RepresentationRef, RevocationRef, Signature, SnapshotRef, StreamRef, TimeWindow,
+        CipherSuite, CommandRef, DelegationRef, Digest, EncryptedEnvelope, EventRef, HeadRef,
+        IdentityRef, NodeRef, ObjectRef, RateLimit, RepresentationRef, RevocationRef, Signature,
+        SnapshotRef, StreamRef, TimeWindow,
     },
     identity::IdentityRecord,
     network::{ReachabilityHint, RelayEnvelope, RouteAdvertisement, SessionAccept, SessionHello},

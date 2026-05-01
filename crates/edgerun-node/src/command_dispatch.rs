@@ -9,6 +9,7 @@
 use crate::config::{parse_config, NodeConfig};
 use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::{command_hash, validate_command, CommandValidationContext};
+use edgerun_core::encrypted_envelope::{validate_encrypted_envelope, EncryptedEnvelope};
 use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
 use edgerun_core::result::Verdict;
 use edgerun_core::util::{
@@ -408,6 +409,69 @@ pub fn dispatch_command(
                 Vec::new(),
                 None,
             );
+        }
+    }
+
+    // ===========================================================================
+    // Encrypted envelope validation — strict communication invariant
+    //
+    // ALL private data MUST be:
+    // - encrypted before entering the system
+    // - recipient-bound (>= 1 recipient)
+    // - signature-protected
+    //
+    // Node MUST NEVER accept plaintext for private payloads.
+    // CommandEnvelope.payload MUST be EncryptedEnvelope or explicitly PUBLIC object.
+    // ===========================================================================
+    let needs_encryption = matches!(
+        CommandType::from_i32(command.command_type),
+        Some(
+            CommandType::StoreObject
+                | CommandType::ExecuteWorkload
+                | CommandType::PutObject
+        )
+    );
+
+    if needs_encryption {
+        let payload_bytes = match &command.payload {
+            Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(b)) => Some(b.clone()),
+            _ => None,
+        };
+
+        if let Some(raw) = payload_bytes {
+            // Check if it's a plaintext payload that should be encrypted
+            // Try to decode as EncryptedEnvelope first
+            match EncryptedEnvelope::decode(raw.as_slice()) {
+                Ok(env) => {
+                    if let Err(reason) = validate_encrypted_envelope(&env) {
+                        return record_and_respond(
+                            command,
+                            store,
+                            stream_id,
+                            signer,
+                            controllers,
+                            false,
+                            &reason,
+                            Vec::new(),
+                            None,
+                        );
+                    }
+                }
+                Err(_) => {
+                    // Not a valid EncryptedEnvelope - reject plaintext payloads
+                    return record_and_respond(
+                        command,
+                        store,
+                        stream_id,
+                        signer,
+                        controllers,
+                        false,
+                        "PLAINTEXT_PAYLOAD_REJECTED",
+                        Vec::new(),
+                        None,
+                    );
+                }
+            }
         }
     }
 

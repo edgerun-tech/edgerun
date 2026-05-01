@@ -694,13 +694,33 @@ impl NodeStore {
     /// The ciphertext is stored on the filesystem; the recipient list and nonce
     /// are stored alongside as a `.meta` sidecar file.
     ///
+    /// Enforces: >= 1 recipient. Empty recipients are rejected.
+    ///
     /// Returns the blob's content-derived identifier.
     pub fn put_blob(
         &self,
         plaintext: &[u8],
         recipients: &[Vec<u8>],
     ) -> Result<String, StorageError> {
+        if recipients.is_empty() {
+            return Err(StorageError::InvalidArgument(
+                "NO_RECIPIENT".into(),
+            ));
+        }
         self.blobs.store(plaintext, recipients)
+    }
+
+    /// Stores an already-encrypted EncryptedEnvelope blob.
+    ///
+    /// The envelope is validated (recipients >= 1, valid cipher, nonce, etc.)
+    /// and stored as-is. No re-encryption is performed.
+    ///
+    /// Returns the blob's content-derived identifier.
+    pub fn put_encrypted_blob(
+        &self,
+        envelope: &edgerun_proto::edgerun::v0::common::EncryptedEnvelope,
+    ) -> Result<String, StorageError> {
+        self.blobs.store_envelope(envelope)
     }
 
     /// Retrieves and decrypts a blob.
@@ -1170,7 +1190,7 @@ impl NodeStore {
         let payload_object_ref = self.put_object(
             base_heads_text.as_bytes(),
             3, /* OBJECT_KIND_SNAPSHOT */
-            &[],
+            &[node_id.0.to_vec()],
         )?;
 
         let mut descriptor = SnapshotDescriptor {
