@@ -293,6 +293,7 @@ mod tests {
             requested_assurance: None,
             command_metadata: None,
             signature: Some(test_sig(0xCD)),
+            app_intent: Vec::new(),
         };
 
         let signable_bytes = canonical_bytes(&ProtocolRecord::CommandEnvelope(cmd.clone()), true);

@@ -754,6 +754,13 @@ fn required_capability_for_command(command_type: i32) -> Option<(i32, &'static s
         Ct::ListSecrets => Some((Ck::DecryptDomain as i32, "list_secrets")),
         Ct::InstallApp => Some((Ck::ExecuteWorkload as i32, "install_app")),
         Ct::UninstallApp => Some((Ck::ExecuteWorkload as i32, "uninstall_app")),
+        Ct::CreateIdentity => Some((Ck::NodeControl as i32, "create_identity")),
+        Ct::ImportIdentity => Some((Ck::NodeControl as i32, "import_identity")),
+        Ct::AddBootstrapNode => Some((Ck::NodeControl as i32, "add_bootstrap_node")),
+        Ct::AddReachabilityHint => Some((Ck::NodeControl as i32, "add_reachability_hint")),
+        Ct::QueryNodeState => Some((Ck::Query as i32, "query_node_state")),
+        Ct::RequestUserPresence => Some((Ck::Query as i32, "request_user_presence")),
+        Ct::RequestSignature => Some((Ck::NodeControl as i32, "request_signature")),
     }
 }
 
@@ -2726,6 +2733,7 @@ mod tests {
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         }
     }
 

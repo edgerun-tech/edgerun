@@ -6488,6 +6488,7 @@ mod tests {
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         }
     }
 

@@ -692,6 +692,7 @@ trust_nodes: []
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         };
 
         let result = node.process_command(&command);
@@ -729,6 +730,7 @@ trust_nodes: []
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         };
 
         let result = node.process_command(&command);
@@ -761,6 +763,7 @@ trust_nodes: []
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         };
 
         let result = node.process_command(&command);
@@ -797,6 +800,7 @@ trust_nodes: []
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         };
 
         let _ = node.process_command(&command);
@@ -886,6 +890,7 @@ trust_nodes: []
                 algorithm: 1,
                 value: vec![0u8; 64], // bad signature
             }),
+            app_intent: Vec::new(),
         };
 
         let result = node.process_command(&command);

@@ -35,10 +35,6 @@ pub struct EventEnvelope {
     #[prost(message, optional, tag = "16")]
     pub signature: ::core::option::Option<super::common::Signature>,
 }
-impl ::prost::Name for EventEnvelope {
-const NAME: &'static str = "EventEnvelope";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.EventEnvelope".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.EventEnvelope".into() }}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeGenesisPayload {
     #[prost(uint32, tag = "1")]
@@ -60,10 +56,6 @@ pub struct NodeGenesisPayload {
     #[prost(message, optional, tag = "9")]
     pub genesis_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-impl ::prost::Name for NodeGenesisPayload {
-const NAME: &'static str = "NodeGenesisPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.NodeGenesisPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.NodeGenesisPayload".into() }}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CommandEnvelope {
     #[prost(uint32, tag = "1")]
@@ -94,9 +86,6 @@ pub struct CommandEnvelope {
     pub command_metadata: ::core::option::Option<super::common::ObjectRef>,
     #[prost(message, optional, tag = "16")]
     pub signature: ::core::option::Option<super::common::Signature>,
-    /// Serialized AppIntent (app_id || payload || signature)
-    #[prost(bytes = "vec", tag = "17")]
-    pub app_intent: ::prost::alloc::vec::Vec<u8>,
     #[prost(oneof = "command_envelope::Payload", tags = "11, 12")]
     pub payload: ::core::option::Option<command_envelope::Payload>,
 }
@@ -110,10 +99,6 @@ pub mod command_envelope {
         InlinePayload(::prost::alloc::vec::Vec<u8>),
     }
 }
-impl ::prost::Name for CommandEnvelope {
-const NAME: &'static str = "CommandEnvelope";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CommandEnvelope".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CommandEnvelope".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CommandSentPayload {
     #[prost(uint32, tag = "1")]
@@ -125,10 +110,6 @@ pub struct CommandSentPayload {
     #[prost(message, optional, tag = "4")]
     pub send_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-impl ::prost::Name for CommandSentPayload {
-const NAME: &'static str = "CommandSentPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CommandSentPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CommandSentPayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CommandResultPayload {
     #[prost(uint32, tag = "1")]
@@ -148,10 +129,6 @@ pub struct CommandResultPayload {
     #[prost(message, optional, tag = "8")]
     pub result_object: ::core::option::Option<super::common::ObjectRef>,
 }
-impl ::prost::Name for CommandResultPayload {
-const NAME: &'static str = "CommandResultPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CommandResultPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CommandResultPayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ActionLifecyclePayload {
     #[prost(uint32, tag = "1")]
@@ -171,10 +148,6 @@ pub struct ActionLifecyclePayload {
     #[prost(message, optional, tag = "8")]
     pub action_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-impl ::prost::Name for ActionLifecyclePayload {
-const NAME: &'static str = "ActionLifecyclePayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.ActionLifecyclePayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.ActionLifecyclePayload".into() }}
 // ===========================================================================
 // Secret service payloads
 //
@@ -198,16 +171,12 @@ pub struct SecretPutPayload {
     #[prost(string, tag = "4")]
     pub label: ::prost::alloc::string::String,
     /// Key-value attribute pairs for search
-    #[prost(btree_map = "string, string", tag = "5")]
-    pub attributes: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    #[prost(map = "string, string", tag = "5")]
+    pub attributes: ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     /// The blob_id where the encrypted secret is stored (not the secret itself)
     #[prost(string, tag = "6")]
     pub secret_blob_id: ::prost::alloc::string::String,
 }
-impl ::prost::Name for SecretPutPayload {
-const NAME: &'static str = "SecretPutPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.SecretPutPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.SecretPutPayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SecretDeletePayload {
     #[prost(uint32, tag = "1")]
@@ -222,10 +191,6 @@ pub struct SecretDeletePayload {
     #[prost(string, tag = "5")]
     pub reason: ::prost::alloc::string::String,
 }
-impl ::prost::Name for SecretDeletePayload {
-const NAME: &'static str = "SecretDeletePayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.SecretDeletePayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.SecretDeletePayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CollectionCreatedPayload {
     #[prost(uint32, tag = "1")]
@@ -237,24 +202,208 @@ pub struct CollectionCreatedPayload {
     #[prost(string, tag = "3")]
     pub label: ::prost::alloc::string::String,
 }
-impl ::prost::Name for CollectionCreatedPayload {
-const NAME: &'static str = "CollectionCreatedPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CollectionCreatedPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CollectionCreatedPayload".into() }}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CollectionDeletedPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
     #[prost(string, tag = "2")]
     pub collection_name: ::prost::alloc::string::String,
-    /// Number of items that were in the collection
     #[prost(uint32, tag = "3")]
     pub items_removed: u32,
 }
-impl ::prost::Name for CollectionDeletedPayload {
-const NAME: &'static str = "CollectionDeletedPayload";
-const PACKAGE: &'static str = "edgerun.v0.stream";
-fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.stream.CollectionDeletedPayload".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.stream.CollectionDeletedPayload".into() }}
+// ===========================================================================
+// WASM Application packaging
+//
+// AppPackage is a protocol-native object that declares executable behavior
+// AND required capabilities. Apps are immutable, content-addressed, and
+// capability-constrained.
+//
+// Canonicalization ID: "proto-v0:AppPackage:1"
+// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || protobuf_encode(AppPackage))
+// ===========================================================================
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AppPackage {
+    #[prost(uint32, tag = "1")]
+    pub version: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    /// WASM entry point function name (e.g. "on_request", "run")
+    #[prost(string, tag = "3")]
+    pub entry: ::prost::alloc::string::String,
+    /// ObjectRef pointing to the WASM binary (stored as a separate object)
+    #[prost(message, optional, tag = "4")]
+    pub wasm_object: ::core::option::Option<super::common::ObjectRef>,
+    /// Route patterns mapped to this app (e.g. "/api/*" -> entry handler)
+    #[prost(map = "string, string", tag = "5")]
+    pub routes: ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    /// Additional asset objects (styles, templates, static files)
+    #[prost(map = "string, message", tag = "6")]
+    pub assets: ::std::collections::HashMap<::prost::alloc::string::String, super::common::ObjectRef>,
+    /// REQUIRED: capability requirements — the app declares ALL capabilities
+    /// it needs to function. The runtime MUST NOT grant capabilities implicitly.
+    #[prost(message, repeated, tag = "7")]
+    pub required_capabilities: ::prost::alloc::vec::Vec<super::trust::CapabilityDescriptor>,
+    /// Optional metadata object (description, author, version info, etc.)
+    #[prost(message, optional, tag = "8")]
+    pub metadata: ::core::option::Option<super::common::ObjectRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallAppPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// ObjectRef to the AppPackage object
+    #[prost(message, optional, tag = "2")]
+    pub app_package: ::core::option::Option<super::common::ObjectRef>,
+    /// Domain or scope under which the app is installed
+    #[prost(string, tag = "3")]
+    pub domain: ::prost::alloc::string::String,
+    /// Optional delegation context for capability resolution
+    #[prost(message, repeated, tag = "4")]
+    pub delegation_chain: ::prost::alloc::vec::Vec<super::trust::DelegationRecord>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UninstallAppPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// ObjectRef to the AppPackage object being uninstalled
+    #[prost(message, optional, tag = "2")]
+    pub app_package: ::core::option::Option<super::common::ObjectRef>,
+    #[prost(string, tag = "3")]
+    pub reason: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AppExecutionPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// ObjectRef to the AppPackage being executed
+    #[prost(message, optional, tag = "2")]
+    pub app_package: ::core::option::Option<super::common::ObjectRef>,
+    /// Effective capabilities that were granted for this execution
+    #[prost(message, repeated, tag = "3")]
+    pub granted_capabilities: ::prost::alloc::vec::Vec<super::trust::CapabilityDescriptor>,
+    /// Execution result or error
+    #[prost(oneof = "app_execution_payload::Outcome", tags = "4, 5")]
+    pub outcome: ::core::option::Option<app_execution_payload::Outcome>,
+}
+/// Nested message and enum types in `AppExecutionPayload`.
+pub mod app_execution_payload {
+    /// Execution result or error
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Outcome {
+        #[prost(message, tag = "4")]
+        ResultObject(super::super::common::ObjectRef),
+        #[prost(string, tag = "5")]
+        ErrorReason(::prost::alloc::string::String),
+    }
+}
+// ===========================================================================
+// Bootstrap / Settings app command payloads
+//
+// These payloads are used by the settings WASM app to configure a node
+// exclusively through protocol commands. All state changes flow through
+// the same command → validation → event → state pipeline.
+// ===========================================================================
+
+/// CREATE_IDENTITY: Generate a new node identity.
+/// The node generates an ECDSA P-256 keypair and records the identity
+/// as an identity record event in the stream.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CreateIdentityPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// Label for this identity (e.g. "primary", "backup")
+    #[prost(string, tag = "2")]
+    pub label: ::prost::alloc::string::String,
+    /// Key algorithm (1 = ECDSA P-256)
+    #[prost(int32, tag = "3")]
+    pub key_algorithm: i32,
+}
+/// IMPORT_IDENTITY: Import an existing identity from external key material.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ImportIdentityPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// Label for this identity
+    #[prost(string, tag = "2")]
+    pub label: ::prost::alloc::string::String,
+    /// Key algorithm (1 = ECDSA P-256)
+    #[prost(int32, tag = "3")]
+    pub key_algorithm: i32,
+    /// Encrypted or plaintext public key bytes (uncompressed P-256 = 65 bytes)
+    #[prost(bytes = "vec", tag = "4")]
+    pub public_key: ::prost::alloc::vec::Vec<u8>,
+    /// Encrypted private key blob (handled out-of-band by runtime/TPM)
+    #[prost(bytes = "vec", tag = "5")]
+    pub encrypted_private_key: ::prost::alloc::vec::Vec<u8>,
+    /// Source of key material ("file", "tpm", "yubikey", "keystore")
+    #[prost(string, tag = "6")]
+    pub source: ::prost::alloc::string::String,
+}
+/// ADD_BOOTSTRAP_NODE: Register a bootstrap peer for mesh discovery.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AddBootstrapNodePayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// Target node identity
+    #[prost(message, optional, tag = "2")]
+    pub node: ::core::option::Option<super::common::NodeRef>,
+    /// Transport address (e.g. "quic://192.168.1.100:4242")
+    #[prost(string, tag = "3")]
+    pub address: ::prost::alloc::string::String,
+    /// Transport class (LAN_IP=2, QUIC=3, etc.)
+    #[prost(int32, tag = "4")]
+    pub transport_class: i32,
+    /// Human-readable label
+    #[prost(string, tag = "5")]
+    pub label: ::prost::alloc::string::String,
+}
+/// ADD_REACHABILITY_HINT: Publish a reachability hint for this node.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AddReachabilityHintPayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// Transport address for this node
+    #[prost(string, tag = "2")]
+    pub address: ::prost::alloc::string::String,
+    /// Transport class
+    #[prost(int32, tag = "3")]
+    pub transport_class: i32,
+    /// Directness (DIRECT=1, RELAYED=2)
+    #[prost(int32, tag = "4")]
+    pub directness: i32,
+}
+/// QUERY_NODE_STATE: Request current node bootstrap state.
+/// Returns a NodeStateSnapshot as the result object.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QueryNodeStatePayload {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// What to query: "identity", "controllers", "peers", "all"
+    #[prost(string, tag = "2")]
+    pub query_kind: ::prost::alloc::string::String,
+}
+/// NodeStateSnapshot: returned as result object of QueryNodeState.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NodeStateSnapshot {
+    #[prost(uint32, tag = "1")]
+    pub payload_version: u32,
+    /// Whether the node has a valid identity
+    #[prost(bool, tag = "2")]
+    pub has_identity: bool,
+    /// Identity label (if set)
+    #[prost(string, tag = "3")]
+    pub identity_label: ::prost::alloc::string::String,
+    /// Number of configured controllers
+    #[prost(uint32, tag = "4")]
+    pub controller_count: u32,
+    /// Number of bootstrap peers
+    #[prost(uint32, tag = "5")]
+    pub bootstrap_peer_count: u32,
+    /// Whether bootstrap is complete
+    #[prost(bool, tag = "6")]
+    pub bootstrap_complete: bool,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum EventType {
@@ -270,17 +419,17 @@ pub enum EventType {
     CapabilityRevoked = 9,
     DelegationCreated = 10,
     RevocationCreated = 11,
+    /// Secret service events
     SecretPut = 12,
     SecretDelete = 13,
     CollectionCreated = 14,
     CollectionDeleted = 15,
-    CommandReceived = 16,
-    UserPresenceRequest = 17,
-    UserPresenceGranted = 18,
-    SignatureRequest = 19,
-    SignatureResponse = 20,
 }
 impl EventType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "EVENT_TYPE_UNSPECIFIED",
@@ -299,13 +448,9 @@ impl EventType {
             Self::SecretDelete => "EVENT_TYPE_SECRET_DELETE",
             Self::CollectionCreated => "EVENT_TYPE_COLLECTION_CREATED",
             Self::CollectionDeleted => "EVENT_TYPE_COLLECTION_DELETED",
-            Self::CommandReceived => "EVENT_TYPE_COMMAND_RECEIVED",
-            Self::UserPresenceRequest => "EVENT_TYPE_USER_PRESENCE_REQUEST",
-            Self::UserPresenceGranted => "EVENT_TYPE_USER_PRESENCE_GRANTED",
-            Self::SignatureRequest => "EVENT_TYPE_SIGNATURE_REQUEST",
-            Self::SignatureResponse => "EVENT_TYPE_SIGNATURE_RESPONSE",
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "EVENT_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
@@ -319,16 +464,11 @@ impl EventType {
             "EVENT_TYPE_CAPABILITY_GRANTED" => Some(Self::CapabilityGranted),
             "EVENT_TYPE_CAPABILITY_REVOKED" => Some(Self::CapabilityRevoked),
             "EVENT_TYPE_DELEGATION_CREATED" => Some(Self::DelegationCreated),
-            "EVENT_TYPE_COMMAND_RECEIVED" => Some(Self::CommandReceived),
             "EVENT_TYPE_REVOCATION_CREATED" => Some(Self::RevocationCreated),
             "EVENT_TYPE_SECRET_PUT" => Some(Self::SecretPut),
             "EVENT_TYPE_SECRET_DELETE" => Some(Self::SecretDelete),
             "EVENT_TYPE_COLLECTION_CREATED" => Some(Self::CollectionCreated),
             "EVENT_TYPE_COLLECTION_DELETED" => Some(Self::CollectionDeleted),
-            "EVENT_TYPE_USER_PRESENCE_REQUEST" => Some(Self::UserPresenceRequest),
-            "EVENT_TYPE_USER_PRESENCE_GRANTED" => Some(Self::UserPresenceGranted),
-            "EVENT_TYPE_SIGNATURE_REQUEST" => Some(Self::SignatureRequest),
-            "EVENT_TYPE_SIGNATURE_RESPONSE" => Some(Self::SignatureResponse),
             _ => None,
         }
     }
@@ -407,22 +547,27 @@ pub enum CommandType {
     Query = 7,
     ExecuteWorkload = 8,
     TerminateWorkload = 9,
+    /// Core trust commands
     CreateDelegation = 10,
     CreateRevocation = 11,
     StoreAndForward = 12,
     UpdateConfig = 13,
     InstallApp = 14,
     UninstallApp = 15,
+    /// Implementation-specific extensions start at 1000.
+    /// These are NOT part of the core protocol. Receivers MUST reject unknown
+    /// extension types unless local policy explicitly permits them.
     PutSecret = 1001,
     DeleteSecret = 1002,
     ListSecrets = 1003,
+    /// Bootstrap / Settings extension commands (1004..1009)
+    /// These are used by the settings app to configure a node through protocol.
+    /// They are extension types: receivers MUST reject unless local policy permits.
     CreateIdentity = 1004,
     ImportIdentity = 1005,
     AddBootstrapNode = 1006,
     AddReachabilityHint = 1007,
     QueryNodeState = 1008,
-    RequestUserPresence = 1010,
-    RequestSignature = 1011,
 }
 impl CommandType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -455,8 +600,6 @@ impl CommandType {
             Self::AddBootstrapNode => "COMMAND_TYPE_ADD_BOOTSTRAP_NODE",
             Self::AddReachabilityHint => "COMMAND_TYPE_ADD_REACHABILITY_HINT",
             Self::QueryNodeState => "COMMAND_TYPE_QUERY_NODE_STATE",
-            Self::RequestUserPresence => "COMMAND_TYPE_REQUEST_USER_PRESENCE",
-            Self::RequestSignature => "COMMAND_TYPE_REQUEST_SIGNATURE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -486,288 +629,8 @@ impl CommandType {
             "COMMAND_TYPE_ADD_BOOTSTRAP_NODE" => Some(Self::AddBootstrapNode),
             "COMMAND_TYPE_ADD_REACHABILITY_HINT" => Some(Self::AddReachabilityHint),
             "COMMAND_TYPE_QUERY_NODE_STATE" => Some(Self::QueryNodeState),
-            "COMMAND_TYPE_REQUEST_USER_PRESENCE" => Some(Self::RequestUserPresence),
-            "COMMAND_TYPE_REQUEST_SIGNATURE" => Some(Self::RequestSignature),
             _ => None,
         }
     }
 }
 // @@protoc_insertion_point(module)
-
-// ===========================================================================
-// WASM Application packaging — manually added (proto-v0:AppPackage:1)
-// ===========================================================================
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppPackage {
-    #[prost(uint32, tag = "1")]
-    pub version: u32,
-    #[prost(string, tag = "2")]
-    pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub entry: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub wasm_object: ::core::option::Option<super::common::ObjectRef>,
-    #[prost(btree_map = "string, string", tag = "5")]
-    pub routes: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    #[prost(btree_map = "string, message", tag = "6")]
-    pub assets: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        super::common::ObjectRef,
-    >,
-    #[prost(message, repeated, tag = "7")]
-    pub required_capabilities: ::prost::alloc::vec::Vec<super::trust::CapabilityDescriptor>,
-    #[prost(message, optional, tag = "8")]
-    pub metadata: ::core::option::Option<super::common::ObjectRef>,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InstallAppPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(message, optional, tag = "2")]
-    pub app_package: ::core::option::Option<super::common::ObjectRef>,
-    #[prost(string, tag = "3")]
-    pub domain: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "4")]
-    pub delegation_chain: ::prost::alloc::vec::Vec<super::trust::DelegationRecord>,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UninstallAppPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(message, optional, tag = "2")]
-    pub app_package: ::core::option::Option<super::common::ObjectRef>,
-    #[prost(string, tag = "3")]
-    pub reason: ::prost::alloc::string::String,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppExecutionPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(message, optional, tag = "2")]
-    pub app_package: ::core::option::Option<super::common::ObjectRef>,
-    #[prost(message, repeated, tag = "3")]
-    pub granted_capabilities: ::prost::alloc::vec::Vec<super::trust::CapabilityDescriptor>,
-    #[prost(oneof = "app_execution_payload::Outcome", tags = "4, 5")]
-    pub outcome: ::core::option::Option<app_execution_payload::Outcome>,
-}
-
-pub mod app_execution_payload {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Outcome {
-        #[prost(message, tag = "4")]
-        ResultObject(super::super::common::ObjectRef),
-        #[prost(string, tag = "5")]
-        ErrorReason(::prost::alloc::string::String),
-    }
-}
-
-// ===========================================================================
-// Bootstrap / Settings app command payloads
-// ===========================================================================
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CreateIdentityPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub label: ::prost::alloc::string::String,
-    #[prost(int32, tag = "3")]
-    pub key_algorithm: i32,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ImportIdentityPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub label: ::prost::alloc::string::String,
-    #[prost(int32, tag = "3")]
-    pub key_algorithm: i32,
-    #[prost(bytes = "vec", tag = "4")]
-    pub public_key: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "5")]
-    pub encrypted_private_key: ::prost::alloc::vec::Vec<u8>,
-    #[prost(string, tag = "6")]
-    pub source: ::prost::alloc::string::String,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AddBootstrapNodePayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(message, optional, tag = "2")]
-    pub node: ::core::option::Option<super::common::NodeRef>,
-    #[prost(string, tag = "3")]
-    pub address: ::prost::alloc::string::String,
-    #[prost(int32, tag = "4")]
-    pub transport_class: i32,
-    #[prost(string, tag = "5")]
-    pub label: ::prost::alloc::string::String,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AddReachabilityHintPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub address: ::prost::alloc::string::String,
-    #[prost(int32, tag = "3")]
-    pub transport_class: i32,
-    #[prost(int32, tag = "4")]
-    pub directness: i32,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryNodeStatePayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub query_kind: ::prost::alloc::string::String,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NodeStateSnapshot {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(bool, tag = "2")]
-    pub has_identity: bool,
-    #[prost(string, tag = "3")]
-    pub identity_label: ::prost::alloc::string::String,
-    #[prost(uint32, tag = "4")]
-    pub controller_count: u32,
-    #[prost(uint32, tag = "5")]
-    pub bootstrap_peer_count: u32,
-    #[prost(bool, tag = "6")]
-    pub bootstrap_complete: bool,
-}
-
-// ===========================================================================
-// App Principal & Intent — manually added (proto-v0:AppPrincipal:1)
-// ===========================================================================
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppPrincipal {
-    /// Stable identifier for the app (SHA256 of AppPackage or assigned)
-    #[prost(bytes = "vec", tag = "1")]
-    pub app_id: ::prost::alloc::vec::Vec<u8>,
-    /// App public key (uncompressed P-256 = 65 bytes)
-    #[prost(bytes = "vec", tag = "2")]
-    pub public_key: ::prost::alloc::vec::Vec<u8>,
-    /// Optional ObjectRef pointing to metadata (name, version, publisher)
-    #[prost(message, optional, tag = "3")]
-    pub metadata_object: ::core::option::Option<super::common::ObjectRef>,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppIntent {
-    /// AppPrincipal app_id
-    #[prost(bytes = "vec", tag = "1")]
-    pub app_id: ::prost::alloc::vec::Vec<u8>,
-    /// Deterministic payload (the action or command the app intends)
-    #[prost(bytes = "vec", tag = "2")]
-    pub payload: ::prost::alloc::vec::Vec<u8>,
-    /// ECDSA P-256 signature over canonical bytes of (app_id || payload)
-    #[prost(bytes = "vec", tag = "3")]
-    pub signature: ::prost::alloc::vec::Vec<u8>,
-}
-
-// ===========================================================================
-// User Authority Acquisition — manually added
-// ===========================================================================
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UserPresenceRequestPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(bytes = "vec", tag = "2")]
-    pub app_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(string, tag = "3")]
-    pub reason: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "4")]
-    pub session_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint32, tag = "5")]
-    pub ttl_seconds: u32,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UserPresenceGrantedPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(bytes = "vec", tag = "2")]
-    pub presence_token: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
-    pub app_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub session_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(int64, tag = "5")]
-    pub expires_at: i64,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignatureRequestPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(bytes = "vec", tag = "2")]
-    pub app_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
-    pub payload: ::prost::alloc::vec::Vec<u8>,
-    #[prost(string, tag = "4")]
-    pub human_readable: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub action: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "6")]
-    pub session_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "7")]
-    pub presence_token: ::prost::alloc::vec::Vec<u8>,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignatureResponsePayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(bytes = "vec", tag = "2")]
-    pub app_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
-    pub payload: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub signature: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "5")]
-    pub signing_key: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "6")]
-    pub session_id: ::prost::alloc::vec::Vec<u8>,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RequestUserPresencePayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub reason: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "3")]
-    pub session_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint32, tag = "4")]
-    pub ttl_seconds: u32,
-}
-
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RequestSignaturePayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(bytes = "vec", tag = "2")]
-    pub payload: ::prost::alloc::vec::Vec<u8>,
-    #[prost(string, tag = "3")]
-    pub human_readable: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub action: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "5")]
-    pub session_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "6")]
-    pub presence_token: ::prost::alloc::vec::Vec<u8>,
-}

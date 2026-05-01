@@ -25,6 +25,11 @@ enum EventType {
   EVENT_TYPE_SECRET_DELETE = 13;
   EVENT_TYPE_COLLECTION_CREATED = 14;
   EVENT_TYPE_COLLECTION_DELETED = 15;
+  // User authority acquisition events
+  EVENT_TYPE_USER_PRESENCE_REQUEST = 17;
+  EVENT_TYPE_USER_PRESENCE_GRANTED = 18;
+  EVENT_TYPE_SIGNATURE_REQUEST = 19;
+  EVENT_TYPE_SIGNATURE_RESPONSE = 20;
 }
 
 enum CommandDecision {
@@ -68,6 +73,22 @@ enum CommandType {
   COMMAND_TYPE_PUT_SECRET = 1001;
   COMMAND_TYPE_DELETE_SECRET = 1002;
   COMMAND_TYPE_LIST_SECRETS = 1003;
+
+  // Bootstrap / Settings extension commands (1004..1009)
+  // These are used by the settings app to configure a node through protocol.
+  // They are extension types: receivers MUST reject unless local policy permits.
+  COMMAND_TYPE_CREATE_IDENTITY = 1004;
+  COMMAND_TYPE_IMPORT_IDENTITY = 1005;
+  COMMAND_TYPE_ADD_BOOTSTRAP_NODE = 1006;
+  COMMAND_TYPE_ADD_REACHABILITY_HINT = 1007;
+  COMMAND_TYPE_QUERY_NODE_STATE = 1008;
+
+  // User authority acquisition commands (1010..1011)
+  // These allow WASM apps to request user presence and node signing
+  // through the protocol. All signing MUST go through the node; apps
+  // MUST NOT have direct access to private keys.
+  COMMAND_TYPE_REQUEST_USER_PRESENCE = 1010;
+  COMMAND_TYPE_REQUEST_SIGNATURE = 1011;
 }
 
 message EventEnvelope {
@@ -271,4 +292,273 @@ message AppExecutionPayload {
     edgerun.v0.common.ObjectRef result_object = 4;
     string error_reason = 5;
   }
+}
+
+// ===========================================================================
+// Bootstrap / Settings app command payloads
+//
+// These payloads are used by the settings WASM app to configure a node
+// exclusively through protocol commands. All state changes flow through
+// the same command → validation → event → state pipeline.
+// ===========================================================================
+
+// CREATE_IDENTITY: Generate a new node identity.
+// The node generates an ECDSA P-256 keypair and records the identity
+// as an identity record event in the stream.
+message CreateIdentityPayload {
+  uint32 payload_version = 1;
+
+  // Label for this identity (e.g. "primary", "backup")
+  string label = 2;
+
+  // Key algorithm (1 = ECDSA P-256)
+  int32 key_algorithm = 3;
+}
+
+// IMPORT_IDENTITY: Import an existing identity from external key material.
+message ImportIdentityPayload {
+  uint32 payload_version = 1;
+
+  // Label for this identity
+  string label = 2;
+
+  // Key algorithm (1 = ECDSA P-256)
+  int32 key_algorithm = 3;
+
+  // Encrypted or plaintext public key bytes (uncompressed P-256 = 65 bytes)
+  bytes public_key = 4;
+
+  // Encrypted private key blob (handled out-of-band by runtime/TPM)
+  bytes encrypted_private_key = 5;
+
+  // Source of key material ("file", "tpm", "yubikey", "keystore")
+  string source = 6;
+}
+
+// ADD_BOOTSTRAP_NODE: Register a bootstrap peer for mesh discovery.
+message AddBootstrapNodePayload {
+  uint32 payload_version = 1;
+
+  // Target node identity
+  edgerun.v0.common.NodeRef node = 2;
+
+  // Transport address (e.g. "quic://192.168.1.100:4242")
+  string address = 3;
+
+  // Transport class (LAN_IP=2, QUIC=3, etc.)
+  int32 transport_class = 4;
+
+  // Human-readable label
+  string label = 5;
+}
+
+// ADD_REACHABILITY_HINT: Publish a reachability hint for this node.
+message AddReachabilityHintPayload {
+  uint32 payload_version = 1;
+
+  // Transport address for this node
+  string address = 2;
+
+  // Transport class
+  int32 transport_class = 3;
+
+  // Directness (DIRECT=1, RELAYED=2)
+  int32 directness = 4;
+}
+
+// QUERY_NODE_STATE: Request current node bootstrap state.
+// Returns a NodeStateSnapshot as the result object.
+message QueryNodeStatePayload {
+  uint32 payload_version = 1;
+
+  // What to query: "identity", "controllers", "peers", "all"
+  string query_kind = 2;
+}
+
+// NodeStateSnapshot: returned as result object of QueryNodeState.
+message NodeStateSnapshot {
+  uint32 payload_version = 1;
+
+  // Whether the node has a valid identity
+  bool has_identity = 2;
+
+  // Identity label (if set)
+  string identity_label = 3;
+
+  // Number of configured controllers
+  uint32 controller_count = 4;
+
+  // Number of bootstrap peers
+  uint32 bootstrap_peer_count = 5;
+
+  // Whether bootstrap is complete
+  bool bootstrap_complete = 6;
+}
+
+// ===========================================================================
+// App Principal & Intent
+//
+// Apps are first-class principals that sign their own intents but MUST NOT
+// write streams. Only the node identity can commit state.
+//
+// Canonicalization ID: "proto-v0:AppPrincipal:1"
+// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || protobuf_encode(AppPrincipal))
+// ===========================================================================
+
+// AppPrincipal: a protocol-level identity for an installed app.
+// AppPrincipals are valid delegation recipients and can appear in
+// capability scopes, but they are NOT stream writers.
+message AppPrincipal {
+  // Stable identifier for the app (SHA256 of AppPackage or assigned)
+  bytes app_id = 1;
+
+  // App public key (uncompressed P-256 = 65 bytes)
+  bytes public_key = 2;
+
+  // Optional ObjectRef pointing to metadata (name, version, publisher)
+  edgerun.v0.common.ObjectRef metadata_object = 3;
+}
+
+// AppIntent: a signed action declaration from an app principal.
+// The intent proves the app authorized the specific payload.
+// Signature MUST be over canonical protobuf encoding of (app_id || payload).
+message AppIntent {
+  // AppPrincipal app_id
+  bytes app_id = 1;
+
+  // Deterministic payload (the action or command the app intends)
+  bytes payload = 2;
+
+  // ECDSA P-256 signature over canonical bytes of (app_id || payload)
+  bytes signature = 3;
+}
+
+// ===========================================================================
+// CommandEnvelope — updated to carry AppIntent (field 17)
+// ===========================================================================
+// message CommandEnvelope {
+//   ...existing fields...
+//   bytes app_intent = 17;  // serialized AppIntent
+// }
+
+// ===========================================================================
+// User Authority Acquisition
+//
+// WASM apps MUST NOT have direct access to private keys or authority.
+// All sensitive actions MUST go through explicit user approval flows.
+// These payloads are used for both events and command payloads.
+// ===========================================================================
+
+// UserPresenceRequestPayload: emitted when an app requests user presence.
+// The node shows a UI prompt to the user with the given reason.
+message UserPresenceRequestPayload {
+  uint32 payload_version = 1;
+
+  // App that is requesting presence
+  bytes app_id = 2;
+
+  // Human-readable reason for the request
+  string reason = 3;
+
+  // Session identifier this presence is tied to
+  bytes session_id = 4;
+
+  // Maximum time the presence token is valid (seconds from request time)
+  uint32 ttl_seconds = 5;
+}
+
+// UserPresenceGrantedPayload: emitted when the user confirms presence.
+message UserPresenceGrantedPayload {
+  uint32 payload_version = 1;
+
+  // Opaque short-lived presence token
+  bytes presence_token = 2;
+
+  // App that requested presence
+  bytes app_id = 3;
+
+  // Session identifier
+  bytes session_id = 4;
+
+  // Expiration timestamp (Unix micros)
+  int64 expires_at = 5;
+}
+
+// SignatureRequestPayload: emitted when an app requests the node to sign.
+message SignatureRequestPayload {
+  uint32 payload_version = 1;
+
+  // App requesting the signature
+  bytes app_id = 2;
+
+  // Deterministic payload to be signed
+  bytes payload = 3;
+
+  // Human-readable description of what is being signed
+  string human_readable = 4;
+
+  // Action identifier (e.g. "create_delegation", "store_object")
+  string action = 5;
+
+  // Session identifier
+  bytes session_id = 6;
+
+  // Presence token proving user approved this action
+  bytes presence_token = 7;
+}
+
+// SignatureResponsePayload: emitted after the node signs on behalf of the app.
+message SignatureResponsePayload {
+  uint32 payload_version = 1;
+
+  // App that requested the signature
+  bytes app_id = 2;
+
+  // The original payload that was signed
+  bytes payload = 3;
+
+  // ECDSA P-256 signature (DER-encoded)
+  bytes signature = 4;
+
+  // Node public key used for signing (uncompressed P-256 = 65 bytes)
+  bytes signing_key = 5;
+
+  // Session identifier
+  bytes session_id = 6;
+}
+
+// Command payloads for user authority acquisition
+
+// REQUEST_USER_PRESENCE: command to request user presence confirmation.
+message RequestUserPresencePayload {
+  uint32 payload_version = 1;
+
+  // Human-readable reason shown to user
+  string reason = 2;
+
+  // Session identifier
+  bytes session_id = 3;
+
+  // Token TTL in seconds
+  uint32 ttl_seconds = 4;
+}
+
+// REQUEST_SIGNATURE: command to request the node sign a payload.
+message RequestSignaturePayload {
+  uint32 payload_version = 1;
+
+  // Deterministic payload to sign
+  bytes payload = 2;
+
+  // Human-readable description
+  string human_readable = 3;
+
+  // Action identifier
+  string action = 4;
+
+  // Session identifier
+  bytes session_id = 5;
+
+  // Presence token (must be valid and unexpired)
+  bytes presence_token = 6;
 }

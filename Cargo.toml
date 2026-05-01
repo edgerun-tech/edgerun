@@ -229,7 +229,7 @@ prost-types = { version = "0.14", default-features = false }
 der = { version = "0.8", features = ["heapless"] }
 wasmtime = "29"
 wasmparser = "0.224"
-eframe = "0.32"
+eframe = { version = "0.32", default-features = false }
 
 [patch.crates-io]
 const-oid = { path = "crates/edgerun-crypto/vendor/const-oid-0.9" }

@@ -191,6 +191,31 @@ pub mod host {
         pub fn write_blob(ptr: i32, len: i32, hash_out_ptr: i32) -> i32;
 
         pub fn poll_event(buf_ptr: i32, buf_len: i32) -> i32;
+
+        pub fn request_user_presence(
+            reason_ptr: i32,
+            reason_len: i32,
+            session_ptr: i32,
+            session_len: i32,
+            ttl_seconds: u32,
+            out_token_ptr: i32,
+            out_token_len: i32,
+        ) -> i32;
+
+        pub fn request_signature(
+            payload_ptr: i32,
+            payload_len: i32,
+            action_ptr: i32,
+            action_len: i32,
+            human_ptr: i32,
+            human_len: i32,
+            session_ptr: i32,
+            session_len: i32,
+            token_ptr: i32,
+            token_len: i32,
+            out_sig_ptr: i32,
+            out_sig_len: i32,
+        ) -> i32;
     }
 
     pub fn send_message_safe(target: &str, payload: &[u8]) -> i32 {
@@ -231,6 +256,77 @@ pub mod host {
             return None;
         }
         Event::from_bytes(&buf[..bytes_written as usize])
+    }
+
+    pub fn request_user_presence_safe(
+        reason: &str,
+        session_id: &[u8],
+        ttl_seconds: u32,
+    ) -> Option<[u8; 32]> {
+        let mut out_token = [0u8; 32];
+        let reason_ptr = reason.as_ptr() as i32;
+        let reason_len = reason.len() as i32;
+        let session_ptr = session_id.as_ptr() as i32;
+        let session_len = session_id.len() as i32;
+        let out_token_ptr = out_token.as_mut_ptr() as i32;
+        unsafe {
+            let result = request_user_presence(
+                reason_ptr,
+                reason_len,
+                session_ptr,
+                session_len,
+                ttl_seconds,
+                out_token_ptr,
+                32,
+            );
+            if result == 0 {
+                Some(out_token)
+            } else {
+                None
+            }
+        }
+    }
+
+    pub fn request_signature_safe(
+        payload: &[u8],
+        action: &str,
+        human_readable: &str,
+        session_id: &[u8],
+        presence_token: &[u8],
+    ) -> Option<[u8; 64]> {
+        let mut out_sig = [0u8; 64];
+        let payload_ptr = payload.as_ptr() as i32;
+        let payload_len = payload.len() as i32;
+        let action_ptr = action.as_ptr() as i32;
+        let action_len = action.len() as i32;
+        let human_ptr = human_readable.as_ptr() as i32;
+        let human_len = human_readable.len() as i32;
+        let session_ptr = session_id.as_ptr() as i32;
+        let session_len = session_id.len() as i32;
+        let token_ptr = presence_token.as_ptr() as i32;
+        let token_len = presence_token.len() as i32;
+        let out_sig_ptr = out_sig.as_mut_ptr() as i32;
+        unsafe {
+            let result = request_signature(
+                payload_ptr,
+                payload_len,
+                action_ptr,
+                action_len,
+                human_ptr,
+                human_len,
+                session_ptr,
+                session_len,
+                token_ptr,
+                token_len,
+                out_sig_ptr,
+                64,
+            );
+            if result == 0 {
+                Some(out_sig)
+            } else {
+                None
+            }
+        }
     }
 }
 
@@ -506,6 +602,80 @@ impl Event {
             self.data[7],
             self.data[8],
         ]))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// User Authority Acquisition — PresenceToken and SignatureContext
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub struct PresenceToken {
+    pub token: [u8; 32],
+    pub expires_at_micros: u64,
+    pub session_id: Vec<u8>,
+}
+
+impl PresenceToken {
+    pub fn new(token: [u8; 32], expires_at_micros: u64, session_id: Vec<u8>) -> Self {
+        Self {
+            token,
+            expires_at_micros,
+            session_id,
+        }
+    }
+
+    pub fn is_expired(&self, now_micros: u64) -> bool {
+        now_micros >= self.expires_at_micros
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&self.token);
+        out.extend_from_slice(&self.expires_at_micros.to_le_bytes());
+        let session_len = self.session_id.len() as u8;
+        out.push(session_len);
+        out.extend_from_slice(&self.session_id);
+        out
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 32 + 8 + 1 {
+            return None;
+        }
+        let mut token = [0u8; 32];
+        token.copy_from_slice(&bytes[0..32]);
+        let expires_at_micros = u64::from_le_bytes([
+            bytes[32], bytes[33], bytes[34], bytes[35],
+            bytes[36], bytes[37], bytes[38], bytes[39],
+        ]);
+        let session_len = bytes[40] as usize;
+        if bytes.len() < 41 + session_len {
+            return None;
+        }
+        let session_id = bytes[41..41 + session_len].to_vec();
+        Some(Self {
+            token,
+            expires_at_micros,
+            session_id,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SignatureContext {
+    pub app_id: [u8; 32],
+    pub action: String,
+    pub human_readable: String,
+}
+
+impl SignatureContext {
+    pub fn new(app_id: [u8; 32], action: String, human_readable: String) -> Self {
+        Self {
+            app_id,
+            action,
+            human_readable,
+        }
     }
 }
 

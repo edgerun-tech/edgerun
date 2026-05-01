@@ -334,6 +334,7 @@ metadata:
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         };
 
         // Encode and deliver as a frame
@@ -384,6 +385,7 @@ metadata:
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         };
 
         // Encode and deliver as a frame (fake signature)
@@ -451,6 +453,7 @@ metadata:
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         };
 
         node.send_command(dest, &command);
@@ -568,6 +571,7 @@ metadata:
             requested_assurance: None,
             command_metadata: None,
             signature: None,
+            app_intent: Vec::new(),
         };
 
         let mut buf = Vec::new();

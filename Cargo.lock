@@ -1395,11 +1395,17 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
+ "edgerun-core",
+ "edgerun-crypto",
+ "edgerun-hardware-signing",
+ "edgerun-node",
  "edgerun-proto",
+ "edgerun-storage",
  "edgerun-ui",
  "eframe",
  "prost",
  "prost-types",
+ "sha2",
  "wasmtime",
 ]
 

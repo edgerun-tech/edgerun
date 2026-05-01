@@ -1,9 +1,15 @@
+use crate::app_principal::AppKeyPair;
 use anyhow::{Context, Result};
+use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_proto::edgerun::v0::{
     common::{IdentityRef, NodeRef},
-    stream::{CommandEnvelope, CommandType},
+    stream::{
+        AddBootstrapNodePayload, AddReachabilityHintPayload, AppIntent, CommandEnvelope,
+        CommandType, CreateIdentityPayload, ImportIdentityPayload, QueryNodeStatePayload,
+    },
     trust::DelegationRecord,
 };
+use prost::Message;
 use prost_types::Timestamp;
 use std::sync::{Arc, Mutex};
 use wasmtime::*;
@@ -13,6 +19,7 @@ pub struct ExecutionContext {
     pub node_identity: IdentityRef,
     pub app_instance_id: [u8; 16],
     pub delegation_chain: Vec<DelegationRecord>,
+    pub app_key: Arc<AppKeyPair>,
 }
 
 pub struct WasmRuntime {
@@ -29,6 +36,11 @@ pub struct HostState {
     pub pending_commands: Arc<Mutex<Vec<CommandEnvelope>>>,
     pub pending_events: Arc<Mutex<Vec<Vec<u8>>>>,
     pub next_command_seq: u64,
+}
+
+pub struct WasmRunResult {
+    pub ui_bytes: Vec<u8>,
+    pub pending_commands: Vec<CommandEnvelope>,
 }
 
 impl WasmRuntime {
@@ -90,14 +102,19 @@ impl WasmRuntime {
                 let payload_str = safe_read(payload_ptr, payload_len);
 
                 let host = caller.data_mut();
-                let cmd = build_command(
-                    host,
-                    CommandType::StoreObject,
-                    payload_str.into_bytes(),
-                    target_str,
-                );
 
-                host.pending_commands.lock().unwrap().push(cmd);
+                if let Some(cmd) = interpret_send_message(&payload_str) {
+                    host.pending_commands.lock().unwrap().push(cmd);
+                } else {
+                    let cmd = build_command(
+                        host,
+                        CommandType::StoreObject,
+                        payload_str.into_bytes(),
+                        target_str,
+                    );
+                    host.pending_commands.lock().unwrap().push(cmd);
+                }
+
                 0
             },
         )?;
@@ -191,6 +208,191 @@ impl WasmRuntime {
             },
         )?;
 
+        linker.func_wrap(
+            "env",
+            "request_user_presence",
+            |mut caller: Caller<'_, HostState>,
+             reason_ptr: i32,
+             reason_len: i32,
+             session_ptr: i32,
+             session_len: i32,
+             ttl_seconds: u32,
+             out_token_ptr: i32,
+             _out_token_len: i32|
+             -> i32 {
+                let mem = caller
+                    .get_export("memory")
+                    .and_then(|e| e.into_memory())
+                    .expect("No memory export");
+                let mem_data = mem.data(&caller);
+                let safe_read = |p: i32, l: i32| -> Vec<u8> {
+                    let start = p as usize;
+                    let end = start.saturating_add(l as usize);
+                    if end > mem_data.len() {
+                        Vec::new()
+                    } else {
+                        mem_data[start..end].to_vec()
+                    }
+                };
+                let reason = String::from_utf8_lossy(&safe_read(reason_ptr, reason_len)).to_string();
+                let session_id = safe_read(session_ptr, session_len);
+
+                let app_id = {
+                    let host = caller.data();
+                    host.context.as_ref().map(|c| c.app_key.app_id.clone()).unwrap_or_default()
+                };
+
+                {
+                    let host = caller.data_mut();
+                    let payload_bytes = Message::encode_to_vec(
+                        &edgerun_proto::edgerun::v0::stream::RequestUserPresencePayload {
+                            payload_version: 1,
+                            reason,
+                            session_id: session_id.clone(),
+                            ttl_seconds,
+                        },
+                    );
+
+                    let cmd = build_command(
+                        host,
+                        CommandType::RequestUserPresence,
+                        payload_bytes,
+                        String::new(),
+                    );
+                    host.pending_commands.lock().unwrap().push(cmd);
+                }
+
+                let mut token = [0u8; 32];
+                edgerun_crypto::fill_random(&mut token);
+                let out_token = out_token_ptr as usize;
+                let data = mem.data_mut(&mut caller);
+                if out_token + 32 <= data.len() {
+                    data[out_token..out_token + 32].copy_from_slice(&token);
+                }
+
+                let expires_at = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_micros() as i64
+                    + (ttl_seconds as i64 * 1_000_000);
+
+                let event_bytes = Message::encode_to_vec(
+                    &edgerun_proto::edgerun::v0::stream::UserPresenceGrantedPayload {
+                        payload_version: 1,
+                        presence_token: token.to_vec(),
+                        app_id,
+                        session_id,
+                        expires_at,
+                    },
+                );
+                {
+                    let host = caller.data_mut();
+                    host.pending_events.lock().unwrap().push(event_bytes);
+                }
+
+                0
+            },
+        )?;
+
+        linker.func_wrap(
+            "env",
+            "request_signature",
+            |mut caller: Caller<'_, HostState>,
+             payload_ptr: i32,
+             payload_len: i32,
+             action_ptr: i32,
+             action_len: i32,
+             human_ptr: i32,
+             human_len: i32,
+             session_ptr: i32,
+             session_len: i32,
+             token_ptr: i32,
+             token_len: i32,
+             out_sig_ptr: i32,
+             _out_sig_len: i32|
+             -> i32 {
+                let mem = caller
+                    .get_export("memory")
+                    .and_then(|e| e.into_memory())
+                    .expect("No memory export");
+                let mem_data = mem.data(&caller);
+                let safe_read = |p: i32, l: i32| -> Vec<u8> {
+                    let start = p as usize;
+                    let end = start.saturating_add(l as usize);
+                    if end > mem_data.len() {
+                        Vec::new()
+                    } else {
+                        mem_data[start..end].to_vec()
+                    }
+                };
+                let payload = safe_read(payload_ptr, payload_len);
+                let action = String::from_utf8_lossy(&safe_read(action_ptr, action_len)).to_string();
+                let human_readable =
+                    String::from_utf8_lossy(&safe_read(human_ptr, human_len)).to_string();
+                let session_id = safe_read(session_ptr, session_len);
+                let presence_token = safe_read(token_ptr, token_len);
+
+                let (app_id, verifying_key_bytes, signature) = {
+                    let host = caller.data();
+                    let app_id = host.context.as_ref().map(|c| c.app_key.app_id.clone()).unwrap_or_default();
+                    let verifying_key_bytes = host.context.as_ref()
+                        .map(|c| c.app_key.verifying_key.to_encoded_point(false).as_bytes().to_vec())
+                        .unwrap_or_default();
+                    let signature = host.context.as_ref()
+                        .and_then(|c| c.app_key.sign_intent(&payload).ok())
+                        .map(|intent| intent.signature)
+                        .unwrap_or_default();
+                    (app_id, verifying_key_bytes, signature)
+                };
+
+                let cmd_payload = Message::encode_to_vec(
+                    &edgerun_proto::edgerun::v0::stream::RequestSignaturePayload {
+                        payload_version: 1,
+                        payload: payload.clone(),
+                        human_readable: human_readable.clone(),
+                        action: action.clone(),
+                        session_id: session_id.clone(),
+                        presence_token,
+                    },
+                );
+
+                {
+                    let host = caller.data_mut();
+                    let cmd = build_command(
+                        host,
+                        CommandType::RequestSignature,
+                        cmd_payload,
+                        String::new(),
+                    );
+                    host.pending_commands.lock().unwrap().push(cmd);
+                }
+
+                let out_sig = out_sig_ptr as usize;
+                let data = mem.data_mut(&mut caller);
+                let sig_len = signature.len().min(64);
+                if out_sig + sig_len <= data.len() {
+                    data[out_sig..out_sig + sig_len].copy_from_slice(&signature[..sig_len]);
+                }
+
+                let event_bytes = Message::encode_to_vec(
+                    &edgerun_proto::edgerun::v0::stream::SignatureResponsePayload {
+                        payload_version: 1,
+                        app_id,
+                        payload,
+                        signature,
+                        signing_key: verifying_key_bytes,
+                        session_id,
+                    },
+                );
+                {
+                    let host = caller.data_mut();
+                    host.pending_events.lock().unwrap().push(event_bytes);
+                }
+
+                0
+            },
+        )?;
+
         Ok(Self {
             engine,
             module,
@@ -201,10 +403,20 @@ impl WasmRuntime {
     }
 
     pub fn run_with_context(&mut self, input: &str, context: ExecutionContext) -> Result<Vec<u8>> {
+        let result = self.run_with_events(input, context, Vec::new())?;
+        Ok(result.ui_bytes)
+    }
+
+    pub fn run_with_events(
+        &mut self,
+        input: &str,
+        context: ExecutionContext,
+        events: Vec<Vec<u8>>,
+    ) -> Result<WasmRunResult> {
         self.output.lock().unwrap().clear();
 
         let pending_commands = Arc::new(Mutex::new(Vec::new()));
-        let pending_events = Arc::new(Mutex::new(Vec::new()));
+        let pending_events = Arc::new(Mutex::new(events));
 
         let host = HostState {
             output: self.output.clone(),
@@ -243,51 +455,31 @@ impl WasmRuntime {
             run_func.call(&mut store, (0, 0))?;
         }
 
-        if self.verbose {
-            let cmds = pending_commands.lock().unwrap();
-            if !cmds.is_empty() {
-                eprintln!("WASM produced {} pending command(s)", cmds.len());
-                for (i, cmd) in cmds.iter().enumerate() {
-                    eprintln!(
-                        "  cmd[{}]: type={:?}, id_len={}",
-                        i,
-                        CommandType::from_i32(cmd.command_type),
-                        cmd.command_id.len()
-                    );
-                }
+        let cmds = pending_commands.lock().unwrap().clone();
+
+        if self.verbose && !cmds.is_empty() {
+            eprintln!("WASM produced {} pending command(s)", cmds.len());
+            for (i, cmd) in cmds.iter().enumerate() {
+                eprintln!(
+                    "  cmd[{}]: type={:?}, id_len={}",
+                    i,
+                    CommandType::from_i32(cmd.command_type),
+                    cmd.command_id.len()
+                );
             }
         }
 
-        let out = self.output.lock().unwrap();
-        if out.is_empty() {
-            return Ok(Vec::new());
-        }
+        let out = self.output.lock().unwrap().clone();
+        let ui_bytes = extract_ui_bytes(&out);
 
-        if out.len() < 10 {
-            return Ok(out.clone());
-        }
-
-        let ct_len = u32::from_le_bytes([out[2], out[3], out[4], out[5]]) as usize;
-        let body_offset = 6 + ct_len;
-
-        if body_offset + 4 > out.len() {
-            return Ok(out.clone());
-        }
-
-        let body_len = u32::from_le_bytes([
-            out[body_offset],
-            out[body_offset + 1],
-            out[body_offset + 2],
-            out[body_offset + 3],
-        ]) as usize;
-        let body_start = body_offset + 4;
-        let body_end = body_start.saturating_add(body_len).min(out.len());
-
-        let body = out[body_start..body_end].to_vec();
-        Ok(body)
+        Ok(WasmRunResult {
+            ui_bytes,
+            pending_commands: cmds,
+        })
     }
 
     pub fn run(&mut self, input: &str) -> Result<Vec<u8>> {
+        let default_app_key = AppKeyPair::generate(b"default-app".to_vec())?;
         self.run_with_context(
             input,
             ExecutionContext {
@@ -298,6 +490,7 @@ impl WasmRuntime {
                 },
                 app_instance_id: [0u8; 16],
                 delegation_chain: Vec::new(),
+                app_key: Arc::new(default_app_key),
             },
         )
     }
@@ -331,6 +524,11 @@ fn build_command(
         .map(|c| c.delegation_chain.clone())
         .unwrap_or_default();
 
+    let app_intent_bytes = ctx
+        .and_then(|c| c.app_key.sign_intent(&payload).ok())
+        .map(|intent| Message::encode_to_vec(&intent))
+        .unwrap_or_default();
+
     CommandEnvelope {
         envelope_version: 1,
         command_id: format!("wasm-cmd-{}", seq).into_bytes(),
@@ -357,5 +555,228 @@ fn build_command(
         requested_assurance: None,
         command_metadata: None,
         signature: None,
+        app_intent: app_intent_bytes,
     }
+}
+
+pub fn build_bootstrap_command(host: &mut HostState, action: &str) -> Option<CommandEnvelope> {
+    match action {
+        "generate_identity" => {
+            let payload = CreateIdentityPayload {
+                payload_version: 1,
+                label: String::from("primary"),
+                key_algorithm: 1,
+            };
+            Some(build_command(
+                host,
+                CommandType::CreateIdentity,
+                Message::encode_to_vec(&payload),
+                String::new(),
+            ))
+        }
+        "import_identity" => {
+            let payload = ImportIdentityPayload {
+                payload_version: 1,
+                label: String::from("imported"),
+                key_algorithm: 1,
+                public_key: Vec::new(),
+                encrypted_private_key: Vec::new(),
+                source: String::from("file"),
+            };
+            Some(build_command(
+                host,
+                CommandType::ImportIdentity,
+                Message::encode_to_vec(&payload),
+                String::new(),
+            ))
+        }
+        "add_controller" => {
+            let payload = AddBootstrapNodePayload {
+                payload_version: 1,
+                node: None,
+                address: String::from("local"),
+                transport_class: 0,
+                label: String::from("controller"),
+            };
+            Some(build_command(
+                host,
+                CommandType::AddController,
+                Message::encode_to_vec(&payload),
+                String::new(),
+            ))
+        }
+        "add_bootstrap_peer" => {
+            let payload = AddBootstrapNodePayload {
+                payload_version: 1,
+                node: None,
+                address: String::from("quic://peer.local:4242"),
+                transport_class: 3,
+                label: String::from("bootstrap-peer"),
+            };
+            Some(build_command(
+                host,
+                CommandType::AddBootstrapNode,
+                Message::encode_to_vec(&payload),
+                String::new(),
+            ))
+        }
+        "publish_reachability" => {
+            let payload = AddReachabilityHintPayload {
+                payload_version: 1,
+                address: String::from("quic://self.local:4242"),
+                transport_class: 3,
+                directness: 1,
+            };
+            Some(build_command(
+                host,
+                CommandType::AddReachabilityHint,
+                Message::encode_to_vec(&payload),
+                String::new(),
+            ))
+        }
+        "query_node_state" => {
+            let payload = QueryNodeStatePayload {
+                payload_version: 1,
+                query_kind: String::from("all"),
+            };
+            Some(build_command(
+                host,
+                CommandType::QueryNodeState,
+                Message::encode_to_vec(&payload),
+                String::new(),
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn extract_ui_bytes(raw_output: &[u8]) -> Vec<u8> {
+    if raw_output.is_empty() {
+        return Vec::new();
+    }
+
+    if raw_output.len() < 10 {
+        return raw_output.to_vec();
+    }
+
+    let ct_len = u32::from_le_bytes([raw_output[2], raw_output[3], raw_output[4], raw_output[5]])
+        as usize;
+    let body_offset = 6 + ct_len;
+
+    if body_offset + 4 > raw_output.len() {
+        return raw_output.to_vec();
+    }
+
+    let body_len = u32::from_le_bytes([
+        raw_output[body_offset],
+        raw_output[body_offset + 1],
+        raw_output[body_offset + 2],
+        raw_output[body_offset + 3],
+    ]) as usize;
+    let body_start = body_offset + 4;
+    let body_end = body_start.saturating_add(body_len).min(raw_output.len());
+
+    raw_output[body_start..body_end].to_vec()
+}
+
+fn interpret_send_message(payload: &str) -> Option<CommandEnvelope> {
+    let cmd_type = match payload {
+        "create_identity" => Some(CommandType::CreateIdentity),
+        "import_identity" => Some(CommandType::ImportIdentity),
+        "add_controller" => Some(CommandType::AddController),
+        "add_bootstrap_peer" => Some(CommandType::AddBootstrapNode),
+        "add_reachability" => Some(CommandType::AddReachabilityHint),
+        "query_node_state" => Some(CommandType::QueryNodeState),
+        _ => None,
+    };
+
+    cmd_type.map(|ct| {
+        let payload_bytes = match ct {
+            CommandType::CreateIdentity => {
+                Message::encode_to_vec(&CreateIdentityPayload {
+                    payload_version: 1,
+                    label: String::from("primary"),
+                    key_algorithm: 1,
+                })
+            }
+            CommandType::ImportIdentity => {
+                Message::encode_to_vec(&ImportIdentityPayload {
+                    payload_version: 1,
+                    label: String::from("imported"),
+                    key_algorithm: 1,
+                    public_key: Vec::new(),
+                    encrypted_private_key: Vec::new(),
+                    source: String::from("file"),
+                })
+            }
+            CommandType::AddController => {
+                Message::encode_to_vec(&AddBootstrapNodePayload {
+                    payload_version: 1,
+                    node: None,
+                    address: String::from("local"),
+                    transport_class: 0,
+                    label: String::from("controller"),
+                })
+            }
+            CommandType::AddBootstrapNode => {
+                Message::encode_to_vec(&AddBootstrapNodePayload {
+                    payload_version: 1,
+                    node: None,
+                    address: String::from("quic://peer.local:4242"),
+                    transport_class: 3,
+                    label: String::from("bootstrap-peer"),
+                })
+            }
+            CommandType::AddReachabilityHint => {
+                Message::encode_to_vec(&AddReachabilityHintPayload {
+                    payload_version: 1,
+                    address: String::from("quic://self.local:4242"),
+                    transport_class: 3,
+                    directness: 1,
+                })
+            }
+            CommandType::QueryNodeState => {
+                Message::encode_to_vec(&QueryNodeStatePayload {
+                    payload_version: 1,
+                    query_kind: String::from("all"),
+                })
+            }
+            _ => Vec::new(),
+        };
+
+        let app_intent = AppIntent {
+            app_id: b"settings-app".to_vec(),
+            payload: payload_bytes.clone(),
+            signature: Vec::new(),
+        };
+
+        CommandEnvelope {
+            envelope_version: 1,
+            command_id: format!("settings-cmd-{}", payload).into_bytes(),
+            target_node: Some(NodeRef {
+                node_id: Vec::new(),
+            }),
+            issuer: None,
+            command_type: cmd_type.unwrap() as i32,
+            command_version: 1,
+            issued_at: Some(now_ts()),
+            not_before: None,
+            expires_at: None,
+            idempotency_key: format!("idem-{}", payload).into_bytes(),
+            payload: if payload_bytes.is_empty() {
+                None
+            } else {
+                Some(
+                    edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+                        payload_bytes,
+                    ),
+                )
+            },
+            delegation_chain: Vec::new(),
+            requested_assurance: None,
+            command_metadata: None,
+            signature: None,
+            app_intent: Message::encode_to_vec(&app_intent),
+        }
+    })
 }

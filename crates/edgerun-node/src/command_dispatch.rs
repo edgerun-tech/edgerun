@@ -518,6 +518,27 @@ pub fn dispatch_command(
         x if x == CommandType::UninstallApp as i32 => {
             dispatch_uninstall_app(command, store, stream_id, signer, controllers)
         }
+        x if x == CommandType::CreateIdentity as i32 => {
+            dispatch_create_identity(command, store, stream_id, signer, controllers)
+        }
+        x if x == CommandType::ImportIdentity as i32 => {
+            dispatch_import_identity(command, store, stream_id, signer, controllers)
+        }
+        x if x == CommandType::AddBootstrapNode as i32 => {
+            dispatch_add_bootstrap_node(command, store, stream_id, signer, controllers)
+        }
+        x if x == CommandType::AddReachabilityHint as i32 => {
+            dispatch_add_reachability_hint(command, store, stream_id, signer, controllers)
+        }
+        x if x == CommandType::QueryNodeState as i32 => {
+            dispatch_query_node_state(command, store, stream_id, signer, controllers)
+        }
+        x if x == CommandType::RequestUserPresence as i32 => {
+            dispatch_request_user_presence(command, store, stream_id, signer, controllers)
+        }
+        x if x == CommandType::RequestSignature as i32 => {
+            dispatch_request_signature(command, store, stream_id, signer, controllers)
+        }
         _ => {
             // Spec §11.1: unknown values in authority-critical enums MUST cause rejection.
             // CommandType is authority-critical. The proto reserves 13..=999.
@@ -889,6 +910,746 @@ fn dispatch_uninstall_app(
         response_bytes,
         None,
         uninstall_payload.package_object.clone(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Bootstrap / Settings app command handlers
+// ---------------------------------------------------------------------------
+
+fn dispatch_create_identity(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    use edgerun_proto::edgerun::v0::stream::CreateIdentityPayload;
+
+    let payload_bytes = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
+        _ => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_create_identity_payload",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let create_payload = match CreateIdentityPayload::decode(payload_bytes.as_slice()) {
+        Ok(p) => p,
+        Err(e) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("invalid_create_identity_payload: {}", e),
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let label = if create_payload.label.is_empty() {
+        "primary"
+    } else {
+        &create_payload.label
+    };
+
+    edgerun_log::info!("create_identity: label={}", label);
+
+    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
+        payload_version: 1,
+        command: None,
+        issuer: command.issuer.clone(),
+        decision: 1,
+        decision_basis: None,
+        reason_code: String::new(),
+        effect_summary_object: None,
+        result_object: None,
+    };
+
+    let response_bytes = result_payload.encode_to_vec();
+
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response_bytes,
+        None,
+        None,
+    )
+}
+
+fn dispatch_import_identity(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    use edgerun_proto::edgerun::v0::stream::ImportIdentityPayload;
+
+    let payload_bytes = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
+        _ => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_import_identity_payload",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let import_payload = match ImportIdentityPayload::decode(payload_bytes.as_slice()) {
+        Ok(p) => p,
+        Err(e) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("invalid_import_identity_payload: {}", e),
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let label = if import_payload.label.is_empty() {
+        "imported"
+    } else {
+        &import_payload.label
+    };
+
+    edgerun_log::info!("import_identity: label={} source={}", label, import_payload.source);
+
+    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
+        payload_version: 1,
+        command: None,
+        issuer: command.issuer.clone(),
+        decision: 1,
+        decision_basis: None,
+        reason_code: String::new(),
+        effect_summary_object: None,
+        result_object: None,
+    };
+
+    let response_bytes = result_payload.encode_to_vec();
+
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response_bytes,
+        None,
+        None,
+    )
+}
+
+fn dispatch_add_bootstrap_node(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    use edgerun_proto::edgerun::v0::stream::AddBootstrapNodePayload;
+
+    let payload_bytes = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
+        _ => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_add_bootstrap_node_payload",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let bootstrap_payload = match AddBootstrapNodePayload::decode(payload_bytes.as_slice()) {
+        Ok(p) => p,
+        Err(e) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("invalid_add_bootstrap_node_payload: {}", e),
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let address = &bootstrap_payload.address;
+    let label = if bootstrap_payload.label.is_empty() {
+        address
+    } else {
+        &bootstrap_payload.label
+    };
+
+    edgerun_log::info!("add_bootstrap_node: label={} address={}", label, address);
+
+    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
+        payload_version: 1,
+        command: None,
+        issuer: command.issuer.clone(),
+        decision: 1,
+        decision_basis: None,
+        reason_code: String::new(),
+        effect_summary_object: None,
+        result_object: None,
+    };
+
+    let response_bytes = result_payload.encode_to_vec();
+
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response_bytes,
+        None,
+        None,
+    )
+}
+
+fn dispatch_add_reachability_hint(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    use edgerun_proto::edgerun::v0::stream::AddReachabilityHintPayload;
+
+    let payload_bytes = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
+        _ => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "missing_add_reachability_hint_payload",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let hint_payload = match AddReachabilityHintPayload::decode(payload_bytes.as_slice()) {
+        Ok(p) => p,
+        Err(e) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("invalid_add_reachability_hint_payload: {}", e),
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    edgerun_log::info!(
+        "add_reachability_hint: address={} transport_class={}",
+        hint_payload.address,
+        hint_payload.transport_class
+    );
+
+    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
+        payload_version: 1,
+        command: None,
+        issuer: command.issuer.clone(),
+        decision: 1,
+        decision_basis: None,
+        reason_code: String::new(),
+        effect_summary_object: None,
+        result_object: None,
+    };
+
+    let response_bytes = result_payload.encode_to_vec();
+
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response_bytes,
+        None,
+        None,
+    )
+}
+
+fn dispatch_query_node_state(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    use edgerun_proto::edgerun::v0::stream::{NodeStateSnapshot, QueryNodeStatePayload};
+
+    let _payload_bytes = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
+        _ => Vec::new(),
+    };
+
+    let query_kind = if !_payload_bytes.is_empty() {
+        match QueryNodeStatePayload::decode(_payload_bytes.as_slice()) {
+            Ok(p) => p.query_kind,
+            Err(_) => String::from("all"),
+        }
+    } else {
+        String::from("all")
+    };
+
+    let has_identity = !signer.node_id().0.is_empty();
+    let controller_count = controllers.controller_ids().len() as u32;
+
+    let head_seq = store.get_head(stream_id).ok().flatten().map(|(s, _)| s).unwrap_or(0);
+    let bootstrap_complete = has_identity && controller_count > 0 && head_seq > 0;
+
+    let snapshot = NodeStateSnapshot {
+        payload_version: 1,
+        has_identity,
+        identity_label: if has_identity {
+            "primary".to_string()
+        } else {
+            String::new()
+        },
+        controller_count,
+        bootstrap_peer_count: 0,
+        bootstrap_complete,
+    };
+
+    let snapshot_bytes = prost::Message::encode_to_vec(&snapshot);
+    let snapshot_object = store.put_object(
+        &snapshot_bytes,
+        edgerun_proto::edgerun::v0::common::ObjectKind::DerivedView as i32,
+        &[stream_id.to_vec()],
+    );
+
+    edgerun_log::info!(
+        "query_node_state: kind={} identity={} controllers={} complete={}",
+        query_kind,
+        has_identity,
+        controller_count,
+        bootstrap_complete
+    );
+
+    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
+        payload_version: 1,
+        command: None,
+        issuer: command.issuer.clone(),
+        decision: 1,
+        decision_basis: None,
+        reason_code: String::new(),
+        effect_summary_object: None,
+        result_object: snapshot_object.ok(),
+    };
+
+    let response_bytes = result_payload.encode_to_vec();
+
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response_bytes,
+        None,
+        snapshot_object.ok(),
+    )
+}
+
+fn extract_app_id_from_command(command: &CommandEnvelope) -> Vec<u8> {
+    use edgerun_proto::edgerun::v0::stream::AppIntent;
+
+    if !command.app_intent.is_empty() {
+        if let Ok(intent) = AppIntent::decode(command.app_intent.as_slice()) {
+            return intent.app_id;
+        }
+    }
+    command
+        .issuer
+        .as_ref()
+        .map(|i| i.identity_id.clone())
+        .unwrap_or_default()
+}
+
+// ---------------------------------------------------------------------------
+// User Authority Acquisition handlers
+// ---------------------------------------------------------------------------
+
+fn dispatch_request_user_presence(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    use edgerun_proto::edgerun::v0::stream::{
+        RequestUserPresencePayload, UserPresenceGrantedPayload, UserPresenceRequestPayload,
+    };
+
+    let payload_bytes = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
+        _ => Vec::new(),
+    };
+
+    let req = if !payload_bytes.is_empty() {
+        match RequestUserPresencePayload::decode(payload_bytes.as_slice()) {
+            Ok(p) => p,
+            Err(_) => {
+                return record_and_respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    false,
+                    "invalid_presence_request_payload",
+                    Vec::new(),
+                    None,
+                );
+            }
+        }
+    } else {
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_presence_request_payload",
+            Vec::new(),
+            None,
+        );
+    };
+
+    if req.reason.is_empty() {
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "empty_presence_reason",
+            Vec::new(),
+            None,
+        );
+    }
+
+    let ttl = if req.ttl_seconds > 0 && req.ttl_seconds <= 300 {
+        req.ttl_seconds
+    } else {
+        60
+    };
+
+    let mut token = [0u8; 32];
+    edgerun_crypto::rand_core::RngCore::fill_bytes(
+        &mut edgerun_crypto::rng::OsRng,
+        &mut token,
+    );
+
+    let expires_at = now_unix_micros_u64() + (ttl as u64 * 1_000_000);
+
+    let app_id = extract_app_id_from_command(command);
+
+    let request_payload = UserPresenceRequestPayload {
+        payload_version: 1,
+        app_id: app_id.clone(),
+        reason: req.reason.clone(),
+        session_id: req.session_id.clone(),
+        ttl_seconds: ttl,
+    };
+
+    let request_bytes = Message::encode_to_vec(&request_payload);
+    let request_obj = store.put_object(
+        &request_bytes,
+        edgerun_proto::edgerun::v0::common::ObjectKind::EventData as i32,
+        &[stream_id.to_vec()],
+    );
+
+    let granted_payload = UserPresenceGrantedPayload {
+        payload_version: 1,
+        presence_token: token.to_vec(),
+        app_id,
+        session_id: req.session_id,
+        expires_at: expires_at as i64,
+    };
+
+    let granted_bytes = Message::encode_to_vec(&granted_payload);
+    let granted_obj = store.put_object(
+        &granted_bytes,
+        edgerun_proto::edgerun::v0::common::ObjectKind::EventData as i32,
+        &[stream_id.to_vec()],
+    );
+
+    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
+        payload_version: 1,
+        command: None,
+        issuer: command.issuer.clone(),
+        decision: 1,
+        decision_basis: granted_obj.clone(),
+        reason_code: String::new(),
+        effect_summary_object: request_obj.clone(),
+        result_object: granted_obj,
+    };
+
+    let response_bytes = result_payload.encode_to_vec();
+
+    edgerun_log::info!(
+        "request_user_presence: reason='{}' ttl={}s",
+        req.reason,
+        ttl
+    );
+
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response_bytes,
+        None,
+        granted_obj.ok(),
+    )
+}
+
+fn dispatch_request_signature(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+) -> CommandDispatchResult {
+    use edgerun_proto::edgerun::v0::stream::{
+        RequestSignaturePayload, SignatureRequestPayload, SignatureResponsePayload,
+    };
+
+    let payload_bytes = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            bytes,
+        )) => bytes.clone(),
+        _ => Vec::new(),
+    };
+
+    let req = if !payload_bytes.is_empty() {
+        match RequestSignaturePayload::decode(payload_bytes.as_slice()) {
+            Ok(p) => p,
+            Err(_) => {
+                return record_and_respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    false,
+                    "invalid_signature_request_payload",
+                    Vec::new(),
+                    None,
+                );
+            }
+        }
+    } else {
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_signature_request_payload",
+            Vec::new(),
+            None,
+        );
+    };
+
+    if req.payload.is_empty() {
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "empty_signature_payload",
+            Vec::new(),
+            None,
+        );
+    }
+
+    if req.presence_token.is_empty() {
+        return record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "missing_presence_token",
+            Vec::new(),
+            None,
+        );
+    }
+
+    let node_id = signer.node_id();
+    let public_key = signer.public_key_bytes();
+
+    let mut hasher = edgerun_crypto::sha2::Sha256::new();
+    edgerun_crypto::sha2::Digest::update(&mut hasher, &req.payload);
+    let message_hash = hasher.finalize();
+
+    let signature_result = signer.sign(&message_hash);
+    let signature_bytes = match signature_result {
+        Ok(sig) => sig,
+        Err(e) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("signing_failed: {:?}", e),
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    let app_id = extract_app_id_from_command(command);
+
+    let request_payload = SignatureRequestPayload {
+        payload_version: 1,
+        app_id: app_id.clone(),
+        payload: req.payload.clone(),
+        human_readable: req.human_readable.clone(),
+        action: req.action.clone(),
+        session_id: req.session_id.clone(),
+        presence_token: req.presence_token,
+    };
+
+    let request_bytes = Message::encode_to_vec(&request_payload);
+    let request_obj = store.put_object(
+        &request_bytes,
+        edgerun_proto::edgerun::v0::common::ObjectKind::EventData as i32,
+        &[stream_id.to_vec()],
+    );
+
+    let response_payload = SignatureResponsePayload {
+        payload_version: 1,
+        app_id,
+        payload: req.payload,
+        signature: signature_bytes,
+        signing_key: public_key,
+        session_id: req.session_id,
+    };
+
+    let response_obj_bytes = Message::encode_to_vec(&response_payload);
+    let response_obj = store.put_object(
+        &response_obj_bytes,
+        edgerun_proto::edgerun::v0::common::ObjectKind::EventData as i32,
+        &[stream_id.to_vec()],
+    );
+
+    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
+        payload_version: 1,
+        command: None,
+        issuer: command.issuer.clone(),
+        decision: 1,
+        decision_basis: response_obj.clone(),
+        reason_code: String::new(),
+        effect_summary_object: request_obj.clone(),
+        result_object: response_obj,
+    };
+
+    let response_bytes = result_payload.encode_to_vec();
+
+    edgerun_log::info!(
+        "request_signature: action='{}' human='{}'",
+        req.action,
+        req.human_readable
+    );
+
+    record_and_respond_with_result_object(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        true,
+        "",
+        response_bytes,
+        None,
+        response_obj.ok(),
     )
 }
 
