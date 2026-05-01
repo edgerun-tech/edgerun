@@ -137,8 +137,8 @@ impl Backend {
     }
 
     /// Creates a backend with a no-op event recorder (for tests).
-    pub fn new_noop(data_root: PathBuf) -> io::Result<Self> {
-        Self::new(data_root, no_op_recorder())
+    pub fn new_noop(data_root: PathBuf, node_id: Vec<u8>) -> io::Result<Self> {
+        Self::new(data_root, no_op_recorder(), node_id)
     }
 
     /// Map a collection D-Bus path to a credential namespace.
@@ -194,7 +194,7 @@ impl Backend {
         // Store encrypted blob
         let blob_id = self
             .blobs
-            .store(secret, &[])
+            .store(secret, &[self.node_id.clone()])
             .map_err(|e| io::Error::other(e.to_string()))?;
 
         // Index with metadata in description
@@ -517,7 +517,7 @@ mod tests {
                 .push((event_type.to_string(), payload));
             Ok(())
         });
-        let be = Backend::new(data_root, recorder).unwrap();
+        let be = Backend::new(data_root, recorder, vec![0u8; 32]).unwrap();
         (be, events)
     }
 
@@ -540,7 +540,7 @@ mod tests {
     #[test]
     fn backend_put_get() {
         let root = tmp_root();
-        let mut be = Backend::new_noop(root).unwrap();
+        let mut be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "test-key", b"super-secret", "Test Label", &[])
             .unwrap();
@@ -552,7 +552,7 @@ mod tests {
     #[test]
     fn backend_delete() {
         let root = tmp_root();
-        let mut be = Backend::new_noop(root).unwrap();
+        let mut be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "del-key", b"secret", "Del Label", &[])
             .unwrap();
@@ -564,7 +564,7 @@ mod tests {
     #[test]
     fn backend_list() {
         let root = tmp_root();
-        let mut be = Backend::new_noop(root).unwrap();
+        let mut be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "k1", b"v1", "Label 1", &[]).unwrap();
         be.put(coll, "k2", b"v2", "Label 2", &[]).unwrap();
@@ -575,7 +575,7 @@ mod tests {
     #[test]
     fn backend_search_by_attr() {
         let root = tmp_root();
-        let mut be = Backend::new_noop(root).unwrap();
+        let mut be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(
             coll,
@@ -835,7 +835,7 @@ mod tests {
     #[test]
     fn empty_secret_roundtrip() {
         let root = tmp_root();
-        let mut be = Backend::new_noop(root).unwrap();
+        let mut be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "empty", b"", "Empty Secret", &[]).unwrap();
         let (secret, meta) = be.get(coll, "empty").unwrap().unwrap();
@@ -846,7 +846,7 @@ mod tests {
     #[test]
     fn large_secret_roundtrip() {
         let root = tmp_root();
-        let mut be = Backend::new_noop(root).unwrap();
+        let mut be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         let large = vec![0xCCu8; 50_000];
         be.put(coll, "large", &large, "Large Secret", &[]).unwrap();
@@ -881,7 +881,7 @@ mod tests {
     #[test]
     fn backend_search_no_matches() {
         let root = tmp_root();
-        let mut be = Backend::new_noop(root).unwrap();
+        let mut be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(
             coll,
@@ -904,7 +904,7 @@ mod tests {
     #[test]
     fn backend_search_multiple_attributes() {
         let root = tmp_root();
-        let mut be = Backend::new_noop(root).unwrap();
+        let mut be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(
             coll,
@@ -955,7 +955,7 @@ mod tests {
     #[test]
     fn backend_get_nonexistent_collection() {
         let root = tmp_root();
-        let be = Backend::new_noop(root).unwrap();
+        let be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         assert!(be
             .get("/org/freedesktop/secrets/collections/nonexistent", "any")
             .unwrap()
@@ -965,7 +965,7 @@ mod tests {
     #[test]
     fn backend_list_nonexistent_collection() {
         let root = tmp_root();
-        let be = Backend::new_noop(root).unwrap();
+        let be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         assert!(be
             .list("/org/freedesktop/secrets/collections/nonexistent")
             .unwrap()
@@ -992,7 +992,7 @@ mod tests {
     #[test]
     fn backend_list_collections_empty() {
         let root = tmp_root();
-        let be = Backend::new_noop(root).unwrap();
+        let be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         assert!(be.list_collections().unwrap().is_empty());
     }
 
@@ -1039,7 +1039,7 @@ mod tests {
     #[test]
     fn backend_collection_exists_nonexistent() {
         let root = tmp_root();
-        let be = Backend::new_noop(root).unwrap();
+        let be = Backend::new_noop(root, vec![0u8; 32]).unwrap();
         assert!(!be.collection_exists("/org/freedesktop/secrets/collections/nonexistent"));
     }
 }

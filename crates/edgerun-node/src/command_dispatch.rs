@@ -2886,7 +2886,7 @@ fn cache_cert(
     // Also store as an object so it's recoverable from the event stream
     // via the command that triggered the re-benchmark.
     let cert_bytes = cert.to_bytes();
-    if let Err(e) = store.put_object(&cert_bytes, 0, &[]) {
+    if let Err(e) = store.put_object(&cert_bytes, 0, &[local_node_id.to_vec()]) {
         edgerun_log::warn!("failed to store cert as object: {}", e);
     }
 }
@@ -3066,7 +3066,7 @@ fn dispatch_create_delegation(
     // Store the delegation as an object so it's cryptographically linked
     // to the signed CommandCommitted event via payload_object
     let delegation_bytes = prost::Message::encode_to_vec(delegation);
-    let object_ref = match store.put_object(&delegation_bytes, 0, &[]) {
+    let object_ref = match store.put_object(&delegation_bytes, 0, &[signer.node_id().0.to_vec()]) {
         Ok(r) => r,
         Err(e) => {
             edgerun_log::warn!("failed to store delegation object: {}", e);
@@ -3244,7 +3244,7 @@ fn dispatch_create_revocation(
     // Store the revocation as an object so it's cryptographically linked
     // to the signed CommandCommitted event via payload_object
     let revocation_bytes = prost::Message::encode_to_vec(revocation);
-    let object_ref = match store.put_object(&revocation_bytes, 0, &[]) {
+    let object_ref = match store.put_object(&revocation_bytes, 0, &[signer.node_id().0.to_vec()]) {
         Ok(r) => r,
         Err(e) => {
             edgerun_log::warn!("failed to store revocation object: {}", e);

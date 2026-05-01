@@ -51,7 +51,7 @@ impl Server {
         let listener = UnixListener::bind(socket_path)?;
         // Standalone daemon doesn't have a node stream — events are no-ops
         // until integrated with the node's main event recorder.
-        let backend = Backend::new_noop(data_root)?;
+        let backend = Backend::new_noop(data_root, vec![0u8; 32])?;
 
         // Try to register on the D-Bus session bus
         let bus = BusConnection::connect("org.freedesktop.secrets");

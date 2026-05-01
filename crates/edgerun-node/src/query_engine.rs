@@ -665,6 +665,7 @@ fn build_query_proof_objects(
         };
         store_proof_object(
             store,
+            signer,
             &prost::Message::encode_to_vec(&proof),
             &mut proof_objects,
         );
@@ -681,6 +682,7 @@ fn build_query_proof_objects(
         if validate_snapshot_set_proof(&proof) == ProofStructuralResult::Valid {
             store_proof_object(
                 store,
+                signer,
                 &prost::Message::encode_to_vec(&proof),
                 &mut proof_objects,
             );
@@ -699,6 +701,7 @@ fn build_query_proof_objects(
         if validate_event_set_proof(&proof) == ProofStructuralResult::Valid {
             store_proof_object(
                 store,
+                signer,
                 &prost::Message::encode_to_vec(&proof),
                 &mut proof_objects,
             );
@@ -722,6 +725,7 @@ fn build_query_proof_objects(
             if validate_object_assertion_proof(&proof) == ProofStructuralResult::Valid {
                 store_proof_object(
                     store,
+                    signer,
                     &prost::Message::encode_to_vec(&proof),
                     &mut proof_objects,
                 );
@@ -738,12 +742,13 @@ fn build_query_proof_objects(
 
 fn store_proof_object(
     store: &mut NodeStore,
+    signer: &dyn MeshSigner,
     proof_bytes: &[u8],
     proof_objects: &mut Vec<edgerun_proto::edgerun::v0::common::ObjectRef>,
 ) {
     use edgerun_proto::edgerun::v0::common::ObjectKind;
 
-    match store.put_object(proof_bytes, ObjectKind::Proof as i32, &[]) {
+    match store.put_object(proof_bytes, ObjectKind::Proof as i32, &[signer.node_id().0.to_vec()]) {
         Ok(object_ref) => proof_objects.push(object_ref),
         Err(e) => edgerun_log::warn!("failed to store query proof object: {}", e),
     }

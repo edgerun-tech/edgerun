@@ -18,7 +18,7 @@
 //! # fn main() -> std::io::Result<()> {
 //! let tmp = std::env::temp_dir().join("ss_doc_test");
 //! let _ = std::fs::remove_dir_all(&tmp);
-//! let mut backend = Backend::new(tmp.clone(), Box::new(|_, _| Ok(())))?;
+//! let mut backend = Backend::new(tmp.clone(), Box::new(|_, _| Ok(())), vec![0u8; 32])?;
 //! let coll = "/org/freedesktop/secrets/collections/default";
 //! backend.put(coll, "doc-key", b"secret-value", "Doc Label", &[])?;
 //! let (secret, meta) = backend.get(coll, "doc-key")?.unwrap();

@@ -139,7 +139,11 @@ impl BlobStore {
         edgerun_core::encrypted_envelope::validate_encrypted_envelope(envelope)
             .map_err(|e| StorageError::InvalidArgument(e.to_string()))?;
 
-        let recipients = envelope.recipients.clone();
+        let recipient_ids: Vec<Vec<u8>> = envelope
+            .recipients
+            .iter()
+            .map(|rk| rk.identity.clone())
+            .collect();
 
         let blob_id =
             edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(&envelope.ciphertext));
@@ -147,8 +151,8 @@ impl BlobStore {
         let blob_path = blob_file_path(&self.config.blob_dir, &blob_id);
 
         if blob_path.exists() {
-            if !recipients.is_empty() {
-                merge_recipients(&self.config.blob_dir, &blob_id, &recipients)?;
+            if !recipient_ids.is_empty() {
+                merge_recipients(&self.config.blob_dir, &blob_id, &recipient_ids)?;
             }
             return Ok(blob_id);
         }
@@ -158,6 +162,7 @@ impl BlobStore {
         }
 
         let mut file = File::create(&blob_path)?;
+        file.write_all(&envelope.ephemeral_pubkey)?;
         file.write_all(&envelope.nonce)?;
         file.write_all(&envelope.ciphertext)?;
         if !envelope.tag.is_empty() {
@@ -165,9 +170,9 @@ impl BlobStore {
         }
         file.sync_all()?;
 
-        if !recipients.is_empty() {
+        if !recipient_ids.is_empty() {
             let meta_path = blob_meta_path(&self.config.blob_dir, &blob_id);
-            let meta_content = recipients
+            let meta_content = recipient_ids
                 .iter()
                 .map(|r| edgerun_core::util::bytes_to_hex(r))
                 .collect::<Vec<_>>()

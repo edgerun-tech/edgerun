@@ -376,9 +376,9 @@ mod tests {
 
         // Signer closure
         use edgerun_crypto::signature::Signer;
-        use edgerun_crypto::ecdsa::Signature;
+        use edgerun_crypto::p256::NistP256;
         let signer = |data: &[u8]| -> Vec<u8> {
-            let sig: Signature = sender_sk.sign(data);
+            let sig: edgerun_crypto::ecdsa::Signature<NistP256> = sender_sk.sign(data);
             sig.to_bytes().to_vec()
         };
 
@@ -412,8 +412,10 @@ mod tests {
         let sender_pk_bytes = sender_pk.to_encoded_point(false).as_bytes().to_vec();
 
         use edgerun_crypto::signature::Signer;
+        use edgerun_crypto::p256::NistP256;
         let signer = |data: &[u8]| -> Vec<u8> {
-            <SigningKey as Signer<Vec<u8>>>::sign(&sender_sk, data).to_vec()
+            let sig: edgerun_crypto::ecdsa::Signature<NistP256> = sender_sk.sign(data);
+            sig.to_bytes().to_vec()
         };
 
         let envelope = encrypt_envelope(
