@@ -225,6 +225,7 @@ sha2 = { version = "0.10", default-features = false }
 libc = "0.2"
 prost = { version = "0.14", default-features = false, features = ["derive"] }
 prost-types = { version = "0.14", default-features = false }
+prost-build = { version = "0.14", default-features = false }
 der = { version = "0.8", features = ["heapless"] }
 wasmtime = "29"
 wasmparser = "0.224"
