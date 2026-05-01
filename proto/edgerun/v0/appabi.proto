@@ -1,0 +1,378 @@
+syntax = "proto3";
+package edgerun.v0.appabi;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "edgerun/v0/common.proto";
+import "edgerun/v0/trust.proto";
+import "edgerun/v0/capability.proto";
+import "edgerun/v0/stream.proto";
+import "edgerun/v0/object.proto";
+import "edgerun/v0/access.proto";
+
+// ===========================================================================
+// ABI Version
+// ===========================================================================
+
+enum AbiVersion {
+  ABI_VERSION_UNSPECIFIED = 0;
+  ABI_VERSION_V0 = 1;
+}
+
+// ===========================================================================
+// Host Operations
+// ===========================================================================
+
+enum HostOp {
+  HOST_OP_UNSPECIFIED = 0;
+  HOST_OP_GET_CONTEXT = 1;
+  HOST_OP_GET_GRANTED_CAPABILITIES = 2;
+  HOST_OP_REQUEST_USER_PRESENCE = 10;
+  HOST_OP_REQUEST_SIGNATURE = 11;
+  HOST_OP_REQUEST_CAPABILITY = 20;
+  HOST_OP_INVOKE_CAPABILITY = 21;
+  HOST_OP_RELEASE_CAPABILITY = 22;
+  HOST_OP_PUT_OBJECT = 30;
+  HOST_OP_GET_OBJECT = 31;
+  HOST_OP_QUERY = 32;
+  HOST_OP_BUILD_COMMAND = 40;
+  HOST_OP_SUBMIT_COMMAND = 41;
+  HOST_OP_EMIT_APP_INTENT = 50;
+  HOST_OP_LOG_OBSERVATION = 51;
+  HOST_OP_RANDOM = 60;
+  HOST_OP_TIME = 61;
+}
+
+// ===========================================================================
+// ABI Status Codes
+// ===========================================================================
+
+enum AbiStatus {
+  ABI_STATUS_UNSPECIFIED = 0;
+  ABI_STATUS_OK = 1;
+  ABI_STATUS_DENIED = 2;
+  ABI_STATUS_NOT_FOUND = 3;
+  ABI_STATUS_INVALID_REQUEST = 4;
+  ABI_STATUS_INVALID_CAPABILITY = 5;
+  ABI_STATUS_EXPIRED = 6;
+  ABI_STATUS_QUOTA_EXCEEDED = 7;
+  ABI_STATUS_REQUIRES_USER_PRESENCE = 8;
+  ABI_STATUS_NONDETERMINISTIC_DENIED = 9;
+  ABI_STATUS_UNSUPPORTED = 10;
+  ABI_STATUS_INTERNAL_ERROR = 11;
+}
+
+// ===========================================================================
+// Execution Mode
+// ===========================================================================
+
+enum ExecutionMode {
+  EXECUTION_MODE_UNSPECIFIED = 0;
+  // Deterministic compute. No wall clock, no live user prompt, no network,
+  // no ambient state, no host nondeterminism except declared inputs.
+  EXECUTION_MODE_DETERMINISTIC = 1;
+  // Interactive app/agent. Host calls allowed by explicit capabilities.
+  EXECUTION_MODE_INTERACTIVE = 2;
+}
+
+// ===========================================================================
+// Envelope (request/response wrapper)
+// ===========================================================================
+
+message AbiEnvelope {
+  uint32 envelope_version = 1;
+  HostOp op = 2;
+  bytes request_id = 3;
+  bytes session_id = 4;
+  bytes app_id = 5;
+  bytes payload = 6;
+}
+
+message AbiResponse {
+  uint32 response_version = 1;
+  bytes request_id = 2;
+  AbiStatus status = 3;
+  bytes payload = 4;
+  string error_reason = 5;
+  edgerun.v0.common.ObjectRef error_object = 6;
+}
+
+// ===========================================================================
+// App Context
+// ===========================================================================
+
+message AppContextRequest {
+  uint32 request_version = 1;
+}
+
+message AppContext {
+  uint32 context_version = 1;
+  AbiVersion abi_version = 2;
+  ExecutionMode execution_mode = 3;
+  bytes session_id = 4;
+  bytes invocation_id = 5;
+  edgerun.v0.stream.AppPrincipal app = 6;
+  edgerun.v0.common.ObjectRef app_package = 7;
+  edgerun.v0.common.NodeRef host_node = 8;
+  edgerun.v0.common.IdentityRef host_identity = 9;
+  string domain = 10;
+  string route = 11;
+  string entry = 12;
+  repeated edgerun.v0.trust.CapabilityDescriptor granted_capabilities = 13;
+  google.protobuf.Timestamp started_at = 14;
+  edgerun.v0.common.ObjectRef input_object = 15;
+  edgerun.v0.common.ObjectRef context_metadata = 16;
+}
+
+// ===========================================================================
+// Capabilities
+// ===========================================================================
+
+message GetGrantedCapabilitiesRequest {
+  uint32 request_version = 1;
+}
+
+message GetGrantedCapabilitiesResponse {
+  uint32 response_version = 1;
+  repeated edgerun.v0.trust.CapabilityDescriptor capabilities = 2;
+}
+
+message RequestCapability {
+  uint32 request_version = 1;
+  edgerun.v0.capability.CapabilitySelector selector = 2;
+  repeated edgerun.v0.capability.CapabilityOperation requested_operations = 3;
+  repeated edgerun.v0.capability.CapabilityConstraint requested_constraints = 4;
+  string purpose = 5;
+  google.protobuf.Duration requested_duration = 6;
+  // Optional presence token if requested capability requires user presence.
+  bytes presence_token = 7;
+}
+
+message CapabilityHandle {
+  uint32 handle_version = 1;
+  bytes handle_id = 2;
+  edgerun.v0.capability.CapabilityGrant grant = 3;
+  google.protobuf.Timestamp opened_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message InvokeCapability {
+  uint32 request_version = 1;
+  bytes handle_id = 2;
+  edgerun.v0.capability.CapabilityOperation operation = 3;
+  edgerun.v0.capability.CapabilityAccessClass requested_access_class = 4;
+  // Input is an object, not raw ambient memory.
+  edgerun.v0.common.ObjectRef parameter_object = 5;
+  bytes correlation_id = 6;
+}
+
+message CapabilityInvocationResult {
+  uint32 response_version = 1;
+  edgerun.v0.capability.CapabilityResult result = 2;
+  // Runtime may also expose a direct small result for cheap calls.
+  bytes inline_result = 3;
+}
+
+message ReleaseCapability {
+  uint32 request_version = 1;
+  bytes handle_id = 2;
+}
+
+// ===========================================================================
+// User Presence & Signing
+// ===========================================================================
+
+message RequestUserPresence {
+  uint32 request_version = 1;
+  string reason = 2;
+  google.protobuf.Duration requested_ttl = 3;
+  // Optional object containing UI details, risk explanation, markdown, etc.
+  edgerun.v0.common.ObjectRef prompt_object = 4;
+}
+
+message UserPresenceToken {
+  uint32 token_version = 1;
+  bytes presence_token = 2;
+  bytes app_id = 3;
+  bytes session_id = 4;
+  google.protobuf.Timestamp issued_at = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  edgerun.v0.common.ObjectRef approval_event = 7;
+}
+
+message RequestSignature {
+  uint32 request_version = 1;
+  string action = 2;
+  string human_readable = 3;
+  // The exact deterministic payload to sign.
+  bytes payload = 4;
+  // Required. Obtained from HOST_OP_REQUEST_USER_PRESENCE.
+  bytes presence_token = 5;
+  // Optional semantic references.
+  repeated edgerun.v0.common.ObjectRef related_objects = 6;
+  repeated edgerun.v0.common.CommandRef related_commands = 7;
+  repeated edgerun.v0.common.DelegationRef related_delegations = 8;
+  // Domain separation. Example:
+  // "edgerun:v0:command", "edgerun:v0:delegation", "edgerun:v0:object".
+  string signing_domain = 9;
+}
+
+message SignatureResult {
+  uint32 result_version = 1;
+  bytes payload = 2;
+  edgerun.v0.common.Signature signature = 3;
+  edgerun.v0.common.IdentityRef signer = 4;
+  bytes session_id = 5;
+  edgerun.v0.common.ObjectRef signature_event = 6;
+}
+
+// ===========================================================================
+// Objects & Queries
+// ===========================================================================
+
+message PutObject {
+  uint32 request_version = 1;
+  edgerun.v0.common.ObjectKind object_kind = 2;
+  bytes content = 3;
+  repeated edgerun.v0.common.IdentityRef recipients = 4;
+  // If true, runtime must reject plaintext persistence.
+  bool require_encrypted_storage = 5;
+  edgerun.v0.common.ObjectRef metadata_object = 6;
+}
+
+message PutObjectResult {
+  uint32 response_version = 1;
+  edgerun.v0.common.ObjectRef object = 2;
+}
+
+message GetObject {
+  uint32 request_version = 1;
+  edgerun.v0.common.ObjectRef object = 2;
+  // Must be backed by an explicit read/fetch/query capability.
+  bytes capability_handle_id = 3;
+  uint64 offset = 4;
+  uint64 max_bytes = 5;
+}
+
+message GetObjectResult {
+  uint32 response_version = 1;
+  bytes content = 2;
+  bool truncated = 3;
+  uint64 next_offset = 4;
+}
+
+message Query {
+  uint32 request_version = 1;
+  // Use existing access/query proto object by reference where possible.
+  edgerun.v0.common.ObjectRef query_object = 2;
+  bytes capability_handle_id = 3;
+  uint32 max_fragments = 4;
+  uint64 max_cost_units = 5;
+}
+
+message QueryResult {
+  uint32 response_version = 1;
+  repeated edgerun.v0.common.ObjectRef result_objects = 2;
+  edgerun.v0.common.ObjectRef aggregate_object = 3;
+  bool partial = 4;
+  string reason = 5;
+}
+
+// ===========================================================================
+// Commands
+// ===========================================================================
+
+message BuildCommand {
+  uint32 request_version = 1;
+  edgerun.v0.common.NodeRef target_node = 2;
+  edgerun.v0.stream.CommandType command_type = 3;
+  uint32 command_version = 4;
+  oneof payload {
+    edgerun.v0.common.ObjectRef payload_object = 5;
+    bytes inline_payload = 6;
+  }
+  repeated edgerun.v0.trust.DelegationRecord delegation_chain = 7;
+  edgerun.v0.trust.AssuranceRequirement requested_assurance = 8;
+  google.protobuf.Duration ttl = 9;
+  bytes idempotency_key = 10;
+  edgerun.v0.common.ObjectRef command_metadata = 11;
+}
+
+message BuiltCommand {
+  uint32 response_version = 1;
+  // Unsigned or partially prepared command envelope.
+  edgerun.v0.stream.CommandEnvelope command = 2;
+  // Canonical bytes that must be signed if the app/user approves.
+  bytes signable_payload = 3;
+}
+
+message SubmitCommand {
+  uint32 request_version = 1;
+  edgerun.v0.stream.CommandEnvelope command = 2;
+  // Optional app-level authorization proof.
+  edgerun.v0.stream.AppIntent app_intent = 3;
+}
+
+message SubmitCommandResult {
+  uint32 response_version = 1;
+  edgerun.v0.common.CommandRef command = 2;
+  edgerun.v0.stream.CommandDecision decision = 3;
+  string reason_code = 4;
+  edgerun.v0.common.EventRef committed_event = 5;
+  edgerun.v0.common.ObjectRef result_object = 6;
+}
+
+// ===========================================================================
+// App Intent & Observations
+// ===========================================================================
+
+message EmitAppIntent {
+  uint32 request_version = 1;
+  bytes payload = 2;
+}
+
+message AppIntentResult {
+  uint32 response_version = 1;
+  edgerun.v0.stream.AppIntent intent = 2;
+}
+
+message LogObservation {
+  uint32 request_version = 1;
+  string observation_kind = 2;
+  // Small observation can be inline. Large one should be object.
+  oneof payload {
+    bytes inline_payload = 3;
+    edgerun.v0.common.ObjectRef payload_object = 4;
+  }
+  repeated edgerun.v0.common.ObjectRef related_objects = 5;
+  repeated edgerun.v0.common.CommandRef related_commands = 6;
+}
+
+message LogObservationResult {
+  uint32 response_version = 1;
+  // This is not authoritative app state. It is a node-stream observation.
+  edgerun.v0.common.EventRef event = 2;
+}
+
+// ===========================================================================
+// Determinism-safe Helpers
+// ===========================================================================
+
+message RandomRequest {
+  uint32 request_version = 1;
+  uint32 length = 2;
+}
+
+message RandomResult {
+  uint32 response_version = 1;
+  bytes random = 2;
+}
+
+message TimeRequest {
+  uint32 request_version = 1;
+}
+
+message TimeResult {
+  uint32 response_version = 1;
+  google.protobuf.Timestamp now = 2;
+}

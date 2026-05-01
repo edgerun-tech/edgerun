@@ -143,6 +143,9 @@ message CommandEnvelope {
   edgerun.v0.trust.AssuranceRequirement requested_assurance = 14;
   edgerun.v0.common.ObjectRef command_metadata = 15;
   edgerun.v0.common.Signature signature = 16;
+  // Serialized edgerun.v0.stream.AppIntent.
+  // App proves it authorized the exact command/payload.
+  bytes app_intent = 17;
 }
 
 message CommandSentPayload {

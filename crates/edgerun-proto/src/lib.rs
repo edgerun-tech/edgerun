@@ -3,8 +3,6 @@
 //! Every domain message is a protobuf struct with `prost::Message`.
 //! Canonical encoding = `prost::Message::encode()` directly.
 
-#![no_std]
-
 extern crate alloc;
 
 pub mod edgerun {
@@ -14,6 +12,9 @@ pub mod edgerun {
         }
         pub mod app {
             core::include!("gen/edgerun.v0.app.rs");
+        }
+        pub mod appabi {
+            core::include!("gen/edgerun/v0/appabi/edgerun.v0.appabi.rs");
         }
         pub mod capability {
             core::include!("gen/edgerun.v0.capability.rs");

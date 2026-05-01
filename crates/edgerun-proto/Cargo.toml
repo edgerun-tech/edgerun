@@ -9,8 +9,11 @@ homepage.workspace = true
 description = "Generated Edgerun protocol v0 protobuf types"
 
 [dependencies]
-prost.workspace = true
-prost-types.workspace = true
+prost = { workspace = true, features = ["std"] }
+prost-types = { workspace = true, features = ["std"] }
+
+[build-dependencies]
+prost-build.workspace = true
 
 [lints]
 workspace = true
