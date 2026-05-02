@@ -35,8 +35,6 @@ extern crate self as std;
 mod std_compat;
 pub use std_compat::*;
 
-pub mod accounting;
-pub mod benchmark;
 pub mod command;
 #[cfg(feature = "conformance")]
 pub mod conformance;

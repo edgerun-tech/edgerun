@@ -1,0 +1,27 @@
+[package]
+name = "edgerun-exchange"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun Exchange — provider adapters and routing"
+
+[dependencies]
+edgerun-wallet = { version = "0.1", path = "../edgerun-wallet" }
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
+edgerun-http = { version = "0.1", path = "../edgerun-http", features = ["client"] }
+edgerun-json = { version = "0.1", path = "../edgerun-json" }
+edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+
+[dev-dependencies]
+edgerun-http = { version = "0.1", path = "../edgerun-http" }
+
+[features]
+ffio = []
+
+[lints]
+workspace = true

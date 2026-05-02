@@ -37,7 +37,7 @@ pub use edgerun_proto::edgerun::v0::{
         ConstraintSet, DelegationRecord, RevocationRecord, RouteSelectionPolicy,
         RouteTrustAssignment, RouteTrustAssignments, ScopeDescriptor,
     },
-    ui::{UINode, UIActionEvent, UIRenderRequest},
+    ui::{UiNode, UiActionEvent, UiRenderRequest},
 };
 
 // Proof types
@@ -130,9 +130,9 @@ pub enum ProtocolRecord {
     ExecutionContext(ExecutionContext),
     CapabilityCheck(CapabilityCheck),
     CapabilityResultMsg(CapabilityResult),
-    UINode(UINode),
-    UIActionEvent(UIActionEvent),
-    UIRenderRequest(UIRenderRequest),
+    UiNode(UiNode),
+    UiActionEvent(UiActionEvent),
+    UiRenderRequest(UiRenderRequest),
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +192,7 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> Vec<u8> {
             CollectionCreatedPayload, CollectionDeletedPayload,
             InstallAppPayload, UninstallAppPayload, AppExecutionPayload,
             AppPackage, ExecutionContext, CapabilityCheck, CapabilityResultMsg,
-            UINode, UIActionEvent, UIRenderRequest,
+            UiNode, UiActionEvent, UiRenderRequest,
             LogicalObjectDescriptor, StoredRepresentationHeader, ChunkEntry,
             ChunkManifest, AggregateTrustPolicy, RouteTrustAssignment,
             RouteTrustAssignments, RouteSelectionPolicy, AssuranceRequirement,

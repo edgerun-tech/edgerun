@@ -3,13 +3,11 @@ use std::sync::Arc;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_storage::NodeStore;
 
-use crate::capacity;
 use crate::command_dispatch;
 use crate::daemon::send_command_to_peer;
 use crate::ingress;
 use crate::query_engine::{execute_federated_query, execute_query};
 use crate::types::{MeshReply, StoreRequest, StoreResponse};
-use crate::workload_policy;
 
 pub fn run_store_task(
     mut store: NodeStore,
@@ -20,15 +18,8 @@ pub fn run_store_task(
     mut message_hash_cache: ingress::RecentHashCache,
     mut allowed_peers: Vec<Vec<u8>>,
     responder_node_id: NodeID,
-    capacity_tracker: std::sync::Arc<capacity::ResourceTracker>,
-    mut workload_policy: workload_policy::WorkloadPolicy,
     local_assurance_class: i32,
 ) {
-    let rate_limiter = workload_policy::RateLimiter::new(
-        100,        // max 100 workloads per requester
-        60_000_000, // within a 60-second window
-    );
-    let running_workloads = std::sync::Arc::new(crate::running_workloads::RunningWorkloads::new());
     // Initialize controller set from the node's config, then replay from
     // the persistent change log so controller state survives restarts.
     let initial_controllers = config_controllers_from_signer(signer);
@@ -290,10 +281,6 @@ pub fn run_store_task(
                     &revoked_delegations,
                     &trusted_root_ids,
                     local_assurance_class,
-                    &capacity_tracker,
-                    &workload_policy,
-                    &rate_limiter,
-                    &running_workloads,
                 );
                 if let Some(tx) = reply_tx {
                     let _ = tx.send(StoreResponse::Ok(result.response_bytes));
@@ -460,11 +447,6 @@ pub fn run_store_task(
                 let _ = reply_tx.send(StoreResponse::Ok(addr.unwrap_or_default().into_bytes()));
             }
             StoreRequest::Shutdown => {
-                // Graceful shutdown: terminate all running workloads
-                let terminated = running_workloads.terminate_all();
-                if !terminated.is_empty() {
-                    edgerun_log::info!("signaled {} workloads to terminate", terminated.len());
-                }
                 // Break out of the loop — the task will exit naturally
                 break;
             }
@@ -494,15 +476,6 @@ pub fn run_store_task(
                     old_count,
                     allowed_peers.len()
                 );
-
-                // Reload workload policy
-                let policy_path = std::path::Path::new("workload_policy.txt");
-                if let Ok(p) = workload_policy::load_policy_file(policy_path) {
-                    if !p.allowed_registries.is_empty() || !p.blocked_images.is_empty() {
-                        workload_policy = p;
-                        edgerun_log::info!("config reload: workload policy updated");
-                    }
-                }
 
                 // Reload controllers from the event log (replay from persistent change log)
                 let initial_controllers = config_controllers_from_signer(signer);

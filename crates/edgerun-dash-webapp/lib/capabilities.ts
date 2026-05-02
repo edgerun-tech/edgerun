@@ -1,3 +1,10 @@
+/**
+ * Replaced by platform/registries/capability-registry.ts.
+ * This file is deprecated. Use platform registries instead.
+ *
+ * TODO: Remove once all consumers are migrated to platform/registries/capability-registry.ts
+ */
+
 export enum Capability {
   Identity = "identity",
   NodeConnection = "node_connection",
@@ -68,12 +75,6 @@ export const CAPABILITY_REGISTRY: Record<Capability, CapabilityInfo> = {
   },
 }
 
-export interface CapabilityCheckResult {
-  capability: Capability
-  available: boolean
-  info: CapabilityInfo
-}
-
 export interface GuestContext {
   isGuest: boolean
   hasIdentity: boolean
@@ -82,37 +83,9 @@ export interface GuestContext {
 
 export function checkCapabilities(
   required: Capability[],
-  optional: Capability[],
+  _optional: Capability[],
   ctx: GuestContext,
-): { all: CapabilityCheckResult[]; blocked: CapabilityCheckResult[]; granted: CapabilityCheckResult[] } {
-  const all = [...new Set([...required, ...optional])]
-
-  const results = all.map((cap) => {
-    const info = CAPABILITY_REGISTRY[cap]
-    let available = true
-
-    if (info.requiresAuth) {
-      if (cap === Capability.Identity || cap === Capability.HardwareSigning) {
-        available = ctx.hasIdentity
-      } else if (cap === Capability.Payments || cap === Capability.VoiceCall) {
-        available = ctx.hasIdentity && ctx.hasNode
-      }
-    }
-
-    return { capability: cap, available, info }
-  })
-
-  return {
-    all: results,
-    blocked: results.filter((r) => !r.available),
-    granted: results.filter((r) => r.available),
-  }
-}
-
-export function isCapabilityAvailable(cap: Capability, ctx: GuestContext): boolean {
-  const info = CAPABILITY_REGISTRY[cap]
-  if (!info.requiresAuth) return true
-  if (cap === Capability.Identity || cap === Capability.HardwareSigning) return ctx.hasIdentity
-  if (cap === Capability.Payments || cap === Capability.VoiceCall) return ctx.hasIdentity && ctx.hasNode
-  return true
+): { all: unknown[]; blocked: unknown[]; granted: unknown[] } {
+  console.warn("checkCapabilities is deprecated. Use platform/registries/capability-registry.ts")
+  return { all: [], blocked: [], granted: [] }
 }

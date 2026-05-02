@@ -1,9 +1,9 @@
 //! EdgeRun UI renderers — native (egui) and browser (DOM).
 //!
-//! Renders `UINode` trees produced by WASM into platform-native widgets.
+//! Renders `UiNode` trees produced by WASM into platform-native widgets.
 //! WASM never contains platform-specific UI logic.
 
-use edgerun_proto::edgerun::v0::ui::UINode;
+use edgerun_proto::edgerun::v0::ui::UiNode;
 use prost::Message;
 use std::collections::BTreeMap;
 
@@ -15,7 +15,7 @@ pub type ActionCallback = Box<dyn Fn(String) + Send + Sync>;
 
 pub struct NativeRenderer {
     pub action_fn: Option<ActionCallback>,
-    current_ui: Option<UINode>,
+    current_ui: Option<UiNode>,
 }
 
 impl NativeRenderer {
@@ -35,7 +35,7 @@ impl NativeRenderer {
     }
 
     pub fn set_ui(&mut self, bytes: &[u8]) -> bool {
-        match UINode::decode(bytes) {
+        match UiNode::decode(bytes) {
             Ok(node) => {
                 self.current_ui = Some(node);
                 true
@@ -52,12 +52,12 @@ impl NativeRenderer {
         }
     }
 
-    pub fn current_ui(&self) -> Option<&UINode> {
+    pub fn current_ui(&self) -> Option<&UiNode> {
         self.current_ui.as_ref()
     }
 }
 
-fn render_node(ui: &mut egui::Ui, node: &UINode, action_fn: &Option<ActionCallback>) {
+fn render_node(ui: &mut egui::Ui, node: &UiNode, action_fn: &Option<ActionCallback>) {
     match node.node_type.as_str() {
         "text" => {
             if let Some(value) = node.props.get("value") {
@@ -153,26 +153,26 @@ fn render_node(ui: &mut egui::Ui, node: &UINode, action_fn: &Option<ActionCallba
 // Serialize / deserialize helpers
 // ---------------------------------------------------------------------------
 
-pub fn encode_ui(node: &UINode) -> Vec<u8> {
+pub fn encode_ui(node: &UiNode) -> Vec<u8> {
     use prost::Message;
     let mut buf = Vec::new();
-    node.encode(&mut buf).expect("UINode encode failed");
+    node.encode(&mut buf).expect("UiNode encode failed");
     buf
 }
 
-pub fn decode_ui(bytes: &[u8]) -> Option<UINode> {
+pub fn decode_ui(bytes: &[u8]) -> Option<UiNode> {
     use prost::Message;
-    UINode::decode(bytes).ok()
+    UiNode::decode(bytes).ok()
 }
 
 // ---------------------------------------------------------------------------
 // Convenience builders (Rust-side UI construction for tests / default UI)
 // ---------------------------------------------------------------------------
 
-pub fn text(value: &str) -> UINode {
+pub fn text(value: &str) -> UiNode {
     let mut props = BTreeMap::new();
     props.insert(String::from("value"), String::from(value));
-    UINode {
+    UiNode {
         node_type: String::from("text"),
         props,
         children: Vec::new(),
@@ -180,10 +180,10 @@ pub fn text(value: &str) -> UINode {
     }
 }
 
-pub fn button(label: &str, action: &str) -> UINode {
+pub fn button(label: &str, action: &str) -> UiNode {
     let mut props = BTreeMap::new();
     props.insert(String::from("label"), String::from(label));
-    UINode {
+    UiNode {
         node_type: String::from("button"),
         props,
         children: Vec::new(),
@@ -191,8 +191,8 @@ pub fn button(label: &str, action: &str) -> UINode {
     }
 }
 
-pub fn column(children: Vec<UINode>) -> UINode {
-    UINode {
+pub fn column(children: Vec<UiNode>) -> UiNode {
+    UiNode {
         node_type: String::from("column"),
         props: BTreeMap::new(),
         children,

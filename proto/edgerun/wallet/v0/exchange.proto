@@ -1,0 +1,182 @@
+syntax = "proto3";
+
+package edgerun.wallet.v0;
+
+option go_package = "edgerun/wallet/v0";
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum QuoteMode {
+  QUOTE_MODE_UNSPECIFIED = 0;
+  QUOTE_MODE_INSTANT = 1;
+  QUOTE_MODE_FLOATING = 2;
+}
+
+enum AmountSide {
+  AMOUNT_SIDE_UNSPECIFIED = 0;
+  AMOUNT_SIDE_SETTLEMENT = 1;
+  AMOUNT_SIDE_PAY = 2;
+}
+
+enum CanonicalOrderStatus {
+  CANONICAL_ORDER_STATUS_UNSPECIFIED = 0;
+  CANONICAL_ORDER_STATUS_QUOTED = 1;
+  CANONICAL_ORDER_STATUS_QUOTE_EXPIRED = 2;
+  CANONICAL_ORDER_STATUS_CREATED = 3;
+  CANONICAL_ORDER_STATUS_AWAITING_DEPOSIT = 4;
+  CANONICAL_ORDER_STATUS_DEPOSIT_SEEN = 5;
+  CANONICAL_ORDER_STATUS_DEPOSIT_CONFIRMED = 6;
+  CANONICAL_ORDER_STATUS_EXCHANGING = 7;
+  CANONICAL_ORDER_STATUS_SENDING = 8;
+  CANONICAL_ORDER_STATUS_COMPLETED = 9;
+  CANONICAL_ORDER_STATUS_ACTION_REQUIRED = 10;
+  CANONICAL_ORDER_STATUS_REFUND_REQUIRED = 11;
+  CANONICAL_ORDER_STATUS_REFUNDING = 12;
+  CANONICAL_ORDER_STATUS_REFUNDED = 13;
+  CANONICAL_ORDER_STATUS_EXPIRED = 14;
+  CANONICAL_ORDER_STATUS_FAILED = 15;
+  CANONICAL_ORDER_STATUS_REJECTED = 16;
+  CANONICAL_ORDER_STATUS_ON_HOLD = 17;
+  CANONICAL_ORDER_STATUS_CANCELED = 18;
+  CANONICAL_ORDER_STATUS_PARTIAL_DEPOSITS = 19;
+}
+
+// ---------------------------------------------------------------------------
+// Asset Reference & Asset
+// ---------------------------------------------------------------------------
+
+message AssetRef {
+  string symbol = 1;
+  string network = 2;
+  optional string contract = 3;
+  optional uint32 decimals = 4;
+}
+
+message Asset {
+  string id = 1; // canonical: SYMBOL:network[:contract]
+  string symbol = 2;
+  string network = 3;
+  optional string contract = 4;
+  uint32 decimals = 5;
+  optional string name = 6;
+}
+
+// ---------------------------------------------------------------------------
+// Fee Breakdown
+// ---------------------------------------------------------------------------
+
+message FeeBreakdown {
+  string edgerun_bps = 1; // string decimal, e.g. "25" = 25 bps
+  string provider_bps = 2;
+  string network_fee_settlement = 3; // string decimal amount
+  string network_fee_pay = 4;
+  string total_fee_usd_estimate = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Transaction Reference
+// ---------------------------------------------------------------------------
+
+message TxRef {
+  string tx_id = 1;
+  string network = 2;
+  optional uint64 confirmations = 3;
+  optional string explorer_url = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Quote Request & Quote
+// ---------------------------------------------------------------------------
+
+message QuoteRequest {
+  string settlement_asset_id = 1; // canonical asset id
+  string pay_asset_id = 2;        // canonical asset id
+  string settlement_amount = 3;   // string decimal
+  string pay_amount = 4;          // string decimal (either settlement or pay)
+  QuoteMode quote_mode = 5;
+  AmountSide amount_side = 6;
+  optional string refund_address = 7;
+  optional string recipient_address = 8;
+}
+
+message Quote {
+  string quote_id = 1;
+  string settlement_asset_id = 2;
+  string pay_asset_id = 3;
+  string settlement_amount = 4; // string decimal
+  string pay_amount = 5;        // string decimal
+  string rate = 6;              // settlement per pay unit, string decimal
+  QuoteMode quote_mode = 7;
+  uint64 expires_at_ms = 8;     // epoch millis
+  FeeBreakdown fees = 9;
+  optional uint64 estimated_seconds = 10;
+  optional string provider_code_internal = 11; // never in public API
+}
+
+// ---------------------------------------------------------------------------
+// Order
+// ---------------------------------------------------------------------------
+
+message Order {
+  string order_id = 1;
+  string quote_id = 2;
+  string settlement_asset_id = 3;
+  string pay_asset_id = 4;
+  string settlement_amount = 5;
+  string pay_amount = 6;
+  string deposit_address = 7;
+  CanonicalOrderStatus status = 8;
+  uint64 created_at_ms = 9;
+  optional string recipient_address = 10;
+  optional string refund_address = 11;
+  optional string provider_order_id_internal = 12; // never in public API
+  optional string provider_code_internal = 13;     // never in public API
+}
+
+// ---------------------------------------------------------------------------
+// Order Status (live query)
+// ---------------------------------------------------------------------------
+
+message OrderStatus {
+  string order_id = 1;
+  CanonicalOrderStatus status = 2;
+  optional TxRef deposit_tx = 3;
+  optional TxRef payout_tx = 4;
+  optional string status_detail = 5;
+  uint64 updated_at_ms = 6;
+}
+
+// ---------------------------------------------------------------------------
+// Payment Request
+// ---------------------------------------------------------------------------
+
+message PaymentRequest {
+  string request_id = 1;
+  string settlement_asset_id = 2;
+  string settlement_amount = 3;
+  optional string recipient_address = 4;
+  optional string description = 5;
+  uint64 created_at_ms = 6;
+  uint64 expires_at_ms = 7;
+  optional string pay_asset_id = 8;
+}
+
+// ---------------------------------------------------------------------------
+// Receipt
+// ---------------------------------------------------------------------------
+
+message Receipt {
+  string receipt_id = 1;
+  string order_id = 2;
+  string settlement_asset_id = 3;
+  string pay_asset_id = 4;
+  string settlement_amount = 5;
+  string pay_amount = 6;
+  TxRef deposit_tx = 7;
+  TxRef payout_tx = 8;
+  uint64 completed_at_ms = 9;
+  bytes receipt_hash = 10;
+  optional bytes receipt_signature = 11; // edgerun-crypto signature
+}

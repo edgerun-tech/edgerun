@@ -5,7 +5,6 @@ import { useStore } from "@nanostores/react"
 import { cn } from "@/lib/utils"
 import { Window } from "./window"
 import { TopBar } from "./top-bar"
-import { AppStore, availableApps, type AppDefinition } from "./app-store"
 import { launchApp, getAppIcon } from "@/stores/app-launcher"
 import { Terminal, generateMockLogs } from "./terminal"
 import { CodeRunner } from "./code-runner"
@@ -26,7 +25,8 @@ import { WidgetPanel } from "./widget-panel"
 import { WorkspaceStatusPanel } from "@/components/workspace"
 import { useAuth } from "@/hooks/use-auth"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
-import { type GuestContext } from "@/lib/capabilities"
+import { getBuiltinApp, listBuiltinApps } from "@/platform/registries/builtin-app-registry"
+import { getDashboardMode, isDemoMode } from "@/platform/runtime/dashboard-mode"
 import {
   LayoutDashboard,
   PanelRight,
@@ -47,8 +47,6 @@ import {
   focusWindow,
   type OpenWindowDef,
 } from "@/stores/desktop-store"
-import { launchAppById, handleCloseWindow, buildAppComponent } from "@/stores/app-launcher"
-import { startSystemStatsSimulation, generateInitialLogs } from "@/stores/system-store"
 
 export function Desktop() {
   const auth = useAuth()
@@ -62,6 +60,7 @@ export function Desktop() {
   const pendingGate = useStore(pendingGateStore)
   const stageMode = useStore(stageModeStore)
   const widgetVisible = useStore(widgetVisibleStore)
+  const mode = getDashboardMode()
 
   const showDesktop = auth.authState === "authenticated" || auth.authState === "guest"
 
@@ -69,7 +68,7 @@ export function Desktop() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "a") {
       e.preventDefault()
-      const aiApp = availableApps.find(a => a.id === "ai-assistant")
+      const aiApp = getBuiltinApp("ai-assistant")
       if (aiApp) launchApp(aiApp)
     }
   }, [])
@@ -78,6 +77,15 @@ export function Desktop() {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [handleKeyDown])
+
+  // App IDs to show in dock (uses builtin registry, not hardcoded availableApps)
+  const dockAppIds = [
+    "app-store", "app-studio", "ai-assistant", "workflow-builder",
+    "contacts", "calling", "chat", "wallet", "calculator",
+    "file-browser", "terminal", "code-runner", "wasm-calculator",
+    "wasm-hello", "db-explorer", "network-monitor", "git-sync",
+    "web-server", "compute-node", "resource-monitor", "help",
+  ]
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
@@ -182,24 +190,30 @@ export function Desktop() {
 
               <div className="mx-1 h-6 w-px bg-border" />
 
-               {["app-store", "app-studio", "ai-assistant", "workflow-builder", "contacts", "calling", "chat", "wallet", "calculator", "file-browser", "terminal", "code-runner", "wasm-calculator", "wasm-hello", "db-explorer", "network-monitor", "git-sync", "web-server", "compute-node", "resource-monitor", "help"].map((appId) => {
-                const app = availableApps.find((a) => a.id === appId)
-                if (!app) return null
-                const isRunning = windows.some((w) => w.appId === app.id)
-                return (
-                  <button
-                    key={app.id}
-                    onClick={() => launchApp(app)}
-                    className="group relative flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
-                    title={app.name}
-                  >
-                    {getAppIcon(app.id)}
-                    {isRunning && (
-                      <span className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />
-                    )}
-                  </button>
-                )
-              })}
+               {dockAppIds.map((appId) => {
+                 const app = getBuiltinApp(appId)
+                 if (!app) return null
+                 const isRunning = windows.some((w) => w.appId === app.appId)
+                 return (
+                   <button
+                     key={app.appId}
+                     onClick={() => {
+                       const fullApp = getBuiltinApp(app.appId)
+                       if (fullApp) launchApp(fullApp)
+                     }}
+                     className="group relative flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
+                     title={app.name + (app.source === "demo" ? " (Demo)" : "")}
+                   >
+                     {getAppIcon(app.appId)}
+                     {app.source === "demo" && isDemoMode() && (
+                       <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-yellow-400/80" title="Demo app" />
+                     )}
+                     {isRunning && (
+                       <span className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />
+                     )}
+                   </button>
+                 )
+               })}
             </div>
 
             {/* FloatingDock for comparison - positioned at top */}

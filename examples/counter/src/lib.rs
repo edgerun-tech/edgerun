@@ -30,7 +30,7 @@ impl State {
         }
     }
 
-    fn to_ui(&self) -> edgerun_sdk::UINode {
+    fn to_ui(&self) -> edgerun_sdk::UiNode {
         let count_str = self.count.to_string();
 
         ui::column(vec![

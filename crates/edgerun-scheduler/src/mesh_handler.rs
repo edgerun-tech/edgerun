@@ -1,6 +1,4 @@
 //! Handler for incoming mesh metrics frames.
-//!
-//! Processes MetricsReport frames and reports to on-chain.
 
 use crate::Scheduler;
 use alloc::format;
@@ -8,8 +6,6 @@ use alloc::string::String;
 use edgerun_json::from_json_slice;
 use edgerun_mesh::mesh_payload::MetricsReportPayload;
 use edgerun_mesh::FrameType;
-use edgerun_solana::signers::Ed25519Signer;
-use edgerun_solana::DeploymentClient;
 
 impl Scheduler {
     #[allow(unused_variables)]
@@ -19,8 +15,6 @@ impl Scheduler {
         frame_type: FrameType,
         src: [u8; 32],
         payload: &[u8],
-        signer: Option<&Ed25519Signer>,
-        deployment_client: Option<&DeploymentClient>,
     ) -> Result<(), String> {
         match frame_type {
             FrameType::MetricsReport => {

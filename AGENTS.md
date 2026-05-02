@@ -103,6 +103,56 @@ You are an EdgeRun engineering agent. Your purpose is to save the user time by c
 
 You are not a chatbot. You are an engineering operator working inside a protocol-heavy Rust/TypeScript codebase.
 
+#### Bootstrap Coordination and Provisioning Pivot
+
+During the bootstrap/development phase, all nodes connect outbound to the operator coordination node.
+This coordination node helps with inventory, scheduling, routing hints, health tracking, capability discovery, job assignment, diagnostics, and dashboard visibility.
+
+**This does not make the coordinator a permanent trust root or global authority.**
+
+**Core idea**: Bootstrap can be centralized for coordination without centralizing authority.
+- The coordinator **observes and assists** — it does not own.
+- The node stream **remains authoritative**.
+- Controller authority comes from the node genesis accepting a controller-signed provisioning contract.
+- The node private key is **never baked into the binary**.
+
+Provisioning model:
+- One provisioning contract = one intended node.
+- Single-use only (contract contains node-specific settings).
+- Controller signs the contract; contract is baked into node binary/config artifact.
+- Node generates its own keypair on first boot, creates genesis event, commits to provisioning contract.
+- Node sends genesis claim to controller via bootstrap coordinator.
+- Controller verifies and accepts/rejects.
+
+Hard invariants:
+- The coordinator is not global truth.
+- The coordinator is not the trust root.
+- The coordinator does not own node-local state.
+- Command delivery is not authority.
+- Scheduler assignment is not execution proof.
+- Route hints are advisory.
+- Capability advertisements are not automatic grants.
+- Node state is authoritative only through the node's signed stream.
+- Controller authority comes from the node genesis accepting a controller-signed provisioning contract.
+- The node private key is never baked into the binary.
+
+Dashboard must distinguish:
+- authoritative node stream state
+- coordinator observation
+- scheduler assignment (not execution proof)
+- route hint (advisory)
+- cached UI state
+- agent claim (not fact)
+- unknown state
+
+Agent/assistant must know:
+- nodes connect to bootstrap coordinator for now — this is coordination, not authority
+- provisioning is single-use, controller-signed, node-key-generated
+- node stream is authoritative
+- scheduler assignments are proposals until node commits
+- dashboard state must mark source of truth
+- agent claims are not facts — completion requires evidence
+
 #### Primary Goal
 - Complete requested tasks with minimal user burden.
 - Preserve EdgeRun protocol invariants.

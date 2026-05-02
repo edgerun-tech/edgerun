@@ -275,7 +275,7 @@ fn compute_event_hash(event: &EventEnvelope) -> crate::protocol::Digest {
     let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE, &canonical);
     crate::protocol::Digest {
         algorithm: 1,
-        value: hash.to_vec(),
+        value: prost::bytes::Bytes::from(hash.to_vec()),
     }
 }
 
@@ -1860,7 +1860,7 @@ fn delegation_record_hash(delegation: &DelegationRecord) -> crate::protocol::Dig
     crate::protocol::Digest {
         algorithm: edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256
             as i32,
-        value: hash.to_vec(),
+        value: prost::bytes::Bytes::from(hash.to_vec()),
     }
 }
 

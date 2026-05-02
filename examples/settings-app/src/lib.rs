@@ -5,7 +5,7 @@ extern crate alloc;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
-use edgerun_sdk::{Request, Response, host, render, ui, UINode};
+use edgerun_sdk::{Request, Response, host, render, ui, UiNode};
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -101,7 +101,7 @@ impl AppState {
         emitted_commands
     }
 
-    fn to_ui(&self) -> UINode {
+    fn to_ui(&self) -> UiNode {
         match &self.screen {
             Screen::Welcome => self.ui_welcome(),
             Screen::Identity => self.ui_identity(),
@@ -111,7 +111,7 @@ impl AppState {
         }
     }
 
-    fn ui_welcome(&self) -> UINode {
+    fn ui_welcome(&self) -> UiNode {
         ui::column(vec![
             ui::heading("EdgeRun Node Setup", 1),
             ui::spacer(16),
@@ -126,7 +126,7 @@ impl AppState {
         ])
     }
 
-    fn ui_identity(&self) -> UINode {
+    fn ui_identity(&self) -> UiNode {
         let mut children = vec![
             ui::heading("Node Identity", 2),
             ui::spacer(12),
@@ -153,7 +153,7 @@ impl AppState {
         ui::column(children)
     }
 
-    fn ui_controllers(&self) -> UINode {
+    fn ui_controllers(&self) -> UiNode {
         let mut children = vec![
             ui::heading("Controllers", 2),
             ui::spacer(12),
@@ -179,7 +179,7 @@ impl AppState {
         ui::column(children)
     }
 
-    fn ui_networking(&self) -> UINode {
+    fn ui_networking(&self) -> UiNode {
         let mut children = vec![
             ui::heading("Network Peers", 2),
             ui::spacer(12),
@@ -202,7 +202,7 @@ impl AppState {
         ui::column(children)
     }
 
-    fn ui_complete(&self) -> UINode {
+    fn ui_complete(&self) -> UiNode {
         ui::column(vec![
             ui::heading("Setup Complete", 1),
             ui::spacer(16),

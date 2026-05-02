@@ -1,0 +1,19 @@
+[package]
+name = "edgerun-exchange-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun Exchange polling worker"
+
+[dependencies]
+edgerun-exchange = { version = "0.1", path = "../edgerun-exchange" }
+edgerun-wallet = { version = "0.1", path = "../edgerun-wallet" }
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
+
+[lints]
+workspace = true

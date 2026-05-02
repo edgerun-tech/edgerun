@@ -11,15 +11,22 @@ pub mod collections {
     pub type HashMap<K, V> = alloc::collections::BTreeMap<K, V>;
 }
 
-pub mod chain;
 pub mod deployment;
 pub mod error;
 pub mod mesh_handler;
 pub mod metrics;
 pub mod provider;
 
+/// Deployment status for tracking lifecycle.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DeploymentStatus {
+    Created,
+    Running,
+    Stopped,
+    Disputed,
+}
+
 pub use deployment::{DeploymentHandle, DeploymentManager};
-pub use edgerun_solana::DeploymentStatus;
 pub use error::SchedulerError;
 pub use metrics::{MetricsReceiver, ProviderMetrics};
 pub use provider::{ProviderInfo, ProviderManager};
@@ -47,11 +54,6 @@ impl Scheduler {
             shutdown: Arc::new(CancellationToken::new()),
             provider_deployments: HashMap::new(),
         }
-    }
-
-    pub fn with_solana_rpc(mut self, rpc_url: &str) -> Self {
-        self.deployment_manager = DeploymentManager::new_with_rpc(rpc_url);
-        self
     }
 
     pub fn add_provider(&mut self, info: ProviderInfo) {
@@ -217,16 +219,12 @@ mod tests {
 
         let node_id: [u8; 32] = info.node_id;
         scheduler.deployment_manager.create_local(DeploymentHandle {
-            on_chain_address: [0u8; 32],
             name: "test".to_string(),
             provider: [0u8; 32],
             container_count: 1,
             total_cpu_cores: 2,
             total_memory_bytes: 4_000_000_000,
             status: DeploymentStatus::Running,
-            deposit: 1_000_000_000,
-            burn_rate: 100,
-            spent: 0,
             assigned: false,
         });
 
@@ -243,16 +241,12 @@ mod tests {
     fn assign_deployment_requires_registered_online_provider() {
         let mut scheduler = Scheduler::new();
         scheduler.deployment_manager.create_local(DeploymentHandle {
-            on_chain_address: [0u8; 32],
             name: "test".to_string(),
             provider: [0u8; 32],
             container_count: 1,
             total_cpu_cores: 2,
             total_memory_bytes: 4_000_000_000,
             status: DeploymentStatus::Running,
-            deposit: 1_000_000_000,
-            burn_rate: 100,
-            spent: 0,
             assigned: false,
         });
 
@@ -278,16 +272,12 @@ mod tests {
         scheduler.add_provider(info);
 
         scheduler.deployment_manager.create_local(DeploymentHandle {
-            on_chain_address: [0u8; 32],
             name: "test".to_string(),
             provider: [0u8; 32],
             container_count: 1,
             total_cpu_cores: 2,
             total_memory_bytes: 4_000_000_000,
             status: DeploymentStatus::Running,
-            deposit: 1_000_000_000,
-            burn_rate: 100,
-            spent: 0,
             assigned: false,
         });
 
@@ -305,16 +295,12 @@ mod tests {
         scheduler.add_provider(info);
 
         scheduler.deployment_manager.create_local(DeploymentHandle {
-            on_chain_address: [0u8; 32],
             name: "test".to_string(),
             provider: [0u8; 32],
             container_count: 1,
             total_cpu_cores: 2,
             total_memory_bytes: 4_000_000_000,
             status: DeploymentStatus::Running,
-            deposit: 1_000_000_000,
-            burn_rate: 100,
-            spent: 0,
             assigned: false,
         });
 

@@ -683,17 +683,17 @@ impl SignatureContext {
 // UI system — deterministic UI tree produced by WASM, rendered by adapters
 // ---------------------------------------------------------------------------
 
-pub use edgerun_proto::edgerun::v0::ui::{UINode, UIActionEvent, UIRenderRequest};
+pub use edgerun_proto::edgerun::v0::ui::{UiNode, UiActionEvent, UiRenderRequest};
 
 pub mod ui {
     use super::*;
     use alloc::collections::BTreeMap;
     use alloc::string::ToString;
 
-    pub fn text(value: &str) -> UINode {
+    pub fn text(value: &str) -> UiNode {
         let mut props = BTreeMap::new();
         props.insert(String::from("value"), String::from(value));
-        UINode {
+        UiNode {
             node_type: String::from("text"),
             props,
             children: Vec::new(),
@@ -701,11 +701,11 @@ pub mod ui {
         }
     }
 
-    pub fn heading(value: &str, level: u32) -> UINode {
+    pub fn heading(value: &str, level: u32) -> UiNode {
         let mut props = BTreeMap::new();
         props.insert(String::from("value"), String::from(value));
         props.insert(String::from("level"), level.to_string());
-        UINode {
+        UiNode {
             node_type: String::from("heading"),
             props,
             children: Vec::new(),
@@ -713,10 +713,10 @@ pub mod ui {
         }
     }
 
-    pub fn button(label: &str, action: &str) -> UINode {
+    pub fn button(label: &str, action: &str) -> UiNode {
         let mut props = BTreeMap::new();
         props.insert(String::from("label"), String::from(label));
-        UINode {
+        UiNode {
             node_type: String::from("button"),
             props,
             children: Vec::new(),
@@ -724,8 +724,8 @@ pub mod ui {
         }
     }
 
-    pub fn column(children: Vec<UINode>) -> UINode {
-        UINode {
+    pub fn column(children: Vec<UiNode>) -> UiNode {
+        UiNode {
             node_type: String::from("column"),
             props: BTreeMap::new(),
             children,
@@ -733,8 +733,8 @@ pub mod ui {
         }
     }
 
-    pub fn row(children: Vec<UINode>) -> UINode {
-        UINode {
+    pub fn row(children: Vec<UiNode>) -> UiNode {
+        UiNode {
             node_type: String::from("row"),
             props: BTreeMap::new(),
             children,
@@ -742,10 +742,10 @@ pub mod ui {
         }
     }
 
-    pub fn spacer(height: u32) -> UINode {
+    pub fn spacer(height: u32) -> UiNode {
         let mut props = BTreeMap::new();
         props.insert(String::from("height"), height.to_string());
-        UINode {
+        UiNode {
             node_type: String::from("spacer"),
             props,
             children: Vec::new(),
@@ -753,10 +753,10 @@ pub mod ui {
         }
     }
 
-    pub fn input(placeholder: &str, action: &str) -> UINode {
+    pub fn input(placeholder: &str, action: &str) -> UiNode {
         let mut props = BTreeMap::new();
         props.insert(String::from("placeholder"), String::from(placeholder));
-        UINode {
+        UiNode {
             node_type: String::from("input"),
             props,
             children: Vec::new(),
@@ -765,11 +765,11 @@ pub mod ui {
     }
 }
 
-/// Serialize a UINode tree to bytes and wrap in a Response.
+/// Serialize a UiNode tree to bytes and wrap in a Response.
 /// Content type is "application/x-edgerun-ui-v0+protobuf".
-pub fn render(root: UINode) -> Response {
+pub fn render(root: UiNode) -> Response {
     let mut bytes = Vec::new();
-    prost::Message::encode(&root, &mut bytes).expect("UINode encode failed");
+    prost::Message::encode(&root, &mut bytes).expect("UiNode encode failed");
 
     Response {
         status: 200,
@@ -790,10 +790,10 @@ pub fn render_jsx(jsx: impl Into<String>) -> Response {
     }
 }
 
-/// Serialize a UINode tree to bytes with a custom status code.
-pub fn render_with_status(status: u16, root: UINode) -> Response {
+/// Serialize a UiNode tree to bytes with a custom status code.
+pub fn render_with_status(status: u16, root: UiNode) -> Response {
     let mut bytes = Vec::new();
-    prost::Message::encode(&root, &mut bytes).expect("UINode encode failed");
+    prost::Message::encode(&root, &mut bytes).expect("UiNode encode failed");
 
     Response {
         status,
@@ -802,8 +802,8 @@ pub fn render_with_status(status: u16, root: UINode) -> Response {
     }
 }
 
-/// Deserialize UINode from response bytes.
-pub fn parse_ui(bytes: &[u8]) -> Option<UINode> {
+/// Deserialize UiNode from response bytes.
+pub fn parse_ui(bytes: &[u8]) -> Option<UiNode> {
     use prost::Message;
-    UINode::decode(bytes).ok()
+    UiNode::decode(bytes).ok()
 }

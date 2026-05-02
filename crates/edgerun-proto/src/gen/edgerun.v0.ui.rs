@@ -17,7 +17,7 @@ pub struct UiNode {
     #[prost(string, optional, tag = "4")]
     pub action: ::core::option::Option<::prost::alloc::string::String>,
 }
-/// UIActionEvent carries a user interaction back to the WASM runtime.
+/// UiActionEvent carries a user interaction back to the WASM runtime.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct UiActionEvent {
     #[prost(uint32, tag = "1")]
@@ -29,7 +29,7 @@ pub struct UiActionEvent {
     #[prost(string, optional, tag = "4")]
     pub context: ::core::option::Option<::prost::alloc::string::String>,
 }
-/// UIRenderRequest — sent from renderer to request a fresh UI tree.
+/// UiRenderRequest — sent from renderer to request a fresh UI tree.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct UiRenderRequest {
     #[prost(uint32, tag = "1")]

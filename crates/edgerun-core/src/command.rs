@@ -41,7 +41,7 @@ pub struct CommandValidationContext<'a> {
     pub local_node_id: &'a [u8; 64],
     /// Replay cache: maps command_hash -> (command_id, decision_event_seq) for already-processed commands.
     /// A repeated command_hash is a duplicate; command_id is retained only as an idempotency hint.
-    pub replay_cache: &'a crate::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
+    pub replay_cache: &'a crate::collections::HashMap<prost::bytes::Bytes, (Vec<u8>, i64)>,
     /// Known revocation IDs (delegations that have been revoked).
     pub revoked_delegation_ids: &'a crate::collections::HashSet<Vec<u8>>,
     /// Local use counts keyed by delegation_id.
@@ -154,7 +154,7 @@ pub fn command_hash(command: &CommandEnvelope) -> Digest {
     let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_COMMAND_ENVELOPE, &canonical);
     Digest {
         algorithm: 1, // SHA256
-        value: hash.to_vec(),
+        value: hash.to_vec().into().into(),
     }
 }
 
@@ -165,7 +165,7 @@ fn delegation_hash(delegation: &DelegationRecord) -> Digest {
     Digest {
         algorithm: edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256
             as i32,
-        value: hash.to_vec(),
+        value: hash.to_vec().into().into(),
     }
 }
 
@@ -1445,7 +1445,8 @@ pub fn validate_command(
     // The replay cache is keyed by command_hash. command_id is an idempotency
     // hint and MUST NOT be used as the replay key (§5.1).
     let computed_hash = command_hash(command).value.clone();
-    if ctx.replay_cache.contains_key(&computed_hash) {
+    let computed_hash_bytes = prost::bytes::Bytes::from(computed_hash.clone());
+    if ctx.replay_cache.contains_key(&computed_hash_bytes) {
         let mut derived = std::collections::BTreeMap::new();
         derived.insert(
             "command_hash".into(),

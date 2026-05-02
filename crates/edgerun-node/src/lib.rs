@@ -16,7 +16,6 @@ extern crate alloc;
 extern crate std;
 
 pub mod mesh_node;
-pub mod metering;
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;

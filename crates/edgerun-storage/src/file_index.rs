@@ -794,7 +794,7 @@ impl FileIndex {
         // exclusively from the single store task thread. No cross-thread
         // synchronization is required.
         let _record = EventRecord {
-            event_hash: event_hash.to_vec(),
+            event_hash: event_hash.to_vec().into(),
             file_offset,
             envelope_version,
         };
@@ -845,7 +845,7 @@ impl FileIndex {
             stream_id.to_string(),
             StreamHead {
                 seq,
-                hash: hash.to_vec(),
+                hash: hash.to_vec().into(),
             },
         );
         self.save()

@@ -89,7 +89,6 @@ members = [
   "crates/edgerun-qpack",
   "crates/edgerun-quic",
   "crates/edgerun-remote-capability",
-  "crates/edgerun-solana",
   "crates/edgerun-secret-service",
   "crates/edgerun-server",
   "crates/edgerun-email",
@@ -112,17 +111,16 @@ members = [
   "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
   "crates/edgerun-scheduler",
-  "crates/edgerun-marketplace-cli",
   "crates/edgerun-wasm",
   "crates/edgerun-sdk",
   "crates/edgerun-sdk-macro",
-  "crates/edgerun-example",
   "crates/edgerun-event",
   "crates/edgerun-wallet",
   "crates/edgerun-exchange",
   "crates/edgerun-exchange-api",
   "crates/edgerun-exchange-worker",
   "crates/edgerun-crate-analyzer",
+  "crates/edgerun-provisioning",
 ]
 
 [workspace.package]

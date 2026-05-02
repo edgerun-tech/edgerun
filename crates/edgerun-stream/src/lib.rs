@@ -183,7 +183,7 @@ pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
     );
     Digest {
         algorithm: 1, // DIGEST_ALGORITHM_SHA256
-        value: hash.to_vec(),
+        value: hash.to_vec().into(),
     }
 }
 

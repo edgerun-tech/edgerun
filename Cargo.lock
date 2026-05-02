@@ -1746,13 +1746,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-example"
-version = "0.1.0"
-dependencies = [
- "edgerun-sdk",
-]
-
-[[package]]
 name = "edgerun-exchange"
 version = "0.1.1"
 dependencies = [
@@ -1998,17 +1991,6 @@ dependencies = [
  "edgerun-pci",
  "edgerun-usb",
  "edgerun-wifi",
-]
-
-[[package]]
-name = "edgerun-marketplace-cli"
-version = "0.1.1"
-dependencies = [
- "edgerun-clap",
- "edgerun-json",
- "edgerun-log",
- "edgerun-rt",
- "edgerun-solana",
 ]
 
 [[package]]
@@ -2263,6 +2245,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-provisioning"
+version = "0.1.0"
+dependencies = [
+ "edgerun-core",
+ "edgerun-crypto",
+ "edgerun-error",
+ "edgerun-stream",
+]
+
+[[package]]
 name = "edgerun-proxy"
 version = "0.1.1"
 dependencies = [
@@ -2340,7 +2332,6 @@ dependencies = [
  "edgerun-json",
  "edgerun-mesh",
  "edgerun-rt",
- "edgerun-solana",
 ]
 
 [[package]]
@@ -2395,18 +2386,6 @@ dependencies = [
  "edgerun-tftp",
  "edgerun-tls",
  "edgerun-url",
-]
-
-[[package]]
-name = "edgerun-solana"
-version = "0.1.1"
-dependencies = [
- "edgerun-crypto",
- "edgerun-encoding",
- "edgerun-error",
- "edgerun-http",
- "edgerun-json",
- "edgerun-rt",
 ]
 
 [[package]]
