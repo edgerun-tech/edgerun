@@ -116,7 +116,7 @@ export function buildContext(): ContextSnapshot {
       if (d.capability_id && d.capability_id.length > 0) {
         return bytesToHex(d.capability_id)
       }
-      return d.capability_kind?.toString() || 'unknown'
+      return d.provider_name || bytesToHex(d.capability_id) || 'unknown'
     }),
     total: caps.descriptors.size,
   }
@@ -132,7 +132,7 @@ export function buildContext(): ContextSnapshot {
   const approvalsContext: ApprovalsContext = {
     pending: pendingApprovals.map((a) => ({
       id: a.approvalId,
-      action: a.action || 'unknown',
+      action: a.operation || a.description || 'unknown',
       status: 'pending',
       timestamp: new Date().getTime(),
     })),

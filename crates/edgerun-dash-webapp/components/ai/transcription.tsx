@@ -3,7 +3,7 @@
 import { useControllableState } from "@radix-ui/react-use-controllable-state"
 import type { ComponentProps, ReactNode } from "react"
 import { createContext, useContext } from "react"
-import { cn } from "~/lib/utils"
+import { cn } from "@/lib/utils"
 
 interface TranscriptionSegment {
   text: string

@@ -11,9 +11,9 @@ import {
 } from "lucide-react"
 import type { ComponentProps, HTMLAttributes, ReactNode } from "react"
 import { createContext, useContext, useMemo } from "react"
-import { Button } from "~/components/ui/button"
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "~/components/ui/hover-card"
-import { cn } from "~/lib/utils"
+import { Button } from "@/components/ui/button"
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
+import { cn } from "@/lib/utils"
 
 // ============================================================================
 // Types

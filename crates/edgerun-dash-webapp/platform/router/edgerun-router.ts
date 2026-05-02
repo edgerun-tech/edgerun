@@ -7,7 +7,7 @@ import { atom, computed } from "nanostores"
 import type { RouteDefinition, ResolvedRoute } from "./route-types"
 import { DASHBOARD_ROUTES } from "./route-types"
 import { resolveRoute, buildRoutePath } from "./route-resolver"
-import { createCapabilityGuard, combineGuards } from "./route-guards"
+import { createCapabilityGuard } from "./route-guards"
 
 export interface RouterState {
   currentPath: string

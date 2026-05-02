@@ -220,13 +220,12 @@ async function createApprovalForToolCall(
 
   const id = `approval-${Date.now()}-${Math.random().toString(36).slice(2)}`
   addApproval({
-    id,
-    toolId,
-    input,
-    preview,
-    riskClass: plan.riskClass,
-    createdAt: Date.now(),
-    status: "pending",
+    approvalId: id,
+    operation: tool.name,
+    scope: "tool" as any,
+    description: preview,
+    requestedAt: new Date().toISOString(),
+    riskLevel: plan.riskClass === "critical" ? "critical" : plan.riskClass === "high" ? "high" : plan.riskClass === "medium" ? "medium" : "low",
   })
   return id
 }

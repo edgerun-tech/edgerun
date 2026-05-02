@@ -4,7 +4,7 @@
  */
 
 import { atom, computed } from "nanostores"
-import type { NodeResource, ResourceSource } from "./resource-store"
+import type { NodeResource, ResourceSource } from "../state/resource-store"
 
 export interface ResourceRegistryState {
   nodeResources: Map<string, NodeResource>

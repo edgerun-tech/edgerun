@@ -2,10 +2,10 @@
 
 import { CopyIcon, RefreshCcwIcon, ThumbsDownIcon, ThumbsUpIcon } from "lucide-react"
 import type { ComponentProps } from "react"
-import { Button } from "~/components/ui/button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip"
-import { cn } from "~/lib/utils"
-import { Message, MessageContent } from "~/packages/ai/message"
+import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
+import { Message, MessageContent } from "@/packages/ai/message"
 
 export type ActionsProps = ComponentProps<"div">
 

@@ -11,10 +11,10 @@ import {
 } from "lucide-react"
 import type { ComponentProps, ReactNode } from "react"
 import { isValidElement } from "react"
-import { Badge } from "~/components/ui/badge"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible"
-import { cn } from "~/lib/utils"
-import { CodeBlock } from "~/packages/ai/code-block"
+import { Badge } from "@/components/ui/badge"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { cn } from "@/lib/utils"
+import { CodeBlock } from "@/packages/ai/code-block"
 
 export type ToolProps = ComponentProps<typeof Collapsible>
 

@@ -4,13 +4,13 @@
  */
 
 import { assistantContext } from "./assistant-context"
-import { listRegisteredComponents, listRegisteredTools } from "@/platform/registries/tool-registry"
-import { approvalTracker, getPendingApprovals } from "@/platform/auth/approval-tracker"
+import { allTools } from "@/platform/registries/tool-registry"
+import { approvalTracker, listPending } from "@/platform/auth/approval-tracker"
 
 export function buildAssistantSystemPrompt(): string {
   const ctx = assistantContext.get()
 
-  const tools = listRegisteredTools()
+  const tools = allTools.get()
   const toolNames = tools.map((t: { toolId: string }) => t.toolId).join(", ")
 
   return `You are the EdgeRun platform assistant.

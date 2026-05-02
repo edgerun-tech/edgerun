@@ -8,9 +8,9 @@ import {
   XCircleIcon,
 } from "lucide-react"
 import { type ComponentProps, createContext, type HTMLAttributes, useContext } from "react"
-import { Badge } from "~/components/ui/badge"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible"
-import { cn } from "~/lib/utils"
+import { Badge } from "@/components/ui/badge"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { cn } from "@/lib/utils"
 
 type TestStatus = "passed" | "failed" | "skipped" | "running"
 

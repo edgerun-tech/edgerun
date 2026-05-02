@@ -50,11 +50,9 @@ export function usePermissions() {
     setExternalAuthStatus,
     isExternalAuthConnected,
     // Permission tracker
-    hasPending: tracker.hasPending,
+    hasPending: tracker.pendingApprovals.size > 0,
     tracker: {
-      hasPermission: permissionTracker.hasPermission,
-      requiresApproval: permissionTracker.requiresApproval,
-      explainPermission: permissionTracker.explainPermission,
+      hasPermission,
       addPendingApproval: trackerAddPending,
       approvePending: trackerApprove,
       rejectPending: trackerReject,

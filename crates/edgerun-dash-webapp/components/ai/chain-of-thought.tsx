@@ -11,9 +11,9 @@ import {
 } from "lucide-react"
 import type { ComponentProps, ReactNode } from "react"
 import { createContext, memo, useContext, useMemo } from "react"
-import { Badge } from "~/components/ui/badge"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible"
-import { cn } from "~/lib/utils"
+import { Badge } from "@/components/ui/badge"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { cn } from "@/lib/utils"
 
 interface ChainOfThoughtContextValue {
   isOpen: boolean
@@ -204,7 +204,7 @@ ChainOfThoughtSearchResult.displayName = "ChainOfThoughtSearchResult"
 ChainOfThoughtContent.displayName = "ChainOfThoughtContent"
 ChainOfThoughtImage.displayName = "ChainOfThoughtImage"
 
-import { Image } from "~/packages/ai/image"
+import { Image } from "@/packages/ai/image"
 
 const exampleImage = {
   base64:

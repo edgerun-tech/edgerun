@@ -2,7 +2,7 @@
 
 import { NodeToolbar, Position } from "@xyflow/react"
 import type { ComponentProps } from "react"
-import { cn } from "~/lib/utils"
+import { cn } from "@/lib/utils"
 
 type ToolbarProps = ComponentProps<typeof NodeToolbar>
 
@@ -16,7 +16,7 @@ export const Toolbar = ({ className, ...props }: ToolbarProps) => (
 
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react"
 import { CopyIcon, EditIcon, TrashIcon } from "lucide-react"
-import { Button } from "~/components/ui/button"
+import { Button } from "@/components/ui/button"
 import "@xyflow/react/dist/style.css"
 
 const ToolbarNode = ({ data, selected }: { data: { label: string }; selected: boolean }) => (

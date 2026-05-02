@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 import type { ComponentProps, ReactNode } from "react"
 import { createContext, useContext, useMemo, useState } from "react"
-import { Button } from "~/components/ui/button"
+import { Button } from "@/components/ui/button"
 import {
   Command,
   CommandEmpty,
@@ -21,9 +21,9 @@ import {
   CommandList,
   CommandSeparator,
   CommandShortcut,
-} from "~/components/ui/command"
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "~/components/ui/dialog"
-import { cn } from "~/lib/utils"
+} from "@/components/ui/command"
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 
 interface VoiceSelectorContextValue {
   value: string | undefined

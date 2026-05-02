@@ -5,6 +5,7 @@
 import type { RouteGuard, RouteParams } from "./route-types"
 import { hasPermission } from "@/platform/auth/permission-tracker"
 import { canSatisfy } from "@/platform/registries/capability-registry"
+import type { PermissionScope } from "@/platform/state/permission-store"
 
 export function createCapabilityGuard(
   requiredCapabilities: string[],
@@ -27,7 +28,7 @@ export function createPermissionGuard(
   permission: string,
 ): RouteGuard {
   return {
-    check: () => hasPermission(permission),
+    check: () => hasPermission(permission as PermissionScope),
     redirectTo: "/login",
     message: `Requires permission: ${permission}`,
   }
@@ -44,7 +45,7 @@ export function checkRouteGuard(
   params: RouteParams,
 ): { allowed: boolean; redirectTo?: string; message?: string } {
   if (!guard) return { allowed: true }
-  const allowed = guard.check(params)
+  const allowed = guard.check()
   if (!allowed) {
     return {
       allowed: false,

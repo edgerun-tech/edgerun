@@ -41,7 +41,6 @@ function getRealSystemData() {
   return {
     nodeCount: stats.nodeCount,
     activeSessions: stats.activeSessions,
-    cpuUsage: stats.cpuUsage,
     ramUsed: stats.ramUsage.used,
     ramTotal: stats.ramUsage.total,
     ramPercent: Math.round((stats.ramUsage.used / stats.ramUsage.total) * 100),
@@ -108,10 +107,10 @@ export async function POST(req: Request) {
         }
 
         case "create": {
-          const workflow = createWorkflowFromAI(workflowAction.spec)
-          if (workflow) {
+          const workflowId = createWorkflowFromAI(workflowAction.name || "New Workflow", workflowAction.description || "", workflowAction.trigger || "manual")
+          if (workflowId) {
             return Response.json({ 
-              text: `Created workflow "${workflow.name}" successfully! You can now open the Workflow Builder to edit it.`,
+              text: `Created workflow "${workflowId}" successfully! You can now open the Workflow Builder to edit it.`,
             })
           }
           return Response.json({ text: "Failed to create workflow. Check the JSON format." }, { status: 400 })
@@ -123,9 +122,9 @@ export async function POST(req: Request) {
         }
 
         case "execute": {
-          const exec = await executeWorkflow(workflowAction.workflowId)
+          const execId = await executeWorkflow(workflowAction.workflowId)
           return Response.json({ 
-            text: `Workflow execution ${exec.status}: ${exec.error || "Completed in " + (exec.completedAt ? Math.round((exec.completedAt - exec.startedAt) / 1000) + "s" : "running...")}`,
+            text: `Workflow execution started with ID: ${execId}`,
           })
         }
 
@@ -135,7 +134,7 @@ export async function POST(req: Request) {
             return Response.json({ text: "No execution history for this workflow." })
           }
           const summary = history.map(e => 
-            `- ${new Date(e.startedAt).toLocaleString()}: ${e.status} ${e.error ? `(error: ${e.error})` : ""}`
+            `- ${new Date(e.startedAt).toLocaleString()}: ${e.status} ${e.error ? `(result: ${e.status})` : ""}`
           ).join("\n")
           return Response.json({ text: `Execution history:\n${summary}` })
         }
@@ -163,7 +162,7 @@ export async function POST(req: Request) {
 
   try {
     const result = await generateText({
-      model: opencode(FREE_MODEL),
+      model: opencode(FREE_MODEL) as any,
       messages: [
         { role: "system", content: systemPrompt },
         ...messages,

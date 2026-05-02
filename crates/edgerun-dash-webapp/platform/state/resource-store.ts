@@ -5,7 +5,7 @@
  */
 
 import { atom, computed } from "nanostores"
-import type { NodeContext } from "./assitant-context"
+import type { NodeContext } from "../assitant/assitant-context"
 
 export type ResourceSource = 
   | "node_reported"

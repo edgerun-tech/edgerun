@@ -34,10 +34,10 @@ import {
 } from "@xyflow/react"
 import { PlusIcon, ZapIcon } from "lucide-react"
 import { useCallback, useMemo } from "react"
-import { Button } from "~/components/ui/button"
-import { Controls } from "~/packages/ai/controls"
-import { Node, NodeHeader, NodeTitle } from "~/packages/ai/node"
-import { Panel } from "~/packages/ai/panel"
+import { Button } from "@/components/ui/button"
+import { Controls } from "@/packages/ai/controls"
+import { Node, NodeHeader, NodeTitle } from "@/packages/ai/node"
+import { Panel } from "@/packages/ai/panel"
 
 const AgentNode = ({ data }: { data: { label: string } }) => (
   <Node handles={{ target: true, source: true }} className="w-[140px]">

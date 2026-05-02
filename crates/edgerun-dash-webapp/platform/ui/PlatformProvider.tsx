@@ -19,7 +19,7 @@ import { connectionRegistry } from "@/platform/registries/connection-registry"
 import { toolRegistry } from "@/platform/registries/tool-registry"
 import { router } from "@/platform/router/edgerun-router"
 import { permissionTracker } from "@/platform/auth/permission-tracker"
-import { sessionTracker } from "@/platform/auth/session-tracker"
+import { sessionTracker, setNodeRegistration } from "@/platform/auth/session-tracker"
 import { approvalTracker } from "@/platform/auth/approval-tracker"
 import { appRuntime } from "@/platform/runtime/app-runtime"
 
@@ -68,7 +68,7 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
         try {
           const reg = JSON.parse(stored)
           protocolClient.setNodeRegistration(reg)
-          sessionTracker.setNodeRegistration(reg)
+          setNodeRegistration(reg)
         } catch {
           // Ignore parse errors
         }

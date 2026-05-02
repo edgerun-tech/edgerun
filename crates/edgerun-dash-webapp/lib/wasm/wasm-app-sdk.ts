@@ -2,20 +2,29 @@ import type { UINode } from "./protobuf-ui"
 
 // ── Node builders ───────────────────────────────────────
 
+function sanitize(props?: Props): Record<string, string> {
+  if (!props) return {}
+  const result: Record<string, string> = {}
+  for (const [k, v] of Object.entries(props)) {
+    if (v !== undefined) result[k] = v
+  }
+  return result
+}
+
 export function col(children: UINode[], props?: Props): UINode {
-  return { type: "column", props: props ?? {}, children, action: null }
+  return { type: "column", props: sanitize(props), children, action: null }
 }
 
 export function row(children: UINode[], props?: Props): UINode {
-  return { type: "row", props: props ?? {}, children, action: null }
+  return { type: "row", props: sanitize(props), children, action: null }
 }
 
 export function grid(children: UINode[], props?: Props): UINode {
-  return { type: "grid", props: props ?? {}, children, action: null }
+  return { type: "grid", props: sanitize(props), children, action: null }
 }
 
 export function scroll(children: UINode[], props?: Props): UINode {
-  return { type: "scroll", props: props ?? {}, children, action: null }
+  return { type: "scroll", props: sanitize(props), children, action: null }
 }
 
 export function spacer(height = 8): UINode {
@@ -48,7 +57,7 @@ export function button(label: string, props?: ButtonProps): UINode {
 }
 
 export function input(props?: InputProps): UINode {
-  return { type: "input", props: { ...(props ?? {}) }, children: [], action: props?.action ?? null }
+  return { type: "input", props: sanitize(props), children: [], action: props?.action ?? null }
 }
 
 export function link(label: string, action?: string): UINode {
@@ -58,7 +67,7 @@ export function link(label: string, action?: string): UINode {
 export function card(children: UINode[], props?: CardProps): UINode {
   return {
     type: "card",
-    props: { ...(props ?? {}) },
+    props: sanitize(props),
     children,
     action: null,
   }
@@ -114,7 +123,7 @@ export function image(src: string, props?: Props): UINode {
 // ── Prop types ──────────────────────────────────────────
 
 export interface Props {
-  [key: string]: string
+  [key: string]: string | undefined
 }
 
 export interface TextProps extends Props {

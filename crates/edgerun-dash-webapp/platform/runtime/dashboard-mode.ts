@@ -71,22 +71,25 @@ export function isOfflineMode(): boolean {
 // Auto-detect: if node-store reports a connected node, switch to real
 if (typeof window !== "undefined") {
   import("@/platform/state/node-store").then((mod) => {
-    mod.nodeStore.listen((state) => {
-      const current = dashboardModeStore.get()
-      const hasCoordinationNode = state.connections?.some(
-        (c: any) => c.role === "coordinator" || c.isCoordinator
-      )
-      const connectedTo = hasCoordinationNode ? "coordinator" : "node"
+    import("@/platform/state/connection-store").then((connMod) => {
+      mod.nodeStore.listen((state) => {
+        const current = dashboardModeStore.get()
+        const connections = Array.from(connMod.connectionStore.get().connections.values())
+        const hasCoordinationNode = connections.some(
+          (c) => c.type === "local_node" && c.status === "connected"
+        )
+        const connectedTo = hasCoordinationNode ? "coordinator" : "node"
 
-      if (state.currentNode && state.currentNode.health === "healthy") {
-        if (current.mode === "demo" || current.mode === "offline") {
-          setDashboardMode("real", undefined, connectedTo)
-        } else if (current.connectedTo !== connectedTo) {
-          dashboardModeStore.set({ ...current, connectedTo })
+        if (state.currentNode && state.currentNode.health === "healthy") {
+          if (current.mode === "demo" || current.mode === "offline") {
+            setDashboardMode("real", undefined, connectedTo)
+          } else if (current.connectedTo !== connectedTo) {
+            dashboardModeStore.set({ ...current, connectedTo })
+          }
+        } else if (current.mode === "real") {
+          setDashboardMode("offline", "Node unavailable", undefined)
         }
-      } else if (current.mode === "real") {
-        setDashboardMode("offline", "Node unavailable", undefined)
-      }
+      })
     })
   })
 }

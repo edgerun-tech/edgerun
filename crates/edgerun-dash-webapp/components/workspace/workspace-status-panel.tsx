@@ -14,11 +14,9 @@ import {
   type OtherAgentStatus,
 } from "@/platform/assistant/assistant-git-awareness"
 import {
-  verificationStatus,
-  verificationResult,
-  getVerificationSummary,
-  getVerificationErrors,
-  getVerificationWarnings,
+  verificationStore,
+  type VerificationStatus,
+  type VerificationResult,
 } from "@/platform/assistant/assistant-verification"
 import {
   policyStatus,
@@ -69,7 +67,7 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
 
   const git = useStore(gitStatus)
   const otherAgents = useStore(otherAgentStatus)
-  const verification = useStore(verificationStatus)
+  const verification = useStore(verificationStore)
   const policy = useStore(policyStatus)
   const review = useStore(selfReviewStore)
   const memContextAge = useStore(contextAge)
@@ -92,9 +90,9 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
 
   const gitSummary = getGitSummary()
   const otherAgentSummary = getOtherAgentSummary()
-  const verificationSummary = getVerificationSummary()
-  const verificationErrors = getVerificationErrors()
-  const verificationWarnings = getVerificationWarnings()
+  const verificationSummary = verification.status
+  const verificationErrors = verification.results.filter(r => r.status === "failed")
+  const verificationWarnings = verification.results.filter(r => r.status === "warning")
   const memorySummary = getMemorySummary()
 
   const formatAge = (ageMs: number) => {
@@ -244,7 +242,7 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
             <div className="mt-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1">
               <div className="text-[10px] text-red-400">Errors:</div>
               <div className="text-[9px] text-red-300">
-                {verificationErrors.slice(0, 2).join(", ")}
+                {verificationErrors.slice(0, 2).map(e => e.check).join(", ")}
               </div>
             </div>
           )}
@@ -253,7 +251,7 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
             <div className="mt-2 rounded border border-yellow-500/30 bg-yellow-500/10 px-2 py-1">
               <div className="text-[10px] text-yellow-400">Warnings:</div>
               <div className="text-[9px] text-yellow-300">
-                {verificationWarnings.slice(0, 2).join(", ")}
+                {verificationWarnings.slice(0, 2).map(w => w.check).join(", ")}
               </div>
             </div>
           )}

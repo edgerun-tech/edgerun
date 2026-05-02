@@ -11,12 +11,18 @@ import {
   listApps,
   loadApps,
 } from "@/platform/state/app-store"
-import { appRegistry } from "@/platform/registries/app-registry"
+import {
+  appRegistry,
+  getApp as getAppFromRegistry,
+  listApps as listAppsFromRegistry,
+  registerApp,
+} from "@/platform/registries/app-registry"
 
 export function useApps() {
   const store = useStore(appStore)
   const apps = useStore(installedApps)
   const count = useStore(appCount)
+  const registry = useStore(appRegistry)
 
   return {
     apps,
@@ -27,9 +33,10 @@ export function useApps() {
     listApps,
     refresh: loadApps,
     registry: {
-      getApp: appRegistry.getApp,
-      listApps: appRegistry.listApps,
-      registerApp: appRegistry.registerApp,
+      getApp: getAppFromRegistry,
+      listApps: listAppsFromRegistry,
+      registerApp,
+      allApps: registry.apps,
     },
   }
 }

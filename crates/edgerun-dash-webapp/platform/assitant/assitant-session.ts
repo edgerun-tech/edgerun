@@ -7,6 +7,7 @@
 import { atom, computed } from "nanostores"
 import type { AssistantMessage, AssistantSession, AssistantToolCall } from "./assitant-types"
 import { getDashboardMode } from "@/platform/runtime/dashboard-mode"
+import type { edgerun } from "@/gen/edgerun/v0/capability"
 
 const STORAGE_KEY = "edgerun_assitant_session"
 
@@ -45,7 +46,7 @@ if (typeof window !== "undefined") {
 }
 
 export function addMessage(
-  role: "user" | "assitant",
+  role: "user" | "assistant",
   content: string,
   toolCalls?: AssistantToolCall[],
 ): AssistantMessage {
@@ -112,16 +113,16 @@ export function buildPlatformContext(): string {
     .map((a: any) => `- ${a.name || a.appId} (${a.version || "unknown"})`)
     .join("\n")
 
-  const capList = Array.from(caps.descriptors.values())
+  const capList = (Array.from(caps.descriptors.values()) as edgerun.v0.capability.CapabilityDescriptor[])
     .slice(0, 8)
-    .map((c: any) => `- ${c.capabilityId}: ${c.description || c.capabilityType}`)
+    .map((c) => `- ${c.provider_name || 'unknown'} (${c.role})`)
     .join("\n")
 
   return `
 ## Session Context
 
 **Mode**: ${mode}
-**Message Count**: ${assitantSession.get().messages.length}
+**Message Count**: ${assistantSession.get().messages.length}
 
 ## Node Status
 

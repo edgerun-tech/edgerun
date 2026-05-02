@@ -5,7 +5,8 @@
 
 "use client"
 
-import { useApps, useCapabilities } from "@/platform/ui/useApps"
+import { useApps } from "@/platform/ui/useApps"
+import { useCapabilities } from "@/platform/ui/useCapabilities"
 import { edgerun as stream } from "@/gen/edgerun/v0/stream"
 
 interface AppListProps {

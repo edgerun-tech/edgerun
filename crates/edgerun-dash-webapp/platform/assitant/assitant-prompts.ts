@@ -76,9 +76,9 @@ export function getToolsSection(): PromptSection {
 }
 
 export function getPendingApprovalsSection(): PromptSection {
-  const approvals = approvalTracker.getState()
+  const approvals = approvalTracker.get()
 
-  if (approvals.pending.length === 0) {
+  if (approvals.pending.size === 0) {
     return {
       name: 'Approvals',
       content: 'No pending approvals',
@@ -86,8 +86,8 @@ export function getPendingApprovalsSection(): PromptSection {
     }
   }
 
-  const pendingList = approvals.pending
-    .map((a: any) => `- ${a.action} (${a.status})`)
+  const pendingList = Array.from(approvals.pending.values())
+    .map((a) => `- ${a.operation} (${a.riskLevel})`)
     .join('\n')
 
   return {

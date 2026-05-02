@@ -10,8 +10,8 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
-import { cn } from "~/lib/utils"
+} from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
 export type NodeProps = ComponentProps<typeof Card> & {
   handles: {
@@ -66,7 +66,7 @@ export const NodeFooter = ({ className, ...props }: NodeFooterProps) => (
 
 import { Background, type Edge, ReactFlow, ReactFlowProvider } from "@xyflow/react"
 import { BrainIcon, CheckCircleIcon, DatabaseIcon, SendIcon, ZapIcon } from "lucide-react"
-import { Badge } from "~/components/ui/badge"
+import { Badge } from "@/components/ui/badge"
 import "@xyflow/react/dist/style.css"
 
 const TriggerNode = ({ data }: { data: { label: string } }) => (

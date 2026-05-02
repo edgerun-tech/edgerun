@@ -2,7 +2,7 @@
 
 import { Panel as PanelPrimitive } from "@xyflow/react"
 import type { ComponentProps } from "react"
-import { cn } from "~/lib/utils"
+import { cn } from "@/lib/utils"
 
 type PanelProps = ComponentProps<typeof PanelPrimitive>
 
@@ -15,7 +15,7 @@ export const Panel = ({ className, ...props }: PanelProps) => (
 
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react"
 import { LayersIcon, PlusIcon, SettingsIcon } from "lucide-react"
-import { Button } from "~/components/ui/button"
+import { Button } from "@/components/ui/button"
 import "@xyflow/react/dist/style.css"
 
 const SimpleNode = ({ data }: { data: { label: string } }) => (

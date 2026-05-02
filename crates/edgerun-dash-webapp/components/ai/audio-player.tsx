@@ -13,8 +13,8 @@ import {
   MediaVolumeRange,
 } from "media-chrome/react"
 import type { ComponentProps, CSSProperties } from "react"
-import { Button } from "~/components/ui/button"
-import { cn } from "~/lib/utils"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 export type AudioPlayerProps = Omit<ComponentProps<typeof MediaController>, "audio">
 

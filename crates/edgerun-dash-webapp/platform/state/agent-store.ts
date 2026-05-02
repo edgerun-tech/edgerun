@@ -107,7 +107,7 @@ export function verifyCompletion(agentId: string, passed: boolean, evidence: str
     ...agent,
     isClaimVerified: passed,
     status: passed ? "verified_done" as AgentStatus : "failed" as AgentStatus,
-    verificationStatus: passed ? "passed" : "failed",
+    verificationStatus: passed ? "passed" as const : "failed" as const,
     evidenceRefs: [...agent.evidenceRefs, evidence],
     updatedAt: Date.now(),
   }

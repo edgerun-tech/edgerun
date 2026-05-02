@@ -90,13 +90,15 @@ function renderComponentTree(
       ? renderComponentTree(spec.children)
       : undefined
 
+    const Component = registered.component as React.ComponentType<{ children?: React.ReactNode }>
+
     return (
-      <registered.component
+      <Component
         key={`${spec.type}-${index}`}
         {...spec.props}
       >
         {childNodes}
-      </registered.component>
+      </Component>
     )
   })
 }

@@ -40,18 +40,18 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
   const [actionConfig, setActionConfig] = useState<Record<string, unknown>>({})
   const [executing, setExecuting] = useState<string | null>(null)
   
-  const selected = selectedId ? store.workflows.find(w => w.id === selectedId) : null
+  const selected = selectedId ? Array.from(store.workflows.values()).find(w => w.workflowId === selectedId) : null
   
   useEffect(() => {
-    if (!selectedId && store.workflows.length > 0) {
-      setSelectedId(store.workflows[0].id)
+    if (!selectedId && store.workflows.size > 0) {
+      setSelectedId(Array.from(store.workflows.values())[0].workflowId)
     }
   }, [store.workflows, selectedId])
   
   const handleCreate = () => {
     if (!newName.trim()) return
-    const wf = createWorkflow(newName.trim(), newDesc.trim())
-    setSelectedId(wf.id)
+    const wf = createWorkflow(newName.trim(), newDesc.trim(), 'manual')
+    setSelectedId(wf)
     setShowNewDialog(false)
     setNewName("")
     setNewDesc("")
@@ -68,10 +68,13 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
   
   return (
     <Window
+      id="workflow-builder"
       title="Workflow Builder"
-      width={900}
-      height={600}
+      defaultSize={{ width: 900, height: 600 }}
       onClose={onClose}
+      onFocus={() => {}}
+      isFocused={true}
+      zIndex={10}
     >
       <div className="flex h-full">
         {/* Sidebar - Workflow List */}
@@ -86,24 +89,24 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
           </div>
           
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {store.workflows.map(wf => (
+            {Array.from(store.workflows.values()).map(wf => (
               <div
-                key={wf.id}
-                onClick={() => setSelectedId(wf.id)}
+                key={wf.workflowId}
+                onClick={() => setSelectedId(wf.workflowId)}
                 className={`p-2 rounded cursor-pointer text-sm ${
-                  selectedId === wf.id 
+                  selectedId === wf.workflowId 
                     ? "bg-[var(--accent)]/20 border border-[var(--accent)]" 
                     : "hover:bg-[var(--bg-hover)]"
                 }`}
               >
                 <div className="font-medium truncate">{wf.name}</div>
                 <div className="text-[var(--text-muted)] text-xs truncate">
-                  {wf.stages.length} stages • {wf.enabled ? "enabled" : "disabled"}
+                  {wf.stages.length} stages • {wf.isEnabled ? "enabled" : "disabled"}
                 </div>
               </div>
             ))}
             
-            {store.workflows.length === 0 && (
+            {store.workflows.size === 0 && (
               <div className="text-center text-[var(--text-muted)] text-sm p-4">
                 No workflows yet.<br />Create one to get started.
               </div>
@@ -121,13 +124,13 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
                   <input
                     type="text"
                     value={selected.name}
-                    onChange={e => updateWorkflow(selected.id, { name: e.target.value })}
+                    onChange={e => updateWorkflow(selected.workflowId, { name: e.target.value })}
                     className="font-medium bg-transparent border-none outline-none text-lg"
                   />
                   <input
                     type="text"
                     value={selected.description}
-                    onChange={e => updateWorkflow(selected.id, { description: e.target.value })}
+                    onChange={e => updateWorkflow(selected.workflowId, { description: e.target.value })}
                     placeholder="Description..."
                     className="block w-full mt-1 text-sm text-[var(--text-muted)] bg-transparent border-none outline-none"
                   />
@@ -135,28 +138,28 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
                 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => updateWorkflow(selected.id, { enabled: !selected.enabled })}
+                    onClick={() => updateWorkflow(selected.workflowId, { isEnabled: !selected.isEnabled })}
                     className={`px-3 py-1 rounded text-sm ${
-                      selected.enabled 
+                      selected.isEnabled 
                         ? "bg-green-600/20 text-green-400" 
                         : "bg-gray-600/20 text-gray-400"
                     }`}
                   >
-                    {selected.enabled ? "Enabled" : "Disabled"}
+                    {selected.isEnabled ? "Enabled" : "Disabled"}
                   </button>
                   
                   <button
-                    onClick={() => handleExecute(selected.id)}
-                    disabled={executing === selected.id}
+                    onClick={() => handleExecute(selected.workflowId)}
+                    disabled={executing === selected.workflowId}
                     className="px-3 py-1 bg-[var(--accent)] text-[var(--accent-fg)] rounded text-sm disabled:opacity-50"
                   >
-                    {executing === selected.id ? "Running..." : "▶ Run"}
+                    {executing === selected.workflowId ? "Running..." : "▶ Run"}
                   </button>
                   
                   <button
                     onClick={() => {
-                      deleteWorkflow(selected.id)
-                      setSelectedId(store.workflows.find(w => w.id !== selected.id)?.id || null)
+                      deleteWorkflow(selected.workflowId)
+                      setSelectedId(Array.from(store.workflows.values()).find(w => w.workflowId !== selected.workflowId)?.workflowId || null)
                     }}
                     className="px-3 py-1 bg-red-600/20 text-red-400 rounded text-sm"
                   >
@@ -170,22 +173,22 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
                 <div className="flex gap-4 min-w-max">
                   {selected.stages.map((stage, idx) => (
                     <StageCard
-                      key={stage.id}
+                      key={stage.stageId}
                       stage={stage}
-                      workflowId={selected.id}
+                      workflowId={selected.workflowId}
                       isLast={idx === selected.stages.length - 1}
-                      onAddAction={(type) => setShowActionDialog({ stageId: stage.id, type })}
-                      onRemoveStage={() => removeStage(selected.id, stage.id)}
-                      onRemoveAction={(actionId) => removeAction(selected.id, stage.id, actionId)}
+                      onAddAction={(type) => setShowActionDialog({ stageId: stage.stageId, type })}
+                      onRemoveStage={() => removeStage(selected.workflowId, stage.stageId)}
+                      onRemoveAction={(actionId) => removeAction(selected.workflowId, stage.stageId, actionId)}
                     />
                   ))}
                   
                   <button
                     onClick={() => {
                       const name = `Stage ${selected.stages.length + 1}`
-                      const stage = addStage(selected.id, name)
+                      const stage = addStage(selected.workflowId, name)
                       if (stage) {
-                        updateWorkflow(selected.id, { 
+                        updateWorkflow(selected.workflowId, { 
                           stages: [...selected.stages, stage] 
                         })
                       }
@@ -201,7 +204,7 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
               <div className="p-3 border-t border-[var(--border)]">
                 <div className="text-sm font-medium mb-2">Variables</div>
                 <div className="flex gap-2 flex-wrap">
-                  {Object.entries(selected.variables).map(([key, value]) => (
+                  {Object.entries(selected).map(([key, value]) => (
                     <div key={key} className="flex items-center gap-1 bg-[var(--bg-hover)] px-2 py-1 rounded text-sm">
                       <span className="text-[var(--accent)]">{key}</span>
                       <span>=</span>
@@ -209,16 +212,16 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
                         type="text"
                         value={value}
                         onChange={e => {
-                          const newVars = { ...selected.variables, [key]: e.target.value }
-                          updateWorkflow(selected.id, { variables: newVars })
+                          const newVars = { ...selected, [key]: e.target.value }
+                          updateWorkflow(selected.workflowId, { name: newVars })
                         }}
                         className="bg-transparent border-none outline-none w-24"
                       />
                       <button
                         onClick={() => {
-                          const newVars = { ...selected.variables }
+                          const newVars = { ...selected }
                           delete newVars[key]
-                          updateWorkflow(selected.id, { variables: newVars })
+                          updateWorkflow(selected.workflowId, { name: newVars })
                         }}
                         className="text-red-400 hover:text-red-300"
                       >
@@ -231,8 +234,8 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
                     onClick={() => {
                       const key = prompt("Variable name:")
                       if (key) {
-                        const newVars = { ...selected.variables, [key]: "" }
-                        updateWorkflow(selected.id, { variables: newVars })
+                        const newVars = { ...selected, [key]: "" }
+                        updateWorkflow(selected.workflowId, { name: newVars })
                       }
                     }}
                     className="text-[var(--accent)] text-sm hover:underline"
@@ -298,7 +301,7 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
           onSave={() => {
             if (!showActionDialog) return
             const actionType = ACTION_TYPES.find(t => t.type === showActionDialog.type)
-            addAction(selected!.id, showActionDialog.stageId, {
+            addAction(selected!.workflowId, showActionDialog.stageId, {
               type: showActionDialog.type,
               name: `${actionType?.label || showActionDialog.type} Action`,
               config: actionConfig,
@@ -375,7 +378,7 @@ function StageCard({
       <div className="p-2 space-y-1 min-h-[60px]">
         {stage.actions.map(action => (
           <div
-            key={action.id}
+            key={action.actionId}
             className="p-2 bg-[var(--bg)] rounded border border-[var(--border)] text-sm flex items-center justify-between group"
           >
             <div>
@@ -383,7 +386,7 @@ function StageCard({
               <span className="ml-1">{action.name}</span>
             </div>
             <button
-              onClick={() => onRemoveAction(action.id)}
+              onClick={() => onRemoveAction(action.actionId)}
               className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300"
             >
               ×
