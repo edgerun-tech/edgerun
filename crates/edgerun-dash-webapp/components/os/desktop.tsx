@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useCallback } from "react"
+import { useEffect, useCallback, useState } from "react"
 import { useStore } from "@nanostores/react"
 import { cn } from "@/lib/utils"
 import { Window } from "./window"
@@ -17,7 +17,7 @@ import { CallingApp } from "./calling-app"
 import { DemoChatApp } from "./chat-app"
 import { WalletApp } from "./wallet-app"
 import { CalculatorApp } from "./calculator-app"
-import { AIAssistant } from "./ai-assistant"
+import { AIAssistant } from "./ai-assitant"
 import { WasmAppWindow } from "@/components/wasm-app-window"
 import { removeWasm } from "@/stores/wasm-store"
 import { StageManager } from "./stage-manager"
@@ -33,6 +33,7 @@ import {
   Users,
 } from "lucide-react"
 import { FloatingDock } from "@/components/ui/floating-dock"
+import dynamic from "next/dynamic"
 import {
   windowsStore,
   windowOrderStore,
@@ -49,6 +50,11 @@ import {
   focusWindow,
   type OpenWindowDef,
 } from "@/stores/desktop-store"
+
+const XrayWorkspace = dynamic(
+  () => import("@/features/xray/XrayWorkspace").then(mod => ({ default: mod.default })),
+  { ssr: false }
+)
 
 export function Desktop() {
   const auth = useAuth()
@@ -93,14 +99,54 @@ export function Desktop() {
     closeWindow(id)
   }, [])
 
+  const [xrayMode, setXrayMode] = useState(false);
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <Globe
-          nodeCount={24}
-          className="h-full w-full opacity-40"
-        />
-      </div>
+      {/* Globe / Xray toggle */}
+      {showDesktop && (
+        <div className="absolute top-12 right-4 z-20 flex gap-2">
+          <button
+            onClick={() => setXrayMode(false)}
+            className={`p-2 rounded-lg border transition-colors ${
+              !xrayMode
+                ? "bg-blue-600 border-blue-500 text-white"
+                : "bg-gray-800/80 border-gray-600 text-gray-400 hover:text-white"
+            }`}
+            title="Globe view"
+          >
+            <Globe className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setXrayMode(true)}
+            className={`p-2 rounded-lg border transition-colors ${
+              xrayMode
+                ? "bg-blue-600 border-blue-500 text-white"
+                : "bg-gray-800/80 border-gray-600 text-gray-400 hover:text-white"
+            }`}
+            title="Xray graph view"
+          >
+            <LayoutDashboard className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Globe (existing) */}
+      {!xrayMode && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <Globe
+            nodeCount={24}
+            className="h-full w-full opacity-40"
+          />
+        </div>
+      )}
+
+      {/* Xray graph (new) */}
+      {xrayMode && showDesktop && (
+        <div className="absolute inset-0">
+          <XrayWorkspace />
+        </div>
+      )}
 
       {!showDesktop && (
         <AuthOverlay

@@ -120,8 +120,8 @@ export function createGraphRenderer(canvas, overlayCanvas) {
      */
     render(state) {
       const {
-        nodes,
-        edges,
+        nodes = [],
+        edges = [],
         selectedIds = new Set(),
         highlightedIds = new Set(),
         zoom = 1,

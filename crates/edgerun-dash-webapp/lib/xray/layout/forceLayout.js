@@ -69,11 +69,11 @@ export function buildSpatialGrid(nodes, cellSize = DEFAULTS.CELL_SIZE) {
 /**
  * Step the layout simulation forward one frame.
  * @param {object} state - Layout state (mutable)
- * @param {Map<string, object>} nodes
+ * @param {Map<string, object>|null} nodes
  * @param {object[]} edges
  */
 export function stepLayout(state, nodes, edges) {
-  if (!state.running) return;
+  if (!state.running || !nodes) return;
 
   const {
     REPULSION,

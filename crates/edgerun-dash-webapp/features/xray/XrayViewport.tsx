@@ -1,6 +1,6 @@
 "use client";
 
-import { onMount, onCleanup, createSignal, createEffect } from "solid-js";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createGraphRenderer } from "../../lib/xray/render/GraphRenderer.js";
 import { createLayoutState, stepLayout, buildSpatialGrid } from "../../lib/xray/layout/forceLayout.js";
 import { hitTest, boxSelect } from "../../lib/xray/input/hitTest.js";
@@ -16,57 +16,62 @@ export default function XrayViewport(props: {
   onNodeSelect?: (nodeId: string | null) => void;
   onNodeHover?: (nodeId: string | null) => void;
 }) {
-  let canvasRef: HTMLCanvasElement;
-  let overlayCanvasRef: HTMLCanvasElement;
-  let renderer: any = null;
-  let animFrame = 0;
-  let layoutState = createLayoutState();
-  let spatialGrid = new Map();
-  let spatialGridBuilt = false;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<any>(null);
+  const animFrameRef = useRef(0);
+  const layoutStateRef = useRef(createLayoutState());
+  const spatialGridRef = useRef(new Map());
+  const spatialGridBuiltRef = useRef(false);
 
-  const [zoom, setZoom] = createSignal(1);
-  const [panX, setPanX] = createSignal(0);
-  const [panY, setPanY] = createSignal(0);
-  const [rotation, setRotation] = createSignal(0);
-  const [selectedIds, setSelectedIds] = createSignal(new Set<string>());
-  const [highlightedIds, setHighlightedIds] = createSignal(new Set<string>());
-  const [hoveredId, setHoveredId] = createSignal<string | null>(null);
-  const [boxSelectRect, setBoxSelectRect] = createSignal<any>(null);
-  const [fps, setFps] = createSignal(0);
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [rotation, setRotation] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [boxSelectRect, setBoxSelectRect] = useState<any>(null);
+  const [fps, setFps] = useState(0);
 
-  // Interaction state
-  let isPanning = false;
-  let isRotating = false;
-  let isDraggingNode = false;
-  let isBoxSelecting = false;
-  let dragNodeId = "";
-  let boxStartX = 0;
-  let boxStartY = 0;
-  let ctrlDown = false;
-  let frameCount = 0;
-  let fpsTime = 0;
+  // Interaction state refs
+  const isPanningRef = useRef(false);
+  const isRotatingRef = useRef(false);
+  const isDraggingNodeRef = useRef(false);
+  const isBoxSelectingRef = useRef(false);
+  const dragNodeIdRef = useRef("");
+  const boxStartXRef = useRef(0);
+  const boxStartYRef = useRef(0);
+  const ctrlDownRef = useRef(false);
+  const frameCountRef = useRef(0);
+  const fpsTimeRef = useRef(0);
 
-  const runtimeMode = () => props.runtimeMode ?? false;
+  const runtimeMode = props.runtimeMode ?? false;
 
-  onMount(() => {
-    renderer = createGraphRenderer(canvasRef, overlayCanvasRef);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const overlayCanvas = overlayCanvasRef.current;
+    if (!canvas || !overlayCanvas) return;
+
+    const renderer = createGraphRenderer(canvas, overlayCanvas);
+    rendererRef.current = renderer;
     renderer.resize();
 
     const ro = new ResizeObserver(() => renderer.resize());
-    ro.observe(canvasRef.parentElement!);
+    ro.observe(canvas.parentElement!);
 
-    initEvents();
+    initEvents(canvas);
     initPositions();
-    layoutState.running = true;
+    layoutStateRef.current.running = true;
     renderLoop(0);
 
-    onCleanup(() => {
-      cancelAnimationFrame(animFrame);
+    return () => {
+      cancelAnimationFrame(animFrameRef.current);
       renderer.destroy();
       ro.disconnect();
-      cleanupEvents();
-    });
-  });
+      cleanupEvents(canvas);
+    };
+  }, []);
 
   function initPositions() {
     const nodes = props.graph?.nodes;
@@ -84,52 +89,54 @@ export default function XrayViewport(props: {
     }
   }
 
-  function initEvents() {
-    canvasRef.addEventListener("mousemove", onMouseMove);
-    canvasRef.addEventListener("mousedown", onMouseDown);
-    canvasRef.addEventListener("mouseup", onMouseUp);
-    canvasRef.addEventListener("wheel", onWheel, { passive: false });
-    canvasRef.addEventListener("contextmenu", (e) => e.preventDefault());
+  function initEvents(canvas: HTMLCanvasElement) {
+    canvas.addEventListener("mousemove", onMouseMove);
+    canvas.addEventListener("mousedown", onMouseDown);
+    canvas.addEventListener("mouseup", onMouseUp);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("keyup", onKeyUp);
   }
 
-  function cleanupEvents() {
-    canvasRef.removeEventListener("mousemove", onMouseMove);
-    canvasRef.removeEventListener("mousedown", onMouseDown);
-    canvasRef.removeEventListener("mouseup", onMouseUp);
-    canvasRef.removeEventListener("wheel", onWheel);
+  function cleanupEvents(canvas: HTMLCanvasElement) {
+    canvas.removeEventListener("mousemove", onMouseMove);
+    canvas.removeEventListener("mousedown", onMouseDown);
+    canvas.removeEventListener("mouseup", onMouseUp);
+    canvas.removeEventListener("wheel", onWheel);
     document.removeEventListener("keydown", onKeyDown);
     document.removeEventListener("keyup", onKeyUp);
   }
 
-  function getMousePos(e: MouseEvent) {
-    const rect = canvasRef.getBoundingClientRect();
+  function getMousePos(e: MouseEvent, canvas: HTMLCanvasElement) {
+    const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     return [(e.clientX - rect.left) * dpr, (e.clientY - rect.top) * dpr];
   }
 
-  function onKeyDown(e: KeyboardEvent) {
-    ctrlDown = e.ctrlKey || e.metaKey;
+  const onKeyDown = useCallback((e: KeyboardEvent) => {
+    ctrlDownRef.current = e.ctrlKey || e.metaKey;
     if (e.key === "Escape") {
       setSelectedIds(new Set());
       setHighlightedIds(new Set());
       props.onNodeSelect?.(null);
     }
-  }
+  }, []);
 
-  function onKeyUp(e: KeyboardEvent) {
-    ctrlDown = e.ctrlKey || e.metaKey;
-  }
+  const onKeyUp = useCallback((e: KeyboardEvent) => {
+    ctrlDownRef.current = e.ctrlKey || e.metaKey;
+  }, []);
 
-  function onMouseMove(e: MouseEvent) {
-    const [sx, sy] = getMousePos(e);
+  const onMouseMove = useCallback((e: MouseEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const [sx, sy] = getMousePos(e, canvas);
 
-    if (isDraggingNode && dragNodeId) {
+    if (isDraggingNodeRef.current && dragNodeIdRef.current) {
       const dpr = window.devicePixelRatio || 1;
-      const gx = (sx - canvasRef.width * 0.5) / zoom() + panX();
-      const gy = (canvasRef.height * 0.5 - sy) / zoom() + panY();
-      const node = props.graph?.nodes?.get(dragNodeId);
+      const gx = (sx - canvas.width * 0.5) / zoom + panX;
+      const gy = (canvas.height * 0.5 - sy) / zoom + panY;
+      const node = props.graph?.nodes?.get(dragNodeIdRef.current);
       if (node) {
         node.x = gx;
         node.y = gy;
@@ -137,51 +144,54 @@ export default function XrayViewport(props: {
       return;
     }
 
-    if (isRotating) {
-      setRotation(rotation() + e.movementX * 0.005);
+    if (isRotatingRef.current) {
+      setRotation((r) => r + e.movementX * 0.005);
       return;
     }
 
-    if (isPanning) {
-      setPanX(panX() + e.movementX / zoom());
-      setPanY(panY() - e.movementY / zoom());
+    if (isPanningRef.current) {
+      setPanX((p) => p + e.movementX / zoom);
+      setPanY((p) => p - e.movementY / zoom);
       return;
     }
 
-    if (isBoxSelecting) {
-      setBoxSelectRect({ x1: boxStartX, y1: boxStartY, x2: e.clientX, y2: e.clientY });
+    if (isBoxSelectingRef.current) {
+      setBoxSelectRect({ x1: boxStartXRef.current, y1: boxStartYRef.current, x2: e.clientX, y2: e.clientY });
       return;
     }
 
     const nodeId = hitTest(
       sx, sy,
       props.graph?.nodes,
-      { zoom: zoom(), panX: panX(), panY: panY(), rotation: rotation() },
-      { width: canvasRef.width, height: canvasRef.height },
-      spatialGrid
+      { zoom, panX, panY, rotation },
+      { width: canvas.width, height: canvas.height },
+      spatialGridRef.current
     );
 
-    if (nodeId !== hoveredId()) {
+    if (nodeId !== hoveredId) {
       setHoveredId(nodeId);
-      canvasRef.style.cursor = nodeId ? "pointer" : "default";
+      canvas.style.cursor = nodeId ? "pointer" : "default";
       props.onNodeHover?.(nodeId);
     }
-  }
+  }, [zoom, panX, panY, rotation, hoveredId, props.graph]);
 
-  function onMouseDown(e: MouseEvent) {
+  const onMouseDown = useCallback((e: MouseEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     if (e.button !== 0) return;
-    const [sx, sy] = getMousePos(e);
+
+    const [sx, sy] = getMousePos(e, canvas);
     const nodeId = hitTest(
       sx, sy,
       props.graph?.nodes,
-      { zoom: zoom(), panX: panX(), panY: panY(), rotation: rotation() },
-      { width: canvasRef.width, height: canvasRef.height },
-      spatialGrid
+      { zoom, panX, panY, rotation },
+      { width: canvas.width, height: canvas.height },
+      spatialGridRef.current
     );
 
     if (nodeId) {
-      if (ctrlDown) {
-        const sel = new Set(selectedIds());
+      if (ctrlDownRef.current) {
+        const sel = new Set(selectedIds);
         if (sel.has(nodeId)) sel.delete(nodeId);
         else sel.add(nodeId);
         setSelectedIds(sel);
@@ -189,36 +199,36 @@ export default function XrayViewport(props: {
       } else {
         setSelectedIds(new Set([nodeId]));
         setHighlightedIds(new Set([nodeId]));
-        isDraggingNode = true;
-        dragNodeId = nodeId;
+        isDraggingNodeRef.current = true;
+        dragNodeIdRef.current = nodeId;
       }
       props.onNodeSelect?.(nodeId);
       return;
     }
 
-    if (ctrlDown) {
-      isRotating = true;
+    if (ctrlDownRef.current) {
+      isRotatingRef.current = true;
       return;
     }
 
     if (e.shiftKey) {
-      isBoxSelecting = true;
-      boxStartX = e.clientX;
-      boxStartY = e.clientY;
+      isBoxSelectingRef.current = true;
+      boxStartXRef.current = e.clientX;
+      boxStartYRef.current = e.clientY;
       return;
     }
 
-    isPanning = true;
-  }
+    isPanningRef.current = true;
+  }, [zoom, panX, panY, rotation, selectedIds, props.graph]);
 
-  function onMouseUp(e: MouseEvent) {
-    if (isBoxSelecting) {
-      const rect = boxSelectRect();
+  const onMouseUp = useCallback((e: MouseEvent) => {
+    if (isBoxSelectingRef.current) {
+      const rect = boxSelectRect;
       if (rect && Math.abs(rect.x2 - rect.x1) > 5 && Math.abs(rect.y2 - rect.y1) > 5) {
         const dpr = window.devicePixelRatio || 1;
-        const inBox = boxSelect(rect, props.graph?.nodes, { zoom: zoom(), panX: panX(), panY: panY(), rotation: rotation() }, { width: canvasRef.width, height: canvasRef.height }, dpr);
+        const inBox = boxSelect(rect, props.graph?.nodes, { zoom, panX, panY, rotation }, { width: canvasRef.current!.width, height: canvasRef.current!.height }, dpr);
         if (inBox.length > 0) {
-          const sel = ctrlDown ? new Set(selectedIds()) : new Set();
+          const sel = ctrlDownRef.current ? new Set(selectedIds) : new Set();
           for (const id of inBox) sel.add(id);
           setSelectedIds(sel);
           setHighlightedIds(sel);
@@ -228,68 +238,68 @@ export default function XrayViewport(props: {
       setBoxSelectRect(null);
     }
 
-    isPanning = false;
-    isRotating = false;
-    isDraggingNode = false;
-    isBoxSelecting = false;
-    dragNodeId = "";
-  }
+    isPanningRef.current = false;
+    isRotatingRef.current = false;
+    isDraggingNodeRef.current = false;
+    isBoxSelectingRef.current = false;
+    dragNodeIdRef.current = "";
+  }, [zoom, panX, panY, rotation, selectedIds, boxSelectRect, props.graph]);
 
-  function onWheel(e: WheelEvent) {
+  const onWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const [mx, my] = getMousePos(e);
-    const newZoom = Math.max(0.1, Math.min(10, zoom() * zoomFactor));
-
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const [mx, my] = getMousePos(e, canvas);
+    const newZoom = Math.max(0.1, Math.min(10, zoom * zoomFactor));
     setZoom(newZoom);
-    // Adjust pan to zoom towards mouse position
-    const gx = (mx - canvasRef.width * 0.5) / newZoom + panX();
-    const gy = (canvasRef.height * 0.5 - my) / newZoom + panY();
-    setPanX(panX() + gx - ((mx - canvasRef.width * 0.5) / zoom() + panX()));
-    setPanY(panY() + gy - ((canvasRef.height * 0.5 - my) / zoom() + panY()));
-  }
+  }, [zoom]);
 
   function renderLoop(now: number) {
-    animFrame = requestAnimationFrame(renderLoop);
+    animFrameRef.current = requestAnimationFrame(renderLoop) as any;
 
-    frameCount++;
-    if (now - fpsTime >= 1000) {
-      setFps(frameCount);
-      frameCount = 0;
-      fpsTime = now;
+    frameCountRef.current++;
+    if (now - fpsTimeRef.current >= 1000) {
+      setFps(frameCountRef.current);
+      frameCountRef.current = 0;
+      fpsTimeRef.current = now;
     }
 
     // Layout step
-    if (layoutState.running) {
-      stepLayout(layoutState, props.graph?.nodes, props.graph?.edges);
-    } else if (!spatialGridBuilt) {
-      spatialGrid = buildSpatialGrid(props.graph?.nodes);
-      spatialGridBuilt = true;
+    if (layoutStateRef.current.running) {
+      stepLayout(layoutStateRef.current, props.graph?.nodes, props.graph?.edges);
+    } else if (!spatialGridBuiltRef.current) {
+      spatialGridRef.current = buildSpatialGrid(props.graph?.nodes);
+      spatialGridBuiltRef.current = true;
     }
 
+    // Build highlighted set
+    const hl = new Set([...highlightedIds]);
+    if (hoveredId) hl.add(hoveredId);
+
     // Render
-    renderer.render({
+    rendererRef.current?.render({
       nodes: props.graph?.nodes,
       edges: props.graph?.edges,
-      selectedIds: selectedIds(),
-      highlightedIds: new Set([...highlightedIds(), ...(hoveredId() ? [hoveredId()!] : [])]),
-      zoom: zoom(),
-      panX: panX(),
-      panY: panY(),
-      rotation: rotation(),
-      boxSelectRect: boxSelectRect(),
-      rotationIndicator: isRotating ? rotation() : null,
-      runtimeMode: runtimeMode(),
+      selectedIds,
+      highlightedIds: hl,
+      zoom,
+      panX,
+      panY,
+      rotation,
+      boxSelectRect,
+      rotationIndicator: isRotatingRef.current ? rotation : null,
+      runtimeMode,
     });
   }
 
   return (
-    <div class="relative w-full h-full">
-      <canvas ref={canvasRef!} id="xray-canvas" class="block w-full h-full" />
+    <div className="relative w-full h-full">
+      <canvas ref={canvasRef} id="xray-canvas" className="block w-full h-full" />
       <canvas
-        ref={overlayCanvasRef!}
+        ref={overlayCanvasRef}
         id="xray-overlay"
-        class="absolute top-0 left-0 w-full h-full pointer-events-none z-10"
+        className="absolute top-0 left-0 w-full h-full pointer-events-none z-10"
       />
     </div>
   );

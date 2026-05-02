@@ -28,12 +28,12 @@ export function TopBar({
   onLock,
   onSignIn,
 }: TopBarProps) {
-  const [showMode, setShowMode] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   return (
     <div className="flex h-10 items-center gap-3 border-b border-[var(--window-border)] px-4">
       <EdgerunLogo className="h-5 w-5 text-primary" />
-      <span className="text-sm font-medium text-foreground">Edgerun</span>
 
       <div className="ml-4 flex items-center gap-3 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1">
@@ -57,19 +57,20 @@ export function TopBar({
           ) : (
             <WifiOff className="h-3 w-3" />
           )}
-          {isConnected ? "Connected" : "Offine"}
+          {isConnected ? "Connected" : "Offline"}
         </span>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        {username && (
+        {/* Only render username after mount to avoid hydration mismatch */}
+        {mounted && username && (
           <span className="text-xs text-muted-foreground">
             {isGuest ? "Guest" : username}
           </span>
         )}
         <button
           onClick={() => {
-            const app = getBuiltinApp("ai-assitant")
+            const app = getBuiltinApp("ai-assistant")
             if (app) launchApp(app)
           }}
           className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
@@ -77,7 +78,7 @@ export function TopBar({
         >
           <Sparkles className="h-3 w-3" />
         </button>
-        {username ? (
+        {mounted && username ? (
           <button
             onClick={onLock}
             className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
