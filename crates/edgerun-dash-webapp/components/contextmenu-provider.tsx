@@ -42,8 +42,8 @@ export const ContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       if (selection && selection.length > 0) {
         menu = [
-          { 
-            label: copied ? "Copied!" : "Copy", 
+          {
+            label: copied ? "Copied!" : "Copy",
             icon: copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />,
             action: () => handleCopy(selection)
           },
@@ -70,8 +70,8 @@ export const ContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ c
         // AI message context menu
         const msgContent = target.closest("[data-message]")?.textContent;
         menu = [
-          { 
-            label: copied ? "Copied!" : "Copy", 
+          {
+            label: copied ? "Copied!" : "Copy",
             icon: copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />,
             action: () => msgContent && handleCopy(msgContent)
           },
@@ -87,7 +87,26 @@ export const ContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       setItems(menu);
-      setPos({ x: e.clientX, y: e.clientY });
+
+      // Calculate position to keep menu within viewport
+      const menuWidth = 200; // min-w-[180px] + padding
+      const menuHeight = menu.length * 40 + 16; // estimated item height + padding
+      const padding = 8;
+
+      let x = e.clientX;
+      let y = e.clientY;
+
+      // Adjust horizontal position if menu would overflow right
+      if (x + menuWidth > window.innerWidth - padding) {
+        x = Math.max(padding, window.innerWidth - menuWidth - padding);
+      }
+
+      // Adjust vertical position if menu would overflow bottom
+      if (y + menuHeight > window.innerHeight - padding) {
+        y = Math.max(padding, window.innerHeight - menuHeight - padding);
+      }
+
+      setPos({ x, y });
       setVisible(true);
     };
 
@@ -116,7 +135,7 @@ export const ContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ c
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             className="fixed z-[9999] bg-[#1F2023] border border-[#444] rounded-xl shadow-xl py-1 min-w-[180px] overflow-hidden"
-            style={{ top: pos.y, left: pos.x }}
+            style={{ top: pos.y + 'px', left: pos.x + 'px' }}
           >
             {items.map((item, i) => (
               <button

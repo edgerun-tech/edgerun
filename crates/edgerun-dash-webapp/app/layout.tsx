@@ -4,6 +4,7 @@ import './globals.css'
 import { CommandPalette } from '../components/os/command-input'
 import { ContextMenuProvider } from '../components/contextmenu-provider'
 import { PlatformProvider } from '@/platform/ui/PlatformProvider'
+import { TooltipProvider } from '@radix-ui/react-tooltip'
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
@@ -39,10 +40,12 @@ export default function RootLayout({
     <html lang="en" className="bg-background">
       <body className="font-sans antialiased overflow-hidden">
         <ContextMenuProvider>
+          <TooltipProvider>
           <PlatformProvider>
             {children}
             <CommandPalette />
           </PlatformProvider>
+          </TooltipProvider>
         </ContextMenuProvider>
       </body>
     </html>

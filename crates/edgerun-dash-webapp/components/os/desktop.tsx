@@ -23,6 +23,7 @@ import { WasmAppWindow } from "@/components/wasm-app-window"
 import { removeWasm } from "@/stores/wasm-store"
 import { StageManager } from "./stage-manager"
 import { WidgetPanel } from "./widget-panel"
+import { WorkspaceStatusPanel } from "@/components/workspace"
 import { useAuth } from "@/hooks/use-auth"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
 import { type GuestContext } from "@/lib/capabilities"
@@ -30,6 +31,7 @@ import {
   LayoutDashboard,
   PanelRight,
 } from "lucide-react"
+import { FloatingDock } from "@/components/ui/floating-dock"
 import {
   windowsStore,
   windowOrderStore,
@@ -200,6 +202,34 @@ export function Desktop() {
               })}
             </div>
 
+            {/* FloatingDock for comparison - positioned at top */}
+            <div className="fixed top-4 left-1/2 z-50 -translate-x-1/2">
+              <FloatingDock
+                items={[
+                  {
+                    title: "App Store",
+                    icon: <span className="text-xs">AS</span>,
+                    href: "#",
+                  },
+                  {
+                    title: "Terminal",
+                    icon: <span className="text-xs">T</span>,
+                    href: "#",
+                  },
+                  {
+                    title: "Settings",
+                    icon: <span className="text-xs">S</span>,
+                    href: "#",
+                  },
+                  {
+                    title: "Help",
+                    icon: <span className="text-xs">?</span>,
+                    href: "#",
+                  },
+                ]}
+              />
+            </div>
+
             {pendingGate && (
               <Window
                 id="window-capability-gate"
@@ -248,6 +278,8 @@ export function Desktop() {
                 </Window>
               )
             })}
+
+            <WorkspaceStatusPanel />
           </div>
         </>
       )}

@@ -153,7 +153,7 @@ export function AIAssistant() {
   }
 
   const runningCount = windows.filter(w => w.appId !== "app-store" && w.appId !== "app-studio").length
-  const hasOpenFile = fs.openFiles.length > 0
+  const hasOpenFile = fs.openFiles?.length > 0
 
   return (
     <div className="flex h-full flex-col">
