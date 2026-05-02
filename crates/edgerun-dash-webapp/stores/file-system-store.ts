@@ -149,43 +149,45 @@ export function isFileSystemAccessSupported(): boolean {
 
 export async function openDirectory(): Promise<boolean> {
   if (!isFileSystemAccessSupported()) {
-    fileSystemStore.set(s => ({ 
-      ...s, 
-      isLoading: false, 
-      error: "File System Access API not supported. Use Chrome/Edge on desktop, or drag & drop files into the browser." 
-    }))
+    const s = fileSystemStore.get()
+    fileSystemStore.set({
+      ...s,
+      isLoading: false,
+      error: "File System Access API not supported. Use Chrome/Edge on desktop, or drag & drop files into the browser.",
+    })
     return false
   }
 
   try {
-    fileSystemStore.set(s => ({ ...s, isLoading: true, error: null }))
-    
-    const handle = await window.showDirectoryPicker()
-    
-    fileSystemStore.set(s => ({
-      ...s,
+    fileSystemStore.set({ ...fileSystemStore.get(), isLoading: true, error: null })
+
+    const handle = await (window as any).showDirectoryPicker()
+
+    fileSystemStore.set({
+      ...fileSystemStore.get(),
       rootHandle: handle,
       rootPath: handle.name,
       isLoading: true,
       hasPermission: true,
       error: null,
-    }))
-    
+    })
+
     await refreshEntries()
-    
+
     const paths = loadRecentRepos()
     if (!paths.includes(handle.name)) {
       saveRecentRepos([handle.name, ...paths])
     }
-    
+
     try {
       await saveHandle(handle.name, handle)
     } catch (e) {
       console.warn("Could not persist handle:", e)
     }
-    
+
+    const s = fileSystemStore.get()
     const hasGit = await checkForGit(handle)
-    fileSystemStore.set(s => ({ ...s, gitRoot: hasGit ? s.rootPath : null }))
+    fileSystemStore.set({ ...s, gitRoot: hasGit ? s.rootPath : null })
     
     return true
   } catch (err) {
@@ -199,12 +201,13 @@ export async function openDirectory(): Promise<boolean> {
       errorMessage = "Browser doesn't support File System Access API. Use Chrome/Edge on desktop."
     }
     
-    fileSystemStore.set(s => ({ 
-      ...s, 
-      isLoading: false, 
+    const s = fileSystemStore.get()
+    fileSystemStore.set({
+      ...s,
+      isLoading: false,
       error: errorMessage,
-      hasPermission: errorMessage.includes("permission") || errorMessage.includes("denied") ? false : s.hasPermission
-    }))
+      hasPermission: errorMessage.includes("permission") || errorMessage.includes("denied") ? false : s.hasPermission,
+    })
     console.error("Failed to open directory:", err)
     return false
   }
@@ -219,19 +222,19 @@ export async function restoreDirectory(): Promise<boolean> {
       const handle = await loadHandle(name)
       if (!handle) continue
       
-      fileSystemStore.set(s => ({
-        ...s,
+      fileSystemStore.set({
+        ...fileSystemStore.get(),
         rootHandle: handle,
         rootPath: name,
         isLoading: true,
         hasPermission: true,
         error: null,
-      }))
-      
+      })
+
       await refreshEntries()
-      
+
       const hasGit = await checkForGit(handle)
-      fileSystemStore.set(s => ({ ...s, gitRoot: hasGit ? s.rootPath : null }))
+      fileSystemStore.set({ ...fileSystemStore.get(), gitRoot: hasGit ? fileSystemStore.get().rootPath : null })
       
       return true
     } catch (e) {
@@ -250,7 +253,7 @@ export async function refreshEntries() {
   const entries: FileEntry[] = []
   
   try {
-    for await (const entry of store.rootHandle.values()) {
+    for await (const [, entry] of store.rootHandle.entries()) {
       entries.push({
         name: entry.name,
         path: entry.name,
@@ -263,21 +266,22 @@ export async function refreshEntries() {
       return a.kind === "directory" ? -1 : 1
     })
     
-    fileSystemStore.set(s => ({ ...s, entries, isLoading: false, error: null }))
+    fileSystemStore.set({ ...fileSystemStore.get(), entries, isLoading: false, error: null })
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Permission denied"
-    fileSystemStore.set(s => ({ 
-      ...s, 
-      isLoading: false, 
+    const s = fileSystemStore.get()
+    fileSystemStore.set({
+      ...s,
+      isLoading: false,
       error: errorMessage,
-      hasPermission: errorMessage.includes("denied") ? false : s.hasPermission
-    }))
+      hasPermission: errorMessage.includes("denied") ? false : s.hasPermission,
+    })
   }
 }
 
 async function checkForGit(dirHandle: FileSystemDirectoryHandle): Promise<boolean> {
   try {
-    for await (const entry of dirHandle.values()) {
+    for await (const [, entry] of dirHandle.entries()) {
       if (entry.name === ".git" && entry.kind === "directory") {
         return true
       }
@@ -330,7 +334,7 @@ export async function openFile(path: string): Promise<OpenFile | null> {
   
   const existing = store.openFiles.find(f => f.path === path)
   if (existing) {
-    fileSystemStore.set(s => ({ ...s, activeFileIndex: s.openFiles.indexOf(existing) }))
+    fileSystemStore.set({ ...store, activeFileIndex: store.openFiles.indexOf(existing) })
     return existing
   }
   
@@ -356,11 +360,12 @@ export async function openFile(path: string): Promise<OpenFile | null> {
       language: getLanguageFromFilename(name),
     }
     
-    fileSystemStore.set(s => ({
+    const s = fileSystemStore.get()
+    fileSystemStore.set({
       ...s,
       openFiles: [...s.openFiles, openFile],
       activeFileIndex: s.openFiles.length,
-    }))
+    })
     
     return openFile
   } catch (err) {
@@ -382,7 +387,7 @@ export async function saveFile(index: number, newContent: string): Promise<boole
     const updatedFiles = [...store.openFiles]
     updatedFiles[index] = { ...file, content: newContent, modified: false }
     
-    fileSystemStore.set(s => ({ ...s, openFiles: updatedFiles }))
+    fileSystemStore.set({ ...store, openFiles: updatedFiles })
     return true
   } catch (err) {
     console.error("Failed to save file:", err)
@@ -401,7 +406,7 @@ export function closeFile(index: number) {
 }
 
 export function setActiveFile(index: number) {
-  fileSystemStore.set(s => ({ ...s, activeFileIndex: index }))
+  fileSystemStore.set({ ...fileSystemStore.get(), activeFileIndex: index })
 }
 
 export function getActiveFile(): OpenFile | null {
@@ -419,7 +424,7 @@ export async function readFileContent(path: string): Promise<string | null> {
 }
 
 export function clearError() {
-  fileSystemStore.set(s => ({ ...s, error: null }))
+  fileSystemStore.set({ ...fileSystemStore.get(), error: null })
 }
 
 interface DroppedEntry {
@@ -434,14 +439,14 @@ export async function handleDroppedItems(items: DataTransferItemList): Promise<{
   
   const processEntry = async (entry: FileSystemEntry, path: string): Promise<void> => {
     if (entry.isFile) {
-      const file = entry as FileSystemFile
+      const fileEntry = entry as unknown as { name: string }
       entries.push({
-        name: file.name,
-        path: `${path}/${file.name}`.replace(/^\//, ""),
+        name: fileEntry.name,
+        path: `${path}/${fileEntry.name}`.replace(/^\//, ""),
         kind: "file",
       })
     } else if (entry.isDirectory) {
-      const dir = entry as FileSystemDirectory
+      const dir = entry as FileSystemDirectoryEntry
       const dirPath = `${path}/${dir.name}`.replace(/^\//, "")
       entries.push({
         name: dir.name,
@@ -496,7 +501,8 @@ export async function openDroppedFiles(files: FileList): Promise<void> {
     openFiles.push(openFile)
   }
   
-  fileSystemStore.set(s => ({
+  const s = fileSystemStore.get()
+  fileSystemStore.set({
     ...s,
     openFiles: [...s.openFiles, ...openFiles],
     activeFileIndex: s.openFiles.length,
@@ -504,5 +510,5 @@ export async function openDroppedFiles(files: FileList): Promise<void> {
     rootHandle: null,
     entries: openFiles.map(f => ({ name: f.name, path: f.path, kind: "file" as const })),
     error: null,
-  }))
+  })
 }
