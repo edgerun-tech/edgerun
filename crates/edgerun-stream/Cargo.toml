@@ -12,7 +12,8 @@ description = "Signed single-writer stream production and verification for Edger
 edgerun-core = { version = "0.1", path = "../edgerun-core" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
-prost-types.workspace = true
+prost = { workspace = true }
+prost-types = { workspace = true }
 
 [dev-dependencies]
 

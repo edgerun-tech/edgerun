@@ -2411,6 +2411,7 @@ dependencies = [
  "edgerun-core",
  "edgerun-crypto",
  "edgerun-hardware-signing",
+ "prost",
  "prost-types",
 ]
 
