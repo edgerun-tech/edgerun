@@ -40,10 +40,15 @@ pub mod edgerun {
         pub mod trust {
             core::include!("gen/edgerun.v0.trust.rs");
         }
-        pub mod ui {
-            core::include!("gen/edgerun.v0.ui.rs");
+    pub mod ui {
+        core::include!("gen/edgerun.v0.ui.rs");
+    }
+    pub mod wallet {
+        pub mod v0 {
+            core::include!("gen/edgerun/wallet/v0/edgerun.wallet.v0.rs");
         }
     }
+}
 }
 
 #[cfg(test)]

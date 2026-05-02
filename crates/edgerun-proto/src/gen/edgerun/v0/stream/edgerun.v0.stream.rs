@@ -598,16 +598,22 @@ pub enum EventType {
     CapabilityRevoked = 9,
     DelegationCreated = 10,
     RevocationCreated = 11,
-    /// Secret service events
+    /// Secret service events (12-15)
     SecretPut = 12,
     SecretDelete = 13,
     CollectionCreated = 14,
     CollectionDeleted = 15,
-    /// User authority acquisition events
+    /// User authority (17-20)
     UserPresenceRequest = 17,
     UserPresenceGranted = 18,
     SignatureRequest = 19,
     SignatureResponse = 20,
+    /// Wallet/exchange events (21-25)
+    WalletQuoteCreated = 21,
+    WalletOrderCreated = 22,
+    WalletOrderStatusChanged = 23,
+    WalletPaymentRequestCreated = 24,
+    WalletReceiptCreated = 25,
 }
 impl EventType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -636,6 +642,11 @@ impl EventType {
             Self::UserPresenceGranted => "EVENT_TYPE_USER_PRESENCE_GRANTED",
             Self::SignatureRequest => "EVENT_TYPE_SIGNATURE_REQUEST",
             Self::SignatureResponse => "EVENT_TYPE_SIGNATURE_RESPONSE",
+            Self::WalletQuoteCreated => "EVENT_TYPE_WALLET_QUOTE_CREATED",
+            Self::WalletOrderCreated => "EVENT_TYPE_WALLET_ORDER_CREATED",
+            Self::WalletOrderStatusChanged => "EVENT_TYPE_WALLET_ORDER_STATUS_CHANGED",
+            Self::WalletPaymentRequestCreated => "EVENT_TYPE_WALLET_PAYMENT_REQUEST_CREATED",
+            Self::WalletReceiptCreated => "EVENT_TYPE_WALLET_RECEIPT_CREATED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -661,6 +672,11 @@ impl EventType {
             "EVENT_TYPE_USER_PRESENCE_GRANTED" => Some(Self::UserPresenceGranted),
             "EVENT_TYPE_SIGNATURE_REQUEST" => Some(Self::SignatureRequest),
             "EVENT_TYPE_SIGNATURE_RESPONSE" => Some(Self::SignatureResponse),
+            "EVENT_TYPE_WALLET_QUOTE_CREATED" => Some(Self::WalletQuoteCreated),
+            "EVENT_TYPE_WALLET_ORDER_CREATED" => Some(Self::WalletOrderCreated),
+            "EVENT_TYPE_WALLET_ORDER_STATUS_CHANGED" => Some(Self::WalletOrderStatusChanged),
+            "EVENT_TYPE_WALLET_PAYMENT_REQUEST_CREATED" => Some(Self::WalletPaymentRequestCreated),
+            "EVENT_TYPE_WALLET_RECEIPT_CREATED" => Some(Self::WalletReceiptCreated),
             _ => None,
         }
     }

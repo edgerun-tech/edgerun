@@ -1732,6 +1732,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-exchange"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-proto",
+ "edgerun-rt",
+ "edgerun-wallet",
+]
+
+[[package]]
+name = "edgerun-exchange-api"
+version = "0.1.1"
+dependencies = [
+ "edgerun-exchange",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-proto",
+ "edgerun-rt",
+ "edgerun-url",
+ "edgerun-wallet",
+]
+
+[[package]]
+name = "edgerun-exchange-worker"
+version = "0.1.1"
+dependencies = [
+ "edgerun-exchange",
+ "edgerun-log",
+ "edgerun-proto",
+ "edgerun-rt",
+ "edgerun-wallet",
+]
+
+[[package]]
 name = "edgerun-face-detection"
 version = "0.1.1"
 dependencies = [
@@ -2529,6 +2567,17 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-rt",
+]
+
+[[package]]
+name = "edgerun-wallet"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-error",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-proto",
 ]
 
 [[package]]

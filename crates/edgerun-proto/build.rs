@@ -16,6 +16,7 @@ fn main() {
         "edgerun/v0/ui.proto",
         "edgerun/v0/app.proto",
         "edgerun/v0/appabi.proto",
+        "edgerun/wallet/v0/exchange.proto",
     ];
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap_or_else(|_| "src/gen".to_string()));
@@ -35,6 +36,7 @@ fn main() {
     std::fs::create_dir_all(gen_dir.join("edgerun/v0/object")).ok();
     std::fs::create_dir_all(gen_dir.join("edgerun/v0/ui")).ok();
     std::fs::create_dir_all(gen_dir.join("edgerun/v0/appabi")).ok();
+    std::fs::create_dir_all(gen_dir.join("edgerun/wallet/v0")).ok();
 
     // Build prost config
     let mut config = prost_build::Config::new();
@@ -79,6 +81,8 @@ fn main() {
                 gen_dir.join("edgerun/v0/ui").join(file_name)
             } else if file_name.contains("identity") {
                 gen_dir.join("edgerun/v0").join(file_name)
+            } else if file_name.contains("exchange") || file_name.contains("wallet") {
+                gen_dir.join("edgerun/wallet/v0").join(file_name)
             } else {
                 gen_dir.join(file_name)
             };

@@ -118,6 +118,10 @@ members = [
   "crates/edgerun-sdk-macro",
   "crates/edgerun-example",
   "crates/edgerun-event",
+  "crates/edgerun-wallet",
+  "crates/edgerun-exchange",
+  "crates/edgerun-exchange-api",
+  "crates/edgerun-exchange-worker",
 ]
 
 [workspace.package]
@@ -213,6 +217,10 @@ edgerun-clap-derive = { version = "0.1", path = "crates/edgerun-clap-derive" }
 edgerun-wasm = { version = "0.1", path = "crates/edgerun-wasm" }
 edgerun-virtio = { version = "0.1", path = "crates/edgerun-virtio" }
 edgerun-event = { version = "0.1", path = "crates/edgerun-event" }
+edgerun-wallet = { version = "0.1", path = "crates/edgerun-wallet" }
+edgerun-exchange = { version = "0.1", path = "crates/edgerun-exchange" }
+edgerun-exchange-api = { version = "0.1", path = "crates/edgerun-exchange-api" }
+edgerun-exchange-worker = { version = "0.1", path = "crates/edgerun-exchange-worker" }
 edgerun-sdk = { version = "0.1", path = "crates/edgerun-sdk" }
 edgerun-sdk-macro = { version = "0.1", path = "crates/edgerun-sdk-macro" }
 # edgerun-wgpu = { path = "crates/edgerun-wgpu" }
