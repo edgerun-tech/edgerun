@@ -6,15 +6,10 @@
 export { protocolClient, ProtocolError } from "./protocol/client"
 export type { NodeRegistration, ProtocolRequest, ProtocolResponse } from "./protocol/client"
 export { encodeBase64, decodeBase64, sha256, computeCanonical } from "./protocol/codec"
-export { formatObjectRef, parseObjectRef, type ObjectRef, type ProtocolRef } from "./protocol/refs"
-export { buildCommandEnvelope, sendCommand } from "./protocol/commands"
-export type { CommandEnvelope, CommandResult } from "./protocol/commands"
-export { fetchObject, fetchObjectMetadata } from "./protocol/objects"
-export type { StoredObject, ObjectMetadata } from "./protocol/objects"
+export { formatObjectRef, formatEventRef, formatCommandRef, formatProtocolRef } from "./protocol/refs"
+export { buildCommandEnvelope, serializeCommandEnvelope, deserializeCommandEnvelope } from "./protocol/commands"
 export { fetchAppPackage, listInstalledApps } from "./protocol/apps"
-export type { AppPackage, AppRoute, AppAction, AppPipeline } from "./protocol/apps"
-export { listAvailableCapabilities, canSatisfy } from "./protocol/capabilities"
-export type { CapabilityDescriptor, CapabilityGrant, CapabilitySatisfaction } from "./protocol/capabilities"
+export { listAvailableCapabilities, listGrantsForApp } from "./protocol/capabilities"
 
 // State stores
 export { nodeStore, refreshNodeStatus } from "./state/node-store"

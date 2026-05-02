@@ -1,56 +1,46 @@
 /**
- * Single source of truth for command state and history.
+ * Command store for tracking pending and completed commands.
+ * Uses generated protobuf types.
  */
 
 import { atom, computed } from "nanostores"
-import type { CommandEnvelope, CommandResult } from "@/platform/protocol/commands"
+import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
+import { edgerun } from "@/gen/edgerun/v0/common"
+
+export interface PendingCommand {
+  envelope: edgerunStream.v0.stream.CommandEnvelope
+  submittedAt: string
+  status: "pending" | "committed" | "rejected"
+}
 
 export interface CommandStoreState {
-  pendingCommands: Map<string, CommandEnvelope>
-  commandHistory: Map<string, CommandResult>
+  pending: Map<string, PendingCommand>
   isLoading: boolean
   error: string | null
 }
 
 const initialState: CommandStoreState = {
-  pendingCommands: new Map(),
-  commandHistory: new Map(),
+  pending: new Map(),
   isLoading: false,
   error: null,
 }
 
 export const commandStore = atom<CommandStoreState>(initialState)
 
-export const pendingCommandCount = computed(commandStore, (s) =>
-  s.pendingCommands.size,
+export const pendingCommands = computed(commandStore, (s) =>
+  Array.from(s.pending.values()),
 )
 
-export function addPendingCommand(command: CommandEnvelope): void {
+export function addPendingCommand(
+  envelope: edgerunStream.v0.stream.CommandEnvelope,
+): void {
   const state = commandStore.get()
-  const newPending = new Map(state.pendingCommands)
-  newPending.set(command.commandId, command)
-  commandStore.set({ ...state, pendingCommands: newPending })
-}
-
-export function updateCommandResult(result: CommandResult): void {
-  const state = commandStore.get()
-  const newPending = new Map(state.pendingCommands)
-  newPending.delete(result.commandId)
-  const newHistory = new Map(state.commandHistory)
-  newHistory.set(result.commandId, result)
-  commandStore.set({
-    ...state,
-    pendingCommands: newPending,
-    commandHistory: newHistory,
+  const commandId = Buffer.from(envelope.command_id).toString("hex")
+  const newPending = new Map(state.pending)
+  newPending.set(commandId, {
+    envelope,
+    submittedAt: new Date().toISOString(),
+    status: "pending",
   })
-}
-
-export function getCommandResult(
-  commandId: string,
-): CommandResult | undefined {
-  return commandStore.get().commandHistory.get(commandId)
-}
-
-export function isCommandPending(commandId: string): boolean {
-  return commandStore.get().pendingCommands.has(commandId)
+  commandStore.set({ ...state, pending: newPending })
 }

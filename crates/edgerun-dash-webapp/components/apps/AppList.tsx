@@ -6,10 +6,10 @@
 "use client"
 
 import { useApps, useCapabilities } from "@/platform/ui/useApps"
-import type { AppPackage } from "@/platform/protocol/apps"
+import { edgerun as stream } from "@/gen/edgerun/v0/stream"
 
 interface AppListProps {
-  apps: AppPackage[]
+  apps: stream.AppPackage[]
   getGrants: (appId: string) => unknown[]
   onRefresh: () => void
 }
@@ -29,25 +29,27 @@ export function AppList({ apps, getGrants, onRefresh }: AppListProps) {
         </button>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        {apps.map((app) => (
-          <div
-            key={app.appId}
-            className="rounded-lg border border-border bg-secondary/50 p-3"
-          >
-            <h3 className="text-sm font-medium">{app.name}</h3>
-            <p className="text-xs text-muted-foreground">{app.description}</p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {listGrantsForApp(app.appId).map((grant: never) => (
-                <span
-                  key={(grant as { capabilityId: string }).capabilityId}
-                  className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px]"
-                >
-                  {(grant as { capabilityId: string }).capabilityId}
-                </span>
-              ))}
+        {apps.map((app) => {
+          const appId = Buffer.from(app.wasm_object?.object_id || new Uint8Array(0)).toString("hex")
+          return (
+            <div
+              key={appId}
+              className="rounded-lg border border-border bg-secondary/50 p-3"
+            >
+              <h3 className="text-sm font-medium">{app.name}</h3>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {listGrantsForApp(appId).map((grant: never) => (
+                  <span
+                    key={(grant as { grant_id: Uint8Array }).grant_id?.toString()}
+                    className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px]"
+                  >
+                    {Buffer.from((grant as { grant_id: Uint8Array }).grant_id || new Uint8Array(0)).toString("hex")}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

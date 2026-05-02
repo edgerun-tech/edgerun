@@ -9,10 +9,10 @@
  * If measured, link to footprint evidence.
  */
 
-import type { AppPackage } from "@/platform/protocol/apps"
+import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
+import { edgerun } from "@/gen/edgerun/v0/common"
 
 export type AppKind = "builtin" | "installed" | "wasm" | "external" | "demo"
-
 export type AppSource = "node" | "builtin" | "demo"
 
 export interface AppFootprint {
@@ -45,22 +45,21 @@ export interface AppDefinition {
  * Does NOT invent RAM/CPU/price.
  */
 export function appPackageToDefinition(
-  pkg: AppPackage,
+  pkg: edgerunStream.v0.stream.AppPackage,
   kind: AppKind = "installed",
   source: AppSource = "node",
 ): AppDefinition {
   return {
-    appId: pkg.appId,
-    name: pkg.name || pkg.appId,
-    description: pkg.description || "",
-    iconId: pkg.iconId || pkg.appId,
+    appId: Buffer.from(pkg.wasm_object?.object_id || new Uint8Array(0)).toString("hex"),
+    name: pkg.name || "",
+    description: "",
+    iconId: Buffer.from(pkg.wasm_object?.object_id || new Uint8Array(0)).toString("hex"),
     kind,
     source,
-    route: pkg.routes?.[0]?.path,
-    componentKey: pkg.appId,
-    wasmObjectRef: pkg.wasmObjectRef,
-    requiredCapabilityIds: (pkg.requiredCapabilities || []).map((c) => c.capabilityId),
-    optionalCapabilityIds: (pkg.optionalCapabilities || []).map((c) => c.capabilityId),
+    route: Object.keys(pkg.routes || {})[0],
+    componentKey: pkg.name,
+    requiredCapabilityIds: [],
+    optionalCapabilityIds: [],
     status: "installed",
   }
 }

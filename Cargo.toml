@@ -104,20 +104,20 @@ members = [
   "crates/edgerun-virtual-disk",
   "crates/edgerun-wifi",
   "crates/edgerun-yubikey",
-   "crates/edgerun-vfs",
-   
-   "crates/edgerun-app",
-  "crates/edgerun-clap",
+"crates/edgerun-vfs",
+   "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
-  "crates/edgerun-wasm",
-  "crates/edgerun-sdk",
+"crates/edgerun-wasm",
+   "crates/edgerun-wasm-bench",
+   "crates/edgerun-sdk",
   "crates/edgerun-sdk-macro",
   "crates/edgerun-event",
   "crates/edgerun-wallet",
   "crates/edgerun-exchange",
   "crates/edgerun-exchange-api",
   "crates/edgerun-exchange-worker",
-  "crates/edgerun-provisioning",
+   "crates/edgerun-provisioning",
+   "crates/zen-client",
 ]
 
 [workspace.package]
@@ -204,6 +204,7 @@ edgerun-crypto = { version = "0.1", path = "crates/edgerun-crypto", default-feat
     # edgerun-json native JSON APIs
 edgerun-json = { version = "0.1", path = "crates/edgerun-json", default-features = false }
 edgerun-error = { version = "0.1", path = "crates/edgerun-error" }
+edgerun-edit = { version = "0.1", path = "crates/edgerun-edit" }
 # Browser deps
 edgerun-display = { version = "0.1", path = "crates/edgerun-display" }
 edgerun-gpu = { version = "0.1", path = "crates/edgerun-gpu" }

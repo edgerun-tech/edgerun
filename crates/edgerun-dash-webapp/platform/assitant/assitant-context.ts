@@ -77,6 +77,12 @@ export const contextAge = atom<number>(0)
 
 export const isContextStale = computed(contextAge, (age) => age > CONTEXT_STALE_THRESHOLD)
 
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 export function buildContext(): ContextSnapshot {
   const node = nodeStore.get()
   const apps = appStore.get()
@@ -93,51 +99,61 @@ export function buildContext(): ContextSnapshot {
     isConnected: node.isConnected,
   }
 
-  const installedApps: AppInfo[] = Array.from(apps.apps.values())
+  const installedApps: AppInfo[] = Array.from(apps.apps.entries())
     .slice(0, 20)
-    .map((a) => ({
-      appId: a.appId,
-      name: a.name || a.appId,
-      version: a.version || 'unknown',
+    .map(([appId, pkg]) => ({
+      appId,
+      name: pkg.name || appId,
+      version: String(pkg.version),
     }))
 
-  const runningApps = Array.from(apps.apps.values())
-    .filter((a: any) => a.status === 'running')
+  const runningAppIds = Array.from(runtime.runningApps.values())
+    .filter((a) => a.isRunning)
     .map((a) => a.appId)
 
   const capabilitiesContext: CapabilitiesContext = {
-    descriptors: Array.from(caps.descriptors.values()).map((d: any) => d.capabilityId),
+    descriptors: Array.from(caps.descriptors.values()).map((d) => {
+      if (d.capability_id && d.capability_id.length > 0) {
+        return bytesToHex(d.capability_id)
+      }
+      return d.capability_kind?.toString() || 'unknown'
+    }),
     total: caps.descriptors.size,
   }
 
   const connectionsContext: ConnectionsContext = {
-    active: Array.from(connections.connections.values()).filter((c: ExternalConnection) => c.isConnected).length,
+    active: Array.from(connections.connections.values()).filter((c) => c.status === 'connected').length,
     total: connections.connections.size,
   }
 
+  const pendingApprovals = Array.from(approvals.pending.values())
+  const historyEntries = Array.from(approvals.history.entries())
+
   const approvalsContext: ApprovalsContext = {
-    pending: approvals.pending.map((a) => ({
-      id: a.id,
-      action: a.action,
-      status: a.status,
-      timestamp: a.createdAt,
+    pending: pendingApprovals.map((a) => ({
+      id: a.approvalId,
+      action: a.action || 'unknown',
+      status: 'pending',
+      timestamp: new Date().getTime(),
     })),
-    recent: approvals.approved.slice(0, 5).map((a) => ({
-      id: a.id,
-      action: a.action,
-      status: a.status,
-      timestamp: a.createdAt,
-    })),
+    recent: historyEntries
+      .slice(0, 5)
+      .map(([, h]) => ({
+        id: '',
+        action: 'historical',
+        status: h.approved ? 'approved' : 'rejected',
+        timestamp: new Date(h.at).getTime(),
+      })),
   }
 
   const runtimeContext: RuntimeContext = {
-    isRunning: runtime.runningApps.length > 0,
-    runningAppsCount: runtime.runningApps.length,
+    isRunning: runtime.runningApps.size > 0,
+    runningAppsCount: runtime.runningApps.size,
   }
 
   const textSummary = buildTextSummary(
     nodeContext,
-    { installed: installedApps, running: runningApps, total: installedApps.length },
+    { installed: installedApps, running: runningAppIds, total: installedApps.length },
     capabilitiesContext,
     connectionsContext,
     approvalsContext,
@@ -148,146 +164,7 @@ export function buildContext(): ContextSnapshot {
     id: `ctx_${Date.now()}`,
     timestamp: Date.now(),
     node: nodeContext,
-    apps: { installed: installedApps, running: runningApps, total: installedApps.length },
-    capabilities: capabilitiesContext,
-    connections: connectionsContext,
-    approvals: approvalsContext,
-    runtime: runtimeContext,
-    textSummary,
-  }
-
-  contextSnapshotStore.set(snapshot)
-  contextAge.set(0)
-
-  return snapshot
-}
-
-export interface NodeContext {
-  nodeId: string | null
-  health: string | null
-  runtimeVersion: string | null
-  syncStatus: string | null
-  isConnected: boolean
-}
-
-export interface AppsContext {
-  installed: AppInfo[]
-  running: string[]
-  total: number
-}
-
-export interface AppInfo {
-  appId: string
-  name: string
-  version: string
-}
-
-export interface CapabilitiesContext {
-  descriptors: string[]
-  total: number
-}
-
-export interface ConnectionsContext {
-  active: number
-  total: number
-}
-
-export interface ApprovalsContext {
-  pending: ApprovalInfo[]
-  recent: ApprovalInfo[]
-}
-
-export interface ApprovalInfo {
-  id: string
-  action: string
-  status: string
-  timestamp: number
-}
-
-export interface RuntimeContext {
-  isRunning: boolean
-  runningAppsCount: number
-}
-
-const CONTEXT_STALE_THRESHOLD = 30000
-
-export const contextSnapshotStore = atom<ContextSnapshot | null>(null)
-export const contextAge = atom<number>(0)
-
-export const isContextStale = computed(contextAge, (age) => age > CONTEXT_STALE_THRESHOLD)
-
-export function buildContext(): ContextSnapshot {
-  const node = nodeStore.get()
-  const apps = appStore.get()
-  const caps = capabilityStore.get()
-  const connections = connectionStore.get()
-  const approvals = approvalTracker.getState()
-  const runtime = runtimeStore.get()
-
-  const nodeContext: NodeContext = {
-    nodeId: node.currentNode?.nodeId || null,
-    health: node.currentNode?.health || null,
-    runtimeVersion: node.currentNode?.runtimeVersion || null,
-    syncStatus: node.currentNode?.syncStatus || null,
-    isConnected: node.isConnected,
-  }
-
-  const installedApps: AppInfo[] = Array.from(apps.apps.values())
-    .slice(0, 20)
-    .map((a) => ({
-      appId: a.appId,
-      name: a.name || a.appId,
-      version: a.version || 'unknown',
-    }))
-
-  const runningApps = Array.from(apps.apps.values())
-    .filter((a) => a.status === 'running')
-    .map((a) => a.appId)
-
-  const capabilitiesContext: CapabilitiesContext = {
-    descriptors: Array.from(caps.descriptors.values()).map((d) => d.capabilityId),
-    total: caps.descriptors.size,
-  }
-
-  const connectionsContext: ConnectionsContext = {
-    active: connections.connections.filter((c) => c.isConnected).length,
-    total: connections.connections.length,
-  }
-
-  const approvalsContext: ApprovalsContext = {
-    pending: approvals.pending.map((a) => ({
-      id: a.id,
-      action: a.action,
-      status: a.status,
-      timestamp: a.createdAt,
-    })),
-    recent: approvals.approved.slice(0, 5).map((a) => ({
-      id: a.id,
-      action: a.action,
-      status: a.status,
-      timestamp: a.createdAt,
-    })),
-  }
-
-  const runtimeContext: RuntimeContext = {
-    isRunning: runtime.runningApps.length > 0,
-    runningAppsCount: runtime.runningApps.length,
-  }
-
-  const textSummary = buildTextSummary(
-    nodeContext,
-    { installed: installedApps, running: runningApps, total: installedApps.length },
-    capabilitiesContext,
-    connectionsContext,
-    approvalsContext,
-    runtimeContext,
-  )
-
-  const snapshot: ContextSnapshot = {
-    id: `ctx_${Date.now()}`,
-    timestamp: Date.now(),
-    node: nodeContext,
-    apps: { installed: installedApps, running: runningApps, total: installedApps.length },
+    apps: { installed: installedApps, running: runningAppIds, total: installedApps.length },
     capabilities: capabilitiesContext,
     connections: connectionsContext,
     approvals: approvalsContext,

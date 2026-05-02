@@ -1,10 +1,21 @@
+import { atom } from "nanostores"
 /**
  * Single registry for dashboard-renderable UI components.
  * Safe declarative UI component mapping, shadcn presets, ViewSpec support.
  * No arbitrary dynamic imports for untrusted apps in MVP.
  */
 
-import type { ViewSpec, ComponentSpec } from "@/platform/protocol/apps"
+export interface ViewSpec {
+  type: "react" | "html" | "canvas"
+  componentTree?: ComponentSpec[]
+  styles?: Record<string, string>
+}
+
+export interface ComponentSpec {
+  type: string
+  props?: Record<string, unknown>
+  children?: ComponentSpec[]
+}
 
 export interface RegisteredComponent {
   type: string
@@ -24,6 +35,8 @@ const initialState: ComponentRegistryState = {
   viewSpecRenderers: new Map(),
 }
 
+export const componentRegistry = atom<ComponentRegistryState>(initialState)
+
 let registryState: ComponentRegistryState = { ...initialState }
 
 export function registerComponent(def: RegisteredComponent): void {
@@ -31,6 +44,7 @@ export function registerComponent(def: RegisteredComponent): void {
     ...registryState,
     components: new Map(registryState.components).set(def.type, def),
   }
+  componentRegistry.set({ ...registryState })
 }
 
 export function getComponent(type: string): RegisteredComponent | undefined {

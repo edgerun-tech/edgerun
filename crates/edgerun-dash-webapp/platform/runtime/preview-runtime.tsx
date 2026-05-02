@@ -4,8 +4,19 @@
  */
 
 import { atom, computed } from "nanostores"
-import type { ViewSpec, ComponentSpec } from "@/platform/protocol/apps"
-import { componentRegistry } from "@/platform/registries/component-registry"
+import { componentRegistry, getComponent } from "@/platform/registries/component-registry"
+
+export interface ViewSpec {
+  type: "react" | "html" | "canvas"
+  componentTree?: ComponentSpec[]
+  styles?: Record<string, string>
+}
+
+export interface ComponentSpec {
+  type: string
+  props?: Record<string, unknown>
+  children?: ComponentSpec[]
+}
 
 export interface PreviewState {
   isPreviewing: boolean
@@ -65,8 +76,13 @@ function renderComponentTree(
   components: ComponentSpec[],
 ): React.ReactNode[] {
   return components.map((spec, index) => {
-    const registered = componentRegistry.getComponent(spec.type)
-    if (!registered || !registered.isSafe) {
+    const registered = getComponent(spec.type)
+    if (!registered) {
+      return null
+    }
+
+    if (!registered.isSafe) {
+      console.warn(`Component ${spec.type} is not safe for untrusted rendering`)
       return null
     }
 
@@ -76,8 +92,8 @@ function renderComponentTree(
 
     return (
       <registered.component
-        key={`preview-${spec.type}-${index}`}
-        {...(spec.props as Record<string, unknown>)}
+        key={`${spec.type}-${index}`}
+        {...spec.props}
       >
         {childNodes}
       </registered.component>

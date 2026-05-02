@@ -1,6 +1,8 @@
 import { atom, computed } from "nanostores"
 import type { AuthState, NodeProvisionInput, StoredNodeRegistration } from "@/hooks/use-auth"
 
+export type { AuthState, NodeProvisionInput, StoredNodeRegistration }
+
 const STORAGE_KEY = "edgerun_credential_id"
 const USERNAME_KEY = "edgerun_username"
 const NODE_REGISTRATION_KEY = "edgerun_node_registration_v1"

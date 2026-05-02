@@ -1,23 +1,17 @@
 /**
  * Single source of truth for installed apps.
- * Tracks AppPackage, AppPrincipal, app routes, actions, pipelines, runtime status.
+ * Uses generated protobuf types from gen/edgerun/v0/stream.ts.
  */
 
 import { atom, computed } from "nanostores"
 import { protocolClient } from "@/platform/protocol/client"
-import type {
-  AppPackage,
-  AppRoute,
-  AppAction,
-  AppPipeline,
-  AppPrincipal,
-} from "@/platform/protocol/apps"
-import type { CapabilityGrant } from "@/platform/protocol/capabilities"
+import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
+import { edgerun as edgerunCap } from "@/gen/edgerun/v0/capability"
 
 export interface AppStoreState {
-  apps: Map<string, AppPackage>
-  principals: Map<string, AppPrincipal>
-  grants: Map<string, CapabilityGrant[]>
+  apps: Map<string, edgerunStream.v0.stream.AppPackage>
+  principals: Map<string, edgerunStream.v0.stream.AppPrincipal>
+  grants: Map<string, edgerunCap.v0.capability.CapabilityGrant[]>
   isLoading: boolean
   error: string | null
   lastRefresh: string | null
@@ -40,39 +34,19 @@ export const installedApps = computed(appStore, (s) =>
 
 export const appCount = computed(appStore, (s) => s.apps.size)
 
-export function getApp(appId: string): AppPackage | undefined {
+export function getApp(appId: string): edgerunStream.v0.stream.AppPackage | undefined {
   return appStore.get().apps.get(appId)
 }
 
-export function listApps(): AppPackage[] {
+export function listApps(): edgerunStream.v0.stream.AppPackage[] {
   return Array.from(appStore.get().apps.values())
 }
 
-export function listAppRoutes(appId: string): AppRoute[] {
-  const app = getApp(appId)
-  return app?.routes ?? []
-}
-
-export function listAppActions(appId: string): AppAction[] {
-  const app = getApp(appId)
-  return app?.actions ?? []
-}
-
-export function listAppPipelines(appId: string): AppPipeline[] {
-  const app = getApp(appId)
-  return app?.pipelines ?? []
-}
-
-export function getAppPackageHash(appId: string): string | undefined {
-  const app = getApp(appId)
-  return app?.packageHash
-}
-
-export function getAppPrincipal(appId: string): AppPrincipal | undefined {
+export function getAppPrincipal(appId: string): edgerunStream.v0.stream.AppPrincipal | undefined {
   return appStore.get().principals.get(appId)
 }
 
-export function listGrantsForApp(appId: string): CapabilityGrant[] {
+export function listGrantsForApp(appId: string): edgerunCap.v0.capability.CapabilityGrant[] {
   return appStore.get().grants.get(appId) ?? []
 }
 
@@ -88,10 +62,11 @@ export async function loadApps(): Promise<void> {
 
     if (response.status === 200) {
       const text = new TextDecoder().decode(response.body)
-      const apps = JSON.parse(text) as AppPackage[]
-      const newApps = new Map<string, AppPackage>()
+      const items = JSON.parse(text) as Array<any>
+      const apps = items.map((obj) => edgerunStream.v0.stream.AppPackage.fromObject(obj))
+      const newApps = new Map<string, edgerunStream.v0.stream.AppPackage>()
       for (const app of apps) {
-        newApps.set(app.appId, app)
+        newApps.set(app.name, app)
       }
       appStore.set({
         ...appStore.get(),
@@ -120,7 +95,8 @@ export async function loadAppGrants(appId: string): Promise<void> {
 
     if (response.status === 200) {
       const text = new TextDecoder().decode(response.body)
-      const grants = JSON.parse(text) as CapabilityGrant[]
+      const items = JSON.parse(text) as Array<any>
+      const grants = items.map((obj) => edgerunCap.v0.capability.CapabilityGrant.fromObject(obj))
       const state = appStore.get()
       const newGrants = new Map(state.grants)
       newGrants.set(appId, grants)
@@ -128,44 +104,5 @@ export async function loadAppGrants(appId: string): Promise<void> {
     }
   } catch {
     // Silently fail for grants
-  }
-}
-
-export async function installApp(appId: string): Promise<boolean> {
-  try {
-    const response = await protocolClient.send({
-      method: "POST",
-      path: "/protocol/app/install",
-      body: new TextEncoder().encode(JSON.stringify({ appId })),
-    })
-    if (response.status === 200) {
-      await loadApps()
-      return true
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
-export async function uninstallApp(appId: string): Promise<boolean> {
-  try {
-    const response = await protocolClient.send({
-      method: "POST",
-      path: "/protocol/app/uninstall",
-      body: new TextEncoder().encode(JSON.stringify({ appId })),
-    })
-    if (response.status === 200) {
-      const state = appStore.get()
-      const newApps = new Map(state.apps)
-      newApps.delete(appId)
-      const newGrants = new Map(state.grants)
-      newGrants.delete(appId)
-      appStore.set({ ...state, apps: newApps, grants: newGrants })
-      return true
-    }
-    return false
-  } catch {
-    return false
   }
 }

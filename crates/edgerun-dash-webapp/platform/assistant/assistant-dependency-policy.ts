@@ -54,8 +54,10 @@ export function approveDependency(name: string): void {
   )
   const approved = updated.find((r) => r.name === name && r.status === 'approved')
   dependencyPolicyStore.set({
+    ...state,
     pendingRequests: updated,
     approvedDeps: approved ? [...state.approvedDeps, name] : state.approvedDeps,
+    rejectedDeps: state.rejectedDeps,
   })
 }
 
@@ -66,8 +68,10 @@ export function rejectDependency(name: string): void {
   )
   const rejected = updated.find((r) => r.name === name && r.status === 'rejected')
   dependencyPolicyStore.set({
+    ...state,
     pendingRequests: updated,
     rejectedDeps: rejected ? [...state.rejectedDeps, name] : state.rejectedDeps,
+    approvedDeps: state.approvedDeps,
   })
 }
 

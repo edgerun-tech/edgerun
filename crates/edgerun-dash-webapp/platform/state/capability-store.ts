@@ -1,23 +1,17 @@
 /**
  * Single source of truth for capabilities available and granted across nodes/apps/sessions.
- * Tracks descriptors, grants, selectors, delegation state.
+ * Uses generated protobuf types.
  */
 
 import { atom, computed } from "nanostores"
 import { protocolClient } from "@/platform/protocol/client"
-import type {
-  CapabilityDescriptor,
-  CapabilityGrant,
-  CapabilitySelector,
-  CapabilitySatisfaction,
-  DelegationRecord,
-} from "@/platform/protocol/capabilities"
-import { listAvailableCapabilities, listGrantsForApp } from "@/platform/protocol/capabilities"
+import { edgerun as edgerunCap } from "@/gen/edgerun/v0/capability"
+import { edgerun as edgerunTrust } from "@/gen/edgerun/v0/trust"
 
 export interface CapabilityStoreState {
-  descriptors: Map<string, CapabilityDescriptor>
-  grants: Map<string, CapabilityGrant[]>
-  delegations: Map<string, DelegationRecord>
+  descriptors: Map<string, edgerunCap.v0.capability.CapabilityDescriptor>
+  grants: Map<string, edgerunCap.v0.capability.CapabilityGrant[]>
+  delegations: Map<string, edgerunTrust.v0.trust.DelegationRecord>
   isLoading: boolean
   error: string | null
   lastRefresh: string | null
@@ -43,53 +37,17 @@ export const capabilityCount = computed(
   (s) => s.descriptors.size,
 )
 
-export function listAvailableCapabilitiesByNode(): CapabilityDescriptor[] {
-  return Array.from(capabilityStore.get().descriptors.values())
-}
-
-export function listCapabilitiesByNode(nodeId: string): CapabilityDescriptor[] {
+export function listCapabilitiesByNode(nodeId: string): edgerunCap.v0.capability.CapabilityDescriptor[] {
   return Array.from(capabilityStore.get().descriptors.values()).filter(
-    (d) => d.capabilityId.startsWith(nodeId),
+    (d) => {
+      const providerId = d.provider_node?.node_id
+      return providerId && Buffer.from(providerId).toString("hex").startsWith(nodeId)
+    },
   )
 }
 
-export function listGrantsForAppFromStore(appId: string): CapabilityGrant[] {
+export function listGrantsForAppFromStore(appId: string): edgerunCap.v0.capability.CapabilityGrant[] {
   return capabilityStore.get().grants.get(appId) ?? []
-}
-
-export function listGrantsForSession(sessionId: string): CapabilityGrant[] {
-  return Array.from(capabilityStore.get().grants.values())
-    .flat()
-    .filter((g) => g.granteeId === sessionId && g.granteeType === "session")
-}
-
-export function canSatisfy(
-  selector: CapabilitySelector,
-): CapabilityDescriptor[] {
-  const descriptors = Array.from(
-    capabilityStore.get().descriptors.values(),
-  )
-  return descriptors.filter((cap) => {
-    if (selector.capabilityType && cap.capabilityType !== selector.capabilityType)
-      return false
-    if (selector.riskClass && cap.riskClass !== selector.riskClass)
-      return false
-    if (
-      selector.requiresUserPresence !== undefined &&
-      cap.requiresUserPresence !== selector.requiresUserPresence
-    )
-      return false
-    return true
-  })
-}
-
-export function explainMissingCapabilities(required: string[]): string {
-  const availableIds = new Set(
-    Array.from(capabilityStore.get().descriptors.keys()),
-  )
-  const missing = required.filter((id) => !availableIds.has(id))
-  if (missing.length === 0) return "All capabilities satisfied"
-  return `Missing capabilities: ${missing.join(", ")}`
 }
 
 export async function loadCapabilities(): Promise<void> {
@@ -97,10 +55,16 @@ export async function loadCapabilities(): Promise<void> {
   capabilityStore.set({ ...state, isLoading: true, error: null })
 
   try {
-    const descriptors = await listAvailableCapabilities()
-    const newDescriptors = new Map<string, CapabilityDescriptor>()
+    const response = await protocolClient.send({ method: "GET", path: "/protocol/capabilities" })
+    if (response.status !== 200) throw new Error(`Failed: ${response.status}`)
+
+    const text = new TextDecoder().decode(response.body)
+    const items: Array<any> = JSON.parse(text)
+    const descriptors = items.map((obj) => edgerunCap.v0.capability.CapabilityDescriptor.fromObject(obj))
+    const newDescriptors = new Map<string, edgerunCap.v0.capability.CapabilityDescriptor>()
     for (const desc of descriptors) {
-      newDescriptors.set(desc.capabilityId, desc)
+      const id = Buffer.from(desc.capability_id).toString("hex")
+      newDescriptors.set(id, desc)
     }
     capabilityStore.set({
       ...capabilityStore.get(),
@@ -112,46 +76,27 @@ export async function loadCapabilities(): Promise<void> {
     capabilityStore.set({
       ...capabilityStore.get(),
       isLoading: false,
-      error:
-        err instanceof Error ? err.message : "Failed to load capabilities",
+      error: err instanceof Error ? err.message : "Failed to load capabilities",
     })
   }
 }
 
 export async function loadGrantsForApp(appId: string): Promise<void> {
   try {
-    const grants = await listGrantsForApp(appId)
+    const response = await protocolClient.send({
+      method: "GET",
+      path: `/protocol/app/${appId}/grants`,
+    })
+    if (response.status !== 200) return
+
+    const text = new TextDecoder().decode(response.body)
+    const items: Array<any> = JSON.parse(text)
+    const grants = items.map((obj) => edgerunCap.v0.capability.CapabilityGrant.fromObject(obj))
     const state = capabilityStore.get()
     const newGrants = new Map(state.grants)
     newGrants.set(appId, grants)
     capabilityStore.set({ ...state, grants: newGrants })
   } catch {
     // Silently fail
-  }
-}
-
-export function getCapabilitySatisfaction(
-  appId: string,
-  actionId: string,
-): CapabilitySatisfaction {
-  const appGrants = listGrantsForAppFromStore(appId)
-  const appCapabilities = appGrants.map((g) => g.capabilityId)
-  const available = Array.from(
-    capabilityStore.get().descriptors.keys(),
-  )
-
-  const missing = appCapabilities.filter((id) => !available.includes(id))
-
-  return {
-    satisfied: missing.length === 0,
-    missing,
-    requiresApproval: false,
-    requiresExternalAuth: false,
-    impossible: false,
-    expired: false,
-    explanation:
-      missing.length === 0
-        ? "All capabilities satisfied"
-        : `Missing: ${missing.join(", ")}`,
   }
 }

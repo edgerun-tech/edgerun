@@ -1,7 +1,12 @@
+/**
+ * WASM cache store - manages cached WASM modules.
+ * Uses local UI types, not protocol types.
+ */
+
 import { atom, computed } from "nanostores"
 import { fetchWasmModule, WasmSource, type WasmFetchOptions } from "@/lib/wasm/wasm-fetcher"
 
-export interface AppPackage {
+export interface WasmPackageDraft {
   name: string
   entry: string
   wasmObjectId: string
@@ -51,7 +56,7 @@ export function removeWasm(name: string) {
   }
 }
 
-export async function fetchWasmPackage(pkg: AppPackage): Promise<CachedWasm> {
+export async function fetchWasmPackage(pkg: WasmPackageDraft): Promise<CachedWasm> {
   const existing = getWasmFromCache(pkg.name)
   if (existing) return existing
 

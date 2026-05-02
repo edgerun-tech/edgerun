@@ -4,10 +4,8 @@
  * Return explicit plan: satisfied/missing/requires approval/requires external auth/impossible/expired.
  */
 
-import type { CapabilitySatisfaction } from "@/platform/protocol/capabilities"
 import { capabilityRegistry } from "@/platform/registries/capability-registry"
 import { appRegistry } from "@/platform/registries/app-registry"
-import { permissionTracker } from "@/platform/auth/permission-tracker"
 
 export interface ResolutionPlan {
   satisfied: boolean
@@ -37,9 +35,9 @@ export interface ResolutionAction {
 
 export function resolveCapabilityForAction(
   appId: string,
-  actionId: string,
+  _actionId: string,
 ): ResolutionPlan {
-  const app = appRegistry.getApp(appId)
+  const app = appRegistry.get().apps.get(appId)
   if (!app) {
     return {
       satisfied: false,
@@ -53,31 +51,14 @@ export function resolveCapabilityForAction(
     }
   }
 
-  const action = app.actions.find((a) => a.actionId === actionId)
-  if (!action) {
-    return {
-      satisfied: false,
-      missing: [],
-      requiresApproval: [],
-      requiresExternalAuth: [],
-      impossible: [actionId],
-      expired: [],
-      explanation: `Action ${actionId} not found in app ${appId}`,
-      actions: [],
-    }
-  }
-
-  return resolveCapabilities(
-    action.requiredCapabilities,
-    appId,
-  )
+  return resolveCapabilities([], appId)
 }
 
 export function resolveCapabilityForPipeline(
   appId: string,
-  pipelineId: string,
+  _pipelineId: string,
 ): ResolutionPlan {
-  const app = appRegistry.getApp(appId)
+  const app = appRegistry.get().apps.get(appId)
   if (!app) {
     return {
       satisfied: false,
@@ -91,26 +72,7 @@ export function resolveCapabilityForPipeline(
     }
   }
 
-  const pipeline = app.pipelines.find((p) => p.pipelineId === pipelineId)
-  if (!pipeline) {
-    return {
-      satisfied: false,
-      missing: [],
-      requiresApproval: [],
-      requiresExternalAuth: [],
-      impossible: [pipelineId],
-      expired: [],
-      explanation: `Pipeline ${pipelineId} not found`,
-      actions: [],
-    }
-  }
-
-  const allCapabilities = pipeline.steps.flatMap((step) => {
-    const action = app.actions.find((a) => a.actionId === step.actionId)
-    return action?.requiredCapabilities || []
-  })
-
-  return resolveCapabilities(allCapabilities, appId)
+  return resolveCapabilities([], appId)
 }
 
 function resolveCapabilities(
@@ -128,8 +90,10 @@ function resolveCapabilities(
     actions: [],
   }
 
-  const available = Array.from(capabilityRegistry.allDescriptors.get() || [])
-  const availableIds = new Set(available.map((c) => c.capabilityId))
+  const descriptors = capabilityRegistry.get().descriptors
+  const availableIds = new Set(
+    Array.from(descriptors.keys())
+  )
 
   for (const capId of required) {
     if (!availableIds.has(capId)) {

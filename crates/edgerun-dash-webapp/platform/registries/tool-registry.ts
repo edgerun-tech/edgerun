@@ -18,9 +18,8 @@ import { atom, computed } from "nanostores"
 import type { RiskClass } from "@/platform/assitant/assitant-types"
 import {
   capabilityRegistry,
-  resolveCapabilityForAction,
 } from "@/platform/registries/capability-registry"
-import { approvalTracker } from "@/platform/auth/approval-tracker"
+import { approvalTracker, addApproval } from "@/platform/auth/approval-tracker"
 
 export interface ToolDefinition {
   toolId: string
@@ -220,7 +219,7 @@ async function createApprovalForToolCall(
   const preview = tool.commandPreview?.(input) || `Execute ${tool.name}`
 
   const id = `approval-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  approvalTracker.addApproval({
+  addApproval({
     id,
     toolId,
     input,

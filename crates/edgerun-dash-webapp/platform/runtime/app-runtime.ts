@@ -4,14 +4,15 @@
  */
 
 import { atom, computed } from "nanostores"
-import type { AppPackage } from "@/platform/protocol/apps"
-import { wasmRegistry } from "./wasm-registry"
+import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
+import { edgerun } from "@/gen/edgerun/v0/common"
+import { wasmRegistry, loadWasmForApp } from "./wasm-registry"
 
 export type RuntimeStatus = "stopped" | "starting" | "running" | "stopping" | "error"
 
 export interface RunningApp {
   appId: string
-  appPackage: AppPackage
+  appPackage: edgerunStream.v0.stream.AppPackage
   status: RuntimeStatus
   startedAt?: string
   pid?: number
@@ -35,25 +36,26 @@ export const runningAppsList = computed(appRuntime, (s) =>
 )
 
 export async function startApp(
-  app: AppPackage,
+  app: edgerunStream.v0.stream.AppPackage,
 ): Promise<RunningApp | null> {
   const state = appRuntime.get()
+  const appId = Buffer.from(app.wasm_object?.object_id || new Uint8Array(0)).toString("hex")
 
   // Load WASM if needed
-  const wasmModule = await wasmRegistry.loadWasmForApp(
-    app.appId,
-    app.wasmObjectRef,
+  const wasmModule = await loadWasmForApp(
+    appId,
+    app.wasm_object || new edgerun.v0.common.ObjectRef(),
   )
 
   if (!wasmModule) {
     const newErrors = new Map(state.runtimeErrors)
-    newErrors.set(app.appId, "Failed to load WASM module")
+    newErrors.set(appId, "Failed to load WASM module")
     appRuntime.set({ ...state, runtimeErrors: newErrors })
     return null
   }
 
   const runningApp: RunningApp = {
-    appId: app.appId,
+    appId,
     appPackage: app,
     status: "running",
     startedAt: new Date().toISOString(),
@@ -61,7 +63,7 @@ export async function startApp(
   }
 
   const newRunning = new Map(state.runningApps)
-  newRunning.set(app.appId, runningApp)
+  newRunning.set(appId, runningApp)
   appRuntime.set({ ...state, runningApps: newRunning })
 
   return runningApp

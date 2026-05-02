@@ -5,27 +5,19 @@
 import { useStore } from "@nanostores/react"
 import {
   commandStore,
-  pendingCommandCount,
+  pendingCommands,
   addPendingCommand,
-  updateCommandResult,
-  getCommandResult,
-  isCommandPending,
 } from "@/platform/state/command-store"
-import type { CommandEnvelope, CommandResult } from "@/platform/protocol/commands"
+import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
 
 export function useCommands() {
   const store = useStore(commandStore)
-  const pendingCount = useStore(pendingCommandCount)
+  const pending = useStore(pendingCommands)
 
   return {
-    pendingCommands: store.pendingCommands,
-    commandHistory: store.commandHistory,
-    pendingCount,
+    pending,
     isLoading: store.isLoading,
     error: store.error,
     addPending: addPendingCommand,
-    updateResult: updateCommandResult,
-    getResult: getCommandResult,
-    isPending: isCommandPending,
   }
 }

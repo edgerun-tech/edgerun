@@ -1,16 +1,15 @@
 /**
  * Single registry for Wasm artifacts.
- * Resolves wasm_object ObjectRef, caches wasm bytes/blob URLs, validates hashes.
+ * Resolves wasm_object ObjectRef, caches wasm bytes/blobURLs, validates hashes.
  */
 
 import { atom, computed } from "nanostores"
-import type { ObjectRef } from "@/platform/protocol/refs"
-import { fetchObject } from "@/platform/protocol/objects"
+import { edgerun } from "@/gen/edgerun/v0/common"
 import { protocolClient } from "@/platform/protocol/client"
 
 export interface WasmModule {
   name: string
-  objectRef: ObjectRef
+  objectRef: edgerun.v0.common.ObjectRef
   wasmUrl: string
   wasmBytes: Uint8Array
   hash?: string
@@ -35,22 +34,28 @@ export const allWasmModules = computed(wasmRegistry, (s) =>
 )
 
 export function resolveWasmObject(
-  objectRef: ObjectRef,
+  objectRef: edgerun.v0.common.ObjectRef,
 ): WasmModule | undefined {
   return Array.from(wasmRegistry.get().modules.values()).find(
-    (m) => m.objectRef.objectId === objectRef.objectId,
+    (m) => m.objectRef.object_id.toString() === objectRef.object_id.toString(),
   )
 }
 
 export async function loadWasmForApp(
   appId: string,
-  objectRef: ObjectRef,
+  objectRef: edgerun.v0.common.ObjectRef,
 ): Promise<WasmModule | null> {
   const existing = resolveWasmObject(objectRef)
   if (existing) return existing
 
   try {
-    const bytes = await fetchObject(objectRef)
+    const response = await protocolClient.send({
+      method: "GET",
+      path: `/protocol/object/${Buffer.from(objectRef.object_id).toString("hex")}`,
+    })
+    if (response.status !== 200) throw new Error(`Failed: ${response.status}`)
+    const bytes = response.body
+
     const blob = new Blob([bytes], { type: "application/wasm" })
     const url = URL.createObjectURL(blob)
     const hash = await crypto.subtle
@@ -75,7 +80,7 @@ export async function loadWasmForApp(
     const newModules = new Map(state.modules)
     newModules.set(appId, module)
     const newCache = new Map(state.cache)
-    newCache.set(objectRef.objectId, bytes)
+    newCache.set(Buffer.from(objectRef.object_id).toString("hex"), bytes)
     wasmRegistry.set({
       modules: newModules,
       cache: newCache,
@@ -92,8 +97,8 @@ export function getWasmUrl(appId: string): string | undefined {
   return wasmRegistry.get().modules.get(appId)?.wasmUrl
 }
 
-export function getWasmBytes(objectId: string): Uint8Array | undefined {
-  return wasmRegistry.get().cache.get(objectId)
+export function getWasmBytes(objectIdHex: string): Uint8Array | undefined {
+  return wasmRegistry.get().cache.get(objectIdHex)
 }
 
 export function removeWasm(appId: string): void {
@@ -106,7 +111,7 @@ export function removeWasm(appId: string): void {
   newModules.delete(appId)
   const newCache = new Map(state.cache)
   if (module) {
-    newCache.delete(module.objectRef.objectId)
+    newCache.delete(Buffer.from(module.objectRef.object_id).toString("hex"))
   }
   wasmRegistry.set({
     modules: newModules,
@@ -115,10 +120,10 @@ export function removeWasm(appId: string): void {
 }
 
 export async function validateWasmHash(
-  objectId: string,
+  objectIdHex: string,
   expectedHash: string,
 ): Promise<boolean> {
-  const bytes = wasmRegistry.get().cache.get(objectId)
+  const bytes = wasmRegistry.get().cache.get(objectIdHex)
   if (!bytes) return false
 
   const actualHash = await crypto.subtle

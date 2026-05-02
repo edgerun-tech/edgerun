@@ -20,7 +20,6 @@ x11 = ["eframe/x11"]
 external_compositor = ["wayland", "eframe/glow"]
 
 [dependencies]
-edgerun-ui = { workspace = true }
 edgerun-proto = { workspace = true }
 edgerun-core = { workspace = true }
 edgerun-node = { workspace = true }

@@ -9,13 +9,7 @@ import {
   appCount,
   getApp,
   listApps,
-  listAppRoutes,
-  listAppActions,
-  listAppPipelines,
-  getAppPackageHash,
   loadApps,
-  installApp,
-  uninstallApp,
 } from "@/platform/state/app-store"
 import { appRegistry } from "@/platform/registries/app-registry"
 
@@ -31,13 +25,7 @@ export function useApps() {
     error: store.error,
     getApp,
     listApps,
-    listAppRoutes,
-    listAppActions,
-    listAppPipelines,
-    getAppPackageHash,
     refresh: loadApps,
-    install: installApp,
-    uninstall: uninstallApp,
     registry: {
       getApp: appRegistry.getApp,
       listApps: appRegistry.listApps,

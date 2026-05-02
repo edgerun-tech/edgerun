@@ -10,7 +10,12 @@ plugins:
     opt:
       - paths=source_relative
     strategy: all
-  - plugin: buf.build/protocolbuffers/prost:v0.14.1
+  - local: protoc-gen-ts
+    out: crates/edgerun-dash-webapp/gen
+    opt:
+      - output_types_only
+    strategy: all
+  - local: protoc-gen-prost
     out: crates/edgerun-proto/src/gen
     opt:
       - enable_type_names

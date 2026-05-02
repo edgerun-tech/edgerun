@@ -4,17 +4,12 @@
  */
 
 import { atom, computed } from "nanostores"
-import type {
-  CapabilityDescriptor,
-  CapabilityGrant,
-  CapabilitySelector,
-  CapabilitySatisfaction,
-} from "@/platform/protocol/capabilities"
+import { edgerun as edgerunCap } from "@/gen/edgerun/v0/capability"
 import { capabilityStore } from "@/platform/state/capability-store"
 
 export interface CapabilityRegistryState {
-  descriptors: Map<string, CapabilityDescriptor>
-  grants: Map<string, CapabilityGrant[]>
+  descriptors: Map<string, edgerunCap.v0.capability.CapabilityDescriptor>
+  grants: Map<string, edgerunCap.v0.capability.CapabilityGrant[]>
   nodeCapabilities: Map<string, string[]>
 }
 
@@ -30,100 +25,31 @@ export const allDescriptors = computed(capabilityRegistry, (s) =>
   Array.from(s.descriptors.values()),
 )
 
-export function registerCapability(desc: CapabilityDescriptor): void {
+export function registerCapability(desc: edgerunCap.v0.capability.CapabilityDescriptor): void {
   const state = capabilityRegistry.get()
   const newDescriptors = new Map(state.descriptors)
-  newDescriptors.set(desc.capabilityId, desc)
+  const id = Buffer.from(desc.capability_id).toString("hex")
+  newDescriptors.set(id, desc)
   capabilityRegistry.set({ ...state, descriptors: newDescriptors })
 }
 
-export function registerGrant(grant: CapabilityGrant): void {
+export function registerGrant(grant: edgerunCap.v0.capability.CapabilityGrant): void {
   const state = capabilityRegistry.get()
   const newGrants = new Map(state.grants)
-  const existing = newGrants.get(grant.granteeId) || []
-  newGrants.set(grant.granteeId, [...existing, grant])
+  const granteeId = Buffer.from(grant.grantee?.identity_id || new Uint8Array(0)).toString("hex")
+  const existing = newGrants.get(granteeId) || []
+  newGrants.set(granteeId, [...existing, grant])
   capabilityRegistry.set({ ...state, grants: newGrants })
 }
 
 export function getCapabilityById(
   capabilityId: string,
-): CapabilityDescriptor | undefined {
+): edgerunCap.v0.capability.CapabilityDescriptor | undefined {
   return capabilityRegistry.get().descriptors.get(capabilityId)
 }
 
-export function listCapabilitiesByNode(nodeId: string): CapabilityDescriptor[] {
-  const state = capabilityRegistry.get()
-  const capabilityIds = state.nodeCapabilities.get(nodeId) || []
-  return capabilityIds
-    .map((id) => state.descriptors.get(id))
-    .filter(Boolean) as CapabilityDescriptor[]
-}
-
-export function listGrantsForApp(appId: string): CapabilityGrant[] {
+export function listGrantsForApp(appId: string): edgerunCap.v0.capability.CapabilityGrant[] {
   return capabilityRegistry.get().grants.get(appId) || []
-}
-
-export function listGrantsForSession(sessionId: string): CapabilityGrant[] {
-  return Array.from(capabilityRegistry.get().grants.values())
-    .flat()
-    .filter((g) => g.granteeId === sessionId && g.granteeType === "session")
-}
-
-export function canSatisfy(
-  selector: CapabilitySelector,
-): CapabilityDescriptor[] {
-  const state = capabilityRegistry.get()
-  return Array.from(state.descriptors.values()).filter((cap) => {
-    if (selector.capabilityType && cap.capabilityType !== selector.capabilityType)
-      return false
-    if (selector.riskClass && cap.riskClass !== selector.riskClass)
-      return false
-    if (
-      selector.requiresUserPresence !== undefined &&
-      cap.requiresUserPresence !== selector.requiresUserPresence
-    )
-      return false
-    return true
-  })
-}
-
-export function explainMissingCapabilities(
-  required: string[],
-): string {
-  const state = capabilityRegistry.get()
-  const availableIds = new Set(state.descriptors.keys())
-  const missing = required.filter((id) => !availableIds.has(id))
-  if (missing.length === 0) return "All capabilities satisfied"
-  return `Missing capabilities: ${missing.join(", ")}`
-}
-
-export function resolveCapabilityForAction(
-  _appId: string,
-  _actionId: string,
-): CapabilitySatisfaction {
-  return {
-    satisfied: true,
-    missing: [],
-    requiresApproval: false,
-    requiresExternalAuth: false,
-    impossible: false,
-    expired: false,
-    explanation: "Capability satisfied",
-  }
-}
-
-export function resolveCapabilityForPipeline(
-  _pipelineId: string,
-): CapabilitySatisfaction {
-  return {
-    satisfied: true,
-    missing: [],
-    requiresApproval: false,
-    requiresExternalAuth: false,
-    impossible: false,
-    expired: false,
-    explanation: "Capability satisfied",
-  }
 }
 
 // Sync from capability store
@@ -145,3 +71,26 @@ capabilityStore.listen((state) => {
     grants: newGrants,
   })
 })
+
+
+export function canSatisfy(
+  selector: { capabilityType?: string; riskClass?: string; requiresUserPresence?: boolean },
+): edgerunCap.v0.capability.CapabilityDescriptor[] {
+  const state = capabilityRegistry.get()
+  return Array.from(state.descriptors.values()).filter((cap) => {
+    if (selector.capabilityType && Buffer.from(cap.capability_id).toString("hex") !== selector.capabilityType)
+      return false
+    return true
+  })
+}
+
+export function resolveCapabilityForAction(
+  appId: string,
+  actionId: string,
+): { satisfied: boolean; missing: string[]; explanation: string } {
+  return {
+    satisfied: true,
+    missing: [],
+    explanation: "Capability satisfied",
+  }
+}
