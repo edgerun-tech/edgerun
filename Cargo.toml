@@ -122,6 +122,7 @@ members = [
   "crates/edgerun-exchange",
   "crates/edgerun-exchange-api",
   "crates/edgerun-exchange-worker",
+  "crates/edgerun-crate-analyzer",
 ]
 
 [workspace.package]

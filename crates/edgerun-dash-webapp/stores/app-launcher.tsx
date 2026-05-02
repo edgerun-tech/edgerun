@@ -17,6 +17,8 @@ import {
   Wallet,
   Calculator,
   Activity,
+  Sparkles,
+  Workflow,
 } from "lucide-react"
 import { Terminal, generateMockLogs } from "@/components/os/terminal"
 import { CodeRunner } from "@/components/os/code-runner"
@@ -28,6 +30,8 @@ import { ChatApp } from "@/components/os/chat-app"
 import { WalletApp } from "@/components/os/wallet-app"
 import { CalculatorApp } from "@/components/os/calculator-app"
 import { HelpApp } from "@/components/os/help-app"
+import { AIAssistant } from "@/components/os/ai-assistant"
+import { WorkflowBuilder } from "@/components/os/workflow-builder"
 // AppStudio removed - will be rebuilt using platform services
 
 export function getAppIcon(appId: string): React.ReactNode {
@@ -48,6 +52,8 @@ export function getAppIcon(appId: string): React.ReactNode {
     case "calculator": return <Calculator className="h-4 w-4" />
     case "help": return <HelpCircle className="h-4 w-4" />
     case "resource-monitor": return <Activity className="h-4 w-4" />
+    case "ai-assistant": return <Sparkles className="h-4 w-4" />
+    case "workflow-builder": return <Workflow className="h-4 w-4" />
     case "wasm-hello": return <Cpu className="h-4 w-4" />
     case "wasm-calculator": return <Calculator className="h-4 w-4" />
     default: return <Grid3x3 className="h-4 w-4" />
@@ -81,6 +87,10 @@ export function buildAppComponent(app: AppDefinition): React.ReactNode {
       return <CalculatorApp />
     case "help":
       return <HelpApp />
+    case "ai-assistant":
+      return <AIAssistant />
+    case "workflow-builder":
+      return <WorkflowBuilder onClose={() => {}} />
     case "app-studio":
       return <div className="p-4 text-muted-foreground">App Studio coming soon</div>
     case "wasm-hello":
@@ -116,6 +126,8 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): Open
     case "wallet": defaultSize = { width: 360, height: 520 }; break
     case "calculator": defaultSize = { width: 300, height: 420 }; break
     case "help": defaultSize = { width: 420, height: 480 }; break
+    case "ai-assistant": defaultSize = { width: 500, height: 550 }; break
+    case "workflow-builder": defaultSize = { width: 900, height: 600 }; break
     case "wasm-hello": defaultSize = { width: 700, height: 450 }; break
     default: if (app.isWasm) defaultSize = { width: 700, height: 450 }; break
   }

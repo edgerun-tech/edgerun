@@ -7,9 +7,6 @@ const nextConfig = {
     unoptimized: true,
   },
   output: "export",
-  font: {
-    fontFamily: false,
-  },
 }
 
 export default nextConfig

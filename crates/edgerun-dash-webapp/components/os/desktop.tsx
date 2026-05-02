@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useCallback } from "react"
 import { useStore } from "@nanostores/react"
 import { cn } from "@/lib/utils"
 import { Window } from "./window"
 import { TopBar } from "./top-bar"
 import { AppStore, availableApps, type AppDefinition } from "./app-store"
+import { launchApp, getAppIcon } from "@/stores/app-launcher"
 import { Terminal, generateMockLogs } from "./terminal"
 import { CodeRunner } from "./code-runner"
 import { ResourceMonitor } from "./resource-monitor"
@@ -17,6 +18,7 @@ import { CallingApp } from "./calling-app"
 import { ChatApp } from "./chat-app"
 import { WalletApp } from "./wallet-app"
 import { CalculatorApp } from "./calculator-app"
+import { AIAssistant } from "./ai-assistant"
 import { WasmAppWindow } from "@/components/wasm-app-window"
 import { removeWasm } from "@/stores/wasm-store"
 import { StageManager } from "./stage-manager"
@@ -43,7 +45,7 @@ import {
   focusWindow,
   type OpenWindowDef,
 } from "@/stores/desktop-store"
-import { launchApp, launchAppById, handleCloseWindow, buildAppComponent, getAppIcon } from "@/stores/app-launcher"
+import { launchAppById, handleCloseWindow, buildAppComponent } from "@/stores/app-launcher"
 import { startSystemStatsSimulation, generateInitialLogs } from "@/stores/system-store"
 
 export function Desktop() {
@@ -60,6 +62,20 @@ export function Desktop() {
   const widgetVisible = useStore(widgetVisibleStore)
 
   const showDesktop = auth.authState === "authenticated" || auth.authState === "guest"
+
+  // Keyboard shortcuts
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "a") {
+      e.preventDefault()
+      const aiApp = availableApps.find(a => a.id === "ai-assistant")
+      if (aiApp) launchApp(aiApp)
+    }
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [handleKeyDown])
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
@@ -164,7 +180,7 @@ export function Desktop() {
 
               <div className="mx-1 h-6 w-px bg-border" />
 
-               {["app-store", "app-studio", "contacts", "calling", "chat", "wallet", "calculator", "file-browser", "terminal", "code-runner", "wasm-calculator", "wasm-hello", "db-explorer", "network-monitor", "git-sync", "web-server", "compute-node", "resource-monitor", "help"].map((appId) => {
+               {["app-store", "app-studio", "ai-assistant", "workflow-builder", "contacts", "calling", "chat", "wallet", "calculator", "file-browser", "terminal", "code-runner", "wasm-calculator", "wasm-hello", "db-explorer", "network-monitor", "git-sync", "web-server", "compute-node", "resource-monitor", "help"].map((appId) => {
                 const app = availableApps.find((a) => a.id === appId)
                 if (!app) return null
                 const isRunning = windows.some((w) => w.appId === app.id)

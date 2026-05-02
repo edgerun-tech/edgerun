@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Cpu, HardDrive, Wifi, WifiOff, Activity, Server, Lock } from "lucide-react"
+import { Cpu, HardDrive, Wifi, WifiOff, Activity, Server, Lock, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { EdgerunLogo } from "./edgerun-logo"
+import { launchApp } from "@/stores/app-launcher"
+import { availableApps } from "./app-store"
 
 interface TopBarProps {
   nodeCount: number
@@ -112,6 +114,20 @@ export function TopBar({ nodeCount, activeSessions, ramUsage, isConnected, usern
               })
             : "--:--:--"}
         </div>
+
+        {/* AI Assistant Button */}
+        <button
+          onClick={() => {
+            const aiApp = availableApps.find(a => a.id === "ai-assistant")
+            if (aiApp) launchApp(aiApp)
+          }}
+          title="AI Assistant (Ctrl+Shift+A)"
+          className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/20"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          <span className="font-medium">AI</span>
+          <span className="text-[10px] opacity-60">⌘⇧A</span>
+        </button>
 
         {/* User + Lock */}
         {isGuest && onSignIn && (

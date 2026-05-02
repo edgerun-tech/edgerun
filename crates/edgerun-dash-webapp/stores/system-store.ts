@@ -1,5 +1,7 @@
 import { systemStatsStore } from "./desktop-store"
 
+export { systemStatsStore }
+
 let statsInterval: ReturnType<typeof setInterval> | null = null
 
 export function startSystemStatsSimulation() {

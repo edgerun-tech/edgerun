@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useStore } from "@nanostores/react"
-import { Terminal, Code2, Database, Globe, FileText, GitBranch, Cpu, Network, HelpCircle, Users, Phone, MessageSquare, Wallet, Calculator, Upload, Trash2, Package, Lock, Shield, Activity } from "lucide-react"
+import { Terminal, Code2, Database, Globe, FileText, GitBranch, Cpu, Network, HelpCircle, Users, Phone, MessageSquare, Wallet, Calculator, Upload, Trash2, Package, Lock, Shield, Activity, Sparkles, Workflow } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WasmInstaller, type WasmInstallResult } from "@/components/wasm-installer"
 import { useApps } from "@/platform/ui/useApps"
@@ -140,6 +140,24 @@ export const availableApps: AppDefinition[] = [
     cpu: "0.2%",
     price: "Free",
     requiredCapabilities: ["identity"],
+  },
+  {
+    id: "ai-assistant",
+    name: "AI Assistant",
+    description: "LLM-powered helper",
+    icon: <Sparkles className="h-5 w-5" />,
+    ram: "128MB",
+    cpu: "1.0%",
+    price: "Free",
+  },
+  {
+    id: "workflow-builder",
+    name: "Workflow Builder",
+    description: "Create & manage automation workflows",
+    icon: <Workflow className="h-5 w-5" />,
+    ram: "64MB",
+    cpu: "0.5%",
+    price: "Free",
   },
   {
     id: "wallet",
