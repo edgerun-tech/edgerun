@@ -93,8 +93,10 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
     <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
       Parameters
     </h4>
-    <div className="rounded-md bg-muted/50">
-      <pre><code>JSON.stringify(input, null, 2)} language="json" />
+    <div className="rounded-md bg-muted/50 p-3">
+      <pre className="text-xs overflow-x-auto">
+        <code>{JSON.stringify(input, null, 2)}</code>
+      </pre>
     </div>
   </div>
 )
@@ -112,9 +114,17 @@ export const ToolOutput = ({ className, output, errorText, ...props }: ToolOutpu
   let Output = <div>{output as ReactNode}</div>
 
   if (typeof output === "object" && !isValidElement(output)) {
-    Output = <pre><code>JSON.stringify(output, null, 2)} language="json" />
+    Output = (
+      <pre className="text-xs overflow-x-auto">
+        <code>{JSON.stringify(output, null, 2)}</code>
+      </pre>
+    )
   } else if (typeof output === "string") {
-    Output = <pre><code>output} language="json" />
+    Output = (
+      <pre className="text-xs overflow-x-auto">
+        <code>{output}</code>
+      </pre>
+    )
   }
 
   return (

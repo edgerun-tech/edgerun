@@ -6,7 +6,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: "export",
+  // Removed "output: export" to support API routes for Gmail OAuth
   devIndicators: false,
 }
 

@@ -30,6 +30,7 @@ import {
   Sparkles,
   Workflow,
   Package,
+  Mail,
 } from "lucide-react"
 
 /**
@@ -55,6 +56,7 @@ export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   calculator: <Calculator className="h-5 w-5" />,
   help: <HelpCircle className="h-5 w-5" />,
   "wasm-generic": <Package className="h-5 w-5" />,
+  gmail: <Mail className="h-5 w-5" />,
 }
 
 export function getIconById(iconId: string): React.ReactNode {
@@ -268,6 +270,18 @@ export const BUILTIN_APPS: AppDefinition[] = [
     kind: "builtin",
     source: "builtin",
     componentKey: "help",
+    requiredCapabilityIds: [],
+    optionalCapabilityIds: [],
+    status: "available",
+  },
+  {
+    appId: "gmail",
+    name: "Gmail",
+    description: "Read and send emails via Google",
+    iconId: "gmail",
+    kind: "builtin",
+    source: "builtin",
+    componentKey: "gmail",
     requiredCapabilityIds: [],
     optionalCapabilityIds: [],
     status: "available",

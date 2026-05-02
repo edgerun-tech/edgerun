@@ -1,11 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Cpu, HardDrive, Wifi, WifiOff, Activity, Server, Lock, Sparkles } from "lucide-react"
+import { HardDrive, Wifi, WifiOff, Activity, Server, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { EdgerunLogo } from "./edgerun-logo"
-import { launchApp } from "@/stores/app-launcher"
-import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
 
 interface TopBarProps {
   nodeCount: number
@@ -33,7 +31,7 @@ export function TopBar({
 
   return (
     <div className="flex h-10 items-center gap-3 border-b border-[var(--window-border)] px-4">
-      <EdgerunLogo className="h-5 w-5 text-primary" />
+      <EdgerunLogo className="text-primary" size="sm" />
 
       <div className="ml-4 flex items-center gap-3 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1">
@@ -62,22 +60,11 @@ export function TopBar({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        {/* Only render username after mount to avoid hydration mismatch */}
         {mounted && username && (
           <span className="text-xs text-muted-foreground">
             {isGuest ? "Guest" : username}
           </span>
         )}
-        <button
-          onClick={() => {
-            const app = getBuiltinApp("ai-assistant")
-            if (app) launchApp(app)
-          }}
-          className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-          title="AI Assistant"
-        >
-          <Sparkles className="h-3 w-3" />
-        </button>
         {mounted && username ? (
           <button
             onClick={onLock}

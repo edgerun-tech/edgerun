@@ -13,8 +13,10 @@ import { DemoChatApp as ChatApp } from "@/components/os/chat-app"
 import { WalletApp } from "@/components/os/wallet-app"
 import { CalculatorApp } from "@/components/os/calculator-app"
 import { HelpApp } from "@/components/os/help-app"
-import { AIAssistant } from "@/components/os/ai-assistant"
+import { AIAssistant } from "@/components/os/ai-assitant"
 import { WorkflowBuilder } from "@/components/os/workflow-builder"
+import { FileManager } from "@/components/os/file-manager"
+import { SettingsApp } from "@/components/os/settings-app"
 import { BUILTIN_ICON_MAP } from "@/platform/registries/builtin-app-registry"
 import type { AppDefinition } from "@/platform/types/app-definition"
 
@@ -61,6 +63,10 @@ function resolveComponent(app: AppDefinition): React.ReactNode {
       return <AIAssistant />
     case "workflow-builder":
       return <WorkflowBuilder onClose={() => {}} />
+    case "file-browser":
+      return <FileManager />
+    case "settings":
+      return <SettingsApp />
     case "app-studio":
       return <div className="p-4 text-muted-foreground">App Studio coming soon</div>
     default: {
@@ -91,7 +97,7 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): Open
   const windows = windowsStore.get()
   const offset = (windows.length % 8) * 30
   const position = { x: 150 + offset, y: 80 + offset }
-  const windowId = `window-${app.appId}-${Date.now()}`
+  const windowId = `window-${app.appId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
   const defaultSize = getDefaultSize(app.appId)
 

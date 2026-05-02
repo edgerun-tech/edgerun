@@ -92,7 +92,7 @@ export function AssistantApp() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col-reverse">
       {/* Header */}
       <div className="flex h-10 flex-shrink-0 items-center gap-2 border-b border-[var(--window-border)] px-4">
         <Sparkles className="h-4 w-4 text-primary" />
@@ -123,7 +123,7 @@ export function AssistantApp() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-4">
-          {session.messages.map((msg) => (
+          {[...session.messages].reverse().map((msg) => (
             <div
               key={msg.id}
               className={cn(

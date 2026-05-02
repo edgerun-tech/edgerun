@@ -29,8 +29,7 @@ export async function GET(req: NextRequest) {
 
   const clientId = process.env.GMAIL_CLIENT_ID
   const clientSecret = process.env.GMAIL_CLIENT_SECRET
-  const redirectUri = process.env.GMAIL_REDIRECT_URI ||
-    `${req.nextUrl.origin}/api/gmail/callback`
+  const redirectUri = process.env.GMAIL_REDIRECT_URI || "http://127.0.0.1/api/gmail/callback"
 
   if (!clientId || !clientSecret) {
     return NextResponse.json(
