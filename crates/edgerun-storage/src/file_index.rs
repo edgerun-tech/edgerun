@@ -242,28 +242,6 @@ pub struct ControllerChange {
     pub event_seq: i64,
 }
 
-/// Persistent work accounting record.
-/// Stores the serialized WorkAccounting bytes along with query indexes.
-#[derive(Clone)]
-pub struct WorkAccountingRecord {
-    /// Serialized WorkAccounting (from edgerun_core::accounting)
-    pub data: Vec<u8>,
-    /// SHA-256 hash of the record (unique identifier)
-    pub record_hash: String,
-    /// Requester identity (for indexing)
-    pub requester_hex: String,
-    /// Provider identity (for indexing)
-    pub provider_hex: String,
-    /// Workload class string
-    pub workload_class: String,
-    /// Status string
-    pub status: String,
-    /// Start timestamp in µs
-    pub started_at_us: u64,
-    /// Billable compute RC-µs
-    pub billable_rc_us: u64,
-}
-
 // ===========================================================================
 // FileIndex
 // ===========================================================================
@@ -281,7 +259,6 @@ pub struct FileIndex {
     delegations: RwLock<HashMap<String, DelegationRecord>>,
     revocations: RwLock<HashMap<String, RevocationRecord>>,
     credentials: RwLock<HashMap<String, CredentialRecord>>,
-    work_accounting: RwLock<Vec<WorkAccountingRecord>>,
     data_root: PathBuf,
 }
 
@@ -305,7 +282,6 @@ impl FileIndex {
             delegations: RwLock::new(HashMap::new()),
             revocations: RwLock::new(HashMap::new()),
             credentials: RwLock::new(HashMap::new()),
-            work_accounting: RwLock::new(Vec::new()),
             data_root: data_root.to_path_buf(),
         };
 
@@ -552,34 +528,6 @@ impl FileIndex {
             }
         }
 
-        // Load work_accounting
-        if let Ok(data) = fs::read(self.idx_dir().join("work_accounting.bin")) {
-            let data_len = data.len() as u64;
-            let mut r = std::io::Cursor::new(data);
-            while r.position() < data_len {
-                let data_len_val = read_u64(&mut r)? as usize;
-                let mut data = vec![0u8; data_len_val];
-                r.read_exact(&mut data)?;
-                let record_hash = read_str(&mut r)?;
-                let requester_hex = read_str(&mut r)?;
-                let provider_hex = read_str(&mut r)?;
-                let workload_class = read_str(&mut r)?;
-                let status = read_str(&mut r)?;
-                let started_at_us = read_u64(&mut r)?;
-                let billable_rc_us = read_u64(&mut r)?;
-                self.work_accounting.write().push(WorkAccountingRecord {
-                    data,
-                    record_hash,
-                    requester_hex,
-                    provider_hex,
-                    workload_class,
-                    status,
-                    started_at_us,
-                    billable_rc_us,
-                });
-            }
-        }
-
         // Load credentials
         if let Ok(data) = fs::read(self.idx_dir().join("credentials.bin")) {
             let data_len = data.len() as u64;
@@ -744,22 +692,6 @@ impl FileIndex {
                 write_u64(w, v.priority as u64)?;
                 write_u64(w, v.created_at as u64)?;
                 write_str(w, &v.status)?;
-            }
-            Ok(())
-        })?;
-
-        // Save work_accounting
-        self.persist("work_accounting.bin", |w| {
-            for v in self.work_accounting.read().iter() {
-                write_u64(w, v.data.len() as u64)?;
-                w.write_all(&v.data)?;
-                write_str(w, &v.record_hash)?;
-                write_str(w, &v.requester_hex)?;
-                write_str(w, &v.provider_hex)?;
-                write_str(w, &v.workload_class)?;
-                write_str(w, &v.status)?;
-                write_u64(w, v.started_at_us)?;
-                write_u64(w, v.billable_rc_us)?;
             }
             Ok(())
         })?;
@@ -1266,78 +1198,6 @@ impl FileIndex {
     // ===========================================================================
     // Work accounting
     // ===========================================================================
-
-    /// Record a completed work unit.
-    pub fn record_work_accounting(&self, record: WorkAccountingRecord) -> io::Result<()> {
-        self.work_accounting.write().push(record);
-        self.save()
-    }
-
-    /// Get total billable RC-µs for a requester (buyer).
-    pub fn total_billable_for_requester(&self, requester_hex: &str) -> io::Result<u64> {
-        Ok(self
-            .work_accounting
-            .read()
-            .iter()
-            .filter(|r| r.requester_hex == requester_hex && r.status == "completed")
-            .map(|r| r.billable_rc_us)
-            .sum())
-    }
-
-    /// Get total billable RC-µs for a provider (seller).
-    pub fn total_billable_for_provider(&self, provider_hex: &str) -> io::Result<u64> {
-        Ok(self
-            .work_accounting
-            .read()
-            .iter()
-            .filter(|r| r.provider_hex == provider_hex && r.status == "completed")
-            .map(|r| r.billable_rc_us)
-            .sum())
-    }
-
-    /// Get all work records in a time window.
-    pub fn work_in_time_range(
-        &self,
-        from_us: u64,
-        to_us: u64,
-    ) -> io::Result<Vec<WorkAccountingRecord>> {
-        Ok(self
-            .work_accounting
-            .read()
-            .iter()
-            .filter(|r| r.started_at_us >= from_us && r.started_at_us <= to_us)
-            .cloned()
-            .collect())
-    }
-
-    /// Get all work records for a specific workload class.
-    pub fn work_by_class(&self, class: &str) -> io::Result<Vec<WorkAccountingRecord>> {
-        Ok(self
-            .work_accounting
-            .read()
-            .iter()
-            .filter(|r| r.workload_class == class)
-            .cloned()
-            .collect())
-    }
-
-    /// Get all work records with a specific status.
-    pub fn work_by_status(&self, status: &str) -> io::Result<Vec<WorkAccountingRecord>> {
-        Ok(self
-            .work_accounting
-            .read()
-            .iter()
-            .filter(|r| r.status == status)
-            .cloned()
-            .collect())
-    }
-
-    /// Get all work records.
-    pub fn list_all_work(&self) -> io::Result<Vec<WorkAccountingRecord>> {
-        Ok(self.work_accounting.read().iter().cloned().collect())
-    }
-
-    // ===========================================================================
     // Credential index
     // ===========================================================================
 
@@ -1433,7 +1293,6 @@ impl FileIndex {
         self.delegations.write().clear();
         self.revocations.write().clear();
         self.credentials.write().clear();
-        self.work_accounting.write().clear();
         // Clear files
         for file in &[
             "stream_heads.bin",
@@ -1447,7 +1306,6 @@ impl FileIndex {
             "delegations.bin",
             "revocations.bin",
             "credentials.bin",
-            "work_accounting.bin",
         ] {
             let path = self.idx_dir().join(file);
             if path.exists() {
@@ -1484,7 +1342,6 @@ impl FileIndex {
             "object_presence.bin",
             "controller_changes.bin",
             "fetch_queue.bin",
-            "work_accounting.bin",
         ];
 
         for file in &bin_files {
@@ -1537,7 +1394,6 @@ pub fn validate_bin_file(data: &[u8], filename: &str) -> bool {
         "object_presence.bin" => validate_object_presence(&mut r, data_len),
         "controller_changes.bin" => validate_controller_changes(&mut r, data_len),
         "fetch_queue.bin" => validate_fetch_queue(&mut r, data_len),
-        "work_accounting.bin" => validate_work_accounting(&mut r, data_len),
         _ => false,
     }
 }
@@ -1803,44 +1659,6 @@ fn validate_fetch_queue(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
         if read_str(r).is_err() {
             return false;
         } // status
-    }
-    true
-}
-
-fn validate_work_accounting(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
-    while r.position() < data_len {
-        let data_len_val = match read_u64(r) {
-            Ok(v) => v as usize,
-            Err(_) => return false,
-        };
-        if data_len_val > data_len as usize {
-            return false;
-        }
-        let mut buf = vec![0u8; data_len_val];
-        if r.read_exact(&mut buf).is_err() {
-            return false;
-        }
-        if read_str(r).is_err() {
-            return false;
-        } // record_hash
-        if read_str(r).is_err() {
-            return false;
-        } // requester_hex
-        if read_str(r).is_err() {
-            return false;
-        } // provider_hex
-        if read_str(r).is_err() {
-            return false;
-        } // workload_class
-        if read_str(r).is_err() {
-            return false;
-        } // status
-        if read_u64(r).is_err() {
-            return false;
-        } // started_at_us
-        if read_u64(r).is_err() {
-            return false;
-        } // billable_rc_us
     }
     true
 }

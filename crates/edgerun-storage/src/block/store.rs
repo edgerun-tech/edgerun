@@ -92,7 +92,7 @@ impl<S: BlockStorage> BlockStreamStore<S> {
             )));
         }
 
-        let event_hash = crate::core::canonical_event_hash(&event).value;
+        let event_hash = crate::core::canonical_event_hash(&event).value.to_vec();
         let receipt = self.event_log.append_event(&event)?;
         let location = EventLocation {
             stream_id: event.stream_id.clone(),

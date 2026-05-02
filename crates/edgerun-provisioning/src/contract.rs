@@ -1,8 +1,9 @@
-use edgerun_core::{Identity, StreamId, EventId, Signature, Timestamp};
+use edgerun_proto::edgerun::v0::common::{Identity, Signature, Timestamp};
 use edgerun_crypto::{sign, verify, KeyPair, PublicKey};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Provisioning contract kind — enum, not bool
+/// Mirrors proto enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProvisioningKind {
     Unspecified,  // Rejected
@@ -36,7 +37,7 @@ pub enum ProvisioningContractStatus {
 
 /// Provisioning contract
 /// Single-use by default (contains node-specific settings)
-#[derive(Debug, Clone)]
+/// Uses edgerun-proto types for Identity, Signature, Timestamp
 pub struct ProvisioningContract {
     pub version: String,
     pub provisioning_id: String,
@@ -58,17 +59,13 @@ pub struct ProvisioningContract {
 
 impl ProvisioningContract {
     /// Compute the hash of this contract (for commitment in genesis)
-    pub fn compute_hash(&self) -> String {
-        // TODO: Use proper canonical serialization + hash
-        // For now, use a simple approach
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        
-        let mut s = DefaultHasher::new();
-        self.provisioning_id.hash(&mut s);
-        self.controller.to_string().hash(&mut s);
-        self.version.hash(&mut s);
-        format!("{:x}", s.finish())
+    pub fn compute_hash(&self) -> Vec<u8> {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(self.provisioning_id.as_bytes());
+        hasher.update(&self.controller.fingerprint);
+        hasher.update(self.version.as_bytes());
+        hasher.finalize().to_vec()
     }
     
     /// Verify the controller signature on this contract
@@ -77,21 +74,17 @@ impl ProvisioningContract {
             return false;
         };
         
-        // TODO: Use proper signature verification with canonical payload
-        verify(
-            controller_public_key,
-            self.canonical_payload().as_bytes(),
-            sig,
-        )
+        let payload = self.canonical_payload();
+        verify(controller_public_key, payload.as_bytes(), sig)
     }
     
     /// Build the canonical payload for signing
     fn canonical_payload(&self) -> String {
         format!(
-            "version={};provisioning_id={};controller={};node_label={};kind={:?}",
+            "version={};provisioning_id={};controller={};node_label={:?};kind={:?}",
             self.version,
             self.provisioning_id,
-            self.controller.to_string(),
+            hex::encode(&self.controller.fingerprint),
             self.node_label,
             self.kind,
         )

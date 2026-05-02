@@ -694,7 +694,7 @@ pub mod ui {
         let mut props = BTreeMap::new();
         props.insert(String::from("value"), String::from(value));
         UiNode {
-            node_type: String::from("text"),
+            r#type: String::from("text"),
             props,
             children: Vec::new(),
             action: None,
@@ -706,7 +706,7 @@ pub mod ui {
         props.insert(String::from("value"), String::from(value));
         props.insert(String::from("level"), level.to_string());
         UiNode {
-            node_type: String::from("heading"),
+            r#type: String::from("heading"),
             props,
             children: Vec::new(),
             action: None,
@@ -717,7 +717,7 @@ pub mod ui {
         let mut props = BTreeMap::new();
         props.insert(String::from("label"), String::from(label));
         UiNode {
-            node_type: String::from("button"),
+            r#type: String::from("button"),
             props,
             children: Vec::new(),
             action: Some(String::from(action)),
@@ -726,7 +726,7 @@ pub mod ui {
 
     pub fn column(children: Vec<UiNode>) -> UiNode {
         UiNode {
-            node_type: String::from("column"),
+            r#type: String::from("column"),
             props: BTreeMap::new(),
             children,
             action: None,
@@ -735,7 +735,7 @@ pub mod ui {
 
     pub fn row(children: Vec<UiNode>) -> UiNode {
         UiNode {
-            node_type: String::from("row"),
+            r#type: String::from("row"),
             props: BTreeMap::new(),
             children,
             action: None,
@@ -746,7 +746,7 @@ pub mod ui {
         let mut props = BTreeMap::new();
         props.insert(String::from("height"), height.to_string());
         UiNode {
-            node_type: String::from("spacer"),
+            r#type: String::from("spacer"),
             props,
             children: Vec::new(),
             action: None,
@@ -757,7 +757,7 @@ pub mod ui {
         let mut props = BTreeMap::new();
         props.insert(String::from("placeholder"), String::from(placeholder));
         UiNode {
-            node_type: String::from("input"),
+            r#type: String::from("input"),
             props,
             children: Vec::new(),
             action: Some(String::from(action)),

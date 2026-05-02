@@ -1,16 +1,6 @@
 // EdgeRun bootstrap provisioning
+// Uses edgerun-proto generated types - no parallel types
 // Single-use contracts, node genesis, controller verification
-// Coordinator is NOT authority — only assists/observes
-
-// This crate is responsible for:
-// - Building signable provisioning contract payloads
-// - Verifying controller signatures on contracts
-// - Computing contract hashes
-// - Building node genesis claims
-// - Verifying node genesis claims
-// - Enforcing single-use state machine
-// - Rejecting replayed/expired contracts
-// - Producing dashboard-friendly status
 
 #![forbid(unsafe_code)]
 
@@ -20,7 +10,7 @@ pub mod verifier;
 pub mod state;
 pub mod errors;
 
-// Re-exports
+// Re-exports using edgerun-proto types
 pub use contract::ProvisioningContract;
 pub use genesis::NodeGenesisClaim;
 pub use verifier::ProvisioningVerifier;

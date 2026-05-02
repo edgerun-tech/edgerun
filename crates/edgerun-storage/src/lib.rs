@@ -59,9 +59,8 @@ pub use event_loop::{
     CredentialDeleteHandler, CredentialHandler, DispatchContext, EventHandler, EventLoopBuilder,
     EventWriter, FetchHandler, OpEventType, PeerDiscoveryHandler, PeerStatusHandler,
 };
-pub use file_index::{EventIndexEntry, FetchEntry, FileIndex, ReplayEntry, WorkAccountingRecord};
+pub use file_index::{EventIndexEntry, FetchEntry, FileIndex, ReplayEntry};
 pub use mem::{MemContentStore, MemEventLog};
 pub use store::{
     CommandReplayResult, ControllerSet, NodeStore, NodeStoreConfig, ObjectResult,
-    WorkAccountingSink,
 };

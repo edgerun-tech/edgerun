@@ -18,8 +18,6 @@ use alloc::boxed::Box;
 #[cfg(any(feature = "tls", feature = "http3"))]
 use alloc::collections::BTreeSet;
 use alloc::string::String;
-#[cfg(feature = "tls")]
-use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{format, string::ToString};

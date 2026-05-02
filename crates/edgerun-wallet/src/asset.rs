@@ -4,26 +4,10 @@
 //! Asset is the full asset record.
 //! Canonical asset ID: SYMBOL:network[:contract]
 
-use alloc::string::{String, ToString};
-use core::fmt;
+use alloc::string::ToString;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AssetRef {
-    pub symbol: String,
-    pub network: String,
-    pub contract: Option<String>,
-    pub decimals: Option<u32>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Asset {
-    pub id: String, // canonical: SYMBOL:network[:contract]
-    pub symbol: String,
-    pub network: String,
-    pub contract: Option<String>,
-    pub decimals: u32,
-    pub name: Option<String>,
-}
+pub use edgerun_proto::edgerun::v0::wallet::v0::AssetRef;
+pub use edgerun_proto::edgerun::v0::wallet::v0::Asset;
 
 /// Build canonical asset ID.
 /// Format: SYMBOL:network[:contract]
@@ -34,17 +18,7 @@ pub fn canonical_asset_id(symbol: &str, network: &str, contract: Option<&str>) -
     }
 }
 
-impl fmt::Display for AssetRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", canonical_asset_id(&self.symbol, &self.network, self.contract.as_deref()))
-    }
-}
 
-impl fmt::Display for Asset {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.id)
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -69,13 +43,13 @@ mod tests {
     }
 
     #[test]
-    fn asset_ref_display() {
+    fn asset_ref_canonical_id() {
         let asset_ref = AssetRef {
             symbol: "BTC".into(),
             network: "bitcoin".into(),
             contract: None,
             decimals: Some(8),
         };
-        assert_eq!(asset_ref.to_string(), "BTC:bitcoin");
+        assert_eq!(canonical_asset_id(&asset_ref.symbol, &asset_ref.network, asset_ref.contract.as_deref()), "BTC:bitcoin");
     }
 }

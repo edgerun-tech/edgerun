@@ -42,7 +42,7 @@ impl ContentStore for FsContentStore {
             canonicalization_id: "raw-bytes-v0".into(),
             canonical_digest: Some(edgerun_proto::edgerun::v0::common::Digest {
                 algorithm: 1,
-                value: edgerun_core::crypto::sha256(content).to_vec(),
+                value: edgerun_core::crypto::sha256(content).to_vec().into(),
             }),
             canonical_size: content.len() as u64,
             created_at: Some(now_timestamp()),
