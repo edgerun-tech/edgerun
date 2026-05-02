@@ -154,7 +154,7 @@ pub fn command_hash(command: &CommandEnvelope) -> Digest {
     let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_COMMAND_ENVELOPE, &canonical);
     Digest {
         algorithm: 1, // SHA256
-        value: hash.to_vec().into().into(),
+        value: prost::bytes::Bytes::from(hash.to_vec()),
     }
 }
 
@@ -165,7 +165,7 @@ fn delegation_hash(delegation: &DelegationRecord) -> Digest {
     Digest {
         algorithm: edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256
             as i32,
-        value: hash.to_vec().into().into(),
+        value: prost::bytes::Bytes::from(hash.to_vec()),
     }
 }
 

@@ -6,7 +6,7 @@ pub fn analyze_dependencies(cargo_toml_path: &Path, workspace_root: &Path) -> Re
     let content = std::fs::read_to_string(cargo_toml_path)
         .map_err(|e| crate::errors::AnalyzerError::IoError(e.to_string()))?;
 
-    let toml = edgerun_json::toml_parse(&content)
+    let toml = edgerun_json::from_toml_str(&content)
         .map_err(|e| crate::errors::AnalyzerError::ParseError {
             file: cargo_toml_path.to_path_buf(),
             message: e.to_string(),

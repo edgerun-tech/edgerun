@@ -6,7 +6,7 @@ pub fn parse_cargo_toml(path: &Path) -> Result<CrateIdentity> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| crate::errors::AnalyzerError::IoError(e.to_string()))?;
 
-    let toml = edgerun_json::toml_parse(&content)
+    let toml = edgerun_json::from_toml_str(&content)
         .map_err(|e| crate::errors::AnalyzerError::ParseError {
             file: path.to_path_buf(),
             message: e.to_string(),

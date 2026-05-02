@@ -21,7 +21,7 @@ pub fn load_standards_matrix(crate_dir: &Path, _workspace_root: &Path) -> Vec<St
             let path = entry.path();
             if path.extension().map(|e| e == "toml").unwrap_or(false) {
                 if let Ok(content) = std::fs::read_to_string(&path) {
-                    if let Ok(toml) = edgerun_json::toml_parse(&content) {
+                    if let Ok(toml) = edgerun_json::from_toml_str(&content) {
                         if let Some(obj) = toml.as_object() {
                             for (key, value) in obj {
                                 let status = value.get("status")

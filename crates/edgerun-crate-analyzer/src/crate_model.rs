@@ -45,8 +45,11 @@ impl ToJson for CrateIdentity {
 }
 
 impl FromJson for CrateIdentity {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(CrateIdentity {
             name: FromJson::from_json(obj.get("name").ok_or("missing field")?)?,
             version: FromJson::from_json(obj.get("version").ok_or("missing field")?)?,
@@ -95,8 +98,11 @@ impl ToJson for Dependency {
 }
 
 impl FromJson for Dependency {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(Dependency {
             name: FromJson::from_json(obj.get("name").ok_or("missing field")?)?,
             version_req: FromJson::from_json(obj.get("version_req").ok_or("missing field")?)?,
@@ -128,7 +134,7 @@ impl ToJson for DependencyKind {
 }
 
 impl FromJson for DependencyKind {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
         let s = value.as_str().ok_or("expected string")?;
         match s {
             "Normal" => Ok(DependencyKind::Normal),
@@ -165,8 +171,11 @@ impl ToJson for ApiItem {
 }
 
 impl FromJson for ApiItem {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(ApiItem {
             name: FromJson::from_json(obj.get("name").ok_or("missing field")?)?,
             kind: FromJson::from_json(obj.get("kind").ok_or("missing field")?)?,
@@ -204,7 +213,7 @@ impl ToJson for ApiItemKind {
 }
 
 impl FromJson for ApiItemKind {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
         let s = value.as_str().ok_or("expected string")?;
         match s {
             "Module" => Ok(ApiItemKind::Module),
@@ -237,7 +246,7 @@ impl ToJson for Visibility {
 }
 
 impl FromJson for Visibility {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
         let s = value.as_str().ok_or("expected string")?;
         match s {
             "Public" => Ok(Visibility::Public),
@@ -270,8 +279,11 @@ impl ToJson for CallGraphEdge {
 }
 
 impl FromJson for CallGraphEdge {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(CallGraphEdge {
             caller: FromJson::from_json(obj.get("caller").ok_or("missing field")?)?,
             callee: FromJson::from_json(obj.get("callee").ok_or("missing field")?)?,
@@ -301,7 +313,7 @@ impl ToJson for Confidence {
 }
 
 impl FromJson for Confidence {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
         let s = value.as_str().ok_or("expected string")?;
         match s {
             "Exact" => Ok(Confidence::Exact),
@@ -342,8 +354,11 @@ impl ToJson for SecurityFinding {
 }
 
 impl FromJson for SecurityFinding {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(SecurityFinding {
             id: FromJson::from_json(obj.get("id").ok_or("missing field")?)?,
             severity: FromJson::from_json(obj.get("severity").ok_or("missing field")?)?,
@@ -381,7 +396,7 @@ impl ToJson for Severity {
 }
 
 impl FromJson for Severity {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
         let s = value.as_str().ok_or("expected string")?;
         match s {
             "Critical" => Ok(Severity::Critical),
@@ -424,8 +439,11 @@ impl ToJson for TestInfo {
 }
 
 impl FromJson for TestInfo {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(TestInfo {
             total: FromJson::from_json(obj.get("total").ok_or("missing field")?)?,
             unit_tests: FromJson::from_json(obj.get("unit_tests").ok_or("missing field")?)?,
@@ -470,8 +488,11 @@ impl ToJson for FootprintInfo {
 }
 
 impl FromJson for FootprintInfo {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(FootprintInfo {
             binary_size: FromJson::from_json(obj.get("binary_size").ok_or("missing field")?)?,
             stripped_size: FromJson::from_json(obj.get("stripped_size").ok_or("missing field")?)?,
@@ -506,8 +527,11 @@ impl ToJson for BenchmarkArtifact {
 }
 
 impl FromJson for BenchmarkArtifact {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(BenchmarkArtifact {
             name: FromJson::from_json(obj.get("name").ok_or("missing field")?)?,
             path: FromJson::from_json(obj.get("path").ok_or("missing field")?)?,
@@ -541,8 +565,11 @@ impl ToJson for StandardCoverage {
 }
 
 impl FromJson for StandardCoverage {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(StandardCoverage {
             standard: FromJson::from_json(obj.get("standard").ok_or("missing field")?)?,
             status: FromJson::from_json(obj.get("status").ok_or("missing field")?)?,
@@ -576,8 +603,11 @@ impl ToJson for VisibilityReport {
 }
 
 impl FromJson for VisibilityReport {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(VisibilityReport {
             visible_count: FromJson::from_json(obj.get("visible_count").ok_or("missing field")?)?,
             hidden_count: FromJson::from_json(obj.get("hidden_count").ok_or("missing field")?)?,
@@ -624,8 +654,11 @@ impl ToJson for CrateReport {
 }
 
 impl FromJson for CrateReport {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+        let obj = {
         let obj = value.as_object().ok_or("expected object")?;
+        Ok(obj
+    )?.ok_or("expected object")?;
         Ok(CrateReport {
             identity: FromJson::from_json(obj.get("identity").ok_or("missing field")?)?,
             dependencies: FromJson::from_json(obj.get("dependencies").ok_or("missing field")?)?,

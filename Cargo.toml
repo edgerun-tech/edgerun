@@ -110,7 +110,6 @@ members = [
    "crates/edgerun-app",
   "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
-  "crates/edgerun-scheduler",
   "crates/edgerun-wasm",
   "crates/edgerun-sdk",
   "crates/edgerun-sdk-macro",

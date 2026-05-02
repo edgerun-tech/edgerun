@@ -5,3 +5,5 @@ edition = "2021"
 [dependencies]
 serde = "1"
 chrono = "0.4"
+edgerun-json = { path = "../edgerun-json", features = ["toml"] }
+edgerun-glob = { path = "../edgerun-glob" }

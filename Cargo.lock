@@ -1552,6 +1552,8 @@ name = "edgerun-crate-analyzer"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "edgerun-glob",
+ "edgerun-json",
  "serde",
 ]
 
@@ -2323,16 +2325,6 @@ dependencies = [
 [[package]]
 name = "edgerun-rtl8125"
 version = "0.1.0"
-
-[[package]]
-name = "edgerun-scheduler"
-version = "0.1.1"
-dependencies = [
- "edgerun-error",
- "edgerun-json",
- "edgerun-mesh",
- "edgerun-rt",
-]
 
 [[package]]
 name = "edgerun-sdk"
