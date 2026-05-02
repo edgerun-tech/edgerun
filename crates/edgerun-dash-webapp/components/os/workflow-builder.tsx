@@ -186,12 +186,7 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
                   <button
                     onClick={() => {
                       const name = `Stage ${selected.stages.length + 1}`
-                      const stage = addStage(selected.workflowId, name)
-                      if (stage) {
-                        updateWorkflow(selected.workflowId, { 
-                          stages: [...selected.stages, stage] 
-                        })
-                      }
+                      addStage(selected.workflowId, name)
                     }}
                     className="w-48 h-32 border-2 border-dashed border-[var(--border)] rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
                   >
@@ -200,48 +195,10 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
               
-              {/* Variables */}
+              {/* Meta */}
               <div className="p-3 border-t border-[var(--border)]">
-                <div className="text-sm font-medium mb-2">Variables</div>
-                <div className="flex gap-2 flex-wrap">
-                  {Object.entries(selected).map(([key, value]) => (
-                    <div key={key} className="flex items-center gap-1 bg-[var(--bg-hover)] px-2 py-1 rounded text-sm">
-                      <span className="text-[var(--accent)]">{key}</span>
-                      <span>=</span>
-                      <input
-                        type="text"
-                        value={value}
-                        onChange={e => {
-                          const newVars = { ...selected, [key]: e.target.value }
-                          updateWorkflow(selected.workflowId, { name: newVars })
-                        }}
-                        className="bg-transparent border-none outline-none w-24"
-                      />
-                      <button
-                        onClick={() => {
-                          const newVars = { ...selected }
-                          delete newVars[key]
-                          updateWorkflow(selected.workflowId, { name: newVars })
-                        }}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  
-                  <button
-                    onClick={() => {
-                      const key = prompt("Variable name:")
-                      if (key) {
-                        const newVars = { ...selected, [key]: "" }
-                        updateWorkflow(selected.workflowId, { name: newVars })
-                      }
-                    }}
-                    className="text-[var(--accent)] text-sm hover:underline"
-                  >
-                    + Add Variable
-                  </button>
+                <div className="text-xs text-[var(--text-muted)]">
+                  Created {new Date(selected.createdAt).toLocaleDateString()} · {selected.stages.length} stage(s)
                 </div>
               </div>
             </>
@@ -568,33 +525,24 @@ function ActionConfigDialog({
 }
 
 export function WorkflowStatus({ execution }: { execution: WorkflowExecution }) {
-  const statusColors = {
-    idle: "text-gray-400",
+  const statusColors: Record<string, string> = {
     running: "text-yellow-400",
     success: "text-green-400",
     failed: "text-red-400",
-    skipped: "text-gray-500",
+    cancelled: "text-gray-500",
   }
   
   return (
     <div className="text-sm">
-      <div className={`font-medium ${statusColors[execution.status]}`}>
+      <div className={`font-medium ${statusColors[execution.status] ?? "text-gray-400"}`}>
         {execution.status === "running" ? "⚡ Running" : 
          execution.status === "success" ? "✓ Success" :
-         execution.status === "failed" ? "✗ Failed" : "○ Idle"}
+         execution.status === "failed" ? "✗ Failed" :
+         execution.status === "cancelled" ? "○ Cancelled" : "○ Idle"}
       </div>
-      {execution.logs.length > 0 && (
-        <div className="mt-2 text-xs text-[var(--text-muted)] font-mono">
-          {execution.logs.slice(-3).map((log, i) => (
-            <div key={i} className="truncate">
-              [{log.stage}] {log.action}: {log.message.slice(0, 50)}
-            </div>
-          ))}
-        </div>
-      )}
-      {execution.error && (
-        <div className="text-red-400 text-xs mt-1">{execution.error}</div>
-      )}
+      <div className="text-xs text-[var(--text-muted)] mt-1">
+        {execution.stageResults.length} stage(s) · Started {new Date(execution.startedAt).toLocaleTimeString()}
+      </div>
     </div>
   )
 }

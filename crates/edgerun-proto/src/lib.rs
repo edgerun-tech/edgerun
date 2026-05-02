@@ -46,6 +46,49 @@ pub mod edgerun {
     pub mod wallet {
         pub mod v0 {
             core::include!("gen/edgerun/wallet/v0/edgerun.wallet.v0.rs");
+
+            use edgerun_json::{Map, JsonValue, ToJson, FromJson, JsonValueError};
+
+            impl ToJson for AssetRef {
+                fn to_json(&self) -> JsonValue {
+                    let mut map = Map::new();
+                    map.insert("symbol".into(), self.symbol.to_json());
+                    map.insert("network".into(), self.network.to_json());
+                    if let Some(ref c) = self.contract {
+                        map.insert("contract".into(), c.to_json());
+                    }
+                    if let Some(d) = self.decimals {
+                        map.insert("decimals".into(), d.to_json());
+                    }
+                    JsonValue::Object(map)
+                }
+            }
+
+            impl FromJson for AssetRef {
+                fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+                    let obj = value.as_object().ok_or(JsonValueError::WrongType("expected object".into()))?;
+                    let symbol = obj.get("symbol").and_then(|v| v.as_str()).ok_or(JsonValueError::WrongType("missing symbol".into()))?;
+                    let network = obj.get("network").and_then(|v| v.as_str()).ok_or(JsonValueError::WrongType("missing network".into()))?;
+                    let contract = obj.get("contract").and_then(|v| v.as_str()).map(|s| s.into());
+                    let decimals = obj.get("decimals").and_then(|v| v.as_u32());
+                    Ok(Self { symbol: symbol.into(), network: network.into(), contract, decimals })
+                }
+            }
+
+            impl ToJson for TxRef {
+                fn to_json(&self) -> JsonValue {
+                    let mut map = Map::new();
+                    map.insert("tx_id".into(), self.tx_id.to_json());
+                    map.insert("network".into(), self.network.to_json());
+                    if let Some(c) = self.confirmations {
+                        map.insert("confirmations".into(), c.to_json());
+                    }
+                    if let Some(ref e) = self.explorer_url {
+                        map.insert("explorer_url".into(), e.to_json());
+                    }
+                    JsonValue::Object(map)
+                }
+            }
         }
     }
 }

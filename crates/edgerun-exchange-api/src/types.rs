@@ -1,77 +1,13 @@
 //! Public API types for exchange service.
 //!
-//! Never exposes provider names in public API.
-//!
-//! NOTE: These types intentionally differ from proto edgerun.v0.wallet types
-//! for API compatibility. AssetRef lacks decimals, TxRef uses tx_hash naming.
+//! Uses canonical proto types from edgerun-proto.
 
 extern crate alloc;
 
-use edgerun_json::{Map, JsonValue, ToJson, FromJson};
+use edgerun_json::{Map, JsonValue, ToJson};
 
-/// Asset reference in requests.
-#[derive(Debug, Clone, PartialEq)]
-pub struct AssetRef {
-    pub symbol: alloc::string::String,
-    pub network: alloc::string::String,
-    pub contract: Option<alloc::string::String>,
-}
-
-impl AssetRef {
-    pub fn new(symbol: &str, network: &str) -> Self {
-        Self {
-            symbol: symbol.into(),
-            network: network.into(),
-            contract: None,
-        }
-    }
-
-    pub fn with_contract(symbol: &str, network: &str, contract: &str) -> Self {
-        Self {
-            symbol: symbol.into(),
-            network: network.into(),
-            contract: Some(contract.into()),
-        }
-    }
-}
-
-impl ToJson for AssetRef {
-    fn to_json(&self) -> JsonValue {
-        let mut map = Map::new();
-        map.insert("symbol".into(), self.symbol.to_json());
-        map.insert("network".into(), self.network.to_json());
-        if let Some(ref c) = self.contract {
-            map.insert("contract".into(), c.to_json());
-        }
-        JsonValue::Object(map)
-    }
-}
-
-impl FromJson for AssetRef {
-    fn from_json(value: &JsonValue) -> Result<Self, alloc::string::String> {
-        let obj = value.as_object().ok_or("expected object")?;
-        let symbol = obj.get("symbol").and_then(|v| v.as_str()).ok_or("missing symbol")?;
-        let network = obj.get("network").and_then(|v| v.as_str()).ok_or("missing network")?;
-        let contract = obj.get("contract").and_then(|v| v.as_str()).map(|s| s.into());
-        Ok(AssetRef { symbol: symbol.into(), network: network.into(), contract })
-    }
-}
-
-/// Transaction reference.
-#[derive(Debug, Clone, PartialEq)]
-pub struct TxRef {
-    pub tx_hash: alloc::string::String,
-    pub confirmations: u32,
-}
-
-impl ToJson for TxRef {
-    fn to_json(&self) -> JsonValue {
-        let mut map = Map::new();
-        map.insert("tx_hash".into(), self.tx_hash.to_json());
-        map.insert("confirmations".into(), self.confirmations.to_json());
-        JsonValue::Object(map)
-    }
-}
+pub use edgerun_proto::edgerun::v0::wallet::v0::AssetRef;
+pub use edgerun_proto::edgerun::v0::wallet::v0::TxRef;
 
 /// Quote request from client.
 #[derive(Debug)]

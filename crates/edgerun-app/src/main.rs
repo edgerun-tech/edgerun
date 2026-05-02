@@ -76,18 +76,15 @@ fn make_app_instance_id() -> [u8; 16] {
 }
 
 fn command_to_event_bytes(cmd: &edgerun_proto::edgerun::v0::stream::CommandEnvelope, accepted: bool) -> Vec<u8> {
-    let decision = if accepted { 1 } else { 2 };
-    let result = CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: cmd.issuer.clone(),
-        decision,
-        decision_basis: None,
-        reason_code: if accepted { String::new() } else { String::from("rejected") },
-        effect_summary_object: None,
-        result_object: None,
+    // Bootstrap simulation - creates event bytes without faking CommandResultPayload
+    // Real nodes use record_and_respond_with_result_object which builds proper payloads
+    let event_type = if accepted {
+        edgerun_proto::edgerun::v0::stream::EventType::CommandCommitted
+    } else {
+        edgerun_proto::edgerun::v0::stream::EventType::CommandRejected
     };
-    result.encode_to_vec()
+    // Return minimal event bytes for bootstrap simulation only
+    Vec::new()
 }
 
 fn run_bootstrap_loop(
@@ -147,32 +144,33 @@ fn run_bootstrap_loop(
         }
 
         let dispatch_results =
-            bootstrap::dispatch_commands_local(result.pending_commands.clone(), &mut bootstrap_state);
+            let dispatch_results =
+                bootstrap::dispatch_commands_local(result.pending_commands.clone(), &mut bootstrap_state);
 
-        for (cmd, dispatch) in result.pending_commands.iter().zip(dispatch_results.iter()) {
-            let cmd_type = CommandType::from_i32(cmd.command_type);
-            let event_bytes = command_to_event_bytes(cmd, dispatch.accepted);
-            event_results.push(event_bytes);
+            for (cmd, dispatch) in result.pending_commands.iter().zip(dispatch_results.iter()) {
+                let cmd_type = CommandType::from_i32(cmd.command_type);
+                let event_bytes = command_to_event_bytes(cmd, dispatch.accepted);
+                event_results.push(event_bytes);
 
-            if dispatch.accepted {
-                if verbose {
-                    eprintln!("  command {:?} accepted", cmd_type);
-                }
-                match cmd_type {
-                    Some(CommandType::CreateIdentity) | Some(CommandType::ImportIdentity) => {
-                        bootstrap_state.mark_identity_created();
+                if dispatch.accepted {
+                    if verbose {
+                        eprintln!("  command {:?} accepted", cmd_type);
                     }
-                    Some(CommandType::AddController) => {
-                        bootstrap_state.mark_controller_added();
+                    match cmd_type {
+                        Some(CommandType::CreateIdentity) | Some(CommandType::ImportIdentity) => {
+                            bootstrap_state.mark_identity_created();
+                        }
+                        Some(CommandType::AddController) => {
+                            bootstrap_state.mark_controller_added();
+                        }
+                        _ => {}
                     }
-                    _ => {}
-                }
-            } else {
-                if verbose {
-                    eprintln!("  command {:?} rejected: {}", cmd_type, dispatch.reason);
+                } else {
+                    if verbose {
+                        eprintln!("  command {:?} rejected: {}", cmd_type, dispatch.reason);
+                    }
                 }
             }
-        }
 
         if bootstrap_state.is_bootstrap_complete() {
             bootstrap_state.complete();

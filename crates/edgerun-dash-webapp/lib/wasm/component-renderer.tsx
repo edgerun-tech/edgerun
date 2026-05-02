@@ -1,3 +1,4 @@
+import React from "react"
 import { useCallback, useState, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import type { UIComponent, SafeValue } from "./ui-component"
@@ -92,9 +93,7 @@ function renderNative(node: UIComponent, ctx: RenderCtx, keyHint: string): React
   const children = node.children?.map((c, i) => ctx.render(c, `${keyHint}-${i}`))
 
   return (
-    <Tag key={keyHint} {...props} {...handlers}>
-      {children}
-    </Tag>
+    React.createElement(Tag, { key: keyHint, ...props, ...handlers }, children)
   )
 }
 

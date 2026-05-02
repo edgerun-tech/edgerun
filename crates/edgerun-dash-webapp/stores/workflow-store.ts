@@ -52,6 +52,7 @@ export interface WorkflowExecution {
   startedAt: number
   completedAt?: number
   stageResults: Array<{ stageId: string; status: StageStatus }>
+  error?: string
 }
 
 export interface WorkflowStoreState {

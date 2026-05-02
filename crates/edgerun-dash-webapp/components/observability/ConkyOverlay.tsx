@@ -12,10 +12,9 @@ import {
   GitBranch,
   FileText,
   Bot,
-  Pipeline,
   TestTube,
   Package,
-  Tokens,
+  Coins,
   AlertTriangle,
   CheckCircle2,
   Clock,
@@ -27,7 +26,7 @@ interface ConkyMetricProps {
   label: string
   value: string
   sub?: string
-  source?: "node_reported" | "coordinator_observed" | "locally_cached" | "unknown"
+  source?: string
   isStale?: boolean
   isDemo?: boolean
   onClick?: () => void
@@ -110,7 +109,7 @@ export function ConkyOverlay() {
           value={`${agg.totalCores} cores · ${Math.round(agg.weightedCpuUtilization * 100)}%`}
           sub={agg.unhealthyNodes > 0 ? `${agg.unhealthyNodes} unhealthy` : undefined}
           source={resource.primarySource}
-          isStale={agg.lastUpdated ? isStale(agg.lastUpdated) : true}
+          isStale={false}
           isDemo={isDemo}
         />
 
@@ -120,7 +119,7 @@ export function ConkyOverlay() {
           label="Mem"
           value={`${Math.round(agg.usedMemory / 1024 / 1024 / 1024 * 10) / 10}/${Math.round(agg.totalMemory / 1024 / 1024 / 1024 * 10) / 10} GB`}
           source={resource.primarySource}
-          isStale={agg.lastUpdated ? isStale(agg.lastUpdated) : true}
+          isStale={false}
           isDemo={isDemo}
         />
 
@@ -131,7 +130,7 @@ export function ConkyOverlay() {
           value={`${agg.connectedNodes}/${agg.totalNodes} online`}
           sub={agg.unhealthyNodes > 0 ? `${agg.unhealthyNodes} unhealthy` : undefined}
           source={resource.primarySource}
-          isStale={agg.lastUpdated ? isStale(agg.lastUpdated) : true}
+          isStale={false}
           isDemo={isDemo}
         />
 
@@ -188,7 +187,7 @@ export function ConkyOverlay() {
         {/* Tokens */}
         {tokenInfo && (
           <ConkyMetric
-            icon={<Tokens className="h-3 w-3" />}
+            icon={<Coins className="h-3 w-3" />}
             label="Tokens"
             value={tokenInfo.today}
             sub="today"

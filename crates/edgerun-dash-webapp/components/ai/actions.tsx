@@ -5,7 +5,7 @@ import type { ComponentProps } from "react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { Message, MessageContent } from "@/packages/ai/message"
+import UIMessage, { UIMessage as MessageContent } from "@/packages/ai/message"
 
 export type ActionsProps = ComponentProps<"div">
 
@@ -62,12 +62,12 @@ export const Action = ({
 export default function ActionsDemo() {
   return (
     <div className="flex w-full flex-col gap-4 p-6">
-      <Message from="assistant">
-        <MessageContent>
+      <div>
+        <div>
           Here's a quick example of how to use React hooks. The useState hook lets you add state to
           functional components, while useEffect handles side effects like data fetching or
           subscriptions.
-        </MessageContent>
+        </div>
 
         <Actions>
           <Action onClick={() => console.log("Copied!")} tooltip="Copy to clipboard">
@@ -83,7 +83,7 @@ export default function ActionsDemo() {
             <ThumbsDownIcon className="size-4" />
           </Action>
         </Actions>
-      </Message>
+      </div>
     </div>
   )
 }

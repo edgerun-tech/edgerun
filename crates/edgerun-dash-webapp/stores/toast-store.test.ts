@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { toastsStore, addToast, dismissToast, removeToast, hasOpenToastStore } from './toast-store'
 
 describe('toast-store', () => {

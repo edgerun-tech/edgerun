@@ -1,6 +1,6 @@
 import { atom, computed } from "nanostores"
 import { persistentAtom } from "@nanostores/persistent"
-import type { AppDefinition } from "@/components/os/app-store"
+import type { AppDefinition } from "@/platform/types/app-definition"
 
 export interface LogEntry {
   id: string

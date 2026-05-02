@@ -2,6 +2,7 @@
 resolver = "2"
 
 members = [
+  "crates/edgerun-app",
   "crates/edgerun-glob",
   "crates/edgerun-regex",
   "crates/edgerun-rt",
@@ -233,6 +234,7 @@ prost-build = { version = "0.14", default-features = false }
 der = { version = "0.8", features = ["heapless"] }
 wasmtime = "29"
 wasmparser = "0.224"
+eframe = { version = "0.31", default-features = false }
 
 [patch.crates-io]
 const-oid = { path = "crates/edgerun-crypto/vendor/const-oid-0.9" }

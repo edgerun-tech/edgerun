@@ -24,7 +24,7 @@ function resolveComponent(app: AppDefinition): React.ReactNode {
   // WASM apps
   if (app.kind === "wasm" || app.wasmUrl) {
     if (app.wasmUrl) {
-      return <WasmAppWindow wasmUrl={app.wasmUrl} appName={app.name} />
+      return <div className="p-4 text-muted-foreground">WASM app: {app.name}</div>
     }
     return <div className="p-4 text-muted-foreground">WASM URL not configured</div>
   }

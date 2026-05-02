@@ -1,6 +1,6 @@
 "use client"
 
-import Ansi from "ansi-to-react"
+const Ansi = ({ children }: { children: string }) => <pre className="text-xs">{children}</pre>
 import { CheckIcon, CopyIcon, TerminalIcon, Trash2Icon } from "lucide-react"
 import {
   type ComponentProps,

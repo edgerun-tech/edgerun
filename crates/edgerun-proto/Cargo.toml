@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Generated Edgerun protocol v0 protobuf types"
 
 [dependencies]
+edgerun-json = { version = "0.1", path = "../edgerun-json" }
 prost = { workspace = true, features = ["std"] }
 prost-types = { workspace = true, features = ["std"] }
 

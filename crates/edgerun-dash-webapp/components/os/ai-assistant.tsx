@@ -4,7 +4,7 @@ import { useRef, useEffect, useCallback, useState } from "react"
 import { useStore } from "@nanostores/react"
 import { Send, Sparkles, Loader2, Bot, User, Trash2, Activity, Wifi, WifiOff, Code2, FolderOpen, Copy, Check, Workflow, Play, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { aiChatStore, addMessage, setLoading, clearChat } from "@/stores/ai-chat-store"
+import { aiChatStore, addMessage, setLoading, clearSession } from "@/stores/ai-chat-store"
 import { getSystemContext } from "@/stores/ai-chat-store"
 import { systemStatsStore, windowsStore } from "@/stores/desktop-store"
 import { fileSystemStore, openDirectory, isFileSystemAccessSupported, openDroppedFiles, handleDroppedItems } from "@/stores/file-system-store"
@@ -148,7 +148,7 @@ export function AIAssistant() {
   }
 
   const handleClear = () => {
-    clearChat()
+    clearSession()
     addMessage("assistant", "Chat cleared. How can I help you?")
   }
 

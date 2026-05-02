@@ -57,21 +57,21 @@ interface AppStoreProps {
 export function AppStore({ onLaunchApp, onAppBlocked, runningApps }: AppStoreProps) {
   const [showInstaller, setShowInstaller] = useState(false)
   const { apps: installedApps, registry } = useApps()
-  const { listGrantsForApp, resolveCapabilityForApp } = useCapabilities()
+  const { listGrantsForApp } = useCapabilities()
   const { getCachedWasm } = useRuntime()
   const mode = getDashboardMode()
 
   // Merge builtin app definitions with installed app state
   const builtinApps = listBuiltinApps()
   const allApps = builtinApps.map((def) => {
-    const installed = installedApps.find((a) => a.appId === def.appId)
+    const installed = installedApps.find((a) => a.name === def.appId)
     return {
       ...def,
       status: installed ? "installed" : def.status,
     }
   })
 
-  const installedWasm = installedApps.filter((app) => app.wasmObjectRef)
+  const installedWasm = installedApps.filter((app) => app.has_wasm_object)
 
   if (showInstaller) {
     return (
@@ -114,12 +114,16 @@ export function AppStore({ onLaunchApp, onAppBlocked, runningApps }: AppStorePro
           </h3>
           <div className="grid grid-cols-2 gap-3">
             {installedWasm.map((app) => {
-              const isRunning = runningApps.includes(app.appId)
-              const wasmBytes = getCachedWasm(app.appId)
+              const appId = app.name
+              const isRunning = runningApps.includes(appId)
+              const wasmBytes = getCachedWasm(appId)
               return (
-                <div key={app.appId} className="group flex flex-col rounded-lg border border-border bg-secondary/50 p-3">
+                <div key={appId} className="group flex flex-col rounded-lg border border-border bg-secondary/50 p-3">
                   <button
-                    onClick={() => onLaunchApp(app as unknown as AppDefinition)}
+                    onClick={() => {
+                      const builtin = getBuiltinApp(appId)
+                      if (builtin) onLaunchApp(builtin)
+                    }}
                     className="flex flex-1 flex-col text-left transition-all hover:border-primary/50"
                   >
                     <div className="flex items-start justify-between">
@@ -151,9 +155,11 @@ export function AppStore({ onLaunchApp, onAppBlocked, runningApps }: AppStorePro
       <div className="grid flex-1 grid-cols-2 gap-3 overflow-auto">
         {allApps.map((app) => {
           const isRunning = runningApps.includes(app.appId)
-          const satisfaction = resolveCapabilityForApp?.(app.appId)
-          const isBlocked = satisfaction && !satisfaction.satisfied
-          const blockedIds = satisfaction?.missing || []
+          const grants = listGrantsForApp(app.appId)
+          const hasAnyGrant = grants.length > 0
+          // Simple check: if no grants exist and app requires capabilities, it's blocked
+          const isBlocked = app.requiredCapabilityIds.length > 0 && !hasAnyGrant
+          const blockedIds = isBlocked ? app.requiredCapabilityIds : []
 
           return (
             <div key={app.appId} className="group relative">

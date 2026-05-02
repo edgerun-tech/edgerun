@@ -6,7 +6,7 @@ import {
   Globe, Wifi, WifiOff, ChevronRight, Check, RotateCcw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { EdgerRunLogo } from "./edgerun-logo"
+import { EdgerunLogo } from "./edgerun-logo"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -292,7 +292,7 @@ function AboutPanel() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-center gap-3 pt-2 text-center">
-        <EdgerRunLogo size="lg" showWordmark={false} />
+        <EdgerunLogo size="lg" variant="mark" />
         <div>
           <p className="text-lg font-semibold tracking-tight text-foreground">Edgerun</p>
           <p className="text-sm text-muted-foreground">Distributed Runtime</p>

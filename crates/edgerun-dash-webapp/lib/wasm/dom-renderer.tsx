@@ -71,7 +71,7 @@ export function UIRenderer({ node, onAction, className }: UIRendererProps) {
 
   return (
     <div className={cn("h-full w-full", className)}>
-      {renderNode(node, 0)}
+      {renderNode(node, "root")}
     </div>
   )
 }

@@ -6,7 +6,7 @@ import { useCallback } from "react"
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Message, MessageContent } from "@/packages/ai/message"
+import UIMessage, { UIMessage as MessageContent } from "@/packages/ai/message"
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>
 
@@ -108,9 +108,9 @@ export default function ConversationDemo() {
     <Conversation className="relative size-full p-4">
       <ConversationContent>
         {messages.map(msg => (
-          <Message from={msg.from} key={msg.id}>
-            <MessageContent>{msg.text}</MessageContent>
-          </Message>
+          <div from={msg.from} key={msg.id}>
+            <div>{msg.text}</div>
+          </div>
         ))}
       </ConversationContent>
       <ConversationScrollButton />

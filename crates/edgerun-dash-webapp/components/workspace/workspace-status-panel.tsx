@@ -91,8 +91,8 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
   const gitSummary = getGitSummary()
   const otherAgentSummary = getOtherAgentSummary()
   const verificationSummary = verification.status
-  const verificationErrors = verification.results.filter(r => r.status === "failed")
-  const verificationWarnings = verification.results.filter(r => r.status === "warning")
+  const verificationErrors = (verification.lastResult?.checks.filter(r => !r.passed) || [])
+  const verificationWarnings: typeof verificationErrors = []
   const memorySummary = getMemorySummary()
 
   const formatAge = (ageMs: number) => {
@@ -113,7 +113,7 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
   }
 
   const getVerificationIcon = () => {
-    switch (verification) {
+    switch (verification.status) {
       case "passed":
         return <CheckCircle2 className="h-3 w-3 text-green-500" />
       case "failed":
@@ -204,11 +204,11 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
               <span className="text-muted-foreground">Verify:</span>
               <span className={cn(
                 "font-mono",
-                verification === "passed" && "text-green-500",
-                verification === "failed" && "text-red-500",
-                verification === "running" && "text-blue-500"
+                verification.status === "passed" && "text-green-500",
+                verification.status === "failed" && "text-red-500",
+                verification.status === "running" && "text-blue-500"
               )}>
-                {verification}
+                {verification.status}
               </span>
             </div>
 
@@ -242,7 +242,7 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
             <div className="mt-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1">
               <div className="text-[10px] text-red-400">Errors:</div>
               <div className="text-[9px] text-red-300">
-                {verificationErrors.slice(0, 2).map(e => e.check).join(", ")}
+                {verificationErrors.slice(0, 2).map(e => e.name + (e.error ? ": " + e.error : "")).join(", ")}
               </div>
             </div>
           )}
@@ -251,7 +251,7 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
             <div className="mt-2 rounded border border-yellow-500/30 bg-yellow-500/10 px-2 py-1">
               <div className="text-[10px] text-yellow-400">Warnings:</div>
               <div className="text-[9px] text-yellow-300">
-                {verificationWarnings.slice(0, 2).map(w => w.check).join(", ")}
+                {verificationWarnings.slice(0, 2).map(w => w.name + (w.error ? ": " + w.error : "")).join(", ")}
               </div>
             </div>
           )}

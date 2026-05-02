@@ -68,7 +68,7 @@ export async function scanCodebase() {
           type: "directory",
         })
         try {
-          await scanDir(entry, fullPath, depth + 1)
+          await scanDir(entry as FileSystemDirectoryHandle, fullPath, depth + 1)
         } catch {
           // Skip inaccessible dirs
         }

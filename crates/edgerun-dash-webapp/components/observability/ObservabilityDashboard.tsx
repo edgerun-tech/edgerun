@@ -20,7 +20,7 @@ import {
   TestTube,
   Bot,
   Package,
-  Tokens,
+  Coins,
   AlertTriangle,
   Activity,
 } from "lucide-react"
@@ -71,7 +71,7 @@ export function ObservabilityDashboard() {
                 Nodes ({nodes.length})
               </TabsTrigger>
               <TabsTrigger value="pipelines">
-                <Pipeline className="h-4 w-4 mr-1" />
+                <GitBranch className="h-4 w-4 mr-1" />
                 Pipelines
               </TabsTrigger>
               <TabsTrigger value="agents">
@@ -87,7 +87,7 @@ export function ObservabilityDashboard() {
                 Dependencies
               </TabsTrigger>
               <TabsTrigger value="tokens">
-                <Tokens className="h-4 w-4 mr-1" />
+                <Coins className="h-4 w-4 mr-1" />
                 Tokens
               </TabsTrigger>
               <TabsTrigger value="alerts">
@@ -114,23 +114,23 @@ export function ObservabilityDashboard() {
             </TabsContent>
 
             <TabsContent value="pipelines">
-              <PipelineProgress detailed />
+              <PipelineProgress />
             </TabsContent>
 
             <TabsContent value="agents">
-              <AgentActivityPanel detailed />
+              <AgentActivityPanel />
             </TabsContent>
 
             <TabsContent value="tests">
-              <TestStatusPanel detailed />
+              <TestStatusPanel />
             </TabsContent>
 
             <TabsContent value="deps">
-              <DependencyGraph detailed />
+              <DependencyGraph />
             </TabsContent>
 
             <TabsContent value="tokens">
-              <TokenUsagePanel detailed />
+              <TokenUsagePanel />
             </TabsContent>
 
             <TabsContent value="alerts">

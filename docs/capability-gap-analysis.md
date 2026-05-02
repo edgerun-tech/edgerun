@@ -132,13 +132,6 @@ A command can request hardware-backed or attested-runtime execution, but the rec
 
 ### P1 — Security Hardening
 
-#### 2. WorkSettlement bilateral signing missing
-**Spec:** Buyer+seller signed settlement as cryptographic proof
-**Status:** Only unilateral `WorkAccounting` recorded on provider side. No bilateral settlement protocol.
-
-#### 3. ComputeAdvertisement not published/discovered
-**Status:** Type defined in `accounting.rs` but no mesh-based publish/discover flow exists.
-
 #### 4. Query signatures not verified
 **Status:** `QueryRequest.signature` is optional and **never checked** even when present. Any peer can query without authorization.
 

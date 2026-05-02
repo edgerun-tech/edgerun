@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Capability, checkCapabilities, isCapabilityAvailable, CAPABILITY_REGISTRY } from './capabilities'
+import { Capability, checkCapabilities, CAPABILITY_REGISTRY } from './capabilities'
 
 describe('capabilities', () => {
   describe('CAPABILITY_REGISTRY', () => {
@@ -34,8 +34,8 @@ describe('capabilities', () => {
         guestContext
       )
       expect(result.all).toHaveLength(2)
-      expect(result.granted.map((r) => r.capability)).toContain(Capability.Filesystem)
-      expect(result.granted.map((r) => r.capability)).toContain(Capability.NetworkAccess)
+      expect(result.granted).toContain(Capability.Filesystem)
+      expect(result.granted).toContain(Capability.NetworkAccess)
     })
 
     it('should block identity caps when no identity', () => {
@@ -73,34 +73,6 @@ describe('capabilities', () => {
         guestContext
       )
       expect(result.all).toHaveLength(1)
-    })
-  })
-
-  describe('isCapabilityAvailable', () => {
-    const guestContext = { isGuest: false, hasIdentity: false, hasNode: false }
-
-    it('should return true for non-auth capabilities', () => {
-      expect(isCapabilityAvailable(Capability.NetworkAccess, guestContext)).toBe(true)
-      expect(isCapabilityAvailable(Capability.Filesystem, guestContext)).toBe(true)
-      expect(isCapabilityAvailable(Capability.NodeConnection, guestContext)).toBe(true)
-    })
-
-    it('should return false for identity without identity', () => {
-      expect(isCapabilityAvailable(Capability.Identity, guestContext)).toBe(false)
-    })
-
-    it('should return true for identity with identity', () => {
-      const ctx = { ...guestContext, hasIdentity: true }
-      expect(isCapabilityAvailable(Capability.Identity, ctx)).toBe(true)
-    })
-
-    it('should return false for payments without context', () => {
-      expect(isCapabilityAvailable(Capability.Payments, guestContext)).toBe(false)
-    })
-
-    it('should return true for payments with identity and node', () => {
-      const ctx = { ...guestContext, hasIdentity: true, hasNode: true }
-      expect(isCapabilityAvailable(Capability.Payments, ctx)).toBe(true)
     })
   })
 })

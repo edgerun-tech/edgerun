@@ -49,10 +49,10 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
         </div>
         <div className="flex items-center gap-1">
           {hasClaim && !isVerified && (
-            <AlertTriangle className="h-3 w-3 text-yellow-500" title="Claimed done but not verified" />
+            <AlertTriangle className="h-3 w-3 text-yellow-500" aria-label="Claimed done but not verified" />
           )}
           {isVerified && (
-            <ShieldCheck className="h-3 w-3 text-green-500" title="Verified done" />
+            <ShieldCheck className="h-3 w-3 text-green-500" aria-label="Verified done" />
           )}
           <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium">
             {agent.status}

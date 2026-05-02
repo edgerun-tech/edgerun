@@ -14,7 +14,7 @@ import { AuthOverlay } from "./auth-overlay"
 import { HelpApp } from "./help-app"
 import { ContactsApp } from "./contacts-app"
 import { CallingApp } from "./calling-app"
-import { ChatApp } from "./chat-app"
+import { DemoChatApp } from "./chat-app"
 import { WalletApp } from "./wallet-app"
 import { CalculatorApp } from "./calculator-app"
 import { AIAssistant } from "./ai-assistant"
@@ -30,6 +30,7 @@ import { getDashboardMode, isDemoMode } from "@/platform/runtime/dashboard-mode"
 import {
   LayoutDashboard,
   PanelRight,
+  Users,
 } from "lucide-react"
 import { FloatingDock } from "@/components/ui/floating-dock"
 import {
@@ -43,6 +44,7 @@ import {
   stageModeStore,
   widgetVisibleStore,
   addLog,
+  openWindow,
   closeWindow,
   focusWindow,
   type OpenWindowDef,
@@ -86,6 +88,10 @@ export function Desktop() {
     "wasm-hello", "db-explorer", "network-monitor", "git-sync",
     "web-server", "compute-node", "resource-monitor", "help",
   ]
+
+  const handleCloseWindow = useCallback((id: string) => {
+    closeWindow(id)
+  }, [])
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">

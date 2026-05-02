@@ -1,12 +1,9 @@
 use edgerun_proto::edgerun::v0::stream::{CommandEnvelope, CommandType};
-use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum BootstrapPhase {
-    NotStarted,
-    Running,
-    Complete,
-    Skipped,
+#[derive(Debug, Clone)]
+pub struct SimulationResult {
+    pub accepted: bool,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone)]
@@ -112,7 +109,7 @@ pub struct DispatchResult {
 pub fn dispatch_commands_local(
     commands: Vec<CommandEnvelope>,
     state: &mut BootstrapState,
-) -> Vec<DispatchResult> {
+) -> Vec<SimulationResult> {
     let mut results = Vec::new();
 
     for cmd in commands {
@@ -134,13 +131,8 @@ pub fn dispatch_commands_local(
             state.commands_rejected += 1;
         }
 
-        results.push(DispatchResult {
+        results.push(SimulationResult {
             accepted,
-            response_bytes: if accepted {
-                build_success_response(&cmd)
-            } else {
-                build_rejection_response(&cmd, "unsupported_command_type")
-            },
             reason: if accepted {
                 String::new()
             } else {
@@ -150,38 +142,4 @@ pub fn dispatch_commands_local(
     }
 
     results
-}
-
-fn build_success_response(cmd: &CommandEnvelope) -> Vec<u8> {
-    use edgerun_proto::edgerun::v0::stream::CommandResultPayload;
-    use prost::Message;
-
-    let result = CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: cmd.issuer.clone(),
-        decision: 1,
-        decision_basis: None,
-        reason_code: String::new(),
-        effect_summary_object: None,
-        result_object: None,
-    };
-    Message::encode_to_vec(&result)
-}
-
-fn build_rejection_response(cmd: &CommandEnvelope, reason: &str) -> Vec<u8> {
-    use edgerun_proto::edgerun::v0::stream::CommandResultPayload;
-    use prost::Message;
-
-    let result = CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: cmd.issuer.clone(),
-        decision: 2,
-        decision_basis: None,
-        reason_code: String::from(reason),
-        effect_summary_object: None,
-        result_object: None,
-    };
-    Message::encode_to_vec(&result)
 }

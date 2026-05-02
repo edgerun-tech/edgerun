@@ -12,7 +12,7 @@ import {
   X,
   Clock,
 } from "lucide-react"
-import { atom } from "nanostores"
+import { atom, computed } from "nanostores"
 
 export type AlertSeverity = "critical" | "error" | "warning" | "info" | "resolved"
 
@@ -52,7 +52,7 @@ const initialAlertState: AlertState = {
 export const alertStore = atom<AlertState>(initialAlertState)
 
 export const activeAlerts = computed(alertStore, (s) =>
-  Array.from(s.alerts.values()).filter(a => a.isActive).sort((a, b) => b.lastSeen - a.lastSeen),
+  Array.from(s.alerts.values()).filter((a: Alert) => a.isActive).sort((a: Alert, b: Alert) => b.lastSeen - a.lastSeen),
 )
 
 export function raiseAlert(alert: Omit<Alert, "alertId" | "firstSeen" | "lastSeen" | "count" | "isActive">): void {
@@ -209,7 +209,7 @@ export function AlertCenter() {
       )}
 
       <div className="grid grid-cols-1 gap-2">
-        {alerts.map(alert => (
+        {alerts.map((alert: Alert) => (
           <AlertCard key={alert.alertId} alert={alert} />
         ))}
       </div>

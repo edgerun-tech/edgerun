@@ -7,10 +7,11 @@
 
 import { useApps } from "@/platform/ui/useApps"
 import { useCapabilities } from "@/platform/ui/useCapabilities"
-import { edgerun as stream } from "@/gen/edgerun/v0/stream"
+import { edgerun as streamTypes } from "@/gen/edgerun/v0/stream"
+import { edgerun as capTypes } from "@/gen/edgerun/v0/capability"
 
 interface AppListProps {
-  apps: stream.AppPackage[]
+  apps: streamTypes.v0.stream.AppPackage[]
   getGrants: (appId: string) => unknown[]
   onRefresh: () => void
 }
@@ -39,12 +40,12 @@ export function AppList({ apps, getGrants, onRefresh }: AppListProps) {
             >
               <h3 className="text-sm font-medium">{app.name}</h3>
               <div className="mt-2 flex flex-wrap gap-1">
-                {listGrantsForApp(appId).map((grant: never) => (
+                {listGrantsForApp(appId).map((grant: capTypes.v0.capability.CapabilityGrant) => (
                   <span
-                    key={(grant as { grant_id: Uint8Array }).grant_id?.toString()}
+                    key={Buffer.from(grant.grant_id || new Uint8Array(0)).toString("hex")}
                     className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px]"
                   >
-                    {Buffer.from((grant as { grant_id: Uint8Array }).grant_id || new Uint8Array(0)).toString("hex")}
+                    {Buffer.from(grant.grant_id || new Uint8Array(0)).toString("hex").slice(0, 8)}...
                   </span>
                 ))}
               </div>

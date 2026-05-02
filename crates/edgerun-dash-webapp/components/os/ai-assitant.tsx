@@ -1,6 +1,6 @@
 "use client"
 
-import { AssistantApp } from "@/components/assitant/AssistantApp"
+import { AssistantApp } from "@/components/assistant/AssistantApp"
 
 /**
  * Thin wrapper around the platform assistant.

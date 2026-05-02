@@ -7,7 +7,7 @@
 import { useCapabilities } from "@/platform/ui/useCapabilities"
 
 export function CapabilityList() {
-  const { descriptors, isLoading, error, loadCapabilities } = useCapabilities()
+  const { capabilities, isLoading, error, loadCapabilities } = useCapabilities()
 
   if (isLoading) return <div className="p-4">Loading capabilities...</div>
   if (error) return <div className="p-4 text-red-500">Error: {error}</div>
@@ -24,20 +24,26 @@ export function CapabilityList() {
         </button>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        {descriptors.map((cap) => (
+        {capabilities.map((cap) => (
           <div
-            key={cap.capabilityId}
+            key={Buffer.from(cap.capability_id).toString("hex")}
             className="rounded-lg border border-border bg-secondary/50 p-3"
           >
-            <h3 className="text-sm font-medium">{cap.label}</h3>
-            <p className="text-xs text-muted-foreground">{cap.description}</p>
+            <h3 className="text-sm font-medium">
+              {cap.provider_name || "Unnamed"}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Role: {cap.role}
+            </p>
             <div className="mt-2 flex gap-2 text-[9px]">
-              <span className="rounded bg-primary/10 px-1.5 py-0.5">
-                {cap.riskClass}
-              </span>
-              {cap.requiresUserPresence && (
+              {cap.modalities && cap.modalities.length > 0 && (
+                <span className="rounded bg-primary/10 px-1.5 py-0.5">
+                  {cap.modalities.join(", ")}
+                </span>
+              )}
+              {cap.operations && cap.operations.length > 0 && (
                 <span className="rounded bg-yellow-500/10 px-1.5 py-0.5 text-yellow-600">
-                  Requires presence
+                  {cap.operations.length} operation(s)
                 </span>
               )}
             </div>

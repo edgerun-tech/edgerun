@@ -72,9 +72,9 @@ export function AssistantApp() {
       }
 
       const data = await response.json()
-      addMessage("assitant", data.text, data.toolCalls)
+      addMessage("assistant", data.text, data.toolCalls)
     } catch (error) {
-      addMessage("assitant", `Error: ${error instanceof Error ? error.message : "Failed to get response"}`)
+      addMessage("assistant", `Error: ${error instanceof Error ? error.message : "Failed to get response"}`)
     } finally {
       setLoading(false)
     }
@@ -134,12 +134,12 @@ export function AssistantApp() {
               <div
                 className={cn(
                   "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full",
-                  msg.role === "assitant"
+                  msg.role === "assistant"
                     ? "bg-primary/20 text-primary"
                     : "bg-secondary text-muted-foreground"
                 )}
               >
-                {msg.role === "assitant" ? (
+                {msg.role === "assistant" ? (
                   <Bot className="h-4 w-4" />
                 ) : (
                   <User className="h-4 w-4" />
@@ -157,7 +157,7 @@ export function AssistantApp() {
                     msg.role === "user" && "text-right"
                   )}
                 >
-                  {msg.role === "assitant" ? "AI" : "You"} ·{" "}
+                  {msg.role === "assistant" ? "AI" : "You"} ·{" "}
                   {new Date(msg.timestamp).toLocaleTimeString("en-US", {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -175,7 +175,7 @@ export function AssistantApp() {
                   >
                     {msg.content}
                   </div>
-                  {msg.role === "assitant" && (
+                  {msg.role === "assistant" && (
                     <button
                       onClick={() => handleCopyMessage(msg.content, msg.id)}
                       className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded bg-secondary hover:bg-primary/20"

@@ -33,7 +33,6 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
   const labels: Record<ToolUIPart["state"], string> = {
     "input-streaming": "Pending",
     "input-available": "Running",
-    // @ts-expect-error state only available in AI SDK v6
     "approval-requested": "Awaiting Approval",
     "approval-responded": "Responded",
     "output-available": "Completed",
@@ -44,7 +43,6 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
   const icons: Record<ToolUIPart["state"], ReactNode> = {
     "input-streaming": <CircleIcon className="size-4" />,
     "input-available": <ClockIcon className="size-4 animate-pulse" />,
-    // @ts-expect-error state only available in AI SDK v6
     "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
     "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
     "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
@@ -96,7 +94,7 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
       Parameters
     </h4>
     <div className="rounded-md bg-muted/50">
-      <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+      <pre><code>JSON.stringify(input, null, 2)} language="json" />
     </div>
   </div>
 )
@@ -114,9 +112,9 @@ export const ToolOutput = ({ className, output, errorText, ...props }: ToolOutpu
   let Output = <div>{output as ReactNode}</div>
 
   if (typeof output === "object" && !isValidElement(output)) {
-    Output = <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
+    Output = <pre><code>JSON.stringify(output, null, 2)} language="json" />
   } else if (typeof output === "string") {
-    Output = <CodeBlock code={output} language="json" />
+    Output = <pre><code>output} language="json" />
   }
 
   return (
