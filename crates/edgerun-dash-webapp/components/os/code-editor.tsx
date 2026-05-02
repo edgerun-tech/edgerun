@@ -184,13 +184,13 @@ export function FileTreeView() {
     
     const result = await handleDroppedItems(items)
     if (result) {
-      fileSystemStore.set(s => ({
-        ...s,
+      fileSystemStore.set({
+        ...fileSystemStore.get(),
         entries: result.entries,
         rootPath: result.rootName,
         rootHandle: null,
         error: null,
-      }))
+      })
     } else if (e.dataTransfer.files.length > 0) {
       await openDroppedFiles(e.dataTransfer.files)
     }

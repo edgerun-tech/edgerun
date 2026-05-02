@@ -1,7 +1,22 @@
 import { atom, computed } from "nanostores"
-import type { AuthState, NodeProvisionInput, StoredNodeRegistration } from "@/hooks/use-auth"
 
-export type { AuthState, NodeProvisionInput, StoredNodeRegistration }
+export type AuthState = "idle" | "registering" | "authenticating" | "authenticated" | "guest" | "locked" | "error" | "unauthenticated"
+
+export interface NodeProvisionInput {
+  nodeTarget: string
+  nodeId: string
+  pairingPin?: string
+  passphrase?: string
+  provisioningToken?: string
+}
+
+export interface StoredNodeRegistration {
+  nodeId: string
+  nodeTarget: string
+  username: string
+  credentialId?: string
+  registeredAtIso: string
+}
 
 const STORAGE_KEY = "edgerun_credential_id"
 const USERNAME_KEY = "edgerun_username"

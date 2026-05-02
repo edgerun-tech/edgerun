@@ -3,21 +3,18 @@ import { getBuiltinApp, listBuiltinApps } from "@/platform/registries/builtin-ap
 import { getComponent } from "@/platform/registries/component-registry"
 import { getDefaultSize } from "@/platform/registries/window-registry"
 import { getDashboardMode, isDemoMode } from "@/platform/runtime/dashboard-mode"
-import {
-  Terminal,
-  CodeRunner,
-  ResourceMonitor,
-  AppStore as AppStoreComponent,
-  ContactsApp,
-  CallingApp,
-  ChatApp,
-  WalletApp,
-  CalculatorApp,
-  HelpApp,
-  AIAssistant,
-  WorkflowBuilder,
-  WasmAppWindow,
-} from "@/components/os"
+import { Terminal } from "@/components/os/terminal"
+import { CodeRunner } from "@/components/os/code-runner"
+import { ResourceMonitor } from "@/components/os/resource-monitor"
+import { AppStore as AppStoreComponent } from "@/components/os/app-store"
+import { ContactsApp } from "@/components/os/contacts-app"
+import { CallingApp } from "@/components/os/calling-app"
+import { DemoChatApp as ChatApp } from "@/components/os/chat-app"
+import { WalletApp } from "@/components/os/wallet-app"
+import { CalculatorApp } from "@/components/os/calculator-app"
+import { HelpApp } from "@/components/os/help-app"
+import { AIAssistant } from "@/components/os/ai-assistant"
+import { WorkflowBuilder } from "@/components/os/workflow-builder"
 import { BUILTIN_ICON_MAP } from "@/platform/registries/builtin-app-registry"
 import type { AppDefinition } from "@/platform/types/app-definition"
 
