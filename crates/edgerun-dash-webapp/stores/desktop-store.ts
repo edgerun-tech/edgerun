@@ -19,6 +19,21 @@ export interface OpenWindowDef {
   defaultSize: { width: number; height: number }
 }
 
+export interface WindowLayoutState {
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  maximized: boolean
+}
+
+export const windowLayoutStore = persistentAtom<Record<string, WindowLayoutState>>(
+  "edgerun:windowLayout",
+  {},
+  {
+    encode: JSON.stringify,
+    decode: JSON.parse,
+  }
+)
+
 export const stageModeStore = persistentAtom("edgerun:stageMode", false, {
   encode: String,
   decode: (v) => v === "true",
@@ -85,4 +100,13 @@ export function focusWindow(windowId: string) {
   windowOrderStore.set(
     [...windowOrderStore.get().filter((id) => id !== windowId), windowId]
   )
+}
+
+export function saveWindowLayout(appId: string, layout: WindowLayoutState) {
+  const store = windowLayoutStore.get()
+  windowLayoutStore.set({ ...store, [appId]: layout })
+}
+
+export function getWindowLayout(appId: string): WindowLayoutState | null {
+  return windowLayoutStore.get()[appId] || null
 }

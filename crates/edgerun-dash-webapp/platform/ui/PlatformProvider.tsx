@@ -22,6 +22,7 @@ import { permissionTracker } from "@/platform/auth/permission-tracker"
 import { sessionTracker, setNodeRegistration } from "@/platform/auth/session-tracker"
 import { approvalTracker } from "@/platform/auth/approval-tracker"
 import { appRuntime } from "@/platform/runtime/app-runtime"
+import { registerPlatformTools } from "@/platform/tools/register-tools"
 
 interface PlatformContextValue {
   protocolClient: typeof protocolClient
@@ -60,6 +61,7 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     refreshNodeStatus()
     loadApps()
     loadCapabilities()
+    registerPlatformTools()
 
     // Set up node registration if available
     if (typeof window !== "undefined") {

@@ -5,11 +5,11 @@
  */
 
 import { atom, computed } from "nanostores"
-import type { AssistantMessage, AssistantSession, AssistantToolCall } from "./assitant-types"
+import type { AssistantMessage, AssistantSession, AssistantToolCall } from "./assistant-types"
 import { getDashboardMode } from "@/platform/runtime/dashboard-mode"
 import type { edgerun } from "@/gen/edgerun/v0/capability"
 
-const STORAGE_KEY = "edgerun_assitant_session"
+const STORAGE_KEY = "edgerun_assistant_session"
 
 function loadFromStorage(): AssistantMessage[] {
   if (typeof window === "undefined") return []

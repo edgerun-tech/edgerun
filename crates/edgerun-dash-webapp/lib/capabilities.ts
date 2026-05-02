@@ -83,9 +83,35 @@ export interface GuestContext {
 
 export function checkCapabilities(
   required: Capability[],
-  _optional: Capability[],
+  optional: Capability[],
   ctx: GuestContext,
 ): { all: unknown[]; blocked: unknown[]; granted: unknown[] } {
   console.warn("checkCapabilities is deprecated. Use platform/registries/capability-registry.ts")
-  return { all: [], blocked: [], granted: [] }
+
+  const allSet = new Set<Capability>([...required, ...optional])
+  const all = Array.from(allSet)
+  const blocked: Capability[] = []
+  const granted: Capability[] = []
+
+  for (const cap of all) {
+    const info = CAPABILITY_REGISTRY[cap]
+    if (!info) continue
+
+    if (info.requiresAuth) {
+      const needsIdentity = cap === Capability.Identity || cap === Capability.HardwareSigning || cap === Capability.Payments
+      const needsNode = cap === Capability.Payments
+
+      if (needsIdentity && !ctx.hasIdentity) {
+        blocked.push(cap)
+        continue
+      }
+      if (needsNode && !ctx.hasNode) {
+        blocked.push(cap)
+        continue
+      }
+    }
+    granted.push(cap)
+  }
+
+  return { all, blocked, granted }
 }

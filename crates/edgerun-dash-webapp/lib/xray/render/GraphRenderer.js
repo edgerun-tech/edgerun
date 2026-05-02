@@ -137,7 +137,7 @@ export function createGraphRenderer(canvas, overlayCanvas) {
       const vh = canvas.height;
       const nodeCount = nodes.size;
 
-      gl.clearColor(0.06, 0.06, 0.08, 1.0);
+      gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

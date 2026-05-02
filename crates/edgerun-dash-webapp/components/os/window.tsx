@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, type ReactNode, useCallback } from "react"
 import { X, Minus, Maximize2, Minimize2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { saveWindowLayout, getWindowLayout } from "@/stores/desktop-store"
 
 interface WindowProps {
   id: string

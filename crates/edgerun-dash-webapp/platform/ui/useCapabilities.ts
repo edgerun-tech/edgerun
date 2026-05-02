@@ -12,7 +12,8 @@ import {
   loadCapabilities,
   loadGrantsForApp,
 } from "@/platform/state/capability-store"
-import { capabilityRegistry, canSatisfy, resolveCapabilityForAction } from "@/platform/registries/capability-registry"
+import { capabilityRegistry, canSatisfy } from "@/platform/registries/capability-registry"
+import { resolveCapabilityForAction, resolveCapabilityForPipeline } from "@/platform/runtime/capability-resolver"
 
 export function useCapabilities() {
   const store = useStore(capabilityStore)
@@ -31,6 +32,7 @@ export function useCapabilities() {
     registry: {
       canSatisfy,
       resolveCapabilityForAction,
+      resolveCapabilityForPipeline,
     },
   }
 }

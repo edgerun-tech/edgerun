@@ -83,14 +83,3 @@ export function canSatisfy(
     return true
   })
 }
-
-export function resolveCapabilityForAction(
-  appId: string,
-  actionId: string,
-): { satisfied: boolean; missing: string[]; explanation: string } {
-  return {
-    satisfied: true,
-    missing: [],
-    explanation: "Capability satisfied",
-  }
-}

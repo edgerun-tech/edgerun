@@ -13,9 +13,10 @@ import { DemoChatApp as ChatApp } from "@/components/os/chat-app"
 import { WalletApp } from "@/components/os/wallet-app"
 import { CalculatorApp } from "@/components/os/calculator-app"
 import { HelpApp } from "@/components/os/help-app"
-import { AIAssistant } from "@/components/os/ai-assitant"
+import { AIAssistant } from "@/components/os/ai-assistant"
 import { WorkflowBuilder } from "@/components/os/workflow-builder"
 import { FileManager } from "@/components/os/file-manager"
+import { GmailApp } from "@/components/os/gmail-app"
 import { SettingsApp } from "@/components/os/settings-app"
 import { BUILTIN_ICON_MAP } from "@/platform/registries/builtin-app-registry"
 import type { AppDefinition } from "@/platform/types/app-definition"
@@ -65,6 +66,8 @@ function resolveComponent(app: AppDefinition): React.ReactNode {
       return <WorkflowBuilder onClose={() => {}} />
     case "file-browser":
       return <FileManager />
+    case "gmail":
+      return <GmailApp />
     case "settings":
       return <SettingsApp />
     case "app-studio":

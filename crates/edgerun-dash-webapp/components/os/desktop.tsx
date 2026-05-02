@@ -66,11 +66,10 @@ export function Desktop() {
 
   const dockItems = useMemo(() => {
     const dockAppIds = [
-      "app-store", "app-studio", "ai-assistant", "workflow-builder",
-      "contacts", "calling", "chat", "wallet", "calculator",
-      "file-browser", "terminal", "code-runner",
-      "db-explorer", "network-monitor", "git-sync",
-      "web-server", "compute-node", "resource-monitor", "help",
+      "ai-assistant", "workflow-builder", "terminal", "code-runner",
+      "file-browser", "db-explorer", "network-monitor", "resource-monitor",
+      "git-sync", "web-server", "compute-node", "contacts", "calling",
+      "chat", "wallet", "calculator", "help", "gmail", "settings",
     ]
     return dockAppIds.map((appId) => {
       const app = getBuiltinApp(appId)
@@ -88,9 +87,9 @@ export function Desktop() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
-      {/* Xray graph — behind everything, non-interactive, viewport only */}
+      {/* Xray graph — behind everything, non-interactive, starts below top bar */}
       {showDesktop && (
-        <div className="pointer-events-none absolute inset-0 z-0">
+        <div className="pointer-events-none absolute inset-0 top-10 z-0">
           <XrayWorkspace mode="bg" />
         </div>
       )}

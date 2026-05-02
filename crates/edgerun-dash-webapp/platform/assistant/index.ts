@@ -48,3 +48,10 @@ export {
 } from './assistant-memory'
 
 export { recordUserCorrection } from './assistant-self-review'
+
+// Legacy-assitant files (renamed and merged into assistant/)
+export { contextSnapshotStore, buildContext, getContextSummary as getContextSummaryText, initializeContext } from './assistant-types-context'
+export type { ContextSnapshot, NodeContext, AppsContext, AppInfo, CapabilitiesContext, ConnectionsContext, ApprovalsContext, ApprovalInfo, RuntimeContext } from './assistant-types-context'
+export { getBasePrompt, getDynamicContextSection, getToolsSection, getPendingApprovalsSection, buildSystemPrompt, getPromptForModel, getWelcomeMessage } from './assistant-types-prompts'
+export { assistantSession, addMessage, setLoading, clearSession, buildPlatformContext } from './assistant-types-session'
+export type { AssistantMessage, AssistantToolCall, AssistantSession, AssistantFeedback, EvidenceRef, RiskClass, ToolSpec, ToolCallPlan } from './assistant-types'

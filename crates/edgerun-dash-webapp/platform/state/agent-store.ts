@@ -5,7 +5,7 @@
  */
 
 import { atom, computed } from "nanostores"
-import type { AssistantMessage } from "../assitant/assitant-types"
+import type { AssistantMessage } from "../assistant"
 
 export type AgentStatus = 
   | "idle"

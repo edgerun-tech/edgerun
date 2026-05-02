@@ -31,6 +31,7 @@ import {
   Workflow,
   Package,
   Mail,
+  Settings,
 } from "lucide-react"
 
 /**
@@ -57,6 +58,7 @@ export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   help: <HelpCircle className="h-5 w-5" />,
   "wasm-generic": <Package className="h-5 w-5" />,
   gmail: <Mail className="h-5 w-5" />,
+  settings: <Settings className="h-5 w-5" />,
 }
 
 export function getIconById(iconId: string): React.ReactNode {
@@ -282,6 +284,18 @@ export const BUILTIN_APPS: AppDefinition[] = [
     kind: "builtin",
     source: "builtin",
     componentKey: "gmail",
+    requiredCapabilityIds: [],
+    optionalCapabilityIds: [],
+    status: "available",
+  },
+  {
+    appId: "settings",
+    name: "Settings",
+    description: "System preferences & configuration",
+    iconId: "settings",
+    kind: "builtin",
+    source: "builtin",
+    componentKey: "settings",
     requiredCapabilityIds: [],
     optionalCapabilityIds: [],
     status: "available",

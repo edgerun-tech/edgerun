@@ -30,14 +30,9 @@ impl Handler for ExchangeApiHandler {
     }
 }
 
-pub fn run_server(config: Config) -> Result<(), alloc::string::String> {
-    let addr = format!("{}:{}", config.host, config.port);
-    let server = HttpServer::new(ExchangeApiHandler);
-    
-    // Note: this is synchronous blocking - in a real async runtime we'd use .await on bind
-    // For now, we just return Ok as this would run in a spawnable context
-    let _ = addr;
-    let _ = server;
-    
-    Ok(())
+/// Build a configured handler for the exchange API.
+/// Does NOT start a server — the caller is responsible for binding
+/// this handler to an actual HTTP transport.
+pub fn build_handler() -> ExchangeApiHandler {
+    ExchangeApiHandler
 }

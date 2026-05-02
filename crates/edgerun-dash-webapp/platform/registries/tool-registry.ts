@@ -15,7 +15,7 @@
  */
 
 import { atom, computed } from "nanostores"
-import type { RiskClass } from "@/platform/assitant/assitant-types"
+import type { RiskClass } from "@/platform/assistant"
 import {
   capabilityRegistry,
 } from "@/platform/registries/capability-registry"

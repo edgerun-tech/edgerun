@@ -1,4 +1,11 @@
 //! Exchange API handlers.
+//!
+//! Honesty contract:
+//! - /v1/quote: 501 until provider-backed routing is wired.
+//! - /v1/order: 501 until order creation is wired.
+//! - /v1/order/:id: 501 until event-derived status is wired.
+//! - /v1/assets: Static supported-assets catalog (NOT provider truth).
+//! - /health: degraded until provider health checks are real.
 
 extern crate alloc;
 
@@ -9,6 +16,8 @@ use edgerun_json::{Map, JsonValue, to_string, from_slice};
 
 use crate::types::*;
 
+/// POST /v1/quote — returns 501 until provider-backed routing is implemented.
+/// The request is parsed and validated, but no provider quote is called.
 pub fn handle_quote(req: &Request) -> Response {
     let body = match req.body() {
         Some(b) => b,
@@ -23,7 +32,9 @@ pub fn handle_quote(req: &Request) -> Response {
         Ok(json) => {
             match parse_quote_request(&json) {
                 Ok(_req) => {
-                    json_error(501, "not implemented")
+                    // Quote routing not yet wired to real providers.
+                    // Do not return fake data.
+                    json_error(501, "quote routing not yet implemented")
                 }
                 Err(e) => json_error(400, &e),
             }
@@ -32,23 +43,23 @@ pub fn handle_quote(req: &Request) -> Response {
     }
 }
 
+/// POST /v1/order — returns 501 until order creation is implemented.
 pub fn handle_order(req: &Request) -> Response {
-    let body = match req.body() {
-        Some(b) => b,
-        None => return json_error(400, "missing request body"),
-    };
-
-    if body.is_empty() {
-        return json_error(400, "missing request body");
-    }
-
-    json_error(501, "not implemented")
+    let _body = req.body();
+    // Order creation not yet wired to providers or event log.
+    json_error(501, "order creation not yet implemented")
 }
 
+/// GET /v1/order/:id — returns 501 until event-derived status is implemented.
+/// Status must come from the exchange event stream, not from mutable provider state.
 pub fn handle_order_status(req: &Request) -> Response {
-    json_error(501, "not implemented")
+    let _path = req.uri().path();
+    json_error(501, "order status not yet implemented")
 }
 
+/// GET /v1/assets — static supported-assets catalog.
+/// This is NOT provider truth. Providers may or may not support these pairs at any given time.
+/// Actual availability is determined at quote time via provider.quote().
 pub fn handle_assets(req: &Request) -> Response {
     let mut assets = Map::new();
     assets.insert("USDT".into(), asset_info("Tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"));
@@ -60,15 +71,39 @@ pub fn handle_assets(req: &Request) -> Response {
     let mut response = Map::new();
     response.insert("assets".into(), JsonValue::Object(assets));
     response.insert("count".into(), JsonValue::Number(5u64.into()));
+    response.insert("source".into(), JsonValue::String("static_catalog".into()));
+    response.insert("note".into(), JsonValue::String(
+        "This is a static catalog of supported asset types. \
+         Actual pair availability depends on provider support and is determined at quote time."
+            .into()));
 
     json_response(200, JsonValue::Object(response))
 }
 
+/// GET /health — reports degraded status because provider health checks are not yet implemented.
+/// Must not return "healthy" unless providers are actually checked.
 pub fn handle_health(req: &Request) -> Response {
-    let mut status = Map::new();
-    status.insert("status".into(), JsonValue::String("healthy".into()));
-    status.insert("providers".into(), JsonValue::Object(Map::new()));
+    let mut providers = Map::new();
+    providers.insert(
+        "SIDESHIFT".into(),
+        JsonValue::String("not_implemented".into()),
+    );
+    providers.insert(
+        "CHANGENOW".into(),
+        JsonValue::String("not_implemented".into()),
+    );
+    providers.insert(
+        "FFIO".into(),
+        JsonValue::String("not_implemented".into()),
+    );
 
+    let mut status = Map::new();
+    status.insert("status".into(), JsonValue::String("degraded".into()));
+    status.insert("reason".into(), JsonValue::String(
+        "Provider health checks not yet implemented".into()));
+    status.insert("providers".into(), JsonValue::Object(providers));
+
+    // 200 but status=degraded so orchestrators can detect
     json_response(200, JsonValue::Object(status))
 }
 

@@ -1,5 +1,5 @@
 import { computed } from 'nanostores'
-import { contextSnapshotStore, getContextSummary } from './assitant-context'
+import { contextSnapshotStore, getContextSummary } from './assistant-types-context'
 import { toolRegistry } from '../registries/tool-registry'
 import { approvalTracker } from '../auth/approval-tracker'
 

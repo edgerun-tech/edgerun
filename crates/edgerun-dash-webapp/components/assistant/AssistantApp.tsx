@@ -1,10 +1,9 @@
 "use client"
 
 import { useStore } from "@nanostores/react"
-import { assistantSession, addMessage, setLoading, clearSession } from "@/platform/assitant/assitant-session"
+import { assistantSession, addMessage, setLoading, clearSession, buildSystemPrompt } from "@/platform/assistant"
 import { toolRegistry, invokeToolCall } from "@/platform/registries/tool-registry"
 import { getDashboardMode } from "@/platform/runtime/dashboard-mode"
-import { buildSystemPrompt } from "@/platform/assitant/assitant-prompts"
 import { cn } from "@/lib/utils"
 import {
   Send,

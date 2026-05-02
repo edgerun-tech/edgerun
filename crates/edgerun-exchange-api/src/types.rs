@@ -177,34 +177,21 @@ impl ToJson for AssetInfo {
 }
 
 /// Health check response.
+/// Status is "degraded" until provider health checks are real.
 #[derive(Debug)]
 pub struct ApiHealthResponse {
     pub status: alloc::string::String,
-    pub providers: alloc::collections::BTreeMap<alloc::string::String, ProviderHealth>,
-}
-
-#[derive(Debug)]
-pub struct ProviderHealth {
-    pub available: bool,
-    pub latency_ms: Option<u32>,
+    pub reason: alloc::string::String,
+    /// Provider health — keys are internal codes, values indicate check status.
+    pub providers: alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
 }
 
 impl ToJson for ApiHealthResponse {
     fn to_json(&self) -> JsonValue {
         let mut map = Map::new();
         map.insert("status".into(), self.status.to_json());
+        map.insert("reason".into(), self.reason.to_json());
         map.insert("providers".into(), self.providers.to_json());
-        JsonValue::Object(map)
-    }
-}
-
-impl ToJson for ProviderHealth {
-    fn to_json(&self) -> JsonValue {
-        let mut map = Map::new();
-        map.insert("available".into(), self.available.to_json());
-        if let Some(l) = self.latency_ms {
-            map.insert("latency_ms".into(), l.to_json());
-        }
         JsonValue::Object(map)
     }
 }

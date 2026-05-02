@@ -4,25 +4,22 @@ import { systemStatsStore, windowsStore } from "@/stores/desktop-store"
 import { appStore } from "@/platform/state/app-store"
 import { capabilityStore } from "@/platform/state/capability-store"
 import { nodeStore } from "@/platform/state/node-store"
-import { fileSystemStore, isFileSystemAccessSupported } from "@/stores/file-system-store"
-import { getCodebaseContext, scanCodebase } from "@/stores/codebase-context"
+import { fileSystemStore } from "@/stores/file-system-store"
+import { getCodebaseContext } from "@/stores/codebase-context"
 import {
   getWorkflowsForAI,
   getWorkflowDetailsForAI,
-  createWorkflowFromAI,
-  updateWorkflowFromAI,
-  executeWorkflow,
   getExecutionHistory,
-  type Workflow,
 } from "@/stores/workflow-store"
 import { getSystemPrompt } from "./system-prompt"
+import { explainToolAvailability } from "@/platform/registries/tool-registry"
 
 const opencode = createOpenAI({
   baseURL: "https://opencode.ai/zen/v1",
   apiKey: process.env.OPENCODE_API_KEY || "",
 })
 
-const FREE_MODEL = "minimax-m2.5-free"
+const FREE_MODEL = "minimax-m2-free"
 
 export const maxDuration = 60
 
@@ -57,108 +54,35 @@ function getRealSystemData() {
   }
 }
 
-function getWorkflowContext(): string {
+function getReadonlyContext(): string {
   const workflows = getWorkflowsForAI()
+  const toolAvailability = explainToolAvailability()
+
   return `
-## Workflows
+## Workflows (${workflows.length} total)
 
-${workflows}
+Available workflows:
+${workflows.map(w => `- ${w.name} (${w.workflowId}): ${w.trigger}`).join("\n") || "No workflows"}
 
-You can help users:
-- Create new workflows with stages and actions
-- Edit existing workflows
-- Execute workflows manually
-- View workflow execution history
+## Registered Tools
 
-To work with workflows, tell me what you want to do (create/edit/run) and I'll help you manage them.`
+${toolAvailability}
+
+To perform actions, reference tools by their toolId. The chat route is read-only — all mutations go through the tool registry.`
 }
 
 export async function POST(req: Request) {
   const body = await req.json()
-  const { messages, action, workflowAction } = body
-
-  // Handle special actions
-  if (action === "scanCodebase") {
-    await scanCodebase()
-    return Response.json({ success: true, message: "Codebase scanned" })
-  }
-
-  if (action === "openFolder") {
-    const { openDirectory } = await import("@/stores/file-system-store")
-    const success = await openDirectory()
-    if (success) {
-      await scanCodebase()
-    }
-    return Response.json({ success, message: success ? "Folder opened" : "Failed" })
-  }
-
-  // Handle workflow actions
-  if (workflowAction) {
-    try {
-      switch (workflowAction.type) {
-        case "list": {
-          const workflows = getWorkflowsForAI()
-          return Response.json({ text: `Here are your workflows:\n\n${workflows}` })
-        }
-
-        case "details": {
-          const details = getWorkflowDetailsForAI(workflowAction.workflowId)
-          return Response.json({ text: details })
-        }
-
-        case "create": {
-          const workflowId = createWorkflowFromAI(workflowAction.name || "New Workflow", workflowAction.description || "", workflowAction.trigger || "manual")
-          if (workflowId) {
-            return Response.json({ 
-              text: `Created workflow "${workflowId}" successfully! You can now open the Workflow Builder to edit it.`,
-            })
-          }
-          return Response.json({ text: "Failed to create workflow. Check the JSON format." }, { status: 400 })
-        }
-
-        case "update": {
-          updateWorkflowFromAI(workflowAction.workflowId, workflowAction.updates)
-          return Response.json({ text: "Workflow updated successfully!" })
-        }
-
-        case "execute": {
-          const execId = await executeWorkflow(workflowAction.workflowId)
-          return Response.json({ 
-            text: `Workflow execution started with ID: ${execId}`,
-          })
-        }
-
-        case "history": {
-          const history = getExecutionHistory(workflowAction.workflowId)
-          if (history.length === 0) {
-            return Response.json({ text: "No execution history for this workflow." })
-          }
-          const summary = history.map(e => 
-            `- ${new Date(e.startedAt).toLocaleString()}: ${e.status} ${e.error ? `(result: ${e.status})` : ""}`
-          ).join("\n")
-          return Response.json({ text: `Execution history:\n${summary}` })
-        }
-
-        default:
-          return Response.json({ text: "Unknown workflow action" }, { status: 400 })
-      }
-    } catch (error) {
-      return Response.json({ 
-        text: `Workflow error: ${error instanceof Error ? error.message : "Unknown error"}` 
-      }, { status: 500 })
-    }
-  }
+  const { messages } = body
 
   const systemData = getRealSystemData()
   const codebaseContext = getCodebaseContext()
-  const workflowContext = getWorkflowContext()
-  const fsSupported = isFileSystemAccessSupported()
+  const readonlyCtx = getReadonlyContext()
 
   const systemPrompt = getSystemPrompt()
     .replace("{{SYSTEM_DATA}}", JSON.stringify(systemData, null, 2))
     .replace("{{CODEBASE_CONTEXT}}", codebaseContext)
-    .replace("{{WORKFLOW_CONTEXT}}", workflowContext)
-    .replace("{{FS_SUPPORTED}}", fsSupported ? "yes" : "no")
+    .replace("{{WORKFLOW_CONTEXT}}", readonlyCtx)
 
   try {
     const result = await generateText({

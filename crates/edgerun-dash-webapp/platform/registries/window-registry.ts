@@ -45,6 +45,8 @@ const BUILTIN_SPECS: Record<string, WindowSpec> = {
   help: { defaultWidth: 420, defaultHeight: 480 },
   "app-store": { defaultWidth: 700, defaultHeight: 500 },
   "app-studio": { defaultWidth: 800, defaultHeight: 600 },
+  gmail: { defaultWidth: 700, defaultHeight: 500 },
+  settings: { defaultWidth: 600, defaultHeight: 500 },
   "wasm-hello": { defaultWidth: 700, defaultHeight: 450 },
   "wasm-calculator": { defaultWidth: 700, defaultHeight: 450 },
 }
