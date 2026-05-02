@@ -17,7 +17,7 @@ pub(crate) async fn run_provisioning_listener(
     cancel: CancellationToken,
 ) {
     let addr = format!("0.0.0.0:{PROVISION_PORT}");
-    let listen_addr = match addr.parse() {
+    let listen_addr: std::net::SocketAddr = match addr.parse() {
         Ok(a) => a,
         Err(e) => {
             edgerun_log::error!("failed to parse provisioning address: {e}");

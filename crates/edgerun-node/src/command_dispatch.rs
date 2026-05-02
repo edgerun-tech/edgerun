@@ -284,7 +284,7 @@ pub fn dispatch_command(
         has_local_session: exec_ctx.has_local_session,
         has_user_presence: exec_ctx.has_user_presence,
         transport_class: exec_ctx.transport_class.as_deref().and_then(|s| {
-            match s.as_str() {
+            match s as &str {
                 "lan" => Some(1),      // TRANSPORT_CLASS_LAN
                 "mesh" => Some(2),     // TRANSPORT_CLASS_MESH
                 "internet" => Some(3), // TRANSPORT_CLASS_INTERNET
@@ -296,7 +296,7 @@ pub fn dispatch_command(
         target_view_type: exec_ctx.target_view_type.as_deref(),
         target_domain: exec_ctx.target_domain.as_deref(),
         execution_class: exec_ctx.execution_class.as_deref().and_then(|s| {
-            match s.as_str() {
+            match s as &str {
                 "wasm" => Some(1),     // EXECUTION_CLASS_WASM
                 "native" => Some(2),   // EXECUTION_CLASS_NATIVE
                 "container" => Some(3), // EXECUTION_CLASS_CONTAINER
@@ -304,7 +304,7 @@ pub fn dispatch_command(
             }
         }),
         storage_class: exec_ctx.storage_class.as_deref().and_then(|s| {
-            match s.as_str() {
+            match s as &str {
                 "file" => Some(1),     // STORAGE_CLASS_FILE
                 "memory" => Some(2),   // STORAGE_CLASS_MEMORY
                 "object" => Some(3),   // STORAGE_CLASS_OBJECT
@@ -841,7 +841,7 @@ fn dispatch_install_app(
 
     // Decode AppPackage from the object content to resolve internal ObjectRefs
     let app_package: edgerun_proto::edgerun::v0::stream::AppPackage =
-        match prost::Message::decode(package_bytes.as_slice()) {
+        match prost::Message::decode(package_bytes.content.as_slice()) {
             Ok(pkg) => pkg,
             Err(e) => {
                 return record_and_respond(
@@ -1513,13 +1513,14 @@ fn dispatch_request_user_presence(
         &[stream_id.to_vec()],
     );
 
+    let granted_obj_ref = granted_obj.as_ref().ok().cloned();
     let result_payload = build_command_result_payload(
         command,
         CommandDecision::Committed as i32,
         "",
-        granted_obj.as_ref().ok().cloned(),
+        granted_obj_ref.clone(),
         request_obj.as_ref().ok().cloned(),
-        granted_obj.ok(),
+        granted_obj_ref.clone(),
     );
     let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
@@ -1539,7 +1540,7 @@ fn dispatch_request_user_presence(
         "",
         response_bytes,
         None,
-        granted_obj.ok(),
+        granted_obj_ref,
     )
 }
 
@@ -1678,13 +1679,14 @@ fn dispatch_request_signature(
         &[stream_id.to_vec()],
     );
 
+    let response_obj_ref = response_obj.as_ref().ok().cloned();
     let result_payload = build_command_result_payload(
         command,
         CommandDecision::Committed as i32,
         "",
-        response_obj.as_ref().ok().cloned(),
+        response_obj_ref.clone(),
         request_obj.as_ref().ok().cloned(),
-        response_obj.ok(),
+        response_obj_ref.clone(),
     );
     let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
@@ -1704,7 +1706,7 @@ fn dispatch_request_signature(
         "",
         response_bytes,
         None,
-        response_obj.ok(),
+        response_obj_ref,
     )
 }
 
@@ -2913,19 +2915,8 @@ mod tests {
     use edgerun_storage::{BlobKeySource, NodeStore, NodeStoreConfig};
     use std::sync::Arc;
 
-    fn test_workload_policy() -> super::super::workload_policy::WorkloadPolicy {
-        super::super::workload_policy::WorkloadPolicy::permissive()
-    }
-
-    fn test_rate_limiter() -> super::super::workload_policy::RateLimiter {
-        super::super::workload_policy::RateLimiter::new(1000, 60_000_000)
-    }
-
-    fn test_running_workloads() -> std::sync::Arc<super::super::running_workloads::RunningWorkloads>
-    {
-        std::sync::Arc::new(super::super::running_workloads::RunningWorkloads::new())
-    }
-
+    // Test helpers for workload policy removed - modules not needed for interface boundary audit
+    // The dispatch_command function now takes CommandExecutionContext directly
     // -----------------------------------------------------------------------
     // Test helpers
     // -----------------------------------------------------------------------
@@ -3031,6 +3022,7 @@ mod tests {
             payload: None,
             delegation_chain: vec![],
             requested_assurance: None,
+            app_intent: vec![],
             command_metadata: None,
             signature: None,
         }
@@ -3356,6 +3348,7 @@ bootstrap_peers: []
         revoked: &HashSet<Vec<u8>>,
         trusted: &[Vec<u8>],
     ) -> CommandDispatchResult {
+        let exec_ctx = CommandExecutionContext::test_default();
         dispatch_command(
             command,
             store,
@@ -3366,10 +3359,7 @@ bootstrap_peers: []
             revoked,
             trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &test_running_workloads(),
+            &exec_ctx,
         )
     }
 
@@ -4164,6 +4154,7 @@ bootstrap_peers: []
             CommandType::Query as i32,
         );
 
+        let exec_ctx = CommandExecutionContext::test_default();
         let _result = dispatch_command(
             &command,
             &mut store,
@@ -4174,10 +4165,7 @@ bootstrap_peers: []
             &revoked,
             &trusted,
             2, // HARDWARE_BACKED
-            &test_capacity_tracker(),
-            &test_workload_policy(),
-            &test_rate_limiter(),
-            &std::sync::Arc::new(crate::running_workloads::RunningWorkloads::new()),
+            &exec_ctx,
         );
 
         // After genesis (seq 0), there should be additional events recorded

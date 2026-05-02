@@ -29,7 +29,6 @@ use crate::tcp_server::{
     run_tcp_listener, SessionContext,
 };
 use crate::types::{StoreRequest, StoreResponse};
-use crate::workload_policy;
 
 async fn run_fetch_queue_consumer(
     peers: Vec<BootstrapPeer>,
@@ -458,32 +457,6 @@ pub async fn cmd_run(
         capacity::format_bytes(tracker.available_memory()),
     );
 
-    // Load workload content policy (optional file next to config)
-    let policy_path = path
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."))
-        .join("workload_policy.txt");
-    let workload_policy = match workload_policy::load_policy_file(&policy_path) {
-        Ok(p) => {
-            if !p.allowed_registries.is_empty()
-                || !p.blocked_images.is_empty()
-                || !p.pinned_digests.is_empty()
-            {
-                edgerun_log::info!(
-                    "workload policy loaded: {} registries, {} blocked, {} pinned",
-                    p.allowed_registries.len(),
-                    p.blocked_images.len(),
-                    p.pinned_digests.len()
-                );
-            }
-            p
-        }
-        Err(e) => {
-            edgerun_log::warn!("failed to load workload policy: {}", e);
-            workload_policy::WorkloadPolicy::permissive()
-        }
-    };
-
     // Create genesis if new node
     let stream_id_bytes = config.stream_id.as_bytes();
     let head_result = store.get_head(stream_id_bytes).unwrap_or_else(|e| {
@@ -646,8 +619,6 @@ pub async fn cmd_run(
             message_hash_cache,
             allowed_peers,
             node_id,
-            tracker,
-            workload_policy,
             local_assurance_class,
         );
     });

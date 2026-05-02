@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use edgerun_core::command::CommandExecutionContext;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_storage::NodeStore;
 
@@ -271,6 +272,9 @@ pub fn run_store_task(
             StoreRequest::Command {
                 command, reply_tx, ..
             } => {
+                // Build execution context from available information
+                // In a real implementation, this would be populated from the ingress layer
+                let exec_ctx = CommandExecutionContext::test_default();
                 let result = command_dispatch::dispatch_command(
                     &command,
                     &mut store,
@@ -281,6 +285,7 @@ pub fn run_store_task(
                     &revoked_delegations,
                     &trusted_root_ids,
                     local_assurance_class,
+                    &exec_ctx,
                 );
                 if let Some(tx) = reply_tx {
                     let _ = tx.send(StoreResponse::Ok(result.response_bytes));

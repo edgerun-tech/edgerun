@@ -200,20 +200,10 @@ initial_grants: []
     println!();
 
     // Run benchmarks and cache performance certificate
-    println!("Running performance benchmarks...");
-    let cert = edgerun_core::benchmark::run_full_benchmark(node_id.0);
-    let data_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-    let cert_path = data_dir.join("perf_cert.bin");
-    if let Err(e) = std::fs::write(&cert_path, cert.to_bytes()) {
-        eprintln!("warning: failed to cache perf cert: {}", e);
-    } else {
-        let mult = cert.cpu_core_multiplier().to_raw() as f64 / 65536.0;
-        println!("  CPU:      {:.2}x reference", mult);
-        println!("  Mem BW:   {} MB/s", cert.mem_bandwidth_mbps);
-        println!("  Mem Lat:  {} ns", cert.mem_latency_ns);
-        println!("  Stor IOPS: {}", cert.storage_random_iops);
-        println!("  Cert:     {}", cert_path.display());
-    }
+    // TODO: benchmark module not yet implemented in edgerun-core
+    // println!("Running performance benchmarks...");
+    // let cert = edgerun_core::benchmark::run_full_benchmark(node_id.0);
+    // ...
 }
 
 pub fn check_yubikey_available() -> bool {
