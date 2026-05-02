@@ -1,7 +1,10 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { persistentAtom } from "@nanostores/persistent"
+import { useStore } from "@nanostores/react"
 import {
+  GripVertical,
   Music2,
   SkipBack,
   SkipForward,
@@ -15,6 +18,11 @@ import {
   Droplets,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+const widgetOrderStore = persistentAtom<string[]>("edgerun:widgetOrder", ["music", "lights", "ac"], {
+  encode: JSON.stringify,
+  decode: (v) => JSON.parse(v),
+})
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -451,6 +459,40 @@ interface WidgetPanelProps {
 }
 
 export function WidgetPanel({ visible, onToggle }: WidgetPanelProps) {
+  const widgetOrder = useStore(widgetOrderStore)
+  const dragItem = useRef<number | null>(null)
+  const dragOverItem = useRef<number | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDragStart = (index: number) => {
+    dragItem.current = index
+    setIsDragging(true)
+  }
+
+  const handleDragEnter = (index: number) => {
+    dragOverItem.current = index
+    if (dragItem.current !== null && dragItem.current !== index) {
+      const order = [...widgetOrderStore.get()]
+      const item = order[dragItem.current]
+      order.splice(dragItem.current, 1)
+      order.splice(index, 0, item)
+      dragItem.current = index
+      widgetOrderStore.set(order)
+    }
+  }
+
+  const handleDragEnd = () => {
+    dragItem.current = null
+    dragOverItem.current = null
+    setIsDragging(false)
+  }
+
+  const widgetMap: Record<string, React.ReactNode> = {
+    music: <MusicWidget />,
+    lights: <LightsWidget />,
+    ac: <AcWidget />,
+  }
+
   return (
     <>
       {/* Toggle tab */}
@@ -478,9 +520,25 @@ export function WidgetPanel({ visible, onToggle }: WidgetPanelProps) {
         )}
         style={{ scrollbarWidth: "none" }}
       >
-        <MusicWidget />
-        <LightsWidget />
-        <AcWidget />
+        {widgetOrder.map((key, index) => (
+          <div
+            key={key}
+            draggable={!isDragging}
+            onDragStart={() => handleDragStart(index)}
+            onDragEnter={() => handleDragEnter(index)}
+            onDragEnd={handleDragEnd}
+            onDragOver={(e) => e.preventDefault()}
+            className={cn(
+              "group relative",
+              isDragging && "cursor-grabbing"
+            )}
+          >
+            <div className="absolute -left-1 top-3 z-10 flex h-5 w-5 cursor-grab items-center justify-center rounded opacity-0 transition-opacity hover:bg-secondary/80 group-hover:opacity-100">
+              <GripVertical className="h-3 w-3 text-muted-foreground" />
+            </div>
+            {widgetMap[key]}
+          </div>
+        ))}
       </div>
     </>
   )

@@ -197,6 +197,7 @@ export function Desktop() {
                 <Window
                   key={win.id}
                   id={win.id}
+                  appId={win.appId}
                   title={win.title}
                   icon={win.icon}
                   defaultPosition={win.defaultPosition}

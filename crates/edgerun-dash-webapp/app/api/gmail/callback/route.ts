@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/dashboard?gmail_error=${error}`, req.nextUrl.origin)
+      new URL(`/?gmail_error=${error}`, req.nextUrl.origin)
     )
   }
 
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   const clientId = process.env.GMAIL_CLIENT_ID
   const clientSecret = process.env.GMAIL_CLIENT_SECRET
-  const redirectUri = process.env.GMAIL_REDIRECT_URI || "http://127.0.0.1/api/gmail/callback"
+  const redirectUri = process.env.GMAIL_REDIRECT_URI || `${req.nextUrl.origin}/api/gmail/callback`
 
   if (!clientId || !clientSecret) {
     return NextResponse.json(
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
     const userInfo = userRes.ok ? await userRes.json() : null
 
     const res = NextResponse.redirect(
-      new URL("/dashboard?gmail_connected=true", req.nextUrl.origin)
+      new URL("/?gmail_connected=true", req.nextUrl.origin)
     )
 
     // Store tokens in httpOnly cookies (in production, use secure session store)

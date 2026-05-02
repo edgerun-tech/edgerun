@@ -176,12 +176,12 @@ export function GmailApp({ className }: GmailAppProps) {
         setEmail(decodeURIComponent(emailCookie.split("=")[1]))
       }
       // Clean URL
-      window.history.replaceState({}, "", "/dashboard")
+      window.history.replaceState({}, "", "/")
       fetchEmails()
     }
     if (params.get("gmail_error")) {
       setError(`OAuth error: ${params.get("gmail_error")}`)
-      window.history.replaceState({}, "", "/dashboard")
+      window.history.replaceState({}, "", "/")
     }
   }, [fetchEmails])
 

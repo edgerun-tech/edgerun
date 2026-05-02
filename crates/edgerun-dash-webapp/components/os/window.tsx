@@ -7,6 +7,7 @@ import { saveWindowLayout, getWindowLayout } from "@/stores/desktop-store"
 
 interface WindowProps {
   id: string
+  appId?: string
   title: string
   icon?: ReactNode
   children: ReactNode
@@ -25,6 +26,7 @@ interface WindowProps {
 
 export function Window({
   id,
+  appId,
   title,
   icon,
   children,
@@ -38,9 +40,10 @@ export function Window({
   stageHidden = false,
   stageMode = false,
 }: WindowProps) {
-  const [position, setPosition] = useState(defaultPosition)
-  const [size, setSize] = useState(defaultSize)
-  const [isMaximized, setIsMaximized] = useState(false)
+  const savedLayout = appId ? getWindowLayout(appId) : null
+  const [position, setPosition] = useState(savedLayout?.position ?? defaultPosition)
+  const [size, setSize] = useState(savedLayout?.size ?? defaultSize)
+  const [isMaximized, setIsMaximized] = useState(savedLayout?.maximized ?? false)
   const [isMinimized, setIsMinimized] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
@@ -96,6 +99,9 @@ export function Window({
     const handleMouseUp = () => {
       setIsDragging(false)
       setIsResizing(false)
+      if (appId && !isMaximized) {
+        saveWindowLayout(appId, { position: position, size, maximized: false })
+      }
     }
 
     if (isDragging || isResizing) {
@@ -107,18 +113,21 @@ export function Window({
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
     }
-  }, [isDragging, isResizing, minSize.width, minSize.height])
+  }, [isDragging, isResizing, isMaximized, minSize.width, minSize.height, appId, position, size])
 
   const handleMaximize = () => {
     if (isMaximized) {
       setPosition(preMaximizeState.current.position)
       setSize(preMaximizeState.current.size)
+      setIsMaximized(false)
+      if (appId) saveWindowLayout(appId, { position: preMaximizeState.current.position, size: preMaximizeState.current.size, maximized: false })
     } else {
       preMaximizeState.current = { position, size }
       setPosition({ x: 0, y: 40 })
       setSize({ width: window.innerWidth, height: window.innerHeight - 40 })
+      setIsMaximized(true)
+      if (appId) saveWindowLayout(appId, { position: { x: 0, y: 40 }, size: { width: window.innerWidth, height: window.innerHeight - 40 }, maximized: true })
     }
-    setIsMaximized(!isMaximized)
   }
 
   const handleMinimize = () => {
