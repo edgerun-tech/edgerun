@@ -358,7 +358,7 @@ impl QuicTlsServerHandshaker {
     ///
     /// Returns a tuple of:
     /// - `(handshake_crypto_data, client_finished_verify_data)` — the data to send and the expected client verify data
-    pub fn build_encrypted_handshake(&self) -> Result<(Vec<u8>, Vec<u8>), String> {
+    pub fn build_encrypted_handshake(&mut self) -> Result<(Vec<u8>, Vec<u8>), String> {
         let ks = self.key_schedule.as_ref().ok_or_else(|| {
             "Key schedule not initialized — process_client_hello first".to_string()
         })?;
@@ -370,10 +370,12 @@ impl QuicTlsServerHandshaker {
         // 1. EncryptedExtensions
         let ee = build_encrypted_extensions(self.negotiated_alpn.as_deref());
         output.extend_from_slice(&ee);
+        self.transcript.extend_from_slice(&ee);
 
         // 2. Certificate
         let cert_msg = build_certificate_message(&self.cert_and_key.cert_der);
         output.extend_from_slice(&cert_msg);
+        self.transcript.extend_from_slice(&cert_msg);
 
         // 3. CertificateVerify
         let cv = build_certificate_verify(
@@ -383,11 +385,12 @@ impl QuicTlsServerHandshaker {
         )
         .map_err(|e| format!("CertificateVerify build failed: {:?}", e))?;
         output.extend_from_slice(&cv);
+        self.transcript.extend_from_slice(&cv);
 
         // 4. Finished
         let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
         // The pre-finished transcript hash is hash(CH || SH || EE || Cert || CertVerify)
-        let pre_finished_transcript = self.transcript_with_messages(&[&ee, &cert_msg, &cv]);
+        let pre_finished_transcript = self.transcript.clone();
         let pre_finished_hash = self.hasher.hash(&pre_finished_transcript);
 
         // Derive finished_key from server_hs_secret (RFC 8446 §4.4.4)
@@ -403,6 +406,7 @@ impl QuicTlsServerHandshaker {
         // Build the server's Finished message first
         let finished_msg = build_finished_message(&verify_data);
         output.extend_from_slice(&finished_msg);
+        self.transcript.extend_from_slice(&finished_msg);
 
         // For client Finished verification, we need to return the expected verify data
         // The client's Finished verify_data is computed over the transcript INCLUDING
@@ -413,9 +417,7 @@ impl QuicTlsServerHandshaker {
                 .expand_label(&client_hs_secret, "finished", &[], self.hasher.len());
 
         // Build the full transcript including server's Finished for client's verify_data
-        let mut full_transcript = pre_finished_transcript.clone();
-        full_transcript.extend_from_slice(&finished_msg);
-        let full_transcript_hash = self.hasher.hash(&full_transcript);
+        let full_transcript_hash = self.hasher.hash(&self.transcript);
 
         let client_verify_data = match self.hasher {
             Hasher::Sha256 => {
@@ -462,7 +464,8 @@ impl QuicTlsServerHandshaker {
 
         let initial_keys = self.initial_keys(client_dcid);
 
-        let transcript_hash = self.hasher.hash(self.transcript_without_client_finished());
+        // For handshake keys, use transcript without client's Finished
+        let transcript_hash = self.hasher.hash(&self.transcript);
         let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
         let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
 
@@ -481,6 +484,7 @@ impl QuicTlsServerHandshaker {
         let hs_write_hp = quic_hp_key(&server_hs_secret, self.cipher_suite.key_len(), &self.hasher);
         let hs_read_hp = quic_hp_key(&client_hs_secret, self.cipher_suite.key_len(), &self.hasher);
 
+        // For app keys, use transcript that includes client's Finished
         let app_transcript_hash = self.hasher.hash(transcript_after_finished);
         let client_app_secret = ks.client_app_traffic_secret(&app_transcript_hash);
         let server_app_secret = ks.server_app_traffic_secret(&app_transcript_hash);

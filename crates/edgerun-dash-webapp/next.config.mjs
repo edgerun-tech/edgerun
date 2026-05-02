@@ -6,7 +6,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: "export"
+  output: "export",
+  font: {
+    fontFamily: false,
+  },
 }
 
 export default nextConfig

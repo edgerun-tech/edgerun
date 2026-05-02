@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { CommandPalette } from '../components/os/command-input'
 import { ContextMenuProvider } from '../components/contextmenu-provider'
+import { PlatformProvider } from '@/platform/ui/PlatformProvider'
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
@@ -38,8 +39,10 @@ export default function RootLayout({
     <html lang="en" className="bg-background">
       <body className="font-sans antialiased overflow-hidden">
         <ContextMenuProvider>
-          {children}
-          <CommandPalette />
+          <PlatformProvider>
+            {children}
+            <CommandPalette />
+          </PlatformProvider>
         </ContextMenuProvider>
       </body>
     </html>

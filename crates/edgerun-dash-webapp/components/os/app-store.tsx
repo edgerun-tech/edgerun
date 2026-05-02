@@ -1,11 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import { useStore } from "@nanostores/react"
 import { Terminal, Code2, Database, Globe, FileText, GitBranch, Cpu, Network, HelpCircle, Users, Phone, MessageSquare, Wallet, Calculator, Upload, Trash2, Package, Lock, Shield, Activity } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { WasmInstaller, type WasmInstallResult } from "@/components/wasm-installer"
-import { wasmRegistry } from "@/lib/wasm/wasm-registry"
-import { Capability, type CapabilityInfo, CAPABILITY_REGISTRY, type GuestContext, checkCapabilities } from "@/lib/capabilities"
+import { useApps } from "@/platform/ui/useApps"
+import { useCapabilities } from "@/platform/ui/useCapabilities"
+import { useRuntime } from "@/platform/ui/useRuntime"
+import { type GuestContext, CAPABILITY_REGISTRY } from "@/lib/capabilities"
 
 export interface AppDefinition {
   id: string
@@ -17,8 +20,8 @@ export interface AppDefinition {
   price: string | "Free"
   wasmUrl?: string
   isWasm?: boolean
-  requiredCapabilities?: Capability[]
-  optionalCapabilities?: Capability[]
+  requiredCapabilities?: string[]
+  optionalCapabilities?: string[]
 }
 
 export const availableApps: AppDefinition[] = [
@@ -48,7 +51,7 @@ export const availableApps: AppDefinition[] = [
     ram: "64MB",
     cpu: "0.5%",
     price: "$5/mo",
-    optionalCapabilities: [Capability.NodeConnection],
+    optionalCapabilities: ["node_connection"],
   },
   {
     id: "network-monitor",
@@ -76,7 +79,7 @@ export const availableApps: AppDefinition[] = [
     ram: "24MB",
     cpu: "0.1%",
     price: "Free",
-    optionalCapabilities: [Capability.Filesystem],
+    optionalCapabilities: ["filesystem"],
   },
   {
     id: "git-sync",
@@ -86,7 +89,7 @@ export const availableApps: AppDefinition[] = [
     ram: "96MB",
     cpu: "1.2%",
     price: "$3/mo",
-    optionalCapabilities: [Capability.NodeConnection],
+    optionalCapabilities: ["node_connection"],
   },
   {
     id: "web-server",
@@ -96,7 +99,7 @@ export const availableApps: AppDefinition[] = [
     ram: "64MB",
     cpu: "0.8%",
     price: "Free",
-    optionalCapabilities: [Capability.NetworkAccess],
+    optionalCapabilities: ["network_access"],
   },
   {
     id: "compute-node",
@@ -106,7 +109,7 @@ export const availableApps: AppDefinition[] = [
     ram: "256MB",
     cpu: "5.0%",
     price: "$10/mo",
-    optionalCapabilities: [Capability.NodeConnection],
+    optionalCapabilities: ["node_connection"],
   },
   {
     id: "contacts",
@@ -116,7 +119,7 @@ export const availableApps: AppDefinition[] = [
     ram: "12MB",
     cpu: "0.0%",
     price: "Free",
-    requiredCapabilities: [Capability.Identity],
+    requiredCapabilities: ["identity"],
   },
   {
     id: "calling",
@@ -126,7 +129,7 @@ export const availableApps: AppDefinition[] = [
     ram: "48MB",
     cpu: "1.0%",
     price: "Free",
-    requiredCapabilities: [Capability.Identity, Capability.VoiceCall],
+    requiredCapabilities: ["identity", "voice_call"],
   },
   {
     id: "chat",
@@ -136,7 +139,7 @@ export const availableApps: AppDefinition[] = [
     ram: "24MB",
     cpu: "0.2%",
     price: "Free",
-    requiredCapabilities: [Capability.Identity],
+    requiredCapabilities: ["identity"],
   },
   {
     id: "wallet",
@@ -146,7 +149,7 @@ export const availableApps: AppDefinition[] = [
     ram: "16MB",
     cpu: "0.1%",
     price: "Free",
-    requiredCapabilities: [Capability.Identity, Capability.Payments],
+    requiredCapabilities: ["identity", "payments"],
   },
   {
     id: "calculator",
@@ -214,17 +217,18 @@ interface AppStoreProps {
 
 export function AppStore({ onLaunchApp, onAppBlocked, runningApps, onRemoveWasm, guestCtx }: AppStoreProps) {
   const [showInstaller, setShowInstaller] = useState(false)
-  const [installedApps, setInstalledApps] = useState(wasmRegistry.list())
+  const { apps, useApps } = useApps()
+  const { listGrantsForApp } = useCapabilities()
+  const { getCachedWasm, removeWasm } = useRuntime()
 
-  useEffect(() => {
-    return wasmRegistry.subscribe(() => setInstalledApps(wasmRegistry.list()))
-  }, [])
+  const installedWasm = apps.filter((app) => app.wasmObjectRef)
 
   if (showInstaller) {
     return (
       <WasmInstaller
         onInstall={(result) => {
-          wasmRegistry.install({ ...result, installedAt: new Date(), isPublic: true })
+          // Use platform runtime to cache WASM
+          cacheWasm(result.name, result.wasmBytes, result.hash)
           setShowInstaller(false)
         }}
         onCancel={() => setShowInstaller(false)}
@@ -248,19 +252,19 @@ export function AppStore({ onLaunchApp, onAppBlocked, runningApps, onRemoveWasm,
         </button>
       </div>
 
-      {installedApps.length > 0 && (
+      {installedWasm.length > 0 && (
         <div className="mb-4">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Installed WASM Apps
           </h3>
           <div className="grid grid-cols-2 gap-3">
-            {installedApps.map((wasm) => {
-              const def = wasmAppDef(wasm.name, wasm.wasmUrl)
-              const isRunning = runningApps.includes(def.id)
+            {installedWasm.map((app) => {
+              const isRunning = runningApps.includes(app.appId)
+              const wasmBytes = getCachedWasm(app.appId)
               return (
-                <div key={wasm.name} className="group flex flex-col rounded-lg border border-border bg-secondary/50 p-3">
+                <div key={app.appId} className="group flex flex-col rounded-lg border border-border bg-secondary/50 p-3">
                   <button
-                    onClick={() => onLaunchApp(def)}
+                    onClick={() => onLaunchApp(app as unknown as AppDefinition)}
                     className={cn(
                       "flex flex-1 flex-col text-left transition-all hover:border-primary/50",
                       isRunning && "border-primary/30"
@@ -276,13 +280,15 @@ export function AppStore({ onLaunchApp, onAppBlocked, runningApps, onRemoveWasm,
                       {isRunning && <span className="h-1.5 w-1.5 rounded-full bg-[var(--status-online)]" />}
                     </div>
                     <div className="mt-2">
-                      <h3 className="text-sm font-medium text-foreground">{wasm.name}</h3>
-                      <p className="text-xs text-muted-foreground">{(wasm.wasmBytes.length / 1024).toFixed(1)} KB</p>
+                      <h3 className="text-sm font-medium text-foreground">{app.name}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {wasmBytes ? `${(wasmBytes.length / 1024).toFixed(1)} KB` : 'Loading...'}
+                      </p>
                     </div>
                   </button>
                   {onRemoveWasm && (
                     <button
-                      onClick={() => onRemoveWasm(wasm.name)}
+                      onClick={() => onRemoveWasm(app.name)}
                       className="mt-2 flex items-center justify-center gap-1 rounded border border-border/50 bg-transparent px-2 py-1 text-[10px] text-muted-foreground hover:border-[var(--status-error)]/50 hover:text-[var(--status-error)] transition-colors"
                     >
                       <Trash2 className="h-3 w-3" />
@@ -369,7 +375,7 @@ export function AppStore({ onLaunchApp, onAppBlocked, runningApps, onRemoveWasm,
                 {required.length > 0 && (
                   <div className="mt-auto flex flex-wrap gap-1 pt-2">
                     {required.map((cap) => {
-                      const info = CAPABILITY_REGISTRY[cap]
+                      const info = CAPABILITY_REGISTRY[cap as never]
                       const available = guestCtx.hasIdentity || !info.requiresAuth
                       return (
                         <span

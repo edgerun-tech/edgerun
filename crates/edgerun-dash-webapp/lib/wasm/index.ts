@@ -2,5 +2,5 @@ export { EventQueue, EventType, NetworkSubtype, DiskSubtype, encodeNetworkEvent,
 export { decodeUINode, type UINode } from "./protobuf-ui"
 export { UIRenderer } from "./dom-renderer"
 export { WasmAdapter, type WasmHostCallbacks } from "./wasm-adapter"
-export { wasmRegistry, type AppPackage, type CachedWasm } from "./wasm-registry"
+export { installedWasmListStore, getWasmFromCache, installWasm, removeWasm, fetchWasmPackage, fetchWasmFromUrl, type AppPackage, type CachedWasm } from "@/stores/wasm-store"
 export { fetchWasmModule, formatWasmSize, WasmSource, type WasmFetchOptions, type WasmFetchResult } from "./wasm-fetcher"

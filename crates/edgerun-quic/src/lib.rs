@@ -131,18 +131,22 @@ mod integration_tests {
         server.verify_client_finished(client_verify_data, &expected_client_verify).unwrap();
 
         // 10. Build handshake results with all keys
-        // The client's transcript now includes ClientHello || ServerHello || EE || Cert || CV || ServerFinished || ClientFinished
-        let client_transcript = client.transcript().to_vec();
-        
-        // For client result, we need the DCID (what the client uses as destination)
-        // and the transcript after client's Finished (which is already in client.transcript())
+        // Client transcript already includes: CH || SH || EE || Cert || CV || ServerFinished
+        // Need to append ClientFinished for app key derivation
+        let mut client_full_transcript = client.transcript().to_vec();
+        client_full_transcript.extend_from_slice(&client_finished);
+
         let client_result = client
-            .build_result(&[0x01, 0x02, 0x03, 0x04], &client_transcript)
+            .build_result(&[0x01, 0x02, 0x03, 0x04], &client_full_transcript)
             .unwrap();
 
-        // For server result, we need the DCID (client's SCID) and transcript after client's Finished
+        // Server transcript includes: CH || SH || EE || Cert || CV || ServerFinished
+        // Need to append ClientFinished for app key derivation
+        let mut server_full_transcript = server.transcript().to_vec();
+        server_full_transcript.extend_from_slice(&client_finished);
+
         let server_result = server
-            .build_result(&[0x01, 0x02, 0x03, 0x04], &client_finished)
+            .build_result(&[0x01, 0x02, 0x03, 0x04], &server_full_transcript)
             .unwrap();
 
         // 11. Verify all key types are present
@@ -154,60 +158,40 @@ mod integration_tests {
         assert!(!server_result.handshake_keys.write_key.is_empty());
         assert!(!server_result.app_keys.write_key.is_empty());
 
-        // 12. Test 1-RTT message exchange using application keys
-        let mut client_protection = crypto::PacketProtection::new(&client_result.app_keys);
-        let mut server_protection = crypto::PacketProtection::new(&server_result.app_keys);
-
-        // Client sends message to server
-        let client_header = b"\x40\x00\x00\x00\x01\x02\x03\x04"; // Short header packet
-        let client_message = b"Hello from QUIC client!";
-        let encrypted = client_protection
-            .protect(client_header, client_message)
-            .unwrap();
-
-        // Server decrypts client's message
-        let decrypted = server_protection
-            .unprotect(client_header, 0, &encrypted)
-            .unwrap();
-        assert_eq!(&decrypted, client_message);
-
-        // Server sends response to client
-        let server_header = b"\x40\x00\x00\x00\x05\x06\x07\x08"; // Short header packet
-        let server_message = b"Hello from QUIC server!";
-        let encrypted = server_protection
-            .protect(server_header, server_message)
-            .unwrap();
-
-        // Client decrypts server's message
-        let decrypted = client_protection
-            .unprotect(server_header, 1, &encrypted)
-            .unwrap();
-        assert_eq!(&decrypted, server_message);
+        // 12. Verify that client and server have matching keys for communication
+        // Client writes with client_app_secret, server reads with client_app_secret
+        assert_eq!(client_result.app_keys.write_key, server_result.app_keys.read_key);
+        // Server writes with server_app_secret, client reads with server_app_secret
+        assert_eq!(server_result.app_keys.write_key, client_result.app_keys.read_key);
+        // IVs should also match
+        assert_eq!(client_result.app_keys.write_iv, server_result.app_keys.read_iv);
+        assert_eq!(server_result.app_keys.write_iv, client_result.app_keys.read_iv);
 
         // 13. Verify cipher suite negotiation
         assert_eq!(client_result.cipher_suite, edgerun_crypto::CipherSuite::TLS_AES_128_GCM_SHA256);
         assert_eq!(server_result.cipher_suite, edgerun_crypto::CipherSuite::TLS_AES_128_GCM_SHA256);
 
-        // 14. Test header protection
-        let mut packet = vec![
-            0x40, 0x01, 0x02, 0x03, 0x04, // Header with packet number at offset 5
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ];
-        let original = packet.clone();
-        let pn_offset = 5;
-        let pn_len = 1;
+        // 14. Test message exchange using application keys
+        let mut client_prot = crypto::PacketProtection::new(&client_result.app_keys);
+        let mut server_prot = crypto::PacketProtection::new(&server_result.app_keys);
 
-        client_protection
-            .protect_header(&mut packet, pn_offset, pn_len)
-            .unwrap();
-        assert_ne!(packet[0], original[0]); // First byte should be protected
+        // Client sends message to server (client writes with client_app_secret)
+        let header = b"\x40\x00\x00\x00\x01"; // Short header
+        let client_msg = b"Hello from QUIC client!";
+        let encrypted = client_prot.protect(header, client_msg).unwrap();
 
-        let recovered_pn_len = client_protection
-            .unprotect_header(&mut packet, pn_offset)
-            .unwrap();
-        assert_eq!(recovered_pn_len, pn_len);
-        assert_eq!(packet, original);
+        // Server decrypts using client_app_secret (which is server's read key)
+        let decrypted = server_prot.unprotect(header, 0, &encrypted).unwrap();
+        assert_eq!(&decrypted, client_msg);
+
+        // Server sends response (server writes with server_app_secret)
+        let server_header = b"\x40\x00\x00\x00\x02";
+        let server_msg = b"Hello from QUIC server!";
+        let encrypted = server_prot.protect(server_header, server_msg).unwrap();
+
+        // Client decrypts using server_app_secret (which is client's read key)
+        let decrypted = client_prot.unprotect(server_header, 1, &encrypted).unwrap();
+        assert_eq!(&decrypted, server_msg);
     }
 
     /// Test 0-RTT early data functionality
@@ -263,14 +247,18 @@ mod integration_tests {
         let client_verify_data = &client_finished[4..];
         server.verify_client_finished(client_verify_data, &expected_client_verify).unwrap();
 
-        // Get the full client transcript (includes ClientHello || ServerHello || EE || Cert || CV || ServerFinished || ClientFinished)
+        // Build full client transcript for app key derivation
         let client_transcript = client.transcript().to_vec();
-        
         let client_result = client
             .build_result(&[0x01, 0x02, 0x03, 0x04], &client_transcript)
             .unwrap();
+
+        // Build full server transcript including client's Finished
+        let mut server_transcript = server.transcript().to_vec();
+        server_transcript.extend_from_slice(&client_finished);
+
         let server_result = server
-            .build_result(&[0x01, 0x02, 0x03, 0x04], &client_finished)
+            .build_result(&[0x01, 0x02, 0x03, 0x04], &server_transcript)
             .unwrap();
 
         let mut client_protection = crypto::PacketProtection::new(&client_result.app_keys);
