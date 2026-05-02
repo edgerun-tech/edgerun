@@ -1593,7 +1593,7 @@ fn validate_scanned_event_chains(scanned: &[ScannedEvent]) -> Result<(), Storage
                 ))
             })?;
             let actual_prev = event.prev_event_hash.as_ref().map(|d| &d.value);
-            if actual_prev != Some(expected_prev) {
+            if actual_prev != Some(expected_prev.to_vec()) {
                 return Err(StorageError::Decode(format!(
                     "stream {} prev_hash mismatch at seq {}",
                     edgerun_core::util::bytes_to_hex(&location.stream_id),
@@ -1602,7 +1602,7 @@ fn validate_scanned_event_chains(scanned: &[ScannedEvent]) -> Result<(), Storage
             }
         }
 
-        prev_hash = Some(event_hash);
+        prev_hash = Some(event_hash.to_vec());
         expected_seq = expected_seq.saturating_add(1);
     }
 

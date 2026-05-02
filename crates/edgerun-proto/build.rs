@@ -40,7 +40,6 @@ fn main() {
 
     // Build prost config
     let mut config = prost_build::Config::new();
-    config.bytes([".edgerun.v0.common.Digest", ".edgerun.v0.common.Signature"]);
 
     // Compile protos
     config

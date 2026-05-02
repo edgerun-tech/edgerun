@@ -3,8 +3,8 @@
 pub struct Digest {
     #[prost(enumeration = "digest::Algorithm", tag = "1")]
     pub algorithm: i32,
-    #[prost(bytes = "bytes", tag = "2")]
-    pub value: ::prost::bytes::Bytes,
+    #[prost(bytes = "vec", tag = "2")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// Nested message and enum types in `Digest`.
 pub mod digest {
@@ -39,8 +39,8 @@ pub mod digest {
 pub struct Signature {
     #[prost(enumeration = "signature::Algorithm", tag = "1")]
     pub algorithm: i32,
-    #[prost(bytes = "bytes", tag = "2")]
-    pub value: ::prost::bytes::Bytes,
+    #[prost(bytes = "vec", tag = "2")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// Nested message and enum types in `Signature`.
 pub mod signature {
