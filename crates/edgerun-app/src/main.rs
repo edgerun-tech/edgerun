@@ -144,8 +144,7 @@ fn run_bootstrap_loop(
         }
 
         let dispatch_results =
-            let dispatch_results =
-                bootstrap::dispatch_commands_local(result.pending_commands.clone(), &mut bootstrap_state);
+            bootstrap::simulate_bootstrap_commands(result.pending_commands.clone(), &mut bootstrap_state);
 
             for (cmd, dispatch) in result.pending_commands.iter().zip(dispatch_results.iter()) {
                 let cmd_type = CommandType::from_i32(cmd.command_type);

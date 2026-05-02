@@ -83,9 +83,7 @@ pub struct ConstraintSet {
     #[prost(enumeration = "super::common::TransportClass", repeated, tag = "8")]
     pub requires_transport_classes: ::prost::alloc::vec::Vec<i32>,
     #[prost(string, repeated, tag = "9")]
-    pub requires_location_classes: ::prost::alloc::vec::Vec<
-        ::prost::alloc::string::String,
-    >,
+    pub requires_location_classes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(enumeration = "ExportPolicy", tag = "10")]
     pub export_policy: i32,
     #[prost(enumeration = "super::common::ExecutionClass", repeated, tag = "11")]
@@ -336,9 +334,7 @@ impl DelegationPolicy {
         match self {
             Self::Unspecified => "DELEGATION_POLICY_UNSPECIFIED",
             Self::NonDelegable => "DELEGATION_POLICY_NON_DELEGABLE",
-            Self::DelegableWithAttenuation => {
-                "DELEGATION_POLICY_DELEGABLE_WITH_ATTENUATION"
-            }
+            Self::DelegableWithAttenuation => "DELEGATION_POLICY_DELEGABLE_WITH_ATTENUATION",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -346,9 +342,7 @@ impl DelegationPolicy {
         match value {
             "DELEGATION_POLICY_UNSPECIFIED" => Some(Self::Unspecified),
             "DELEGATION_POLICY_NON_DELEGABLE" => Some(Self::NonDelegable),
-            "DELEGATION_POLICY_DELEGABLE_WITH_ATTENUATION" => {
-                Some(Self::DelegableWithAttenuation)
-            }
+            "DELEGATION_POLICY_DELEGABLE_WITH_ATTENUATION" => Some(Self::DelegableWithAttenuation),
             _ => None,
         }
     }
@@ -420,9 +414,7 @@ impl RevocationKind {
         match value {
             "REVOCATION_KIND_UNSPECIFIED" => Some(Self::Unspecified),
             "REVOCATION_KIND_DELEGATION" => Some(Self::Delegation),
-            "REVOCATION_KIND_CONTROLLER_INSTALLATION" => {
-                Some(Self::ControllerInstallation)
-            }
+            "REVOCATION_KIND_CONTROLLER_INSTALLATION" => Some(Self::ControllerInstallation),
             "REVOCATION_KIND_IDENTITY_TRUST" => Some(Self::IdentityTrust),
             "REVOCATION_KIND_ASSURANCE_CLAIM" => Some(Self::AssuranceClaim),
             "REVOCATION_KIND_SNAPSHOT_TRUST" => Some(Self::SnapshotTrust),

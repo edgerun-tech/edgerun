@@ -441,15 +441,11 @@ impl CapabilityConstraintKind {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "CAPABILITY_CONSTRAINT_KIND_UNSPECIFIED",
-            Self::RequireUserPresence => {
-                "CAPABILITY_CONSTRAINT_KIND_REQUIRE_USER_PRESENCE"
-            }
+            Self::RequireUserPresence => "CAPABILITY_CONSTRAINT_KIND_REQUIRE_USER_PRESENCE",
             Self::RequireBiometric => "CAPABILITY_CONSTRAINT_KIND_REQUIRE_BIOMETRIC",
             Self::RequireFreshness => "CAPABILITY_CONSTRAINT_KIND_REQUIRE_FRESHNESS",
             Self::RequireLocalOnly => "CAPABILITY_CONSTRAINT_KIND_REQUIRE_LOCAL_ONLY",
-            Self::RequireHardwareProtected => {
-                "CAPABILITY_CONSTRAINT_KIND_REQUIRE_HARDWARE_PROTECTED"
-            }
+            Self::RequireHardwareProtected => "CAPABILITY_CONSTRAINT_KIND_REQUIRE_HARDWARE_PROTECTED",
             Self::OneShot => "CAPABILITY_CONSTRAINT_KIND_ONE_SHOT",
             Self::RateLimited => "CAPABILITY_CONSTRAINT_KIND_RATE_LIMITED",
             Self::MaxBytes => "CAPABILITY_CONSTRAINT_KIND_MAX_BYTES",
@@ -460,21 +456,11 @@ impl CapabilityConstraintKind {
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "CAPABILITY_CONSTRAINT_KIND_UNSPECIFIED" => Some(Self::Unspecified),
-            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_USER_PRESENCE" => {
-                Some(Self::RequireUserPresence)
-            }
-            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_BIOMETRIC" => {
-                Some(Self::RequireBiometric)
-            }
-            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_FRESHNESS" => {
-                Some(Self::RequireFreshness)
-            }
-            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_LOCAL_ONLY" => {
-                Some(Self::RequireLocalOnly)
-            }
-            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_HARDWARE_PROTECTED" => {
-                Some(Self::RequireHardwareProtected)
-            }
+            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_USER_PRESENCE" => Some(Self::RequireUserPresence),
+            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_BIOMETRIC" => Some(Self::RequireBiometric),
+            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_FRESHNESS" => Some(Self::RequireFreshness),
+            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_LOCAL_ONLY" => Some(Self::RequireLocalOnly),
+            "CAPABILITY_CONSTRAINT_KIND_REQUIRE_HARDWARE_PROTECTED" => Some(Self::RequireHardwareProtected),
             "CAPABILITY_CONSTRAINT_KIND_ONE_SHOT" => Some(Self::OneShot),
             "CAPABILITY_CONSTRAINT_KIND_RATE_LIMITED" => Some(Self::RateLimited),
             "CAPABILITY_CONSTRAINT_KIND_MAX_BYTES" => Some(Self::MaxBytes),

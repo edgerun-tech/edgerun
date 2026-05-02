@@ -18,7 +18,6 @@ import {
   type ActionType,
   type WorkflowExecution,
 } from "@/stores/workflow-store"
-import { Window } from "./window"
 
 const ACTION_TYPES: { type: ActionType; label: string; icon: string; defaultConfig: Record<string, unknown> }[] = [
   { type: "log", label: "Log", icon: "📝", defaultConfig: { message: "" } },
@@ -67,15 +66,7 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
   }
   
   return (
-    <Window
-      id="workflow-builder"
-      title="Workflow Builder"
-      defaultSize={{ width: 900, height: 600 }}
-      onClose={onClose}
-      onFocus={() => {}}
-      isFocused={true}
-      zIndex={10}
-    >
+    <>
       <div className="flex h-full">
         {/* Sidebar - Workflow List */}
         <div className="w-56 border-r border-[var(--border)] flex flex-col">
@@ -272,7 +263,7 @@ export function WorkflowBuilder({ onClose }: { onClose: () => void }) {
           }}
         />
       )}
-    </Window>
+      </>
   )
 }
 

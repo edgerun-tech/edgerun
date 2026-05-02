@@ -167,7 +167,7 @@ pub fn sign_event(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<
     let sig = signer.sign_record(SIG_DOMAIN_EVENT_ENVELOPE, &canonical)?;
     event.signature = Some(Signature {
         algorithm: 1, // ECDSA_P256_SHA256
-        value: prost::bytes::Bytes::from(sig.to_vec()),
+        value: sig.to_vec(),
     });
     Ok(())
 }
@@ -183,7 +183,7 @@ pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
     );
     Digest {
         algorithm: 1, // DIGEST_ALGORITHM_SHA256
-        value: hash.to_vec().into(),
+        value: hash.to_vec(),
     }
 }
 
@@ -262,7 +262,7 @@ pub fn validate_stream(events: &[EventEnvelope], writer: &NodeID) -> Result<(), 
                 expected: expected_hash,
                 actual: curr.prev_event_hash.clone().unwrap_or(Digest {
                     algorithm: 0,
-                    value: prost::bytes::Bytes::new(),
+                    value: Vec::new(),
                 }),
             });
         }

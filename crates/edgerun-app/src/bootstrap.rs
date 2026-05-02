@@ -106,7 +106,7 @@ pub struct DispatchResult {
     pub reason: String,
 }
 
-pub fn dispatch_commands_local(
+pub fn simulate_bootstrap_commands(
     commands: Vec<CommandEnvelope>,
     state: &mut BootstrapState,
 ) -> Vec<SimulationResult> {

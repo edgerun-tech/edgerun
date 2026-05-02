@@ -13,8 +13,8 @@ pub mod edgerun {
         pub mod app {
             core::include!("gen/edgerun.v0.app.rs");
         }
-        pub mod appabi {
-            core::include!("gen/edgerun/v0/appabi/edgerun.v0.appabi.rs");
+    pub mod appabi {
+        core::include!("gen/edgerun.v0.appabi.rs");
         }
         pub mod capability {
             core::include!("gen/edgerun.v0.capability.rs");
@@ -45,7 +45,7 @@ pub mod edgerun {
     }
     pub mod wallet {
         pub mod v0 {
-            core::include!("gen/edgerun/wallet/v0/edgerun.wallet.v0.rs");
+            core::include!("gen/edgerun.wallet.v0.rs");
 
             use edgerun_json::{Map, JsonValue, ToJson, FromJson, JsonValueError};
 

@@ -151,6 +151,15 @@ pub struct ActionLifecyclePayload {
     #[prost(message, optional, tag = "8")]
     pub action_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
+// ===========================================================================
+// Secret service payloads
+//
+// These payloads are stored as payload_object references in EventEnvelopes
+// for secret-related events. The actual secret value is NEVER stored in the
+// payload — only metadata (label, attributes, namespace, key name) is recorded.
+// The secret itself is stored separately in the encrypted BlobStore.
+// ===========================================================================
+
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SecretPutPayload {
     #[prost(uint32, tag = "1")]
@@ -166,10 +175,7 @@ pub struct SecretPutPayload {
     pub label: ::prost::alloc::string::String,
     /// Key-value attribute pairs for search
     #[prost(map = "string, string", tag = "5")]
-    pub attributes: ::std::collections::HashMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub attributes: ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     /// The blob_id where the encrypted secret is stored (not the secret itself)
     #[prost(string, tag = "6")]
     pub secret_blob_id: ::prost::alloc::string::String,
@@ -208,6 +214,17 @@ pub struct CollectionDeletedPayload {
     #[prost(uint32, tag = "3")]
     pub items_removed: u32,
 }
+// ===========================================================================
+// WASM Application packaging
+//
+// AppPackage is a protocol-native object that declares executable behavior
+// AND required capabilities. Apps are immutable, content-addressed, and
+// capability-constrained.
+//
+// Canonicalization ID: "proto-v0:AppPackage:1"
+// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || protobuf_encode(AppPackage))
+// ===========================================================================
+
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AppPackage {
     #[prost(uint32, tag = "1")]
@@ -222,22 +239,14 @@ pub struct AppPackage {
     pub wasm_object: ::core::option::Option<super::common::ObjectRef>,
     /// Route patterns mapped to this app (e.g. "/api/*" -> entry handler)
     #[prost(map = "string, string", tag = "5")]
-    pub routes: ::std::collections::HashMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub routes: ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     /// Additional asset objects (styles, templates, static files)
     #[prost(map = "string, message", tag = "6")]
-    pub assets: ::std::collections::HashMap<
-        ::prost::alloc::string::String,
-        super::common::ObjectRef,
-    >,
+    pub assets: ::std::collections::HashMap<::prost::alloc::string::String, super::common::ObjectRef>,
     /// REQUIRED: capability requirements — the app declares ALL capabilities
     /// it needs to function. The runtime MUST NOT grant capabilities implicitly.
     #[prost(message, repeated, tag = "7")]
-    pub required_capabilities: ::prost::alloc::vec::Vec<
-        super::trust::CapabilityDescriptor,
-    >,
+    pub required_capabilities: ::prost::alloc::vec::Vec<super::trust::CapabilityDescriptor>,
     /// Optional metadata object (description, author, version info, etc.)
     #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<super::common::ObjectRef>,
@@ -275,9 +284,7 @@ pub struct AppExecutionPayload {
     pub app_package: ::core::option::Option<super::common::ObjectRef>,
     /// Effective capabilities that were granted for this execution
     #[prost(message, repeated, tag = "3")]
-    pub granted_capabilities: ::prost::alloc::vec::Vec<
-        super::trust::CapabilityDescriptor,
-    >,
+    pub granted_capabilities: ::prost::alloc::vec::Vec<super::trust::CapabilityDescriptor>,
     /// Execution result or error
     #[prost(oneof = "app_execution_payload::Outcome", tags = "4, 5")]
     pub outcome: ::core::option::Option<app_execution_payload::Outcome>,
@@ -293,6 +300,14 @@ pub mod app_execution_payload {
         ErrorReason(::prost::alloc::string::String),
     }
 }
+// ===========================================================================
+// Bootstrap / Settings app command payloads
+//
+// These payloads are used by the settings WASM app to configure a node
+// exclusively through protocol commands. All state changes flow through
+// the same command → validation → event → state pipeline.
+// ===========================================================================
+
 /// CREATE_IDENTITY: Generate a new node identity.
 /// The node generates an ECDSA P-256 keypair and records the identity
 /// as an identity record event in the stream.
@@ -392,6 +407,16 @@ pub struct NodeStateSnapshot {
     #[prost(bool, tag = "6")]
     pub bootstrap_complete: bool,
 }
+// ===========================================================================
+// App Principal & Intent
+//
+// Apps are first-class principals that sign their own intents but MUST NOT
+// write streams. Only the node identity can commit state.
+//
+// Canonicalization ID: "proto-v0:AppPrincipal:1"
+// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || protobuf_encode(AppPrincipal))
+// ===========================================================================
+
 /// AppPrincipal: a protocol-level identity for an installed app.
 /// AppPrincipals are valid delegation recipients and can appear in
 /// capability scopes, but they are NOT stream writers.
@@ -422,6 +447,22 @@ pub struct AppIntent {
     #[prost(bytes = "vec", tag = "3")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
 }
+// ===========================================================================
+// CommandEnvelope — updated to carry AppIntent (field 17)
+// ===========================================================================
+// message CommandEnvelope {
+//    ...existing fields...
+//    bytes app_intent = 17;  // serialized AppIntent
+// }
+
+// ===========================================================================
+// User Authority Acquisition
+//
+// WASM apps MUST NOT have direct access to private keys or authority.
+// All sensitive actions MUST go through explicit user approval flows.
+// These payloads are used for both events and command payloads.
+// ===========================================================================
+
 /// UserPresenceRequestPayload: emitted when an app requests user presence.
 /// The node shows a UI prompt to the user with the given reason.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -504,6 +545,8 @@ pub struct SignatureResponsePayload {
     #[prost(bytes = "vec", tag = "6")]
     pub session_id: ::prost::alloc::vec::Vec<u8>,
 }
+// Command payloads for user authority acquisition
+
 /// REQUEST_USER_PRESENCE: command to request user presence confirmation.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RequestUserPresencePayload {
@@ -555,16 +598,22 @@ pub enum EventType {
     CapabilityRevoked = 9,
     DelegationCreated = 10,
     RevocationCreated = 11,
-    /// Secret service events
+    /// Secret service events (12-15)
     SecretPut = 12,
     SecretDelete = 13,
     CollectionCreated = 14,
     CollectionDeleted = 15,
-    /// User authority acquisition events
+    /// User authority (17-20)
     UserPresenceRequest = 17,
     UserPresenceGranted = 18,
     SignatureRequest = 19,
     SignatureResponse = 20,
+    /// Wallet/exchange events (21-25)
+    WalletQuoteCreated = 21,
+    WalletOrderCreated = 22,
+    WalletOrderStatusChanged = 23,
+    WalletPaymentRequestCreated = 24,
+    WalletReceiptCreated = 25,
 }
 impl EventType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -593,6 +642,11 @@ impl EventType {
             Self::UserPresenceGranted => "EVENT_TYPE_USER_PRESENCE_GRANTED",
             Self::SignatureRequest => "EVENT_TYPE_SIGNATURE_REQUEST",
             Self::SignatureResponse => "EVENT_TYPE_SIGNATURE_RESPONSE",
+            Self::WalletQuoteCreated => "EVENT_TYPE_WALLET_QUOTE_CREATED",
+            Self::WalletOrderCreated => "EVENT_TYPE_WALLET_ORDER_CREATED",
+            Self::WalletOrderStatusChanged => "EVENT_TYPE_WALLET_ORDER_STATUS_CHANGED",
+            Self::WalletPaymentRequestCreated => "EVENT_TYPE_WALLET_PAYMENT_REQUEST_CREATED",
+            Self::WalletReceiptCreated => "EVENT_TYPE_WALLET_RECEIPT_CREATED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -618,6 +672,11 @@ impl EventType {
             "EVENT_TYPE_USER_PRESENCE_GRANTED" => Some(Self::UserPresenceGranted),
             "EVENT_TYPE_SIGNATURE_REQUEST" => Some(Self::SignatureRequest),
             "EVENT_TYPE_SIGNATURE_RESPONSE" => Some(Self::SignatureResponse),
+            "EVENT_TYPE_WALLET_QUOTE_CREATED" => Some(Self::WalletQuoteCreated),
+            "EVENT_TYPE_WALLET_ORDER_CREATED" => Some(Self::WalletOrderCreated),
+            "EVENT_TYPE_WALLET_ORDER_STATUS_CHANGED" => Some(Self::WalletOrderStatusChanged),
+            "EVENT_TYPE_WALLET_PAYMENT_REQUEST_CREATED" => Some(Self::WalletPaymentRequestCreated),
+            "EVENT_TYPE_WALLET_RECEIPT_CREATED" => Some(Self::WalletReceiptCreated),
             _ => None,
         }
     }

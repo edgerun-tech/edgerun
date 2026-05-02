@@ -56,9 +56,7 @@ pub struct SessionHello {
     #[prost(message, optional, tag = "3")]
     pub target_node: ::core::option::Option<super::common::NodeRef>,
     #[prost(string, repeated, tag = "4")]
-    pub supported_transport_features: ::prost::alloc::vec::Vec<
-        ::prost::alloc::string::String,
-    >,
+    pub supported_transport_features: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(uint32, repeated, tag = "5")]
     pub supported_protocol_versions: ::prost::alloc::vec::Vec<u32>,
     #[prost(bytes = "vec", tag = "6")]
@@ -81,9 +79,7 @@ pub struct SessionAccept {
     #[prost(uint32, tag = "4")]
     pub selected_protocol_version: u32,
     #[prost(string, repeated, tag = "5")]
-    pub selected_transport_features: ::prost::alloc::vec::Vec<
-        ::prost::alloc::string::String,
-    >,
+    pub selected_transport_features: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, repeated, tag = "6")]
     pub responder_locators: ::prost::alloc::vec::Vec<ReachabilityHint>,
     #[prost(message, optional, tag = "7")]

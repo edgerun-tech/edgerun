@@ -305,7 +305,7 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
         frame.extend_from_slice(&len_prefix);
         frame.extend_from_slice(&event_bytes);
 
-        let event_hash = canonical_event_hash(event).value.to_vec();
+        let event_hash = canonical_event_hash(event).value.clone();
         let file_offset = self.append_raw_frame(&frame)?;
 
         Ok(AppendReceipt {
@@ -361,7 +361,7 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
             let event_bytes = self.read_bytes(data_offset, len as usize)?;
             let event = ProtoEventEnvelope::decode(event_bytes.as_slice())
                 .map_err(|e| StorageError::Decode(format!("event protobuf decode failed: {e}")))?;
-            let event_hash = canonical_event_hash(&event).value.to_vec();
+            let event_hash = canonical_event_hash(&event).value.clone();
             scanned.push(ScannedEvent {
                 location: EventLocation {
                     stream_id: event.stream_id.clone(),

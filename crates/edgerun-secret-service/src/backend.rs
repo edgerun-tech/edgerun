@@ -206,7 +206,7 @@ impl Backend {
         // Store encrypted blob
         let blob_id = self
             .blobs
-            .store(secret, &[get_node_id()])
+            .store(secret, &[get_node_id().to_vec()])
             .map_err(|e| io::Error::other(e.to_string()))?;
 
         // Index with metadata in description

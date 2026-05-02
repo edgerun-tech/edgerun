@@ -13,9 +13,7 @@ pub struct ExecutionContext {
     /// Capabilities granted for this execution
     /// MUST be: intersect(app.required_capabilities, node_policy, delegation_chain)
     #[prost(message, repeated, tag = "4")]
-    pub granted_capabilities: ::prost::alloc::vec::Vec<
-        super::trust::CapabilityDescriptor,
-    >,
+    pub granted_capabilities: ::prost::alloc::vec::Vec<super::trust::CapabilityDescriptor>,
     /// Execution class constraint
     #[prost(enumeration = "super::common::ExecutionClass", tag = "5")]
     pub execution_class: i32,
@@ -35,17 +33,7 @@ pub struct CapabilityCheck {
 }
 /// Nested message and enum types in `CapabilityCheck`.
 pub mod capability_check {
-    #[derive(
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration
-    )]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Operation {
         Unspecified = 0,
@@ -100,17 +88,7 @@ pub struct CapabilityResult {
 }
 /// Nested message and enum types in `CapabilityResult`.
 pub mod capability_result {
-    #[derive(
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration
-    )]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Decision {
         Unspecified = 0,

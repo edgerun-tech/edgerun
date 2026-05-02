@@ -328,9 +328,7 @@ impl ResultCompleteness {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "RESULT_COMPLETENESS_UNSPECIFIED",
-            Self::CompleteForLocalKnowledge => {
-                "RESULT_COMPLETENESS_COMPLETE_FOR_LOCAL_KNOWLEDGE"
-            }
+            Self::CompleteForLocalKnowledge => "RESULT_COMPLETENESS_COMPLETE_FOR_LOCAL_KNOWLEDGE",
             Self::Partial => "RESULT_COMPLETENESS_PARTIAL",
             Self::Denied => "RESULT_COMPLETENESS_DENIED",
             Self::MetadataOnly => "RESULT_COMPLETENESS_METADATA_ONLY",
@@ -340,9 +338,7 @@ impl ResultCompleteness {
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "RESULT_COMPLETENESS_UNSPECIFIED" => Some(Self::Unspecified),
-            "RESULT_COMPLETENESS_COMPLETE_FOR_LOCAL_KNOWLEDGE" => {
-                Some(Self::CompleteForLocalKnowledge)
-            }
+            "RESULT_COMPLETENESS_COMPLETE_FOR_LOCAL_KNOWLEDGE" => Some(Self::CompleteForLocalKnowledge),
             "RESULT_COMPLETENESS_PARTIAL" => Some(Self::Partial),
             "RESULT_COMPLETENESS_DENIED" => Some(Self::Denied),
             "RESULT_COMPLETENESS_METADATA_ONLY" => Some(Self::MetadataOnly),

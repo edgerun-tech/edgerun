@@ -8,7 +8,9 @@
 
 use crate::config::{parse_config, NodeConfig};
 use edgerun_core::collections::{HashMap, HashSet};
-use edgerun_core::command::{command_hash, validate_command, CommandValidationContext};
+use edgerun_core::command::{
+    command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
+};
 use edgerun_core::encrypted_envelope::validate_encrypted_envelope;
 use edgerun_proto::edgerun::v0::common::EncryptedEnvelope;
 use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
@@ -22,7 +24,7 @@ use edgerun_core::validators_proto::{
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_json::Value as JsonValue;
-use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef};
+use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef, ObjectRef};
 use edgerun_proto::edgerun::v0::stream::{
     CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload,
     CommandType, EventType,
@@ -223,6 +225,7 @@ pub fn dispatch_command(
     revoked_delegations: &HashSet<Vec<u8>>,
     trusted_root_ids: &[Vec<u8>],
     local_assurance_class: i32,
+    exec_ctx: &CommandExecutionContext,
 ) -> CommandDispatchResult {
     let now_ms = now_unix_millis_i64();
 
@@ -265,7 +268,7 @@ pub fn dispatch_command(
         );
     }
 
-    // Build validation context for full validate_command
+    // Build validation context from execution context + node-local state
     let delegation_use_counts: HashMap<Vec<u8>, u64> = HashMap::new();
     let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
     let ctx = CommandValidationContext {
@@ -277,16 +280,37 @@ pub fn dispatch_command(
         now_ms,
         trusted_root_ids,
         local_assurance_class,
-        accepted_assurance_claims: &[],
-        has_local_session: false,
-        has_user_presence: false,
-        transport_class: None,
-        location_classes: &[],
-        target_stream_id: None,
-        target_view_type: None,
-        target_domain: None,
-        execution_class: None,
-        storage_class: None,
+        accepted_assurance_claims: &exec_ctx.accepted_assurance_claims,
+        has_local_session: exec_ctx.has_local_session,
+        has_user_presence: exec_ctx.has_user_presence,
+        transport_class: exec_ctx.transport_class.as_deref().and_then(|s| {
+            match s.as_str() {
+                "lan" => Some(1),      // TRANSPORT_CLASS_LAN
+                "mesh" => Some(2),     // TRANSPORT_CLASS_MESH
+                "internet" => Some(3), // TRANSPORT_CLASS_INTERNET
+                _ => None,
+            }
+        }),
+        location_classes: &exec_ctx.location_classes.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        target_stream_id: exec_ctx.target_stream_id.as_deref(),
+        target_view_type: exec_ctx.target_view_type.as_deref(),
+        target_domain: exec_ctx.target_domain.as_deref(),
+        execution_class: exec_ctx.execution_class.as_deref().and_then(|s| {
+            match s.as_str() {
+                "wasm" => Some(1),     // EXECUTION_CLASS_WASM
+                "native" => Some(2),   // EXECUTION_CLASS_NATIVE
+                "container" => Some(3), // EXECUTION_CLASS_CONTAINER
+                _ => None,
+            }
+        }),
+        storage_class: exec_ctx.storage_class.as_deref().and_then(|s| {
+            match s.as_str() {
+                "file" => Some(1),     // STORAGE_CLASS_FILE
+                "memory" => Some(2),   // STORAGE_CLASS_MEMORY
+                "object" => Some(3),   // STORAGE_CLASS_OBJECT
+                _ => None,
+            }
+        }),
     };
 
     // Run full validation (replay, timing, delegation chain, cryptographic signatures)
@@ -756,25 +780,8 @@ fn dispatch_install_app(
         }
     };
 
-    let package_bytes = match install_payload.app_package {
-        Some(ref obj) => {
-            match store.get_blob(&obj.object_id) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    return record_and_respond(
-                        command,
-                        store,
-                        stream_id,
-                        signer,
-                        controllers,
-                        false,
-                        &format!("app_package_not_found: {}", e),
-                        Vec::new(),
-                        None,
-                    );
-                }
-            }
-        }
+    let package_object_ref = match install_payload.app_package {
+        Some(ref obj) => obj.clone(),
         None => {
             return record_and_respond(
                 command,
@@ -784,6 +791,37 @@ fn dispatch_install_app(
                 controllers,
                 false,
                 "app_package_required",
+                Vec::new(),
+                None,
+            );
+        }
+    };
+
+    // Use get_object to resolve the logical ObjectRef (not get_blob on object_id)
+    let package_bytes = match store.get_object(&package_object_ref) {
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "app_package_not_found",
+                Vec::new(),
+                None,
+            );
+        }
+        Err(e) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("app_package_not_found: {}", e),
                 Vec::new(),
                 None,
             );
@@ -801,23 +839,52 @@ fn dispatch_install_app(
         domain
     );
 
-    let package_object_id = edgerun_crypto::sha256(&package_bytes);
+    // Decode AppPackage from the object content to resolve internal ObjectRefs
+    let app_package: edgerun_proto::edgerun::v0::stream::AppPackage =
+        match prost::Message::decode(package_bytes.as_slice()) {
+            Ok(pkg) => pkg,
+            Err(e) => {
+                return record_and_respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    false,
+                    &format!("invalid_app_package: {}", e),
+                    Vec::new(),
+                    None,
+                );
+            }
+        };
 
-    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        payload_version: 1,
-        command: command_ref_from(command),
-        issuer: command.issuer.clone(),
-        decision: 1,
-        decision_basis: None,
-        reason_code: String::new(),
-        effect_summary_object: None,
-        result_object: Some(edgerun_proto::edgerun::v0::common::ObjectRef {
-            object_id: package_object_id.to_vec(),
-            object_kind: Some(edgerun_proto::edgerun::v0::common::ObjectKind::AppPackage as i32),
-        }),
-    };
+    // Resolve wasm_object and assets as ObjectRefs (logical references)
+    if let Some(ref wasm_ref) = app_package.wasm_object {
+        edgerun_log::info!(
+            "install_app: wasm_object kind={:?} id={}",
+            wasm_ref.object_kind,
+            edgerun_core::util::bytes_to_hex(&wasm_ref.object_id)
+        );
+    }
+    for (name, asset_ref) in &app_package.assets {
+        edgerun_log::info!(
+            "install_app: asset '{}' kind={:?} id={}",
+            name,
+            asset_ref.object_kind,
+            edgerun_core::util::bytes_to_hex(&asset_ref.object_id)
+        );
+    }
 
-    let response_bytes = result_payload.encode_to_vec();
+    // Use the original package_object_ref as the result
+    let result_payload = build_command_result_payload(
+        command,
+        CommandDecision::Committed as i32,
+        "",
+        None,
+        None,
+        Some(package_object_ref),
+    );
+    let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
     record_and_respond_with_result_object(
         command,
@@ -897,18 +964,15 @@ fn dispatch_uninstall_app(
 
     edgerun_log::info!("uninstall_app: id={} reason={}", app_id, uninstall_payload.reason);
 
-    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        payload_version: 1,
-        command: command_ref_from(command),
-        issuer: command.issuer.clone(),
-        decision: 1,
-        decision_basis: None,
-        reason_code: String::new(),
-        effect_summary_object: None,
-        result_object: uninstall_payload.app_package.clone(),
-    };
-
-    let response_bytes = result_payload.encode_to_vec();
+    let result_payload = build_command_result_payload(
+        command,
+        CommandDecision::Committed as i32,
+        "",
+        None,
+        None,
+        None,
+    );
+    let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
     record_and_respond_with_result_object(
         command,
@@ -920,9 +984,10 @@ fn dispatch_uninstall_app(
         "",
         response_bytes,
         None,
-        uninstall_payload.app_package.clone(),
+        None,
     )
 }
+
 
 // ---------------------------------------------------------------------------
 // Bootstrap / Settings app command handlers
@@ -981,18 +1046,15 @@ fn dispatch_create_identity(
 
     edgerun_log::info!("create_identity: label={}", label);
 
-    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: command.issuer.clone(),
-        decision: 1,
-        decision_basis: None,
-        reason_code: String::new(),
-        effect_summary_object: None,
-        result_object: None,
-    };
-
-    let response_bytes = result_payload.encode_to_vec();
+    let result_payload = build_command_result_payload(
+        command,
+        CommandDecision::Committed as i32,
+        "",
+        None,
+        None,
+        None,
+    );
+    let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
     record_and_respond_with_result_object(
         command,
@@ -1061,18 +1123,15 @@ fn dispatch_import_identity(
 
     edgerun_log::info!("import_identity: label={} source={}", label, import_payload.source);
 
-    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: command.issuer.clone(),
-        decision: 1,
-        decision_basis: None,
-        reason_code: String::new(),
-        effect_summary_object: None,
-        result_object: None,
-    };
-
-    let response_bytes = result_payload.encode_to_vec();
+    let result_payload = build_command_result_payload(
+        command,
+        CommandDecision::Committed as i32,
+        "",
+        None,
+        None,
+        None,
+    );
+    let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
     record_and_respond_with_result_object(
         command,
@@ -1142,18 +1201,15 @@ fn dispatch_add_bootstrap_node(
 
     edgerun_log::info!("add_bootstrap_node: label={} address={}", label, address);
 
-    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: command.issuer.clone(),
-        decision: 1,
-        decision_basis: None,
-        reason_code: String::new(),
-        effect_summary_object: None,
-        result_object: None,
-    };
-
-    let response_bytes = result_payload.encode_to_vec();
+    let result_payload = build_command_result_payload(
+        command,
+        CommandDecision::Committed as i32,
+        "",
+        None,
+        None,
+        None,
+    );
+    let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
     record_and_respond_with_result_object(
         command,
@@ -1220,18 +1276,15 @@ fn dispatch_add_reachability_hint(
         hint_payload.transport_class
     );
 
-    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: command.issuer.clone(),
-        decision: 1,
-        decision_basis: None,
-        reason_code: String::new(),
-        effect_summary_object: None,
-        result_object: None,
-    };
-
-    let response_bytes = result_payload.encode_to_vec();
+    let result_payload = build_command_result_payload(
+        command,
+        CommandDecision::Committed as i32,
+        "",
+        None,
+        None,
+        None,
+    );
+    let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
     record_and_respond_with_result_object(
         command,
@@ -1308,18 +1361,15 @@ fn dispatch_query_node_state(
 
     let snapshot_ref = snapshot_object.ok();
 
-    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: command.issuer.clone(),
-        decision: 1,
-        decision_basis: None,
-        reason_code: String::new(),
-        effect_summary_object: None,
-        result_object: snapshot_ref.clone(),
-    };
-
-    let response_bytes = result_payload.encode_to_vec();
+    let result_payload = build_command_result_payload(
+        command,
+        CommandDecision::Committed as i32,
+        "",
+        None,
+        None,
+        snapshot_ref.clone(),
+    );
+    let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
     record_and_respond_with_result_object(
         command,
@@ -1463,18 +1513,15 @@ fn dispatch_request_user_presence(
         &[stream_id.to_vec()],
     );
 
-    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: command.issuer.clone(),
-        decision: 1,
-        decision_basis: granted_obj.as_ref().ok().cloned(),
-        reason_code: String::new(),
-        effect_summary_object: request_obj.as_ref().ok().cloned(),
-        result_object: granted_obj.ok(),
-    };
-
-    let response_bytes = result_payload.encode_to_vec();
+    let result_payload = build_command_result_payload(
+        command,
+        CommandDecision::Committed as i32,
+        "",
+        granted_obj.as_ref().ok().cloned(),
+        request_obj.as_ref().ok().cloned(),
+        granted_obj.ok(),
+    );
+    let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
     edgerun_log::info!(
         "request_user_presence: reason='{}' ttl={}s",
@@ -1631,18 +1678,15 @@ fn dispatch_request_signature(
         &[stream_id.to_vec()],
     );
 
-    let result_payload = edgerun_proto::edgerun::v0::stream::CommandResultPayload {
-        payload_version: 1,
-        command: None,
-        issuer: command.issuer.clone(),
-        decision: 1,
-        decision_basis: response_obj.as_ref().ok().cloned(),
-        reason_code: String::new(),
-        effect_summary_object: request_obj.as_ref().ok().cloned(),
-        result_object: response_obj.ok(),
-    };
-
-    let response_bytes = result_payload.encode_to_vec();
+    let result_payload = build_command_result_payload(
+        command,
+        CommandDecision::Committed as i32,
+        "",
+        response_obj.as_ref().ok().cloned(),
+        request_obj.as_ref().ok().cloned(),
+        response_obj.ok(),
+    );
+    let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
     edgerun_log::info!(
         "request_signature: action='{}' human='{}'",
@@ -1838,11 +1882,6 @@ fn dispatch_transfer_control(
             "transferred",
         )),
     )
-}
-
-// ---------------------------------------------------------------------------
-// TerminateWorkload removed — marketplace logic no longer Solana/OCI-based
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -2419,6 +2458,38 @@ pub fn record_action_event(
         vec![],
         related_event_refs,
     );
+}
+
+// ---------------------------------------------------------------------------
+// Canonical CommandResultPayload builder
+// ---------------------------------------------------------------------------
+
+/// Build a `CommandResultPayload` with all required fields, always including
+/// a valid `CommandRef` (command_id + command_hash).
+///
+/// Per protocol invariants, every `CommandResultPayload` MUST reference the
+/// command it is answering. This helper ensures that invariant.
+fn build_command_result_payload(
+    command: &CommandEnvelope,
+    decision: i32,
+    reason_code: &str,
+    decision_basis: Option<ObjectRef>,
+    effect_summary_object: Option<ObjectRef>,
+    result_object: Option<ObjectRef>,
+) -> ProtoCommandResultPayload {
+    ProtoCommandResultPayload {
+        payload_version: 1,
+        command: Some(CommandRef {
+            command_id: command.command_id.clone(),
+            command_hash: Some(command_hash(command)),
+        }),
+        issuer: command.issuer.clone(),
+        decision,
+        decision_basis,
+        reason_code: reason_code.to_string(),
+        effect_summary_object,
+        result_object,
+    }
 }
 
 // ---------------------------------------------------------------------------

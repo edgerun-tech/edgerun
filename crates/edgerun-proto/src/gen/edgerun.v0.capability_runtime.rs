@@ -14,9 +14,7 @@ pub struct CapabilitySessionOpen {
     #[prost(enumeration = "super::capability::CapabilityAccessClass", tag = "6")]
     pub requested_access_class: i32,
     #[prost(message, repeated, tag = "7")]
-    pub requested_constraints: ::prost::alloc::vec::Vec<
-        super::capability::CapabilityConstraint,
-    >,
+    pub requested_constraints: ::prost::alloc::vec::Vec<super::capability::CapabilityConstraint>,
     #[prost(bytes = "vec", tag = "8")]
     pub correlation_id: ::prost::alloc::vec::Vec<u8>,
 }
@@ -77,10 +75,7 @@ pub struct CapabilityResultFrame {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CapabilityRemoteEnvelope {
-    #[prost(
-        oneof = "capability_remote_envelope::Message",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
-    )]
+    #[prost(oneof = "capability_remote_envelope::Message", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11")]
     pub message: ::core::option::Option<capability_remote_envelope::Message>,
 }
 /// Nested message and enum types in `CapabilityRemoteEnvelope`.

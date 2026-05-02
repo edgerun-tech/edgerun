@@ -3,22 +3,12 @@
 pub struct Digest {
     #[prost(enumeration = "digest::Algorithm", tag = "1")]
     pub algorithm: i32,
-    #[prost(bytes = "bytes", tag = "2")]
-    pub value: ::prost::bytes::Bytes,
+    #[prost(bytes = "vec", tag = "2")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// Nested message and enum types in `Digest`.
 pub mod digest {
-    #[derive(
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration
-    )]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Algorithm {
         DigestAlgorithmUnspecified = 0,
@@ -49,22 +39,12 @@ pub mod digest {
 pub struct Signature {
     #[prost(enumeration = "signature::Algorithm", tag = "1")]
     pub algorithm: i32,
-    #[prost(bytes = "bytes", tag = "2")]
-    pub value: ::prost::bytes::Bytes,
+    #[prost(bytes = "vec", tag = "2")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// Nested message and enum types in `Signature`.
 pub mod signature {
-    #[derive(
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration
-    )]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Algorithm {
         SignatureAlgorithmUnspecified = 0,
@@ -78,20 +58,14 @@ pub mod signature {
         pub fn as_str_name(&self) -> &'static str {
             match self {
                 Self::SignatureAlgorithmUnspecified => "SIGNATURE_ALGORITHM_UNSPECIFIED",
-                Self::SignatureAlgorithmEcdsaP256Sha256 => {
-                    "SIGNATURE_ALGORITHM_ECDSA_P256_SHA256"
-                }
+                Self::SignatureAlgorithmEcdsaP256Sha256 => "SIGNATURE_ALGORITHM_ECDSA_P256_SHA256",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
         pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
             match value {
-                "SIGNATURE_ALGORITHM_UNSPECIFIED" => {
-                    Some(Self::SignatureAlgorithmUnspecified)
-                }
-                "SIGNATURE_ALGORITHM_ECDSA_P256_SHA256" => {
-                    Some(Self::SignatureAlgorithmEcdsaP256Sha256)
-                }
+                "SIGNATURE_ALGORITHM_UNSPECIFIED" => Some(Self::SignatureAlgorithmUnspecified),
+                "SIGNATURE_ALGORITHM_ECDSA_P256_SHA256" => Some(Self::SignatureAlgorithmEcdsaP256Sha256),
                 _ => None,
             }
         }
@@ -514,6 +488,25 @@ impl ExecutionClass {
         }
     }
 }
+// ===========================================================================
+// EncryptedEnvelope — strict E2E encryption with ECDH key exchange
+//
+// ALL private data MUST be:
+// - encrypted using ECDH P-256 key agreement + AEAD payload encryption
+// - ephemeral key per message (forward secrecy)
+// - recipient-bound with per-recipient wrapped message keys
+// - signature-protected
+//
+// Encryption model:
+//    1. Generate ephemeral ECDH key pair
+//    2. Generate random message key K_msg
+//    3. For each recipient: K_wrapped = AEAD(ECDH(shared_secret), K_msg)
+//    4. Ciphertext = AEAD(K_msg, plaintext)
+//    5. Sign: sender || recipients || ephemeral_pub || nonce || ciphertext
+//
+// Domain separation: "edgerun:v0:hash:encrypted-envelope"
+// ===========================================================================
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CipherSuite {

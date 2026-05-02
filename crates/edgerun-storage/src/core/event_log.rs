@@ -3,7 +3,6 @@
 use crate::prelude::v1::*;
 use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
 use edgerun_proto::edgerun::v0::stream as proto_stream;
-use prost::bytes::Bytes;
 use prost::Message;
 
 use crate::error::StorageError;
@@ -11,9 +10,9 @@ use crate::error::StorageError;
 /// Result returned by durable event-log append implementations.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppendReceipt {
-    pub stream_id: Bytes,
+    pub stream_id: Vec<u8>,
     pub seq: u64,
-    pub event_hash: Bytes,
+    pub event_hash: Vec<u8>,
     pub file_offset: u64,
     pub envelope_version: u32,
 }
@@ -22,15 +21,15 @@ pub struct AppendReceipt {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StreamHead {
     pub seq: u64,
-    pub event_hash: Bytes,
+    pub event_hash: Vec<u8>,
 }
 
 /// Physical location of an event record in an append log.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EventLocation {
-    pub stream_id: Bytes,
+    pub stream_id: Vec<u8>,
     pub seq: u64,
-    pub event_hash: Bytes,
+    pub event_hash: Vec<u8>,
     pub file_offset: u64,
     pub envelope_version: u32,
 }
@@ -70,7 +69,7 @@ pub fn canonical_event_hash(event: &EventEnvelope) -> Digest {
     );
     Digest {
         algorithm: 1,
-        value: hash,
+        value: hash.to_vec(),
     }
 }
 
