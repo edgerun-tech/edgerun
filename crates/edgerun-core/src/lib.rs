@@ -11,7 +11,7 @@ macro_rules! println {
     };
 }
 
-#[cfg(all(not(target_os = "none", feature = "conformance")))]
+#[cfg(all(not(target_os = "none"), feature = "conformance"))]
 macro_rules! eprintln {
     ($($arg:tt)*) => {
         std::eprintln!($($arg)*)
