@@ -24,6 +24,8 @@ pub enum NameError {
         /// The label that exceeds the 63-character limit.
         label: String,
     },
+    /// A domain contains an empty label in the middle, e.g. `example..com`.
+    EmptyLabel,
     /// A label starts or ends with a hyphen.
     ///
     /// - `label`: The label with invalid hyphen placement.
@@ -51,6 +53,7 @@ impl core::fmt::Display for NameError {
             Self::LabelTooLong { label } => {
                 write!(f, "label too long: '{}' (max 63 characters)", label)
             }
+            Self::EmptyLabel => write!(f, "domain name contains an empty label"),
             Self::InvalidHyphen { label } => {
                 write!(f, "invalid hyphen placement in label: '{}'", label)
             }
@@ -66,18 +69,20 @@ impl core::error::Error for NameError {}
 
 /// Validate a domain name against RFC 1035 rules.
 ///
-/// Accepts names with or without trailing dot. The `@` symbol is accepted
-/// as a shorthand for the zone origin (treated as empty/relative).
+/// Accepts names with or without one trailing root dot. The `@` symbol is
+/// accepted as a shorthand for the zone origin.
 ///
 /// # Errors
 /// Returns `NameError` if the name violates any DNS naming constraint.
 pub fn validate_name(name: &str) -> Result<(), NameError> {
-    // Accept "@" as zone origin shorthand
+    let name = name.trim();
+
+    // Accept "@" and empty string as zone-origin shorthands used in zone files.
     if name == "@" || name.is_empty() {
         return Ok(());
     }
 
-    // Strip trailing dot for length checks
+    // Strip exactly the trailing root dot for length and label checks.
     let name = name.strip_suffix('.').unwrap_or(name);
 
     if name.is_empty() {
@@ -90,7 +95,7 @@ pub fn validate_name(name: &str) -> Result<(), NameError> {
 
     for label in name.split('.') {
         if label.is_empty() {
-            continue; // empty label from double-dot or trailing dot
+            return Err(NameError::EmptyLabel);
         }
 
         if label.len() > 63 {
@@ -120,9 +125,9 @@ pub fn validate_name(name: &str) -> Result<(), NameError> {
     Ok(())
 }
 
-/// Normalize a domain name for internal use: lowercase, strip trailing dots.
+/// Normalize a domain name for internal use: lowercase, trim whitespace, strip trailing dots.
 pub fn normalize_name(name: &str) -> String {
-    name.trim_end_matches('.').to_lowercase()
+    name.trim().trim_end_matches('.').to_lowercase()
 }
 
 #[cfg(test)]
@@ -149,6 +154,13 @@ mod tests {
         assert!(validate_name("-example.com").is_err());
         assert!(validate_name("example-.com").is_err());
 
+        // Empty internal label
+        assert_eq!(validate_name("example..com"), Err(NameError::EmptyLabel));
+        assert_eq!(validate_name(".example.com"), Err(NameError::EmptyLabel));
+
+        // Multiple root dots create an empty internal label after one root-dot strip.
+        assert_eq!(validate_name("example.com.."), Err(NameError::EmptyLabel));
+
         // Label too long (64 chars)
         assert!(validate_name(&format!("{}.com", "a".repeat(64))).is_err());
 
@@ -165,5 +177,6 @@ mod tests {
         assert_eq!(normalize_name("WWW.EXAMPLE.COM"), "www.example.com");
         assert_eq!(normalize_name("www.example.com."), "www.example.com");
         assert_eq!(normalize_name("www.example.com..."), "www.example.com");
+        assert_eq!(normalize_name("  WWW.EXAMPLE.COM.  "), "www.example.com");
     }
 }
