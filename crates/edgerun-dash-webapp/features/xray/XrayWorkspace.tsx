@@ -6,12 +6,6 @@ import { XrayInspector } from "./XrayInspector"
 import { XrayCommandSurface } from "./XrayCommandSurface"
 import { registerGlobalApi } from "./graph/graph-commands"
 
-import { useEffect } from "react"
-import { XrayViewport } from "./XrayViewport"
-import { XrayInspector } from "./XrayInspector"
-import { XrayCommandSurface } from "./XrayCommandSurface"
-import { registerGlobalApi } from "./graph/graph-commands"
-
 export function XrayWorkspace() {
   useEffect(() => {
     registerGlobalApi()
