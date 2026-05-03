@@ -19,15 +19,13 @@
 mod assurance;
 mod capabilities;
 mod capacity;
-#[path = "command_dispatch/mod.rs"]
 mod command_dispatch;
-#[path = "command_dispatch.rs"]
-mod command_dispatch_legacy;
 mod command_dispatch_event;
 mod command_dispatch_payload;
 mod command_dispatch_result;
 mod command_dispatch_route;
 mod command_dispatch_server_resource;
+mod command_router;
 // mod metering;      // TODO: file missing — not needed for interface boundary
 // mod running_workloads; // TODO: file missing — not needed for interface boundary
 // mod workload_policy;  // TODO: file missing — not needed for interface boundary
