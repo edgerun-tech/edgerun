@@ -2,7 +2,8 @@
 //!
 //! Holds quotes, orders, and events in memory.
 //! Generates EdgeRun quote/order IDs and keeps provider identifiers internal.
-//! State is tracked per event to support eventual event-log persistence.
+//! State is tracked per event and mirrored into the protocol event stream when
+//! the exchange stream runtime is configured.
 
 extern crate alloc;
 
@@ -231,6 +232,14 @@ impl ExchangeStore {
 
     pub fn append_event(&mut self, event: ExchangeEvent) {
         self.events.push(event);
+    }
+
+    pub fn events_from(&self, start_index: usize) -> &[ExchangeEvent] {
+        if start_index >= self.events.len() {
+            &[]
+        } else {
+            &self.events[start_index..]
+        }
     }
 
     pub fn events_for_order(&self, order_id: &str) -> Vec<&ExchangeEvent> {
