@@ -244,23 +244,42 @@ pub fn handle_order_status(req: &Request) -> Response {
     let path = req.uri().path();
     let order_id = &path[11..];
 
-    let result = with_store(|store| store.get_order(order_id).cloned());
+    let result = with_store(|store| {
+        let order = store.get_order(order_id).cloned();
+        let projection = store.project_order(order_id);
+        (order, projection)
+    });
 
     match result {
-        Some(Some(order)) => {
-            let status_str = canonical_status_to_str(order.status);
-            let event_count = with_store(|store| store.events_for_order(order_id).len()).unwrap_or(0);
+        Some((Some(order), Some(projection))) => {
+            let status_str = canonical_status_to_str(projection.canonical_status);
 
             let mut response = Map::new();
             response.insert("id".into(), JsonValue::String(order_id.into()));
             response.insert("status".into(), JsonValue::String(status_str.into()));
+            response.insert("canonical_status".into(), JsonValue::Number((projection.canonical_status as i64).into()));
             response.insert("deposit_address".into(), JsonValue::String(order.deposit_address));
             response.insert("settlement_amount".into(), JsonValue::String(order.settlement_amount));
             response.insert("pay_amount".into(), JsonValue::String(order.pay_amount));
-            response.insert("event_count".into(), JsonValue::Number((event_count as u64).into()));
+            response.insert("event_count".into(), JsonValue::Number((projection.event_count as u64).into()));
+            response.insert("terminal".into(), JsonValue::Bool(projection.terminal));
+            response.insert("manual_review_required".into(), JsonValue::Bool(projection.manual_review_required));
+            if let Some(status) = projection.latest_provider_status {
+                response.insert("latest_provider_status".into(), JsonValue::Number((status as i64).into()));
+            }
+            if let Some(detail) = projection.latest_provider_status_string {
+                response.insert("latest_provider_status_detail".into(), JsonValue::String(detail));
+            }
+            if let Some(event_type) = projection.last_event_type {
+                response.insert("last_event_type".into(), JsonValue::String(event_type.into()));
+            }
+            if let Some(updated_at_ms) = projection.updated_at_ms {
+                response.insert("updated_at_ms".into(), JsonValue::Number(updated_at_ms.into()));
+            }
             json_response(200, JsonValue::Object(response))
         }
-        Some(None) => json_error(404, "order not found"),
+        Some((Some(_), None)) => json_error(500, "order projection unavailable"),
+        Some((None, _)) => json_error(404, "order not found"),
         None => json_error(500, "store not available"),
     }
 }
