@@ -15,6 +15,7 @@ pub mod provider_mapping;
 pub mod sideshift;
 pub mod changenow;
 pub mod events;
+pub mod projection;
 
 // FF.io adapter behind feature flag
 #[cfg(feature = "ffio")]
@@ -26,3 +27,4 @@ pub use router::route_quote;
 pub use status_machine::StatusMachine;
 pub use audit::AuditLogger;
 pub use events::ExchangeEvent;
+pub use projection::{project_order, project_order_events, ExchangeOrderProjection};
