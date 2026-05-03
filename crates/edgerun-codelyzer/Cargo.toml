@@ -8,36 +8,35 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-default = []
-server = ["dep:edgerun-http", "dep:edgerun-rt", "dep:edgerun-log", "dep:tokio", "edgerun-http/http1"]
+default = ["lang-rust", "lang-python", "lang-typescript", "lang-javascript", "lang-c", "lang-go", "lang-java"]
+lang-rust = ["dep:tree-sitter-rust"]
+lang-typescript = ["dep:tree-sitter-typescript"]
+lang-c = ["dep:tree-sitter-c"]
+lang-python = ["dep:tree-sitter-python"]
+lang-go = ["dep:tree-sitter-go"]
+lang-java = ["dep:tree-sitter-java"]
+lang-javascript = ["dep:tree-sitter-javascript"]
 
 [dependencies]
 tree-sitter = "0.23"
-tree-sitter-rust = "0.23"
-tree-sitter-typescript = "0.23"
-tree-sitter-c = "0.23"
-tree-sitter-python = "0.23"
-tree-sitter-go = "0.23"
-tree-sitter-java = "0.23"
-tree-sitter-javascript = "0.23"
+tree-sitter-rust = { version = "0.23", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-c = { version = "0.23", optional = true }
+tree-sitter-python = { version = "0.23", optional = true }
+tree-sitter-go = { version = "0.23", optional = true }
+tree-sitter-java = { version = "0.23", optional = true }
+tree-sitter-javascript = { version = "0.23", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha1 = "0.10"
-dirs = "5"
-glob = "0.3"
+edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
+edgerun-glob.workspace = true
+edgerun-regex.workspace = true
 grep = "0.3"
 regex = "1"
+dirs = "5"
 rayon = "1.10"
 rusqlite = { version = "0.31", features = ["bundled"] }
 prost = "0.13"
-
-# edgerun dependencies
-edgerun-http = { workspace = true, optional = true, features = ["server"] }
-edgerun-rt = { workspace = true, optional = true }
-edgerun-log = { workspace = true, optional = true }
-
-# Async runtime for server
-tokio = { version = "1", optional = true, features = ["fs", "io-util"] }
 
 [build-dependencies]
 prost-build = "0.13"

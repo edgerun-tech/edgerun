@@ -1,5 +1,5 @@
 //! Tool implementations for context-aware chat.
-//! Provides search_codebase, read_file, get_xref, list_files, and get_stats.
+//! Provides search_codebase, read_file, list_files, and lint_file.
 
 #![allow(clippy::unwrap_used)]
 
@@ -9,10 +9,9 @@ use grep::{
     regex::RegexMatcher,
     searcher::{Searcher, SinkMatch},
 };
+use edgerun_glob::glob_match;
 
-// use crate::{diagnostics, server::get_state};  // Old server
 use crate::diagnostics;
-use crate::server_http::APP_STATE;
 
 #[allow(dead_code)]
 pub struct ToolResult {
@@ -26,9 +25,7 @@ pub struct ToolResult {
 pub enum ToolCall {
     SearchCodebase { query: String },
     ReadFile { path: String },
-    GetXref { function: String },
     ListFiles { pattern: String },
-    GetStats,
     EditFile { path: String, content: String },
     LintFile { path: String },
 }
@@ -62,17 +59,6 @@ impl ToolCall {
                     }
                     Some(ToolCall::ReadFile { path })
                 }
-                "get_xref" => {
-                    let function = args
-                        .get("function")
-                        .cloned()
-                        .or_else(|| args.get("function_name").cloned())
-                        .unwrap_or_default();
-                    if function.is_empty() {
-                        return None;
-                    }
-                    Some(ToolCall::GetXref { function })
-                }
                 "list_files" => {
                     let pattern = args.get("pattern").cloned().unwrap_or_default();
                     if pattern.is_empty() {
@@ -80,7 +66,6 @@ impl ToolCall {
                     }
                     Some(ToolCall::ListFiles { pattern })
                 }
-                "get_stats" => Some(ToolCall::GetStats),
                 "edit_file" => {
                     let path = args.get("path").cloned().unwrap_or_default();
                     let content = args.get("content").cloned().unwrap_or_default();
@@ -123,29 +108,11 @@ impl ToolCall {
                     content: None,
                 }
             }
-            ToolCall::GetXref { function } => {
-                let output = get_xref(function);
-                ToolResult {
-                    tool_name: "get_xref".to_string(),
-                    args: format!("function=\"{}\"", function),
-                    output,
-                    content: None,
-                }
-            }
             ToolCall::ListFiles { pattern } => {
                 let output = list_files(pattern);
                 ToolResult {
                     tool_name: "list_files".to_string(),
                     args: format!("pattern=\"{}\"", pattern),
-                    output,
-                    content: None,
-                }
-            }
-            ToolCall::GetStats => {
-                let output = get_stats();
-                ToolResult {
-                    tool_name: "get_stats".to_string(),
-                    args: String::new(),
                     output,
                     content: None,
                 }
@@ -272,50 +239,50 @@ fn search_codebase(query: &str) -> String {
     let mut results: Vec<String> = Vec::new();
     let extensions = &["c", "h", "rs", "ts", "tsx", "js", "jsx", "mjs", "py", "go", "java"];
 
-    // Use glob to find source files
-    let pattern = format!("{}/**/*", root_dir);
-    let glob_entries = match glob::glob(&pattern) {
-        Ok(entries) => entries,
-        Err(_) => return format!("Error evaluating glob pattern: {}", pattern),
-    };
+    // Walk directory tree manually since we're using edgerun-glob for matching
+    let mut dirs_to_visit = vec![std::path::PathBuf::from(&root_dir)];
+    let skip_dirs: &[&str] = &["target", "node_modules", ".git", "__pycache__", ".venv"];
 
-    for entry in glob_entries {
-        let path = match entry {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
+    while let Some(dir) = dirs_to_visit.pop() {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        if skip_dirs.contains(&name) {
+                            continue;
+                        }
+                    }
+                    dirs_to_visit.push(path);
+                } else if path.is_file() {
+                    // Check extension
+                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    if !extensions.contains(&ext) {
+                        continue;
+                    }
 
-        // Check extension
-        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        if !extensions.contains(&ext) {
-            continue;
-        }
+                    // Search the file with grep
+                    let mut searcher = Searcher::new();
+                    let mut sink = LineSink {
+                        path: path.clone(),
+                        root_dir: root_dir.clone(),
+                        results: Vec::new(),
+                        limit: 20, // Limit matches per file
+                    };
 
-        // Skip noise directories
-        if path.components().any(|c| {
-            c.as_os_str()
-                .to_str()
-                .map(|s| s == "target" || s == "node_modules" || s == ".git" || s.starts_with('.'))
-                .unwrap_or(false)
-        }) {
-            continue;
-        }
-
-        // Search the file with grep
-        let mut searcher = Searcher::new();
-
-        let mut sink = LineSink {
-            path: path.clone(),
-            root_dir: root_dir.clone(),
-            results: Vec::new(),
-            limit: 20, // Limit matches per file
-        };
-
-        if searcher.search_path(&matcher, &path, &mut sink).is_ok() && !sink.results.is_empty() {
-            results.extend(sink.results);
-            if results.len() >= 100 {
-                break; // Overall limit
+                    if searcher.search_path(&matcher, &path, &mut sink).is_ok()
+                        && !sink.results.is_empty()
+                    {
+                        results.extend(sink.results);
+                        if results.len() >= 100 {
+                            break; // Overall limit
+                        }
+                    }
+                }
             }
+        }
+        if results.len() >= 100 {
+            break;
         }
     }
 
@@ -344,17 +311,25 @@ struct LineSink {
 impl grep::searcher::Sink for LineSink {
     type Error = std::io::Error;
 
-    fn matched(&mut self, _searcher: &Searcher, mat: &SinkMatch<'_>) -> Result<bool, Self::Error> {
+    fn matched(
+        &mut self,
+        _searcher: &Searcher,
+        mat: &SinkMatch<'_>,
+    ) -> Result<bool, Self::Error> {
         if self.results.len() >= self.limit {
             return Ok(false);
         }
 
         let line = String::from_utf8_lossy(mat.bytes()).to_string();
         let line_num = mat.line_number().unwrap_or(0);
-        let rel_path =
-            self.path.strip_prefix(&self.root_dir).unwrap_or(&self.path).to_string_lossy();
+        let rel_path = self
+            .path
+            .strip_prefix(&self.root_dir)
+            .unwrap_or(&self.path)
+            .to_string_lossy();
 
-        self.results.push(format!("{}:{}: {}", rel_path, line_num, line.trim()));
+        self.results
+            .push(format!("{}:{}: {}", rel_path, line_num, line.trim()));
         Ok(true)
     }
 }
@@ -393,70 +368,6 @@ fn read_file(path: &str) -> String {
     }
 }
 
-/// Get callers and callees of a function from the call graph.
-#[allow(dead_code)]
-fn get_xref(function: &str) -> String {
-    let state = APP_STATE.lock().unwrap();
-    let app_state = match state.as_ref() {
-        Some(s) => s,
-        None => return "Error: No codebase analyzed yet.".to_string(),
-    };
-
-    let graph = &app_state.graph;
-
-    // Build a map of function id to name
-    let mut id_to_name: HashMap<String, String> = HashMap::new();
-    for node in &graph.nodes {
-        id_to_name.insert(node.id.clone(), node.name.clone());
-    }
-
-    let mut callers: Vec<String> = Vec::new();
-    let mut callees: Vec<String> = Vec::new();
-
-    for edge in &graph.edges {
-        // Check if this edge involves our function as callee (caller -> our function)
-        if edge.target.ends_with(&format!("::{}", function)) || edge.target == function {
-            let caller_name =
-                id_to_name.get(&edge.source).cloned().unwrap_or_else(|| edge.source.clone());
-            if !callers.contains(&caller_name) {
-                callers.push(caller_name);
-            }
-        }
-
-        // Check if this edge involves our function as caller (our function -> callee)
-        if edge.source.ends_with(&format!("::{}", function)) || edge.source == function {
-            let callee_name =
-                id_to_name.get(&edge.target).cloned().unwrap_or_else(|| edge.target.clone());
-            if !callees.contains(&callee_name) {
-                callees.push(callee_name);
-            }
-        }
-    }
-
-    if callers.is_empty() && callees.is_empty() {
-        format!("No cross-references found for function: {}", function)
-    } else {
-        let mut output = format!("Cross-references for '{}':\n", function);
-        output.push_str(&format!("\nCallers ({}):\n", callers.len()));
-        if callers.is_empty() {
-            output.push_str("  (none)\n");
-        } else {
-            for caller in &callers {
-                output.push_str(&format!("  - {}\n", caller));
-            }
-        }
-        output.push_str(&format!("\nCallees ({}):\n", callees.len()));
-        if callees.is_empty() {
-            output.push_str("  (none)\n");
-        } else {
-            for callee in &callees {
-                output.push_str(&format!("  - {}\n", callee));
-            }
-        }
-        output
-    }
-}
-
 /// List files matching a glob pattern.
 #[allow(dead_code)]
 fn list_files(pattern: &str) -> String {
@@ -465,24 +376,26 @@ fn list_files(pattern: &str) -> String {
         None => return "Error: No project root available.".to_string(),
     };
 
-    let full_pattern = format!("{}/{}", root_dir, pattern);
-
-    let glob_entries = match glob::glob(&full_pattern) {
-        Ok(entries) => entries,
-        Err(_) => return format!("Error evaluating glob pattern: {}", pattern),
-    };
-
     let mut files: Vec<String> = Vec::new();
-    for entry in glob_entries {
-        match entry {
-            Ok(path) => {
-                if path.is_file() {
-                    let rel_path =
-                        path.strip_prefix(&root_dir).unwrap_or(&path).to_string_lossy().to_string();
-                    files.push(rel_path);
+    let mut dirs_to_visit = vec![std::path::PathBuf::from(&root_dir)];
+
+    while let Some(dir) = dirs_to_visit.pop() {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    dirs_to_visit.push(path);
+                } else if path.is_file() {
+                    let rel_path = path
+                        .strip_prefix(&root_dir)
+                        .unwrap_or(&path)
+                        .to_string_lossy()
+                        .to_string();
+                    if glob_match(pattern, &rel_path) {
+                        files.push(rel_path);
+                    }
                 }
             }
-            Err(_) => continue,
         }
         if files.len() >= 100 {
             break;
@@ -498,41 +411,6 @@ fn list_files(pattern: &str) -> String {
         }
         output
     }
-}
-
-/// Get codebase statistics.
-#[allow(dead_code)]
-fn get_stats() -> String {
-    let state = APP_STATE.lock().unwrap();
-    let app_state = match state.as_ref() {
-        Some(s) => s,
-        None => return "Error: No codebase analyzed yet.".to_string(),
-    };
-
-    let graph = &app_state.graph;
-
-    let mut lang_counts: HashMap<String, usize> = HashMap::new();
-    let mut file_set: std::collections::HashSet<String> = std::collections::HashSet::new();
-
-    for node in &graph.nodes {
-        *lang_counts.entry(node.language.clone()).or_insert(0) += 1;
-        file_set.insert(node.file.clone());
-    }
-
-    let mut output = String::new();
-    output.push_str("## Codebase Statistics\n\n");
-    output.push_str(&format!("- Files: {}\n", file_set.len()));
-    output.push_str(&format!("- Functions: {}\n", graph.nodes.len()));
-    output.push_str(&format!("- Relationships: {}\n", graph.edges.len()));
-    output.push_str("\n### Languages\n");
-
-    let mut langs: Vec<_> = lang_counts.into_iter().collect();
-    langs.sort_by_key(|b| std::cmp::Reverse(b.1));
-    for (lang, count) in langs {
-        output.push_str(&format!("- {}: {}\n", lang, count));
-    }
-
-    output
 }
 
 /// Edit a file: validate path, read current content for diff preview, and
@@ -562,8 +440,7 @@ fn edit_file(path: &str, content: &str) -> String {
     let diff_lines = compute_line_diff(&current_content, content);
 
     format!(
-        "Proposed edit for '{}':\n- Current: {} bytes\n- Proposed: {} bytes\n- Changes: {} lines \
-         added/modified\n\nUse the UI to accept or reject this edit.",
+        "Proposed edit for '{}':\n- Current: {} bytes\n- Proposed: {} bytes\n- Changes: {} lines added/modified\n\nUse the UI to accept or reject this edit.",
         path, old_len, new_len, diff_lines
     )
 }
@@ -586,11 +463,14 @@ fn compute_line_diff(old: &str, new: &str) -> usize {
     changes
 }
 
-/// Get the project root directory from the app state.
+/// Get the project root directory.
+/// This is a simplified version that looks for common project markers.
 #[allow(dead_code)]
 fn get_project_root() -> Option<String> {
-    let state = APP_STATE.lock().unwrap();
-    state.as_ref().map(|s| s.root_dir.clone())
+    // For now, just use current directory
+    std::env::current_dir()
+        .ok()
+        .map(|p| p.to_string_lossy().to_string())
 }
 
 /// Run linters on a file and return formatted output.

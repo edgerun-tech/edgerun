@@ -20,7 +20,7 @@ use edgerun_codelyzer::{
 };
 use rayon::prelude::*;
 use rusqlite::{params, Connection, OpenFlags};
-use sha1::{Digest, Sha1};
+use edgerun_crypto::sha1::{Digest, Sha1};
 
 // ─── File discovery ──────────────────────────────────────────────────
 

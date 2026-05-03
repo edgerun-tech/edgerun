@@ -1647,10 +1647,9 @@ version = "0.1.1"
 dependencies = [
  "criterion",
  "dirs",
- "edgerun-http",
- "edgerun-log",
- "edgerun-rt",
- "glob",
+ "edgerun-crypto",
+ "edgerun-glob",
+ "edgerun-regex",
  "grep",
  "prost 0.13.5",
  "prost-build 0.13.5",
@@ -1659,8 +1658,6 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "sha1",
- "tokio",
  "tree-sitter",
  "tree-sitter-c",
  "tree-sitter-go",
@@ -3282,12 +3279,6 @@ dependencies = [
  "log",
  "xml-rs",
 ]
-
-[[package]]
-name = "glob"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "globset"
@@ -5877,16 +5868,6 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "tokio"
-version = "1.52.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b67dee974fe86fd92cc45b7a95fdd2f99a36a6d7b0d431a231178d3d670bbcc6"
-dependencies = [
- "bytes",
- "pin-project-lite",
 ]
 
 [[package]]

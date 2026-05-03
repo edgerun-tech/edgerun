@@ -2,13 +2,21 @@ use std::{borrow::Cow, collections::HashMap, fs};
 
 use serde::{Deserialize, Serialize};
 use tree_sitter::{Language, Node, Parser};
-// Language grammars
+
+// Language grammars - feature gated
+#[cfg(feature = "lang-c")]
 use tree_sitter_c::LANGUAGE as TS_C;
+#[cfg(feature = "lang-go")]
 use tree_sitter_go::LANGUAGE as TS_GO;
+#[cfg(feature = "lang-java")]
 use tree_sitter_java::LANGUAGE as TS_JAVA;
+#[cfg(feature = "lang-javascript")]
 use tree_sitter_javascript::LANGUAGE as TS_JS;
+#[cfg(feature = "lang-python")]
 use tree_sitter_python::LANGUAGE as TS_PYTHON;
+#[cfg(feature = "lang-rust")]
 use tree_sitter_rust::LANGUAGE as TS_RUST;
+#[cfg(feature = "lang-typescript")]
 use tree_sitter_typescript::LANGUAGE_TSX as TS_TS;
 
 /// Parser module using tree-sitter to extract functions and call relationships.
@@ -155,19 +163,68 @@ impl ParserPool {
 /// Determine the language from a file path.
 fn lang_for_path(path: &str) -> Option<Lang> {
     if path.ends_with(".rs") {
-        Some(Lang::Rust)
+        #[cfg(feature = "lang-rust")]
+        {
+            return Some(Lang::Rust);
+        }
+        #[cfg(not(feature = "lang-rust"))]
+        {
+            return None;
+        }
     } else if path.ends_with(".ts") || path.ends_with(".tsx") {
-        Some(Lang::TypeScript)
+        #[cfg(feature = "lang-typescript")]
+        {
+            return Some(Lang::TypeScript);
+        }
+        #[cfg(not(feature = "lang-typescript"))]
+        {
+            return None;
+        }
     } else if path.ends_with(".c") || path.ends_with(".h") {
-        Some(Lang::C)
+        #[cfg(feature = "lang-c")]
+        {
+            return Some(Lang::C);
+        }
+        #[cfg(not(feature = "lang-c"))]
+        {
+            return None;
+        }
     } else if path.ends_with(".py") {
-        Some(Lang::Python)
+        #[cfg(feature = "lang-python")]
+        {
+            return Some(Lang::Python);
+        }
+        #[cfg(not(feature = "lang-python"))]
+        {
+            return None;
+        }
     } else if path.ends_with(".go") {
-        Some(Lang::Go)
+        #[cfg(feature = "lang-go")]
+        {
+            return Some(Lang::Go);
+        }
+        #[cfg(not(feature = "lang-go"))]
+        {
+            return None;
+        }
     } else if path.ends_with(".java") {
-        Some(Lang::Java)
+        #[cfg(feature = "lang-java")]
+        {
+            return Some(Lang::Java);
+        }
+        #[cfg(not(feature = "lang-java"))]
+        {
+            return None;
+        }
     } else if path.ends_with(".js") || path.ends_with(".jsx") || path.ends_with(".mjs") {
-        Some(Lang::JavaScript)
+        #[cfg(feature = "lang-javascript")]
+        {
+            return Some(Lang::JavaScript);
+        }
+        #[cfg(not(feature = "lang-javascript"))]
+        {
+            return None;
+        }
     } else {
         None
     }
@@ -175,13 +232,22 @@ fn lang_for_path(path: &str) -> Option<Lang> {
 
 fn lang_to_tree_sitter(lang: Lang) -> Language {
     match lang {
+        #[cfg(feature = "lang-rust")]
         Lang::Rust => TS_RUST.into(),
+        #[cfg(feature = "lang-typescript")]
         Lang::TypeScript => TS_TS.into(),
+        #[cfg(feature = "lang-c")]
         Lang::C => TS_C.into(),
+        #[cfg(feature = "lang-python")]
         Lang::Python => TS_PYTHON.into(),
+        #[cfg(feature = "lang-go")]
         Lang::Go => TS_GO.into(),
+        #[cfg(feature = "lang-java")]
         Lang::Java => TS_JAVA.into(),
+        #[cfg(feature = "lang-javascript")]
         Lang::JavaScript => TS_JS.into(),
+        #[allow(unreachable_patterns)]
+        _ => panic!("Language not enabled via feature flag"),
     }
 }
 
@@ -211,13 +277,22 @@ pub fn parse_file<'a>(file_path: &str, source: &'a str) -> Option<ParseResult<'a
 fn extract_functions<'a>(node: Node, source: &'a str, lang: Lang) -> Vec<RawFunction<'a>> {
     let mut results = Vec::new();
     match lang {
+        #[cfg(feature = "lang-rust")]
         Lang::Rust => collect_functions_rust(node, source, &mut results),
+        #[cfg(feature = "lang-typescript")]
         Lang::TypeScript => collect_functions_ts(node, source, &mut results),
+        #[cfg(feature = "lang-c")]
         Lang::C => collect_functions_c(node, source, &mut results),
+        #[cfg(feature = "lang-python")]
         Lang::Python => collect_functions_python(node, source, &mut results),
+        #[cfg(feature = "lang-go")]
         Lang::Go => collect_functions_go(node, source, &mut results),
+        #[cfg(feature = "lang-java")]
         Lang::Java => collect_functions_java(node, source, &mut results),
+        #[cfg(feature = "lang-javascript")]
         Lang::JavaScript => collect_functions_js(node, source, &mut results),
+        #[allow(unreachable_patterns)]
+        _ => {}
     }
     results
 }
@@ -524,12 +599,20 @@ fn has_static_specifier(node: Node, source: &str) -> bool {
 fn extract_calls<'a>(node: Node, source: &'a str, lang: Lang) -> Vec<RawCall<'a>> {
     let mut results = Vec::new();
     match lang {
+        #[cfg(any(feature = "lang-rust", feature = "lang-typescript"))]
         Lang::Rust | Lang::TypeScript => collect_calls_rust_ts(node, source, &mut results),
+        #[cfg(feature = "lang-c")]
         Lang::C => collect_calls_c(node, source, &mut results),
+        #[cfg(feature = "lang-python")]
         Lang::Python => collect_calls_python(node, source, &mut results),
+        #[cfg(feature = "lang-go")]
         Lang::Go => collect_calls_go(node, source, &mut results),
+        #[cfg(feature = "lang-java")]
         Lang::Java => collect_calls_java(node, source, &mut results),
+        #[cfg(feature = "lang-javascript")]
         Lang::JavaScript => collect_calls_js(node, source, &mut results),
+        #[allow(unreachable_patterns)]
+        _ => {}
     }
     results
 }
