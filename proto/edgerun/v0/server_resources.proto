@@ -1,0 +1,143 @@
+syntax = "proto3";
+
+package edgerun.v0.server_resources;
+
+import "edgerun/v0/common.proto";
+
+// Server resource commands are typed command payloads. They must not be
+// represented as generic UpdateConfig patches.
+//
+// CommandType extension numbers reserved in stream.proto direction:
+// 1012 CLAIM_DOMAIN
+// 1013 RELEASE_DOMAIN
+// 1014 ADD_MAILBOX
+// 1015 REMOVE_MAILBOX
+// 1016 ADD_ALIAS
+// 1017 REMOVE_ALIAS
+// 1018 AUTHORIZE_CONTENT_SOURCE
+// 1019 PUBLISH_WEBSITE
+// 1020 UNPUBLISH_WEBSITE
+// 1021 SET_AUTHORITATIVE_DNS
+// 1022 REQUEST_CERTIFICATE
+// 1023 SET_SERVICE_POLICY
+
+message CompiledBootstrapPolicyPayload {
+  uint32 payload_version = 1;
+  string node_label = 2;
+  bytes stream_id = 3;
+  bytes controller_id = 4;
+  repeated string bootstrap_relays = 5;
+}
+
+enum ServerResourceEventKind {
+  SERVER_RESOURCE_EVENT_KIND_UNSPECIFIED = 0;
+  SERVER_RESOURCE_EVENT_KIND_CLAIM_DOMAIN = 1;
+  SERVER_RESOURCE_EVENT_KIND_RELEASE_DOMAIN = 2;
+  SERVER_RESOURCE_EVENT_KIND_ADD_MAILBOX = 3;
+  SERVER_RESOURCE_EVENT_KIND_REMOVE_MAILBOX = 4;
+  SERVER_RESOURCE_EVENT_KIND_ADD_ALIAS = 5;
+  SERVER_RESOURCE_EVENT_KIND_REMOVE_ALIAS = 6;
+  SERVER_RESOURCE_EVENT_KIND_AUTHORIZE_CONTENT_SOURCE = 7;
+  SERVER_RESOURCE_EVENT_KIND_PUBLISH_WEBSITE = 8;
+  SERVER_RESOURCE_EVENT_KIND_UNPUBLISH_WEBSITE = 9;
+  SERVER_RESOURCE_EVENT_KIND_SET_AUTHORITATIVE_DNS = 10;
+  SERVER_RESOURCE_EVENT_KIND_REQUEST_CERTIFICATE = 11;
+  SERVER_RESOURCE_EVENT_KIND_SET_SERVICE_POLICY = 12;
+}
+
+enum GenerationEventKind {
+  GENERATION_EVENT_KIND_UNSPECIFIED = 0;
+  GENERATION_EVENT_KIND_PLANNED = 1;
+  GENERATION_EVENT_KIND_STAGED = 2;
+  GENERATION_EVENT_KIND_HEALTH_PASSED = 3;
+  GENERATION_EVENT_KIND_PROMOTED = 4;
+  GENERATION_EVENT_KIND_ROLLBACK = 5;
+  GENERATION_EVENT_KIND_FAILED = 6;
+}
+
+message ClaimDomainPayload {
+  uint32 payload_version = 1;
+  string domain = 2;
+}
+
+message ReleaseDomainPayload {
+  uint32 payload_version = 1;
+  string domain = 2;
+}
+
+message AddMailboxPayload {
+  uint32 payload_version = 1;
+  string address = 2;
+}
+
+message RemoveMailboxPayload {
+  uint32 payload_version = 1;
+  string address = 2;
+}
+
+message AddAliasPayload {
+  uint32 payload_version = 1;
+  string address = 2;
+  string target = 3;
+}
+
+message RemoveAliasPayload {
+  uint32 payload_version = 1;
+  string address = 2;
+}
+
+message AuthorizeContentSourcePayload {
+  uint32 payload_version = 1;
+  string repo = 2;
+  string allowed_ref = 3;
+  repeated string allowed_paths = 4;
+}
+
+message ContentRef {
+  string repo = 1;
+  string commit = 2;
+  string path = 3;
+}
+
+message PublishWebsitePayload {
+  uint32 payload_version = 1;
+  string domain = 2;
+  ContentRef content_ref = 3;
+}
+
+message UnpublishWebsitePayload {
+  uint32 payload_version = 1;
+  string domain = 2;
+}
+
+message SetAuthoritativeDnsPayload {
+  uint32 payload_version = 1;
+  string domain = 2;
+  bool enabled = 3;
+}
+
+message RequestCertificatePayload {
+  uint32 payload_version = 1;
+  string name = 2;
+}
+
+message SetServicePolicyPayload {
+  uint32 payload_version = 1;
+  string service = 2;
+  string policy = 3;
+}
+
+message ServerResourceCommittedPayload {
+  uint32 payload_version = 1;
+  ServerResourceEventKind event_kind = 2;
+  bytes event_payload = 3;
+  edgerun.v0.common.CommandRef origin_command = 4;
+}
+
+message GenerationEventPayload {
+  uint32 payload_version = 1;
+  bytes generation_id = 2;
+  GenerationEventKind event_kind = 3;
+  bytes plan_hash = 4;
+  string reason = 5;
+}
