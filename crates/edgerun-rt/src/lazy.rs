@@ -8,7 +8,10 @@ const UNINITIALIZED: u8 = 0;
 const INITIALIZING: u8 = 1;
 const INITIALIZED: u8 = 2;
 
-unsafe impl<T: Sync> Sync for LazyStatic<T> {}
+// `get()` can initialize from any thread and then publish a shared reference.
+// `T: Send` is required for cross-thread initialization ownership, `T: Sync`
+// is required because callers receive `&T` from a shared static.
+unsafe impl<T: Send + Sync> Sync for LazyStatic<T> {}
 unsafe impl<T: Send> Send for LazyStatic<T> {}
 
 pub struct LazyStatic<T> {
@@ -60,13 +63,15 @@ impl<T> LazyStatic<T> {
     }
 }
 
-impl<T: 'static> Default for LazyStatic<T> {
+impl<T> Default for LazyStatic<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-unsafe impl<T: Sync> Sync for OnceCell<T> {}
+// `set()` can publish a value through `&self`, so `T` must be `Send` to move
+// into the cell from another thread and `Sync` to share by reference after init.
+unsafe impl<T: Send + Sync> Sync for OnceCell<T> {}
 unsafe impl<T: Send> Send for OnceCell<T> {}
 
 pub struct OnceCell<T> {
@@ -114,9 +119,20 @@ impl<T> OnceCell<T> {
         let mut pending = Some(value);
 
         loop {
-            let value = pending.take().expect("value present");
+            let Some(value) = pending.take() else {
+                while self.state.load(Ordering::Acquire) == INITIALIZING {
+                    core::hint::spin_loop();
+                }
+                continue;
+            };
+
             match self.set(value) {
-                Ok(()) => return Ok(self.get().unwrap()),
+                Ok(()) => {
+                    if let Some(value) = self.get() {
+                        return Ok(value);
+                    }
+                    unreachable!("OnceCell set returned Ok but cell is not initialized");
+                }
                 Err(value) => match self.state.load(Ordering::Acquire) {
                     INITIALIZING => {
                         pending = Some(value);
@@ -124,7 +140,12 @@ impl<T> OnceCell<T> {
                             core::hint::spin_loop();
                         }
                     }
-                    INITIALIZED => return Err((self.get().expect("cell is initialized"), value)),
+                    INITIALIZED => {
+                        if let Some(existing) = self.get() {
+                            return Err((existing, value));
+                        }
+                        unreachable!("OnceCell is initialized but get returned None");
+                    }
                     UNINITIALIZED => {
                         pending = Some(value);
                     }
