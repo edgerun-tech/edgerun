@@ -22,8 +22,8 @@ edgerun-clap = { workspace = true, features = ["std"] }
 edgerun-proto = { workspace = true }
 edgerun-capabilities = { workspace = true }
 libc = { workspace = true }
-wasmparser = { workspace = true }
-wasmtime = { workspace = true }
+wasmparser = "0.224"
+wasmtime = "29"
 sha2 = { workspace = true }
 prost = { workspace = true }
 
