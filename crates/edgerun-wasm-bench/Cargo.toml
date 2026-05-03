@@ -16,8 +16,8 @@ path = "src/main.rs"
 anyhow = "1.0"
 edgerun-proto = { workspace = true }
 edgerun-encoding = { workspace = true }
-wasmparser = { workspace = true }
-wasmtime = { workspace = true }
+wasmparser = "0.224"
+wasmtime = "29"
 sha2 = { workspace = true }
 
 [lints]
