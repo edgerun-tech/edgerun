@@ -48,3 +48,4 @@ pub mod validators;
 pub mod validators_proto;
 pub mod value;
 pub mod varint;
+pub mod wire_boundary;
