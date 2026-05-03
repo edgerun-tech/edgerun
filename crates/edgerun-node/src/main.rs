@@ -20,12 +20,16 @@ mod assurance;
 mod capabilities;
 mod capacity;
 mod command_dispatch;
+mod command_dispatch_payload;
+mod command_dispatch_result;
+mod command_dispatch_route;
 // mod metering;      // TODO: file missing — not needed for interface boundary
 // mod running_workloads; // TODO: file missing — not needed for interface boundary
 // mod workload_policy;  // TODO: file missing — not needed for interface boundary
 mod hardware;
 mod ingress;
 mod init;
+mod server_resource_dispatch;
 mod server_resources;
 mod session;
 
