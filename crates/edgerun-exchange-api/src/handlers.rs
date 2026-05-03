@@ -10,10 +10,7 @@ use edgerun_proto::edgerun::v0::wallet::v0::{Quote, QuoteRequest};
 
 use crate::store::ExchangeQuoteId;
 use crate::types::*;
-use crate::{
-    append_exchange_events_to_stream, project_exchange_order_from_stream, with_ctx, with_policy,
-    with_providers, with_store,
-};
+use crate::{with_ctx, with_policy, with_providers, with_store};
 
 fn now_epoch_millis() -> u64 {
     #[cfg(feature = "std")]
@@ -76,20 +73,11 @@ pub fn handle_quote(req: &Request) -> Response {
 
     match routing_result {
         edgerun_exchange::router::QuoteRoutingResult::Quote(provider_quote) => {
-            let result = with_store(|store| {
-                let before = store.event_count();
-                let quote_id = store.store_quote(&provider_quote);
-                let events = store.events_from(before).to_vec();
-                (quote_id, events)
-            });
+            let quote_id = with_store(|store| store.store_quote(&provider_quote));
 
-            let Some((quote_id, events)) = result else {
+            let Some(quote_id) = quote_id else {
                 return json_error(500, "store not available");
             };
-
-            if let Err(e) = append_exchange_events_to_stream(&events) {
-                return json_error(500, &e);
-            }
 
             let mut response = Map::new();
             response.insert("id".into(), JsonValue::String(quote_id.as_str().into()));
@@ -214,9 +202,8 @@ pub fn handle_order(req: &Request) -> Response {
 
     let deposit_addr = provider_order.deposit_address.clone();
     let provider_status = provider_order.status;
-    let result = with_store(|store| {
-        let before = store.event_count();
-        let order_id = store.store_order(
+    let order_id = with_store(|store| {
+        store.store_order(
             &exchange_quote_id,
             provider_order.provider_order_id,
             provider_order.deposit_address,
@@ -225,18 +212,12 @@ pub fn handle_order(req: &Request) -> Response {
             provider_code,
             provider_order.status,
             provider_order.created_at_ms,
-        );
-        let events = store.events_from(before).to_vec();
-        (order_id, events)
+        )
     });
 
-    let Some((Some(order_id), events)) = result else {
+    let Some(Some(order_id)) = order_id else {
         return json_error(500, "failed to store order");
     };
-
-    if let Err(e) = append_exchange_events_to_stream(&events) {
-        return json_error(500, &e);
-    }
 
     let status_str = canonical_status_to_str(provider_status);
     let mut response = Map::new();
@@ -265,14 +246,7 @@ pub fn handle_order_status(req: &Request) -> Response {
 
     let result = with_store(|store| {
         let order = store.get_order(order_id).cloned();
-        let stream_projection = match project_exchange_order_from_stream(order_id) {
-            Ok(projection) => projection,
-            Err(e) => {
-                edgerun_log::warn!("exchange stream projection failed: {}", e);
-                None
-            }
-        };
-        let projection = stream_projection.or_else(|| store.project_order(order_id));
+        let projection = store.project_order(order_id);
         (order, projection)
     });
 
