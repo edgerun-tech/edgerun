@@ -1,13 +1,16 @@
 import { atom } from "nanostores"
 import type { XrayState, LayoutType } from "./types"
 import { createMockGraph, createMockRuntimeStats } from "./mock-graph"
+import { CodeAnalyzerWsService } from "../services/codeanalyzer-ws"
+
+// WebSocket service instance
+let wsService: CodeAnalyzerWsService | null = null
 
 function initialState(): XrayState {
-  const { nodes, edges } = createMockGraph()
   return {
-    nodes,
-    edges,
-    runtimeStats: createMockRuntimeStats(),
+    nodes: new Map(),
+    edges: [],
+    runtimeStats: new Map(),
     selectedId: null,
     highlightedIds: new Set(),
     layout: "force",
@@ -16,10 +19,55 @@ function initialState(): XrayState {
     panX: 0,
     panY: 0,
     rotation: 0,
+    loading: false,
+    error: null,
   }
 }
 
+export interface XrayState extends ReturnType<typeof initialState> {}
+
 export const xrayState = atom<XrayState>(initialState())
+
+// Initialize WebSocket connection to codeanalyzer
+export function initCodeAnalyzerConnection(url?: string): void {
+  if (wsService) {
+    wsService.disconnect()
+  }
+
+  wsService = new CodeAnalyzerWsService({ wsUrl: url || "ws://localhost:13337/ws" })
+
+  xrayState.set({ ...xrayState.get(), loading: true, error: null })
+
+  wsService.onGraphUpdate((data) => {
+    const nodeMap = new Map()
+    for (const node of data.nodes) {
+      nodeMap.set(node.id, { ...node, x: node.x ?? 0, y: node.y ?? 0 })
+    }
+
+    xrayState.set({
+      ...xrayState.get(),
+      nodes: nodeMap,
+      edges: data.edges,
+      loading: false,
+      error: null,
+    })
+  })
+
+  wsService.onError((error) => {
+    console.error("[xray] WebSocket error:", error)
+    xrayState.set({ ...xrayState.get(), loading: false, error: error.message })
+  })
+
+  wsService.connect()
+}
+
+// Request analysis of a specific path
+export function requestAnalysis(path: string): void {
+  if (wsService) {
+    xrayState.set({ ...xrayState.get(), loading: true })
+    wsService.requestAnalyze(path)
+  }
+}
 
 export function setLayout(layout: LayoutType) {
   const s = xrayState.get()

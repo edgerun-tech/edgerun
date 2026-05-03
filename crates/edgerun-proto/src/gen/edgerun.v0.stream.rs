@@ -782,6 +782,20 @@ pub enum CommandType {
     /// MUST NOT have direct access to private keys.
     RequestUserPresence = 1010,
     RequestSignature = 1011,
+    /// Server resource commands (1012..1023)
+    /// These are typed resource commands. Do not tunnel them through UPDATE_CONFIG.
+    ClaimDomain = 1012,
+    ReleaseDomain = 1013,
+    AddMailbox = 1014,
+    RemoveMailbox = 1015,
+    AddAlias = 1016,
+    RemoveAlias = 1017,
+    AuthorizeContentSource = 1018,
+    PublishWebsite = 1019,
+    UnpublishWebsite = 1020,
+    SetAuthoritativeDns = 1021,
+    RequestCertificate = 1022,
+    SetServicePolicy = 1023,
 }
 impl CommandType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -816,6 +830,18 @@ impl CommandType {
             Self::QueryNodeState => "COMMAND_TYPE_QUERY_NODE_STATE",
             Self::RequestUserPresence => "COMMAND_TYPE_REQUEST_USER_PRESENCE",
             Self::RequestSignature => "COMMAND_TYPE_REQUEST_SIGNATURE",
+            Self::ClaimDomain => "COMMAND_TYPE_CLAIM_DOMAIN",
+            Self::ReleaseDomain => "COMMAND_TYPE_RELEASE_DOMAIN",
+            Self::AddMailbox => "COMMAND_TYPE_ADD_MAILBOX",
+            Self::RemoveMailbox => "COMMAND_TYPE_REMOVE_MAILBOX",
+            Self::AddAlias => "COMMAND_TYPE_ADD_ALIAS",
+            Self::RemoveAlias => "COMMAND_TYPE_REMOVE_ALIAS",
+            Self::AuthorizeContentSource => "COMMAND_TYPE_AUTHORIZE_CONTENT_SOURCE",
+            Self::PublishWebsite => "COMMAND_TYPE_PUBLISH_WEBSITE",
+            Self::UnpublishWebsite => "COMMAND_TYPE_UNPUBLISH_WEBSITE",
+            Self::SetAuthoritativeDns => "COMMAND_TYPE_SET_AUTHORITATIVE_DNS",
+            Self::RequestCertificate => "COMMAND_TYPE_REQUEST_CERTIFICATE",
+            Self::SetServicePolicy => "COMMAND_TYPE_SET_SERVICE_POLICY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -847,6 +873,18 @@ impl CommandType {
             "COMMAND_TYPE_QUERY_NODE_STATE" => Some(Self::QueryNodeState),
             "COMMAND_TYPE_REQUEST_USER_PRESENCE" => Some(Self::RequestUserPresence),
             "COMMAND_TYPE_REQUEST_SIGNATURE" => Some(Self::RequestSignature),
+            "COMMAND_TYPE_CLAIM_DOMAIN" => Some(Self::ClaimDomain),
+            "COMMAND_TYPE_RELEASE_DOMAIN" => Some(Self::ReleaseDomain),
+            "COMMAND_TYPE_ADD_MAILBOX" => Some(Self::AddMailbox),
+            "COMMAND_TYPE_REMOVE_MAILBOX" => Some(Self::RemoveMailbox),
+            "COMMAND_TYPE_ADD_ALIAS" => Some(Self::AddAlias),
+            "COMMAND_TYPE_REMOVE_ALIAS" => Some(Self::RemoveAlias),
+            "COMMAND_TYPE_AUTHORIZE_CONTENT_SOURCE" => Some(Self::AuthorizeContentSource),
+            "COMMAND_TYPE_PUBLISH_WEBSITE" => Some(Self::PublishWebsite),
+            "COMMAND_TYPE_UNPUBLISH_WEBSITE" => Some(Self::UnpublishWebsite),
+            "COMMAND_TYPE_SET_AUTHORITATIVE_DNS" => Some(Self::SetAuthoritativeDns),
+            "COMMAND_TYPE_REQUEST_CERTIFICATE" => Some(Self::RequestCertificate),
+            "COMMAND_TYPE_SET_SERVICE_POLICY" => Some(Self::SetServicePolicy),
             _ => None,
         }
     }

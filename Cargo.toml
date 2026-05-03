@@ -119,6 +119,7 @@ members = [
   "crates/edgerun-exchange-worker",
    "crates/edgerun-provisioning",
    "crates/zen-client",
+  "crates/edgerun-codelyzer",
 ]
 
 [workspace.package]

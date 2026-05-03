@@ -1,0 +1,386 @@
+syntax = "proto3";
+
+package codeanalyzer;
+
+message GraphNode {
+  string id = 1;
+  string name = 2;
+  string file = 3;
+  string language = 4;
+  bool is_static = 5;
+  uint32 connections = 6;
+  repeated string tags = 7;
+  optional string commit = 8;
+}
+
+message GraphEdge {
+  string source = 1;
+  string target = 2;
+  string kind = 3;
+}
+
+message TagGroup {
+  string name = 1;
+  repeated string tags = 2;
+  string color = 3;
+}
+
+message GraphData {
+  repeated GraphNode nodes = 1;
+  repeated GraphEdge edges = 2;
+  repeated TagGroup tag_groups = 3;
+  uint64 total_bytes = 4;
+  uint32 node_count = 5;
+  uint32 edge_count = 6;
+}
+
+message Diagnostic {
+  string file = 1;
+  optional uint32 line = 2;
+  optional uint32 column = 3;
+  string severity = 4;
+  string message = 5;
+  string source = 6;
+}
+
+message TestResult {
+  string name = 1;
+  bool passed = 2;
+  optional string file = 3;
+  optional string message = 4;
+  optional uint64 duration_ms = 5;
+}
+
+message CoverageInfo {
+  string file = 1;
+  uint32 lines_total = 2;
+  uint32 lines_covered = 3;
+  double coverage_pct = 4;
+}
+
+message FormatIssue {
+  string file = 1;
+  optional uint32 line = 2;
+  string message = 3;
+}
+
+message MissingRef {
+  string name = 1;
+  string referenced_by = 2;
+  string kind = 3;
+}
+
+message DiagnosticsReport {
+  repeated string linters_available = 1;
+  repeated Diagnostic diagnostics = 2;
+  repeated TestResult tests = 3;
+  repeated CoverageInfo coverage = 4;
+  repeated FormatIssue formatting_issues = 5;
+  repeated MissingRef missing_references = 6;
+  string scan_timestamp = 7;
+}
+
+message RepoInfo {
+  string path = 1;
+  string name = 2;
+  bool is_git_repo = 3;
+  optional string git_remote = 4;
+  uint32 file_count = 5;
+  uint64 total_size_bytes = 6;
+  uint64 last_modified = 7;
+  IndexState index_state = 8;
+  repeated string languages = 9;
+  uint64 added_at = 10;
+}
+
+message IndexState {
+  oneof state {
+    NotIndexed not_indexed = 1;
+    Indexing indexing = 2;
+    Indexed indexed = 3;
+    Stale stale = 4;
+    Error error = 5;
+  }
+
+  message NotIndexed {}
+  message Indexing {
+    float progress = 1;
+    uint32 files_scanned = 2;
+    uint32 total_files = 3;
+  }
+  message Indexed {
+    uint32 functions = 1;
+    uint32 edges = 2;
+    uint64 index_time_ms = 3;
+  }
+  message Stale {
+    uint32 functions = 1;
+    uint32 edges = 2;
+    uint64 last_indexed = 3;
+  }
+  message Error {
+    string message = 1;
+  }
+}
+
+message RegistryConfig {
+  repeated string scan_roots = 1;
+  repeated string excluded_paths = 2;
+  uint32 max_concurrent_index = 3;
+  bool auto_discover = 4;
+}
+
+message RepoList {
+  repeated RepoInfo repos = 1;
+  optional string active = 2;
+}
+
+message FileInfo {
+  string path = 1;
+  uint64 hash = 2;
+  uint64 modified_ts = 3;
+  string language = 4;
+  uint64 size = 5;
+}
+
+message FileEntry {
+  string name = 1;
+  string path = 2;
+  bool is_dir = 3;
+}
+
+message DirListing {
+  repeated FileEntry entries = 1;
+}
+
+message QueryResult {
+  repeated QueryMatch matches = 1;
+  uint32 total_count = 2;
+}
+
+message QueryMatch {
+  string id = 1;
+  string name = 2;
+  string file = 3;
+  string language = 4;
+}
+
+message StatsResponse {
+  map<string, uint32> languages = 1;
+  map<string, uint32> files = 2;
+  uint32 total_functions = 3;
+  uint32 total_edges = 4;
+}
+
+message XrefResponse {
+  string function = 1;
+  repeated string callers = 2;
+  repeated string callees = 3;
+}
+
+message FileData {
+  string file = 1;
+  repeated string functions = 2;
+  repeated string dependencies = 3;
+}
+
+message FilesResponse {
+  repeated FileData files = 1;
+}
+
+message AnalyzeResponse {
+  string status = 1;
+  string path = 2;
+  uint32 functions = 3;
+  uint32 edges = 4;
+}
+
+message ApplyEditResponse {
+  string status = 1;
+  string path = 2;
+  uint32 bytes = 3;
+}
+
+message ChatRequest {
+  string message = 1;
+  optional string context = 2;
+  optional string summary = 3;
+  optional string session_id = 4;
+}
+
+message ChatResponse {
+  string reply = 1;
+  optional string error = 2;
+}
+
+message ToolCallInfo {
+  string name = 1;
+  string args = 2;
+  string output = 3;
+  optional string content = 4;
+}
+
+message ToolUseResponse {
+  string reply = 1;
+  repeated ToolCallInfo tools = 2;
+  optional string error = 3;
+}
+
+message StatusResponse {
+  string status = 1;
+  optional string error = 2;
+  optional uint32 functions = 3;
+  optional uint32 edges = 4;
+  optional uint32 found = 5;
+}
+
+message ErrorResponse {
+  string error = 1;
+}
+
+message ViewData {
+  repeated ViewNode nodes = 1;
+  repeated ViewEdge edges = 2;
+}
+
+message ViewNode {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+}
+
+message ViewEdge {
+  string source = 1;
+  string target = 2;
+  string kind = 3;
+}
+
+message GetFileResponse {
+  string content = 1;
+}
+
+message GetViewResponse {
+  ViewData data = 1;
+}
+
+message GetReposResponse {
+  RepoList repos = 1;
+}
+
+message SwitchRepoResponse {
+  StatusResponse status = 1;
+}
+
+message GetFilesResponse {
+  repeated FileData files = 1;
+}
+
+message GetDiagnosticsResponse {
+  repeated Diagnostic diagnostics = 1;
+}
+
+message AddRepoResponse {
+  StatusResponse status = 1;
+  string path = 2;
+}
+
+message RemoveRepoResponse {
+  StatusResponse status = 1;
+}
+
+message DiscoverReposResponse {
+  uint32 found = 1;
+  RepoList repos = 2;
+}
+
+message GetConfigResponse {
+  RegistryConfig config = 1;
+}
+
+message UpdateConfigResponse {
+  StatusResponse status = 1;
+}
+
+message GetIndexStateResponse {
+  IndexState state = 1;
+}
+
+message GetWsConnectionsResponse {
+  uint32 count = 1;
+}
+
+message WsRequest {
+  uint64 id = 1;
+  string action = 2;
+  bytes payload = 3;
+}
+
+message WsResponse {
+  uint64 id = 1;
+  oneof result {
+    bytes data = 2;
+    string error = 3;
+  }
+}
+
+message GraphUpdate {
+  message NodeUpdate {
+    repeated GraphNode added = 1;
+    repeated GraphNode modified = 2;
+    repeated string removed = 3;
+  }
+
+  message EdgeUpdate {
+    repeated GraphEdge added = 1;
+    repeated string removed = 2;
+  }
+
+  optional NodeUpdate nodes = 1;
+  optional EdgeUpdate edges = 2;
+  bool is_full = 3;
+  uint64 timestamp = 4;
+}
+
+message WsMessage {
+  oneof msg {
+    WsRequest request = 1;
+    WsResponse response = 2;
+    GraphData graph_data = 3;
+    GraphUpdate graph_update = 4;
+    bytes raw_json = 5;
+    EvalCommand eval_command = 6;
+    EvalResult eval_result = 7;
+    ClientReady client_ready = 8;
+    DebugLog debug_log = 9;
+  }
+
+  message ClientReady {}
+  message DebugLog {
+    string level = 1;
+    string message = 2;
+  }
+  message EvalCommand {
+    uint64 id = 1;
+    string code = 2;
+  }
+  message EvalResult {
+    uint64 id = 1;
+    optional string result = 2;
+    optional string error = 3;
+  }
+}
+
+message WsFrame {
+  oneof frame_type {
+    BinaryFrame binary = 1;
+    TextFrame text = 2;
+  }
+
+  message BinaryFrame {
+    bytes data = 1;
+  }
+
+  message TextFrame {
+    string text = 1;
+  }
+}
