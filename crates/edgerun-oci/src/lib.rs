@@ -69,6 +69,8 @@ mod registry {
     pub mod trust;
 }
 
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod accountability;
 pub mod bare_rootfs;
 pub mod bare_syscall;
 #[cfg(all(feature = "std", not(target_os = "none")))]
