@@ -7,7 +7,12 @@
 //! Real wiring:
 //! - POST /v1/quote → route_quote across configured providers
 //! - POST /v1/order → create_order via selected provider
-//! - GET /v1/order/:id → event-derived status from stream/store
+//! - GET /v1/order/:id → event-derived status from store
+//!
+//! The API does not own a stream runtime. The node owns the single event stream.
+//! Exchange API records `ExchangeEvent`s in its store; node-owned code may drain
+//! those events and append them to the node stream using `edgerun-exchange`'s
+//! stream codec.
 
 extern crate alloc;
 
@@ -22,7 +27,6 @@ use edgerun_exchange::provider::{ExchangeProvider, ProviderContext};
 use edgerun_http::{Handler, Request, Response};
 
 pub mod config;
-pub mod stream_runtime;
 pub mod store;
 pub mod types;
 mod handlers;
@@ -30,11 +34,6 @@ mod routes;
 
 pub use config::Config;
 pub use store::ExchangeStore;
-pub use stream_runtime::{
-    append_exchange_event_to_stream, append_exchange_events_to_stream,
-    init_exchange_stream_runtime, init_exchange_stream_runtime_with_recipients,
-    project_exchange_order_from_stream,
-};
 pub use types::*;
 
 /// Global shared state for the exchange API.
