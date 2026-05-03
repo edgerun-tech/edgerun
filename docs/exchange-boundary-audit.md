@@ -1,8 +1,8 @@
 # Exchange Boundary Audit
 
 > Updated: 2026-05-04
-> Scope: edgerun-exchange, edgerun-exchange-api, edgerun-exchange-worker
-> Status: provider-backed quote/order wiring exists. Exchange events now have a codec boundary to the existing protocol event stream, and the API can commit quote/order events through the existing object-store + signed stream append path when `init_exchange_stream_runtime*` is configured.
+> Scope: edgerun-exchange, edgerun-exchange-api, edgerun-exchange-worker, edgerun-node
+> Status: provider-backed quote/order wiring exists. Exchange events have a codec boundary to the existing protocol event stream. The exchange API is stream-agnostic; the node owns the single event stream and is responsible for appending exchange events.
 
 ## Current Classification
 
@@ -15,12 +15,12 @@
 | `router::route_quote` | Real MVP | Filters providers, calls `quote()`, distinguishes no provider from provider failure, selects best by rate. Fees/health scoring are still TODO. |
 | `ExchangeEvent` enum | Real model | Defines quote/order/status lifecycle facts. |
 | `stream_codec` | Real boundary | Maps `ExchangeEvent` to existing wallet `EventType` values and protobuf payload bytes for `EventEnvelope.payload_object`. No new sink/storage path. |
-| `stream_runtime` | Real API/runtime bridge | Stores encoded exchange payloads as `OBJECT_KIND_PAYLOAD`, builds envelopes, appends/signs through `NodeStore`. |
+| `edgerun-node/src/exchange_events.rs` | Node-owned stream bridge | Stores encoded exchange payloads as `OBJECT_KIND_PAYLOAD`, builds envelopes, appends/signs through `NodeStore`. |
 | `projection::ExchangeOrderProjection` | Real projection | Pure derived order view over `ExchangeEvent` sequences. |
-| `ExchangeStore` | Real in-memory store | Keeps fast quote/order state and mirrors events into stream runtime when configured. |
-| `POST /v1/quote` | Stream-wired MVP | Calls provider routing, stores selected quote, returns public EdgeRun quote id, commits `QuoteCreated` when stream runtime is configured. |
-| `POST /v1/order` | Stream-wired MVP | Uses stored quote/provider continuity and commits `OrderCreated` plus initial `OrderStatusChanged` when needed. |
-| `GET /v1/order/:id` | Stream-projected MVP | Prefers decoded stream projection and falls back to in-memory projection. |
+| `ExchangeStore` | Real in-memory store | Keeps fast quote/order state and records `ExchangeEvent`s. It does not own stream append. |
+| `POST /v1/quote` | Provider-backed MVP | Calls provider routing, stores selected quote, returns public EdgeRun quote id, records `QuoteCreated` in the exchange store. |
+| `POST /v1/order` | Provider-backed MVP | Uses stored quote/provider continuity and records `OrderCreated` plus initial `OrderStatusChanged` when needed. |
+| `GET /v1/order/:id` | Event-projected in-memory view | Returns public order fields plus projected status metadata from `ExchangeStore`. |
 | `GET /v1/assets` | Static catalog | Explicitly not provider truth. |
 | `GET /health` | Honest degraded | Provider health checks are not implemented, so the API does not claim healthy. |
 
@@ -28,31 +28,35 @@
 
 | Component | Status | Notes |
 |---|---|---|
+| Node route/bootstrap integration | Missing | Node-owned exchange append helper exists, but the node/server path still needs to drain exchange events and call it. |
 | Worker poller | Stub | `run_poller()` is no-op and logs that no active polling occurs. |
 | Worker reconciliation | Stub | `run_reconciliation()` is no-op and logs that no active reconciliation occurs. |
 | Provider health checks | Missing | `/health` reports degraded until actual checks exist. |
-| Audit persistence | Partial | Exchange lifecycle facts are stream-backed when configured; raw provider responses are not yet separately stored. |
+| Audit persistence | Partial | Exchange lifecycle facts can be stream-backed by node-owned append helpers; raw provider responses are not yet separately stored. |
 | Fee/health-aware routing | Partial | Routing currently scores by rate only. |
 
 ## Authority Boundary
 
-When `init_exchange_stream_runtime*` is configured, exchange lifecycle events flow through the existing signed protocol stream:
+The node owns exactly one event stream. Exchange does not own a stream runtime.
+
+Correct flow:
 
 ```text
 provider quote/order/status
   -> ExchangeEvent
+  -> ExchangeStore records event for fast API projection
+  -> node-owned wrapper drains/receives ExchangeEvent
   -> encode_exchange_event()
   -> WalletExchangeEventPayload bytes
   -> NodeStore::put_object(..., OBJECT_KIND_PAYLOAD, recipients)
   -> build_exchange_event_envelope(...)
   -> NodeStore::append_signed_event_blocking(...)
   -> decoded stream projection
-  -> API response
 ```
 
-No new event sink, log, or storage abstraction is introduced.
+No new event sink, log, stream runtime, or storage abstraction is introduced.
 
-If the stream runtime is not configured, the API still works in local/in-memory mode and `GET /v1/order/:id` falls back to the in-memory projection.
+Until node/server integration calls the node-owned append helper, API endpoints remain in-memory MVP paths.
 
 ## Existing Stream Event Mapping
 
@@ -134,21 +138,24 @@ Rules:
 
 ## Remaining Required Work
 
-1. Wire exchange stream runtime initialization from the node/server bootstrap path.
-2. Add poller that emits `ProviderStatusObserved`.
-3. Add reconciliation that emits `ManualReviewRequired` on contradictions.
-4. Add provider health checks.
-5. Store raw provider responses as private/audit objects where policy allows.
-6. Add fee/expiry/health-aware quote scoring.
-7. Add live integration tests for SideShift/ChangeNOW behind ignored/env-gated tests.
+1. Expose `exchange_events` from `edgerun-node` crate root or wire it from the node server module that already owns `NodeStore + signer + stream_id`.
+2. Add a node-owned wrapper around exchange route handling that drains newly recorded `ExchangeEvent`s and calls `append_exchange_events_to_node_stream`.
+3. Add poller that emits `ProviderStatusObserved`.
+4. Add reconciliation that emits `ManualReviewRequired` on contradictions.
+5. Add provider health checks.
+6. Store raw provider responses as private/audit objects where policy allows.
+7. Add fee/expiry/health-aware quote scoring.
+8. Add live integration tests for SideShift/ChangeNOW behind ignored/env-gated tests.
 
 ## Verification Commands
 
 ```bash
 cargo check -p edgerun-exchange
 cargo check -p edgerun-exchange-api
+cargo check -p edgerun-node
 cargo check -p edgerun-exchange-worker
 cargo test -p edgerun-exchange
 cargo test -p edgerun-exchange-api
+cargo test -p edgerun-node
 cargo test -p edgerun-exchange-worker
 ```
