@@ -4,7 +4,7 @@ use edgerun_core::command::CommandExecutionContext;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_storage::NodeStore;
 
-use crate::command_dispatch;
+use crate::command_router as command_dispatch;
 use crate::daemon::send_command_to_peer;
 use crate::ingress;
 use crate::query_engine::{execute_federated_query, execute_query};
