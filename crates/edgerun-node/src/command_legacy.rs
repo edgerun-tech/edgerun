@@ -6,7 +6,11 @@
 
 pub use crate::command_dispatch::{
     create_node_genesis_payload, dispatch_command, project_config,
-    project_config_from_base, project_controller_set, record_command_sent_event,
-    sign_and_append_event, sign_and_append_event_blocking, sign_event_envelope,
-    CommandDispatchResult, ControllerSet,
+    project_config_from_base, project_controller_set, CommandDispatchResult,
+    ControllerSet,
+};
+
+pub(crate) use crate::command_dispatch::{
+    record_command_sent_event, sign_and_append_event, sign_and_append_event_blocking,
+    sign_event_envelope,
 };
