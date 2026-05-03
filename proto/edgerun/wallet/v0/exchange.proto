@@ -43,10 +43,6 @@ enum CanonicalOrderStatus {
   CANONICAL_ORDER_STATUS_PARTIAL_DEPOSITS = 19;
 }
 
-// ---------------------------------------------------------------------------
-// Asset Reference & Asset
-// ---------------------------------------------------------------------------
-
 message AssetRef {
   string symbol = 1;
   string network = 2;
@@ -63,10 +59,6 @@ message Asset {
   optional string name = 6;
 }
 
-// ---------------------------------------------------------------------------
-// Fee Breakdown
-// ---------------------------------------------------------------------------
-
 message FeeBreakdown {
   string edgerun_bps = 1; // string decimal, e.g. "25" = 25 bps
   string provider_bps = 2;
@@ -75,20 +67,12 @@ message FeeBreakdown {
   string total_fee_usd_estimate = 5;
 }
 
-// ---------------------------------------------------------------------------
-// Transaction Reference
-// ---------------------------------------------------------------------------
-
 message TxRef {
   string tx_id = 1;
   string network = 2;
   optional uint64 confirmations = 3;
   optional string explorer_url = 4;
 }
-
-// ---------------------------------------------------------------------------
-// Quote Request & Quote
-// ---------------------------------------------------------------------------
 
 message QuoteRequest {
   string settlement_asset_id = 1; // canonical asset id
@@ -115,10 +99,6 @@ message Quote {
   optional string provider_code_internal = 11; // never in public API
 }
 
-// ---------------------------------------------------------------------------
-// Order
-// ---------------------------------------------------------------------------
-
 message Order {
   string order_id = 1;
   string quote_id = 2;
@@ -135,10 +115,6 @@ message Order {
   optional string provider_code_internal = 13;     // never in public API
 }
 
-// ---------------------------------------------------------------------------
-// Order Status (live query)
-// ---------------------------------------------------------------------------
-
 message OrderStatus {
   string order_id = 1;
   CanonicalOrderStatus status = 2;
@@ -149,8 +125,99 @@ message OrderStatus {
 }
 
 // ---------------------------------------------------------------------------
-// Payment Request
+// Wallet exchange stream payloads
 // ---------------------------------------------------------------------------
+
+message WalletQuoteCreatedPayload {
+  uint32 payload_version = 1;
+  string quote_id = 2;
+  string settlement_asset_id = 3;
+  string pay_asset_id = 4;
+  string settlement_amount = 5;
+  string pay_amount = 6;
+  string rate = 7;
+  uint64 expires_at_ms = 8;
+  optional string provider_code_internal = 9;
+}
+
+message WalletOrderCreatedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  string quote_id = 3;
+  string provider_order_id_internal = 4;
+  string deposit_address = 5;
+  string recipient_address = 6;
+  optional string refund_address = 7;
+  optional string provider_code_internal = 8;
+  uint64 created_at_ms = 9;
+}
+
+message WalletDepositObservedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  string tx_id = 3;
+  string network = 4;
+  string amount = 5;
+  uint64 confirmations = 6;
+  uint64 observed_at_ms = 7;
+}
+
+message WalletProviderStatusObservedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  optional string provider_code_internal = 3;
+  string provider_order_id_internal = 4;
+  string provider_status_string = 5;
+  CanonicalOrderStatus mapped_canonical_status = 6;
+  uint64 observed_at_ms = 7;
+}
+
+message WalletOrderStatusChangedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  CanonicalOrderStatus from_status = 3;
+  CanonicalOrderStatus to_status = 4;
+  string reason = 5;
+  uint64 changed_at_ms = 6;
+}
+
+message WalletOrderCompletedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  optional string payout_tx_id = 3;
+  optional string payout_network = 4;
+  uint64 completed_at_ms = 5;
+}
+
+message WalletOrderFailedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  string reason = 3;
+  uint64 failed_at_ms = 4;
+}
+
+message WalletManualReviewRequiredPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  string reason = 3;
+  CanonicalOrderStatus canonical_status = 4;
+  CanonicalOrderStatus provider_status = 5;
+  uint64 flagged_at_ms = 6;
+}
+
+message WalletExchangeEventPayload {
+  uint32 payload_version = 1;
+  oneof event {
+    WalletQuoteCreatedPayload quote_created = 2;
+    WalletOrderCreatedPayload order_created = 3;
+    WalletDepositObservedPayload deposit_observed = 4;
+    WalletProviderStatusObservedPayload provider_status_observed = 5;
+    WalletOrderStatusChangedPayload order_status_changed = 6;
+    WalletOrderCompletedPayload order_completed = 7;
+    WalletOrderFailedPayload order_failed = 8;
+    WalletManualReviewRequiredPayload manual_review_required = 9;
+  }
+}
 
 message PaymentRequest {
   string request_id = 1;
@@ -162,10 +229,6 @@ message PaymentRequest {
   uint64 expires_at_ms = 7;
   optional string pay_asset_id = 8;
 }
-
-// ---------------------------------------------------------------------------
-// Receipt
-// ---------------------------------------------------------------------------
 
 message Receipt {
   string receipt_id = 1;
