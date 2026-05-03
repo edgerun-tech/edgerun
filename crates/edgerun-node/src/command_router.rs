@@ -1,9 +1,9 @@
 //! Command router.
 //!
-//! `command_dispatch.rs` remains behind the explicit `command_legacy` boundary
-//! while command groups are extracted. This router is the new front door.
+//! `command_dispatch.rs` remains the fallback implementation while command
+//! groups are extracted. This router is the new front door.
 
-pub use crate::command_legacy::{
+pub use crate::command_dispatch::{
     create_node_genesis_payload, project_config, project_config_from_base,
     project_controller_set, sign_event_envelope, CommandDispatchResult, ControllerSet,
 };
@@ -44,7 +44,7 @@ pub fn dispatch_command(
         );
     }
 
-    crate::command_legacy::dispatch_command(
+    crate::command_dispatch::dispatch_command(
         command,
         store,
         stream_id,
