@@ -149,6 +149,92 @@ message OrderStatus {
 }
 
 // ---------------------------------------------------------------------------
+// Wallet stream event payloads
+//
+// These messages are stored as EventEnvelope.payload_object content for the
+// existing wallet/exchange EventType values in edgerun.v0.stream. They carry
+// exact exchange lifecycle facts while the EventEnvelope supplies stream order,
+// signature, timestamps, related refs, and hash-chain semantics.
+// ---------------------------------------------------------------------------
+
+message WalletQuoteCreatedPayload {
+  uint32 payload_version = 1;
+  string quote_id = 2;
+  string settlement_asset_id = 3;
+  string pay_asset_id = 4;
+  string settlement_amount = 5;
+  string pay_amount = 6;
+  string rate = 7;
+  uint64 expires_at_ms = 8;
+  optional string provider_code_internal = 9;
+}
+
+message WalletOrderCreatedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  string quote_id = 3;
+  string provider_order_id_internal = 4;
+  string deposit_address = 5;
+  string recipient_address = 6;
+  optional string refund_address = 7;
+  optional string provider_code_internal = 8;
+  uint64 created_at_ms = 9;
+}
+
+message WalletDepositObservedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  string tx_id = 3;
+  string network = 4;
+  string amount = 5;
+  uint64 confirmations = 6;
+  uint64 observed_at_ms = 7;
+}
+
+message WalletProviderStatusObservedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  optional string provider_code_internal = 3;
+  string provider_order_id_internal = 4;
+  string provider_status_string = 5;
+  CanonicalOrderStatus mapped_canonical_status = 6;
+  uint64 observed_at_ms = 7;
+}
+
+message WalletOrderStatusChangedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  CanonicalOrderStatus from_status = 3;
+  CanonicalOrderStatus to_status = 4;
+  string reason = 5;
+  uint64 changed_at_ms = 6;
+}
+
+message WalletOrderCompletedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  optional string payout_tx_id = 3;
+  optional string payout_network = 4;
+  uint64 completed_at_ms = 5;
+}
+
+message WalletOrderFailedPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  string reason = 3;
+  uint64 failed_at_ms = 4;
+}
+
+message WalletManualReviewRequiredPayload {
+  uint32 payload_version = 1;
+  string order_id = 2;
+  string reason = 3;
+  CanonicalOrderStatus canonical_status = 4;
+  CanonicalOrderStatus provider_status = 5;
+  uint64 flagged_at_ms = 6;
+}
+
+// ---------------------------------------------------------------------------
 // Payment Request
 // ---------------------------------------------------------------------------
 
