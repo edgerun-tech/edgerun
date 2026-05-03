@@ -1,7 +1,7 @@
 //! Shared event-log framing and hashing.
 
 use crate::prelude::v1::*;
-use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
+use edgerun_core::protocol::{Digest, EventEnvelope};
 use edgerun_proto::edgerun::v0::stream as proto_stream;
 use prost::Message;
 
@@ -44,7 +44,7 @@ pub struct ScannedEvent {
 /// Backend contract for durable append-only event logs.
 ///
 /// Implementations may be filesystem-backed, block-device-backed, or in-memory
-/// test doubles, but they must preserve protocol canonical event hashes.
+/// test doubles, but they must preserve deterministic edgerun-wire event hashes.
 pub trait EventLog {
     fn append_event(&mut self, event: &EventEnvelope) -> Result<AppendReceipt, StorageError>;
 
@@ -58,11 +58,10 @@ pub trait EventLog {
     fn scan(&self) -> Result<Vec<ScannedEvent>, StorageError>;
 }
 
-/// Computes the protocol canonical event hash used for stream linkage and heads.
+/// Computes the deterministic edgerun-wire event hash used for stream linkage and heads.
 #[must_use]
 pub fn canonical_event_hash(event: &EventEnvelope) -> Digest {
-    let record = ProtocolRecord::EventEnvelope(event.clone());
-    let canonical = canonical_bytes(&record, true);
+    let canonical = edgerun_core::wire_stream::event_signable_wire_bytes(event);
     let hash = edgerun_core::crypto::record_hash(
         edgerun_core::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
         &canonical,
@@ -109,7 +108,8 @@ pub fn validate_event_location(
 /// `[varint protobuf_len][protobuf EventEnvelope bytes]`.
 ///
 /// The record body remains protobuf for compatibility with the existing log
-/// files. Integrity/index hashes are computed through `canonical_event_hash`.
+/// files. Integrity/index hashes are computed through edgerun-wire via
+/// `canonical_event_hash`.
 pub fn encode_event_frame(event: &EventEnvelope) -> Result<(Vec<u8>, Vec<u8>), StorageError> {
     let proto: proto_stream::EventEnvelope = event.clone();
     let mut event_bytes = Vec::new();
@@ -121,49 +121,4 @@ pub fn encode_event_frame(event: &EventEnvelope) -> Result<(Vec<u8>, Vec<u8>), S
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use edgerun_core::protocol::{EventType, Signature};
-
-    fn event_with_signature(marker: u8) -> EventEnvelope {
-        EventEnvelope {
-            envelope_version: 1,
-            stream_id: b"stream-1".to_vec(),
-            seq: 0,
-            prev_event_hash: None,
-            event_type: EventType::NodeGenesis as i32,
-            event_version: 1,
-            recorded_at: None,
-            effective_at: None,
-            payload_object: None,
-            related_events: vec![],
-            related_commands: vec![],
-            related_objects: vec![],
-            related_delegations: vec![],
-            related_revocations: vec![],
-            event_metadata: None,
-            signature: Some(Signature {
-                algorithm: 1,
-                value: vec![marker; 64],
-            }),
-        }
-    }
-
-    #[test]
-    fn canonical_event_hash_matches_stream_hash() {
-        let event = event_with_signature(0xAB);
-
-        assert_eq!(
-            canonical_event_hash(&event),
-            edgerun_stream::compute_event_hash(&event)
-        );
-    }
-
-    #[test]
-    fn canonical_event_hash_uses_signable_form() {
-        let first = event_with_signature(0xAB);
-        let second = event_with_signature(0xCD);
-
-        assert_eq!(canonical_event_hash(&first), canonical_event_hash(&second));
-    }
-}
+mod event_log_tests;
