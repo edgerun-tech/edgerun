@@ -4,7 +4,7 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(all(not(target_os = "none"), feature = "conformance"))]
 macro_rules! println {
     ($($arg:tt)*) => {
         std::println!($($arg)*)

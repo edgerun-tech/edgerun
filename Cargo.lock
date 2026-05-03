@@ -1891,12 +1891,15 @@ dependencies = [
 name = "edgerun-exchange-api"
 version = "0.1.1"
 dependencies = [
+ "edgerun-core",
  "edgerun-exchange",
+ "edgerun-hardware-signing",
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
  "edgerun-proto",
  "edgerun-rt",
+ "edgerun-storage",
  "edgerun-url",
  "edgerun-wallet",
 ]

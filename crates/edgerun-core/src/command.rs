@@ -814,6 +814,18 @@ fn required_capability_for_command(command_type: i32) -> Option<(i32, &'static s
         Ct::QueryNodeState => Some((Ck::Query as i32, "query_node_state")),
         Ct::RequestUserPresence => Some((Ck::Query as i32, "request_user_presence")),
         Ct::RequestSignature => Some((Ck::NodeControl as i32, "request_signature")),
+        Ct::ClaimDomain => Some((Ck::NodeControl as i32, "claim_domain")),
+        Ct::ReleaseDomain => Some((Ck::NodeControl as i32, "release_domain")),
+        Ct::AddMailbox => Some((Ck::NodeControl as i32, "add_mailbox")),
+        Ct::RemoveMailbox => Some((Ck::NodeControl as i32, "remove_mailbox")),
+        Ct::AddAlias => Some((Ck::NodeControl as i32, "add_alias")),
+        Ct::RemoveAlias => Some((Ck::NodeControl as i32, "remove_alias")),
+        Ct::AuthorizeContentSource => Some((Ck::NodeControl as i32, "authorize_content_source")),
+        Ct::PublishWebsite => Some((Ck::NodeControl as i32, "publish_website")),
+        Ct::UnpublishWebsite => Some((Ck::NodeControl as i32, "unpublish_website")),
+        Ct::SetAuthoritativeDns => Some((Ck::NodeControl as i32, "set_authoritative_dns")),
+        Ct::RequestCertificate => Some((Ck::NodeControl as i32, "request_certificate")),
+        Ct::SetServicePolicy => Some((Ck::NodeControl as i32, "set_service_policy")),
     }
 }
 
