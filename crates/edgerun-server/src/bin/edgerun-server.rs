@@ -1,13 +1,15 @@
-//! Lightweight edgerun-server binary — hardcoded config for edgerun.tech.
+//! Lightweight edgerun-server binary with compiled-in bootstrap policy.
 //!
-//! No YAML parsing. Config matches deploy/server/*.yaml files.
+//! No YAML parsing. The deployed binary is single-use: controller identity,
+//! initial domains, mailboxes, website routes, cert names, and storage paths are
+//! compiled into `compiled_deployment.rs`.
 //!
 //! Services:
-//! - DNS authoritative for edgerun.tech (port 53 UDP+TCP)
-//! - SMTP (port 25, 587) with Maildir storage, outbound relay, DKIM signing
+//! - DNS authoritative for compiled domains (port 53 UDP+TCP)
+//! - SMTP (port 25) with Maildir storage, outbound relay, DKIM signing
 //! - IMAP (port 143) sharing Maildir root with SMTP
-//! - HTTP (port 80) for MTA-STS policy
-//! - ACME client provisions Let's Encrypt certs via DNS-01 challenge in background
+//! - HTTP (port 80) for MTA-STS and basic compiled website routes
+//! - ACME client provisions Let's Encrypt certs via DNS-01 challenge
 
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
@@ -15,64 +17,39 @@
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
+mod compiled_deployment;
+
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::Arc;
 use std::time::Duration;
 
-use edgerun_acme::{AcmeClient, AcmeConfig, AccountKey};
+use compiled_deployment::{CompiledDeployment, DEPLOYMENT};
 use edgerun_acme::DnsChallenge;
+use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig};
 use edgerun_dns::server::{DnsServer, DnsServerConfig};
 use edgerun_dns::zone::DnsZone;
 use edgerun_email_auth::sign::DkimSigner;
 use edgerun_http::server::HttpServer;
-use edgerun_http::{Handler, Request, Response, StatusCode, into_handler_async};
-use edgerun_rt::{CancellationToken, Runtime, sleep};
+use edgerun_http::{into_handler_async, Handler, Request, Response, StatusCode};
+use edgerun_rt::{sleep, CancellationToken, Runtime};
 use edgerun_server::{ImapConfig, Server, SmtpConfig};
-use edgerun_tls::CertificateAndKey;
 use edgerun_tls::certificate::Certificate;
+use edgerun_tls::CertificateAndKey;
 
 // ===========================================================================
-// Hardcoded deployment config — matches deploy/server/*.yaml
-// ===========================================================================
-
-const SERVER_IP: [u8; 4] = [172, 245, 67, 49];
-const HOSTNAME: &str = "mail.edgerun.tech";
-const ORIGIN: &str = "edgerun.tech";
-
-// Maildir and queue paths
-const MAILDIR_ROOT: &str = "/var/lib/edgerun/mail/maildirs";
-const QUEUE_DATA_ROOT: &str = "/var/lib/edgerun/mail/queue";
-
-// DKIM config
-const DKIM_DOMAIN: &str = "edgerun.tech";
-const DKIM_SELECTOR: &str = "mail";
-const DKIM_KEY_PATH: &str = "/etc/edgerun/server/dkim-mail.private.pem";
-
-// TLS paths (provisioned by ACME or manually placed)
-const TLS_CERT_PATH: &str = "/etc/edgerun/server/tls/fullchain.pem";
-const TLS_KEY_PATH: &str = "/etc/edgerun/server/tls/privkey.pem";
-
-// ACME account key path (generated on first run)
-const ACME_ACCOUNT_KEY_PATH: &str = "/etc/edgerun/server/acme-account.pem";
-
-// User credentials
-const USER_USERNAME: &str = "ken";
-const USER_PASSWORD: &str = "CHANGE_ME_ON_SERVER";
-
 // DNS SOA config
-const SOA_MNAME: &str = "ns1.edgerun.tech";
-const SOA_RNAME: &str = "admin.edgerun.tech";
-const SOA_SERIAL: u32 = 2026050301;
+// ===========================================================================
+
+const SOA_SERIAL: u32 = 2026050401;
 const SOA_REFRESH: u32 = 3600;
 const SOA_RETRY: u32 = 900;
 const SOA_EXPIRE: u32 = 604800;
 const SOA_MINIMUM: u32 = 86400;
 
-// ACME config
-const ACME_CONTACT: &str = "ken@edgerun.tech";
-const ACME_DOMAINS: &[&str] = &["mail.edgerun.tech", "mta-sts.edgerun.tech", "dash.edgerun.tech"];
+// The private DKIM key stays on disk. The TXT value is public and can be
+// replaced by the bootstrap-builder once DKIM key generation is automated.
+const FALLBACK_DKIM_TXT: &str = "v=DKIM1; k=rsa; p=MIIBCgKCAQEAy+Enfug7AYUY+u5InnNMGM39BJsmkqkZFpx5HAUe7ffAPBJhVDIJI4OfcewD+04at3W8aXBx/ZYXxPVO2twqj5nIuKpJVAAeKCaJUuMCyciUtZ89bG61zHFtimMekY4YdSRUwN05Ukq1QfSKFz5FF0E7q7/+KlKATLb3lTtzMJK4olNIDj7EnzW2b9W9PIyyzsnjp/YRSL/u6YlZRWkAT62I8AqnpbegdXMt89aWJMkXF7cfR2TJCJb73qU/ACFYSd6asGWfsCFsDh3dtp8lwpJFwmDY2kUlv6HdN0Hp9NuiX+Ck7z+rrsH9YhVlKlQTtna++bjg2XVgS1rE0o0ogQIDAQAB";
 
 // ===========================================================================
 // CLI
@@ -83,6 +60,7 @@ enum Mode {
     Run,
     HealthCheck,
     SendSystemReport,
+    PrintCompiledPlan,
 }
 
 fn parse_args() -> (Mode, Option<String>) {
@@ -95,7 +73,9 @@ fn parse_args() -> (Mode, Option<String>) {
         match args[i].as_str() {
             "--health-check" => mode = Mode::HealthCheck,
             "--send-system-report" => mode = Mode::SendSystemReport,
+            "--print-compiled-plan" => mode = Mode::PrintCompiledPlan,
             "--config" => {
+                // Backward compatible no-op. The deploy binary must not read YAML.
                 if i + 1 < args.len() {
                     config_path = Some(args[i + 1].clone());
                     i += 1;
@@ -109,46 +89,135 @@ fn parse_args() -> (Mode, Option<String>) {
 }
 
 // ===========================================================================
+// Compiled deployment helpers
+// ===========================================================================
+
+fn ip_addr(deployment: &CompiledDeployment) -> edgerun_dns::std::net::Ipv4Addr {
+    let ip = deployment.public_ipv4;
+    edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])
+}
+
+fn zone_name(origin: &str, fqdn: &str) -> String {
+    let origin = origin.trim_end_matches('.');
+    let fqdn = fqdn.trim_end_matches('.');
+    if fqdn.eq_ignore_ascii_case(origin) {
+        "@".to_string()
+    } else if let Some(prefix) = fqdn.strip_suffix(&format!(".{origin}")) {
+        prefix.to_string()
+    } else {
+        fqdn.to_string()
+    }
+}
+
+fn mail_host_for_domain(deployment: &CompiledDeployment, domain: &str) -> String {
+    if deployment.mail_host_prefix.is_empty() {
+        domain.to_string()
+    } else {
+        format!("{}.{}", deployment.mail_host_prefix, domain)
+    }
+}
+
+fn first_mailbox_user(deployment: &CompiledDeployment) -> String {
+    for domain in deployment.domains {
+        if let Some(mailbox) = domain.mailboxes.first() {
+            if let Some((local, _)) = mailbox.address.split_once('@') {
+                return local.to_string();
+            }
+        }
+    }
+    "postmaster".to_string()
+}
+
+fn local_mail_domains(deployment: &CompiledDeployment) -> Vec<String> {
+    let mut domains = Vec::new();
+    for domain in deployment.domains {
+        if domain.mail_enabled() || domain.domain == deployment.origin {
+            domains.push(domain.domain.to_string());
+        }
+    }
+    domains.sort();
+    domains.dedup();
+    domains
+}
+
+// ===========================================================================
 // DNS zone builder
 // ===========================================================================
 
-fn build_dns_zone() -> DnsZone {
-    let mut zone = DnsZone::new(ORIGIN);
+fn build_dns_zone(deployment: &CompiledDeployment) -> DnsZone {
+    let mut zone = DnsZone::new(deployment.origin);
     zone.set_default_ttl(3600);
 
-    zone.set_soa(SOA_MNAME, SOA_RNAME, SOA_SERIAL, SOA_REFRESH, SOA_RETRY, SOA_EXPIRE, SOA_MINIMUM);
+    let soa_mname = format!("ns1.{}", deployment.origin);
+    let soa_rname = format!("admin.{}", deployment.origin);
+    zone.set_soa(
+        &soa_mname,
+        &soa_rname,
+        SOA_SERIAL,
+        SOA_REFRESH,
+        SOA_RETRY,
+        SOA_EXPIRE,
+        SOA_MINIMUM,
+    );
 
-    zone.add_ns("ns1.edgerun.tech");
-    zone.add_ns("ns2.edgerun.tech");
+    let ip = ip_addr(deployment);
+    let ns1 = format!("ns1.{}", deployment.origin);
+    let ns2 = format!("ns2.{}", deployment.origin);
+    zone.add_ns(&ns1);
+    zone.add_ns(&ns2);
+    zone.add_a(&zone_name(deployment.origin, &ns1), ip, 3600);
+    zone.add_a(&zone_name(deployment.origin, &ns2), ip, 3600);
 
-    let ip = SERVER_IP;
-    zone.add_a("@", edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), 3600);
-    zone.add_a("mail", edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), 3600);
-    zone.add_a("mta-sts", edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), 3600);
-    zone.add_a("blog", edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), 3600);
-    zone.add_a("git", edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), 3600);
-    zone.add_a("dash", edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), 3600);
-    zone.add_a("ns1", edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), 3600);
-    zone.add_a("ns2", edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), 3600);
+    for domain in deployment.domains {
+        if domain.authoritative_dns {
+            zone.add_caa(&zone_name(deployment.origin, domain.domain), false, "issue", "letsencrypt.org", 3600);
+            zone.add_caa(
+                &zone_name(deployment.origin, domain.domain),
+                false,
+                "iodef",
+                &format!("mailto:admin@{}", deployment.origin),
+                3600,
+            );
+        }
 
-    zone.add_cname("blog", "sylchi.github.io", 3600);
+        if domain.mail_enabled() {
+            let mail_host = mail_host_for_domain(deployment, domain.domain);
+            zone.add_a(&zone_name(deployment.origin, &mail_host), ip, 3600);
+            zone.add_mx(&zone_name(deployment.origin, domain.domain), 0, &mail_host, 3600);
+            zone.add_txt(&zone_name(deployment.origin, domain.domain), "v=spf1 mx -all", 3600);
+            zone.add_txt(
+                &zone_name(deployment.origin, &format!("_dmarc.{}", domain.domain)),
+                &format!("v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@{}", deployment.origin),
+                3600,
+            );
+            zone.add_txt(
+                &zone_name(deployment.origin, &format!("_mta-sts.{}", domain.domain)),
+                &format!("v=STSv1; id={SOA_SERIAL}"),
+                3600,
+            );
+            zone.add_txt(
+                &zone_name(deployment.origin, &format!("_smtp._tls.{}", domain.domain)),
+                &format!("v=TLSRPTv1; rua=mailto:tls-reports@{}", deployment.origin),
+                3600,
+            );
+            zone.add_txt(
+                &zone_name(
+                    deployment.origin,
+                    &format!("{}._domainkey.{}", deployment.dkim_selector, domain.domain),
+                ),
+                FALLBACK_DKIM_TXT,
+                86400,
+            );
+        }
 
-    zone.add_mx("@", 0, "mail.edgerun.tech", 3600);
-    zone.add_mx("nodes", 0, "mail.edgerun.tech", 3600);
+        if let Some(site) = domain.website {
+            zone.add_a(&zone_name(deployment.origin, site.domain), ip, 3600);
+        }
+    }
 
-    zone.add_txt("@", "v=spf1 mx -all", 3600);
-    zone.add_txt("nodes", "v=spf1 -all", 3600);
-    zone.add_txt("_dmarc", "v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@edgerun.tech", 3600);
-    zone.add_txt("_mta-sts", "v=STSv1; id=2026050301", 3600);
-    zone.add_txt("_smtp._tls", "v=TLSRPTv1; rua=mailto:tls-reports@edgerun.tech", 3600);
-    zone.add_txt("default._bimi", "v=BIMI1; l=https://mail.edgerun.tech/bimi/logo.svg", 3600);
-
-    zone.add_txt("mail._domainkey",
-        "v=DKIM1; k=rsa; p=MIIBCgKCAQEAy+Enfug7AYUY+u5InnNMGM39BJsmkqkZFpx5HAUe7ffAPBJhVDIJI4OfcewD+04at3W8aXBx/ZYXxPVO2twqj5nIuKpJVAAeKCaJUuMCyciUtZ89bG61zHFtimMekY4YdSRUwN05Ukq1QfSKFz5FF0E7q7/+KlKATLb3lTtzMJK4olNIDj7EnzW2b9W9PIyyzsnjp/YRSL/u6YlZRWkAT62I8AqnpbegdXMt89aWJMkXF7cfR2TJCJb73qU/ACFYSd6asGWfsCFsDh3dtp8lwpJFwmDY2kUlv6HdN0Hp9NuiX+Ck7z+rrsH9YhVlKlQTtna++bjg2XVgS1rE0o0ogQIDAQAB",
-        86400);
-
-    zone.add_caa("@", false, "issue", "letsencrypt.org", 3600);
-    zone.add_caa("@", false, "iodef", "mailto:admin@edgerun.tech", 3600);
+    for (name, target) in deployment.external_cnames {
+        zone.add_cname(&zone_name(deployment.origin, name), target, 3600);
+    }
 
     zone
 }
@@ -157,22 +226,27 @@ fn build_dns_zone() -> DnsZone {
 // DKIM key loader
 // ===========================================================================
 
-fn load_dkim_signer() -> Option<DkimSigner> {
-    match fs::read_to_string(DKIM_KEY_PATH) {
-        Ok(pem) => {
-            match DkimSigner::from_private_key_pem(DKIM_DOMAIN, DKIM_SELECTOR, &pem) {
-                Ok(signer) => {
-                    edgerun_log::info!("DKIM signer loaded from {}", DKIM_KEY_PATH);
-                    Some(signer)
-                }
-                Err(e) => {
-                    edgerun_log::warn!("Failed to parse DKIM key: {}", e);
-                    None
-                }
+fn load_dkim_signer(deployment: &CompiledDeployment) -> Option<DkimSigner> {
+    match fs::read_to_string(deployment.dkim_key_path) {
+        Ok(pem) => match DkimSigner::from_private_key_pem(
+            deployment.dkim_domain,
+            deployment.dkim_selector,
+            &pem,
+        ) {
+            Ok(signer) => {
+                edgerun_log::info!("DKIM signer loaded from {}", deployment.dkim_key_path);
+                Some(signer)
             }
-        }
-        Err(e) => {
-            edgerun_log::warn!("DKIM key not found at {}, DKIM signing disabled", DKIM_KEY_PATH);
+            Err(e) => {
+                edgerun_log::warn!("Failed to parse DKIM key: {}", e);
+                None
+            }
+        },
+        Err(_) => {
+            edgerun_log::warn!(
+                "DKIM key not found at {}, DKIM signing disabled",
+                deployment.dkim_key_path
+            );
             None
         }
     }
@@ -182,20 +256,24 @@ fn load_dkim_signer() -> Option<DkimSigner> {
 // TLS certificate loader
 // ===========================================================================
 
-fn load_tls_cert() -> Option<CertificateAndKey> {
-    if !Path::new(TLS_CERT_PATH).exists() || !Path::new(TLS_KEY_PATH).exists() {
-        edgerun_log::info!("TLS certs not found at {} / {}, running without TLS", TLS_CERT_PATH, TLS_KEY_PATH);
+fn load_tls_cert(deployment: &CompiledDeployment) -> Option<CertificateAndKey> {
+    if !Path::new(deployment.tls_cert_path).exists() || !Path::new(deployment.tls_key_path).exists() {
+        edgerun_log::info!(
+            "TLS certs not found at {} / {}, running without TLS",
+            deployment.tls_cert_path,
+            deployment.tls_key_path
+        );
         return None;
     }
 
-    let cert_pem = match fs::read_to_string(TLS_CERT_PATH) {
+    let cert_pem = match fs::read_to_string(deployment.tls_cert_path) {
         Ok(p) => p,
         Err(e) => {
             edgerun_log::warn!("Failed to read TLS cert: {}", e);
             return None;
         }
     };
-    let key_pem = match fs::read_to_string(TLS_KEY_PATH) {
+    let key_pem = match fs::read_to_string(deployment.tls_key_path) {
         Ok(p) => p,
         Err(e) => {
             edgerun_log::warn!("Failed to read TLS key: {}", e);
@@ -206,7 +284,7 @@ fn load_tls_cert() -> Option<CertificateAndKey> {
     let combined = format!("{}\n{}", cert_pem, key_pem);
     match CertificateAndKey::from_pem(&combined) {
         Ok(cert) => {
-            edgerun_log::info!("TLS certificate loaded from {}", TLS_CERT_PATH);
+            edgerun_log::info!("TLS certificate loaded from {}", deployment.tls_cert_path);
             Some(cert)
         }
         Err(e) => {
@@ -217,26 +295,61 @@ fn load_tls_cert() -> Option<CertificateAndKey> {
 }
 
 // ===========================================================================
-// HTTP handler for MTA-STS
+// HTTP handler for MTA-STS and compiled website routes
 // ===========================================================================
 
-struct MtaStsApp;
+struct CompiledHttpApp;
 
-impl Handler for MtaStsApp {
+impl Handler for CompiledHttpApp {
     fn handle(&self, req: Request) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+        let host = req.uri().host().unwrap_or(DEPLOYMENT.origin).to_ascii_lowercase();
+        let host = host.trim_end_matches('.').to_string();
         let path = req.uri().path().to_string();
 
-        if path == "/.well-known/mta-sts.txt" {
-            let policy = "version: STSv1\nmode: enforce\nmx: mail.edgerun.tech\nmax_age: 604800\n";
-            return Box::pin(async move {
-                Response::new(StatusCode::new(200).unwrap())
-                    .with_header("Content-Type", "text/plain; charset=utf-8")
-                    .with_body(policy.as_bytes().to_vec())
-            });
-        }
+        Box::pin(async move {
+            for domain in DEPLOYMENT.domains {
+                let mta_sts_host = format!("mta-sts.{}", domain.domain);
+                if host == mta_sts_host && path == "/.well-known/mta-sts.txt" {
+                    let policy = format!(
+                        "version: STSv1\nmode: enforce\nmx: {}\nmax_age: 604800\n",
+                        mail_host_for_domain(&DEPLOYMENT, domain.domain)
+                    );
+                    return Response::new(StatusCode::new(200).unwrap())
+                        .with_header("Content-Type", "text/plain; charset=utf-8")
+                        .with_body(policy.into_bytes());
+                }
 
-        Box::pin(async move { Response::not_found() })
+                if let Some(site) = domain.website {
+                    if host == site.domain && (path == "/" || path == "/index.html") {
+                        let body = format!(
+                            "edgerun online\n\ndomain={}\nrepo={}\nref={}\npath={}\ncontroller={}\nnode={}\n",
+                            site.domain,
+                            site.repo,
+                            site.commit,
+                            site.path,
+                            hex_bytes(&DEPLOYMENT.policy.controller_id),
+                            DEPLOYMENT.policy.node_label,
+                        );
+                        return Response::new(StatusCode::new(200).unwrap())
+                            .with_header("Content-Type", "text/plain; charset=utf-8")
+                            .with_body(body.into_bytes());
+                    }
+                }
+            }
+
+            Response::not_found()
+        })
     }
+}
+
+fn hex_bytes(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    out
 }
 
 // ===========================================================================
@@ -255,40 +368,31 @@ async fn provision_certs(
 
     let mut active_challenges: Vec<(String, DnsChallenge)> = Vec::new();
 
-    // Process authorizations — inject DNS-01 TXT records
     for authz_url in order.authorization_urls() {
         let authz = client.get_authorization(authz_url).await?;
         edgerun_log::info!("ACME: authorization status = {:?}", authz.status);
 
         let challenges = authz.challenges.as_ref().map(|v| v.as_slice()).unwrap_or(&[]);
-        let dns_challenge = challenges.iter().find(|c| {
-            matches!(c.challenge_type, edgerun_acme::types::ChallengeType::Dns01)
-        });
+        let dns_challenge = challenges
+            .iter()
+            .find(|c| matches!(c.challenge_type, edgerun_acme::types::ChallengeType::Dns01));
         let Some(challenge) = dns_challenge else {
             edgerun_log::warn!("ACME: no dns-01 challenge found");
             continue;
         };
 
         let token = challenge.token.as_deref().unwrap_or("");
-
-        // Extract domain from authorization identifier
         let domain = authz.identifier.value.clone();
-        edgerun_log::info!("ACME: DNS-01 challenge for domain {} token={}", domain, token);
-
         let dns_ch = DnsChallenge::new(&domain, token, account_key);
-        edgerun_log::info!("ACME: adding TXT record {} = {}", dns_ch.record_name(), dns_ch.record_value());
+        edgerun_log::info!("ACME: adding TXT record {}", dns_ch.record_name());
 
         dns_ch.add_to_zone(base_zone);
-        // Re-add zone to DNS server (replaces existing zone with updated one)
         dns_server.add_zone(base_zone.clone()).await;
-
         active_challenges.push((domain.clone(), dns_ch));
 
-        // Validate challenge
         let validated = client.validate_challenge(&challenge.url).await?;
         edgerun_log::info!("ACME: challenge validated, status = {:?}", validated.status());
 
-        // Poll for challenge to be valid
         let mut attempts = 0;
         while attempts < 30 {
             sleep(Duration::from_secs(2)).await;
@@ -299,15 +403,15 @@ async fn provision_certs(
             }
             if status.status() == edgerun_acme::ChallengeStatus::Invalid {
                 edgerun_log::error!("ACME: DNS-01 challenge failed for {}", domain);
-                return Err(edgerun_acme::AcmeError::ChallengeFailed(
-                    format!("DNS-01 challenge failed for {}", domain),
-                ));
+                return Err(edgerun_acme::AcmeError::ChallengeFailed(format!(
+                    "DNS-01 challenge failed for {}",
+                    domain
+                )));
             }
             attempts += 1;
         }
     }
 
-    // Clean up DNS challenge TXT records
     for (_, ch) in &active_challenges {
         ch.remove_from_zone(base_zone);
     }
@@ -316,7 +420,6 @@ async fn provision_certs(
         edgerun_log::info!("ACME: cleaned up DNS-01 TXT records");
     }
 
-    // Check order status
     let order_url = order.inner.id.clone();
     let order = client.get_order(&order_url).await?;
     edgerun_log::info!("ACME: order status = {:?}", order.status());
@@ -326,11 +429,13 @@ async fn provision_certs(
             edgerun_log::info!("ACME: downloading certificate");
             let cert_pem = client.download_certificate(cert_url).await?;
 
-            fs::create_dir_all("/etc/edgerun/server/tls").ok();
-            fs::write(TLS_CERT_PATH, &cert_pem)
+            if let Some(parent) = Path::new(DEPLOYMENT.tls_cert_path).parent() {
+                fs::create_dir_all(parent).ok();
+            }
+            fs::write(DEPLOYMENT.tls_cert_path, &cert_pem)
                 .map_err(|e| edgerun_acme::AcmeError::Storage(e.to_string()))?;
 
-            edgerun_log::info!("ACME: certificate saved to {}", TLS_CERT_PATH);
+            edgerun_log::info!("ACME: certificate saved to {}", DEPLOYMENT.tls_cert_path);
             return Ok(());
         }
     }
@@ -343,25 +448,28 @@ async fn acme_loop(
     account_key: AccountKey,
     dns_server: DnsServer,
     mut base_zone: DnsZone,
+    domains: Vec<String>,
     shutdown: CancellationToken,
 ) {
-    edgerun_log::info!("ACME:starting DNS-01 provisioning loop");
+    edgerun_log::info!("ACME: starting DNS-01 provisioning loop for {:?}", domains);
 
     loop {
         if shutdown.is_cancelled() {
             break;
         }
 
-        if let Ok(Some(cert_info)) = check_existing_certs() {
+        if let Ok(Some(cert_info)) = check_existing_certs(&DEPLOYMENT) {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs();
-            let days_left = (cert_info.expires_at - now) / 86400;
+            let days_left = cert_info.expires_at.saturating_sub(now) / 86400;
             if days_left > 30 {
                 edgerun_log::info!("ACME: certs valid for {} more days, sleeping 12h", days_left);
                 for _ in 0..72 {
-                    if shutdown.is_cancelled() { break; }
+                    if shutdown.is_cancelled() {
+                        break;
+                    }
                     sleep(Duration::from_secs(600)).await;
                 }
                 continue;
@@ -369,18 +477,15 @@ async fn acme_loop(
             edgerun_log::info!("ACME: certs expire in {} days, renewing", days_left);
         }
 
-        let domains: Vec<String> = ACME_DOMAINS.iter().map(|s| s.to_string()).collect();
         match provision_certs(&client, &account_key, &dns_server, &mut base_zone, &domains).await {
-            Ok(()) => {
-                edgerun_log::info!("ACME: certificates provisioned successfully");
-            }
-            Err(e) => {
-                edgerun_log::error!("ACME: provisioning failed: {}", e);
-            }
+            Ok(()) => edgerun_log::info!("ACME: certificates provisioned successfully"),
+            Err(e) => edgerun_log::error!("ACME: provisioning failed: {}", e),
         }
 
         for _ in 0..72 {
-            if shutdown.is_cancelled() { break; }
+            if shutdown.is_cancelled() {
+                break;
+            }
             sleep(Duration::from_secs(600)).await;
         }
     }
@@ -392,16 +497,14 @@ struct ExistingCertInfo {
     expires_at: u64,
 }
 
-fn check_existing_certs() -> Result<Option<ExistingCertInfo>, String> {
-    if !Path::new(TLS_CERT_PATH).exists() {
+fn check_existing_certs(deployment: &CompiledDeployment) -> Result<Option<ExistingCertInfo>, String> {
+    if !Path::new(deployment.tls_cert_path).exists() {
         return Ok(None);
     }
 
-    let pem = fs::read_to_string(TLS_CERT_PATH).map_err(|e| e.to_string())?;
+    let pem = fs::read_to_string(deployment.tls_cert_path).map_err(|e| e.to_string())?;
     let cert = Certificate::from_pem(&pem)?;
-    Ok(Some(ExistingCertInfo {
-        expires_at: cert.not_after,
-    }))
+    Ok(Some(ExistingCertInfo { expires_at: cert.not_after }))
 }
 
 // ===========================================================================
@@ -420,10 +523,7 @@ fn run_health_check() -> ExitCode {
     ];
 
     for (name, addr) in &checks {
-        match TcpStream::connect_timeout(
-            &addr.parse().unwrap(),
-            Duration::from_secs(5),
-        ) {
+        match TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(5)) {
             Ok(_) => println!("  [OK] {}", name),
             Err(e) => {
                 println!("  [FAIL] {} ({})", name, e);
@@ -432,27 +532,23 @@ fn run_health_check() -> ExitCode {
         }
     }
 
-    if Path::new(TLS_CERT_PATH).exists() {
-        match fs::read_to_string(TLS_CERT_PATH) {
-            Ok(pem) => {
-                match Certificate::from_pem(&pem) {
-                    Ok(cert) => {
-                        if cert.is_valid_now() {
-                            println!("  [OK] TLS certificate is valid");
-                        } else {
-                            println!("  [FAIL] TLS certificate is not currently valid");
-                            ok = false;
-                        }
-                    }
-                    Err(e) => {
-                        println!("  [FAIL] TLS certificate parse error: {}", e);
+    if Path::new(DEPLOYMENT.tls_cert_path).exists() {
+        match fs::read_to_string(DEPLOYMENT.tls_cert_path) {
+            Ok(pem) => match Certificate::from_pem(&pem) {
+                Ok(cert) => {
+                    if cert.is_valid_now() {
+                        println!("  [OK] TLS certificate is valid");
+                    } else {
+                        println!("  [FAIL] TLS certificate is not currently valid");
                         ok = false;
                     }
                 }
-            }
-            Err(e) => {
-                println!("  [WARN] Cannot read TLS cert: {}", e);
-            }
+                Err(e) => {
+                    println!("  [FAIL] TLS certificate parse error: {}", e);
+                    ok = false;
+                }
+            },
+            Err(e) => println!("  [WARN] Cannot read TLS cert: {}", e),
         }
     } else {
         println!("  [WARN] TLS certificate not yet provisioned (ACME pending)");
@@ -468,10 +564,11 @@ fn run_health_check() -> ExitCode {
 }
 
 // ===========================================================================
-// System report
+// System report / compiled plan
 // ===========================================================================
 
 fn run_send_system_report() -> ExitCode {
+    let user = first_mailbox_user(&DEPLOYMENT);
     let report = format!(
         "From: server-report@{}\r\n\
          To: {}@{}\r\n\
@@ -481,27 +578,33 @@ fn run_send_system_report() -> ExitCode {
          Edgerun Server System Report\r\n\
          ===========================\r\n\
          \r\n\
+         Node label: {}\r\n\
          Hostname: {}\r\n\
+         Origin: {}\r\n\
+         Controller: {}\r\n\
          TLS cert: {}\r\n\
          DKIM key: {}\r\n\
          Maildir: {}\r\n\
          Queue: {}\r\n\
          ",
-        ORIGIN,
-        USER_USERNAME,
-        ORIGIN,
+        DEPLOYMENT.origin,
+        user,
+        DEPLOYMENT.origin,
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0),
-        HOSTNAME,
-        if Path::new(TLS_CERT_PATH).exists() { "present" } else { "not provisioned" },
-        if Path::new(DKIM_KEY_PATH).exists() { "present" } else { "missing" },
-        MAILDIR_ROOT,
-        QUEUE_DATA_ROOT,
+        DEPLOYMENT.policy.node_label,
+        DEPLOYMENT.hostname,
+        DEPLOYMENT.origin,
+        hex_bytes(&DEPLOYMENT.policy.controller_id),
+        if Path::new(DEPLOYMENT.tls_cert_path).exists() { "present" } else { "not provisioned" },
+        if Path::new(DEPLOYMENT.dkim_key_path).exists() { "present" } else { "missing" },
+        DEPLOYMENT.maildir_root,
+        DEPLOYMENT.queue_data_root,
     );
 
-    let maildir_new = format!("{}/{}/new", MAILDIR_ROOT, USER_USERNAME);
+    let maildir_new = format!("{}/{}/new", DEPLOYMENT.maildir_root, user);
     fs::create_dir_all(&maildir_new).ok();
 
     let timestamp = std::time::SystemTime::now()
@@ -521,6 +624,29 @@ fn run_send_system_report() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn print_compiled_plan() -> ExitCode {
+    println!("node_label={}", DEPLOYMENT.policy.node_label);
+    println!("origin={}", DEPLOYMENT.origin);
+    println!("hostname={}", DEPLOYMENT.hostname);
+    println!("controller={}", hex_bytes(&DEPLOYMENT.policy.controller_id));
+    println!("public_ipv4={}.{}.{}.{}", DEPLOYMENT.public_ipv4[0], DEPLOYMENT.public_ipv4[1], DEPLOYMENT.public_ipv4[2], DEPLOYMENT.public_ipv4[3]);
+    println!("local_mail_domains={:?}", local_mail_domains(&DEPLOYMENT));
+    println!("certificate_domains={:?}", DEPLOYMENT.certificate_domains());
+    for domain in DEPLOYMENT.domains {
+        println!("domain={} authoritative_dns={} mail_enabled={}", domain.domain, domain.authoritative_dns, domain.mail_enabled());
+        for mailbox in domain.mailboxes {
+            println!("  mailbox={} target={}", mailbox.address, mailbox.target);
+        }
+        for alias in domain.aliases {
+            println!("  alias={} target={}", alias.address, alias.target);
+        }
+        if let Some(site) = domain.website {
+            println!("  website={} repo={} ref={} path={}", site.domain, site.repo, site.commit, site.path);
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 // ===========================================================================
@@ -545,16 +671,17 @@ fn main() -> ExitCode {
     let (mode, _config_path) = parse_args();
 
     match mode {
-        Mode::HealthCheck => {
-            return run_health_check();
-        }
-        Mode::SendSystemReport => {
-            return run_send_system_report();
-        }
+        Mode::HealthCheck => return run_health_check(),
+        Mode::SendSystemReport => return run_send_system_report(),
+        Mode::PrintCompiledPlan => return print_compiled_plan(),
         Mode::Run => {}
     }
 
-    edgerun_log::info!("edgerun-server starting on {}", HOSTNAME);
+    edgerun_log::info!(
+        "edgerun-server starting on {} with controller {}",
+        DEPLOYMENT.hostname,
+        hex_bytes(&DEPLOYMENT.policy.controller_id)
+    );
 
     let rt = Runtime::new_multi_thread()
         .enable_all()
@@ -573,14 +700,12 @@ fn main() -> ExitCode {
 async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let shutdown = CancellationToken::new();
 
-    let dkim_signer = load_dkim_signer();
-    let tls_cert = load_tls_cert();
+    let dkim_signer = load_dkim_signer(&DEPLOYMENT);
+    let tls_cert = load_tls_cert(&DEPLOYMENT);
 
-    // Build DNS zone
-    let base_zone = build_dns_zone();
-    edgerun_log::info!("DNS zone built for {}", ORIGIN);
+    let base_zone = build_dns_zone(&DEPLOYMENT);
+    edgerun_log::info!("DNS zone built for {}", DEPLOYMENT.origin);
 
-    // Start DNS server
     let dns_config = DnsServerConfig {
         bind_addr: "0.0.0.0:53".to_string(),
         default_ttl: 3600,
@@ -597,47 +722,46 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let smtp_config = SmtpConfig {
         bind_addr: "0.0.0.0:25".to_string(),
-        domain_name: HOSTNAME.to_string(),
+        domain_name: DEPLOYMENT.hostname.to_string(),
         max_message_size: 35_882_577,
         smtps: false,
         starttls: tls_cert.is_some(),
-        local_domains: vec![ORIGIN.to_string()],
-        queue_data_root: Some(std::path::PathBuf::from(QUEUE_DATA_ROOT)),
+        local_domains: local_mail_domains(&DEPLOYMENT),
+        queue_data_root: Some(std::path::PathBuf::from(DEPLOYMENT.queue_data_root)),
         relay_dns_server: "1.1.1.1:53".to_string(),
-        maildir_root: Some(std::path::PathBuf::from(MAILDIR_ROOT)),
-        dkim_domain: dkim_signer.as_ref().map(|_| DKIM_DOMAIN.to_string()),
-        dkim_selector: dkim_signer.as_ref().map(|_| DKIM_SELECTOR.to_string()),
-        dkim_key_path: dkim_signer.as_ref().map(|_| std::path::PathBuf::from(DKIM_KEY_PATH)),
+        maildir_root: Some(std::path::PathBuf::from(DEPLOYMENT.maildir_root)),
+        dkim_domain: dkim_signer.as_ref().map(|_| DEPLOYMENT.dkim_domain.to_string()),
+        dkim_selector: dkim_signer.as_ref().map(|_| DEPLOYMENT.dkim_selector.to_string()),
+        dkim_key_path: dkim_signer.as_ref().map(|_| std::path::PathBuf::from(DEPLOYMENT.dkim_key_path)),
         tls_cert: tls_cert.clone(),
     };
 
     let imap_config = ImapConfig {
         bind_addr: "0.0.0.0:143".to_string(),
-        domain_name: HOSTNAME.to_string(),
+        domain_name: DEPLOYMENT.hostname.to_string(),
         imaps: false,
-        maildir_root: Some(std::path::PathBuf::from(MAILDIR_ROOT)),
+        maildir_root: Some(std::path::PathBuf::from(DEPLOYMENT.maildir_root)),
         tls_cert: tls_cert.clone(),
     };
 
-    // HTTP server for MTA-STS only
     let http_handler = into_handler_async(|req| {
-        let app = MtaStsApp;
+        let app = CompiledHttpApp;
         async move { app.handle(req).await }
     });
 
     let http_server = HttpServer::new(http_handler)
         .bind("0.0.0.0:80")
         .await
-        .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error + Send + Sync>)?;
+        .map_err(|e| {
+            Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+                as Box<dyn std::error::Error + Send + Sync>
+        })?;
 
     let http_task = edgerun_rt::spawn(async move {
         let _ = http_server.serve().await;
     });
 
-    let mut server = Server::new()
-        .with_smtp(smtp_config)
-        .with_imap(imap_config);
-
+    let mut server = Server::new().with_smtp(smtp_config).with_imap(imap_config);
     let mut bound = server.build().await?;
 
     let server_shutdown = shutdown.clone();
@@ -645,26 +769,36 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let _ = bound.run(server_shutdown).await;
     });
 
-    // ACME client with DNS-01 challenge — run as background task
-    let acme_account = load_or_create_acme_account();
+    let acme_account = load_or_create_acme_account(&DEPLOYMENT);
     edgerun_log::info!("ACME account loaded: {}", acme_account.is_some());
     if let Some(account_key) = acme_account {
         let acme_config = AcmeConfig {
             directory_url: edgerun_acme::DirectoryUrl::LetsEncrypt,
-            email: vec![ACME_CONTACT.to_string()],
+            email: vec![DEPLOYMENT.acme_contact.to_string()],
             terms_of_service_agreed: true,
         };
         let acme_client = AcmeClient::new(acme_config, account_key.clone());
+        let dns_server_for_acme = dns_server.clone();
+        let base_zone_for_acme = base_zone.clone();
+        let shutdown_for_acme = shutdown.clone();
+        let domains = DEPLOYMENT.certificate_domains();
         edgerun_rt::spawn(async move {
             edgerun_log::info!("ACME: starting background init");
             let init_start = std::time::Instant::now();
             match acme_client.init().await {
                 Ok(()) => {
                     edgerun_log::info!("ACME: directory fetched in {:?}", init_start.elapsed());
+                    acme_loop(
+                        acme_client,
+                        account_key,
+                        dns_server_for_acme,
+                        base_zone_for_acme,
+                        domains,
+                        shutdown_for_acme,
+                    )
+                    .await;
                 }
-                Err(e) => {
-                    edgerun_log::warn!("ACME init failed after {:?}: {}", init_start.elapsed(), e);
-                }
+                Err(e) => edgerun_log::warn!("ACME init failed after {:?}: {}", init_start.elapsed(), e),
             }
         });
     }
@@ -689,30 +823,28 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 
-fn load_or_create_acme_account() -> Option<AccountKey> {
-    if Path::new(ACME_ACCOUNT_KEY_PATH).exists() {
-        match fs::read_to_string(ACME_ACCOUNT_KEY_PATH) {
+fn load_or_create_acme_account(deployment: &CompiledDeployment) -> Option<AccountKey> {
+    if Path::new(deployment.acme_account_key_path).exists() {
+        match fs::read_to_string(deployment.acme_account_key_path) {
             Ok(pem) => match AccountKey::from_pem(&pem) {
                 Ok(key) => {
-                    edgerun_log::info!("ACME account key loaded from {}", ACME_ACCOUNT_KEY_PATH);
+                    edgerun_log::info!("ACME account key loaded from {}", deployment.acme_account_key_path);
                     return Some(key);
                 }
-                Err(e) => {
-                    edgerun_log::warn!("Failed to parse ACME account key: {}", e);
-                }
+                Err(e) => edgerun_log::warn!("Failed to parse ACME account key: {}", e),
             },
-            Err(e) => {
-                edgerun_log::warn!("Failed to read ACME account key: {}", e);
-            }
+            Err(e) => edgerun_log::warn!("Failed to read ACME account key: {}", e),
         }
     }
 
     let key = AccountKey::generate();
-    fs::create_dir_all("/etc/edgerun/server").ok();
-    if let Err(e) = fs::write(ACME_ACCOUNT_KEY_PATH, key.pem()) {
+    if let Some(parent) = Path::new(deployment.acme_account_key_path).parent() {
+        fs::create_dir_all(parent).ok();
+    }
+    if let Err(e) = fs::write(deployment.acme_account_key_path, key.pem()) {
         edgerun_log::warn!("Failed to save ACME account key: {}", e);
     } else {
-        edgerun_log::info!("ACME account key generated and saved to {}", ACME_ACCOUNT_KEY_PATH);
+        edgerun_log::info!("ACME account key generated and saved to {}", deployment.acme_account_key_path);
     }
     Some(key)
 }
