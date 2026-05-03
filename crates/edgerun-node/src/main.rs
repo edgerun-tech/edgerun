@@ -6,8 +6,8 @@
 //! ## Usage
 //! ```text
 //! edgerund init --config node.yaml --software          # Dev-only: in-memory key
-//! edgerund run --config node.yaml --listen 0.0.0.0:8080  # Start daemon with TCP
-//! edgerund status --config node.yaml                   # Show node identity
+//! edgerund run --config node.yaml --listen 0.0.0.0:8080  // Start daemon with TCP
+//! edgerund status --config node.yaml                   // Show node identity
 //! ```
 //!
 //! ## Security
@@ -26,6 +26,7 @@ mod command_dispatch;
 mod hardware;
 mod ingress;
 mod init;
+mod server_resources;
 mod session;
 
 // Extracted modules
