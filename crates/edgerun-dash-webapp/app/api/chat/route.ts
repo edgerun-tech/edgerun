@@ -1,16 +1,10 @@
 import { generateText } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
 import { systemStatsStore, windowsStore } from "@/stores/desktop-store"
-import { appStore } from "@/platform/state/app-store"
-import { capabilityStore } from "@/platform/state/capability-store"
 import { nodeStore } from "@/platform/state/node-store"
 import { fileSystemStore } from "@/stores/file-system-store"
 import { getCodebaseContext } from "@/stores/codebase-context"
-import {
-  getWorkflowsForAI,
-  getWorkflowDetailsForAI,
-  getExecutionHistory,
-} from "@/stores/workflow-store"
+import { getWorkflowsForAI } from "@/stores/workflow-store"
 import { getSystemPrompt } from "./system-prompt"
 import { explainToolAvailability } from "@/platform/registries/tool-registry"
 
@@ -20,14 +14,19 @@ const opencode = createOpenAI({
 })
 
 const FREE_MODEL = "minimax-m2-free"
+const MAX_REPO_CONTEXT_CHARS = 80_000
 
 export const maxDuration = 60
+
+function boundedText(value: unknown, maxChars: number): string {
+  if (typeof value !== "string") return ""
+  if (value.length <= maxChars) return value
+  return `${value.slice(0, maxChars)}\n\n[repo context truncated by chat API route]`
+}
 
 function getRealSystemData() {
   const stats = systemStatsStore.get()
   const windows = windowsStore.get()
-  const apps = appStore.get()
-  const caps = capabilityStore.get()
   const node = nodeStore.get()
   const fs = fileSystemStore.get()
 
@@ -74,9 +73,10 @@ To perform actions, reference tools by their toolId. The chat route is read-only
 export async function POST(req: Request) {
   const body = await req.json()
   const { messages } = body
+  const repoContext = boundedText(body.repoContext, MAX_REPO_CONTEXT_CHARS)
 
   const systemData = getRealSystemData()
-  const codebaseContext = getCodebaseContext()
+  const codebaseContext = [getCodebaseContext(), repoContext ? `\n## Browser Repo Xray\n\n${repoContext}\n\nRepo Xray rules: context came from a user-granted browser directory handle. Do not claim server filesystem access. Treat it as read-only unless the user explicitly saves through the editor.` : ""].filter(Boolean).join("\n\n")
   const readonlyCtx = getReadonlyContext()
 
   const systemPrompt = getSystemPrompt()
@@ -93,12 +93,12 @@ export async function POST(req: Request) {
       ],
     })
 
-    return Response.json({ 
+    return Response.json({
       text: result.text,
       finishReason: result.finishReason,
     })
-  } catch (error) {
-    return Response.json({ 
+  } catch {
+    return Response.json({
       text: "AI unavailable. Check OPENCODE_API_KEY in .env.local",
     }, { status: 503 })
   }
