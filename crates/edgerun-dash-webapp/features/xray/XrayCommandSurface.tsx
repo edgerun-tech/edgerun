@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 /**
  * XrayCommandSurface - Bottom control surface for layout/runtime/timeline.
  * Provides controls for graph visualization modes and runtime overlay.
@@ -12,9 +10,12 @@ export default function XrayCommandSurface(props: {
   layoutType: "force" | "grid" | "hierarchical";
   onLayoutTypeChange: (layout: "force" | "grid" | "hierarchical") => void;
 }) {
+  function fitView() {
+    (window as any).xray?.command?.({ type: "fit_view" });
+  }
+
   return (
     <div className="h-12 border-t border-border flex items-center px-4 gap-4 bg-background/50">
-      {/* Layout controls */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Layout:</span>
         <select
@@ -26,9 +27,14 @@ export default function XrayCommandSurface(props: {
           <option value="grid">Grid</option>
           <option value="hierarchical">Hierarchical</option>
         </select>
+        <button
+          onClick={fitView}
+          className="text-xs px-3 py-1 rounded border bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/60"
+        >
+          Fit
+        </button>
       </div>
 
-      {/* Runtime mode toggle */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Runtime:</span>
         <button
@@ -48,11 +54,10 @@ export default function XrayCommandSurface(props: {
         )}
       </div>
 
-      {/* Placeholder for timeline controls */}
       <div className="flex-1" />
 
       <div className="text-xs text-muted-foreground">
-        Xray v0.1
+        Xray v0.2
       </div>
     </div>
   );
