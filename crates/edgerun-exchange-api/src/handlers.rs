@@ -10,7 +10,10 @@ use edgerun_proto::edgerun::v0::wallet::v0::{Quote, QuoteRequest};
 
 use crate::store::ExchangeQuoteId;
 use crate::types::*;
-use crate::{with_ctx, with_policy, with_providers, with_store};
+use crate::{
+    append_exchange_events_to_stream, project_exchange_order_from_stream, with_ctx, with_policy,
+    with_providers, with_store,
+};
 
 fn now_epoch_millis() -> u64 {
     #[cfg(feature = "std")]
@@ -73,44 +76,54 @@ pub fn handle_quote(req: &Request) -> Response {
 
     match routing_result {
         edgerun_exchange::router::QuoteRoutingResult::Quote(provider_quote) => {
-            with_store(|store| {
+            let result = with_store(|store| {
+                let before = store.event_count();
                 let quote_id = store.store_quote(&provider_quote);
+                let events = store.events_from(before).to_vec();
+                (quote_id, events)
+            });
 
-                let mut response = Map::new();
-                response.insert("id".into(), JsonValue::String(quote_id.as_str().into()));
-                response.insert(
-                    "settlement_asset".into(),
-                    JsonValue::String(alloc::format!(
-                        "{}:{}",
-                        provider_quote.settlement_asset.symbol,
-                        provider_quote.settlement_asset.network
-                    )),
-                );
-                response.insert(
-                    "pay_asset".into(),
-                    JsonValue::String(alloc::format!(
-                        "{}:{}",
-                        provider_quote.pay_asset.symbol,
-                        provider_quote.pay_asset.network
-                    )),
-                );
-                response.insert(
-                    "settlement_amount".into(),
-                    JsonValue::String(provider_quote.settlement_amount.to_string()),
-                );
-                response.insert(
-                    "pay_amount".into(),
-                    JsonValue::String(provider_quote.pay_amount.to_string()),
-                );
-                response.insert("rate".into(), JsonValue::String(provider_quote.rate.to_string()));
-                response.insert("expires_at_ms".into(), JsonValue::Number(provider_quote.expires_at_ms.into()));
-                if let Some(est) = provider_quote.estimated_seconds {
-                    response.insert("estimated_seconds".into(), JsonValue::Number(est.into()));
-                }
+            let Some((quote_id, events)) = result else {
+                return json_error(500, "store not available");
+            };
 
-                json_response(200, JsonValue::Object(response))
-            })
-            .unwrap_or_else(|| json_error(500, "store not available"))
+            if let Err(e) = append_exchange_events_to_stream(&events) {
+                return json_error(500, &e);
+            }
+
+            let mut response = Map::new();
+            response.insert("id".into(), JsonValue::String(quote_id.as_str().into()));
+            response.insert(
+                "settlement_asset".into(),
+                JsonValue::String(alloc::format!(
+                    "{}:{}",
+                    provider_quote.settlement_asset.symbol,
+                    provider_quote.settlement_asset.network
+                )),
+            );
+            response.insert(
+                "pay_asset".into(),
+                JsonValue::String(alloc::format!(
+                    "{}:{}",
+                    provider_quote.pay_asset.symbol,
+                    provider_quote.pay_asset.network
+                )),
+            );
+            response.insert(
+                "settlement_amount".into(),
+                JsonValue::String(provider_quote.settlement_amount.to_string()),
+            );
+            response.insert(
+                "pay_amount".into(),
+                JsonValue::String(provider_quote.pay_amount.to_string()),
+            );
+            response.insert("rate".into(), JsonValue::String(provider_quote.rate.to_string()));
+            response.insert("expires_at_ms".into(), JsonValue::Number(provider_quote.expires_at_ms.into()));
+            if let Some(est) = provider_quote.estimated_seconds {
+                response.insert("estimated_seconds".into(), JsonValue::Number(est.into()));
+            }
+
+            json_response(200, JsonValue::Object(response))
         }
         edgerun_exchange::router::QuoteRoutingResult::NoProviderAvailable => {
             json_error(404, "no provider available for this asset pair")
@@ -199,8 +212,10 @@ pub fn handle_order(req: &Request) -> Response {
         return json_error(502, "selected quote provider failed to create order");
     };
 
-    with_store(|store| {
-        let deposit_addr = provider_order.deposit_address.clone();
+    let deposit_addr = provider_order.deposit_address.clone();
+    let provider_status = provider_order.status;
+    let result = with_store(|store| {
+        let before = store.event_count();
         let order_id = store.store_order(
             &exchange_quote_id,
             provider_order.provider_order_id,
@@ -211,32 +226,36 @@ pub fn handle_order(req: &Request) -> Response {
             provider_order.status,
             provider_order.created_at_ms,
         );
+        let events = store.events_from(before).to_vec();
+        (order_id, events)
+    });
 
-        match order_id {
-            Some(order_id) => {
-                let status_str = canonical_status_to_str(provider_order.status);
-                let mut response = Map::new();
-                response.insert("id".into(), JsonValue::String(order_id.as_str().into()));
-                response.insert("status".into(), JsonValue::String(status_str.into()));
-                response.insert("deposit_address".into(), JsonValue::String(deposit_addr));
-                response.insert(
-                    "settlement_asset".into(),
-                    JsonValue::String(stored_quote.settlement_asset_id.clone()),
-                );
-                response.insert(
-                    "settlement_amount".into(),
-                    JsonValue::String(stored_quote.settlement_amount.clone()),
-                );
-                response.insert(
-                    "pay_amount".into(),
-                    JsonValue::String(stored_quote.pay_amount.clone()),
-                );
-                json_response(201, JsonValue::Object(response))
-            }
-            None => json_error(500, "failed to store order"),
-        }
-    })
-    .unwrap_or_else(|| json_error(500, "store not available"))
+    let Some((Some(order_id), events)) = result else {
+        return json_error(500, "failed to store order");
+    };
+
+    if let Err(e) = append_exchange_events_to_stream(&events) {
+        return json_error(500, &e);
+    }
+
+    let status_str = canonical_status_to_str(provider_status);
+    let mut response = Map::new();
+    response.insert("id".into(), JsonValue::String(order_id.as_str().into()));
+    response.insert("status".into(), JsonValue::String(status_str.into()));
+    response.insert("deposit_address".into(), JsonValue::String(deposit_addr));
+    response.insert(
+        "settlement_asset".into(),
+        JsonValue::String(stored_quote.settlement_asset_id.clone()),
+    );
+    response.insert(
+        "settlement_amount".into(),
+        JsonValue::String(stored_quote.settlement_amount.clone()),
+    );
+    response.insert(
+        "pay_amount".into(),
+        JsonValue::String(stored_quote.pay_amount.clone()),
+    );
+    json_response(201, JsonValue::Object(response))
 }
 
 /// GET /v1/order/:id — returns event-derived order status.
@@ -246,7 +265,14 @@ pub fn handle_order_status(req: &Request) -> Response {
 
     let result = with_store(|store| {
         let order = store.get_order(order_id).cloned();
-        let projection = store.project_order(order_id);
+        let stream_projection = match project_exchange_order_from_stream(order_id) {
+            Ok(projection) => projection,
+            Err(e) => {
+                edgerun_log::warn!("exchange stream projection failed: {}", e);
+                None
+            }
+        };
+        let projection = stream_projection.or_else(|| store.project_order(order_id));
         (order, projection)
     });
 
