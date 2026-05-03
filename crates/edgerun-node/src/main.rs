@@ -20,6 +20,7 @@ mod assurance;
 mod capabilities;
 mod capacity;
 mod command_dispatch;
+mod command_dispatch_event;
 mod command_dispatch_payload;
 mod command_dispatch_result;
 mod command_dispatch_route;
