@@ -79,6 +79,7 @@ pub mod dhcp;
 pub mod dnssec;
 pub mod doh;
 pub mod dot;
+pub mod limits;
 pub mod message;
 pub mod name;
 pub mod record;
@@ -95,6 +96,10 @@ pub use axfr::{handle_axfr, handle_notify, handle_update};
 pub use cache::DnsCache;
 pub use doh::{DohServer, DohServerConfig};
 pub use dot::{DotServer, DotServerConfig};
+pub use limits::{
+    dns_section_counts, parse_dns_message_bounded, validate_dns_wire_bounds, DnsSectionCounts,
+    MAX_DNS_MESSAGE_LEN, MAX_DNS_QUESTIONS, MAX_DNS_SECTION_RECORDS,
+};
 pub use resolver::{default_root_hints, RecursiveResolver, RootHint};
 pub use server::RateLimiter;
 #[cfg(feature = "tsig")]

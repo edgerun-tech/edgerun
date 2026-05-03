@@ -12,6 +12,7 @@ use alloc::{
 
 use crate::compat::AsyncUdpSocket;
 
+use crate::limits::parse_dns_message_bounded;
 use crate::message::{DnsMessage, DnsOpcode, DnsRecord, DnsResponseCode};
 use crate::name::validate_name;
 use crate::record::{DnsRecordData, DnsRecordType};
@@ -38,7 +39,7 @@ pub struct ParseError;
 ///
 /// If the response exceeds `MAX_UDP_RESPONSE` bytes, `needs_tcp` is true.
 pub async fn handle_query(wire: &[u8], state: &ServerState) -> Result<(Vec<u8>, bool), ParseError> {
-    let query = DnsMessage::from_wire(wire).map_err(|_| ParseError)?;
+    let query = parse_dns_message_bounded(wire).map_err(|_| ParseError)?;
 
     if query.header.is_response {
         return Ok((

@@ -14,6 +14,7 @@ use crate::compat::AsyncUdpSocket;
 
 use super::query::{handle_query, ParseError, ServerState};
 use super::RateLimiter;
+use crate::limits::parse_dns_message_bounded;
 use crate::message::{DnsMessage, DnsResponseCode};
 
 /// Run the UDP receive loop (async, runs until shutdown).
@@ -66,7 +67,7 @@ pub async fn udp_recv_loop_with_rate_limiting(
             match handle_query(&query_buf, &state).await {
                 Ok((response_wire, needs_tcp)) => {
                     if needs_tcp {
-                        if let Ok(query) = DnsMessage::from_wire(&query_buf) {
+                        if let Ok(query) = parse_dns_message_bounded(&query_buf) {
                             let mut response = DnsMessage::response(
                                 query.header.id,
                                 DnsResponseCode::NoError,
