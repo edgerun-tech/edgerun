@@ -17,7 +17,8 @@ use alloc::vec::Vec;
 
 use prost::Message;
 
-use edgerun_proto::edgerun::v0::stream::EventType;
+use edgerun_proto::edgerun::v0::common::{Digest, ObjectKind, ObjectRef};
+use edgerun_proto::edgerun::v0::stream::{EventEnvelope, EventType};
 use edgerun_proto::edgerun::v0::wallet::v0::{
     WalletDepositObservedPayload, WalletManualReviewRequiredPayload,
     WalletOrderCompletedPayload, WalletOrderCreatedPayload, WalletOrderFailedPayload,
@@ -41,6 +42,12 @@ fn encode_message<M: Message>(message: &M) -> Vec<u8> {
     out
 }
 
+/// Object kind that exchange payload bytes should use when stored as an
+/// `ObjectRef` for `EventEnvelope.payload_object`.
+pub fn exchange_payload_object_kind() -> i32 {
+    ObjectKind::Payload as i32
+}
+
 /// Return the existing stream event type for an exchange event.
 pub fn exchange_event_type(event: &ExchangeEvent) -> i32 {
     match event {
@@ -56,6 +63,38 @@ pub fn exchange_event_type(event: &ExchangeEvent) -> i32 {
         ExchangeEvent::ManualReviewRequired { .. } => {
             EventType::WalletManualReviewRequired as i32
         }
+    }
+}
+
+/// Build the existing protocol event envelope for an exchange event.
+///
+/// `payload_object` should point at an object containing `encode_exchange_event(event).payload_bytes`.
+/// The returned envelope is unsigned and unappended; callers must sign/append it
+/// through the existing stream writer.
+pub fn build_exchange_event_envelope(
+    event: &ExchangeEvent,
+    stream_id: Vec<u8>,
+    seq: u64,
+    prev_event_hash: Option<Digest>,
+    payload_object: ObjectRef,
+) -> EventEnvelope {
+    EventEnvelope {
+        envelope_version: 1,
+        stream_id,
+        seq,
+        prev_event_hash,
+        event_type: exchange_event_type(event),
+        event_version: 1,
+        recorded_at: None,
+        effective_at: None,
+        payload_object: Some(payload_object.clone()),
+        related_events: Vec::new(),
+        related_commands: Vec::new(),
+        related_objects: vec![payload_object],
+        related_delegations: Vec::new(),
+        related_revocations: Vec::new(),
+        event_metadata: None,
+        signature: None,
     }
 }
 
@@ -338,5 +377,28 @@ mod tests {
         let encoded = encode_exchange_event(&event);
         assert_eq!(encoded.event_type, EventType::WalletOrderStatusChanged as i32);
         assert!(matches!(decode_exchange_event(encoded.event_type, &encoded.payload_bytes), Some(ExchangeEvent::OrderStatusChanged { .. })));
+    }
+
+    #[test]
+    fn envelope_uses_existing_event_type_and_payload_object() {
+        let event = ExchangeEvent::OrderFailed {
+            order_id: "ex-1".into(),
+            reason: "provider_failed".into(),
+            failed_at_ms: 999,
+        };
+        let payload_object = ObjectRef {
+            object_id: vec![1, 2, 3],
+            object_kind: Some(exchange_payload_object_kind()),
+        };
+        let envelope = build_exchange_event_envelope(
+            &event,
+            vec![9, 9, 9],
+            7,
+            None,
+            payload_object.clone(),
+        );
+        assert_eq!(envelope.event_type, EventType::WalletOrderFailed as i32);
+        assert_eq!(envelope.payload_object, Some(payload_object.clone()));
+        assert_eq!(envelope.related_objects, vec![payload_object]);
     }
 }
