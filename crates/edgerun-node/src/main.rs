@@ -26,6 +26,7 @@ mod command_dispatch;
 mod hardware;
 mod ingress;
 mod init;
+mod server_resources;
 mod session;
 
 // Extracted modules
