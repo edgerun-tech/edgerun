@@ -107,7 +107,7 @@ impl AcmeClient {
         let nonce = res
             .headers()
             .get("replay-nonce")
-            .and_then(|v| Some(v.as_str()))
+            .map(|v| v.as_str())
             .map(|s| s.to_string())
             .ok_or(AcmeError::Protocol("missing replay-nonce".into()))?;
 
@@ -185,7 +185,7 @@ impl AcmeClient {
         let new_nonce = res
             .headers()
             .get("replay-nonce")
-            .and_then(|v| Some(v.as_str()))
+            .map(|v| v.as_str())
             .map(|s| s.to_string());
 
         if let Some(nonce) = new_nonce {
@@ -240,6 +240,13 @@ impl AcmeClient {
     }
 
     pub async fn create_order(&self, domains: &[String]) -> Result<Order, AcmeError> {
+        if domains.is_empty() {
+            return Err(AcmeError::Protocol("ACME order must include at least one domain".into()));
+        }
+        for domain in domains {
+            validate_acme_dns_identifier(domain)?;
+        }
+
         let new_order_url = {
             let dir = self.directory.read();
             dir.as_ref()
@@ -251,7 +258,7 @@ impl AcmeClient {
             .iter()
             .map(|d| Identifier {
                 id_type: "dns".to_string(),
-                value: d.clone(),
+                value: d.trim().trim_end_matches('.').to_ascii_lowercase(),
             })
             .collect();
 
@@ -379,6 +386,48 @@ impl AcmeClient {
     }
 }
 
+fn validate_acme_dns_identifier(domain: &str) -> Result<(), AcmeError> {
+    let domain = domain.trim().trim_end_matches('.');
+    if domain.is_empty() {
+        return Err(AcmeError::Protocol("empty ACME DNS identifier".into()));
+    }
+    if domain.len() > 253 {
+        return Err(AcmeError::Protocol("ACME DNS identifier too long".into()));
+    }
+    if domain.starts_with("*.") && domain[2..].contains('*') {
+        return Err(AcmeError::Protocol("invalid wildcard ACME DNS identifier".into()));
+    }
+    if !domain.starts_with("*.") && domain.contains('*') {
+        return Err(AcmeError::Protocol("invalid wildcard ACME DNS identifier".into()));
+    }
+
+    let labels = if let Some(rest) = domain.strip_prefix("*.") {
+        rest.split('.')
+    } else {
+        domain.split('.')
+    };
+
+    let mut label_count = 0usize;
+    for label in labels {
+        label_count += 1;
+        if label.is_empty() || label.len() > 63 {
+            return Err(AcmeError::Protocol("invalid ACME DNS label length".into()));
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err(AcmeError::Protocol("ACME DNS label cannot start or end with '-'".into()));
+        }
+        if !label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+            return Err(AcmeError::Protocol("ACME DNS label contains invalid characters".into()));
+        }
+    }
+
+    if label_count < 2 {
+        return Err(AcmeError::Protocol("ACME DNS identifier must be fully qualified".into()));
+    }
+
+    Ok(())
+}
+
 fn parse_acme_object_with_id<T: FromJson>(body: &[u8], id: &str) -> Result<T, AcmeError> {
     let mut value: JsonValue =
         edgerun_json::from_json_slice(body).map_err(|e| AcmeError::Parse(e.to_string()))?;
@@ -386,4 +435,26 @@ fn parse_acme_object_with_id<T: FromJson>(body: &[u8], id: &str) -> Result<T, Ac
         value.push_field("id", id.to_string());
     }
     T::from_json(value).map_err(|e| AcmeError::Parse(e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_acme_dns_identifier_rejects_bad_names() {
+        assert!(validate_acme_dns_identifier("").is_err());
+        assert!(validate_acme_dns_identifier("localhost").is_err());
+        assert!(validate_acme_dns_identifier("-bad.example").is_err());
+        assert!(validate_acme_dns_identifier("bad-.example").is_err());
+        assert!(validate_acme_dns_identifier("bad_*example.com").is_err());
+        assert!(validate_acme_dns_identifier("*.*.example.com").is_err());
+    }
+
+    #[test]
+    fn validate_acme_dns_identifier_accepts_normal_and_wildcard_names() {
+        assert!(validate_acme_dns_identifier("example.com").is_ok());
+        assert!(validate_acme_dns_identifier("www.example.com.").is_ok());
+        assert!(validate_acme_dns_identifier("*.example.com").is_ok());
+    }
 }
