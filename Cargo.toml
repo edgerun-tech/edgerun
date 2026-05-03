@@ -105,20 +105,21 @@ members = [
   "crates/edgerun-virtual-disk",
   "crates/edgerun-wifi",
   "crates/edgerun-yubikey",
-"crates/edgerun-vfs",
-   "crates/edgerun-clap",
+  "crates/edgerun-vfs",
+  "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
-"crates/edgerun-wasm",
-   "crates/edgerun-wasm-bench",
-   "crates/edgerun-sdk",
+  "crates/edgerun-wasm",
+  "crates/edgerun-wasm-bench",
+  "crates/edgerun-wire",
+  "crates/edgerun-sdk",
   "crates/edgerun-sdk-macro",
   "crates/edgerun-event",
   "crates/edgerun-wallet",
   "crates/edgerun-exchange",
   "crates/edgerun-exchange-api",
   "crates/edgerun-exchange-worker",
-   "crates/edgerun-provisioning",
-   "crates/zen-client",
+  "crates/edgerun-provisioning",
+  "crates/zen-client",
   "crates/edgerun-codelyzer",
 ]
 
@@ -201,9 +202,10 @@ edgerun-regex = { version = "0.1", path = "crates/edgerun-regex" }
 edgerun-email = { version = "0.1", path = "crates/edgerun-email" }
 edgerun-log = { version = "0.1", path = "crates/edgerun-log" }
 edgerun-rt = { version = "0.1", path = "crates/edgerun-rt" }
+edgerun-wire = { version = "0.1", path = "crates/edgerun-wire", default-features = false }
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { version = "0.1", path = "crates/edgerun-crypto", default-features = false }
-    # edgerun-json native JSON APIs
+# edgerun-json native JSON APIs
 edgerun-json = { version = "0.1", path = "crates/edgerun-json", default-features = false }
 edgerun-error = { version = "0.1", path = "crates/edgerun-error" }
 edgerun-edit = { version = "0.1", path = "crates/edgerun-edit" }
@@ -224,18 +226,13 @@ edgerun-sdk-macro = { version = "0.1", path = "crates/edgerun-sdk-macro" }
 # edgerun-wgpu = { path = "crates/edgerun-wgpu" }
 # edgerun-rasterizer = { path = "crates/edgerun-rasterizer" }
 # edgerun-css-cascade = { path = "crates/edgerun-css-cascade" }
-# Compression libraries for HTTP content-encoding
-miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"] }
-brotli = { version = "8", default-features = false }
+
+# Temporary external compatibility boundary. These stay only while protobuf,
+# SHA-2 and libc-backed Linux shims are being retired from core storage paths.
 sha2 = { version = "0.10", default-features = false }
 libc = "0.2"
 prost = { version = "0.14", default-features = false }
 prost-types = { version = "0.14", default-features = false }
-prost-build = { version = "0.14", default-features = false }
-der = { version = "0.8", features = ["heapless"] }
-wasmtime = "29"
-wasmparser = "0.224"
-eframe = { version = "0.31", default-features = false }
 
 [patch.crates-io]
 const-oid = { path = "crates/edgerun-crypto/vendor/const-oid-0.9" }
