@@ -291,7 +291,19 @@ pub fn save_created_state(
         annotations: spec.annotations.clone(),
     };
     save_state(&state, container_id)?;
-    save_runtime_spec(spec, container_id)
+    save_runtime_spec(spec, container_id)?;
+    let _ = crate::accountability::append_runtime_event(
+        spec,
+        container_id,
+        crate::accountability::RuntimeEvent {
+            event: "ContainerCreated",
+            status: "created",
+            pid: Some(pid),
+            bundle: Some(bundle_path),
+            payload_json: None,
+        },
+    );
+    Ok(())
 }
 
 // ===========================================================================
@@ -397,7 +409,23 @@ pub fn start_created_container(spec: &OciSpec, container_id: &str, pid: u32) -> 
     setup_spec_device_cgroups(spec, container_id)?;
     crate::fifo::write_start_signal(&mut fifo_writer)?;
     run_poststart_hooks(spec, container_id, pid)?;
-    update_state_running(container_id, pid)
+    update_state_running(container_id, pid)?;
+    let bundle = spec
+        .root
+        .as_ref()
+        .map(|root| root.path.as_str());
+    let _ = crate::accountability::append_runtime_event(
+        spec,
+        container_id,
+        crate::accountability::RuntimeEvent {
+            event: "ContainerStarted",
+            status: "running",
+            pid: Some(pid),
+            bundle,
+            payload_json: None,
+        },
+    );
+    Ok(())
 }
 
 /// Save created state for a freshly forked child, then start it.
