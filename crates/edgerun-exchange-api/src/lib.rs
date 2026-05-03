@@ -7,29 +7,35 @@
 //! Real wiring:
 //! - POST /v1/quote → route_quote across configured providers
 //! - POST /v1/order → create_order via selected provider
-//! - GET /v1/order/:id → event-derived status from store
+//! - GET /v1/order/:id → event-derived status from stream/store
 
 extern crate alloc;
 
 use alloc::boxed::Box;
-use core::pin::Pin;
 use core::future::Future;
+use core::pin::Pin;
 use core::ptr::addr_of;
 use edgerun_rt::sync::Mutex;
 
-use edgerun_http::{Handler, HttpServer, Request, Response, StatusCode};
-use edgerun_exchange::provider::{ExchangeProvider, ProviderCode, ProviderContext};
 use edgerun_exchange::policy::RoutingPolicy;
+use edgerun_exchange::provider::{ExchangeProvider, ProviderContext};
+use edgerun_http::{Handler, Request, Response};
 
 pub mod config;
+pub mod stream_runtime;
+pub mod store;
 pub mod types;
 mod handlers;
 mod routes;
-pub mod store;
 
 pub use config::Config;
-pub use types::*;
 pub use store::ExchangeStore;
+pub use stream_runtime::{
+    append_exchange_event_to_stream, append_exchange_events_to_stream,
+    init_exchange_stream_runtime, init_exchange_stream_runtime_with_recipients,
+    project_exchange_order_from_stream,
+};
+pub use types::*;
 
 /// Global shared state for the exchange API.
 /// Initialized via `init_global_state` before serving requests.
@@ -84,21 +90,15 @@ pub fn with_store<R>(f: impl FnOnce(&mut ExchangeStore) -> R) -> Option<R> {
 }
 
 pub fn with_providers<R>(f: impl FnOnce(&[Box<dyn ExchangeProvider>]) -> R) -> Option<R> {
-    unsafe {
-        (*global_providers_ptr()).as_ref().map(|p| f(p.as_slice()))
-    }
+    unsafe { (*global_providers_ptr()).as_ref().map(|p| f(p.as_slice())) }
 }
 
 pub fn with_ctx<R>(f: impl FnOnce(&ProviderContext) -> R) -> Option<R> {
-    unsafe {
-        (*global_ctx_ptr()).as_ref().map(|c| f(c))
-    }
+    unsafe { (*global_ctx_ptr()).as_ref().map(|c| f(c)) }
 }
 
 pub fn with_policy<R>(f: impl FnOnce(&RoutingPolicy) -> R) -> Option<R> {
-    unsafe {
-        (*global_policy_ptr()).as_ref().map(|p| f(p))
-    }
+    unsafe { (*global_policy_ptr()).as_ref().map(|p| f(p)) }
 }
 
 /// Handler that dispatches to real provider-backed routes.
@@ -107,9 +107,7 @@ pub struct ExchangeApiHandler;
 
 impl Handler for ExchangeApiHandler {
     fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
-        Box::pin(async move {
-            routes::route(&request)
-        })
+        Box::pin(async move { routes::route(&request) })
     }
 }
 
