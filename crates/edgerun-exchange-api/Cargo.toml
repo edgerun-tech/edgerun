@@ -17,6 +17,8 @@ edgerun-json = { version = "0.1", path = "../edgerun-json" }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-url = { version = "0.1", path = "../edgerun-url" }
+edgerun-storage = { version = "0.1", path = "../edgerun-storage" }
+edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 
 [lints]
 workspace = true
