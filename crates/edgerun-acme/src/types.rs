@@ -31,14 +31,25 @@ pub enum DirectoryUrl {
 impl DirectoryUrl {
     pub fn url(&self) -> Url {
         match self {
-            DirectoryUrl::LetsEncrypt => {
-                Url::parse("https://acme-v02.api.letsencrypt.org/directory").unwrap()
-            }
-            DirectoryUrl::LetsEncryptStaging => {
-                Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory").unwrap()
-            }
+            DirectoryUrl::LetsEncrypt => Url::parse("https://acme-v02.api.letsencrypt.org/directory")
+                .expect("built-in Let's Encrypt directory URL is valid"),
+            DirectoryUrl::LetsEncryptStaging => Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory")
+                .expect("built-in Let's Encrypt staging directory URL is valid"),
             DirectoryUrl::Custom(u) => u.clone(),
         }
+    }
+
+    pub fn validate_custom(url: &Url) -> Result<(), JsonValueError> {
+        if url.scheme() != "https" {
+            return Err(expected("ACME directory URL must use https"));
+        }
+        if url.host().is_empty() {
+            return Err(expected("ACME directory URL must include a host"));
+        }
+        if url.fragment().is_some() {
+            return Err(expected("ACME directory URL must not contain a fragment"));
+        }
+        Ok(())
     }
 }
 
@@ -69,8 +80,8 @@ impl Jwk {
     pub fn thumbprint(&self) -> Vec<u8> {
         use sha2::{Digest, Sha256};
         let jwk_json = match self {
-            Jwk::RSA { n, e } => format!(r#"{{"e":"{e}","kty":"RSA","n":"{n}"}}"#),
-            Jwk::EC { crv, x, y } => format!(r#"{{"crv":"{crv}","kty":"EC","x":"{x}","y":"{y}"}}"#),
+            Jwk::RSA { n, e } => format!(r#"{{\"e\":\"{e}\",\"kty\":\"RSA\",\"n\":\"{n}\"}}"#),
+            Jwk::EC { crv, x, y } => format!(r#"{{\"crv\":\"{crv}\",\"kty\":\"EC\",\"x\":\"{x}\",\"y\":\"{y}\"}}"#),
         };
         let mut hasher = Sha256::new();
         hasher.update(jwk_json.as_bytes());
@@ -296,9 +307,11 @@ impl FromJson for DirectoryUrl {
         match value.as_str() {
             "letsencrypt" => Ok(Self::LetsEncrypt),
             "letsencryptstaging" => Ok(Self::LetsEncryptStaging),
-            _ => Url::parse(&value)
-                .map(Self::Custom)
-                .map_err(|_| expected("invalid directory URL")),
+            _ => {
+                let url = Url::parse(&value).map_err(|_| expected("invalid directory URL"))?;
+                Self::validate_custom(&url)?;
+                Ok(Self::Custom(url))
+            }
         }
     }
 }
@@ -713,5 +726,11 @@ mod tests {
         };
 
         assert_eq!(jwk.thumbprint(), expected);
+    }
+
+    #[test]
+    fn custom_directory_url_requires_https() {
+        assert!(DirectoryUrl::from_json(JsonValue::String("http://example.test/directory".to_string())).is_err());
+        assert!(DirectoryUrl::from_json(JsonValue::String("https://example.test/directory".to_string())).is_ok());
     }
 }
