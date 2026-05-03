@@ -32,8 +32,8 @@ edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-feat
 edgerun-hpack = { version = "0.1", path = "../edgerun-hpack", optional = true }
 edgerun-qpack = { version = "0.1", path = "../edgerun-qpack", optional = true }
 edgerun-quic = { version = "0.1", path = "../edgerun-quic", optional = true }
-miniz_oxide = { workspace = true, optional = true }
-brotli = { workspace = true, optional = true }
+miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"], optional = true }
+brotli = { version = "8", default-features = false, optional = true }
 
 [[test]]
 name = "http3_integration"
