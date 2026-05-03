@@ -24,9 +24,7 @@ mod command_dispatch;
 mod command_dispatch_event;
 mod command_dispatch_payload;
 mod command_dispatch_result;
-mod command_dispatch_route;
 mod command_dispatch_server_resource;
-mod command_legacy;
 mod command_router;
 // mod metering;      // TODO: file missing — not needed for interface boundary
 // mod running_workloads; // TODO: file missing — not needed for interface boundary
@@ -55,7 +53,7 @@ mod tcp_server;
 mod provisioning_listener;
 
 mod types;
-use command_legacy::sign_event_envelope;
+use command_dispatch::sign_event_envelope;
 
 fn main() {
     cli::main()
