@@ -10,7 +10,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use edgerun_exchange::provider::ProviderQuote;
-use edgerun_exchange::ExchangeEvent;
+use edgerun_exchange::{project_order_events, ExchangeEvent, ExchangeOrderProjection};
 use edgerun_wallet::canonical_asset_id;
 
 fn is_valid_generated_id(value: &str, prefix: &str) -> bool {
@@ -208,6 +208,16 @@ impl ExchangeStore {
             created_at_ms,
         });
 
+        if status != 3 {
+            self.append_event(ExchangeEvent::OrderStatusChanged {
+                order_id: order_id.as_str().into(),
+                from_status: 3,
+                to_status: status,
+                reason: "provider_initial_status".into(),
+                changed_at_ms: created_at_ms,
+            });
+        }
+
         Some(order_id)
     }
 
@@ -230,12 +240,20 @@ impl ExchangeStore {
             .collect()
     }
 
+    pub fn project_order(&self, order_id: &str) -> Option<ExchangeOrderProjection> {
+        project_order_events(self.events_for_order(order_id), order_id)
+    }
+
     pub fn order_count(&self) -> usize {
         self.orders.len()
     }
 
     pub fn quote_count(&self) -> usize {
         self.quotes.len()
+    }
+
+    pub fn event_count(&self) -> usize {
+        self.events.len()
     }
 }
 

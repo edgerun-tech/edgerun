@@ -2,7 +2,7 @@
 
 > Updated: 2026-05-03
 > Scope: edgerun-exchange, edgerun-exchange-api, edgerun-exchange-worker
-> Status: provider-backed quote/order wiring exists, but exchange state is still in-memory and not yet durable protocol truth.
+> Status: provider-backed quote/order wiring exists. Order status is now projected from in-memory exchange events, but those events are still not durable protocol truth.
 
 ## Current Classification
 
@@ -14,10 +14,11 @@
 | Provider adapters | Real-ish | SideShift, ChangeNOW, and feature-gated FF.io adapters exist. External API correctness still needs live integration testing. |
 | `router::route_quote` | Real MVP | Filters providers, calls `quote()`, distinguishes no provider from provider failure, selects best by rate. Fees/health scoring are still TODO. |
 | `ExchangeEvent` enum | Real model | Defines quote/order/status lifecycle events. Not yet persisted to core event stream. |
+| `projection::ExchangeOrderProjection` | Real in-memory projection | Pure derived order view over `ExchangeEvent` sequences. |
 | `ExchangeStore` | Real in-memory store | Keeps quotes, orders, and exchange events in memory. Not durable. |
 | `POST /v1/quote` | Wired MVP | Calls provider routing, stores selected quote, returns public EdgeRun quote id. |
 | `POST /v1/order` | Wired MVP | Uses stored quote, same selected provider, provider internal quote id, expiry check, and public EdgeRun order id. |
-| `GET /v1/order/:id` | Wired MVP | Reads in-memory order and event count. |
+| `GET /v1/order/:id` | Event-projected MVP | Combines stored public order fields with derived status/event flags from `ExchangeOrderProjection`. |
 | `GET /v1/assets` | Static catalog | Explicitly not provider truth. |
 | `GET /health` | Honest degraded | Provider health checks are not implemented, so the API does not claim healthy. |
 
@@ -39,8 +40,8 @@ Exchange state is **not yet authoritative protocol state**.
 Current flow:
 
 ```text
-provider quote -> in-memory StoredQuote -> public exchange quote id
-stored quote -> selected provider create_order -> in-memory StoredOrder -> public order id
+provider quote -> ExchangeEvent::QuoteCreated in memory -> public exchange quote id
+stored quote -> selected provider create_order -> ExchangeEvent::OrderCreated in memory -> projected order status
 ```
 
 Target flow:
@@ -51,7 +52,30 @@ order creation -> ExchangeEvent::OrderCreated -> append-only stream/object stora
 provider polling -> ProviderStatusObserved -> derived OrderStatusChanged -> projected order status
 ```
 
-The in-memory store is an MVP projection and should be treated as volatile.
+The in-memory store is an MVP event projection and should be treated as volatile.
+
+## Projection Boundary
+
+`edgerun-exchange/src/projection.rs` is the canonical in-memory projection layer for orders.
+
+Rules:
+
+1. Projection functions are pure over event sequences.
+2. Projection code does not call providers.
+3. Projection code does not mutate storage.
+4. API handlers may combine projection results with public stored fields, but must not expose provider internals.
+5. Durable future state should reuse this projection over persisted events.
+
+`GET /v1/order/:id` now returns derived fields:
+
+- `canonical_status`
+- `event_count`
+- `terminal`
+- `manual_review_required`
+- `latest_provider_status` if observed
+- `latest_provider_status_detail` if observed
+- `last_event_type`
+- `updated_at_ms`
 
 ## Provider Isolation Rules
 
@@ -114,9 +138,9 @@ canonical order status = f(event sequence), not f(last provider status)
 
 | Endpoint | Current Classification | Notes |
 |---|---|---|
-| `POST /v1/quote` | Provider-backed MVP | Requires providers initialized. Stores quote in memory. |
-| `POST /v1/order` | Provider-backed MVP | Uses stored quote provider continuity. Stores order in memory. |
-| `GET /v1/order/:id` | In-memory projection | Returns stored order and event count. |
+| `POST /v1/quote` | Provider-backed MVP | Requires providers initialized. Stores quote event in memory. |
+| `POST /v1/order` | Provider-backed MVP | Uses stored quote provider continuity. Stores order event in memory. |
+| `GET /v1/order/:id` | Event-projected in-memory view | Returns public order fields plus projected status metadata. |
 | `GET /v1/assets` | Static catalog | Not provider truth. |
 | `GET /health` | Degraded | Provider health checks pending. |
 
