@@ -8,14 +8,11 @@ pub use crate::command_dispatch::{
     project_controller_set, sign_event_envelope, CommandDispatchResult, ControllerSet,
 };
 
+use crate::command_authority::{command_authority_gate, CommandGateDecision};
 use crate::command_dispatch_event::{append_command_result_event, CommandResultEventWrite};
 use crate::command_dispatch_server_resource::dispatch_server_resource_command_result;
 use edgerun_core::collections::{HashMap, HashSet};
-use edgerun_core::command::{
-    command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
-};
-use edgerun_core::result::Verdict;
-use edgerun_core::util::now_unix_millis_i64;
+use edgerun_core::command::CommandExecutionContext;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::stream::{CommandDecision, CommandEnvelope, EventType};
 use edgerun_storage::NodeStore;
@@ -33,7 +30,7 @@ pub fn dispatch_command(
     exec_ctx: &CommandExecutionContext,
 ) -> CommandDispatchResult {
     if crate::server_resources::is_server_resource_command(command.command_type) {
-        return dispatch_server_resource_command_after_validation(
+        return dispatch_server_resource_command_after_gate(
             command,
             store,
             stream_id,
@@ -61,7 +58,7 @@ pub fn dispatch_command(
     )
 }
 
-fn dispatch_server_resource_command_after_validation(
+fn dispatch_server_resource_command_after_gate(
     command: &CommandEnvelope,
     store: &mut NodeStore,
     stream_id: &[u8],
@@ -73,106 +70,28 @@ fn dispatch_server_resource_command_after_validation(
     local_assurance_class: i32,
     exec_ctx: &CommandExecutionContext,
 ) -> CommandDispatchResult {
-    let computed_hash = command_hash(command);
-    let cmd_hash_hex = edgerun_core::util::bytes_to_hex(&computed_hash.value);
-    if let Some(ref target) = command.target_node {
-        let target_hex = edgerun_core::util::bytes_to_hex(&target.node_id);
-        if let Ok(Some((_cmd_id, _event_seq))) = store.get_replay_entry(&target_hex, &cmd_hash_hex)
-        {
-            return append_decision(command, store, stream_id, signer, true, "duplicate_command");
+    match command_authority_gate(
+        command,
+        store,
+        stream_id,
+        signer,
+        controllers,
+        replay_cache,
+        revoked_delegations,
+        trusted_root_ids,
+        local_assurance_class,
+        exec_ctx,
+    ) {
+        CommandGateDecision::Accept => {
+            dispatch_server_resource_command_result(command, store, stream_id, signer)
+        }
+        CommandGateDecision::CommitDuplicate => {
+            append_decision(command, store, stream_id, signer, true, "duplicate_command")
+        }
+        CommandGateDecision::Reject(reason) => {
+            append_decision(command, store, stream_id, signer, false, &reason)
         }
     }
-
-    if replay_cache.contains_key(&computed_hash.value) {
-        return append_decision(command, store, stream_id, signer, true, "duplicate_command");
-    }
-
-    let now_ms = now_unix_millis_i64();
-    let local_node_id = signer.node_id().0;
-    let delegation_use_counts: HashMap<Vec<u8>, u64> = HashMap::new();
-    let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
-    let location_classes: Vec<&str> = exec_ctx
-        .location_classes
-        .iter()
-        .map(String::as_str)
-        .collect();
-
-    let validation_result = {
-        let ctx = CommandValidationContext {
-            local_node_id: &local_node_id,
-            replay_cache,
-            revoked_delegation_ids: revoked_delegations,
-            delegation_use_counts: &delegation_use_counts,
-            delegation_rate_events_ms: &delegation_rate_events_ms,
-            now_ms,
-            trusted_root_ids,
-            local_assurance_class,
-            accepted_assurance_claims: &exec_ctx.accepted_assurance_claims,
-            has_local_session: exec_ctx.has_local_session,
-            has_user_presence: exec_ctx.has_user_presence,
-            transport_class: exec_ctx.transport_class.as_deref().and_then(|s| match s {
-                "lan" => Some(1),
-                "mesh" => Some(2),
-                "internet" => Some(3),
-                _ => None,
-            }),
-            location_classes: &location_classes,
-            target_stream_id: exec_ctx.target_stream_id.as_deref(),
-            target_view_type: exec_ctx.target_view_type.as_deref(),
-            target_domain: exec_ctx.target_domain.as_deref(),
-            execution_class: exec_ctx.execution_class.as_deref().and_then(|s| match s {
-                "wasm" => Some(1),
-                "native" => Some(2),
-                "container" => Some(3),
-                _ => None,
-            }),
-            storage_class: exec_ctx.storage_class.as_deref().and_then(|s| match s {
-                "file" => Some(1),
-                "memory" => Some(2),
-                "object" => Some(3),
-                _ => None,
-            }),
-        };
-        validate_command(command, &ctx)
-    };
-
-    match validation_result.verdict {
-        Verdict::Reject => {
-            let reason = validation_result
-                .reason_code
-                .map(|r| r.as_str().to_string())
-                .unwrap_or_else(|| "rejected".into());
-            return append_decision(command, store, stream_id, signer, false, &reason);
-        }
-        Verdict::Defer => return append_decision(command, store, stream_id, signer, false, "deferred"),
-        Verdict::Duplicate => {
-            return append_decision(command, store, stream_id, signer, true, "duplicate_command")
-        }
-        Verdict::Accept => {}
-    }
-
-    let issuer_id = command
-        .issuer
-        .as_ref()
-        .map(|i| i.identity_id.clone())
-        .unwrap_or_default();
-    let policy_ctx = edgerun_core::command::CommandPolicyContext {
-        issuer_identity_id: &issuer_id,
-        command_type: command.command_type,
-        has_valid_delegation: !command.delegation_chain.is_empty(),
-        controller_ids: &controllers.to_vec(),
-        allowed_command_types: &[],
-    };
-    let policy_result = edgerun_core::command::validate_command_policy(&policy_ctx);
-    if policy_result.verdict == Verdict::Reject {
-        let reason = policy_result
-            .reason_code
-            .map(|r| r.as_str().to_string())
-            .unwrap_or_else(|| "policy_denied".into());
-        return append_decision(command, store, stream_id, signer, false, &reason);
-    }
-
-    dispatch_server_resource_command_result(command, store, stream_id, signer)
 }
 
 fn append_decision(
