@@ -19,7 +19,10 @@
 mod assurance;
 mod capabilities;
 mod capacity;
+#[path = "command_dispatch/mod.rs"]
 mod command_dispatch;
+#[path = "command_dispatch.rs"]
+mod command_dispatch_legacy;
 mod command_dispatch_event;
 mod command_dispatch_payload;
 mod command_dispatch_result;
