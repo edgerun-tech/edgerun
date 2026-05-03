@@ -80,8 +80,8 @@ impl Jwk {
     pub fn thumbprint(&self) -> Vec<u8> {
         use sha2::{Digest, Sha256};
         let jwk_json = match self {
-            Jwk::RSA { n, e } => format!(r#"{{\"e\":\"{e}\",\"kty\":\"RSA\",\"n\":\"{n}\"}}"#),
-            Jwk::EC { crv, x, y } => format!(r#"{{\"crv\":\"{crv}\",\"kty\":\"EC\",\"x\":\"{x}\",\"y\":\"{y}\"}}"#),
+            Jwk::RSA { n, e } => format!(r#"{{"e":"{e}","kty":"RSA","n":"{n}"}}"#),
+            Jwk::EC { crv, x, y } => format!(r#"{{"crv":"{crv}","kty":"EC","x":"{x}","y":"{y}"}}"#),
         };
         let mut hasher = Sha256::new();
         hasher.update(jwk_json.as_bytes());
