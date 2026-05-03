@@ -31,6 +31,7 @@ extern crate alloc;
 extern crate std as host_std;
 
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt;
 pub use edgerun_rt as rt;
 
@@ -73,6 +74,8 @@ pub enum TlsError {
     Cipher(String),
     /// Alert received from peer
     Alert(AlertLevel, Alert),
+    /// HelloRetryRequest received — retry with this group and optional cookie
+    HelloRetryRequest(crate::key_exchange::KeyExchangeGroup, Vec<u8>),
     /// Underlying I/O error from the async transport.
     Io(std::io::Error),
 }
@@ -85,6 +88,7 @@ impl fmt::Display for TlsError {
             TlsError::Certificate(m) => write!(f, "Certificate error: {m}"),
             TlsError::Cipher(m) => write!(f, "Cipher error: {m}"),
             TlsError::Alert(lv, a) => write!(f, "TLS alert: {lv:?} {a}"),
+            TlsError::HelloRetryRequest(g, _) => write!(f, "HelloRetryRequest: group={g:?}"),
             TlsError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }

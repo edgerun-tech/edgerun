@@ -63,3 +63,9 @@ impl AccountKey {
         self.pem.clone()
     }
 }
+
+impl Clone for AccountKey {
+    fn clone(&self) -> Self {
+        Self::from_pem(&self.pem).expect("AccountKey PEM should always be valid")
+    }
+}

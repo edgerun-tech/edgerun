@@ -128,6 +128,20 @@ pub struct DnsServer {
     tcp_listener_ipv6: Option<Arc<AsyncTcpListener>>,
 }
 
+impl Clone for DnsServer {
+    fn clone(&self) -> Self {
+        Self {
+            udp_socket: Arc::clone(&self.udp_socket),
+            tcp_listener: Arc::clone(&self.tcp_listener),
+            state: self.state.clone(),
+            rate_limiter: self.rate_limiter.clone(),
+            shutdown_flag: Arc::clone(&self.shutdown_flag),
+            udp_socket_ipv6: self.udp_socket_ipv6.clone(),
+            tcp_listener_ipv6: self.tcp_listener_ipv6.clone(),
+        }
+    }
+}
+
 impl DnsServer {
     /// Create a new DNS server, binding to both UDP and TCP.
     ///

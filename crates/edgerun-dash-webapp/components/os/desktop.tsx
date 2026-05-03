@@ -30,7 +30,7 @@ import {
 } from "@/stores/desktop-store"
 
 const XrayWorkspace = dynamic(
-  () => import("@/features/xray/XrayWorkspace").then(mod => ({ default: mod.default })),
+  () => import("@/features/xray/XrayWorkspace").then(mod => ({ default: mod.XrayWorkspace })),
   { ssr: false }
 )
 

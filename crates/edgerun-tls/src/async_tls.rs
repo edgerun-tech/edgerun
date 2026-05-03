@@ -232,11 +232,49 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         alpn_protocols: &[&[u8]],
         session_cache: Option<&SessionCache>,
     ) -> Result<Self> {
-        let client_random = generate_random();
-        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1)
+        let mut stream = stream;
+        let mut hrr_group = KeyExchangeGroup::X25519;
+        let mut cookie: Vec<u8> = Vec::new();
+        loop {
+            let client_random = generate_random();
+            let key_pair = EcdhKeyPair::generate(if cookie.is_empty() {
+                KeyExchangeGroup::X25519
+            } else {
+                hrr_group
+            })
             .map_err(TlsError::HandshakeFailure)?;
 
-        // 1. Send ClientHello
+            match Self::client_inner_with_cookie(
+                stream,
+                server_name,
+                alpn_protocols,
+                session_cache,
+                client_random,
+                key_pair,
+                &cookie,
+            )
+            .await
+            {
+                Ok(tls) => return Ok(tls),
+                Err((TlsError::HelloRetryRequest(selected_group, new_cookie), s)) => {
+                    stream = s;
+                    hrr_group = selected_group;
+                    cookie = new_cookie;
+                }
+                Err((e, _s)) => return Err(e),
+            }
+        }
+    }
+
+    async fn client_inner_with_cookie(
+        stream: S,
+        server_name: &str,
+        alpn_protocols: &[&[u8]],
+        session_cache: Option<&SessionCache>,
+        client_random: [u8; 32],
+        key_pair: EcdhKeyPair,
+        hrr_cookie: &[u8],
+    ) -> core::result::Result<Self, (TlsError, S)> {
         let group = match key_pair.group() {
             KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
             KeyExchangeGroup::X25519 => NamedGroup::X25519,
@@ -244,7 +282,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let mut ch_builder = ClientHelloBuilder::new(client_random, server_name)
             .key_share(&key_pair.public_key_bytes(), group);
 
-        // Try session resumption if cache provided
+        if !hrr_cookie.is_empty() {
+            ch_builder = ch_builder.cookie(hrr_cookie);
+        }
+
         if let Some(cache) = session_cache {
             if let Some(ticket) = cache.get(server_name) {
                 ch_builder = ch_builder.psk_identity(&ticket.ticket, 0, ticket.obfuscated_age());
@@ -254,9 +295,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         if !alpn_protocols.is_empty() {
             ch_builder = ch_builder.alpn_protocols(alpn_protocols);
         }
-        let ch = ch_builder.build()?;
+        let ch = match ch_builder.build() {
+            Ok(c) => c,
+            Err(e) => return Err((e, stream)),
+        };
 
-        let _ch_hash = Hasher::Sha256.hash(&ch);
         let mut transcript = ch.clone();
 
         let record = crate::record::TlsRecord {
@@ -264,57 +307,99 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             version: 0x0301,
             fragment: ch,
         };
-        stream.write_all(&record.to_bytes()).await?;
-        stream.flush().await?;
+        let mut stream = stream;
+        if let Err(e) = stream.write_all(&record.to_bytes()).await {
+            return Err((TlsError::Io(e), stream));
+        }
+        if let Err(e) = stream.flush().await {
+            return Err((TlsError::Io(e), stream));
+        }
 
-        // 2. Read ServerHello (plaintext)
         let mut hdr = [0u8; 5];
-        stream.read_exact(&mut hdr).await?;
+        if let Err(e) = stream.read_exact(&mut hdr).await {
+            return Err((TlsError::Io(e), stream));
+        }
         let ct = hdr[0];
         if ct != 22 {
             if ct == 21 {
                 let len = read_u16_be(&hdr, 3) as usize;
                 let mut fragment = vec![0u8; len];
-                stream.read_exact(&mut fragment).await?;
+                if let Err(e) = stream.read_exact(&mut fragment).await {
+                    return Err((TlsError::Io(e), stream));
+                }
                 if fragment.len() >= 2 {
-                    let level = AlertLevel::from_wire(fragment[0]).map_err(TlsError::Protocol)?;
-                    let alert = Alert::from_wire(fragment[1]).map_err(TlsError::Protocol)?;
-                    return Err(TlsError::Alert(level, alert));
+                    match AlertLevel::from_wire(fragment[0]) {
+                        Ok(level) => match Alert::from_wire(fragment[1]) {
+                            Ok(alert) => return Err((TlsError::Alert(level, alert), stream)),
+                            Err(e) => return Err((TlsError::Protocol(e), stream)),
+                        },
+                        Err(e) => return Err((TlsError::Protocol(e), stream)),
+                    }
                 }
             }
-            return Err(TlsError::HandshakeFailure(format!(
-                "Expected handshake record, got content_type={ct}",
-            )));
+            return Err((
+                TlsError::HandshakeFailure(format!(
+                    "Expected handshake record, got content_type={ct}",
+                )),
+                stream,
+            ));
         }
         let len = read_u16_be(&hdr, 3) as usize;
         let mut fragment = vec![0u8; len];
-        stream.read_exact(&mut fragment).await?;
-        let sh = ServerHello::parse(&fragment)?;
-
-        if sh.supported_version != Some(0x0304) {
-            return Err(TlsError::HandshakeFailure(format!(
-                "Server did not negotiate TLS 1.3 (got supported_version={:?})",
-                sh.supported_version,
-            )));
+        if let Err(e) = stream.read_exact(&mut fragment).await {
+            return Err((TlsError::Io(e), stream));
         }
 
-        let _server_random = sh.random;
+        const HRR_MAGIC: [u8; 32] = [
+            0xCF, 0x21, 0xAD, 0x74, 0xE5, 0x9A, 0x61, 0x11, 0xBE, 0x1D, 0x8C, 0x02, 0x1E, 0x65,
+            0xB8, 0x91, 0xC2, 0xA2, 0x11, 0x16, 0x7A, 0xBB, 0x8C, 0x5E, 0x07, 0x9E, 0x44, 0xE2,
+            0xF6, 0x8E, 0x02, 0x81,
+        ];
+        if fragment.len() >= 4 + 32 {
+            let random_start = 4 + 2;
+            if random_start + 32 <= fragment.len()
+                && fragment[random_start..random_start + 32] == HRR_MAGIC
+            {
+                let selected_group = match parse_hrr_selected_group(&fragment) {
+                    Ok(g) => g,
+                    Err(e) => return Err((e, stream)),
+                };
+                let cookie = parse_hrr_cookie(&fragment).unwrap_or_default();
+                return Err((TlsError::HelloRetryRequest(selected_group, cookie), stream));
+            }
+        }
+
+        let sh = match ServerHello::parse(&fragment) {
+            Ok(s) => s,
+            Err(e) => return Err((e, stream)),
+        };
+
+        if sh.supported_version != Some(0x0304) {
+            return Err((
+                TlsError::HandshakeFailure(format!(
+                    "Server did not negotiate TLS 1.3 (got supported_version={:?})",
+                    sh.supported_version,
+                )),
+                stream,
+            ));
+        }
+
         let negotiated_suite = sh.cipher_suite;
         let hash = match negotiated_suite {
             CipherSuite::TLS_AES_128_GCM_SHA256 => Hasher::Sha256,
             CipherSuite::TLS_AES_256_GCM_SHA384 => Hasher::Sha384,
         };
-        let _sh_hash = hash.hash(&fragment);
         transcript.extend_from_slice(&fragment);
 
-        // 3. Derive handshake keys — offload ECDH to blocking pool
         let key_pair = std::sync::Arc::new(key_pair);
         let server_key_share = sh.server_key_share.clone();
-        let shared_secret =
-            edgerun_rt::spawn_blocking(move || key_pair.exchange(&server_key_share))
-                .await
-                .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
-                .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
+        let shared_secret = match edgerun_rt::spawn_blocking(move || key_pair.exchange(&server_key_share))
+            .await
+        {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => return Err((TlsError::HandshakeFailure(e.to_string()), stream)),
+            Err(_) => return Err((TlsError::HandshakeFailure("blocking pool shutdown".into()), stream)),
+        };
         let transcript_hash = hash.hash(&transcript);
 
         let mut ks = Tls13KeySchedule::new(hash.clone());
@@ -327,37 +412,45 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let server_hs_keys =
             server_write_keys(&server_hs_secret, negotiated_suite.key_len(), 12, &hash);
 
-        let mut _write_cipher =
-            RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
-        let mut _read_cipher =
-            RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
+        let mut write_cipher = match RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv) {
+            Ok(c) => c,
+            Err(e) => return Err((e, stream)),
+        };
+        let mut read_cipher = match RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv) {
+            Ok(c) => c,
+            Err(e) => return Err((e, stream)),
+        };
 
-        // 4. Read encrypted handshake messages
-        let alpn_protocol = async_read_encrypted_handshake_messages(
+        let alpn_protocol = match async_read_encrypted_handshake_messages(
             &mut stream,
-            &mut _read_cipher,
+            &mut read_cipher,
             &mut ks,
             &mut transcript,
             &hash,
             &transcript_hash,
             server_name,
         )
-        .await?;
+        .await
+        {
+            Ok(a) => a,
+            Err(e) => return Err((e, stream)),
+        };
 
         let app_transcript_hash = hash.hash(&transcript);
 
-        // 5. Send client Finished
-        async_send_client_finished(
+        if let Err(e) = async_send_client_finished(
             &mut stream,
-            &mut _write_cipher,
+            &mut write_cipher,
             &ks,
             &transcript,
             &hash,
             &transcript_hash,
         )
-        .await?;
+        .await
+        {
+            return Err((e, stream));
+        }
 
-        // 6. Derive application keys
         ks.advance_to_master();
         let client_app = ks.client_app_traffic_secret(&app_transcript_hash);
         let server_app = ks.server_app_traffic_secret(&app_transcript_hash);
@@ -367,14 +460,20 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let server_app_keys =
             server_app_write_keys(&server_app, negotiated_suite.key_len(), 12, &hash);
 
-        let write_cipher = ClientRecordCipher::Tls13(RecordCipher::new(
+        let write_cipher = match RecordCipher::new(
             &client_app_keys.write_key,
             &client_app_keys.write_iv,
-        )?);
-        let read_cipher = ClientRecordCipher::Tls13(RecordCipher::new(
+        ) {
+            Ok(c) => ClientRecordCipher::Tls13(c),
+            Err(e) => return Err((e, stream)),
+        };
+        let read_cipher = match RecordCipher::new(
             &server_app_keys.write_key,
             &server_app_keys.write_iv,
-        )?);
+        ) {
+            Ok(c) => ClientRecordCipher::Tls13(c),
+            Err(e) => return Err((e, stream)),
+        };
 
         Ok(AsyncTlsStream {
             stream,
@@ -2074,4 +2173,86 @@ mod tests {
 
         assert_eq!(parse_encrypted_extensions_alpn(&msg), None);
     }
+}
+
+/// Parse the selected group from a HelloRetryRequest key_share extension.
+/// HRR key_share extension format: group_id (2 bytes) only.
+fn parse_hrr_selected_group(data: &[u8]) -> Result<crate::key_exchange::KeyExchangeGroup> {
+    use crate::key_exchange::KeyExchangeGroup;
+
+    // Skip handshake header: type (1) + length (3) + legacy_version (2) + random (32) +
+    // legacy_session_id_echo (1 byte length + variable) + cipher_suite (2) + legacy_compression (1)
+    let mut pos = 1 + 3 + 2 + 32;
+    if pos >= data.len() {
+        return Err(TlsError::Protocol("HRR: session_id length missing".into()));
+    }
+    let sid_len = data[pos] as usize;
+    pos += 1 + sid_len;
+    if pos + 2 + 1 + 2 > data.len() {
+        return Err(TlsError::Protocol("HRR: too short for extensions".into()));
+    }
+    // cipher_suite (2) + legacy_compression (1) + extensions_length (2)
+    pos += 2 + 1;
+    let ext_len = read_u16_be(data, pos) as usize;
+    pos += 2;
+
+    let ext_end = pos + ext_len;
+    while pos < ext_end {
+        if pos + 4 > ext_end {
+            break;
+        }
+        let ext_type = read_u16_be(data, pos);
+        let ext_data_len = read_u16_be(data, pos + 2) as usize;
+        pos += 4;
+
+        // key_share extension (type 51) in HRR contains only selected_group (2 bytes)
+        if ext_type == 51 && ext_data_len >= 2 {
+            let group_id = read_u16_be(data, pos);
+            return KeyExchangeGroup::from_wire(group_id)
+                .ok_or_else(|| TlsError::Protocol(format!("HRR: unknown group {group_id:#06x}")));
+        }
+
+        pos += ext_data_len;
+    }
+
+    Err(TlsError::Protocol("HRR: no key_share extension found".into()))
+}
+
+/// Parse the cookie from a HelloRetryRequest (optional).
+fn parse_hrr_cookie(data: &[u8]) -> Option<Vec<u8>> {
+    // Skip handshake header: type (1) + length (3) + legacy_version (2) + random (32) +
+    // legacy_session_id_echo (1 byte length + variable) + cipher_suite (2) + legacy_compression (1)
+    let mut pos = 1 + 3 + 2 + 32;
+    if pos >= data.len() {
+        return None;
+    }
+    let sid_len = data[pos] as usize;
+    pos += 1 + sid_len;
+    if pos + 2 + 1 + 2 > data.len() {
+        return None;
+    }
+    pos += 2 + 1;
+    let ext_len = read_u16_be(data, pos) as usize;
+    pos += 2;
+
+    let ext_end = pos + ext_len;
+    while pos < ext_end {
+        if pos + 4 > ext_end {
+            break;
+        }
+        let ext_type = read_u16_be(data, pos);
+        let ext_data_len = read_u16_be(data, pos + 2) as usize;
+        pos += 4;
+
+        // cookie extension (type 44)
+        if ext_type == 44 && ext_data_len > 0 {
+            if pos + ext_data_len <= data.len() {
+                return Some(data[pos..pos + ext_data_len].to_vec());
+            }
+        }
+
+        pos += ext_data_len;
+    }
+
+    None
 }

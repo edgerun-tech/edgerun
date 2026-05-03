@@ -1,64 +1,77 @@
-"use client";
+"use client"
 
-/**
- * XrayCommandSurface - Bottom control surface for layout/runtime/timeline.
- * Provides controls for graph visualization modes and runtime overlay.
- */
-export default function XrayCommandSurface(props: {
-  runtimeMode: boolean;
-  onRuntimeModeChange: (enabled: boolean) => void;
-  layoutType: "force" | "grid" | "hierarchical";
-  onLayoutTypeChange: (layout: "force" | "grid" | "hierarchical") => void;
-}) {
-  function fitView() {
-    (window as any).xray?.command?.({ type: "fit_view" });
-  }
+import { useStore } from "@nanostores/react"
+import { xrayState, resetView, setLayout, setRuntimeMode } from "./graph/graph-store"
+import { setRuntimeOverlayEnabled } from "./runtime/runtime-store"
+import type { LayoutType } from "./graph/types"
+
+export function XrayCommandSurface() {
+  const state = useStore(xrayState)
 
   return (
-    <div className="h-12 border-t border-border flex items-center px-4 gap-4 bg-background/50">
+    <div className="h-12 border-t border-zinc-800 bg-zinc-950/90 flex items-center px-4 gap-4 text-sm">
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">Layout:</span>
-        <select
-          value={props.layoutType}
-          onChange={(e) => props.onLayoutTypeChange(e.currentTarget.value as any)}
-          className="text-xs bg-card text-card-foreground rounded px-2 py-1 border border-border"
-        >
-          <option value="force">Force-Directed</option>
-          <option value="grid">Grid</option>
-          <option value="hierarchical">Hierarchical</option>
-        </select>
+        <span className="text-zinc-500 text-xs font-mono">Layout</span>
+        <div className="flex gap-1">
+          {(["force", "globe", "layers"] as LayoutType[]).map((layout) => (
+            <button
+              key={layout}
+              onClick={() => setLayout(layout)}
+              className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
+                state.layout === layout
+                  ? "bg-zinc-700 text-zinc-100"
+                  : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+              }`}
+            >
+              {layout}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="h-6 w-px bg-zinc-800" />
+
+      <div className="flex items-center gap-2">
+        <span className="text-zinc-500 text-xs font-mono">Runtime</span>
         <button
-          onClick={fitView}
-          className="text-xs px-3 py-1 rounded border bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/60"
+          onClick={() => {
+            setRuntimeMode(!state.runtimeMode)
+            setRuntimeOverlayEnabled(!state.runtimeMode)
+          }}
+          className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
+            state.runtimeMode
+              ? "bg-emerald-800/60 text-emerald-300"
+              : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          }`}
         >
-          Fit
+          {state.runtimeMode ? "ON" : "OFF"}
         </button>
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">Runtime:</span>
-        <button
-          onClick={() => props.onRuntimeModeChange(!props.runtimeMode)}
-          className={`text-xs px-3 py-1 rounded border ${
-            props.runtimeMode
-              ? "bg-green-600 border-green-500 text-white"
-              : "bg-card border-border text-muted-foreground"
-          }`}
-        >
-          {props.runtimeMode ? "ON" : "OFF"}
-        </button>
-        {props.runtimeMode && (
-          <span className="text-xs text-green-400 animate-pulse">
-            Runtime overlay active
-          </span>
-        )}
-      </div>
+      <div className="h-6 w-px bg-zinc-800" />
+
+      <button
+        onClick={resetView}
+        className="px-2.5 py-1 rounded text-xs font-mono bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
+      >
+        Reset View
+      </button>
 
       <div className="flex-1" />
 
-      <div className="text-xs text-muted-foreground">
-        Xray v0.2
+      <div className="flex items-center gap-2">
+        <span className="text-zinc-600 text-xs font-mono">Timeline</span>
+        <div className="w-32 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="w-1/3 h-full bg-zinc-600 rounded-full" />
+        </div>
+        <span className="text-zinc-600 text-xs font-mono">placeholder</span>
+      </div>
+
+      <div className="h-6 w-px bg-zinc-800" />
+
+      <div className="text-zinc-600 text-xs font-mono">
+        {state.nodes.size} nodes · {state.edges.length} edges
       </div>
     </div>
-  );
+  )
 }

@@ -33,6 +33,8 @@ pub struct ClientHelloBuilder {
     psk_ticket: Option<Vec<u8>>,
     /// Cipher suite index for the PSK (which cipher suite the ticket was negotiated with)
     psk_cipher_index: Option<usize>,
+    /// Cookie from HelloRetryRequest (RFC 8446 §4.2.2)
+    hrr_cookie: Option<Vec<u8>>,
 }
 
 impl ClientHelloBuilder {
@@ -48,6 +50,7 @@ impl ClientHelloBuilder {
             alpn_protocols: Vec::new(),
             psk_ticket: None,
             psk_cipher_index: None,
+            hrr_cookie: None,
         }
     }
 
@@ -84,6 +87,12 @@ impl ClientHelloBuilder {
     /// For HTTP/3, use `&["h3"]`.
     pub fn alpn_protocols(mut self, protocols: &[&[u8]]) -> Self {
         self.alpn_protocols = protocols.iter().map(|p| p.to_vec()).collect();
+        self
+    }
+
+    /// Set the cookie from a HelloRetryRequest (RFC 8446 §4.2.2).
+    pub fn cookie(mut self, cookie: &[u8]) -> Self {
+        self.hrr_cookie = Some(cookie.to_vec());
         self
     }
 
@@ -163,7 +172,14 @@ impl ClientHelloBuilder {
             msg.extend_from_slice(&data);
         }
 
-        // 4. key_share (ext 51)
+        // 4. cookie (ext 44) — from HelloRetryRequest (RFC 8446 §4.2.2)
+        if let Some(ref cookie) = self.hrr_cookie {
+            msg.extend_from_slice(&44u16.to_be_bytes());
+            msg.extend_from_slice(&(cookie.len() as u16).to_be_bytes());
+            msg.extend_from_slice(cookie);
+        }
+
+        // 5. key_share (ext 51)
         {
             let mut data = Vec::new();
             data.extend_from_slice(&(self.key_share.len() as u16).to_be_bytes());
@@ -173,7 +189,7 @@ impl ClientHelloBuilder {
             msg.extend_from_slice(&data);
         }
 
-        // 5. psk_key_exchange_modes (ext 45) — required for TLS 1.3
+        // 6. psk_key_exchange_modes (ext 45) — required for TLS 1.3
         {
             let data = vec![0x01, 0x01]; // psk_dhe_ke
             msg.extend_from_slice(&45u16.to_be_bytes());
@@ -181,7 +197,7 @@ impl ClientHelloBuilder {
             msg.extend_from_slice(&data);
         }
 
-        // 6. server_name (ext 0) — SNI
+        // 7. server_name (ext 0) — SNI
         {
             let mut data = Vec::new();
             let name_entry_len = 1 + 2 + self.server_name.len(); // type(1) + len(2) + name
@@ -194,7 +210,7 @@ impl ClientHelloBuilder {
             msg.extend_from_slice(&data);
         }
 
-        // 7. application_layer_protocol_negiation (ext 16) — ALPN (RFC 7301)
+        // 8. application_layer_protocol_negiation (ext 16) — ALPN (RFC 7301)
         if !self.alpn_protocols.is_empty() {
             let mut proto_list = Vec::new();
             // Total length placeholder (2 bytes)
@@ -213,7 +229,7 @@ impl ClientHelloBuilder {
             msg.extend_from_slice(&proto_list);
         }
 
-        // 8. pre_shared_key (ext 41) — session resumption (RFC 8446 §4.2.11)
+        // 9. pre_shared_key (ext 41) — session resumption (RFC 8446 §4.2.11)
         // MUST be the last extension per RFC 8446 §4.2.11
         if let (Some(ticket), Some(_cipher_idx)) = (&self.psk_ticket, self.psk_cipher_index) {
             let obfuscated_age: u32 = 0; // Simplified — proper implementation needs age tracking

@@ -127,6 +127,36 @@ impl DnsZone {
         self.add_record(rr);
     }
 
+    /// Set the SOA record with explicit serial and timing parameters.
+    pub fn set_soa(
+        &mut self,
+        mname: &str,
+        rname: &str,
+        serial: u32,
+        refresh: u32,
+        retry: u32,
+        expire: u32,
+        minimum: u32,
+    ) {
+        let rr = DnsRecord {
+            name: self.origin.clone(),
+            rtype: DnsRecordType::SOA,
+            rclass: 1,
+            ttl: self.default_ttl,
+            data: DnsRecordData::SOA {
+                mname: mname.to_string(),
+                rname: rname.to_string(),
+                serial,
+                refresh,
+                retry,
+                expire,
+                minimum,
+            },
+        };
+        self.remove_record("", DnsRecordType::SOA);
+        self.add_record(rr);
+    }
+
     /// Add an SRV record.
     pub fn add_srv(
         &mut self,
