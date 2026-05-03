@@ -1,8 +1,8 @@
 # Exchange Boundary Audit
 
-> Updated: 2026-05-03
+> Updated: 2026-05-04
 > Scope: edgerun-exchange, edgerun-exchange-api, edgerun-exchange-worker
-> Status: provider-backed quote/order wiring exists. Order status is projected from exchange events. Exchange events now have a codec boundary to the existing protocol event stream; API/runtime still needs to call the existing object-store + stream append path.
+> Status: provider-backed quote/order wiring exists. Exchange events now have a codec boundary to the existing protocol event stream, and the API can commit quote/order events through the existing object-store + signed stream append path when `init_exchange_stream_runtime*` is configured.
 
 ## Current Classification
 
@@ -15,11 +15,12 @@
 | `router::route_quote` | Real MVP | Filters providers, calls `quote()`, distinguishes no provider from provider failure, selects best by rate. Fees/health scoring are still TODO. |
 | `ExchangeEvent` enum | Real model | Defines quote/order/status lifecycle facts. |
 | `stream_codec` | Real boundary | Maps `ExchangeEvent` to existing wallet `EventType` values and protobuf payload bytes for `EventEnvelope.payload_object`. No new sink/storage path. |
+| `stream_runtime` | Real API/runtime bridge | Stores encoded exchange payloads as `OBJECT_KIND_PAYLOAD`, builds envelopes, appends/signs through `NodeStore`. |
 | `projection::ExchangeOrderProjection` | Real projection | Pure derived order view over `ExchangeEvent` sequences. |
-| `ExchangeStore` | Real in-memory store | Keeps quotes, orders, and exchange events in memory. Not durable by itself. |
-| `POST /v1/quote` | Wired MVP | Calls provider routing, stores selected quote, returns public EdgeRun quote id. |
-| `POST /v1/order` | Wired MVP | Uses stored quote, same selected provider, provider internal quote id, expiry check, and public EdgeRun order id. |
-| `GET /v1/order/:id` | Event-projected MVP | Combines stored public order fields with derived status/event flags from `ExchangeOrderProjection`. |
+| `ExchangeStore` | Real in-memory store | Keeps fast quote/order state and mirrors events into stream runtime when configured. |
+| `POST /v1/quote` | Stream-wired MVP | Calls provider routing, stores selected quote, returns public EdgeRun quote id, commits `QuoteCreated` when stream runtime is configured. |
+| `POST /v1/order` | Stream-wired MVP | Uses stored quote/provider continuity and commits `OrderCreated` plus initial `OrderStatusChanged` when needed. |
+| `GET /v1/order/:id` | Stream-projected MVP | Prefers decoded stream projection and falls back to in-memory projection. |
 | `GET /v1/assets` | Static catalog | Explicitly not provider truth. |
 | `GET /health` | Honest degraded | Provider health checks are not implemented, so the API does not claim healthy. |
 
@@ -29,38 +30,29 @@
 |---|---|---|
 | Worker poller | Stub | `run_poller()` is no-op and logs that no active polling occurs. |
 | Worker reconciliation | Stub | `run_reconciliation()` is no-op and logs that no active reconciliation occurs. |
-| Stream append integration | Missing | `stream_codec` can build payload bytes and an unsigned `EventEnvelope`; API/runtime still needs to store payload object and append/sign through the existing stream writer. |
 | Provider health checks | Missing | `/health` reports degraded until actual checks exist. |
-| Audit persistence | Missing | Audit logger is logging-only / non-durable unless replaced by persistent stream/object storage. |
+| Audit persistence | Partial | Exchange lifecycle facts are stream-backed when configured; raw provider responses are not yet separately stored. |
 | Fee/health-aware routing | Partial | Routing currently scores by rate only. |
 
 ## Authority Boundary
 
-Exchange state is **not yet fully authoritative protocol state** until the runtime stores each payload object and appends the returned `EventEnvelope` through the existing stream writer.
-
-Current wired flow:
+When `init_exchange_stream_runtime*` is configured, exchange lifecycle events flow through the existing signed protocol stream:
 
 ```text
 provider quote/order/status
   -> ExchangeEvent
-  -> in-memory ExchangeStore
-  -> ExchangeOrderProjection
+  -> encode_exchange_event()
+  -> WalletExchangeEventPayload bytes
+  -> NodeStore::put_object(..., OBJECT_KIND_PAYLOAD, recipients)
+  -> build_exchange_event_envelope(...)
+  -> NodeStore::append_signed_event_blocking(...)
+  -> decoded stream projection
   -> API response
 ```
 
-Implemented stream-codec boundary:
-
-```text
-ExchangeEvent
-  -> encode_exchange_event()
-  -> WalletExchangeEventPayload bytes
-  -> ObjectRef payload object
-  -> build_exchange_event_envelope()
-  -> existing EventEnvelope
-  -> existing stream writer appends/signs
-```
-
 No new event sink, log, or storage abstraction is introduced.
+
+If the stream runtime is not configured, the API still works in local/in-memory mode and `GET /v1/order/:id` falls back to the in-memory projection.
 
 ## Existing Stream Event Mapping
 
@@ -140,46 +132,15 @@ Rules:
 6. `store_order()` refuses to store if the provider code does not match the stored quote provider.
 7. Public response returns only the EdgeRun order id and public order fields.
 
-## Event Model
-
-All exchange state should eventually be derived from these immutable events:
-
-1. `QuoteCreated`
-2. `OrderCreated`
-3. `DepositObserved`
-4. `ProviderStatusObserved`
-5. `OrderStatusChanged`
-6. `OrderCompleted`
-7. `OrderFailed`
-8. `ManualReviewRequired`
-
-State derivation rule:
-
-```text
-canonical order status = f(event sequence), not f(last provider status)
-```
-
-## Endpoint Classification
-
-| Endpoint | Current Classification | Notes |
-|---|---|---|
-| `POST /v1/quote` | Provider-backed MVP | Requires providers initialized. Stores quote event in memory. |
-| `POST /v1/order` | Provider-backed MVP | Uses stored quote provider continuity. Stores order event in memory. |
-| `GET /v1/order/:id` | Event-projected in-memory view | Returns public order fields plus projected status metadata. |
-| `GET /v1/assets` | Static catalog | Not provider truth. |
-| `GET /health` | Degraded | Provider health checks pending. |
-
 ## Remaining Required Work
 
-1. Store `encode_exchange_event(event).payload_bytes` as a payload object.
-2. Append `build_exchange_event_envelope(...)` through the existing stream writer.
-3. Rebuild exchange projections from decoded stream event payload objects.
-4. Add poller that emits `ProviderStatusObserved`.
-5. Add reconciliation that emits `ManualReviewRequired` on contradictions.
-6. Add provider health checks.
-7. Store raw provider responses as private/audit objects where policy allows.
-8. Add fee/expiry/health-aware quote scoring.
-9. Add live integration tests for SideShift/ChangeNOW behind ignored/env-gated tests.
+1. Wire exchange stream runtime initialization from the node/server bootstrap path.
+2. Add poller that emits `ProviderStatusObserved`.
+3. Add reconciliation that emits `ManualReviewRequired` on contradictions.
+4. Add provider health checks.
+5. Store raw provider responses as private/audit objects where policy allows.
+6. Add fee/expiry/health-aware quote scoring.
+7. Add live integration tests for SideShift/ChangeNOW behind ignored/env-gated tests.
 
 ## Verification Commands
 
