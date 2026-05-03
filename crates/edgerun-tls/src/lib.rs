@@ -43,6 +43,7 @@ pub mod cipher;
 pub mod compat;
 pub mod handshake;
 pub mod key_exchange;
+pub mod name_match;
 pub mod prf;
 pub mod record;
 pub mod server;
@@ -52,6 +53,7 @@ pub mod tls_alpn;
 
 pub use async_tls::{AsyncTlsServerStream, AsyncTlsStream};
 pub use compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+pub use name_match::normalize_tls_dns_name;
 pub use session_cache::{parse_new_session_ticket, SessionCache, SessionTicket};
 
 pub use alert::{Alert, AlertLevel};
