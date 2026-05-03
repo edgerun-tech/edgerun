@@ -1,15 +1,16 @@
-//! Server resource command dispatch planning.
+//! Server resource command dispatch planning and execution.
 //!
-//! This module prepares the side-effect-free part of server resource command
-//! execution so the legacy dispatcher can later delegate to it with a small
-//! router splice.
+//! This module prepares and commits typed server resource commands so the
+//! legacy dispatcher can later delegate to it with a small router splice.
 
+use crate::command_dispatch_event::{append_command_result_event, CommandResultEventWrite};
 use crate::command_dispatch_payload::inline_payload_bytes;
 use crate::server_resources::{
     apply_server_resource_event, compile_server_plan, decode_command_payload,
     encode_committed_resource_event, project_server_resources, DerivedServerPlan,
     ServerResourceEvent,
 };
+use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::common::ObjectRef;
 use edgerun_proto::edgerun::v0::stream::CommandEnvelope;
 use edgerun_storage::NodeStore;
@@ -27,7 +28,8 @@ pub fn plan_server_resource_command(
     store: &mut NodeStore,
     stream_id: &[u8],
 ) -> Result<ServerResourceDispatchPlan, String> {
-    let payload = inline_payload_bytes(command).ok_or_else(|| "missing_server_resource_payload".to_string())?;
+    let payload = inline_payload_bytes(command)
+        .ok_or_else(|| "missing_server_resource_payload".to_string())?;
     let resource_event = decode_command_payload(command.command_type, payload)?;
 
     let mut projection = project_server_resources(store, stream_id)?;
@@ -48,4 +50,33 @@ pub fn plan_server_resource_command(
         result_object,
         desired_plan,
     })
+}
+
+pub fn dispatch_server_resource_command(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+) -> Result<(ServerResourceDispatchPlan, CommandResultEventWrite), String> {
+    let plan = plan_server_resource_command(command, store, stream_id)?;
+    let event_write = append_command_result_event(
+        command,
+        store,
+        stream_id,
+        signer,
+        true,
+        "",
+        Some(plan.result_object.clone()),
+    )?;
+    Ok((plan, event_write))
+}
+
+pub fn reject_server_resource_command(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    reason_code: &str,
+) -> Result<CommandResultEventWrite, String> {
+    append_command_result_event(command, store, stream_id, signer, false, reason_code, None)
 }
