@@ -15,6 +15,7 @@ fn main() {
         "edgerun/v0/capability.proto",
         "edgerun/v0/capability_runtime.proto",
         "edgerun/v0/stream.proto",
+        "edgerun/v0/server_resources.proto",
         "edgerun/v0/object.proto",
         "edgerun/v0/access.proto",
         "edgerun/v0/network.proto",
