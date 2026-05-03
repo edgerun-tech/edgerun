@@ -25,6 +25,28 @@ pub fn normalize_tls_dns_name(name: &str) -> Option<String> {
     Some(lower)
 }
 
+pub fn tls_dns_name_matches(pattern: &str, host: &str) -> bool {
+    let Some(host) = normalize_tls_dns_name(host) else {
+        return false;
+    };
+    let pattern = pattern.trim().trim_end_matches('.').to_ascii_lowercase();
+    if pattern == host {
+        return true;
+    }
+    let bytes = pattern.as_bytes();
+    if bytes.len() < 3 || bytes[0] != 42 || bytes[1] != b'.' {
+        return false;
+    }
+    let suffix = &pattern[2..];
+    if suffix.as_bytes().contains(&42) || suffix == host || !suffix.contains('.') {
+        return false;
+    }
+    let Some(prefix) = host.strip_suffix(suffix).and_then(|s| s.strip_suffix('.')) else {
+        return false;
+    };
+    !prefix.is_empty() && !prefix.contains('.') && is_dns_label(prefix)
+}
+
 fn is_dns_label(label: &str) -> bool {
     if label.is_empty() || label.len() > 63 {
         return false;
