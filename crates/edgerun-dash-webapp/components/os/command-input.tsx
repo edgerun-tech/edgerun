@@ -4,6 +4,7 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bot, X, Send, Loader2, Sparkles, Terminal, FolderOpen, Activity, Wifi, WifiOff } from "lucide-react";
 import { launchAppById } from "@/stores/app-launcher";
+import { buildRepoContext, fileSystemStore } from "@/stores/file-system-store";
 
 // Parse special actions from agent response
 function parseActions(text: string): { text: string; actions: Array<{ type: string; payload: unknown }> } {
@@ -119,12 +120,15 @@ export const CommandPalette = () => {
     setLoading(true);
 
     try {
+      const repoContext = fileSystemStore.get().rootHandle ? await buildRepoContext() : "";
+
       // Use local API - calls OpenCode Zen directly via SDK (no external server needed)
       const chatRes = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          messages: messages.map(m => ({ role: m.role, content: m.content })).concat({ role: "user", content: userMsg })
+          messages: messages.map(m => ({ role: m.role, content: m.content })).concat({ role: "user", content: userMsg }),
+          repoContext,
         }),
       });
 
