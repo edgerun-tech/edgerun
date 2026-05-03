@@ -20,22 +20,25 @@ export default function XrayWorkspace(props: {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [runtimeMode, setRuntimeMode] = useState(false);
   const [layoutType, setLayoutType] = useState<"force" | "grid" | "hierarchical">("force");
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string>>(new Set());
+  const [viewportCommand, setViewportCommand] = useState<any>(null);
 
-  // Semantic command API exposed on window.xray
   useEffect(() => {
     (window as any).xray = {
       getState: () => ({
         selectedNode: selectedNodeId,
         runtimeMode,
         layoutType,
+        highlightedNodeIds: Array.from(highlightedNodeIds),
         graphNodeCount: xrayGraph?.nodes.size ?? 0,
         graphEdgeCount: xrayGraph?.edges.length ?? 0,
       }),
       command: (cmd: any) => handleCommand(cmd),
+      getVisibleGraph: () => xrayGraph,
+      getSelection: () => selectedNodeId,
     };
-  }, [selectedNodeId, runtimeMode, layoutType, xrayGraph]);
+  }, [selectedNodeId, runtimeMode, layoutType, highlightedNodeIds, xrayGraph]);
 
-  // Adapt initial graph data
   useEffect(() => {
     if (props.initialGraph) {
       const graph = props.initialGraph.nodes instanceof Map
@@ -45,20 +48,32 @@ export default function XrayWorkspace(props: {
     }
   }, [props.initialGraph]);
 
+  function sendViewportCommand(cmd: any) {
+    setViewportCommand({ ...cmd, nonce: Date.now() + Math.random() });
+  }
+
   function handleCommand(cmd: any) {
     switch (cmd.type) {
       case "focus_node":
         setSelectedNodeId(cmd.nodeId);
+        sendViewportCommand(cmd);
         break;
       case "set_layout":
         setLayoutType(cmd.layout);
         break;
       case "set_runtime_mode":
-        setRuntimeMode(cmd.enabled);
+        setRuntimeMode(Boolean(cmd.enabled));
         break;
       case "highlight_nodes":
+        setHighlightedNodeIds(new Set(cmd.nodeIds ?? []));
+        sendViewportCommand(cmd);
         break;
       case "clear_highlight":
+        setHighlightedNodeIds(new Set());
+        break;
+      case "fit_view":
+      case "reset_view":
+        sendViewportCommand(cmd);
         break;
       case "open_code_popup":
         break;
@@ -73,9 +88,7 @@ export default function XrayWorkspace(props: {
 
   return (
     <div className={`flex flex-col w-full h-full ${props.className || ""}`}>
-      {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left panel: graph context — hidden in bg mode */}
         {!bgMode && (
           <div className="w-64 border-r border-border bg-card/50 overflow-y-auto hidden md:block">
             <div className="p-4 space-y-4">
@@ -84,6 +97,7 @@ export default function XrayWorkspace(props: {
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <p>{xrayGraph?.nodes.size ?? 0} nodes</p>
                   <p>{xrayGraph?.edges.length ?? 0} edges</p>
+                  <p>{highlightedNodeIds.size} highlighted</p>
                 </div>
               </div>
               <div>
@@ -96,20 +110,27 @@ export default function XrayWorkspace(props: {
                   {runtimeMode ? "Runtime" : "Static"}
                 </p>
               </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>Console:</p>
+                <code className="block rounded border border-border bg-background/70 p-2 text-[10px]">
+                  window.xray.command({`{ type: "fit_view" }`})
+                </code>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Center: XrayViewport */}
         <div className="flex-1 relative">
           <XrayViewport
             graph={xrayGraph}
             runtimeMode={runtimeMode}
+            layoutType={layoutType}
+            externalHighlightedIds={highlightedNodeIds}
+            viewportCommand={viewportCommand}
             onNodeSelect={handleNodeSelect}
           />
         </div>
 
-        {/* Right panel: inspector — hidden in bg mode */}
         {!bgMode && (
           <div className="w-80 border-l border-border bg-card/50 overflow-y-auto">
             <XrayInspector
@@ -120,7 +141,6 @@ export default function XrayWorkspace(props: {
         )}
       </div>
 
-      {/* Bottom: Command surface — hidden in bg mode */}
       {!bgMode && (
         <XrayCommandSurface
           runtimeMode={runtimeMode}
