@@ -1747,6 +1747,7 @@ dependencies = [
  "edgerun-proto",
  "edgerun-rt",
  "edgerun-wallet",
+ "prost",
 ]
 
 [[package]]
