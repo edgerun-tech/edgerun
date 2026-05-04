@@ -1,0 +1,12 @@
+{
+  "name": "edgerun-reference-core-root",
+  "private": true,
+  "scripts": {
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:start": "npm --prefix frontend run start",
+    "frontend:lint": "npm --prefix frontend run lint",
+    "frontend:test": "npm --prefix frontend run test"
+  }
+}
