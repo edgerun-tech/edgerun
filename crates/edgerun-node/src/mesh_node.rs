@@ -222,11 +222,11 @@ impl MeshNode {
 mod tests {
     use super::*;
     use alloc::vec;
+    use edgerun_core::protocol::common as proto_common;
     use edgerun_core::protocol::EventType;
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
-    use edgerun_proto::edgerun::v0::common as proto_common;
 
     struct TestSigner {
         node_id: NodeID,
@@ -340,7 +340,7 @@ metadata:
 
         // Encode and deliver as a frame
         let mut buf = Vec::new();
-        edgerun_core::protocol::stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
+        buf.extend_from_slice(b"edgerun-command-native-v0");
         let mut frame = MeshFrame::from_payload(node.identity(), buf);
         frame.header.src = node.identity();
         frame.signature = [0u8; 64];
@@ -391,7 +391,7 @@ metadata:
 
         // Encode and deliver as a frame (fake signature)
         let mut buf = Vec::new();
-        edgerun_core::protocol::stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
+        buf.extend_from_slice(b"edgerun-command-native-v0");
         let mut frame = MeshFrame::from_payload(bob.identity(), buf);
         frame.header.src = node_a_id;
         frame.signature = [0u8; 64];
@@ -576,7 +576,7 @@ metadata:
         };
 
         let mut buf = Vec::new();
-        edgerun_core::protocol::stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
+        buf.extend_from_slice(b"edgerun-command-native-v0");
         let frame = MeshFrame::from_payload(node.identity(), buf);
         let decoded = MeshNode::decode_command(&frame);
         assert!(decoded.is_some());

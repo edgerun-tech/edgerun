@@ -806,16 +806,16 @@ fn interface_name_to_ifindex(name: &str) -> Result<c_int, io::Error> {
 mod tests {
     use super::*;
     use edgerun_capabilities::CapabilityError;
-    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-    use edgerun_crypto::p256::ecdsa::{Signature, SigningKey};
-    use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-    use edgerun_proto::edgerun::v0::capability::{
+    use edgerun_core::protocol::capability::{
         CapabilityDescriptor, CapabilityGrant, CapabilityInvocation, CapabilityRequest,
         CapabilityRevocation,
     };
-    use edgerun_proto::edgerun::v0::capability_runtime::{
+    use edgerun_core::protocol::capability_runtime::{
         CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionOpen,
     };
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::p256::ecdsa::{Signature, SigningKey};
+    use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
     use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteInvocationResult};
 
     struct TestProvider;
@@ -1202,7 +1202,7 @@ mod tests {
 
     #[test]
     fn test_provider_open_session_returns_unsupported() {
-        use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionOpen;
+        use edgerun_core::protocol::capability_runtime::CapabilitySessionOpen;
         let mut provider = TestProvider;
         let open = CapabilitySessionOpen::default();
         let err = provider.open_session(&open).unwrap_err();
@@ -1211,7 +1211,7 @@ mod tests {
 
     #[test]
     fn test_provider_invoke_returns_unsupported() {
-        use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
+        use edgerun_core::protocol::capability::CapabilityInvocation;
         let mut provider = TestProvider;
         let invocation = CapabilityInvocation::default();
         let result = provider.invoke(&[], &invocation, None);
@@ -1220,7 +1220,7 @@ mod tests {
 
     #[test]
     fn test_provider_close_session_returns_ok() {
-        use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionClose;
+        use edgerun_core::protocol::capability_runtime::CapabilitySessionClose;
         let mut provider = TestProvider;
         let close = CapabilitySessionClose::default();
         assert!(provider.close_session(&close).is_ok());
@@ -1228,7 +1228,7 @@ mod tests {
 
     #[test]
     fn test_provider_handle_request_returns_none() {
-        use edgerun_proto::edgerun::v0::capability::CapabilityRequest;
+        use edgerun_core::protocol::capability::CapabilityRequest;
         let mut provider = TestProvider;
         let req = CapabilityRequest::default();
         let result = provider.handle_request(&req).unwrap();
@@ -1237,7 +1237,7 @@ mod tests {
 
     #[test]
     fn test_provider_handle_grant_returns_ok() {
-        use edgerun_proto::edgerun::v0::capability::CapabilityGrant;
+        use edgerun_core::protocol::capability::CapabilityGrant;
         let mut provider = TestProvider;
         let grant = CapabilityGrant::default();
         assert!(provider.handle_grant(&grant).is_ok());
@@ -1245,7 +1245,7 @@ mod tests {
 
     #[test]
     fn test_provider_handle_revocation_returns_ok() {
-        use edgerun_proto::edgerun::v0::capability::CapabilityRevocation;
+        use edgerun_core::protocol::capability::CapabilityRevocation;
         let mut provider = TestProvider;
         let rev = CapabilityRevocation::default();
         assert!(provider.handle_revocation(&rev).is_ok());

@@ -108,6 +108,7 @@ pub enum ProtocolRecord {
     RevocationRecord(RevocationRecord),
     IdentityRecord(IdentityRecord),
     RouteAdvertisement(RouteAdvertisement),
+    AssuranceClaim(AssuranceClaim),
     SnapshotDescriptor(SnapshotDescriptor),
     ObjectRef(ObjectRef),
     Digest(Digest),

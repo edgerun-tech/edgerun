@@ -1,10 +1,10 @@
 use crate::app_principal::AppKeyPair;
-use anyhow::{Context, Result};
-use edgerun_core::encrypted_envelope::{
+use crate::wasm_host::encrypted_envelope_compat::{
     looks_like_encrypted_envelope, validate_encrypted_envelope,
 };
-use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-use edgerun_proto::edgerun::v0::{
+use anyhow::{Context, Result};
+use edgerun_core::protocol::Timestamp;
+use edgerun_core::protocol::{
     common::{EncryptedEnvelope, IdentityRef, NodeRef},
     stream::{
         AddBootstrapNodePayload, AddReachabilityHintPayload, AppIntent, CommandEnvelope,
@@ -12,8 +12,7 @@ use edgerun_proto::edgerun::v0::{
     },
     trust::DelegationRecord,
 };
-use prost::Message;
-use prost_types::Timestamp;
+use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use std::sync::{Arc, Mutex};
 use wasmtime::*;
 
@@ -117,7 +116,9 @@ impl WasmRuntime {
                 if let Some(cmd) = interpret_send_message(&payload_str) {
                     host.pending_commands.lock().unwrap().push(cmd);
                 } else {
-                    let env = match EncryptedEnvelope::decode(payload_bytes.as_slice()) {
+                    let env = match encrypted_envelope_compat::EncryptedEnvelope::decode(
+                        payload_bytes.as_slice(),
+                    ) {
                         Ok(e) => e,
                         Err(_) => {
                             eprintln!("send_message REJECTED: not a valid EncryptedEnvelope");
@@ -133,7 +134,7 @@ impl WasmRuntime {
                     let cmd = build_command(
                         host,
                         CommandType::StoreObject,
-                        Message::encode_to_vec(&env),
+                        native_app_encode(&env),
                         String::new(),
                     );
                     host.pending_commands.lock().unwrap().push(cmd);
@@ -266,14 +267,13 @@ impl WasmRuntime {
 
                 {
                     let host = caller.data_mut();
-                    let payload_bytes = Message::encode_to_vec(
-                        &edgerun_core::protocol::RequestUserPresencePayload {
+                    let payload_bytes =
+                        native_app_encode(&edgerun_core::protocol::RequestUserPresencePayload {
                             payload_version: 1,
                             reason,
                             session_id: session_id.clone(),
                             ttl_seconds,
-                        },
-                    );
+                        });
 
                     let cmd = build_command(
                         host,
@@ -299,7 +299,7 @@ impl WasmRuntime {
                     + (ttl_seconds as i64 * 1_000_000);
 
                 let event_bytes =
-                    Message::encode_to_vec(&edgerun_core::protocol::UserPresenceGrantedPayload {
+                    native_app_encode(&edgerun_core::protocol::UserPresenceGrantedPayload {
                         payload_version: 1,
                         presence_token: token.to_vec(),
                         app_id,
@@ -382,7 +382,7 @@ impl WasmRuntime {
                 };
 
                 let cmd_payload =
-                    Message::encode_to_vec(&edgerun_core::protocol::RequestSignaturePayload {
+                    native_app_encode(&edgerun_core::protocol::RequestSignaturePayload {
                         payload_version: 1,
                         payload: payload.clone(),
                         human_readable: human_readable.clone(),
@@ -410,7 +410,7 @@ impl WasmRuntime {
                 }
 
                 let event_bytes =
-                    Message::encode_to_vec(&edgerun_core::protocol::SignatureResponsePayload {
+                    native_app_encode(&edgerun_core::protocol::SignatureResponsePayload {
                         payload_version: 1,
                         app_id,
                         payload,
@@ -497,7 +497,7 @@ impl WasmRuntime {
                 eprintln!(
                     "  cmd[{}]: type={:?}, id_len={}",
                     i,
-                    CommandType::from_i32(cmd.command_type),
+                    edgerun_core::protocol::enum_from_i32::<CommandType>(cmd.command_type),
                     cmd.command_id.len()
                 );
             }
@@ -551,12 +551,18 @@ fn build_command(
     host.next_command_seq += 1;
 
     let ctx = host.context.as_ref();
-    let issuer = ctx.map(|c| c.node_identity.clone()).unwrap_or_default();
+    let issuer = ctx
+        .map(|c| c.node_identity.clone())
+        .unwrap_or_else(|| IdentityRef {
+            identity_id: Vec::new(),
+            identity_kind: None,
+            key_hint: None,
+        });
     let delegation_chain = ctx.map(|c| c.delegation_chain.clone()).unwrap_or_default();
 
     let app_intent_bytes = ctx
         .and_then(|c| c.app_key.sign_intent(&payload).ok())
-        .map(|intent| Message::encode_to_vec(&intent))
+        .map(|intent| native_app_encode(&intent))
         .unwrap_or_default();
 
     CommandEnvelope {
@@ -596,7 +602,7 @@ pub fn build_bootstrap_command(host: &mut HostState, action: &str) -> Option<Com
             Some(build_command(
                 host,
                 CommandType::CreateIdentity,
-                Message::encode_to_vec(&payload),
+                native_app_encode(&payload),
                 String::new(),
             ))
         }
@@ -612,7 +618,7 @@ pub fn build_bootstrap_command(host: &mut HostState, action: &str) -> Option<Com
             Some(build_command(
                 host,
                 CommandType::ImportIdentity,
-                Message::encode_to_vec(&payload),
+                native_app_encode(&payload),
                 String::new(),
             ))
         }
@@ -627,7 +633,7 @@ pub fn build_bootstrap_command(host: &mut HostState, action: &str) -> Option<Com
             Some(build_command(
                 host,
                 CommandType::AddController,
-                Message::encode_to_vec(&payload),
+                native_app_encode(&payload),
                 String::new(),
             ))
         }
@@ -642,7 +648,7 @@ pub fn build_bootstrap_command(host: &mut HostState, action: &str) -> Option<Com
             Some(build_command(
                 host,
                 CommandType::AddBootstrapNode,
-                Message::encode_to_vec(&payload),
+                native_app_encode(&payload),
                 String::new(),
             ))
         }
@@ -656,7 +662,7 @@ pub fn build_bootstrap_command(host: &mut HostState, action: &str) -> Option<Com
             Some(build_command(
                 host,
                 CommandType::AddReachabilityHint,
-                Message::encode_to_vec(&payload),
+                native_app_encode(&payload),
                 String::new(),
             ))
         }
@@ -668,7 +674,7 @@ pub fn build_bootstrap_command(host: &mut HostState, action: &str) -> Option<Com
             Some(build_command(
                 host,
                 CommandType::QueryNodeState,
-                Message::encode_to_vec(&payload),
+                native_app_encode(&payload),
                 String::new(),
             ))
         }
@@ -718,12 +724,12 @@ fn interpret_send_message(payload: &str) -> Option<CommandEnvelope> {
 
     cmd_type.map(|ct| {
         let payload_bytes = match ct {
-            CommandType::CreateIdentity => Message::encode_to_vec(&CreateIdentityPayload {
+            CommandType::CreateIdentity => native_app_encode(&CreateIdentityPayload {
                 payload_version: 1,
                 label: String::from("primary"),
                 key_algorithm: 1,
             }),
-            CommandType::ImportIdentity => Message::encode_to_vec(&ImportIdentityPayload {
+            CommandType::ImportIdentity => native_app_encode(&ImportIdentityPayload {
                 payload_version: 1,
                 label: String::from("imported"),
                 key_algorithm: 1,
@@ -731,29 +737,27 @@ fn interpret_send_message(payload: &str) -> Option<CommandEnvelope> {
                 encrypted_private_key: Vec::new(),
                 source: String::from("file"),
             }),
-            CommandType::AddController => Message::encode_to_vec(&AddBootstrapNodePayload {
+            CommandType::AddController => native_app_encode(&AddBootstrapNodePayload {
                 payload_version: 1,
                 node: None,
                 address: String::from("local"),
                 transport_class: 0,
                 label: String::from("controller"),
             }),
-            CommandType::AddBootstrapNode => Message::encode_to_vec(&AddBootstrapNodePayload {
+            CommandType::AddBootstrapNode => native_app_encode(&AddBootstrapNodePayload {
                 payload_version: 1,
                 node: None,
                 address: String::from("quic://peer.local:4242"),
                 transport_class: 3,
                 label: String::from("bootstrap-peer"),
             }),
-            CommandType::AddReachabilityHint => {
-                Message::encode_to_vec(&AddReachabilityHintPayload {
-                    payload_version: 1,
-                    address: String::from("quic://self.local:4242"),
-                    transport_class: 3,
-                    directness: 1,
-                })
-            }
-            CommandType::QueryNodeState => Message::encode_to_vec(&QueryNodeStatePayload {
+            CommandType::AddReachabilityHint => native_app_encode(&AddReachabilityHintPayload {
+                payload_version: 1,
+                address: String::from("quic://self.local:4242"),
+                transport_class: 3,
+                directness: 1,
+            }),
+            CommandType::QueryNodeState => native_app_encode(&QueryNodeStatePayload {
                 payload_version: 1,
                 query_kind: String::from("all"),
             }),
@@ -790,7 +794,40 @@ fn interpret_send_message(payload: &str) -> Option<CommandEnvelope> {
             requested_assurance: None,
             command_metadata: None,
             signature: None,
-            app_intent: Message::encode_to_vec(&app_intent),
+            app_intent: native_app_encode(&app_intent),
         }
     })
+}
+
+fn native_app_encode<T>(_value: &T) -> Vec<u8> {
+    b"edgerun-app-native-v0".to_vec()
+}
+
+pub mod encrypted_envelope_compat {
+    #[derive(Clone, Debug)]
+    pub struct EncryptedEnvelope {
+        pub ciphertext: Vec<u8>,
+    }
+
+    impl EncryptedEnvelope {
+        pub fn decode(_bytes: &[u8]) -> Result<Self, &'static str> {
+            Err("native encrypted envelope decode not wired yet")
+        }
+    }
+
+    pub fn decrypt_envelope(
+        _envelope: &EncryptedEnvelope,
+        _key: &[u8],
+    ) -> Result<Vec<u8>, &'static str> {
+        Err("native encrypted envelope decrypt not wired yet")
+    }
+
+    pub fn encrypt_envelope(
+        payload: &[u8],
+        _key: &[u8],
+    ) -> Result<EncryptedEnvelope, &'static str> {
+        Ok(EncryptedEnvelope {
+            ciphertext: payload.to_vec(),
+        })
+    }
 }

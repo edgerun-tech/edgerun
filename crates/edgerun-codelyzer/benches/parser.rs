@@ -5,8 +5,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use codeanalyzer::parser::{parse_file, ParserPool};
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use edgerun_codelyzer::parser::{parse_file, ParserPool};
 
 // ─── Test data ─────────────────────────────────────────────────────────
 

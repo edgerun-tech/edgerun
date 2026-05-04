@@ -68,4 +68,6 @@ export type XrayState = {
   panX: number
   panY: number
   rotation: number
+  loading: boolean
+  error: string | null
 }

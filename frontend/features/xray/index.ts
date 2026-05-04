@@ -3,10 +3,10 @@
  * Clean EdgeRun xray architecture extracted from codeanalyzer.
  */
 
-export { default as XrayWorkspace } from "./XrayWorkspace";
-export { default as XrayViewport } from "./XrayViewport";
-export { default as XrayCommandSurface } from "./XrayCommandSurface";
-export { default as XrayInspector } from "./XrayInspector";
+export { XrayWorkspace } from "./XrayWorkspace"
+export { XrayViewport } from "./XrayViewport"
+export { XrayCommandSurface } from "./XrayCommandSurface"
+export { XrayInspector } from "./XrayInspector"
 
 // Types
 export type { XrayGraph, XrayNode, XrayEdge } from "../../lib/xray/types/XrayGraph";

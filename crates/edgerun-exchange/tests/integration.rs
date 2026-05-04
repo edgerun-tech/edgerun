@@ -8,10 +8,10 @@ extern crate alloc;
 
 mod mocks {
     use super::*;
+    use edgerun_core::protocol::edgerun_wallet_v0::QuoteRequest;
     use edgerun_exchange::changenow::ChangeNOWAdapter;
     use edgerun_exchange::provider::{ExchangeProvider, ProviderCode};
     use edgerun_exchange::sideshift::SideShiftAdapter;
-    use edgerun_proto::edgerun::v0::wallet::v0::QuoteRequest;
 
     fn make_quote_request(settlement_asset_id: &str, pay_asset_id: &str) -> QuoteRequest {
         QuoteRequest {
@@ -194,9 +194,9 @@ mod error_handling {
 
 mod quote_validation {
     use super::*;
+    use edgerun_core::protocol::edgerun_wallet_v0::QuoteRequest;
     use edgerun_exchange::provider::ExchangeProvider;
     use edgerun_exchange::sideshift::SideShiftAdapter;
-    use edgerun_proto::edgerun::v0::wallet::v0::QuoteRequest;
 
     fn make_req(settlement_asset_id: &str, pay_asset_id: &str) -> QuoteRequest {
         QuoteRequest {
@@ -276,7 +276,7 @@ mod provider_code_tests {
 }
 
 mod asset_ref_canonical {
-    use edgerun_proto::edgerun::v0::wallet::v0::AssetRef;
+    use edgerun_core::protocol::edgerun_wallet_v0::AssetRef;
 
     #[test]
     fn test_asset_ref_equality() {

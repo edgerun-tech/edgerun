@@ -10,9 +10,11 @@ import { LayoutDashboard, Globe } from "lucide-react";
  * This is the integration point for replacing the globe with xray.
  */
 const XrayWorkspace = dynamic(
-  () => import("@/features/xray/XrayWorkspace").then(mod => ({ default: mod.default })),
+  () => import("@/features/xray/XrayWorkspace").then(mod => ({ default: mod.XrayWorkspace })),
   { ssr: false }
 );
+
+import { Globe as GlobeIcon } from "lucide-react";
 
 const Globe = dynamic(
   () => import("@/components/os/globe").then(mod => ({ default: mod.Globe })),

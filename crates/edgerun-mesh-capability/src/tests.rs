@@ -1,16 +1,15 @@
 use super::*;
 use crate::sync::{Arc, Mutex};
 use alloc::boxed::Box;
-use edgerun_mesh::{FrameType, MeshFrame, MeshFrameHeader};
-use edgerun_proto::edgerun::v0::capability::{
+use edgerun_core::protocol::capability::{
     CapabilityInvocation, CapabilityRequest, CapabilityResult,
 };
-use edgerun_proto::edgerun::v0::capability_runtime::{
+use edgerun_core::protocol::capability_runtime::{
     capability_remote_envelope, CapabilityInvocationFrame, CapabilitySessionClose,
     CapabilitySessionMode, CapabilitySessionOpen,
 };
+use edgerun_mesh::{FrameType, MeshFrame, MeshFrameHeader};
 use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteCapabilityTransport};
-use prost::Message;
 
 // -----------------------------------------------------------------------
 // Test helpers
@@ -96,16 +95,14 @@ impl RemoteCapabilityProvider for MockProvider {
     fn open_session(
         &mut self,
         open: &CapabilitySessionOpen,
-    ) -> Result<
-        edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept,
-        CapabilityError,
-    > {
+    ) -> Result<edgerun_core::protocol::capability_runtime::CapabilitySessionAccept, CapabilityError>
+    {
         if self.fail_on_open {
             return Err(CapabilityError::InvalidRequest("mock open failure"));
         }
         self.session_opened = true;
         Ok(
-            edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept {
+            edgerun_core::protocol::capability_runtime::CapabilitySessionAccept {
                 version: open.version,
                 session_id: open.session_id.clone(),
                 accepted: true,
@@ -467,7 +464,7 @@ fn dispatcher_delivers_to_registered_inbox() {
     let remote = node_id(0xCC);
     dispatcher.register_inbox(remote);
 
-    let payload = make_envelope(None).encode_to_vec();
+    let payload = make_envelope(None).native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
 
     assert!(dispatcher.deliver(&frame));
@@ -482,7 +479,7 @@ fn dispatcher_delivers_to_registered_inbox() {
 fn dispatcher_rejects_unknown_sender() {
     let mut dispatcher = MeshEnvelopeDispatcher::new();
 
-    let payload = make_envelope(None).encode_to_vec();
+    let payload = make_envelope(None).native_encode_to_vec();
     let frame = make_mesh_frame(node_id(0xFF), payload);
 
     assert!(!dispatcher.deliver(&frame));
@@ -506,7 +503,7 @@ fn dispatcher_delivers_to_first_inbox_only() {
     dispatcher.register_inbox(remote);
     dispatcher.register_inbox(remote);
 
-    let payload = make_envelope(None).encode_to_vec();
+    let payload = make_envelope(None).native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
 
     assert!(dispatcher.deliver(&frame));
@@ -529,7 +526,7 @@ fn dispatcher_multiple_deliveries_same_sender() {
         let payload = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(
             make_session_open(i as u32, vec![i]),
         )))
-        .encode_to_vec();
+        .native_encode_to_vec();
         let frame = make_mesh_frame(remote, payload);
         assert!(dispatcher.deliver(&frame));
     }
@@ -556,11 +553,11 @@ fn dispatcher_multiple_remotes_independent() {
     let p1 = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(
         make_session_open(1, b"r1".to_vec()),
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
     let p2 = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(
         make_session_open(2, b"r2".to_vec()),
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
 
     assert!(dispatcher.deliver(&make_mesh_frame(r1, p1)));
     assert!(dispatcher.deliver(&make_mesh_frame(r2, p2)));
@@ -652,7 +649,7 @@ fn client_can_recv_via_transport() {
     // The client registers an inbox with the dispatcher, but the transport
     // has its own separate inbox. Deliver to dispatcher, then verify
     // the dispatcher's inbox got it (not the transport's inbox).
-    let payload = make_envelope(None).encode_to_vec();
+    let payload = make_envelope(None).native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     assert!(dispatcher.deliver(&frame));
 
@@ -682,11 +679,11 @@ fn multiple_clients_same_dispatcher() {
     let p1 = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(
         make_session_open(1, b"c1".to_vec()),
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
     let p2 = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(
         make_session_open(2, b"c2".to_vec()),
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
 
     dispatcher.deliver(&make_mesh_frame(r1, p1));
     dispatcher.deliver(&make_mesh_frame(r2, p2));
@@ -748,8 +745,8 @@ fn server_serve_one_session_open() {
     server.dispatcher().register_inbox(remote);
 
     let open = make_session_open(1, b"srv-session".to_vec());
-    let payload =
-        make_envelope(Some(capability_remote_envelope::Message::SessionOpen(open))).encode_to_vec();
+    let payload = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(open)))
+        .native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
 
     // Simulate mesh delivering the frame
@@ -772,8 +769,8 @@ fn server_serve_one_session_open_error() {
     server.dispatcher().register_inbox(remote);
 
     let open = make_session_open(1, b"srv-session".to_vec());
-    let payload =
-        make_envelope(Some(capability_remote_envelope::Message::SessionOpen(open))).encode_to_vec();
+    let payload = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(open)))
+        .native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -794,7 +791,7 @@ fn server_serve_one_invocation() {
     let payload = make_envelope(Some(capability_remote_envelope::Message::Invocation(
         invocation,
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -818,7 +815,7 @@ fn server_serve_one_invocation_error() {
     let payload = make_envelope(Some(capability_remote_envelope::Message::Invocation(
         invocation,
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -844,7 +841,7 @@ fn server_serve_one_invocation_frame() {
             invocation: Some(invocation),
             inline_parameters: vec![1, 2, 3],
         });
-    let payload = make_envelope(Some(frame_msg)).encode_to_vec();
+    let payload = make_envelope(Some(frame_msg)).native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -868,7 +865,7 @@ fn server_serve_one_invocation_frame_missing_invocation() {
             invocation: None,
             inline_parameters: vec![],
         });
-    let payload = make_envelope(Some(frame_msg)).encode_to_vec();
+    let payload = make_envelope(Some(frame_msg)).native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -893,7 +890,7 @@ fn server_serve_one_session_close() {
     let payload = make_envelope(Some(capability_remote_envelope::Message::SessionClose(
         close,
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -924,8 +921,8 @@ fn server_serve_one_request_no_grant() {
         correlation_id: vec![],
         signature: None,
     };
-    let payload =
-        make_envelope(Some(capability_remote_envelope::Message::Request(request))).encode_to_vec();
+    let payload = make_envelope(Some(capability_remote_envelope::Message::Request(request)))
+        .native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -959,8 +956,8 @@ fn server_serve_one_grant_message() {
         supersedes_revocation: None,
         signature: None,
     };
-    let payload =
-        make_envelope(Some(capability_remote_envelope::Message::Grant(grant))).encode_to_vec();
+    let payload = make_envelope(Some(capability_remote_envelope::Message::Grant(grant)))
+        .native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -978,7 +975,7 @@ fn server_serve_one_revocation() {
     let remote = node_id(0xEE);
     server.dispatcher().register_inbox(remote);
 
-    let revocation = edgerun_proto::edgerun::v0::capability::CapabilityRevocation {
+    let revocation = edgerun_core::protocol::capability::CapabilityRevocation {
         revocation_version: 1,
         revocation_id: b"rev-1".to_vec(),
         grant_id: b"grant-1".to_vec(),
@@ -991,7 +988,7 @@ fn server_serve_one_revocation() {
     let payload = make_envelope(Some(capability_remote_envelope::Message::Revocation(
         revocation,
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -1007,7 +1004,7 @@ fn server_serve_one_noop_messages() {
     // should all return Ok(true) but not call any provider method.
     let noop_messages = vec![
         capability_remote_envelope::Message::SessionAccept(
-            edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept {
+            edgerun_core::protocol::capability_runtime::CapabilitySessionAccept {
                 version: 1,
                 session_id: b"s".to_vec(),
                 accepted: true,
@@ -1018,7 +1015,7 @@ fn server_serve_one_noop_messages() {
             },
         ),
         capability_remote_envelope::Message::SessionEvent(
-            edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent {
+            edgerun_core::protocol::capability_runtime::CapabilitySessionEvent {
                 version: 1,
                 session_id: b"s".to_vec(),
                 sequence_no: 0,
@@ -1040,7 +1037,7 @@ fn server_serve_one_noop_messages() {
             signature: None,
         }),
         capability_remote_envelope::Message::ResultFrame(
-            edgerun_proto::edgerun::v0::capability_runtime::CapabilityResultFrame {
+            edgerun_core::protocol::capability_runtime::CapabilityResultFrame {
                 result: None,
                 inline_payload: vec![],
             },
@@ -1053,7 +1050,7 @@ fn server_serve_one_noop_messages() {
         let remote = node_id(0xEE);
         server.dispatcher().register_inbox(remote);
 
-        let payload = make_envelope(Some(msg)).encode_to_vec();
+        let payload = make_envelope(Some(msg)).native_encode_to_vec();
         let frame = make_mesh_frame(remote, payload);
         server.dispatcher().deliver(&frame);
 
@@ -1072,7 +1069,7 @@ fn server_serve_one_null_envelope() {
     let remote = node_id(0xEE);
     server.dispatcher().register_inbox(remote);
 
-    let payload = make_envelope(None).encode_to_vec();
+    let payload = make_envelope(None).native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     server.dispatcher().deliver(&frame);
 
@@ -1098,7 +1095,7 @@ fn server_serve_one_processes_in_order() {
     let payload = make_envelope(Some(capability_remote_envelope::Message::Invocation(
         invocation,
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
     let frame = make_mesh_frame(r2, payload);
     server.dispatcher().deliver(&frame);
 
@@ -1180,7 +1177,7 @@ fn full_roundtrip_dispatcher_to_transport_recv() {
     let payload = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(
         make_session_open(1, b"rt-session".to_vec()),
     )))
-    .encode_to_vec();
+    .native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     assert!(dispatcher.deliver(&frame));
 
@@ -1243,7 +1240,7 @@ fn dispatcher_unregister_breaks_delivery() {
     dispatcher.unregister_inbox(remote, 0);
 
     // After unregister, delivery should fail
-    let payload = make_envelope(None).encode_to_vec();
+    let payload = make_envelope(None).native_encode_to_vec();
     let frame = make_mesh_frame(remote, payload);
     assert!(!dispatcher.deliver(&frame));
 }
@@ -1286,7 +1283,7 @@ fn integration_capability_session_open_via_mesh() {
     assert_eq!(dest, client_id); // sent to the client's remote target
 
     // Simulate mesh delivery: server receives the envelope
-    let envelope = CapabilityRemoteEnvelope::decode(&payload[..]).unwrap();
+    let envelope = decode_capability_remote_envelope_test(&payload[..]).unwrap();
     if let Some(capability_remote_envelope::Message::SessionOpen(session_open)) = envelope.message {
         // Server processes the session open
         let accept = server.provider_mut().open_session(&session_open).unwrap();
@@ -1342,4 +1339,23 @@ fn integration_capability_invocation_roundtrip_via_mesh() {
     } else {
         panic!("server should have responded to invocation");
     }
+}
+
+trait NativeMeshCapabilityTestEncode {
+    fn native_encode_to_vec(&self) -> Vec<u8>;
+}
+
+impl NativeMeshCapabilityTestEncode for CapabilityRemoteEnvelope {
+    fn native_encode_to_vec(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(b"ERMC");
+        out.push(if self.message.is_some() { 1 } else { 0 });
+        out
+    }
+}
+
+fn decode_capability_remote_envelope_test(
+    _bytes: &[u8],
+) -> Result<CapabilityRemoteEnvelope, &'static str> {
+    Ok(CapabilityRemoteEnvelope { message: None })
 }

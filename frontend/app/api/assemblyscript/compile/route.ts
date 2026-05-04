@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import ascModule from "assemblyscript/asc"
 
 type AscMainResult = { error?: unknown }
 
@@ -7,7 +6,15 @@ type AscCompiler = {
   main: (args: string[], options: Record<string, unknown>) => Promise<AscMainResult>
 }
 
-const asc = ascModule as AscCompiler
+let _asc: AscCompiler | null = null
+
+async function getAsc(): Promise<AscCompiler> {
+  if (!_asc) {
+    const ascModule = await import("assemblyscript/asc")
+    _asc = ascModule.default as AscCompiler
+  }
+  return _asc
+}
 
 function normalizePath(path: string): string {
   return path.replace(/^\.\//, "")
@@ -38,6 +45,7 @@ export async function POST(req: NextRequest) {
 
     logs.push("compiling assembly/index.ts → module.wasm")
 
+    const asc = await getAsc()
     const result = await asc.main(
       [
         "assembly/index.ts",

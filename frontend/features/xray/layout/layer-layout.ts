@@ -1,4 +1,4 @@
-import type { XrayNode } from "./types"
+import type { XrayNode } from "../graph/types"
 
 const LAYER_ORDER = ["ui", "api", "runtime", "protocol", "storage", "network", "crypto", "agent"] as const
 

@@ -6,15 +6,12 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use edgerun_core::protocol::IdentityRef;
 use edgerun_core::protocol::{CommandResultPayload, CommandType};
-use prost::Message;
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "gui")]
 use eframe::egui;
 
 #[cfg(feature = "gui")]
-use edgerun_ui::NativeRenderer;
-
 #[derive(Parser, Debug)]
 #[command(name = "edgerun-app", about = "EdgeRun native UI runtime")]
 struct Args {
@@ -150,7 +147,7 @@ fn run_bootstrap_loop(wasm_path: &str, verbose: bool, node_identity: IdentityRef
         );
 
         for (cmd, dispatch) in result.pending_commands.iter().zip(dispatch_results.iter()) {
-            let cmd_type = CommandType::from_i32(cmd.command_type);
+            let cmd_type = edgerun_core::protocol::enum_from_i32::<CommandType>(cmd.command_type);
             let event_bytes = command_to_event_bytes(cmd, dispatch.accepted);
             event_results.push(event_bytes);
 
@@ -361,4 +358,29 @@ fn main() -> Result<()> {
     };
 
     run_gui_app(&args.file, args.verbose, ctx)
+}
+
+struct NativeRenderer {
+    action_fn: Option<Box<dyn FnMut(String) + Send>>,
+    current: Option<Vec<u8>>,
+}
+
+impl NativeRenderer {
+    fn new() -> Self {
+        Self {
+            action_fn: None,
+            current: None,
+        }
+    }
+
+    fn set_ui(&mut self, bytes: &[u8]) -> bool {
+        self.current = Some(bytes.to_vec());
+        true
+    }
+
+    fn current_ui(&self) -> Option<&[u8]> {
+        self.current.as_deref()
+    }
+
+    fn render(&mut self, _ctx: &egui::Context) {}
 }

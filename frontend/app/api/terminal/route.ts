@@ -2,7 +2,7 @@ import { spawn } from "child_process"
 
 export const maxDuration = 10
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
   const { command } = await req.json()
 
   if (!command || typeof command !== "string") {

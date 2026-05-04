@@ -40,7 +40,7 @@ export async function POST(req: Request) {
 
   try {
     const result = await generateText({
-      model: opencode(FREE_MODEL),
+      model: opencode.languageModel(FREE_MODEL),
       messages: [
         { role: "system", content: fullSystemPrompt },
         ...messages,

@@ -1,4 +1,4 @@
-import type { XrayNode } from "./types"
+import type { XrayNode } from "../graph/types"
 
 export function morphPositions(nodes: Map<string, XrayNode>, targetPositions: Map<string, { x: number; y: number }>, steps = 30) {
   for (const node of nodes.values()) {

@@ -445,6 +445,8 @@ pub fn boolv(value: bool) -> WireValue {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+
     use super::*;
 
     #[test]

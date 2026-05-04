@@ -874,7 +874,7 @@ trust_nodes: []
             }),
             command_type: 7,
             command_version: 1,
-            issued_at: Some(prost_types::Timestamp {
+            issued_at: Some(edgerun_core::protocol::Timestamp {
                 seconds: edgerun_core::util::now_unix_secs_i64(),
                 nanos: 0,
             }),

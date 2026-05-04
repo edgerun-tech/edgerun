@@ -1,3 +1,11 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BootstrapPhase {
+    NotStarted,
+    Running,
+    Complete,
+    Skipped,
+}
+
 use edgerun_core::protocol::{CommandEnvelope, CommandType};
 
 #[derive(Debug, Clone)]
@@ -113,7 +121,7 @@ pub fn simulate_bootstrap_commands(
     let mut results = Vec::new();
 
     for cmd in commands {
-        let cmd_type = CommandType::from_i32(cmd.command_type);
+        let cmd_type = edgerun_core::protocol::enum_from_i32::<CommandType>(cmd.command_type);
         let accepted = matches!(
             cmd_type,
             Some(CommandType::CreateIdentity)

@@ -108,7 +108,7 @@ export default function ConversationDemo() {
     <Conversation className="relative size-full p-4">
       <ConversationContent>
         {messages.map(msg => (
-          <div from={msg.from} key={msg.id}>
+          <div key={msg.id} data-from={msg.from}>
             <div>{msg.text}</div>
           </div>
         ))}

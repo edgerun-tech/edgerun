@@ -1,4 +1,4 @@
-import type { XrayNode, XrayEdge } from "./types"
+import type { XrayNode, XrayEdge } from "../graph/types"
 
 export function runForceLayout(nodes: Map<string, XrayNode>, edges: XrayEdge[], iterations = 120) {
   const nodeArray = Array.from(nodes.values())

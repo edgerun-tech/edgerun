@@ -2847,11 +2847,11 @@ mod tests {
         let attester_id = key_hint_for(key);
         let mut claim = AssuranceClaim {
             claim_version: 1,
-            subject: Some(crate::protocol::assurance_claim::Subject::SubjectNode(
-                NodeRef {
+            subject: Some(
+                crate::protocol::trust::assurance_claim::Subject::SubjectNode(NodeRef {
                     node_id: subject_node_id,
-                },
-            )),
+                }),
+            ),
             assurance_class: AssuranceClass::HardwareBacked as i32,
             attester: Some(IdentityRef {
                 identity_id: attester_id.clone(),
