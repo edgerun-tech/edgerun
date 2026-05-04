@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { XrayViewport } from "./XrayViewport"
 import { XrayInspector } from "./XrayInspector"
 import { XrayCommandSurface } from "./XrayCommandSurface"
-import { registerGlobalApi, initCodeAnalyzerConnection, xrayState } from "./graph/graph-store"
+import { initCodeAnalyzerConnection, xrayState } from "./graph/graph-store"
 import { useStore } from "@nanostores/react"
 
 type XrayWorkspaceMode = "full" | "bg"
@@ -16,18 +16,11 @@ interface XrayWorkspaceProps {
 export function XrayWorkspace({ mode = "full" }: XrayWorkspaceProps) {
   const state = useStore(xrayState)
   const [connected, setConnected] = useState(false)
-  const [codeanalyzerUrl, setCodeanalyzerUrl] = useState("ws://localhost:13337/ws")
+  const [codeanalyzerUrl] = useState("ws://localhost:13337/ws")
 
   useEffect(() => {
-    registerGlobalApi()
-
-    // Initialize connection to codeanalyzer
     initCodeAnalyzerConnection(codeanalyzerUrl)
     setConnected(true)
-
-    return () => {
-      // Cleanup on unmount
-    }
   }, [codeanalyzerUrl])
 
   if (mode === "bg") {
