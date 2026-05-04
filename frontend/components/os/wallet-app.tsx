@@ -6,9 +6,9 @@ import {
   ArrowRightLeft,
   ArrowUpRight,
   Check,
+  ChevronDown,
   Copy,
   ExternalLink,
-  Plus,
   RefreshCw,
   Send,
   Shield,
@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils"
 
 type TxType = "send" | "receive" | "earn" | "exchange"
-type Tab = "balance" | "exchange" | "send" | "receive"
+type Tab = "portfolio" | "exchange" | "send" | "receive"
 
 type AssetInfo = {
   symbol: string
@@ -88,14 +88,13 @@ const FALLBACK_ASSETS: AssetInfo[] = [
   { symbol: "SOL", network: "Solana" },
 ]
 
-function TxIcon({ type }: { type: TxType }) {
-  const config = {
-    send: { icon: <ArrowUpRight className="h-4 w-4" />, color: "text-[var(--status-error)] bg-[var(--status-error)]/10" },
-    receive: { icon: <ArrowDownLeft className="h-4 w-4" />, color: "text-[var(--status-online)] bg-[var(--status-online)]/10" },
-    earn: { icon: <RefreshCw className="h-4 w-4" />, color: "text-[var(--status-warning)] bg-[var(--status-warning)]/10" },
-    exchange: { icon: <ArrowRightLeft className="h-4 w-4" />, color: "text-primary bg-primary/10" },
-  }[type]
-  return <div className={cn("flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full", config.color)}>{config.icon}</div>
+const ASSET_COLORS: Record<string, string> = {
+  BTC: "#f7931a",
+  ETH: "#627eea",
+  USDT: "#26a17b",
+  DOGE: "#c2a633",
+  SOL: "#9945ff",
+  EDGE: "#22c55e",
 }
 
 function formatDate(d: Date) {
@@ -121,9 +120,7 @@ function backendNetwork(network: string) {
 
 async function readJson<T>(response: Response): Promise<T> {
   const json = await response.json().catch(() => null)
-  if (!response.ok || json?.error) {
-    throw new Error(json?.error || json?.detail || `HTTP ${response.status}`)
-  }
+  if (!response.ok || json?.error) throw new Error(json?.error || json?.detail || `HTTP ${response.status}`)
   return json as T
 }
 
@@ -133,6 +130,102 @@ function statusTone(status: string) {
   if (["failed", "rejected", "canceled", "expired", "refund_required"].includes(normalized)) return "text-[var(--status-error)] bg-[var(--status-error)]/10"
   if (["action_required", "on_hold", "manual_review_required"].includes(normalized)) return "text-[var(--status-warning)] bg-[var(--status-warning)]/10"
   return "text-primary bg-primary/10"
+}
+
+function AssetIcon({ asset, size = "md" }: { asset: AssetInfo | { symbol: string; network?: string }; size?: "sm" | "md" | "lg" }) {
+  const color = ASSET_COLORS[asset.symbol.toUpperCase()] || "#64748b"
+  const sizeClass = size === "lg" ? "h-10 w-10 text-sm" : size === "sm" ? "h-6 w-6 text-[10px]" : "h-8 w-8 text-xs"
+  return (
+    <div
+      className={cn("flex flex-shrink-0 items-center justify-center rounded-full font-bold text-white shadow-sm ring-1 ring-white/10", sizeClass)}
+      style={{ background: `radial-gradient(circle at 30% 20%, rgba(255,255,255,.35), transparent 30%), ${color}` }}
+    >
+      {asset.symbol.slice(0, 1).toUpperCase()}
+    </div>
+  )
+}
+
+function AssetButton({ asset, onClick }: { asset: AssetInfo; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-2 rounded-full bg-secondary px-2 py-1.5 text-sm font-semibold text-foreground transition hover:bg-secondary/80">
+      <AssetIcon asset={asset} />
+      <span>{asset.symbol}</span>
+      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+    </button>
+  )
+}
+
+function AssetPicker({ value, assets, onChange }: { value: string; assets: AssetInfo[]; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const selected = parseAssetId(value)
+  const selectedAsset = assets.find((asset) => assetId(asset) === value) || selected
+
+  return (
+    <div className="relative">
+      <AssetButton asset={selectedAsset} onClick={() => setOpen((v) => !v)} />
+      {open && (
+        <div className="absolute right-0 top-11 z-50 w-64 overflow-hidden rounded-xl border border-border bg-popover shadow-xl">
+          <div className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Select asset</div>
+          <div className="max-h-72 overflow-y-auto p-1">
+            {assets.map((asset) => (
+              <button
+                key={assetId(asset)}
+                onClick={() => { onChange(assetId(asset)); setOpen(false) }}
+                className={cn("flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-secondary", assetId(asset) === value && "bg-primary/10")}
+              >
+                <AssetIcon asset={asset} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-foreground">{asset.symbol}</div>
+                  <div className="truncate text-[11px] text-muted-foreground">{asset.network}{asset.contract ? ` · ${asset.contract.slice(0, 8)}…` : ""}</div>
+                </div>
+                {assetId(asset) === value && <Check className="h-4 w-4 text-primary" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TxIcon({ type }: { type: TxType }) {
+  const config = {
+    send: { icon: <ArrowUpRight className="h-4 w-4" />, color: "text-[var(--status-error)] bg-[var(--status-error)]/10" },
+    receive: { icon: <ArrowDownLeft className="h-4 w-4" />, color: "text-[var(--status-online)] bg-[var(--status-online)]/10" },
+    earn: { icon: <RefreshCw className="h-4 w-4" />, color: "text-[var(--status-warning)] bg-[var(--status-warning)]/10" },
+    exchange: { icon: <ArrowRightLeft className="h-4 w-4" />, color: "text-primary bg-primary/10" },
+  }[type]
+  return <div className={cn("flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full", config.color)}>{config.icon}</div>
+}
+
+function SwapAmountPanel({ label, value, onChange, assetValue, assets, onAssetChange, readOnly }: {
+  label: string
+  value: string
+  onChange?: (value: string) => void
+  assetValue: string
+  assets: AssetInfo[]
+  onAssetChange: (value: string) => void
+  readOnly?: boolean
+}) {
+  const asset = parseAssetId(assetValue)
+  return (
+    <div className="rounded-2xl border border-border bg-background/80 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <span className="text-[10px] text-muted-foreground">{asset.network}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <input
+          value={value}
+          onChange={(event) => onChange?.(event.target.value)}
+          readOnly={readOnly}
+          placeholder="0"
+          className="min-w-0 flex-1 bg-transparent font-mono text-3xl font-semibold text-foreground outline-none placeholder:text-muted-foreground/30"
+        />
+        <AssetPicker value={assetValue} assets={assets} onChange={onAssetChange} />
+      </div>
+    </div>
+  )
 }
 
 function ExchangePanel({ onExchangeTx }: { onExchangeTx: (tx: Transaction) => void }) {
@@ -161,7 +254,7 @@ function ExchangePanel({ onExchangeTx }: { onExchangeTx: (tx: Transaction) => vo
         const parsed = Object.entries(json.assets).map(([symbol, value]) => ({ symbol, network: value.network, contract: value.contract }))
         if (!cancelled && parsed.length > 0) setAssets(parsed)
       } catch (err) {
-        if (!cancelled) setInfo(`Exchange API unavailable; showing static asset catalog. ${err instanceof Error ? err.message : String(err)}`)
+        if (!cancelled) setInfo(`Exchange API unavailable; using static asset catalog. ${err instanceof Error ? err.message : String(err)}`)
       }
     }
     loadAssets()
@@ -172,6 +265,7 @@ function ExchangePanel({ onExchangeTx }: { onExchangeTx: (tx: Transaction) => vo
   const selectedTarget = useMemo(() => parseAssetId(target), [target])
   const quoteExpired = quote ? Date.now() > quote.expires_at_ms : false
   const quoteSecondsLeft = quote ? Math.max(0, Math.floor((quote.expires_at_ms - Date.now()) / 1000)) : 0
+  const receivePreview = quote?.pay_amount ?? ""
 
   async function requestQuote() {
     setLoading(true)
@@ -218,14 +312,7 @@ function ExchangePanel({ onExchangeTx }: { onExchangeTx: (tx: Transaction) => vo
       const json = await readJson<OrderResponse>(response)
       setOrder(json)
       setInfo(`Order ${json.id} created. Send ${json.settlement_amount} ${json.settlement_asset} to deposit address.`)
-      onExchangeTx({
-        id: `exchange-${json.id}`,
-        type: "exchange",
-        label: `Exchange ${json.settlement_amount} ${json.settlement_asset} → ${json.pay_amount} ${quote.pay_asset}`,
-        amount: 0,
-        ts: new Date(),
-        status: "pending",
-      })
+      onExchangeTx({ id: `exchange-${json.id}`, type: "exchange", label: `Exchange ${json.settlement_amount} ${json.settlement_asset} → ${json.pay_amount} ${quote.pay_asset}`, amount: 0, ts: new Date(), status: "pending" })
       await refreshStatus(json.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -254,92 +341,84 @@ function ExchangePanel({ onExchangeTx }: { onExchangeTx: (tx: Transaction) => vo
     setInfo("Copied to clipboard")
   }
 
+  function flipPair() {
+    setSource(target)
+    setTarget(source)
+    setQuote(null)
+    setOrder(null)
+    setOrderStatus(null)
+  }
+
   return (
-    <div className="grid h-full grid-cols-[1fr_280px] overflow-hidden">
-      <div className="space-y-4 overflow-y-auto p-5">
-        <div className="rounded-xl border border-border bg-secondary/30 p-4">
-          <div className="mb-4 flex items-center justify-between">
+    <div className="grid h-full grid-cols-[minmax(420px,1fr)_320px] overflow-hidden bg-background">
+      <div className="flex min-h-0 items-start justify-center overflow-y-auto p-6">
+        <div className="w-full max-w-xl space-y-3">
+          <div className="flex items-center justify-between px-1">
             <div>
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><ArrowRightLeft className="h-4 w-4 text-primary" /> Exchange</h3>
-              <p className="mt-0.5 text-xs text-muted-foreground">Provider-routed quote → stored quote → provider order → event-derived status.</p>
+              <h3 className="text-lg font-semibold text-foreground">Exchange</h3>
+              <p className="text-xs text-muted-foreground">Provider-routed crypto exchange with event-derived order status.</p>
             </div>
-            <span className="rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">/v1 quote/order</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">You send</span>
-              <select value={source} onChange={(e) => setSource(e.target.value)} className="h-9 w-full rounded-lg bg-background px-3 text-sm text-foreground outline-none ring-1 ring-border focus:ring-primary/50">
-                {assets.map((asset) => <option key={assetId(asset)} value={assetId(asset)}>{asset.symbol} · {asset.network}</option>)}
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">You receive</span>
-              <select value={target} onChange={(e) => setTarget(e.target.value)} className="h-9 w-full rounded-lg bg-background px-3 text-sm text-foreground outline-none ring-1 ring-border focus:ring-primary/50">
-                {assets.map((asset) => <option key={assetId(asset)} value={assetId(asset)}>{asset.symbol} · {asset.network}</option>)}
-              </select>
-            </label>
-          </div>
-
-          <div className="mt-3 grid grid-cols-[1fr_120px_120px] gap-3">
-            <label className="space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Amount</span>
-              <input value={amount} onChange={(e) => setAmount(e.target.value)} className="h-9 w-full rounded-lg bg-background px-3 font-mono text-sm text-foreground outline-none ring-1 ring-border focus:ring-primary/50" placeholder="100" />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Side</span>
-              <select value={amountSide} onChange={(e) => setAmountSide(e.target.value as "settlement" | "pay")} className="h-9 w-full rounded-lg bg-background px-3 text-sm text-foreground outline-none ring-1 ring-border focus:ring-primary/50">
-                <option value="settlement">Send</option>
-                <option value="pay">Receive</option>
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Mode</span>
-              <select value={mode} onChange={(e) => setMode(e.target.value as "instant" | "floating")} className="h-9 w-full rounded-lg bg-background px-3 text-sm text-foreground outline-none ring-1 ring-border focus:ring-primary/50">
-                <option value="instant">Instant</option>
-                <option value="floating">Floating</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="mt-3 space-y-3">
-            <label className="block space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Recipient address for payout</span>
-              <input value={recipient} onChange={(e) => setRecipient(e.target.value)} className="h-9 w-full rounded-lg bg-background px-3 font-mono text-xs text-foreground outline-none ring-1 ring-border focus:ring-primary/50" placeholder={`${selectedTarget.symbol} ${selectedTarget.network} address`} />
-            </label>
-            <label className="block space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Refund address optional</span>
-              <input value={refund} onChange={(e) => setRefund(e.target.value)} className="h-9 w-full rounded-lg bg-background px-3 font-mono text-xs text-foreground outline-none ring-1 ring-border focus:ring-primary/50" placeholder={`${selectedSource.symbol} ${selectedSource.network} refund address`} />
-            </label>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <button onClick={requestQuote} disabled={loading || !amount.trim()} className="flex h-10 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-opacity disabled:opacity-40">
-              {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Get quote
-            </button>
-            <button onClick={createOrder} disabled={loading || !quote || quoteExpired || !recipient.trim()} className="flex h-10 items-center justify-center gap-2 rounded-lg bg-secondary text-sm font-medium text-foreground transition-opacity hover:bg-secondary/80 disabled:opacity-40">
-              <ExternalLink className="h-4 w-4" /> Create order
-            </button>
-          </div>
-        </div>
-
-        {error && <div className="rounded-lg border border-[var(--status-error)]/20 bg-[var(--status-error)]/10 p-3 text-xs text-[var(--status-error)]">{error}</div>}
-        {info && <div className="rounded-lg border border-primary/20 bg-primary/10 p-3 text-xs text-primary">{info}</div>}
-
-        {quote && (
-          <div className="rounded-xl border border-border bg-secondary/30 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">Quote</h3>
-              <span className={cn("rounded px-2 py-1 text-[10px] font-medium", quoteExpired ? "bg-[var(--status-error)]/10 text-[var(--status-error)]" : "bg-[var(--status-online)]/10 text-[var(--status-online)]")}>{quoteExpired ? "Expired" : `${quoteSecondsLeft}s left`}</span>
+            <div className="flex rounded-full bg-secondary p-1 text-xs">
+              {(["instant", "floating"] as const).map((m) => (
+                <button key={m} onClick={() => setMode(m)} className={cn("rounded-full px-3 py-1 font-medium capitalize", mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>{m}</button>
+              ))}
             </div>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div><p className="text-muted-foreground">Send</p><p className="font-mono text-foreground">{quote.settlement_amount} {quote.settlement_asset}</p></div>
-              <div><p className="text-muted-foreground">Receive</p><p className="font-mono text-foreground">{quote.pay_amount} {quote.pay_asset}</p></div>
+          </div>
+
+          <div className="relative rounded-3xl border border-border bg-card p-3 shadow-lg">
+            <SwapAmountPanel label="You pay" value={amount} onChange={setAmount} assetValue={source} assets={assets} onAssetChange={(v) => { setSource(v); setQuote(null) }} />
+            <div className="relative flex justify-center">
+              <button onClick={flipPair} className="absolute -top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-md transition hover:text-foreground">
+                <ArrowRightLeft className="h-4 w-4 rotate-90" />
+              </button>
+            </div>
+            <div className="mt-2">
+              <SwapAmountPanel label="You receive" value={receivePreview} readOnly assetValue={target} assets={assets} onAssetChange={(v) => { setTarget(v); setQuote(null) }} />
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-background/70 p-3">
+              <label className="space-y-1">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Amount side</span>
+                <select value={amountSide} onChange={(e) => setAmountSide(e.target.value as "settlement" | "pay")} className="h-9 w-full rounded-lg bg-secondary px-3 text-sm text-foreground outline-none">
+                  <option value="settlement">Exact pay amount</option>
+                  <option value="pay">Exact receive amount</option>
+                </select>
+              </label>
+              <div className="space-y-1">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Quote</span>
+                <div className="flex h-9 items-center rounded-lg bg-secondary px-3 text-xs text-muted-foreground">
+                  {quote ? (quoteExpired ? "Expired" : `${quoteSecondsLeft}s remaining`) : "No quote yet"}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-2 rounded-2xl bg-background/70 p-3">
+              <input value={recipient} onChange={(e) => setRecipient(e.target.value)} className="h-10 w-full rounded-xl bg-secondary px-3 font-mono text-xs text-foreground outline-none ring-1 ring-transparent focus:ring-primary/50" placeholder={`${selectedTarget.symbol} payout address`} />
+              <input value={refund} onChange={(e) => setRefund(e.target.value)} className="h-10 w-full rounded-xl bg-secondary px-3 font-mono text-xs text-foreground outline-none ring-1 ring-transparent focus:ring-primary/50" placeholder={`${selectedSource.symbol} refund address optional`} />
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button onClick={requestQuote} disabled={loading || !amount.trim()} className="flex h-11 items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground transition-opacity disabled:opacity-40">
+                {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Quote
+              </button>
+              <button onClick={createOrder} disabled={loading || !quote || quoteExpired || !recipient.trim()} className="flex h-11 items-center justify-center gap-2 rounded-2xl bg-secondary text-sm font-semibold text-foreground transition hover:bg-secondary/80 disabled:opacity-40">
+                <ExternalLink className="h-4 w-4" /> Order
+              </button>
+            </div>
+          </div>
+
+          {error && <div className="rounded-xl border border-[var(--status-error)]/20 bg-[var(--status-error)]/10 p-3 text-xs text-[var(--status-error)]">{error}</div>}
+          {info && <div className="rounded-xl border border-primary/20 bg-primary/10 p-3 text-xs text-primary">{info}</div>}
+
+          {quote && (
+            <div className="grid grid-cols-4 gap-2 rounded-2xl border border-border bg-card p-3 text-xs">
+              <div><p className="text-muted-foreground">Pay</p><p className="font-mono text-foreground">{quote.settlement_amount}</p></div>
+              <div><p className="text-muted-foreground">Receive</p><p className="font-mono text-foreground">{quote.pay_amount}</p></div>
               <div><p className="text-muted-foreground">Rate</p><p className="font-mono text-foreground">{quote.rate}</p></div>
-              <div><p className="text-muted-foreground">ETA</p><p className="font-mono text-foreground">{quote.estimated_seconds ? `${Math.round(quote.estimated_seconds / 60)} min` : "unknown"}</p></div>
+              <div><p className="text-muted-foreground">ETA</p><p className="font-mono text-foreground">{quote.estimated_seconds ? `${Math.round(quote.estimated_seconds / 60)}m` : "unknown"}</p></div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <aside className="border-l border-border bg-[var(--window-header)]/30 p-4">
@@ -348,27 +427,12 @@ function ExchangePanel({ onExchangeTx }: { onExchangeTx: (tx: Transaction) => vo
           {order && <button onClick={() => refreshStatus()} disabled={statusLoading} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><RefreshCw className={cn("h-3.5 w-3.5", statusLoading && "animate-spin")} /></button>}
         </div>
 
-        {!order ? (
-          <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">Create an order from a non-expired quote. Backend will return the deposit address and store provider state for event-derived status projection.</div>
-        ) : (
+        {!order ? <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">Create an order from a live quote. The backend returns a deposit address and derives status from exchange events.</div> : (
           <div className="space-y-3">
             <div className={cn("rounded-lg p-2 text-xs font-medium", statusTone(orderStatus?.status || order.status))}>{orderStatus?.status || order.status}</div>
-            <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Deposit address</p>
-              <button onClick={() => copy(order.deposit_address)} className="w-full rounded-lg bg-background p-2 text-left font-mono text-[11px] text-foreground ring-1 ring-border hover:ring-primary/40">{order.deposit_address}</button>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-lg bg-background p-2 ring-1 ring-border"><p className="text-muted-foreground">Send</p><p className="font-mono text-foreground">{order.settlement_amount}</p></div>
-              <div className="rounded-lg bg-background p-2 ring-1 ring-border"><p className="text-muted-foreground">Receive</p><p className="font-mono text-foreground">{order.pay_amount}</p></div>
-            </div>
-            {orderStatus && (
-              <div className="space-y-1 rounded-lg bg-background p-2 text-[11px] ring-1 ring-border">
-                <div className="flex justify-between"><span className="text-muted-foreground">Events</span><span>{orderStatus.event_count ?? 0}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Terminal</span><span>{orderStatus.terminal ? "yes" : "no"}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Manual review</span><span>{orderStatus.manual_review_required ? "yes" : "no"}</span></div>
-                {orderStatus.last_event_type && <div className="flex justify-between gap-2"><span className="text-muted-foreground">Last event</span><span className="truncate">{orderStatus.last_event_type}</span></div>}
-              </div>
-            )}
+            <div className="space-y-1"><p className="text-[10px] uppercase tracking-wider text-muted-foreground">Deposit address</p><button onClick={() => copy(order.deposit_address)} className="w-full rounded-lg bg-background p-2 text-left font-mono text-[11px] text-foreground ring-1 ring-border hover:ring-primary/40">{order.deposit_address}</button></div>
+            <div className="grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-background p-2 ring-1 ring-border"><p className="text-muted-foreground">Send</p><p className="font-mono text-foreground">{order.settlement_amount}</p></div><div className="rounded-lg bg-background p-2 ring-1 ring-border"><p className="text-muted-foreground">Receive</p><p className="font-mono text-foreground">{order.pay_amount}</p></div></div>
+            {orderStatus && <div className="space-y-1 rounded-lg bg-background p-2 text-[11px] ring-1 ring-border"><div className="flex justify-between"><span className="text-muted-foreground">Events</span><span>{orderStatus.event_count ?? 0}</span></div><div className="flex justify-between"><span className="text-muted-foreground">Terminal</span><span>{orderStatus.terminal ? "yes" : "no"}</span></div><div className="flex justify-between"><span className="text-muted-foreground">Manual review</span><span>{orderStatus.manual_review_required ? "yes" : "no"}</span></div>{orderStatus.last_event_type && <div className="flex justify-between gap-2"><span className="text-muted-foreground">Last event</span><span className="truncate">{orderStatus.last_event_type}</span></div>}</div>}
           </div>
         )}
       </aside>
@@ -379,7 +443,7 @@ function ExchangePanel({ onExchangeTx }: { onExchangeTx: (tx: Transaction) => vo
 export function WalletApp() {
   const [balance, setBalance] = useState(134.57)
   const [txs, setTxs] = useState<Transaction[]>(DEMO_TXS)
-  const [tab, setTab] = useState<Tab>("balance")
+  const [tab, setTab] = useState<Tab>("portfolio")
   const [copied, setCopied] = useState(false)
   const [sendTo, setSendTo] = useState("")
   const [sendAmount, setSendAmount] = useState("")
@@ -406,37 +470,37 @@ export function WalletApp() {
       setSendTo("")
       setSendAmount("")
       setSendNote("")
-      setTimeout(() => { setSendDone(false); setTab("balance") }, 1500)
+      setTimeout(() => { setSendDone(false); setTab("portfolio") }, 1500)
     }, 1200)
   }
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "balance", label: "Balance", icon: <WalletCards className="h-3.5 w-3.5" /> },
+    { id: "portfolio", label: "Portfolio", icon: <WalletCards className="h-3.5 w-3.5" /> },
     { id: "exchange", label: "Exchange", icon: <ArrowRightLeft className="h-3.5 w-3.5" /> },
     { id: "send", label: "Send", icon: <Send className="h-3.5 w-3.5" /> },
     { id: "receive", label: "Receive", icon: <ArrowDownLeft className="h-3.5 w-3.5" /> },
   ]
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="relative overflow-hidden border-b border-[var(--window-border)] bg-gradient-to-br from-[oklch(0.14_0.02_145)] to-[oklch(0.1_0.005_280)] px-6 py-5">
-        <div className="absolute right-4 top-4 opacity-5"><Shield className="h-24 w-24" /></div>
-        <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">EDGE Balance</p>
-        <p className="mt-1 text-3xl font-bold tabular-nums text-foreground">{balance.toFixed(2)} <span className="text-lg font-normal text-muted-foreground">EDGE</span></p>
-        <p className="mt-0.5 text-xs text-muted-foreground">≈ ${(balance * 1.84).toFixed(2)} USD</p>
-        <div className="mt-4 flex items-center gap-1.5"><p className="font-mono text-[11px] text-muted-foreground">{SHORT_ADDRESS}</p><button onClick={handleCopy} className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground">{copied ? <Check className="h-3.5 w-3.5 text-[var(--status-online)]" /> : <Copy className="h-3.5 w-3.5" />}</button></div>
-      </div>
+    <div className="flex h-full min-h-0 bg-background text-foreground">
+      <aside className="flex w-64 flex-shrink-0 flex-col border-r border-border bg-[var(--window-header)]/60">
+        <div className="relative overflow-hidden border-b border-border bg-gradient-to-br from-[oklch(0.14_0.02_145)] to-[oklch(0.1_0.005_280)] p-5">
+          <div className="absolute right-3 top-3 opacity-5"><Shield className="h-24 w-24" /></div>
+          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Total balance</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums">{balance.toFixed(2)} <span className="text-base font-normal text-muted-foreground">EDGE</span></p>
+          <p className="mt-0.5 text-xs text-muted-foreground">≈ ${(balance * 1.84).toFixed(2)} USD</p>
+          <div className="mt-4 flex items-center gap-1.5"><p className="font-mono text-[11px] text-muted-foreground">{SHORT_ADDRESS}</p><button onClick={handleCopy} className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground">{copied ? <Check className="h-3.5 w-3.5 text-[var(--status-online)]" /> : <Copy className="h-3.5 w-3.5" />}</button></div>
+        </div>
+        <nav className="flex-1 space-y-1 p-2">{tabs.map((t) => <button key={t.id} onClick={() => setTab(t.id)} className={cn("flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-medium transition-colors", tab === t.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground")}>{t.icon}<span>{t.label}</span></button>)}</nav>
+        <div className="border-t border-border p-3 text-[10px] text-muted-foreground">Finance workspace · wallet · exchange · settlement</div>
+      </aside>
 
-      <div className="flex border-b border-[var(--window-border)]">
-        {tabs.map((t) => <button key={t.id} onClick={() => setTab(t.id)} className={cn("flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors", tab === t.id ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground")}>{t.icon}{t.label}</button>)}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <main className="min-w-0 flex-1 overflow-hidden">
         {tab === "exchange" && <ExchangePanel onExchangeTx={(tx) => setTxs((prev) => [tx, ...prev])} />}
-        {tab === "balance" && <div className="divide-y divide-[var(--window-border)]">{txs.map((tx) => <div key={tx.id} className="flex items-center gap-3 px-4 py-3"><TxIcon type={tx.type} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{tx.label}</p><p className="text-[10px] text-muted-foreground">{formatDate(tx.ts)}</p></div><div className="text-right"><p className={cn("text-sm font-semibold tabular-nums", tx.amount > 0 ? "text-[var(--status-online)]" : "text-foreground")}>{tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)} EDGE</p><p className="text-[10px] text-muted-foreground capitalize">{tx.status}</p></div></div>)}</div>}
-        {tab === "send" && <div className="space-y-4 p-5">{sendDone ? <div className="flex flex-col items-center gap-3 py-8 text-center"><div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--status-online)]/15"><Check className="h-7 w-7 text-[var(--status-online)]" /></div><p className="text-sm font-medium text-foreground">Transfer confirmed</p><p className="text-xs text-muted-foreground">Settled on the Edgerun ledger</p></div> : <><label className="block space-y-1"><span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Recipient handle or address</span><input value={sendTo} onChange={(e) => setSendTo(e.target.value)} placeholder="@handle or edge1q..." className="h-9 w-full rounded-lg bg-secondary px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" /></label><label className="block space-y-1"><span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Amount (EDGE)</span><input type="number" min="0.01" step="0.01" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} placeholder="0.00" className="h-9 w-full rounded-lg bg-secondary px-3 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" /><p className="text-[10px] text-muted-foreground">Available: {balance.toFixed(2)} EDGE</p></label><label className="block space-y-1"><span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Note (optional)</span><input value={sendNote} onChange={(e) => setSendNote(e.target.value)} placeholder="What's this for?" className="h-9 w-full rounded-lg bg-secondary px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" /></label><button onClick={handleSend} disabled={sending || !sendTo.trim() || !sendAmount || parseFloat(sendAmount) <= 0 || parseFloat(sendAmount) > balance} className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-opacity disabled:opacity-40">{sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <><Send className="h-4 w-4" />Send</>}</button></>}</div>}
-        {tab === "receive" && <div className="flex flex-col items-center gap-5 p-6"><div className="relative flex h-40 w-40 items-center justify-center rounded-xl border border-[var(--window-border)] bg-secondary/50"><div className="grid grid-cols-7 gap-0.5 p-2 opacity-60">{Array.from({ length: 49 }).map((_, i) => <div key={i} className="h-4 w-4 rounded-sm" style={{ background: (Math.sin(i * 7.3 + 1.1) > 0.1) ? "oklch(0.65 0.2 145)" : "transparent" }} />)}</div><div className="absolute inset-0 flex items-center justify-center"><div className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--window-bg)] text-[10px] font-bold text-primary">ER</div></div></div><div className="text-center"><p className="mb-1 text-[10px] text-muted-foreground">Your EDGE address</p><p className="break-all font-mono text-xs text-foreground">{ADDRESS}</p></div><button onClick={handleCopy} className="flex items-center gap-2 rounded-lg bg-secondary px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-secondary/70">{copied ? <Check className="h-3.5 w-3.5 text-[var(--status-online)]" /> : <Copy className="h-3.5 w-3.5" />}{copied ? "Copied!" : "Copy address"}</button><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60"><Shield className="h-3 w-3" /><span>Identity-bound to your fingerprint key</span></div></div>}
-      </div>
+        {tab === "portfolio" && <div className="grid h-full grid-cols-[1fr_280px] overflow-hidden"><div className="overflow-auto"><div className="border-b border-border p-4"><h2 className="text-sm font-semibold">Recent activity</h2><p className="text-xs text-muted-foreground">Ledger and exchange activity across this identity.</p></div><div className="divide-y divide-border">{txs.map((tx) => <div key={tx.id} className="flex items-center gap-3 px-4 py-3"><TxIcon type={tx.type} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{tx.label}</p><p className="text-[10px] text-muted-foreground">{formatDate(tx.ts)}</p></div><div className="text-right"><p className={cn("text-sm font-semibold tabular-nums", tx.amount > 0 ? "text-[var(--status-online)]" : "text-foreground")}>{tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)} EDGE</p><p className="text-[10px] text-muted-foreground capitalize">{tx.status}</p></div></div>)}</div></div><aside className="border-l border-border bg-[var(--window-header)]/30 p-4"><h3 className="text-sm font-semibold">Assets</h3><div className="mt-3 space-y-2">{[{ symbol: "EDGE", network: "Edgerun", amount: balance.toFixed(2) }, { symbol: "USDT", network: "Tron", amount: "0.00" }, { symbol: "BTC", network: "Bitcoin", amount: "0.0000" }].map((asset) => <div key={asset.symbol} className="flex items-center gap-2 rounded-lg bg-background p-2 ring-1 ring-border"><AssetIcon asset={asset} /><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{asset.symbol}</p><p className="text-[10px] text-muted-foreground">{asset.network}</p></div><p className="font-mono text-xs">{asset.amount}</p></div>)}</div></aside></div>}
+        {tab === "send" && <div className="max-w-xl space-y-4 p-6">{sendDone ? <div className="flex flex-col items-center gap-3 py-8 text-center"><div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--status-online)]/15"><Check className="h-7 w-7 text-[var(--status-online)]" /></div><p className="text-sm font-medium">Transfer confirmed</p><p className="text-xs text-muted-foreground">Settled on the Edgerun ledger</p></div> : <><label className="block space-y-1"><span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Recipient handle or address</span><input value={sendTo} onChange={(e) => setSendTo(e.target.value)} placeholder="@handle or edge1q..." className="h-10 w-full rounded-lg bg-secondary px-3 text-sm outline-none focus:ring-1 focus:ring-primary" /></label><label className="block space-y-1"><span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Amount (EDGE)</span><input type="number" min="0.01" step="0.01" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} placeholder="0.00" className="h-10 w-full rounded-lg bg-secondary px-3 font-mono text-sm outline-none focus:ring-1 focus:ring-primary" /><p className="text-[10px] text-muted-foreground">Available: {balance.toFixed(2)} EDGE</p></label><label className="block space-y-1"><span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Note</span><input value={sendNote} onChange={(e) => setSendNote(e.target.value)} placeholder="What's this for?" className="h-10 w-full rounded-lg bg-secondary px-3 text-sm outline-none focus:ring-1 focus:ring-primary" /></label><button onClick={handleSend} disabled={sending || !sendTo.trim() || !sendAmount || parseFloat(sendAmount) <= 0 || parseFloat(sendAmount) > balance} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-foreground disabled:opacity-40">{sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <><Send className="h-4 w-4" />Send</>}</button></>}</div>}
+        {tab === "receive" && <div className="flex h-full flex-col items-center justify-center gap-5 p-6"><div className="relative flex h-40 w-40 items-center justify-center rounded-xl border border-border bg-secondary/50"><div className="grid grid-cols-7 gap-0.5 p-2 opacity-60">{Array.from({ length: 49 }).map((_, i) => <div key={i} className="h-4 w-4 rounded-sm" style={{ background: (Math.sin(i * 7.3 + 1.1) > 0.1) ? "oklch(0.65 0.2 145)" : "transparent" }} />)}</div><div className="absolute inset-0 flex items-center justify-center"><div className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--window-bg)] text-[10px] font-bold text-primary">ER</div></div></div><div className="text-center"><p className="mb-1 text-[10px] text-muted-foreground">Your EDGE address</p><p className="break-all font-mono text-xs">{ADDRESS}</p></div><button onClick={handleCopy} className="flex items-center gap-2 rounded-lg bg-secondary px-4 py-2 text-xs font-medium transition hover:bg-secondary/70">{copied ? <Check className="h-3.5 w-3.5 text-[var(--status-online)]" /> : <Copy className="h-3.5 w-3.5" />}{copied ? "Copied!" : "Copy address"}</button></div>}
+      </main>
     </div>
   )
 }
