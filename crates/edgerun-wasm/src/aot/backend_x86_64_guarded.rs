@@ -424,7 +424,10 @@ fn emit_memory_copy(code: &mut Vec<u8>) -> Result<()> {
     code.extend_from_slice(&[0x49, 0xFF, 0xC1]);
     code.extend_from_slice(&[0x48, 0xFF, 0xCA]);
     emit_jmp_rel32(code, loop_start)?;
-    patch_rel32(code, done_patch, code.len())
+    {
+        let target = code.len();
+        patch_rel32(code, done_patch, target)
+    }
 }
 
 fn emit_memory_fill(code: &mut Vec<u8>) -> Result<()> {
@@ -444,7 +447,10 @@ fn emit_memory_fill(code: &mut Vec<u8>) -> Result<()> {
     code.extend_from_slice(&[0x49, 0xFF, 0xC0]);
     code.extend_from_slice(&[0x48, 0xFF, 0xCA]);
     emit_jmp_rel32(code, loop_start)?;
-    patch_rel32(code, done_patch, code.len())
+    {
+        let target = code.len();
+        patch_rel32(code, done_patch, target)
+    }
 }
 
 fn emit_select(code: &mut Vec<u8>, ty: ValueType) {

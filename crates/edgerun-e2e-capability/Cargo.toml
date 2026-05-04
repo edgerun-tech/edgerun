@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "End-to-end capability delegation scenarios for Edgerun"
 
 [dependencies]
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-capability-policy = { version = "0.1", path = "../edgerun-capability-policy" }
 edgerun-remote-capability = { version = "0.1", path = "../edgerun-remote-capability" }

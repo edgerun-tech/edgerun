@@ -27,10 +27,10 @@ pub enum QuoteMode {
 impl ToJson for ApiQuoteRequest {
     fn to_json(&self) -> JsonValue {
         let mut map = Map::new();
-        map.insert("settlement".into(), self.settlement.to_json());
-        map.insert("pay".into(), self.pay.to_json());
+        map.insert("settlement".into(), self.settlement.asset_ref_to_json());
+        map.insert("pay".into(), self.pay.asset_ref_to_json());
         if let Some(ref amt) = self.amount {
-            map.insert("amount".into(), amt.to_json());
+            map.insert("amount".into(), amtx_ref_to_json(t));
         }
         map.insert(
             "mode".into(),
@@ -60,12 +60,15 @@ impl ToJson for ApiQuoteResponse {
     fn to_json(&self) -> JsonValue {
         let mut map = Map::new();
         map.insert("id".into(), self.id.to_json());
-        map.insert("settlement".into(), self.settlement.to_json());
-        map.insert("pay".into(), self.pay.to_json());
-        map.insert("settlement_amount".into(), self.settlement_amount.to_json());
-        map.insert("pay_amount".into(), self.pay_amount.to_json());
+        map.insert("settlement".into(), self.settlement.asset_ref_to_json());
+        map.insert("pay".into(), self.pay.asset_ref_to_json());
+        map.insert(
+            "settlement_amount".into(),
+            self.settlement_amountx_ref_to_json(t),
+        );
+        map.insert("pay_amount".into(), self.pay_amountx_ref_to_json(t));
         map.insert("rate".into(), self.rate.to_json());
-        map.insert("expires_at".into(), self.expires_at.to_json());
+        map.insert("expires_at".into(), self.expires_atx_ref_to_json(t));
         JsonValue::Object(map)
     }
 }
@@ -110,12 +113,15 @@ impl ToJson for ApiOrderResponse {
             "settlement_address".into(),
             self.settlement_address.to_json(),
         );
-        map.insert("settlement_amount".into(), self.settlement_amount.to_json());
+        map.insert(
+            "settlement_amount".into(),
+            self.settlement_amountx_ref_to_json(t),
+        );
         if let Some(ref p) = self.pay_amount {
             map.insert("pay_amount".into(), p.to_json());
         }
         if let Some(ref t) = self.tx_ref {
-            map.insert("tx_ref".into(), t.to_json());
+            map.insert("tx_ref".into(), tx_ref_to_json(t));
         }
         JsonValue::Object(map)
     }
@@ -165,7 +171,7 @@ impl ToJson for ApiAssetsResponse {
     fn to_json(&self) -> JsonValue {
         let mut map = Map::new();
         map.insert("assets".into(), self.assets.to_json());
-        map.insert("count".into(), self.count.to_json());
+        map.insert("count".into(), self.countx_ref_to_json(t));
         JsonValue::Object(map)
     }
 }
@@ -201,4 +207,28 @@ impl ToJson for ApiHealthResponse {
         map.insert("providers".into(), self.providers.to_json());
         JsonValue::Object(map)
     }
+}
+
+trait AssetRefJsonExt {
+    fn asset_ref_to_json(&self) -> edgerun_json::JsonValue;
+}
+
+impl AssetRefJsonExt for AssetRef {
+    fn asset_ref_to_json(&self) -> edgerun_json::JsonValue {
+        let mut map = std::collections::BTreeMap::new();
+        map.insert("symbol".into(), self.symbol.to_json());
+        map.insert("network".into(), self.network.to_json());
+        map.insert("contract".into(), self.contract.to_json());
+        map.insert("decimals".into(), self.decimals.to_json());
+        edgerun_json::JsonValue::Object(map)
+    }
+}
+
+fn tx_ref_to_json(tx: &TxRef) -> edgerun_json::JsonValue {
+    let mut map = std::collections::BTreeMap::new();
+    map.insert("tx_id".into(), tx.tx_id.to_json());
+    map.insert("network".into(), tx.network.to_json());
+    map.insert("confirmations".into(), tx.confirmations.to_json());
+    map.insert("explorer_url".into(), tx.explorer_url.to_json());
+    edgerun_json::JsonValue::Object(map)
 }

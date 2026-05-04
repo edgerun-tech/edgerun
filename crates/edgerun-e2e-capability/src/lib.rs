@@ -49,7 +49,7 @@ fn require_hardware() -> bool {
 pub(crate) mod test_policy {
     use crate::prelude::v1::*;
     use edgerun_capabilities::{CapabilityError, CapabilityInvocation};
-    use edgerun_proto::edgerun::v0::capability_runtime::{
+    use edgerun_core::protocol::capability_runtime::{
         CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,
         CapabilitySessionOpen,
     };
@@ -113,7 +113,7 @@ pub(crate) mod test_policy {
 pub(crate) mod session_harness {
     use crate::prelude::v1::*;
     use edgerun_capabilities::{CapabilityAccessClass, CapabilityOperation};
-    use edgerun_proto::edgerun::v0::capability_runtime::{
+    use edgerun_core::protocol::capability_runtime::{
         capability_remote_envelope, CapabilityRemoteEnvelope, CapabilitySessionMode,
         CapabilitySessionOpen,
     };

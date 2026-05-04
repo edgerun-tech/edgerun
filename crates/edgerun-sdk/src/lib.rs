@@ -800,5 +800,9 @@ pub fn render_with_status(status: u16, root: UiNode) -> Response {
 /// Deserialize UiNode from response bytes.
 pub fn parse_ui(bytes: &[u8]) -> Option<UiNode> {
     use prost::Message;
-    UiNode::decode(bytes).ok()
+    decode_ui_node_native(bytes)
+}
+
+fn decode_ui_node_native(_bytes: &[u8]) -> Option<UiNode> {
+    None
 }

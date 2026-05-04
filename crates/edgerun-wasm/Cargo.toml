@@ -21,6 +21,7 @@ name = "edgerun-aot"
 path = "src/aot.rs"
 
 [dependencies]
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
 anyhow = "1.0"
 edgerun-clap = { workspace = true, features = ["std"] }
 edgerun-capabilities = { workspace = true }

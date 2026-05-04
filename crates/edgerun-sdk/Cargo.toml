@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "EdgeRun SDK for building WASM execution units"
 
 [dependencies]
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
 edgerun-sdk-macro = { path = "../edgerun-sdk-macro" }
 
 [lints]

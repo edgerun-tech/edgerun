@@ -34,6 +34,7 @@ use core::result::Result::{self, Err, Ok};
 use core::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_os = "none")]
 use core::time::Duration;
+use edgerun_core::protocol::capability_runtime::CapabilityRemoteEnvelope;
 use edgerun_hardware_signing::HardwareSigningError;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::router::MeshRouter;
@@ -46,11 +47,9 @@ use edgerun_mesh_capability::{
 use edgerun_mesh_link::io;
 use edgerun_mesh_link::MeshLink;
 use edgerun_mesh_session::{HandshakeAccept, HandshakeInit, SessionError, SessionManager};
-use edgerun_proto::edgerun::v0::capability_runtime::CapabilityRemoteEnvelope;
 use edgerun_remote_capability::RemoteCapabilityProvider;
 #[cfg(not(target_os = "none"))]
 use libc::{c_int, pollfd, POLLIN};
-use prost::Message;
 #[cfg(not(target_os = "none"))]
 use std::io;
 #[cfg(not(target_os = "none"))]
@@ -1279,5 +1278,18 @@ mod tests {
         config.interface_ipv4.insert(2, [10, 0, 0, 1]);
         config.interface_ipv4.insert(3, [172, 16, 0, 1]);
         assert_eq!(config.interface_ipv4.len(), 3);
+    }
+}
+
+trait NativeCapabilityRemoteEnvelopeEncode {
+    fn native_encode_to_vec(&self) -> Vec<u8>;
+}
+
+impl NativeCapabilityRemoteEnvelopeEncode for CapabilityRemoteEnvelope {
+    fn native_encode_to_vec(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(b"ERMD");
+        out.push(if self.message.is_some() { 1 } else { 0 });
+        out
     }
 }

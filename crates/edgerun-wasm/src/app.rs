@@ -65,7 +65,7 @@ fn validate_app_package(package: &AppPackage) -> Result<()> {
 }
 
 fn validate_capability_descriptor(cap: &CapabilityDescriptor) -> Result<()> {
-    let kind = CapabilityKind::from_i32(cap.capability_kind)
+    let kind = edgerun_core::protocol::enum_from_i32::<CapabilityKind>(cap.capability_kind)
         .ok_or_else(|| anyhow::anyhow!("invalid capability kind: {}", cap.capability_kind))?;
 
     if kind == CapabilityKind::Unspecified {
@@ -84,7 +84,7 @@ fn validate_capability_descriptor(cap: &CapabilityDescriptor) -> Result<()> {
 }
 
 fn validate_scope(scope: &ScopeDescriptor) -> Result<()> {
-    let kind = ScopeKind::from_i32(scope.scope_kind)
+    let kind = edgerun_core::protocol::enum_from_i32::<ScopeKind>(scope.scope_kind)
         .ok_or_else(|| anyhow::anyhow!("invalid scope kind: {}", scope.scope_kind))?;
 
     if kind == ScopeKind::Unspecified {
@@ -181,10 +181,11 @@ pub fn check_capability(
 }
 
 fn action_matches_operation(action: &str, operation: i32) -> bool {
-    let op_name = match capability_check::Operation::from_i32(operation) {
-        Some(op) => op.as_str_name(),
-        None => return false,
-    };
+    let op_name =
+        match edgerun_core::protocol::enum_from_i32::<capability_check::Operation>(operation) {
+            Some(op) => op.as_str_name(),
+            None => return false,
+        };
 
     let action_lower = action.to_lowercase();
     let op_lower = op_name.to_lowercase();
@@ -204,8 +205,8 @@ fn scope_matches(cap: &CapabilityDescriptor, scope: &Option<ScopeDescriptor>) ->
         return true;
     };
 
-    let scope_kind = ScopeKind::from_i32(scope_ref.scope_kind);
-    let cap_scope_kind = ScopeKind::from_i32(cap_scope.scope_kind);
+    let scope_kind = edgerun_core::protocol::enum_from_i32::<ScopeKind>(scope_ref.scope_kind);
+    let cap_scope_kind = edgerun_core::protocol::enum_from_i32::<ScopeKind>(cap_scope.scope_kind);
 
     if cap_scope_kind == Some(ScopeKind::GlobalWithConstraints) {
         return true;
