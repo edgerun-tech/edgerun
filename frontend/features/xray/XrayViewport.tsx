@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useCallback, useState } from "react"
+import { useEffect, useRef, useCallback, useState, useMemo } from "react"
 import { useStore } from "@nanostores/react"
 import {
   xrayState,
@@ -21,6 +21,23 @@ function shortPath(path?: string) {
   return parts.length > 4 ? parts.slice(-4).join("/") : path
 }
 
+function relationList(nodeId: string | null, limit = 8) {
+  if (!nodeId) return []
+  const state = xrayState.get()
+  const items: Array<{ id: string; label: string; kind: string; direction: "in" | "out" }> = []
+  for (const edge of state.edges) {
+    if (edge.source === nodeId) {
+      const node = state.nodes.get(edge.target)
+      if (node) items.push({ id: node.id, label: node.label, kind: edge.kind, direction: "out" })
+    } else if (edge.target === nodeId) {
+      const node = state.nodes.get(edge.source)
+      if (node) items.push({ id: node.id, label: node.label, kind: edge.kind, direction: "in" })
+    }
+    if (items.length >= limit) break
+  }
+  return items
+}
+
 export function XrayViewport() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<WebGLRenderer | null>(null)
@@ -29,7 +46,7 @@ export function XrayViewport() {
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null)
   const dragStart = useRef({ x: 0, y: 0 })
   const dragPanStart = useRef({ x: 0, y: 0 })
-  const dragRotationStart = useRef(0)
+  const dragCameraStart = useRef({ yaw: 0, pitch: 0 })
   const dragMode = useRef<"pan" | "rotate">("rotate")
 
   const renderFrame = useCallback(() => {
@@ -48,7 +65,8 @@ export function XrayViewport() {
       zoom: s.zoom,
       panX: s.panX,
       panY: s.panY,
-      rotation: s.rotation,
+      yaw: s.yaw,
+      pitch: s.pitch,
       runtimeMode: s.runtimeMode,
     })
   }, [])
@@ -110,7 +128,7 @@ export function XrayViewport() {
     const sy = (e.clientY - rect.top) * dpr
     const s = xrayState.get()
     const visible = getVisibleGraph(s)
-    const [gx, gy] = rendererRef.current.screenToGraphCoords(sx, sy, s.zoom, s.panX, s.panY, s.rotation)
+    const [gx, gy] = rendererRef.current.screenToGraphCoords(sx, sy, s.zoom, s.panX, s.panY, s.yaw)
 
     let closest: string | null = null
     let closestDist = Infinity
@@ -130,11 +148,11 @@ export function XrayViewport() {
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return
     setIsDragging(true)
-    dragMode.current = e.ctrlKey ? "pan" : "rotate"
+    dragMode.current = e.ctrlKey || e.shiftKey ? "pan" : "rotate"
     dragStart.current = { x: e.clientX, y: e.clientY }
     dragPanStart.current = { x: state.panX, y: state.panY }
-    dragRotationStart.current = state.rotation
-  }, [state.panX, state.panY, state.rotation])
+    dragCameraStart.current = { yaw: state.yaw, pitch: state.pitch }
+  }, [state.panX, state.panY, state.yaw, state.pitch])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const dx = e.clientX - dragStart.current.x
@@ -143,9 +161,15 @@ export function XrayViewport() {
 
     if (isDragging) {
       if (dragMode.current === "pan") {
-        setViewTransform(s.zoom, dragPanStart.current.x + dx / s.zoom, dragPanStart.current.y - dy / s.zoom, s.rotation)
+        setViewTransform(s.zoom, dragPanStart.current.x + dx / s.zoom, dragPanStart.current.y - dy / s.zoom, s.yaw, s.pitch)
       } else {
-        setViewTransform(s.zoom, s.panX, s.panY, dragRotationStart.current + dx * 0.006)
+        setViewTransform(
+          s.zoom,
+          s.panX,
+          s.panY,
+          dragCameraStart.current.yaw + dx * 0.006,
+          dragCameraStart.current.pitch - dy * 0.006,
+        )
       }
       return
     }
@@ -169,10 +193,12 @@ export function XrayViewport() {
     const s = xrayState.get()
     const factor = e.deltaY > 0 ? 0.9 : 1.1
     const newZoom = Math.max(0.1, Math.min(10, s.zoom * factor))
-    setViewTransform(newZoom, s.panX, s.panY, s.rotation)
+    setViewTransform(newZoom, s.panX, s.panY, s.yaw, s.pitch)
   }, [])
 
-  const hoveredNode = state.hoveredId ? state.nodes.get(state.hoveredId) : null
+  const inspectedId = state.hoveredId || state.selectedId
+  const inspectedNode = inspectedId ? state.nodes.get(inspectedId) : null
+  const inspectedRelations = useMemo(() => relationList(inspectedId, 8), [inspectedId, state.highlightedIds])
   const relatedCount = state.highlightedIds.size > 0 ? state.highlightedIds.size - 1 : 0
 
   return (
@@ -192,19 +218,45 @@ export function XrayViewport() {
         onWheel={handleWheel}
       />
 
-      {hoveredNode && hoverPoint ? (
+      {inspectedNode ? (
         <div
-          className="pointer-events-none fixed z-[80] max-w-[320px] rounded-xl border border-white/10 bg-black/85 px-3 py-2 text-xs shadow-2xl backdrop-blur-md"
-          style={{ left: hoverPoint.x + 14, top: hoverPoint.y + 14 }}
+          className="pointer-events-auto fixed z-[80] w-[320px] rounded-xl border border-white/10 bg-black/85 px-3 py-2 text-xs shadow-2xl backdrop-blur-md"
+          style={{
+            left: hoverPoint ? Math.min(hoverPoint.x + 18, window.innerWidth - 340) : undefined,
+            top: hoverPoint ? Math.min(hoverPoint.y + 18, window.innerHeight - 260) : undefined,
+            right: hoverPoint ? undefined : 24,
+            bottom: hoverPoint ? undefined : 92,
+          }}
         >
-          <div className="truncate font-medium text-foreground">{hoveredNode.label}</div>
-          <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">{shortPath(hoveredNode.source?.file)}</div>
-          <div className="mt-2 flex flex-wrap gap-1">
-            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] text-primary">{hoveredNode.kind}</span>
-            {hoveredNode.language && <span className="rounded-full bg-secondary px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{hoveredNode.language}</span>}
-            {hoveredNode.layer && <span className="rounded-full bg-secondary px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{hoveredNode.layer}</span>}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate font-medium text-foreground">{inspectedNode.label}</div>
+              <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">{shortPath(inspectedNode.source?.file)}</div>
+            </div>
+            {state.selectedId === inspectedNode.id && <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] text-primary">selected</span>}
           </div>
-          <div className="mt-1 font-mono text-[10px] text-muted-foreground">{relatedCount} closest relation{relatedCount === 1 ? "" : "s"}</div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] text-primary">{inspectedNode.kind}</span>
+            {inspectedNode.language && <span className="rounded-full bg-secondary px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{inspectedNode.language}</span>}
+            {inspectedNode.layer && <span className="rounded-full bg-secondary px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{inspectedNode.layer}</span>}
+          </div>
+          <div className="mt-2 font-mono text-[10px] text-muted-foreground">{relatedCount} closest relation{relatedCount === 1 ? "" : "s"}</div>
+          {inspectedRelations.length > 0 && (
+            <div className="mt-2 max-h-36 space-y-1 overflow-auto">
+              {inspectedRelations.map((relation) => (
+                <button
+                  key={`${relation.direction}-${relation.kind}-${relation.id}`}
+                  type="button"
+                  onClick={() => selectNode(relation.id)}
+                  className="flex w-full items-center gap-2 rounded-lg bg-white/5 px-2 py-1 text-left text-[10px] hover:bg-white/10"
+                >
+                  <span className="shrink-0 font-mono text-primary">{relation.direction === "out" ? "→" : "←"}</span>
+                  <span className="min-w-0 flex-1 truncate text-foreground">{relation.label}</span>
+                  <span className="shrink-0 font-mono text-muted-foreground">{relation.kind}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
     </div>
