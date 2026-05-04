@@ -9,49 +9,40 @@ export interface LogEntry {
   message: string
 }
 
-export interface OpenWindowDef {
+export type AppSurfaceKind = "overlay" | "pinned-widget"
+export type AppSurfaceSlot = "left-top" | "left-bottom" | "right-top" | "right-bottom"
+
+export interface AppSurfaceDef {
   id: string
   appId: string
   title: string
   icon: React.ReactNode
   component: React.ReactNode
-  defaultPosition: { x: number; y: number }
-  defaultSize: { width: number; height: number }
+  kind: AppSurfaceKind
+  dismissOnOutsideClick: boolean
+  preferredSlot?: AppSurfaceSlot
+  defaultSize?: { width: number; height: number }
 }
 
-export interface WindowLayoutState {
-  position: { x: number; y: number }
-  size: { width: number; height: number }
-  maximized: boolean
-}
+/** @deprecated Use AppSurfaceDef. Kept as a transition alias for older launcher call sites. */
+export type OpenWindowDef = AppSurfaceDef
 
-export const windowLayoutStore = persistentAtom<Record<string, WindowLayoutState>>(
-  "edgerun:windowLayout",
-  {},
-  {
-    encode: JSON.stringify,
-    decode: JSON.parse,
-  }
-)
+export const appSurfacesStore = atom<AppSurfaceDef[]>([])
+export const appSurfaceOrderStore = atom<string[]>([])
+export const focusedAppSurfaceStore = atom<string | null>(null)
 
-export const stageModeStore = persistentAtom("edgerun:stageMode", false, {
-  encode: String,
-  decode: (v) => v === "true",
-})
+/** @deprecated Use appSurfacesStore. */
+export const windowsStore = appSurfacesStore
+/** @deprecated Use appSurfaceOrderStore. */
+export const windowOrderStore = appSurfaceOrderStore
+/** @deprecated Use focusedAppSurfaceStore. */
+export const focusedWindowStore = focusedAppSurfaceStore
 
 export const widgetVisibleStore = persistentAtom("edgerun:widgetVisible", false, {
   encode: String,
   decode: (v) => v === "true",
 })
 
-export const desktopTelemetryVisibleStore = persistentAtom("edgerun:desktopTelemetryVisible", true, {
-  encode: String,
-  decode: (v) => v !== "false",
-})
-
-export const windowsStore = atom<OpenWindowDef[]>([])
-export const windowOrderStore = atom<string[]>([])
-export const focusedWindowStore = atom<string | null>(null)
 export const terminalLogsStore = atom<LogEntry[]>([])
 
 export const systemStatsStore = atom({
@@ -69,8 +60,8 @@ export interface PendingGate {
 }
 export const pendingGateStore = atom<PendingGate | null>(null)
 
-export const runningAppsStore = computed(windowsStore, (wins) =>
-  wins.map((w) => w.appId)
+export const runningAppsStore = computed(appSurfacesStore, (surfaces) =>
+  surfaces.map((surface) => surface.appId)
 )
 
 export function addLog(type: LogEntry["type"], message: string) {
@@ -82,36 +73,39 @@ export function addLog(type: LogEntry["type"], message: string) {
   }])
 }
 
-export function openWindow(win: OpenWindowDef) {
-  windowsStore.set([...windowsStore.get(), win])
-  windowOrderStore.set([...windowOrderStore.get(), win.id])
-  focusedWindowStore.set(win.id)
+export function openAppSurface(surface: AppSurfaceDef) {
+  const existing = appSurfacesStore.get().filter((candidate) => candidate.id !== surface.id)
+  appSurfacesStore.set([...existing, surface])
+  appSurfaceOrderStore.set([...appSurfaceOrderStore.get().filter((id) => id !== surface.id), surface.id])
+  focusedAppSurfaceStore.set(surface.id)
 }
 
-export function closeWindow(windowId: string) {
-  const wins = windowsStore.get()
-  const closed = wins.find((w) => w.id === windowId)
-  windowsStore.set(wins.filter((w) => w.id !== windowId))
-  windowOrderStore.set(windowOrderStore.get().filter((id) => id !== windowId))
-  if (focusedWindowStore.get() === windowId) {
-    const order = windowOrderStore.get()
-    focusedWindowStore.set(order[order.length - 1] || null)
+/** @deprecated Use openAppSurface. */
+export const openWindow = openAppSurface
+
+export function closeAppSurface(surfaceId: string) {
+  const surfaces = appSurfacesStore.get()
+  const closed = surfaces.find((surface) => surface.id === surfaceId)
+  appSurfacesStore.set(surfaces.filter((surface) => surface.id !== surfaceId))
+  appSurfaceOrderStore.set(appSurfaceOrderStore.get().filter((id) => id !== surfaceId))
+
+  if (focusedAppSurfaceStore.get() === surfaceId) {
+    const remainingOrder = appSurfaceOrderStore.get().filter((id) => id !== surfaceId)
+    focusedAppSurfaceStore.set(remainingOrder[remainingOrder.length - 1] || null)
   }
+
   return closed
 }
 
-export function focusWindow(windowId: string) {
-  focusedWindowStore.set(windowId)
-  windowOrderStore.set(
-    [...windowOrderStore.get().filter((id) => id !== windowId), windowId]
+/** @deprecated Use closeAppSurface. */
+export const closeWindow = closeAppSurface
+
+export function focusAppSurface(surfaceId: string) {
+  focusedAppSurfaceStore.set(surfaceId)
+  appSurfaceOrderStore.set(
+    [...appSurfaceOrderStore.get().filter((id) => id !== surfaceId), surfaceId]
   )
 }
 
-export function saveWindowLayout(appId: string, layout: WindowLayoutState) {
-  const store = windowLayoutStore.get()
-  windowLayoutStore.set({ ...store, [appId]: layout })
-}
-
-export function getWindowLayout(appId: string): WindowLayoutState | null {
-  return windowLayoutStore.get()[appId] || null
-}
+/** @deprecated Use focusAppSurface. */
+export const focusWindow = focusAppSurface
