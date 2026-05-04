@@ -94,7 +94,7 @@ pub struct CommandEnvelope {
 }
 /// Nested message and enum types in `CommandEnvelope`.
 pub mod command_envelope {
-    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Payload {
         #[prost(message, tag = "11")]
         PayloadObject(super::super::common::ObjectRef),
@@ -102,7 +102,7 @@ pub mod command_envelope {
         InlinePayload(::prost::alloc::vec::Vec<u8>),
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CommandSentPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -113,7 +113,7 @@ pub struct CommandSentPayload {
     #[prost(message, optional, tag = "4")]
     pub send_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CommandResultPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -132,7 +132,7 @@ pub struct CommandResultPayload {
     #[prost(message, optional, tag = "8")]
     pub result_object: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ActionLifecyclePayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -180,7 +180,7 @@ pub struct SecretPutPayload {
     #[prost(string, tag = "6")]
     pub secret_blob_id: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SecretDeletePayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -194,7 +194,7 @@ pub struct SecretDeletePayload {
     #[prost(string, tag = "5")]
     pub reason: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectionCreatedPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -205,7 +205,7 @@ pub struct CollectionCreatedPayload {
     #[prost(string, tag = "3")]
     pub label: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollectionDeletedPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -265,7 +265,7 @@ pub struct InstallAppPayload {
     #[prost(message, repeated, tag = "4")]
     pub delegation_chain: ::prost::alloc::vec::Vec<super::trust::DelegationRecord>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UninstallAppPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -292,7 +292,7 @@ pub struct AppExecutionPayload {
 /// Nested message and enum types in `AppExecutionPayload`.
 pub mod app_execution_payload {
     /// Execution result or error
-    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Outcome {
         #[prost(message, tag = "4")]
         ResultObject(super::super::common::ObjectRef),
@@ -311,7 +311,7 @@ pub mod app_execution_payload {
 /// CREATE_IDENTITY: Generate a new node identity.
 /// The node generates an ECDSA P-256 keypair and records the identity
 /// as an identity record event in the stream.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateIdentityPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -323,7 +323,7 @@ pub struct CreateIdentityPayload {
     pub key_algorithm: i32,
 }
 /// IMPORT_IDENTITY: Import an existing identity from external key material.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ImportIdentityPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -344,7 +344,7 @@ pub struct ImportIdentityPayload {
     pub source: ::prost::alloc::string::String,
 }
 /// ADD_BOOTSTRAP_NODE: Register a bootstrap peer for mesh discovery.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AddBootstrapNodePayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -362,7 +362,7 @@ pub struct AddBootstrapNodePayload {
     pub label: ::prost::alloc::string::String,
 }
 /// ADD_REACHABILITY_HINT: Publish a reachability hint for this node.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AddReachabilityHintPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -378,7 +378,7 @@ pub struct AddReachabilityHintPayload {
 }
 /// QUERY_NODE_STATE: Request current node bootstrap state.
 /// Returns a NodeStateSnapshot as the result object.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryNodeStatePayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -387,7 +387,7 @@ pub struct QueryNodeStatePayload {
     pub query_kind: ::prost::alloc::string::String,
 }
 /// NodeStateSnapshot: returned as result object of QueryNodeState.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeStateSnapshot {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -420,7 +420,7 @@ pub struct NodeStateSnapshot {
 /// AppPrincipal: a protocol-level identity for an installed app.
 /// AppPrincipals are valid delegation recipients and can appear in
 /// capability scopes, but they are NOT stream writers.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AppPrincipal {
     /// Stable identifier for the app (SHA256 of AppPackage or assigned)
     #[prost(bytes = "vec", tag = "1")]
@@ -435,7 +435,7 @@ pub struct AppPrincipal {
 /// AppIntent: a signed action declaration from an app principal.
 /// The intent proves the app authorized the specific payload.
 /// Signature MUST be over canonical protobuf encoding of (app_id || payload).
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AppIntent {
     /// AppPrincipal app_id
     #[prost(bytes = "vec", tag = "1")]
@@ -465,7 +465,7 @@ pub struct AppIntent {
 
 /// UserPresenceRequestPayload: emitted when an app requests user presence.
 /// The node shows a UI prompt to the user with the given reason.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UserPresenceRequestPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -483,7 +483,7 @@ pub struct UserPresenceRequestPayload {
     pub ttl_seconds: u32,
 }
 /// UserPresenceGrantedPayload: emitted when the user confirms presence.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UserPresenceGrantedPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -501,7 +501,7 @@ pub struct UserPresenceGrantedPayload {
     pub expires_at: i64,
 }
 /// SignatureRequestPayload: emitted when an app requests the node to sign.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignatureRequestPayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -525,7 +525,7 @@ pub struct SignatureRequestPayload {
     pub presence_token: ::prost::alloc::vec::Vec<u8>,
 }
 /// SignatureResponsePayload: emitted after the node signs on behalf of the app.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignatureResponsePayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -548,7 +548,7 @@ pub struct SignatureResponsePayload {
 // Command payloads for user authority acquisition
 
 /// REQUEST_USER_PRESENCE: command to request user presence confirmation.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestUserPresencePayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,
@@ -563,7 +563,7 @@ pub struct RequestUserPresencePayload {
     pub ttl_seconds: u32,
 }
 /// REQUEST_SIGNATURE: command to request the node sign a payload.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestSignaturePayload {
     #[prost(uint32, tag = "1")]
     pub payload_version: u32,

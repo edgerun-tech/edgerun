@@ -3,7 +3,7 @@
 // Envelope (request/response wrapper)
 // ===========================================================================
 
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AbiEnvelope {
     #[prost(uint32, tag = "1")]
     pub envelope_version: u32,
@@ -18,7 +18,7 @@ pub struct AbiEnvelope {
     #[prost(bytes = "vec", tag = "6")]
     pub payload: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AbiResponse {
     #[prost(uint32, tag = "1")]
     pub response_version: u32,
@@ -37,7 +37,7 @@ pub struct AbiResponse {
 // App Context
 // ===========================================================================
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct AppContextRequest {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
@@ -81,7 +81,7 @@ pub struct AppContext {
 // Capabilities
 // ===========================================================================
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct GetGrantedCapabilitiesRequest {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
@@ -124,7 +124,7 @@ pub struct CapabilityHandle {
     #[prost(message, optional, tag = "5")]
     pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InvokeCapability {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
@@ -140,7 +140,7 @@ pub struct InvokeCapability {
     #[prost(bytes = "vec", tag = "6")]
     pub correlation_id: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CapabilityInvocationResult {
     #[prost(uint32, tag = "1")]
     pub response_version: u32,
@@ -150,7 +150,7 @@ pub struct CapabilityInvocationResult {
     #[prost(bytes = "vec", tag = "3")]
     pub inline_result: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReleaseCapability {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
@@ -161,7 +161,7 @@ pub struct ReleaseCapability {
 // User Presence & Signing
 // ===========================================================================
 
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestUserPresence {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
@@ -173,7 +173,7 @@ pub struct RequestUserPresence {
     #[prost(message, optional, tag = "4")]
     pub prompt_object: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UserPresenceToken {
     #[prost(uint32, tag = "1")]
     pub token_version: u32,
@@ -216,7 +216,7 @@ pub struct RequestSignature {
     #[prost(string, tag = "9")]
     pub signing_domain: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignatureResult {
     #[prost(uint32, tag = "1")]
     pub result_version: u32,
@@ -251,14 +251,14 @@ pub struct PutObject {
     #[prost(message, optional, tag = "6")]
     pub metadata_object: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PutObjectResult {
     #[prost(uint32, tag = "1")]
     pub response_version: u32,
     #[prost(message, optional, tag = "2")]
     pub object: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetObject {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
@@ -272,7 +272,7 @@ pub struct GetObject {
     #[prost(uint64, tag = "5")]
     pub max_bytes: u64,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetObjectResult {
     #[prost(uint32, tag = "1")]
     pub response_version: u32,
@@ -283,7 +283,7 @@ pub struct GetObjectResult {
     #[prost(uint64, tag = "4")]
     pub next_offset: u64,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Query {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
@@ -339,7 +339,7 @@ pub struct BuildCommand {
 }
 /// Nested message and enum types in `BuildCommand`.
 pub mod build_command {
-    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Payload {
         #[prost(message, tag = "5")]
         PayloadObject(super::super::common::ObjectRef),
@@ -368,7 +368,7 @@ pub struct SubmitCommand {
     #[prost(message, optional, tag = "3")]
     pub app_intent: ::core::option::Option<super::stream::AppIntent>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubmitCommandResult {
     #[prost(uint32, tag = "1")]
     pub response_version: u32,
@@ -387,14 +387,14 @@ pub struct SubmitCommandResult {
 // App Intent & Observations
 // ===========================================================================
 
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EmitAppIntent {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
     #[prost(bytes = "vec", tag = "2")]
     pub payload: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AppIntentResult {
     #[prost(uint32, tag = "1")]
     pub response_version: u32,
@@ -418,7 +418,7 @@ pub struct LogObservation {
 /// Nested message and enum types in `LogObservation`.
 pub mod log_observation {
     /// Small observation can be inline. Large one should be object.
-    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Payload {
         #[prost(bytes, tag = "3")]
         InlinePayload(::prost::alloc::vec::Vec<u8>),
@@ -426,7 +426,7 @@ pub mod log_observation {
         PayloadObject(super::super::common::ObjectRef),
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LogObservationResult {
     #[prost(uint32, tag = "1")]
     pub response_version: u32,
@@ -438,26 +438,26 @@ pub struct LogObservationResult {
 // Determinism-safe Helpers
 // ===========================================================================
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RandomRequest {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
     #[prost(uint32, tag = "2")]
     pub length: u32,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RandomResult {
     #[prost(uint32, tag = "1")]
     pub response_version: u32,
     #[prost(bytes = "vec", tag = "2")]
     pub random: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct TimeRequest {
     #[prost(uint32, tag = "1")]
     pub request_version: u32,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct TimeResult {
     #[prost(uint32, tag = "1")]
     pub response_version: u32,
