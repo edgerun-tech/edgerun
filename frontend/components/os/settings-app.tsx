@@ -1,14 +1,36 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import {
-  Palette, Shield, Network, Info, Bell, Cpu, Fingerprint,
-  Globe, Wifi, WifiOff, ChevronRight, Check, RotateCcw,
+  Bell,
+  Check,
+  ChevronRight,
+  Cpu,
+  Fingerprint,
+  Globe,
+  Info,
+  MonitorCog,
+  Palette,
+  RadioTower,
+  RotateCcw,
+  Shield,
+  Sparkles,
+  WalletCards,
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { EdgerunLogo } from "./edgerun-logo"
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 type SettingsSection =
   | "appearance"
@@ -18,127 +40,164 @@ type SettingsSection =
   | "performance"
   | "about"
 
-// ─── Toggle ───────────────────────────────────────────────────────────────────
+type SectionMeta = {
+  id: SettingsSection
+  label: string
+  hint: string
+  icon: ReactNode
+}
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+const SECTIONS: SectionMeta[] = [
+  { id: "appearance", label: "Appearance", hint: "Desktop, windows, dock", icon: <Palette className="h-4 w-4" /> },
+  { id: "privacy", label: "Privacy", hint: "Identity and local data", icon: <Shield className="h-4 w-4" /> },
+  { id: "network", label: "Network", hint: "Peers, region, bandwidth", icon: <Globe className="h-4 w-4" /> },
+  { id: "notifications", label: "Alerts", hint: "System and app signals", icon: <Bell className="h-4 w-4" /> },
+  { id: "performance", label: "Performance", hint: "Resource policy", icon: <Cpu className="h-4 w-4" /> },
+  { id: "about", label: "About", hint: "Build and runtime", icon: <Info className="h-4 w-4" /> },
+]
+
+function SettingsCard({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  return (
+    <Card className="gap-3 border-[var(--window-border)] bg-card/55 py-4 shadow-none">
+      <CardHeader className="gap-1 px-4">
+        <CardTitle className="text-sm">{title}</CardTitle>
+        {description && <CardDescription className="text-xs">{description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="px-4">
+        {children}
+      </CardContent>
+    </Card>
+  )
+}
+
+function SettingRow({ label, sub, right }: { label: string; sub?: string; right: ReactNode }) {
+  return (
+    <div className="flex min-h-11 items-center justify-between gap-4 border-t border-[var(--window-border)] py-3 first:border-t-0 first:pt-0 last:pb-0">
+      <div className="min-w-0">
+        <p className="text-sm text-foreground">{label}</p>
+        {sub && <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{sub}</p>}
+      </div>
+      <div className="shrink-0">{right}</div>
+    </div>
+  )
+}
+
+function SliderControl({ value, onChange, min = 0, max = 100, suffix = "%" }: {
+  value: number
+  onChange: (v: number) => void
+  min?: number
+  max?: number
+  suffix?: string
+}) {
+  return (
+    <div className="flex w-40 items-center gap-3">
+      <Slider value={[value]} min={min} max={max} onValueChange={([next]) => onChange(next ?? value)} />
+      <span className="w-12 text-right font-mono text-[10px] text-primary">{value}{suffix}</span>
+    </div>
+  )
+}
+
+function AccentButton({ active, color, label, onClick }: { active: boolean; color: string; label: string; onClick: () => void }) {
   return (
     <button
-      role="switch"
-      aria-checked={value}
-      onClick={() => onChange(!value)}
+      onClick={onClick}
       className={cn(
-        "relative h-5 w-9 rounded-full transition-colors duration-200",
-        value ? "bg-primary" : "bg-secondary"
+        "group relative h-10 flex-1 overflow-hidden rounded-xl border border-[var(--window-border)] transition-all hover:-translate-y-0.5 hover:border-primary/30",
+        active && "border-primary/50 ring-2 ring-primary/20"
       )}
+      title={label}
     >
-      <span
-        className={cn(
-          "absolute top-0.5 h-4 w-4 rounded-full bg-foreground shadow transition-transform duration-200",
-          value ? "translate-x-4" : "translate-x-0.5"
-        )}
-      />
+      <span className="absolute inset-0" style={{ background: color }} />
+      <span className="absolute inset-0 bg-gradient-to-br from-white/30 to-black/25" />
+      {active && <Check className="absolute inset-0 m-auto h-4 w-4 text-black" />}
     </button>
   )
 }
-
-// ─── Slider ───────────────────────────────────────────────────────────────────
-
-function Slider({ value, onChange, min = 0, max = 100, label }: {
-  value: number; onChange: (v: number) => void; min?: number; max?: number; label?: string
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      {label && <span className="w-12 text-right font-mono text-[10px] text-muted-foreground">{value}{label}</span>}
-      <input
-        type="range" min={min} max={max} value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        className="flex-1 accent-[var(--primary)] h-1"
-      />
-    </div>
-  )
-}
-
-// ─── Row ─────────────────────────────────────────────────────────────────────
-
-function Row({ label, sub, right }: { label: string; sub?: string; right: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between py-2.5">
-      <div>
-        <p className="text-sm text-foreground">{label}</p>
-        {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
-      </div>
-      {right}
-    </div>
-  )
-}
-
-// ─── Section panels ───────────────────────────────────────────────────────────
 
 function AppearancePanel() {
   const [accentColor, setAccentColor] = useState("green")
   const [globeOpacity, setGlobeOpacity] = useState(40)
   const [windowBlur, setWindowBlur] = useState(true)
   const [animations, setAnimations] = useState(true)
+  const [desktopTelemetry, setDesktopTelemetry] = useState(true)
   const [fontSize, setFontSize] = useState(13)
   const [dockPosition, setDockPosition] = useState("bottom")
 
   const accents = [
-    { id: "green",  color: "oklch(0.65 0.2 145)" },
-    { id: "blue",   color: "oklch(0.6 0.2 250)" },
-    { id: "orange", color: "oklch(0.72 0.18 60)" },
-    { id: "pink",   color: "oklch(0.65 0.22 340)" },
-    { id: "cyan",   color: "oklch(0.68 0.16 200)" },
+    { id: "green", label: "Edge", color: "oklch(0.65 0.2 145)" },
+    { id: "blue", label: "Cloud", color: "oklch(0.6 0.2 250)" },
+    { id: "orange", label: "Market", color: "oklch(0.72 0.18 60)" },
+    { id: "pink", label: "Signal", color: "oklch(0.65 0.22 340)" },
+    { id: "cyan", label: "Mesh", color: "oklch(0.68 0.16 200)" },
   ]
 
   return (
-    <div className="space-y-1 divide-y divide-[var(--window-border)]">
-      <div className="pb-4">
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Accent Color</p>
-        <div className="flex gap-2">
-          {accents.map(a => (
-            <button
-              key={a.id}
-              onClick={() => setAccentColor(a.id)}
-              className="relative h-7 w-7 rounded-full transition-transform hover:scale-110"
-              style={{ background: a.color }}
-              title={a.id}
-            >
-              {accentColor === a.id && <Check className="absolute inset-0 m-auto h-3.5 w-3.5 text-black" />}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-0 divide-y divide-[var(--window-border)]">
-        <Row label="Window blur" sub="Frosted glass effect on windows" right={<Toggle value={windowBlur} onChange={setWindowBlur} />} />
-        <Row label="Animations" sub="Window open/close transitions" right={<Toggle value={animations} onChange={setAnimations} />} />
-        <Row
-          label="Globe opacity"
-          sub={`Background globe visibility — ${globeOpacity}%`}
-          right={<div className="w-32"><Slider value={globeOpacity} onChange={setGlobeOpacity} label="%" /></div>}
-        />
-        <Row
-          label="Font size"
-          sub={`UI base font size — ${fontSize}px`}
-          right={<div className="w-32"><Slider value={fontSize} onChange={setFontSize} min={11} max={18} label="px" /></div>}
-        />
-        <Row
-          label="Dock position"
-          right={
-            <div className="flex gap-1">
-              {["bottom", "left", "right"].map(p => (
-                <button
-                  key={p}
-                  onClick={() => setDockPosition(p)}
-                  className={cn("rounded px-2 py-0.5 text-[11px] capitalize transition-colors",
-                    dockPosition === p ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
-                  )}
-                >{p}</button>
+    <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
+      <div className="space-y-4">
+        <SettingsCard title="Desktop" description="Make the shell feel like an operating system, not a website.">
+          <div className="space-y-3">
+            <div className="grid grid-cols-5 gap-2">
+              {accents.map(a => (
+                <AccentButton
+                  key={a.id}
+                  active={accentColor === a.id}
+                  color={a.color}
+                  label={a.label}
+                  onClick={() => setAccentColor(a.id)}
+                />
               ))}
             </div>
-          }
-        />
+            <SettingRow label="Window blur" sub="Frosted glass depth on app windows." right={<Switch checked={windowBlur} onCheckedChange={setWindowBlur} size="sm" />} />
+            <SettingRow label="Animations" sub="Window, dock, and panel motion." right={<Switch checked={animations} onCheckedChange={setAnimations} size="sm" />} />
+            <SettingRow label="Background telemetry" sub="Conky-style resource and earnings layer behind windows." right={<Switch checked={desktopTelemetry} onCheckedChange={setDesktopTelemetry} size="sm" />} />
+          </div>
+        </SettingsCard>
+
+        <SettingsCard title="Layout" description="Tune density for the amount of work on screen.">
+          <SettingRow label="Globe opacity" sub="Background globe visibility." right={<SliderControl value={globeOpacity} onChange={setGlobeOpacity} />} />
+          <SettingRow label="Font size" sub="Base UI scale for compact desktop use." right={<SliderControl value={fontSize} onChange={setFontSize} min={11} max={18} suffix="px" />} />
+          <SettingRow
+            label="Dock position"
+            sub="Apps can later request preferred window size and dock behavior."
+            right={
+              <div className="flex rounded-lg border border-[var(--window-border)] bg-secondary/40 p-1">
+                {["bottom", "left", "right"].map(p => (
+                  <Button
+                    key={p}
+                    variant={dockPosition === p ? "default" : "ghost"}
+                    size="xs"
+                    onClick={() => setDockPosition(p)}
+                    className="capitalize"
+                  >
+                    {p}
+                  </Button>
+                ))}
+              </div>
+            }
+          />
+        </SettingsCard>
       </div>
+
+      <Card className="overflow-hidden border-[var(--window-border)] bg-background/35 py-0 shadow-none">
+        <div className="relative h-full min-h-[290px] p-4">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_25%,var(--primary)_0,transparent_28%),linear-gradient(135deg,transparent,rgba(255,255,255,0.04))] opacity-25" />
+          <div className="relative flex h-full flex-col justify-between rounded-2xl border border-primary/10 bg-background/30 p-4">
+            <div>
+              <Badge variant="secondary" className="mb-4 gap-1.5 bg-primary/10 text-primary">
+                <Sparkles className="h-3 w-3" /> Live preview
+              </Badge>
+              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">node telemetry</p>
+              <p className="mt-2 font-mono text-2xl text-foreground">12 peers</p>
+              <p className="mt-1 text-xs text-muted-foreground">3 sessions · 4.2 / 8 GB</p>
+            </div>
+            <div className="space-y-2 font-mono text-[10px] text-muted-foreground/60">
+              <div className="flex justify-between"><span>EDGE / hour</span><span className="text-primary">0.339</span></div>
+              <div className="flex justify-between"><span>resource mode</span><span>balanced</span></div>
+              <div className="h-1.5 rounded-full bg-secondary"><div className="h-full w-3/5 rounded-full bg-primary" /></div>
+            </div>
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -152,33 +211,31 @@ function PrivacyPanel() {
   const [locationAccess, setLocationAccess] = useState(false)
 
   return (
-    <div className="space-y-0 divide-y divide-[var(--window-border)]">
-      <div className="pb-3">
-        <div className="flex items-center gap-2 rounded-lg bg-primary/10 p-3">
-          <Fingerprint className="h-5 w-5 shrink-0 text-primary" />
-          <div>
-            <p className="text-sm font-medium text-foreground">Fingerprint locked</p>
-            <p className="text-[11px] text-muted-foreground">WebAuthn credential active on this device</p>
+    <div className="space-y-4">
+      <Card className="border-primary/20 bg-primary/5 py-4 shadow-none">
+        <CardContent className="flex items-center gap-3 px-4">
+          <div className="rounded-xl bg-primary/10 p-3 text-primary">
+            <Fingerprint className="h-5 w-5" />
           </div>
-        </div>
-      </div>
-      <Row label="Biometric lock" sub="Require fingerprint to unlock" right={<Toggle value={biometricLock} onChange={setBiometricLock} />} />
-      <Row label="Auto-lock" sub="Lock when idle" right={<Toggle value={autoLock} onChange={setAutoLock} />} />
-      {autoLock && (
-        <Row
-          label="Auto-lock delay"
-          sub={`${autoLockTime} minute${autoLockTime !== 1 ? "s" : ""}`}
-          right={<div className="w-32"><Slider value={autoLockTime} onChange={setAutoLockTime} min={1} max={60} /></div>}
-        />
-      )}
-      <div className="pt-2">
-        <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Data & Privacy</p>
-        <div className="space-y-0 divide-y divide-[var(--window-border)]">
-          <Row label="Analytics" sub="Send anonymous usage data" right={<Toggle value={analytics} onChange={setAnalytics} />} />
-          <Row label="Crash reports" sub="Share diagnostics on crash" right={<Toggle value={crashReports} onChange={setCrashReports} />} />
-          <Row label="Location access" sub="Allow apps to access rough location" right={<Toggle value={locationAccess} onChange={setLocationAccess} />} />
-        </div>
-      </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">Fingerprint locked</p>
+            <p className="text-xs text-muted-foreground">WebAuthn credential active on this device.</p>
+          </div>
+          <Badge variant="outline" className="border-primary/20 text-primary">local</Badge>
+        </CardContent>
+      </Card>
+
+      <SettingsCard title="Identity lock" description="Device trust should be clear and low-friction.">
+        <SettingRow label="Biometric lock" sub="Require fingerprint or passkey to unlock." right={<Switch checked={biometricLock} onCheckedChange={setBiometricLock} size="sm" />} />
+        <SettingRow label="Auto-lock" sub="Lock the shell when idle." right={<Switch checked={autoLock} onCheckedChange={setAutoLock} size="sm" />} />
+        {autoLock && <SettingRow label="Auto-lock delay" sub={`${autoLockTime} minute${autoLockTime !== 1 ? "s" : ""}.`} right={<SliderControl value={autoLockTime} onChange={setAutoLockTime} min={1} max={60} suffix="m" />} />}
+      </SettingsCard>
+
+      <SettingsCard title="Data & privacy" description="Prefer local-first behavior unless explicitly enabled.">
+        <SettingRow label="Analytics" sub="Send anonymous usage data." right={<Switch checked={analytics} onCheckedChange={setAnalytics} size="sm" />} />
+        <SettingRow label="Crash reports" sub="Share diagnostics after crashes." right={<Switch checked={crashReports} onCheckedChange={setCrashReports} size="sm" />} />
+        <SettingRow label="Location access" sub="Allow apps to request rough location." right={<Switch checked={locationAccess} onCheckedChange={setLocationAccess} size="sm" />} />
+      </SettingsCard>
     </div>
   )
 }
@@ -190,47 +247,49 @@ function NetworkPanel() {
   const [bandwidth, setBandwidth] = useState(50)
   const [region, setRegion] = useState("auto")
 
-  const regions = ["auto", "eu-west", "us-east", "ap-south", "us-west"]
-
   return (
-    <div className="space-y-0 divide-y divide-[var(--window-border)]">
-      {/* Live stats */}
-      <div className="pb-4">
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Live Status</p>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { label: "Latency", val: "14ms", color: "text-primary" },
-            { label: "Peers", val: "12", color: "text-primary" },
-            { label: "Upload", val: "2.4 MB/s", color: "text-[oklch(0.65_0.2_200)]" },
-          ].map(s => (
-            <div key={s.label} className="rounded-lg bg-secondary/40 p-2 text-center">
-              <p className={cn("font-mono text-sm font-semibold", s.color)}>{s.val}</p>
-              <p className="text-[10px] text-muted-foreground">{s.label}</p>
-            </div>
-          ))}
-        </div>
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Latency", val: "14ms" },
+          { label: "Peers", val: "12" },
+          { label: "Upload", val: "2.4 MB/s" },
+        ].map(s => (
+          <Card key={s.label} className="gap-1 border-[var(--window-border)] bg-card/55 py-4 text-center shadow-none">
+            <CardContent className="px-3">
+              <p className="font-mono text-lg font-semibold text-primary">{s.val}</p>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{s.label}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      <Row label="VPN tunnel" sub="Route traffic through Edgerun VPN" right={<Toggle value={vpn} onChange={setVpn} />} />
-      <Row label="Tor relay" sub="Contribute as a relay node" right={<Toggle value={torRelay} onChange={setTorRelay} />} />
-      <Row label="P2P discovery" sub="Allow peers to discover this node" right={<Toggle value={p2pDiscovery} onChange={setP2pDiscovery} />} />
-      <Row
-        label="Bandwidth limit"
-        sub={`${bandwidth === 100 ? "Unlimited" : `${bandwidth}%`} of available bandwidth`}
-        right={<div className="w-32"><Slider value={bandwidth} onChange={setBandwidth} label="%" /></div>}
-      />
-      <Row
-        label="Region"
-        right={
-          <select
-            value={region}
-            onChange={e => setRegion(e.target.value)}
-            className="rounded-md bg-secondary px-2 py-1 font-mono text-[11px] text-foreground outline-none"
-          >
-            {regions.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-        }
-      />
+      <SettingsCard title="Routing" description="Separate trust from transport so hostile networks can still relay sealed packets.">
+        <SettingRow label="VPN tunnel" sub="Route traffic through Edgerun VPN." right={<Switch checked={vpn} onCheckedChange={setVpn} size="sm" />} />
+        <SettingRow label="Relay mode" sub="Contribute spare bandwidth as a paid relay." right={<Switch checked={torRelay} onCheckedChange={setTorRelay} size="sm" />} />
+        <SettingRow label="P2P discovery" sub="Allow peers to discover this node." right={<Switch checked={p2pDiscovery} onCheckedChange={setP2pDiscovery} size="sm" />} />
+        <SettingRow label="Bandwidth limit" sub={`${bandwidth === 100 ? "Unlimited" : `${bandwidth}%`} of available bandwidth.`} right={<SliderControl value={bandwidth} onChange={setBandwidth} />} />
+        <SettingRow
+          label="Region"
+          sub="Use auto unless you need deterministic routing."
+          right={
+            <Select value={region} onValueChange={setRegion}>
+              <SelectTrigger size="sm" className="w-36 font-mono text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[
+                  ["auto", "Auto"],
+                  ["eu-west", "EU West"],
+                  ["us-east", "US East"],
+                  ["ap-south", "AP South"],
+                  ["us-west", "US West"],
+                ].map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          }
+        />
+      </SettingsCard>
     </div>
   )
 }
@@ -244,14 +303,14 @@ function NotificationsPanel() {
   const [sound, setSound] = useState(true)
 
   return (
-    <div className="space-y-0 divide-y divide-[var(--window-border)]">
-      <Row label="System alerts" sub="Critical runtime events" right={<Toggle value={systemAlerts} onChange={setSystemAlerts} />} />
-      <Row label="Chat messages" sub="New messages from peers" right={<Toggle value={chatNotifs} onChange={setChatNotifs} />} />
-      <Row label="Incoming calls" sub="P2P call notifications" right={<Toggle value={callNotifs} onChange={setCallNotifs} />} />
-      <Row label="Wallet activity" sub="Transactions and transfers" right={<Toggle value={walletNotifs} onChange={setWalletNotifs} />} />
-      <Row label="Node events" sub="Peer join / leave events" right={<Toggle value={nodeEvents} onChange={setNodeEvents} />} />
-      <Row label="Sound" sub="Play audio for notifications" right={<Toggle value={sound} onChange={setSound} />} />
-    </div>
+    <SettingsCard title="Notification policy" description="Keep alerts useful and quiet by default.">
+      <SettingRow label="System alerts" sub="Critical runtime events." right={<Switch checked={systemAlerts} onCheckedChange={setSystemAlerts} size="sm" />} />
+      <SettingRow label="Chat messages" sub="New messages from peers." right={<Switch checked={chatNotifs} onCheckedChange={setChatNotifs} size="sm" />} />
+      <SettingRow label="Incoming calls" sub="P2P call notifications." right={<Switch checked={callNotifs} onCheckedChange={setCallNotifs} size="sm" />} />
+      <SettingRow label="Wallet activity" sub="Transactions, payouts, and exchange events." right={<Switch checked={walletNotifs} onCheckedChange={setWalletNotifs} size="sm" />} />
+      <SettingRow label="Node events" sub="Peer join and leave events." right={<Switch checked={nodeEvents} onCheckedChange={setNodeEvents} size="sm" />} />
+      <SettingRow label="Sound" sub="Play audio for important notifications." right={<Switch checked={sound} onCheckedChange={setSound} size="sm" />} />
+    </SettingsCard>
   )
 }
 
@@ -260,69 +319,65 @@ function PerformancePanel() {
   const [maxRamUsage, setMaxRamUsage] = useState(60)
   const [backgroundTasks, setBackgroundTasks] = useState(true)
   const [powerSaver, setPowerSaver] = useState(false)
+  const [marketTasks, setMarketTasks] = useState(true)
 
   return (
-    <div className="space-y-0 divide-y divide-[var(--window-border)]">
-      <div className="pb-4">
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Resource Limits</p>
-        <div className="space-y-4">
-          <div>
-            <div className="mb-1 flex justify-between text-[11px]">
-              <span className="text-muted-foreground">Max CPU usage</span>
-              <span className="font-mono text-primary">{maxCpuUsage}%</span>
-            </div>
-            <Slider value={maxCpuUsage} onChange={setMaxCpuUsage} />
-          </div>
-          <div>
-            <div className="mb-1 flex justify-between text-[11px]">
-              <span className="text-muted-foreground">Max RAM allocation</span>
-              <span className="font-mono text-primary">{maxRamUsage}%</span>
-            </div>
-            <Slider value={maxRamUsage} onChange={setMaxRamUsage} />
-          </div>
-        </div>
-      </div>
-      <Row label="Background tasks" sub="Allow tasks to run when minimized" right={<Toggle value={backgroundTasks} onChange={setBackgroundTasks} />} />
-      <Row label="Power saver" sub="Reduce performance to save energy" right={<Toggle value={powerSaver} onChange={setPowerSaver} />} />
+    <div className="space-y-4">
+      <SettingsCard title="Resource limits" description="Apps should declare what they need; the shell decides what they get.">
+        <SettingRow label="Max CPU usage" sub="Upper bound for foreground and background workloads." right={<SliderControl value={maxCpuUsage} onChange={setMaxCpuUsage} />} />
+        <SettingRow label="Max RAM allocation" sub="Memory budget before apps must degrade or pause." right={<SliderControl value={maxRamUsage} onChange={setMaxRamUsage} />} />
+      </SettingsCard>
+
+      <SettingsCard title="Runtime behavior" description="Balance local UX, battery, and compute-market participation.">
+        <SettingRow label="Background tasks" sub="Allow tasks to run when minimized." right={<Switch checked={backgroundTasks} onCheckedChange={setBackgroundTasks} size="sm" />} />
+        <SettingRow label="Market workloads" sub="Accept paid workloads when resources are idle." right={<Switch checked={marketTasks} onCheckedChange={setMarketTasks} size="sm" />} />
+        <SettingRow label="Power saver" sub="Reduce performance to save energy." right={<Switch checked={powerSaver} onCheckedChange={setPowerSaver} size="sm" />} />
+      </SettingsCard>
     </div>
   )
 }
 
 function AboutPanel() {
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col items-center gap-3 pt-2 text-center">
-        <EdgerunLogo size="lg" variant="mark" />
-        <div>
-          <p className="text-lg font-semibold tracking-tight text-foreground">Edgerun</p>
-          <p className="text-sm text-muted-foreground">Distributed Runtime</p>
-        </div>
-      </div>
+  const details = [
+    ["Version", "1.0.0-alpha"],
+    ["Runtime", "WASI 2.0"],
+    ["Node ID", "edge-0xdeadbeef"],
+    ["Region", "eu-west"],
+    ["Build", "2026.04.29"],
+    ["Protocol", "WebRTC / CBOR"],
+    ["Auth", "WebAuthn / FIDO2"],
+  ]
 
-      <div className="space-y-0 divide-y divide-[var(--window-border)] rounded-lg border border-[var(--window-border)]">
-        {[
-          ["Version", "1.0.0-alpha"],
-          ["Runtime", "WASI 2.0"],
-          ["Node ID", "edge-0xdeadbeef"],
-          ["Region", "eu-west"],
-          ["Build", "2026.04.29"],
-          ["Protocol", "WebRTC / CBOR"],
-          ["Auth", "WebAuthn / FIDO2"],
-        ].map(([k, v]) => (
-          <div key={k} className="flex items-center justify-between px-3 py-2">
-            <span className="text-xs text-muted-foreground">{k}</span>
-            <span className="font-mono text-xs text-foreground">{v}</span>
+  return (
+    <div className="space-y-4">
+      <Card className="overflow-hidden border-[var(--window-border)] bg-card/55 py-0 shadow-none">
+        <CardContent className="relative flex items-center gap-4 px-5 py-5">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,var(--primary)_0,transparent_28%)] opacity-10" />
+          <div className="relative rounded-2xl border border-primary/10 bg-primary/5 p-3">
+            <EdgerunLogo size="lg" variant="mark" />
           </div>
-        ))}
-      </div>
+          <div className="relative min-w-0 flex-1">
+            <p className="text-lg font-semibold tracking-tight text-foreground">Edgerun</p>
+            <p className="text-sm text-muted-foreground">Distributed Runtime</p>
+          </div>
+          <Badge variant="secondary" className="relative bg-primary/10 text-primary">alpha</Badge>
+        </CardContent>
+      </Card>
+
+      <SettingsCard title="Build information">
+        <div className="divide-y divide-[var(--window-border)] rounded-xl border border-[var(--window-border)]">
+          {details.map(([k, v]) => (
+            <div key={k} className="flex items-center justify-between px-3 py-2">
+              <span className="text-xs text-muted-foreground">{k}</span>
+              <span className="font-mono text-xs text-foreground">{v}</span>
+            </div>
+          ))}
+        </div>
+      </SettingsCard>
 
       <div className="flex gap-2">
-        <button className="flex-1 rounded-lg border border-[var(--window-border)] px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-          Check for updates
-        </button>
-        <button className="flex-1 rounded-lg border border-[var(--window-border)] px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-          View changelog
-        </button>
+        <Button variant="outline" className="flex-1" size="sm"><RotateCcw className="h-3.5 w-3.5" /> Check for updates</Button>
+        <Button variant="secondary" className="flex-1" size="sm">View changelog</Button>
       </div>
 
       <p className="text-center font-mono text-[10px] text-muted-foreground/40">
@@ -332,55 +387,63 @@ function AboutPanel() {
   )
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
-
-const SECTIONS: { id: SettingsSection; label: string; icon: React.ReactNode }[] = [
-  { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
-  { id: "privacy",    label: "Privacy",    icon: <Shield className="h-4 w-4" /> },
-  { id: "network",    label: "Network",    icon: <Globe className="h-4 w-4" /> },
-  { id: "notifications", label: "Alerts",  icon: <Bell className="h-4 w-4" /> },
-  { id: "performance", label: "Performance", icon: <Cpu className="h-4 w-4" /> },
-  { id: "about",      label: "About",      icon: <Info className="h-4 w-4" /> },
-]
-
 export function SettingsApp() {
   const [active, setActive] = useState<SettingsSection>("appearance")
+  const section = SECTIONS.find(s => s.id === active) ?? SECTIONS[0]
 
   const renderPanel = () => {
     switch (active) {
-      case "appearance":    return <AppearancePanel />
-      case "privacy":       return <PrivacyPanel />
-      case "network":       return <NetworkPanel />
+      case "appearance": return <AppearancePanel />
+      case "privacy": return <PrivacyPanel />
+      case "network": return <NetworkPanel />
       case "notifications": return <NotificationsPanel />
-      case "performance":   return <PerformancePanel />
-      case "about":         return <AboutPanel />
+      case "performance": return <PerformancePanel />
+      case "about": return <AboutPanel />
     }
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-36 shrink-0 border-r border-[var(--window-border)] py-2">
-        {SECTIONS.map(s => (
-          <button
-            key={s.id}
-            onClick={() => setActive(s.id)}
-            className={cn(
-              "flex w-full items-center gap-2.5 px-3 py-2 text-xs transition-colors",
-              active === s.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-            )}
-          >
-            {s.icon}
-            {s.label}
-          </button>
-        ))}
+    <div className="flex h-full overflow-hidden bg-background/40">
+      <div className="w-56 shrink-0 border-r border-[var(--window-border)] bg-sidebar/35 p-3">
+        <div className="mb-4 flex items-center gap-2 px-2">
+          <MonitorCog className="h-4 w-4 text-primary" />
+          <div>
+            <p className="text-sm font-medium text-foreground">Settings</p>
+            <p className="text-[10px] text-muted-foreground">System control</p>
+          </div>
+        </div>
+        <div className="space-y-1">
+          {SECTIONS.map(s => (
+            <button
+              key={s.id}
+              onClick={() => setActive(s.id)}
+              className={cn(
+                "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+                active === s.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary/65 hover:text-foreground"
+              )}
+            >
+              <span className="shrink-0">{s.icon}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-medium">{s.label}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">{s.hint}</span>
+              </span>
+              <ChevronRight className={cn("h-3.5 w-3.5 opacity-0 transition-opacity", active === s.id && "opacity-100")} />
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Panel */}
-      <div className="flex-1 overflow-auto p-4">
-        <h2 className="mb-4 font-mono text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-          {SECTIONS.find(s => s.id === active)?.label}
-        </h2>
+      <div className="min-w-0 flex-1 overflow-auto p-5">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">{section.label}</h2>
+            <p className="text-sm text-muted-foreground">{section.hint}</p>
+          </div>
+          <Badge variant="outline" className="hidden gap-1.5 border-primary/20 text-primary sm:inline-flex">
+            {active === "network" ? <RadioTower className="h-3 w-3" /> : active === "performance" ? <Cpu className="h-3 w-3" /> : active === "notifications" ? <Bell className="h-3 w-3" /> : active === "about" ? <Info className="h-3 w-3" /> : active === "privacy" ? <Shield className="h-3 w-3" /> : <WalletCards className="h-3 w-3" />}
+            live policy
+          </Badge>
+        </div>
         {renderPanel()}
       </div>
     </div>
