@@ -51,8 +51,9 @@ interface CodeRunnerProps {
 }
 
 function createCompilerWorker(): Worker {
-  return new Worker(new URL("../../workers/assemblyscript-compiler-worker.ts", import.meta.url), {
+  return new Worker("/workers/assemblyscript-compiler-worker.js", {
     type: "module",
+    name: "edgerun-assemblyscript-compiler",
   })
 }
 
