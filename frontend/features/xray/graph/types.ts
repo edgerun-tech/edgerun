@@ -56,12 +56,31 @@ export type RuntimeNodeStats = {
 
 export type LayoutType = "force" | "globe" | "layers"
 
+export type XrayFilterKey =
+  | "file"
+  | "function"
+  | "ui"
+  | "runtime"
+  | "storage"
+  | "network"
+  | "crypto"
+  | "agent"
+  | "rust"
+  | "typescript"
+  | "javascript"
+  | "go"
+  | "python"
+  | "c"
+  | "unknown"
+
 export type XrayState = {
   nodes: Map<string, XrayNode>
   edges: XrayEdge[]
   runtimeStats: Map<string, RuntimeNodeStats>
   selectedId: string | null
+  hoveredId: string | null
   highlightedIds: Set<string>
+  hiddenFilterKeys: Set<XrayFilterKey>
   layout: LayoutType
   runtimeMode: boolean
   zoom: number
