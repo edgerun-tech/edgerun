@@ -5,7 +5,7 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-pub use edgerun_core::protocol::{
+pub use edgerun_core::protocol::capability::{
     CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor,
     CapabilityEventKind, CapabilityGrant, CapabilityInvocation, CapabilityModality,
     CapabilityOperation, CapabilityRequest, CapabilityResult, CapabilityRevocation, CapabilityRole,
