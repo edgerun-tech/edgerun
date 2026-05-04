@@ -56,7 +56,7 @@ function formatBytes(bytes?: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MiB`
 }
 
-export function CodelyzerNetworkPanel() {
+function useCodelyzerBridge() {
   const [status, setStatus] = useState<BridgeStatus>("checking")
   const [graph, setGraph] = useState<BridgeGraph | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -104,11 +104,85 @@ export function CodelyzerNetworkPanel() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
   }, [graph])
 
-  const statusTone = status === "online"
+  return { status, graph, error, lastRefresh, refresh, nodeMap, activeConnections, languageSummary }
+}
+
+function statusClass(status: BridgeStatus) {
+  return status === "online"
     ? "border-[var(--status-online)]/30 bg-[var(--status-online)]/10 text-[var(--status-online)]"
     : status === "checking"
       ? "border-primary/30 bg-primary/10 text-primary"
       : "border-[var(--status-error)]/30 bg-[var(--status-error)]/10 text-[var(--status-error)]"
+}
+
+export function CodelyzerNetworkWidget() {
+  const { status, graph, error, refresh, nodeMap, activeConnections } = useCodelyzerBridge()
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background/5 p-3 text-foreground">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-xs font-semibold">
+            <Network className="h-3.5 w-3.5 text-primary" />
+            Network
+          </div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">Codelyzer bridge</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          className={cn("rounded-full border px-2 py-0.5 font-mono text-[10px]", statusClass(status))}
+        >
+          {status}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-border/70 bg-background/55 p-2">
+          <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">nodes</div>
+          <div className="mt-1 font-mono text-xs text-foreground">{graph?.node_count ?? graph?.nodes?.length ?? 0}</div>
+        </div>
+        <div className="rounded-xl border border-border/70 bg-background/55 p-2">
+          <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">edges</div>
+          <div className="mt-1 font-mono text-xs text-foreground">{graph?.edge_count ?? graph?.edges?.length ?? 0}</div>
+        </div>
+      </div>
+
+      <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-hidden">
+        {error ? (
+          <div className="rounded-lg bg-[var(--status-error)]/10 px-2 py-1.5 text-[10px] text-[var(--status-error)]">
+            Bridge offline · {error}
+          </div>
+        ) : activeConnections.length === 0 ? (
+          <div className="rounded-lg bg-background/45 px-2 py-1.5 text-[10px] text-muted-foreground">
+            No graph connections loaded.
+          </div>
+        ) : activeConnections.slice(0, 5).map((edge, index) => {
+          const source = nodeMap.get(edge.source)
+          const target = nodeMap.get(edge.target)
+          return (
+            <div key={edge.id || `${edge.source}-${edge.target}-${index}`} className="rounded-lg bg-background/45 px-2 py-1.5 text-[10px]">
+              <div className="flex items-center gap-1.5">
+                <Activity className="h-3 w-3 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">{displayNode(source, edge.source)}</span>
+                <span className="font-mono text-primary">→</span>
+                <span className="min-w-0 flex-1 truncate text-foreground">{displayNode(target, edge.target)}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-2 truncate text-[10px] text-muted-foreground">
+        {graph?.source ? shortFile(graph.source) : BRIDGE_URL}
+      </div>
+    </div>
+  )
+}
+
+export function CodelyzerNetworkPanel() {
+  const { status, graph, error, lastRefresh, refresh, nodeMap, activeConnections, languageSummary } = useCodelyzerBridge()
+  const statusTone = statusClass(status)
 
   return (
     <div className="space-y-4">
