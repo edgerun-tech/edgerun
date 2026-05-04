@@ -12,9 +12,17 @@ import {
   uninstallApp,
   isCoreApp,
 } from "@/stores/installed-apps-store"
+import { windowsStore, closeWindow } from "@/stores/desktop-store"
 
 interface AppStoreProps {
   onLaunchApp?: (app: AppDefinition) => void
+}
+
+function uninstallAndClose(appId: string) {
+  for (const win of windowsStore.get()) {
+    if (win.appId === appId) closeWindow(win.id)
+  }
+  uninstallApp(appId)
 }
 
 export function AppStore({ onLaunchApp }: AppStoreProps) {
@@ -30,7 +38,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
             App Store
           </h2>
           <p className="text-xs text-muted-foreground">
-            Install apps to show them in the dock. Uninstalled app code is lazy and stays unloaded.
+            Install apps to show them in the dock. Uninstall closes running windows and keeps app code unloaded.
           </p>
         </div>
         <div className="rounded-md border border-border bg-secondary/50 px-2 py-1 font-mono text-[10px] text-muted-foreground">
@@ -95,7 +103,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                 )}
 
                 <button
-                  onClick={() => uninstallApp(app.appId)}
+                  onClick={() => uninstallAndClose(app.appId)}
                   disabled={!installed || core}
                   title={core ? "Core app cannot be uninstalled" : "Uninstall"}
                   className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary text-muted-foreground transition-colors hover:bg-[var(--status-error)]/15 hover:text-[var(--status-error)] disabled:cursor-not-allowed disabled:opacity-40"
