@@ -69,6 +69,7 @@ pub enum IrOp {
     I32Const(i32),
     I64Const(i64),
     GlobalGet(u32, ValueType),
+    GlobalSet(u32, ValueType),
     LocalGet(u32),
     LocalSet(u32),
     LocalTee(u32),
@@ -110,6 +111,7 @@ impl IrOp {
             Self::I32Const(v) => format!("i32.const {v}"),
             Self::I64Const(v) => format!("i64.const {v}"),
             Self::GlobalGet(i, _) => format!("global.get {i}"),
+            Self::GlobalSet(i, _) => format!("global.set {i}"),
             Self::LocalGet(i) => format!("local.get {i}"),
             Self::LocalSet(i) => format!("local.set {i}"),
             Self::LocalTee(i) => format!("local.tee {i}"),
@@ -215,15 +217,23 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
             IrOp::I32Const(_) => stack.push(ValueType::I32),
             IrOp::I64Const(_) => stack.push(ValueType::I64),
             IrOp::GlobalGet(index, ty) => {
-                let global = ir
-                    .global_values
-                    .get(index as usize)
-                    .copied()
-                    .with_context(|| format!("{} references missing global {index}", ir.name()))?;
-                if global.value_type() != ty {
+                let global = global_type(ir, index)?;
+                if global != ty {
                     bail!("{} global.get {} type mismatch", ir.name(), index);
                 }
                 stack.push(ty);
+            }
+            IrOp::GlobalSet(index, ty) => {
+                let global = global_type(ir, index)?;
+                if global != ty {
+                    bail!("{} global.set {} type mismatch", ir.name(), index);
+                }
+                let actual = stack
+                    .pop()
+                    .with_context(|| format!("{} stack underflow at global.set {index}", ir.name()))?;
+                if actual != ty {
+                    bail!("{} global.set {} value type mismatch: expected {}, found {}", ir.name(), index, ty.as_str(), actual.as_str());
+                }
             }
             IrOp::LocalGet(i) => stack.push(local_type(ir, i)?),
             IrOp::LocalSet(i) => {
@@ -319,6 +329,14 @@ fn local_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
         .get(index as usize)
         .copied()
         .with_context(|| format!("{} references missing local {index}", ir.name()))
+}
+
+fn global_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
+    ir.global_values
+        .get(index as usize)
+        .copied()
+        .map(GlobalValue::value_type)
+        .with_context(|| format!("{} references missing global {index}", ir.name()))
 }
 
 fn pop1(stack: &mut Vec<ValueType>, expected: ValueType, ir: &FunctionIr, op: &IrOp) -> Result<()> {
