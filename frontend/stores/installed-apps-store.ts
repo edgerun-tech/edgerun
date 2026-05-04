@@ -6,6 +6,8 @@ const APP_ID_ALIASES: Record<string, string> = {
   wallet: "finances",
 }
 
+const REMOVED_APP_IDS = new Set(["resource-monitor"])
+
 export const CORE_APP_IDS = ["app-store", "settings"] as const
 
 export const DEFAULT_INSTALLED_APP_IDS = [
@@ -17,11 +19,16 @@ export const DEFAULT_INSTALLED_APP_IDS = [
   "finances",
   "code-runner",
   "file-browser",
-  "resource-monitor",
 ] as const
 
 export function normalizeAppId(appId: string): string {
   return APP_ID_ALIASES[appId] || appId
+}
+
+function normalizeInstalledIds(ids: unknown[]): string[] {
+  return ids
+    .map((id) => typeof id === "string" ? normalizeAppId(id) : "")
+    .filter((id) => id && !REMOVED_APP_IDS.has(id))
 }
 
 export const installedAppIdsStore = persistentAtom<string[]>(
@@ -32,8 +39,8 @@ export const installedAppIdsStore = persistentAtom<string[]>(
     decode: (value) => {
       const parsed = JSON.parse(value)
       if (!Array.isArray(parsed)) return [...DEFAULT_INSTALLED_APP_IDS]
-      const normalized = parsed.map((id) => typeof id === "string" ? normalizeAppId(id) : "").filter(Boolean)
-      return Array.from(new Set([...DEFAULT_INSTALLED_APP_IDS.filter((id) => id === "app-store" || id === "settings"), ...normalized]))
+      const normalized = normalizeInstalledIds(parsed)
+      return Array.from(new Set([...CORE_APP_IDS, ...normalized]))
     },
   },
 )
@@ -44,12 +51,14 @@ export function isCoreApp(appId: string): boolean {
 
 export function isAppInstalled(appId: string): boolean {
   const normalized = normalizeAppId(appId)
+  if (REMOVED_APP_IDS.has(normalized)) return false
   return installedAppIdsStore.get().map(normalizeAppId).includes(normalized) || isCoreApp(normalized)
 }
 
 export function installApp(appId: string): void {
   const normalized = normalizeAppId(appId)
-  const ids = installedAppIdsStore.get().map(normalizeAppId)
+  if (REMOVED_APP_IDS.has(normalized)) return
+  const ids = normalizeInstalledIds(installedAppIdsStore.get())
   if (ids.includes(normalized)) return
   installedAppIdsStore.set([...ids, normalized])
 }
@@ -57,5 +66,5 @@ export function installApp(appId: string): void {
 export function uninstallApp(appId: string): void {
   const normalized = normalizeAppId(appId)
   if (isCoreApp(normalized)) return
-  installedAppIdsStore.set(installedAppIdsStore.get().map(normalizeAppId).filter((id) => id !== normalized))
+  installedAppIdsStore.set(normalizeInstalledIds(installedAppIdsStore.get()).filter((id) => id !== normalized))
 }
