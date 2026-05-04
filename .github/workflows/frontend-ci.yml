@@ -1,0 +1,55 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Format check (if available)
+        run: |
+          if [ -f package.json ] && node -e "const s=require('./package.json').scripts||{}; process.exit(s['format:check'] ? 0 : 1)"; then
+            bun run format:check
+          else
+            echo "format:check script not configured. Skipping formatting check."
+          fi
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Test (if configured)
+        run: |
+          if node -e "const s=require('./package.json').scripts||{}; process.exit(s.test && s.test !== 'echo \"No frontend tests configured\"' ? 0 : 1)"; then
+            bun run test
+          else
+            echo "No tests configured for frontend."
+          fi
+
+      - name: Lighthouse CI
+        # Targets are intentionally strict at 1.0 for frontend launch criteria.
+        # Lower only when Lighthouse variance is independently documented.
+        run: |
+          npx -y @lhci/cli@0.12.0 autorun --config ../.lighthouserc.json
