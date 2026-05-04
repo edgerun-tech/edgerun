@@ -11,7 +11,6 @@ description = "Core Edgerun protocol types, validation, commands, and crypto-fac
 [dependencies]
 prost.workspace = true
 prost-types.workspace = true
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 edgerun-wire = { workspace = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "p256", "aead"] }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }

@@ -85,7 +85,6 @@ members = [
   "crates/edgerun-pci",
   "crates/edgerun-power",
   "crates/edgerun-quectel-ec200a",
-  "crates/edgerun-proto",
   "crates/edgerun-proxy",
   "crates/edgerun-qpack",
   "crates/edgerun-quic",
