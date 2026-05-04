@@ -70,7 +70,7 @@ export function Desktop() {
         const app = getBuiltinApp(appId)
         if (!app) return null
         return {
-          title: app.name + (app.source === "demo" ? " (Demo)" : ""),
+          title: app.name,
           icon: getAppIcon(app.appId),
           onClick: () => {
             const fullApp = getBuiltinApp(app.appId)
