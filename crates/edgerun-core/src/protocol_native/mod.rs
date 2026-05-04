@@ -73,13 +73,6 @@ pub use server_resources::*;
 pub use stream::*;
 pub use ui::*;
 
-pub use trust::{
-    AggregateTrustPolicy, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor,
-    CapabilityKind, ConstraintSet, DelegationPolicy, DelegationRecord, ExportPolicy,
-    RevocationKind, RevocationRecord, RouteSelectionPolicy, RouteTrustAssignment,
-    RouteTrustAssignments, ScopeDescriptor, ScopeKind,
-};
-
 // Explicit reexports prevent name collisions between capability::* and trust::*.
 pub use capability::{
     CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityEventKind,

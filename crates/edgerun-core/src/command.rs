@@ -28,9 +28,9 @@ fn validate_assurance_claim_satisfies_requirement(
 ) -> crate::result::ValidationResult {
     crate::result::ValidationResult {
         verdict: crate::result::Verdict::Accept,
-        reason_code: "assurance_compatibility_shim",
-        derived: None,
-        post_state: None,
+        reason_code: None,
+        derived: crate::value::Value::Unit,
+        post_state: crate::value::Value::Unit,
     }
 }
 
@@ -795,7 +795,7 @@ fn required_capability_for_command(command_type: i32) -> Option<(i32, &'static s
     use crate::protocol::CapabilityKind as Ck;
     use crate::protocol::CommandType as Ct;
 
-    match Ct::from(command_type)? {
+    match crate::protocol::enum_from_i32::<Ct>(command_type)? {
         Ct::Unspecified => None,
         Ct::AddController => Some((Ck::NodeControl as i32, "add_controller")),
         Ct::RemoveController => Some((Ck::NodeControl as i32, "remove_controller")),
