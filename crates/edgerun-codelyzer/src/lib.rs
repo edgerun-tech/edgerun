@@ -9,6 +9,8 @@ pub mod filesystem;
 #[allow(dead_code)]
 pub mod git;
 #[allow(dead_code)]
+pub mod mcp_permission;
+#[allow(dead_code)]
 pub mod mcp_rust_ast;
 #[allow(dead_code)]
 pub mod parser;
