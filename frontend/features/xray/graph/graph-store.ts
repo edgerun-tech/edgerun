@@ -3,14 +3,14 @@ import type { XrayState, LayoutType } from "./types"
 import { createMockGraph, createMockRuntimeStats } from "./mock-graph"
 import { CodeAnalyzerWsService } from "../services/codeanalyzer-ws"
 
-// WebSocket service instance
 let wsService: CodeAnalyzerWsService | null = null
 
 function initialState(): XrayState {
+  const graph = createMockGraph()
   return {
-    nodes: new Map(),
-    edges: [],
-    runtimeStats: new Map(),
+    nodes: graph.nodes,
+    edges: graph.edges,
+    runtimeStats: createMockRuntimeStats(graph.nodes),
     selectedId: null,
     highlightedIds: new Set(),
     layout: "force",
@@ -24,11 +24,8 @@ function initialState(): XrayState {
   }
 }
 
-export interface XrayState extends ReturnType<typeof initialState> {}
-
 export const xrayState = atom<XrayState>(initialState())
 
-// Initialize WebSocket connection to codeanalyzer
 export function initCodeAnalyzerConnection(url?: string): void {
   if (wsService) {
     wsService.disconnect()
@@ -48,6 +45,7 @@ export function initCodeAnalyzerConnection(url?: string): void {
       ...xrayState.get(),
       nodes: nodeMap,
       edges: data.edges,
+      runtimeStats: createMockRuntimeStats(nodeMap),
       loading: false,
       error: null,
     })
@@ -61,7 +59,6 @@ export function initCodeAnalyzerConnection(url?: string): void {
   wsService.connect()
 }
 
-// Request analysis of a specific path
 export function requestAnalysis(path: string): void {
   if (wsService) {
     xrayState.set({ ...xrayState.get(), loading: true })
