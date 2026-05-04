@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use super::ir::FunctionIr;
 
 const MAGIC: &[u8; 8] = b"ERAOT001";
-pub const ARTIFACT_VERSION: u32 = 1;
+pub const ARTIFACT_VERSION: u32 = 2;
 
 #[derive(Clone, Debug)]
 pub struct CompiledFunction {
@@ -25,6 +25,7 @@ pub struct AotArtifact {
 pub struct DecodedFunction {
     pub index: u32,
     pub name: String,
+    pub sig: String,
     pub rendered_ir: String,
     pub code: Vec<u8>,
 }
@@ -51,6 +52,7 @@ impl AotArtifact {
         for f in &self.functions {
             put_u32(&mut out, f.index);
             put_bytes(&mut out, f.name.as_bytes());
+            put_bytes(&mut out, f.ir.sig.render().as_bytes());
             put_bytes(&mut out, f.ir.render().as_bytes());
             put_bytes(&mut out, &f.code);
         }
@@ -87,6 +89,7 @@ impl DecodedAotArtifact {
         for _ in 0..function_count {
             let index = cursor.u32().context("missing function index")?;
             let name = cursor.string("function name")?;
+            let sig = cursor.string("function signature")?;
             let rendered_ir = cursor.string("rendered IR")?;
             let code = cursor.bytes("machine code")?.to_vec();
             if code.is_empty() {
@@ -95,6 +98,7 @@ impl DecodedAotArtifact {
             functions.push(DecodedFunction {
                 index,
                 name,
+                sig,
                 rendered_ir,
                 code,
             });
