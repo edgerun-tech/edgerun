@@ -137,9 +137,7 @@ fn inline_callee_call(
     for op in expanded_callee.ops {
         match op {
             IrOp::End => {}
-            IrOp::Return => {
-                bail!("AOT cannot inline explicit return from {} yet", callee.name());
-            }
+            IrOp::Return => break,
             other => caller.ops.push(remap_locals(other, local_base)?),
         }
     }
@@ -203,6 +201,26 @@ mod tests {
                 IrOp::Call(1, callee.sig.clone()),
                 IrOp::End,
             ],
+        );
+
+        let module = X86_64ModuleBackend::compile_module(&[caller, callee]).unwrap();
+        assert_eq!(module.functions.len(), 2);
+        assert!(!module.code.is_empty());
+    }
+
+    #[test]
+    fn module_backend_inlines_direct_call_with_return() {
+        let callee = function(
+            1,
+            vec![ValueType::I32],
+            vec![ValueType::I32],
+            vec![IrOp::LocalGet(0), IrOp::Return, IrOp::I32Const(9), IrOp::End],
+        );
+        let caller = function(
+            0,
+            vec![ValueType::I32],
+            vec![ValueType::I32],
+            vec![IrOp::LocalGet(0), IrOp::Call(1, callee.sig.clone()), IrOp::End],
         );
 
         let module = X86_64ModuleBackend::compile_module(&[caller, callee]).unwrap();
