@@ -379,8 +379,10 @@ fn emit_load(code: &mut Vec<u8>, kind: LoadKind, mem: MemOp) -> Result<()> {
         LoadKind::I64 => code.extend_from_slice(&[0x49, 0x8B, 0x04, 0x02]),
         LoadKind::I32Load8U => code.extend_from_slice(&[0x41, 0x0F, 0xB6, 0x04, 0x02]),
         LoadKind::I32Load8S => code.extend_from_slice(&[0x41, 0x0F, 0xBE, 0x04, 0x02]),
+        LoadKind::I32Load16U => code.extend_from_slice(&[0x41, 0x0F, 0xB7, 0x04, 0x02]),
+        LoadKind::I32Load16S => code.extend_from_slice(&[0x41, 0x0F, 0xBF, 0x04, 0x02]),
     }
-    if matches!(kind, LoadKind::I32 | LoadKind::I32Load8U) {
+    if matches!(kind, LoadKind::I32 | LoadKind::I32Load8U | LoadKind::I32Load16U) {
         emit_zero_extend_eax(code);
     }
     code.push(0x50);
@@ -394,6 +396,7 @@ fn emit_store(code: &mut Vec<u8>, kind: StoreKind, mem: MemOp) -> Result<()> {
         StoreKind::I32 => code.extend_from_slice(&[0x41, 0x89, 0x0C, 0x02]),
         StoreKind::I64 => code.extend_from_slice(&[0x49, 0x89, 0x0C, 0x02]),
         StoreKind::I32Store8 => code.extend_from_slice(&[0x41, 0x88, 0x0C, 0x02]),
+        StoreKind::I32Store16 => code.extend_from_slice(&[0x66, 0x41, 0x89, 0x0C, 0x02]),
     }
     Ok(())
 }
