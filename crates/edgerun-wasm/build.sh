@@ -37,6 +37,16 @@ echo ""
 echo "Validating..."
 cargo run -p edgerun-wasm --bin edgerun-validate --target "$WASM_TARGET" -- app.wasm --verbose 2>&1
 
+# Baseline AOT compile. This intentionally supports only the tiny deterministic
+# integer subset first; larger WASM modules should still run through runtime.
+echo ""
+echo "AOT compiling baseline subset..."
+if cargo run -p edgerun-wasm --bin edgerun-aot --target "$WASM_TARGET" -- app.wasm --emit-ir --verbose 2>&1; then
+    echo "AOT output: app.eraot"
+else
+    echo "AOT skipped: module uses operators outside the current baseline subset"
+fi
+
 # Run
 echo ""
 echo "Running..."
