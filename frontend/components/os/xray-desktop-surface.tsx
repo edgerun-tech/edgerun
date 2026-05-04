@@ -28,6 +28,30 @@ function MiniTile({ icon, label, value, sub }: { icon: ReactNode; label: string;
   )
 }
 
+function CompactMetric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-background/70 px-3 py-1.5 shadow-xl backdrop-blur-md">
+      <span className="shrink-0 text-primary">{icon}</span>
+      <span className="hidden text-[10px] uppercase tracking-[0.18em] text-muted-foreground sm:inline">{label}</span>
+      <span className="font-mono text-xs text-foreground">{value}</span>
+    </div>
+  )
+}
+
+function MiniFinanceSparkline() {
+  return (
+    <div className="flex h-5 w-20 items-end gap-0.5 overflow-hidden rounded-sm opacity-80">
+      {[28, 42, 34, 55, 47, 64, 58, 76, 69, 86].map((height, index) => (
+        <div
+          key={index}
+          className="w-1 rounded-t bg-primary/65"
+          style={{ height: `${height}%` }}
+        />
+      ))}
+    </div>
+  )
+}
+
 export function XrayDesktopSurface({
   nodeCount,
   activeSessions,
@@ -42,7 +66,7 @@ export function XrayDesktopSurface({
     <div className="absolute inset-0 z-0 overflow-hidden bg-zinc-950">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(120,119,198,0.16),transparent_36%),radial-gradient(circle_at_80%_10%,rgba(16,185,129,0.08),transparent_32%)]" />
 
-      <div className="absolute inset-y-4 left-4 z-10 grid w-56 grid-rows-2 gap-4 pt-12 pb-20">
+      <div className="absolute inset-y-4 left-4 z-10 hidden w-56 grid-rows-2 gap-4 pt-12 pb-20 xl:grid">
         <MiniTile
           icon={<RadioTower className="h-3.5 w-3.5" />}
           label="network"
@@ -57,7 +81,7 @@ export function XrayDesktopSurface({
         />
       </div>
 
-      <div className="absolute inset-y-4 right-4 z-10 grid w-56 grid-rows-2 gap-4 pt-12 pb-20">
+      <div className="absolute inset-y-4 right-4 z-10 hidden w-56 grid-rows-2 gap-4 pt-12 pb-20 xl:grid">
         <MiniTile
           icon={<Cpu className="h-3.5 w-3.5" />}
           label="workloads"
@@ -72,8 +96,30 @@ export function XrayDesktopSurface({
         />
       </div>
 
-      <div className="absolute inset-y-4 left-[260px] right-[260px] z-0 rounded-[28px] border border-white/5 bg-black/30 shadow-[0_0_120px_rgba(0,0,0,0.65)] max-xl:left-4 max-xl:right-4">
-        <div className="absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-background/65 px-3 py-1.5 backdrop-blur-md">
+      <div className="absolute left-4 right-4 top-4 z-20 flex items-center gap-2 overflow-x-auto xl:hidden">
+        <CompactMetric
+          icon={<RadioTower className="h-3.5 w-3.5" />}
+          label="nodes"
+          value={`${nodeCount}`}
+        />
+        <CompactMetric
+          icon={<WalletCards className="h-3.5 w-3.5" />}
+          label="EDGE/h"
+          value={edgePerHour}
+        />
+        <div className="flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-background/70 px-3 py-1.5 shadow-xl backdrop-blur-md">
+          <MiniFinanceSparkline />
+          <span className="font-mono text-xs text-primary">market</span>
+        </div>
+        <CompactMetric
+          icon={<HardDrive className="h-3.5 w-3.5" />}
+          label="mem"
+          value={`${ramPercent}%`}
+        />
+      </div>
+
+      <div className="absolute inset-y-4 left-[260px] right-[260px] z-0 rounded-[28px] border border-white/5 bg-black/30 shadow-[0_0_120px_rgba(0,0,0,0.65)] max-xl:left-4 max-xl:right-4 max-xl:top-14">
+        <div className="absolute left-1/2 top-4 z-20 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-background/65 px-3 py-1.5 backdrop-blur-md xl:flex">
           <Badge variant="secondary" className="bg-primary/10 text-primary">
             <Activity className="h-3 w-3" /> XRAY
           </Badge>
