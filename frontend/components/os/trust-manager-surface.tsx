@@ -4,13 +4,10 @@ import * as React from "react"
 import {
   CheckCircle2,
   Copy,
-  ExternalLink,
   GitBranch,
   KeyRound,
   Link2,
-  Lock,
   Mail,
-  Network,
   PlugZap,
   RefreshCw,
   Route,
