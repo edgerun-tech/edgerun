@@ -12,7 +12,7 @@ function stringifyExportResult(value) {
 
 async function loadAssemblyScriptCompiler() {
   if (!cachedAsc) {
-    cachedAsc = import("https://cdn.jsdelivr.net/npm/assemblyscript@0.28.2/dist/asc.js").then((mod) => {
+    cachedAsc = import("https://esm.sh/assemblyscript@0.28.2/dist/asc.js?bundle").then((mod) => {
       const asc = "main" in mod ? mod : mod.default
       if (!asc?.main) throw new Error("AssemblyScript compiler loaded, but asc.main was not found")
       return asc
