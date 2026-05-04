@@ -98,13 +98,13 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
                     }
                 }
 
-                let mut raw_ops = Vec::new();
+                let mut ops = Vec::new();
                 let mut ops_reader = body.get_operators_reader()?;
                 while !ops_reader.eof() {
                     let op = ops_reader.read()?;
-                    raw_ops.push(lower_operator(op, &globals)?);
+                    ops.push(lower_operator(op, &globals)?);
                 }
-                let ops = normalize_function_ends(raw_ops)?;
+                let ops = normalize_function_ends(ops)?;
 
                 bodies.push(FunctionBody {
                     func_index,
@@ -180,7 +180,7 @@ fn normalize_function_ends(mut ops: Vec<IrOp>) -> Result<Vec<IrOp>> {
         .context("function body has no terminating end")?;
     for (idx, op) in ops.iter_mut().enumerate() {
         if matches!(op, IrOp::End) && idx != last_real {
-            *op = IrOp::Nop;
+            *op = IrOp::BlockEnd;
         }
     }
     if !matches!(ops[last_real], IrOp::End | IrOp::Return) {
@@ -211,8 +211,9 @@ fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
             if !matches!(blockty, BlockType::Empty) {
                 bail!("baseline AOT only supports empty block types for now: {blockty:?}");
             }
-            IrOp::Nop
+            IrOp::Block
         }
+        Operator::BrIf { relative_depth } => IrOp::BrIf(relative_depth),
         Operator::I32Const { value } => IrOp::I32Const(value),
         Operator::I64Const { value } => IrOp::I64Const(value),
         Operator::GlobalGet { global_index } => {
