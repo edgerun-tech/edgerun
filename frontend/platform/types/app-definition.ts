@@ -5,15 +5,16 @@
  *
  * No fake RAM/CPU/price as truth.
  * If unknown, show unknown.
- * If demo, label demo.
+ * If preview, label preview.
  * If measured, link to footprint evidence.
  */
 
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
 import { edgerun } from "@/gen/edgerun/v0/common"
 
-export type AppKind = "builtin" | "installed" | "wasm" | "external" | "demo"
-export type AppSource = "node" | "builtin" | "demo"
+export type AppKind = "builtin" | "installed" | "wasm" | "external" | "preview"
+export type AppSource = "node" | "builtin" | "preview"
+export type AppStatus = "available" | "installed" | "running" | "blocked" | "preview"
 
 export interface AppFootprint {
   ramBytes?: number
@@ -35,7 +36,7 @@ export interface AppDefinition {
   wasmObjectRef?: { objectId: string; hash: string }
   requiredCapabilityIds: string[]
   optionalCapabilityIds: string[]
-  status: "available" | "installed" | "running" | "blocked" | "demo"
+  status: AppStatus
   footprint?: AppFootprint
   displayMetadata?: Record<string, unknown>
 }
