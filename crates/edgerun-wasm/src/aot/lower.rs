@@ -107,7 +107,7 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
                 while !ops_reader.eof() {
                     let op = ops_reader.read()?;
                     let lowered = lower_operator(op, &globals, &all_locals, &mut type_stack)?;
-                    if matches!(lowered, IrOp::Load(_, _) | IrOp::Store(_, _)) {
+                    if matches!(lowered, IrOp::Load(_, _) | IrOp::Store(_, _) | IrOp::MemoryCopy) {
                         uses_memory = true;
                     }
                     ops.push(lowered);
@@ -323,6 +323,15 @@ fn lower_operator(op: Operator<'_>, globals: &[GlobalValue], locals: &[ValueType
             pop_ty(stack, ValueType::I64, "i64.store value")?;
             pop_ty(stack, ValueType::I32, "i64.store address")?;
             IrOp::Store(StoreKind::I64, mem_op(memarg)?)
+        }
+        Operator::MemoryCopy { dst_mem, src_mem } => {
+            if dst_mem != 0 || src_mem != 0 {
+                bail!("baseline AOT only supports memory.copy within memory 0");
+            }
+            pop_ty(stack, ValueType::I32, "memory.copy length")?;
+            pop_ty(stack, ValueType::I32, "memory.copy source")?;
+            pop_ty(stack, ValueType::I32, "memory.copy destination")?;
+            IrOp::MemoryCopy
         }
         Operator::Select => {
             pop_ty(stack, ValueType::I32, "select condition")?;
