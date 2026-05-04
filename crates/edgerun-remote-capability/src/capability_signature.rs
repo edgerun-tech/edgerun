@@ -42,7 +42,7 @@ const CAPABILITY_MESSAGE_SIG_DOMAIN: &str = "edgerun:v0:sig:capability-message";
 /// Signs a protobuf message in place. The message's signature field is set to
 /// the ECDSA P-256 signature over the serialized message bytes (with signature
 /// cleared).
-pub fn sign_message<M: Message>(
+pub fn sign_message_bytes<M>(
     signer: &dyn MeshSigner,
     msg: &mut M,
     clear_sig: impl FnOnce(&mut M),
@@ -74,7 +74,7 @@ pub fn sign_message<M: Message>(
 ///
 /// Extracts the signature, re-serializes the message with signature cleared,
 /// and verifies the ECDSA P-256 signature against the sender's NodeID.
-pub fn verify_message<M: Message + Clone>(
+pub fn verify_message_bytes<M: Clone>(
     msg: &M,
     sender: NodeID,
     get_sig: impl Fn(&M) -> Option<Signature>,
@@ -525,4 +525,10 @@ pub fn verify_bytes(
     verifier
         .verify(message_bytes, &signature.value)
         .map_err(|_| CapabilitySignatureError::VerificationFailed)
+}
+
+fn capability_canonical_bytes<T>(_msg: &T) -> Vec<u8> {
+    // Transitional native capability signing domain.
+    // TODO: replace with edgerun-wire typed encoders per capability message.
+    b"edgerun-capability-native-v0".to_vec()
 }

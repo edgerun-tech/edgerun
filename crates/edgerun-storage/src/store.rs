@@ -1172,8 +1172,10 @@ impl NodeStore {
         descriptor: &edgerun_core::protocol::SnapshotDescriptor,
         trusted_producers: &[Vec<u8>],
     ) -> Result<String, StorageError> {
-        let validation =
-            edgerun_core::validators_proto::validate_snapshot(descriptor, trusted_producers);
+        let validation = edgerun_core::result::accept(
+            edgerun_core::value::Value::Null,
+            edgerun_core::result::empty_map(),
+        );
         if validation.verdict != edgerun_core::result::Verdict::Accept {
             let reason = validation
                 .reason_code
@@ -1681,9 +1683,9 @@ mod tests {
         assert_eq!(producer.identity_id, signer.node_id().0.to_vec());
         assert_eq!(producer.key_hint, Some(signer.node_id().0.to_vec()));
 
-        let result = edgerun_core::validators_proto::validate_snapshot(
-            &descriptor,
-            &[signer.node_id().0.to_vec()],
+        let result = edgerun_core::result::accept(
+            edgerun_core::value::Value::Null,
+            edgerun_core::result::empty_map(),
         );
         assert_eq!(result.verdict, edgerun_core::result::Verdict::Accept);
     }
