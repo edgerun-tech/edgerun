@@ -4,13 +4,12 @@ use std::net::SocketAddr;
 #[derive(Clone, Debug)]
 pub struct HealthState {
     pub node_id: String,
-    pub stream_id: String,
     pub started_at: std::time::Instant,
 }
 
 /// Runs a simple HTTP health server on the given port.
 ///
-/// GET /health -> { "status": "ok", "uptime_secs": N, "node_id": "...", "stream_id": "..." }
+/// GET /health -> { "status": "ok", "uptime_secs": N, "node_id": "..." }
 pub async fn run_health_server(port: u16, state: HealthState) {
     use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
 
@@ -33,8 +32,8 @@ pub async fn run_health_server(port: u16, state: HealthState) {
                     let _ = stream.read(&mut buf).await;
                     let uptime = state.started_at.elapsed().as_secs();
                     let body = format!(
-                        r#"{{"status":"ok","uptime_secs":{},"node_id":"{}","stream_id":"{}"}}"#,
-                        uptime, state.node_id, state.stream_id
+                        r#"{{"status":"ok","uptime_secs":{},"node_id":"{}"}}"#,
+                        uptime, state.node_id
                     );
                     let response = format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
