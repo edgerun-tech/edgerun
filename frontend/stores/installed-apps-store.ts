@@ -19,6 +19,7 @@ export const DEFAULT_INSTALLED_APP_IDS = [
   "finances",
   "code-runner",
   "file-browser",
+  "storage",
 ] as const
 
 export function normalizeAppId(appId: string): string {
@@ -40,7 +41,7 @@ export const installedAppIdsStore = persistentAtom<string[]>(
       const parsed = JSON.parse(value)
       if (!Array.isArray(parsed)) return [...DEFAULT_INSTALLED_APP_IDS]
       const normalized = normalizeInstalledIds(parsed)
-      return Array.from(new Set([...CORE_APP_IDS, ...normalized]))
+      return Array.from(new Set([...CORE_APP_IDS, ...DEFAULT_INSTALLED_APP_IDS, ...normalized]))
     },
   },
 )
