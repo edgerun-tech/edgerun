@@ -381,6 +381,13 @@ export function WidgetPanel({ visible, onToggle }: WidgetPanelProps) {
   const dragItem = useRef<number | null>(null)
   const dragOverItem = useRef<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const resolvedVisible = mounted && visible
 
   const handleDragStart = (index: number) => {
     dragItem.current = index
@@ -417,19 +424,21 @@ export function WidgetPanel({ visible, onToggle }: WidgetPanelProps) {
         onClick={onToggle}
         className={cn(
           "absolute right-0 top-1/2 z-50 flex h-16 w-5 -translate-y-1/2 flex-col items-center justify-center rounded-l-md border border-r-0 border-border bg-[var(--window-bg)]/90 backdrop-blur-md transition-[right,background-color] hover:bg-secondary",
-          visible && "right-[220px]"
+          resolvedVisible && "right-[220px]"
         )}
-        title={visible ? "Hide widgets" : "Show widgets"}
+        title={resolvedVisible ? "Hide widgets" : "Show widgets"}
+        suppressHydrationWarning
       >
-        <ChevronRight className={cn("h-3 w-3 text-muted-foreground transition-transform duration-300", visible ? "rotate-0" : "rotate-180")} />
+        <ChevronRight className={cn("h-3 w-3 text-muted-foreground transition-transform duration-300", resolvedVisible ? "rotate-0" : "rotate-180")} />
       </button>
 
       <aside
         className={cn(
           "absolute right-0 top-0 bottom-20 z-40 flex w-[220px] flex-col gap-2 overflow-y-auto overflow-x-hidden border-l border-border/40 bg-background/20 p-2 backdrop-blur-sm transition-transform duration-300 ease-out",
-          visible ? "translate-x-0" : "translate-x-full"
+          resolvedVisible ? "translate-x-0" : "translate-x-full"
         )}
         style={{ scrollbarWidth: "none" }}
+        suppressHydrationWarning
       >
         {widgetOrder.map((key, index) => (
           <div
