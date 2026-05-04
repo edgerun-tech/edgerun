@@ -3,6 +3,7 @@
 //! This is not a generic configuration layer. It models resources that are
 //! changed only by signed stream commands, then derives the runtime plan.
 
+use crate::command_result_codec::decode_command_result_payload;
 use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_proto::edgerun::v0::common::ObjectRef;
 use edgerun_storage::NodeStore;
@@ -450,7 +451,7 @@ pub fn project_server_resources(store: &NodeStore, stream_id: &[u8]) -> Result<S
     let events = store.list_event_range(&stream_id_hex, 1, head_seq).map_err(|e| format!("failed_to_list_events: {e}"))?;
     for (seq, _hash, _ver) in events {
         let Some((_event, Some(payload_bytes))) = store.get_event_with_payload(stream_id, seq as u64).map_err(|e| format!("failed_to_load_event_{seq}: {e}"))? else { continue; };
-        let Ok(result) = edgerun_proto::edgerun::v0::stream::CommandResultPayload::decode(&payload_bytes[..]) else { continue; };
+        let Ok(result) = decode_command_result_payload(&payload_bytes[..]) else { continue; };
         let Some(result_object) = result.result_object.as_ref() else { continue; };
         let Some(object) = store.get_object(result_object).map_err(|e| format!("failed_to_load_result_object_{seq}: {e}"))? else { continue; };
         if let Ok(resource_event) = decode_committed_resource_event(&object.content) {
