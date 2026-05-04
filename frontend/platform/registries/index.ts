@@ -11,6 +11,7 @@ export {
   getBuiltinApp,
   getIconById,
   listBuiltinApps,
+  normalizeBuiltinAppId,
 } from "./builtin-app-registry"
 
 export {
