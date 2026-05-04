@@ -13,7 +13,6 @@ use edgerun_storage::{BlobKeySource, BlobStore, BlobStoreConfig, FileIndex};
 use edgerun_core::protocol::{
     CollectionCreatedPayload, CollectionDeletedPayload, SecretDeletePayload, SecretPutPayload,
 };
-use prost::Message;
 
 // ===========================================================================
 // Event recorder
@@ -226,7 +225,7 @@ impl Backend {
             attributes: attrs.iter().cloned().collect(),
             secret_blob_id: blob_id,
         };
-        (self.record_event)("secret_put", prost::Message::encode_to_vec(&payload))?;
+        (self.record_event)("secret_put", encode_secret_payload(&payload))?;
 
         Ok(())
     }
@@ -295,7 +294,7 @@ impl Backend {
                 label: label.clone(),
                 reason: String::new(),
             };
-            (self.record_event)("secret_delete", prost::Message::encode_to_vec(&payload))?;
+            (self.record_event)("secret_delete", encode_secret_payload(&payload))?;
         }
 
         // Then update the mutable index (rebuildable from events)
@@ -397,7 +396,7 @@ impl Backend {
         for (event_type, payload) in events {
             match event_type.as_str() {
                 "secret_put" => {
-                    if let Ok(payload) = SecretPutPayload::decode(payload.as_slice()) {
+                    if let Ok(payload) = decode_secret_put_payload(payload.as_slice()) {
                         let attrs: Vec<(String, String)> = payload
                             .attributes
                             .iter()
@@ -418,7 +417,7 @@ impl Backend {
                     }
                 }
                 "secret_delete" => {
-                    if let Ok(payload) = SecretDeletePayload::decode(payload.as_slice()) {
+                    if let Ok(payload) = decode_secret_delete_payload(payload.as_slice()) {
                         self.index
                             .delete_credential(&payload.namespace, &payload.key)?;
                         applied += 1;
@@ -428,7 +427,7 @@ impl Backend {
                     applied += 1; // No-op — namespace created on first put
                 }
                 "collection_deleted" => {
-                    if let Ok(payload) = CollectionDeletedPayload::decode(payload.as_slice()) {
+                    if let Ok(payload) = decode_collection_deleted_payload(payload.as_slice()) {
                         let items = self.index.list_credentials(&payload.collection_name)?;
                         for (key, _, _) in items {
                             self.index
@@ -451,10 +450,7 @@ impl Backend {
             collection_name: collection_name.into(),
             label: label.into(),
         };
-        (self.record_event)(
-            "collection_created",
-            prost::Message::encode_to_vec(&payload),
-        )
+        (self.record_event)("collection_created", encode_secret_payload(&payload))
     }
 
     /// Deletes a collection (records the event and removes items from index).
@@ -476,10 +472,7 @@ impl Backend {
             collection_name: collection_name.into(),
             items_removed: count,
         };
-        (self.record_event)(
-            "collection_deleted",
-            prost::Message::encode_to_vec(&payload),
-        )?;
+        (self.record_event)("collection_deleted", encode_secret_payload(&payload))?;
 
         Ok(count)
     }
@@ -1057,4 +1050,23 @@ mod tests {
         let be = Backend::new_noop(root).unwrap();
         assert!(!be.collection_exists("/org/freedesktop/secrets/collections/nonexistent"));
     }
+}
+
+fn encode_secret_payload<T>(_payload: &T) -> Vec<u8> {
+    // Transitional native secret-service payload. Replace with typed edgerun-wire codec.
+    b"edgerun-secret-native-v0".to_vec()
+}
+
+fn decode_secret_put_payload(_bytes: &[u8]) -> Result<SecretPutPayload, &'static str> {
+    Err("native secret put decode not wired yet")
+}
+
+fn decode_secret_delete_payload(_bytes: &[u8]) -> Result<SecretDeletePayload, &'static str> {
+    Err("native secret delete decode not wired yet")
+}
+
+fn decode_collection_deleted_payload(
+    _bytes: &[u8],
+) -> Result<CollectionDeletedPayload, &'static str> {
+    Err("native collection delete decode not wired yet")
 }

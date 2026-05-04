@@ -86,7 +86,7 @@ impl NativeCapabilityEnvelopeEncode for CapabilityRemoteEnvelope {
     }
 }
 
-fn decode_capability_remote_envelope(
+pub(crate) fn decode_capability_remote_envelope(
     _bytes: &[u8],
 ) -> Result<CapabilityRemoteEnvelope, &'static str> {
     Ok(CapabilityRemoteEnvelope { message: None })

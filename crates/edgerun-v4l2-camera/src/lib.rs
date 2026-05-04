@@ -1797,7 +1797,7 @@ impl PairedCameraBiometricReader for V4l2PairedCameraBiometricReader {
 // ---------------------------------------------------------------------------
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
-use edgerun_proto::edgerun::v0::capability::{
+use edgerun_core::protocol::capability::{
     CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityRole,
 };
 

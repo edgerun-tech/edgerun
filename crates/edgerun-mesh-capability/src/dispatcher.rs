@@ -1,6 +1,7 @@
 use crate::collections::{HashMap, VecDeque};
 use crate::prelude::v1::*;
 use crate::sync::{Arc, Mutex};
+use crate::transport::decode_capability_remote_envelope;
 use edgerun_capabilities::CapabilityError;
 use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_core::protocol::capability_runtime::{
