@@ -63,7 +63,7 @@ impl DecodedAotArtifact {
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(bytes);
         let magic = cursor.take_exact(MAGIC.len()).context("missing AOT artifact magic")?;
-        if magic != MAGIC {
+        if magic != MAGIC.as_slice() {
             bail!("invalid AOT artifact magic");
         }
 
@@ -193,7 +193,7 @@ mod tests {
             compiler: "test",
             functions: Vec::new(),
         };
-        assert!(artifact.encode().starts_with(MAGIC));
+        assert!(artifact.encode().starts_with(MAGIC.as_slice()));
     }
 
     #[test]
