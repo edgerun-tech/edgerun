@@ -4,6 +4,8 @@ mod artifact;
 mod backend_x86_64;
 #[path = "aot/ir.rs"]
 mod ir;
+#[path = "aot/loader.rs"]
+mod loader;
 #[path = "aot/lower.rs"]
 mod lower;
 
@@ -11,6 +13,7 @@ use anyhow::{bail, Context, Result};
 use artifact::{AotArtifact, CompiledFunction, DecodedAotArtifact};
 use backend_x86_64::X86_64Backend;
 use edgerun_clap::Parser;
+use loader::{find_function, LoadedFunction};
 use lower::{lower_module, parse_module};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -19,7 +22,7 @@ const TARGET: &str = "x86_64-linux-sysv";
 const COMPILER: &str = "edgerun-aot-baseline-v0";
 
 #[derive(Parser, Debug)]
-#[command(name = "edgerun-aot", about = "Compile or verify small deterministic EdgeRun WASM AOT artifacts")]
+#[command(name = "edgerun-aot", about = "Compile, verify, inspect, or run deterministic EdgeRun WASM AOT artifacts")]
 struct Args {
     #[arg(default_value = "app.wasm")]
     file: String,
@@ -36,6 +39,15 @@ struct Args {
     #[arg(long)]
     inspect_artifact: Option<String>,
 
+    #[arg(long)]
+    run_artifact: Option<String>,
+
+    #[arg(long, default_value = "run")]
+    function: String,
+
+    #[arg(long = "arg")]
+    arg_values: Vec<String>,
+
     #[arg(short, long)]
     verbose: bool,
 }
@@ -49,6 +61,10 @@ fn main() -> Result<()> {
 
     if let Some(path) = args.verify_artifact.as_deref() {
         return verify_artifact(&args.file, path, args.verbose);
+    }
+
+    if let Some(path) = args.run_artifact.as_deref() {
+        return run_artifact(&args.file, path, &args.function, &args.arg_values, args.verbose);
     }
 
     compile_artifact(&args)
@@ -109,7 +125,7 @@ fn compile_artifact(args: &Args) -> Result<()> {
     Ok(())
 }
 
-fn verify_artifact(wasm_path: &str, artifact_path: &str, verbose: bool) -> Result<()> {
+fn decode_verified_artifact(wasm_path: &str, artifact_path: &str) -> Result<DecodedAotArtifact> {
     let wasm = std::fs::read(wasm_path).context("failed to read WASM input")?;
     let expected_hash: [u8; 32] = Sha256::digest(&wasm).into();
 
@@ -133,17 +149,49 @@ fn verify_artifact(wasm_path: &str, artifact_path: &str, verbose: bool) -> Resul
         );
     }
 
+    Ok(decoded)
+}
+
+fn verify_artifact(wasm_path: &str, artifact_path: &str, verbose: bool) -> Result<()> {
+    let decoded = decode_verified_artifact(wasm_path, artifact_path)?;
+
     if verbose {
         eprintln!("artifact: {}", artifact_path);
         eprintln!("target: {}", decoded.target);
         eprintln!("compiler: {}", decoded.compiler);
         eprintln!("functions: {}", decoded.functions.len());
         for f in &decoded.functions {
-            eprintln!("  {} #{}: {} bytes", f.name, f.index, f.code.len());
+            eprintln!("  {} #{} {}: {} bytes", f.name, f.index, f.sig, f.code.len());
         }
     }
 
     println!("PASS: verified {} against {}", artifact_path, wasm_path);
+    Ok(())
+}
+
+fn run_artifact(
+    wasm_path: &str,
+    artifact_path: &str,
+    function_selector: &str,
+    arg_values: &[String],
+    verbose: bool,
+) -> Result<()> {
+    let decoded = decode_verified_artifact(wasm_path, artifact_path)?;
+    let function = find_function(&decoded, function_selector)?;
+    let args = arg_values
+        .iter()
+        .map(|v| parse_u64_arg(v))
+        .collect::<Result<Vec<_>>>()?;
+
+    if verbose {
+        eprintln!("artifact: {}", artifact_path);
+        eprintln!("function: {} #{} {}", function.name, function.index, function.sig);
+        eprintln!("args: {:?}", args);
+    }
+
+    let loaded = LoadedFunction::from_artifact_function(function)?;
+    let result = loaded.call_u64(&args)?;
+    println!("{}", result);
     Ok(())
 }
 
@@ -158,10 +206,28 @@ fn inspect_artifact(artifact_path: &str) -> Result<()> {
     println!("  wasm_sha256: {}", hex32(&decoded.wasm_sha256));
     println!("  functions: {}", decoded.functions.len());
     for f in &decoded.functions {
-        println!("    #{} {}: {} bytes", f.index, f.name, f.code.len());
+        println!("    #{} {} {}: {} bytes", f.index, f.name, f.sig, f.code.len());
     }
 
     Ok(())
+}
+
+fn parse_u64_arg(value: &str) -> Result<u64> {
+    if let Some(hex) = value.strip_prefix("0x") {
+        return u64::from_str_radix(hex, 16).with_context(|| format!("invalid hex argument: {value}"));
+    }
+    if let Some(hex) = value.strip_prefix("0X") {
+        return u64::from_str_radix(hex, 16).with_context(|| format!("invalid hex argument: {value}"));
+    }
+    if value.starts_with('-') {
+        let signed = value
+            .parse::<i64>()
+            .with_context(|| format!("invalid signed argument: {value}"))?;
+        return Ok(signed as u64);
+    }
+    value
+        .parse::<u64>()
+        .with_context(|| format!("invalid integer argument: {value}"))
 }
 
 fn hex32(bytes: &[u8; 32]) -> String {
