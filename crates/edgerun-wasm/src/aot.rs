@@ -27,20 +27,20 @@ struct Args {
     #[arg(default_value = "app.wasm")]
     file: String,
 
-    #[arg(short, long)]
-    output: Option<String>,
+    #[arg(short, long, default_value = "")]
+    output: String,
 
     #[arg(long)]
     emit_ir: bool,
 
-    #[arg(long)]
-    verify_artifact: Option<String>,
+    #[arg(long, default_value = "")]
+    verify_artifact: String,
 
-    #[arg(long)]
-    inspect_artifact: Option<String>,
+    #[arg(long, default_value = "")]
+    inspect_artifact: String,
 
-    #[arg(long)]
-    run_artifact: Option<String>,
+    #[arg(long, default_value = "")]
+    run_artifact: String,
 
     #[arg(long, default_value = "run")]
     function: String,
@@ -55,16 +55,16 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    if let Some(path) = args.inspect_artifact.as_deref() {
-        return inspect_artifact(path);
+    if !args.inspect_artifact.is_empty() {
+        return inspect_artifact(&args.inspect_artifact);
     }
 
-    if let Some(path) = args.verify_artifact.as_deref() {
-        return verify_artifact(&args.file, path, args.verbose);
+    if !args.verify_artifact.is_empty() {
+        return verify_artifact(&args.file, &args.verify_artifact, args.verbose);
     }
 
-    if let Some(path) = args.run_artifact.as_deref() {
-        return run_artifact(&args.file, path, &args.function, &args.args, args.verbose);
+    if !args.run_artifact.is_empty() {
+        return run_artifact(&args.file, &args.run_artifact, &args.function, &args.args, args.verbose);
     }
 
     compile_artifact(&args)
@@ -114,11 +114,11 @@ fn compile_artifact(args: &Args) -> Result<()> {
         }
     }
 
-    let output = args
-        .output
-        .as_ref()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| input_path.with_extension("eraot"));
+    let output = if args.output.is_empty() {
+        input_path.with_extension("eraot")
+    } else {
+        PathBuf::from(&args.output)
+    };
     std::fs::write(&output, artifact.encode()).context("failed to write AOT artifact")?;
 
     println!("PASS: wrote {}", output.display());
