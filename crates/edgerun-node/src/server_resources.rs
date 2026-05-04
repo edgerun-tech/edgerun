@@ -3,7 +3,7 @@
 //! This is not a generic configuration layer. It models resources that are
 //! changed only by signed stream commands, then derives the runtime plan.
 
-use crate::command_result_codec::decode_command_result_payload;
+use crate::command_result_wire_codec::decode_command_result_payload;
 use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_proto::edgerun::v0::common::ObjectRef;
 use edgerun_storage::NodeStore;
