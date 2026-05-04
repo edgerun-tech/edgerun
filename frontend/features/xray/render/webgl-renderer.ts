@@ -4,6 +4,7 @@ import type { XrayNode, XrayEdge, RuntimeNodeStats } from "../graph/types"
 
 const MAX_BUFFERED_NODES = 20000
 const MAX_BUFFERED_EDGES = 100000
+const XRAY_TILT = 0.72
 
 interface RenderInput {
   nodes: Map<string, XrayNode>
@@ -106,12 +107,12 @@ export class WebGLRenderer {
       const isDimmed = hasFocus && !isSelected && !isHighlighted
       const runtime = runtimeStats.get(id)
       const color = getNodeColor(node.layer, node.language, isHighlighted, isSelected, runtime, runtimeMode)
-      const alpha = isDimmed ? color[3] * 0.22 : color[3]
+      const alpha = isDimmed ? color[3] * 0.52 : color[3]
       this.colors[ni * 4] = color[0]
       this.colors[ni * 4 + 1] = color[1]
       this.colors[ni * 4 + 2] = color[2]
       this.colors[ni * 4 + 3] = alpha
-      this.sizes[ni] = getNodeSize(0, isHighlighted, isSelected, runtime, runtimeMode) * (isHighlighted || isSelected ? 1 + pulse * 0.16 : 1)
+      this.sizes[ni] = getNodeSize(0, isHighlighted, isSelected, runtime, runtimeMode) * (isHighlighted || isSelected ? 1 + pulse * 0.18 : 1)
       this.sels[ni] = isSelected ? 1 : 0
       indexMap.set(id, ni)
 
@@ -121,8 +122,8 @@ export class WebGLRenderer {
         this.glowColors[glowCount * 4] = color[0]
         this.glowColors[glowCount * 4 + 1] = color[1]
         this.glowColors[glowCount * 4 + 2] = color[2]
-        this.glowColors[glowCount * 4 + 3] = 0.18 + pulse * 0.16
-        this.glowSizes[glowCount] = this.sizes[ni] * (2.4 + pulse * 0.8)
+        this.glowColors[glowCount * 4 + 3] = 0.2 + pulse * 0.18
+        this.glowSizes[glowCount] = this.sizes[ni] * (2.6 + pulse * 0.95)
         this.glowSels[glowCount] = 0
         glowCount++
       }
@@ -136,8 +137,9 @@ export class WebGLRenderer {
       const ti = indexMap.get(edge.target)
       if (si === undefined || ti === undefined) continue
       const isHighlighted = highlightedIds.has(edge.source) || highlightedIds.has(edge.target)
-      if (hasFocus && !isHighlighted) continue
-      const ec = getEdgeColor(edge.kind, isHighlighted)
+      const raw = getEdgeColor(edge.kind, isHighlighted)
+      const dim = hasFocus && !isHighlighted ? 0.38 : 1
+      const ec: [number, number, number] = [raw[0] * dim, raw[1] * dim, raw[2] * dim]
 
       const ei = edgeVertCount * 5
       this.edgeFloat[ei] = this.positions[si * 2]
@@ -181,6 +183,7 @@ export class WebGLRenderer {
     const eZoom = gl.getUniformLocation(this.edgeProgram, "u_zoom")
     const ePan = gl.getUniformLocation(this.edgeProgram, "u_pan")
     const eRot = gl.getUniformLocation(this.edgeProgram, "u_rotation")
+    const eTilt = gl.getUniformLocation(this.edgeProgram, "u_tilt")
     const ePos = gl.getAttribLocation(this.edgeProgram, "a_position")
     const eCol = gl.getAttribLocation(this.edgeProgram, "a_color")
 
@@ -188,6 +191,7 @@ export class WebGLRenderer {
     if (eZoom) gl.uniform1f(eZoom, zoom)
     if (ePan) gl.uniform2f(ePan, panX, panY)
     if (eRot) gl.uniform1f(eRot, rotation)
+    if (eTilt) gl.uniform1f(eTilt, XRAY_TILT)
 
     if (ePos >= 0 && eCol >= 0) {
       gl.enableVertexAttribArray(ePos)
@@ -251,11 +255,13 @@ export class WebGLRenderer {
     const nZoom = gl.getUniformLocation(this.nodeProgram, "u_zoom")
     const nPan = gl.getUniformLocation(this.nodeProgram, "u_pan")
     const nRot = gl.getUniformLocation(this.nodeProgram, "u_rotation")
+    const nTilt = gl.getUniformLocation(this.nodeProgram, "u_tilt")
 
     if (nRes) gl.uniform2f(nRes, vw, vh)
     if (nZoom) gl.uniform1f(nZoom, zoom)
     if (nPan) gl.uniform2f(nPan, panX, panY)
     if (nRot) gl.uniform1f(nRot, rotation)
+    if (nTilt) gl.uniform1f(nTilt, XRAY_TILT)
 
     gl.drawArrays(gl.POINTS, 0, nodeCount)
   }
