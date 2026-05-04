@@ -8,6 +8,13 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+// Bring vec! macro into scope for no_std compatibility
+#[cfg(not(feature = "std"))]
+use alloc::vec;
+
+#[cfg(feature = "std")]
+use std::vec;
+
 use edgerun_wire::{field, struct_value, u64v, bytes, WireEncode, WireValue};
 
 #[derive(Clone, Debug, Eq, PartialEq)]

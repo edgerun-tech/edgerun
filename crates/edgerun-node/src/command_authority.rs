@@ -14,6 +14,32 @@ use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::stream::CommandEnvelope;
 use edgerun_storage::NodeStore;
 
+/// Check if a command is a duplicate using both persistent and in-memory replay caches.
+///
+/// Returns `Some(CommandGateDecision::CommitDuplicate)` if the command was already processed,
+/// or `None` if it's a new command.
+pub fn check_replay_cache(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    replay_cache: &HashMap<Vec<u8>, (Vec<u8>, i64)>,
+) -> Option<CommandGateDecision> {
+    let computed_hash = command_hash(command);
+    let cmd_hash_hex = edgerun_core::util::bytes_to_hex(&computed_hash.value);
+    if let Some(ref target) = command.target_node {
+        let target_hex = edgerun_core::util::bytes_to_hex(&target.node_id);
+        if let Ok(Some((_cmd_id, _event_seq))) = store.get_replay_entry(&target_hex, &cmd_hash_hex)
+        {
+            return Some(CommandGateDecision::CommitDuplicate);
+        }
+    }
+
+    if replay_cache.contains_key(&computed_hash.value) {
+        return Some(CommandGateDecision::CommitDuplicate);
+    }
+
+    None
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommandGateDecision {
     Accept,
@@ -33,18 +59,9 @@ pub fn command_authority_gate(
     local_assurance_class: i32,
     exec_ctx: &CommandExecutionContext,
 ) -> CommandGateDecision {
-    let computed_hash = command_hash(command);
-    let cmd_hash_hex = edgerun_core::util::bytes_to_hex(&computed_hash.value);
-    if let Some(ref target) = command.target_node {
-        let target_hex = edgerun_core::util::bytes_to_hex(&target.node_id);
-        if let Ok(Some((_cmd_id, _event_seq))) = store.get_replay_entry(&target_hex, &cmd_hash_hex)
-        {
-            return CommandGateDecision::CommitDuplicate;
-        }
-    }
-
-    if replay_cache.contains_key(&computed_hash.value) {
-        return CommandGateDecision::CommitDuplicate;
+    // Check replay cache first
+    if let Some(decision) = check_replay_cache(command, store, replay_cache) {
+        return decision;
     }
 
     let validation = validate_command_with_context(
@@ -94,31 +111,34 @@ pub fn command_authority_gate(
     CommandGateDecision::Accept
 }
 
-fn validate_command_with_context(
-    command: &CommandEnvelope,
-    replay_cache: &mut HashMap<Vec<u8>, (Vec<u8>, i64)>,
-    revoked_delegations: &HashSet<Vec<u8>>,
-    trusted_root_ids: &[Vec<u8>],
+/// Build a CommandValidationContext from the execution context and node-local state.
+///
+/// This eliminates duplicated context-building logic between command_dispatch.rs
+/// and command_authority.rs.
+pub fn build_validation_context<'a>(
+    signer: &'a dyn MeshSigner,
+    replay_cache: &'a mut HashMap<Vec<u8>, (Vec<u8>, i64)>,
+    revoked_delegations: &'a HashSet<Vec<u8>>,
+    trusted_root_ids: &'a [Vec<u8>],
     local_assurance_class: i32,
-    exec_ctx: &CommandExecutionContext,
-    signer: &dyn MeshSigner,
-) -> edgerun_core::result::ValidationResult {
-    let now_ms = now_unix_millis_i64();
+    exec_ctx: &'a CommandExecutionContext,
+    delegation_use_counts: &'a HashMap<Vec<u8>, u64>,
+    delegation_rate_events_ms: &'a HashMap<Vec<u8>, Vec<i64>>,
+    now_ms: i64,
+) -> CommandValidationContext<'a> {
     let local_node_id = signer.node_id().0;
-    let delegation_use_counts: HashMap<Vec<u8>, u64> = HashMap::new();
-    let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
     let location_classes: Vec<&str> = exec_ctx
         .location_classes
         .iter()
         .map(String::as_str)
         .collect();
 
-    let ctx = CommandValidationContext {
+    CommandValidationContext {
         local_node_id: &local_node_id,
         replay_cache,
         revoked_delegation_ids: revoked_delegations,
-        delegation_use_counts: &delegation_use_counts,
-        delegation_rate_events_ms: &delegation_rate_events_ms,
+        delegation_use_counts,
+        delegation_rate_events_ms,
         now_ms,
         trusted_root_ids,
         local_assurance_class,
@@ -147,6 +167,32 @@ fn validate_command_with_context(
             "object" => Some(3),
             _ => None,
         }),
-    };
+    }
+}
+
+fn validate_command_with_context(
+    command: &CommandEnvelope,
+    replay_cache: &mut HashMap<Vec<u8>, (Vec<u8>, i64)>,
+    revoked_delegations: &HashSet<Vec<u8>>,
+    trusted_root_ids: &[Vec<u8>],
+    local_assurance_class: i32,
+    exec_ctx: &CommandExecutionContext,
+    signer: &dyn MeshSigner,
+) -> edgerun_core::result::ValidationResult {
+    let now_ms = now_unix_millis_i64();
+    let delegation_use_counts: HashMap<Vec<u8>, u64> = HashMap::new();
+    let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
+
+    let ctx = build_validation_context(
+        signer,
+        replay_cache,
+        revoked_delegations,
+        trusted_root_ids,
+        local_assurance_class,
+        exec_ctx,
+        &delegation_use_counts,
+        &delegation_rate_events_ms,
+        now_ms,
+    );
     validate_command(command, &ctx)
 }
