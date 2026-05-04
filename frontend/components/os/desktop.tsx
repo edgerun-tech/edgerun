@@ -11,10 +11,10 @@ import { WidgetPanel } from "./widget-panel"
 import { useAuth } from "@/hooks/use-auth"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
 import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
-import { FloatingDock } from "@/components/ui/floating-dock"
+import { FloatingDock, type FloatingDockContext } from "@/components/ui/floating-dock"
 import { installedAppIdsStore, CORE_APP_IDS } from "@/stores/installed-apps-store"
 import { grantLocalCapabilities } from "@/stores/local-capability-grants-store"
-import { Users } from "lucide-react"
+import { MessageSquare, Phone, Users } from "lucide-react"
 import {
   appSurfacesStore,
   appSurfaceOrderStore,
@@ -22,11 +22,27 @@ import {
   systemStatsStore,
   pendingGateStore,
   widgetVisibleStore,
+  terminalLogsStore,
   openAppSurface,
   closeAppSurface,
   focusAppSurface,
+  addLog,
   type AppSurfaceDef,
 } from "@/stores/desktop-store"
+
+function ChatHead({ label, tone = "primary" }: { label: string; tone?: "primary" | "green" | "blue" | "amber" }) {
+  const tones = {
+    primary: "from-primary/80 to-primary/35",
+    green: "from-emerald-400/90 to-emerald-700/50",
+    blue: "from-sky-400/90 to-sky-700/50",
+    amber: "from-amber-300/90 to-amber-700/50",
+  }
+  return (
+    <div className={`flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br ${tones[tone]} font-mono text-xs font-bold text-white shadow-inner ring-1 ring-white/20`}>
+      {label}
+    </div>
+  )
+}
 
 export function Desktop() {
   const auth = useAuth()
@@ -44,6 +60,18 @@ export function Desktop() {
     () => appSurfaces.filter((surface) => surface.kind === "pinned-widget"),
     [appSurfaces],
   )
+
+  const activeSurface = useMemo(() => {
+    if (focusedAppSurface) {
+      const focused = appSurfaces.find((surface) => surface.id === focusedAppSurface)
+      if (focused) return focused
+    }
+    for (let i = appSurfaceOrder.length - 1; i >= 0; i--) {
+      const surface = appSurfaces.find((candidate) => candidate.id === appSurfaceOrder[i])
+      if (surface?.kind === "overlay") return surface
+    }
+    return null
+  }, [appSurfaceOrder, appSurfaces, focusedAppSurface])
 
   useEffect(() => {
     if (!showDesktop) return
@@ -84,6 +112,7 @@ export function Desktop() {
         return {
           title: app.name,
           icon: getAppIcon(app.appId),
+          kind: "app" as const,
           onClick: () => {
             const fullApp = getBuiltinApp(app.appId)
             if (fullApp) launchApp(fullApp)
@@ -92,6 +121,71 @@ export function Desktop() {
       })
       .filter(Boolean)
   }, [installedAppIds])
+
+  const dockContext = useMemo<FloatingDockContext>(() => {
+    const activeAppId = activeSurface?.appId
+    if (activeAppId === "people" || activeAppId === "chat" || activeAppId === "contacts" || activeAppId === "calling") {
+      return {
+        mode: "chat-heads",
+        label: "People",
+        items: [
+          {
+            title: "Ara",
+            subtitle: "online",
+            kind: "person",
+            icon: <ChatHead label="A" tone="green" />,
+            onClick: () => addLog("info", "Selected Ara conversation"),
+          },
+          {
+            title: "Elias",
+            subtitle: "build thread",
+            kind: "person",
+            icon: <ChatHead label="E" tone="blue" />,
+            onClick: () => addLog("info", "Selected Elias conversation"),
+          },
+          {
+            title: "Max",
+            subtitle: "nearby",
+            kind: "person",
+            icon: <ChatHead label="M" tone="amber" />,
+            onClick: () => addLog("info", "Selected Max conversation"),
+          },
+          {
+            title: "New chat",
+            subtitle: "compose",
+            kind: "trigger",
+            icon: <MessageSquare className="h-full w-full rounded-full bg-primary/10 p-2 text-primary" />,
+            onClick: () => addLog("info", "New chat trigger"),
+          },
+          {
+            title: "Call",
+            subtitle: "voice",
+            kind: "trigger",
+            icon: <Phone className="h-full w-full rounded-full bg-primary/10 p-2 text-primary" />,
+            onClick: () => addLog("info", "Call trigger"),
+          },
+        ],
+      }
+    }
+
+    return {
+      mode: "apps",
+      label: activeSurface ? activeSurface.title : "Apps",
+    }
+  }, [activeSurface])
+
+  const handleDockCommand = useCallback((command: string) => {
+    addLog("info", `Dock command: ${command}`)
+    terminalLogsStore.set([
+      ...terminalLogsStore.get(),
+      {
+        id: `dock-command-${Date.now()}`,
+        timestamp: new Date(),
+        type: "system",
+        message: `dock> ${command}`,
+      },
+    ])
+  }, [])
 
   const grantPendingAndOpen = useCallback(() => {
     const gate = pendingGateStore.get()
@@ -181,6 +275,8 @@ export function Desktop() {
 
         <FloatingDock
           items={dockItems as any}
+          context={dockContext}
+          onCommandSubmit={handleDockCommand}
           desktopClassName="fixed bottom-4 left-1/2 z-50 -translate-x-1/2"
         />
 
