@@ -16,7 +16,7 @@ type WorkerAppMessage =
   | { type: "ERROR"; payload: string }
 
 function createSandboxedWorker(app: AppDefinition): Worker {
-  return new Worker(new URL("../../workers/sandboxed-js-app-worker.ts", import.meta.url), {
+  return new Worker("/workers/sandboxed-js-app-worker.js", {
     type: "module",
     name: `edgerun-app-${app.appId}`,
   })
