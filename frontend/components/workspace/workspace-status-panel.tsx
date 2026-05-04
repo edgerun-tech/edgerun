@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useStore } from "@nanostores/react"
+import { useState, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import {
   Circle,
@@ -12,16 +11,19 @@ import {
 
 interface WorkspaceStatusPanelProps {
   className?: string
+  surface?: "floating" | "embedded"
 }
 
-export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
+export function WorkspaceStatusPanel({ className, surface = "floating" }: WorkspaceStatusPanelProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isHovered, setIsHovered] = useState(false)
+  const embedded = surface === "embedded"
 
   return (
     <div
       className={cn(
-        "pointer-events-auto fixed bottom-4 left-4 z-40 flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-sm transition-opacity duration-200",
+        "pointer-events-auto flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-sm transition-opacity duration-200",
+        embedded ? "h-full w-full overflow-hidden" : "fixed bottom-4 left-4 z-40",
         isHovered ? "opacity-100" : "opacity-80",
         className
       )}
@@ -39,8 +41,8 @@ export function WorkspaceStatusPanel({ className }: WorkspaceStatusPanelProps) {
       </button>
 
       {isExpanded && (
-        <div className="flex flex-col gap-1 px-3 pb-3">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+        <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
+          <div className={cn("grid gap-x-4 gap-y-1 text-[10px]", embedded ? "grid-cols-1" : "grid-cols-2")}>
             <div className="flex items-center gap-1.5">
               <Circle className="h-3 w-3 text-muted-foreground" />
               <span className="text-muted-foreground">Git:</span>
