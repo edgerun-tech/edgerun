@@ -28,6 +28,7 @@ export { runtimeStore, cacheWasm, removeWasmCache } from "./state/runtime-store"
 // Registries
 export { capabilityRegistry, registerCapability } from "./registries/capability-registry"
 export { appRegistry, registerApp } from "./registries/app-registry"
+export { appCatalogRegistry, catalogApps, registerCatalogApp, getCatalogApp, listCatalogApps, verifyCatalogApp, installCatalogApp, seedBuiltinCatalogApps } from "./registries/app-catalog-registry"
 export { routeRegistry, registerRoute } from "./registries/route-registry"
 export { componentRegistry, registerComponent } from "./registries/component-registry"
 export { connectionRegistry, registerConnection } from "./registries/connection-registry"
