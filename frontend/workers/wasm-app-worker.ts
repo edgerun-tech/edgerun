@@ -61,14 +61,24 @@ function stop() {
 }
 
 self.onmessage = (event: MessageEvent<HostMessage>) => {
-  boot(event.data.payload).catch((error) => {
+  try {
+    switch (event.data.type) {
+      case "BOOT":
+        boot(event.data.payload).catch((error) => {
+          self.postMessage({
+            type: "ERROR",
+            payload: error instanceof Error ? error.message : String(error),
+          })
+        })
+        break
+      case "STOP":
+        stop()
+        break
+    }
+  } catch (error) {
     self.postMessage({
       type: "ERROR",
       payload: error instanceof Error ? error.message : String(error),
     })
-  })
+  }
 }
-
-self.addEventListener("message", (event: MessageEvent<HostMessage>) => {
-  if (event.data.type === "STOP") stop()
-})
