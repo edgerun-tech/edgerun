@@ -101,10 +101,12 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
 
                 let mut uses_memory = false;
                 let mut ops = Vec::new();
+                let mut type_stack = Vec::new();
+                let all_locals = current_locals_placeholder(&types, &func_type_indices, func_index, &locals)?;
                 let mut ops_reader = body.get_operators_reader()?;
                 while !ops_reader.eof() {
                     let op = ops_reader.read()?;
-                    let lowered = lower_operator(op, &globals)?;
+                    let lowered = lower_operator(op, &globals, &all_locals, &mut type_stack)?;
                     if matches!(lowered, IrOp::Load(_, _) | IrOp::Store(_, _)) {
                         uses_memory = true;
                     }
@@ -181,6 +183,23 @@ pub fn lower_module(module: ParsedModule) -> Result<Vec<FunctionIr>> {
     Ok(functions)
 }
 
+fn current_locals_placeholder(
+    types: &[FuncSig],
+    func_type_indices: &[u32],
+    func_index: u32,
+    body_locals: &[ValueType],
+) -> Result<Vec<ValueType>> {
+    let type_idx = *func_type_indices
+        .get(func_index as usize)
+        .with_context(|| format!("missing type index for function {func_index}"))?;
+    let sig = types
+        .get(type_idx as usize)
+        .with_context(|| format!("missing function type {type_idx}"))?;
+    let mut locals = sig.params.clone();
+    locals.extend_from_slice(body_locals);
+    Ok(locals)
+}
+
 fn normalize_function_ends(mut ops: Vec<IrOp>) -> Result<Vec<IrOp>> {
     let last_real = ops
         .iter()
@@ -219,8 +238,8 @@ fn mem_op(memarg: MemArg) -> Result<MemOp> {
     Ok(MemOp { offset: memarg.offset })
 }
 
-fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
-    Ok(match op {
+fn lower_operator(op: Operator<'_>, globals: &[GlobalValue], locals: &[ValueType], stack: &mut Vec<ValueType>) -> Result<IrOp> {
+    let lowered = match op {
         Operator::Nop => IrOp::Nop,
         Operator::Block { blockty } => {
             if !matches!(blockty, BlockType::Empty) {
@@ -235,14 +254,24 @@ fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
             IrOp::Loop
         }
         Operator::Br { relative_depth } => IrOp::Br(relative_depth),
-        Operator::BrIf { relative_depth } => IrOp::BrIf(relative_depth),
-        Operator::I32Const { value } => IrOp::I32Const(value),
-        Operator::I64Const { value } => IrOp::I64Const(value),
+        Operator::BrIf { relative_depth } => {
+            pop_ty(stack, ValueType::I32, "br_if")?;
+            IrOp::BrIf(relative_depth)
+        }
+        Operator::I32Const { value } => {
+            stack.push(ValueType::I32);
+            IrOp::I32Const(value)
+        }
+        Operator::I64Const { value } => {
+            stack.push(ValueType::I64);
+            IrOp::I64Const(value)
+        }
         Operator::GlobalGet { global_index } => {
             let global = globals
                 .get(global_index as usize)
                 .copied()
                 .with_context(|| format!("global.get references missing global {global_index}"))?;
+            stack.push(global.value_type());
             IrOp::GlobalGet(global_index, global.value_type())
         }
         Operator::GlobalSet { global_index } => {
@@ -250,45 +279,117 @@ fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
                 .get(global_index as usize)
                 .copied()
                 .with_context(|| format!("global.set references missing global {global_index}"))?;
+            pop_ty(stack, global.value_type(), "global.set")?;
             IrOp::GlobalSet(global_index, global.value_type())
         }
-        Operator::LocalGet { local_index } => IrOp::LocalGet(local_index),
-        Operator::LocalSet { local_index } => IrOp::LocalSet(local_index),
-        Operator::LocalTee { local_index } => IrOp::LocalTee(local_index),
-        Operator::I32Load { memarg } => IrOp::Load(LoadKind::I32, mem_op(memarg)?),
-        Operator::I64Load { memarg } => IrOp::Load(LoadKind::I64, mem_op(memarg)?),
-        Operator::I32Store { memarg } => IrOp::Store(StoreKind::I32, mem_op(memarg)?),
-        Operator::I64Store { memarg } => IrOp::Store(StoreKind::I64, mem_op(memarg)?),
-        Operator::I32Add => IrOp::I32Add,
-        Operator::I32Sub => IrOp::I32Sub,
-        Operator::I32Mul => IrOp::I32Mul,
-        Operator::I64Add => IrOp::I64Add,
-        Operator::I64Sub => IrOp::I64Sub,
-        Operator::I64Mul => IrOp::I64Mul,
-        Operator::I32Eqz => IrOp::I32Eqz,
-        Operator::I64Eqz => IrOp::I64Eqz,
-        Operator::I32Eq => IrOp::I32Eq,
-        Operator::I32Ne => IrOp::I32Ne,
-        Operator::I32LtS => IrOp::I32LtS,
-        Operator::I32LtU => IrOp::I32LtU,
-        Operator::I32GtS => IrOp::I32GtS,
-        Operator::I32GtU => IrOp::I32GtU,
-        Operator::I32LeS => IrOp::I32LeS,
-        Operator::I32LeU => IrOp::I32LeU,
-        Operator::I32GeS => IrOp::I32GeS,
-        Operator::I32GeU => IrOp::I32GeU,
-        Operator::I64Eq => IrOp::I64Eq,
-        Operator::I64Ne => IrOp::I64Ne,
-        Operator::I64LtS => IrOp::I64LtS,
-        Operator::I64LtU => IrOp::I64LtU,
-        Operator::I64GtS => IrOp::I64GtS,
-        Operator::I64GtU => IrOp::I64GtU,
-        Operator::I64LeS => IrOp::I64LeS,
-        Operator::I64LeU => IrOp::I64LeU,
-        Operator::I64GeS => IrOp::I64GeS,
-        Operator::I64GeU => IrOp::I64GeU,
+        Operator::LocalGet { local_index } => {
+            let ty = *locals
+                .get(local_index as usize)
+                .with_context(|| format!("local.get references missing local {local_index}"))?;
+            stack.push(ty);
+            IrOp::LocalGet(local_index)
+        }
+        Operator::LocalSet { local_index } => {
+            let ty = *locals
+                .get(local_index as usize)
+                .with_context(|| format!("local.set references missing local {local_index}"))?;
+            pop_ty(stack, ty, "local.set")?;
+            IrOp::LocalSet(local_index)
+        }
+        Operator::LocalTee { local_index } => {
+            let ty = *locals
+                .get(local_index as usize)
+                .with_context(|| format!("local.tee references missing local {local_index}"))?;
+            pop_ty(stack, ty, "local.tee")?;
+            stack.push(ty);
+            IrOp::LocalTee(local_index)
+        }
+        Operator::I32Load { memarg } => {
+            pop_ty(stack, ValueType::I32, "i32.load address")?;
+            stack.push(ValueType::I32);
+            IrOp::Load(LoadKind::I32, mem_op(memarg)?)
+        }
+        Operator::I64Load { memarg } => {
+            pop_ty(stack, ValueType::I32, "i64.load address")?;
+            stack.push(ValueType::I64);
+            IrOp::Load(LoadKind::I64, mem_op(memarg)?)
+        }
+        Operator::I32Store { memarg } => {
+            pop_ty(stack, ValueType::I32, "i32.store value")?;
+            pop_ty(stack, ValueType::I32, "i32.store address")?;
+            IrOp::Store(StoreKind::I32, mem_op(memarg)?)
+        }
+        Operator::I64Store { memarg } => {
+            pop_ty(stack, ValueType::I64, "i64.store value")?;
+            pop_ty(stack, ValueType::I32, "i64.store address")?;
+            IrOp::Store(StoreKind::I64, mem_op(memarg)?)
+        }
+        Operator::Select => {
+            pop_ty(stack, ValueType::I32, "select condition")?;
+            let false_ty = pop_any(stack, "select false value")?;
+            let true_ty = pop_any(stack, "select true value")?;
+            if true_ty != false_ty {
+                bail!("select value type mismatch: true={} false={}", true_ty.as_str(), false_ty.as_str());
+            }
+            stack.push(true_ty);
+            IrOp::Select(true_ty)
+        }
+        Operator::I32Add => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32Add)?,
+        Operator::I32Sub => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32Sub)?,
+        Operator::I32Mul => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32Mul)?,
+        Operator::I64Add => bin(stack, ValueType::I64, ValueType::I64, IrOp::I64Add)?,
+        Operator::I64Sub => bin(stack, ValueType::I64, ValueType::I64, IrOp::I64Sub)?,
+        Operator::I64Mul => bin(stack, ValueType::I64, ValueType::I64, IrOp::I64Mul)?,
+        Operator::I32Eqz => unary(stack, ValueType::I32, ValueType::I32, IrOp::I32Eqz)?,
+        Operator::I64Eqz => unary(stack, ValueType::I64, ValueType::I32, IrOp::I64Eqz)?,
+        Operator::I32Eq => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32Eq)?,
+        Operator::I32Ne => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32Ne)?,
+        Operator::I32LtS => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32LtS)?,
+        Operator::I32LtU => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32LtU)?,
+        Operator::I32GtS => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32GtS)?,
+        Operator::I32GtU => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32GtU)?,
+        Operator::I32LeS => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32LeS)?,
+        Operator::I32LeU => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32LeU)?,
+        Operator::I32GeS => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32GeS)?,
+        Operator::I32GeU => bin(stack, ValueType::I32, ValueType::I32, IrOp::I32GeU)?,
+        Operator::I64Eq => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64Eq)?,
+        Operator::I64Ne => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64Ne)?,
+        Operator::I64LtS => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64LtS)?,
+        Operator::I64LtU => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64LtU)?,
+        Operator::I64GtS => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64GtS)?,
+        Operator::I64GtU => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64GtU)?,
+        Operator::I64LeS => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64LeS)?,
+        Operator::I64LeU => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64LeU)?,
+        Operator::I64GeS => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64GeS)?,
+        Operator::I64GeU => bin(stack, ValueType::I64, ValueType::I32, IrOp::I64GeU)?,
         Operator::Return => IrOp::Return,
         Operator::End => IrOp::End,
         other => bail!("unsupported baseline AOT operator: {other:?}"),
-    })
+    };
+    Ok(lowered)
+}
+
+fn pop_any(stack: &mut Vec<ValueType>, label: &str) -> Result<ValueType> {
+    stack.pop().with_context(|| format!("stack underflow at {label}"))
+}
+
+fn pop_ty(stack: &mut Vec<ValueType>, expected: ValueType, label: &str) -> Result<()> {
+    let actual = pop_any(stack, label)?;
+    if actual != expected {
+        bail!("type mismatch at {label}: expected {}, found {}", expected.as_str(), actual.as_str());
+    }
+    Ok(())
+}
+
+fn unary(stack: &mut Vec<ValueType>, input: ValueType, output: ValueType, op: IrOp) -> Result<IrOp> {
+    pop_ty(stack, input, &op.render())?;
+    stack.push(output);
+    Ok(op)
+}
+
+fn bin(stack: &mut Vec<ValueType>, input: ValueType, output: ValueType, op: IrOp) -> Result<IrOp> {
+    pop_ty(stack, input, &op.render())?;
+    pop_ty(stack, input, &op.render())?;
+    stack.push(output);
+    Ok(op)
 }
