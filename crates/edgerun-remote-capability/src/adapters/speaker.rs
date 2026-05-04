@@ -4,8 +4,8 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
+use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_encoding::byteorder::{read_i64_le, read_u16_le, read_u32_le};
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_speaker::{
     AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerOutputLevel,
     SpeakerSampleFormat,

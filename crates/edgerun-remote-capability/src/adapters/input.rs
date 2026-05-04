@@ -2,10 +2,10 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_core::protocol::capability::CapabilityInvocation;
+use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_encoding::byteorder::{read_i32_le, read_i64_le, read_u16_le};
 use edgerun_input::{InputDevice, InputEventKind, InputEventRecord};
-use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
-use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::{decode_count_u32, encode_count_u32, stream_oriented_error};
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};

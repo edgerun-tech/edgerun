@@ -2,10 +2,8 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
-use edgerun_proto::edgerun::v0::capability::CapabilityGrant;
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    CapabilitySessionAccept, CapabilitySessionOpen,
-};
+use edgerun_core::protocol::capability::CapabilityGrant;
+use edgerun_core::protocol::capability_runtime::{CapabilitySessionAccept, CapabilitySessionOpen};
 
 /// Build a capability request from a session open.
 pub fn session_open_as_request(

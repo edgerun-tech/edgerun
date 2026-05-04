@@ -8,9 +8,9 @@ use edgerun_camera_biometrics::{
     PairedCameraBiometricReader, PairedCameraFrame,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_core::protocol::capability::CapabilityInvocation;
+use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_encoding::byteorder::read_u32_le;
-use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
-use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::{decode_byte_field, encode_byte_field, stream_oriented_error};
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};

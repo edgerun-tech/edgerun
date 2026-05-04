@@ -2,8 +2,8 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::CapabilityError;
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::{
+use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
+use edgerun_core::protocol::capability_runtime::{
     capability_remote_envelope, CapabilityRemoteEnvelope, CapabilityResultFrame,
 };
 

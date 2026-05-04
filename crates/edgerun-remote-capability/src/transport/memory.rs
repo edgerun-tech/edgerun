@@ -6,7 +6,7 @@ use crate::prelude::v1::*;
 use crate::rc::Rc;
 
 use edgerun_capabilities::CapabilityError;
-use edgerun_proto::edgerun::v0::capability_runtime::CapabilityRemoteEnvelope;
+use edgerun_core::protocol::capability_runtime::CapabilityRemoteEnvelope;
 
 use crate::protocol::RemoteCapabilityTransport;
 

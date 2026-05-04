@@ -1,7 +1,7 @@
 use crate::prelude::v1::*;
 use edgerun_capabilities::CapabilityError;
+use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_encoding::byteorder::read_u32_le;
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 
 use crate::protocol::RemoteInvocationResult;
 

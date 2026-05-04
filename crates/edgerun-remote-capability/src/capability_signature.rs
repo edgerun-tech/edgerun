@@ -22,14 +22,13 @@
 //! 5. Verify ECDSA P-256 signature using sender's NodeID as public key
 
 use crate::prelude::v1::*;
-use edgerun_core::protocol::{signature, Signature};
-use edgerun_crypto::p256::ecdsa::VerifyingKey;
-use edgerun_hardware_signing::{MeshSigner, NodeID};
-use edgerun_proto::edgerun::v0::capability::{
+use edgerun_core::protocol::capability::{
     CapabilityGrant, CapabilityInvocation, CapabilityRequest, CapabilityResult,
     CapabilityRevocation,
 };
-use prost::Message;
+use edgerun_core::protocol::{signature, Signature};
+use edgerun_crypto::p256::ecdsa::VerifyingKey;
+use edgerun_hardware_signing::{MeshSigner, NodeID};
 
 /// The ECDSA P-256 algorithm identifier used in protobuf Signature messages.
 pub const SIGNATURE_ALGORITHM_ECDSA_P256_SHA256: i32 =

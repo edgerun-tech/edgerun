@@ -7,10 +7,10 @@ use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
 use edgerun_capability_policy::{
     PolicyContext, PolicyDecision, PolicyEngine, RevocationReason, SimplePolicyEngine,
 };
-use edgerun_proto::edgerun::v0::capability::{
+use edgerun_core::protocol::capability::{
     CapabilityGrant, CapabilityRequest, CapabilityRevocation,
 };
-use edgerun_proto::edgerun::v0::capability_runtime::{
+use edgerun_core::protocol::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionOpen,
 };
 
@@ -184,7 +184,7 @@ where
     fn invoke(
         &mut self,
         session_id: &[u8],
-        invocation: &edgerun_proto::edgerun::v0::capability::CapabilityInvocation,
+        invocation: &edgerun_core::protocol::capability::CapabilityInvocation,
         inline_parameters: Option<&[u8]>,
     ) -> Result<RemoteInvocationResult, CapabilityError> {
         let binding = self
@@ -204,7 +204,7 @@ where
         &mut self,
         session_id: &[u8],
     ) -> Result<
-        Option<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent>,
+        Option<edgerun_core::protocol::capability_runtime::CapabilitySessionEvent>,
         CapabilityError,
     > {
         self.inner.next_event(session_id)

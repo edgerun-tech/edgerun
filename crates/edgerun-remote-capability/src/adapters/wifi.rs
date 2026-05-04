@@ -4,9 +4,9 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
+use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
+use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_encoding::byteorder::{read_i16_le, read_i64_le, read_u32_le};
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 use edgerun_wifi::{
     WifiController, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState,
     WifiScanResult, WifiScanner,

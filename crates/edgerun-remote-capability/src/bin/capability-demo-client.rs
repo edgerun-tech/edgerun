@@ -1,6 +1,6 @@
 use edgerun_capabilities::{CapabilityAccessClass, CapabilityOperation};
-use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
-use edgerun_proto::edgerun::v0::capability_runtime::{
+use edgerun_core::protocol::capability::CapabilityInvocation;
+use edgerun_core::protocol::capability_runtime::{
     CapabilityRemoteEnvelope, CapabilitySessionMode, CapabilitySessionOpen,
 };
 use edgerun_remote_capability::{

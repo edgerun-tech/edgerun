@@ -12,10 +12,10 @@ pub use session::{
 };
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
-use edgerun_proto::edgerun::v0::capability::{
+use edgerun_core::protocol::capability::{
     CapabilityGrant, CapabilityInvocation, CapabilityRequest, CapabilityRevocation,
 };
-pub use edgerun_proto::edgerun::v0::capability_runtime::{
+pub use edgerun_core::protocol::capability_runtime::{
     capability_remote_envelope, CapabilityInvocationFrame, CapabilityRemoteEnvelope,
     CapabilityResultFrame, CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,
     CapabilitySessionMode, CapabilitySessionOpen,
@@ -23,7 +23,7 @@ pub use edgerun_proto::edgerun::v0::capability_runtime::{
 
 /// Result of a remote capability invocation.
 pub struct RemoteInvocationResult {
-    pub result: edgerun_proto::edgerun::v0::capability::CapabilityResult,
+    pub result: edgerun_core::protocol::capability::CapabilityResult,
     pub inline_payload: Vec<u8>,
 }
 

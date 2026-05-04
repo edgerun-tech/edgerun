@@ -4,12 +4,12 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
+use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_display::{
     validate_display_update_request, DisplayContentKind, DisplayDevice, DisplayInfo, DisplayMode,
     DisplayUpdateRequest,
 };
 use edgerun_encoding::byteorder::read_u32_le;
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
 
 use crate::adapters::common::{decode_count_u32, decode_string_field, encode_string_field};
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};

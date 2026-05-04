@@ -2,12 +2,12 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_core::protocol::capability::CapabilityInvocation;
+use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_encoding::byteorder::{read_i64_le, read_u16_le, read_u32_le};
 use edgerun_microphone::{
     AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
 };
-use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
-use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::{decode_byte_field, encode_byte_field, stream_oriented_error};
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};

@@ -2,8 +2,8 @@ use edgerun_capabilities::{
     capability_descriptor, CapabilityAccessClass, CapabilityDescriptor, CapabilityError,
     CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityRole,
 };
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::{
+use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
+use edgerun_core::protocol::capability_runtime::{
     CapabilitySessionClose, CapabilitySessionEvent, CapabilitySessionOpen,
 };
 use edgerun_remote_capability::{

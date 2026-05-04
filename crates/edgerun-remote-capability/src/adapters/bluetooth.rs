@@ -7,9 +7,9 @@ use edgerun_bluetooth::{
     BluetoothScanner, BluetoothTransportKind,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
+use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_encoding::byteorder::{read_i16_le, read_i64_le, read_u16_le, read_u32_le};
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent;
 
 use crate::adapters::common::{
     decode_byte_field, decode_count_u32, decode_optional_string_field, decode_string_field,

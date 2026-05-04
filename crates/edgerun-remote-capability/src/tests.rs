@@ -28,17 +28,17 @@ use edgerun_capabilities::{
     CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRole, CapabilitySelector,
 };
-use edgerun_input::{InputDeviceInfo, InputDeviceKind, InputEventKind, InputEventRecord};
-use edgerun_microphone::{
-    AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneInfo, MicrophoneSampleFormat,
-};
-use edgerun_proto::edgerun::v0::capability::{
+use edgerun_core::protocol::capability::{
     CapabilityGrant, CapabilityInvocation, CapabilityRequest as ProtoRequest, CapabilityResult,
     CapabilityRevocation,
 };
-use edgerun_proto::edgerun::v0::capability_runtime::{
+use edgerun_core::protocol::capability_runtime::{
     capability_remote_envelope, CapabilityInvocationFrame, CapabilityRemoteEnvelope,
     CapabilitySessionClose, CapabilitySessionMode, CapabilitySessionOpen,
+};
+use edgerun_input::{InputDeviceInfo, InputDeviceKind, InputEventKind, InputEventRecord};
+use edgerun_microphone::{
+    AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneInfo, MicrophoneSampleFormat,
 };
 use edgerun_speaker::{
     AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel,
@@ -98,10 +98,8 @@ impl RemoteCapabilityProvider for DummyProvider {
     fn open_session(
         &mut self,
         open: &CapabilitySessionOpen,
-    ) -> Result<
-        edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept,
-        CapabilityError,
-    > {
+    ) -> Result<edgerun_core::protocol::capability_runtime::CapabilitySessionAccept, CapabilityError>
+    {
         self.opened = true;
         let mut accept = accept_session_open_unchecked(open);
         accept.granted_access_class = CapabilityAccessClass::Derived as i32;
@@ -135,7 +133,7 @@ impl RemoteCapabilityProvider for DummyProvider {
         &mut self,
         session_id: &[u8],
     ) -> Result<
-        Option<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent>,
+        Option<edgerun_core::protocol::capability_runtime::CapabilitySessionEvent>,
         CapabilityError,
     > {
         if self.event_sent {
@@ -143,7 +141,7 @@ impl RemoteCapabilityProvider for DummyProvider {
         }
         self.event_sent = true;
         Ok(Some(
-            edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent {
+            edgerun_core::protocol::capability_runtime::CapabilitySessionEvent {
                 version: 1,
                 session_id: session_id.to_vec(),
                 sequence_no: 1,
