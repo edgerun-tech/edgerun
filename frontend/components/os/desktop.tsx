@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
 import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
 import { FloatingDock } from "@/components/ui/floating-dock"
+import { installedAppIdsStore, CORE_APP_IDS } from "@/stores/installed-apps-store"
 import { Users } from "lucide-react"
 import {
   windowsStore,
@@ -38,6 +39,7 @@ export function Desktop() {
   const pendingGate = useStore(pendingGateStore)
   const stageMode = useStore(stageModeStore)
   const widgetVisible = useStore(widgetVisibleStore)
+  const installedAppIds = useStore(installedAppIdsStore)
 
   const showDesktop = auth.authState === "authenticated" || auth.authState === "guest"
 
@@ -59,12 +61,7 @@ export function Desktop() {
   }, [])
 
   const dockItems = useMemo(() => {
-    const dockAppIds = [
-      "ai-assistant", "workflow-builder", "terminal", "code-runner",
-      "people", "file-browser", "db-explorer", "network-monitor", "resource-monitor",
-      "git-sync", "web-server", "compute-node", "wallet", "calculator", "help",
-      "gmail", "settings",
-    ]
+    const dockAppIds = Array.from(new Set([...CORE_APP_IDS, ...installedAppIds]))
     return dockAppIds.map((appId) => {
       const app = getBuiltinApp(appId)
       if (!app) return null
@@ -77,7 +74,7 @@ export function Desktop() {
         },
       }
     }).filter(Boolean)
-  }, [])
+  }, [installedAppIds])
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
