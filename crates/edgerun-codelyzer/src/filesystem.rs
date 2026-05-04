@@ -8,7 +8,28 @@ use std::collections::HashMap;
 use std::{fs, path::Path, time::UNIX_EPOCH};
 
 /// Extensions we care about.
-const TRACKED_EXTS: &[&str] = &[".c", ".h", ".rs", ".ts", ".js", ".py", ".go", ".java"];
+const TRACKED_EXTS: &[&str] = &[".c", ".h", ".rs", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".go", ".java"];
+
+const IGNORED_DIRS: &[&str] = &[
+    ".git",
+    ".next",
+    ".turbo",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "out",
+    "target",
+    "third_party",
+    "vendor",
+];
+
+const IGNORED_GENERATED_PREFIXES: &[&str] = &[
+    "zerrors_",
+    "zsyscall_",
+    "zsysnum_",
+    "ztypes_",
+];
 
 /// Metadata about a single tracked source file.
 #[derive(Debug, Clone)]
@@ -69,8 +90,7 @@ fn scan_recursive(root: &Path, current: &Path, out: &mut Vec<FileInfo>) {
         let path = entry.path();
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
-        // Skip noise
-        if name.starts_with('.') || name == "target" || name == "node_modules" || name == ".git" {
+        if should_skip_dir_or_file(name) {
             continue;
         }
 
@@ -85,6 +105,16 @@ fn scan_recursive(root: &Path, current: &Path, out: &mut Vec<FileInfo>) {
             }
         }
     }
+}
+
+fn should_skip_dir_or_file(name: &str) -> bool {
+    if name.starts_with('.') && name != ".storybook" {
+        return true;
+    }
+    if IGNORED_DIRS.contains(&name) {
+        return true;
+    }
+    IGNORED_GENERATED_PREFIXES.iter().any(|prefix| name.starts_with(prefix))
 }
 
 fn file_info(path: &Path, root: &Path) -> Option<FileInfo> {
