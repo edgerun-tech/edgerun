@@ -88,7 +88,7 @@ fn emit_return(code: &mut Vec<u8>, result_count: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{verify_ir, FuncSig, FunctionIr, IrOp, ValueType};
+    use super::super::ir::{verify_ir, FuncSig, FunctionIr, IrOp, ValueType};
 
     #[test]
     fn x86_add_two_i32_params() {
