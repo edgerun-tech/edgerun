@@ -61,9 +61,9 @@ export function Desktop() {
   const dockItems = useMemo(() => {
     const dockAppIds = [
       "ai-assistant", "workflow-builder", "terminal", "code-runner",
-      "file-browser", "db-explorer", "network-monitor", "resource-monitor",
-      "git-sync", "web-server", "compute-node", "contacts", "calling",
-      "chat", "wallet", "calculator", "help", "gmail", "settings",
+      "people", "file-browser", "db-explorer", "network-monitor", "resource-monitor",
+      "git-sync", "web-server", "compute-node", "wallet", "calculator", "help",
+      "gmail", "settings",
     ]
     return dockAppIds.map((appId) => {
       const app = getBuiltinApp(appId)
@@ -132,7 +132,7 @@ export function Desktop() {
             }}
           />
 
-          <div className="relative z-10 absolute inset-0 top-10">
+          <div className="absolute inset-0 top-10 z-10">
             <StageManager
               windows={windows}
               focusedWindowId={focusedWindow}
