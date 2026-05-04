@@ -5,9 +5,9 @@
 
 use crate::command_dispatch_event::{append_command_result_event, CommandResultEventWrite};
 use crate::command_dispatch_payload::inline_payload_bytes;
-use crate::server_resource_wire_codec::{decode_command_payload, encode_committed_resource_event};
 use crate::server_resources::{
-    apply_server_resource_event, compile_server_plan, project_server_resources, DerivedServerPlan,
+    apply_server_resource_event, compile_server_plan, decode_command_payload,
+    encode_committed_resource_event, project_server_resources, DerivedServerPlan,
     ServerResourceEvent,
 };
 use edgerun_hardware_signing::MeshSigner;
