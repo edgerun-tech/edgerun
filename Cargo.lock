@@ -1528,11 +1528,8 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-hardware-signing",
  "edgerun-node",
- "edgerun-proto",
  "edgerun-storage",
  "eframe",
- "prost 0.14.3",
- "prost-types 0.14.3",
  "sha2",
  "wasmtime",
 ]
@@ -1602,9 +1599,6 @@ dependencies = [
 [[package]]
 name = "edgerun-capabilities"
 version = "0.1.1"
-dependencies = [
- "edgerun-proto",
-]
 
 [[package]]
 name = "edgerun-capability-policy"
@@ -1613,8 +1607,6 @@ dependencies = [
  "edgerun-capabilities",
  "edgerun-core",
  "edgerun-crypto",
- "edgerun-proto",
- "prost-types 0.14.3",
 ]
 
 [[package]]
@@ -1651,8 +1643,6 @@ dependencies = [
  "edgerun-glob",
  "edgerun-regex",
  "grep",
- "prost 0.13.5",
- "prost-build 0.13.5",
  "rayon",
  "regex",
  "rusqlite",
@@ -1675,10 +1665,7 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-json",
- "edgerun-proto",
  "edgerun-wire",
- "prost 0.14.3",
- "prost-types 0.14.3",
 ]
 
 [[package]]
@@ -1761,10 +1748,8 @@ dependencies = [
  "edgerun-mesh-link",
  "edgerun-mesh-session",
  "edgerun-oci",
- "edgerun-proto",
  "edgerun-remote-capability",
  "edgerun-storage",
- "prost 0.14.3",
 ]
 
 [[package]]
@@ -1786,12 +1771,10 @@ dependencies = [
  "edgerun-mgmt-bluetooth",
  "edgerun-microphone",
  "edgerun-npu",
- "edgerun-proto",
  "edgerun-remote-capability",
  "edgerun-speaker",
  "edgerun-tpm",
  "edgerun-v4l2-camera",
- "prost 0.14.3",
 ]
 
 [[package]]
@@ -1879,10 +1862,8 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
- "edgerun-proto",
  "edgerun-rt",
  "edgerun-wallet",
- "prost 0.14.3",
 ]
 
 [[package]]
@@ -1893,7 +1874,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
- "edgerun-proto",
  "edgerun-rt",
  "edgerun-url",
  "edgerun-wallet",
@@ -1905,7 +1885,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-exchange",
  "edgerun-log",
- "edgerun-proto",
  "edgerun-rt",
  "edgerun-wallet",
 ]
@@ -2146,9 +2125,7 @@ dependencies = [
  "edgerun-hardware-signing",
  "edgerun-mesh",
  "edgerun-mesh-link",
- "edgerun-proto",
  "edgerun-remote-capability",
- "prost 0.14.3",
 ]
 
 [[package]]
@@ -2166,10 +2143,8 @@ dependencies = [
  "edgerun-mesh-link",
  "edgerun-mesh-session",
  "edgerun-network-interface",
- "edgerun-proto",
  "edgerun-remote-capability",
  "libc",
- "prost 0.14.3",
 ]
 
 [[package]]
@@ -2277,7 +2252,6 @@ dependencies = [
  "edgerun-oci",
  "edgerun-pci",
  "edgerun-power",
- "edgerun-proto",
  "edgerun-remote-capability",
  "edgerun-rt",
  "edgerun-speaker",
@@ -2291,8 +2265,6 @@ dependencies = [
  "edgerun-wire",
  "edgerun-yubikey",
  "libc",
- "prost 0.14.3",
- "prost-types 0.14.3",
 ]
 
 [[package]]
@@ -2369,9 +2341,9 @@ name = "edgerun-proto"
 version = "0.1.1"
 dependencies = [
  "edgerun-json",
- "prost 0.14.3",
- "prost-build 0.14.3",
- "prost-types 0.14.3",
+ "prost 0.13.5",
+ "prost-build",
+ "prost-types 0.13.5",
 ]
 
 [[package]]
@@ -2435,10 +2407,8 @@ dependencies = [
  "edgerun-input",
  "edgerun-microphone",
  "edgerun-npu",
- "edgerun-proto",
  "edgerun-speaker",
  "edgerun-wifi",
- "prost 0.14.3",
 ]
 
 [[package]]
@@ -2458,9 +2428,7 @@ version = "0.1.0"
 name = "edgerun-sdk"
 version = "0.1.1"
 dependencies = [
- "edgerun-proto",
  "edgerun-sdk-macro",
- "prost 0.14.3",
 ]
 
 [[package]]
@@ -2481,9 +2449,7 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-json",
  "edgerun-log",
- "edgerun-proto",
  "edgerun-storage",
- "prost 0.14.3",
 ]
 
 [[package]]
@@ -2524,12 +2490,9 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-hardware-signing",
  "edgerun-log",
- "edgerun-proto",
  "edgerun-rt",
  "edgerun-stream",
  "libc",
- "prost 0.14.3",
- "prost-types 0.14.3",
 ]
 
 [[package]]
@@ -2539,8 +2502,6 @@ dependencies = [
  "edgerun-core",
  "edgerun-crypto",
  "edgerun-hardware-signing",
- "prost 0.14.3",
- "prost-types 0.14.3",
 ]
 
 [[package]]
@@ -2649,7 +2610,6 @@ dependencies = [
  "edgerun-capabilities",
  "edgerun-encoding",
  "edgerun-linux-sysfs",
- "edgerun-proto",
 ]
 
 [[package]]
@@ -2689,7 +2649,6 @@ dependencies = [
  "edgerun-error",
  "edgerun-json",
  "edgerun-log",
- "edgerun-proto",
 ]
 
 [[package]]
@@ -2699,9 +2658,7 @@ dependencies = [
  "anyhow",
  "edgerun-capabilities",
  "edgerun-clap",
- "edgerun-proto",
  "libc",
- "prost 0.14.3",
  "sha2",
  "wasmparser 0.224.1",
  "wasmtime",
@@ -2713,7 +2670,6 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "edgerun-encoding",
- "edgerun-proto",
  "sha2",
  "wasmparser 0.224.1",
  "wasmtime",
@@ -4712,16 +4668,6 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "petgraph"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
-dependencies = [
- "fixedbitset",
- "indexmap",
-]
-
-[[package]]
-name = "petgraph"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
@@ -4963,26 +4909,6 @@ dependencies = [
 
 [[package]]
 name = "prost-build"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
-dependencies = [
- "heck",
- "itertools 0.14.0",
- "log",
- "multimap",
- "once_cell",
- "petgraph 0.7.1",
- "prettyplease",
- "prost 0.13.5",
- "prost-types 0.13.5",
- "regex",
- "syn",
- "tempfile",
-]
-
-[[package]]
-name = "prost-build"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
@@ -4991,7 +4917,7 @@ dependencies = [
  "itertools 0.14.0",
  "log",
  "multimap",
- "petgraph 0.8.3",
+ "petgraph",
  "prost 0.14.3",
  "prost-types 0.14.3",
  "regex",
