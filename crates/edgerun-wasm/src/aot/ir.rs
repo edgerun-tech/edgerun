@@ -23,6 +23,23 @@ impl ValueType {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LoadKind {
+    I32,
+    I64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StoreKind {
+    I32,
+    I64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MemOp {
+    pub offset: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct FuncSig {
     pub params: Vec<ValueType>,
@@ -32,34 +49,14 @@ pub struct FuncSig {
 impl FuncSig {
     pub fn from_wasm(sig: wasmparser::FuncType) -> Result<Self> {
         Ok(Self {
-            params: sig
-                .params()
-                .iter()
-                .copied()
-                .map(ValueType::from_wasm)
-                .collect::<Result<Vec<_>>>()?,
-            results: sig
-                .results()
-                .iter()
-                .copied()
-                .map(ValueType::from_wasm)
-                .collect::<Result<Vec<_>>>()?,
+            params: sig.params().iter().copied().map(ValueType::from_wasm).collect::<Result<Vec<_>>>()?,
+            results: sig.results().iter().copied().map(ValueType::from_wasm).collect::<Result<Vec<_>>>()?,
         })
     }
 
     pub fn render(&self) -> String {
-        let params = self
-            .params
-            .iter()
-            .map(|t| t.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let results = self
-            .results
-            .iter()
-            .map(|t| t.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let params = self.params.iter().map(|t| t.as_str()).collect::<Vec<_>>().join(", ");
+        let results = self.results.iter().map(|t| t.as_str()).collect::<Vec<_>>().join(", ");
         format!("({params}) -> ({results})")
     }
 }
@@ -79,6 +76,8 @@ pub enum IrOp {
     LocalGet(u32),
     LocalSet(u32),
     LocalTee(u32),
+    Load(LoadKind, MemOp),
+    Store(StoreKind, MemOp),
     I32Add,
     I32Sub,
     I32Mul,
@@ -127,6 +126,10 @@ impl IrOp {
             Self::LocalGet(i) => format!("local.get {i}"),
             Self::LocalSet(i) => format!("local.set {i}"),
             Self::LocalTee(i) => format!("local.tee {i}"),
+            Self::Load(LoadKind::I32, mem) => format!("i32.load offset={}", mem.offset),
+            Self::Load(LoadKind::I64, mem) => format!("i64.load offset={}", mem.offset),
+            Self::Store(StoreKind::I32, mem) => format!("i32.store offset={}", mem.offset),
+            Self::Store(StoreKind::I64, mem) => format!("i64.store offset={}", mem.offset),
             Self::I32Add => "i32.add".to_string(),
             Self::I32Sub => "i32.sub".to_string(),
             Self::I32Mul => "i32.mul".to_string(),
@@ -168,19 +171,19 @@ pub struct FunctionIr {
     pub sig: FuncSig,
     pub locals: Vec<ValueType>,
     pub global_values: Vec<GlobalValue>,
+    pub uses_memory: bool,
     pub ops: Vec<IrOp>,
 }
 
 impl FunctionIr {
     pub fn name(&self) -> String {
-        self.export_name
-            .clone()
-            .unwrap_or_else(|| format!("func{}", self.index))
+        self.export_name.clone().unwrap_or_else(|| format!("func{}", self.index))
     }
 
     pub fn render(&self) -> String {
         let mut out = String::new();
         out.push_str(&format!("func {} {}\n", self.name(), self.sig.render()));
+        if self.uses_memory { out.push_str("  requires_memory\n"); }
         if self.locals.len() > self.sig.params.len() {
             out.push_str("  locals");
             for local in self.locals.iter().skip(self.sig.params.len()) {
@@ -190,9 +193,7 @@ impl FunctionIr {
             out.push('\n');
         }
         for op in &self.ops {
-            if matches!(op, IrOp::Nop) {
-                continue;
-            }
+            if matches!(op, IrOp::Nop) { continue; }
             out.push_str("  ");
             out.push_str(&op.render());
             out.push('\n');
@@ -202,27 +203,17 @@ impl FunctionIr {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GlobalValue {
-    I32(i32),
-    I64(i64),
-}
+pub enum GlobalValue { I32(i32), I64(i64) }
 
 impl GlobalValue {
     pub fn value_type(self) -> ValueType {
-        match self {
-            Self::I32(_) => ValueType::I32,
-            Self::I64(_) => ValueType::I64,
-        }
+        match self { Self::I32(_) => ValueType::I32, Self::I64(_) => ValueType::I64 }
     }
 }
 
 pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
-    if ir.sig.results.len() > 1 {
-        bail!("{} returns more than one value", ir.name());
-    }
-    if ir.sig.params.len() > 6 {
-        bail!("{} has more than six integer params; SysV register ABI MVP only", ir.name());
-    }
+    if ir.sig.results.len() > 1 { bail!("{} returns more than one value", ir.name()); }
+    if ir.sig.params.len() > 6 { bail!("{} has more than six integer params; SysV register ABI MVP only", ir.name()); }
 
     let mut stack: Vec<ValueType> = Vec::new();
     let mut ended = false;
@@ -230,175 +221,47 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
     for op in &ir.ops {
         match *op {
             IrOp::Nop | IrOp::Block | IrOp::Loop | IrOp::BlockEnd => {}
-            IrOp::Br(depth) => {
-                if depth != 0 {
-                    bail!("{} only supports br depth 0 for now", ir.name());
-                }
-            }
-            IrOp::BrIf(depth) => {
-                if depth != 0 {
-                    bail!("{} only supports br_if depth 0 for now", ir.name());
-                }
-                pop1(&mut stack, ValueType::I32, ir, op)?;
-            }
+            IrOp::Br(depth) => { if depth != 0 { bail!("{} only supports br depth 0 for now", ir.name()); } }
+            IrOp::BrIf(depth) => { if depth != 0 { bail!("{} only supports br_if depth 0 for now", ir.name()); } pop1(&mut stack, ValueType::I32, ir, op)?; }
             IrOp::I32Const(_) => stack.push(ValueType::I32),
             IrOp::I64Const(_) => stack.push(ValueType::I64),
-            IrOp::GlobalGet(index, ty) => {
-                let global = global_type(ir, index)?;
-                if global != ty {
-                    bail!("{} global.get {} type mismatch", ir.name(), index);
-                }
-                stack.push(ty);
-            }
-            IrOp::GlobalSet(index, ty) => {
-                let global = global_type(ir, index)?;
-                if global != ty {
-                    bail!("{} global.set {} type mismatch", ir.name(), index);
-                }
-                let actual = stack
-                    .pop()
-                    .with_context(|| format!("{} stack underflow at global.set {index}", ir.name()))?;
-                if actual != ty {
-                    bail!("{} global.set {} value type mismatch: expected {}, found {}", ir.name(), index, ty.as_str(), actual.as_str());
-                }
-            }
+            IrOp::GlobalGet(index, ty) => { let global = global_type(ir, index)?; if global != ty { bail!("{} global.get {} type mismatch", ir.name(), index); } stack.push(ty); }
+            IrOp::GlobalSet(index, ty) => { let global = global_type(ir, index)?; if global != ty { bail!("{} global.set {} type mismatch", ir.name(), index); } let actual = stack.pop().with_context(|| format!("{} stack underflow at global.set {index}", ir.name()))?; if actual != ty { bail!("{} global.set {} value type mismatch: expected {}, found {}", ir.name(), index, ty.as_str(), actual.as_str()); } }
             IrOp::LocalGet(i) => stack.push(local_type(ir, i)?),
-            IrOp::LocalSet(i) => {
-                let expected = local_type(ir, i)?;
-                let actual = stack
-                    .pop()
-                    .with_context(|| format!("{} stack underflow at local.set {i}", ir.name()))?;
-                if actual != expected {
-                    bail!("{} local.set {} type mismatch: expected {}, found {}", ir.name(), i, expected.as_str(), actual.as_str());
-                }
-            }
-            IrOp::LocalTee(i) => {
-                let expected = local_type(ir, i)?;
-                let actual = stack
-                    .pop()
-                    .with_context(|| format!("{} stack underflow at local.tee {i}", ir.name()))?;
-                if actual != expected {
-                    bail!("{} local.tee {} type mismatch: expected {}, found {}", ir.name(), i, expected.as_str(), actual.as_str());
-                }
-                stack.push(expected);
-            }
-            IrOp::I32Add | IrOp::I32Sub | IrOp::I32Mul => {
-                pop2(&mut stack, ValueType::I32, ir, op)?;
-                stack.push(ValueType::I32);
-            }
-            IrOp::I64Add | IrOp::I64Sub | IrOp::I64Mul => {
-                pop2(&mut stack, ValueType::I64, ir, op)?;
-                stack.push(ValueType::I64);
-            }
-            IrOp::I32Eqz => {
-                pop1(&mut stack, ValueType::I32, ir, op)?;
-                stack.push(ValueType::I32);
-            }
-            IrOp::I64Eqz => {
-                pop1(&mut stack, ValueType::I64, ir, op)?;
-                stack.push(ValueType::I32);
-            }
-            IrOp::I32Eq
-            | IrOp::I32Ne
-            | IrOp::I32LtS
-            | IrOp::I32LtU
-            | IrOp::I32GtS
-            | IrOp::I32GtU
-            | IrOp::I32LeS
-            | IrOp::I32LeU
-            | IrOp::I32GeS
-            | IrOp::I32GeU => {
-                pop2(&mut stack, ValueType::I32, ir, op)?;
-                stack.push(ValueType::I32);
-            }
-            IrOp::I64Eq
-            | IrOp::I64Ne
-            | IrOp::I64LtS
-            | IrOp::I64LtU
-            | IrOp::I64GtS
-            | IrOp::I64GtU
-            | IrOp::I64LeS
-            | IrOp::I64LeU
-            | IrOp::I64GeS
-            | IrOp::I64GeU => {
-                pop2(&mut stack, ValueType::I64, ir, op)?;
-                stack.push(ValueType::I32);
-            }
-            IrOp::Return | IrOp::End => {
-                if let Some(expected) = ir.sig.results.first().copied() {
-                    let actual = stack
-                        .pop()
-                        .with_context(|| format!("{} ends without result", ir.name()))?;
-                    if actual != expected {
-                        bail!(
-                            "{} result type mismatch: expected {}, found {}",
-                            ir.name(),
-                            expected.as_str(),
-                            actual.as_str()
-                        );
-                    }
-                }
-                ended = true;
-                break;
-            }
+            IrOp::LocalSet(i) => { let expected = local_type(ir, i)?; let actual = stack.pop().with_context(|| format!("{} stack underflow at local.set {i}", ir.name()))?; if actual != expected { bail!("{} local.set {} type mismatch: expected {}, found {}", ir.name(), i, expected.as_str(), actual.as_str()); } }
+            IrOp::LocalTee(i) => { let expected = local_type(ir, i)?; let actual = stack.pop().with_context(|| format!("{} stack underflow at local.tee {i}", ir.name()))?; if actual != expected { bail!("{} local.tee {} type mismatch: expected {}, found {}", ir.name(), i, expected.as_str(), actual.as_str()); } stack.push(expected); }
+            IrOp::Load(kind, _) => { pop1(&mut stack, ValueType::I32, ir, op)?; stack.push(match kind { LoadKind::I32 => ValueType::I32, LoadKind::I64 => ValueType::I64 }); }
+            IrOp::Store(kind, _) => { let val_ty = match kind { StoreKind::I32 => ValueType::I32, StoreKind::I64 => ValueType::I64 }; pop1(&mut stack, val_ty, ir, op)?; pop1(&mut stack, ValueType::I32, ir, op)?; }
+            IrOp::I32Add | IrOp::I32Sub | IrOp::I32Mul => { pop2(&mut stack, ValueType::I32, ir, op)?; stack.push(ValueType::I32); }
+            IrOp::I64Add | IrOp::I64Sub | IrOp::I64Mul => { pop2(&mut stack, ValueType::I64, ir, op)?; stack.push(ValueType::I64); }
+            IrOp::I32Eqz => { pop1(&mut stack, ValueType::I32, ir, op)?; stack.push(ValueType::I32); }
+            IrOp::I64Eqz => { pop1(&mut stack, ValueType::I64, ir, op)?; stack.push(ValueType::I32); }
+            IrOp::I32Eq | IrOp::I32Ne | IrOp::I32LtS | IrOp::I32LtU | IrOp::I32GtS | IrOp::I32GtU | IrOp::I32LeS | IrOp::I32LeU | IrOp::I32GeS | IrOp::I32GeU => { pop2(&mut stack, ValueType::I32, ir, op)?; stack.push(ValueType::I32); }
+            IrOp::I64Eq | IrOp::I64Ne | IrOp::I64LtS | IrOp::I64LtU | IrOp::I64GtS | IrOp::I64GtU | IrOp::I64LeS | IrOp::I64LeU | IrOp::I64GeS | IrOp::I64GeU => { pop2(&mut stack, ValueType::I64, ir, op)?; stack.push(ValueType::I32); }
+            IrOp::Return | IrOp::End => { if let Some(expected) = ir.sig.results.first().copied() { let actual = stack.pop().with_context(|| format!("{} ends without result", ir.name()))?; if actual != expected { bail!("{} result type mismatch: expected {}, found {}", ir.name(), expected.as_str(), actual.as_str()); } } ended = true; break; }
         }
     }
-
-    if !ended {
-        bail!("{} has no return/end terminator", ir.name());
-    }
-
+    if !ended { bail!("{} has no return/end terminator", ir.name()); }
     Ok(())
 }
 
 fn local_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
-    ir.locals
-        .get(index as usize)
-        .copied()
-        .with_context(|| format!("{} references missing local {index}", ir.name()))
+    ir.locals.get(index as usize).copied().with_context(|| format!("{} references missing local {index}", ir.name()))
 }
 
 fn global_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
-    ir.global_values
-        .get(index as usize)
-        .copied()
-        .map(GlobalValue::value_type)
-        .with_context(|| format!("{} references missing global {index}", ir.name()))
+    ir.global_values.get(index as usize).copied().map(GlobalValue::value_type).with_context(|| format!("{} references missing global {index}", ir.name()))
 }
 
 fn pop1(stack: &mut Vec<ValueType>, expected: ValueType, ir: &FunctionIr, op: &IrOp) -> Result<()> {
-    let actual = stack
-        .pop()
-        .with_context(|| format!("{} stack underflow at {}", ir.name(), op.render()))?;
-    if actual != expected {
-        bail!(
-            "{} type mismatch at {}: expected {}, found {}",
-            ir.name(),
-            op.render(),
-            expected.as_str(),
-            actual.as_str()
-        );
-    }
+    let actual = stack.pop().with_context(|| format!("{} stack underflow at {}", ir.name(), op.render()))?;
+    if actual != expected { bail!("{} type mismatch at {}: expected {}, found {}", ir.name(), op.render(), expected.as_str(), actual.as_str()); }
     Ok(())
 }
 
 fn pop2(stack: &mut Vec<ValueType>, expected: ValueType, ir: &FunctionIr, op: &IrOp) -> Result<()> {
-    let rhs = stack
-        .pop()
-        .with_context(|| format!("{} stack underflow at {}", ir.name(), op.render()))?;
-    let lhs = stack
-        .pop()
-        .with_context(|| format!("{} stack underflow at {}", ir.name(), op.render()))?;
-    if lhs != expected || rhs != expected {
-        bail!(
-            "{} type mismatch at {}: expected {} + {}, found {} + {}",
-            ir.name(),
-            op.render(),
-            expected.as_str(),
-            expected.as_str(),
-            lhs.as_str(),
-            rhs.as_str()
-        );
-    }
+    let rhs = stack.pop().with_context(|| format!("{} stack underflow at {}", ir.name(), op.render()))?;
+    let lhs = stack.pop().with_context(|| format!("{} stack underflow at {}", ir.name(), op.render()))?;
+    if lhs != expected || rhs != expected { bail!("{} type mismatch at {}: expected {} + {}, found {} + {}", ir.name(), op.render(), expected.as_str(), expected.as_str(), lhs.as_str(), rhs.as_str()); }
     Ok(())
 }
