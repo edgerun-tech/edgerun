@@ -159,15 +159,21 @@ fn remap_locals(op: IrOp, local_base: u32) -> Result<IrOp> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::ir::{FuncSig, GlobalValue};
+    use super::*;
 
-    fn function(index: u32, params: Vec<ValueType>, results: Vec<ValueType>, ops: Vec<IrOp>) -> FunctionIr {
+    fn function(
+        index: u32,
+        params: Vec<ValueType>,
+        results: Vec<ValueType>,
+        ops: Vec<IrOp>,
+    ) -> FunctionIr {
+        let locals = params.clone();
         FunctionIr {
             index,
             export_name: Some(format!("f{index}")),
             sig: FuncSig { params, results },
-            locals: Vec::new(),
+            locals,
             global_values: Vec::<GlobalValue>::new(),
             uses_memory: false,
             ops,
