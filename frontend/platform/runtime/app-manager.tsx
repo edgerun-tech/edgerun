@@ -7,6 +7,10 @@ import { WasmAppHost } from "@/platform/runtime/wasm-app-host"
 
 export type AppRuntimeKind = "builtin" | "wasm" | "sandboxed-worker" | "blocked"
 
+export interface AppHostContext {
+  launchApp?: (app: AppDefinition) => void
+}
+
 export interface AppLaunchPlan {
   runtime: AppRuntimeKind
   reason: string
@@ -17,7 +21,7 @@ function isSandboxedJavaScriptApp(app: AppDefinition): boolean {
   return app.kind === "external" || app.displayMetadata?.runtime === "sandboxed-worker"
 }
 
-export function createAppLaunchPlan(app: AppDefinition): AppLaunchPlan {
+export function createAppLaunchPlan(app: AppDefinition, context: AppHostContext = {}): AppLaunchPlan {
   if (app.kind === "wasm" || app.wasmUrl || app.wasmObjectRef) {
     return {
       runtime: "wasm",
@@ -38,7 +42,7 @@ export function createAppLaunchPlan(app: AppDefinition): AppLaunchPlan {
     return {
       runtime: "builtin",
       reason: "Trusted dashboard builtin rendered by the host UI.",
-      component: <BuiltinAppHost app={app} />,
+      component: <BuiltinAppHost app={app} onLaunchApp={context.launchApp} />,
     }
   }
 
