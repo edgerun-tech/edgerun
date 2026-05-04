@@ -43,6 +43,12 @@ echo ""
 echo "AOT compiling baseline subset..."
 if cargo run -p edgerun-wasm --bin edgerun-aot --target "$WASM_TARGET" -- app.wasm --emit-ir --verbose 2>&1; then
     echo "AOT output: app.eraot"
+    echo ""
+    echo "Inspecting AOT artifact..."
+    cargo run -p edgerun-wasm --bin edgerun-aot --target "$WASM_TARGET" -- --inspect-artifact app.eraot 2>&1
+    echo ""
+    echo "Verifying AOT artifact..."
+    cargo run -p edgerun-wasm --bin edgerun-aot --target "$WASM_TARGET" -- app.wasm --verify-artifact app.eraot --verbose 2>&1
 else
     echo "AOT skipped: module uses operators outside the current baseline subset"
 fi
