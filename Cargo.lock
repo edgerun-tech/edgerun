@@ -2638,6 +2638,7 @@ dependencies = [
 name = "edgerun-wallet"
 version = "0.1.1"
 dependencies = [
+ "edgerun-core",
  "edgerun-crypto",
  "edgerun-error",
  "edgerun-json",
