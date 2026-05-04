@@ -1,9 +1,0 @@
-name = "edgerun-benchmarks"
-main = "./dist/_worker.js"
-compatibility_date = "2026-05-05"
-
-assets = { directory = "./dist", binding = "ASSETS" }
-
-[build]
-command = "bun run build"
-watch_dir = ["src", "public"]
