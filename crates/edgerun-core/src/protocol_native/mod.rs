@@ -96,7 +96,18 @@ pub use trust::{
     RouteTrustAssignments, ScopeDescriptor, ScopeKind,
 };
 
-#[derive(Clone, Debug)]
+pub fn enum_from_i32<T>(value: i32) -> Option<T>
+where
+    T: NativeEnum,
+{
+    T::from_i32(value)
+}
+
+pub trait NativeEnum: Sized {
+    fn from_i32(value: i32) -> Option<Self>;
+}
+
+#[derive(Clone)]
 pub enum ProtocolRecord {
     CommandEnvelope(CommandEnvelope),
     EventEnvelope(EventEnvelope),
@@ -104,6 +115,7 @@ pub enum ProtocolRecord {
     DelegationRecord(DelegationRecord),
     RevocationRecord(RevocationRecord),
     IdentityRecord(IdentityRecord),
+    RouteAdvertisement(RouteAdvertisement),
     ObjectRef(ObjectRef),
     Digest(Digest),
     Signature(Signature),
@@ -135,6 +147,7 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::V
                     ProtocolRecord::DelegationRecord(_) => "DelegationRecord",
                     ProtocolRecord::RevocationRecord(_) => "RevocationRecord",
                     ProtocolRecord::IdentityRecord(_) => "IdentityRecord",
+                    ProtocolRecord::RouteAdvertisement(_) => "RouteAdvertisement",
                     ProtocolRecord::ObjectRef(_) => "ObjectRef",
                     ProtocolRecord::Digest(_) => "Digest",
                     ProtocolRecord::Signature(_) => "Signature",
