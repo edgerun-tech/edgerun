@@ -8,7 +8,7 @@ use edgerun_core::protocol::{canonical_bytes, ProtocolRecord};
 use edgerun_core::util::{now_unix_millis_i64, system_time_to_prost};
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_core::protocol::ObjectKind;
-use edgerun_proto::edgerun::v0::trust::AssuranceClaim;
+use edgerun_core::protocol::AssuranceClaim;
 use edgerun_storage::NodeStore;
 use std::time::SystemTime;
 
@@ -35,7 +35,7 @@ pub fn generate_and_record_assurance_claim(
     let claim = AssuranceClaim {
         claim_version: 1,
         subject: Some(
-            edgerun_proto::edgerun::v0::trust::assurance_claim::Subject::SubjectNode(
+            edgerun_core::protocol::assurance_claim::Subject::SubjectNode(
                 edgerun_core::protocol::NodeRef {
                     node_id: node_id.0.to_vec(),
                 },

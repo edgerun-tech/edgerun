@@ -34,7 +34,7 @@ impl ContentStore for FsContentStore {
         // Create the descriptor now to keep this backend responsible for the
         // logical object model. Persistence of descriptors can be added without
         // changing `NodeStore` callers.
-        let _descriptor = edgerun_proto::edgerun::v0::object::LogicalObjectDescriptor {
+        let _descriptor = edgerun_core::protocol::LogicalObjectDescriptor {
             descriptor_version: 1,
             object_id: ids.object_id.clone(),
             object_kind,

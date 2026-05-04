@@ -61,7 +61,7 @@ fn make_node_identity(node_id: &str) -> IdentityRef {
 
     IdentityRef {
         identity_id: id_bytes.to_vec(),
-        identity_kind: Some(edgerun_proto::edgerun::v0::common::IdentityKind::Node as i32),
+        identity_kind: Some(edgerun_core::protocol::IdentityKind::Node as i32),
         key_hint: None,
     }
 }

@@ -23,7 +23,7 @@ pub fn dispatch_custom_command(
     signer: &dyn MeshSigner,
     controllers: &mut ControllerSet,
 ) -> CommandDispatchResult {
-    use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
+    use edgerun_core::protocol::command_envelope::Payload;
 
     if let Some(ref payload) = command.payload {
         if let Payload::InlinePayload(bytes) = payload {

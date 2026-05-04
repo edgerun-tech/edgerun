@@ -267,7 +267,7 @@ impl WasmRuntime {
                 {
                     let host = caller.data_mut();
                     let payload_bytes = Message::encode_to_vec(
-                        &edgerun_proto::edgerun::v0::stream::RequestUserPresencePayload {
+                        &edgerun_core::protocol::RequestUserPresencePayload {
                             payload_version: 1,
                             reason,
                             session_id: session_id.clone(),
@@ -299,7 +299,7 @@ impl WasmRuntime {
                     + (ttl_seconds as i64 * 1_000_000);
 
                 let event_bytes = Message::encode_to_vec(
-                    &edgerun_proto::edgerun::v0::stream::UserPresenceGrantedPayload {
+                    &edgerun_core::protocol::UserPresenceGrantedPayload {
                         payload_version: 1,
                         presence_token: token.to_vec(),
                         app_id,
@@ -383,7 +383,7 @@ impl WasmRuntime {
                 };
 
                 let cmd_payload = Message::encode_to_vec(
-                    &edgerun_proto::edgerun::v0::stream::RequestSignaturePayload {
+                    &edgerun_core::protocol::RequestSignaturePayload {
                         payload_version: 1,
                         payload: payload.clone(),
                         human_readable: human_readable.clone(),
@@ -412,7 +412,7 @@ impl WasmRuntime {
                 }
 
                 let event_bytes = Message::encode_to_vec(
-                    &edgerun_proto::edgerun::v0::stream::SignatureResponsePayload {
+                    &edgerun_core::protocol::SignatureResponsePayload {
                         payload_version: 1,
                         app_id,
                         payload,
@@ -579,7 +579,7 @@ fn build_command(
             None
         } else {
             Some(
-                edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+                edgerun_core::protocol::command_envelope::Payload::InlinePayload(
                     payload,
                 ),
             )
@@ -790,7 +790,7 @@ fn interpret_send_message(payload: &str) -> Option<CommandEnvelope> {
                 None
             } else {
                 Some(
-                    edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+                    edgerun_core::protocol::command_envelope::Payload::InlinePayload(
                         payload_bytes,
                     ),
                 )

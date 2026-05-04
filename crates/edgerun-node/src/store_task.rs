@@ -592,8 +592,8 @@ mod tests {
         Signature,
     };
     use edgerun_crypto::p256::ecdsa::SigningKey;
-    use edgerun_proto::edgerun::v0::access::QueryClass;
-    use edgerun_proto::edgerun::v0::trust::ScopeKind;
+    use edgerun_core::protocol::QueryClass;
+    use edgerun_core::protocol::ScopeKind;
 
     fn test_signing_key() -> SigningKey {
         SigningKey::from_bytes(&[42u8; 32].into()).unwrap()

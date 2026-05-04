@@ -570,7 +570,7 @@ fn validate_timestamp_shape(
 /// Validates the structural integrity and signature of a RouteAdvertisement
 /// at the proto type level (spec §14.24).
 pub fn validate_route_advertisement(
-    adv: &edgerun_proto::edgerun::v0::network::RouteAdvertisement,
+    adv: &edgerun_core::protocol::RouteAdvertisement,
 ) -> ValidationResult {
     if adv.advertisement_version != 1 {
         return reject(
@@ -827,7 +827,7 @@ pub fn validate_route_advertisement(
 mod proto_tests {
     use super::*;
     use edgerun_core::protocol::{Directness, IdentityRef, NodeRef, ObjectKind, ObjectRef, Signature, TransportClass};
-    use edgerun_proto::edgerun::v0::network::{ReachabilityHint, RouteAdvertisement};
+    use edgerun_core::protocol::{ReachabilityHint, RouteAdvertisement};
     use prost_types::Timestamp;
 
     fn make_test_keypair() -> (edgerun_crypto::p256::ecdsa::SigningKey, Vec<u8>) {

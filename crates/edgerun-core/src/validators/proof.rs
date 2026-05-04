@@ -53,8 +53,8 @@ fn validate_identity_ref(
         });
     }
     if identity.identity_kind.is_some_and(|identity_kind| {
-        edgerun_proto::edgerun::v0::common::IdentityKind::from_i32(identity_kind).is_none_or(
-            |kind| kind == edgerun_proto::edgerun::v0::common::IdentityKind::Unspecified,
+        edgerun_core::protocol::IdentityKind::from_i32(identity_kind).is_none_or(
+            |kind| kind == edgerun_core::protocol::IdentityKind::Unspecified,
         )
     }) {
         return Some(ProofStructuralResult::Invalid {
@@ -65,7 +65,7 @@ fn validate_identity_ref(
 }
 
 fn validate_event_ref(
-    event: &edgerun_proto::edgerun::v0::common::EventRef,
+    event: &edgerun_core::protocol::EventRef,
 ) -> Option<ProofStructuralResult> {
     if event.stream_id.is_empty() {
         return Some(ProofStructuralResult::Invalid {
@@ -78,7 +78,7 @@ fn validate_event_ref(
         });
     };
     if event_hash.algorithm
-        != edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256 as i32
+        != edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256 as i32
     {
         return Some(ProofStructuralResult::Invalid {
             reason: "EventSetProof event_ref event_hash algorithm is not SHA-256",
@@ -93,7 +93,7 @@ fn validate_event_ref(
 }
 
 fn validate_head_ref(
-    head: &edgerun_proto::edgerun::v0::common::HeadRef,
+    head: &edgerun_core::protocol::HeadRef,
 ) -> Option<ProofStructuralResult> {
     if head.stream_id.is_empty() {
         return Some(ProofStructuralResult::Invalid {
@@ -106,7 +106,7 @@ fn validate_head_ref(
         });
     };
     if event_hash.algorithm
-        != edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256 as i32
+        != edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256 as i32
     {
         return Some(ProofStructuralResult::Invalid {
             reason: "StreamHeadsProof head_ref event_hash algorithm is not SHA-256",

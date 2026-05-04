@@ -3,7 +3,7 @@ mod event_loop;
 
 use anyhow::{Context, Result};
 use edgerun_clap::Parser;
-use edgerun_proto::edgerun::v0::app::capability_check;
+use edgerun_core::protocol::capability_check;
 use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -35,7 +35,7 @@ struct HostState {
     output: Arc<Mutex<Vec<u8>>>,
     messages: Arc<Mutex<Vec<(String, String)>>>,
     event_queue: Arc<Mutex<Vec<Vec<u8>>>>,
-    exec_context: Option<Arc<Mutex<edgerun_proto::edgerun::v0::app::ExecutionContext>>>,
+    exec_context: Option<Arc<Mutex<edgerun_core::protocol::ExecutionContext>>>,
     verbose: bool,
 }
 
@@ -120,7 +120,7 @@ fn main() -> Result<()> {
                 let result =
                     app::check_capability(&ctx, capability_check::Operation::ReadBlob, None);
                 if result.decision
-                    != edgerun_proto::edgerun::v0::app::capability_result::Decision::Granted as i32
+                    != edgerun_core::protocol::capability_result::Decision::Granted as i32
                 {
                     if verbose {
                         eprintln!("read_blob: capability denied");
@@ -143,7 +143,7 @@ fn main() -> Result<()> {
                 let result =
                     app::check_capability(&ctx, capability_check::Operation::WriteBlob, None);
                 if result.decision
-                    != edgerun_proto::edgerun::v0::app::capability_result::Decision::Granted as i32
+                    != edgerun_core::protocol::capability_result::Decision::Granted as i32
                 {
                     if verbose {
                         eprintln!("write_blob: capability denied");
@@ -172,7 +172,7 @@ fn main() -> Result<()> {
                 let result =
                     app::check_capability(&ctx, capability_check::Operation::SendMessage, None);
                 if result.decision
-                    != edgerun_proto::edgerun::v0::app::capability_result::Decision::Granted as i32
+                    != edgerun_core::protocol::capability_result::Decision::Granted as i32
                 {
                     if verbose {
                         eprintln!("send_message: capability denied");

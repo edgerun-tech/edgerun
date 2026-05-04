@@ -27,10 +27,10 @@ use std::collections::BTreeMap;
 /// - signature has correct length
 /// - Signature verifies against the record's own public_key (self-signed)
 pub fn validate_identity_record(
-    record: &edgerun_proto::edgerun::v0::identity::IdentityRecord,
+    record: &edgerun_core::protocol::IdentityRecord,
 ) -> ValidationResult {
     use edgerun_core::protocol::{IdentityKind, ObjectKind};
-    use edgerun_proto::edgerun::v0::identity::{IdentityRecord, KeyAlgorithm};
+    use edgerun_core::protocol::{IdentityRecord, KeyAlgorithm};
 
     // --- Required field checks ---
     if record.record_version != 1 {
@@ -210,7 +210,7 @@ pub fn validate_identity_record(
 mod tests {
     use super::*;
     use edgerun_core::protocol::{IdentityKind, IdentityRef, ObjectKind, ObjectRef, Signature};
-    use edgerun_proto::edgerun::v0::identity::IdentityRecord;
+    use edgerun_core::protocol::IdentityRecord;
 
     fn make_test_keypair() -> (
         edgerun_crypto::p256::ecdsa::SigningKey,

@@ -390,7 +390,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
         // Try SessionHello (in case peer sends another hello). Prost decoding is
         // permissive, so only treat the frame as a hello if required hello
         // fields are actually present.
-        if let Ok(hello) = edgerun_proto::edgerun::v0::network::SessionHello::decode(&payload[..]) {
+        if let Ok(hello) = edgerun_core::protocol::SessionHello::decode(&payload[..]) {
             if hello.initiator.is_some()
                 && !hello.session_nonce.is_empty()
                 && !hello.supported_protocol_versions.is_empty()
@@ -457,7 +457,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
 
                 // Extract the ObjectRef from the proto command's payload_object
                 let object_ref = if let Some(ref obj) = proto_command.payload {
-                    use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
+                    use edgerun_core::protocol::command_envelope::Payload;
                     match obj {
                         Payload::PayloadObject(obj) => obj.clone(),
                         Payload::InlinePayload(bytes) => {

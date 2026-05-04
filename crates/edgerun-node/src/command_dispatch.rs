@@ -30,7 +30,7 @@ use edgerun_core::validators_proto::{
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_json::Value as JsonValue;
-use edgerun_proto::edgerun::v0::common::EncryptedEnvelope;
+use edgerun_core::protocol::EncryptedEnvelope;
 use edgerun_core::protocol::{CommandRef, EventRef, ObjectRef};
 use edgerun_core::protocol::{CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload, CommandType, EventType};
 use edgerun_core::protocol::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
@@ -265,7 +265,7 @@ pub fn dispatch_command(
 
     if needs_encryption {
         let payload_bytes = match &command.payload {
-            Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            Some(edgerun_core::protocol::command_envelope::Payload::InlinePayload(
                 b,
             )) => Some(b.clone()),
             _ => None,

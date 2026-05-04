@@ -7,7 +7,7 @@ use edgerun_core::protocol::{
 };
 use edgerun_encoding::hex::bytes_to_hex;
 use edgerun_core::protocol::{ProofClass, QueryClass};
-use edgerun_proto::edgerun::v0::common::IdentityKind;
+use edgerun_core::protocol::IdentityKind;
 use edgerun_core::protocol::{CapabilityKind, DelegationPolicy, ExportPolicy, ScopeKind};
 use std::format;
 

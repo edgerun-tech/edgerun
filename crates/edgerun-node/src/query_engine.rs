@@ -72,7 +72,7 @@ pub fn execute_query(
 
     let query_class = query.query_class;
     let mut event_refs: Vec<EventRef> = Vec::new();
-    let mut snapshot_refs: Vec<edgerun_proto::edgerun::v0::common::SnapshotRef> = Vec::new();
+    let mut snapshot_refs: Vec<edgerun_core::protocol::SnapshotRef> = Vec::new();
     let mut object_refs: Vec<ObjectRef> = Vec::new();
     let mut completeness = ResultCompleteness::CompleteForLocalKnowledge as i32;
 
@@ -214,7 +214,7 @@ pub fn execute_query(
                         completeness = ResultCompleteness::Partial as i32;
                         break;
                     }
-                    use edgerun_proto::edgerun::v0::common::SnapshotRef;
+                    use edgerun_core::protocol::SnapshotRef;
                     snapshot_refs.push(SnapshotRef {
                         snapshot_id: sid.clone().into_bytes(),
                         object_id: Some(
@@ -287,7 +287,7 @@ pub fn execute_query(
                         completeness = ResultCompleteness::Partial as i32;
                         break;
                     }
-                    use edgerun_proto::edgerun::v0::common::SnapshotRef;
+                    use edgerun_core::protocol::SnapshotRef;
                     snapshot_refs.push(SnapshotRef {
                         snapshot_id: sid.clone().into_bytes(),
                         object_id: Some(
@@ -591,7 +591,7 @@ fn enforce_aggregate_result_limits(
     }
     if truncated {
         aggregate.completeness =
-            edgerun_proto::edgerun::v0::access::ResultCompleteness::Partial as i32;
+            edgerun_core::protocol::ResultCompleteness::Partial as i32;
     }
 }
 
@@ -637,8 +637,8 @@ fn sign_query_result_fragment(
 fn build_query_proof_objects(
     query: &edgerun_core::protocol::QueryRequest,
     store: &mut NodeStore,
-    event_refs: &[edgerun_proto::edgerun::v0::common::EventRef],
-    snapshot_refs: &[edgerun_proto::edgerun::v0::common::SnapshotRef],
+    event_refs: &[edgerun_core::protocol::EventRef],
+    snapshot_refs: &[edgerun_core::protocol::SnapshotRef],
     object_refs: &[edgerun_core::protocol::ObjectRef],
     signer: &dyn MeshSigner,
 ) -> Vec<edgerun_core::protocol::ObjectRef> {
@@ -770,9 +770,9 @@ fn filter_events_by_time(
     not_before: Option<i64>,
     expires_at: Option<i64>,
     max_results: Option<usize>,
-) -> Vec<edgerun_proto::edgerun::v0::common::EventRef> {
+) -> Vec<edgerun_core::protocol::EventRef> {
     use edgerun_core::protocol::EventEnvelope;
-    use edgerun_proto::edgerun::v0::common::EventRef;
+    use edgerun_core::protocol::EventRef;
     use edgerun_proto::edgerun::v0::stream as proto_stream;
     use prost::Message;
 
@@ -1057,7 +1057,7 @@ mod tests {
             answered_at: Some(now_prost_timestamp()),
             completeness: ResultCompleteness::CompleteForLocalKnowledge as i32,
             snapshot_refs: vec![],
-            event_refs: vec![edgerun_proto::edgerun::v0::common::EventRef {
+            event_refs: vec![edgerun_core::protocol::EventRef {
                 stream_id: b"remote-stream".to_vec(),
                 seq: 7,
                 event_hash: Some(edgerun_core::protocol::Digest {
@@ -1130,7 +1130,7 @@ mod tests {
             completeness: ResultCompleteness::CompleteForLocalKnowledge as i32,
             snapshot_refs: vec![],
             event_refs: vec![
-                edgerun_proto::edgerun::v0::common::EventRef {
+                edgerun_core::protocol::EventRef {
                     stream_id: b"remote-stream-a".to_vec(),
                     seq: 1,
                     event_hash: Some(edgerun_core::protocol::Digest {
@@ -1138,7 +1138,7 @@ mod tests {
                         value: vec![1; 32],
                     }),
                 },
-                edgerun_proto::edgerun::v0::common::EventRef {
+                edgerun_core::protocol::EventRef {
                     stream_id: b"remote-stream-b".to_vec(),
                     seq: 2,
                     event_hash: Some(edgerun_core::protocol::Digest {

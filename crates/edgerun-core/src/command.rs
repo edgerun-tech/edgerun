@@ -216,7 +216,7 @@ fn delegation_hash(delegation: &DelegationRecord) -> Digest {
     let canonical = canonical_bytes(&record, true);
     let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_DELEGATION_RECORD, &canonical);
     Digest {
-        algorithm: edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256
+        algorithm: edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256
             as i32,
         value: hash.to_vec(),
     }
@@ -292,8 +292,8 @@ fn duration_millis(duration: &prost_types::Duration) -> Option<i128> {
 }
 
 fn rate_limit_allows(
-    parent: &edgerun_proto::edgerun::v0::common::RateLimit,
-    child: &edgerun_proto::edgerun::v0::common::RateLimit,
+    parent: &edgerun_core::protocol::RateLimit,
+    child: &edgerun_core::protocol::RateLimit,
 ) -> bool {
     let (Some(parent_per), Some(child_per)) = (&parent.per, &child.per) else {
         return false;
@@ -337,7 +337,7 @@ fn validate_object_ref(object: &ObjectRef, label: &str) -> Option<ValidationResu
 }
 
 fn validate_constraint_set(
-    constraints: &edgerun_proto::edgerun::v0::trust::ConstraintSet,
+    constraints: &edgerun_core::protocol::ConstraintSet,
     label: &str,
 ) -> Option<ValidationResult> {
     if let Some(result) =
@@ -398,9 +398,9 @@ fn validate_constraint_set(
         }
     }
     for transport_class in &constraints.requires_transport_classes {
-        if edgerun_proto::edgerun::v0::common::TransportClass::from_i32(*transport_class)
+        if edgerun_core::protocol::TransportClass::from_i32(*transport_class)
             .is_none_or(|class| {
-                class == edgerun_proto::edgerun::v0::common::TransportClass::Unspecified
+                class == edgerun_core::protocol::TransportClass::Unspecified
             })
         {
             return Some(reject(
@@ -422,7 +422,7 @@ fn validate_constraint_set(
         ));
     }
     if constraints.export_policy != 0
-        && edgerun_proto::edgerun::v0::trust::ExportPolicy::from_i32(constraints.export_policy)
+        && edgerun_core::protocol::ExportPolicy::from_i32(constraints.export_policy)
             .is_none()
     {
         return Some(reject(
@@ -432,9 +432,9 @@ fn validate_constraint_set(
         ));
     }
     for execution_class in &constraints.execution_class_limits {
-        if edgerun_proto::edgerun::v0::common::ExecutionClass::from_i32(*execution_class)
+        if edgerun_core::protocol::ExecutionClass::from_i32(*execution_class)
             .is_none_or(|class| {
-                class == edgerun_proto::edgerun::v0::common::ExecutionClass::Unspecified
+                class == edgerun_core::protocol::ExecutionClass::Unspecified
             })
         {
             return Some(reject(
@@ -445,8 +445,8 @@ fn validate_constraint_set(
         }
     }
     for storage_class in &constraints.storage_class_limits {
-        if edgerun_proto::edgerun::v0::common::StorageClass::from_i32(*storage_class).is_none_or(
-            |class| class == edgerun_proto::edgerun::v0::common::StorageClass::Unspecified,
+        if edgerun_core::protocol::StorageClass::from_i32(*storage_class).is_none_or(
+            |class| class == edgerun_core::protocol::StorageClass::Unspecified,
         ) {
             return Some(reject(
                 ReasonCode::StructuralInvalid,
@@ -464,14 +464,14 @@ fn validate_constraint_set(
 }
 
 fn validate_scope_descriptor(
-    scope: &edgerun_proto::edgerun::v0::trust::ScopeDescriptor,
+    scope: &edgerun_core::protocol::ScopeDescriptor,
     label: &str,
 ) -> Option<ValidationResult> {
     if let Some(result) = validate_supported_version(scope.scope_version, label, "scope_version") {
         return Some(result);
     }
-    if edgerun_proto::edgerun::v0::trust::ScopeKind::from_i32(scope.scope_kind)
-        .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::trust::ScopeKind::Unspecified)
+    if edgerun_core::protocol::ScopeKind::from_i32(scope.scope_kind)
+        .is_none_or(|kind| kind == edgerun_core::protocol::ScopeKind::Unspecified)
     {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -572,8 +572,8 @@ fn validate_capability_descriptor(
     {
         return Some(result);
     }
-    if edgerun_proto::edgerun::v0::trust::CapabilityKind::from_i32(capability.capability_kind)
-        .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::trust::CapabilityKind::Unspecified)
+    if edgerun_core::protocol::CapabilityKind::from_i32(capability.capability_kind)
+        .is_none_or(|kind| kind == edgerun_core::protocol::CapabilityKind::Unspecified)
     {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -594,9 +594,9 @@ fn validate_capability_descriptor(
             return Some(result);
         }
     }
-    if edgerun_proto::edgerun::v0::trust::DelegationPolicy::from_i32(capability.delegation_policy)
+    if edgerun_core::protocol::DelegationPolicy::from_i32(capability.delegation_policy)
         .is_none_or(|policy| {
-            policy == edgerun_proto::edgerun::v0::trust::DelegationPolicy::Unspecified
+            policy == edgerun_core::protocol::DelegationPolicy::Unspecified
         })
     {
         return Some(reject(
@@ -623,9 +623,9 @@ fn validate_capability_descriptor(
         ) {
             return Some(result);
         }
-        if edgerun_proto::edgerun::v0::common::AssuranceClass::from_i32(assurance.required_class)
+        if edgerun_core::protocol::AssuranceClass::from_i32(assurance.required_class)
             .is_none_or(|class| {
-                class == edgerun_proto::edgerun::v0::common::AssuranceClass::Unspecified
+                class == edgerun_core::protocol::AssuranceClass::Unspecified
             })
         {
             return Some(reject(
@@ -758,7 +758,7 @@ fn validate_delegation_record_structure(
             ));
         };
         if parent_hash.algorithm
-            != edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256 as i32
+            != edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256 as i32
             || parent_hash.value.len() != 32
         {
             return Some(reject(
@@ -785,7 +785,7 @@ fn validate_delegation_record_structure(
 
 fn required_capability_for_command(command_type: i32) -> Option<(i32, &'static str)> {
     use edgerun_core::protocol::CommandType as Ct;
-    use edgerun_proto::edgerun::v0::trust::CapabilityKind as Ck;
+    use edgerun_core::protocol::CapabilityKind as Ck;
 
     match Ct::from_i32(command_type)? {
         Ct::Unspecified => None,
@@ -839,7 +839,7 @@ fn assurance_claim_subject_matches_local_node(
 ) -> bool {
     matches!(
         &claim.subject,
-        Some(edgerun_proto::edgerun::v0::trust::assurance_claim::Subject::SubjectNode(node))
+        Some(edgerun_core::protocol::assurance_claim::Subject::SubjectNode(node))
             if node.node_id == ctx.local_node_id.as_slice()
     )
 }
@@ -849,7 +849,7 @@ fn local_assurance_satisfies_requirement(
     ctx: &CommandValidationContext<'_>,
     failure_code: ReasonCode,
 ) -> Result<(), ValidationResult> {
-    use edgerun_proto::edgerun::v0::common::AssuranceClass;
+    use edgerun_core::protocol::AssuranceClass;
 
     if AssuranceClass::from_i32(ctx.local_assurance_class).is_none() {
         return Err(reject(
@@ -971,7 +971,7 @@ fn validate_effective_capability_for_command(
         ));
     }
     if !scope.target_object_kinds.is_empty() {
-        let Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::PayloadObject(
+        let Some(edgerun_core::protocol::command_envelope::Payload::PayloadObject(
             payload_object,
         )) = &command.payload
         else {
@@ -1207,8 +1207,8 @@ fn validate_identity_ref(identity: &IdentityRef, label: &str) -> Option<Validati
         ));
     }
     if identity.identity_kind.is_some_and(|identity_kind| {
-        edgerun_proto::edgerun::v0::common::IdentityKind::from_i32(identity_kind).is_none_or(
-            |kind| kind == edgerun_proto::edgerun::v0::common::IdentityKind::Unspecified,
+        edgerun_core::protocol::IdentityKind::from_i32(identity_kind).is_none_or(
+            |kind| kind == edgerun_core::protocol::IdentityKind::Unspecified,
         )
     }) {
         return Some(reject(
@@ -1327,14 +1327,14 @@ fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationRes
 
     if let Some(payload) = &command.payload {
         match payload {
-            edgerun_proto::edgerun::v0::stream::command_envelope::Payload::PayloadObject(
+            edgerun_core::protocol::command_envelope::Payload::PayloadObject(
                 object,
             ) => {
                 if let Some(result) = validate_object_ref(object, "command payload_object") {
                     return Some(result);
                 }
             }
-            edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+            edgerun_core::protocol::command_envelope::Payload::InlinePayload(
                 payload,
             ) => {
                 if payload.is_empty() {
@@ -1521,7 +1521,7 @@ pub fn validate_command(
 
     // --- Step 5: Assurance requirement check (if requested) ---
     if let Some(ref req) = command.requested_assurance {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_core::protocol::AssuranceClass;
 
         if let Some(result) =
             validate_command_version_field(req.assurance_version, "assurance requirement version")
@@ -1894,7 +1894,7 @@ fn validate_delegation_chain(
         };
 
         if parent_cap.delegation_policy
-            == edgerun_proto::edgerun::v0::trust::DelegationPolicy::NonDelegable as i32
+            == edgerun_core::protocol::DelegationPolicy::NonDelegable as i32
         {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
@@ -2008,9 +2008,9 @@ fn attenuate_scope(
         ));
     };
     let parent_kind =
-        edgerun_proto::edgerun::v0::trust::ScopeKind::from_i32(parent_scope.scope_kind);
-    let child_kind = edgerun_proto::edgerun::v0::trust::ScopeKind::from_i32(child_scope.scope_kind);
-    if parent_kind == Some(edgerun_proto::edgerun::v0::trust::ScopeKind::GlobalWithConstraints) {
+        edgerun_core::protocol::ScopeKind::from_i32(parent_scope.scope_kind);
+    let child_kind = edgerun_core::protocol::ScopeKind::from_i32(child_scope.scope_kind);
+    if parent_kind == Some(edgerun_core::protocol::ScopeKind::GlobalWithConstraints) {
         if !time_window_allows(
             parent_scope.time_bounds.as_ref(),
             child_scope.time_bounds.as_ref(),
@@ -2755,7 +2755,7 @@ mod tests {
     use crate::result::Verdict;
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_core::protocol::{AssuranceClass, ExecutionClass, ObjectKind, RateLimit, Signature as ProtoSignature, StorageClass, TimeWindow, TransportClass};
-    use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
+    use edgerun_core::protocol::command_envelope::Payload;
     use edgerun_core::protocol::{CapabilityKind, DelegationPolicy, ScopeKind};
 
     fn test_signing_key() -> SigningKey {
@@ -2841,7 +2841,7 @@ mod tests {
         let mut claim = AssuranceClaim {
             claim_version: 1,
             subject: Some(
-                edgerun_proto::edgerun::v0::trust::assurance_claim::Subject::SubjectNode(NodeRef {
+                edgerun_core::protocol::assurance_claim::Subject::SubjectNode(NodeRef {
                     node_id: subject_node_id,
                 }),
             ),
@@ -2938,8 +2938,8 @@ mod tests {
         }
     }
 
-    fn valid_global_scope() -> edgerun_proto::edgerun::v0::trust::ScopeDescriptor {
-        edgerun_proto::edgerun::v0::trust::ScopeDescriptor {
+    fn valid_global_scope() -> edgerun_core::protocol::ScopeDescriptor {
+        edgerun_core::protocol::ScopeDescriptor {
             scope_version: 1,
             scope_kind: ScopeKind::GlobalWithConstraints as i32,
             target_nodes: vec![],
@@ -5377,7 +5377,7 @@ mod tests {
                 delegation_id: b"deleg-1".to_vec(),
                 delegation_hash: Some(crate::protocol::Digest {
                     algorithm:
-                        edgerun_proto::edgerun::v0::common::digest::Algorithm::DigestAlgorithmSha256
+                        edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256
                             as i32,
                     value: vec![0xA5; 32],
                 }),
@@ -5895,8 +5895,8 @@ mod tests {
 
     #[test]
     fn command_with_unsupported_assurance_requirement_version_is_rejected() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let vk = key.verifying_key();
@@ -5933,7 +5933,7 @@ mod tests {
 
     #[test]
     fn command_with_invalid_assurance_class_is_rejected() {
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let vk = key.verifying_key();
@@ -5970,8 +5970,8 @@ mod tests {
 
     #[test]
     fn command_with_empty_requested_assurance_attester_is_rejected() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -5999,8 +5999,8 @@ mod tests {
 
     #[test]
     fn command_with_invalid_requested_assurance_attester_kind_is_rejected() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -6028,8 +6028,8 @@ mod tests {
 
     #[test]
     fn command_with_empty_requested_assurance_metadata_is_rejected() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -6056,8 +6056,8 @@ mod tests {
 
     #[test]
     fn command_with_invalid_requested_assurance_metadata_kind_is_rejected() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -6084,8 +6084,8 @@ mod tests {
 
     #[test]
     fn command_with_negative_requested_assurance_max_age_is_rejected() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -6112,8 +6112,8 @@ mod tests {
 
     #[test]
     fn command_requested_assurance_max_age_requires_claim_evidence() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -6141,8 +6141,8 @@ mod tests {
 
     #[test]
     fn command_requested_assurance_rejects_claim_for_other_node() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -6172,8 +6172,8 @@ mod tests {
 
     #[test]
     fn command_requested_assurance_accepts_matching_node_claim() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let hint = key_hint_for(&key);
@@ -6202,8 +6202,8 @@ mod tests {
 
     #[test]
     fn command_requesting_hardware_backed_is_rejected_when_node_is_software_only() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let vk = key.verifying_key();
@@ -6243,8 +6243,8 @@ mod tests {
 
     #[test]
     fn command_requesting_attested_runtime_is_rejected_when_node_is_hardware_only() {
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let vk = key.verifying_key();
@@ -6283,8 +6283,8 @@ mod tests {
     #[test]
     fn command_requesting_software_is_accepted_when_node_is_hardware_backed() {
         // Hardware-backed node can satisfy software requirement (higher >= lower)
-        use edgerun_proto::edgerun::v0::common::AssuranceClass;
-        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+        use edgerun_core::protocol::AssuranceClass;
+        use edgerun_core::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
         let vk = key.verifying_key();
@@ -6877,7 +6877,7 @@ mod tests {
                 capability_version: 1,
                 capability_kind: CapabilityKind::Query as i32,
                 actions: vec!["query".into()],
-                scope: Some(edgerun_proto::edgerun::v0::trust::ScopeDescriptor {
+                scope: Some(edgerun_core::protocol::ScopeDescriptor {
                     scope_version: 2,
                     scope_kind: ScopeKind::Node as i32,
                     target_nodes: vec![NodeRef {
@@ -6946,7 +6946,7 @@ mod tests {
                 capability_version: 1,
                 capability_kind: CapabilityKind::Query as i32,
                 actions: vec!["query".into()],
-                scope: Some(edgerun_proto::edgerun::v0::trust::ScopeDescriptor {
+                scope: Some(edgerun_core::protocol::ScopeDescriptor {
                     scope_version: 1,
                     scope_kind: ScopeKind::Unspecified as i32,
                     target_nodes: vec![NodeRef {

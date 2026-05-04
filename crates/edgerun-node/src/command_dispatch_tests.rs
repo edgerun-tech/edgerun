@@ -123,7 +123,7 @@ mod tests {
         command.signature = None;
         if let Some(issuer) = &mut command.issuer {
             issuer.identity_kind =
-                Some(edgerun_proto::edgerun::v0::common::IdentityKind::Node as i32);
+                Some(edgerun_core::protocol::IdentityKind::Node as i32);
             issuer.key_hint = Some(signer.node_id.0.to_vec());
         }
         let canonical = edgerun_core::protocol::canonical_bytes(
@@ -149,7 +149,7 @@ mod tests {
         revocation.signature = None;
         if let Some(issuer) = &mut revocation.issuer {
             issuer.identity_kind =
-                Some(edgerun_proto::edgerun::v0::common::IdentityKind::Node as i32);
+                Some(edgerun_core::protocol::IdentityKind::Node as i32);
             issuer.key_hint = Some(signer.node_id.0.to_vec());
         }
         let canonical = edgerun_core::protocol::canonical_bytes(
@@ -175,7 +175,7 @@ mod tests {
         delegation.signature = None;
         if let Some(issuer) = &mut delegation.issuer {
             issuer.identity_kind =
-                Some(edgerun_proto::edgerun::v0::common::IdentityKind::Node as i32);
+                Some(edgerun_core::protocol::IdentityKind::Node as i32);
             issuer.key_hint = Some(signer.node_id.0.to_vec());
         }
         let canonical = edgerun_core::protocol::canonical_bytes(
@@ -197,11 +197,11 @@ mod tests {
     fn valid_capability_descriptor() -> edgerun_core::protocol::CapabilityDescriptor {
         edgerun_core::protocol::CapabilityDescriptor {
             capability_version: 1,
-            capability_kind: edgerun_proto::edgerun::v0::trust::CapabilityKind::NodeControl as i32,
+            capability_kind: edgerun_core::protocol::CapabilityKind::NodeControl as i32,
             actions: vec!["delegate".into()],
-            scope: Some(edgerun_proto::edgerun::v0::trust::ScopeDescriptor {
+            scope: Some(edgerun_core::protocol::ScopeDescriptor {
                 scope_version: 1,
-                scope_kind: edgerun_proto::edgerun::v0::trust::ScopeKind::Node as i32,
+                scope_kind: edgerun_core::protocol::ScopeKind::Node as i32,
                 target_nodes: vec![edgerun_core::protocol::NodeRef {
                     node_id: b"node-a".to_vec(),
                 }],
@@ -214,7 +214,7 @@ mod tests {
             }),
             constraints: None,
             delegation_policy:
-                edgerun_proto::edgerun::v0::trust::DelegationPolicy::DelegableWithAttenuation as i32,
+                edgerun_core::protocol::DelegationPolicy::DelegableWithAttenuation as i32,
             minimum_assurance: None,
             capability_metadata: None,
         }
@@ -905,7 +905,7 @@ bootstrap_peers: []
 
     #[test]
     fn dispatch_custom_command_with_delegation_payload() {
-        use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
+        use edgerun_core::protocol::command_envelope::Payload;
         use edgerun_core::protocol::DelegationRecord;
 
         let mut store = test_store();
@@ -973,7 +973,7 @@ bootstrap_peers: []
 
     #[test]
     fn dispatch_signed_delegation_payload_commits() {
-        use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
+        use edgerun_core::protocol::command_envelope::Payload;
         use edgerun_core::protocol::DelegationRecord;
 
         let mut store = test_store();
@@ -1042,7 +1042,7 @@ bootstrap_peers: []
 
     #[test]
     fn dispatch_custom_command_with_revocation_payload() {
-        use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
+        use edgerun_core::protocol::command_envelope::Payload;
         use edgerun_core::protocol::RevocationRecord;
 
         let mut store = test_store();
@@ -1074,7 +1074,7 @@ bootstrap_peers: []
             revocation_metadata: None,
             signature: None,
             target: Some(
-                edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(
+                edgerun_core::protocol::revocation_record::Target::TargetIdentity(
                     edgerun_core::protocol::IdentityRef {
                         identity_id: vec![5, 6, 7],
                         identity_kind: Some(2),
@@ -1109,7 +1109,7 @@ bootstrap_peers: []
 
     #[test]
     fn dispatch_signed_revocation_payload_commits() {
-        use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
+        use edgerun_core::protocol::command_envelope::Payload;
         use edgerun_core::protocol::{RevocationKind, RevocationRecord};
 
         let mut store = test_store();
@@ -1144,7 +1144,7 @@ bootstrap_peers: []
             revocation_metadata: None,
             signature: None,
             target: Some(
-                edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(
+                edgerun_core::protocol::revocation_record::Target::TargetIdentity(
                     edgerun_core::protocol::IdentityRef {
                         identity_id: vec![5, 6, 7],
                         identity_kind: Some(2),
@@ -1200,7 +1200,7 @@ bootstrap_peers: []
             CommandType::CreateDelegation as i32,
         );
         command.payload = Some(
-            edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(vec![
+            edgerun_core::protocol::command_envelope::Payload::InlinePayload(vec![
                 0xFF;
                 10
             ]),

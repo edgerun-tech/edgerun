@@ -18,7 +18,7 @@ pub fn dispatch_update_config(
 ) -> CommandDispatchResult {
     // Extract config patch from payload (JSON format)
     let config_patch: Vec<u8> = match &command.payload {
-        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+        Some(edgerun_core::protocol::command_envelope::Payload::InlinePayload(
             bytes,
         )) => bytes.clone(),
         _ => {

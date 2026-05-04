@@ -681,7 +681,7 @@ impl NodeStore {
     /// Returns the blob's content-derived identifier.
     pub fn put_encrypted_blob(
         &self,
-        envelope: &edgerun_proto::edgerun::v0::common::EncryptedEnvelope,
+        envelope: &edgerun_core::protocol::EncryptedEnvelope,
     ) -> Result<String, StorageError> {
         self.blobs.store_envelope(envelope)
     }

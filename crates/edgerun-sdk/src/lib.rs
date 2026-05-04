@@ -678,7 +678,7 @@ impl SignatureContext {
 // UI system — deterministic UI tree produced by WASM, rendered by adapters
 // ---------------------------------------------------------------------------
 
-pub use edgerun_proto::edgerun::v0::ui::{UiActionEvent, UiNode, UiRenderRequest};
+pub use edgerun_core::protocol::{UiActionEvent, UiNode, UiRenderRequest};
 
 pub mod ui {
     use super::*;

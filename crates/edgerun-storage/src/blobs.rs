@@ -134,7 +134,7 @@ impl BlobStore {
     /// Returns the blob ID.
     pub fn store_envelope(
         &self,
-        envelope: &edgerun_proto::edgerun::v0::common::EncryptedEnvelope,
+        envelope: &edgerun_core::protocol::EncryptedEnvelope,
     ) -> Result<String, StorageError> {
         edgerun_core::encrypted_envelope::validate_encrypted_envelope(envelope)
             .map_err(|e| StorageError::InvalidArgument(e.to_string()))?;
