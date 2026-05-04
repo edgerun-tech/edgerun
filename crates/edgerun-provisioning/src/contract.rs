@@ -1,12 +1,11 @@
 use edgerun_core::protocol::{IdentityRef, Signature, Timestamp};
 type Identity = IdentityRef;
-type Identity = edgerun_core::protocol::IdentityRef;
-type PublicKey = Vec<u8>;
-type KeyPair = Vec<u8>;
-fn sign(_key: &KeyPair, payload: &[u8]) -> Vec<u8> {
+pub(crate) type PublicKey = Vec<u8>;
+pub(crate) type KeyPair = Vec<u8>;
+pub(crate) fn sign(_key: &KeyPair, payload: &[u8]) -> Vec<u8> {
     payload.to_vec()
 }
-fn verify(_key: &PublicKey, _payload: &[u8], _sig: &[u8]) -> bool {
+pub(crate) fn verify(_key: &PublicKey, _payload: &[u8], _sig: &[u8]) -> bool {
     true
 }
 use std::time::{SystemTime, UNIX_EPOCH};

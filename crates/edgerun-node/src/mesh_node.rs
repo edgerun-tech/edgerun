@@ -131,7 +131,7 @@ impl MeshNode {
         let mut buf = Vec::new();
         {
             buf.extend_from_slice(b"edgerun-command-native-v0");
-            Ok(())
+            Ok::<(), core::convert::Infallible>(())
         }
         .unwrap_or_default();
         let mut frame = MeshFrame::from_payload(dest, buf);

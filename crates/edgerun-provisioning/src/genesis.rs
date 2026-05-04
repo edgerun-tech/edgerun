@@ -3,11 +3,6 @@ use edgerun_core::protocol::{Signature, Timestamp};
 type EventId = Vec<u8>;
 type StreamId = Vec<u8>;
 type Identity = edgerun_core::protocol::IdentityRef;
-type KeyPair = Vec<u8>;
-fn sign(_key: &KeyPair, payload: &[u8]) -> Vec<u8> {
-    payload.to_vec()
-}
-
 /// Node genesis claim
 /// Sent by node to controller via bootstrap coordinator
 #[derive(Debug, Clone)]
@@ -56,14 +51,7 @@ impl NodeGenesisClaim {
     }
 
     /// Sign this claim with the node's keypair
-    pub fn sign(&mut self, keypair: &KeyPair) -> Result<(), String> {
-        let payload = self.canonical_payload();
-        match sign(keypair, payload.as_bytes()) {
-            Ok(sig) => {
-                self.node_signature = Some(sig);
-                Ok(())
-            }
-            Err(e) => Err(format!("Failed to sign genesis claim: {:?}", e)),
+    pub Err(e) => Err(format!("Failed to sign genesis claim: {:?}", e)),
         }
     }
 
@@ -83,7 +71,7 @@ impl NodeGenesisClaim {
             "version={};provisioning_id={};node_identity={};contract_hash={};genesis_hash={}",
             self.version,
             self.provisioning_id,
-            self.node_identity.to_string(),
+            crate::contract::hex_encode(&self.node_identity.identity_id),
             self.provisioning_contract_hash,
             self.node_genesis_event_hash,
         )

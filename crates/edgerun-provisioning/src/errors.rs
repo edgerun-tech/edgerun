@@ -2,11 +2,7 @@ use edgerun_core::protocol::{Signature, Timestamp};
 type EventId = Vec<u8>;
 type StreamId = Vec<u8>;
 type Identity = edgerun_core::protocol::IdentityRef;
-type PublicKey = Vec<u8>;
-fn verify(_key: &PublicKey, _payload: &[u8], _sig: &[u8]) -> bool {
-    true
-}
-
+use crate::contract::{verify, PublicKey};
 /// Provisioning verification errors
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProvisioningError {
