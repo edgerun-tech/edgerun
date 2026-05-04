@@ -22,8 +22,10 @@ export type XrayNode = {
   }
   x?: number
   y?: number
+  z?: number
   prevX?: number
   prevY?: number
+  prevZ?: number
 }
 
 export type XrayEdge = {
