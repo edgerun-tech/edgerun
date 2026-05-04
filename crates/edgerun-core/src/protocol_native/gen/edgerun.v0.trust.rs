@@ -134,7 +134,7 @@ pub struct RouteSelectionPolicy {
     pub require_active_session: ::core::option::Option<bool>,
     pub policy_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CapabilityKind {
     Unspecified = 0,
@@ -146,22 +146,6 @@ pub enum CapabilityKind {
     Relay = 6,
     ExecuteWorkload = 7,
     DecryptDomain = 8,
-}
-impl CapabilityKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::NodeControl),
-            2 => Some(Self::Query),
-            3 => Some(Self::SnapshotPublish),
-            4 => Some(Self::ObjectStore),
-            5 => Some(Self::ObjectFetch),
-            6 => Some(Self::Relay),
-            7 => Some(Self::ExecuteWorkload),
-            8 => Some(Self::DecryptDomain),
-            _ => None,
-        }
-    }
 }
 
 impl CapabilityKind {
@@ -198,7 +182,7 @@ impl CapabilityKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ScopeKind {
     Unspecified = 0,
@@ -210,22 +194,6 @@ pub enum ScopeKind {
     QueryClass = 6,
     WorkloadClass = 7,
     GlobalWithConstraints = 8,
-}
-impl ScopeKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Node),
-            2 => Some(Self::Stream),
-            3 => Some(Self::ObjectClass),
-            4 => Some(Self::View),
-            5 => Some(Self::Domain),
-            6 => Some(Self::QueryClass),
-            7 => Some(Self::WorkloadClass),
-            8 => Some(Self::GlobalWithConstraints),
-            _ => None,
-        }
-    }
 }
 
 impl ScopeKind {
@@ -262,22 +230,12 @@ impl ScopeKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum DelegationPolicy {
     Unspecified = 0,
     NonDelegable = 1,
     DelegableWithAttenuation = 2,
-}
-impl DelegationPolicy {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::NonDelegable),
-            2 => Some(Self::DelegableWithAttenuation),
-            _ => None,
-        }
-    }
 }
 
 impl DelegationPolicy {
@@ -302,7 +260,7 @@ impl DelegationPolicy {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ExportPolicy {
     Unspecified = 0,
@@ -310,18 +268,6 @@ pub enum ExportPolicy {
     QueryOnly = 2,
     SignOnly = 3,
     NoPlaintextExport = 4,
-}
-impl ExportPolicy {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::AllowExport),
-            2 => Some(Self::QueryOnly),
-            3 => Some(Self::SignOnly),
-            4 => Some(Self::NoPlaintextExport),
-            _ => None,
-        }
-    }
 }
 
 impl ExportPolicy {
@@ -350,7 +296,7 @@ impl ExportPolicy {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum RevocationKind {
     Unspecified = 0,
@@ -360,20 +306,6 @@ pub enum RevocationKind {
     AssuranceClaim = 4,
     SnapshotTrust = 5,
     RepresentationAccess = 6,
-}
-impl RevocationKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Delegation),
-            2 => Some(Self::ControllerInstallation),
-            3 => Some(Self::IdentityTrust),
-            4 => Some(Self::AssuranceClaim),
-            5 => Some(Self::SnapshotTrust),
-            6 => Some(Self::RepresentationAccess),
-            _ => None,
-        }
-    }
 }
 
 impl RevocationKind {

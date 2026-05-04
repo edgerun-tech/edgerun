@@ -102,7 +102,7 @@ pub struct CapabilityRevocation {
     pub replacement_constraints: alloc::vec::Vec<CapabilityConstraint>,
     pub signature: ::core::option::Option<super::common::Signature>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CapabilityRole {
     Unspecified = 0,
@@ -113,21 +113,6 @@ pub enum CapabilityRole {
     Storage = 5,
     Execution = 6,
     Derived = 7,
-}
-impl CapabilityRole {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Input),
-            2 => Some(Self::Output),
-            3 => Some(Self::SecureElement),
-            4 => Some(Self::Communication),
-            5 => Some(Self::Storage),
-            6 => Some(Self::Execution),
-            7 => Some(Self::Derived),
-            _ => None,
-        }
-    }
 }
 
 impl CapabilityRole {
@@ -162,7 +147,7 @@ impl CapabilityRole {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CapabilityModality {
     Unspecified = 0,
@@ -177,25 +162,6 @@ pub enum CapabilityModality {
     Text = 9,
     Computational = 10,
     Other = 11,
-}
-impl CapabilityModality {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Visual),
-            2 => Some(Self::Auditory),
-            3 => Some(Self::Touch),
-            4 => Some(Self::Biometric),
-            5 => Some(Self::Display),
-            6 => Some(Self::Radio),
-            7 => Some(Self::Cryptographic),
-            8 => Some(Self::Haptic),
-            9 => Some(Self::Text),
-            10 => Some(Self::Computational),
-            11 => Some(Self::Other),
-            _ => None,
-        }
-    }
 }
 
 impl CapabilityModality {
@@ -238,7 +204,7 @@ impl CapabilityModality {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CapabilityEventKind {
     Unspecified = 0,
@@ -254,26 +220,6 @@ pub enum CapabilityEventKind {
     Text = 10,
     State = 11,
     Inference = 12,
-}
-impl CapabilityEventKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Visual),
-            2 => Some(Self::Auditory),
-            3 => Some(Self::Touch),
-            4 => Some(Self::Biometric),
-            5 => Some(Self::Display),
-            6 => Some(Self::Radio),
-            7 => Some(Self::Signing),
-            8 => Some(Self::Attestation),
-            9 => Some(Self::Haptic),
-            10 => Some(Self::Text),
-            11 => Some(Self::State),
-            12 => Some(Self::Inference),
-            _ => None,
-        }
-    }
 }
 
 impl CapabilityEventKind {
@@ -318,7 +264,7 @@ impl CapabilityEventKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CapabilityOperation {
     Unspecified = 0,
@@ -331,23 +277,6 @@ pub enum CapabilityOperation {
     Attest = 7,
     Verify = 8,
     Invoke = 9,
-}
-impl CapabilityOperation {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Query),
-            2 => Some(Self::Observe),
-            3 => Some(Self::Capture),
-            4 => Some(Self::Control),
-            5 => Some(Self::Render),
-            6 => Some(Self::Sign),
-            7 => Some(Self::Attest),
-            8 => Some(Self::Verify),
-            9 => Some(Self::Invoke),
-            _ => None,
-        }
-    }
 }
 
 impl CapabilityOperation {
@@ -386,22 +315,12 @@ impl CapabilityOperation {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CapabilityAccessClass {
     Unspecified = 0,
     Raw = 1,
     Derived = 2,
-}
-impl CapabilityAccessClass {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Raw),
-            2 => Some(Self::Derived),
-            _ => None,
-        }
-    }
 }
 
 impl CapabilityAccessClass {
@@ -426,7 +345,7 @@ impl CapabilityAccessClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CapabilityConstraintKind {
     Unspecified = 0,
@@ -439,23 +358,6 @@ pub enum CapabilityConstraintKind {
     RateLimited = 7,
     MaxBytes = 8,
     Scope = 9,
-}
-impl CapabilityConstraintKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::RequireUserPresence),
-            2 => Some(Self::RequireBiometric),
-            3 => Some(Self::RequireFreshness),
-            4 => Some(Self::RequireLocalOnly),
-            5 => Some(Self::RequireHardwareProtected),
-            6 => Some(Self::OneShot),
-            7 => Some(Self::RateLimited),
-            8 => Some(Self::MaxBytes),
-            9 => Some(Self::Scope),
-            _ => None,
-        }
-    }
 }
 
 impl CapabilityConstraintKind {

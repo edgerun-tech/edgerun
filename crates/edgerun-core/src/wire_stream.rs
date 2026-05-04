@@ -7,18 +7,19 @@
 use alloc::vec::Vec;
 
 use crate::protocol::{CommandEnvelope, CommandResultPayload, EventEnvelope};
-use crate::wire_boundary::proto_boundary;
 
 pub fn event_signable_wire_bytes(event: &EventEnvelope) -> Vec<u8> {
-    proto_boundary::event_envelope_from_proto(event.clone()).signable_bytes()
+    crate::wire_boundary_free::event_envelope_wire_from_event(event).signable_bytes()
 }
 
 pub fn event_full_wire_bytes(event: &EventEnvelope) -> Vec<u8> {
-    edgerun_wire::canonical_bytes(&proto_boundary::event_envelope_from_proto(event.clone()))
+    edgerun_wire::canonical_bytes(&crate::wire_boundary_free::event_envelope_wire_from_event(
+        event,
+    ))
 }
 
 pub fn command_signable_wire_bytes(command: &CommandEnvelope) -> Vec<u8> {
-    proto_boundary::command_envelope_from_proto(command.clone()).signable_bytes()
+    crate::wire_boundary_free::command_envelope_wire_from_command(command).signable_bytes()
 }
 
 pub fn command_full_wire_bytes(command: &CommandEnvelope) -> Vec<u8> {
@@ -28,5 +29,7 @@ pub fn command_full_wire_bytes(command: &CommandEnvelope) -> Vec<u8> {
 }
 
 pub fn command_result_wire_bytes(result: &CommandResultPayload) -> Vec<u8> {
-    edgerun_wire::canonical_bytes(&proto_boundary::command_result_from_proto(result.clone()))
+    edgerun_wire::canonical_bytes(&crate::wire_boundary_free::command_result_wire_from_result(
+        result,
+    ))
 }

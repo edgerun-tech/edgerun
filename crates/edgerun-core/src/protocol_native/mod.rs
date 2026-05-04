@@ -81,8 +81,7 @@ pub use trust::{
 };
 
 // Explicit reexports prevent name collisions between capability::* and trust::*.
-// The unqualified CapabilityDescriptor is the trust-layer descriptor used by
-// command validation.
+// The unqualified CapabilityDescriptor is the trust-layer descriptor used by command validation.
 pub use capability::{
     CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityEventKind,
     CapabilityGrant, CapabilityInvocation, CapabilityModality, CapabilityOperation,
@@ -96,3 +95,53 @@ pub use trust::{
     RevocationKind, RevocationRecord, RouteSelectionPolicy, RouteTrustAssignment,
     RouteTrustAssignments, ScopeDescriptor, ScopeKind,
 };
+
+#[derive(Clone, Debug)]
+pub enum ProtocolRecord {
+    CommandEnvelope(CommandEnvelope),
+    EventEnvelope(EventEnvelope),
+    CommandResultPayload(CommandResultPayload),
+    DelegationRecord(DelegationRecord),
+    RevocationRecord(RevocationRecord),
+    IdentityRecord(IdentityRecord),
+    ObjectRef(ObjectRef),
+    Digest(Digest),
+    Signature(Signature),
+}
+
+pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::Vec<u8> {
+    match record {
+        ProtocolRecord::CommandEnvelope(command) => {
+            if signable {
+                crate::wire_command::command_signable_bytes(command)
+            } else {
+                crate::wire_command::command_full_bytes(command)
+            }
+        }
+        ProtocolRecord::EventEnvelope(event) => {
+            if signable {
+                crate::wire_stream::event_signable_wire_bytes(event)
+            } else {
+                crate::wire_stream::event_full_wire_bytes(event)
+            }
+        }
+        ProtocolRecord::CommandResultPayload(payload) => {
+            crate::wire_command::command_result_bytes(payload)
+        }
+        other => edgerun_wire::canonical_bytes(&edgerun_wire::struct_value(alloc::vec![
+            edgerun_wire::field(
+                1,
+                edgerun_wire::text(match other {
+                    ProtocolRecord::DelegationRecord(_) => "DelegationRecord",
+                    ProtocolRecord::RevocationRecord(_) => "RevocationRecord",
+                    ProtocolRecord::IdentityRecord(_) => "IdentityRecord",
+                    ProtocolRecord::ObjectRef(_) => "ObjectRef",
+                    ProtocolRecord::Digest(_) => "Digest",
+                    ProtocolRecord::Signature(_) => "Signature",
+                    _ => "ProtocolRecord",
+                })
+            ),
+            edgerun_wire::field(2, edgerun_wire::boolv(signable)),
+        ])),
+    }
+}

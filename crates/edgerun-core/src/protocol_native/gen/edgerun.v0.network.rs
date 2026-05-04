@@ -70,7 +70,7 @@ pub mod relay_envelope {
         InlinePayload(alloc::vec::Vec<u8>),
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PayloadKind {
     Unspecified = 0,
@@ -79,19 +79,6 @@ pub enum PayloadKind {
     ResultFragment = 3,
     ObjectFragment = 4,
     SessionMessage = 5,
-}
-impl PayloadKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Command),
-            2 => Some(Self::Query),
-            3 => Some(Self::ResultFragment),
-            4 => Some(Self::ObjectFragment),
-            5 => Some(Self::SessionMessage),
-            _ => None,
-        }
-    }
 }
 
 impl PayloadKind {

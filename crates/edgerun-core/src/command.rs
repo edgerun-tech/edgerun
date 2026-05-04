@@ -26,7 +26,10 @@ fn validate_assurance_claim_satisfies_requirement(
     _requirement: &crate::protocol::AssuranceRequirement,
     _now_ms: i64,
 ) -> crate::result::ValidationResult {
-    crate::result::ValidationResult::accept("assurance compatibility shim")
+    crate::result::ValidationResult {
+        verdict: crate::result::Verdict::Accept,
+        issues: alloc::vec::Vec::new(),
+    }
 }
 
 use crate::prelude::v1::*;
@@ -330,7 +333,7 @@ fn validate_object_ref(object: &ObjectRef, label: &str) -> Option<ValidationResu
         ));
     }
     if object.object_kind.is_some_and(|object_kind| {
-        crate::protocol::ObjectKind::from_i32(object_kind)
+        crate::protocol::ObjectKind::from(object_kind)
             .is_none_or(|kind| kind == crate::protocol::ObjectKind::Unspecified)
     }) {
         return Some(reject(
@@ -404,7 +407,7 @@ fn validate_constraint_set(
         }
     }
     for transport_class in &constraints.requires_transport_classes {
-        if crate::protocol::TransportClass::from_i32(*transport_class)
+        if crate::protocol::TransportClass::from(*transport_class)
             .is_none_or(|class| class == crate::protocol::TransportClass::Unspecified)
         {
             return Some(reject(
@@ -426,7 +429,7 @@ fn validate_constraint_set(
         ));
     }
     if constraints.export_policy != 0
-        && crate::protocol::ExportPolicy::from_i32(constraints.export_policy).is_none()
+        && crate::protocol::ExportPolicy::from(constraints.export_policy).is_none()
     {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -435,7 +438,7 @@ fn validate_constraint_set(
         ));
     }
     for execution_class in &constraints.execution_class_limits {
-        if crate::protocol::ExecutionClass::from_i32(*execution_class)
+        if crate::protocol::ExecutionClass::from(*execution_class)
             .is_none_or(|class| class == crate::protocol::ExecutionClass::Unspecified)
         {
             return Some(reject(
@@ -446,7 +449,7 @@ fn validate_constraint_set(
         }
     }
     for storage_class in &constraints.storage_class_limits {
-        if crate::protocol::StorageClass::from_i32(*storage_class)
+        if crate::protocol::StorageClass::from(*storage_class)
             .is_none_or(|class| class == crate::protocol::StorageClass::Unspecified)
         {
             return Some(reject(
@@ -471,7 +474,7 @@ fn validate_scope_descriptor(
     if let Some(result) = validate_supported_version(scope.scope_version, label, "scope_version") {
         return Some(result);
     }
-    if crate::protocol::ScopeKind::from_i32(scope.scope_kind)
+    if crate::protocol::ScopeKind::from(scope.scope_kind)
         .is_none_or(|kind| kind == crate::protocol::ScopeKind::Unspecified)
     {
         return Some(reject(
@@ -501,7 +504,7 @@ fn validate_scope_descriptor(
         }
     }
     for object_kind in &scope.target_object_kinds {
-        if crate::protocol::ObjectKind::from_i32(*object_kind)
+        if crate::protocol::ObjectKind::from(*object_kind)
             .is_none_or(|kind| kind == crate::protocol::ObjectKind::Unspecified)
         {
             return Some(reject(
@@ -573,7 +576,7 @@ fn validate_capability_descriptor(
     {
         return Some(result);
     }
-    if crate::protocol::CapabilityKind::from_i32(capability.capability_kind)
+    if crate::protocol::CapabilityKind::from(capability.capability_kind)
         .is_none_or(|kind| kind == crate::protocol::CapabilityKind::Unspecified)
     {
         return Some(reject(
@@ -595,7 +598,7 @@ fn validate_capability_descriptor(
             return Some(result);
         }
     }
-    if crate::protocol::DelegationPolicy::from_i32(capability.delegation_policy)
+    if crate::protocol::DelegationPolicy::from(capability.delegation_policy)
         .is_none_or(|policy| policy == crate::protocol::DelegationPolicy::Unspecified)
     {
         return Some(reject(
@@ -622,7 +625,7 @@ fn validate_capability_descriptor(
         ) {
             return Some(result);
         }
-        if crate::protocol::AssuranceClass::from_i32(assurance.required_class)
+        if crate::protocol::AssuranceClass::from(assurance.required_class)
             .is_none_or(|class| class == crate::protocol::AssuranceClass::Unspecified)
         {
             return Some(reject(
@@ -783,7 +786,7 @@ fn required_capability_for_command(command_type: i32) -> Option<(i32, &'static s
     use crate::protocol::CapabilityKind as Ck;
     use crate::protocol::CommandType as Ct;
 
-    match Ct::from_i32(command_type)? {
+    match Ct::from(command_type)? {
         Ct::Unspecified => None,
         Ct::AddController => Some((Ck::NodeControl as i32, "add_controller")),
         Ct::RemoveController => Some((Ck::NodeControl as i32, "remove_controller")),
@@ -847,7 +850,7 @@ fn local_assurance_satisfies_requirement(
 ) -> Result<(), ValidationResult> {
     use crate::protocol::AssuranceClass;
 
-    if AssuranceClass::from_i32(ctx.local_assurance_class).is_none() {
+    if AssuranceClass::from(ctx.local_assurance_class).is_none() {
         return Err(reject(
             ReasonCode::StructuralInvalid,
             Value::String(format!(
@@ -1202,7 +1205,7 @@ fn validate_identity_ref(identity: &IdentityRef, label: &str) -> Option<Validati
         ));
     }
     if identity.identity_kind.is_some_and(|identity_kind| {
-        crate::protocol::IdentityKind::from_i32(identity_kind)
+        crate::protocol::IdentityKind::from(identity_kind)
             .is_none_or(|kind| kind == crate::protocol::IdentityKind::Unspecified)
     }) {
         return Some(reject(
@@ -1225,7 +1228,7 @@ fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationRes
         return Some(result);
     }
 
-    let Some(command_type) = CommandType::from_i32(command.command_type) else {
+    let Some(command_type) = CommandType::from(command.command_type) else {
         return Some(reject(
             ReasonCode::StructuralInvalid,
             Value::String(format!(
@@ -1519,7 +1522,7 @@ pub fn validate_command(
             return result;
         }
 
-        let Some(required_class) = AssuranceClass::from_i32(req.required_class) else {
+        let Some(required_class) = AssuranceClass::from(req.required_class) else {
             return reject(
                 ReasonCode::StructuralInvalid,
                 Value::String(format!(
@@ -1995,8 +1998,8 @@ fn attenuate_scope(
             empty_map(),
         ));
     };
-    let parent_kind = crate::protocol::ScopeKind::from_i32(parent_scope.scope_kind);
-    let child_kind = crate::protocol::ScopeKind::from_i32(child_scope.scope_kind);
+    let parent_kind = crate::protocol::ScopeKind::from(parent_scope.scope_kind);
+    let child_kind = crate::protocol::ScopeKind::from(child_scope.scope_kind);
     if parent_kind == Some(crate::protocol::ScopeKind::GlobalWithConstraints) {
         if !time_window_allows(
             parent_scope.time_bounds.as_ref(),

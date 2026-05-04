@@ -116,24 +116,13 @@ pub struct ProofBundle {
     pub supporting_objects: alloc::vec::Vec<super::common::ObjectRef>,
     pub signature: ::core::option::Option<super::common::Signature>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum SnapshotCompleteness {
     Unspecified = 0,
     Full = 1,
     Partial = 2,
     Bounded = 3,
-}
-impl SnapshotCompleteness {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Full),
-            2 => Some(Self::Partial),
-            3 => Some(Self::Bounded),
-            _ => None,
-        }
-    }
 }
 
 impl SnapshotCompleteness {
@@ -160,7 +149,7 @@ impl SnapshotCompleteness {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum QueryClass {
     Unspecified = 0,
@@ -172,22 +161,6 @@ pub enum QueryClass {
     View = 6,
     Search = 7,
     TrustState = 8,
-}
-impl QueryClass {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Head),
-            2 => Some(Self::Snapshot),
-            3 => Some(Self::EventRange),
-            4 => Some(Self::ObjectExistence),
-            5 => Some(Self::ObjectFetch),
-            6 => Some(Self::View),
-            7 => Some(Self::Search),
-            8 => Some(Self::TrustState),
-            _ => None,
-        }
-    }
 }
 
 impl QueryClass {
@@ -224,7 +197,7 @@ impl QueryClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ProofClass {
     Unspecified = 0,
@@ -233,19 +206,6 @@ pub enum ProofClass {
     EventRef = 3,
     ObjectRef = 4,
     SnapshotBase = 5,
-}
-impl ProofClass {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Signature),
-            2 => Some(Self::StreamHead),
-            3 => Some(Self::EventRef),
-            4 => Some(Self::ObjectRef),
-            5 => Some(Self::SnapshotBase),
-            _ => None,
-        }
-    }
 }
 
 impl ProofClass {
@@ -276,7 +236,7 @@ impl ProofClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ResultCompleteness {
     Unspecified = 0,
@@ -284,18 +244,6 @@ pub enum ResultCompleteness {
     Partial = 2,
     Denied = 3,
     MetadataOnly = 4,
-}
-impl ResultCompleteness {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::CompleteForLocalKnowledge),
-            2 => Some(Self::Partial),
-            3 => Some(Self::Denied),
-            4 => Some(Self::MetadataOnly),
-            _ => None,
-        }
-    }
 }
 
 impl ResultCompleteness {
@@ -326,7 +274,7 @@ impl ResultCompleteness {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ProofPayloadType {
     Unspecified = 0,
@@ -337,21 +285,6 @@ pub enum ProofPayloadType {
     ResultFragment = 5,
     AggregateSummary = 6,
     TrustPolicy = 7,
-}
-impl ProofPayloadType {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::StreamHeads),
-            2 => Some(Self::SnapshotSet),
-            3 => Some(Self::EventSet),
-            4 => Some(Self::ObjectAssertion),
-            5 => Some(Self::ResultFragment),
-            6 => Some(Self::AggregateSummary),
-            7 => Some(Self::TrustPolicy),
-            _ => None,
-        }
-    }
 }
 
 impl ProofPayloadType {

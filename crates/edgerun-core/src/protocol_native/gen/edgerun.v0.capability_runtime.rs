@@ -66,22 +66,12 @@ pub mod capability_remote_envelope {
         ResultFrame(super::CapabilityResultFrame),
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CapabilitySessionMode {
     Unspecified = 0,
     Unary = 1,
     Stream = 2,
-}
-impl CapabilitySessionMode {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Unary),
-            2 => Some(Self::Stream),
-            _ => None,
-        }
-    }
 }
 
 impl CapabilitySessionMode {

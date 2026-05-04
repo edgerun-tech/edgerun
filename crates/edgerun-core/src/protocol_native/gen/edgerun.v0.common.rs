@@ -6,7 +6,7 @@ pub struct Digest {
 }
 /// Nested message and enum types in `Digest`.
 pub mod digest {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     #[repr(i32)]
     pub enum Algorithm {
         DigestAlgorithmUnspecified = 0,
@@ -33,15 +33,6 @@ pub mod digest {
         }
     }
 }
-impl Algorithm {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::DigestAlgorithmUnspecified),
-            1 => Some(Self::DigestAlgorithmSha256),
-            _ => None,
-        }
-    }
-}
 
 #[derive(Clone, PartialEq)]
 pub struct Signature {
@@ -50,7 +41,7 @@ pub struct Signature {
 }
 /// Nested message and enum types in `Signature`.
 pub mod signature {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     #[repr(i32)]
     pub enum Algorithm {
         SignatureAlgorithmUnspecified = 0,
@@ -76,15 +67,6 @@ pub mod signature {
                 }
                 _ => None,
             }
-        }
-    }
-}
-impl Algorithm {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::SignatureAlgorithmUnspecified),
-            1 => Some(Self::SignatureAlgorithmEcdsaP256Sha256),
-            _ => None,
         }
     }
 }
@@ -190,7 +172,7 @@ pub struct EncryptedEnvelope {
     /// ECDSA P-256 signature over (sender || recipients || ephemeral_pub || nonce || ciphertext)
     pub signature: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum IdentityKind {
     Unspecified = 0,
@@ -199,19 +181,6 @@ pub enum IdentityKind {
     Agent = 3,
     Service = 4,
     Other = 5,
-}
-impl IdentityKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::User),
-            2 => Some(Self::Node),
-            3 => Some(Self::Agent),
-            4 => Some(Self::Service),
-            5 => Some(Self::Other),
-            _ => None,
-        }
-    }
 }
 
 impl IdentityKind {
@@ -242,7 +211,7 @@ impl IdentityKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ObjectKind {
     Unspecified = 0,
@@ -256,24 +225,6 @@ pub enum ObjectKind {
     DerivedView = 8,
     AppPackage = 9,
     UiTree = 10,
-}
-impl ObjectKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Payload),
-            2 => Some(Self::Attachment),
-            3 => Some(Self::Snapshot),
-            4 => Some(Self::Manifest),
-            5 => Some(Self::Index),
-            6 => Some(Self::Command),
-            7 => Some(Self::Proof),
-            8 => Some(Self::DerivedView),
-            9 => Some(Self::AppPackage),
-            10 => Some(Self::UiTree),
-            _ => None,
-        }
-    }
 }
 
 impl ObjectKind {
@@ -314,24 +265,13 @@ impl ObjectKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum AssuranceClass {
     Unspecified = 0,
     Software = 1,
     HardwareBacked = 2,
     AttestedRuntime = 3,
-}
-impl AssuranceClass {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Software),
-            2 => Some(Self::HardwareBacked),
-            3 => Some(Self::AttestedRuntime),
-            _ => None,
-        }
-    }
 }
 
 impl AssuranceClass {
@@ -358,7 +298,7 @@ impl AssuranceClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum TransportClass {
     Unspecified = 0,
@@ -369,21 +309,6 @@ pub enum TransportClass {
     Relay = 5,
     StoreForward = 6,
     Other = 7,
-}
-impl TransportClass {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Ble),
-            2 => Some(Self::LanIp),
-            3 => Some(Self::Quic),
-            4 => Some(Self::WifiDirect),
-            5 => Some(Self::Relay),
-            6 => Some(Self::StoreForward),
-            7 => Some(Self::Other),
-            _ => None,
-        }
-    }
 }
 
 impl TransportClass {
@@ -418,7 +343,7 @@ impl TransportClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum Directness {
     Unspecified = 0,
@@ -426,18 +351,6 @@ pub enum Directness {
     Relayed = 2,
     BridgeRequired = 3,
     StoreForward = 4,
-}
-impl Directness {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Direct),
-            2 => Some(Self::Relayed),
-            3 => Some(Self::BridgeRequired),
-            4 => Some(Self::StoreForward),
-            _ => None,
-        }
-    }
 }
 
 impl Directness {
@@ -466,7 +379,7 @@ impl Directness {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum StorageClass {
     Unspecified = 0,
@@ -474,18 +387,6 @@ pub enum StorageClass {
     Warm = 2,
     Cold = 3,
     Archive = 4,
-}
-impl StorageClass {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Hot),
-            2 => Some(Self::Warm),
-            3 => Some(Self::Cold),
-            4 => Some(Self::Archive),
-            _ => None,
-        }
-    }
 }
 
 impl StorageClass {
@@ -514,7 +415,7 @@ impl StorageClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ExecutionClass {
     Unspecified = 0,
@@ -523,19 +424,6 @@ pub enum ExecutionClass {
     TeeAllowed = 3,
     RedundantUntrusted = 4,
     Public = 5,
-}
-impl ExecutionClass {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::LocalOnly),
-            2 => Some(Self::TrustedPeer),
-            3 => Some(Self::TeeAllowed),
-            4 => Some(Self::RedundantUntrusted),
-            5 => Some(Self::Public),
-            _ => None,
-        }
-    }
 }
 
 impl ExecutionClass {
@@ -585,22 +473,12 @@ impl ExecutionClass {
 // Domain separation: "edgerun:v0:hash:encrypted-envelope"
 // ===========================================================================
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum CipherSuite {
     Unspecified = 0,
     Xchacha20Poly1305 = 1,
     Aes256Gcm = 2,
-}
-impl CipherSuite {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Xchacha20Poly1305),
-            2 => Some(Self::Aes256Gcm),
-            _ => None,
-        }
-    }
 }
 
 impl CipherSuite {

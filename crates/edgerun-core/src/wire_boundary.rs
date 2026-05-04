@@ -328,6 +328,7 @@ fn list_value<T: WireEncode>(values: &[T]) -> WireValue {
     WireValue::List(out)
 }
 
+#[cfg(feature = "proto-compat")]
 pub mod proto_boundary {
     use super::*;
     use edgerun_proto::edgerun::v0::{common, stream};

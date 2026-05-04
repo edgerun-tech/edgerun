@@ -47,7 +47,7 @@ pub mod util;
 pub mod validators;
 pub mod value;
 pub mod varint;
-#[cfg(feature = "proto-compat")]
 pub mod wire_boundary;
+pub mod wire_boundary_free;
 pub mod wire_command;
 pub mod wire_stream;

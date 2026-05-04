@@ -12,20 +12,11 @@ pub struct IdentityRecord {
     pub metadata_object: ::core::option::Option<super::common::ObjectRef>,
     pub signature: ::core::option::Option<super::common::Signature>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum KeyAlgorithm {
     Unspecified = 0,
     EcdsaP256 = 1,
-}
-impl KeyAlgorithm {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::EcdsaP256),
-            _ => None,
-        }
-    }
 }
 
 impl KeyAlgorithm {

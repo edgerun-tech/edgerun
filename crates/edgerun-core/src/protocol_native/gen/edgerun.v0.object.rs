@@ -47,22 +47,12 @@ pub struct ChunkManifest {
     pub chunk_entries: alloc::vec::Vec<ChunkEntry>,
     pub manifest_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ChunkingMode {
     Unspecified = 0,
     None = 1,
     Manifest = 2,
-}
-impl ChunkingMode {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::None),
-            2 => Some(Self::Manifest),
-            _ => None,
-        }
-    }
 }
 
 impl ChunkingMode {

@@ -111,7 +111,7 @@ pub struct GenerationEventPayload {
     pub plan_hash: alloc::vec::Vec<u8>,
     pub reason: alloc::string::String,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ServerResourceEventKind {
     Unspecified = 0,
@@ -127,26 +127,6 @@ pub enum ServerResourceEventKind {
     SetAuthoritativeDns = 10,
     RequestCertificate = 11,
     SetServicePolicy = 12,
-}
-impl ServerResourceEventKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::ClaimDomain),
-            2 => Some(Self::ReleaseDomain),
-            3 => Some(Self::AddMailbox),
-            4 => Some(Self::RemoveMailbox),
-            5 => Some(Self::AddAlias),
-            6 => Some(Self::RemoveAlias),
-            7 => Some(Self::AuthorizeContentSource),
-            8 => Some(Self::PublishWebsite),
-            9 => Some(Self::UnpublishWebsite),
-            10 => Some(Self::SetAuthoritativeDns),
-            11 => Some(Self::RequestCertificate),
-            12 => Some(Self::SetServicePolicy),
-            _ => None,
-        }
-    }
 }
 
 impl ServerResourceEventKind {
@@ -193,7 +173,7 @@ impl ServerResourceEventKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum GenerationEventKind {
     Unspecified = 0,
@@ -203,20 +183,6 @@ pub enum GenerationEventKind {
     Promoted = 4,
     Rollback = 5,
     Failed = 6,
-}
-impl GenerationEventKind {
-    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        match value {
-            0 => Some(Self::Unspecified),
-            1 => Some(Self::Planned),
-            2 => Some(Self::Staged),
-            3 => Some(Self::HealthPassed),
-            4 => Some(Self::Promoted),
-            5 => Some(Self::Rollback),
-            6 => Some(Self::Failed),
-            _ => None,
-        }
-    }
 }
 
 impl GenerationEventKind {
