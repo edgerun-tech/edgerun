@@ -76,6 +76,26 @@ function formatBytes(bytes?: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MiB`
 }
 
+function statusDotClass(status: BridgeStatus) {
+  if (status === "online") return "bg-[var(--status-online)] shadow-[0_0_8px_rgba(34,197,94,0.75)]"
+  if (status === "checking") return "bg-[var(--status-warning)] shadow-[0_0_8px_rgba(251,191,36,0.75)]"
+  return "bg-[var(--status-error)] shadow-[0_0_8px_rgba(239,68,68,0.75)]"
+}
+
+function StatusDot({ status, onClick }: { status: BridgeStatus; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+      title={status}
+      aria-label={`Bridge status: ${status}`}
+    >
+      <span className={cn("h-2.5 w-2.5 rounded-full", statusDotClass(status))} />
+    </button>
+  )
+}
+
 function useCodelyzerBridge() {
   const [status, setStatus] = useState<BridgeStatus>("checking")
   const [graph, setGraph] = useState<BridgeGraph | null>(null)
@@ -145,18 +165,10 @@ function useCodelyzerBridge() {
   return { status, graph, connections, suspiciousConnections, error, lastRefresh, refresh, nodeMap, activeCodeConnections, languageSummary, topFiles }
 }
 
-function statusClass(status: BridgeStatus) {
-  return status === "online"
-    ? "border-[var(--status-online)]/30 bg-[var(--status-online)]/10 text-[var(--status-online)]"
-    : status === "checking"
-      ? "border-primary/30 bg-primary/10 text-primary"
-      : "border-[var(--status-error)]/30 bg-[var(--status-error)]/10 text-[var(--status-error)]"
-}
-
 function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-background/55 p-2">
-      <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
+    <div className="min-w-0 rounded-xl border border-border/70 bg-background/55 p-2">
+      <div className="truncate text-[9px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
       <div className="mt-1 truncate font-mono text-xs text-foreground">{value}</div>
     </div>
   )
@@ -168,24 +180,24 @@ export function NetworkConnectionsWidget() {
   const visibleConnections = suspiciousConnections.length > 0 ? suspiciousConnections : connections
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background/5 p-3 text-foreground">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold">
-            <Network className="h-3.5 w-3.5 text-primary" />
-            Network
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background/5 p-3 text-foreground">
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs font-semibold">
+            <Network className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span className="truncate">Network</span>
           </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">Active external IPs</div>
+          <div className="mt-0.5 truncate text-[10px] text-muted-foreground">Active external IPs</div>
         </div>
-        <button type="button" onClick={() => void refresh()} className={cn("rounded-full border px-2 py-0.5 font-mono text-[10px]", statusClass(status))}>{status}</button>
+        <StatusDot status={status} onClick={() => void refresh()} />
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid min-w-0 grid-cols-2 gap-2">
         <MiniStat label="active" value={connections.length} />
         <MiniStat label="watch" value={suspiciousConnections.length} />
       </div>
 
-      <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-hidden">
+      <div className="mt-2 min-h-0 min-w-0 flex-1 space-y-1 overflow-hidden">
         {page === "policy" ? (
           <div className="space-y-1 text-[10px]">
             {[
@@ -194,26 +206,26 @@ export function NetworkConnectionsWidget() {
               ["Discovery", "on"],
               ["Region", "auto"],
             ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between rounded-lg bg-background/45 px-2 py-1.5">
-                <span className="text-muted-foreground">{label}</span>
-                <span className="font-mono text-foreground">{value}</span>
+              <div key={label} className="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-background/45 px-2 py-1.5">
+                <span className="truncate text-muted-foreground">{label}</span>
+                <span className="shrink-0 font-mono text-foreground">{value}</span>
               </div>
             ))}
           </div>
         ) : error ? (
-          <div className="rounded-lg bg-[var(--status-error)]/10 px-2 py-1.5 text-[10px] text-[var(--status-error)]">Bridge offline · {error}</div>
+          <div className="truncate rounded-lg bg-[var(--status-error)]/10 px-2 py-1.5 text-[10px] text-[var(--status-error)]" title={error}>Bridge offline · {error}</div>
         ) : visibleConnections.length === 0 ? (
           <div className="rounded-lg bg-background/45 px-2 py-1.5 text-[10px] text-muted-foreground">No external connections.</div>
-        ) : visibleConnections.slice(0, 6).map((connection) => (
-          <div key={`${connection.protocol}-${connection.remote_address}-${connection.remote_port}`} className="rounded-lg bg-background/45 px-2 py-1.5 text-[10px]">
-            <div className="flex items-center gap-1.5">
+        ) : visibleConnections.slice(0, 6).map((connection, index) => (
+          <div key={`${connection.protocol}-${connection.local_address}-${connection.local_port}-${connection.remote_address}-${connection.remote_port}-${connection.state}-${index}`} className="min-w-0 rounded-lg bg-background/45 px-2 py-1.5 text-[10px]">
+            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5">
               <ShieldAlert className="h-3 w-3 shrink-0 text-primary" />
-              <span className="min-w-0 flex-1 truncate font-mono text-foreground">{connection.remote_address}</span>
-              <span className="font-mono text-muted-foreground">:{connection.remote_port}</span>
+              <span className="min-w-0 truncate font-mono text-foreground" title={connection.remote_address}>{connection.remote_address}</span>
+              <span className="shrink-0 font-mono text-muted-foreground">:{connection.remote_port}</span>
             </div>
-            <div className="mt-0.5 flex justify-between text-[9px] text-muted-foreground">
-              <span>{connection.protocol}</span>
-              <span>{connection.state}</span>
+            <div className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 text-[9px] text-muted-foreground">
+              <span className="truncate">{connection.protocol}</span>
+              <span className="shrink-0 truncate">{connection.state}</span>
             </div>
           </div>
         ))}
@@ -235,36 +247,36 @@ export function CodelyzerCodeWidget() {
   const { status, graph, error, refresh, topFiles } = useCodelyzerBridge()
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background/5 p-3 text-foreground">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold">
-            <FolderGit2 className="h-3.5 w-3.5 text-primary" />
-            Code
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background/5 p-3 text-foreground">
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs font-semibold">
+            <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span className="truncate">Code</span>
           </div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground">Opened git repo</div>
+          <div className="mt-0.5 truncate text-[10px] text-muted-foreground">Opened git repo</div>
         </div>
-        <button type="button" onClick={() => void refresh()} className={cn("rounded-full border px-2 py-0.5 font-mono text-[10px]", statusClass(status))}>{status}</button>
+        <StatusDot status={status} onClick={() => void refresh()} />
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid min-w-0 grid-cols-2 gap-2">
         <MiniStat label="nodes" value={graph?.node_count ?? graph?.nodes?.length ?? 0} />
         <MiniStat label="edges" value={graph?.edge_count ?? graph?.edges?.length ?? 0} />
       </div>
 
-      <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-hidden">
+      <div className="mt-2 min-h-0 min-w-0 flex-1 space-y-1 overflow-hidden">
         {error ? (
-          <div className="rounded-lg bg-[var(--status-error)]/10 px-2 py-1.5 text-[10px] text-[var(--status-error)]">Bridge offline · {error}</div>
+          <div className="truncate rounded-lg bg-[var(--status-error)]/10 px-2 py-1.5 text-[10px] text-[var(--status-error)]" title={error}>Bridge offline · {error}</div>
         ) : topFiles.length === 0 ? (
           <div className="rounded-lg bg-background/45 px-2 py-1.5 text-[10px] text-muted-foreground">No repo files indexed.</div>
         ) : topFiles.map((file) => (
-          <div key={file.path} className="rounded-lg bg-background/45 px-2 py-1.5 text-[10px]">
-            <div className="flex items-center gap-1.5">
+          <div key={file.path} className="min-w-0 rounded-lg bg-background/45 px-2 py-1.5 text-[10px]">
+            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5">
               <FolderGit2 className="h-3 w-3 shrink-0 text-primary" />
-              <span className="min-w-0 flex-1 truncate text-foreground">{shortFile(file.path)}</span>
-              <span className="font-mono text-muted-foreground">{formatBytes(file.size)}</span>
+              <span className="min-w-0 truncate text-foreground" title={file.path}>{shortFile(file.path)}</span>
+              <span className="shrink-0 font-mono text-muted-foreground">{formatBytes(file.size)}</span>
             </div>
-            <div className="mt-0.5 text-[9px] text-muted-foreground">{file.language}</div>
+            <div className="mt-0.5 truncate text-[9px] text-muted-foreground">{file.language}</div>
           </div>
         ))}
       </div>
@@ -276,7 +288,6 @@ export function CodelyzerCodeWidget() {
 
 export function CodelyzerNetworkPanel() {
   const { status, graph, error, lastRefresh, refresh, nodeMap, activeCodeConnections, languageSummary } = useCodelyzerBridge()
-  const statusTone = statusClass(status)
 
   return (
     <div className="space-y-4">
@@ -284,7 +295,7 @@ export function CodelyzerNetworkPanel() {
         <Card className="border-[var(--window-border)] bg-card/55 py-4 shadow-none">
           <CardContent className="px-3">
             <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground"><Server className="h-3 w-3" /> Bridge</div>
-            <Badge variant="outline" className={cn("text-[10px]", statusTone)}>{status}</Badge>
+            <StatusDot status={status} onClick={() => void refresh()} />
           </CardContent>
         </Card>
         <Card className="border-[var(--window-border)] bg-card/55 py-4 shadow-none"><CardContent className="px-3"><p className="font-mono text-lg font-semibold text-primary">{graph?.node_count ?? graph?.nodes?.length ?? 0}</p><p className="text-[10px] uppercase tracking-widest text-muted-foreground">nodes</p></CardContent></Card>
