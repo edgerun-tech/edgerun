@@ -19,9 +19,10 @@ export function XrayWorkspace({ mode = "full" }: XrayWorkspaceProps) {
   const [codeanalyzerUrl] = useState("ws://localhost:13337/ws")
 
   useEffect(() => {
+    if (mode !== "full") return
     initCodeAnalyzerConnection(codeanalyzerUrl)
     setConnected(true)
-  }, [codeanalyzerUrl])
+  }, [codeanalyzerUrl, mode])
 
   if (mode === "bg") {
     return (
