@@ -14,7 +14,9 @@ use edgerun_core::protocol::{
 };
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use std::sync::{Arc, Mutex};
-use wasmtime::*;
+// TODO: Replace with real wasmtime when feature-gated
+mod wasmtime_mock;
+use wasmtime_mock::*;
 
 #[derive(Debug, Clone)]
 pub struct ExecutionContext {

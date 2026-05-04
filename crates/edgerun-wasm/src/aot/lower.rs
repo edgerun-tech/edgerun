@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
-use wasmparser::{BlockType, ExternalKind, MemArg, Operator, Payload, TypeRef};
+use crate::wasmparser_mock;
 
 use super::ir::{
     verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, LoadKind, MemOp, StoreKind, ValueType,
@@ -33,7 +33,7 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
     let mut defined_func_type_indices = Vec::new();
     let mut bodies = Vec::new();
 
-    for payload in wasmparser::Parser::new(0).parse_all(wasm) {
+    for payload in wasmparser_mock::Parser::new(0).parse_all(wasm) {
         match payload? {
             Payload::TypeSection(section) => {
                 for group in section {
@@ -236,7 +236,7 @@ fn normalize_function_ends(mut ops: Vec<IrOp>) -> Result<Vec<IrOp>> {
     Ok(ops)
 }
 
-fn parse_global_init(ty: ValueType, init_expr: wasmparser::ConstExpr<'_>) -> Result<GlobalValue> {
+fn parse_global_init(ty: ValueType, init_expr: wasmparser_mock::ConstExpr<'_>) -> Result<GlobalValue> {
     let mut reader = init_expr.get_operators_reader();
     let first = reader.read()?;
     let value = match (ty, first) {

@@ -25,7 +25,6 @@ edgerun-node = { workspace = true }
 edgerun-storage = { workspace = true }
 edgerun-hardware-signing = { workspace = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
-wasmtime = "29"
 eframe = { version = "0.31", default-features = false, optional = true }
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }

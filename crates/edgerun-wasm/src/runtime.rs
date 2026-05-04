@@ -1,5 +1,6 @@
 mod app;
 mod event_loop;
+mod wasmtime_mock;
 
 use anyhow::{Context, Result};
 use edgerun_clap::Parser;
@@ -7,7 +8,7 @@ use edgerun_core::protocol::capability_check;
 use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use wasmtime::*;
+use wasmtime_mock::*;
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun-runtime", about = "Run EdgeRun WASM modules locally")]

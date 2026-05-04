@@ -1531,7 +1531,6 @@ dependencies = [
  "edgerun-storage",
  "eframe",
  "sha2",
- "wasmtime",
 ]
 
 [[package]]
@@ -2662,8 +2661,6 @@ dependencies = [
  "edgerun-core",
  "libc",
  "sha2",
- "wasmparser 0.224.1",
- "wasmtime",
 ]
 
 [[package]]

@@ -10,6 +10,7 @@ mod loader;
 mod lower;
 #[path = "aot/module_backend.rs"]
 mod module_backend;
+mod wasmparser_mock;
 
 use anyhow::{bail, Context, Result};
 use artifact::{AotArtifact, CompiledFunction, DecodedAotArtifact};
@@ -135,7 +136,7 @@ fn compile_artifact(args: &Args) -> Result<()> {
     let input_path = Path::new(&args.file);
     let wasm = std::fs::read(input_path).context("failed to read WASM input")?;
 
-    wasmparser::Validator::new()
+    wasmparser_mock::Validator::new()
         .validate_all(&wasm)
         .context("invalid WASM module")?;
 

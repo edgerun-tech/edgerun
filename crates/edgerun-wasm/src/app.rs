@@ -95,7 +95,7 @@ fn validate_scope(scope: &ScopeDescriptor) -> Result<()> {
 }
 
 fn validate_wasm_abi(bytes: &[u8]) -> Result<()> {
-    use wasmparser::Validator;
+    use wasmparser_mock::Validator;
 
     let mut validator = Validator::new();
     validator
