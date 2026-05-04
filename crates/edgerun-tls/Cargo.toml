@@ -22,5 +22,8 @@ edgerun-crypto = { workspace = true, default-features = false, features = ["aead
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
 edgerun-rt.workspace = true
 
+[dev-dependencies]
+edgerun-acme = { version = "0.1", path = "../edgerun-acme" }
+
 [lints]
 workspace = true

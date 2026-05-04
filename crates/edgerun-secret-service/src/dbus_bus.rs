@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 //! D-Bus session bus client — connects to the system bus, authenticates,
 //! and registers `org.freedesktop.secrets` so desktop apps find us.
 

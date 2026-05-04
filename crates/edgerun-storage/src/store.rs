@@ -1404,7 +1404,7 @@ impl NodeStore {
 
     /// Checks available disk space on the data root partition.
     /// Returns available bytes, or `None` if the stat couldn't be obtained.
-    #[cfg(not(target_os = "none"))]
+    #[cfg(all(not(target_os = "none"), unix))]
     pub fn available_disk_space(&self) -> Result<Option<u64>, std::io::Error> {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
@@ -1422,6 +1422,11 @@ impl NodeStore {
                 Err(std::io::Error::last_os_error())
             }
         }
+    }
+
+    #[cfg(all(not(target_os = "none"), not(unix)))]
+    pub fn available_disk_space(&self) -> Result<Option<u64>, std::io::Error> {
+        Ok(None)
     }
 
     /// Checks if there is sufficient disk space for a write operation.

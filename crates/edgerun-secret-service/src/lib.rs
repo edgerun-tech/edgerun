@@ -72,16 +72,16 @@ pub use edgerun_storage::{
 };
 
 pub mod backend;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 pub mod dbus_bus;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 pub mod dbus_server;
 pub mod dbus_types;
 pub mod dbus_wire;
 pub mod session;
 
 pub use backend::{no_op_event_recorder, Backend, CredentialMeta, SecretEventRecorder};
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 pub use dbus_bus::BusConnection;
 pub use session::{
     BiometricVerifier, NoBiometricVerifier, Session, SessionManager, DEFAULT_IDLE_TIMEOUT_US,

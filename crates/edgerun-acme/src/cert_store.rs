@@ -1,4 +1,7 @@
 use crate::prelude::v1::*;
+#[cfg(target_os = "none")]
+use edgerun_secret_service::path::PathBuf;
+#[cfg(not(target_os = "none"))]
 use std::path::PathBuf;
 
 use edgerun_secret_service::Backend;

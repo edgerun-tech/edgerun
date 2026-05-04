@@ -1,6 +1,8 @@
 //! D-Bus Secret Service server — Unix domain socket listener with full
 //! org.freedesktop.Secret.Service implementation.
 
+#![cfg(unix)]
+
 use crate::prelude::v1::*;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
