@@ -10,6 +10,7 @@ export { formatObjectRef, formatEventRef, formatCommandRef, formatProtocolRef } 
 export { buildCommandEnvelope, serializeCommandEnvelope, deserializeCommandEnvelope } from "./protocol/commands"
 export { fetchAppPackage, listInstalledApps } from "./protocol/apps"
 export { listAvailableCapabilities, listGrantsForApp } from "./protocol/capabilities"
+export { listProtocolApprovals, syncProtocolApprovals, approveProtocolApproval, rejectProtocolApproval } from "./protocol/approvals"
 
 // State stores
 export { nodeStore, refreshNodeStatus } from "./state/node-store"
