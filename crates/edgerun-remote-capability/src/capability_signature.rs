@@ -135,11 +135,11 @@ macro_rules! impl_sign_verify {
             msg.signature = Some(sig);
         }
         pub fn $sign(signer: &dyn MeshSigner, msg: &mut $msg) -> Result<(), String> {
-            sign_message(signer, msg, $clear, $set)
+            sign_message_bytes(signer, msg, $clear, $set)
         }
         pub fn $verify(msg: &$msg, sender: NodeID) -> Result<(), String> {
             let get_sig = |m: &$msg| m.signature.clone();
-            verify_message(msg, sender, get_sig, |m| {
+            verify_message_bytes(msg, sender, get_sig, |m| {
                 let mut c = m.clone();
                 c.signature = None;
                 c
@@ -502,4 +502,27 @@ mod tests {
         let err = verify_invocation(&invocation, NodeID([0u8; 64])).unwrap_err();
         assert!(err.contains("unsupported signature algorithm"));
     }
+}
+
+pub fn sign_bytes(
+    message_bytes: &[u8],
+    signer: &dyn MeshSigner,
+) -> Result<Signature, CapabilitySignatureError> {
+    let sig = signer
+        .sign(message_bytes)
+        .map_err(|_| CapabilitySignatureError::SigningFailed)?;
+    Ok(Signature {
+        algorithm: 1,
+        value: sig,
+    })
+}
+
+pub fn verify_bytes(
+    message_bytes: &[u8],
+    signature: &Signature,
+    verifier: &dyn MeshVerifier,
+) -> Result<(), CapabilitySignatureError> {
+    verifier
+        .verify(message_bytes, &signature.value)
+        .map_err(|_| CapabilitySignatureError::VerificationFailed)
 }
