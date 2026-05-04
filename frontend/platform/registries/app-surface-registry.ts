@@ -36,6 +36,7 @@ const BUILTIN_SPECS: Record<string, AppSurfaceSpec> = {
   "db-explorer": { kind: "overlay", ...SIZE.md, dismissOnOutsideClick: true },
   "network-monitor": { kind: "pinned-widget", ...SIZE.widget, dismissOnOutsideClick: false, preferredSlot: "left-top" },
   "file-browser": { kind: "overlay", ...SIZE.md, dismissOnOutsideClick: true },
+  storage: { kind: "overlay", ...SIZE.xl, dismissOnOutsideClick: true },
   "git-sync": { kind: "overlay", ...SIZE.md, dismissOnOutsideClick: true },
   "web-server": { kind: "overlay", ...SIZE.md, dismissOnOutsideClick: true },
   "compute-node": { kind: "pinned-widget", ...SIZE.widget, dismissOnOutsideClick: false, preferredSlot: "right-top" },
