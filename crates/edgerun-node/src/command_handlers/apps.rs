@@ -1,17 +1,17 @@
 //! App command handlers — install/uninstall.
 
+use crate::app_package_wire_codec::decode_app_package;
 use crate::command_dispatch::{
     build_command_result_payload, extract_payload_or_reject, record_and_respond,
     record_and_respond_with_result_object, CommandDispatchResult, ControllerSet,
 };
-use crate::command_result_codec::encode_command_result_payload;
+use crate::command_result_wire_codec::encode_command_result_payload;
 use edgerun_core::util::{bytes_to_hex, now_unix_millis_i64};
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::stream::{
     CommandEnvelope, CommandType, InstallAppPayload, UninstallAppPayload,
 };
 use edgerun_storage::NodeStore;
-use prost::Message;
 
 pub fn dispatch_install_app(
     command: &CommandEnvelope,
@@ -20,7 +20,6 @@ pub fn dispatch_install_app(
     signer: &dyn MeshSigner,
     controllers: &mut ControllerSet,
 ) -> CommandDispatchResult {
-    // Extract and decode payload, or reject with error
     let reject_fn = |e: String| -> CommandDispatchResult {
         record_and_respond(
             command,
@@ -58,7 +57,6 @@ pub fn dispatch_install_app(
         }
     };
 
-    // Use get_object to resolve the logical ObjectRef (not get_blob on object_id)
     let package_bytes = match store.get_object(&package_object_ref) {
         Ok(Some(bytes)) => bytes,
         Ok(None) => {
@@ -97,28 +95,23 @@ pub fn dispatch_install_app(
 
     edgerun_log::info!("install_app: domain={}", domain);
 
-    // Decode AppPackage from the object content to resolve internal ObjectRefs.
-    // AppPackage is still a protobuf boundary payload until app packaging is moved
-    // to edgerun-wire.
-    let app_package: edgerun_proto::edgerun::v0::stream::AppPackage =
-        match prost::Message::decode(package_bytes.content.as_slice()) {
-            Ok(pkg) => pkg,
-            Err(e) => {
-                return record_and_respond(
-                    command,
-                    store,
-                    stream_id,
-                    signer,
-                    controllers,
-                    false,
-                    &format!("invalid_app_package: {}", e),
-                    Vec::new(),
-                    None,
-                );
-            }
-        };
+    let app_package = match decode_app_package(package_bytes.content.as_slice()) {
+        Ok(pkg) => pkg,
+        Err(e) => {
+            return record_and_respond(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &format!("invalid_app_package: {}", e),
+                Vec::new(),
+                None,
+            );
+        }
+    };
 
-    // Resolve wasm_object and assets as ObjectRefs (logical references)
     if let Some(ref wasm_ref) = app_package.wasm_object {
         edgerun_log::info!(
             "install_app: wasm_object kind={:?} id={}",
@@ -135,7 +128,6 @@ pub fn dispatch_install_app(
         );
     }
 
-    // Use the original package_object_ref as the result
     let result_payload = build_command_result_payload(
         command,
         CommandType::InstallApp as i32,
@@ -208,13 +200,11 @@ pub fn dispatch_uninstall_app(
         bytes_to_hex(&app_id)
     );
 
-    // Look up the app by app_id in the index
     let mut found = false;
     if let Ok(Some(_app)) = store.get_app(&bytes_to_hex(&app_id)) {
         found = true;
         edgerun_log::info!("uninstall_app: found app, marking uninstalled");
 
-        // Mark the app as uninstalled in the index
         if let Err(e) = store.uninstall_app(&bytes_to_hex(&app_id), now_unix_millis_i64()) {
             edgerun_log::warn!("failed to mark app uninstalled: {}", e);
         }
