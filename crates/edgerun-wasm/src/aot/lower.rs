@@ -160,6 +160,8 @@ fn lower_operator(op: Operator<'_>) -> Result<IrOp> {
         Operator::I32Const { value } => IrOp::I32Const(value),
         Operator::I64Const { value } => IrOp::I64Const(value),
         Operator::LocalGet { local_index } => IrOp::LocalGet(local_index),
+        Operator::LocalSet { local_index } => IrOp::LocalSet(local_index),
+        Operator::LocalTee { local_index } => IrOp::LocalTee(local_index),
         Operator::I32Add => IrOp::I32Add,
         Operator::I32Sub => IrOp::I32Sub,
         Operator::I32Mul => IrOp::I32Mul,
