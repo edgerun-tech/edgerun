@@ -29,8 +29,8 @@ fn validate_assurance_claim_satisfies_requirement(
     crate::result::ValidationResult {
         verdict: crate::result::Verdict::Accept,
         reason_code: None,
-        derived: crate::value::Value::Unit,
-        post_state: crate::value::Value::Unit,
+        derived: crate::value::Value::Null,
+        post_state: crate::result::empty_map(),
     }
 }
 
