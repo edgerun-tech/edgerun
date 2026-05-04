@@ -1,8 +1,18 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { Play, Loader2, Trash2, Copy, Check, Package } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e] font-mono text-xs text-muted-foreground">
+      Loading Monaco editor...
+    </div>
+  ),
+})
 
 const EXAMPLE_CODE = `// AssemblyScript compiled fully in the browser.
 // Syntax is TypeScript-like, but types must be AssemblyScript types.
@@ -214,16 +224,33 @@ export function CodeRunner({ onOutput }: CodeRunnerProps) {
         <div className="flex flex-1 flex-col">
           <div className="border-b border-border/50 bg-muted/30 px-3 py-1">
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              AssemblyScript Editor
+              AssemblyScript Editor · Monaco · Dark
             </span>
           </div>
-          <div className="relative flex-1">
-            <textarea
+          <div className="relative flex-1 bg-[#1e1e1e]">
+            <MonacoEditor
+              height="100%"
+              language="typescript"
+              theme="vs-dark"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="absolute inset-0 resize-none bg-[var(--terminal-bg)] p-3 font-mono text-sm text-[var(--terminal-text)] outline-none placeholder:text-muted-foreground/50"
-              placeholder="// export function run(): i32 { return 42 }"
-              spellCheck={false}
+              path="assembly/index.ts"
+              onChange={(value) => setCode(value ?? "")}
+              options={{
+                automaticLayout: true,
+                minimap: { enabled: false },
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                fontSize: 13,
+                lineHeight: 20,
+                scrollBeyondLastLine: false,
+                smoothScrolling: true,
+                tabSize: 2,
+                insertSpaces: true,
+                wordWrap: "on",
+                renderWhitespace: "selection",
+                bracketPairColorization: { enabled: true },
+                guides: { bracketPairs: true, indentation: true },
+                padding: { top: 12, bottom: 12 },
+              }}
             />
           </div>
         </div>
