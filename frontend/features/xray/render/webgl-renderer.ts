@@ -54,12 +54,12 @@ export class WebGLRenderer {
     }
     this.edgeBuffer = gl.createBuffer()!
 
-    this.positions = new Float32Array(MAX_BUFFERED_NODES * 2)
+    this.positions = new Float32Array(MAX_BUFFERED_NODES * 3)
     this.colors = new Float32Array(MAX_BUFFERED_NODES * 4)
     this.sizes = new Float32Array(MAX_BUFFERED_NODES)
     this.sels = new Float32Array(MAX_BUFFERED_NODES)
-    this.edgeFloat = new Float32Array(MAX_BUFFERED_EDGES * 2 * 5)
-    this.glowPositions = new Float32Array(MAX_BUFFERED_NODES * 2)
+    this.edgeFloat = new Float32Array(MAX_BUFFERED_EDGES * 2 * 6)
+    this.glowPositions = new Float32Array(MAX_BUFFERED_NODES * 3)
     this.glowColors = new Float32Array(MAX_BUFFERED_NODES * 4)
     this.glowSizes = new Float32Array(MAX_BUFFERED_NODES)
     this.glowSels = new Float32Array(MAX_BUFFERED_NODES)
@@ -100,8 +100,9 @@ export class WebGLRenderer {
     const indexMap = new Map<string, number>()
     for (const [id, node] of nodes) {
       if (ni >= MAX_BUFFERED_NODES) break
-      this.positions[ni * 2] = node.x ?? 0
-      this.positions[ni * 2 + 1] = node.y ?? 0
+      this.positions[ni * 3] = node.x ?? 0
+      this.positions[ni * 3 + 1] = node.y ?? 0
+      this.positions[ni * 3 + 2] = node.z ?? 0
       const isSelected = selectedId === id
       const isHighlighted = highlightedIds.has(id)
       const isDimmed = hasFocus && !isSelected && !isHighlighted
@@ -117,8 +118,9 @@ export class WebGLRenderer {
       indexMap.set(id, ni)
 
       if (isHighlighted || isSelected) {
-        this.glowPositions[glowCount * 2] = node.x ?? 0
-        this.glowPositions[glowCount * 2 + 1] = node.y ?? 0
+        this.glowPositions[glowCount * 3] = node.x ?? 0
+        this.glowPositions[glowCount * 3 + 1] = node.y ?? 0
+        this.glowPositions[glowCount * 3 + 2] = node.z ?? 0
         this.glowColors[glowCount * 4] = color[0]
         this.glowColors[glowCount * 4 + 1] = color[1]
         this.glowColors[glowCount * 4 + 2] = color[2]
@@ -141,20 +143,22 @@ export class WebGLRenderer {
       const dim = hasFocus && !isHighlighted ? 0.38 : 1
       const ec: [number, number, number] = [raw[0] * dim, raw[1] * dim, raw[2] * dim]
 
-      const ei = edgeVertCount * 5
-      this.edgeFloat[ei] = this.positions[si * 2]
-      this.edgeFloat[ei + 1] = this.positions[si * 2 + 1]
-      this.edgeFloat[ei + 2] = ec[0]
-      this.edgeFloat[ei + 3] = ec[1]
-      this.edgeFloat[ei + 4] = ec[2]
+      const ei = edgeVertCount * 6
+      this.edgeFloat[ei] = this.positions[si * 3]
+      this.edgeFloat[ei + 1] = this.positions[si * 3 + 1]
+      this.edgeFloat[ei + 2] = this.positions[si * 3 + 2]
+      this.edgeFloat[ei + 3] = ec[0]
+      this.edgeFloat[ei + 4] = ec[1]
+      this.edgeFloat[ei + 5] = ec[2]
       edgeVertCount++
 
-      const ti2 = edgeVertCount * 5
-      this.edgeFloat[ti2] = this.positions[ti * 2]
-      this.edgeFloat[ti2 + 1] = this.positions[ti * 2 + 1]
-      this.edgeFloat[ti2 + 2] = ec[0]
-      this.edgeFloat[ti2 + 3] = ec[1]
-      this.edgeFloat[ti2 + 4] = ec[2]
+      const ti2 = edgeVertCount * 6
+      this.edgeFloat[ti2] = this.positions[ti * 3]
+      this.edgeFloat[ti2 + 1] = this.positions[ti * 3 + 1]
+      this.edgeFloat[ti2 + 2] = this.positions[ti * 3 + 2]
+      this.edgeFloat[ti2 + 3] = ec[0]
+      this.edgeFloat[ti2 + 4] = ec[1]
+      this.edgeFloat[ti2 + 5] = ec[2]
       edgeVertCount++
     }
 
@@ -177,7 +181,7 @@ export class WebGLRenderer {
     for (let i = 0; i < 16; i++) gl.disableVertexAttribArray(i)
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.edgeBuffer)
-    gl.bufferData(gl.ARRAY_BUFFER, this.edgeFloat.subarray(0, edgeVertCount * 5), gl.DYNAMIC_DRAW)
+    gl.bufferData(gl.ARRAY_BUFFER, this.edgeFloat.subarray(0, edgeVertCount * 6), gl.DYNAMIC_DRAW)
 
     const eRes = gl.getUniformLocation(this.edgeProgram, "u_resolution")
     const eZoom = gl.getUniformLocation(this.edgeProgram, "u_zoom")
@@ -196,8 +200,8 @@ export class WebGLRenderer {
     if (ePos >= 0 && eCol >= 0) {
       gl.enableVertexAttribArray(ePos)
       gl.enableVertexAttribArray(eCol)
-      gl.vertexAttribPointer(ePos, 2, gl.FLOAT, false, 20, 0)
-      gl.vertexAttribPointer(eCol, 3, gl.FLOAT, false, 20, 8)
+      gl.vertexAttribPointer(ePos, 3, gl.FLOAT, false, 24, 0)
+      gl.vertexAttribPointer(eCol, 3, gl.FLOAT, false, 24, 12)
       gl.drawArrays(gl.LINES, 0, edgeVertCount)
     }
   }
@@ -220,11 +224,11 @@ export class WebGLRenderer {
     for (let i = 0; i < 16; i++) gl.disableVertexAttribArray(i)
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.nodeBuffers.positions)
-    gl.bufferData(gl.ARRAY_BUFFER, positions.subarray(0, nodeCount * 2), gl.DYNAMIC_DRAW)
+    gl.bufferData(gl.ARRAY_BUFFER, positions.subarray(0, nodeCount * 3), gl.DYNAMIC_DRAW)
     const nPos = gl.getAttribLocation(this.nodeProgram, "a_position")
     if (nPos >= 0) {
       gl.enableVertexAttribArray(nPos)
-      gl.vertexAttribPointer(nPos, 2, gl.FLOAT, false, 0, 0)
+      gl.vertexAttribPointer(nPos, 3, gl.FLOAT, false, 0, 0)
     }
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.nodeBuffers.colors)
