@@ -37,6 +37,39 @@ function deny(name: string): never {
   throw new Error(`${name} is not available to sandboxed worker apps; request a host capability instead`)
 }
 
+function hardenWorkerGlobals() {
+  const deniedGlobals = [
+    "fetch",
+    "XMLHttpRequest",
+    "WebSocket",
+    "EventSource",
+    "Worker",
+    "SharedWorker",
+    "importScripts",
+    "indexedDB",
+    "caches",
+    "navigator",
+  ]
+
+  for (const name of deniedGlobals) {
+    try {
+      Object.defineProperty(globalThis, name, {
+        configurable: false,
+        enumerable: false,
+        get() {
+          return () => deny(name)
+        },
+        set() {
+          deny(name)
+        },
+      })
+    } catch {
+      // Some browser-provided worker globals may be non-configurable already.
+      // In that case the host must enforce the same policy with CSP / worker origin isolation.
+    }
+  }
+}
+
 function runAppSource(payload: BootPayload) {
   if (!payload.source) return
 
@@ -62,6 +95,9 @@ function runAppSource(payload: BootPayload) {
     "Worker",
     "SharedWorker",
     "importScripts",
+    "indexedDB",
+    "caches",
+    "navigator",
     source,
   )
 
@@ -74,11 +110,15 @@ function runAppSource(payload: BootPayload) {
     () => deny("Worker"),
     () => deny("SharedWorker"),
     () => deny("importScripts"),
+    () => deny("indexedDB"),
+    () => deny("caches"),
+    Object.freeze({}),
   )
 }
 
 function boot(payload: BootPayload) {
   stopped = false
+  hardenWorkerGlobals()
   self.postMessage({ type: "READY" })
   postLog(`boot ${payload.appId}`)
 
