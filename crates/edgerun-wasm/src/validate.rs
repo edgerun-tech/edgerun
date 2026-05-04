@@ -5,7 +5,7 @@ mod wasmparser_mock {
 use anyhow::{Context, Result};
 use edgerun_clap::Parser;
 use std::path::Path;
-use wasmparser::*;
+use wasmparser_mock::wasmparser::*;
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun-validate", about = "Validate EdgeRun WASM modules")]
