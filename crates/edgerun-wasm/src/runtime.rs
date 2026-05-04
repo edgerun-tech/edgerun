@@ -1,6 +1,9 @@
 mod app;
 mod event_loop;
 mod wasmtime_mock;
+mod wasmparser_mock {
+    include!("wasmparser_mock.rs");
+}
 
 use anyhow::{Context, Result};
 use edgerun_clap::Parser;

@@ -1,6 +1,5 @@
 use anyhow::{bail, Context, Result};
-
-use crate::wasmparser_mock;
+use crate::wasmparser_mock::wasmparser::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValueType {
@@ -9,10 +8,10 @@ pub enum ValueType {
 }
 
 impl ValueType {
-    pub fn from_wasm(t: crate::wasmparser_mock::ValType) -> Result<Self> {
+    pub fn from_wasm(t: ValType) -> Result<Self> {
         match t {
-            crate::wasmparser_mock::ValType::I32 => Ok(Self::I32),
-            crate::wasmparser_mock::ValType::I64 => Ok(Self::I64),
+            ValType::I32 => Ok(Self::I32),
+            ValType::I64 => Ok(Self::I64),
             other => bail!("unsupported WASM value type for baseline AOT: {other:?}"),
         }
     }
@@ -95,7 +94,7 @@ pub struct FuncSig {
 }
 
 impl FuncSig {
-    pub fn from_wasm(sig: crate::wasmparser_mock::FuncType) -> Result<Self> {
+    pub fn from_wasm(sig: FuncType) -> Result<Self> {
         Ok(Self {
             params: sig
                 .params()

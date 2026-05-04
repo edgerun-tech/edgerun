@@ -1,3 +1,7 @@
+mod wasmparser_mock {
+    include!("wasmparser_mock.rs");
+}
+
 use anyhow::{bail, Context, Result};
 use edgerun_core::protocol::{
     app::{
@@ -95,7 +99,7 @@ fn validate_scope(scope: &ScopeDescriptor) -> Result<()> {
 }
 
 fn validate_wasm_abi(bytes: &[u8]) -> Result<()> {
-    use wasmparser_mock::Validator;
+    use wasmparser_mock::wasmparser::Validator;
 
     let mut validator = Validator::new();
     validator

@@ -1,7 +1,6 @@
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
-use crate::wasmparser_mock;
-
+use crate::wasmparser_mock::wasmparser::*;
 use super::ir::{
     verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, LoadKind, MemOp, StoreKind, ValueType,
 };
