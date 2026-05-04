@@ -1,28 +1,35 @@
+"use client"
+
 import React from "react"
 import type { AppDefinition } from "@/platform/types/app-definition"
 import { getComponent } from "@/platform/registries/component-registry"
 import { BuiltinAppHost } from "@/platform/runtime/builtin-app-host"
 import { SandboxedWorkerAppHost } from "@/platform/runtime/sandboxed-worker-app-host"
 import { WasmAppHost } from "@/platform/runtime/wasm-app-host"
+import { readRuntimeManifest, type AppRuntimeKind } from "@/platform/runtime/app-runtime-manifest"
 
-export type AppRuntimeKind = "builtin" | "wasm" | "sandboxed-worker" | "blocked"
+export type { AppRuntimeKind }
 
 export interface AppHostContext {
   launchApp?: (app: AppDefinition) => void
 }
 
 export interface AppLaunchPlan {
-  runtime: AppRuntimeKind
+  runtime: AppRuntimeKind | "blocked"
   reason: string
   component: React.ReactNode
 }
 
-function isSandboxedJavaScriptApp(app: AppDefinition): boolean {
-  return app.kind === "external" || app.displayMetadata?.runtime === "sandboxed-worker"
+function declaredRuntime(app: AppDefinition): AppRuntimeKind | undefined {
+  const manifest = readRuntimeManifest(app.displayMetadata)
+  const runtime = manifest.runtime ?? app.displayMetadata?.runtime
+  return runtime === "builtin" || runtime === "wasm" || runtime === "sandboxed-worker" ? runtime : undefined
 }
 
 export function createAppLaunchPlan(app: AppDefinition, context: AppHostContext = {}): AppLaunchPlan {
-  if (app.kind === "wasm" || app.wasmUrl || app.wasmObjectRef) {
+  const runtime = declaredRuntime(app)
+
+  if (runtime === "wasm" || app.kind === "wasm" || app.wasmUrl || app.wasmObjectRef) {
     return {
       runtime: "wasm",
       reason: "WASM apps run inside the WASM host boundary.",
@@ -30,7 +37,7 @@ export function createAppLaunchPlan(app: AppDefinition, context: AppHostContext 
     }
   }
 
-  if (isSandboxedJavaScriptApp(app)) {
+  if (runtime === "sandboxed-worker" || app.kind === "external") {
     return {
       runtime: "sandboxed-worker",
       reason: "JavaScript app logic is isolated in a worker and can only talk through host messages.",
@@ -38,7 +45,7 @@ export function createAppLaunchPlan(app: AppDefinition, context: AppHostContext 
     }
   }
 
-  if (app.kind === "builtin" || app.kind === "demo" || app.source === "builtin" || app.source === "demo") {
+  if (runtime === "builtin" || app.kind === "builtin" || app.kind === "demo" || app.source === "builtin" || app.source === "demo") {
     return {
       runtime: "builtin",
       reason: "Trusted dashboard builtin rendered by the host UI.",
