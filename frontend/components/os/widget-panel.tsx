@@ -24,24 +24,20 @@ const widgetOrderStore = persistentAtom<string[]>("edgerun:widgetOrder", ["music
   decode: (v) => JSON.parse(v),
 })
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface Track {
   title: string
   artist: string
-  duration: number // seconds
+  duration: number
 }
 
 interface Room {
   id: string
   name: string
-  brightness: number // 0-100
+  brightness: number
   on: boolean
 }
 
 type AcMode = "cool" | "heat" | "fan" | "auto"
-
-// ─── Shared slider primitive ──────────────────────────────────────────────────
 
 function Slider({
   value,
@@ -78,8 +74,6 @@ function Slider({
   )
 }
 
-// ─── Music Widget ─────────────────────────────────────────────────────────────
-
 const TRACKS: Track[] = [
   { title: "Dark Matter", artist: "Edge Protocol", duration: 214 },
   { title: "Node Sync", artist: "Binary Ghost", duration: 187 },
@@ -102,6 +96,16 @@ function MusicWidget() {
     return `${m}:${sec.toString().padStart(2, "0")}`
   }
 
+  const next = useCallback(() => {
+    setTrackIdx((i) => (i + 1) % TRACKS.length)
+    setProgress(0)
+  }, [])
+
+  const prev = useCallback(() => {
+    setTrackIdx((i) => (i - 1 + TRACKS.length) % TRACKS.length)
+    setProgress(0)
+  }, [])
+
   useEffect(() => {
     if (playing) {
       intervalRef.current = setInterval(() => {
@@ -113,26 +117,13 @@ function MusicWidget() {
           return p + 1
         })
       }, 1000)
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current)
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current)
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, trackIdx])
-
-  const next = useCallback(() => {
-    setTrackIdx((i) => (i + 1) % TRACKS.length)
-    setProgress(0)
-  }, [])
-
-  const prev = useCallback(() => {
-    setTrackIdx((i) => (i - 1 + TRACKS.length) % TRACKS.length)
-    setProgress(0)
-  }, [])
+  }, [playing, track.duration, next])
 
   const pct = (progress / track.duration) * 100
-
-  // Waveform bars (static visual, animated when playing)
   const bars = [3, 6, 9, 5, 11, 8, 4, 10, 7, 5, 9, 6]
 
   return (
@@ -142,15 +133,11 @@ function MusicWidget() {
         <span>Music</span>
       </div>
 
-      {/* Waveform */}
       <div className="mb-3 flex h-8 items-end justify-center gap-px">
         {bars.map((h, i) => (
           <div
             key={i}
-            className={cn(
-              "w-1 rounded-sm transition-all",
-              playing ? "bg-primary" : "bg-secondary"
-            )}
+            className={cn("w-1 rounded-sm transition-all", playing ? "bg-primary" : "bg-secondary")}
             style={{
               height: playing ? `${h * 3}px` : "6px",
               animation: playing ? `widget-bar ${0.4 + i * 0.05}s ease-in-out infinite alternate` : "none",
@@ -160,20 +147,17 @@ function MusicWidget() {
         ))}
       </div>
 
-      {/* Track info */}
       <div className="mb-2 text-center">
         <p className="truncate text-sm font-semibold text-foreground">{track.title}</p>
         <p className="text-[11px] text-muted-foreground">{track.artist}</p>
       </div>
 
-      {/* Progress */}
       <div className="mb-1 flex items-center gap-2">
         <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">{fmt(progress)}</span>
         <Slider value={pct} onChange={(v) => setProgress((v / 100) * track.duration)} />
         <span className="w-8 font-mono text-[10px] text-muted-foreground">{fmt(track.duration)}</span>
       </div>
 
-      {/* Controls */}
       <div className="mb-3 flex items-center justify-center gap-4">
         <button onClick={prev} className="widget-icon-btn"><SkipBack className="h-4 w-4" /></button>
         <button
@@ -185,7 +169,6 @@ function MusicWidget() {
         <button onClick={next} className="widget-icon-btn"><SkipForward className="h-4 w-4" /></button>
       </div>
 
-      {/* Volume */}
       <div className="flex items-center gap-2">
         <Volume2 className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
         <Slider value={volume} onChange={setVolume} />
@@ -194,8 +177,6 @@ function MusicWidget() {
     </div>
   )
 }
-
-// ─── Lights Widget ────────────────────────────────────────────────────────────
 
 const SCENES = ["Ambient", "Focus", "Movie", "Night", "Off"]
 const INITIAL_ROOMS: Room[] = [
@@ -209,16 +190,12 @@ function LightsWidget() {
   const [activeScene, setActiveScene] = useState<string | null>("Focus")
 
   const setRoomBrightness = (id: string, brightness: number) => {
-    setRooms((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, brightness, on: brightness > 0 } : r))
-    )
+    setRooms((prev) => prev.map((r) => (r.id === id ? { ...r, brightness, on: brightness > 0 } : r)))
     setActiveScene(null)
   }
 
   const toggleRoom = (id: string) => {
-    setRooms((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, on: !r.on } : r))
-    )
+    setRooms((prev) => prev.map((r) => (r.id === id ? { ...r, on: !r.on } : r)))
     setActiveScene(null)
   }
 
@@ -226,18 +203,15 @@ function LightsWidget() {
     setActiveScene(scene)
     const presets: Record<string, number[]> = {
       Ambient: [55, 55, 40],
-      Focus:   [100, 80, 0],
-      Movie:   [15, 20, 0],
-      Night:   [10, 0, 15],
-      Off:     [0, 0, 0],
+      Focus: [100, 80, 0],
+      Movie: [15, 20, 0],
+      Night: [10, 0, 15],
+      Off: [0, 0, 0],
     }
     const vals = presets[scene] ?? [50, 50, 50]
-    setRooms((prev) =>
-      prev.map((r, i) => ({ ...r, brightness: vals[i], on: vals[i] > 0 }))
-    )
+    setRooms((prev) => prev.map((r, i) => ({ ...r, brightness: vals[i], on: vals[i] > 0 })))
   }
 
-  // Amber tint for lights color
   const LIGHT_COLOR = "oklch(0.78 0.15 75)"
 
   return (
@@ -247,23 +221,17 @@ function LightsWidget() {
         <span>Lights</span>
       </div>
 
-      {/* Rooms */}
       <div className="mb-3 flex flex-col gap-2.5">
         {rooms.map((room) => (
           <div key={room.id} className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
               <button
                 onClick={() => toggleRoom(room.id)}
-                className={cn(
-                  "text-left text-xs font-medium transition-colors",
-                  room.on ? "text-foreground" : "text-muted-foreground"
-                )}
+                className={cn("text-left text-xs font-medium transition-colors", room.on ? "text-foreground" : "text-muted-foreground")}
               >
                 {room.name}
               </button>
-              <span className="font-mono text-[10px] text-muted-foreground">
-                {room.on ? `${room.brightness}%` : "off"}
-              </span>
+              <span className="font-mono text-[10px] text-muted-foreground">{room.on ? `${room.brightness}%` : "off"}</span>
             </div>
             <Slider
               value={room.on ? room.brightness : 0}
@@ -274,7 +242,6 @@ function LightsWidget() {
         ))}
       </div>
 
-      {/* Scene presets */}
       <div className="flex flex-wrap gap-1">
         {SCENES.map((s) => (
           <button
@@ -295,19 +262,17 @@ function LightsWidget() {
   )
 }
 
-// ─── AC Widget ────────────────────────────────────────────────────────────────
-
 const AC_MODES: { id: AcMode; label: string; icon: React.ReactNode }[] = [
   { id: "cool", label: "Cool", icon: <Droplets className="h-3 w-3" /> },
   { id: "heat", label: "Heat", icon: <Thermometer className="h-3 w-3" /> },
-  { id: "fan",  label: "Fan",  icon: <Wind className="h-3 w-3" /> },
+  { id: "fan", label: "Fan", icon: <Wind className="h-3 w-3" /> },
   { id: "auto", label: "Auto", icon: <Wind className="h-3 w-3" /> },
 ]
 
 const MODE_COLORS: Record<AcMode, string> = {
   cool: "oklch(0.6 0.18 220)",
   heat: "oklch(0.65 0.2 35)",
-  fan:  "var(--primary)",
+  fan: "var(--primary)",
   auto: "oklch(0.6 0.15 280)",
 }
 
@@ -315,12 +280,10 @@ function AcWidget() {
   const [on, setOn] = useState(true)
   const [temp, setTemp] = useState(22)
   const [mode, setMode] = useState<AcMode>("cool")
-  const [fanSpeed, setFanSpeed] = useState(2) // 1-4
+  const [fanSpeed, setFanSpeed] = useState(2)
   const fanLabels = ["Low", "Med", "High", "Max"]
-
   const modeColor = MODE_COLORS[mode]
 
-  // Arc path for temperature dial
   const ARC_R = 36
   const ARC_CX = 52
   const ARC_CY = 52
@@ -331,15 +294,12 @@ function AcWidget() {
   const endAngle = 40 * (Math.PI / 180)
   const angle = startAngle + pct * (endAngle - startAngle)
   const largeArc = pct > 0.5 ? 1 : 0
-
   const toPathCoord = (v: number) => v.toFixed(2)
 
-  // Full track arc
   const tx1 = toPathCoord(ARC_CX + ARC_R * Math.cos(startAngle))
   const ty1 = toPathCoord(ARC_CY + ARC_R * Math.sin(startAngle))
   const tx2 = toPathCoord(ARC_CX + ARC_R * Math.cos(endAngle))
   const ty2 = toPathCoord(ARC_CY + ARC_R * Math.sin(endAngle))
-  // Filled arc
   const fx1 = toPathCoord(ARC_CX + ARC_R * Math.cos(startAngle))
   const fy1 = toPathCoord(ARC_CY + ARC_R * Math.sin(startAngle))
   const fx2 = toPathCoord(ARC_CX + ARC_R * Math.cos(angle))
@@ -352,61 +312,29 @@ function AcWidget() {
         <span>Climate</span>
         <button
           onClick={() => setOn((o) => !o)}
-          className={cn(
-            "ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium transition-all",
-            on
-              ? "bg-primary/15 text-primary"
-              : "bg-secondary text-muted-foreground"
-          )}
+          className={cn("ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium transition-all", on ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground")}
         >
           {on ? "ON" : "OFF"}
         </button>
       </div>
 
-      {/* Dial */}
       <div className={cn("relative flex justify-center transition-opacity", !on && "opacity-30 pointer-events-none")}>
         <div className="relative">
           <svg width="104" height="80" viewBox="0 0 104 80">
-            {/* Track */}
-            <path
-              d={`M ${tx1} ${ty1} A ${ARC_R} ${ARC_R} 0 1 1 ${tx2} ${ty2}`}
-              fill="none"
-              stroke="var(--secondary)"
-              strokeWidth="5"
-              strokeLinecap="round"
-            />
-            {/* Filled */}
+            <path d={`M ${tx1} ${ty1} A ${ARC_R} ${ARC_R} 0 1 1 ${tx2} ${ty2}`} fill="none" stroke="var(--secondary)" strokeWidth="5" strokeLinecap="round" />
             {pct > 0 && (
-              <path
-                d={`M ${fx1} ${fy1} A ${ARC_R} ${ARC_R} 0 ${largeArc} 1 ${fx2} ${fy2}`}
-                fill="none"
-                stroke={modeColor}
-                strokeWidth="5"
-                strokeLinecap="round"
-                style={{ transition: "d 0.15s ease" }}
-              />
+              <path d={`M ${fx1} ${fy1} A ${ARC_R} ${ARC_R} 0 ${largeArc} 1 ${fx2} ${fy2}`} fill="none" stroke={modeColor} strokeWidth="5" strokeLinecap="round" style={{ transition: "d 0.15s ease" }} />
             )}
-            {/* Thumb */}
             <circle cx={fx2} cy={fy2} r="6" fill={modeColor} />
           </svg>
-          {/* Center temp display */}
           <div className="absolute inset-0 flex flex-col items-center justify-center pb-2">
-            <button
-              onClick={() => setTemp((t) => Math.max(minTemp, t - 1))}
-              className="text-[16px] leading-none text-muted-foreground hover:text-foreground"
-            >−</button>
-            <span className="font-mono text-xl font-bold leading-tight" style={{ color: modeColor }}>
-              {temp}°
-            </span>
-            <button
-              onClick={() => setTemp((t) => Math.min(maxTemp, t + 1))}
-              className="text-[16px] leading-none text-muted-foreground hover:text-foreground"
-            >+</button>
+            <button onClick={() => setTemp((t) => Math.max(minTemp, t - 1))} className="text-[16px] leading-none text-muted-foreground hover:text-foreground">−</button>
+            <span className="font-mono text-xl font-bold leading-tight" style={{ color: modeColor }}>{temp}°</span>
+            <button onClick={() => setTemp((t) => Math.min(maxTemp, t + 1))} className="text-[16px] leading-none text-muted-foreground hover:text-foreground">+</button>
           </div>
         </div>
       </div>
 
-      {/* Mode pills */}
       <div className={cn("mb-3 flex gap-1", !on && "opacity-30 pointer-events-none")}>
         {AC_MODES.map((m) => (
           <button
@@ -414,9 +342,7 @@ function AcWidget() {
             onClick={() => setMode(m.id)}
             className={cn(
               "flex flex-1 items-center justify-center gap-1 rounded-md border py-1 text-[10px] font-medium transition-all",
-              mode === m.id
-                ? "border-[var(--mode-c)] bg-[var(--mode-c)]/15 text-[var(--mode-c)]"
-                : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"
+              mode === m.id ? "border-[var(--mode-c)] bg-[var(--mode-c)]/15 text-[var(--mode-c)]" : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground"
             )}
             style={{ "--mode-c": modeColor } as React.CSSProperties}
           >
@@ -426,7 +352,6 @@ function AcWidget() {
         ))}
       </div>
 
-      {/* Fan speed */}
       <div className={cn("flex items-center gap-2", !on && "opacity-30 pointer-events-none")}>
         <Wind className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
         <div className="flex flex-1 gap-1">
@@ -434,24 +359,17 @@ function AcWidget() {
             <button
               key={s}
               onClick={() => setFanSpeed(s)}
-              className={cn(
-                "h-1.5 flex-1 rounded-full transition-all",
-                s <= fanSpeed ? "opacity-100" : "opacity-25"
-              )}
+              className={cn("h-1.5 flex-1 rounded-full transition-all", s <= fanSpeed ? "opacity-100" : "opacity-25")}
               style={{ background: s <= fanSpeed ? modeColor : "var(--secondary)" }}
               title={fanLabels[s - 1]}
             />
           ))}
         </div>
-        <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">
-          {fanLabels[fanSpeed - 1]}
-        </span>
+        <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">{fanLabels[fanSpeed - 1]}</span>
       </div>
     </div>
   )
 }
-
-// ─── Widget Panel ─────────────────────────────────────────────────────────────
 
 interface WidgetPanelProps {
   visible: boolean
@@ -495,27 +413,20 @@ export function WidgetPanel({ visible, onToggle }: WidgetPanelProps) {
 
   return (
     <>
-      {/* Toggle tab */}
       <button
         onClick={onToggle}
         className={cn(
-          "absolute right-0 top-1/2 z-40 flex h-16 w-5 -translate-y-1/2 flex-col items-center justify-center rounded-l-md border border-r-0 border-border bg-[var(--window-bg)]/80 backdrop-blur-md transition-all hover:bg-secondary",
+          "absolute right-0 top-1/2 z-50 flex h-16 w-5 -translate-y-1/2 flex-col items-center justify-center rounded-l-md border border-r-0 border-border bg-[var(--window-bg)]/90 backdrop-blur-md transition-[right,background-color] hover:bg-secondary",
           visible && "right-[220px]"
         )}
         title={visible ? "Hide widgets" : "Show widgets"}
       >
-        <ChevronRight
-          className={cn(
-            "h-3 w-3 text-muted-foreground transition-transform duration-300",
-            visible ? "rotate-0" : "rotate-180"
-          )}
-        />
+        <ChevronRight className={cn("h-3 w-3 text-muted-foreground transition-transform duration-300", visible ? "rotate-0" : "rotate-180")} />
       </button>
 
-      {/* Panel */}
-      <div
+      <aside
         className={cn(
-          "absolute right-0 top-10 bottom-16 z-30 flex w-[220px] flex-col gap-2 overflow-y-auto overflow-x-hidden p-2 transition-transform duration-300 ease-out",
+          "absolute right-0 top-0 bottom-20 z-40 flex w-[220px] flex-col gap-2 overflow-y-auto overflow-x-hidden border-l border-border/40 bg-background/20 p-2 backdrop-blur-sm transition-transform duration-300 ease-out",
           visible ? "translate-x-0" : "translate-x-full"
         )}
         style={{ scrollbarWidth: "none" }}
@@ -528,10 +439,7 @@ export function WidgetPanel({ visible, onToggle }: WidgetPanelProps) {
             onDragEnter={() => handleDragEnter(index)}
             onDragEnd={handleDragEnd}
             onDragOver={(e) => e.preventDefault()}
-            className={cn(
-              "group relative",
-              isDragging && "cursor-grabbing"
-            )}
+            className={cn("group relative", isDragging && "cursor-grabbing")}
           >
             <div className="absolute -left-1 top-3 z-10 flex h-5 w-5 cursor-grab items-center justify-center rounded opacity-0 transition-opacity hover:bg-secondary/80 group-hover:opacity-100">
               <GripVertical className="h-3 w-3 text-muted-foreground" />
@@ -539,7 +447,7 @@ export function WidgetPanel({ visible, onToggle }: WidgetPanelProps) {
             {widgetMap[key]}
           </div>
         ))}
-      </div>
+      </aside>
     </>
   )
 }
