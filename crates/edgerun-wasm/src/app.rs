@@ -22,7 +22,8 @@ pub struct LoadedApp {
 }
 
 pub fn load_app(package_bytes: &[u8], wasm_bytes: &[u8], domain: &str) -> Result<LoadedApp> {
-    let package = AppPackage::decode(package_bytes).context("failed to decode AppPackage")?;
+    let package = decode_native_app_message::<AppPackage>(package_bytes)
+        .context("failed to decode AppPackage")?;
 
     validate_app_package(&package)?;
 

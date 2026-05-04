@@ -215,7 +215,7 @@ trait AssetRefJsonExt {
 
 impl AssetRefJsonExt for AssetRef {
     fn asset_ref_to_json(&self) -> edgerun_json::JsonValue {
-        let mut map = std::collections::BTreeMap::new();
+        let mut map = edgerun_json::Map::new();
         map.insert("symbol".into(), self.symbol.to_json());
         map.insert("network".into(), self.network.to_json());
         map.insert("contract".into(), self.contractx_ref_to_json(t));
@@ -225,7 +225,7 @@ impl AssetRefJsonExt for AssetRef {
 }
 
 fn tx_ref_to_json(tx: &TxRef) -> edgerun_json::JsonValue {
-    let mut map = std::collections::BTreeMap::new();
+    let mut map = edgerun_json::Map::new();
     map.insert("tx_id".into(), tx.tx_id.to_json());
     map.insert("network".into(), tx.network.to_json());
     map.insert("confirmations".into(), tx.confirmations.to_json());

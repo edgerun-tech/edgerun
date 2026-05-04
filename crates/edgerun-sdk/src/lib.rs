@@ -1,7 +1,8 @@
-use std::collections::HashMap;
 #![no_std]
 
 extern crate alloc;
+
+use std::collections::HashMap;
 
 use alloc::string::String;
 use alloc::vec;
@@ -800,7 +801,7 @@ pub fn render_with_status(status: u16, root: UiNode) -> Response {
 
 /// Deserialize UiNode from response bytes.
 pub fn parse_ui(bytes: &[u8]) -> Option<UiNode> {
-        decode_ui_node_native(bytes)
+    decode_ui_node_native(bytes)
 }
 
 fn decode_ui_node_native(_bytes: &[u8]) -> Option<UiNode> {

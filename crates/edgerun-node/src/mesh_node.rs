@@ -45,8 +45,6 @@ use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::MeshRouter;
 use edgerun_mesh::{LocalNode, MeshFrame};
 use edgerun_mesh_link::MeshLink;
-use edgerun_proto::edgerun::v0::stream as proto_stream;
-use prost::Message;
 
 /// A mesh-connected edgerun node.
 ///
@@ -131,7 +129,8 @@ impl MeshNode {
     /// The command will be signed and sent on the next tick.
     pub fn send_command(&mut self, dest: NodeID, command: &CommandEnvelope) {
         let mut buf = Vec::new();
-        proto_stream::CommandEnvelope::encode(command, &mut buf).unwrap_or_default();
+        edgerun_core::protocol::stream::CommandEnvelope::encode(command, &mut buf)
+            .unwrap_or_default();
         let mut frame = MeshFrame::from_payload(dest, buf);
         self.sign_frame(&mut frame);
         self.mesh_link.queue_frame(frame);
@@ -197,7 +196,7 @@ impl MeshNode {
 
     /// Decodes a mesh frame as a command envelope.
     fn decode_command(frame: &MeshFrame) -> Option<CommandEnvelope> {
-        proto_stream::CommandEnvelope::decode(&frame.payload[..]).ok()
+        edgerun_core::protocol::stream::CommandEnvelope::decode(&frame.payload[..]).ok()
     }
 
     /// Creates a new frame with the given destination, preserving the payload.
@@ -225,7 +224,6 @@ mod tests {
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
     use edgerun_proto::edgerun::v0::common as proto_common;
-    use edgerun_proto::edgerun::v0::stream as proto_stream;
 
     struct TestSigner {
         node_id: NodeID,
@@ -312,7 +310,7 @@ metadata:
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         // Build a command using the proto type directly
-        let command = proto_stream::CommandEnvelope {
+        let command = edgerun_core::protocol::stream::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: Some(proto_common::NodeRef {
@@ -339,7 +337,7 @@ metadata:
 
         // Encode and deliver as a frame
         let mut buf = Vec::new();
-        proto_stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
+        edgerun_core::protocol::stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
         let mut frame = MeshFrame::from_payload(node.identity(), buf);
         frame.header.src = node.identity();
         frame.signature = [0u8; 64];
@@ -363,7 +361,7 @@ metadata:
         let mut bob = MeshNode::from_config(config_b, signer_b).unwrap();
 
         // Build a command using the proto type directly
-        let command = proto_stream::CommandEnvelope {
+        let command = edgerun_core::protocol::stream::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: Some(proto_common::NodeRef {
@@ -390,7 +388,7 @@ metadata:
 
         // Encode and deliver as a frame (fake signature)
         let mut buf = Vec::new();
-        proto_stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
+        edgerun_core::protocol::stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
         let mut frame = MeshFrame::from_payload(bob.identity(), buf);
         frame.header.src = node_a_id;
         frame.signature = [0u8; 64];
@@ -431,7 +429,7 @@ metadata:
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         let dest = NodeID([0xAAu8; 64]);
-        let command = proto_stream::CommandEnvelope {
+        let command = edgerun_core::protocol::stream::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: Some(proto_common::NodeRef {
@@ -553,7 +551,7 @@ metadata:
         let signer = Box::new(TestSigner::new());
         let node = MeshNode::from_config(config, signer).unwrap();
 
-        let command = proto_stream::CommandEnvelope {
+        let command = edgerun_core::protocol::stream::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: Some(proto_common::NodeRef {
@@ -575,7 +573,7 @@ metadata:
         };
 
         let mut buf = Vec::new();
-        proto_stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
+        edgerun_core::protocol::stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
         let frame = MeshFrame::from_payload(node.identity(), buf);
         let decoded = MeshNode::decode_command(&frame);
         assert!(decoded.is_some());
