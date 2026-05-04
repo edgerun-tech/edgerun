@@ -2,7 +2,7 @@
 //!
 //! Provides:
 //! - **`MeshCapabilityTransport`** — wraps the mesh to send/receive
-//!   `CapabilityRemoteEnvelope` protobuf messages routed by `NodeID`.
+//!   `CapabilityRemoteEnvelope` native capability messages routed by `NodeID`.
 //! - **`MeshCapabilityServer`** — hosts local `RemoteCapabilityProvider`
 //!   instances and serves inbound requests routed to this node.
 //! - **`MeshCapabilityClient`** — initiates sessions with remote nodes
@@ -87,13 +87,12 @@ use crate::collections::VecDeque;
 use crate::prelude::v1::*;
 use crate::sync::{Arc, Mutex};
 use edgerun_capabilities::CapabilityError;
-use edgerun_hardware_signing::NodeID;
-use edgerun_mesh_link::MeshLink;
-use edgerun_proto::edgerun::v0::capability_runtime::{
+use edgerun_core::protocol::capability_runtime::{
     capability_remote_envelope, CapabilityRemoteEnvelope,
 };
+use edgerun_hardware_signing::NodeID;
+use edgerun_mesh_link::MeshLink;
 use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteCapabilityTransport};
-use prost::Message;
 
 pub use client::MeshCapabilityClient;
 pub use dispatcher::MeshEnvelopeDispatcher;
@@ -101,7 +100,7 @@ pub use inbox::EnvelopeInbox;
 pub use server::MeshCapabilityServer;
 pub use transport::MeshCapabilityTransport;
 
-/// Shared outbound queue: (destination NodeID, serialized protobuf payload).
+/// Shared outbound queue: (destination NodeID, serialized native payload).
 /// Used by `MeshCapabilityTransport::send()` to push frames that the daemon
 /// will drain, encrypt, and send.
 ///

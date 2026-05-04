@@ -2,16 +2,15 @@ use crate::collections::{HashMap, VecDeque};
 use crate::prelude::v1::*;
 use crate::sync::{Arc, Mutex};
 use edgerun_capabilities::CapabilityError;
+use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
+use edgerun_core::protocol::capability_runtime::{
+    capability_remote_envelope, CapabilityRemoteEnvelope,
+};
 use edgerun_hardware_signing::NodeID;
 #[allow(unused_imports)] // used in tests
 use edgerun_mesh::{FrameType, MeshFrame, MeshFrameHeader};
 use edgerun_mesh_link::MeshLink;
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    capability_remote_envelope, CapabilityRemoteEnvelope,
-};
 use edgerun_remote_capability::RemoteCapabilityProvider;
-use prost::Message;
 
 use super::*;
 
@@ -79,7 +78,7 @@ impl MeshEnvelopeDispatcher {
     /// was registered for the sender.
     pub fn deliver(&mut self, frame: &MeshFrame) -> bool {
         // The payload is a protobuf CapabilityRemoteEnvelope
-        let envelope = match CapabilityRemoteEnvelope::decode(frame.payload.as_slice()) {
+        let envelope = match decode_capability_remote_envelope(frame.payload.as_slice()) {
             Ok(e) => e,
             Err(_) => return false,
         };

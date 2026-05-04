@@ -256,7 +256,7 @@ pub fn encode_exchange_event(event: &ExchangeEvent) -> ExchangeStreamPayload {
 }
 
 pub fn decode_exchange_event(event_type: i32, payload_bytes: &[u8]) -> Option<ExchangeEvent> {
-    let event_type = EventType::try_from(event_type).ok()?;
+    let event_type = edgerun_core::protocol::enum_from_i32::<EventType>(event_type)?;
     if !matches!(
         event_type,
         EventType::WalletQuoteCreated

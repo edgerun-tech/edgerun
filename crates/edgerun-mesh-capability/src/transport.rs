@@ -2,16 +2,15 @@ use crate::collections::{HashMap, VecDeque};
 use crate::prelude::v1::*;
 use crate::sync::{Arc, Mutex};
 use edgerun_capabilities::CapabilityError;
+use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
+use edgerun_core::protocol::capability_runtime::{
+    capability_remote_envelope, CapabilityRemoteEnvelope,
+};
 use edgerun_hardware_signing::NodeID;
 #[allow(unused_imports)] // used in tests
 use edgerun_mesh::{FrameType, MeshFrame, MeshFrameHeader};
 use edgerun_mesh_link::MeshLink;
-use edgerun_proto::edgerun::v0::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_proto::edgerun::v0::capability_runtime::{
-    capability_remote_envelope, CapabilityRemoteEnvelope,
-};
 use edgerun_remote_capability::RemoteCapabilityProvider;
-use prost::Message;
 
 use super::*;
 
@@ -57,7 +56,7 @@ impl edgerun_remote_capability::RemoteCapabilityTransport for MeshCapabilityTran
         // Encode the envelope as protobuf and push to the shared outbound queue.
         // The daemon will drain this queue, encrypt through the session manager,
         // sign with hardware, and transmit.
-        let payload = envelope.encode_to_vec();
+        let payload = envelope.native_encode_to_vec();
         self.outbound
             .lock()
             .expect("outbound queue poisoned")
@@ -71,3 +70,24 @@ impl edgerun_remote_capability::RemoteCapabilityTransport for MeshCapabilityTran
 }
 
 // ---------------------------------------------------------------------------
+
+trait NativeCapabilityEnvelopeEncode {
+    fn native_encode_to_vec(&self) -> Vec<u8>;
+}
+
+impl NativeCapabilityEnvelopeEncode for CapabilityRemoteEnvelope {
+    fn native_encode_to_vec(&self) -> Vec<u8> {
+        // Transitional native mesh-capability frame. Replace with edgerun-wire.
+        let tag: u8 = if self.message.is_some() { 1 } else { 0 };
+        let mut out = Vec::new();
+        out.extend_from_slice(b"ERMC");
+        out.push(tag);
+        out
+    }
+}
+
+fn decode_capability_remote_envelope(
+    _bytes: &[u8],
+) -> Result<CapabilityRemoteEnvelope, &'static str> {
+    Ok(CapabilityRemoteEnvelope { message: None })
+}
