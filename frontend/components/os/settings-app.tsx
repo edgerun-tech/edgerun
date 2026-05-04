@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
-import { useStore } from "@nanostores/react"
 import {
   Bell,
   Check,
@@ -30,7 +29,7 @@ import {
 } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
-import { desktopTelemetryVisibleStore } from "@/stores/desktop-store"
+import { CodelyzerNetworkPanel } from "@/components/sections/codelyzer-network"
 import { cn } from "@/lib/utils"
 import { EdgerunLogo } from "./edgerun-logo"
 
@@ -50,11 +49,11 @@ type SectionMeta = {
 }
 
 const SECTIONS: SectionMeta[] = [
-  { id: "appearance", label: "Appearance", hint: "Desktop, windows, dock", icon: <Palette className="h-4 w-4" /> },
+  { id: "appearance", label: "Appearance", hint: "Desktop, glow, dock", icon: <Palette className="h-4 w-4" /> },
   { id: "privacy", label: "Privacy", hint: "Identity and local data", icon: <Shield className="h-4 w-4" /> },
-  { id: "network", label: "Network", hint: "Peers, region, bandwidth", icon: <Globe className="h-4 w-4" /> },
+  { id: "network", label: "Network", hint: "Codelyzer bridge and graph links", icon: <Globe className="h-4 w-4" /> },
   { id: "notifications", label: "Alerts", hint: "System and app signals", icon: <Bell className="h-4 w-4" /> },
-  { id: "performance", label: "Performance", hint: "Resource policy", icon: <Cpu className="h-4 w-4" /> },
+  { id: "performance", label: "Performance", hint: "Runtime policy", icon: <Cpu className="h-4 w-4" /> },
   { id: "about", label: "About", hint: "Build and runtime", icon: <Info className="h-4 w-4" /> },
 ]
 
@@ -118,10 +117,8 @@ function AccentButton({ active, color, label, onClick }: { active: boolean; colo
 
 function AppearancePanel() {
   const [accentColor, setAccentColor] = useState("green")
-  const [globeOpacity, setGlobeOpacity] = useState(40)
   const [windowBlur, setWindowBlur] = useState(true)
   const [animations, setAnimations] = useState(true)
-  const desktopTelemetry = useStore(desktopTelemetryVisibleStore)
   const [fontSize, setFontSize] = useState(13)
   const [dockPosition, setDockPosition] = useState("bottom")
 
@@ -136,7 +133,7 @@ function AppearancePanel() {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
       <div className="space-y-4">
-        <SettingsCard title="Desktop" description="Make the shell feel like an operating system, not a website.">
+        <SettingsCard title="Desktop" description="Keep the shell beautiful, calm, and useful.">
           <div className="space-y-3">
             <div className="grid grid-cols-5 gap-2">
               {accents.map(a => (
@@ -149,18 +146,16 @@ function AppearancePanel() {
                 />
               ))}
             </div>
-            <SettingRow label="Window blur" sub="Frosted glass depth on app windows." right={<Switch checked={windowBlur} onCheckedChange={setWindowBlur} size="sm" />} />
-            <SettingRow label="Animations" sub="Window, dock, and panel motion." right={<Switch checked={animations} onCheckedChange={setAnimations} size="sm" />} />
-            <SettingRow label="Background telemetry" sub="Conky-style resource and earnings layer behind windows." right={<Switch checked={desktopTelemetry} onCheckedChange={desktopTelemetryVisibleStore.set} size="sm" />} />
+            <SettingRow label="Window blur" sub="Frosted glass depth on app surfaces." right={<Switch checked={windowBlur} onCheckedChange={setWindowBlur} size="sm" />} />
+            <SettingRow label="Animations" sub="Window, dock, and xray motion." right={<Switch checked={animations} onCheckedChange={setAnimations} size="sm" />} />
           </div>
         </SettingsCard>
 
         <SettingsCard title="Layout" description="Tune density for the amount of work on screen.">
-          <SettingRow label="Globe opacity" sub="Background globe visibility." right={<SliderControl value={globeOpacity} onChange={setGlobeOpacity} />} />
           <SettingRow label="Font size" sub="Base UI scale for compact desktop use." right={<SliderControl value={fontSize} onChange={setFontSize} min={11} max={18} suffix="px" />} />
           <SettingRow
             label="Dock position"
-            sub="Apps can later request preferred window size and dock behavior."
+            sub="Dock currently renders at the bottom; other placements can be added after the current model settles."
             right={
               <div className="flex rounded-lg border border-[var(--window-border)] bg-secondary/40 p-1">
                 {["bottom", "left", "right"].map(p => (
@@ -188,13 +183,13 @@ function AppearancePanel() {
               <Badge variant="secondary" className="mb-4 gap-1.5 bg-primary/10 text-primary">
                 <Sparkles className="h-3 w-3" /> Live preview
               </Badge>
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">node telemetry</p>
-              <p className="mt-2 font-mono text-2xl text-foreground">12 peers</p>
-              <p className="mt-1 text-xs text-muted-foreground">3 sessions · 4.2 / 8 GB</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">xray workspace</p>
+              <p className="mt-2 font-mono text-2xl text-foreground">graph-first</p>
+              <p className="mt-1 text-xs text-muted-foreground">glowing panels · dock pages · app surfaces</p>
             </div>
             <div className="space-y-2 font-mono text-[10px] text-muted-foreground/60">
-              <div className="flex justify-between"><span>EDGE / hour</span><span className="text-primary">0.339</span></div>
-              <div className="flex justify-between"><span>resource mode</span><span>balanced</span></div>
+              <div className="flex justify-between"><span>layout</span><span className="text-primary">automatic</span></div>
+              <div className="flex justify-between"><span>app model</span><span>surface</span></div>
               <div className="h-1.5 rounded-full bg-secondary"><div className="h-full w-3/5 rounded-full bg-primary" /></div>
             </div>
           </div>
@@ -244,33 +239,18 @@ function PrivacyPanel() {
 
 function NetworkPanel() {
   const [vpn, setVpn] = useState(false)
-  const [torRelay, setTorRelay] = useState(false)
+  const [relayMode, setRelayMode] = useState(false)
   const [p2pDiscovery, setP2pDiscovery] = useState(true)
-  const [bandwidth, setBandwidth] = useState(50)
   const [region, setRegion] = useState("auto")
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Latency", val: "14ms" },
-          { label: "Peers", val: "12" },
-          { label: "Upload", val: "2.4 MB/s" },
-        ].map(s => (
-          <Card key={s.label} className="gap-1 border-[var(--window-border)] bg-card/55 py-4 text-center shadow-none">
-            <CardContent className="px-3">
-              <p className="font-mono text-lg font-semibold text-primary">{s.val}</p>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{s.label}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <CodelyzerNetworkPanel />
 
       <SettingsCard title="Routing" description="Separate trust from transport so hostile networks can still relay sealed packets.">
         <SettingRow label="VPN tunnel" sub="Route traffic through Edgerun VPN." right={<Switch checked={vpn} onCheckedChange={setVpn} size="sm" />} />
-        <SettingRow label="Relay mode" sub="Contribute spare bandwidth as a paid relay." right={<Switch checked={torRelay} onCheckedChange={setTorRelay} size="sm" />} />
+        <SettingRow label="Relay mode" sub="Contribute spare bandwidth as a paid relay." right={<Switch checked={relayMode} onCheckedChange={setRelayMode} size="sm" />} />
         <SettingRow label="P2P discovery" sub="Allow peers to discover this node." right={<Switch checked={p2pDiscovery} onCheckedChange={setP2pDiscovery} size="sm" />} />
-        <SettingRow label="Bandwidth limit" sub={`${bandwidth === 100 ? "Unlimited" : `${bandwidth}%`} of available bandwidth.`} right={<SliderControl value={bandwidth} onChange={setBandwidth} />} />
         <SettingRow
           label="Region"
           sub="Use auto unless you need deterministic routing."
