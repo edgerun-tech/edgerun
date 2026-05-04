@@ -1,9 +1,10 @@
 import type React from "react"
-import { windowsStore, openWindow, closeWindow, addLog, type OpenWindowDef } from "./desktop-store"
+import { windowsStore, openWindow, closeWindow, addLog, pendingGateStore, type OpenWindowDef } from "./desktop-store"
 import { getBuiltinApp, BUILTIN_ICON_MAP } from "@/platform/registries/builtin-app-registry"
 import { getDefaultSize } from "@/platform/registries/window-registry"
 import { createAppLaunchPlan } from "@/platform/runtime/app-manager"
 import { isAppInstalled } from "@/stores/installed-apps-store"
+import { getMissingCapabilities } from "@/stores/local-capability-grants-store"
 import type { AppDefinition } from "@/platform/types/app-definition"
 
 export function getAppIcon(appId: string): React.ReactNode {
@@ -21,6 +22,13 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): Open
   }
 
   if (!component) {
+    const missing = getMissingCapabilities(app.appId, app.requiredCapabilityIds)
+    if (missing.length > 0) {
+      pendingGateStore.set({ app, blocked: missing })
+      addLog("warning", `${app.name} requires permission: ${missing.join(", ")}`)
+      return null
+    }
+
     const plan = createAppLaunchPlan(app, { launchApp })
     component = plan.component
     addLog("info", `${app.name} runtime: ${plan.runtime}`)
