@@ -1,7 +1,6 @@
 /**
  * App definition types for the platform.
  * Canonical app metadata used by the app registry, launcher, and AppStore UI.
- * Replaces the old AppDefinition interface in components/os/app-store.tsx.
  *
  * No fake RAM/CPU/price as truth.
  * If unknown, show unknown.
@@ -10,10 +9,9 @@
  */
 
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
-import { edgerun } from "@/gen/edgerun/v0/common"
 
 export type AppKind = "builtin" | "installed" | "wasm" | "external" | "preview"
-export type AppSource = "node" | "builtin" | "preview"
+export type AppSource = "node" | "builtin" | "preview" | "catalog"
 export type AppStatus = "available" | "installed" | "running" | "blocked" | "preview"
 
 export interface AppFootprint {
@@ -21,6 +19,27 @@ export interface AppFootprint {
   cpuMillisPerSec?: number
   measuredAt?: number
   evidenceRef?: string
+}
+
+export interface AppSignatureInfo {
+  developerId: string
+  developerName?: string
+  packageHash: string
+  manifestHash?: string
+  signature?: string
+  verified: boolean
+  verifiedAt?: string
+  authorityRef?: string
+  proofRef?: string
+}
+
+export interface ExternalAppBinding {
+  provider: string
+  externalAppId: string
+  accountLabel?: string
+  allowedActions: string[]
+  authorityRef?: string
+  proofRef?: string
 }
 
 export interface AppDefinition {
@@ -37,8 +56,15 @@ export interface AppDefinition {
   requiredCapabilityIds: string[]
   optionalCapabilityIds: string[]
   status: AppStatus
+  signature?: AppSignatureInfo
+  externalBindings?: ExternalAppBinding[]
   footprint?: AppFootprint
   displayMetadata?: Record<string, unknown>
+}
+
+function bytesToHex(bytes?: Uint8Array): string {
+  if (!bytes || bytes.byteLength === 0) return ""
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
 }
 
 /**
@@ -50,11 +76,12 @@ export function appPackageToDefinition(
   kind: AppKind = "installed",
   source: AppSource = "node",
 ): AppDefinition {
+  const objectId = bytesToHex(pkg.wasm_object?.object_id)
   return {
-    appId: Buffer.from(pkg.wasm_object?.object_id || new Uint8Array(0)).toString("hex"),
-    name: pkg.name || "",
-    description: "",
-    iconId: Buffer.from(pkg.wasm_object?.object_id || new Uint8Array(0)).toString("hex"),
+    appId: objectId || pkg.name || "unknown-app",
+    name: pkg.name || "Unnamed app",
+    description: "Published EdgeRun app package",
+    iconId: objectId || "wasm-generic",
     kind,
     source,
     route: Object.keys(pkg.routes || {})[0],
@@ -62,5 +89,6 @@ export function appPackageToDefinition(
     requiredCapabilityIds: [],
     optionalCapabilityIds: [],
     status: "installed",
+    wasmObjectRef: pkg.wasm_object ? { objectId, hash: objectId } : undefined,
   }
 }
