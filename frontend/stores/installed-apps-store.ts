@@ -10,6 +10,7 @@ export const DEFAULT_INSTALLED_APP_IDS = [
   "terminal",
   "ai-assistant",
   "people",
+  "trust-manager",
   "code-runner",
   "file-browser",
   "resource-monitor",
@@ -22,7 +23,8 @@ export const installedAppIdsStore = persistentAtom<string[]>(
     encode: JSON.stringify,
     decode: (value) => {
       const parsed = JSON.parse(value)
-      return Array.isArray(parsed) ? parsed : [...DEFAULT_INSTALLED_APP_IDS]
+      if (!Array.isArray(parsed)) return [...DEFAULT_INSTALLED_APP_IDS]
+      return Array.from(new Set([...DEFAULT_INSTALLED_APP_IDS.filter((id) => id === "app-store" || id === "settings"), ...parsed]))
     },
   },
 )
