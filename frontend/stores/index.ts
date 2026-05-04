@@ -45,9 +45,11 @@ export {
 
 export {
   localCapabilityGrantsStore,
+  listLocalGrantsForApp,
   grantLocalCapabilities,
-  revokeLocalCapabilities,
+  revokeLocalCapabilityGrant,
   revokeAllLocalCapabilityGrants,
   hasLocalCapabilityGrant,
   getMissingCapabilities,
+  type LocalCapabilityGrant,
 } from "./local-capability-grants-store"
