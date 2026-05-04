@@ -1,7 +1,6 @@
 /**
  * Window registry.
  * Centralizes default window sizes and positions for apps.
- * Replaces hardcoded window size mappings in stores/app-launcher.tsx.
  */
 
 import type { AppDefinition } from "@/platform/types/app-definition"
@@ -24,7 +23,6 @@ const DEFAULT_SPEC: WindowSpec = {
 
 const registry: Map<string, WindowSpec> = new Map()
 
-// Initialize builtin window specs
 const BUILTIN_SPECS: Record<string, WindowSpec> = {
   terminal: { defaultWidth: 700, defaultHeight: 450 },
   "code-runner": { defaultWidth: 800, defaultHeight: 500 },
@@ -35,9 +33,10 @@ const BUILTIN_SPECS: Record<string, WindowSpec> = {
   "git-sync": { defaultWidth: 600, defaultHeight: 400 },
   "web-server": { defaultWidth: 600, defaultHeight: 400 },
   "compute-node": { defaultWidth: 700, defaultHeight: 500 },
-  contacts: { defaultWidth: 560, defaultHeight: 460 },
-  calling: { defaultWidth: 340, defaultHeight: 480 },
-  chat: { defaultWidth: 580, defaultHeight: 460 },
+  people: { defaultWidth: 720, defaultHeight: 520 },
+  contacts: { defaultWidth: 720, defaultHeight: 520 },
+  calling: { defaultWidth: 720, defaultHeight: 520 },
+  chat: { defaultWidth: 720, defaultHeight: 520 },
   "ai-assistant": { defaultWidth: 500, defaultHeight: 550 },
   "workflow-builder": { defaultWidth: 900, defaultHeight: 600 },
   wallet: { defaultWidth: 360, defaultHeight: 520 },
@@ -51,7 +50,6 @@ const BUILTIN_SPECS: Record<string, WindowSpec> = {
   "wasm-calculator": { defaultWidth: 700, defaultHeight: 450 },
 }
 
-// Initialize registry
 for (const [appId, spec] of Object.entries(BUILTIN_SPECS)) {
   registry.set(appId, spec)
 }
@@ -69,9 +67,6 @@ export function getDefaultSize(appId: string): { width: number; height: number }
   return { width: spec.defaultWidth, height: spec.defaultHeight }
 }
 
-/**
- * Update the window spec for an app definition if not already set.
- */
 export function enrichAppWithWindowSpec(app: AppDefinition): AppDefinition {
   const spec = getWindowSpec(app.appId)
   return { ...app, displayMetadata: { ...app.displayMetadata, windowSpec: spec } }
