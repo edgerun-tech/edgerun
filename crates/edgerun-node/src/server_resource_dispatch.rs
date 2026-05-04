@@ -5,16 +5,15 @@
 
 use crate::command_dispatch_event::{append_command_result_event, CommandResultEventWrite};
 use crate::command_dispatch_payload::inline_payload_bytes;
+use crate::server_resource_wire_codec::{decode_command_payload, encode_committed_resource_event};
 use crate::server_resources::{
-    apply_server_resource_event, compile_server_plan, decode_command_payload,
-    encode_committed_resource_event, project_server_resources, DerivedServerPlan,
+    apply_server_resource_event, compile_server_plan, project_server_resources, DerivedServerPlan,
     ServerResourceEvent,
 };
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::common::ObjectRef;
 use edgerun_proto::edgerun::v0::stream::CommandEnvelope;
 use edgerun_storage::NodeStore;
-use prost::Message;
 
 #[derive(Clone, Debug)]
 pub struct ServerResourceDispatchPlan {
@@ -36,7 +35,7 @@ pub fn plan_server_resource_command(
     apply_server_resource_event(&mut projection, resource_event.clone())?;
 
     let desired_plan = compile_server_plan(&projection, &Default::default());
-    let committed = encode_committed_resource_event(&resource_event, None).encode_to_vec();
+    let committed = encode_committed_resource_event(&resource_event, None);
     let result_object = store
         .put_object(
             &committed,
