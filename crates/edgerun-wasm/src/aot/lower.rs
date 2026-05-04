@@ -198,6 +198,13 @@ fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
                 .with_context(|| format!("global.get references missing global {global_index}"))?;
             IrOp::GlobalGet(global_index, global.value_type())
         }
+        Operator::GlobalSet { global_index } => {
+            let global = globals
+                .get(global_index as usize)
+                .copied()
+                .with_context(|| format!("global.set references missing global {global_index}"))?;
+            IrOp::GlobalSet(global_index, global.value_type())
+        }
         Operator::LocalGet { local_index } => IrOp::LocalGet(local_index),
         Operator::LocalSet { local_index } => IrOp::LocalSet(local_index),
         Operator::LocalTee { local_index } => IrOp::LocalTee(local_index),
