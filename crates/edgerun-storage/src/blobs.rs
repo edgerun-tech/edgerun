@@ -136,7 +136,7 @@ impl BlobStore {
         &self,
         envelope: &edgerun_core::protocol::EncryptedEnvelope,
     ) -> Result<String, StorageError> {
-        Ok(()).map_err(|e| StorageError::InvalidArgument(e.to_string()))?;
+        let _ = envelope;
 
         let recipient_ids: Vec<Vec<u8>> = envelope
             .recipients

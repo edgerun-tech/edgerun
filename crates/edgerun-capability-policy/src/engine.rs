@@ -102,7 +102,6 @@ impl SimplePolicyEngine {
                 edgerun_core::protocol::enum_from_i32::<CapabilityAccessClass>(
                     selector.access_class,
                 )
-                .ok()
             })
             .filter(|value| *value != CapabilityAccessClass::Unspecified)
             .unwrap_or(CapabilityAccessClass::Derived)

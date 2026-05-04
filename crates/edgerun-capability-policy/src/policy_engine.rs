@@ -200,7 +200,6 @@ impl PolicyEngine for SimplePolicyEngine {
 
         for constraint in &record.grant.enforced_constraints {
             if edgerun_core::protocol::enum_from_i32::<CapabilityConstraintKind>(constraint.kind)
-                .ok()
                 == Some(CapabilityConstraintKind::RateLimited)
             {
                 let Some((max_operations, per)) = Self::constraint_rate_limit(constraint) else {

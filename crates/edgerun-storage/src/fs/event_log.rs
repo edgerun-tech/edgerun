@@ -108,8 +108,7 @@ pub fn read_event_at(
     let mut event_bytes = vec![0u8; len as usize];
     file.read_exact(&mut event_bytes)?;
 
-    let event = proto_stream::EventEnvelope::decode(&event_bytes[..])
-        .map_err(|e| StorageError::Decode(format!("event protobuf decode failed: {e}")))?;
+    let event = decode_event_envelope_wire(&event_bytes[..])?;
     if event.stream_id != stream_id {
         return Err(StorageError::Decode(format!(
             "event stream mismatch at offset {file_offset}: expected {}, got {}",
@@ -163,11 +162,7 @@ pub fn scan_event_logs(events_dir: &Path) -> Result<Vec<ScannedEvent>, StorageEr
             let mut event_bytes = vec![0u8; len as usize];
             file.read_exact(&mut event_bytes)?;
 
-            let event = proto_stream::EventEnvelope::decode(&event_bytes[..]).map_err(|e| {
-                StorageError::Decode(format!(
-                    "event protobuf decode failed at offset {record_start}: {e}"
-                ))
-            })?;
+            let event = decode_event_envelope_wire(&event_bytes[..])?;
             if event.stream_id != stream_id {
                 return Err(StorageError::Decode(format!(
                     "event stream mismatch at offset {record_start}: expected {}, got {}",

@@ -71,7 +71,7 @@ pub(crate) fn has_constraint_kind(
     kind: CapabilityConstraintKind,
 ) -> bool {
     constraints.iter().any(|constraint| {
-        edgerun_core::protocol::enum_from_i32::<CapabilityConstraintKind>(constraint.kind).ok()
+        edgerun_core::protocol::enum_from_i32::<CapabilityConstraintKind>(constraint.kind)
             == Some(kind)
     })
 }
@@ -91,9 +91,7 @@ pub(crate) fn requires_user_presence(
     let sensitive_modality = descriptor
         .modalities
         .iter()
-        .filter_map(|value| {
-            edgerun_core::protocol::enum_from_i32::<CapabilityModality>(*value).ok()
-        })
+        .filter_map(|value| edgerun_core::protocol::enum_from_i32::<CapabilityModality>(*value))
         .any(|modality| {
             matches!(
                 modality,
@@ -105,9 +103,7 @@ pub(crate) fn requires_user_presence(
         });
     let sensitive_operation = operations
         .iter()
-        .filter_map(|value| {
-            edgerun_core::protocol::enum_from_i32::<CapabilityOperation>(*value).ok()
-        })
+        .filter_map(|value| edgerun_core::protocol::enum_from_i32::<CapabilityOperation>(*value))
         .any(|operation| {
             matches!(
                 operation,

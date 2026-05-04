@@ -327,8 +327,7 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
         }
 
         let event_bytes = self.read_frame_at(location.file_offset)?;
-        let event = ProtoEventEnvelope::decode(event_bytes.as_slice())
-            .map_err(|e| StorageError::Decode(format!("event protobuf decode failed: {e}")))?;
+        let event = decode_event_envelope_wire(event_bytes.as_slice())?;
 
         if event.stream_id != stream_id {
             return Err(StorageError::Decode(format!(
@@ -358,8 +357,7 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
             let (len, consumed) = self.decode_varint_at(cursor)?;
             let data_offset = cursor.saturating_add(consumed as u64);
             let event_bytes = self.read_bytes(data_offset, len as usize)?;
-            let event = ProtoEventEnvelope::decode(event_bytes.as_slice())
-                .map_err(|e| StorageError::Decode(format!("event protobuf decode failed: {e}")))?;
+            let event = decode_event_envelope_wire(event_bytes.as_slice())?;
             let event_hash = canonical_event_hash(&event).value.clone();
             scanned.push(ScannedEvent {
                 location: EventLocation {
