@@ -1,5 +1,5 @@
 import { atom } from "nanostores"
-import type { XrayState, LayoutType, XrayNode, XrayEdge } from "./types"
+import type { XrayState, LayoutType, XrayNode, XrayEdge, XrayFilterKey } from "./types"
 import { createMockGraph, createMockRuntimeStats } from "./mock-graph"
 import { CodeAnalyzerWsService } from "../services/codeanalyzer-ws"
 
@@ -17,7 +17,9 @@ function initialState(): XrayState {
     edges: graph.edges,
     runtimeStats: createMockRuntimeStats(graph.nodes),
     selectedId: null,
+    hoveredId: null,
     highlightedIds: new Set(),
+    hiddenFilterKeys: new Set(),
     layout: "force",
     runtimeMode: false,
     zoom: 1,
@@ -27,6 +29,30 @@ function initialState(): XrayState {
     loading: false,
     error: null,
   }
+}
+
+export function nodeFilterKeys(node: XrayNode): XrayFilterKey[] {
+  const keys = new Set<XrayFilterKey>()
+  if (node.kind === "file" || node.kind === "function") keys.add(node.kind)
+  if (node.layer) keys.add(node.layer as XrayFilterKey)
+  if (node.language) keys.add(node.language as XrayFilterKey)
+  for (const tag of node.tags || []) {
+    if (["ui", "runtime", "storage", "network", "crypto", "agent", "rust", "typescript", "javascript", "go", "python", "c", "unknown"].includes(tag)) {
+      keys.add(tag as XrayFilterKey)
+    }
+  }
+  return [...keys]
+}
+
+export function getVisibleGraph(state: XrayState = xrayState.get()) {
+  if (state.hiddenFilterKeys.size === 0) return { nodes: state.nodes, edges: state.edges }
+  const nodes = new Map<string, XrayNode>()
+  for (const [id, node] of state.nodes) {
+    const hidden = nodeFilterKeys(node).some((key) => state.hiddenFilterKeys.has(key))
+    if (!hidden) nodes.set(id, node)
+  }
+  const edges = state.edges.filter((edge) => nodes.has(edge.source) && nodes.has(edge.target))
+  return { nodes, edges }
 }
 
 function edgeScore(edge: XrayEdge, degree: Map<string, number>) {
@@ -112,12 +138,14 @@ function applyGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
     nodeMap.set(node.id, { ...node, x: node.x ?? 0, y: node.y ?? 0 })
   }
 
+  const current = xrayState.get()
   xrayState.set({
-    ...xrayState.get(),
+    ...current,
     nodes: nodeMap,
     edges: projected.edges,
     runtimeStats: createMockRuntimeStats(nodeMap),
     selectedId: null,
+    hoveredId: null,
     highlightedIds: new Set(),
     loading: false,
     error: null,
@@ -166,6 +194,30 @@ export function requestAnalysis(path: string): void {
   wsService?.requestAnalyze(path)
 }
 
+export function toggleXrayFilter(key: XrayFilterKey) {
+  const s = xrayState.get()
+  const hidden = new Set(s.hiddenFilterKeys)
+  if (hidden.has(key)) hidden.delete(key)
+  else hidden.add(key)
+  xrayState.set({ ...s, hiddenFilterKeys: hidden })
+}
+
+export function setHoveredNode(nodeId: string | null) {
+  const s = xrayState.get()
+  if (s.hoveredId === nodeId) return
+  if (!nodeId) {
+    xrayState.set({ ...s, hoveredId: null, highlightedIds: new Set() })
+    return
+  }
+  const related = new Set<string>([nodeId])
+  for (const edge of s.edges) {
+    if (edge.source === nodeId) related.add(edge.target)
+    if (edge.target === nodeId) related.add(edge.source)
+    if (related.size > 80) break
+  }
+  xrayState.set({ ...s, hoveredId: nodeId, highlightedIds: related })
+}
+
 export function setLayout(layout: LayoutType) {
   const s = xrayState.get()
   for (const node of s.nodes.values()) {
@@ -209,7 +261,7 @@ export function setViewTransform(zoom: number, panX: number, panY: number, rotat
 
 export function resetView() {
   const s = xrayState.get()
-  xrayState.set({ ...s, selectedId: null, highlightedIds: new Set(), zoom: 1, panX: 0, panY: 0, rotation: 0 })
+  xrayState.set({ ...s, selectedId: null, hoveredId: null, highlightedIds: new Set(), zoom: 1, panX: 0, panY: 0, rotation: 0 })
 }
 
 export function updateNodePositions(positions: Map<string, { x: number; y: number }>) {
