@@ -16,6 +16,11 @@ export type PermissionScope =
   | "app_launch"
   | "app_install"
   | "capability_grant"
+  | "tool"
+  | "repo_read"
+  | "repo_text_edit"
+  | "repo_rust_ast_edit"
+  | "xray_viewport_control"
 
 export interface PendingApproval {
   approvalId: string
@@ -71,7 +76,6 @@ export const pendingApprovalsList = computed(permissionStore, (s) =>
 export function hasPermission(scope: PermissionScope): boolean {
   const state = permissionStore.get()
   if (!state.isAuthenticated && scope !== "app_launch") return false
-  // Check if there are any denied grants for this scope
   const denied = Array.from(state.deniedGrants.values()).some(
     (d) => d.scope === scope,
   )
@@ -84,6 +88,9 @@ export function requiresApproval(operation: string): boolean {
     "app_install",
     "hardware_signing",
     "payments",
+    "repo_text_edit",
+    "repo_rust_ast_edit",
+    "xray_viewport_control",
   ]
   return highRiskOps.some((op) => operation.includes(op))
 }
