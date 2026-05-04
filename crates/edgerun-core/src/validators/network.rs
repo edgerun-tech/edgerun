@@ -507,7 +507,7 @@ use crate::crypto::{
     ECDSA_P256_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ECDSA_P256, SIG_DOMAIN_ROUTE_ADVERTISEMENT,
 };
 use crate::protocol::{canonical_bytes, IdentityRef, ObjectRef, ProtocolRecord};
-use edgerun_core::protocol::{Directness, IdentityKind, ObjectKind, TransportClass};
+use crate::protocol::{Directness, IdentityKind, ObjectKind, TransportClass};
 
 fn validate_identity_ref(
     identity: &IdentityRef,
@@ -569,9 +569,7 @@ fn validate_timestamp_shape(
 
 /// Validates the structural integrity and signature of a RouteAdvertisement
 /// at the proto type level (spec §14.24).
-pub fn validate_route_advertisement(
-    adv: &edgerun_core::protocol::RouteAdvertisement,
-) -> ValidationResult {
+pub fn validate_route_advertisement(adv: &crate::protocol::RouteAdvertisement) -> ValidationResult {
     if adv.advertisement_version != 1 {
         return reject(
             ReasonCode::VersionUnsupported,
@@ -826,10 +824,10 @@ pub fn validate_route_advertisement(
 #[cfg(test)]
 mod proto_tests {
     use super::*;
-    use edgerun_core::protocol::{
+    use crate::protocol::{
         Directness, IdentityRef, NodeRef, ObjectKind, ObjectRef, Signature, TransportClass,
     };
-    use edgerun_core::protocol::{ReachabilityHint, RouteAdvertisement};
+    use crate::protocol::{ReachabilityHint, RouteAdvertisement};
     use prost_types::Timestamp;
 
     fn make_test_keypair() -> (edgerun_crypto::p256::ecdsa::SigningKey, Vec<u8>) {

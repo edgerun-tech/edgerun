@@ -26,11 +26,9 @@ use std::collections::BTreeMap;
 /// - public_key has correct length for the algorithm
 /// - signature has correct length
 /// - Signature verifies against the record's own public_key (self-signed)
-pub fn validate_identity_record(
-    record: &edgerun_core::protocol::IdentityRecord,
-) -> ValidationResult {
-    use edgerun_core::protocol::{IdentityKind, ObjectKind};
-    use edgerun_core::protocol::{IdentityRecord, KeyAlgorithm};
+pub fn validate_identity_record(record: &crate::protocol::IdentityRecord) -> ValidationResult {
+    use crate::protocol::{IdentityKind, ObjectKind};
+    use crate::protocol::{IdentityRecord, KeyAlgorithm};
 
     // --- Required field checks ---
     if record.record_version != 1 {
@@ -209,8 +207,8 @@ pub fn validate_identity_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_core::protocol::IdentityRecord;
-    use edgerun_core::protocol::{IdentityKind, IdentityRef, ObjectKind, ObjectRef, Signature};
+    use crate::protocol::IdentityRecord;
+    use crate::protocol::{IdentityKind, IdentityRef, ObjectKind, ObjectRef, Signature};
 
     fn make_test_keypair() -> (
         edgerun_crypto::p256::ecdsa::SigningKey,

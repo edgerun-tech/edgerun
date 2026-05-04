@@ -13,13 +13,13 @@
 
 use crate::prelude::v1::*;
 
-use crate::result::{accept, defer, empty_map, reject, ReasonCode, ValidationResult};
-use crate::value::{mapping, ystr, Value};
-use edgerun_core::protocol::{
+use crate::protocol::{
     AggregateSummaryProof, EventSetProof, FederatedAggregateDescriptor, ObjectAssertionProof,
     ProofBundle, ProofPayloadType, ResultFragmentProof, SnapshotSetProof, StreamHeadsProof,
     TrustPolicyProof,
 };
+use crate::result::{accept, defer, empty_map, reject, ReasonCode, ValidationResult};
+use crate::value::{mapping, ystr, Value};
 
 /// Structural validation result for a proof object.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,15 +29,15 @@ pub enum ProofStructuralResult {
 }
 
 fn validate_object_ref(
-    object: &edgerun_core::protocol::ObjectRef,
+    object: &crate::protocol::ObjectRef,
     reason: &'static str,
 ) -> Option<ProofStructuralResult> {
     if object.object_id.is_empty() {
         return Some(ProofStructuralResult::Invalid { reason });
     }
     if object.object_kind.is_some_and(|object_kind| {
-        edgerun_core::protocol::ObjectKind::from_i32(object_kind)
-            .is_none_or(|kind| kind == edgerun_core::protocol::ObjectKind::Unspecified)
+        crate::protocol::ObjectKind::from_i32(object_kind)
+            .is_none_or(|kind| kind == crate::protocol::ObjectKind::Unspecified)
     }) {
         return Some(ProofStructuralResult::Invalid {
             reason: "ObjectRef object_kind is invalid",
@@ -47,7 +47,7 @@ fn validate_object_ref(
 }
 
 fn validate_identity_ref(
-    identity: &edgerun_core::protocol::IdentityRef,
+    identity: &crate::protocol::IdentityRef,
     empty_reason: &'static str,
     invalid_kind_reason: &'static str,
 ) -> Option<ProofStructuralResult> {
@@ -57,8 +57,8 @@ fn validate_identity_ref(
         });
     }
     if identity.identity_kind.is_some_and(|identity_kind| {
-        edgerun_core::protocol::IdentityKind::from_i32(identity_kind)
-            .is_none_or(|kind| kind == edgerun_core::protocol::IdentityKind::Unspecified)
+        crate::protocol::IdentityKind::from_i32(identity_kind)
+            .is_none_or(|kind| kind == crate::protocol::IdentityKind::Unspecified)
     }) {
         return Some(ProofStructuralResult::Invalid {
             reason: invalid_kind_reason,
@@ -67,7 +67,7 @@ fn validate_identity_ref(
     None
 }
 
-fn validate_event_ref(event: &edgerun_core::protocol::EventRef) -> Option<ProofStructuralResult> {
+fn validate_event_ref(event: &crate::protocol::EventRef) -> Option<ProofStructuralResult> {
     if event.stream_id.is_empty() {
         return Some(ProofStructuralResult::Invalid {
             reason: "EventSetProof event_ref missing stream_id",
@@ -78,9 +78,7 @@ fn validate_event_ref(event: &edgerun_core::protocol::EventRef) -> Option<ProofS
             reason: "EventSetProof event_ref missing event_hash",
         });
     };
-    if event_hash.algorithm
-        != edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256 as i32
-    {
+    if event_hash.algorithm != crate::protocol::digest::Algorithm::DigestAlgorithmSha256 as i32 {
         return Some(ProofStructuralResult::Invalid {
             reason: "EventSetProof event_ref event_hash algorithm is not SHA-256",
         });
@@ -93,7 +91,7 @@ fn validate_event_ref(event: &edgerun_core::protocol::EventRef) -> Option<ProofS
     None
 }
 
-fn validate_head_ref(head: &edgerun_core::protocol::HeadRef) -> Option<ProofStructuralResult> {
+fn validate_head_ref(head: &crate::protocol::HeadRef) -> Option<ProofStructuralResult> {
     if head.stream_id.is_empty() {
         return Some(ProofStructuralResult::Invalid {
             reason: "StreamHeadsProof head_ref missing stream_id",
@@ -104,9 +102,7 @@ fn validate_head_ref(head: &edgerun_core::protocol::HeadRef) -> Option<ProofStru
             reason: "StreamHeadsProof head_ref missing event_hash",
         });
     };
-    if event_hash.algorithm
-        != edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256 as i32
-    {
+    if event_hash.algorithm != crate::protocol::digest::Algorithm::DigestAlgorithmSha256 as i32 {
         return Some(ProofStructuralResult::Invalid {
             reason: "StreamHeadsProof head_ref event_hash algorithm is not SHA-256",
         });
@@ -601,7 +597,7 @@ pub fn validate_federated_aggregate_descriptor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_core::protocol::{
+    use crate::protocol::{
         EventRef, HeadRef, IdentityKind, IdentityRef, ObjectKind, ObjectRef, SnapshotRef,
     };
 
@@ -612,7 +608,7 @@ mod tests {
             heads: vec![HeadRef {
                 stream_id: vec![2],
                 seq: 3,
-                event_hash: Some(edgerun_core::protocol::Digest {
+                event_hash: Some(crate::protocol::Digest {
                     algorithm: 1,
                     value: vec![4; 32],
                 }),
@@ -631,7 +627,7 @@ mod tests {
             heads: vec![HeadRef {
                 stream_id: vec![2],
                 seq: 3,
-                event_hash: Some(edgerun_core::protocol::Digest {
+                event_hash: Some(crate::protocol::Digest {
                     algorithm: 1,
                     value: vec![4; 32],
                 }),
@@ -745,7 +741,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_core::protocol::Digest {
+                event_hash: Some(crate::protocol::Digest {
                     algorithm: 1,
                     value: vec![2; 32],
                 }),
@@ -767,7 +763,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_core::protocol::Digest {
+                event_hash: Some(crate::protocol::Digest {
                     algorithm: 1,
                     value: vec![2; 32],
                 }),
@@ -840,7 +836,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_core::protocol::Digest {
+                event_hash: Some(crate::protocol::Digest {
                     algorithm: 0,
                     value: vec![2; 32],
                 }),
@@ -862,7 +858,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_core::protocol::Digest {
+                event_hash: Some(crate::protocol::Digest {
                     algorithm: 1,
                     value: vec![2; 32],
                 }),
@@ -887,7 +883,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_core::protocol::Digest {
+                event_hash: Some(crate::protocol::Digest {
                     algorithm: 1,
                     value: vec![2; 32],
                 }),
@@ -1012,7 +1008,7 @@ mod tests {
     #[test]
     fn result_fragment_proof_empty_query_id_is_invalid() {
         let proof = ResultFragmentProof {
-            fragment: Some(edgerun_core::protocol::QueryResultFragment {
+            fragment: Some(crate::protocol::QueryResultFragment {
                 fragment_version: 1,
                 query_id: vec![],
                 responder: None,
@@ -1039,7 +1035,7 @@ mod tests {
     #[test]
     fn result_fragment_proof_with_query_id_is_valid() {
         let proof = ResultFragmentProof {
-            fragment: Some(edgerun_core::protocol::QueryResultFragment {
+            fragment: Some(crate::protocol::QueryResultFragment {
                 fragment_version: 1,
                 query_id: vec![1],
                 responder: None,

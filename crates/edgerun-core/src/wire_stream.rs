@@ -6,8 +6,8 @@
 
 use alloc::vec::Vec;
 
+use crate::protocol::{CommandEnvelope, CommandResultPayload, EventEnvelope};
 use crate::wire_boundary::proto_boundary;
-use edgerun_core::protocol::{CommandEnvelope, CommandResultPayload, EventEnvelope};
 
 pub fn event_signable_wire_bytes(event: &EventEnvelope) -> Vec<u8> {
     proto_boundary::event_envelope_from_proto(event.clone()).signable_bytes()
