@@ -7,7 +7,6 @@ import { GlowingContainer } from "@/components/layouts/glowing-containers"
 import { FinancesOverviewWidget } from "@/components/sections/finance-overviews"
 import { WorkspaceStatusPanel } from "@/components/workspace"
 import { XrayViewport } from "@/features/xray/XrayViewport"
-import { XrayInspector } from "@/features/xray/XrayInspector"
 import { XrayCommandSurface } from "@/features/xray/XrayCommandSurface"
 import type { AppSurfaceDef, AppSurfaceSlot } from "@/stores/desktop-store"
 
@@ -180,13 +179,8 @@ export function XrayDesktopSurface({
           <XrayCommandSurface surface="top" />
         </div>
 
-        <div className="absolute inset-0 flex overflow-hidden rounded-xl">
-          <div className="min-w-0 flex-1">
-            <XrayViewport />
-          </div>
-          <div className="hidden shrink-0 lg:block">
-            <XrayInspector />
-          </div>
+        <div className="absolute inset-0 overflow-hidden rounded-xl">
+          <XrayViewport />
         </div>
       </GlowingContainer>
     </div>
