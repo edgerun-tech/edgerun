@@ -1,0 +1,109 @@
+name: Purge configurable event stream id
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  purge:
+    if: ${{ !contains(github.event.head_commit.message, 'codemod: purge configurable event stream id') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rewrite node event-stream identity
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8')
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def drop_stream_id_from_node_config_rs(path):
+              p = Path(path)
+              if not p.exists():
+                  return
+              s = read(p)
+              s = s.replace('    pub stream_id: String,\n', '')
+              s = s.replace('        stream_id: String::new(),\n', '')
+              s = s.replace('                    "stream_id" => config.stream_id = unquote(&val),\n', '')
+              s = re.sub(r'\n\s*if config\.stream_id\.is_empty\(\) \{\n\s*return Err\("missing required field: stream_id"\.into\(\)\);\n\s*\}', '', s)
+              write(p, s)
+
+          drop_stream_id_from_node_config_rs('crates/edgerun-node/src/config.rs')
+
+          # Health endpoint must not expose or carry event stream identity.
+          health = Path('crates/edgerun-node/src/health.rs')
+          if health.exists():
+              s = read(health)
+              s = s.replace('    /// Transitional compatibility field while daemon setup is moved from\n    /// configured stream ids to node-id-derived event identity.\n    pub stream_id: String,\n', '')
+              s = s.replace('    pub stream_id: String,\n', '')
+              s = s.replace('/// GET /health -> { "status": "ok", "uptime_secs": N, "node_id": "...", "stream_id": "..." }', '/// GET /health -> { "status": "ok", "uptime_secs": N, "node_id": "..." }')
+              write(health, s)
+
+          # Daemon: derive stream identity from node_id. This is the main runtime invariant.
+          daemon = Path('crates/edgerun-node/src/daemon.rs')
+          if daemon.exists():
+              s = read(daemon)
+              s = s.replace('            stream_id: config.stream_id.clone(),\n', '')
+              s = s.replace('    let stream_id_bytes = config.stream_id.as_bytes();', '    let stream_id_bytes = node_id.0.as_slice();')
+              s = s.replace('    let stream_id_vec = stream_id_bytes.to_vec();', '    let stream_id_vec = node_id.0.to_vec();')
+              write(daemon, s)
+
+          # Legacy/simple Node implementation in edgerun-node/src/lib.rs.
+          node_lib = Path('crates/edgerun-node/src/lib.rs')
+          if node_lib.exists():
+              s = read(node_lib)
+              s = s.replace('    /// The node\'s stream identifier.\n    pub stream_id: String,\n', '')
+              s = s.replace('            stream_id: String::new(),\n', '')
+              s = s.replace('                    "stream_id" => config.stream_id = unquote(val),\n', '')
+              s = re.sub(r'\n\s*if config\.stream_id\.is_empty\(\) \{\n\s*return Err\(NodeError::MissingField\("stream_id"\.into\(\)\)\);\n\s*\}', '', s)
+              s = s.replace('        out.push_str(&format!("stream_id: \\\"{}\\\"\\n", self.stream_id));\n', '')
+              s = s.replace('        let stream_id = config.stream_id.clone();\n        let stream_writer =\n            DurableStreamWriter::new(stream_id.clone(), signer, now_ms(), event_log)?;', '        let stream_id = edgerun_core::util::bytes_to_hex(&identity.0);\n        let stream_writer = DurableStreamWriter::new(stream_id, signer, now_ms(), event_log)?;')
+              s = re.sub(r'\n\s*assert_eq!\(config\.stream_id, [^;]+;\n', '\n', s)
+              s = re.sub(r'\n\s*assert_eq!\(config\.stream_id, config2\.stream_id\);\n', '\n', s)
+              s = re.sub(r'\n\s*#\[test\]\n\s*fn config_missing_stream_id\(\) \{.*?\n\s*\}\n', '\n', s, flags=re.S)
+              write(node_lib, s)
+
+          # Docs: make the invariant explicit. Do not touch HTTP/QUIC/QPACK stream ids.
+          for doc_path in ['docs/exchange-boundary-audit.md', 'docs/interface-boundary-audit.md', 'docs/rfc/RFC-0001-protocol-core.md']:
+              p = Path(doc_path)
+              if not p.exists():
+                  continue
+              s = read(p)
+              s = s.replace('stream id', 'writer node id')
+              s = s.replace('stream_id', 'writer_node_id')
+              s = s.replace('target_streams', 'target_nodes')
+              write(p, s)
+
+          # Remove this one-shot workflow from the resulting codemod commit.
+          wf = Path('.github/workflows/purge-event-stream-id.yml')
+          if wf.exists():
+              wf.unlink()
+          PY
+
+      - name: Format and check focused crates
+        run: |
+          cargo fmt || true
+          cargo check -p edgerun-node -p edgerun-exchange-api -p edgerun-exchange
+
+      - name: Commit codemod
+        run: |
+          if git diff --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "codemod: purge configurable event stream id"
+          git push
