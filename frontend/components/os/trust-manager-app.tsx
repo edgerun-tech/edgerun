@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  Copy,
   Database,
   Download,
   Eye,
@@ -30,6 +31,7 @@ import { cn } from "@/lib/utils"
 type TrustTab = "overview" | "capsules" | "capabilities" | "routes" | "delegations" | "events"
 type Risk = "low" | "medium" | "high"
 type Status = "strong" | "verified" | "review" | "danger" | "active" | "limited" | "revoked"
+type FilterMode = "all" | "review" | "high" | "danger"
 
 type TrustItem = {
   id: string
@@ -39,6 +41,9 @@ type TrustItem = {
   status: Status
   risk?: Risk
   icon: LucideIcon
+  authorityRef: string
+  proofRef: string
+  lastChecked: string
   details: string[]
   actions?: string[]
 }
@@ -52,6 +57,13 @@ const tabs: { id: TrustTab; label: string; icon: LucideIcon }[] = [
   { id: "events", label: "Audit", icon: ScrollText },
 ]
 
+const filters: { id: FilterMode; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "review", label: "Needs review" },
+  { id: "high", label: "High risk" },
+  { id: "danger", label: "Denied / danger" },
+]
+
 const itemsByTab: Record<TrustTab, TrustItem[]> = {
   overview: [
     {
@@ -61,6 +73,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       meta: "2-of-3 devices · Framework · Phone · YubiKey",
       status: "strong",
       icon: Fingerprint,
+      authorityRef: "stream:ken-root@head:482",
+      proofRef: "proof:root-quorum:2of3",
+      lastChecked: "just now",
       details: ["Authority is derived from the latest valid signed root state.", "Current quorum requires 2 trusted devices.", "Old phone key was revoked 3 hours ago."],
       actions: ["Open root", "Add backup", "Export capsule"],
     },
@@ -71,6 +86,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       meta: "Home Assistant route · external identity route · payment threshold",
       status: "review",
       icon: AlertTriangle,
+      authorityRef: "policy:local-routes@head:91",
+      proofRef: "proof:route-drift:3",
+      lastChecked: "43 sec ago",
       details: ["A route can still be valid while needing review.", "Review does not revoke existing signed history.", "Unreviewed future actions should ask first."],
       actions: ["Review routes", "Simulate policy"],
     },
@@ -81,6 +99,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       meta: "last 24 hours",
       status: "danger",
       icon: XCircle,
+      authorityRef: "audit:local-denials@head:144",
+      proofRef: "event:event-denied-private-folder",
+      lastChecked: "2 min ago",
       details: ["Unknown App attempted private folder access.", "No matching capability grant existed.", "The denial was recorded as local audit evidence."],
       actions: ["Inspect audit", "Block identity"],
     },
@@ -93,6 +114,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       meta: "Local file · phone · encrypted backup",
       status: "strong",
       icon: Shield,
+      authorityRef: "capsule:ken-personal:v3",
+      proofRef: "proof:local-backup-set",
+      lastChecked: "just now",
       details: ["Root policy: 2-of-3 devices.", "Portable trust capsule can be exported or backed up.", "Used for local identity, app approval, and delegation roots."],
       actions: ["Export", "Backup", "Rotate"],
     },
@@ -103,6 +127,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       meta: "Board authority · build authority",
       status: "verified",
       icon: Database,
+      authorityRef: "capsule:edgerun-org:v1",
+      proofRef: "proof:domain+release-key",
+      lastChecked: "5 min ago",
       details: ["Verified by domain proof and release key fingerprint.", "Trusted for software releases and infrastructure metadata.", "Does not grant access to personal data."],
       actions: ["Open", "Pin", "Publish"],
     },
@@ -113,6 +140,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       meta: "Browser bundle · website certificates only",
       status: "limited",
       icon: Lock,
+      authorityRef: "compat:web-pki:system",
+      proofRef: "proof:browser-root-bundle",
+      lastChecked: "boot",
       details: ["Imported compatibility root.", "Scope is limited to website certificate interpretation.", "Not trusted for app authority or payment policy."],
       actions: ["Limit scope", "Remove"],
     },
@@ -126,6 +156,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       status: "active",
       risk: "medium",
       icon: SlidersHorizontal,
+      authorityRef: "cap:manage-invoices:v2",
+      proofRef: "delegation:invoice-agent",
+      lastChecked: "2 min ago",
       details: ["Allows reading invoice emails and extracting fields.", "Allows creating accounting records with source hashes.", "Does not allow sending emails, deleting emails, or approving payments."],
       actions: ["Edit scope", "Show routes", "Revoke"],
     },
@@ -137,6 +170,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       status: "active",
       risk: "medium",
       icon: KeyRound,
+      authorityRef: "cap:sign-releases:v1",
+      proofRef: "delegation:build-authority",
+      lastChecked: "18 min ago",
       details: ["Allows signing release binaries and publishing manifests.", "Allows revoking compromised releases.", "Does not allow source-code edits or user-data access."],
       actions: ["Edit policy", "Inspect key"],
     },
@@ -148,6 +184,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       status: "review",
       risk: "high",
       icon: Lock,
+      authorityRef: "cap:approve-payments:v1",
+      proofRef: "delegation:payment-authority",
+      lastChecked: "3 hr ago",
       details: ["Allows approving payouts under configured limits.", "Final spending must require explicit confirmation.", "Does not allow changing payout addresses or treasury withdrawal."],
       actions: ["Review", "Tighten", "Disable"],
     },
@@ -161,6 +200,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       status: "active",
       risk: "medium",
       icon: Route,
+      authorityRef: "route:invoice-agent:v5",
+      proofRef: "event:invoice-route-commit",
+      lastChecked: "2 min ago",
       details: ["Source: Gmail invoice messages.", "Capability: Manage Invoices.", "Destination: Accounting record with signed source hash."],
       actions: ["Simulate", "Edit", "Pause"],
     },
@@ -172,6 +214,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       status: "active",
       risk: "medium",
       icon: Route,
+      authorityRef: "route:release-signing:v2",
+      proofRef: "event:release-signing-commit",
+      lastChecked: "18 min ago",
       details: ["Source: GitHub release event.", "Capability: Sign Software Releases.", "Destination: signed release manifest."],
       actions: ["Inspect", "Pause"],
     },
@@ -183,6 +228,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       status: "review",
       risk: "medium",
       icon: Route,
+      authorityRef: "route:home-gate:v1",
+      proofRef: "policy-review:physical-access",
+      lastChecked: "2 days ago",
       details: ["Route affects physical-world behavior.", "Review required before future automatic execution.", "Recommended policy: require local presence + confirmation."],
       actions: ["Review", "Disable"],
     },
@@ -196,6 +244,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       status: "verified",
       risk: "medium",
       icon: GitBranch,
+      authorityRef: "delegation:build-authority:v1",
+      proofRef: "chain:ken-root→build-authority",
+      lastChecked: "18 min ago",
       details: ["Can sign software releases and approve runtime versions.", "Can revoke compromised releases.", "Cannot access user data or change payment settings."],
       actions: ["Inspect chain", "Rotate", "Revoke"],
     },
@@ -207,6 +258,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       status: "verified",
       risk: "medium",
       icon: GitBranch,
+      authorityRef: "delegation:dns-authority:v2",
+      proofRef: "chain:ken-root→infra→dns",
+      lastChecked: "1 hr ago",
       details: ["Can update records under *.edgerun.tech.", "Cannot transfer domain or change registrar.", "All changes must be logged."],
       actions: ["Inspect chain", "Revoke"],
     },
@@ -218,6 +272,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       status: "review",
       risk: "high",
       icon: GitBranch,
+      authorityRef: "delegation:payment-authority:v1",
+      proofRef: "chain:ken-root→payment-authority",
+      lastChecked: "3 hr ago",
       details: ["Can approve payouts under $500.", "Cannot change payout address or withdraw treasury.", "Recommended: require second factor for every use."],
       actions: ["Review", "Revoke"],
     },
@@ -230,6 +287,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       meta: "2 min ago · verified",
       status: "verified",
       icon: CheckCircle2,
+      authorityRef: "stream:ken-laptop@seq:4821",
+      proofRef: "event-hash:invoice-4821",
+      lastChecked: "2 min ago",
       details: ["Reason: Manage Invoices capability.", "Result: committed local record with source hash.", "Audit: signed and append-only."],
       actions: ["Open proof", "Copy hash"],
     },
@@ -240,6 +300,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       meta: "18 min ago · verified",
       status: "verified",
       icon: CheckCircle2,
+      authorityRef: "stream:build-authority@seq:87",
+      proofRef: "event-hash:release-v042",
+      lastChecked: "18 min ago",
       details: ["Reason: Build signing delegation.", "Result: signed release manifest.", "Audit: delegation chain verified."],
       actions: ["Open release", "Copy proof"],
     },
@@ -250,6 +313,9 @@ const itemsByTab: Record<TrustTab, TrustItem[]> = {
       meta: "7 hr ago · denied",
       status: "danger",
       icon: XCircle,
+      authorityRef: "stream:local-policy@seq:144",
+      proofRef: "event-hash:denied-private-folder",
+      lastChecked: "7 hr ago",
       details: ["Reason: no matching filesystem capability grant.", "Result: blocked before action.", "Recommendation: keep denied unless the app is identified and scoped."],
       actions: ["Block app", "Inspect source"],
     },
@@ -323,6 +389,13 @@ function Inspector({ item }: { item: TrustItem }) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Protocol evidence</div>
+        <div className="mb-4 space-y-2 rounded-lg border border-border bg-background/60 p-2 font-mono text-[10px] text-muted-foreground">
+          <div className="flex items-center justify-between gap-2"><span>authority</span><span className="truncate text-foreground">{item.authorityRef}</span></div>
+          <div className="flex items-center justify-between gap-2"><span>proof</span><span className="truncate text-foreground">{item.proofRef}</span></div>
+          <div className="flex items-center justify-between gap-2"><span>checked</span><span className="truncate text-foreground">{item.lastChecked}</span></div>
+        </div>
+
         <div className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Why trusted / blocked</div>
         <div className="space-y-2">
           {item.details.map((detail) => (
@@ -400,23 +473,43 @@ function OverviewGraph({ selectedId }: { selectedId: string }) {
   )
 }
 
+function matchesFilter(item: TrustItem, filter: FilterMode) {
+  if (filter === "all") return true
+  if (filter === "review") return item.status === "review"
+  if (filter === "high") return item.risk === "high"
+  if (filter === "danger") return item.status === "danger" || item.status === "revoked"
+  return true
+}
+
 export function TrustManagerApp() {
   const [tab, setTab] = useState<TrustTab>("overview")
   const [query, setQuery] = useState("")
+  const [filter, setFilter] = useState<FilterMode>("all")
   const list = itemsByTab[tab]
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return list
-    return list.filter((item) => `${item.title} ${item.subtitle} ${item.meta}`.toLowerCase().includes(q))
-  }, [list, query])
+    return list.filter((item) => {
+      const textMatch = !q || `${item.title} ${item.subtitle} ${item.meta}`.toLowerCase().includes(q)
+      return textMatch && matchesFilter(item, filter)
+    })
+  }, [list, query, filter])
   const [selectedId, setSelectedId] = useState<string>(list[0]?.id ?? "")
   const selected = filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? list[0]
   const activeTab = tabs.find((item) => item.id === tab) ?? tabs[0]
   const ActiveIcon = activeTab.icon
+  const statusCounts = useMemo(() => {
+    const all = Object.values(itemsByTab).flat()
+    return {
+      verified: all.filter((item) => ["strong", "verified", "active"].includes(item.status)).length,
+      review: all.filter((item) => item.status === "review").length,
+      danger: all.filter((item) => item.status === "danger" || item.status === "revoked").length,
+    }
+  }, [])
 
   function selectTab(next: TrustTab) {
     setTab(next)
     setQuery("")
+    setFilter("all")
     setSelectedId(itemsByTab[next][0]?.id ?? "")
   }
 
@@ -492,23 +585,52 @@ export function TrustManagerApp() {
           </div>
         </header>
 
+        <div className="flex h-10 flex-shrink-0 items-center gap-2 border-b border-border bg-background/60 px-3">
+          {filters.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setFilter(item.id)}
+              className={cn(
+                "rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+                filter === item.id ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+          <div className="ml-auto flex items-center gap-2 text-[10px] text-muted-foreground">
+            <span>{filtered.length} shown</span>
+            <span>·</span>
+            <span>{statusCounts.verified} ok</span>
+            <span>{statusCounts.review} review</span>
+            <span>{statusCounts.danger} danger</span>
+          </div>
+        </div>
+
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(300px,1fr)_320px]">
           <section className="min-w-0 overflow-hidden border-r border-border">
             {tab === "overview" && (
               <div className="grid h-full min-h-0 grid-rows-[160px_1fr] gap-3 p-3">
-                <div className="grid grid-cols-4 gap-3">
-                  {trustCards.map((card) => {
-                    const Icon = card.icon
+                <div className="grid grid-cols-3 gap-3">
+                  {itemsByTab.overview.map((item) => {
+                    const Icon = item.icon
                     return (
-                      <div key={card.label} className="rounded-xl border border-border bg-card p-3">
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedId(item.id)}
+                        className={cn(
+                          "rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-secondary/50",
+                          selected?.id === item.id && "border-primary/40 bg-primary/5",
+                        )}
+                      >
                         <div className="mb-3 flex items-center justify-between">
                           <Icon className="h-4 w-4 text-primary" />
-                          <Badge value={card.status} />
+                          <Badge value={item.status} />
                         </div>
-                        <div className="text-xl font-semibold text-foreground">{card.value}</div>
-                        <div className="text-[11px] text-muted-foreground">{card.label}</div>
-                        <div className="mt-1 truncate text-[10px] text-muted-foreground/70">{card.detail}</div>
-                      </div>
+                        <div className="text-sm font-semibold text-foreground">{item.title}</div>
+                        <div className="mt-1 truncate text-[11px] text-muted-foreground">{item.subtitle}</div>
+                        <div className="mt-1 truncate text-[10px] text-muted-foreground/70">{item.meta}</div>
+                      </button>
                     )
                   })}
                 </div>
@@ -531,6 +653,11 @@ export function TrustManagerApp() {
 
           {selected && <Inspector item={selected} />}
         </div>
+
+        <footer className="flex h-7 flex-shrink-0 items-center justify-between border-t border-border bg-[var(--window-header)]/40 px-3 font-mono text-[10px] text-muted-foreground">
+          <span>policy engine: local · grants: bounded · stream authority: append-only</span>
+          <span>selected: {selected?.id ?? "none"}</span>
+        </footer>
       </main>
     </div>
   )
