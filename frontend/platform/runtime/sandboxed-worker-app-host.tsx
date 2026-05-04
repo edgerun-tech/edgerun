@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import type { AppDefinition } from "@/platform/types/app-definition"
+import { readRuntimeManifest } from "@/platform/runtime/app-runtime-manifest"
 
 interface WorkerViewState {
   title?: string
@@ -19,6 +20,12 @@ function createSandboxedWorker(app: AppDefinition): Worker {
     type: "module",
     name: `edgerun-app-${app.appId}`,
   })
+}
+
+function getWorkerSource(app: AppDefinition): string | null {
+  const manifest = readRuntimeManifest(app.displayMetadata)
+  const source = manifest.source ?? app.displayMetadata?.source
+  return typeof source === "string" ? source : null
 }
 
 export function SandboxedWorkerAppHost({ app }: { app: AppDefinition }) {
@@ -56,14 +63,15 @@ export function SandboxedWorkerAppHost({ app }: { app: AppDefinition }) {
       setLogs((prev) => [...prev.slice(-100), `worker error: ${event.message}`])
     }
 
+    const manifest = readRuntimeManifest(app.displayMetadata)
     worker.postMessage({
       type: "BOOT",
       payload: {
         appId: app.appId,
         name: app.name,
         description: app.description,
-        capabilities: app.requiredCapabilityIds,
-        source: app.displayMetadata?.source ?? null,
+        permissions: manifest.permissions ?? app.requiredCapabilityIds,
+        source: getWorkerSource(app),
       },
     })
 
