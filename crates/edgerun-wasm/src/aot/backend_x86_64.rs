@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 
-use super::ir::{FunctionIr, IrOp, ValueType};
+use super::ir::{FunctionIr, GlobalValue, IrOp, ValueType};
 
 pub struct X86_64Backend;
 
@@ -15,6 +15,7 @@ impl X86_64Backend {
             match *op {
                 IrOp::I32Const(v) => emit_push_i32(&mut code, v),
                 IrOp::I64Const(v) => emit_push_i64(&mut code, v),
+                IrOp::GlobalGet(i, _) => emit_global_get(&mut code, ir, i)?,
                 IrOp::LocalGet(i) => frame.emit_local_get(&mut code, i, local_type(ir, i)?)?,
                 IrOp::LocalSet(i) => frame.emit_local_set(&mut code, i, local_type(ir, i)?)?,
                 IrOp::LocalTee(i) => frame.emit_local_tee(&mut code, i, local_type(ir, i)?)?,
@@ -211,6 +212,18 @@ fn local_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
         .ok_or_else(|| anyhow::anyhow!("local index {} outside function frame", index))
 }
 
+fn emit_global_get(code: &mut Vec<u8>, ir: &FunctionIr, index: u32) -> Result<()> {
+    let global = *ir
+        .global_values
+        .get(index as usize)
+        .ok_or_else(|| anyhow::anyhow!("global index {} outside global table", index))?;
+    match global {
+        GlobalValue::I32(v) => emit_push_i32(code, v),
+        GlobalValue::I64(v) => emit_push_i64(code, v),
+    }
+    Ok(())
+}
+
 fn emit_push_i32(code: &mut Vec<u8>, value: i32) {
     code.push(0xB8); // mov eax, imm32; zero-extends into rax
     code.extend_from_slice(&value.to_le_bytes());
@@ -316,20 +329,30 @@ fn emit_return(code: &mut Vec<u8>, result: Option<ValueType>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::ir::{verify_ir, FuncSig, FunctionIr, IrOp, ValueType};
+    use super::super::ir::{verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, ValueType};
+
+    fn test_ir(name: &str, sig: FuncSig, locals: Vec<ValueType>, ops: Vec<IrOp>) -> FunctionIr {
+        FunctionIr {
+            index: 0,
+            export_name: Some(name.to_string()),
+            sig,
+            locals,
+            global_values: Vec::new(),
+            ops,
+        }
+    }
 
     #[test]
     fn x86_add_two_i32_params() {
-        let ir = FunctionIr {
-            index: 0,
-            export_name: Some("add".to_string()),
-            sig: FuncSig {
+        let ir = test_ir(
+            "add",
+            FuncSig {
                 params: vec![ValueType::I32, ValueType::I32],
                 results: vec![ValueType::I32],
             },
-            locals: vec![ValueType::I32, ValueType::I32],
-            ops: vec![IrOp::LocalGet(0), IrOp::LocalGet(1), IrOp::I32Add, IrOp::End],
-        };
+            vec![ValueType::I32, ValueType::I32],
+            vec![IrOp::LocalGet(0), IrOp::LocalGet(1), IrOp::I32Add, IrOp::End],
+        );
 
         verify_ir(&ir).unwrap();
         let code = X86_64Backend::compile(&ir).unwrap();
@@ -339,15 +362,14 @@ mod tests {
 
     #[test]
     fn x86_supports_mutable_local() {
-        let ir = FunctionIr {
-            index: 0,
-            export_name: Some("mut_local".to_string()),
-            sig: FuncSig {
+        let ir = test_ir(
+            "mut_local",
+            FuncSig {
                 params: vec![ValueType::I64],
                 results: vec![ValueType::I64],
             },
-            locals: vec![ValueType::I64, ValueType::I64],
-            ops: vec![
+            vec![ValueType::I64, ValueType::I64],
+            vec![
                 IrOp::LocalGet(0),
                 IrOp::I64Const(7),
                 IrOp::I64Add,
@@ -355,7 +377,7 @@ mod tests {
                 IrOp::LocalGet(1),
                 IrOp::End,
             ],
-        };
+        );
 
         verify_ir(&ir).unwrap();
         let code = X86_64Backend::compile(&ir).unwrap();
@@ -364,19 +386,36 @@ mod tests {
 
     #[test]
     fn x86_supports_i32_comparison() {
-        let ir = FunctionIr {
-            index: 0,
-            export_name: Some("lt".to_string()),
-            sig: FuncSig {
+        let ir = test_ir(
+            "lt",
+            FuncSig {
                 params: vec![ValueType::I32, ValueType::I32],
                 results: vec![ValueType::I32],
             },
-            locals: vec![ValueType::I32, ValueType::I32],
-            ops: vec![IrOp::LocalGet(0), IrOp::LocalGet(1), IrOp::I32LtS, IrOp::End],
-        };
+            vec![ValueType::I32, ValueType::I32],
+            vec![IrOp::LocalGet(0), IrOp::LocalGet(1), IrOp::I32LtS, IrOp::End],
+        );
 
         verify_ir(&ir).unwrap();
         let code = X86_64Backend::compile(&ir).unwrap();
         assert!(code.windows(3).any(|w| w == [0x0F, 0x9C, 0xC0]));
+    }
+
+    #[test]
+    fn x86_supports_global_get() {
+        let mut ir = test_ir(
+            "global",
+            FuncSig {
+                params: vec![],
+                results: vec![ValueType::I32],
+            },
+            vec![],
+            vec![IrOp::GlobalGet(0, ValueType::I32), IrOp::End],
+        );
+        ir.global_values = vec![GlobalValue::I32(42)];
+
+        verify_ir(&ir).unwrap();
+        let code = X86_64Backend::compile(&ir).unwrap();
+        assert!(code.windows(5).any(|w| w == [0xB8, 42, 0, 0, 0]));
     }
 }
