@@ -138,8 +138,8 @@ export function CodeRunner({ onOutput }: CodeRunnerProps) {
     setWasmSize(null)
   }
 
-  const copyCode = async () => {
-    await navigator.clipboard.writeText(code)
+  const copyOutput = async () => {
+    await navigator.clipboard.writeText(output.join("\n"))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -186,8 +186,10 @@ export function CodeRunner({ onOutput }: CodeRunnerProps) {
             </span>
           )}
           <button
-            onClick={copyCode}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            onClick={copyOutput}
+            disabled={output.length === 0}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
+            title="Copy compiler output"
           >
             {copied ? (
               <Check className="h-3.5 w-3.5 text-[var(--status-online)]" />
