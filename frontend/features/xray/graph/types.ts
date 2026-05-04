@@ -14,7 +14,7 @@ export type XrayNode = {
   label: string
   tags: string[]
   layer?: "ui" | "api" | "runtime" | "protocol" | "storage" | "network" | "crypto" | "agent"
-  language?: "rust" | "typescript" | "c" | "unknown"
+  language?: "rust" | "typescript" | "javascript" | "python" | "go" | "java" | "c" | "unknown"
   source?: {
     file?: string
     line?: number
