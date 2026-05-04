@@ -15,6 +15,7 @@ import { connectionStore } from "@/platform/state/connection-store"
 import { permissionStore } from "@/platform/state/permission-store"
 import { wasmRegistry } from "@/platform/runtime/wasm-registry"
 import { appRegistry } from "@/platform/registries/app-registry"
+import { seedBuiltinCatalogApps } from "@/platform/registries/app-catalog-registry"
 import { capabilityRegistry } from "@/platform/registries/capability-registry"
 import { connectionRegistry } from "@/platform/registries/connection-registry"
 import { toolRegistry } from "@/platform/registries/tool-registry"
@@ -56,6 +57,7 @@ const PlatformContext = createContext<PlatformContextValue | null>(null)
 
 export function PlatformProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
+    seedBuiltinCatalogApps()
     refreshNodeStatus()
     loadApps()
     loadCapabilities()
