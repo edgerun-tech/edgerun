@@ -213,6 +213,13 @@ fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
             }
             IrOp::Block
         }
+        Operator::Loop { blockty } => {
+            if !matches!(blockty, BlockType::Empty) {
+                bail!("baseline AOT only supports empty loop types for now: {blockty:?}");
+            }
+            IrOp::Loop
+        }
+        Operator::Br { relative_depth } => IrOp::Br(relative_depth),
         Operator::BrIf { relative_depth } => IrOp::BrIf(relative_depth),
         Operator::I32Const { value } => IrOp::I32Const(value),
         Operator::I64Const { value } => IrOp::I64Const(value),
