@@ -4,7 +4,8 @@
 //!   cargo run -p edgerun-codelyzer --bin codelyzer-mcp -- /home/ken/edgerun
 //!
 //! Tools cover graph inspection, Rust AST edits via edgerun-edit, conservative
-//! non-Rust text edits, and Xray viewport control commands.
+//! non-Rust text edits gated by explicit user approval, and Xray viewport
+//! control commands.
 
 use std::{
     fs,
@@ -13,7 +14,13 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
-use edgerun_codelyzer::{analyzer::analyze_full, filesystem, mcp_rust_ast, uir::Program};
+use edgerun_codelyzer::{
+    analyzer::analyze_full,
+    filesystem,
+    mcp_permission,
+    mcp_rust_ast,
+    uir::Program,
+};
 use serde::Serialize;
 use serde_json::{json, Value};
 
@@ -120,10 +127,10 @@ fn tool_definitions() -> Value {
         { "name": "read_file", "description": "Read a file under the repository root.", "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "max_bytes": { "type": "integer", "minimum": 1, "maximum": 200000 } }, "required": ["path"] } },
         { "name": "grep_files", "description": "Search text in indexed files under the repository root.", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "limit": { "type": "integer", "minimum": 1, "maximum": 200 } }, "required": ["query"] } },
         { "name": "rust_ast", "description": "AST-safe Rust edits powered by edgerun-edit. Ops: list_file, find_fn, replace_fn_body, add_fn, remove_fn, add_use, add_derive, rename_type, new_file, remove_file, incoming_refs.", "inputSchema": { "type": "object", "properties": { "op": { "type": "string" }, "path": { "type": "string" }, "name": { "type": "string" }, "body": { "type": "string" }, "args": { "type": "string" }, "ret": { "type": "string" }, "use_path": { "type": "string" }, "derive": { "type": "string" }, "old": { "type": "string" }, "new": { "type": "string" }, "content": { "type": "string" } }, "required": ["op"] } },
-        { "name": "write_file", "description": "Create or overwrite a non-Rust repo file. Rust files must use rust_ast.", "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" }, "create": { "type": "boolean" }, "backup": { "type": "boolean" }, "expected_contains": { "type": "string" }, "allow_text_edit_on_rust": { "type": "boolean" } }, "required": ["path", "content"] } },
-        { "name": "replace_text", "description": "Replace exact text in a non-Rust repo file. Rust files must use rust_ast unless allow_text_edit_on_rust=true.", "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "old": { "type": "string" }, "new": { "type": "string" }, "all": { "type": "boolean" }, "backup": { "type": "boolean" }, "allow_text_edit_on_rust": { "type": "boolean" } }, "required": ["path", "old", "new"] } },
-        { "name": "replace_lines", "description": "Replace 1-indexed inclusive line range in a non-Rust repo file. Rust files must use rust_ast unless allow_text_edit_on_rust=true.", "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "start": { "type": "integer", "minimum": 1 }, "end": { "type": "integer", "minimum": 1 }, "replacement": { "type": "string" }, "backup": { "type": "boolean" }, "allow_text_edit_on_rust": { "type": "boolean" } }, "required": ["path", "start", "end", "replacement"] } },
-        { "name": "delete_file", "description": "Delete a repo file, creating a backup by default.", "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "backup": { "type": "boolean" } }, "required": ["path"] } },
+        { "name": "write_file", "description": "Create or overwrite a non-Rust repo file. Requires text edit approval unless EDGERUN_MCP_ALLOW_TEXT_EDITS=1. Rust files must use rust_ast.", "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" }, "create": { "type": "boolean" }, "backup": { "type": "boolean" }, "expected_contains": { "type": "string" }, "approval_token": { "type": "string" }, "allow_text_edit_on_rust": { "type": "boolean" } }, "required": ["path", "content"] } },
+        { "name": "replace_text", "description": "Replace exact text in a non-Rust repo file. Requires text edit approval unless EDGERUN_MCP_ALLOW_TEXT_EDITS=1. Rust files must use rust_ast unless allow_text_edit_on_rust=true.", "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "old": { "type": "string" }, "new": { "type": "string" }, "all": { "type": "boolean" }, "backup": { "type": "boolean" }, "approval_token": { "type": "string" }, "allow_text_edit_on_rust": { "type": "boolean" } }, "required": ["path", "old", "new"] } },
+        { "name": "replace_lines", "description": "Replace 1-indexed inclusive line range in a non-Rust repo file. Requires text edit approval unless EDGERUN_MCP_ALLOW_TEXT_EDITS=1. Rust files must use rust_ast unless allow_text_edit_on_rust=true.", "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "start": { "type": "integer", "minimum": 1 }, "end": { "type": "integer", "minimum": 1 }, "replacement": { "type": "string" }, "backup": { "type": "boolean" }, "approval_token": { "type": "string" }, "allow_text_edit_on_rust": { "type": "boolean" } }, "required": ["path", "start", "end", "replacement"] } },
+        { "name": "delete_file", "description": "Delete a repo file, creating a backup by default. Requires text edit approval unless EDGERUN_MCP_ALLOW_TEXT_EDITS=1.", "inputSchema": { "type": "object", "properties": { "path": { "type": "string" }, "backup": { "type": "boolean" }, "approval_token": { "type": "string" } }, "required": ["path"] } },
         { "name": "xray_focus_node", "description": "Command the browser Xray viewport to select/focus a node visually.", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" }, "zoom": { "type": "number" } }, "required": ["id"] } },
         { "name": "xray_set_camera", "description": "Command the browser Xray viewport camera.", "inputSchema": { "type": "object", "properties": { "yaw": { "type": "number" }, "pitch": { "type": "number" }, "zoom": { "type": "number" }, "panX": { "type": "number" }, "panY": { "type": "number" } } } },
         { "name": "xray_filter", "description": "Command the browser Xray viewport to hide/show filter keys.", "inputSchema": { "type": "object", "properties": { "hide": { "type": "array", "items": { "type": "string" } }, "show": { "type": "array", "items": { "type": "string" } } } } },
@@ -262,6 +269,15 @@ fn tool_grep_files(state: &mut ServerState, args: Value) -> Result<Value, String
     Ok(json!({ "query": query, "count": results.len(), "matches": results }))
 }
 
+fn require_text_permission(state: &ServerState, operation: &str, path: &str, args: &Value) -> Result<(), String> {
+    let token = args.get("approval_token").and_then(Value::as_str);
+    mcp_permission::require_text_edit_permission(&state.root, operation, path, token).map(|grant| {
+        let _ = grant.approved;
+        let _ = grant.token;
+        let _ = grant.request_path;
+    })
+}
+
 fn forbid_text_rust(path: &str, args: &Value) -> Result<(), String> {
     let allow = args.get("allow_text_edit_on_rust").and_then(Value::as_bool).unwrap_or(false);
     if path.ends_with(".rs") && !allow {
@@ -273,6 +289,7 @@ fn forbid_text_rust(path: &str, args: &Value) -> Result<(), String> {
 fn tool_write_file(state: &mut ServerState, args: Value) -> Result<Value, String> {
     let path = args.get("path").and_then(Value::as_str).ok_or("missing path")?;
     forbid_text_rust(path, &args)?;
+    require_text_permission(state, "write_file", path, &args)?;
     let content = args.get("content").and_then(Value::as_str).ok_or("missing content")?;
     let create = args.get("create").and_then(Value::as_bool).unwrap_or(false);
     let backup = args.get("backup").and_then(Value::as_bool).unwrap_or(true);
@@ -300,6 +317,7 @@ fn tool_write_file(state: &mut ServerState, args: Value) -> Result<Value, String
 fn tool_replace_text(state: &mut ServerState, args: Value) -> Result<Value, String> {
     let path = args.get("path").and_then(Value::as_str).ok_or("missing path")?;
     forbid_text_rust(path, &args)?;
+    require_text_permission(state, "replace_text", path, &args)?;
     let old = args.get("old").and_then(Value::as_str).ok_or("missing old")?;
     let new = args.get("new").and_then(Value::as_str).ok_or("missing new")?;
     let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
@@ -319,6 +337,7 @@ fn tool_replace_text(state: &mut ServerState, args: Value) -> Result<Value, Stri
 fn tool_replace_lines(state: &mut ServerState, args: Value) -> Result<Value, String> {
     let path = args.get("path").and_then(Value::as_str).ok_or("missing path")?;
     forbid_text_rust(path, &args)?;
+    require_text_permission(state, "replace_lines", path, &args)?;
     let start = args.get("start").and_then(Value::as_u64).ok_or("missing start")? as usize;
     let end = args.get("end").and_then(Value::as_u64).ok_or("missing end")? as usize;
     let replacement = args.get("replacement").and_then(Value::as_str).ok_or("missing replacement")?;
@@ -340,6 +359,7 @@ fn tool_replace_lines(state: &mut ServerState, args: Value) -> Result<Value, Str
 
 fn tool_delete_file(state: &mut ServerState, args: Value) -> Result<Value, String> {
     let path = args.get("path").and_then(Value::as_str).ok_or("missing path")?;
+    require_text_permission(state, "delete_file", path, &args)?;
     let backup = args.get("backup").and_then(Value::as_bool).unwrap_or(true);
     let full_path = resolve_under_root(&state.root, path)?;
     if backup { backup_file(&full_path)?; }
