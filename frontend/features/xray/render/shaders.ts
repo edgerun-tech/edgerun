@@ -7,16 +7,28 @@ uniform vec2 u_resolution;
 uniform float u_zoom;
 uniform vec2 u_pan;
 uniform float u_rotation;
+uniform float u_tilt;
 out vec4 v_color;
 out float v_selected;
 void main() {
-    vec2 pos = (a_position + u_pan) * u_zoom;
-    float c = cos(u_rotation);
-    float s = sin(u_rotation);
-    pos = vec2(pos.x * c - pos.y * s, pos.x * s + pos.y * c);
-    vec2 clip = pos / (u_resolution * 0.5);
+    vec2 base = (a_position + u_pan) * u_zoom;
+
+    // Treat the 2D graph as a plane in 3D, then yaw + pitch it before projection.
+    float cy = cos(u_rotation);
+    float sy = sin(u_rotation);
+    float cp = cos(u_tilt);
+    float sp = sin(u_tilt);
+
+    vec3 p = vec3(base.x, base.y, 0.0);
+    vec3 yawed = vec3(p.x * cy - p.z * sy, p.y, p.x * sy + p.z * cy);
+    vec3 pitched = vec3(yawed.x, yawed.y * cp - yawed.z * sp, yawed.y * sp + yawed.z * cp);
+
+    float perspective = 900.0 / max(220.0, 900.0 + pitched.z);
+    vec2 projected = pitched.xy * perspective;
+    vec2 clip = projected / (u_resolution * 0.5);
+
     gl_Position = vec4(clip.x, clip.y, 0.0, 1.0);
-    gl_PointSize = a_size * u_zoom;
+    gl_PointSize = a_size * u_zoom * perspective;
     v_color = a_color;
     v_selected = a_selected;
 }`
@@ -34,7 +46,9 @@ void main() {
     if (v_selected > 0.5 && d > 0.4) {
         color = vec4(1.0, 1.0, 1.0, 1.0);
     }
-    float alpha = smoothstep(0.5, 0.35, d) * color.a;
+    float core = smoothstep(0.5, 0.18, d);
+    float halo = smoothstep(0.5, 0.02, d) * 0.25;
+    float alpha = max(core, halo) * color.a;
     fragColor = vec4(color.rgb * alpha, alpha);
 }`
 
@@ -45,13 +59,22 @@ uniform vec2 u_resolution;
 uniform float u_zoom;
 uniform vec2 u_pan;
 uniform float u_rotation;
+uniform float u_tilt;
 out vec3 v_color;
 void main() {
-    vec2 pos = (a_position + u_pan) * u_zoom;
-    float c = cos(u_rotation);
-    float s = sin(u_rotation);
-    pos = vec2(pos.x * c - pos.y * s, pos.x * s + pos.y * c);
-    vec2 clip = pos / (u_resolution * 0.5);
+    vec2 base = (a_position + u_pan) * u_zoom;
+    float cy = cos(u_rotation);
+    float sy = sin(u_rotation);
+    float cp = cos(u_tilt);
+    float sp = sin(u_tilt);
+
+    vec3 p = vec3(base.x, base.y, 0.0);
+    vec3 yawed = vec3(p.x * cy - p.z * sy, p.y, p.x * sy + p.z * cy);
+    vec3 pitched = vec3(yawed.x, yawed.y * cp - yawed.z * sp, yawed.y * sp + yawed.z * cp);
+    float perspective = 900.0 / max(220.0, 900.0 + pitched.z);
+    vec2 projected = pitched.xy * perspective;
+    vec2 clip = projected / (u_resolution * 0.5);
+
     gl_Position = vec4(clip.x, clip.y, 0.0, 1.0);
     v_color = a_color;
 }`
@@ -61,7 +84,7 @@ precision mediump float;
 in vec3 v_color;
 out vec4 fragColor;
 void main() {
-    fragColor = vec4(v_color, 1.0);
+    fragColor = vec4(v_color, 0.72);
 }`
 
 export function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
@@ -102,6 +125,7 @@ export function buildEdgeProgram(gl: WebGL2RenderingContext): WebGLProgram {
 }
 
 export function screenToGraph(sx: number, sy: number, zoom: number, panX: number, panY: number, rotation: number, vw: number, vh: number): [number, number] {
+  // Approximate inverse projection for picking. Good enough at the default tilt.
   let x = (sx - vw * 0.5) / zoom
   let y = (vh * 0.5 - sy) / zoom
   const c = Math.cos(-rotation)
