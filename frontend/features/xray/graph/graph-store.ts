@@ -1,9 +1,14 @@
 import { atom } from "nanostores"
-import type { XrayState, LayoutType } from "./types"
+import type { XrayState, LayoutType, XrayNode, XrayEdge } from "./types"
 import { createMockGraph, createMockRuntimeStats } from "./mock-graph"
 import { CodeAnalyzerWsService } from "../services/codeanalyzer-ws"
 
 let wsService: CodeAnalyzerWsService | null = null
+let codeAnalyzerInitialized = false
+
+const MAX_VISIBLE_NODES = 2800
+const MAX_VISIBLE_EDGES = 9000
+const MAX_FILE_NODES = 360
 
 function initialState(): XrayState {
   const graph = createMockGraph()
@@ -24,19 +29,102 @@ function initialState(): XrayState {
   }
 }
 
-function applyGraphData(data: { nodes: any[]; edges: any[] }) {
-  const nodeMap = new Map()
-  for (const node of data.nodes) {
+function edgeScore(edge: XrayEdge, degree: Map<string, number>) {
+  return (degree.get(edge.source) || 0) + (degree.get(edge.target) || 0)
+}
+
+function projectGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
+  const degree = new Map<string, number>()
+  for (const edge of data.edges) {
+    degree.set(edge.source, (degree.get(edge.source) || 0) + 1)
+    degree.set(edge.target, (degree.get(edge.target) || 0) + 1)
+  }
+
+  const sourceNodes = data.nodes.filter((node) => node.id)
+  const fileNodes: XrayNode[] = []
+  const seenFiles = new Set<string>()
+
+  const rankedFiles = [...sourceNodes]
+    .filter((node) => node.source?.file)
+    .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0))
+
+  for (const node of rankedFiles) {
+    const file = node.source?.file
+    if (!file || seenFiles.has(file)) continue
+    seenFiles.add(file)
+    fileNodes.push({
+      id: `file:${file}`,
+      kind: "file",
+      label: file.split("/").slice(-1)[0] || file,
+      tags: ["file", node.layer || "code", node.language || "unknown"].filter(Boolean) as string[],
+      layer: node.layer,
+      language: node.language,
+      source: { file },
+      x: 0,
+      y: 0,
+    })
+    if (fileNodes.length >= MAX_FILE_NODES) break
+  }
+
+  const rankedNodes = [...sourceNodes]
+    .sort((a, b) => {
+      const scoreA = degree.get(a.id) || 0
+      const scoreB = degree.get(b.id) || 0
+      if (scoreA !== scoreB) return scoreB - scoreA
+      return (a.source?.file || "").localeCompare(b.source?.file || "")
+    })
+    .slice(0, Math.max(0, MAX_VISIBLE_NODES - fileNodes.length))
+
+  const visibleIds = new Set(rankedNodes.map((node) => node.id))
+  for (const node of fileNodes) visibleIds.add(node.id)
+
+  const visibleEdges = [...data.edges]
+    .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
+    .sort((a, b) => edgeScore(b, degree) - edgeScore(a, degree))
+    .slice(0, MAX_VISIBLE_EDGES)
+
+  const ownershipEdges: XrayEdge[] = []
+  const fileNodeIds = new Set(fileNodes.map((node) => node.id))
+  for (const node of rankedNodes) {
+    const file = node.source?.file
+    const fileId = file ? `file:${file}` : null
+    if (!fileId || !fileNodeIds.has(fileId)) continue
+    ownershipEdges.push({
+      id: `${fileId}->${node.id}:owns`,
+      source: fileId,
+      target: node.id,
+      kind: "owns",
+      tags: ["file", "symbol"],
+    })
+    if (visibleEdges.length + ownershipEdges.length >= MAX_VISIBLE_EDGES) break
+  }
+
+  return {
+    nodes: [...fileNodes, ...rankedNodes],
+    edges: [...ownershipEdges, ...visibleEdges],
+  }
+}
+
+function applyGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
+  const projected = projectGraphData(data)
+  const nodeMap = new Map<string, XrayNode>()
+  for (const node of projected.nodes) {
     nodeMap.set(node.id, { ...node, x: node.x ?? 0, y: node.y ?? 0 })
   }
 
   xrayState.set({
     ...xrayState.get(),
     nodes: nodeMap,
-    edges: data.edges,
+    edges: projected.edges,
     runtimeStats: createMockRuntimeStats(nodeMap),
+    selectedId: null,
+    highlightedIds: new Set(),
     loading: false,
     error: null,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    rotation: 0,
   })
 }
 
@@ -47,6 +135,7 @@ export function initCodeAnalyzerConnection(url?: string): void {
     wsService.disconnect()
   }
 
+  codeAnalyzerInitialized = true
   const endpoint = url || "http://localhost:13337/graph"
   const isHttp = endpoint.startsWith("http://") || endpoint.startsWith("https://")
   const wsUrl = isHttp ? endpoint.replace(/^http/, "ws").replace(/\/graph$/, "/ws") : endpoint
@@ -64,6 +153,11 @@ export function initCodeAnalyzerConnection(url?: string): void {
   })
 
   void wsService.loadGraph()
+}
+
+export function ensureCodeAnalyzerConnection(): void {
+  if (codeAnalyzerInitialized || wsService) return
+  initCodeAnalyzerConnection()
 }
 
 export function requestAnalysis(path: string): void {
