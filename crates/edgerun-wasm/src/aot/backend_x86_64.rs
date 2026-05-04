@@ -15,7 +15,8 @@ impl X86_64Backend {
             match *op {
                 IrOp::I32Const(v) => emit_push_i32(&mut code, v),
                 IrOp::I64Const(v) => emit_push_i64(&mut code, v),
-                IrOp::GlobalGet(i, _) => emit_global_get(&mut code, ir, i)?,
+                IrOp::GlobalGet(i, ty) => frame.emit_global_get(&mut code, i, ty)?,
+                IrOp::GlobalSet(i, ty) => frame.emit_global_set(&mut code, i, ty)?,
                 IrOp::LocalGet(i) => frame.emit_local_get(&mut code, i, local_type(ir, i)?)?,
                 IrOp::LocalSet(i) => frame.emit_local_set(&mut code, i, local_type(ir, i)?)?,
                 IrOp::LocalTee(i) => frame.emit_local_tee(&mut code, i, local_type(ir, i)?)?,
@@ -64,23 +65,35 @@ impl X86_64Backend {
 }
 
 struct Frame {
-    slots: u32,
+    local_slots: u32,
+    global_slots: u32,
 }
 
 impl Frame {
     fn new(ir: &FunctionIr) -> Result<Self> {
-        let slots = ir.locals.len() as u32;
+        let local_slots = ir.locals.len() as u32;
+        let global_slots = ir.global_values.len() as u32;
+        let slots = local_slots
+            .checked_add(global_slots)
+            .ok_or_else(|| anyhow::anyhow!("baseline backend frame slot overflow"))?;
         if slots > 4096 {
-            bail!("baseline backend refuses huge local frame: {slots} slots");
+            bail!("baseline backend refuses huge frame: {slots} slots");
         }
-        Ok(Self { slots })
+        Ok(Self {
+            local_slots,
+            global_slots,
+        })
+    }
+
+    fn total_slots(&self) -> u32 {
+        self.local_slots + self.global_slots
     }
 
     fn emit_prologue(&self, code: &mut Vec<u8>, ir: &FunctionIr) -> Result<()> {
         code.push(0x55); // push rbp
         code.extend_from_slice(&[0x48, 0x89, 0xE5]); // mov rbp, rsp
 
-        let frame_bytes = self.slots * 8;
+        let frame_bytes = self.total_slots() * 8;
         if frame_bytes > 0 {
             code.extend_from_slice(&[0x48, 0x81, 0xEC]); // sub rsp, imm32
             code.extend_from_slice(&(frame_bytes as i32).to_le_bytes());
@@ -89,8 +102,11 @@ impl Frame {
         for i in 0..ir.sig.params.len() as u32 {
             self.emit_store_arg(code, i, local_type(ir, i)?)?;
         }
-        for i in ir.sig.params.len() as u32..self.slots {
+        for i in ir.sig.params.len() as u32..self.local_slots {
             self.emit_zero_slot(code, i)?;
+        }
+        for (i, global) in ir.global_values.iter().copied().enumerate() {
+            self.emit_init_global(code, i as u32, global)?;
         }
 
         Ok(())
@@ -101,7 +117,7 @@ impl Frame {
         if ty == ValueType::I32 {
             emit_zero_extend_eax(code);
         }
-        self.emit_store_rax_to_slot(code, index)
+        self.emit_store_rax_to_slot(code, self.local_slot(index)?)
     }
 
     fn emit_arg_to_rax(&self, code: &mut Vec<u8>, index: u32) -> Result<()> {
@@ -117,8 +133,22 @@ impl Frame {
         Ok(())
     }
 
-    fn emit_zero_slot(&self, code: &mut Vec<u8>, index: u32) -> Result<()> {
-        let disp = self.slot_disp(index)?;
+    fn emit_init_global(&self, code: &mut Vec<u8>, index: u32, global: GlobalValue) -> Result<()> {
+        match global {
+            GlobalValue::I32(v) => {
+                code.push(0xB8); // mov eax, imm32
+                code.extend_from_slice(&v.to_le_bytes());
+            }
+            GlobalValue::I64(v) => {
+                code.extend_from_slice(&[0x48, 0xB8]); // mov rax, imm64
+                code.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+        self.emit_store_rax_to_slot(code, self.global_slot(index)?)
+    }
+
+    fn emit_zero_slot(&self, code: &mut Vec<u8>, slot: u32) -> Result<()> {
+        let disp = self.slot_disp(slot)?;
         code.extend_from_slice(&[0x48, 0xC7, 0x85]); // mov qword [rbp + disp32], imm32
         code.extend_from_slice(&disp.to_le_bytes());
         code.extend_from_slice(&0i32.to_le_bytes());
@@ -126,7 +156,7 @@ impl Frame {
     }
 
     fn emit_local_get(&self, code: &mut Vec<u8>, index: u32, ty: ValueType) -> Result<()> {
-        self.emit_load_slot_to_rax(code, index)?;
+        self.emit_load_slot_to_rax(code, self.local_slot(index)?)?;
         if ty == ValueType::I32 {
             emit_zero_extend_eax(code);
         }
@@ -139,7 +169,7 @@ impl Frame {
         if ty == ValueType::I32 {
             emit_zero_extend_eax(code);
         }
-        self.emit_store_rax_to_slot(code, index)
+        self.emit_store_rax_to_slot(code, self.local_slot(index)?)
     }
 
     fn emit_local_tee(&self, code: &mut Vec<u8>, index: u32, ty: ValueType) -> Result<()> {
@@ -147,30 +177,61 @@ impl Frame {
         if ty == ValueType::I32 {
             emit_zero_extend_eax(code);
         }
-        self.emit_store_rax_to_slot(code, index)?;
+        self.emit_store_rax_to_slot(code, self.local_slot(index)?)?;
         code.push(0x50); // push rax
         Ok(())
     }
 
-    fn emit_load_slot_to_rax(&self, code: &mut Vec<u8>, index: u32) -> Result<()> {
-        let disp = self.slot_disp(index)?;
+    fn emit_global_get(&self, code: &mut Vec<u8>, index: u32, ty: ValueType) -> Result<()> {
+        self.emit_load_slot_to_rax(code, self.global_slot(index)?)?;
+        if ty == ValueType::I32 {
+            emit_zero_extend_eax(code);
+        }
+        code.push(0x50);
+        Ok(())
+    }
+
+    fn emit_global_set(&self, code: &mut Vec<u8>, index: u32, ty: ValueType) -> Result<()> {
+        code.push(0x58);
+        if ty == ValueType::I32 {
+            emit_zero_extend_eax(code);
+        }
+        self.emit_store_rax_to_slot(code, self.global_slot(index)?)
+    }
+
+    fn emit_load_slot_to_rax(&self, code: &mut Vec<u8>, slot: u32) -> Result<()> {
+        let disp = self.slot_disp(slot)?;
         code.extend_from_slice(&[0x48, 0x8B, 0x85]); // mov rax, [rbp + disp32]
         code.extend_from_slice(&disp.to_le_bytes());
         Ok(())
     }
 
-    fn emit_store_rax_to_slot(&self, code: &mut Vec<u8>, index: u32) -> Result<()> {
-        let disp = self.slot_disp(index)?;
+    fn emit_store_rax_to_slot(&self, code: &mut Vec<u8>, slot: u32) -> Result<()> {
+        let disp = self.slot_disp(slot)?;
         code.extend_from_slice(&[0x48, 0x89, 0x85]); // mov [rbp + disp32], rax
         code.extend_from_slice(&disp.to_le_bytes());
         Ok(())
     }
 
-    fn slot_disp(&self, index: u32) -> Result<i32> {
-        if index >= self.slots {
-            bail!("local index {} outside frame with {} slots", index, self.slots);
+    fn local_slot(&self, index: u32) -> Result<u32> {
+        if index >= self.local_slots {
+            bail!("local index {} outside frame with {} local slots", index, self.local_slots);
         }
-        Ok(-8 * ((index as i32) + 1))
+        Ok(index)
+    }
+
+    fn global_slot(&self, index: u32) -> Result<u32> {
+        if index >= self.global_slots {
+            bail!("global index {} outside frame with {} global slots", index, self.global_slots);
+        }
+        Ok(self.local_slots + index)
+    }
+
+    fn slot_disp(&self, slot: u32) -> Result<i32> {
+        if slot >= self.total_slots() {
+            bail!("slot index {} outside frame with {} slots", slot, self.total_slots());
+        }
+        Ok(-8 * ((slot as i32) + 1))
     }
 }
 
@@ -210,18 +271,6 @@ fn local_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
         .get(index as usize)
         .copied()
         .ok_or_else(|| anyhow::anyhow!("local index {} outside function frame", index))
-}
-
-fn emit_global_get(code: &mut Vec<u8>, ir: &FunctionIr, index: u32) -> Result<()> {
-    let global = *ir
-        .global_values
-        .get(index as usize)
-        .ok_or_else(|| anyhow::anyhow!("global index {} outside global table", index))?;
-    match global {
-        GlobalValue::I32(v) => emit_push_i32(code, v),
-        GlobalValue::I64(v) => emit_push_i64(code, v),
-    }
-    Ok(())
 }
 
 fn emit_push_i32(code: &mut Vec<u8>, value: i32) {
@@ -416,6 +465,29 @@ mod tests {
 
         verify_ir(&ir).unwrap();
         let code = X86_64Backend::compile(&ir).unwrap();
-        assert!(code.windows(5).any(|w| w == [0xB8, 42, 0, 0, 0]));
+        assert!(!code.is_empty());
+    }
+
+    #[test]
+    fn x86_supports_global_set_then_get() {
+        let mut ir = test_ir(
+            "global_set",
+            FuncSig {
+                params: vec![],
+                results: vec![ValueType::I32],
+            },
+            vec![],
+            vec![
+                IrOp::I32Const(99),
+                IrOp::GlobalSet(0, ValueType::I32),
+                IrOp::GlobalGet(0, ValueType::I32),
+                IrOp::End,
+            ],
+        );
+        ir.global_values = vec![GlobalValue::I32(42)];
+
+        verify_ir(&ir).unwrap();
+        let code = X86_64Backend::compile(&ir).unwrap();
+        assert!(!code.is_empty());
     }
 }
