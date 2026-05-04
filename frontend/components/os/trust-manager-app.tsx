@@ -5,16 +5,23 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Clock,
+  Database,
+  Download,
+  Eye,
   Fingerprint,
   GitBranch,
   KeyRound,
   Lock,
   Network,
+  Plus,
+  RefreshCw,
   Route,
   ScrollText,
   Search,
   Shield,
   SlidersHorizontal,
+  Trash2,
   XCircle,
   type LucideIcon,
 } from "lucide-react"
@@ -22,7 +29,19 @@ import { cn } from "@/lib/utils"
 
 type TrustTab = "overview" | "capsules" | "capabilities" | "routes" | "delegations" | "events"
 type Risk = "low" | "medium" | "high"
-type Status = "strong" | "verified" | "review" | "danger" | "active" | "limited"
+type Status = "strong" | "verified" | "review" | "danger" | "active" | "limited" | "revoked"
+
+type TrustItem = {
+  id: string
+  title: string
+  subtitle: string
+  meta: string
+  status: Status
+  risk?: Risk
+  icon: LucideIcon
+  details: string[]
+  actions?: string[]
+}
 
 const tabs: { id: TrustTab; label: string; icon: LucideIcon }[] = [
   { id: "overview", label: "Overview", icon: Activity },
@@ -33,40 +52,209 @@ const tabs: { id: TrustTab; label: string; icon: LucideIcon }[] = [
   { id: "events", label: "Audit", icon: ScrollText },
 ]
 
-const trustCards = [
-  { label: "Root policy", value: "2-of-3", detail: "Framework · Phone · YubiKey", status: "strong" as Status, icon: Fingerprint },
-  { label: "Active delegations", value: "7", detail: "2 expire soon", status: "review" as Status, icon: GitBranch },
-  { label: "Policy routes", value: "12", detail: "3 need review", status: "review" as Status, icon: Route },
-  { label: "Denied actions", value: "4", detail: "last 24h", status: "danger" as Status, icon: XCircle },
-]
-
-const capabilities = [
-  { name: "Manage Invoices", risk: "medium" as Risk, usedBy: 2, includes: ["Read invoice emails", "Create accounting records"], excludes: ["Send email", "Approve payments"] },
-  { name: "Sign Software Releases", risk: "medium" as Risk, usedBy: 1, includes: ["Sign binary", "Publish manifest"], excludes: ["Modify source", "Access user data"] },
-  { name: "Update DNS Records", risk: "medium" as Risk, usedBy: 1, includes: ["Read DNS", "Update A/AAAA/CNAME"], excludes: ["Transfer domain"] },
-  { name: "Approve Payments", risk: "high" as Risk, usedBy: 1, includes: ["Approve under limit", "Log payment event"], excludes: ["Change payout address"] },
-]
-
-const routes = [
-  { name: "Gmail → Invoice Agent → Accounting", cap: "Manage Invoices", status: "active" as Status, approval: "Auto under $500 · Ask above", lastRun: "2 min ago" },
-  { name: "GitHub → Build Authority → Release Registry", cap: "Sign Software Releases", status: "active" as Status, approval: "Auto", lastRun: "18 min ago" },
-  { name: "DNS Agent → Cloudflare → edgerun.tech", cap: "Update DNS Records", status: "active" as Status, approval: "Auto", lastRun: "1 hr ago" },
-  { name: "Phone Presence → Home Assistant → Gate", cap: "Control Smart Home", status: "review" as Status, approval: "Ask first", lastRun: "2 days ago" },
-]
-
-const delegations = [
-  { name: "Build Authority", by: "Ken Root", expires: "Dec 31, 2026", risk: "medium" as Risk, allowed: "Sign releases · revoke bad releases" },
-  { name: "DNS Authority", by: "Infrastructure Authority", expires: "Jun 1, 2026", risk: "medium" as Risk, allowed: "Update *.edgerun.tech records" },
-  { name: "Payment Authority", by: "Ken Root", expires: "Mar 15, 2026", risk: "high" as Risk, allowed: "Approve payouts under $500" },
-]
-
-const events = [
-  { actor: "Invoice Agent", action: "created accounting record #4821", reason: "Manage Invoices capability", status: "verified" as Status, time: "2 min ago" },
-  { actor: "Build Authority", action: "signed edgerun-node v0.4.2", reason: "Build signing delegation", status: "verified" as Status, time: "18 min ago" },
-  { actor: "DNS Agent", action: "updated api.edgerun.tech", reason: "DNS Authority delegation", status: "verified" as Status, time: "1 hr ago" },
-  { actor: "System", action: "revoked old phone key", reason: "Manual revocation", status: "review" as Status, time: "3 hr ago" },
-  { actor: "Unknown App", action: "denied private folder", reason: "No capability grant", status: "danger" as Status, time: "7 hr ago" },
-]
+const itemsByTab: Record<TrustTab, TrustItem[]> = {
+  overview: [
+    {
+      id: "root-policy",
+      title: "Root policy",
+      subtitle: "Ken Personal Root",
+      meta: "2-of-3 devices · Framework · Phone · YubiKey",
+      status: "strong",
+      icon: Fingerprint,
+      details: ["Authority is derived from the latest valid signed root state.", "Current quorum requires 2 trusted devices.", "Old phone key was revoked 3 hours ago."],
+      actions: ["Open root", "Add backup", "Export capsule"],
+    },
+    {
+      id: "review-needed",
+      title: "3 routes need review",
+      subtitle: "Policy drift detected",
+      meta: "Home Assistant route · external identity route · payment threshold",
+      status: "review",
+      icon: AlertTriangle,
+      details: ["A route can still be valid while needing review.", "Review does not revoke existing signed history.", "Unreviewed future actions should ask first."],
+      actions: ["Review routes", "Simulate policy"],
+    },
+    {
+      id: "denied-actions",
+      title: "4 denied actions",
+      subtitle: "Blocked by local policy",
+      meta: "last 24 hours",
+      status: "danger",
+      icon: XCircle,
+      details: ["Unknown App attempted private folder access.", "No matching capability grant existed.", "The denial was recorded as local audit evidence."],
+      actions: ["Inspect audit", "Block identity"],
+    },
+  ],
+  capsules: [
+    {
+      id: "ken-personal",
+      title: "Ken Personal",
+      subtitle: "Personal root capsule",
+      meta: "Local file · phone · encrypted backup",
+      status: "strong",
+      icon: Shield,
+      details: ["Root policy: 2-of-3 devices.", "Portable trust capsule can be exported or backed up.", "Used for local identity, app approval, and delegation roots."],
+      actions: ["Export", "Backup", "Rotate"],
+    },
+    {
+      id: "edgerun-org",
+      title: "EdgeRun Organization",
+      subtitle: "Organization capsule",
+      meta: "Board authority · build authority",
+      status: "verified",
+      icon: Database,
+      details: ["Verified by domain proof and release key fingerprint.", "Trusted for software releases and infrastructure metadata.", "Does not grant access to personal data."],
+      actions: ["Open", "Pin", "Publish"],
+    },
+    {
+      id: "web-pki",
+      title: "Public Web PKI",
+      subtitle: "External trust root",
+      meta: "Browser bundle · website certificates only",
+      status: "limited",
+      icon: Lock,
+      details: ["Imported compatibility root.", "Scope is limited to website certificate interpretation.", "Not trusted for app authority or payment policy."],
+      actions: ["Limit scope", "Remove"],
+    },
+  ],
+  capabilities: [
+    {
+      id: "manage-invoices",
+      title: "Manage Invoices",
+      subtitle: "Read invoice emails and create accounting records",
+      meta: "used by 2 routes",
+      status: "active",
+      risk: "medium",
+      icon: SlidersHorizontal,
+      details: ["Allows reading invoice emails and extracting fields.", "Allows creating accounting records with source hashes.", "Does not allow sending emails, deleting emails, or approving payments."],
+      actions: ["Edit scope", "Show routes", "Revoke"],
+    },
+    {
+      id: "sign-releases",
+      title: "Sign Software Releases",
+      subtitle: "Authorize versioned software artifacts",
+      meta: "used by Build Authority",
+      status: "active",
+      risk: "medium",
+      icon: KeyRound,
+      details: ["Allows signing release binaries and publishing manifests.", "Allows revoking compromised releases.", "Does not allow source-code edits or user-data access."],
+      actions: ["Edit policy", "Inspect key"],
+    },
+    {
+      id: "approve-payments",
+      title: "Approve Payments",
+      subtitle: "Authorize outbound payouts within limits",
+      meta: "high risk · ask above $500",
+      status: "review",
+      risk: "high",
+      icon: Lock,
+      details: ["Allows approving payouts under configured limits.", "Final spending must require explicit confirmation.", "Does not allow changing payout addresses or treasury withdrawal."],
+      actions: ["Review", "Tighten", "Disable"],
+    },
+  ],
+  routes: [
+    {
+      id: "invoice-route",
+      title: "Gmail → Invoice Agent → Accounting",
+      subtitle: "Executor: Ken Laptop Agent",
+      meta: "Auto under $500 · ask above · last run 2 min ago",
+      status: "active",
+      risk: "medium",
+      icon: Route,
+      details: ["Source: Gmail invoice messages.", "Capability: Manage Invoices.", "Destination: Accounting record with signed source hash."],
+      actions: ["Simulate", "Edit", "Pause"],
+    },
+    {
+      id: "release-route",
+      title: "GitHub → Build Authority → Release Registry",
+      subtitle: "Executor: Build Authority",
+      meta: "Auto · last run 18 min ago",
+      status: "active",
+      risk: "medium",
+      icon: Route,
+      details: ["Source: GitHub release event.", "Capability: Sign Software Releases.", "Destination: signed release manifest."],
+      actions: ["Inspect", "Pause"],
+    },
+    {
+      id: "home-route",
+      title: "Phone Presence → Home Assistant → Gate",
+      subtitle: "Executor: Local Agent",
+      meta: "Ask first · last run 2 days ago",
+      status: "review",
+      risk: "medium",
+      icon: Route,
+      details: ["Route affects physical-world behavior.", "Review required before future automatic execution.", "Recommended policy: require local presence + confirmation."],
+      actions: ["Review", "Disable"],
+    },
+  ],
+  delegations: [
+    {
+      id: "build-authority",
+      title: "Build Authority",
+      subtitle: "Issued by Ken Root",
+      meta: "expires Dec 31, 2026",
+      status: "verified",
+      risk: "medium",
+      icon: GitBranch,
+      details: ["Can sign software releases and approve runtime versions.", "Can revoke compromised releases.", "Cannot access user data or change payment settings."],
+      actions: ["Inspect chain", "Rotate", "Revoke"],
+    },
+    {
+      id: "dns-authority",
+      title: "DNS Authority",
+      subtitle: "Issued by Infrastructure Authority",
+      meta: "expires Jun 1, 2026",
+      status: "verified",
+      risk: "medium",
+      icon: GitBranch,
+      details: ["Can update records under *.edgerun.tech.", "Cannot transfer domain or change registrar.", "All changes must be logged."],
+      actions: ["Inspect chain", "Revoke"],
+    },
+    {
+      id: "payment-authority",
+      title: "Payment Authority",
+      subtitle: "Issued by Ken Root",
+      meta: "expires Mar 15, 2026",
+      status: "review",
+      risk: "high",
+      icon: GitBranch,
+      details: ["Can approve payouts under $500.", "Cannot change payout address or withdraw treasury.", "Recommended: require second factor for every use."],
+      actions: ["Review", "Revoke"],
+    },
+  ],
+  events: [
+    {
+      id: "event-invoice",
+      title: "Invoice Agent created accounting record #4821",
+      subtitle: "Actor: Invoice Agent",
+      meta: "2 min ago · verified",
+      status: "verified",
+      icon: CheckCircle2,
+      details: ["Reason: Manage Invoices capability.", "Result: committed local record with source hash.", "Audit: signed and append-only."],
+      actions: ["Open proof", "Copy hash"],
+    },
+    {
+      id: "event-release",
+      title: "Build Authority signed edgerun-node v0.4.2",
+      subtitle: "Actor: Build Authority",
+      meta: "18 min ago · verified",
+      status: "verified",
+      icon: CheckCircle2,
+      details: ["Reason: Build signing delegation.", "Result: signed release manifest.", "Audit: delegation chain verified."],
+      actions: ["Open release", "Copy proof"],
+    },
+    {
+      id: "event-denied",
+      title: "Unknown App denied private folder access",
+      subtitle: "Actor: Unknown App",
+      meta: "7 hr ago · denied",
+      status: "danger",
+      icon: XCircle,
+      details: ["Reason: no matching filesystem capability grant.", "Result: blocked before action.", "Recommendation: keep denied unless the app is identified and scoped."],
+      actions: ["Block app", "Inspect source"],
+    },
+  ],
+}
 
 function statusClass(status: Status | Risk) {
   switch (status) {
@@ -80,6 +268,7 @@ function statusClass(status: Status | Risk) {
     case "medium":
       return "border-[var(--status-warning)]/25 bg-[var(--status-warning)]/10 text-[var(--status-warning)]"
     case "danger":
+    case "revoked":
     case "high":
       return "border-[var(--status-error)]/25 bg-[var(--status-error)]/10 text-[var(--status-error)]"
   }
@@ -89,130 +278,151 @@ function Badge({ value }: { value: Status | Risk }) {
   return <span className={cn("rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase", statusClass(value))}>{value}</span>
 }
 
-function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("rounded-xl border border-border bg-card/80 p-3 shadow-sm", className)}>{children}</div>
+function TrustItemRow({ item, active, onSelect }: { item: TrustItem; active: boolean; onSelect: () => void }) {
+  const Icon = item.icon
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-start gap-3 border-b border-border/60 px-3 py-3 text-left transition-colors hover:bg-secondary/60",
+        active && "bg-primary/10",
+      )}
+    >
+      <div className={cn("mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border", statusClass(item.risk ?? item.status))}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <div className="truncate text-sm font-medium text-foreground">{item.title}</div>
+          <Badge value={item.risk ?? item.status} />
+        </div>
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">{item.subtitle}</div>
+        <div className="mt-1 truncate text-[11px] text-muted-foreground/70">{item.meta}</div>
+      </div>
+    </button>
+  )
 }
 
-function Overview() {
+function Inspector({ item }: { item: TrustItem }) {
+  const Icon = item.icon
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-4 gap-3">
-        {trustCards.map((card) => {
-          const Icon = card.icon
-          return (
-            <Panel key={card.label}>
-              <div className="mb-3 flex items-center justify-between">
-                <Icon className="h-4 w-4 text-primary" />
-                <Badge value={card.status} />
-              </div>
-              <div className="text-xl font-semibold text-foreground">{card.value}</div>
-              <div className="text-[11px] text-muted-foreground">{card.label}</div>
-              <div className="mt-1 truncate text-[10px] text-muted-foreground/70">{card.detail}</div>
-            </Panel>
-          )
+    <aside className="flex w-80 flex-shrink-0 flex-col border-l border-border bg-[var(--window-header)]/30">
+      <div className="border-b border-border p-4">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl border", statusClass(item.risk ?? item.status))}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="flex gap-1">
+            <Badge value={item.status} />
+            {item.risk && <Badge value={item.risk} />}
+          </div>
+        </div>
+        <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
+        <p className="mt-1 text-xs text-muted-foreground">{item.subtitle}</p>
+        <p className="mt-2 text-[11px] text-muted-foreground/70">{item.meta}</p>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Why trusted / blocked</div>
+        <div className="space-y-2">
+          {item.details.map((detail) => (
+            <div key={detail} className="rounded-lg border border-border bg-background/60 p-2 text-xs leading-relaxed text-muted-foreground">
+              {detail}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {(item.actions ?? ["Inspect"]).map((action, index) => (
+            <button
+              key={action}
+              className={cn(
+                "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                index === 0 ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+              )}
+            >
+              {action}
+            </button>
+          ))}
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function OverviewGraph({ selectedId }: { selectedId: string }) {
+  const nodes = [
+    { id: "root", x: 180, y: 44, label: "Ken Root", status: "strong" as Status },
+    { id: "infra", x: 88, y: 130, label: "Infra", status: "verified" as Status },
+    { id: "build", x: 272, y: 130, label: "Build", status: "verified" as Status },
+    { id: "dns", x: 48, y: 218, label: "DNS", status: "active" as Status },
+    { id: "server", x: 130, y: 218, label: "Server", status: "active" as Status },
+    { id: "release", x: 312, y: 218, label: "Release", status: "active" as Status },
+    { id: "unknown", x: 218, y: 286, label: "Denied", status: "danger" as Status },
+  ]
+  const edges = [["root", "infra"], ["root", "build"], ["infra", "dns"], ["infra", "server"], ["build", "release"], ["server", "unknown"]]
+  const byId = Object.fromEntries(nodes.map((node) => [node.id, node]))
+
+  return (
+    <div className="h-full rounded-xl border border-border bg-background/70 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-foreground">Live trust graph</div>
+          <div className="text-[11px] text-muted-foreground">authority edges and denied path</div>
+        </div>
+        <Network className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <svg viewBox="0 0 360 330" className="h-[calc(100%-42px)] w-full">
+        {edges.map(([a, b]) => {
+          const from = byId[a]
+          const to = byId[b]
+          return <line key={`${a}-${b}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="currentColor" className="text-border" strokeDasharray="4 4" />
         })}
-      </div>
-
-      <div className="grid grid-cols-[1.2fr_0.8fr] gap-3">
-        <Panel>
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Trust map</h3>
-              <p className="text-xs text-muted-foreground">Root → authority → app/action chain</p>
-            </div>
-            <Network className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="relative h-56 rounded-lg border border-border bg-background/70">
-            <svg viewBox="0 0 520 220" className="h-full w-full">
-              <line x1="260" y1="38" x2="150" y2="110" stroke="currentColor" className="text-border" strokeDasharray="4 4" />
-              <line x1="260" y1="38" x2="370" y2="110" stroke="currentColor" className="text-border" strokeDasharray="4 4" />
-              <line x1="150" y1="110" x2="100" y2="178" stroke="currentColor" className="text-border" strokeDasharray="4 4" />
-              <line x1="150" y1="110" x2="210" y2="178" stroke="currentColor" className="text-border" strokeDasharray="4 4" />
-              <line x1="370" y1="110" x2="430" y2="178" stroke="currentColor" className="text-border" strokeDasharray="4 4" />
-              {[
-                [260, 38, "Ken Root", "var(--status-online)"],
-                [150, 110, "Infra", "var(--primary)"],
-                [370, 110, "Build", "var(--primary)"],
-                [100, 178, "DNS", "var(--status-online)"],
-                [210, 178, "Server", "var(--status-online)"],
-                [430, 178, "Release", "var(--status-online)"],
-              ].map(([x, y, label, color]) => (
-                <g key={String(label)}>
-                  <circle cx={Number(x)} cy={Number(y)} r="14" fill={String(color)} opacity="0.18" stroke={String(color)} />
-                  <text x={Number(x)} y={Number(y) + 32} textAnchor="middle" className="fill-muted-foreground text-[10px] font-mono">{label}</text>
-                </g>
-              ))}
-            </svg>
-          </div>
-        </Panel>
-
-        <Panel>
-          <h3 className="mb-3 text-sm font-semibold text-foreground">Recent decisions</h3>
-          <div className="space-y-2">
-            {events.slice(0, 4).map((event) => (
-              <div key={`${event.actor}-${event.time}`} className="rounded-lg border border-border/70 bg-background/50 p-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="truncate text-xs font-medium text-foreground">{event.actor}</div>
-                  <Badge value={event.status} />
-                </div>
-                <div className="mt-1 truncate text-[11px] text-muted-foreground">{event.action}</div>
-                <div className="mt-1 text-[10px] text-muted-foreground/70">{event.time}</div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      </div>
+        {nodes.map((node) => (
+          <g key={node.id}>
+            <circle
+              cx={node.x}
+              cy={node.y}
+              r={selectedId.includes(node.id) ? 18 : 13}
+              className={cn("stroke-current", statusClass(node.status))}
+              fill="currentColor"
+              fillOpacity="0.12"
+              strokeWidth="1.5"
+            />
+            <text x={node.x} y={node.y + 30} textAnchor="middle" className="fill-muted-foreground text-[10px] font-mono">
+              {node.label}
+            </text>
+          </g>
+        ))}
+      </svg>
     </div>
   )
-}
-
-function CapabilityList() {
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      {capabilities.map((capability) => (
-        <Panel key={capability.name}>
-          <div className="mb-2 flex items-start justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">{capability.name}</h3>
-              <p className="text-xs text-muted-foreground">Used by {capability.usedBy} route{capability.usedBy === 1 ? "" : "s"}</p>
-            </div>
-            <Badge value={capability.risk} />
-          </div>
-          <div className="grid gap-2 text-[11px]">
-            <div>
-              <div className="mb-1 text-muted-foreground">Allows</div>
-              <div className="flex flex-wrap gap-1">{capability.includes.map((item) => <span key={item} className="rounded bg-[var(--status-online)]/10 px-1.5 py-0.5 text-[var(--status-online)]">{item}</span>)}</div>
-            </div>
-            <div>
-              <div className="mb-1 text-muted-foreground">Blocks</div>
-              <div className="flex flex-wrap gap-1">{capability.excludes.map((item) => <span key={item} className="rounded bg-[var(--status-error)]/10 px-1.5 py-0.5 text-[var(--status-error)]">{item}</span>)}</div>
-            </div>
-          </div>
-        </Panel>
-      ))}
-    </div>
-  )
-}
-
-function RoutesList() {
-  return <div className="space-y-2">{routes.map((route) => <Panel key={route.name}><div className="flex items-center justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-semibold text-foreground">{route.name}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground"><span>{route.cap}</span><span>·</span><span>{route.approval}</span><span>·</span><span>{route.lastRun}</span></div></div><Badge value={route.status} /></div></Panel>)}</div>
-}
-
-function DelegationsList() {
-  return <div className="space-y-2">{delegations.map((delegation) => <Panel key={delegation.name}><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold text-foreground">{delegation.name}</div><div className="mt-1 text-xs text-muted-foreground">By {delegation.by} · Expires {delegation.expires}</div><div className="mt-2 text-[11px] text-muted-foreground">{delegation.allowed}</div></div><Badge value={delegation.risk} /></div></Panel>)}</div>
-}
-
-function EventsList() {
-  return <div className="space-y-2">{events.map((event) => <Panel key={`${event.actor}-${event.action}`}><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold text-foreground">{event.actor}</div><div className="mt-1 text-xs text-muted-foreground">{event.action}</div><div className="mt-1 text-[11px] text-muted-foreground/70">Reason: {event.reason}</div></div><div className="text-right"><Badge value={event.status} /><div className="mt-2 text-[10px] text-muted-foreground">{event.time}</div></div></div></Panel>)}</div>
 }
 
 export function TrustManagerApp() {
   const [tab, setTab] = useState<TrustTab>("overview")
-  const activeTab = useMemo(() => tabs.find((item) => item.id === tab) ?? tabs[0], [tab])
+  const [query, setQuery] = useState("")
+  const list = itemsByTab[tab]
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return list
+    return list.filter((item) => `${item.title} ${item.subtitle} ${item.meta}`.toLowerCase().includes(q))
+  }, [list, query])
+  const [selectedId, setSelectedId] = useState<string>(list[0]?.id ?? "")
+  const selected = filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? list[0]
+  const activeTab = tabs.find((item) => item.id === tab) ?? tabs[0]
+  const ActiveIcon = activeTab.icon
+
+  function selectTab(next: TrustTab) {
+    setTab(next)
+    setQuery("")
+    setSelectedId(itemsByTab[next][0]?.id ?? "")
+  }
 
   return (
-    <div className="flex h-full bg-background text-foreground">
-      <aside className="flex w-52 flex-shrink-0 flex-col border-r border-border bg-[var(--window-header)]/60">
+    <div className="flex h-full min-h-0 bg-background text-foreground">
+      <aside className="flex w-52 flex-shrink-0 flex-col border-r border-border bg-[var(--window-header)]/70">
         <div className="border-b border-border p-3">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
@@ -220,61 +430,106 @@ export function TrustManagerApp() {
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">Trust Manager</div>
-              <div className="text-[10px] text-muted-foreground">policy · grants · audit</div>
+              <div className="text-[10px] text-muted-foreground">authority control</div>
             </div>
           </div>
         </div>
         <nav className="flex-1 space-y-1 p-2">
           {tabs.map((item) => {
             const Icon = item.icon
+            const count = itemsByTab[item.id].length
             return (
               <button
                 key={item.id}
-                onClick={() => setTab(item.id)}
+                onClick={() => selectTab(item.id)}
                 className={cn(
                   "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs font-medium transition-colors",
                   tab === item.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
-                {item.label}
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                <span className="rounded bg-background/40 px-1.5 py-0.5 text-[10px]">{count}</span>
               </button>
             )
           })}
         </nav>
-        <div className="border-t border-border p-3 text-[10px] text-muted-foreground">
-          Local-first policy view. Stream commits become authority after validation.
+        <div className="border-t border-border p-3">
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            local policy snapshot
+          </div>
         </div>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-border bg-[var(--window-header)]/40 px-4 py-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <activeTab.icon className="h-4 w-4 text-primary" />
+        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border bg-[var(--window-header)]/40 px-3">
+          <div className="flex items-center gap-2">
+            <ActiveIcon className="h-4 w-4 text-primary" />
+            <div>
               <h2 className="text-sm font-semibold">{activeTab.label}</h2>
+              <p className="text-[11px] text-muted-foreground">explicit trust, bounded authority, auditable decisions</p>
             </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">Human-readable trust, delegation, and capability policy.</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-              <input className="h-8 w-44 rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none focus:border-primary/50" placeholder="Search trust..." />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="h-8 w-52 rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none focus:border-primary/50"
+                placeholder="Search trust state..."
+              />
             </div>
             <button className="flex h-8 items-center gap-1.5 rounded-md bg-secondary px-2 text-xs font-medium hover:bg-secondary/80">
-              <Lock className="h-3.5 w-3.5" />
-              Export
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+            <button className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/90">
+              <Plus className="h-3.5 w-3.5" />
+              New
             </button>
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          {tab === "overview" && <Overview />}
-          {tab === "capsules" && <Overview />}
-          {tab === "capabilities" && <CapabilityList />}
-          {tab === "routes" && <RoutesList />}
-          {tab === "delegations" && <DelegationsList />}
-          {tab === "events" && <EventsList />}
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(300px,1fr)_320px]">
+          <section className="min-w-0 overflow-hidden border-r border-border">
+            {tab === "overview" && (
+              <div className="grid h-full min-h-0 grid-rows-[160px_1fr] gap-3 p-3">
+                <div className="grid grid-cols-4 gap-3">
+                  {trustCards.map((card) => {
+                    const Icon = card.icon
+                    return (
+                      <div key={card.label} className="rounded-xl border border-border bg-card p-3">
+                        <div className="mb-3 flex items-center justify-between">
+                          <Icon className="h-4 w-4 text-primary" />
+                          <Badge value={card.status} />
+                        </div>
+                        <div className="text-xl font-semibold text-foreground">{card.value}</div>
+                        <div className="text-[11px] text-muted-foreground">{card.label}</div>
+                        <div className="mt-1 truncate text-[10px] text-muted-foreground/70">{card.detail}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <OverviewGraph selectedId={selected?.id ?? ""} />
+              </div>
+            )}
+
+            {tab !== "overview" && (
+              <div className="h-full overflow-auto">
+                {filtered.length > 0 ? (
+                  filtered.map((item) => (
+                    <TrustItemRow key={item.id} item={item} active={selected?.id === item.id} onSelect={() => setSelectedId(item.id)} />
+                  ))
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No matching trust records</div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {selected && <Inspector item={selected} />}
         </div>
       </main>
     </div>
