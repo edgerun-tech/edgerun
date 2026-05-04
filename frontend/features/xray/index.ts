@@ -18,5 +18,5 @@ export { runGlobeLayout } from "./layout/globe-layout"
 export { runLayerLayout } from "./layout/layer-layout"
 export { WebGLRenderer } from "./render/webgl-renderer"
 export { getNodeColor, getNodeSize, getEdgeColor } from "./render/color-policy"
-export { CodeAnalyzerWsService }
+export { CodeAnalyzerWsService } from "./services/codeanalyzer-ws"
 export type { CodeAnalyzerConfig, GraphData } from "./services/codeanalyzer-ws"
