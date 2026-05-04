@@ -30,8 +30,8 @@ const TrustManagerApp = dynamic(
   () => import("@/components/os/trust-manager-app").then((mod) => mod.TrustManagerApp),
   { ssr: false, loading: LoadingApp },
 )
-const WalletApp = dynamic(
-  () => import("@/components/os/wallet-app").then((mod) => mod.WalletApp),
+const FinancesApp = dynamic(
+  () => import("@/components/os/finances-app").then((mod) => mod.FinancesApp),
   { ssr: false, loading: LoadingApp },
 )
 const CalculatorApp = dynamic(
@@ -86,7 +86,7 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
     case "trust-manager":
       return <TrustManagerApp />
     case "wallet":
-      return <WalletApp />
+      return <FinancesApp />
     case "calculator":
       return <CalculatorApp />
     case "help":
