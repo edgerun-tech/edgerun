@@ -8,7 +8,6 @@ export const DEFAULT_INSTALLED_APP_IDS = [
   "app-store",
   "settings",
   "terminal",
-  "ai-assistant",
   "people",
   "trust-manager",
   "code-runner",

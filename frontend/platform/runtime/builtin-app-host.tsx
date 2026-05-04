@@ -42,10 +42,6 @@ const HelpApp = dynamic(
   () => import("@/components/os/help-app").then((mod) => mod.HelpApp),
   { ssr: false, loading: LoadingApp },
 )
-const AIAssistantApp = dynamic(
-  () => import("@/components/os/ai-assistant").then((mod) => mod.AIAssistant),
-  { ssr: false, loading: LoadingApp },
-)
 const WorkflowBuilderApp = dynamic(
   () => import("@/components/os/workflow-builder").then((mod) => mod.WorkflowBuilder),
   { ssr: false, loading: LoadingApp },
@@ -91,8 +87,6 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
       return <CalculatorApp />
     case "help":
       return <HelpApp />
-    case "ai-assistant":
-      return <AIAssistantApp />
     case "workflow-builder":
       return <WorkflowBuilderApp onClose={() => {}} />
     case "file-browser":

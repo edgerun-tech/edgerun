@@ -48,10 +48,10 @@ export function Desktop() {
   const showDesktop = auth.authState === "authenticated" || auth.authState === "guest"
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "a") {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "t") {
       e.preventDefault()
-      const aiApp = getBuiltinApp("ai-assistant")
-      if (aiApp) launchApp(aiApp)
+      const terminalApp = getBuiltinApp("terminal")
+      if (terminalApp) launchApp(terminalApp)
     }
   }, [])
 
