@@ -12,16 +12,15 @@ await build({
   target: ["es2022"],
   sourcemap: false,
   legalComments: "none",
+  mainFields: ["browser", "module", "main"],
+  conditions: ["browser", "worker", "import", "default"],
   define: {
-    "process.env.NODE_ENV": "\"production\"",
+    // binaryen ships an Emscripten-style loader that contains both browser and
+    // Node paths. Without this, esbuild sees the Node branch and tries to bundle
+    // `node:module` into the browser worker.
+    process: "undefined",
+    global: "globalThis",
   },
-  external: [
-    "fs",
-    "module",
-    "path",
-    "url",
-    "process",
-  ],
 })
 
 console.log("built public/workers/assemblyscript-compiler-worker.js")
