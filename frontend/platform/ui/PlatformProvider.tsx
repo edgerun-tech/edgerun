@@ -7,6 +7,7 @@
 
 import React, { createContext, useContext, useEffect, type ReactNode } from "react"
 import { protocolClient } from "@/platform/protocol/client"
+import { syncProtocolApprovals } from "@/platform/protocol/approvals"
 import { nodeStore, refreshNodeStatus } from "@/platform/state/node-store"
 import { appStore, loadApps } from "@/platform/state/app-store"
 import { capabilityStore, loadCapabilities } from "@/platform/state/capability-store"
@@ -55,15 +56,11 @@ const PlatformContext = createContext<PlatformContextValue | null>(null)
 
 export function PlatformProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
-    // Initialize platform on mount
-
-    // Load initial data
     refreshNodeStatus()
     loadApps()
     loadCapabilities()
     registerPlatformTools()
 
-    // Set up node registration if available
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("edgerun_node_registration_v1")
       if (stored) {
@@ -76,6 +73,13 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
         }
       }
     }
+
+    void syncProtocolApprovals().catch(() => undefined)
+    const interval = window.setInterval(() => {
+      void syncProtocolApprovals().catch(() => undefined)
+    }, 2500)
+
+    return () => window.clearInterval(interval)
   }, [])
 
   const value: PlatformContextValue = {
