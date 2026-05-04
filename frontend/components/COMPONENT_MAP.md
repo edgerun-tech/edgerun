@@ -20,15 +20,29 @@ Add a component to the preview registry before promoting it into production UI. 
 
 Use these for the desktop/app-surface model:
 
+- `components/os/index.ts` — canonical OS component barrel
 - `components/os/desktop.tsx` — main desktop entry used by `app/page.tsx`
 - `components/os/xray-desktop-surface.tsx` — permanent graph-first desktop stage
 - `components/os/app-overlay-host.tsx` — chrome-less temporary app overlay host
 - `components/os/top-bar.tsx` — global top status/control bar
+- `stores/index.ts` — canonical store barrel
 - `stores/desktop-store.ts` — canonical `AppSurface` state
 - `stores/app-launcher.tsx` — canonical app launch path
+- `platform/registries/index.ts` — canonical registry barrel
 - `platform/registries/app-surface-registry.ts` — canonical app presentation metadata
 
 Terminology: use `AppSurface`, not `Window`, for new code.
+
+### App identity rules
+
+Canonical app IDs should be stable product concepts, not old implementation names.
+
+- `finances` is the canonical finance hub app ID.
+- `wallet` is a compatibility alias only.
+- `people` is the canonical people/contacts/calling/chat hub app ID.
+- `contacts`, `calling`, and `chat` are compatibility aliases only unless they become separate apps later.
+
+Use `normalizeAppId()` for installed-app state and `normalizeBuiltinAppId()` for built-in app lookup.
 
 ### Xray
 
@@ -51,7 +65,6 @@ Do not import from `lib/xray/*` in new code. That directory is legacy JS scaffol
 These are production or production-candidate app surfaces:
 
 - `components/os/settings-app.tsx`
-- `components/os/wallet-app.tsx`
 - `components/os/finances-app.tsx`
 - `components/os/trust-manager-app.tsx`
 - `components/os/trust-manager-surface.tsx`
@@ -118,6 +131,7 @@ These names are now ambiguous or superseded:
 - `components/os/stage-manager.tsx` — old stage-manager window strip model
 - `components/os/desktop-telemetry.tsx` — old conky background layer; superseded by `xray-desktop-surface.tsx`
 - `components/os/globe.tsx` — older desktop visual; xray is now the primary desktop stage
+- `components/os/wallet-app.tsx` — old wallet-specific surface; finance hub is `finances-app.tsx`
 - `components/xray/XrayDashboard.tsx` — duplicate xray entrypoint; prefer `features/xray/*`
 - `lib/xray/*` — older JS xray renderer/adapter/layout implementation; prefer `features/xray/*`
 - `platform/registries/window-registry.ts` — old draggable window metadata; prefer `platform/registries/app-surface-registry.ts`
