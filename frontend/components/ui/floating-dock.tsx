@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } fro
 
 type FloatingDockItem = {
   title: string;
-  icon: ReactNode;
+  icon: ReactNode | React.ComponentType;
   href?: string;
   onClick?: () => void;
   kind?: "app" | "person" | "trigger";

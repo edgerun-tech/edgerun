@@ -13,12 +13,8 @@ import { EdgerunLogo } from "./edgerun-logo"
 import type { AppSurfaceDef, AppSurfaceSlot } from "@/stores/desktop-store"
 
 type XrayDesktopSurfaceProps = {
-  nodeCount: number
-  activeSessions: number
-  ramUsage: { used: number; total: number }
-  runningApps: number
-  isConnected: boolean
-  pinnedSurfaces?: AppSurfaceDef[]
+  runningApps: number;
+  pinnedSurfaces?: AppSurfaceDef[];
 }
 
 function SurfaceSlot({ surface, fallback }: { surface?: AppSurfaceDef; fallback: ReactNode }) {
@@ -119,25 +115,6 @@ export function XrayDesktopSurface({
       </div>
 
       <div className="absolute left-4 right-4 top-4 z-20 flex items-center gap-2 overflow-x-auto xl:hidden">
-        <CompactMetric
-          icon={<RadioTower className="h-3.5 w-3.5" />}
-          label="nodes"
-          value={`${nodeCount}`}
-        />
-        <CompactMetric
-          icon={<WalletCards className="h-3.5 w-3.5" />}
-          label="EDGE/h"
-          value={edgePerHour}
-        />
-        <div className="flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-background/70 px-3 py-1.5 shadow-xl backdrop-blur-md">
-          <MiniFinanceSparkline />
-          <span className="font-mono text-xs text-primary">market</span>
-        </div>
-        <CompactMetric
-          icon={<HardDrive className="h-3.5 w-3.5" />}
-          label="mem"
-          value={`${ramPercent}%`}
-        />
       </div>
 
       <GlowingContainer

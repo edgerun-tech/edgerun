@@ -229,10 +229,6 @@ export function Desktop() {
     <div className="relative h-screen w-screen overflow-hidden bg-background">
       <div className="absolute inset-0 z-10">
         <XrayDesktopSurface
-          nodeCount={systemStats.nodeCount}
-          activeSessions={systemStats.activeSessions}
-          ramUsage={systemStats.ramUsage}
-          isConnected={systemStats.isConnected}
           runningApps={appSurfaces.length}
           pinnedSurfaces={pinnedSurfaces}
         />
