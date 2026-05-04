@@ -36,11 +36,9 @@ pub enum LoadKind {
 impl LoadKind {
     pub fn result_type(self) -> ValueType {
         match self {
-            Self::I32
-            | Self::I32Load8U
-            | Self::I32Load8S
-            | Self::I32Load16U
-            | Self::I32Load16S => ValueType::I32,
+            Self::I32 | Self::I32Load8U | Self::I32Load8S | Self::I32Load16U | Self::I32Load16S => {
+                ValueType::I32
+            }
             Self::I64 => ValueType::I64,
         }
     }
