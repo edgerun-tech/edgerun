@@ -41,6 +41,10 @@ export function Desktop() {
   const installedAppIds = useStore(installedAppIdsStore)
 
   const showDesktop = auth.authState === "authenticated" || auth.authState === "guest"
+  const pinnedSurfaces = useMemo(
+    () => appSurfaces.filter((surface) => surface.kind === "pinned-widget"),
+    [appSurfaces],
+  )
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "t") {
@@ -155,6 +159,7 @@ export function Desktop() {
           ramUsage={systemStats.ramUsage}
           isConnected={systemStats.isConnected}
           runningApps={appSurfaces.length}
+          pinnedSurfaces={pinnedSurfaces}
         />
 
         <WidgetPanel
