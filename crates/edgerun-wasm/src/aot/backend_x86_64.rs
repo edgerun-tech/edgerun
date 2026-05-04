@@ -24,6 +24,28 @@ impl X86_64Backend {
                 IrOp::I64Add => emit_i64_add(&mut code),
                 IrOp::I64Sub => emit_i64_sub(&mut code),
                 IrOp::I64Mul => emit_i64_mul(&mut code),
+                IrOp::I32Eqz => emit_i32_eqz(&mut code),
+                IrOp::I64Eqz => emit_i64_eqz(&mut code),
+                IrOp::I32Eq => emit_i32_cmp(&mut code, SetCc::Eq),
+                IrOp::I32Ne => emit_i32_cmp(&mut code, SetCc::Ne),
+                IrOp::I32LtS => emit_i32_cmp(&mut code, SetCc::LtS),
+                IrOp::I32LtU => emit_i32_cmp(&mut code, SetCc::LtU),
+                IrOp::I32GtS => emit_i32_cmp(&mut code, SetCc::GtS),
+                IrOp::I32GtU => emit_i32_cmp(&mut code, SetCc::GtU),
+                IrOp::I32LeS => emit_i32_cmp(&mut code, SetCc::LeS),
+                IrOp::I32LeU => emit_i32_cmp(&mut code, SetCc::LeU),
+                IrOp::I32GeS => emit_i32_cmp(&mut code, SetCc::GeS),
+                IrOp::I32GeU => emit_i32_cmp(&mut code, SetCc::GeU),
+                IrOp::I64Eq => emit_i64_cmp(&mut code, SetCc::Eq),
+                IrOp::I64Ne => emit_i64_cmp(&mut code, SetCc::Ne),
+                IrOp::I64LtS => emit_i64_cmp(&mut code, SetCc::LtS),
+                IrOp::I64LtU => emit_i64_cmp(&mut code, SetCc::LtU),
+                IrOp::I64GtS => emit_i64_cmp(&mut code, SetCc::GtS),
+                IrOp::I64GtU => emit_i64_cmp(&mut code, SetCc::GtU),
+                IrOp::I64LeS => emit_i64_cmp(&mut code, SetCc::LeS),
+                IrOp::I64LeU => emit_i64_cmp(&mut code, SetCc::LeU),
+                IrOp::I64GeS => emit_i64_cmp(&mut code, SetCc::GeS),
+                IrOp::I64GeU => emit_i64_cmp(&mut code, SetCc::GeU),
                 IrOp::Return | IrOp::End => {
                     emit_return(&mut code, ir.sig.results.first().copied());
                     terminated = true;
@@ -151,6 +173,37 @@ impl Frame {
     }
 }
 
+#[derive(Clone, Copy)]
+enum SetCc {
+    Eq,
+    Ne,
+    LtS,
+    LtU,
+    GtS,
+    GtU,
+    LeS,
+    LeU,
+    GeS,
+    GeU,
+}
+
+impl SetCc {
+    fn opcode(self) -> u8 {
+        match self {
+            Self::Eq => 0x94,  // sete
+            Self::Ne => 0x95,  // setne
+            Self::LtS => 0x9C, // setl
+            Self::LtU => 0x92, // setb
+            Self::GtS => 0x9F, // setg
+            Self::GtU => 0x97, // seta
+            Self::LeS => 0x9E, // setle
+            Self::LeU => 0x96, // setbe
+            Self::GeS => 0x9D, // setge
+            Self::GeU => 0x93, // setae
+        }
+    }
+}
+
 fn local_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
     ir.locals
         .get(index as usize)
@@ -209,6 +262,38 @@ fn emit_i64_mul(code: &mut Vec<u8>) {
     code.push(0x58); // pop rax = rhs
     code.push(0x59); // pop rcx = lhs
     code.extend_from_slice(&[0x48, 0x0F, 0xAF, 0xC1]); // imul rax, rcx
+    code.push(0x50); // push rax
+}
+
+fn emit_i32_eqz(code: &mut Vec<u8>) {
+    code.push(0x58); // pop rax
+    code.extend_from_slice(&[0x85, 0xC0]); // test eax, eax
+    emit_setcc_bool(code, SetCc::Eq);
+}
+
+fn emit_i64_eqz(code: &mut Vec<u8>) {
+    code.push(0x58); // pop rax
+    code.extend_from_slice(&[0x48, 0x85, 0xC0]); // test rax, rax
+    emit_setcc_bool(code, SetCc::Eq);
+}
+
+fn emit_i32_cmp(code: &mut Vec<u8>, cc: SetCc) {
+    code.push(0x58); // pop rax = rhs
+    code.push(0x59); // pop rcx = lhs
+    code.extend_from_slice(&[0x39, 0xC1]); // cmp ecx, eax; flags = lhs - rhs
+    emit_setcc_bool(code, cc);
+}
+
+fn emit_i64_cmp(code: &mut Vec<u8>, cc: SetCc) {
+    code.push(0x58); // pop rax = rhs
+    code.push(0x59); // pop rcx = lhs
+    code.extend_from_slice(&[0x48, 0x39, 0xC1]); // cmp rcx, rax; flags = lhs - rhs
+    emit_setcc_bool(code, cc);
+}
+
+fn emit_setcc_bool(code: &mut Vec<u8>, cc: SetCc) {
+    code.extend_from_slice(&[0x0F, cc.opcode(), 0xC0]); // setcc al
+    code.extend_from_slice(&[0x0F, 0xB6, 0xC0]); // movzx eax, al
     code.push(0x50); // push rax
 }
 
@@ -275,5 +360,23 @@ mod tests {
         verify_ir(&ir).unwrap();
         let code = X86_64Backend::compile(&ir).unwrap();
         assert!(!code.is_empty());
+    }
+
+    #[test]
+    fn x86_supports_i32_comparison() {
+        let ir = FunctionIr {
+            index: 0,
+            export_name: Some("lt".to_string()),
+            sig: FuncSig {
+                params: vec![ValueType::I32, ValueType::I32],
+                results: vec![ValueType::I32],
+            },
+            locals: vec![ValueType::I32, ValueType::I32],
+            ops: vec![IrOp::LocalGet(0), IrOp::LocalGet(1), IrOp::I32LtS, IrOp::End],
+        };
+
+        verify_ir(&ir).unwrap();
+        let code = X86_64Backend::compile(&ir).unwrap();
+        assert!(code.windows(3).any(|w| w == [0x0F, 0x9C, 0xC0]));
     }
 }
