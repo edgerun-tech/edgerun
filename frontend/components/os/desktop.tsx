@@ -22,7 +22,6 @@ import {
   focusedWindowStore,
   systemStatsStore,
   pendingGateStore,
-  stageModeStore,
   widgetVisibleStore,
   openWindow,
   closeWindow,
@@ -62,18 +61,20 @@ export function Desktop() {
 
   const dockItems = useMemo(() => {
     const dockAppIds = Array.from(new Set([...CORE_APP_IDS, ...installedAppIds]))
-    return dockAppIds.map((appId) => {
-      const app = getBuiltinApp(appId)
-      if (!app) return null
-      return {
-        title: app.name + (app.source === "demo" ? " (Demo)" : ""),
-        icon: getAppIcon(app.appId),
-        onClick: () => {
-          const fullApp = getBuiltinApp(app.appId)
-          if (fullApp) launchApp(fullApp)
-        },
-      }
-    }).filter(Boolean)
+    return dockAppIds
+      .map((appId) => {
+        const app = getBuiltinApp(appId)
+        if (!app) return null
+        return {
+          title: app.name + (app.source === "demo" ? " (Demo)" : ""),
+          icon: getAppIcon(app.appId),
+          onClick: () => {
+            const fullApp = getBuiltinApp(app.appId)
+            if (fullApp) launchApp(fullApp)
+          },
+        }
+      })
+      .filter(Boolean)
   }, [installedAppIds])
 
   const grantPendingAndOpen = useCallback(() => {
@@ -88,9 +89,13 @@ export function Desktop() {
     launchApp(gate.app)
   }, [])
 
-  return (
-    <div className="relative h-screen w-screen overflow-hidden bg-background">
-      {!showDesktop && (
+  const openIdentitySetup = useCallback(async () => {
+    const authPromptWin: OpenWindowDef = {
+      id: "window-auth-prompt",
+      appId: "auth-prompt",
+      title: "Set up Identity",
+      icon: <Users className="h-4 w-4" />,
+      component: (
         <AuthOverlay
           authState={auth.authState}
           username={auth.username}
@@ -103,89 +108,87 @@ export function Desktop() {
           onContinueAsGuest={auth.continueAsGuest}
           onClearError={auth.clearError}
         />
-      )}
+      ),
+      defaultPosition: { x: 250, y: 120 },
+      defaultSize: { width: 420, height: 420 },
+    }
+    openWindow(authPromptWin)
+  }, [auth])
 
-      {showDesktop && (
-        <>
-          <TopBar
-            nodeCount={systemStats.nodeCount}
-            activeSessions={systemStats.activeSessions}
-            ramUsage={systemStats.ramUsage}
-            isConnected={systemStats.isConnected}
-            username={auth.username}
-            isGuest={auth.authState === "guest"}
-            onLock={auth.lock}
-            onSignIn={async () => {
-              const authPromptWin: OpenWindowDef = {
-                id: "window-auth-prompt",
-                appId: "auth-prompt",
-                title: "Set up Identity",
-                icon: <Users className="h-4 w-4" />,
-                component: (
-                  <AuthOverlay
-                    authState={auth.authState}
-                    username={auth.username}
-                    isLoading={auth.isLoading}
-                    error={auth.error}
-                    hasRegistered={auth.hasRegistered}
-                    webAuthnAvailable={auth.webAuthnAvailable}
-                    onRegister={auth.register}
-                    onAuthenticate={auth.authenticate}
-                    onContinueAsGuest={auth.continueAsGuest}
-                    onClearError={auth.clearError}
-                  />
-                ),
-                defaultPosition: { x: 250, y: 120 },
-                defaultSize: { width: 420, height: 420 },
-              }
-              openWindow(authPromptWin)
-            }}
-          />
+  if (!showDesktop) {
+    return (
+      <div className="relative h-screen w-screen overflow-hidden bg-background">
+        <AuthOverlay
+          authState={auth.authState}
+          username={auth.username}
+          isLoading={auth.isLoading}
+          error={auth.error}
+          hasRegistered={auth.hasRegistered}
+          webAuthnAvailable={auth.webAuthnAvailable}
+          onRegister={auth.register}
+          onAuthenticate={auth.authenticate}
+          onContinueAsGuest={auth.continueAsGuest}
+          onClearError={auth.clearError}
+        />
+      </div>
+    )
+  }
 
-          <div className="absolute inset-0 top-10 z-10">
-            <XrayDesktopSurface
-              nodeCount={systemStats.nodeCount}
-              activeSessions={systemStats.activeSessions}
-              ramUsage={systemStats.ramUsage}
-              isConnected={systemStats.isConnected}
-              runningApps={windows.length}
-            />
+  return (
+    <div className="relative h-screen w-screen overflow-hidden bg-background">
+      <TopBar
+        nodeCount={systemStats.nodeCount}
+        activeSessions={systemStats.activeSessions}
+        ramUsage={systemStats.ramUsage}
+        isConnected={systemStats.isConnected}
+        username={auth.username}
+        isGuest={auth.authState === "guest"}
+        onLock={auth.lock}
+        onSignIn={openIdentitySetup}
+      />
 
-            <WidgetPanel
-              visible={widgetVisible}
-              onToggle={() => widgetVisibleStore.set(!widgetVisible)}
-            />
+      <div className="absolute inset-0 top-10 z-10">
+        <XrayDesktopSurface
+          nodeCount={systemStats.nodeCount}
+          activeSessions={systemStats.activeSessions}
+          ramUsage={systemStats.ramUsage}
+          isConnected={systemStats.isConnected}
+          runningApps={windows.length}
+        />
 
-            <FloatingDock
-              items={dockItems as any}
-              desktopClassName="fixed bottom-4 left-1/2 -translate-x-1/2 z-50"
-            />
+        <WidgetPanel
+          visible={widgetVisible}
+          onToggle={() => widgetVisibleStore.set(!widgetVisible)}
+        />
 
-            {pendingGate && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/35 p-6 backdrop-blur-[2px]">
-                <div className="w-[min(460px,calc(100vw-3rem))] overflow-hidden rounded-[28px] border border-white/10 bg-background/95 shadow-[0_32px_120px_rgba(0,0,0,0.78)]">
-                  <CapabilityGatePrompt
-                    appName={pendingGate.app.name}
-                    blockedCapabilities={pendingGate.blocked}
-                    onGrant={grantPendingAndOpen}
-                    onDismiss={() => pendingGateStore.set(null)}
-                  />
-                </div>
-              </div>
-            )}
+        <FloatingDock
+          items={dockItems as any}
+          desktopClassName="fixed bottom-4 left-1/2 z-50 -translate-x-1/2"
+        />
 
-            <AppOverlayHost
-              windows={windows}
-              windowOrder={windowOrder}
-              focusedWindowId={focusedWindow}
-              onFocus={focusWindow}
-              onClose={handleCloseWindow}
-            />
-
-            <WorkspaceStatusPanel />
+        {pendingGate ? (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/35 p-6 backdrop-blur-[2px]">
+            <div className="w-[min(460px,calc(100vw-3rem))] overflow-hidden rounded-[28px] border border-white/10 bg-background/95 shadow-[0_32px_120px_rgba(0,0,0,0.78)]">
+              <CapabilityGatePrompt
+                appName={pendingGate.app.name}
+                blockedCapabilities={pendingGate.blocked}
+                onGrant={grantPendingAndOpen}
+                onDismiss={() => pendingGateStore.set(null)}
+              />
+            </div>
           </div>
-        </>
-      )}
+        ) : null}
+
+        <AppOverlayHost
+          windows={windows}
+          windowOrder={windowOrder}
+          focusedWindowId={focusedWindow}
+          onFocus={focusWindow}
+          onClose={handleCloseWindow}
+        />
+
+        <WorkspaceStatusPanel />
+      </div>
     </div>
   )
 }
