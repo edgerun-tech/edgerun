@@ -1,3 +1,4 @@
+import type React from "react"
 import type { AppDefinition, AppSource } from "@/platform/types/app-definition"
 import {
   Store,
@@ -22,6 +23,13 @@ import {
   Settings,
   Shield,
 } from "lucide-react"
+
+const APP_ID_ALIASES: Record<string, string> = {
+  wallet: "finances",
+  contacts: "people",
+  calling: "people",
+  chat: "people",
+}
 
 export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   "app-store": <Store className="h-5 w-5" />,
@@ -49,8 +57,12 @@ export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   settings: <Settings className="h-5 w-5" />,
 }
 
+export function normalizeBuiltinAppId(appId: string): string {
+  return APP_ID_ALIASES[appId] || appId
+}
+
 export function getIconById(iconId: string): React.ReactNode {
-  return BUILTIN_ICON_MAP[iconId] || BUILTIN_ICON_MAP["wasm-generic"]
+  return BUILTIN_ICON_MAP[iconId] || BUILTIN_ICON_MAP[normalizeBuiltinAppId(iconId)] || BUILTIN_ICON_MAP["wasm-generic"]
 }
 
 export const BUILTIN_APPS: AppDefinition[] = [
@@ -75,13 +87,8 @@ export const BUILTIN_APPS: AppDefinition[] = [
 ]
 
 export function getBuiltinApp(appId: string): AppDefinition | undefined {
-  if (appId === "contacts" || appId === "calling" || appId === "chat") {
-    return BUILTIN_APPS.find((a) => a.appId === "people")
-  }
-  if (appId === "wallet") {
-    return BUILTIN_APPS.find((a) => a.appId === "finances")
-  }
-  return BUILTIN_APPS.find((a) => a.appId === appId)
+  const normalizedAppId = normalizeBuiltinAppId(appId)
+  return BUILTIN_APPS.find((a) => a.appId === normalizedAppId)
 }
 
 export function listBuiltinApps(source?: AppSource): AppDefinition[] {
