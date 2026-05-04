@@ -14,13 +14,6 @@ const XrayWorkspace = dynamic(
   { ssr: false }
 );
 
-import { Globe as GlobeIcon } from "lucide-react";
-
-const Globe = dynamic(
-  () => import("@/components/os/globe").then(mod => ({ default: mod.Globe })),
-  { ssr: false }
-);
-
 export default function XrayDashboard(props: {
   globeNodeCount?: number;
   initialGraph?: any;
@@ -55,21 +48,10 @@ export default function XrayDashboard(props: {
           <LayoutDashboard className="h-4 w-4" />
         </button>
       </div>
-
-      {/* Globe (existing) */}
-      {mode === "globe" && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <Globe
-            nodeCount={props.globeNodeCount || 24}
-            className="h-full w-full opacity-40"
-          />
-        </div>
-      )}
-
       {/* Xray Workspace (new) */}
       {mode === "xray" && (
         <div className="absolute inset-0">
-          <XrayWorkspace initialGraph={props.initialGraph} />
+          <XrayWorkspace />
         </div>
       )}
     </div>

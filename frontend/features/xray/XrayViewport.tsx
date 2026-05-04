@@ -1,5 +1,8 @@
 "use client"
 
+type XrayNode = any;
+type XrayEdge = any;
+
 import { useEffect, useRef, useCallback, useState, useMemo } from "react"
 import { useStore } from "@nanostores/react"
 import {

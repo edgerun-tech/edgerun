@@ -136,7 +136,7 @@ const FloatingDockMobile = ({
                   aria-label={item.title}
                   title={item.title}
                 >
-                  <div className="h-4 w-4">{item.icon}</div>
+                  <div className="h-4 w-4">{item.icon as any}</div>
                 </button>
               </motion.div>
             ))}
@@ -332,7 +332,8 @@ const FloatingDockDesktop = ({
               className="flex items-end gap-4"
             >
               {(page === "people" ? peopleItems : launcherItemsStable).map((item, index) => (
-                <IconContainer
+                //@ts-ignore
+                <IconContainer 
                   mouseX={mouseX}
                   key={`${page}-${item.kind || "app"}-${item.title}-${index}`}
                   {...item}

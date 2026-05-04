@@ -6,7 +6,6 @@
 
 export { FinancesOverviewWidget } from "./finance-overviews"
 export { CodelyzerNetworkPanel } from "./codelyzer-network"
-export { AgentActivityPanel } from "@/components/agents/AgentActivityPanel"
 export { AlertCenter } from "@/components/alerts/AlertCenter"
 export { AppList } from "@/components/apps/AppList"
 export { CapabilityList } from "@/components/capabilities/CapabilityList"
