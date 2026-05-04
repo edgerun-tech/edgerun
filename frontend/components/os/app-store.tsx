@@ -2,9 +2,10 @@
 
 import { useMemo } from "react"
 import { useStore } from "@nanostores/react"
-import { Download, Package, Trash2, Play, Shield, CheckCircle2 } from "lucide-react"
+import { Download, Package, Trash2, Play, Shield, CheckCircle2, BadgeCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getIconById, listBuiltinApps } from "@/platform/registries/builtin-app-registry"
+import { appCatalogRegistry, installCatalogApp, listCatalogApps } from "@/platform/registries/app-catalog-registry"
 import type { AppDefinition } from "@/platform/types/app-definition"
 import {
   installedAppIdsStore,
@@ -34,10 +35,27 @@ function uninstallAndClose(appId: string) {
   uninstallApp(normalizedAppId)
 }
 
+function installFromStore(app: AppDefinition) {
+  if (app.source === "catalog") installCatalogApp(app.appId)
+  installApp(normalizeAppId(app.appId))
+}
+
+function appGroupRank(app: AppDefinition): number {
+  if (app.source === "catalog") return 0
+  if (app.kind === "builtin") return 1
+  return 2
+}
+
 export function AppStore({ onLaunchApp }: AppStoreProps) {
   const installedIds = useStore(installedAppIdsStore)
   useStore(localCapabilityGrantsStore)
-  const apps = useMemo(() => listBuiltinApps(), [])
+  useStore(appCatalogRegistry)
+  const apps = useMemo(() => {
+    const merged = new Map<string, AppDefinition>()
+    for (const app of listCatalogApps()) merged.set(app.appId, app)
+    for (const app of listBuiltinApps()) merged.set(app.appId, app)
+    return Array.from(merged.values()).sort((a, b) => appGroupRank(a) - appGroupRank(b) || a.name.localeCompare(b.name))
+  }, [useStore(appCatalogRegistry)])
   const normalizedInstalledIds = useMemo(
     () => installedIds.map(normalizeAppId),
     [installedIds],
@@ -52,7 +70,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
             App Store
           </h2>
           <p className="text-xs text-muted-foreground">
-            Install apps to show them in the dock. Permissions are granted per app and can be revoked by uninstalling.
+            Signed apps install into the platform runtime. Permissions are delegated per app and can be revoked.
           </p>
         </div>
         <div className="rounded-md border border-border bg-secondary/50 px-2 py-1 font-mono text-[10px] text-muted-foreground">
@@ -67,12 +85,14 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
           const core = isCoreApp(normalizedAppId)
           const capabilityInfos = app.requiredCapabilityIds.map(getCapabilityInfo)
           const missingCount = app.requiredCapabilityIds.filter((id) => !hasLocalCapabilityGrant(normalizedAppId, id)).length
+          const signed = Boolean(app.signature)
+          const verified = Boolean(app.signature?.verified)
 
           return (
             <div
               key={app.appId}
               className={cn(
-                "group flex min-h-[168px] flex-col rounded-lg border border-border bg-secondary/40 p-3 transition-colors",
+                "group flex min-h-[190px] flex-col rounded-lg border border-border bg-secondary/40 p-3 transition-colors",
                 installed && "border-primary/30 bg-primary/5",
               )}
             >
@@ -81,6 +101,18 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                   {getIconById(app.iconId)}
                 </div>
                 <div className="flex items-center gap-1">
+                  {signed && (
+                    <span
+                      title={verified ? `Verified package by ${app.signature?.developerName || app.signature?.developerId}` : `Signed by ${app.signature?.developerName || app.signature?.developerId}, not verified yet`}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",
+                        verified ? "bg-[var(--status-online)]/15 text-[var(--status-online)]" : "bg-primary/10 text-primary",
+                      )}
+                    >
+                      <BadgeCheck className="h-2.5 w-2.5" />
+                      {verified ? "Verified" : "Signed"}
+                    </span>
+                  )}
                   {missingCount > 0 && installed && (
                     <span className="rounded bg-[var(--status-warning)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--status-warning)]">
                       {missingCount} permission{missingCount === 1 ? "" : "s"}
@@ -95,8 +127,17 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
               </div>
 
               <div className="mt-2 min-h-0 flex-1">
-                <h3 className="text-sm font-medium text-foreground">{app.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="truncate text-sm font-medium text-foreground">{app.name}</h3>
+                  {app.source === "catalog" && <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[9px] text-muted-foreground">catalog</span>}
+                </div>
                 <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{app.description}</p>
+
+                {app.signature && (
+                  <div className="mt-2 truncate font-mono text-[10px] text-muted-foreground">
+                    dev: <span className="text-foreground">{app.signature.developerName || app.signature.developerId}</span>
+                  </div>
+                )}
 
                 {capabilityInfos.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
@@ -133,7 +174,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                   </button>
                 ) : (
                   <button
-                    onClick={() => installApp(normalizedAppId)}
+                    onClick={() => installFromStore(app)}
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
                     <Download className="h-3.5 w-3.5" />
