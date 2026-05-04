@@ -13,6 +13,7 @@ impl X86_64Backend {
         let mut terminated = false;
         for op in &ir.ops {
             match *op {
+                IrOp::Nop => {}
                 IrOp::I32Const(v) => emit_push_i32(&mut code, v),
                 IrOp::I64Const(v) => emit_push_i64(&mut code, v),
                 IrOp::GlobalGet(i, ty) => frame.emit_global_get(&mut code, i, ty)?,
