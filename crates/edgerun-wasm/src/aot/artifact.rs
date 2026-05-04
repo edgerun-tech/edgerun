@@ -1,4 +1,4 @@
-use crate::ir::FunctionIr;
+use super::ir::FunctionIr;
 
 #[derive(Clone, Debug)]
 pub struct CompiledFunction {
