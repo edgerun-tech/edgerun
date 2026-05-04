@@ -2,7 +2,6 @@
 resolver = "2"
 
 members = [
-  "crates/edgerun-app",
   "crates/edgerun-glob",
   "crates/edgerun-regex",
   "crates/edgerun-rt",
@@ -107,7 +106,6 @@ members = [
   "crates/edgerun-vfs",
   "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
-  "crates/edgerun-wasm",
   "crates/edgerun-wasm-bench",
   "crates/edgerun-wire",
   "crates/edgerun-sdk",
