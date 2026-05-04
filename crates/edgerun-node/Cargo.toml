@@ -30,9 +30,6 @@ hardware = [
     "dep:edgerun-speaker",
     "dep:edgerun-audio-liveliness",
 ]
-# Android hardware backends (NDK + JNI)
-# On Android: replaces Linux drivers with NDK FFI and JNI calls.
-# On non-Android: stub implementations that compile cleanly.
 android-hardware = [
     "dep:edgerun-android-hardware",
     "dep:edgerun-android-keystore",
@@ -40,15 +37,12 @@ android-hardware = [
 ]
 all-hardware = [
     "hardware",
-    # GPU / display
     "dep:edgerun-linux-gpu",
     "dep:edgerun-drm-display",
-    # Input / biometrics
     "dep:edgerun-fingerprint",
     "dep:edgerun-goodix-fingerprint",
     "dep:edgerun-audio-calibration",
     "dep:edgerun-biometrics",
-    # Connectivity
     "dep:edgerun-bluetooth",
     "dep:edgerun-mgmt-bluetooth",
     "dep:edgerun-wifi",
@@ -66,7 +60,6 @@ all-hardware = [
     "dep:edgerun-cec",
     "dep:edgerun-linux-cec",
     "dep:edgerun-amd-xdna",
-    # Storage
     "dep:edgerun-virtual-disk",
     "dep:edgerun-machine-report",
 ]
@@ -88,15 +81,9 @@ edgerun-mesh-capability = { version = "0.1", path = "../edgerun-mesh-capability"
 edgerun-mesh-session = { version = "0.1", path = "../edgerun-mesh-session" }
 edgerun-exchange = { version = "0.1", path = "../edgerun-exchange" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256", "pbkdf2"] }
-prost.workspace = true
-prost-types.workspace = true
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
-
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
-
-# Hardware signing is required for node identity and stream writing
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", default-features = false }
-
 edgerun-json = { version = "0.1", path = "../edgerun-json" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
@@ -106,8 +93,6 @@ edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interf
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"] }
 edgerun-tpm = { version = "0.1", path = "../edgerun-tpm" }
 edgerun-yubikey = { version = "0.1", path = "../edgerun-yubikey" }
-
-# Optional hardware backends (enable with --features hardware)
 edgerun-evdev-input = { version = "0.1", path = "../edgerun-evdev-input", optional = true }
 edgerun-alsa-speaker = { version = "0.1", path = "../edgerun-alsa-speaker", optional = true }
 edgerun-alsa-microphone = { version = "0.1", path = "../edgerun-alsa-microphone", optional = true }
@@ -116,19 +101,13 @@ edgerun-v4l2-camera = { version = "0.1", path = "../edgerun-v4l2-camera", option
 edgerun-camera-biometrics = { version = "0.1", path = "../edgerun-camera-biometrics", optional = true }
 edgerun-speaker = { version = "0.1", path = "../edgerun-speaker", optional = true }
 edgerun-audio-liveliness = { version = "0.1", path = "../edgerun-audio-liveliness", optional = true }
-
-# GPU / display
 edgerun-linux-gpu = { version = "0.1", path = "../edgerun-linux-gpu", optional = true }
 edgerun-drm-display = { version = "0.1", path = "../edgerun-drm-display", optional = true }
-
-# Input / biometrics
 edgerun-input = { version = "0.1", path = "../edgerun-input", optional = true }
 edgerun-fingerprint = { version = "0.1", path = "../edgerun-fingerprint", optional = true }
 edgerun-goodix-fingerprint = { version = "0.1", path = "../edgerun-goodix-fingerprint", optional = true }
 edgerun-audio-calibration = { version = "0.1", path = "../edgerun-audio-calibration", optional = true }
 edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics", optional = true }
-
-# Connectivity
 edgerun-bluetooth = { version = "0.1", path = "../edgerun-bluetooth", optional = true }
 edgerun-mgmt-bluetooth = { version = "0.1", path = "../edgerun-mgmt-bluetooth", optional = true }
 edgerun-wifi = { version = "0.1", path = "../edgerun-wifi", optional = true }
@@ -146,17 +125,9 @@ edgerun-linux-power = { version = "0.1", path = "../edgerun-linux-power", option
 edgerun-cec = { version = "0.1", path = "../edgerun-cec", optional = true }
 edgerun-linux-cec = { version = "0.1", path = "../edgerun-linux-cec", optional = true }
 edgerun-amd-xdna = { version = "0.1", path = "../edgerun-amd-xdna", optional = true }
-
-# Storage
 edgerun-virtual-disk = { version = "0.1", path = "../edgerun-virtual-disk", optional = true }
-
-# Misc
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", optional = true }
-
-# OCI container runtime (enable with --features oci)
 edgerun-oci = { version = "0.1", path = "../edgerun-oci", optional = true }
-
-# Android hardware (NDK + JNI)
 edgerun-android-hardware = { version = "0.1", path = "../edgerun-android-hardware", optional = true }
 edgerun-android-keystore = { version = "0.1", path = "../edgerun-android-keystore", optional = true }
 
