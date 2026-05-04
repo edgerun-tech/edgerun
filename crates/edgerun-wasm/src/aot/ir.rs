@@ -69,6 +69,8 @@ pub enum IrOp {
     I32Const(i32),
     I64Const(i64),
     LocalGet(u32),
+    LocalSet(u32),
+    LocalTee(u32),
     I32Add,
     I32Sub,
     I32Mul,
@@ -85,6 +87,8 @@ impl IrOp {
             Self::I32Const(v) => format!("i32.const {v}"),
             Self::I64Const(v) => format!("i64.const {v}"),
             Self::LocalGet(i) => format!("local.get {i}"),
+            Self::LocalSet(i) => format!("local.set {i}"),
+            Self::LocalTee(i) => format!("local.tee {i}"),
             Self::I32Add => "i32.add".to_string(),
             Self::I32Sub => "i32.sub".to_string(),
             Self::I32Mul => "i32.mul".to_string(),
@@ -149,11 +153,39 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
             IrOp::I32Const(_) => stack.push(ValueType::I32),
             IrOp::I64Const(_) => stack.push(ValueType::I64),
             IrOp::LocalGet(i) => {
-                let ty = *ir
-                    .locals
-                    .get(i as usize)
-                    .with_context(|| format!("{} reads missing local {i}", ir.name()))?;
+                let ty = local_type(ir, i)?;
                 stack.push(ty);
+            }
+            IrOp::LocalSet(i) => {
+                let expected = local_type(ir, i)?;
+                let actual = stack
+                    .pop()
+                    .with_context(|| format!("{} stack underflow at local.set {i}", ir.name()))?;
+                if actual != expected {
+                    bail!(
+                        "{} local.set {} type mismatch: expected {}, found {}",
+                        ir.name(),
+                        i,
+                        expected.as_str(),
+                        actual.as_str()
+                    );
+                }
+            }
+            IrOp::LocalTee(i) => {
+                let expected = local_type(ir, i)?;
+                let actual = stack
+                    .pop()
+                    .with_context(|| format!("{} stack underflow at local.tee {i}", ir.name()))?;
+                if actual != expected {
+                    bail!(
+                        "{} local.tee {} type mismatch: expected {}, found {}",
+                        ir.name(),
+                        i,
+                        expected.as_str(),
+                        actual.as_str()
+                    );
+                }
+                stack.push(expected);
             }
             IrOp::I32Add | IrOp::I32Sub | IrOp::I32Mul => {
                 pop2(&mut stack, ValueType::I32, ir, op)?;
@@ -188,6 +220,13 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn local_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
+    ir.locals
+        .get(index as usize)
+        .copied()
+        .with_context(|| format!("{} references missing local {index}", ir.name()))
 }
 
 fn pop2(stack: &mut Vec<ValueType>, expected: ValueType, ir: &FunctionIr, op: &IrOp) -> Result<()> {
