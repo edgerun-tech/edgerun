@@ -35,12 +35,12 @@ type CommandSuggestion = {
   prefix: CommandPrefix;
 };
 
-const COMMAND_PREFIXES: { prefix: CommandPrefix; label: string; title: string }[] = [
-  { prefix: "/", label: "General", title: "General command" },
-  { prefix: "#", label: "Terminal", title: "Send to terminal" },
-  { prefix: "?", label: "Help", title: "Help topics" },
-  { prefix: "~", label: "AI", title: "AI input" },
-];
+const COMMAND_PREFIXES: Record<CommandPrefix, { label: string; title: string; className: string }> = {
+  "/": { label: "General", title: "General command", className: "bg-sky-500 text-white shadow-[0_0_18px_rgba(14,165,233,0.35)]" },
+  "#": { label: "Terminal", title: "Send to terminal", className: "bg-emerald-500 text-white shadow-[0_0_18px_rgba(16,185,129,0.35)]" },
+  "?": { label: "Help", title: "Help topics", className: "bg-amber-400 text-black shadow-[0_0_18px_rgba(251,191,36,0.35)]" },
+  "~": { label: "AI", title: "AI input", className: "bg-fuchsia-500 text-white shadow-[0_0_18px_rgba(217,70,239,0.35)]" },
+};
 
 const SUGGESTIONS: CommandSuggestion[] = [
   { prefix: "/", value: "/open settings", label: "Open Settings" },
@@ -65,6 +65,13 @@ function commandPrefixFor(value: string): CommandPrefix {
 function commandBody(value: string) {
   const trimmed = value.trimStart();
   return ["/", "#", "?", "~"].includes(trimmed[0] || "") ? trimmed.slice(1) : trimmed;
+}
+
+function nextPrefix(prefix: CommandPrefix): CommandPrefix {
+  if (prefix === "/") return "#";
+  if (prefix === "#") return "?";
+  if (prefix === "?") return "~";
+  return "/";
 }
 
 export const FloatingDock = ({
@@ -162,12 +169,13 @@ const FloatingDockDesktop = ({
   const mouseX = useMotionValue(Infinity);
   const [page, setPage] = useState<DockPage>("launcher");
   const [command, setCommand] = useState("");
+  const [currentPrefix, setCurrentPrefix] = useState<CommandPrefix>("/");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const peopleItems = context?.items ?? [];
   const hasPeoplePage = Boolean(peopleItems.length);
-  const commandPrefix = commandPrefixFor(command);
-  const commandMode = COMMAND_PREFIXES.find((item) => item.prefix === commandPrefix) ?? COMMAND_PREFIXES[0];
+  const commandPrefix = commandPrefixFor(command || currentPrefix);
+  const commandMode = COMMAND_PREFIXES[commandPrefix];
   const commandQuery = commandBody(command).toLowerCase();
   const suggestions = useMemo(() => {
     return SUGGESTIONS
@@ -212,18 +220,29 @@ const FloatingDockDesktop = ({
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [hasPeoplePage]);
 
+  function setPrefix(prefix: CommandPrefix) {
+    setCurrentPrefix(prefix);
+    setCommand(`${prefix}${commandBody(command)}`);
+    inputRef.current?.focus();
+  }
+
+  function cyclePrefix() {
+    setPrefix(nextPrefix(commandPrefix));
+  }
+
   function submitCommand(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const value = command.trim();
-    if (!value) return;
-    const normalized = ["/", "#", "?", "~"].includes(value[0] || "") ? value : `/${value}`;
-    onCommandSubmit?.(normalized);
+    const body = commandBody(command).trim();
+    if (!body) return;
+    onCommandSubmit?.(`${commandPrefix}${body}`);
     setCommand("");
+    setCurrentPrefix("/");
     setPage("launcher");
   }
 
   function applySuggestion(value: string) {
     setCommand(value);
+    setCurrentPrefix(commandPrefixFor(value));
     inputRef.current?.focus();
   }
 
@@ -250,37 +269,35 @@ const FloatingDockDesktop = ({
               onSubmit={submitCommand}
               className="relative flex h-10 w-[min(520px,calc(100vw-8rem))] items-center gap-2 rounded-full border border-border bg-card px-2"
             >
-              <div className="flex shrink-0 items-center gap-1">
-                {COMMAND_PREFIXES.map((item) => (
-                  <button
-                    key={item.prefix}
-                    type="button"
-                    onClick={() => setCommand(`${item.prefix}${commandBody(command)}`)}
-                    className={cn(
-                      "flex h-7 w-7 items-center justify-center rounded-full font-mono text-xs transition-colors",
-                      commandPrefix === item.prefix
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-muted-foreground hover:text-foreground",
-                    )}
-                    aria-label={item.title}
-                    title={item.title}
-                  >
-                    {item.prefix}
-                  </button>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={cyclePrefix}
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-sm font-bold transition-colors",
+                  commandMode.className,
+                )}
+                aria-label={commandMode.title}
+                title={`${commandMode.title}. Click to cycle mode.`}
+              >
+                {commandPrefix}
+              </button>
               <input
                 ref={inputRef}
-                value={command}
-                onChange={(event) => setCommand(event.target.value)}
+                value={commandBody(command)}
+                onChange={(event) => setCommand(`${commandPrefix}${event.target.value}`)}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.preventDefault();
                     setPage("launcher");
                     setCommand("");
+                    setCurrentPrefix("/");
+                  }
+                  if ((event.metaKey || event.ctrlKey) && event.key === " ") {
+                    event.preventDefault();
+                    cyclePrefix();
                   }
                 }}
-                placeholder={`${commandMode.prefix} ${commandMode.label.toLowerCase()}...`}
+                placeholder={`${commandMode.label.toLowerCase()}...`}
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/45"
               />
               {suggestions.length > 0 && (
@@ -292,7 +309,7 @@ const FloatingDockDesktop = ({
                       onClick={() => applySuggestion(item.value)}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-accent"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary font-mono text-[10px] text-muted-foreground">{item.prefix}</span>
+                      <span className={cn("flex h-5 w-5 items-center justify-center rounded-full font-mono text-[10px]", COMMAND_PREFIXES[item.prefix].className)}>{item.prefix}</span>
                       <span className="min-w-0 flex-1 truncate">{item.label}</span>
                       <span className="truncate font-mono text-[10px] text-muted-foreground">{item.value}</span>
                     </button>
