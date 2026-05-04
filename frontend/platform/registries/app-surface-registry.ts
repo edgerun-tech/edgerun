@@ -38,7 +38,6 @@ const BUILTIN_SPECS: Record<string, AppSurfaceSpec> = {
   "code-runner": { kind: "overlay", defaultWidth: 980, defaultHeight: 680, dismissOnOutsideClick: true },
   "db-explorer": { kind: "overlay", defaultWidth: 940, defaultHeight: 640, dismissOnOutsideClick: true },
   "network-monitor": { kind: "pinned-widget", defaultWidth: 224, defaultHeight: 260, dismissOnOutsideClick: false, preferredSlot: "left-top" },
-  "resource-monitor": { kind: "pinned-widget", defaultWidth: 224, defaultHeight: 260, dismissOnOutsideClick: false, preferredSlot: "right-bottom" },
   "file-browser": { kind: "overlay", defaultWidth: 920, defaultHeight: 640, dismissOnOutsideClick: true },
   "git-sync": { kind: "overlay", defaultWidth: 820, defaultHeight: 560, dismissOnOutsideClick: true },
   "web-server": { kind: "overlay", defaultWidth: 820, defaultHeight: 560, dismissOnOutsideClick: true },
