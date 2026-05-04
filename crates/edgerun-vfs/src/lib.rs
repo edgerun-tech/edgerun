@@ -48,7 +48,7 @@
 //!     println!("File size: {} bytes", content.len());
 //! }
 //!
-//! let matches = vfs.grep("fn main");
+//! let matches = vfs.find_files_containing("fn main");
 //! println!("Found {} matches", matches.len());
 //! ```
 //!
