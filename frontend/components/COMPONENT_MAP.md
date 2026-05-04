@@ -71,6 +71,7 @@ These are production or production-candidate app surfaces:
 - `components/os/trust-manager-workspace.tsx`
 - `components/os/terminal.tsx`
 - `components/os/file-manager.tsx`
+- `components/os/storage-app.tsx`
 - `components/os/gmail-app.tsx`
 - `components/os/chat-app.tsx`
 - `components/os/calling-app.tsx`
