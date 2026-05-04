@@ -94,10 +94,10 @@ export function buildPlatformContext(): string {
   }
 
   // Import platform stores lazily to avoid SSR issues
-  const { nodeStore } = require("@/platform/state/node-store")
-  const { appStore } = require("@/platform/state/app-store")
-  const { capabilityStore } = require("@/platform/state/capability-store")
-  const { windowsStore } = require("@/stores/desktop-store")
+  const { nodeStore } = require("@/platform/state/node-store") as { nodeStore: { get(): any } }
+  const { appStore } = require("@/platform/state/app-store") as { appStore: { get(): any } }
+  const { capabilityStore } = require("@/platform/state/capability-store") as { capabilityStore: { get(): any } }
+  const { windowsStore } = require("@/stores/desktop-store") as { windowsStore: { get(): any } }
 
   const node = nodeStore.get()
   const apps = appStore.get()
