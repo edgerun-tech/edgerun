@@ -2,8 +2,6 @@
 
 use crate::prelude::v1::*;
 use edgerun_core::protocol::EventEnvelope;
-use edgerun_proto::edgerun::v0::stream as proto_stream;
-use prost::Message;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};

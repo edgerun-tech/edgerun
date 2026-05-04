@@ -2,8 +2,6 @@
 
 use crate::prelude::v1::*;
 use edgerun_core::protocol::{Digest, EventEnvelope};
-use edgerun_proto::edgerun::v0::stream as proto_stream;
-use prost::Message;
 
 use crate::error::StorageError;
 
@@ -105,16 +103,12 @@ pub fn validate_event_location(
 }
 
 /// Encodes an event into the current hosted append-log frame:
-/// `[varint protobuf_len][protobuf EventEnvelope bytes]`.
+/// `[varint wire_len][edgerun-wire EventEnvelope bytes]`.
 ///
-/// The record body remains protobuf for compatibility with the existing log
-/// files. Integrity/index hashes are computed through edgerun-wire via
+/// The record body is edgerun-wire. Integrity/index hashes are computed through
 /// `canonical_event_hash`.
 pub fn encode_event_frame(event: &EventEnvelope) -> Result<(Vec<u8>, Vec<u8>), StorageError> {
-    let proto: proto_stream::EventEnvelope = event.clone();
-    let mut event_bytes = Vec::new();
-    proto_stream::EventEnvelope::encode(&proto, &mut event_bytes)
-        .map_err(|e| StorageError::Encode(format!("encode failed: {e}")))?;
+    let event_bytes = edgerun_core::wire_stream::event_full_wire_bytes(event);
 
     let len_prefix = edgerun_core::varint::encode_varint(event_bytes.len() as u64);
     Ok((len_prefix, event_bytes))
