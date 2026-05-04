@@ -1,6 +1,6 @@
 #[path = "aot/artifact.rs"]
 mod artifact;
-#[path = "aot/backend_x86_64.rs"]
+#[path = "aot/backend_x86_64_guarded.rs"]
 mod backend_x86_64;
 #[path = "aot/ir.rs"]
 mod ir;
