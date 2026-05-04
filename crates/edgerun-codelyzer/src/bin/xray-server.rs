@@ -1,6 +1,7 @@
 //! Minimal codelyzer → Xray bridge.
 //!
-//! Serves repository analysis as JSON that the frontend Xray graph can consume.
+//! Serves repository analysis and local network observations as JSON that the
+//! frontend Xray desktop can consume.
 //!
 //! Usage:
 //!   cargo run -p edgerun-codelyzer --bin xray-server -- /path/to/repo
@@ -9,17 +10,19 @@
 //! Endpoints:
 //!   GET /graph
 //!   GET /graph?path=/path/to/repo
+//!   GET /connections
 //!   GET /health
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
+    fs,
     io::{Read, Write},
-    net::{TcpListener, TcpStream},
+    net::{Ipv4Addr, Ipv6Addr, TcpListener, TcpStream},
     path::Path,
     time::Instant,
 };
 
-use edgerun_codelyzer::analyzer::analyze_full;
+use edgerun_codelyzer::{analyzer::analyze_full, filesystem};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -44,12 +47,22 @@ struct XrayGraphEdge {
 }
 
 #[derive(Debug, Serialize)]
+struct RepoFileEntry {
+    path: String,
+    language: String,
+    size: u64,
+    modified_ts: u64,
+}
+
+#[derive(Debug, Serialize)]
 struct XrayGraphData {
     nodes: Vec<XrayGraphNode>,
     edges: Vec<XrayGraphEdge>,
+    files: Vec<RepoFileEntry>,
     total_bytes: u64,
     node_count: u32,
     edge_count: u32,
+    file_count: u32,
     elapsed_ms: u64,
     source: String,
 }
@@ -58,6 +71,22 @@ struct XrayGraphData {
 struct GraphUpdateEnvelope<'a> {
     r#type: &'a str,
     data: XrayGraphData,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalConnection {
+    protocol: String,
+    local_address: String,
+    local_port: u16,
+    remote_address: String,
+    remote_port: u16,
+    state: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ConnectionsEnvelope {
+    connections: Vec<LocalConnection>,
+    connection_count: u32,
 }
 
 fn main() {
@@ -122,6 +151,18 @@ fn handle_client(mut stream: TcpStream, default_root: &str) {
 
     if path == "/health" {
         respond_json(&mut stream, 200, r#"{"ok":true}"#);
+        return;
+    }
+
+    if path.starts_with("/connections") {
+        let data = ConnectionsEnvelope {
+            connections: read_local_connections(),
+            connection_count: read_local_connections().len() as u32,
+        };
+        match serde_json::to_string(&data) {
+            Ok(body) => respond_json(&mut stream, 200, &body),
+            Err(err) => respond_json(&mut stream, 500, &serde_json::json!({ "error": err.to_string() }).to_string()),
+        }
         return;
     }
 
@@ -201,13 +242,27 @@ fn analyze_repo_for_xray(root: &str) -> Result<XrayGraphData, String> {
     nodes.sort_by(|a, b| a.id.cmp(&b.id));
     edges.sort_by(|a, b| a.source.cmp(&b.source).then(a.target.cmp(&b.target)));
 
+    let mut files: Vec<RepoFileEntry> = result
+        .file_snapshot
+        .iter()
+        .map(|file| RepoFileEntry {
+            path: file.path.clone(),
+            language: file.language.clone(),
+            size: file.size,
+            modified_ts: file.modified_ts,
+        })
+        .collect();
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+
     let total_bytes = result.file_snapshot.iter().map(|file| file.size).sum();
 
     Ok(XrayGraphData {
         node_count: nodes.len() as u32,
         edge_count: edges.len() as u32,
+        file_count: files.len() as u32,
         nodes,
         edges,
+        files,
         total_bytes,
         elapsed_ms: started.elapsed().as_millis() as u64,
         source: root.to_string(),
@@ -232,6 +287,98 @@ fn tags_for_function(func: &edgerun_codelyzer::uir::Function) -> Vec<String> {
         tags.push("storage".to_string());
     }
     tags
+}
+
+fn read_local_connections() -> Vec<LocalConnection> {
+    let mut connections = Vec::new();
+    connections.extend(read_proc_net("/proc/net/tcp", "tcp", false));
+    connections.extend(read_proc_net("/proc/net/tcp6", "tcp6", true));
+    connections.extend(read_proc_net("/proc/net/udp", "udp", false));
+    connections.extend(read_proc_net("/proc/net/udp6", "udp6", true));
+
+    let mut seen = HashSet::new();
+    connections.retain(|conn| {
+        let key = format!("{}:{}:{}:{}:{}", conn.protocol, conn.local_address, conn.local_port, conn.remote_address, conn.remote_port);
+        seen.insert(key)
+    });
+    connections.sort_by(|a, b| a.remote_address.cmp(&b.remote_address).then(a.remote_port.cmp(&b.remote_port)));
+    connections
+}
+
+fn read_proc_net(path: &str, protocol: &str, ipv6: bool) -> Vec<LocalConnection> {
+    let Ok(content) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+
+    content
+        .lines()
+        .skip(1)
+        .filter_map(|line| parse_proc_net_line(line, protocol, ipv6))
+        .filter(|conn| conn.remote_address != "0.0.0.0" && conn.remote_address != "::" && conn.remote_port != 0)
+        .collect()
+}
+
+fn parse_proc_net_line(line: &str, protocol: &str, ipv6: bool) -> Option<LocalConnection> {
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    let local = fields.get(1)?;
+    let remote = fields.get(2)?;
+    let state = fields.get(3).copied().unwrap_or("00");
+    let (local_address, local_port) = parse_socket_addr(local, ipv6)?;
+    let (remote_address, remote_port) = parse_socket_addr(remote, ipv6)?;
+
+    Some(LocalConnection {
+        protocol: protocol.to_string(),
+        local_address,
+        local_port,
+        remote_address,
+        remote_port,
+        state: tcp_state(state).to_string(),
+    })
+}
+
+fn parse_socket_addr(value: &str, ipv6: bool) -> Option<(String, u16)> {
+    let (addr_hex, port_hex) = value.split_once(':')?;
+    let port = u16::from_str_radix(port_hex, 16).ok()?;
+    let address = if ipv6 {
+        parse_ipv6_hex(addr_hex)?
+    } else {
+        parse_ipv4_hex(addr_hex)?
+    };
+    Some((address, port))
+}
+
+fn parse_ipv4_hex(hex: &str) -> Option<String> {
+    let raw = u32::from_str_radix(hex, 16).ok()?;
+    Some(Ipv4Addr::from(raw.to_le_bytes()).to_string())
+}
+
+fn parse_ipv6_hex(hex: &str) -> Option<String> {
+    if hex.len() != 32 {
+        return None;
+    }
+    let mut bytes = [0u8; 16];
+    for i in 0..4 {
+        let chunk = u32::from_str_radix(&hex[i * 8..i * 8 + 8], 16).ok()?;
+        bytes[i * 4..i * 4 + 4].copy_from_slice(&chunk.to_le_bytes());
+    }
+    Some(Ipv6Addr::from(bytes).to_string())
+}
+
+fn tcp_state(hex: &str) -> &'static str {
+    match hex {
+        "01" => "established",
+        "02" => "syn_sent",
+        "03" => "syn_recv",
+        "04" => "fin_wait1",
+        "05" => "fin_wait2",
+        "06" => "time_wait",
+        "07" => "closed",
+        "08" => "close_wait",
+        "09" => "last_ack",
+        "0A" => "listen",
+        "0B" => "closing",
+        _ => "unknown",
+    }
 }
 
 fn respond_json(stream: &mut TcpStream, status: u16, body: &str) {
