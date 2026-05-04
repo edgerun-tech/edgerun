@@ -1,6 +1,8 @@
 /**
- * Xray feature barrel export.
- * Clean EdgeRun xray architecture extracted from codeanalyzer.
+ * Canonical Xray feature barrel.
+ *
+ * Use this module for all production xray imports. The older JS implementation
+ * under `lib/xray/*` is legacy/scaffolding and should not be imported from new code.
  */
 
 export { XrayWorkspace } from "./XrayWorkspace"
@@ -8,21 +10,12 @@ export { XrayViewport } from "./XrayViewport"
 export { XrayCommandSurface } from "./XrayCommandSurface"
 export { XrayInspector } from "./XrayInspector"
 
-// Types
-export type { XrayGraph, XrayNode, XrayEdge } from "../../lib/xray/types/XrayGraph";
+export { xrayState, resetView, setLayout, setRuntimeMode, setViewTransform, selectNode } from "./graph/graph-store"
+export type { XrayGraph, XrayNode, XrayEdge, RuntimeNodeStats, LayoutType, XrayState } from "./graph/types"
 
-// Adapter
-export { adaptCodeanalyzerToXray, adaptNodes, adaptEdges } from "../../lib/xray/adapter/codeanalyzerAdapter";
-
-// Renderer
-export { createGraphRenderer } from "../../lib/xray/render/GraphRenderer";
-export { buildNodeProgram, buildEdgeProgram, getLangColor, screenToGraph, graphToScreen } from "../../lib/xray/render/gl";
-
-// Layout
-export { createLayoutState, stepLayout, buildSpatialGrid, initPositions } from "../../lib/xray/layout/forceLayout";
-
-// Input
-export { hitTest, boxSelect } from "../../lib/xray/input/hitTest";
-
-// Color policy
-export { getNodeColor, getNodeSize, getEdgeColor } from "../../lib/xray/render/colorPolicy";
+export { runForceLayout } from "./layout/force-layout"
+export { runGlobeLayout } from "./layout/globe-layout"
+export { runLayerLayout } from "./layout/layer-layout"
+export { WebGLRenderer } from "./render/webgl-renderer"
+export { getNodeColor, getNodeSize, getEdgeColor } from "./render/color-policy"
+export { connectCodeAnalyzer, disconnectCodeAnalyzer } from "./services/codeanalyzer-ws"
