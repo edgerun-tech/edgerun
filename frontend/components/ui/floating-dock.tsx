@@ -10,7 +10,7 @@ import {
 } from "motion/react";
 import type { MotionValue } from "motion/react";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 type FloatingDockItem = {
   title: string;
@@ -23,9 +23,11 @@ type FloatingDockItem = {
 
 type FloatingDockContext = {
   mode?: "apps" | "chat-heads" | "triggers";
-  label?: string;
   items?: FloatingDockItem[];
 };
+
+type DockLane = "launcher" | "context";
+type DockMode = "icons" | "command";
 
 export const FloatingDock = ({
   items,
@@ -40,17 +42,17 @@ export const FloatingDock = ({
   mobileClassName?: string;
   onCommandSubmit?: (command: string) => void;
 }) => {
-  const visibleItems = context?.items?.length ? context.items : items;
+  const mobileItems = context?.items?.length ? context.items : items;
 
   return (
     <>
       <FloatingDockDesktop
-        items={visibleItems}
+        launcherItems={items}
         context={context}
         className={desktopClassName}
         onCommandSubmit={onCommandSubmit}
       />
-      <FloatingDockMobile items={visibleItems} className={mobileClassName} />
+      <FloatingDockMobile items={mobileItems} className={mobileClassName} />
     </>
   );
 };
@@ -109,32 +111,34 @@ const FloatingDockMobile = ({
 };
 
 const FloatingDockDesktop = ({
-  items,
+  launcherItems,
   context,
   className,
   onCommandSubmit,
 }: {
-  items: FloatingDockItem[];
+  launcherItems: FloatingDockItem[];
   context?: FloatingDockContext;
   className?: string;
   onCommandSubmit?: (command: string) => void;
 }) => {
   const mouseX = useMotionValue(Infinity);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [commandMode, setCommandMode] = useState(false);
+  const [lane, setLane] = useState<DockLane>("launcher");
+  const [mode, setMode] = useState<DockMode>("icons");
   const [command, setCommand] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const selectedTitle = items[selectedIndex]?.title;
+  const hasContextLane = Boolean(context?.items?.length);
+  const contextItems = context?.items ?? [];
+  const visibleItems = lane === "context" && hasContextLane ? contextItems : launcherItems;
 
   useEffect(() => {
-    setSelectedIndex(0);
-  }, [items, context?.mode]);
+    if (!hasContextLane && lane === "context") setLane("launcher");
+  }, [hasContextLane, lane]);
 
   useEffect(() => {
-    if (!commandMode) return;
+    if (mode !== "command") return;
     inputRef.current?.focus();
-  }, [commandMode]);
+  }, [mode]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -143,23 +147,24 @@ const FloatingDockDesktop = ({
       event.preventDefault();
       event.stopPropagation();
 
-      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        setCommandMode((value) => !value);
+      if (event.key === "ArrowDown") {
+        setMode("command");
         return;
       }
 
-      if (items.length === 0) return;
-      const delta = event.key === "ArrowRight" ? 1 : -1;
-      setSelectedIndex((current) => {
-        const next = (current + delta + items.length) % items.length;
-        items[next]?.onClick?.();
-        return next;
-      });
+      if (event.key === "ArrowUp") {
+        setMode("icons");
+        return;
+      }
+
+      if (!hasContextLane) return;
+      if (event.key === "ArrowRight") setLane("context");
+      if (event.key === "ArrowLeft") setLane("launcher");
     };
 
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [items]);
+  }, [hasContextLane]);
 
   function submitCommand(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -167,7 +172,7 @@ const FloatingDockDesktop = ({
     if (!value) return;
     onCommandSubmit?.(value);
     setCommand("");
-    setCommandMode(false);
+    setMode("icons");
   }
 
   return (
@@ -176,25 +181,26 @@ const FloatingDockDesktop = ({
       onMouseMove={(e) => mouseX.set(e.pageX)}
       onMouseLeave={() => mouseX.set(Infinity)}
       className={cn(
-        "mx-auto hidden h-[58px] items-end overflow-hidden rounded-2xl border border-border bg-background/90 px-4 pb-2 md:flex",
+        "mx-auto hidden h-[58px] items-end rounded-2xl border border-border bg-background/90 px-4 pb-2 md:flex",
         className,
       )}
-      data-dock-mode={context?.mode || "apps"}
+      data-dock-lane={lane}
+      data-dock-mode={mode}
     >
       <div className="relative flex h-full min-w-0 items-end">
-        <AnimatePresence mode="wait">
-          {commandMode ? (
+        <AnimatePresence mode="wait" initial={false}>
+          {mode === "command" ? (
             <motion.form
               key="command-entry"
-              initial={{ opacity: 0, y: 26 }}
+              initial={{ opacity: 0, y: 28 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 26 }}
+              exit={{ opacity: 0, y: 28 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               onSubmit={submitCommand}
               className="flex h-10 w-[min(520px,calc(100vw-8rem))] items-center gap-2 rounded-full border border-border bg-card px-4"
             >
               <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                {context?.label || "Command"}
+                Command
               </span>
               <input
                 ref={inputRef}
@@ -203,7 +209,7 @@ const FloatingDockDesktop = ({
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.preventDefault();
-                    setCommandMode(false);
+                    setMode("icons");
                     setCommand("");
                   }
                 }}
@@ -213,29 +219,29 @@ const FloatingDockDesktop = ({
             </motion.form>
           ) : (
             <motion.div
-              key={`${context?.mode || "apps"}-${selectedTitle || "none"}`}
-              initial={{ opacity: 0, y: -18 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 28 }}
+              key={lane}
+              initial={{ opacity: 0, x: lane === "context" ? 42 : -42 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: lane === "context" ? -42 : 42, y: 0 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               className="flex items-end gap-4"
             >
-              {context?.label && (
-                <div className="mb-1 hidden h-8 items-center rounded-full border border-border/70 bg-card/80 px-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground xl:flex">
-                  {context.label}
-                </div>
-              )}
-              {items.map((item, index) => (
+              {visibleItems.map((item) => (
                 <IconContainer
                   mouseX={mouseX}
-                  key={`${item.kind || "app"}-${item.title}`}
-                  selected={index === selectedIndex}
+                  key={`${lane}-${item.kind || "app"}-${item.title}`}
                   {...item}
                 />
               ))}
             </motion.div>
           )}
         </AnimatePresence>
+
+        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] flex -translate-x-1/2 items-center gap-1.5">
+          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", lane === "launcher" && mode === "icons" ? "bg-primary" : "bg-muted-foreground/35")} />
+          {hasContextLane && <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", lane === "context" && mode === "icons" ? "bg-primary" : "bg-muted-foreground/35")} />}
+          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", mode === "command" ? "bg-primary" : "bg-muted-foreground/35")} />
+        </div>
       </div>
     </motion.div>
   );
@@ -246,7 +252,6 @@ function IconContainer({
   title,
   icon,
   onClick,
-  selected,
   subtitle,
 }: {
   mouseX: MotionValue<number>;
@@ -254,7 +259,6 @@ function IconContainer({
   icon: ReactNode;
   href?: string;
   onClick?: () => void;
-  selected?: boolean;
   subtitle?: string;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -284,10 +288,7 @@ function IconContainer({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onClick}
-      className={cn(
-        "relative flex cursor-pointer items-center justify-center rounded-full border border-border bg-card transition-colors hover:bg-accent",
-        selected && "ring-2 ring-primary/35",
-      )}
+      className="relative flex cursor-pointer items-center justify-center rounded-full border border-border bg-card transition-colors hover:bg-accent"
       aria-label={title}
       title={title}
     >
