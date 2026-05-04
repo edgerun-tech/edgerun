@@ -48,6 +48,7 @@ The x86_64 backend currently emits a simple stack-frame function:
 - parameters are copied from SysV argument registers into frame slots
 - non-parameter locals are zero-initialized
 - WASM operand stack values are represented with native push/pop operations
+- `i32` values are zero-extended and arithmetic is emitted with 32-bit x86 instructions to preserve wrapping/truncation semantics
 - the function epilogue restores `rsp`/`rbp` before returning
 
 Unsupported on purpose for now:
