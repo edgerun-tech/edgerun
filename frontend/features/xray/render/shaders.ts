@@ -6,17 +6,17 @@ layout(location=3) in float a_selected;
 uniform vec2 u_resolution;
 uniform float u_zoom;
 uniform vec2 u_pan;
-uniform float u_rotation;
-uniform float u_tilt;
+uniform float u_yaw;
+uniform float u_pitch;
 out vec4 v_color;
 out float v_selected;
 void main() {
     vec3 p = vec3(a_position.x + u_pan.x, a_position.y + u_pan.y, a_position.z) * u_zoom;
 
-    float cy = cos(u_rotation);
-    float sy = sin(u_rotation);
-    float cp = cos(u_tilt);
-    float sp = sin(u_tilt);
+    float cy = cos(u_yaw);
+    float sy = sin(u_yaw);
+    float cp = cos(u_pitch);
+    float sp = sin(u_pitch);
 
     vec3 yawed = vec3(p.x * cy - p.z * sy, p.y, p.x * sy + p.z * cy);
     vec3 pitched = vec3(yawed.x, yawed.y * cp - yawed.z * sp, yawed.y * sp + yawed.z * cp);
@@ -56,16 +56,16 @@ layout(location=1) in vec3 a_color;
 uniform vec2 u_resolution;
 uniform float u_zoom;
 uniform vec2 u_pan;
-uniform float u_rotation;
-uniform float u_tilt;
+uniform float u_yaw;
+uniform float u_pitch;
 out vec3 v_color;
 out float v_depth;
 void main() {
     vec3 p = vec3(a_position.x + u_pan.x, a_position.y + u_pan.y, a_position.z) * u_zoom;
-    float cy = cos(u_rotation);
-    float sy = sin(u_rotation);
-    float cp = cos(u_tilt);
-    float sp = sin(u_tilt);
+    float cy = cos(u_yaw);
+    float sy = sin(u_yaw);
+    float cp = cos(u_pitch);
+    float sp = sin(u_pitch);
 
     vec3 yawed = vec3(p.x * cy - p.z * sy, p.y, p.x * sy + p.z * cy);
     vec3 pitched = vec3(yawed.x, yawed.y * cp - yawed.z * sp, yawed.y * sp + yawed.z * cp);
@@ -124,13 +124,13 @@ export function buildEdgeProgram(gl: WebGL2RenderingContext): WebGLProgram {
   return buildProgram(gl, vs, fs)
 }
 
-export function screenToGraph(sx: number, sy: number, zoom: number, panX: number, panY: number, rotation: number, vw: number, vh: number): [number, number] {
+export function screenToGraph(sx: number, sy: number, zoom: number, panX: number, panY: number, yaw: number, vw: number, vh: number): [number, number] {
   // Approximate inverse projection for picking. Exact 3D picking needs ray casting,
   // but this keeps hover/click responsive and predictable.
   let x = (sx - vw * 0.5) / zoom
   let y = (vh * 0.5 - sy) / zoom
-  const c = Math.cos(-rotation)
-  const s = Math.sin(-rotation)
+  const c = Math.cos(-yaw)
+  const s = Math.sin(-yaw)
   const rx = x * c - y * s
   const ry = x * s + y * c
   return [rx - panX, ry - panY]
