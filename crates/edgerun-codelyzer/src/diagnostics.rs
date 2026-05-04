@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Auto-discovery diagnostics system.
 //! Scans for available linters/LSPs/formatters at startup, runs them,
 //! and collects: lint errors, missing references, formatting issues,

@@ -1,3 +1,4 @@
+extern crate alloc;
 //! Comprehensive end-to-end test suite for all edgerun subsystems.
 //!
 //! This test suite validates that all components work together in real scenarios:
@@ -353,7 +354,7 @@ signer:
     // TCP session helpers
     // ===========================================================================
 
-    fn encode_frame(msg: &[u8]) -> Vec<u8> {
+    fn encode_frame(msg: &[u8]) -> alloc::vec::Vec<u8> {
         let mut frame = (msg.len() as u64).to_be_bytes().to_vec();
         frame.extend_from_slice(msg);
         frame
@@ -1388,12 +1389,12 @@ signer:
     }
 }
 
-pub(crate) fn native_e2e_encode<T>(_value: &T) -> std::vec::Vec<u8> {
+pub(crate) fn native_e2e_encode<T>(_value: &T) -> alloc::vec::Vec<u8> {
     b"edgerun-e2e-native-v0".to_vec()
 }
 
 pub(crate) fn native_identity_ref_encode(
     value: &edgerun_core::protocol::IdentityRef,
-) -> std::vec::Vec<u8> {
+) -> alloc::vec::Vec<u8> {
     value.identity_id.clone()
 }

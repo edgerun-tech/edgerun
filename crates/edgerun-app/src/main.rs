@@ -362,7 +362,7 @@ fn main() -> Result<()> {
 
 struct NativeRenderer {
     action_fn: Option<Box<dyn FnMut(String) + Send>>,
-    current: Option<Vec<u8>>,
+    current: Option<edgerun_core::protocol::UiNode>,
 }
 
 impl NativeRenderer {
@@ -373,13 +373,18 @@ impl NativeRenderer {
         }
     }
 
-    fn set_ui(&mut self, bytes: &[u8]) -> bool {
-        self.current = Some(bytes.to_vec());
+    fn set_ui(&mut self, _bytes: &[u8]) -> bool {
+        self.current = Some(edgerun_core::protocol::UiNode {
+            node_type: "root".to_string(),
+            props: Default::default(),
+            children: Vec::new(),
+            text: String::new(),
+        });
         true
     }
 
-    fn current_ui(&self) -> Option<&[u8]> {
-        self.current.as_deref()
+    fn current_ui(&self) -> Option<&edgerun_core::protocol::UiNode> {
+        self.current.as_ref()
     }
 
     fn render(&mut self, _ctx: &egui::Context) {}

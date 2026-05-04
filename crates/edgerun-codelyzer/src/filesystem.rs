@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Filesystem tracking layer.
 ///
 /// Scans directories for tracked source files, computes a fast content hash,

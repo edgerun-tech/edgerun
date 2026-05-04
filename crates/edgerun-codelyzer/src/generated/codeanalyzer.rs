@@ -1,4 +1,5 @@
 // Custom binary protocol for codeanalyzer - no protobuf, no external dependencies
+#![allow(unused_imports)]
 
 // Binary format uses simple TLV (Tag-Length-Value) encoding:
 // - Tag: 1 byte for field identification
