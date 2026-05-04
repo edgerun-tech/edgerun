@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { Activity, Cpu, HardDrive, RadioTower, WalletCards } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { GlowingContainer } from "@/components/layouts/glowing-containers"
 import { FinancesOverviewWidget } from "@/components/sections/finance-overviews"
 import { WorkspaceStatusPanel } from "@/components/workspace"
 import { XrayViewport } from "@/features/xray/XrayViewport"
@@ -21,14 +22,14 @@ type XrayDesktopSurfaceProps = {
 
 function MiniTile({ icon, label, value, sub }: { icon: ReactNode; label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-2xl border border-[var(--window-border)] bg-background/70 p-3 shadow-2xl backdrop-blur-md">
+    <GlowingContainer className="h-full" contentClassName="p-3" proximity={52} spread={70} borderWidth={2}>
       <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
         <span className="text-primary">{icon}</span>
         {label}
       </div>
       <div className="font-mono text-lg text-foreground">{value}</div>
       {sub && <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>}
-    </div>
+    </GlowingContainer>
   )
 }
 
@@ -36,19 +37,23 @@ function SurfaceSlot({ surface, fallback }: { surface?: AppSurfaceDef; fallback:
   if (!surface) return <>{fallback}</>
 
   return (
-    <div
+    <GlowingContainer
+      className="h-full min-h-0"
+      contentClassName="flex h-full min-h-0 flex-col bg-background/78"
+      proximity={52}
+      spread={70}
+      borderWidth={2}
       data-pinned-surface-id={surface.id}
       data-app-id={surface.appId}
-      className="min-h-0 overflow-hidden rounded-2xl border border-[var(--window-border)] bg-background/78 shadow-2xl backdrop-blur-md"
     >
-      <div className="flex h-9 items-center gap-2 border-b border-border/60 px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/60 px-3">
         <span className="text-primary">{surface.icon}</span>
         <span className="min-w-0 truncate text-xs font-medium text-foreground">{surface.title}</span>
       </div>
-      <div className="h-[calc(100%-2.25rem)] min-h-0 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         {surface.component}
       </div>
-    </div>
+    </GlowingContainer>
   )
 }
 
@@ -110,9 +115,9 @@ export function XrayDesktopSurface({
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "left-bottom")}
           fallback={
-            <div className="min-h-0 overflow-hidden rounded-2xl border border-[var(--window-border)] bg-background/78 shadow-2xl backdrop-blur-md">
+            <GlowingContainer className="h-full min-h-0" contentClassName="h-full min-h-0 bg-background/78" proximity={52} spread={70} borderWidth={2}>
               <FinancesOverviewWidget />
-            </div>
+            </GlowingContainer>
           }
         />
       </div>
@@ -132,9 +137,9 @@ export function XrayDesktopSurface({
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "right-bottom")}
           fallback={
-            <div className="min-h-0 overflow-hidden rounded-2xl border border-[var(--window-border)] bg-background/78 shadow-2xl backdrop-blur-md">
+            <GlowingContainer className="h-full min-h-0" contentClassName="h-full min-h-0 bg-background/78" proximity={52} spread={70} borderWidth={2}>
               <WorkspaceStatusPanel surface="embedded" />
-            </div>
+            </GlowingContainer>
           }
         />
       </div>
@@ -161,7 +166,13 @@ export function XrayDesktopSurface({
         />
       </div>
 
-      <div className="absolute inset-y-4 left-[260px] right-[260px] z-0 rounded-[28px] border border-white/5 bg-black/30 shadow-[0_0_120px_rgba(0,0,0,0.65)] max-xl:left-4 max-xl:right-4 max-xl:top-14">
+      <GlowingContainer
+        className="absolute inset-y-4 left-[260px] right-[260px] z-0 max-xl:left-4 max-xl:right-4 max-xl:top-14"
+        contentClassName="h-full bg-black/30 shadow-[0_0_120px_rgba(0,0,0,0.65)]"
+        proximity={96}
+        spread={110}
+        borderWidth={2}
+      >
         <div className="absolute left-1/2 top-4 z-20 hidden -translate-x-1/2 items-center gap-2 xl:flex">
           <Badge variant="secondary" className="border-white/10 bg-background/70 text-primary backdrop-blur-md">
             <Activity className="h-3 w-3" /> XRAY
@@ -169,7 +180,7 @@ export function XrayDesktopSurface({
           <XrayCommandSurface surface="top" />
         </div>
 
-        <div className="absolute inset-0 flex overflow-hidden rounded-[28px]">
+        <div className="absolute inset-0 flex overflow-hidden rounded-xl">
           <div className="min-w-0 flex-1">
             <XrayViewport />
           </div>
@@ -177,7 +188,7 @@ export function XrayDesktopSurface({
             <XrayInspector />
           </div>
         </div>
-      </div>
+      </GlowingContainer>
     </div>
   )
 }
