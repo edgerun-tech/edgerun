@@ -13,7 +13,6 @@ import { useAuth } from "@/hooks/use-auth"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
 import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
 import { FloatingDock } from "@/components/ui/floating-dock"
-import dynamic from "next/dynamic"
 import { Users } from "lucide-react"
 import {
   windowsStore,
@@ -28,11 +27,6 @@ import {
   focusWindow,
   type OpenWindowDef,
 } from "@/stores/desktop-store"
-
-const XrayWorkspace = dynamic(
-  () => import("@/features/xray/XrayWorkspace").then(mod => ({ default: mod.XrayWorkspace })),
-  { ssr: false }
-)
 
 export function Desktop() {
   const auth = useAuth()
@@ -87,13 +81,6 @@ export function Desktop() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
-      {/* Xray graph — behind everything, non-interactive, starts below top bar */}
-      {showDesktop && (
-        <div className="pointer-events-none absolute inset-0 top-10 z-0">
-          <XrayWorkspace mode="bg" />
-        </div>
-      )}
-
       {!showDesktop && (
         <AuthOverlay
           authState={auth.authState}
