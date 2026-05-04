@@ -1,10 +1,23 @@
-import js from "@eslint/js";
-import nextPlugin from "@next/eslint-plugin-next";
-import tsPlugin from "typescript-eslint";
-import reactHooks from "eslint-plugin-react-hooks";
-import reactRefresh from "eslint-plugin-react-refresh";
+import js from "@eslint/js"
+import nextPlugin from "@next/eslint-plugin-next"
+import tsPlugin from "typescript-eslint"
+import reactHooks from "eslint-plugin-react-hooks"
+import reactRefresh from "eslint-plugin-react-refresh"
 
 export default [
+  {
+    ignores: [
+      ".next/**",
+      "out/**",
+      "coverage/**",
+      "node_modules/**",
+      "public/workers/**",
+      "tsconfig.tsbuildinfo",
+      "next-env.d.ts",
+      "types/**/*.d.ts",
+      "gen/**/*.ts",
+    ],
+  },
   js.configs.recommended,
   ...tsPlugin.configs.recommended,
   {
@@ -21,7 +34,4 @@ export default [
       "react-refresh/only-export-components": "warn",
     },
   },
-  {
-    ignores: ["next.config.mjs", "next.config.ts", ".next/**", "node_modules/**"],
-  },
-];
+]
