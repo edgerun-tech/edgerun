@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Mesh daemon orchestration for Edgerun nodes"
 
 [dependencies]
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../edgerun-mesh-link" }
 edgerun-mesh-capability = { version = "0.1", path = "../edgerun-mesh-capability" }

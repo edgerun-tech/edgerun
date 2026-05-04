@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Remote capability request and response protocol for Edgerun"
 
 [dependencies]
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 edgerun-capability-policy = { version = "0.1", path = "../edgerun-capability-policy" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-camera-biometrics = { version = "0.1", path = "../edgerun-camera-biometrics" }

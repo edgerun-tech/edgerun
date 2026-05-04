@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Capability attenuation and policy evaluation for Edgerun"
 
 [dependencies]
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 edgerun-crypto = { workspace = true, default-features = false }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-core = { version = "0.1", path = "../edgerun-core" }

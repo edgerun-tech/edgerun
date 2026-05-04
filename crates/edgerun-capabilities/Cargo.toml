@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Capability and delegation data structures for Edgerun"
 
 [dependencies]
+edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 
 [lints]
 workspace = true
