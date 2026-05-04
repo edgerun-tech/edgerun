@@ -121,4 +121,5 @@ pub fn encode_event_frame(event: &EventEnvelope) -> Result<(Vec<u8>, Vec<u8>), S
 }
 
 #[cfg(test)]
+#[path = "event_log_tests.rs"]
 mod event_log_tests;
