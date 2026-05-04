@@ -11,6 +11,7 @@ import {
   installApp,
   uninstallApp,
   isCoreApp,
+  normalizeAppId,
 } from "@/stores/installed-apps-store"
 import {
   localCapabilityGrantsStore,
@@ -18,24 +19,29 @@ import {
   revokeAllLocalCapabilityGrants,
 } from "@/stores/local-capability-grants-store"
 import { getCapabilityInfo, riskTone } from "@/platform/capabilities/capability-catalog"
-import { windowsStore, closeWindow } from "@/stores/desktop-store"
+import { appSurfacesStore, closeAppSurface } from "@/stores/desktop-store"
 
 interface AppStoreProps {
   onLaunchApp?: (app: AppDefinition) => void
 }
 
 function uninstallAndClose(appId: string) {
-  for (const win of windowsStore.get()) {
-    if (win.appId === appId) closeWindow(win.id)
+  const normalizedAppId = normalizeAppId(appId)
+  for (const surface of appSurfacesStore.get()) {
+    if (normalizeAppId(surface.appId) === normalizedAppId) closeAppSurface(surface.id)
   }
-  revokeAllLocalCapabilityGrants(appId)
-  uninstallApp(appId)
+  revokeAllLocalCapabilityGrants(normalizedAppId)
+  uninstallApp(normalizedAppId)
 }
 
 export function AppStore({ onLaunchApp }: AppStoreProps) {
   const installedIds = useStore(installedAppIdsStore)
   useStore(localCapabilityGrantsStore)
   const apps = useMemo(() => listBuiltinApps(), [])
+  const normalizedInstalledIds = useMemo(
+    () => installedIds.map(normalizeAppId),
+    [installedIds],
+  )
 
   return (
     <div className="flex h-full flex-col p-4">
@@ -50,16 +56,17 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
           </p>
         </div>
         <div className="rounded-md border border-border bg-secondary/50 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-          {installedIds.length} installed
+          {normalizedInstalledIds.length} installed
         </div>
       </div>
 
       <div className="grid flex-1 grid-cols-2 gap-3 overflow-auto pr-1">
         {apps.map((app) => {
-          const installed = installedIds.includes(app.appId) || isCoreApp(app.appId)
-          const core = isCoreApp(app.appId)
+          const normalizedAppId = normalizeAppId(app.appId)
+          const installed = normalizedInstalledIds.includes(normalizedAppId) || isCoreApp(normalizedAppId)
+          const core = isCoreApp(normalizedAppId)
           const capabilityInfos = app.requiredCapabilityIds.map(getCapabilityInfo)
-          const missingCount = app.requiredCapabilityIds.filter((id) => !hasLocalCapabilityGrant(app.appId, id)).length
+          const missingCount = app.requiredCapabilityIds.filter((id) => !hasLocalCapabilityGrant(normalizedAppId, id)).length
 
           return (
             <div
@@ -94,7 +101,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                 {capabilityInfos.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {capabilityInfos.map((cap) => {
-                      const granted = hasLocalCapabilityGrant(app.appId, cap.id)
+                      const granted = hasLocalCapabilityGrant(normalizedAppId, cap.id)
                       return (
                         <span
                           key={cap.id}
@@ -126,7 +133,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                   </button>
                 ) : (
                   <button
-                    onClick={() => installApp(app.appId)}
+                    onClick={() => installApp(normalizedAppId)}
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
                     <Download className="h-3.5 w-3.5" />
@@ -135,7 +142,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                 )}
 
                 <button
-                  onClick={() => uninstallAndClose(app.appId)}
+                  onClick={() => uninstallAndClose(normalizedAppId)}
                   disabled={!installed || core}
                   title={core ? "Core app cannot be uninstalled" : "Uninstall and revoke app permissions"}
                   className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary text-muted-foreground transition-colors hover:bg-[var(--status-error)]/15 hover:text-[var(--status-error)] disabled:cursor-not-allowed disabled:opacity-40"
