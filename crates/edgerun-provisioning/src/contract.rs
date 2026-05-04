@@ -1,4 +1,5 @@
-use edgerun_core::protocol::{Signature, Timestamp};
+use edgerun_core::protocol::{IdentityRef, Signature, Timestamp};
+type Identity = IdentityRef;
 type Identity = edgerun_core::protocol::IdentityRef;
 type PublicKey = Vec<u8>;
 type KeyPair = Vec<u8>;
@@ -72,7 +73,7 @@ impl ProvisioningContract {
         use edgerun_crypto::sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(self.provisioning_id.as_bytes());
-        hasher.update(&self.controller.fingerprint);
+        hasher.update(&self.controller.identity_id);
         hasher.update(self.version.as_bytes());
         hasher.finalize().to_vec()
     }
@@ -84,7 +85,7 @@ impl ProvisioningContract {
         };
 
         let payload = self.canonical_payload();
-        verify(controller_public_key, payload.as_bytes(), sig)
+        verify(controller_public_key, payload.as_bytes(), &sig.value)
     }
 
     /// Build the canonical payload for signing
@@ -93,7 +94,7 @@ impl ProvisioningContract {
             "version={};provisioning_id={};controller={};node_label={:?};kind={:?}",
             self.version,
             self.provisioning_id,
-            crate::contract::hex_encode(&self.controller.fingerprint),
+            hex_encode(&self.controller.identity_id),
             self.node_label,
             self.kind,
         )

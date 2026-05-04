@@ -47,7 +47,10 @@ impl NodeGenesisClaim {
             build_artifact_hash: contract.build_artifact_hash.clone(),
             config_hash: contract.config_hash.clone(),
             boot_measurement_hash: None,
-            created_at: Timestamp::now(),
+            created_at: Timestamp {
+                seconds: 0,
+                nanos: 0,
+            },
             node_signature: None,
         }
     }
@@ -65,13 +68,13 @@ impl NodeGenesisClaim {
     }
 
     /// Verify the node signature on this claim
-    pub fn verify_signature(&self, node_public_key: &edgerun_crypto::PublicKey) -> bool {
+    pub fn verify_signature(&self, node_public_key: &PublicKey) -> bool {
         let Some(ref sig) = self.node_signature else {
             return false;
         };
 
         let payload = self.canonical_payload();
-        edgerun_crypto::verify(node_public_key, payload.as_bytes(), sig)
+        verify(node_public_key, payload.as_bytes(), sig)
     }
 
     /// Build canonical payload for signing/verification
