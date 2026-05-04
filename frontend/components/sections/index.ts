@@ -1,12 +1,11 @@
 /**
  * Canonical section exports.
  *
- * Sections are reusable chunks of app content. During migration, mature section
- * candidates may still live in their original folder and be re-exported here.
+ * Sections are reusable chunks of app content.
  */
 
 export { FinancesOverviewWidget } from "./finance-overviews"
-export { ResourceMonitor } from "@/components/os/resource-monitor"
+export { CodelyzerNetworkPanel } from "./codelyzer-network"
 export { AgentActivityPanel } from "@/components/agents/AgentActivityPanel"
 export { AlertCenter } from "@/components/alerts/AlertCenter"
 export { AppList } from "@/components/apps/AppList"
