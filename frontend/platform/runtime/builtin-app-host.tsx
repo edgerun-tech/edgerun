@@ -1,18 +1,63 @@
+"use client"
+
+import dynamic from "next/dynamic"
 import type { AppDefinition } from "@/platform/types/app-definition"
 import { getComponent } from "@/platform/registries/component-registry"
-import { Terminal } from "@/components/os/terminal"
-import { CodeRunner } from "@/components/os/code-runner"
-import { ResourceMonitor } from "@/components/os/resource-monitor"
-import { AppStore as AppStoreComponent } from "@/components/os/app-store"
-import { PeopleApp } from "@/components/os/people-app"
-import { WalletApp } from "@/components/os/wallet-app"
-import { CalculatorApp } from "@/components/os/calculator-app"
-import { HelpApp } from "@/components/os/help-app"
-import { AIAssistant } from "@/components/os/ai-assistant"
-import { WorkflowBuilder } from "@/components/os/workflow-builder"
-import { FileManager } from "@/components/os/file-manager"
-import { GmailApp } from "@/components/os/gmail-app"
-import { SettingsApp } from "@/components/os/settings-app"
+
+const LoadingApp = () => <div className="p-4 text-sm text-muted-foreground">Loading app...</div>
+
+const TerminalApp = dynamic(
+  () => import("@/components/os/terminal").then((mod) => mod.Terminal),
+  { ssr: false, loading: LoadingApp },
+)
+const CodeRunnerApp = dynamic(
+  () => import("@/components/os/code-runner").then((mod) => mod.CodeRunner),
+  { ssr: false, loading: LoadingApp },
+)
+const ResourceMonitorApp = dynamic(
+  () => import("@/components/os/resource-monitor").then((mod) => mod.ResourceMonitor),
+  { ssr: false, loading: LoadingApp },
+)
+const AppStoreApp = dynamic(
+  () => import("@/components/os/app-store").then((mod) => mod.AppStore),
+  { ssr: false, loading: LoadingApp },
+)
+const PeopleApp = dynamic(
+  () => import("@/components/os/people-app").then((mod) => mod.PeopleApp),
+  { ssr: false, loading: LoadingApp },
+)
+const WalletApp = dynamic(
+  () => import("@/components/os/wallet-app").then((mod) => mod.WalletApp),
+  { ssr: false, loading: LoadingApp },
+)
+const CalculatorApp = dynamic(
+  () => import("@/components/os/calculator-app").then((mod) => mod.CalculatorApp),
+  { ssr: false, loading: LoadingApp },
+)
+const HelpApp = dynamic(
+  () => import("@/components/os/help-app").then((mod) => mod.HelpApp),
+  { ssr: false, loading: LoadingApp },
+)
+const AIAssistantApp = dynamic(
+  () => import("@/components/os/ai-assistant").then((mod) => mod.AIAssistant),
+  { ssr: false, loading: LoadingApp },
+)
+const WorkflowBuilderApp = dynamic(
+  () => import("@/components/os/workflow-builder").then((mod) => mod.WorkflowBuilder),
+  { ssr: false, loading: LoadingApp },
+)
+const FileManagerApp = dynamic(
+  () => import("@/components/os/file-manager").then((mod) => mod.FileManager),
+  { ssr: false, loading: LoadingApp },
+)
+const GmailApp = dynamic(
+  () => import("@/components/os/gmail-app").then((mod) => mod.GmailApp),
+  { ssr: false, loading: LoadingApp },
+)
+const SettingsApp = dynamic(
+  () => import("@/components/os/settings-app").then((mod) => mod.SettingsApp),
+  { ssr: false, loading: LoadingApp },
+)
 
 interface BuiltinAppHostProps {
   app: AppDefinition
@@ -22,19 +67,13 @@ interface BuiltinAppHostProps {
 export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
   switch (app.appId) {
     case "terminal":
-      return <Terminal logs={[]} onCommand={() => {}} />
+      return <TerminalApp logs={[]} onCommand={() => {}} />
     case "code-runner":
-      return <CodeRunner />
+      return <CodeRunnerApp />
     case "resource-monitor":
-      return <ResourceMonitor />
+      return <ResourceMonitorApp />
     case "app-store":
-      return (
-        <AppStoreComponent
-          onLaunchApp={(a) => onLaunchApp?.(a)}
-          onAppBlocked={() => {}}
-          runningApps={[]}
-        />
-      )
+      return <AppStoreApp onLaunchApp={(a: AppDefinition) => onLaunchApp?.(a)} />
     case "people":
     case "contacts":
     case "calling":
@@ -47,11 +86,11 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
     case "help":
       return <HelpApp />
     case "ai-assistant":
-      return <AIAssistant />
+      return <AIAssistantApp />
     case "workflow-builder":
-      return <WorkflowBuilder onClose={() => {}} />
+      return <WorkflowBuilderApp onClose={() => {}} />
     case "file-browser":
-      return <FileManager />
+      return <FileManagerApp />
     case "gmail":
       return <GmailApp />
     case "settings":
