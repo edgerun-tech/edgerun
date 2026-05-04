@@ -67,6 +67,9 @@ impl FuncSig {
 #[derive(Clone, Debug)]
 pub enum IrOp {
     Nop,
+    Block,
+    BlockEnd,
+    BrIf(u32),
     I32Const(i32),
     I64Const(i64),
     GlobalGet(u32, ValueType),
@@ -110,6 +113,9 @@ impl IrOp {
     pub fn render(&self) -> String {
         match self {
             Self::Nop => "nop".to_string(),
+            Self::Block => "block".to_string(),
+            Self::BlockEnd => "block.end".to_string(),
+            Self::BrIf(depth) => format!("br_if {depth}"),
             Self::I32Const(v) => format!("i32.const {v}"),
             Self::I64Const(v) => format!("i64.const {v}"),
             Self::GlobalGet(i, _) => format!("global.get {i}"),
@@ -219,7 +225,13 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
 
     for op in &ir.ops {
         match *op {
-            IrOp::Nop => {}
+            IrOp::Nop | IrOp::Block | IrOp::BlockEnd => {}
+            IrOp::BrIf(depth) => {
+                if depth != 0 {
+                    bail!("{} only supports br_if depth 0 for now", ir.name());
+                }
+                pop1(&mut stack, ValueType::I32, ir, op)?;
+            }
             IrOp::I32Const(_) => stack.push(ValueType::I32),
             IrOp::I64Const(_) => stack.push(ValueType::I64),
             IrOp::GlobalGet(index, ty) => {
