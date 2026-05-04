@@ -10,7 +10,7 @@ pub struct UiNode {
     /// Semantic node type: "text", "button", "column", "row", "spacer", "heading", "input", "image"
     pub r#type: alloc::string::String,
     /// Key-value properties. Renderers interpret these per node type.
-    pub props: ::std::collections::HashMap<alloc::string::String, alloc::string::String>,
+    pub props: ::alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     /// Child nodes. Layout nodes (column, row) use these; leaf nodes leave empty.
     pub children: alloc::vec::Vec<UiNode>,
     /// Action identifier sent back to WASM on user interaction.

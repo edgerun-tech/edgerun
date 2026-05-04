@@ -107,7 +107,7 @@ pub struct SecretPutPayload {
     /// Human-readable label
     pub label: alloc::string::String,
     /// Key-value attribute pairs for search
-    pub attributes: ::std::collections::HashMap<alloc::string::String, alloc::string::String>,
+    pub attributes: ::alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     /// The blob_id where the encrypted secret is stored (not the secret itself)
     pub secret_blob_id: alloc::string::String,
 }
@@ -154,7 +154,7 @@ pub struct AppPackage {
     /// ObjectRef pointing to the WASM binary (stored as a separate object)
     pub wasm_object: ::core::option::Option<super::common::ObjectRef>,
     /// Route patterns mapped to this app (e.g. "/api/*" -> entry handler)
-    pub routes: ::std::collections::HashMap<alloc::string::String, alloc::string::String>,
+    pub routes: ::alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     /// Additional asset objects (styles, templates, static files)
     pub assets: ::std::collections::HashMap<alloc::string::String, super::common::ObjectRef>,
     /// REQUIRED: capability requirements — the app declares ALL capabilities

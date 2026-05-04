@@ -575,3 +575,7 @@ mod tests {
         assert_eq!(result.decision, capability_result::Decision::Denied as i32);
     }
 }
+
+fn decode_native_app_message<T>(_bytes: &[u8]) -> anyhow::Result<T> {
+    Err(anyhow::anyhow!("native wasm app decode not wired yet"))
+}

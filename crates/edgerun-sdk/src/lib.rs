@@ -2,8 +2,6 @@
 
 extern crate alloc;
 
-use std::collections::HashMap;
-
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -688,7 +686,7 @@ pub mod ui {
     use alloc::string::ToString;
 
     pub fn text(value: &str) -> UiNode {
-        let mut props = HashMap::new();
+        let mut props = BTreeMap::new();
         props.insert(String::from("value"), String::from(value));
         UiNode {
             r#type: String::from("text"),
@@ -699,7 +697,7 @@ pub mod ui {
     }
 
     pub fn heading(value: &str, level: u32) -> UiNode {
-        let mut props = HashMap::new();
+        let mut props = BTreeMap::new();
         props.insert(String::from("value"), String::from(value));
         props.insert(String::from("level"), level.to_string());
         UiNode {
@@ -711,7 +709,7 @@ pub mod ui {
     }
 
     pub fn button(label: &str, action: &str) -> UiNode {
-        let mut props = HashMap::new();
+        let mut props = BTreeMap::new();
         props.insert(String::from("label"), String::from(label));
         UiNode {
             r#type: String::from("button"),
@@ -724,7 +722,7 @@ pub mod ui {
     pub fn column(children: Vec<UiNode>) -> UiNode {
         UiNode {
             r#type: String::from("column"),
-            props: HashMap::new(),
+            props: BTreeMap::new(),
             children,
             action: None,
         }
@@ -733,14 +731,14 @@ pub mod ui {
     pub fn row(children: Vec<UiNode>) -> UiNode {
         UiNode {
             r#type: String::from("row"),
-            props: HashMap::new(),
+            props: BTreeMap::new(),
             children,
             action: None,
         }
     }
 
     pub fn spacer(height: u32) -> UiNode {
-        let mut props = HashMap::new();
+        let mut props = BTreeMap::new();
         props.insert(String::from("height"), height.to_string());
         UiNode {
             r#type: String::from("spacer"),
@@ -751,7 +749,7 @@ pub mod ui {
     }
 
     pub fn input(placeholder: &str, action: &str) -> UiNode {
-        let mut props = HashMap::new();
+        let mut props = BTreeMap::new();
         props.insert(String::from("placeholder"), String::from(placeholder));
         UiNode {
             r#type: String::from("input"),

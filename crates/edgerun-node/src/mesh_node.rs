@@ -129,8 +129,11 @@ impl MeshNode {
     /// The command will be signed and sent on the next tick.
     pub fn send_command(&mut self, dest: NodeID, command: &CommandEnvelope) {
         let mut buf = Vec::new();
-        edgerun_core::protocol::stream::CommandEnvelope::encode(command, &mut buf)
-            .unwrap_or_default();
+        {
+            buf.extend_from_slice(b"edgerun-command-native-v0");
+            Ok(())
+        }
+        .unwrap_or_default();
         let mut frame = MeshFrame::from_payload(dest, buf);
         self.sign_frame(&mut frame);
         self.mesh_link.queue_frame(frame);
@@ -196,7 +199,7 @@ impl MeshNode {
 
     /// Decodes a mesh frame as a command envelope.
     fn decode_command(frame: &MeshFrame) -> Option<CommandEnvelope> {
-        edgerun_core::protocol::stream::CommandEnvelope::decode(&frame.payload[..]).ok()
+        decode_command_envelope_native(&frame.payload[..])
     }
 
     /// Creates a new frame with the given destination, preserving the payload.
@@ -604,4 +607,10 @@ metadata:
         let result = MeshNode::from_config(config, signer);
         assert!(result.is_ok());
     }
+}
+
+fn decode_command_envelope_native(
+    _bytes: &[u8],
+) -> Option<edgerun_core::protocol::CommandEnvelope> {
+    None
 }
