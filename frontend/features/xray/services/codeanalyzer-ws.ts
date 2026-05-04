@@ -1,12 +1,19 @@
 /**
- * WebSocket service for connecting to codeanalyzer.
- * Handles connection, message parsing, and graph data fetching.
+ * Client for connecting Xray to edgerun-codelyzer.
+ *
+ * Preferred bridge:
+ *   cargo run -p edgerun-codelyzer --bin xray-server -- /path/to/repo
+ *
+ * The server exposes HTTP JSON at /graph. WebSocket is still supported for
+ * future live updates, but the stable path is HTTP snapshot fetch + graph_update
+ * envelope parsing.
  */
 
 import type { XrayNode, XrayEdge } from "../graph/types"
 
 export interface CodeAnalyzerConfig {
   wsUrl: string
+  httpUrl?: string
   reconnectInterval?: number
   maxReconnectAttempts?: number
 }
@@ -21,6 +28,7 @@ type ErrorHandler = (error: Error) => void
 
 const DEFAULT_CONFIG: Required<CodeAnalyzerConfig> = {
   wsUrl: "ws://localhost:13337/ws",
+  httpUrl: "http://localhost:13337/graph",
   reconnectInterval: 3000,
   maxReconnectAttempts: 5,
 }
@@ -35,6 +43,25 @@ export class CodeAnalyzerWsService {
 
   constructor(config?: Partial<CodeAnalyzerConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config }
+  }
+
+  async fetchGraph(path?: string): Promise<GraphData> {
+    const url = new URL(this.config.httpUrl)
+    if (path) url.searchParams.set("path", path)
+    const response = await fetch(url.toString(), { cache: "no-store" })
+    if (!response.ok) throw new Error(`codelyzer HTTP ${response.status}`)
+    const json = await response.json()
+    const data = json?.type === "graph_update" ? json.data : json
+    return this.parseGraphData(data)
+  }
+
+  async loadGraph(path?: string): Promise<void> {
+    try {
+      const graphData = await this.fetchGraph(path)
+      this.notifyHandlers(graphData)
+    } catch (err) {
+      this.notifyError(err instanceof Error ? err : new Error(String(err)))
+    }
   }
 
   connect(): void {
@@ -63,7 +90,7 @@ export class CodeAnalyzerWsService {
       }
     }
 
-    this.ws.onerror = (event) => {
+    this.ws.onerror = () => {
       this.notifyError(new Error("WebSocket error"))
     }
 
@@ -81,36 +108,38 @@ export class CodeAnalyzerWsService {
       if (json.type === "graph_update" && json.data) {
         const graphData = this.parseGraphData(json.data)
         this.notifyHandlers(graphData)
+      } else if (json.nodes || json.edges) {
+        this.notifyHandlers(this.parseGraphData(json))
       }
     } catch {
-      // Ignore non-JSON messages
+      // Ignore non-JSON messages.
     }
   }
 
   private handleBinaryMessage(data: Uint8Array): void {
     try {
-      const graphData = this.decodeProtobufGraph(data)
+      const graphData = this.decodeBinaryGraph(data)
       this.notifyHandlers(graphData)
     } catch (err) {
-      console.warn("[xray:ws] Failed to decode binary message:", err)
+      console.warn("[xray:codelyzer] Failed to decode binary message:", err)
     }
   }
 
   private parseGraphData(data: any): GraphData {
-    const nodes: XrayNode[] = (data.nodes || []).map((n: any) => ({
+    const nodes: XrayNode[] = (data?.nodes || []).map((n: any) => ({
       id: n.id || "",
       kind: this.mapNodeKind(n),
-      label: n.name || n.id || "",
+      label: n.name || n.label || n.id || "",
       tags: Array.isArray(n.tags) ? n.tags : [],
       layer: this.inferLayer(n),
-      language: n.language || "unknown",
-      source: n.file ? { file: n.file } : undefined,
-      x: 0,
-      y: 0,
+      language: this.mapLanguage(n.language),
+      source: n.file ? { file: n.file, symbol: n.name || n.label } : undefined,
+      x: typeof n.x === "number" ? n.x : 0,
+      y: typeof n.y === "number" ? n.y : 0,
     }))
 
-    const edges: XrayEdge[] = (data.edges || []).map((e: any) => ({
-      id: `${e.source}->${e.target}`,
+    const edges: XrayEdge[] = (data?.edges || []).map((e: any, index: number) => ({
+      id: e.id || `${e.source}->${e.target}:${e.kind || "calls"}:${index}`,
       source: e.source || "",
       target: e.target || "",
       kind: this.mapEdgeKind(e.kind),
@@ -120,61 +149,58 @@ export class CodeAnalyzerWsService {
     return { nodes, edges }
   }
 
-  private decodeProtobufGraph(data: Uint8Array): GraphData {
-    // Simple protobuf-like decode for GraphData
-    // In production, use generated protobuf types
+  private decodeBinaryGraph(data: Uint8Array): GraphData {
+    const reader = new BinaryReader(data)
+    const nodeCount = reader.u32()
     const nodes: XrayNode[] = []
+
+    for (let i = 0; i < nodeCount; i++) {
+      const id = reader.string()
+      const name = reader.string()
+      const file = reader.string()
+      const language = reader.string()
+      const isStatic = reader.bool()
+      const connections = reader.u32()
+      const tags = reader.strings()
+      const commit = reader.optionalString()
+
+      nodes.push({
+        id,
+        kind: "function",
+        label: name || id,
+        tags: [...tags, ...(isStatic ? ["static"] : []), ...(commit ? [`commit:${commit}`] : []), `connections:${connections}`],
+        layer: this.inferLayer({ file }),
+        language: this.mapLanguage(language),
+        source: file ? { file, symbol: name } : undefined,
+        x: 0,
+        y: 0,
+      })
+    }
+
+    const edgeCount = reader.u32()
     const edges: XrayEdge[] = []
-
-    let offset = 0
-    while (offset < data.length) {
-      const tag = data[offset] >> 3
-      const wireType = data[offset] & 0x07
-      offset++
-
-      if (wireType === 2) {
-        // Length-delimited
-        let length = 0
-        let shift = 0
-        while (true) {
-          const byte = data[offset++]
-          length |= (byte & 0x7f) << shift
-          if ((byte & 0x80) === 0) break
-          shift += 7
-        }
-
-        if (tag === 1) {
-          // nodes field
-          const nodeData = data.slice(offset, offset + length)
-          offset += length
-          // Parse node (simplified)
-          const node = this.parseProtobufNode(nodeData)
-          if (node) nodes.push(node)
-        } else if (tag === 2) {
-          // edges field
-          const edgeData = data.slice(offset, offset + length)
-          offset += length
-          const edge = this.parseProtobufEdge(edgeData)
-          if (edge) edges.push(edge)
-        } else {
-          offset += length
-        }
-      } else {
-        break
-      }
+    for (let i = 0; i < edgeCount; i++) {
+      const source = reader.string()
+      const target = reader.string()
+      const kind = reader.string()
+      edges.push({
+        id: `${source}->${target}:${kind}:${i}`,
+        source,
+        target,
+        kind: this.mapEdgeKind(kind),
+        tags: [],
+      })
     }
 
     return { nodes, edges }
   }
 
-  private parseProtobufNode(data: Uint8Array): XrayNode | null {
-    // Simplified protobuf node parsing
-    return null
-  }
-
-  private parseProtobufEdge(data: Uint8Array): XrayEdge | null {
-    // Simplified protobuf edge parsing
-    return null
+  private mapLanguage(language: string | undefined): XrayNode["language"] {
+    const normalized = (language || "unknown").toLowerCase()
+    if (["rust", "typescript", "javascript", "python", "go", "java", "c", "unknown"].includes(normalized)) {
+      return normalized as XrayNode["language"]
+    }
+    return "unknown"
   }
 
   private mapNodeKind(n: any): XrayNode["kind"] {
@@ -186,6 +212,8 @@ export class CodeAnalyzerWsService {
   }
 
   private mapEdgeKind(kind: string): XrayEdge["kind"] {
+    const normalized = (kind || "calls").toLowerCase()
+    if (normalized === "direct" || normalized === "indirect" || normalized === "macro" || normalized === "unknown") return "calls"
     const validKinds: XrayEdge["kind"][] = [
       "calls",
       "imports",
@@ -199,9 +227,7 @@ export class CodeAnalyzerWsService {
       "tests",
       "observed_flow",
     ]
-    if (validKinds.includes(kind as any)) {
-      return kind as XrayEdge["kind"]
-    }
+    if (validKinds.includes(normalized as any)) return normalized as XrayEdge["kind"]
     return "calls"
   }
 
@@ -244,13 +270,44 @@ export class CodeAnalyzerWsService {
 
   requestAnalyze(path: string): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(
-        JSON.stringify({
-          type: "request",
-          action: "analyze",
-          payload: { path },
-        }),
-      )
+      this.ws.send(JSON.stringify({ type: "request", action: "analyze", payload: { path } }))
+    } else {
+      void this.loadGraph(path)
     }
+  }
+}
+
+class BinaryReader {
+  private offset = 0
+
+  constructor(private readonly data: Uint8Array) {}
+
+  bool(): boolean {
+    return this.data[this.offset++] !== 0
+  }
+
+  u32(): number {
+    const view = new DataView(this.data.buffer, this.data.byteOffset + this.offset, 4)
+    const value = view.getUint32(0, true)
+    this.offset += 4
+    return value
+  }
+
+  string(): string {
+    const len = this.u32()
+    const bytes = this.data.slice(this.offset, this.offset + len)
+    this.offset += len
+    return new TextDecoder().decode(bytes)
+  }
+
+  strings(): string[] {
+    const len = this.u32()
+    const values: string[] = []
+    for (let i = 0; i < len; i++) values.push(this.string())
+    return values
+  }
+
+  optionalString(): string | undefined {
+    return this.bool() ? this.string() : undefined
   }
 }
