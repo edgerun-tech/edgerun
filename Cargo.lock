@@ -1599,6 +1599,9 @@ dependencies = [
 [[package]]
 name = "edgerun-capabilities"
 version = "0.1.1"
+dependencies = [
+ "edgerun-core",
+]
 
 [[package]]
 name = "edgerun-capability-policy"
