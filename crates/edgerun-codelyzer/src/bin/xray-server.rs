@@ -10,6 +10,7 @@
 //! Endpoints:
 //!   GET /graph
 //!   GET /graph?path=/path/to/repo
+//!   GET /graph?rescan=1
 //!   GET /connections
 //!   GET /health
 
@@ -24,6 +25,24 @@ use std::{
 
 use edgerun_codelyzer::{analyzer::analyze_full, filesystem};
 use serde::Serialize;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SnapshotFingerprint {
+    file_count: usize,
+    total_bytes: u64,
+    combined_hash: u64,
+    max_modified_ts: u64,
+}
+
+#[derive(Default)]
+struct GraphCache {
+    entries: HashMap<String, CachedGraph>,
+}
+
+struct CachedGraph {
+    fingerprint: SnapshotFingerprint,
+    body: String,
+}
 
 #[derive(Debug, Serialize)]
 struct XrayGraphNode {
@@ -65,6 +84,7 @@ struct XrayGraphData {
     file_count: u32,
     elapsed_ms: u64,
     source: String,
+    cache_status: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -120,12 +140,13 @@ fn main() {
     }
 
     let listener = TcpListener::bind(&listen).expect("failed to bind codelyzer xray server");
+    let mut graph_cache = GraphCache::default();
     println!("[xray-server] listening on http://{}", listen);
     println!("[xray-server] default repo: {}", root);
 
     for stream in listener.incoming() {
         match stream {
-            Ok(stream) => handle_client(stream, &root),
+            Ok(stream) => handle_client(stream, &root, &mut graph_cache),
             Err(err) => eprintln!("[xray-server] connection error: {err}"),
         }
     }
@@ -135,7 +156,7 @@ fn print_usage(program: &str) {
     eprintln!("Usage: {program} <repo-path> [--listen 127.0.0.1:13337]");
 }
 
-fn handle_client(mut stream: TcpStream, default_root: &str) {
+fn handle_client(mut stream: TcpStream, default_root: &str, graph_cache: &mut GraphCache) {
     let mut buf = [0u8; 8192];
     let n = match stream.read(&mut buf) {
         Ok(n) => n,
@@ -155,9 +176,10 @@ fn handle_client(mut stream: TcpStream, default_root: &str) {
     }
 
     if path.starts_with("/connections") {
+        let connections = read_local_connections();
         let data = ConnectionsEnvelope {
-            connections: read_local_connections(),
-            connection_count: read_local_connections().len() as u32,
+            connection_count: connections.len() as u32,
+            connections,
         };
         match serde_json::to_string(&data) {
             Ok(body) => respond_json(&mut stream, 200, &body),
@@ -172,6 +194,7 @@ fn handle_client(mut stream: TcpStream, default_root: &str) {
     }
 
     let root = query_param(path, "path").unwrap_or_else(|| default_root.to_string());
+    let force_rescan = query_param(path, "rescan").is_some();
     if !Path::new(&root).is_dir() {
         respond_json(
             &mut stream,
@@ -181,18 +204,8 @@ fn handle_client(mut stream: TcpStream, default_root: &str) {
         return;
     }
 
-    match analyze_repo_for_xray(&root) {
-        Ok(data) => {
-            let envelope = GraphUpdateEnvelope { r#type: "graph_update", data };
-            match serde_json::to_string(&envelope) {
-                Ok(body) => respond_json(&mut stream, 200, &body),
-                Err(err) => respond_json(
-                    &mut stream,
-                    500,
-                    &serde_json::json!({ "error": err.to_string() }).to_string(),
-                ),
-            }
-        }
+    match graph_response_for_root(&root, graph_cache, force_rescan) {
+        Ok(body) => respond_json(&mut stream, 200, &body),
         Err(err) => respond_json(
             &mut stream,
             500,
@@ -201,7 +214,56 @@ fn handle_client(mut stream: TcpStream, default_root: &str) {
     }
 }
 
-fn analyze_repo_for_xray(root: &str) -> Result<XrayGraphData, String> {
+fn graph_response_for_root(root: &str, cache: &mut GraphCache, force_rescan: bool) -> Result<String, String> {
+    let snapshot = filesystem::scan_dir(root);
+    let fingerprint = fingerprint_snapshot(&snapshot);
+
+    if !force_rescan {
+        if let Some(entry) = cache.entries.get(root) {
+            if entry.fingerprint == fingerprint {
+                return Ok(entry.body.clone());
+            }
+        }
+    }
+
+    let mut data = analyze_repo_for_xray(root, snapshot)?;
+    data.cache_status = if force_rescan { "forced_rescan" } else { "miss" }.to_string();
+    let envelope = GraphUpdateEnvelope { r#type: "graph_update", data };
+    let body = serde_json::to_string(&envelope).map_err(|err| err.to_string())?;
+
+    cache.entries.insert(root.to_string(), CachedGraph { fingerprint, body: body.clone() });
+    Ok(body)
+}
+
+fn fingerprint_snapshot(snapshot: &[filesystem::FileInfo]) -> SnapshotFingerprint {
+    let mut combined_hash = 0xcbf29ce484222325u64;
+    let mut total_bytes = 0u64;
+    let mut max_modified_ts = 0u64;
+
+    for file in snapshot {
+        total_bytes = total_bytes.saturating_add(file.size);
+        max_modified_ts = max_modified_ts.max(file.modified_ts);
+        combined_hash ^= file.hash;
+        combined_hash = combined_hash.wrapping_mul(0x100000001b3);
+        combined_hash ^= file.size;
+        combined_hash = combined_hash.wrapping_mul(0x100000001b3);
+        combined_hash ^= file.modified_ts;
+        combined_hash = combined_hash.wrapping_mul(0x100000001b3);
+        for byte in file.path.as_bytes() {
+            combined_hash ^= *byte as u64;
+            combined_hash = combined_hash.wrapping_mul(0x100000001b3);
+        }
+    }
+
+    SnapshotFingerprint {
+        file_count: snapshot.len(),
+        total_bytes,
+        combined_hash,
+        max_modified_ts,
+    }
+}
+
+fn analyze_repo_for_xray(root: &str, snapshot: Vec<filesystem::FileInfo>) -> Result<XrayGraphData, String> {
     let started = Instant::now();
     let (result, _changes) = analyze_full(root);
     let program = result.program;
@@ -242,8 +304,7 @@ fn analyze_repo_for_xray(root: &str) -> Result<XrayGraphData, String> {
     nodes.sort_by(|a, b| a.id.cmp(&b.id));
     edges.sort_by(|a, b| a.source.cmp(&b.source).then(a.target.cmp(&b.target)));
 
-    let mut files: Vec<RepoFileEntry> = result
-        .file_snapshot
+    let mut files: Vec<RepoFileEntry> = snapshot
         .iter()
         .map(|file| RepoFileEntry {
             path: file.path.clone(),
@@ -254,7 +315,7 @@ fn analyze_repo_for_xray(root: &str) -> Result<XrayGraphData, String> {
         .collect();
     files.sort_by(|a, b| a.path.cmp(&b.path));
 
-    let total_bytes = result.file_snapshot.iter().map(|file| file.size).sum();
+    let total_bytes = snapshot.iter().map(|file| file.size).sum();
 
     Ok(XrayGraphData {
         node_count: nodes.len() as u32,
@@ -266,6 +327,7 @@ fn analyze_repo_for_xray(root: &str) -> Result<XrayGraphData, String> {
         total_bytes,
         elapsed_ms: started.elapsed().as_millis() as u64,
         source: root.to_string(),
+        cache_status: "miss".to_string(),
     })
 }
 
