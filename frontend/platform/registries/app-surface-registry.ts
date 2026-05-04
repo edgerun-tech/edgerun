@@ -26,6 +26,13 @@ const DEFAULT_SPEC: AppSurfaceSpec = {
 
 const registry = new Map<string, AppSurfaceSpec>()
 
+const FINANCE_HUB_SPEC: AppSurfaceSpec = {
+  kind: "overlay",
+  defaultWidth: 1280,
+  defaultHeight: 820,
+  dismissOnOutsideClick: true,
+}
+
 const BUILTIN_SPECS: Record<string, AppSurfaceSpec> = {
   terminal: { kind: "overlay", defaultWidth: 900, defaultHeight: 620, dismissOnOutsideClick: true },
   "code-runner": { kind: "overlay", defaultWidth: 980, defaultHeight: 680, dismissOnOutsideClick: true },
@@ -42,8 +49,8 @@ const BUILTIN_SPECS: Record<string, AppSurfaceSpec> = {
   chat: { kind: "overlay", defaultWidth: 980, defaultHeight: 680, dismissOnOutsideClick: true },
   "trust-manager": { kind: "overlay", defaultWidth: 1120, defaultHeight: 760, dismissOnOutsideClick: true },
   "workflow-builder": { kind: "overlay", defaultWidth: 1120, defaultHeight: 760, dismissOnOutsideClick: true },
-  wallet: { kind: "overlay", defaultWidth: 1120, defaultHeight: 760, dismissOnOutsideClick: true },
-  finances: { kind: "pinned-widget", defaultWidth: 224, defaultHeight: 260, dismissOnOutsideClick: false, preferredSlot: "left-bottom" },
+  finances: FINANCE_HUB_SPEC,
+  wallet: FINANCE_HUB_SPEC,
   calculator: { kind: "overlay", defaultWidth: 420, defaultHeight: 520, dismissOnOutsideClick: true },
   help: { kind: "overlay", defaultWidth: 640, defaultHeight: 620, dismissOnOutsideClick: true },
   "app-store": { kind: "overlay", defaultWidth: 980, defaultHeight: 700, dismissOnOutsideClick: true },
