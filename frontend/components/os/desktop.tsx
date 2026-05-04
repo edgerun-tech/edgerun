@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useCallback, useMemo } from "react"
+import { useEffect, useCallback, useMemo, useState } from "react"
 import { useStore } from "@nanostores/react"
 import { TopBar } from "./top-bar"
 import { XrayDesktopSurface } from "./xray-desktop-surface"
@@ -46,6 +46,7 @@ function ChatHead({ label, tone = "primary" }: { label: string; tone?: "primary"
 
 export function Desktop() {
   const auth = useAuth()
+  const [dockReady, setDockReady] = useState(false)
 
   const appSurfaces = useStore(appSurfacesStore)
   const appSurfaceOrder = useStore(appSurfaceOrderStore)
@@ -72,6 +73,10 @@ export function Desktop() {
     }
     return null
   }, [appSurfaceOrder, appSurfaces, focusedAppSurface])
+
+  useEffect(() => {
+    setDockReady(true)
+  }, [])
 
   useEffect(() => {
     if (!showDesktop) return
@@ -127,7 +132,6 @@ export function Desktop() {
     if (activeAppId === "people" || activeAppId === "chat" || activeAppId === "contacts" || activeAppId === "calling") {
       return {
         mode: "chat-heads",
-        label: "People",
         items: [
           {
             title: "Ara",
@@ -170,7 +174,6 @@ export function Desktop() {
 
     return {
       mode: "apps",
-      label: activeSurface ? activeSurface.title : "Apps",
     }
   }, [activeSurface])
 
@@ -273,12 +276,14 @@ export function Desktop() {
           onToggle={() => widgetVisibleStore.set(!widgetVisible)}
         />
 
-        <FloatingDock
-          items={dockItems as any}
-          context={dockContext}
-          onCommandSubmit={handleDockCommand}
-          desktopClassName="fixed bottom-4 left-1/2 z-50 -translate-x-1/2"
-        />
+        {dockReady && (
+          <FloatingDock
+            items={dockItems as any}
+            context={dockContext}
+            onCommandSubmit={handleDockCommand}
+            desktopClassName="fixed bottom-4 left-1/2 z-50 -translate-x-1/2"
+          />
+        )}
 
         {pendingGate ? (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/35 p-6 backdrop-blur-[2px]">
