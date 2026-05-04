@@ -21,6 +21,7 @@ import {
   Package,
   Mail,
   Settings,
+  Shield,
 } from "lucide-react"
 
 export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
@@ -38,6 +39,7 @@ export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   contacts: <Users className="h-5 w-5" />,
   calling: <Phone className="h-5 w-5" />,
   chat: <MessageSquare className="h-5 w-5" />,
+  "trust-manager": <Shield className="h-5 w-5" />,
   "ai-assistant": <Sparkles className="h-5 w-5" />,
   "workflow-builder": <Workflow className="h-5 w-5" />,
   wallet: <Wallet className="h-5 w-5" />,
@@ -183,6 +185,18 @@ export const BUILTIN_APPS: AppDefinition[] = [
     componentKey: "people",
     requiredCapabilityIds: ["identity"],
     optionalCapabilityIds: ["voice_call", "messaging"],
+    status: "available",
+  },
+  {
+    appId: "trust-manager",
+    name: "Trust Manager",
+    description: "Inspect trust roots, delegations, capabilities, and audit trails",
+    iconId: "trust-manager",
+    kind: "builtin",
+    source: "builtin",
+    componentKey: "trust-manager",
+    requiredCapabilityIds: ["identity"],
+    optionalCapabilityIds: ["node_connection"],
     status: "available",
   },
   {
