@@ -9,13 +9,14 @@ homepage.workspace = true
 description = "Core Edgerun protocol types, validation, commands, and crypto-facing helpers"
 
 [dependencies]
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
+edgerun-proto = {version = "0.1", path = "../edgerun-proto", optional = true }
 edgerun-wire = { workspace = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "p256", "aead"] }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
 edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
 
 [features]
+proto-compat = ["dep:edgerun-proto", "dep:prost", "dep:prost-types"]
 conformance = ["edgerun-json/yaml"]
 
 [lints]

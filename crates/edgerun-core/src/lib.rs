@@ -39,6 +39,7 @@ pub mod command;
 #[cfg(feature = "conformance")]
 pub mod conformance;
 pub mod crypto;
+#[cfg(feature = "proto-compat")]
 pub mod encrypted_envelope;
 pub mod fixed_point;
 #[path = "protocol_wire.rs"]
@@ -46,6 +47,7 @@ pub mod protocol;
 pub mod result;
 pub mod util;
 pub mod validators;
+#[cfg(feature = "proto-compat")]
 pub mod validators_proto;
 pub mod value;
 pub mod varint;

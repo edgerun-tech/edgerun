@@ -9,3 +9,9 @@ pub mod parser;
 pub mod repo_registry;
 pub mod tools;
 pub mod uir;
+
+// Custom binary protocol - no protobuf, no external dependencies
+#[allow(dead_code)]
+pub mod generated {
+    pub mod codeanalyzer;
+}
