@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
 use wasmparser::{ExternalKind, Operator, Payload, TypeRef};
 
-use super::ir::{verify_ir, FuncSig, FunctionIr, IrOp, ValueType};
+use super::ir::{verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, ValueType};
 
 #[derive(Debug)]
 pub struct ParsedModule {
@@ -10,6 +10,7 @@ pub struct ParsedModule {
     import_func_count: u32,
     func_type_indices: Vec<u32>,
     export_names: BTreeMap<u32, String>,
+    globals: Vec<GlobalValue>,
     bodies: Vec<FunctionBody>,
 }
 
@@ -25,6 +26,7 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
     let mut import_func_count = 0u32;
     let mut func_type_indices = Vec::new();
     let mut export_names = BTreeMap::new();
+    let mut globals = Vec::new();
     let mut defined_func_type_indices = Vec::new();
     let mut bodies = Vec::new();
 
@@ -47,6 +49,11 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
                             import_func_count += 1;
                             func_type_indices.push(type_idx);
                         }
+                        TypeRef::Global(_) => bail!(
+                            "baseline AOT rejects imported globals: {}.{}",
+                            import.module,
+                            import.name
+                        ),
                         _ => bail!(
                             "baseline AOT rejects non-function imports: {}.{}",
                             import.module,
@@ -60,6 +67,14 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
                     let type_idx = ty?;
                     func_type_indices.push(type_idx);
                     defined_func_type_indices.push(type_idx);
+                }
+            }
+            Payload::GlobalSection(section) => {
+                for global in section {
+                    let global = global?;
+                    let ty = ValueType::from_wasm(global.ty.content_type)?;
+                    let value = parse_global_init(ty, global.init_expr)?;
+                    globals.push(value);
                 }
             }
             Payload::ExportSection(section) => {
@@ -87,7 +102,7 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
                 let mut ops_reader = body.get_operators_reader()?;
                 while !ops_reader.eof() {
                     let op = ops_reader.read()?;
-                    ops.push(lower_operator(op)?);
+                    ops.push(lower_operator(op, &globals)?);
                 }
 
                 bodies.push(FunctionBody {
@@ -113,6 +128,7 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
         import_func_count,
         func_type_indices,
         export_names,
+        globals,
         bodies,
     })
 }
@@ -139,6 +155,7 @@ pub fn lower_module(module: ParsedModule) -> Result<Vec<FunctionIr>> {
             export_name: module.export_names.get(&body.func_index).cloned(),
             sig,
             locals,
+            global_values: module.globals.clone(),
             ops: body.ops,
         };
 
@@ -155,10 +172,32 @@ pub fn lower_module(module: ParsedModule) -> Result<Vec<FunctionIr>> {
     Ok(functions)
 }
 
-fn lower_operator(op: Operator<'_>) -> Result<IrOp> {
+fn parse_global_init(ty: ValueType, init_expr: wasmparser::ConstExpr<'_>) -> Result<GlobalValue> {
+    let mut reader = init_expr.get_operators_reader();
+    let first = reader.read()?;
+    let value = match (ty, first) {
+        (ValueType::I32, Operator::I32Const { value }) => GlobalValue::I32(value),
+        (ValueType::I64, Operator::I64Const { value }) => GlobalValue::I64(value),
+        (_, other) => bail!("unsupported baseline AOT global initializer: {other:?}"),
+    };
+    let end = reader.read()?;
+    if !matches!(end, Operator::End) || !reader.eof() {
+        bail!("unsupported multi-operator global initializer");
+    }
+    Ok(value)
+}
+
+fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
     Ok(match op {
         Operator::I32Const { value } => IrOp::I32Const(value),
         Operator::I64Const { value } => IrOp::I64Const(value),
+        Operator::GlobalGet { global_index } => {
+            let global = globals
+                .get(global_index as usize)
+                .copied()
+                .with_context(|| format!("global.get references missing global {global_index}"))?;
+            IrOp::GlobalGet(global_index, global.value_type())
+        }
         Operator::LocalGet { local_index } => IrOp::LocalGet(local_index),
         Operator::LocalSet { local_index } => IrOp::LocalSet(local_index),
         Operator::LocalTee { local_index } => IrOp::LocalTee(local_index),
