@@ -10,10 +10,19 @@ impl X86_64Backend {
         let frame = Frame::new(ir)?;
         frame.emit_prologue(&mut code, ir)?;
 
+        let mut blocks: Vec<BlockFixup> = Vec::new();
         let mut terminated = false;
         for op in &ir.ops {
             match *op {
                 IrOp::Nop => {}
+                IrOp::Block => blocks.push(BlockFixup::default()),
+                IrOp::BlockEnd => {
+                    let block = blocks
+                        .pop()
+                        .ok_or_else(|| anyhow::anyhow!("block.end without matching block"))?;
+                    patch_block_end(&mut code, block)?;
+                }
+                IrOp::BrIf(depth) => emit_br_if(&mut code, &mut blocks, depth)?,
                 IrOp::I32Const(v) => emit_push_i32(&mut code, v),
                 IrOp::I64Const(v) => emit_push_i64(&mut code, v),
                 IrOp::GlobalGet(i, ty) => frame.emit_global_get(&mut code, i, ty)?,
@@ -50,6 +59,9 @@ impl X86_64Backend {
                 IrOp::I64GeS => emit_i64_cmp(&mut code, SetCc::GeS),
                 IrOp::I64GeU => emit_i64_cmp(&mut code, SetCc::GeU),
                 IrOp::Return | IrOp::End => {
+                    if !blocks.is_empty() {
+                        bail!("function terminator reached with {} open block(s)", blocks.len());
+                    }
                     emit_return(&mut code, ir.sig.results.first().copied());
                     terminated = true;
                     break;
@@ -58,11 +70,58 @@ impl X86_64Backend {
         }
 
         if !terminated {
+            if !blocks.is_empty() {
+                bail!("implicit function terminator reached with {} open block(s)", blocks.len());
+            }
             emit_return(&mut code, ir.sig.results.first().copied());
         }
 
         Ok(code)
     }
+}
+
+#[derive(Default)]
+struct BlockFixup {
+    end_patches: Vec<usize>,
+}
+
+fn emit_br_if(code: &mut Vec<u8>, blocks: &mut [BlockFixup], depth: u32) -> Result<()> {
+    if depth as usize >= blocks.len() {
+        bail!("br_if depth {} outside {} open block(s)", depth, blocks.len());
+    }
+
+    code.push(0x58); // pop rax = i32 condition
+    code.extend_from_slice(&[0x85, 0xC0]); // test eax, eax
+    code.extend_from_slice(&[0x0F, 0x85]); // jnz rel32
+    let patch_at = code.len();
+    code.extend_from_slice(&0i32.to_le_bytes());
+
+    let target_index = blocks.len() - 1 - depth as usize;
+    blocks[target_index].end_patches.push(patch_at);
+    Ok(())
+}
+
+fn patch_block_end(code: &mut [u8], block: BlockFixup) -> Result<()> {
+    let target = code.len();
+    for patch_at in block.end_patches {
+        patch_rel32(code, patch_at, target)?;
+    }
+    Ok(())
+}
+
+fn patch_rel32(code: &mut [u8], imm_at: usize, target: usize) -> Result<()> {
+    let jump_end = imm_at
+        .checked_add(4)
+        .ok_or_else(|| anyhow::anyhow!("jump patch offset overflow"))?;
+    if jump_end > code.len() || target > code.len() {
+        bail!("invalid jump patch imm_at={} target={} len={}", imm_at, target, code.len());
+    }
+    let rel = (target as i64) - (jump_end as i64);
+    if rel < i32::MIN as i64 || rel > i32::MAX as i64 {
+        bail!("jump target out of rel32 range");
+    }
+    code[imm_at..jump_end].copy_from_slice(&(rel as i32).to_le_bytes());
+    Ok(())
 }
 
 struct Frame {
@@ -490,5 +549,31 @@ mod tests {
         verify_ir(&ir).unwrap();
         let code = X86_64Backend::compile(&ir).unwrap();
         assert!(!code.is_empty());
+    }
+
+    #[test]
+    fn x86_supports_br_if_depth0_to_block_end() {
+        let ir = test_ir(
+            "branch",
+            FuncSig {
+                params: vec![ValueType::I32],
+                results: vec![ValueType::I32],
+            },
+            vec![ValueType::I32],
+            vec![
+                IrOp::Block,
+                IrOp::LocalGet(0),
+                IrOp::BrIf(0),
+                IrOp::I32Const(7),
+                IrOp::LocalSet(0),
+                IrOp::BlockEnd,
+                IrOp::LocalGet(0),
+                IrOp::End,
+            ],
+        );
+
+        verify_ir(&ir).unwrap();
+        let code = X86_64Backend::compile(&ir).unwrap();
+        assert!(code.windows(2).any(|w| w == [0x0F, 0x85]));
     }
 }
