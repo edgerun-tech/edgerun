@@ -32,15 +32,15 @@ enum ValType {
     Ref,
 }
 
-impl From<wasmparser::ValType> for ValType {
-    fn from(t: wasmparser_mock::ValType) -> Self {
+impl From<wasmparser_mock::wasmparser::ValType> for ValType {
+    fn from(t: wasmparser_mock::wasmparser::ValType) -> Self {
         match t {
-            wasmparser::ValType::I32 => ValType::I32,
-            wasmparser::ValType::I64 => ValType::I64,
-            wasmparser::ValType::F32 => ValType::F32,
-            wasmparser::ValType::F64 => ValType::F64,
-            wasmparser::ValType::V128 => ValType::V128,
-            wasmparser::ValType::Ref(_) => ValType::Ref,
+            wasmparser_mock::wasmparser::ValType::I32 => ValType::I32,
+            wasmparser_mock::wasmparser::ValType::I64 => ValType::I64,
+            wasmparser_mock::wasmparser::ValType::F32 => ValType::F32,
+            wasmparser_mock::wasmparser::ValType::F64 => ValType::F64,
+            wasmparser_mock::wasmparser::ValType::V128 => ValType::V128,
+            wasmparser_mock::wasmparser::ValType::Ref => ValType::Ref,
         }
     }
 }
@@ -51,7 +51,7 @@ struct TypeEntry {
 }
 
 impl TypeEntry {
-    fn from_sig(sig: wasmparser_mock::FuncType) -> Self {
+    fn from_sig(sig: wasmparser_mock::wasmparser::FuncType) -> Self {
         Self {
             params: sig.params().iter().map(|&t| ValType::from(t)).collect(),
             results: sig.results().iter().map(|&t| ValType::from(t)).collect(),
@@ -72,9 +72,9 @@ fn parse_module(wasm: &[u8]) -> Result<ModuleInfo> {
     let mut import_funcs: Vec<(String, u32)> = Vec::new();
     let mut exported_func_indices: Vec<(String, u32)> = Vec::new();
 
-    for payload in wasmparser_mock::Parser::new(0).parse_all(wasm) {
+    for payload in Parser::new(0).parse_all(wasm) {
         match payload? {
-            wasmparser_mock::Payload::TypeSection(s) => {
+            Payload::TypeSection(s) => {
                 for group in s {
                     let group = group?;
                     for sub in group.types() {
@@ -83,7 +83,7 @@ fn parse_module(wasm: &[u8]) -> Result<ModuleInfo> {
                     }
                 }
             }
-            wasmparser_mock::Payload::ImportSection(s) => {
+            Payload::ImportSection(s) => {
                 for import in s {
                     let import = import?;
                     if let TypeRef::Func(type_idx) = import.ty {
@@ -95,16 +95,16 @@ fn parse_module(wasm: &[u8]) -> Result<ModuleInfo> {
                     }
                 }
             }
-            wasmparser_mock::Payload::FunctionSection(s) => {
+            Payload::FunctionSection(s) => {
                 for ty in s {
                     let ty = ty?;
                     func_type_indices.push(ty);
                 }
             }
-            wasmparser_mock::Payload::ExportSection(s) => {
+            Payload::ExportSection(s) => {
                 for export in s {
                     let export = export?;
-                    if let wasmparser_mock::ExternalKind::Func = export.kind {
+                    if let ExternalKind::Func = export.kind {
                         exported_func_indices.push((export.name.to_string(), export.index));
                     }
                 }
@@ -139,7 +139,7 @@ fn main() -> Result<()> {
 
     let wasm = std::fs::read(path).context("Failed to read WASM")?;
 
-    wasmparser_mock::Validator::new()
+    Validator::new()
         .validate_all(&wasm)
         .context("Invalid WASM structure")?;
 

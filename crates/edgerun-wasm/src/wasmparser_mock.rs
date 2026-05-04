@@ -4,6 +4,8 @@
 // will need to be stubbed or feature-gated separately.
 
 pub mod wasmparser {
+    use std::marker::PhantomData;
+
     #[derive(Debug, Clone, Copy)]
     pub enum ValType {
         I32,
@@ -57,22 +59,31 @@ pub mod wasmparser {
         CodeSectionEntry(CodeSectionEntry<'a>),
         GlobalSection(GlobalSection<'a>),
         End,
-        _Phantom(std::marker::PhantomData<&'a ()>),
+        _Phantom(PhantomData<&'a ()>),
     }
 
     #[derive(Debug, Clone)]
     pub struct TypeSection<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> TypeSection<'a> {
         pub fn into_iter(self) -> TypeSectionIntoIter<'a> {
-            TypeSectionIntoIter { _marker: std::marker::PhantomData }
+            TypeSectionIntoIter { _marker: PhantomData }
+        }
+    }
+
+    impl<'a> IntoIterator for TypeSection<'a> {
+        type Item = Result<TypeEntry<'a>, anyhow::Error>;
+        type IntoIter = TypeSectionIntoIter<'a>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.into_iter()
         }
     }
 
     pub struct TypeSectionIntoIter<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> Iterator for TypeSectionIntoIter<'a> {
@@ -85,7 +96,7 @@ pub mod wasmparser {
     #[derive(Debug, Clone)]
     pub struct TypeEntry<'a> {
         pub composite_type: CompositeType,
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     #[derive(Debug, Clone)]
@@ -101,17 +112,26 @@ pub mod wasmparser {
 
     #[derive(Debug, Clone)]
     pub struct ImportSection<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> ImportSection<'a> {
         pub fn into_iter(self) -> ImportSectionIntoIter<'a> {
-            ImportSectionIntoIter { _marker: std::marker::PhantomData }
+            ImportSectionIntoIter { _marker: PhantomData }
+        }
+    }
+
+    impl<'a> IntoIterator for ImportSection<'a> {
+        type Item = Result<Import<'a>, anyhow::Error>;
+        type IntoIter = ImportSectionIntoIter<'a>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.into_iter()
         }
     }
 
     pub struct ImportSectionIntoIter<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> Iterator for ImportSectionIntoIter<'a> {
@@ -130,20 +150,29 @@ pub mod wasmparser {
 
     #[derive(Debug, Clone)]
     pub struct FunctionSection<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> FunctionSection<'a> {
         pub fn into_iter(self) -> FunctionSectionIntoIter {
-            FunctionSectionIntoIter { _marker: std::marker::PhantomData }
+            FunctionSectionIntoIter { _marker: PhantomData }
         }
     }
 
-    pub struct FunctionSectionIntoIter {
-        _marker: std::marker::PhantomData<()>,
+    impl<'a> IntoIterator for FunctionSection<'a> {
+        type Item = Result<u32, anyhow::Error>;
+        type IntoIter = FunctionSectionIntoIter<'a>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.into_iter()
+        }
     }
 
-    impl Iterator for FunctionSectionIntoIter {
+    pub struct FunctionSectionIntoIter<'a> {
+        _marker: PhantomData<&'a ()>,
+    }
+
+    impl<'a> Iterator for FunctionSectionIntoIter<'a> {
         type Item = Result<u32, anyhow::Error>;
         fn next(&mut self) -> Option<Self::Item> {
             None
@@ -152,17 +181,26 @@ pub mod wasmparser {
 
     #[derive(Debug, Clone)]
     pub struct ExportSection<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> ExportSection<'a> {
         pub fn into_iter(self) -> ExportSectionIntoIter<'a> {
-            ExportSectionIntoIter { _marker: std::marker::PhantomData }
+            ExportSectionIntoIter { _marker: PhantomData }
+        }
+    }
+
+    impl<'a> IntoIterator for ExportSection<'a> {
+        type Item = Result<Export<'a>, anyhow::Error>;
+        type IntoIter = ExportSectionIntoIter<'a>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.into_iter()
         }
     }
 
     pub struct ExportSectionIntoIter<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> Iterator for ExportSectionIntoIter<'a> {
@@ -181,7 +219,7 @@ pub mod wasmparser {
 
     #[derive(Debug, Clone)]
     pub struct CodeSectionEntry<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> CodeSectionEntry<'a> {
@@ -217,17 +255,26 @@ pub mod wasmparser {
 
     #[derive(Debug, Clone)]
     pub struct GlobalSection<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> GlobalSection<'a> {
         pub fn into_iter(self) -> GlobalSectionIntoIter<'a> {
-            GlobalSectionIntoIter { _marker: std::marker::PhantomData }
+            GlobalSectionIntoIter { _marker: PhantomData }
+        }
+    }
+
+    impl<'a> IntoIterator for GlobalSection<'a> {
+        type Item = Result<Global<'a>, anyhow::Error>;
+        type IntoIter = GlobalSectionIntoIter<'a>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.into_iter()
         }
     }
 
     pub struct GlobalSectionIntoIter<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> Iterator for GlobalSectionIntoIter<'a> {
@@ -427,7 +474,7 @@ pub mod wasmparser {
 
     #[derive(Debug, Clone)]
     pub struct ConstExpr<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> ConstExpr<'a> {
@@ -454,12 +501,12 @@ pub mod wasmparser {
             Self
         }
         pub fn parse_all<'a>(&self, _bytes: &'a [u8]) -> ParseAll<'a> {
-            ParseAll { _marker: std::marker::PhantomData }
+            ParseAll { _marker: PhantomData }
         }
     }
 
     pub struct ParseAll<'a> {
-        _marker: std::marker::PhantomData<&'a ()>,
+        _marker: PhantomData<&'a ()>,
     }
 
     impl<'a> Iterator for ParseAll<'a> {

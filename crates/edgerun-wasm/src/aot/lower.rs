@@ -237,7 +237,7 @@ fn normalize_function_ends(mut ops: Vec<IrOp>) -> Result<Vec<IrOp>> {
 
 fn parse_global_init(
     ty: ValueType,
-    init_expr: wasmparser_mock::ConstExpr<'_>,
+    init_expr: wasmparser_mock::ConstExpr,
 ) -> Result<GlobalValue> {
     let mut reader = init_expr.get_operators_reader();
     let first = reader.read()?;
@@ -263,7 +263,7 @@ fn mem_op(memarg: MemArg) -> Result<MemOp> {
 }
 
 fn lower_operator(
-    op: Operator<'_>,
+    op: Operator,
     globals: &[GlobalValue],
     locals: &[ValueType],
     function_sigs: &[FuncSig],
