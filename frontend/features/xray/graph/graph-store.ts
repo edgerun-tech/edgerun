@@ -9,6 +9,8 @@ let codeAnalyzerInitialized = false
 const MAX_VISIBLE_NODES = 2800
 const MAX_VISIBLE_EDGES = 9000
 const MAX_FILE_NODES = 360
+const DEFAULT_YAW = 0
+const DEFAULT_PITCH = 0.72
 
 function initialState(): XrayState {
   const graph = createMockGraph()
@@ -25,7 +27,9 @@ function initialState(): XrayState {
     zoom: 1,
     panX: 0,
     panY: 0,
-    rotation: 0,
+    yaw: DEFAULT_YAW,
+    pitch: DEFAULT_PITCH,
+    rotation: DEFAULT_YAW,
     loading: false,
     error: null,
   }
@@ -186,7 +190,9 @@ function applyGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
     zoom: 1,
     panX: 0,
     panY: 0,
-    rotation: 0,
+    yaw: DEFAULT_YAW,
+    pitch: DEFAULT_PITCH,
+    rotation: DEFAULT_YAW,
   })
 }
 
@@ -240,16 +246,20 @@ export function setHoveredNode(nodeId: string | null) {
   const s = xrayState.get()
   if (s.hoveredId === nodeId) return
   if (!nodeId) {
-    xrayState.set({ ...s, hoveredId: null, highlightedIds: new Set() })
+    xrayState.set({ ...s, hoveredId: null, highlightedIds: s.selectedId ? buildRelatedSet(s.selectedId, s.edges) : new Set() })
     return
   }
+  xrayState.set({ ...s, hoveredId: nodeId, highlightedIds: buildRelatedSet(nodeId, s.edges) })
+}
+
+function buildRelatedSet(nodeId: string, edges: XrayEdge[]) {
   const related = new Set<string>([nodeId])
-  for (const edge of s.edges) {
+  for (const edge of edges) {
     if (edge.source === nodeId) related.add(edge.target)
     if (edge.target === nodeId) related.add(edge.source)
     if (related.size > 80) break
   }
-  xrayState.set({ ...s, hoveredId: nodeId, highlightedIds: related })
+  return related
 }
 
 export function setLayout(layout: LayoutType) {
@@ -271,7 +281,7 @@ export function focusNode(nodeId: string) {
   const s = xrayState.get()
   const node = s.nodes.get(nodeId)
   if (!node) return
-  xrayState.set({ ...s, selectedId: nodeId, highlightedIds: new Set(), panX: -(node.x ?? 0), panY: -(node.y ?? 0), zoom: 1.5 })
+  xrayState.set({ ...s, selectedId: nodeId, highlightedIds: buildRelatedSet(nodeId, s.edges), panX: -(node.x ?? 0), panY: -(node.y ?? 0), zoom: 1.5 })
 }
 
 export function highlightNodes(nodeIds: string[]) {
@@ -281,22 +291,23 @@ export function highlightNodes(nodeIds: string[]) {
 
 export function clearHighlight() {
   const s = xrayState.get()
-  xrayState.set({ ...s, highlightedIds: new Set() })
+  xrayState.set({ ...s, highlightedIds: s.selectedId ? buildRelatedSet(s.selectedId, s.edges) : new Set() })
 }
 
 export function selectNode(nodeId: string | null) {
   const s = xrayState.get()
-  xrayState.set({ ...s, selectedId: nodeId })
+  xrayState.set({ ...s, selectedId: nodeId, highlightedIds: nodeId ? buildRelatedSet(nodeId, s.edges) : new Set() })
 }
 
-export function setViewTransform(zoom: number, panX: number, panY: number, rotation: number) {
+export function setViewTransform(zoom: number, panX: number, panY: number, yaw: number, pitch = xrayState.get().pitch) {
+  const clampedPitch = Math.max(-1.35, Math.min(1.35, pitch))
   const s = xrayState.get()
-  xrayState.set({ ...s, zoom, panX, panY, rotation })
+  xrayState.set({ ...s, zoom, panX, panY, yaw, pitch: clampedPitch, rotation: yaw })
 }
 
 export function resetView() {
   const s = xrayState.get()
-  xrayState.set({ ...s, selectedId: null, hoveredId: null, highlightedIds: new Set(), zoom: 1, panX: 0, panY: 0, rotation: 0 })
+  xrayState.set({ ...s, selectedId: null, hoveredId: null, highlightedIds: new Set(), zoom: 1, panX: 0, panY: 0, yaw: DEFAULT_YAW, pitch: DEFAULT_PITCH, rotation: DEFAULT_YAW })
 }
 
 export function updateNodePositions(positions: Map<string, { x: number; y: number }>) {
@@ -322,5 +333,7 @@ export function getXrayState() {
     zoom: s.zoom,
     panX: s.panX,
     panY: s.panY,
+    yaw: s.yaw,
+    pitch: s.pitch,
   }
 }
