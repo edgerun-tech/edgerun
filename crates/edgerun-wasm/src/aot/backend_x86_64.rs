@@ -63,6 +63,9 @@ impl Frame {
         for i in 0..ir.sig.params.len() as u32 {
             self.emit_store_arg(code, i)?;
         }
+        for i in ir.sig.params.len() as u32..self.slots {
+            self.emit_zero_slot(code, i)?;
+        }
 
         Ok(())
     }
@@ -82,6 +85,14 @@ impl Frame {
             5 => code.extend_from_slice(&[0x4C, 0x89, 0xC8]), // mov rax, r9
             _ => bail!("baseline backend only supports first six argument locals"),
         }
+        Ok(())
+    }
+
+    fn emit_zero_slot(&self, code: &mut Vec<u8>, index: u32) -> Result<()> {
+        let disp = self.slot_disp(index)?;
+        code.extend_from_slice(&[0x48, 0xC7, 0x85]); // mov qword [rbp + disp32], imm32
+        code.extend_from_slice(&disp.to_le_bytes());
+        code.extend_from_slice(&0i32.to_le_bytes());
         Ok(())
     }
 
