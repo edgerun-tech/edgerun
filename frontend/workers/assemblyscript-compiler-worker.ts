@@ -1,5 +1,3 @@
-import ascModule from "assemblyscript/asc"
-
 type CompileRequest = {
   id: number
   source: string
@@ -37,7 +35,9 @@ type AscCompiler = {
   ) => Promise<AscMainResult>
 }
 
-const asc = ascModule as AscCompiler
+type AscModule = AscCompiler | { default?: AscCompiler }
+
+let cachedAsc: Promise<AscCompiler> | null = null
 
 function normalizePath(path: string): string {
   return path.replace(/^\.\//, "")
@@ -47,6 +47,23 @@ function stringifyExportResult(value: unknown): string {
   if (typeof value === "bigint") return value.toString()
   if (value === undefined) return "undefined"
   return String(value)
+}
+
+async function loadAssemblyScriptCompiler(): Promise<AscCompiler> {
+  if (!cachedAsc) {
+    cachedAsc = (async () => {
+      // Do not statically import assemblyscript/asc here.
+      // Next.js tries to bundle dist/asc.js into the client graph and then fails
+      // on its optional Node-only fs/module imports. Runtime import keeps the
+      // compiler isolated inside the Worker and outside the Next bundle.
+      const runtimeImport = new Function("url", "return import(url)") as (url: string) => Promise<AscModule>
+      const mod = await runtimeImport("https://cdn.jsdelivr.net/npm/assemblyscript@0.28.2/dist/asc.js")
+      const asc = "main" in mod ? mod : mod.default
+      if (!asc?.main) throw new Error("AssemblyScript compiler loaded, but asc.main was not found")
+      return asc
+    })()
+  }
+  return cachedAsc
 }
 
 async function instantiateAndRun(wasm: Uint8Array) {
@@ -78,6 +95,7 @@ self.onmessage = async (event: MessageEvent<CompileRequest>) => {
   const logs: string[] = []
 
   try {
+    const asc = await loadAssemblyScriptCompiler()
     const files: Record<string, string | Uint8Array> = {
       "assembly/index.ts": source,
     }
