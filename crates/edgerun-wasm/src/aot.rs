@@ -8,12 +8,14 @@ mod ir;
 mod loader;
 #[path = "aot/lower.rs"]
 mod lower;
+#[path = "aot/module_backend.rs"]
+mod module_backend;
 
 use anyhow::{bail, Context, Result};
 use artifact::{AotArtifact, CompiledFunction, DecodedAotArtifact};
-use backend_x86_64::X86_64Backend;
 use loader::{find_function, LoadedFunction};
 use lower::{lower_module, parse_module};
+use module_backend::X86_64ModuleBackend;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
@@ -144,16 +146,27 @@ fn compile_artifact(args: &Args) -> Result<()> {
         bail!("no baseline-AOT-compilable functions found");
     }
 
+    let module_code = X86_64ModuleBackend::compile_module(&functions)?;
     let mut compiled = Vec::new();
-    for ir in functions {
-        let code = X86_64Backend::compile(&ir)
-            .with_context(|| format!("failed to compile {}", ir.name()))?;
+    for meta in &module_code.functions {
+        let ir = functions
+            .iter()
+            .find(|f| f.index == meta.index)
+            .with_context(|| format!("missing IR for compiled function {}", meta.index))?
+            .clone();
+        let start = meta.offset as usize;
+        let end = start + meta.len as usize;
+        let code = module_code
+            .code
+            .get(start..end)
+            .with_context(|| format!("invalid module code range for function {}", meta.index))?
+            .to_vec();
         if args.verbose {
-            eprintln!("compiled {}: {} bytes", ir.name(), code.len());
+            eprintln!("compiled {}: {} bytes", meta.name, code.len());
         }
         compiled.push(CompiledFunction {
-            index: ir.index,
-            name: ir.name(),
+            index: meta.index,
+            name: meta.name.clone(),
             ir,
             code,
         });
