@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { Activity, Cpu, HardDrive, RadioTower, WalletCards } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { FinancesOverviewWidget } from "@/components/sections/finance-overviews"
 import { XrayViewport } from "@/features/xray/XrayViewport"
 import { XrayInspector } from "@/features/xray/XrayInspector"
 import { XrayCommandSurface } from "@/features/xray/XrayCommandSurface"
@@ -108,12 +109,9 @@ export function XrayDesktopSurface({
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "left-bottom")}
           fallback={
-            <MiniTile
-              icon={<WalletCards className="h-3.5 w-3.5" />}
-              label="earnings"
-              value={`${edgePerHour}`}
-              sub="EDGE / hour estimated"
-            />
+            <div className="min-h-0 overflow-hidden rounded-2xl border border-[var(--window-border)] bg-background/78 shadow-2xl backdrop-blur-md">
+              <FinancesOverviewWidget />
+            </div>
           }
         />
       </div>
