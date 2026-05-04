@@ -2288,6 +2288,7 @@ dependencies = [
  "edgerun-v4l2-camera",
  "edgerun-virtual-disk",
  "edgerun-wifi",
+ "edgerun-wire",
  "edgerun-yubikey",
  "libc",
  "prost 0.14.3",
