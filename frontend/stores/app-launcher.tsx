@@ -1,13 +1,9 @@
+import type React from "react"
 import { windowsStore, openWindow, closeWindow, addLog, type OpenWindowDef } from "./desktop-store"
-import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
+import { getBuiltinApp, BUILTIN_ICON_MAP } from "@/platform/registries/builtin-app-registry"
 import { getDefaultSize } from "@/platform/registries/window-registry"
 import { createAppLaunchPlan } from "@/platform/runtime/app-manager"
-import { BUILTIN_ICON_MAP } from "@/platform/registries/builtin-app-registry"
 import type { AppDefinition } from "@/platform/types/app-definition"
-
-function resolveComponent(app: AppDefinition): React.ReactNode {
-  return createAppLaunchPlan(app, { launchApp }).component
-}
 
 export function getAppIcon(appId: string): React.ReactNode {
   const app = getBuiltinApp(appId)
