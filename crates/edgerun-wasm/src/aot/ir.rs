@@ -100,6 +100,7 @@ pub enum IrOp {
     Store(StoreKind, MemOp),
     MemoryCopy,
     MemoryFill,
+    Call(u32, FuncSig),
     Select(ValueType),
     I32Add,
     I32Sub,
@@ -155,6 +156,7 @@ impl IrOp {
             Self::Store(StoreKind::I64, mem) => format!("i64.store offset={}", mem.offset),
             Self::MemoryCopy => "memory.copy".to_string(),
             Self::MemoryFill => "memory.fill".to_string(),
+            Self::Call(index, sig) => format!("call {index} {}", sig.render()),
             Self::Select(ty) => format!("select {}", ty.as_str()),
             Self::I32Add => "i32.add".to_string(),
             Self::I32Sub => "i32.sub".to_string(),
@@ -355,6 +357,17 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
                 pop1(&mut stack, ValueType::I32, ir, op)?;
                 pop1(&mut stack, ValueType::I32, ir, op)?;
                 pop1(&mut stack, ValueType::I32, ir, op)?;
+            }
+            IrOp::Call(_, ref sig) => {
+                for expected in sig.params.iter().rev().copied() {
+                    pop1(&mut stack, expected, ir, op)?;
+                }
+                if sig.results.len() > 1 {
+                    bail!("{} call returns more than one value", ir.name());
+                }
+                if let Some(result) = sig.results.first().copied() {
+                    stack.push(result);
+                }
             }
             IrOp::Select(ty) => {
                 pop1(&mut stack, ValueType::I32, ir, op)?;
