@@ -14,6 +14,7 @@ import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
 import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
 import { FloatingDock } from "@/components/ui/floating-dock"
 import { installedAppIdsStore, CORE_APP_IDS } from "@/stores/installed-apps-store"
+import { grantLocalCapabilities } from "@/stores/local-capability-grants-store"
 import { Users } from "lucide-react"
 import {
   windowsStore,
@@ -76,6 +77,18 @@ export function Desktop() {
     }).filter(Boolean)
   }, [installedAppIds])
 
+  const grantPendingAndOpen = useCallback(() => {
+    const gate = pendingGateStore.get()
+    if (!gate) return
+    grantLocalCapabilities(
+      gate.app.appId,
+      gate.blocked,
+      `User approved ${gate.blocked.join(", ")} for ${gate.app.name}`,
+    )
+    pendingGateStore.set(null)
+    launchApp(gate.app)
+  }, [])
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
       {!showDesktop && (
@@ -111,19 +124,21 @@ export function Desktop() {
                 title: "Set up Identity",
                 icon: <Users className="h-4 w-4" />,
                 component: (
-                  <CapabilityGatePrompt
-                    appName="Edgerun"
-                    blockedCapabilities={["Identity"]}
-                    onSetupIdentity={async (name) => {
-                      const ok = await auth.register(name)
-                      if (ok) closeWindow("window-auth-prompt")
-                      return ok
-                    }}
-                    onDismiss={() => closeWindow("window-auth-prompt")}
+                  <AuthOverlay
+                    authState={auth.authState}
+                    username={auth.username}
+                    isLoading={auth.isLoading}
+                    error={auth.error}
+                    hasRegistered={auth.hasRegistered}
+                    webAuthnAvailable={auth.webAuthnAvailable}
+                    onRegister={auth.register}
+                    onAuthenticate={auth.authenticate}
+                    onContinueAsGuest={auth.continueAsGuest}
+                    onClearError={auth.clearError}
                   />
                 ),
                 defaultPosition: { x: 250, y: 120 },
-                defaultSize: { width: 400, height: 380 },
+                defaultSize: { width: 420, height: 420 },
               }
               openWindow(authPromptWin)
             }}
@@ -151,10 +166,10 @@ export function Desktop() {
             {pendingGate && (
               <Window
                 id="window-capability-gate"
-                title="Capability Required"
+                title="Permission Request"
                 icon={<Users className="h-4 w-4" />}
                 defaultPosition={{ x: 250, y: 120 }}
-                defaultSize={{ width: 400, height: 380 }}
+                defaultSize={{ width: 460, height: 520 }}
                 onClose={() => pendingGateStore.set(null)}
                 onFocus={() => focusWindow("window-capability-gate")}
                 isFocused={focusedWindow === "window-capability-gate"}
@@ -165,11 +180,7 @@ export function Desktop() {
                 <CapabilityGatePrompt
                   appName={pendingGate.app.name}
                   blockedCapabilities={pendingGate.blocked}
-                  onSetupIdentity={async (name) => {
-                    const ok = await auth.register(name)
-                    if (ok) pendingGateStore.set(null)
-                    return ok
-                  }}
+                  onGrant={grantPendingAndOpen}
                   onDismiss={() => pendingGateStore.set(null)}
                 />
               </Window>
