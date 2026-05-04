@@ -112,16 +112,22 @@ export function buildProgram(gl: WebGL2RenderingContext, vs: WebGLShader, fs: We
   return prog
 }
 
-export function buildNodeProgram(gl: WebGL2RenderingContext): WebGLProgram {
+export function buildNodeProgram(gl: WebGL2RenderingContext, fragmentSource = NODE_FS): WebGLProgram {
   const vs = compileShader(gl, gl.VERTEX_SHADER, NODE_VS)
-  const fs = compileShader(gl, gl.FRAGMENT_SHADER, NODE_FS)
-  return buildProgram(gl, vs, fs)
+  const fs = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource)
+  const program = buildProgram(gl, vs, fs)
+  gl.deleteShader(vs)
+  gl.deleteShader(fs)
+  return program
 }
 
 export function buildEdgeProgram(gl: WebGL2RenderingContext): WebGLProgram {
   const vs = compileShader(gl, gl.VERTEX_SHADER, EDGE_VS)
   const fs = compileShader(gl, gl.FRAGMENT_SHADER, EDGE_FS)
-  return buildProgram(gl, vs, fs)
+  const program = buildProgram(gl, vs, fs)
+  gl.deleteShader(vs)
+  gl.deleteShader(fs)
+  return program
 }
 
 export function screenToGraph(sx: number, sy: number, zoom: number, panX: number, panY: number, yaw: number, vw: number, vh: number): [number, number] {
