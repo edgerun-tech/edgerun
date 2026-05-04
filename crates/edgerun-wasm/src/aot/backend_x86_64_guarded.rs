@@ -382,7 +382,10 @@ fn emit_load(code: &mut Vec<u8>, kind: LoadKind, mem: MemOp) -> Result<()> {
         LoadKind::I32Load16U => code.extend_from_slice(&[0x41, 0x0F, 0xB7, 0x04, 0x02]),
         LoadKind::I32Load16S => code.extend_from_slice(&[0x41, 0x0F, 0xBF, 0x04, 0x02]),
     }
-    if matches!(kind, LoadKind::I32 | LoadKind::I32Load8U | LoadKind::I32Load16U) {
+    if matches!(
+        kind,
+        LoadKind::I32 | LoadKind::I32Load8U | LoadKind::I32Load16U
+    ) {
         emit_zero_extend_eax(code);
     }
     code.push(0x50);
