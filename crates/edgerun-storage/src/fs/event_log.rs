@@ -312,3 +312,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(events_dir);
     }
 }
+
+fn decode_event_envelope_wire(
+    _bytes: &[u8],
+) -> Result<edgerun_core::protocol::EventEnvelope, StorageError> {
+    Err(StorageError::Decode(
+        "native event wire decode not wired yet".to_string(),
+    ))
+}

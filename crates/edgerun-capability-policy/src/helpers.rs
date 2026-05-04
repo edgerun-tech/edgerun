@@ -9,9 +9,9 @@ use edgerun_capabilities::{
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
+use edgerun_core::protocol::{Duration as ProstDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, NodeRef};
 use edgerun_crypto::sha2::Digest;
-use prost_types::{Duration as ProstDuration, Timestamp};
 
 pub(crate) fn dedupe_i32(values: Vec<i32>) -> Vec<i32> {
     let mut out = Vec::new();
@@ -70,9 +70,10 @@ pub(crate) fn has_constraint_kind(
     constraints: &[CapabilityConstraint],
     kind: CapabilityConstraintKind,
 ) -> bool {
-    constraints
-        .iter()
-        .any(|constraint| CapabilityConstraintKind::try_from(constraint.kind).ok() == Some(kind))
+    constraints.iter().any(|constraint| {
+        edgerun_core::protocol::enum_from_i32::<CapabilityConstraintKind>(constraint.kind).ok()
+            == Some(kind)
+    })
 }
 
 pub(crate) fn requires_user_presence(
@@ -84,12 +85,15 @@ pub(crate) fn requires_user_presence(
         return true;
     }
 
-    let role = CapabilityRole::try_from(descriptor.role).unwrap_or(CapabilityRole::Unspecified);
+    let role = edgerun_core::protocol::enum_from_i32::<CapabilityRole>(descriptor.role)
+        .unwrap_or(CapabilityRole::Unspecified);
 
     let sensitive_modality = descriptor
         .modalities
         .iter()
-        .filter_map(|value| CapabilityModality::try_from(*value).ok())
+        .filter_map(|value| {
+            edgerun_core::protocol::enum_from_i32::<CapabilityModality>(*value).ok()
+        })
         .any(|modality| {
             matches!(
                 modality,
@@ -101,7 +105,9 @@ pub(crate) fn requires_user_presence(
         });
     let sensitive_operation = operations
         .iter()
-        .filter_map(|value| CapabilityOperation::try_from(*value).ok())
+        .filter_map(|value| {
+            edgerun_core::protocol::enum_from_i32::<CapabilityOperation>(*value).ok()
+        })
         .any(|operation| {
             matches!(
                 operation,

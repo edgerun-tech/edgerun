@@ -10,9 +10,9 @@ use edgerun_capabilities::{
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
+use edgerun_core::protocol::{Duration as ProstDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, NodeRef};
 use edgerun_crypto::sha2::Digest;
-use prost_types::{Duration as ProstDuration, Timestamp};
 
 #[derive(Debug, Clone)]
 pub struct SimplePolicyEngine {
@@ -98,7 +98,12 @@ impl SimplePolicyEngine {
         request
             .selector
             .as_ref()
-            .and_then(|selector| CapabilityAccessClass::try_from(selector.access_class).ok())
+            .and_then(|selector| {
+                edgerun_core::protocol::enum_from_i32::<CapabilityAccessClass>(
+                    selector.access_class,
+                )
+                .ok()
+            })
             .filter(|value| *value != CapabilityAccessClass::Unspecified)
             .unwrap_or(CapabilityAccessClass::Derived)
     }

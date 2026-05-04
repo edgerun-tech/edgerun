@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex};
 
 use edgerun_core::protocol::EventEnvelope;
 use edgerun_core::protocol::EventEnvelope as ProtoEventEnvelope;
-use prost::Message;
 
 use crate::core::{
     canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
@@ -577,4 +576,12 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, StorageError::Decode(_)));
     }
+}
+
+fn decode_event_envelope_wire(
+    _bytes: &[u8],
+) -> Result<edgerun_core::protocol::EventEnvelope, StorageError> {
+    Err(StorageError::Decode(
+        "native event wire decode not wired yet".to_string(),
+    ))
 }

@@ -100,11 +100,11 @@ impl ContentStore for FsContentStore {
     }
 }
 
-fn now_timestamp() -> prost_types::Timestamp {
+fn now_timestamp() -> edgerun_core::protocol::Timestamp {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
-    prost_types::Timestamp {
+    edgerun_core::protocol::Timestamp {
         seconds: now.as_secs() as i64,
         nanos: now.subsec_nanos() as i32,
     }

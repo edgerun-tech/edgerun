@@ -12,9 +12,9 @@ use edgerun_capabilities::{
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
+use edgerun_core::protocol::{Duration as ProstDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, NodeRef};
 use edgerun_crypto::sha2::Digest;
-use prost_types::{Duration as ProstDuration, Timestamp};
 
 impl PolicyEngine for SimplePolicyEngine {
     fn evaluate_request(
@@ -122,10 +122,14 @@ impl PolicyEngine for SimplePolicyEngine {
             }
         }
 
-        let granted_access = CapabilityAccessClass::try_from(record.grant.access_class)
-            .unwrap_or(CapabilityAccessClass::Derived);
-        let requested_access = CapabilityAccessClass::try_from(invocation.requested_access_class)
-            .unwrap_or(CapabilityAccessClass::Derived);
+        let granted_access = edgerun_core::protocol::enum_from_i32::<CapabilityAccessClass>(
+            record.grant.access_class,
+        )
+        .unwrap_or(CapabilityAccessClass::Derived);
+        let requested_access = edgerun_core::protocol::enum_from_i32::<CapabilityAccessClass>(
+            invocation.requested_access_class,
+        )
+        .unwrap_or(CapabilityAccessClass::Derived);
         if granted_access == CapabilityAccessClass::Derived
             && requested_access == CapabilityAccessClass::Raw
         {
@@ -195,7 +199,8 @@ impl PolicyEngine for SimplePolicyEngine {
         }
 
         for constraint in &record.grant.enforced_constraints {
-            if CapabilityConstraintKind::try_from(constraint.kind).ok()
+            if edgerun_core::protocol::enum_from_i32::<CapabilityConstraintKind>(constraint.kind)
+                .ok()
                 == Some(CapabilityConstraintKind::RateLimited)
             {
                 let Some((max_operations, per)) = Self::constraint_rate_limit(constraint) else {

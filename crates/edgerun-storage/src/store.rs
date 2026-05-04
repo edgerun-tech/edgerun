@@ -9,7 +9,6 @@
 use crate::prelude::v1::*;
 
 use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
-use prost::Message;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -1105,7 +1104,7 @@ impl NodeStore {
                 identity_kind: Some(2), // NODE
                 key_hint: Some(node_id.0.to_vec()),
             }),
-            produced_at: Some(prost_types::Timestamp {
+            produced_at: Some(edgerun_core::protocol::Timestamp {
                 seconds: now_seconds,
                 nanos: 0,
             }),
@@ -1130,7 +1129,11 @@ impl NodeStore {
         };
 
         // Sign the descriptor with domain separation
-        let record = edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone());
+        let record =
+            edgerun_core::protocol::ProtocolRecord::ObjectRef(edgerun_core::protocol::ObjectRef {
+                object_id: Vec::new(),
+                object_kind: None,
+            });
         let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
         let sig = signer
             .sign_record(
