@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use libc::{mmap, munmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
+use libc::{mmap, mprotect, munmap, MAP_ANONYMOUS, MAP_FAILED, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
 use std::ptr;
 
 use super::artifact::{DecodedAotArtifact, DecodedFunction};
@@ -38,8 +38,8 @@ impl LoadedFunction {
             mmap(
                 ptr::null_mut(),
                 len,
-                PROT_READ | PROT_WRITE | PROT_EXEC,
-                MAP_PRIVATE | MAP_ANON,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS,
                 -1,
                 0,
             )
@@ -50,6 +50,14 @@ impl LoadedFunction {
 
         unsafe {
             ptr::copy_nonoverlapping(func.code.as_ptr(), ptr as *mut u8, len);
+        }
+
+        let protect_result = unsafe { mprotect(ptr, len, PROT_READ | PROT_EXEC) };
+        if protect_result != 0 {
+            unsafe {
+                let _ = munmap(ptr, len);
+            }
+            bail!("mprotect failed while sealing AOT function code executable");
         }
 
         Ok(Self {
