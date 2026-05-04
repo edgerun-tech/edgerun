@@ -81,7 +81,7 @@ export function XrayViewport() {
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas) return;
 
     const renderer = new WebGLRenderer(canvas)
     rendererRef.current = renderer
@@ -98,13 +98,13 @@ export function XrayViewport() {
       runLayerLayout(visible.nodes)
     }
 
-    const stop = renderer.startLoop(renderFrame)
+    renderFrame()
 
     const onResize = () => renderer.resize()
+
     window.addEventListener("resize", onResize)
 
     return () => {
-      stop()
       renderer.destroy()
       window.removeEventListener("resize", onResize)
     }
@@ -120,7 +120,12 @@ export function XrayViewport() {
     } else if (s.layout === "layers") {
       runLayerLayout(visible.nodes)
     }
-  }, [state.layout, state.nodes.size, state.edges.length, state.hiddenFilterKeys.size])
+    renderFrame()
+  }, [state.layout, state.nodes.size, state.edges.length, state.hiddenFilterKeys.size, renderFrame])
+
+  useEffect(() => {
+    renderFrame()
+  }, [state.zoom, state.panX, state.panY, state.yaw, state.pitch, state.selectedId, state.highlightedIds, renderFrame])
 
   const findClosestNode = useCallback((e: React.MouseEvent) => {
     const canvas = canvasRef.current

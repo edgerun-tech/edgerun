@@ -37,6 +37,18 @@ export class WebGLRenderer {
   private canvas: HTMLCanvasElement
   private animId = 0
 
+  // Cached uniform/attrib locations to avoid GL lookups every frame
+  private nodeLocations: {
+    pos: number; col: number; size: number; sel: number
+    uRes: WebGLUniformLocation | null; uZoom: WebGLUniformLocation | null
+    uPan: WebGLUniformLocation | null; uYaw: WebGLUniformLocation | null; uPitch: WebGLUniformLocation | null
+  }
+  private edgeLocations: {
+    pos: number; col: number
+    uRes: WebGLUniformLocation | null; uZoom: WebGLUniformLocation | null
+    uPan: WebGLUniformLocation | null; uYaw: WebGLUniformLocation | null; uPitch: WebGLUniformLocation | null
+  }
+
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", { alpha: true, antialias: true })
     if (!gl) throw new Error("WebGL2 not supported")
@@ -63,6 +75,31 @@ export class WebGLRenderer {
     this.glowColors = new Float32Array(MAX_BUFFERED_NODES * 4)
     this.glowSizes = new Float32Array(MAX_BUFFERED_NODES)
     this.glowSels = new Float32Array(MAX_BUFFERED_NODES)
+
+    // Cache GL locations once
+    const nPos = gl.getAttribLocation(this.nodeProgram, "a_position")
+    const nCol = gl.getAttribLocation(this.nodeProgram, "a_color")
+    const nSize = gl.getAttribLocation(this.nodeProgram, "a_size")
+    const nSel = gl.getAttribLocation(this.nodeProgram, "a_selected")
+    this.nodeLocations = {
+      pos: nPos, col: nCol, size: nSize, sel: nSel,
+      uRes: gl.getUniformLocation(this.nodeProgram, "u_resolution"),
+      uZoom: gl.getUniformLocation(this.nodeProgram, "u_zoom"),
+      uPan: gl.getUniformLocation(this.nodeProgram, "u_pan"),
+      uYaw: gl.getUniformLocation(this.nodeProgram, "u_yaw"),
+      uPitch: gl.getUniformLocation(this.nodeProgram, "u_pitch"),
+    }
+
+    const ePos = gl.getAttribLocation(this.edgeProgram, "a_position")
+    const eCol = gl.getAttribLocation(this.edgeProgram, "a_color")
+    this.edgeLocations = {
+      pos: ePos, col: eCol,
+      uRes: gl.getUniformLocation(this.edgeProgram, "u_resolution"),
+      uZoom: gl.getUniformLocation(this.edgeProgram, "u_zoom"),
+      uPan: gl.getUniformLocation(this.edgeProgram, "u_pan"),
+      uYaw: gl.getUniformLocation(this.edgeProgram, "u_yaw"),
+      uPitch: gl.getUniformLocation(this.edgeProgram, "u_pitch"),
+    }
   }
 
   resize() {
@@ -175,31 +212,24 @@ export class WebGLRenderer {
 
   private drawEdges(edgeVertCount: number, vw: number, vh: number, zoom: number, panX: number, panY: number, yaw: number, pitch: number) {
     const gl = this.gl
+    const loc = this.edgeLocations
     gl.useProgram(this.edgeProgram)
     for (let i = 0; i < 16; i++) gl.disableVertexAttribArray(i)
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.edgeBuffer)
     gl.bufferData(gl.ARRAY_BUFFER, this.edgeFloat.subarray(0, edgeVertCount * 6), gl.DYNAMIC_DRAW)
 
-    const eRes = gl.getUniformLocation(this.edgeProgram, "u_resolution")
-    const eZoom = gl.getUniformLocation(this.edgeProgram, "u_zoom")
-    const ePan = gl.getUniformLocation(this.edgeProgram, "u_pan")
-    const eYaw = gl.getUniformLocation(this.edgeProgram, "u_yaw")
-    const ePitch = gl.getUniformLocation(this.edgeProgram, "u_pitch")
-    const ePos = gl.getAttribLocation(this.edgeProgram, "a_position")
-    const eCol = gl.getAttribLocation(this.edgeProgram, "a_color")
+    if (loc.uRes) gl.uniform2f(loc.uRes, vw, vh)
+    if (loc.uZoom) gl.uniform1f(loc.uZoom, zoom)
+    if (loc.uPan) gl.uniform2f(loc.uPan, panX, panY)
+    if (loc.uYaw) gl.uniform1f(loc.uYaw, yaw)
+    if (loc.uPitch) gl.uniform1f(loc.uPitch, pitch)
 
-    if (eRes) gl.uniform2f(eRes, vw, vh)
-    if (eZoom) gl.uniform1f(eZoom, zoom)
-    if (ePan) gl.uniform2f(ePan, panX, panY)
-    if (eYaw) gl.uniform1f(eYaw, yaw)
-    if (ePitch) gl.uniform1f(ePitch, pitch)
-
-    if (ePos >= 0 && eCol >= 0) {
-      gl.enableVertexAttribArray(ePos)
-      gl.enableVertexAttribArray(eCol)
-      gl.vertexAttribPointer(ePos, 3, gl.FLOAT, false, 24, 0)
-      gl.vertexAttribPointer(eCol, 3, gl.FLOAT, false, 24, 12)
+    if (loc.pos >= 0 && loc.col >= 0) {
+      gl.enableVertexAttribArray(loc.pos)
+      gl.enableVertexAttribArray(loc.col)
+      gl.vertexAttribPointer(loc.pos, 3, gl.FLOAT, false, 24, 0)
+      gl.vertexAttribPointer(loc.col, 3, gl.FLOAT, false, 24, 12)
       gl.drawArrays(gl.LINES, 0, edgeVertCount)
     }
   }
@@ -219,67 +249,49 @@ export class WebGLRenderer {
     pitch: number,
   ) {
     const gl = this.gl
+    const loc = this.nodeLocations
     gl.useProgram(this.nodeProgram)
     for (let i = 0; i < 16; i++) gl.disableVertexAttribArray(i)
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.nodeBuffers.positions)
     gl.bufferData(gl.ARRAY_BUFFER, positions.subarray(0, nodeCount * 3), gl.DYNAMIC_DRAW)
-    const nPos = gl.getAttribLocation(this.nodeProgram, "a_position")
-    if (nPos >= 0) {
-      gl.enableVertexAttribArray(nPos)
-      gl.vertexAttribPointer(nPos, 3, gl.FLOAT, false, 0, 0)
+    if (loc.pos >= 0) {
+      gl.enableVertexAttribArray(loc.pos)
+      gl.vertexAttribPointer(loc.pos, 3, gl.FLOAT, false, 0, 0)
     }
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.nodeBuffers.colors)
     gl.bufferData(gl.ARRAY_BUFFER, colors.subarray(0, nodeCount * 4), gl.DYNAMIC_DRAW)
-    const nCol = gl.getAttribLocation(this.nodeProgram, "a_color")
-    if (nCol >= 0) {
-      gl.enableVertexAttribArray(nCol)
-      gl.vertexAttribPointer(nCol, 4, gl.FLOAT, false, 0, 0)
+    if (loc.col >= 0) {
+      gl.enableVertexAttribArray(loc.col)
+      gl.vertexAttribPointer(loc.col, 4, gl.FLOAT, false, 0, 0)
     }
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.nodeBuffers.sizes)
     gl.bufferData(gl.ARRAY_BUFFER, sizes.subarray(0, nodeCount), gl.DYNAMIC_DRAW)
-    const nSize = gl.getAttribLocation(this.nodeProgram, "a_size")
-    if (nSize >= 0) {
-      gl.enableVertexAttribArray(nSize)
-      gl.vertexAttribPointer(nSize, 1, gl.FLOAT, false, 0, 0)
+    if (loc.size >= 0) {
+      gl.enableVertexAttribArray(loc.size)
+      gl.vertexAttribPointer(loc.size, 1, gl.FLOAT, false, 0, 0)
     }
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.nodeBuffers.selected)
     gl.bufferData(gl.ARRAY_BUFFER, selected.subarray(0, nodeCount), gl.DYNAMIC_DRAW)
-    const nSel = gl.getAttribLocation(this.nodeProgram, "a_selected")
-    if (nSel >= 0) {
-      gl.enableVertexAttribArray(nSel)
-      gl.vertexAttribPointer(nSel, 1, gl.FLOAT, false, 0, 0)
+    if (loc.sel >= 0) {
+      gl.enableVertexAttribArray(loc.sel)
+      gl.vertexAttribPointer(loc.sel, 1, gl.FLOAT, false, 0, 0)
     }
 
-    const nRes = gl.getUniformLocation(this.nodeProgram, "u_resolution")
-    const nZoom = gl.getUniformLocation(this.nodeProgram, "u_zoom")
-    const nPan = gl.getUniformLocation(this.nodeProgram, "u_pan")
-    const nYaw = gl.getUniformLocation(this.nodeProgram, "u_yaw")
-    const nPitch = gl.getUniformLocation(this.nodeProgram, "u_pitch")
-
-    if (nRes) gl.uniform2f(nRes, vw, vh)
-    if (nZoom) gl.uniform1f(nZoom, zoom)
-    if (nPan) gl.uniform2f(nPan, panX, panY)
-    if (nYaw) gl.uniform1f(nYaw, yaw)
-    if (nPitch) gl.uniform1f(nPitch, pitch)
+    if (loc.uRes) gl.uniform2f(loc.uRes, vw, vh)
+    if (loc.uZoom) gl.uniform1f(loc.uZoom, zoom)
+    if (loc.uPan) gl.uniform2f(loc.uPan, panX, panY)
+    if (loc.uYaw) gl.uniform1f(loc.uYaw, yaw)
+    if (loc.uPitch) gl.uniform1f(loc.uPitch, pitch)
 
     gl.drawArrays(gl.POINTS, 0, nodeCount)
   }
 
   screenToGraphCoords(sx: number, sy: number, zoom: number, panX: number, panY: number, yaw: number): [number, number] {
     return screenToGraph(sx, sy, zoom, panX, panY, yaw, this.canvas.width, this.canvas.height)
-  }
-
-  startLoop(draw: () => void) {
-    const loop = () => {
-      draw()
-      this.animId = requestAnimationFrame(loop)
-    }
-    this.animId = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(this.animId)
   }
 
   destroy() {
