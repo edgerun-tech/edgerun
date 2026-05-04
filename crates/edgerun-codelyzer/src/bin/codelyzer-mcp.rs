@@ -254,10 +254,12 @@ fn tool_grep_files(state: &mut ServerState, args: Value) -> Result<Value, String
     let query = args.get("query").and_then(Value::as_str).ok_or("missing query")?;
     let needle = query.to_lowercase();
     let limit = limit_arg(&args, 80, 200);
+    let root = state.root.clone();
     let graph = ensure_graph(state, false)?;
+    let files = graph.files.clone();
     let mut results = Vec::new();
-    for file in &graph.files {
-        let path = resolve_under_root(&state.root, &file.path)?;
+    for file in &files {
+        let path = resolve_under_root(&root, &file.path)?;
         let Ok(content) = fs::read_to_string(&path) else { continue };
         for (line_no, line) in content.lines().enumerate() {
             if line.to_lowercase().contains(&needle) {

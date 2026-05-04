@@ -38,18 +38,53 @@ pub struct AnalysisResult {
 }
 
 /// Full analysis: scan all files, build complete graph, include git info.
-/// Returns the result plus a ChangeSet describing everything that was added.
+/// Uses VFS (load_excluding) when the `vfs` feature is enabled,
+/// falling back to scan_dir otherwise.
 pub fn analyze_full(root_dir: &str) -> (AnalysisResult, ChangeSet) {
-    let file_snapshot = filesystem::scan_dir(root_dir);
-    let commit_map = fetch_commit_map(root_dir);
-    let (program, changes) = build_program(&file_snapshot, root_dir, &commit_map);
-    (
-        AnalysisResult {
-            program,
-            file_snapshot,
-        },
-        changes,
-    )
+    #[cfg(feature = "vfs")]
+    {
+        match filesystem::load_vfs(root_dir) {
+            Ok(vfs) => {
+                let commit_map = fetch_commit_map(root_dir);
+                let (program, changes) = build_program_vfs(&vfs, root_dir, &commit_map);
+                let file_snapshot = filesystem::scan_dir(root_dir); // keep for incremental diffs
+                (
+                    AnalysisResult {
+                        program,
+                        file_snapshot,
+                    },
+                    changes,
+                )
+            }
+            Err(e) => {
+                eprintln!("VFS load failed: {e}, falling back to scan_dir");
+                let file_snapshot = filesystem::scan_dir(root_dir);
+                let commit_map = fetch_commit_map(root_dir);
+                let (program, changes) = build_program(&file_snapshot, root_dir, &commit_map);
+                (
+                    AnalysisResult {
+                        program,
+                        file_snapshot,
+                    },
+                    changes,
+                )
+            }
+        }
+    }
+
+    #[cfg(not(feature = "vfs"))]
+    {
+        let file_snapshot = filesystem::scan_dir(root_dir);
+        let commit_map = fetch_commit_map(root_dir);
+        let (program, changes) = build_program(&file_snapshot, root_dir, &commit_map);
+        (
+            AnalysisResult {
+                program,
+                file_snapshot,
+            },
+            changes,
+        )
+    }
 }
 
 /// Build the full UIR program from a file snapshot.
@@ -170,6 +205,130 @@ fn build_program(
             source: "static".to_string(),
         });
         changes.edges_added.push((caller_id, callee_id, call_kind));
+    }
+
+    (program, changes)
+}
+
+/// Build the full UIR program from a VFS instance.
+/// Reads files from VFS memory instead of disk.
+#[cfg(feature = "vfs")]
+fn build_program_vfs(
+    vfs: &edgerun_vfs::SharedVFS,
+    root_dir: &str,
+    commit_map: &HashMap<String, String>,
+) -> (Program, ChangeSet) {
+    let mut program = Program::default();
+    let mut changes = ChangeSet::default();
+
+    // Phase 1: Read all files from VFS
+    let vfs_guard = vfs.read().unwrap();
+    let file_list: Vec<(String, String)> = vfs_guard
+        .files()
+        .filter_map(|(path, content)| {
+            let rel_path = path.to_string_lossy().to_string();
+            let source = String::from_utf8(content.to_vec()).ok()?;
+            Some((rel_path, source))
+        })
+        .collect();
+    drop(vfs_guard);
+
+    // Phase 2: Parse files in parallel (each thread gets its own parser)
+    let parse_results: Vec<(String, Option<parser::CachedParseResult>)> = file_list
+        .into_par_iter()
+        .map(|(rel_path, source)| {
+            let mut pool = parser::ParserPool::new();
+            let result = pool.parse_file(&rel_path, &source);
+            let cached = result.map(|r| r.to_owned());
+            (rel_path, cached)
+        })
+        .collect();
+
+    // Phase 3: Collect functions and calls, update cache
+    let mut cache = filesystem::ParseCache::load(root_dir);
+
+    // Pre-allocate with reasonable capacity to reduce reallocations
+    let mut all_functions_final: Vec<(String, String, bool)> = Vec::with_capacity(256);
+    let mut all_calls_final: Vec<(String, String, String, crate::uir::CallKind)> = Vec::with_capacity(512);
+
+    for (rel_path, cached) in parse_results {
+        if let Some(result) = cached {
+            // Use a dummy FileInfo for cache (VFS already has the data)
+            let hash_input: Vec<u8> = result
+                .functions
+                .iter()
+                .flat_map(|f| f.name.as_bytes())
+                .copied()
+                .collect();
+            let hash = filesystem::rolling_hash(&hash_input);
+            cache.insert(rel_path.clone(), hash, 0, result.clone());
+
+            for func in &result.functions {
+                all_functions_final.push((rel_path.clone(), func.name.clone(), func.is_static));
+            }
+            let pairs = parser::build_call_pairs_owned(&result.functions, &result.calls);
+            for (caller_name, raw_call) in pairs {
+                all_calls_final.push((
+                    rel_path.clone(),
+                    caller_name,
+                    raw_call.callee_name,
+                    raw_call.kind,
+                ));
+            }
+        }
+    }
+
+    // Save cache to disk
+    cache.save();
+
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    let mut file_name_to_id: HashMap<String, HashMap<String, FunctionId>> = HashMap::new();
+    let mut name_to_ids: HashMap<String, Vec<FunctionId>> = HashMap::new();
+
+    for (file, func_name, is_static) in &all_functions_final {
+        let id = format!("{}::{}", file, func_name);
+        if seen_ids.insert(id.clone()) {
+            let commit = commit_map.get(file).map(|s| short_hash(s));
+            let func = Function {
+                id: id.clone(),
+                name: func_name.clone(),
+                language: lang_for_file(file).to_string(),
+                file: file.clone(),
+                is_static: *is_static,
+                last_modified_commit: commit,
+            };
+            let fid = func.function_id();
+            program.add_function(func);
+            changes.added.push((fid.clone(), id.clone()));
+            name_to_ids
+                .entry(func_name.clone())
+                .or_default()
+                .push(fid.clone());
+            file_name_to_id
+                .entry(file.clone())
+                .or_default()
+                .insert(func_name.clone(), fid.clone());
+        }
+    }
+
+    for (file, caller_name, callee_name, kind) in &all_calls_final {
+        let caller_fid = match file_name_to_id.get(file).and_then(|m| m.get(caller_name)) {
+            Some(fid) => fid.clone(),
+            None => continue,
+        };
+        let callee_fid = match resolve_callee(callee_name, file, &file_name_to_id, &name_to_ids) {
+            Some(fid) => fid,
+            None => continue,
+        };
+        let edge = CallEdge {
+            caller: caller_fid.to_legacy(),
+            callee: callee_fid.to_legacy(),
+            kind: *kind,
+            confidence: kind.confidence(),
+            source: "static".to_string(),
+        };
+        program.add_edge(edge.clone());
+        changes.edges_added.push((caller_fid.to_legacy(), callee_fid.to_legacy(), *kind));
     }
 
     (program, changes)

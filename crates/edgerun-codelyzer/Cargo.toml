@@ -8,7 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-default = ["lang-rust", "lang-python", "lang-typescript", "lang-javascript", "lang-c", "lang-go", "lang-java"]
+default = ["lang-rust", "lang-python", "lang-typescript", "lang-javascript", "lang-c", "lang-go", "lang-java", "vfs"]
 lang-rust = ["dep:tree-sitter-rust"]
 lang-typescript = ["dep:tree-sitter-typescript"]
 lang-c = ["dep:tree-sitter-c"]
@@ -16,6 +16,7 @@ lang-python = ["dep:tree-sitter-python"]
 lang-go = ["dep:tree-sitter-go"]
 lang-java = ["dep:tree-sitter-java"]
 lang-javascript = ["dep:tree-sitter-javascript"]
+vfs = ["dep:edgerun-vfs"]
 
 [dependencies]
 tree-sitter = "0.23"
@@ -32,6 +33,7 @@ edgerun-crypto = { workspace = true, default-features = false, features = ["sha1
 edgerun-edit = { path = "../edgerun-edit", features = ["std"] }
 edgerun-glob.workspace = true
 edgerun-regex.workspace = true
+edgerun-vfs = { path = "../edgerun-vfs", optional = true }
 grep = "0.3"
 regex = "1"
 dirs = "5"

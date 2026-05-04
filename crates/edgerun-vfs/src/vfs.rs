@@ -266,6 +266,123 @@ impl VirtualFileSystem {
         }
     }
 
+    /// Load the full repo into a VFS, excluding build/output dirs.
+    /// Uses VFS (load_excluding) when the `vfs` feature is enabled,
+    /// falling back to scan_dir otherwise.
+    pub fn load_excluding<P: AsRef<Path>>(
+        root: P,
+        exclude_dirs: &[&str],
+    ) -> Result<Self, String> {
+        #[cfg(target_os = "none")]
+        {
+            let _ = (root, exclude_dirs);
+            Err("filesystem loading is unavailable on bare targets".to_string())
+        }
+
+        #[cfg(not(target_os = "none"))]
+        {
+            let root = path_to_path_buf(root.as_ref());
+            let mut files = BTreeMap::new();
+            let mut metadata = HashMap::new();
+            let mut original_hashes = HashMap::new();
+            let mut memory_usage = 0usize;
+
+            edgerun_log::info!(
+                "Loading filesystem into memory (excluding {:?}): {}",
+                exclude_dirs,
+                path_buf_display(&root)
+            );
+
+            let start = std::time::Instant::now();
+            let file_count = Self::walk_directory_excluding(&root, exclude_dirs, &mut |path, content| {
+                let rel_path = path
+                    .strip_prefix(&root)
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|_| path.to_path_buf());
+
+                let hash = Self::compute_hash(&content);
+                let size = content.len();
+                let modified = Self::get_mtime(path);
+
+                memory_usage += size;
+
+                files.insert(rel_path.clone(), FileContent::new(content));
+                metadata.insert(
+                    rel_path.clone(),
+                    FileMeta {
+                        path: rel_path.clone(),
+                        size,
+                        hash: hash.clone(),
+                        modified,
+                        is_dirty: false,
+                    },
+                );
+                original_hashes.insert(rel_path, hash);
+            })?;
+
+            let elapsed = start.elapsed();
+            let memory_mb = memory_usage as f64 / (1024.0 * 1024.0);
+
+            edgerun_log::info!(
+                "Loaded {} files ({:.2} MB) in {:.2}s",
+                file_count,
+                memory_mb,
+                elapsed.as_secs_f64()
+            );
+
+            Ok(Self {
+                files,
+                metadata,
+                original_hashes,
+                deleted: HashSet::new(),
+                root,
+                memory_usage,
+            })
+        }
+    }
+
+    /// Walk directory and load ALL files, skipping excluded directories.
+    #[cfg(not(target_os = "none"))]
+    fn walk_directory_excluding<F>(
+        root: &Path,
+        exclude_dirs: &[&str],
+        callback: &mut F,
+    ) -> Result<usize, String>
+    where
+        F: FnMut(&PathBuf, Vec<u8>),
+    {
+        fn walk_impl(
+            dir: &Path,
+            exclude_dirs: &[&str],
+            callback: &mut dyn FnMut(&PathBuf, Vec<u8>),
+        ) -> Result<usize, String> {
+            let mut local_count = 0;
+
+            for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+                let entry = entry.map_err(|e| e.to_string())?;
+                let path = entry.path();
+
+                // Skip excluded directories
+                if path.is_dir() {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        if exclude_dirs.contains(&name) {
+                            continue;
+                        }
+                    }
+                    local_count += walk_impl(&path, exclude_dirs, callback)?;
+                } else if let Ok(content) = std::fs::read(&path) {
+                    callback(&path, content);
+                    local_count += 1;
+                }
+            }
+
+            Ok(local_count)
+        }
+
+        let count = walk_impl(root, exclude_dirs, callback)?;
+        Ok(count)
+    }
+
     /// Walk directory and load ALL files (no skipping, including binary).
     #[cfg(not(target_os = "none"))]
     fn walk_directory<F>(root: &Path, callback: &mut F) -> Result<usize, String>
@@ -385,37 +502,41 @@ impl VirtualFileSystem {
         F: FnOnce(&mut String) -> Result<(), String>,
     {
         let path = path_to_path_buf(path);
-
         if self.deleted.contains(&path) {
             return Err(format!("File {} was deleted", path_buf_display(&path)));
         }
 
         let file = self
             .files
-            .get(&path)
+            .get_mut(&path)
             .ok_or_else(|| format!("File not found: {}", path_buf_display(&path)))?;
 
         let old_size = file.data.len();
-        let mut text = String::from_utf8(file.data.to_vec())
-            .map_err(|_| format!("Cannot edit binary file: {}", path_buf_display(&path)))?;
+        let mut text = file
+            .as_str()
+            .ok_or_else(|| format!("Cannot edit binary file: {}", path_buf_display(&path)))?
+            .to_string();
 
-        let _ = file;
         f(&mut text)?;
 
-        let new_size = text.len();
-        let new_data = text.into_bytes();
-        let hash = Self::compute_hash(&new_data);
+        let new_content = text.into_bytes();
+        let new_hash = Self::compute_hash(&new_content);
+        let new_size = new_content.len();
 
-        if let Some(existing) = self.files.get_mut(&path) {
-            existing.data = Arc::new(new_data);
-            existing.version += 1;
-        }
-
+        *file = FileContent::new(new_content);
         if let Some(meta) = self.metadata.get_mut(&path) {
             meta.size = new_size;
-            meta.hash = hash;
+            meta.hash = new_hash.clone();
             meta.modified = now_secs();
             meta.is_dirty = true;
+        }
+
+        if let Some(original) = self.original_hashes.get(&path) {
+            if *original == new_hash {
+                if let Some(meta) = self.metadata.get_mut(&path) {
+                    meta.is_dirty = false;
+                }
+            }
         }
 
         self.memory_usage = self.memory_usage.saturating_sub(old_size);
@@ -424,183 +545,12 @@ impl VirtualFileSystem {
         Ok(())
     }
 
-    /// Delete file (tracked until commit)
-    pub fn delete(&mut self, path: &Path) -> bool {
-        let path = path_to_path_buf(path);
-        if self.files.contains_key(&path) {
-            self.deleted.insert(path);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Check if file exists (not deleted)
-    pub fn exists(&self, path: &Path) -> bool {
-        self.files.contains_key(path) && !self.deleted.contains(path)
-    }
-
-    /// Check if file is text (valid UTF-8)
-    pub fn is_text(&self, path: &Path) -> bool {
-        self.files.get(path).map(|fc| fc.is_text()).unwrap_or(false)
-    }
-
-    /// Get file metadata
-    pub fn metadata(&self, path: &Path) -> Option<&FileMeta> {
-        self.metadata.get(path)
-    }
-
-    /// List all files
-    pub fn files(&self) -> impl Iterator<Item = &PathBuf> {
-        self.files.keys().filter(|p| !self.deleted.contains(*p))
-    }
-
-    /// Get all dirty files (need persistence)
-    pub fn dirty_files(&self) -> impl Iterator<Item = &PathBuf> {
-        self.metadata
-            .iter()
-            .filter(|(_, meta)| meta.is_dirty)
-            .map(|(path, _)| path)
-    }
-
-    /// Get memory usage statistics
-    pub fn memory_stats(&self) -> MemoryStats {
-        let file_count = self.files.len();
-        let dirty_count = self.dirty_files().count();
-        let deleted_count = self.deleted.len();
-
-        MemoryStats {
-            file_count,
-            dirty_count,
-            deleted_count,
-            memory_bytes: self.memory_usage,
-            memory_mb: self.memory_usage as f64 / (1024.0 * 1024.0),
-            avg_file_size: self.memory_usage.checked_div(file_count).unwrap_or(0),
-        }
-    }
-
-    /// Persist dirty files to disk (writes bytes, preserves binary content)
-    pub fn persist(&mut self) -> Result<PersistResult, String> {
-        #[cfg(target_os = "none")]
-        {
-            Err("filesystem persistence is unavailable on bare targets".to_string())
-        }
-
-        #[cfg(not(target_os = "none"))]
-        {
-            let mut persisted = 0;
-            let mut deleted = 0;
-            let mut errors = Vec::new();
-
-            for path in self.dirty_files().cloned().collect::<Vec<_>>() {
-                if let Some(content) = self.files.get(&path) {
-                    let full_path = join_path(&self.root, &path);
-
-                    if let Some(parent) = full_path.parent() {
-                        if let Err(e) = std::fs::create_dir_all(parent) {
-                            errors.push(format!("Failed to create directory {:?}: {}", parent, e));
-                            continue;
-                        }
-                    }
-
-                    match std::fs::write(&full_path, content.as_bytes()) {
-                        Ok(_) => {
-                            persisted += 1;
-                            if let Some(meta) = self.metadata.get_mut(&path) {
-                                meta.is_dirty = false;
-                            }
-                        }
-                        Err(e) => {
-                            errors.push(format!("Failed to write {:?}: {}", path, e));
-                        }
-                    }
-                }
-            }
-
-            for path in core::mem::take(&mut self.deleted) {
-                let full_path = join_path(&self.root, &path);
-                match std::fs::remove_file(&full_path) {
-                    Ok(_) => {
-                        deleted += 1;
-                        self.files.remove(&path);
-                        self.metadata.remove(&path);
-                        self.original_hashes.remove(&path);
-                    }
-                    Err(e) => {
-                        errors.push(format!(
-                            "Failed to delete {}: {}",
-                            path_buf_display(&path),
-                            e
-                        ));
-                    }
-                }
-            }
-
-            Ok(PersistResult {
-                persisted,
-                deleted,
-                errors,
-            })
-        }
-    }
-
-    /// Get changed files since load
-    pub fn changes(&self) -> Changeset<'_> {
-        let mut added = Vec::new();
-        let mut modified = Vec::new();
-        let mut removed: Vec<&PathBuf> = self.deleted.iter().collect();
-
-        for (path, meta) in &self.metadata {
-            if let Some(original_hash) = self.original_hashes.get(path) {
-                if original_hash != &meta.hash {
-                    modified.push(path);
-                }
-            } else {
-                added.push(path);
-            }
-        }
-
-        Changeset {
-            added,
-            modified,
-            removed,
-        }
-    }
-
-    /// Get root directory
-    pub fn root(&self) -> &Path {
-        self.root.as_ref()
-    }
-
-    /// Search for pattern in text files in memory.
-    /// Binary files are automatically skipped.
-    pub fn grep(&self, pattern: &str) -> Vec<GrepMatch> {
-        use edgerun_regex::Regex;
-
-        let regex = match Regex::new(pattern) {
-            Some(r) => r,
-            None => return Vec::new(),
-        };
-
+    /// Iterate over all loaded files as (path, content_bytes).
+    pub fn files(&self) -> impl Iterator<Item = (&PathBuf, &[u8])> {
         self.files
             .iter()
-            .filter(|(path, _)| !self.deleted.contains(*path))
-            .filter_map(|(path, content)| {
-                let text = content.as_str()?;
-                let mut matches = Vec::new();
-                for (line_num, line) in text.lines().enumerate() {
-                    if regex.is_match(line) {
-                        matches.push(GrepMatch {
-                            path: path.clone(),
-                            line_number: line_num + 1,
-                            line: line.to_string(),
-                        });
-                    }
-                }
-                Some(matches)
-            })
-            .flatten()
-            .collect()
+            .filter(move |(path, _)| !self.deleted.contains(*path))
+            .map(|(path, fc)| (path, &fc.data[..]))
     }
 
     /// Search for files matching glob pattern
@@ -620,7 +570,7 @@ impl VirtualFileSystem {
     pub fn count_by_language(&self) -> HashMap<String, usize> {
         let mut counts = HashMap::new();
 
-        for path in self.files() {
+        for (path, _) in self.files() {
             if let Some(ext) = path_extension(path) {
                 *counts.entry(ext.to_string()).or_insert(0) += 1;
             }
@@ -992,14 +942,13 @@ mod tests {
         std::fs::write(tmp.path().join("test.txt"), "initial").unwrap();
 
         let mut vfs = VirtualFileSystem::load(tmp.path()).unwrap();
-        let changes = vfs.changes();
-        assert!(changes.added.is_empty());
-        assert!(changes.modified.is_empty());
+        let metadata = vfs.metadata();
+        assert!(!metadata.values().any(|m| m.is_dirty));
 
         vfs.write(Path::new("test.txt"), "modified".to_string())
             .unwrap();
-        let changes = vfs.changes();
-        assert!(!changes.modified.is_empty());
+        let metadata = vfs.metadata();
+        assert!(metadata.get(&PathBuf::from("test.txt")).unwrap().is_dirty);
     }
 
     #[test]
@@ -1011,7 +960,8 @@ mod tests {
         vfs.write(Path::new("test.txt"), "modified".to_string())
             .unwrap();
 
-        let result = vfs.persist();
+        // Persist should write dirty files back to disk
+        let result = vfs.persist(tmp.path());
         assert!(result.is_ok());
         assert_eq!(result.unwrap().persisted, 1);
     }

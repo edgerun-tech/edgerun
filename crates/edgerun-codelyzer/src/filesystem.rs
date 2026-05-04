@@ -205,6 +205,20 @@ fn make_relative(path: &Path, root: &Path) -> String {
         .replace('\\', "/")
 }
 
+/// Load the full repo into a VFS, excluding build/output dirs.
+/// Requires the `vfs` feature and edgerun-vfs as a dependency.
+#[cfg(feature = "vfs")]
+pub fn load_vfs(root: &str) -> Result<edgerun_vfs::SharedVFS, String> {
+    use edgerun_vfs::VirtualFileSystem;
+
+    let exclude_dirs = &["target", "node_modules", ".git", "build", "dist", "out", "coverage", ".next", ".turbo", "third_party", "vendor"];
+
+    let vfs = VirtualFileSystem::load_excluding(root, exclude_dirs)
+        .map_err(|e| format!("VFS load failed: {e}"))?;
+
+    Ok(std::sync::Arc::new(std::sync::RwLock::new(vfs)))
+}
+
 // ─── Parse Cache ──────────────────────────────────────────────────────
 
 use std::path::PathBuf;
