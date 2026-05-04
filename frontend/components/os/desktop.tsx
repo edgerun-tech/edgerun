@@ -8,7 +8,6 @@ import { AppOverlayHost } from "./app-overlay-host"
 import { launchApp, getAppIcon } from "@/stores/app-launcher"
 import { AuthOverlay } from "./auth-overlay"
 import { WidgetPanel } from "./widget-panel"
-import { WorkspaceStatusPanel } from "@/components/workspace"
 import { useAuth } from "@/hooks/use-auth"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
 import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
@@ -48,7 +47,7 @@ export function Desktop() {
 
   useEffect(() => {
     if (!showDesktop) return
-    const PINNED_APP_IDS = ["network-monitor", "resource-monitor", "compute-node"]
+    const PINNED_APP_IDS = ["network-monitor", "compute-node"]
     const surfaces = appSurfacesStore.get()
     for (const appId of PINNED_APP_IDS) {
       const alreadyPinned = surfaces.some((s) => s.appId === appId && s.kind === "pinned-widget")
@@ -205,8 +204,6 @@ export function Desktop() {
           onFocus={focusAppSurface}
           onClose={handleCloseSurface}
         />
-
-        <WorkspaceStatusPanel />
       </div>
     </div>
   )
