@@ -11,7 +11,7 @@ import { XrayDesktopSurface } from "@/components/os/xray-desktop-surface"
 import { AppOverlayHost } from "@/components/os/app-overlay-host"
 import { SettingsApp } from "@/components/os/settings-app"
 import { FinancesApp } from "@/components/os/finances-app"
-import { ResourceMonitor } from "@/components/os/resource-monitor"
+import { CodelyzerNetworkPanel } from "@/components/sections/codelyzer-network"
 import { XrayWorkspace } from "@/features/xray"
 import type { AppSurfaceDef } from "@/stores/desktop-store"
 
@@ -128,8 +128,8 @@ function FinancesPreview() {
   return <PanelFrame><FinancesApp /></PanelFrame>
 }
 
-function ResourceMonitorPreview() {
-  return <PanelFrame><ResourceMonitor /></PanelFrame>
+function CodelyzerNetworkPreview() {
+  return <PanelFrame><CodelyzerNetworkPanel /></PanelFrame>
 }
 
 function XrayWorkspacePreview() {
@@ -170,12 +170,12 @@ export const COMPONENT_PREVIEWS: ComponentPreview[] = [
     component: FinancesPreview,
   },
   {
-    id: "resource-monitor",
-    title: "Resource monitor",
+    id: "codelyzer-network-panel",
+    title: "Codelyzer network panel",
     group: "sections",
-    description: "Candidate pinned-widget section. Should not own desktop layout itself.",
-    status: "candidate",
-    component: ResourceMonitorPreview,
+    description: "Lists active repository graph connections from the local codelyzer bridge.",
+    status: "canonical",
+    component: CodelyzerNetworkPreview,
   },
   {
     id: "xray-workspace",
