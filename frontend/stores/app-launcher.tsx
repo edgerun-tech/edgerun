@@ -3,6 +3,7 @@ import { windowsStore, openWindow, closeWindow, addLog, type OpenWindowDef } fro
 import { getBuiltinApp, BUILTIN_ICON_MAP } from "@/platform/registries/builtin-app-registry"
 import { getDefaultSize } from "@/platform/registries/window-registry"
 import { createAppLaunchPlan } from "@/platform/runtime/app-manager"
+import { isAppInstalled } from "@/stores/installed-apps-store"
 import type { AppDefinition } from "@/platform/types/app-definition"
 
 export function getAppIcon(appId: string): React.ReactNode {
@@ -13,7 +14,12 @@ export function getAppIcon(appId: string): React.ReactNode {
   return <div className="h-4 w-4 rounded bg-primary/20" />
 }
 
-export function launchApp(app: AppDefinition, component?: React.ReactNode): OpenWindowDef {
+export function launchApp(app: AppDefinition, component?: React.ReactNode): OpenWindowDef | null {
+  if (!component && !isAppInstalled(app.appId)) {
+    addLog("warning", `${app.name} is not installed`)
+    return null
+  }
+
   if (!component) {
     const plan = createAppLaunchPlan(app, { launchApp })
     component = plan.component
