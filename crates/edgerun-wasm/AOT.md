@@ -28,7 +28,7 @@ The artifact can now be decoded, inspected, verified against the original WASM i
 
 ## Current subset
 
-The first compiler only accepts the small deterministic integer subset below:
+The compiler currently accepts the deterministic integer subset below:
 
 - `i32.const`
 - `i64.const`
@@ -41,6 +41,28 @@ The first compiler only accepts the small deterministic integer subset below:
 - `i64.add`
 - `i64.sub`
 - `i64.mul`
+- `i32.eqz`
+- `i64.eqz`
+- `i32.eq`
+- `i32.ne`
+- `i32.lt_s`
+- `i32.lt_u`
+- `i32.gt_s`
+- `i32.gt_u`
+- `i32.le_s`
+- `i32.le_u`
+- `i32.ge_s`
+- `i32.ge_u`
+- `i64.eq`
+- `i64.ne`
+- `i64.lt_s`
+- `i64.lt_u`
+- `i64.gt_s`
+- `i64.gt_u`
+- `i64.le_s`
+- `i64.le_u`
+- `i64.ge_s`
+- `i64.ge_u`
 - `return`
 - `end`
 
@@ -50,6 +72,7 @@ The x86_64 backend currently emits a simple stack-frame function:
 - non-parameter locals are zero-initialized
 - WASM operand stack values are represented with native push/pop operations
 - `i32` values are zero-extended and arithmetic is emitted with 32-bit x86 instructions to preserve wrapping/truncation semantics
+- integer comparisons emit `0`/`1` `i32` boolean results through `setcc`
 - the function epilogue restores `rsp`/`rbp` before returning
 
 Unsupported on purpose for now:
@@ -120,17 +143,17 @@ The loader is intentionally narrow:
 - checks target and compiler strings
 - selects a function by export name or function index
 - parses the compact integer signature
-- maps the function code into executable memory
+- maps the function code into writeable memory, seals it executable, then calls it
 - calls it through a fixed six-argument C ABI shim
 
 This is a local developer harness, not the final production execution sandbox.
 
 ## Next compiler steps
 
-1. Replace RWX mapping with write-then-exec mapping or memfd-backed executable pages.
-2. Add deterministic hostcall ABI lowering.
+1. Add `select`.
+2. Add `block`/`loop`/`br`/`br_if` lowering.
 3. Add memory load/store with explicit bounds traps.
-4. Add block/loop/br/br_if lowering.
+4. Add deterministic hostcall ABI lowering.
 5. Add direct/indirect calls with strict signature checks.
 6. Add aarch64 backend.
 7. Replace SHA-256 with the repo-wide EdgeRun crypto boundary once this path is wired into runtime artifacts.
