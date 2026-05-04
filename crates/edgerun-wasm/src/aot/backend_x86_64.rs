@@ -10,19 +10,21 @@ impl X86_64Backend {
         let frame = Frame::new(ir)?;
         frame.emit_prologue(&mut code, ir)?;
 
-        let mut blocks: Vec<BlockFixup> = Vec::new();
+        let mut controls: Vec<ControlFrame> = Vec::new();
         let mut terminated = false;
         for op in &ir.ops {
             match *op {
                 IrOp::Nop => {}
-                IrOp::Block => blocks.push(BlockFixup::default()),
+                IrOp::Block => controls.push(ControlFrame::block()),
+                IrOp::Loop => controls.push(ControlFrame::loop_at(code.len())),
                 IrOp::BlockEnd => {
-                    let block = blocks
+                    let frame = controls
                         .pop()
-                        .ok_or_else(|| anyhow::anyhow!("block.end without matching block"))?;
-                    patch_block_end(&mut code, block)?;
+                        .ok_or_else(|| anyhow::anyhow!("block.end without matching control frame"))?;
+                    patch_control_end(&mut code, frame)?;
                 }
-                IrOp::BrIf(depth) => emit_br_if(&mut code, &mut blocks, depth)?,
+                IrOp::Br(depth) => emit_br(&mut code, &mut controls, depth)?,
+                IrOp::BrIf(depth) => emit_br_if(&mut code, &mut controls, depth)?,
                 IrOp::I32Const(v) => emit_push_i32(&mut code, v),
                 IrOp::I64Const(v) => emit_push_i64(&mut code, v),
                 IrOp::GlobalGet(i, ty) => frame.emit_global_get(&mut code, i, ty)?,
@@ -59,8 +61,8 @@ impl X86_64Backend {
                 IrOp::I64GeS => emit_i64_cmp(&mut code, SetCc::GeS),
                 IrOp::I64GeU => emit_i64_cmp(&mut code, SetCc::GeU),
                 IrOp::Return | IrOp::End => {
-                    if !blocks.is_empty() {
-                        bail!("function terminator reached with {} open block(s)", blocks.len());
+                    if !controls.is_empty() {
+                        bail!("function terminator reached with {} open control frame(s)", controls.len());
                     }
                     emit_return(&mut code, ir.sig.results.first().copied());
                     terminated = true;
@@ -70,8 +72,8 @@ impl X86_64Backend {
         }
 
         if !terminated {
-            if !blocks.is_empty() {
-                bail!("implicit function terminator reached with {} open block(s)", blocks.len());
+            if !controls.is_empty() {
+                bail!("implicit function terminator reached with {} open control frame(s)", controls.len());
             }
             emit_return(&mut code, ir.sig.results.first().copied());
         }
@@ -80,30 +82,97 @@ impl X86_64Backend {
     }
 }
 
-#[derive(Default)]
-struct BlockFixup {
+struct ControlFrame {
+    kind: ControlKind,
+    start: usize,
     end_patches: Vec<usize>,
 }
 
-fn emit_br_if(code: &mut Vec<u8>, blocks: &mut [BlockFixup], depth: u32) -> Result<()> {
-    if depth as usize >= blocks.len() {
-        bail!("br_if depth {} outside {} open block(s)", depth, blocks.len());
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ControlKind {
+    Block,
+    Loop,
+}
+
+impl ControlFrame {
+    fn block() -> Self {
+        Self {
+            kind: ControlKind::Block,
+            start: 0,
+            end_patches: Vec::new(),
+        }
     }
 
+    fn loop_at(start: usize) -> Self {
+        Self {
+            kind: ControlKind::Loop,
+            start,
+            end_patches: Vec::new(),
+        }
+    }
+}
+
+fn emit_br(code: &mut Vec<u8>, controls: &mut [ControlFrame], depth: u32) -> Result<()> {
+    let target = control_target(controls, depth)?;
+    emit_jmp_to_target(code, target)
+}
+
+fn emit_br_if(code: &mut Vec<u8>, controls: &mut [ControlFrame], depth: u32) -> Result<()> {
     code.push(0x58); // pop rax = i32 condition
     code.extend_from_slice(&[0x85, 0xC0]); // test eax, eax
-    code.extend_from_slice(&[0x0F, 0x85]); // jnz rel32
-    let patch_at = code.len();
-    code.extend_from_slice(&0i32.to_le_bytes());
 
-    let target_index = blocks.len() - 1 - depth as usize;
-    blocks[target_index].end_patches.push(patch_at);
+    let target_index = control_index(controls, depth)?;
+    if controls[target_index].kind == ControlKind::Loop {
+        code.extend_from_slice(&[0x0F, 0x85]); // jnz rel32
+        let imm_at = code.len();
+        code.extend_from_slice(&0i32.to_le_bytes());
+        patch_rel32(code, imm_at, controls[target_index].start)?;
+    } else {
+        code.extend_from_slice(&[0x0F, 0x85]); // jnz rel32
+        let patch_at = code.len();
+        code.extend_from_slice(&0i32.to_le_bytes());
+        controls[target_index].end_patches.push(patch_at);
+    }
     Ok(())
 }
 
-fn patch_block_end(code: &mut [u8], block: BlockFixup) -> Result<()> {
+fn control_index(controls: &[ControlFrame], depth: u32) -> Result<usize> {
+    if depth as usize >= controls.len() {
+        bail!("branch depth {} outside {} open control frame(s)", depth, controls.len());
+    }
+    Ok(controls.len() - 1 - depth as usize)
+}
+
+fn control_target(controls: &mut [ControlFrame], depth: u32) -> Result<BranchTarget> {
+    let target_index = control_index(controls, depth)?;
+    if controls[target_index].kind == ControlKind::Loop {
+        Ok(BranchTarget::Resolved(controls[target_index].start))
+    } else {
+        Ok(BranchTarget::PatchBlockEnd(target_index))
+    }
+}
+
+enum BranchTarget {
+    Resolved(usize),
+    PatchBlockEnd(usize),
+}
+
+fn emit_jmp_to_target(code: &mut Vec<u8>, target: BranchTarget) -> Result<()> {
+    code.push(0xE9); // jmp rel32
+    let patch_at = code.len();
+    code.extend_from_slice(&0i32.to_le_bytes());
+    match target {
+        BranchTarget::Resolved(target) => patch_rel32(code, patch_at, target),
+        BranchTarget::PatchBlockEnd(_) => {
+            // Caller must register the patch; this variant is handled by emit_unconditional_br.
+            bail!("internal error: unresolved block-end jump emitted without registration")
+        }
+    }
+}
+
+fn patch_control_end(code: &mut [u8], frame: ControlFrame) -> Result<()> {
     let target = code.len();
-    for patch_at in block.end_patches {
+    for patch_at in frame.end_patches {
         patch_rel32(code, patch_at, target)?;
     }
     Ok(())
