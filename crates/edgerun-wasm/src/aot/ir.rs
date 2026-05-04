@@ -78,6 +78,7 @@ pub enum IrOp {
     LocalTee(u32),
     Load(LoadKind, MemOp),
     Store(StoreKind, MemOp),
+    MemoryCopy,
     Select(ValueType),
     I32Add,
     I32Sub,
@@ -131,6 +132,7 @@ impl IrOp {
             Self::Load(LoadKind::I64, mem) => format!("i64.load offset={}", mem.offset),
             Self::Store(StoreKind::I32, mem) => format!("i32.store offset={}", mem.offset),
             Self::Store(StoreKind::I64, mem) => format!("i64.store offset={}", mem.offset),
+            Self::MemoryCopy => "memory.copy".to_string(),
             Self::Select(ty) => format!("select {}", ty.as_str()),
             Self::I32Add => "i32.add".to_string(),
             Self::I32Sub => "i32.sub".to_string(),
@@ -234,6 +236,11 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
             IrOp::LocalTee(i) => { let expected = local_type(ir, i)?; let actual = stack.pop().with_context(|| format!("{} stack underflow at local.tee {i}", ir.name()))?; if actual != expected { bail!("{} local.tee {} type mismatch: expected {}, found {}", ir.name(), i, expected.as_str(), actual.as_str()); } stack.push(expected); }
             IrOp::Load(kind, _) => { pop1(&mut stack, ValueType::I32, ir, op)?; stack.push(match kind { LoadKind::I32 => ValueType::I32, LoadKind::I64 => ValueType::I64 }); }
             IrOp::Store(kind, _) => { let val_ty = match kind { StoreKind::I32 => ValueType::I32, StoreKind::I64 => ValueType::I64 }; pop1(&mut stack, val_ty, ir, op)?; pop1(&mut stack, ValueType::I32, ir, op)?; }
+            IrOp::MemoryCopy => {
+                pop1(&mut stack, ValueType::I32, ir, op)?;
+                pop1(&mut stack, ValueType::I32, ir, op)?;
+                pop1(&mut stack, ValueType::I32, ir, op)?;
+            }
             IrOp::Select(ty) => {
                 pop1(&mut stack, ValueType::I32, ir, op)?;
                 pop1(&mut stack, ty, ir, op)?;
