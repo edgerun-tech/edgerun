@@ -16,6 +16,10 @@ path = "src/validate.rs"
 name = "edgerun-runtime"
 path = "src/runtime.rs"
 
+[[bin]]
+name = "edgerun-aot"
+path = "src/aot.rs"
+
 [dependencies]
 anyhow = "1.0"
 edgerun-clap = { workspace = true, features = ["std"] }
