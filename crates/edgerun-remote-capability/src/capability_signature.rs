@@ -48,11 +48,9 @@ pub fn sign_message_bytes<M>(
     clear_sig: impl FnOnce(&mut M),
     set_sig: impl FnOnce(&mut M, Signature),
 ) -> Result<(), String> {
-    // Clear signature and serialize
+    // Clear signature and build native canonical bytes
     clear_sig(msg);
-    let mut buf = Vec::new();
-    msg.encode(&mut buf)
-        .map_err(|e| format!("proto encode: {e}"))?;
+    let buf = capability_canonical_bytes(msg);
 
     // Sign with domain separation for capability protocol messages
     let sig_bytes = signer
@@ -91,12 +89,9 @@ pub fn verify_message_bytes<M: Clone>(
         return Err(format!("invalid signature length: {}", sig.value.len()));
     }
 
-    // Clear signature and re-serialize
+    // Clear signature and build native canonical bytes
     let msg_clone = clear_sig(msg);
-    let mut buf = Vec::new();
-    msg_clone
-        .encode(&mut buf)
-        .map_err(|e| format!("proto encode: {e}"))?;
+    let buf = capability_canonical_bytes(&msg_clone);
 
     // Build verifying key from sender's NodeID (x||y without 0x04 prefix)
     let mut sec1_bytes = [0u8; 65];
@@ -502,29 +497,6 @@ mod tests {
         let err = verify_invocation(&invocation, NodeID([0u8; 64])).unwrap_err();
         assert!(err.contains("unsupported signature algorithm"));
     }
-}
-
-pub fn sign_bytes(
-    message_bytes: &[u8],
-    signer: &dyn MeshSigner,
-) -> Result<Signature, CapabilitySignatureError> {
-    let sig = signer
-        .sign(message_bytes)
-        .map_err(|_| CapabilitySignatureError::SigningFailed)?;
-    Ok(Signature {
-        algorithm: 1,
-        value: sig,
-    })
-}
-
-pub fn verify_bytes(
-    message_bytes: &[u8],
-    signature: &Signature,
-    verifier: &dyn MeshVerifier,
-) -> Result<(), CapabilitySignatureError> {
-    verifier
-        .verify(message_bytes, &signature.value)
-        .map_err(|_| CapabilitySignatureError::VerificationFailed)
 }
 
 fn capability_canonical_bytes<T>(_msg: &T) -> Vec<u8> {
