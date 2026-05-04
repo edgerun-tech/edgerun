@@ -46,6 +46,10 @@ const FileManagerApp = dynamic(
   () => import("@/components/os/file-manager").then((mod) => mod.FileManager),
   { ssr: false, loading: LoadingApp },
 )
+const StorageApp = dynamic(
+  () => import("@/components/os/storage-app").then((mod) => mod.StorageApp),
+  { ssr: false, loading: LoadingApp },
+)
 const GmailApp = dynamic(
   () => import("@/components/os/gmail-app").then((mod) => mod.GmailApp),
   { ssr: false, loading: LoadingApp },
@@ -90,6 +94,8 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
       return <WorkflowBuilderApp onClose={() => {}} />
     case "file-browser":
       return <FileManagerApp />
+    case "storage":
+      return <StorageApp />
     case "gmail":
       return <GmailApp />
     case "settings":
