@@ -2,15 +2,13 @@
 
 use crate::command_dispatch::{
     build_command_result_payload, extract_payload_or_reject, record_and_respond,
-    record_and_respond_with_result_object, store_object_or_log, CommandDispatchResult,
-    ControllerSet,
+    record_and_respond_with_result_object, CommandDispatchResult, ControllerSet,
 };
-use crate::command_dispatch_event::record_action_event;
+use crate::command_result_codec::encode_command_result_payload;
 use edgerun_core::util::{bytes_to_hex, now_unix_millis_i64};
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::stream::{
-    command_envelope, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload,
-    EventType, InstallAppPayload, UninstallAppPayload,
+    CommandEnvelope, CommandType, InstallAppPayload, UninstallAppPayload,
 };
 use edgerun_storage::NodeStore;
 use prost::Message;
@@ -99,7 +97,9 @@ pub fn dispatch_install_app(
 
     edgerun_log::info!("install_app: domain={}", domain);
 
-    // Decode AppPackage from the object content to resolve internal ObjectRefs
+    // Decode AppPackage from the object content to resolve internal ObjectRefs.
+    // AppPackage is still a protobuf boundary payload until app packaging is moved
+    // to edgerun-wire.
     let app_package: edgerun_proto::edgerun::v0::stream::AppPackage =
         match prost::Message::decode(package_bytes.content.as_slice()) {
             Ok(pkg) => pkg,
@@ -144,7 +144,7 @@ pub fn dispatch_install_app(
         None,
         Some(package_object_ref),
     );
-    let response_bytes = prost::Message::encode_to_vec(&result_payload);
+    let response_bytes = encode_command_result_payload(&result_payload);
 
     record_and_respond_with_result_object(
         command,
@@ -210,7 +210,7 @@ pub fn dispatch_uninstall_app(
 
     // Look up the app by app_id in the index
     let mut found = false;
-    if let Ok(Some(app)) = store.get_app(&bytes_to_hex(&app_id)) {
+    if let Ok(Some(_app)) = store.get_app(&bytes_to_hex(&app_id)) {
         found = true;
         edgerun_log::info!("uninstall_app: found app, marking uninstalled");
 
