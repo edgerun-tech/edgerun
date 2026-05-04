@@ -8,12 +8,14 @@ const ASSET_COLORS: Record<string, string> = {
   EDGE: "#22c55e",
   USDT: "#26a17b",
   BTC: "#f7931a",
+  ETH: "#627eea",
   SOL: "#9945ff",
 }
 
 const portfolioAssets = [
   { symbol: "EDGE", value: 247.61, amount: "134.57", fill: ASSET_COLORS.EDGE },
-  { symbol: "USDT", value: 0, amount: "0.00", fill: ASSET_COLORS.USDT },
+  { symbol: "USDT", value: 92.0, amount: "92.00", fill: ASSET_COLORS.USDT },
+  { symbol: "ETH", value: 38.5, amount: "0.012", fill: ASSET_COLORS.ETH },
   { symbol: "BTC", value: 0, amount: "0.0000", fill: ASSET_COLORS.BTC },
   { symbol: "SOL", value: 0, amount: "0.00", fill: ASSET_COLORS.SOL },
 ]
@@ -64,7 +66,7 @@ export function FinancesOverviewWidget() {
 
       <div className="relative mx-auto h-[122px] w-[122px] shrink-0">
         <PieChart width={122} height={122}>
-          <Pie data={chartData} dataKey="value" nameKey="symbol" innerRadius={36} outerRadius={52} strokeWidth={3} />
+          <Pie data={chartData} dataKey="value" nameKey="symbol" innerRadius={36} outerRadius={52} stroke="transparent" strokeWidth={0} />
           <Label
             content={({ viewBox }) => {
               if (viewBox && "cx" in viewBox && "cy" in viewBox) {
