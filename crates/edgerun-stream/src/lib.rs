@@ -11,9 +11,9 @@ extern crate std;
 
 use alloc::sync::Arc;
 use edgerun_core::prelude::v1::*;
+use edgerun_core::protocol::Timestamp;
 use edgerun_core::protocol::{Digest, EventEnvelope, EventType, Signature};
 use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
-use prost_types::Timestamp;
 
 /// A stream writer maintains the current stream head and produces signed events.
 pub struct StreamWriter {

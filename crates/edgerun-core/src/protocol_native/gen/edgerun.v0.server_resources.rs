@@ -16,7 +16,7 @@
 // 1022 REQUEST_CERTIFICATE
 // 1023 SET_SERVICE_POLICY
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CompiledBootstrapPolicyPayload {
     pub payload_version: u32,
     pub node_label: alloc::string::String,
@@ -24,86 +24,86 @@ pub struct CompiledBootstrapPolicyPayload {
     pub controller_id: alloc::vec::Vec<u8>,
     pub bootstrap_relays: alloc::vec::Vec<alloc::string::String>,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ClaimDomainPayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReleaseDomainPayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AddMailboxPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RemoveMailboxPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AddAliasPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
     pub target: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RemoveAliasPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AuthorizeContentSourcePayload {
     pub payload_version: u32,
     pub repo: alloc::string::String,
     pub allowed_ref: alloc::string::String,
     pub allowed_paths: alloc::vec::Vec<alloc::string::String>,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ContentRef {
     pub repo: alloc::string::String,
     pub commit: alloc::string::String,
     pub path: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PublishWebsitePayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
     pub content_ref: ::core::option::Option<ContentRef>,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UnpublishWebsitePayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SetAuthoritativeDnsPayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
     pub enabled: bool,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RequestCertificatePayload {
     pub payload_version: u32,
     pub name: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SetServicePolicyPayload {
     pub payload_version: u32,
     pub service: alloc::string::String,
     pub policy: alloc::string::String,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ServerResourceCommittedPayload {
     pub payload_version: u32,
     pub event_kind: i32,
     pub event_payload: alloc::vec::Vec<u8>,
     pub origin_command: ::core::option::Option<super::common::CommandRef>,
 }
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GenerationEventPayload {
     pub payload_version: u32,
     pub generation_id: alloc::vec::Vec<u8>,

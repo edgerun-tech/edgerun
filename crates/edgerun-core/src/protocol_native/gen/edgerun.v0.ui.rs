@@ -5,7 +5,7 @@
 // Canonical encoding = edgerun-wire.
 // Object ID = SHA256("edgerun:v0:object" || 0x00 || "proto-v0:UINode:1" || 0x00 || protobuf_encode(UINode))
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UiNode {
     /// Semantic node type: "text", "button", "column", "row", "spacer", "heading", "input", "image"
     pub r#type: alloc::string::String,
@@ -17,7 +17,7 @@ pub struct UiNode {
     pub action: ::core::option::Option<alloc::string::String>,
 }
 /// UIActionEvent carries a user interaction back to the WASM runtime.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UiActionEvent {
     pub event_version: u32,
     pub action: alloc::string::String,
@@ -25,7 +25,7 @@ pub struct UiActionEvent {
     pub context: ::core::option::Option<alloc::string::String>,
 }
 /// UIRenderRequest — sent from renderer to request a fresh UI tree.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UiRenderRequest {
     pub request_version: u32,
     pub last_action: ::core::option::Option<alloc::string::String>,
