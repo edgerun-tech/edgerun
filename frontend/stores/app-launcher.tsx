@@ -3,6 +3,7 @@ import {
   appSurfacesStore,
   openAppSurface,
   closeAppSurface,
+  focusAppSurface,
   addLog,
   pendingGateStore,
   type AppSurfaceDef,
@@ -28,6 +29,18 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): AppS
     return null
   }
 
+  const spec = getAppSurfaceSpec(app.appId)
+  const surfaces = appSurfacesStore.get()
+
+  if (spec.kind === "pinned-widget") {
+    const existing = surfaces.find((candidate) => candidate.appId === app.appId && candidate.kind === "pinned-widget")
+    if (existing) {
+      focusAppSurface(existing.id)
+      addLog("info", `${app.name} is already pinned`)
+      return existing
+    }
+  }
+
   if (!component) {
     const missing = getMissingCapabilities(app.appId, app.requiredCapabilityIds)
     if (missing.length > 0) {
@@ -41,9 +54,7 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): AppS
     addLog("info", `${app.name} runtime: ${plan.runtime}`)
   }
 
-  const surfaces = appSurfacesStore.get()
   const surfaceId = `surface-${app.appId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const spec = getAppSurfaceSpec(app.appId)
 
   const surface: AppSurfaceDef = {
     id: surfaceId,
@@ -60,14 +71,6 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): AppS
 
   openAppSurface(surface)
   addLog("success", `${spec.kind === "pinned-widget" ? "Pinned" : "Opened"} ${app.name}`)
-
-  // Temporary first cut: pinned widget surfaces still open as overlays until the
-  // slot renderer is wired. Keeping the kind on the surface makes the next step
-  // unambiguous without keeping old window terminology alive.
-  if (surface.kind === "pinned-widget" && surfaces.some((candidate) => candidate.appId === app.appId)) {
-    addLog("info", `${app.name} already has an active surface`)
-  }
-
   return surface
 }
 
