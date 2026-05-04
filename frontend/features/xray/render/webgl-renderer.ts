@@ -4,7 +4,6 @@ import type { XrayNode, XrayEdge, RuntimeNodeStats } from "../graph/types"
 
 const MAX_BUFFERED_NODES = 20000
 const MAX_BUFFERED_EDGES = 100000
-const XRAY_TILT = 0.72
 
 interface RenderInput {
   nodes: Map<string, XrayNode>
@@ -15,7 +14,8 @@ interface RenderInput {
   zoom: number
   panX: number
   panY: number
-  rotation: number
+  yaw: number
+  pitch: number
   runtimeMode: boolean
 }
 
@@ -80,7 +80,7 @@ export class WebGLRenderer {
   }
 
   render(input: RenderInput) {
-    const { nodes, edges, runtimeStats, selectedId, highlightedIds, zoom, panX, panY, rotation, runtimeMode } = input
+    const { nodes, edges, runtimeStats, selectedId, highlightedIds, zoom, panX, panY, yaw, pitch, runtimeMode } = input
     const gl = this.gl
     const vw = this.canvas.width
     const vh = this.canvas.height
@@ -162,20 +162,18 @@ export class WebGLRenderer {
       edgeVertCount++
     }
 
-    if (edgeVertCount > 0) {
-      this.drawEdges(edgeVertCount, vw, vh, zoom, panX, panY, rotation)
-    }
+    if (edgeVertCount > 0) this.drawEdges(edgeVertCount, vw, vh, zoom, panX, panY, yaw, pitch)
 
     if (glowCount > 0) {
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE)
-      this.drawNodes(glowCount, this.glowPositions, this.glowColors, this.glowSizes, this.glowSels, vw, vh, zoom, panX, panY, rotation)
+      this.drawNodes(glowCount, this.glowPositions, this.glowColors, this.glowSizes, this.glowSels, vw, vh, zoom, panX, panY, yaw, pitch)
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
     }
 
-    this.drawNodes(nodeCount, this.positions, this.colors, this.sizes, this.sels, vw, vh, zoom, panX, panY, rotation)
+    this.drawNodes(nodeCount, this.positions, this.colors, this.sizes, this.sels, vw, vh, zoom, panX, panY, yaw, pitch)
   }
 
-  private drawEdges(edgeVertCount: number, vw: number, vh: number, zoom: number, panX: number, panY: number, rotation: number) {
+  private drawEdges(edgeVertCount: number, vw: number, vh: number, zoom: number, panX: number, panY: number, yaw: number, pitch: number) {
     const gl = this.gl
     gl.useProgram(this.edgeProgram)
     for (let i = 0; i < 16; i++) gl.disableVertexAttribArray(i)
@@ -186,16 +184,16 @@ export class WebGLRenderer {
     const eRes = gl.getUniformLocation(this.edgeProgram, "u_resolution")
     const eZoom = gl.getUniformLocation(this.edgeProgram, "u_zoom")
     const ePan = gl.getUniformLocation(this.edgeProgram, "u_pan")
-    const eRot = gl.getUniformLocation(this.edgeProgram, "u_rotation")
-    const eTilt = gl.getUniformLocation(this.edgeProgram, "u_tilt")
+    const eYaw = gl.getUniformLocation(this.edgeProgram, "u_yaw")
+    const ePitch = gl.getUniformLocation(this.edgeProgram, "u_pitch")
     const ePos = gl.getAttribLocation(this.edgeProgram, "a_position")
     const eCol = gl.getAttribLocation(this.edgeProgram, "a_color")
 
     if (eRes) gl.uniform2f(eRes, vw, vh)
     if (eZoom) gl.uniform1f(eZoom, zoom)
     if (ePan) gl.uniform2f(ePan, panX, panY)
-    if (eRot) gl.uniform1f(eRot, rotation)
-    if (eTilt) gl.uniform1f(eTilt, XRAY_TILT)
+    if (eYaw) gl.uniform1f(eYaw, yaw)
+    if (ePitch) gl.uniform1f(ePitch, pitch)
 
     if (ePos >= 0 && eCol >= 0) {
       gl.enableVertexAttribArray(ePos)
@@ -217,7 +215,8 @@ export class WebGLRenderer {
     zoom: number,
     panX: number,
     panY: number,
-    rotation: number,
+    yaw: number,
+    pitch: number,
   ) {
     const gl = this.gl
     gl.useProgram(this.nodeProgram)
@@ -258,20 +257,20 @@ export class WebGLRenderer {
     const nRes = gl.getUniformLocation(this.nodeProgram, "u_resolution")
     const nZoom = gl.getUniformLocation(this.nodeProgram, "u_zoom")
     const nPan = gl.getUniformLocation(this.nodeProgram, "u_pan")
-    const nRot = gl.getUniformLocation(this.nodeProgram, "u_rotation")
-    const nTilt = gl.getUniformLocation(this.nodeProgram, "u_tilt")
+    const nYaw = gl.getUniformLocation(this.nodeProgram, "u_yaw")
+    const nPitch = gl.getUniformLocation(this.nodeProgram, "u_pitch")
 
     if (nRes) gl.uniform2f(nRes, vw, vh)
     if (nZoom) gl.uniform1f(nZoom, zoom)
     if (nPan) gl.uniform2f(nPan, panX, panY)
-    if (nRot) gl.uniform1f(nRot, rotation)
-    if (nTilt) gl.uniform1f(nTilt, XRAY_TILT)
+    if (nYaw) gl.uniform1f(nYaw, yaw)
+    if (nPitch) gl.uniform1f(nPitch, pitch)
 
     gl.drawArrays(gl.POINTS, 0, nodeCount)
   }
 
-  screenToGraphCoords(sx: number, sy: number, zoom: number, panX: number, panY: number, rotation: number): [number, number] {
-    return screenToGraph(sx, sy, zoom, panX, panY, rotation, this.canvas.width, this.canvas.height)
+  screenToGraphCoords(sx: number, sy: number, zoom: number, panX: number, panY: number, yaw: number): [number, number] {
+    return screenToGraph(sx, sy, zoom, panX, panY, yaw, this.canvas.width, this.canvas.height)
   }
 
   startLoop(draw: () => void) {
