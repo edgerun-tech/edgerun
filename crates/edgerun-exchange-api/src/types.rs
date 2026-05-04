@@ -6,8 +6,8 @@ extern crate alloc;
 
 use edgerun_json::{JsonValue, Map, ToJson};
 
-pub use edgerun_proto::edgerun::v0::wallet::v0::AssetRef;
-pub use edgerun_proto::edgerun::v0::wallet::v0::TxRef;
+pub use edgerun_core::protocol::edgerun_wallet_v0::AssetRef;
+pub use edgerun_core::protocol::edgerun_wallet_v0::TxRef;
 
 /// Quote request from client.
 #[derive(Debug)]
@@ -30,7 +30,7 @@ impl ToJson for ApiQuoteRequest {
         map.insert("settlement".into(), self.settlement.asset_ref_to_json());
         map.insert("pay".into(), self.pay.asset_ref_to_json());
         if let Some(ref amt) = self.amount {
-            map.insert("amount".into(), amtx_ref_to_json(t));
+            map.insert("amount".into(), self.amountx_ref_to_json(t));
         }
         map.insert(
             "mode".into(),
@@ -218,7 +218,7 @@ impl AssetRefJsonExt for AssetRef {
         let mut map = std::collections::BTreeMap::new();
         map.insert("symbol".into(), self.symbol.to_json());
         map.insert("network".into(), self.network.to_json());
-        map.insert("contract".into(), self.contract.to_json());
+        map.insert("contract".into(), self.contractx_ref_to_json(t));
         map.insert("decimals".into(), self.decimals.to_json());
         edgerun_json::JsonValue::Object(map)
     }

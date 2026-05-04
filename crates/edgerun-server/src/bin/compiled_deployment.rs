@@ -159,3 +159,5 @@ pub const DEPLOYMENT: CompiledDeployment = CompiledDeployment {
     ],
     external_cnames: &[("blog.edgerun.tech", "sylchi.github.io")],
 };
+
+fn main() {}

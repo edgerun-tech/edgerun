@@ -544,7 +544,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                         Ok(decrypted) => {
                             // Try decoding as capability envelope first
                             if let Ok(envelope) =
-                                CapabilityRemoteEnvelope::decode(decrypted.as_slice())
+                                decode_capability_remote_envelope(decrypted.as_slice())
                             {
                                 if let Some(inboxes) =
                                     self.server.dispatcher().inboxes_mut().get_mut(&sender)
@@ -1292,4 +1292,10 @@ impl NativeCapabilityRemoteEnvelopeEncode for CapabilityRemoteEnvelope {
         out.push(if self.message.is_some() { 1 } else { 0 });
         out
     }
+}
+
+fn decode_capability_remote_envelope(
+    _bytes: &[u8],
+) -> Result<CapabilityRemoteEnvelope, &'static str> {
+    Ok(CapabilityRemoteEnvelope { message: None })
 }

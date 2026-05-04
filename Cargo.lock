@@ -1764,6 +1764,7 @@ dependencies = [
  "edgerun-camera-biometrics",
  "edgerun-capabilities",
  "edgerun-capability-policy",
+ "edgerun-core",
  "edgerun-drm-display",
  "edgerun-evdev-input",
  "edgerun-fingerprint",
@@ -1874,6 +1875,7 @@ dependencies = [
 name = "edgerun-exchange-api"
 version = "0.1.1"
 dependencies = [
+ "edgerun-core",
  "edgerun-exchange",
  "edgerun-http",
  "edgerun-json",
@@ -2423,6 +2425,7 @@ version = "0.1.0"
 name = "edgerun-sdk"
 version = "0.1.1"
 dependencies = [
+ "edgerun-core",
  "edgerun-sdk-macro",
 ]
 
@@ -2603,6 +2606,7 @@ dependencies = [
  "edgerun-biometrics",
  "edgerun-camera-biometrics",
  "edgerun-capabilities",
+ "edgerun-core",
  "edgerun-encoding",
  "edgerun-linux-sysfs",
 ]
@@ -2654,6 +2658,7 @@ dependencies = [
  "anyhow",
  "edgerun-capabilities",
  "edgerun-clap",
+ "edgerun-core",
  "libc",
  "sha2",
  "wasmparser 0.224.1",

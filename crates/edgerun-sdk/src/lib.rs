@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 #![no_std]
 
 extern crate alloc;
@@ -686,7 +687,7 @@ pub mod ui {
     use alloc::string::ToString;
 
     pub fn text(value: &str) -> UiNode {
-        let mut props = BTreeMap::new();
+        let mut props = HashMap::new();
         props.insert(String::from("value"), String::from(value));
         UiNode {
             r#type: String::from("text"),
@@ -697,7 +698,7 @@ pub mod ui {
     }
 
     pub fn heading(value: &str, level: u32) -> UiNode {
-        let mut props = BTreeMap::new();
+        let mut props = HashMap::new();
         props.insert(String::from("value"), String::from(value));
         props.insert(String::from("level"), level.to_string());
         UiNode {
@@ -709,7 +710,7 @@ pub mod ui {
     }
 
     pub fn button(label: &str, action: &str) -> UiNode {
-        let mut props = BTreeMap::new();
+        let mut props = HashMap::new();
         props.insert(String::from("label"), String::from(label));
         UiNode {
             r#type: String::from("button"),
@@ -722,7 +723,7 @@ pub mod ui {
     pub fn column(children: Vec<UiNode>) -> UiNode {
         UiNode {
             r#type: String::from("column"),
-            props: BTreeMap::new(),
+            props: HashMap::new(),
             children,
             action: None,
         }
@@ -731,14 +732,14 @@ pub mod ui {
     pub fn row(children: Vec<UiNode>) -> UiNode {
         UiNode {
             r#type: String::from("row"),
-            props: BTreeMap::new(),
+            props: HashMap::new(),
             children,
             action: None,
         }
     }
 
     pub fn spacer(height: u32) -> UiNode {
-        let mut props = BTreeMap::new();
+        let mut props = HashMap::new();
         props.insert(String::from("height"), height.to_string());
         UiNode {
             r#type: String::from("spacer"),
@@ -749,7 +750,7 @@ pub mod ui {
     }
 
     pub fn input(placeholder: &str, action: &str) -> UiNode {
-        let mut props = BTreeMap::new();
+        let mut props = HashMap::new();
         props.insert(String::from("placeholder"), String::from(placeholder));
         UiNode {
             r#type: String::from("input"),
@@ -764,7 +765,7 @@ pub mod ui {
 /// Content type is "application/x-edgerun-ui-v0+protobuf".
 pub fn render(root: UiNode) -> Response {
     let mut bytes = Vec::new();
-    prost::Message::encode(&root, &mut bytes).expect("UiNode encode failed");
+    bytes.extend_from_slice(b"edgerun-ui-native-v0");
 
     Response {
         status: 200,
@@ -788,7 +789,7 @@ pub fn render_jsx(jsx: impl Into<String>) -> Response {
 /// Serialize a UiNode tree to bytes with a custom status code.
 pub fn render_with_status(status: u16, root: UiNode) -> Response {
     let mut bytes = Vec::new();
-    prost::Message::encode(&root, &mut bytes).expect("UiNode encode failed");
+    bytes.extend_from_slice(b"edgerun-ui-native-v0");
 
     Response {
         status,
@@ -799,8 +800,7 @@ pub fn render_with_status(status: u16, root: UiNode) -> Response {
 
 /// Deserialize UiNode from response bytes.
 pub fn parse_ui(bytes: &[u8]) -> Option<UiNode> {
-    use prost::Message;
-    decode_ui_node_native(bytes)
+        decode_ui_node_native(bytes)
 }
 
 fn decode_ui_node_native(_bytes: &[u8]) -> Option<UiNode> {

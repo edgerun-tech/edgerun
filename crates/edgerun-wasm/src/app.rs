@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use edgerun_proto::edgerun::v0::{
+use edgerun_core::protocol::{
     app::{
         capability_check, capability_result, CapabilityCheck, CapabilityResult, ExecutionContext,
     },
@@ -7,7 +7,6 @@ use edgerun_proto::edgerun::v0::{
     stream::AppPackage,
     trust::{CapabilityDescriptor, CapabilityKind, ConstraintSet, ScopeDescriptor, ScopeKind},
 };
-use prost::Message;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 

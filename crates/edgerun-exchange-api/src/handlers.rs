@@ -4,9 +4,9 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use edgerun_core::protocol::edgerun_wallet_v0::{Quote, QuoteRequest};
 use edgerun_http::{Request, Response, StatusCode};
 use edgerun_json::{from_json_slice, from_slice, to_string, JsonValue, Map};
-use edgerun_proto::edgerun::v0::wallet::v0::{Quote, QuoteRequest};
 
 use crate::store::ExchangeQuoteId;
 use crate::types::*;
