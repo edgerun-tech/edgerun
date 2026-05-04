@@ -1,9 +1,9 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Cpu, HardDrive, RadioTower, WalletCards } from "lucide-react"
+import { HardDrive, RadioTower, WalletCards } from "lucide-react"
 import { GlowingContainer } from "@/components/layouts/glowing-containers"
-import { CodelyzerNetworkWidget } from "@/components/sections/codelyzer-network"
+import { CodelyzerCodeWidget, NetworkConnectionsWidget } from "@/components/sections/codelyzer-network"
 import { FinancesOverviewWidget } from "@/components/sections/finance-overviews"
 import { WorkspaceStatusPanel } from "@/components/workspace"
 import { XrayViewport } from "@/features/xray/XrayViewport"
@@ -57,6 +57,14 @@ function SurfaceSlot({ surface, fallback }: { surface?: AppSurfaceDef; fallback:
   )
 }
 
+function WidgetFrame({ children }: { children: ReactNode }) {
+  return (
+    <GlowingContainer className="h-full min-h-0" contentClassName="h-full min-h-0 bg-background/78" proximity={52} spread={70} borderWidth={2}>
+      {children}
+    </GlowingContainer>
+  )
+}
+
 function CompactMetric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-background/70 px-3 py-1.5 shadow-xl backdrop-blur-md">
@@ -103,41 +111,22 @@ export function XrayDesktopSurface({
       <div className="absolute inset-y-4 left-4 z-10 hidden w-56 grid-rows-2 gap-4 pb-20 pt-4 xl:grid">
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "left-top")}
-          fallback={
-            <GlowingContainer className="h-full min-h-0" contentClassName="h-full min-h-0 bg-background/78" proximity={52} spread={70} borderWidth={2}>
-              <CodelyzerNetworkWidget />
-            </GlowingContainer>
-          }
+          fallback={<WidgetFrame><NetworkConnectionsWidget /></WidgetFrame>}
         />
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "left-bottom")}
-          fallback={
-            <GlowingContainer className="h-full min-h-0" contentClassName="h-full min-h-0 bg-background/78" proximity={52} spread={70} borderWidth={2}>
-              <FinancesOverviewWidget />
-            </GlowingContainer>
-          }
+          fallback={<WidgetFrame><CodelyzerCodeWidget /></WidgetFrame>}
         />
       </div>
 
       <div className="absolute inset-y-4 right-4 z-10 hidden w-56 grid-rows-2 gap-4 pb-20 pt-4 xl:grid">
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "right-top")}
-          fallback={
-            <MiniTile
-              icon={<Cpu className="h-3.5 w-3.5" />}
-              label="workloads"
-              value={`${activeSessions}`}
-              sub={`${runningApps} active surface${runningApps === 1 ? "" : "s"}`}
-            />
-          }
+          fallback={<WidgetFrame><FinancesOverviewWidget /></WidgetFrame>}
         />
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "right-bottom")}
-          fallback={
-            <GlowingContainer className="h-full min-h-0" contentClassName="h-full min-h-0 bg-background/78" proximity={52} spread={70} borderWidth={2}>
-              <WorkspaceStatusPanel surface="embedded" />
-            </GlowingContainer>
-          }
+          fallback={<WidgetFrame><WorkspaceStatusPanel surface="embedded" /></WidgetFrame>}
         />
       </div>
 
