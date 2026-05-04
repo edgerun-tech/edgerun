@@ -8,6 +8,7 @@ import { FinancesOverviewWidget } from "@/components/sections/finance-overviews"
 import { WorkspaceStatusPanel } from "@/components/workspace"
 import { XrayViewport } from "@/features/xray/XrayViewport"
 import { XrayCommandSurface } from "@/features/xray/XrayCommandSurface"
+import { XrayLegendOverlay, XrayMouseHelpOverlay } from "@/features/xray/XrayOverlayWidgets"
 import { EdgerunLogo } from "./edgerun-logo"
 import type { AppSurfaceDef, AppSurfaceSlot } from "@/stores/desktop-store"
 
@@ -18,19 +19,6 @@ type XrayDesktopSurfaceProps = {
   runningApps: number
   isConnected: boolean
   pinnedSurfaces?: AppSurfaceDef[]
-}
-
-function MiniTile({ icon, label, value, sub }: { icon: ReactNode; label: string; value: string; sub?: string }) {
-  return (
-    <GlowingContainer className="h-full" contentClassName="p-3" proximity={52} spread={70} borderWidth={2}>
-      <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-        <span className="text-primary">{icon}</span>
-        {label}
-      </div>
-      <div className="font-mono text-lg text-foreground">{value}</div>
-      {sub && <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>}
-    </GlowingContainer>
-  )
 }
 
 function SurfaceSlot({ surface, fallback }: { surface?: AppSurfaceDef; fallback: ReactNode }) {
@@ -162,6 +150,9 @@ export function XrayDesktopSurface({
         <div className="pointer-events-none absolute left-1/2 top-4 z-20 hidden -translate-x-1/2 text-primary/85 xl:block">
           <EdgerunLogo variant="full" size="sm" />
         </div>
+
+        <XrayLegendOverlay />
+        <XrayMouseHelpOverlay />
 
         <div className="absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 xl:block">
           <XrayCommandSurface surface="vertical" />
