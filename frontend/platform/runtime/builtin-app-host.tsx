@@ -58,6 +58,10 @@ const SettingsApp = dynamic(
   () => import("@/components/os/settings-app").then((mod) => mod.SettingsApp),
   { ssr: false, loading: LoadingApp },
 )
+const ComputeNodeApp = dynamic(
+  () => import("@/components/os/compute-node").then((mod) => mod.ComputeNode),
+  { ssr: false, loading: LoadingApp },
+)
 
 interface BuiltinAppHostProps {
   app: AppDefinition
@@ -96,6 +100,8 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
       return <GmailApp />
     case "settings":
       return <SettingsApp />
+    case "compute-node":
+      return <ComputeNodeApp />
     case "app-studio":
       return <div className="p-4 text-muted-foreground">App Studio coming soon</div>
     default: {

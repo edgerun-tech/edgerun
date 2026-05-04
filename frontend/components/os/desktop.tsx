@@ -46,6 +46,19 @@ export function Desktop() {
     [appSurfaces],
   )
 
+  useEffect(() => {
+    if (!showDesktop) return
+    const PINNED_APP_IDS = ["network-monitor", "resource-monitor", "compute-node"]
+    const surfaces = appSurfacesStore.get()
+    for (const appId of PINNED_APP_IDS) {
+      const alreadyPinned = surfaces.some((s) => s.appId === appId && s.kind === "pinned-widget")
+      if (!alreadyPinned) {
+        const app = getBuiltinApp(appId)
+        if (app) launchApp(app)
+      }
+    }
+  }, [showDesktop])
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "t") {
       e.preventDefault()
