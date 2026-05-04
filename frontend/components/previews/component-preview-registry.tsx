@@ -10,24 +10,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { XrayDesktopSurface } from "@/components/os/xray-desktop-surface"
 import { AppOverlayHost } from "@/components/os/app-overlay-host"
 import { SettingsApp } from "@/components/os/settings-app"
-import { WalletApp } from "@/components/os/wallet-app"
+import { FinancesApp } from "@/components/os/finances-app"
 import { ResourceMonitor } from "@/components/os/resource-monitor"
 import { XrayWorkspace } from "@/features/xray"
 import type { AppSurfaceDef } from "@/stores/desktop-store"
 
 export type ComponentPreviewGroup =
-  | "production/os"
-  | "production/xray"
-  | "production/ui"
-  | "scaffolding/observability"
-  | "legacy/review"
+  | "components/ui"
+  | "layouts"
+  | "sections"
+  | "apps"
+  | "features/xray"
+  | "review/cleanup"
 
 export type ComponentPreview = {
   id: string
   title: string
   group: ComponentPreviewGroup
   description: string
-  status: "canonical" | "candidate" | "legacy" | "scaffold"
+  status: "canonical" | "candidate" | "review" | "scaffold"
   component: ComponentType
 }
 
@@ -123,8 +124,8 @@ function SettingsPreview() {
   return <PanelFrame><SettingsApp /></PanelFrame>
 }
 
-function WalletPreview() {
-  return <PanelFrame><WalletApp /></PanelFrame>
+function FinancesPreview() {
+  return <PanelFrame><FinancesApp /></PanelFrame>
 }
 
 function ResourceMonitorPreview() {
@@ -139,7 +140,7 @@ export const COMPONENT_PREVIEWS: ComponentPreview[] = [
   {
     id: "xray-desktop-surface",
     title: "Xray desktop surface",
-    group: "production/os",
+    group: "layouts",
     description: "Canonical desktop stage. Graph in the center, responsive metrics around it.",
     status: "canonical",
     component: XrayDesktopPreview,
@@ -147,7 +148,7 @@ export const COMPONENT_PREVIEWS: ComponentPreview[] = [
   {
     id: "app-overlay-host",
     title: "App overlay host",
-    group: "production/os",
+    group: "layouts",
     description: "Chrome-less almost-fullscreen app surface with outside-click dismissal.",
     status: "canonical",
     component: AppOverlayPreview,
@@ -155,31 +156,31 @@ export const COMPONENT_PREVIEWS: ComponentPreview[] = [
   {
     id: "settings-app",
     title: "Settings app",
-    group: "production/os",
-    description: "Production settings surface. Should move toward shared app-shell primitives.",
+    group: "apps",
+    description: "Production app surface. Should move toward shared app-shell primitives.",
     status: "candidate",
     component: SettingsPreview,
   },
   {
-    id: "wallet-app",
-    title: "Wallet app",
-    group: "production/os",
-    description: "Production wallet surface candidate for sidebar/app-shell consolidation.",
-    status: "candidate",
-    component: WalletPreview,
+    id: "finances-app",
+    title: "Finances app",
+    group: "apps",
+    description: "Finance hub for portfolio, wallet transfers, exchange, rewards, and settlement.",
+    status: "canonical",
+    component: FinancesPreview,
   },
   {
     id: "resource-monitor",
     title: "Resource monitor",
-    group: "scaffolding/observability",
-    description: "Candidate pinned-widget content. Should not own desktop layout itself.",
+    group: "sections",
+    description: "Candidate pinned-widget section. Should not own desktop layout itself.",
     status: "candidate",
     component: ResourceMonitorPreview,
   },
   {
     id: "xray-workspace",
     title: "Xray workspace",
-    group: "production/xray",
+    group: "features/xray",
     description: "Canonical standalone xray feature page surface.",
     status: "canonical",
     component: XrayWorkspacePreview,
@@ -187,7 +188,7 @@ export const COMPONENT_PREVIEWS: ComponentPreview[] = [
   {
     id: "ui-primitives",
     title: "UI primitives",
-    group: "production/ui",
+    group: "components/ui",
     description: "Shared primitives only. These should not import app state.",
     status: "canonical",
     component: UiPrimitivePreview,
@@ -195,9 +196,10 @@ export const COMPONENT_PREVIEWS: ComponentPreview[] = [
 ]
 
 export const COMPONENT_GROUP_LABELS: Record<ComponentPreviewGroup, string> = {
-  "production/os": "Production OS",
-  "production/xray": "Production Xray",
-  "production/ui": "UI Primitives",
-  "scaffolding/observability": "Observability Candidates",
-  "legacy/review": "Legacy / Review",
+  "components/ui": "Components / UI",
+  layouts: "Layouts",
+  sections: "Sections",
+  apps: "Apps",
+  "features/xray": "Feature / Xray",
+  "review/cleanup": "Review / Cleanup",
 }
