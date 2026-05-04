@@ -10,22 +10,37 @@ fn main() {
         .expect("build runtime");
 
     let result = rt.block_on(async {
-        println!("[{:.3}s] Starting ACME init test...", start.elapsed().as_secs_f64());
+        println!(
+            "[{:.3}s] Starting ACME init test...",
+            start.elapsed().as_secs_f64()
+        );
 
         // Test 1: DNS resolution
-        println!("[{:.3}s] Test 1: DNS resolution via to_socket_addrs...", start.elapsed().as_secs_f64());
+        println!(
+            "[{:.3}s] Test 1: DNS resolution via to_socket_addrs...",
+            start.elapsed().as_secs_f64()
+        );
         let dns_start = Instant::now();
-        let addrs: Vec<_> = match std::net::ToSocketAddrs::to_socket_addrs("acme-v02.api.letsencrypt.org:443") {
-            Ok(a) => a.collect(),
-            Err(e) => {
-                println!("[{:.3}s] DNS FAILED: {}", start.elapsed().as_secs_f64(), e);
-                return Err(format!("DNS: {}", e));
-            }
-        };
-        println!("[{:.3}s] DNS OK ({:?}): {:?}", start.elapsed().as_secs_f64(), dns_start.elapsed(), addrs);
+        let addrs: Vec<_> =
+            match std::net::ToSocketAddrs::to_socket_addrs("acme-v02.api.letsencrypt.org:443") {
+                Ok(a) => a.collect(),
+                Err(e) => {
+                    println!("[{:.3}s] DNS FAILED: {}", start.elapsed().as_secs_f64(), e);
+                    return Err(format!("DNS: {}", e));
+                }
+            };
+        println!(
+            "[{:.3}s] DNS OK ({:?}): {:?}",
+            start.elapsed().as_secs_f64(),
+            dns_start.elapsed(),
+            addrs
+        );
 
         // Test 2: HTTP client
-        println!("[{:.3}s] Test 2: HTTP client GET...", start.elapsed().as_secs_f64());
+        println!(
+            "[{:.3}s] Test 2: HTTP client GET...",
+            start.elapsed().as_secs_f64()
+        );
         let http_start = Instant::now();
 
         let acme_config = edgerun_acme::AcmeConfig {
@@ -39,11 +54,19 @@ fn main() {
 
         match client.init().await {
             Ok(()) => {
-                println!("[{:.3}s] ACME init OK ({:?})", start.elapsed().as_secs_f64(), http_start.elapsed());
+                println!(
+                    "[{:.3}s] ACME init OK ({:?})",
+                    start.elapsed().as_secs_f64(),
+                    http_start.elapsed()
+                );
                 Ok(())
             }
             Err(e) => {
-                println!("[{:.3}s] ACME init FAILED: {}", start.elapsed().as_secs_f64(), e);
+                println!(
+                    "[{:.3}s] ACME init FAILED: {}",
+                    start.elapsed().as_secs_f64(),
+                    e
+                );
                 Err(format!("ACME: {}", e))
             }
         }

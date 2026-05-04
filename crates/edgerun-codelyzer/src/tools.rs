@@ -5,11 +5,11 @@
 
 use std::collections::HashMap;
 
+use edgerun_glob::glob_match;
 use grep::{
     regex::RegexMatcher,
     searcher::{Searcher, SinkMatch},
 };
-use edgerun_glob::glob_match;
 
 use crate::diagnostics;
 
@@ -237,7 +237,9 @@ fn search_codebase(query: &str) -> String {
     };
 
     let mut results: Vec<String> = Vec::new();
-    let extensions = &["c", "h", "rs", "ts", "tsx", "js", "jsx", "mjs", "py", "go", "java"];
+    let extensions = &[
+        "c", "h", "rs", "ts", "tsx", "js", "jsx", "mjs", "py", "go", "java",
+    ];
 
     // Walk directory tree manually since we're using edgerun-glob for matching
     let mut dirs_to_visit = vec![std::path::PathBuf::from(&root_dir)];
@@ -311,11 +313,7 @@ struct LineSink {
 impl grep::searcher::Sink for LineSink {
     type Error = std::io::Error;
 
-    fn matched(
-        &mut self,
-        _searcher: &Searcher,
-        mat: &SinkMatch<'_>,
-    ) -> Result<bool, Self::Error> {
+    fn matched(&mut self, _searcher: &Searcher, mat: &SinkMatch<'_>) -> Result<bool, Self::Error> {
         if self.results.len() >= self.limit {
             return Ok(false);
         }

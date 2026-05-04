@@ -240,7 +240,9 @@ impl AcmeClient {
 
     pub async fn create_order(&self, domains: &[String]) -> Result<Order, AcmeError> {
         if domains.is_empty() {
-            return Err(AcmeError::Protocol("ACME order must include at least one domain".into()));
+            return Err(AcmeError::Protocol(
+                "ACME order must include at least one domain".into(),
+            ));
         }
         for domain in domains {
             validate_acme_dns_identifier(domain)?;
@@ -394,10 +396,14 @@ fn validate_acme_dns_identifier(domain: &str) -> Result<(), AcmeError> {
         return Err(AcmeError::Protocol("ACME DNS identifier too long".into()));
     }
     if domain.starts_with("*.") && domain[2..].contains('*') {
-        return Err(AcmeError::Protocol("invalid wildcard ACME DNS identifier".into()));
+        return Err(AcmeError::Protocol(
+            "invalid wildcard ACME DNS identifier".into(),
+        ));
     }
     if !domain.starts_with("*.") && domain.contains('*') {
-        return Err(AcmeError::Protocol("invalid wildcard ACME DNS identifier".into()));
+        return Err(AcmeError::Protocol(
+            "invalid wildcard ACME DNS identifier".into(),
+        ));
     }
 
     let labels = if let Some(rest) = domain.strip_prefix("*.") {
@@ -413,15 +419,24 @@ fn validate_acme_dns_identifier(domain: &str) -> Result<(), AcmeError> {
             return Err(AcmeError::Protocol("invalid ACME DNS label length".into()));
         }
         if label.starts_with('-') || label.ends_with('-') {
-            return Err(AcmeError::Protocol("ACME DNS label cannot start or end with '-'".into()));
+            return Err(AcmeError::Protocol(
+                "ACME DNS label cannot start or end with '-'".into(),
+            ));
         }
-        if !label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
-            return Err(AcmeError::Protocol("ACME DNS label contains invalid characters".into()));
+        if !label
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        {
+            return Err(AcmeError::Protocol(
+                "ACME DNS label contains invalid characters".into(),
+            ));
         }
     }
 
     if label_count < 2 {
-        return Err(AcmeError::Protocol("ACME DNS identifier must be fully qualified".into()));
+        return Err(AcmeError::Protocol(
+            "ACME DNS identifier must be fully qualified".into(),
+        ));
     }
 
     Ok(())

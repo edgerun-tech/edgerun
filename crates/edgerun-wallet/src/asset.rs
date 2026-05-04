@@ -1,13 +1,13 @@
 //! Asset model for EdgeRun Wallet.
-//! 
+//!
 //! AssetRef is a reference to an asset.
 //! Asset is the full asset record.
 //! Canonical asset ID: SYMBOL:network[:contract]
 
 use alloc::string::ToString;
 
-pub use edgerun_proto::edgerun::v0::wallet::v0::AssetRef;
 pub use edgerun_proto::edgerun::v0::wallet::v0::Asset;
+pub use edgerun_proto::edgerun::v0::wallet::v0::AssetRef;
 
 /// Build canonical asset ID.
 /// Format: SYMBOL:network[:contract]
@@ -17,8 +17,6 @@ pub fn canonical_asset_id(symbol: &str, network: &str, contract: Option<&str>) -
         None => alloc::format!("{}:{}", symbol.to_uppercase(), network.to_lowercase()),
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -50,6 +48,13 @@ mod tests {
             contract: None,
             decimals: Some(8),
         };
-        assert_eq!(canonical_asset_id(&asset_ref.symbol, &asset_ref.network, asset_ref.contract.as_deref()), "BTC:bitcoin");
+        assert_eq!(
+            canonical_asset_id(
+                &asset_ref.symbol,
+                &asset_ref.network,
+                asset_ref.contract.as_deref()
+            ),
+            "BTC:bitcoin"
+        );
     }
 }

@@ -1,7 +1,7 @@
 use crate::app_principal::AppKeyPair;
 use anyhow::{Context, Result};
 use edgerun_core::encrypted_envelope::{
-    validate_encrypted_envelope, looks_like_encrypted_envelope,
+    looks_like_encrypted_envelope, validate_encrypted_envelope,
 };
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_proto::edgerun::v0::{
@@ -49,8 +49,7 @@ pub struct WasmRunResult {
 impl WasmRuntime {
     pub fn new(wasm_path: &str, verbose: bool) -> Result<Self> {
         let engine = Engine::default();
-        let module =
-            Module::from_file(&engine, wasm_path).context("Failed to load WASM module")?;
+        let module = Module::from_file(&engine, wasm_path).context("Failed to load WASM module")?;
 
         let output = Arc::new(Mutex::new(Vec::new()));
 
@@ -147,7 +146,11 @@ impl WasmRuntime {
         linker.func_wrap(
             "env",
             "read_blob",
-            |mut caller: Caller<'_, HostState>, hash_ptr: i32, hash_len: i32, _dst_ptr: i32| -> i32 {
+            |mut caller: Caller<'_, HostState>,
+             hash_ptr: i32,
+             hash_len: i32,
+             _dst_ptr: i32|
+             -> i32 {
                 let mem = caller
                     .get_export("memory")
                     .and_then(|e| e.into_memory())
@@ -162,12 +165,7 @@ impl WasmRuntime {
                 };
 
                 let host = caller.data_mut();
-                let cmd = build_command(
-                    host,
-                    CommandType::FetchObject,
-                    hash,
-                    String::new(),
-                );
+                let cmd = build_command(host, CommandType::FetchObject, hash, String::new());
 
                 host.pending_commands.lock().unwrap().push(cmd);
                 0
@@ -192,12 +190,7 @@ impl WasmRuntime {
                 };
 
                 let host = caller.data_mut();
-                let cmd = build_command(
-                    host,
-                    CommandType::StoreObject,
-                    payload,
-                    String::new(),
-                );
+                let cmd = build_command(host, CommandType::StoreObject, payload, String::new());
 
                 host.pending_commands.lock().unwrap().push(cmd);
                 0
@@ -259,12 +252,16 @@ impl WasmRuntime {
                         mem_data[start..end].to_vec()
                     }
                 };
-                let reason = String::from_utf8_lossy(&safe_read(reason_ptr, reason_len)).to_string();
+                let reason =
+                    String::from_utf8_lossy(&safe_read(reason_ptr, reason_len)).to_string();
                 let session_id = safe_read(session_ptr, session_len);
 
                 let app_id = {
                     let host = caller.data();
-                    host.context.as_ref().map(|c| c.app_key.app_id.clone()).unwrap_or_default()
+                    host.context
+                        .as_ref()
+                        .map(|c| c.app_key.app_id.clone())
+                        .unwrap_or_default()
                 };
 
                 {
@@ -351,7 +348,8 @@ impl WasmRuntime {
                     }
                 };
                 let payload = safe_read(payload_ptr, payload_len);
-                let action = String::from_utf8_lossy(&safe_read(action_ptr, action_len)).to_string();
+                let action =
+                    String::from_utf8_lossy(&safe_read(action_ptr, action_len)).to_string();
                 let human_readable =
                     String::from_utf8_lossy(&safe_read(human_ptr, human_len)).to_string();
                 let session_id = safe_read(session_ptr, session_len);
@@ -359,11 +357,25 @@ impl WasmRuntime {
 
                 let (app_id, verifying_key_bytes, signature) = {
                     let host = caller.data();
-                    let app_id = host.context.as_ref().map(|c| c.app_key.app_id.clone()).unwrap_or_default();
-                    let verifying_key_bytes = host.context.as_ref()
-                        .map(|c| c.app_key.verifying_key.to_encoded_point(false).as_bytes().to_vec())
+                    let app_id = host
+                        .context
+                        .as_ref()
+                        .map(|c| c.app_key.app_id.clone())
                         .unwrap_or_default();
-                    let signature = host.context.as_ref()
+                    let verifying_key_bytes = host
+                        .context
+                        .as_ref()
+                        .map(|c| {
+                            c.app_key
+                                .verifying_key
+                                .to_encoded_point(false)
+                                .as_bytes()
+                                .to_vec()
+                        })
+                        .unwrap_or_default();
+                    let signature = host
+                        .context
+                        .as_ref()
                         .and_then(|c| c.app_key.sign_intent(&payload).ok())
                         .map(|intent| intent.signature)
                         .unwrap_or_default();
@@ -542,12 +554,8 @@ fn build_command(
     host.next_command_seq += 1;
 
     let ctx = host.context.as_ref();
-    let issuer = ctx
-        .map(|c| c.node_identity.clone())
-        .unwrap_or_default();
-    let delegation_chain = ctx
-        .map(|c| c.delegation_chain.clone())
-        .unwrap_or_default();
+    let issuer = ctx.map(|c| c.node_identity.clone()).unwrap_or_default();
+    let delegation_chain = ctx.map(|c| c.delegation_chain.clone()).unwrap_or_default();
 
     let app_intent_bytes = ctx
         .and_then(|c| c.app_key.sign_intent(&payload).ok())
@@ -684,8 +692,8 @@ fn extract_ui_bytes(raw_output: &[u8]) -> Vec<u8> {
         return raw_output.to_vec();
     }
 
-    let ct_len = u32::from_le_bytes([raw_output[2], raw_output[3], raw_output[4], raw_output[5]])
-        as usize;
+    let ct_len =
+        u32::from_le_bytes([raw_output[2], raw_output[3], raw_output[4], raw_output[5]]) as usize;
     let body_offset = 6 + ct_len;
 
     if body_offset + 4 > raw_output.len() {
@@ -717,41 +725,33 @@ fn interpret_send_message(payload: &str) -> Option<CommandEnvelope> {
 
     cmd_type.map(|ct| {
         let payload_bytes = match ct {
-            CommandType::CreateIdentity => {
-                Message::encode_to_vec(&CreateIdentityPayload {
-                    payload_version: 1,
-                    label: String::from("primary"),
-                    key_algorithm: 1,
-                })
-            }
-            CommandType::ImportIdentity => {
-                Message::encode_to_vec(&ImportIdentityPayload {
-                    payload_version: 1,
-                    label: String::from("imported"),
-                    key_algorithm: 1,
-                    public_key: Vec::new(),
-                    encrypted_private_key: Vec::new(),
-                    source: String::from("file"),
-                })
-            }
-            CommandType::AddController => {
-                Message::encode_to_vec(&AddBootstrapNodePayload {
-                    payload_version: 1,
-                    node: None,
-                    address: String::from("local"),
-                    transport_class: 0,
-                    label: String::from("controller"),
-                })
-            }
-            CommandType::AddBootstrapNode => {
-                Message::encode_to_vec(&AddBootstrapNodePayload {
-                    payload_version: 1,
-                    node: None,
-                    address: String::from("quic://peer.local:4242"),
-                    transport_class: 3,
-                    label: String::from("bootstrap-peer"),
-                })
-            }
+            CommandType::CreateIdentity => Message::encode_to_vec(&CreateIdentityPayload {
+                payload_version: 1,
+                label: String::from("primary"),
+                key_algorithm: 1,
+            }),
+            CommandType::ImportIdentity => Message::encode_to_vec(&ImportIdentityPayload {
+                payload_version: 1,
+                label: String::from("imported"),
+                key_algorithm: 1,
+                public_key: Vec::new(),
+                encrypted_private_key: Vec::new(),
+                source: String::from("file"),
+            }),
+            CommandType::AddController => Message::encode_to_vec(&AddBootstrapNodePayload {
+                payload_version: 1,
+                node: None,
+                address: String::from("local"),
+                transport_class: 0,
+                label: String::from("controller"),
+            }),
+            CommandType::AddBootstrapNode => Message::encode_to_vec(&AddBootstrapNodePayload {
+                payload_version: 1,
+                node: None,
+                address: String::from("quic://peer.local:4242"),
+                transport_class: 3,
+                label: String::from("bootstrap-peer"),
+            }),
             CommandType::AddReachabilityHint => {
                 Message::encode_to_vec(&AddReachabilityHintPayload {
                     payload_version: 1,
@@ -760,12 +760,10 @@ fn interpret_send_message(payload: &str) -> Option<CommandEnvelope> {
                     directness: 1,
                 })
             }
-            CommandType::QueryNodeState => {
-                Message::encode_to_vec(&QueryNodeStatePayload {
-                    payload_version: 1,
-                    query_kind: String::from("all"),
-                })
-            }
+            CommandType::QueryNodeState => Message::encode_to_vec(&QueryNodeStatePayload {
+                payload_version: 1,
+                query_kind: String::from("all"),
+            }),
             _ => Vec::new(),
         };
 

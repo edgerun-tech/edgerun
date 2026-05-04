@@ -1,8 +1,8 @@
+use crate::artifact::ArtifactWriter;
 use anyhow::Result;
 use std::process::Command;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
-use crate::artifact::ArtifactWriter;
 
 pub fn collect(artifacts: &mut ArtifactWriter) -> Result<()> {
     let mut info = String::new();

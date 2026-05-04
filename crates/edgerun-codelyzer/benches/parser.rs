@@ -81,8 +81,10 @@ fn bench_single_file_parse(c: &mut Criterion) {
     }
 
     // Large kernel files
-    let large_files =
-        [("kernel/core.c", kernel.join("core.c")), ("kernel/fair.c", kernel.join("fair.c"))];
+    let large_files = [
+        ("kernel/core.c", kernel.join("core.c")),
+        ("kernel/fair.c", kernel.join("fair.c")),
+    ];
     for (name, path) in large_files.iter() {
         if path.exists() {
             let source = load_source(path);

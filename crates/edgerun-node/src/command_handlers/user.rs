@@ -80,10 +80,7 @@ pub fn dispatch_request_user_presence(
     };
 
     let mut token = [0u8; 32];
-    edgerun_crypto::rand_core::RngCore::fill_bytes(
-        &mut edgerun_crypto::rng::OsRng,
-        &mut token,
-    );
+    edgerun_crypto::rand_core::RngCore::fill_bytes(&mut edgerun_crypto::rng::OsRng, &mut token);
 
     let expires_at = now_unix_micros_u64() + (ttl as u64 * 1_000_000);
 
@@ -221,10 +218,7 @@ pub fn dispatch_request_signature(
     };
 
     let mut token = [0u8; 32];
-    edgerun_crypto::rand_core::RngCore::fill_bytes(
-        &mut edgerun_crypto::rng::OsRng,
-        &mut token,
-    );
+    edgerun_crypto::rand_core::RngCore::fill_bytes(&mut edgerun_crypto::rng::OsRng, &mut token);
 
     let expires_at = now_unix_millis_i64() + (ttl as i64 * 1000);
 
@@ -237,12 +231,8 @@ pub fn dispatch_request_signature(
     );
 
     let result_payload = build_command_result_payload(
-        command,
-        1, // CommandDecision::Committed
-        "",
-        None,
-        None,
-        None,
+        command, 1, // CommandDecision::Committed
+        "", None, None, None,
     );
     let response_bytes = prost::Message::encode_to_vec(&result_payload);
 

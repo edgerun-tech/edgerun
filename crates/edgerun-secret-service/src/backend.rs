@@ -121,7 +121,10 @@ pub fn init_node_id(id: Vec<u8>) -> Result<(), Vec<u8>> {
 
 /// Get the static node_id. Panics if not initialized.
 fn get_node_id() -> &'static [u8] {
-    NODE_ID.get().expect("node_id not initialized — call init_node_id first").as_slice()
+    NODE_ID
+        .get()
+        .expect("node_id not initialized — call init_node_id first")
+        .as_slice()
 }
 
 impl Backend {

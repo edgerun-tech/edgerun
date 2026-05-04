@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use edgerun_http::{Request, Response, StatusCode, Method};
+use edgerun_http::{Method, Request, Response, StatusCode};
 
 use super::handlers;
 
@@ -36,9 +36,13 @@ pub fn route(req: &Request) -> Response {
 
 fn not_found() -> Response {
     let mut map = edgerun_json::Map::new();
-    map.insert("error".into(), edgerun_json::JsonValue::String("not found".into()));
+    map.insert(
+        "error".into(),
+        edgerun_json::JsonValue::String("not found".into()),
+    );
     let body = edgerun_json::to_string(&edgerun_json::JsonValue::Object(map)).unwrap_or_default();
     let mut resp = Response::json(StatusCode::new(404).unwrap(), &body);
-    resp.headers_mut().insert("Content-Type", "application/json".try_into().unwrap());
+    resp.headers_mut()
+        .insert("Content-Type", "application/json".try_into().unwrap());
     resp
 }

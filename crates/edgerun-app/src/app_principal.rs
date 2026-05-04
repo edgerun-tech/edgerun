@@ -28,7 +28,11 @@ impl AppKeyPair {
     pub fn principal(&self) -> AppPrincipal {
         AppPrincipal {
             app_id: self.app_id.clone(),
-            public_key: self.verifying_key.to_encoded_point(false).as_bytes().to_vec(),
+            public_key: self
+                .verifying_key
+                .to_encoded_point(false)
+                .as_bytes()
+                .to_vec(),
             metadata_object: None,
         }
     }

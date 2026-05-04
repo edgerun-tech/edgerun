@@ -535,12 +535,8 @@ impl Event {
         {
             return None;
         }
-        let payload_len = u32::from_le_bytes([
-            self.data[5],
-            self.data[6],
-            self.data[7],
-            self.data[8],
-        ]) as usize;
+        let payload_len =
+            u32::from_le_bytes([self.data[5], self.data[6], self.data[7], self.data[8]]) as usize;
         if self.data.len() < 9 + payload_len {
             return None;
         }
@@ -646,8 +642,7 @@ impl PresenceToken {
         let mut token = [0u8; 32];
         token.copy_from_slice(&bytes[0..32]);
         let expires_at_micros = u64::from_le_bytes([
-            bytes[32], bytes[33], bytes[34], bytes[35],
-            bytes[36], bytes[37], bytes[38], bytes[39],
+            bytes[32], bytes[33], bytes[34], bytes[35], bytes[36], bytes[37], bytes[38], bytes[39],
         ]);
         let session_len = bytes[40] as usize;
         if bytes.len() < 41 + session_len {
@@ -683,7 +678,7 @@ impl SignatureContext {
 // UI system — deterministic UI tree produced by WASM, rendered by adapters
 // ---------------------------------------------------------------------------
 
-pub use edgerun_proto::edgerun::v0::ui::{UiNode, UiActionEvent, UiRenderRequest};
+pub use edgerun_proto::edgerun::v0::ui::{UiActionEvent, UiNode, UiRenderRequest};
 
 pub mod ui {
     use super::*;

@@ -1,6 +1,6 @@
 use super::contract::ProvisioningContract;
-use super::genesis::NodeGenesisClaim;
 use super::errors::ProvisioningError;
+use super::genesis::NodeGenesisClaim;
 use std::collections::HashMap;
 
 /// State machine for provisioning contracts
@@ -25,7 +25,7 @@ impl ProvisioningState {
             contracts: HashMap::new(),
         }
     }
-    
+
     /// Register a new provisioning contract (status: Issued)
     pub fn issue_contract(&mut self, contract: ProvisioningContract) {
         self.contracts.insert(
@@ -38,14 +38,14 @@ impl ProvisioningState {
             },
         );
     }
-    
+
     /// Mark contract as baked into artifact
     pub fn mark_baked(&mut self, provisioning_id: &str) {
         if let Some(state) = self.contracts.get_mut(provisioning_id) {
             state.status = super::contract::ProvisioningContractStatus::BakedIntoArtifact;
         }
     }
-    
+
     /// Process a node genesis claim
     /// Returns Ok(()) if accepted, Err(ProvisioningError) if rejected
     pub fn process_claim(
@@ -53,9 +53,11 @@ impl ProvisioningState {
         provisioning_id: &str,
         claim: NodeGenesisClaim,
     ) -> Result<(), ProvisioningError> {
-        let state = self.contracts.get_mut(provisioning_id)
+        let state = self
+            .contracts
+            .get_mut(provisioning_id)
             .ok_or(ProvisioningError::ContractRevoked)?; // Treat missing as revoked
-        
+
         match state.status {
             super::contract::ProvisioningContractStatus::Revoked => {
                 return Err(ProvisioningError::ContractRevoked);
@@ -69,32 +71,34 @@ impl ProvisioningState {
                 // OK to process
             }
         }
-        
+
         // Mark as consumed
         state.status = super::contract::ProvisioningContractStatus::Consumed;
         state.consumed_by = Some(claim);
-        state.consumed_at = Some(std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs());
-        
+        state.consumed_at = Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        );
+
         Ok(())
     }
-    
+
     /// Accept a provisioning (after controller verification)
     pub fn accept_provisioning(&mut self, provisioning_id: &str) {
         if let Some(state) = self.contracts.get_mut(provisioning_id) {
             state.status = super::contract::ProvisioningContractStatus::Accepted;
         }
     }
-    
+
     /// Reject a provisioning
     pub fn reject_provisioning(&mut self, provisioning_id: &str) {
         if let Some(state) = self.contracts.get_mut(provisioning_id) {
             state.status = super::contract::ProvisioningContractStatus::Rejected;
         }
     }
-    
+
     /// Revoke a provisioning contract
     pub fn revoke_contract(&mut self, provisioning_id: &str) {
         if let Some(state) = self.contracts.get_mut(provisioning_id) {

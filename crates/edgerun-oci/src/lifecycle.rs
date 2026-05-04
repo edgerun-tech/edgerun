@@ -410,10 +410,7 @@ pub fn start_created_container(spec: &OciSpec, container_id: &str, pid: u32) -> 
     crate::fifo::write_start_signal(&mut fifo_writer)?;
     run_poststart_hooks(spec, container_id, pid)?;
     update_state_running(container_id, pid)?;
-    let bundle = spec
-        .root
-        .as_ref()
-        .map(|root| root.path.as_str());
+    let bundle = spec.root.as_ref().map(|root| root.path.as_str());
     let _ = crate::accountability::append_runtime_event(
         spec,
         container_id,

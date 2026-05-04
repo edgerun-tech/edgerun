@@ -117,18 +117,23 @@ mod integration_tests {
         assert!(client.has_server_hello());
 
         // 7. Server builds encrypted handshake messages (EE, Cert, CV, Finished)
-        let (server_handshake_data, expected_client_verify) = server.build_encrypted_handshake().unwrap();
+        let (server_handshake_data, expected_client_verify) =
+            server.build_encrypted_handshake().unwrap();
         assert!(!server_handshake_data.is_empty());
 
         // 8. Client processes server's handshake messages
-        let client_finished = client.process_handshake_crypto(&server_handshake_data).unwrap();
+        let client_finished = client
+            .process_handshake_crypto(&server_handshake_data)
+            .unwrap();
         assert!(!client_finished.is_empty());
         assert_eq!(client_finished[0], 20); // Finished type
 
         // 9. Server verifies client's Finished
         // Extract verify_data from the Client Finished message (skip type byte and 3-byte length)
         let client_verify_data = &client_finished[4..];
-        server.verify_client_finished(client_verify_data, &expected_client_verify).unwrap();
+        server
+            .verify_client_finished(client_verify_data, &expected_client_verify)
+            .unwrap();
 
         // 10. Build handshake results with all keys
         // Client transcript already includes: CH || SH || EE || Cert || CV || ServerFinished
@@ -160,16 +165,34 @@ mod integration_tests {
 
         // 12. Verify that client and server have matching keys for communication
         // Client writes with client_app_secret, server reads with client_app_secret
-        assert_eq!(client_result.app_keys.write_key, server_result.app_keys.read_key);
+        assert_eq!(
+            client_result.app_keys.write_key,
+            server_result.app_keys.read_key
+        );
         // Server writes with server_app_secret, client reads with server_app_secret
-        assert_eq!(server_result.app_keys.write_key, client_result.app_keys.read_key);
+        assert_eq!(
+            server_result.app_keys.write_key,
+            client_result.app_keys.read_key
+        );
         // IVs should also match
-        assert_eq!(client_result.app_keys.write_iv, server_result.app_keys.read_iv);
-        assert_eq!(server_result.app_keys.write_iv, client_result.app_keys.read_iv);
+        assert_eq!(
+            client_result.app_keys.write_iv,
+            server_result.app_keys.read_iv
+        );
+        assert_eq!(
+            server_result.app_keys.write_iv,
+            client_result.app_keys.read_iv
+        );
 
         // 13. Verify cipher suite negotiation
-        assert_eq!(client_result.cipher_suite, edgerun_crypto::CipherSuite::TLS_AES_128_GCM_SHA256);
-        assert_eq!(server_result.cipher_suite, edgerun_crypto::CipherSuite::TLS_AES_128_GCM_SHA256);
+        assert_eq!(
+            client_result.cipher_suite,
+            edgerun_crypto::CipherSuite::TLS_AES_128_GCM_SHA256
+        );
+        assert_eq!(
+            server_result.cipher_suite,
+            edgerun_crypto::CipherSuite::TLS_AES_128_GCM_SHA256
+        );
 
         // 14. Test message exchange using application keys
         let mut client_prot = crypto::PacketProtection::new(&client_result.app_keys);
@@ -241,11 +264,16 @@ mod integration_tests {
         let server_hello = server.process_client_hello(client_hello).unwrap();
         client.process_initial_crypto(&server_hello).unwrap();
 
-        let (server_handshake_data, expected_client_verify) = server.build_encrypted_handshake().unwrap();
-        let client_finished = client.process_handshake_crypto(&server_handshake_data).unwrap();
+        let (server_handshake_data, expected_client_verify) =
+            server.build_encrypted_handshake().unwrap();
+        let client_finished = client
+            .process_handshake_crypto(&server_handshake_data)
+            .unwrap();
         // Extract verify_data from Client Finished message
         let client_verify_data = &client_finished[4..];
-        server.verify_client_finished(client_verify_data, &expected_client_verify).unwrap();
+        server
+            .verify_client_finished(client_verify_data, &expected_client_verify)
+            .unwrap();
 
         // Build full client transcript for app key derivation
         let client_transcript = client.transcript().to_vec();
@@ -274,7 +302,9 @@ mod integration_tests {
         for (i, msg) in messages.iter().enumerate() {
             let header = b"\x40\x00\x00\x00";
             let encrypted = client_protection.protect(header, msg).unwrap();
-            let decrypted = server_protection.unprotect(header, i as u64, &encrypted).unwrap();
+            let decrypted = server_protection
+                .unprotect(header, i as u64, &encrypted)
+                .unwrap();
             assert_eq!(&decrypted, msg);
         }
     }
@@ -313,9 +343,15 @@ mod integration_tests {
         let mut transport = QuicTransport::new(local_cid, remote_cid);
 
         // Test packet number management
-        assert_eq!(transport.current_packet_number(PacketNumberSpace::Initial), 0);
+        assert_eq!(
+            transport.current_packet_number(PacketNumberSpace::Initial),
+            0
+        );
         assert_eq!(transport.next_packet_number(PacketNumberSpace::Initial), 0);
-        assert_eq!(transport.current_packet_number(PacketNumberSpace::Initial), 1);
+        assert_eq!(
+            transport.current_packet_number(PacketNumberSpace::Initial),
+            1
+        );
 
         // Test packet number expansion
         transport.record_received_packet(PacketNumberSpace::ApplicationData, 0x100);

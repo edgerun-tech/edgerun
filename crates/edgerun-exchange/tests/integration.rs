@@ -8,9 +8,9 @@ extern crate alloc;
 
 mod mocks {
     use super::*;
-    use edgerun_exchange::sideshift::SideShiftAdapter;
     use edgerun_exchange::changenow::ChangeNOWAdapter;
     use edgerun_exchange::provider::{ExchangeProvider, ProviderCode};
+    use edgerun_exchange::sideshift::SideShiftAdapter;
     use edgerun_proto::edgerun::v0::wallet::v0::QuoteRequest;
 
     fn make_quote_request(settlement_asset_id: &str, pay_asset_id: &str) -> QuoteRequest {
@@ -29,15 +29,18 @@ mod mocks {
     #[test]
     fn test_sideshift_quote_request_validation() {
         let adapter = SideShiftAdapter::new("test_key".into(), "test_affiliate".into());
-        
+
         let req = make_quote_request("INVALID:network", "USDT:tron");
-        assert!(!adapter.supports_quote(&req), "Invalid asset should not be supported");
+        assert!(
+            !adapter.supports_quote(&req),
+            "Invalid asset should not be supported"
+        );
     }
 
     #[test]
     fn test_sideshift_valid_asset_pairs() {
         let adapter = SideShiftAdapter::new("test_key".into(), "test_affiliate".into());
-        
+
         let valid_pairs = vec![
             ("USDT:tron", "DOGE:dogecoin"),
             ("USDT:tron", "BTC:bitcoin"),
@@ -49,14 +52,19 @@ mod mocks {
 
         for (settle, pay) in valid_pairs {
             let req = make_quote_request(settle, pay);
-            assert!(adapter.supports_quote(&req), "Pair {} -> {} should be supported", settle, pay);
+            assert!(
+                adapter.supports_quote(&req),
+                "Pair {} -> {} should be supported",
+                settle,
+                pay
+            );
         }
     }
 
     #[test]
     fn test_changenow_valid_asset_pairs() {
         let adapter = ChangeNOWAdapter::new("test_key".into(), "test_partner".into());
-        
+
         let valid_pairs = vec![
             ("USDT:tron", "DOGE:dogecoin"),
             ("USDT:tron", "BTC:bitcoin"),
@@ -68,7 +76,12 @@ mod mocks {
 
         for (settle, pay) in valid_pairs {
             let req = make_quote_request(settle, pay);
-            assert!(adapter.supports_quote(&req), "Pair {} -> {} should be supported", settle, pay);
+            assert!(
+                adapter.supports_quote(&req),
+                "Pair {} -> {} should be supported",
+                settle,
+                pay
+            );
         }
     }
 
@@ -76,7 +89,7 @@ mod mocks {
     fn test_provider_features_sideshift() {
         let adapter = SideShiftAdapter::new("test_key".into(), "test_affiliate".into());
         let features = adapter.features();
-        
+
         assert!(features.supports_fixed_rate);
         assert!(features.supports_float_rate);
         assert!(features.supports_refund_address);
@@ -88,7 +101,7 @@ mod mocks {
     fn test_provider_features_changenow() {
         let adapter = ChangeNOWAdapter::new("test_key".into(), "test_partner".into());
         let features = adapter.features();
-        
+
         assert!(features.supports_fixed_rate);
         assert!(features.supports_float_rate);
         assert!(features.supports_refund_address);
@@ -100,7 +113,7 @@ mod mocks {
     fn test_provider_codes() {
         let sideshift = SideShiftAdapter::new("test".into(), "test".into());
         let changenow = ChangeNOWAdapter::new("test".into(), "test".into());
-        
+
         assert_eq!(sideshift.code(), ProviderCode::SideShift);
         assert_eq!(changenow.code(), ProviderCode::ChangeNOW);
     }
@@ -148,16 +161,16 @@ mod error_handling {
     fn test_error_display_impl() {
         let err = WalletError::InvalidDecimal("invalid".into());
         assert!(format!("{}", err).contains("invalid decimal"));
-        
+
         let err = WalletError::ProviderError("API failed".into());
         assert!(format!("{}", err).contains("provider error"));
-        
+
         let err = WalletError::HttpError("connection refused".into());
         assert!(format!("{}", err).contains("HTTP error"));
-        
+
         let err = WalletError::InvalidAssetId("BAD".into());
         assert!(format!("{}", err).contains("invalid asset id"));
-        
+
         let err = WalletError::Serialization("parse failed".into());
         assert!(format!("{}", err).contains("serialization error"));
     }
@@ -181,8 +194,8 @@ mod error_handling {
 
 mod quote_validation {
     use super::*;
-    use edgerun_exchange::sideshift::SideShiftAdapter;
     use edgerun_exchange::provider::ExchangeProvider;
+    use edgerun_exchange::sideshift::SideShiftAdapter;
     use edgerun_proto::edgerun::v0::wallet::v0::QuoteRequest;
 
     fn make_req(settlement_asset_id: &str, pay_asset_id: &str) -> QuoteRequest {
@@ -201,7 +214,7 @@ mod quote_validation {
     #[test]
     fn test_quote_mode_values() {
         let adapter = SideShiftAdapter::new("test_key".into(), "test_affiliate".into());
-        
+
         for mode in 0i32..=2 {
             let req = QuoteRequest {
                 settlement_asset_id: "USDT:tron".into(),
@@ -220,16 +233,17 @@ mod quote_validation {
     #[test]
     fn test_unsupported_pairs_rejected() {
         let adapter = SideShiftAdapter::new("test_key".into(), "test_affiliate".into());
-        
-        let unsupported = vec![
-            ("BTC", "DOGE"),
-            ("DOT", "ADA"),
-            ("XRP", "SOL"),
-        ];
+
+        let unsupported = vec![("BTC", "DOGE"), ("DOT", "ADA"), ("XRP", "SOL")];
 
         for (settle, pay) in unsupported {
             let req = make_req(settle, pay);
-            assert!(!adapter.supports_quote(&req), "Pair {} -> {} should NOT be supported", settle, pay);
+            assert!(
+                !adapter.supports_quote(&req),
+                "Pair {} -> {} should NOT be supported",
+                settle,
+                pay
+            );
         }
     }
 }
@@ -248,7 +262,7 @@ mod provider_code_tests {
     fn test_provider_code_debug() {
         let ss = format!("{:?}", ProviderCode::SideShift);
         assert!(ss.contains("SideShift"));
-        
+
         let cn = format!("{:?}", ProviderCode::ChangeNOW);
         assert!(cn.contains("ChangeNOW"));
     }
@@ -356,35 +370,51 @@ mod provider_mapping_tests {
 
 mod status_machine_tests {
     use edgerun_exchange::status_machine::StatusMachine;
-    use edgerun_wallet::{CanonicalOrderStatus, is_terminal};
+    use edgerun_wallet::{is_terminal, CanonicalOrderStatus};
 
     #[test]
     fn test_valid_transitions() {
         let machine = StatusMachine;
-        assert!(machine.validate_transition(
-            CanonicalOrderStatus::Created,
-            CanonicalOrderStatus::AwaitingDeposit
-        ).is_ok());
-        assert!(machine.validate_transition(
-            CanonicalOrderStatus::Exchanging,
-            CanonicalOrderStatus::Sending
-        ).is_ok());
-        assert!(machine.validate_transition(
-            CanonicalOrderStatus::Sending,
-            CanonicalOrderStatus::Completed
-        ).is_ok());
+        assert!(machine
+            .validate_transition(
+                CanonicalOrderStatus::Created,
+                CanonicalOrderStatus::AwaitingDeposit
+            )
+            .is_ok());
+        assert!(machine
+            .validate_transition(
+                CanonicalOrderStatus::Exchanging,
+                CanonicalOrderStatus::Sending
+            )
+            .is_ok());
+        assert!(machine
+            .validate_transition(
+                CanonicalOrderStatus::Sending,
+                CanonicalOrderStatus::Completed
+            )
+            .is_ok());
     }
 
     #[test]
     fn test_invalid_transitions_include_from_to() {
         let machine = StatusMachine;
-        let err = machine.validate_transition(
-            CanonicalOrderStatus::Completed,
-            CanonicalOrderStatus::Exchanging,
-        ).unwrap_err();
+        let err = machine
+            .validate_transition(
+                CanonicalOrderStatus::Completed,
+                CanonicalOrderStatus::Exchanging,
+            )
+            .unwrap_err();
         let msg = format!("{}", err);
-        assert!(msg.contains("COMPLETED"), "Error should include from status: {}", msg);
-        assert!(msg.contains("EXCHANGING"), "Error should include to status: {}", msg);
+        assert!(
+            msg.contains("COMPLETED"),
+            "Error should include from status: {}",
+            msg
+        );
+        assert!(
+            msg.contains("EXCHANGING"),
+            "Error should include to status: {}",
+            msg
+        );
     }
 
     #[test]

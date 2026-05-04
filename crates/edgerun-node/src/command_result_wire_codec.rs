@@ -17,17 +17,28 @@ pub fn encode_command_result_payload(payload: &CommandResultPayload) -> Vec<u8> 
 }
 
 pub fn decode_command_result_payload(bytes: &[u8]) -> Result<CommandResultPayload, String> {
-    let value = WireValue::from_wire_bytes(bytes).map_err(|e| format!("wire_decode_failed: {e:?}"))?;
+    let value =
+        WireValue::from_wire_bytes(bytes).map_err(|e| format!("wire_decode_failed: {e:?}"))?;
     let fields = expect_struct(value)?;
     Ok(CommandResultPayload {
         payload_version: field_u32(&fields, 1)?.unwrap_or(0),
-        command: field_bytes(&fields, 2)?.map(decode_command_ref).transpose()?,
-        issuer: field_bytes(&fields, 3)?.map(decode_identity_ref).transpose()?,
+        command: field_bytes(&fields, 2)?
+            .map(decode_command_ref)
+            .transpose()?,
+        issuer: field_bytes(&fields, 3)?
+            .map(decode_identity_ref)
+            .transpose()?,
         decision: field_u32(&fields, 4)?.unwrap_or(0) as i32,
-        decision_basis: field_bytes(&fields, 5)?.map(decode_object_ref).transpose()?,
+        decision_basis: field_bytes(&fields, 5)?
+            .map(decode_object_ref)
+            .transpose()?,
         reason_code: field_text(&fields, 6)?.unwrap_or_default(),
-        effect_summary_object: field_bytes(&fields, 7)?.map(decode_object_ref).transpose()?,
-        result_object: field_bytes(&fields, 8)?.map(decode_object_ref).transpose()?,
+        effect_summary_object: field_bytes(&fields, 7)?
+            .map(decode_object_ref)
+            .transpose()?,
+        result_object: field_bytes(&fields, 8)?
+            .map(decode_object_ref)
+            .transpose()?,
     })
 }
 
@@ -66,7 +77,8 @@ fn decode_digest(bytes: Vec<u8>) -> Result<Digest, String> {
 
 fn decode_embedded_struct(bytes: &[u8]) -> Result<Vec<edgerun_wire::WireField>, String> {
     let mut reader = WireReader::new(bytes);
-    let value = WireValue::decode_wire(&mut reader).map_err(|e| format!("embedded_wire_decode_failed: {e:?}"))?;
+    let value = WireValue::decode_wire(&mut reader)
+        .map_err(|e| format!("embedded_wire_decode_failed: {e:?}"))?;
     if !reader.is_empty() {
         return Err("embedded_wire_trailing_bytes".into());
     }
@@ -81,7 +93,10 @@ fn expect_struct(value: WireValue) -> Result<Vec<edgerun_wire::WireField>, Strin
 }
 
 fn find_field(fields: &[edgerun_wire::WireField], tag: u32) -> Option<&WireValue> {
-    fields.iter().find(|field| field.tag == tag).map(|field| &field.value)
+    fields
+        .iter()
+        .find(|field| field.tag == tag)
+        .map(|field| &field.value)
 }
 
 fn field_u32(fields: &[edgerun_wire::WireField], tag: u32) -> Result<Option<u32>, String> {
@@ -110,6 +125,9 @@ fn field_bytes(fields: &[edgerun_wire::WireField], tag: u32) -> Result<Option<Ve
     }
 }
 
-fn field_raw_bytes(fields: &[edgerun_wire::WireField], tag: u32) -> Result<Option<Vec<u8>>, String> {
+fn field_raw_bytes(
+    fields: &[edgerun_wire::WireField],
+    tag: u32,
+) -> Result<Option<Vec<u8>>, String> {
     field_bytes(fields, tag)
 }

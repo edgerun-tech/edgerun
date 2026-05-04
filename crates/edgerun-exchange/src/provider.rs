@@ -7,9 +7,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use edgerun_proto::edgerun::v0::wallet::v0::{
-    AssetRef, FeeBreakdown, Quote, QuoteRequest, TxRef,
-};
+use edgerun_proto::edgerun::v0::wallet::v0::{AssetRef, FeeBreakdown, Quote, QuoteRequest, TxRef};
 use edgerun_wallet::{DecimalAmount, WalletError};
 
 /// Internal provider code (never in public API).
@@ -61,7 +59,7 @@ pub struct ProviderQuote {
     pub settlement_amount: DecimalAmount,
     pub pay_amount: DecimalAmount,
     pub rate: DecimalAmount, // settlement per pay unit
-    pub quote_mode: i32, // QuoteMode as i32
+    pub quote_mode: i32,     // QuoteMode as i32
     pub expires_at_ms: u64,
     pub estimated_seconds: Option<u64>,
     pub fees: Option<FeeBreakdown>,

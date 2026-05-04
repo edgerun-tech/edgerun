@@ -37,10 +37,8 @@ impl<'a, const EQ: usize> VirtioEventLoop<'a, EQ> {
             if let Some(len) = net.recv(&mut self.rx_buf) {
                 if len == 0 {
                     if self.pending_rx {
-                        had_event |= crate::types::push_network_disconnected(
-                            self.queue,
-                            self.rx_sock_id,
-                        );
+                        had_event |=
+                            crate::types::push_network_disconnected(self.queue, self.rx_sock_id);
                         self.pending_rx = false;
                     }
                 } else {
@@ -48,10 +46,8 @@ impl<'a, const EQ: usize> VirtioEventLoop<'a, EQ> {
                         self.sock_id_counter = self.sock_id_counter.wrapping_add(1);
                         self.rx_sock_id = self.sock_id_counter;
                         self.pending_rx = true;
-                        had_event |= crate::types::push_network_connected(
-                            self.queue,
-                            self.rx_sock_id,
-                        );
+                        had_event |=
+                            crate::types::push_network_connected(self.queue, self.rx_sock_id);
                     }
                     had_event |= crate::types::push_network_received(
                         self.queue,

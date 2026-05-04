@@ -24,25 +24,21 @@ pub fn dispatch_server_resource_command_result(
             reason_code: String::new(),
             response_bytes: event_write.response_bytes,
         },
-        Err(reason) => match reject_server_resource_command(
-            command,
-            store,
-            stream_id,
-            signer,
-            &reason,
-        ) {
-            Ok(event_write) => CommandDispatchResult {
-                event_type: event_write.event_type,
-                decision: CommandDecision::Rejected as i32,
-                reason_code: reason,
-                response_bytes: event_write.response_bytes,
-            },
-            Err(storage_reason) => CommandDispatchResult {
-                event_type: EventType::CommandRejected,
-                decision: CommandDecision::Rejected as i32,
-                reason_code: storage_reason,
-                response_bytes: Vec::new(),
-            },
-        },
+        Err(reason) => {
+            match reject_server_resource_command(command, store, stream_id, signer, &reason) {
+                Ok(event_write) => CommandDispatchResult {
+                    event_type: event_write.event_type,
+                    decision: CommandDecision::Rejected as i32,
+                    reason_code: reason,
+                    response_bytes: event_write.response_bytes,
+                },
+                Err(storage_reason) => CommandDispatchResult {
+                    event_type: EventType::CommandRejected,
+                    decision: CommandDecision::Rejected as i32,
+                    reason_code: storage_reason,
+                    response_bytes: Vec::new(),
+                },
+            }
+        }
     }
 }

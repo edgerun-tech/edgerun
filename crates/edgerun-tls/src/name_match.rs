@@ -54,7 +54,9 @@ fn is_dns_label(label: &str) -> bool {
     if label.starts_with('-') || label.ends_with('-') {
         return false;
     }
-    label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    label
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
 fn is_ip_literal_like(name: &str) -> bool {
@@ -67,7 +69,10 @@ mod tests {
 
     #[test]
     fn normalizes_dns_names_for_tls() {
-        assert_eq!(normalize_tls_dns_name("Example.COM."), Some("example.com".to_string()));
+        assert_eq!(
+            normalize_tls_dns_name("Example.COM."),
+            Some("example.com".to_string())
+        );
         assert_eq!(normalize_tls_dns_name("localhost"), None);
         assert_eq!(normalize_tls_dns_name("127.0.0.1"), None);
         assert_eq!(normalize_tls_dns_name("bad label.example"), None);

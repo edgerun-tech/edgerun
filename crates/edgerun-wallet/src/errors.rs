@@ -15,7 +15,10 @@ pub enum WalletError {
     /// Invalid asset ID format
     InvalidAssetId(alloc::string::String),
     /// Invalid status transition
-    InvalidStatusTransition { from: &'static str, to: &'static str },
+    InvalidStatusTransition {
+        from: &'static str,
+        to: &'static str,
+    },
     /// Terminal state cannot transition
     TerminalState(&'static str),
     /// Provider error (internal, never exposed to public API)

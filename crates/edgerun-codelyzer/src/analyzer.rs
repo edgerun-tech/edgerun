@@ -41,7 +41,13 @@ pub fn analyze_full(root_dir: &str) -> (AnalysisResult, ChangeSet) {
     let file_snapshot = filesystem::scan_dir(root_dir);
     let commit_map = fetch_commit_map(root_dir);
     let (program, changes) = build_program(&file_snapshot, root_dir, &commit_map);
-    (AnalysisResult { program, file_snapshot }, changes)
+    (
+        AnalysisResult {
+            program,
+            file_snapshot,
+        },
+        changes,
+    )
 }
 
 /// Build the full UIR program from a file snapshot.
@@ -125,8 +131,14 @@ fn build_program(
             let fid = func.function_id();
             program.add_function(func.clone());
             changes.added.push((fid.clone(), id.clone()));
-            name_to_ids.entry(func_name.clone()).or_default().push(fid.clone());
-            file_name_to_id.entry(file.clone()).or_default().insert(func_name.clone(), fid.clone());
+            name_to_ids
+                .entry(func_name.clone())
+                .or_default()
+                .push(fid.clone());
+            file_name_to_id
+                .entry(file.clone())
+                .or_default()
+                .insert(func_name.clone(), fid.clone());
         }
     }
 

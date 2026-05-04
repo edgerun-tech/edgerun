@@ -133,19 +133,41 @@ impl FunctionId {
         name: impl Into<String>,
         hash: u64,
     ) -> Self {
-        Self { language, file: file.into(), linkage, name: name.into(), hash }
+        Self {
+            language,
+            file: file.into(),
+            linkage,
+            name: name.into(),
+            hash,
+        }
     }
 
     /// Build a FunctionId from the legacy "file::name" string format.
     /// Uses a zero hash since legacy IDs don't carry content hashes.
     pub fn from_legacy(legacy_id: &str, language: Language, is_static: bool) -> Self {
-        let linkage = if is_static { Linkage::Static } else { Linkage::Module };
+        let linkage = if is_static {
+            Linkage::Static
+        } else {
+            Linkage::Module
+        };
         if let Some(pos) = legacy_id.rfind("::") {
             let file = legacy_id[..pos].to_string();
             let name = legacy_id[pos + 2..].to_string();
-            Self { language, file, linkage, name, hash: 0 }
+            Self {
+                language,
+                file,
+                linkage,
+                name,
+                hash: 0,
+            }
         } else {
-            Self { language, file: legacy_id.to_string(), linkage, name: String::new(), hash: 0 }
+            Self {
+                language,
+                file: legacy_id.to_string(),
+                linkage,
+                name: String::new(),
+                hash: 0,
+            }
         }
     }
 
@@ -162,7 +184,11 @@ impl FunctionId {
 
 impl fmt::Display for FunctionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}:{}:{}:{}", self.language, self.file, self.linkage, self.name, self.hash)
+        write!(
+            f,
+            "{}:{}:{}:{}:{}",
+            self.language, self.file, self.linkage, self.name, self.hash
+        )
     }
 }
 
@@ -177,8 +203,16 @@ impl std::str::FromStr for FunctionId {
         let file = parts[1].to_string();
         let linkage = parts[2].parse()?;
         let name = parts[3].to_string();
-        let hash = parts[4].parse::<u64>().map_err(|e| format!("invalid hash: {e}"))?;
-        Ok(Self { language, file, linkage, name, hash })
+        let hash = parts[4]
+            .parse::<u64>()
+            .map_err(|e| format!("invalid hash: {e}"))?;
+        Ok(Self {
+            language,
+            file,
+            linkage,
+            name,
+            hash,
+        })
     }
 }
 
@@ -224,7 +258,11 @@ impl ChangeSet {
         legacy_id: String,
         edges: Vec<(String, String, CallKind)>,
     ) -> Self {
-        Self { added: vec![(id, legacy_id.clone())], edges_added: edges, ..Default::default() }
+        Self {
+            added: vec![(id, legacy_id.clone())],
+            edges_added: edges,
+            ..Default::default()
+        }
     }
 
     /// Create a ChangeSet for a removed function and all its edges.
@@ -331,10 +369,16 @@ impl Edit for Rename {
         program.edges.retain(|e| {
             let needs_update = e.caller == self.target || e.callee == self.target;
             if needs_update {
-                let new_caller =
-                    if e.caller == self.target { new_id.clone() } else { e.caller.clone() };
-                let new_callee =
-                    if e.callee == self.target { new_id.clone() } else { e.callee.clone() };
+                let new_caller = if e.caller == self.target {
+                    new_id.clone()
+                } else {
+                    e.caller.clone()
+                };
+                let new_callee = if e.callee == self.target {
+                    new_id.clone()
+                } else {
+                    e.callee.clone()
+                };
                 edges_removed.push((e.caller.clone(), e.callee.clone()));
                 new_edges.push((new_caller, new_callee, e.kind));
                 false
@@ -358,7 +402,11 @@ impl Edit for Rename {
         let new_fid = FunctionId::new(
             lang,
             file,
-            if func.is_static { Linkage::Static } else { Linkage::Module },
+            if func.is_static {
+                Linkage::Static
+            } else {
+                Linkage::Module
+            },
             &self.new_name,
             0, // hash will be updated by re-parsing
         );
@@ -390,7 +438,12 @@ impl Edit for Rename {
         let new_id = format!("{}::{}", file, self.new_name);
         let (_fid, mut func) = match program.remove_by_legacy(&new_id) {
             Some(pair) => pair,
-            None => return Err(format!("cannot undo: renamed function not found: {}", new_id)),
+            None => {
+                return Err(format!(
+                    "cannot undo: renamed function not found: {}",
+                    new_id
+                ))
+            }
         };
 
         // Restore original name
@@ -403,12 +456,22 @@ impl Edit for Rename {
 
         // Restore edges
         for (old_caller, old_callee) in &changes.edges_removed {
-            program.edges.retain(|e| !(e.caller == *old_caller && e.callee == *old_callee));
+            program
+                .edges
+                .retain(|e| !(e.caller == *old_caller && e.callee == *old_callee));
         }
         // Re-add old edges with original IDs
         for (caller, callee, kind) in &changes.edges_added {
-            let orig_caller = if *caller == new_id { self.target.clone() } else { caller.clone() };
-            let orig_callee = if *callee == new_id { self.target.clone() } else { callee.clone() };
+            let orig_caller = if *caller == new_id {
+                self.target.clone()
+            } else {
+                caller.clone()
+            };
+            let orig_callee = if *callee == new_id {
+                self.target.clone()
+            } else {
+                callee.clone()
+            };
             program.edges.push(crate::uir::CallEdge {
                 caller: orig_caller,
                 callee: orig_callee,
@@ -465,8 +528,11 @@ impl Edit for Delete {
         let removed_count = before_count - program.edges.len();
 
         changes.removed.push(fid);
-        changes.edges_removed =
-            caller_edges.iter().cloned().chain(callee_edges.iter().cloned()).collect();
+        changes.edges_removed = caller_edges
+            .iter()
+            .cloned()
+            .chain(callee_edges.iter().cloned())
+            .collect();
 
         // Invalidate callers: their outgoing edge is now dangling
         for (caller, _) in &caller_edges {
@@ -556,7 +622,11 @@ impl Edit for Move {
         let fid = FunctionId::new(
             lang,
             &self.to_file,
-            if func.is_static { Linkage::Static } else { Linkage::Module },
+            if func.is_static {
+                Linkage::Static
+            } else {
+                Linkage::Module
+            },
             &name,
             0,
         );
@@ -714,7 +784,11 @@ impl Analysis<HashSet<String>> for DeadCode {
 impl DeadCode {
     /// Returns the set of dead function legacy_ids.
     pub fn dead_functions(&self) -> Vec<String> {
-        self.all.iter().filter(|id| !self.called.contains(*id)).cloned().collect()
+        self.all
+            .iter()
+            .filter(|id| !self.called.contains(*id))
+            .cloned()
+            .collect()
     }
 }
 
@@ -797,7 +871,10 @@ impl PathIndex {
     pub fn bootstrap(&mut self, program: &Program) {
         self.adjacency.clear();
         for edge in &program.edges {
-            self.adjacency.entry(edge.caller.clone()).or_default().push(edge.callee.clone());
+            self.adjacency
+                .entry(edge.caller.clone())
+                .or_default()
+                .push(edge.callee.clone());
         }
     }
 
@@ -851,7 +928,10 @@ impl Analysis<HashMap<String, Vec<String>>> for PathIndex {
 
     fn on_change(&mut self, changes: &ChangeSet) {
         for (caller, callee, _) in &changes.edges_added {
-            self.adjacency.entry(caller.clone()).or_default().push(callee.clone());
+            self.adjacency
+                .entry(caller.clone())
+                .or_default()
+                .push(callee.clone());
         }
         for (caller, callee) in &changes.edges_removed {
             if let Some(neighbors) = self.adjacency.get_mut(caller) {

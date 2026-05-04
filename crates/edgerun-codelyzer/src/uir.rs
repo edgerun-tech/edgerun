@@ -52,7 +52,11 @@ impl Function {
     /// Build the canonical FunctionId for this function.
     pub fn function_id(&self) -> FunctionId {
         let lang = self.language.parse().unwrap_or(Language::C);
-        let linkage = if self.is_static { Linkage::Static } else { Linkage::Module };
+        let linkage = if self.is_static {
+            Linkage::Static
+        } else {
+            Linkage::Module
+        };
         FunctionId::new(lang, &self.file, linkage, &self.name, 0)
     }
 }
@@ -93,7 +97,9 @@ impl Program {
     /// Look up a function by its legacy string ID.
     #[allow(dead_code)]
     pub fn get_by_legacy(&self, legacy_id: &str) -> Option<&Function> {
-        self.legacy_index.get(legacy_id).and_then(|fid| self.functions.get(fid))
+        self.legacy_index
+            .get(legacy_id)
+            .and_then(|fid| self.functions.get(fid))
     }
 
     /// Remove a function by its legacy string ID. Returns the removed function
@@ -133,8 +139,10 @@ impl Program {
     /// Remove all edges involving a given legacy ID.
     #[allow(dead_code)]
     pub fn remove_edges_for(&mut self, legacy_id: &str) -> Vec<CallEdge> {
-        let (kept, removed): (Vec<_>, Vec<_>) =
-            self.edges.drain(..).partition(|e| e.caller != legacy_id && e.callee != legacy_id);
+        let (kept, removed): (Vec<_>, Vec<_>) = self
+            .edges
+            .drain(..)
+            .partition(|e| e.caller != legacy_id && e.callee != legacy_id);
         self.edges = kept;
         removed
     }
@@ -142,13 +150,19 @@ impl Program {
     /// Get all edges where the given function is the callee.
     #[allow(dead_code)]
     pub fn get_callers(&self, callee_id: &str) -> Vec<&CallEdge> {
-        self.edges.iter().filter(|e| e.callee == callee_id).collect()
+        self.edges
+            .iter()
+            .filter(|e| e.callee == callee_id)
+            .collect()
     }
 
     /// Get all edges where the given function is the caller.
     #[allow(dead_code)]
     pub fn get_callees(&self, caller_id: &str) -> Vec<&CallEdge> {
-        self.edges.iter().filter(|e| e.caller == caller_id).collect()
+        self.edges
+            .iter()
+            .filter(|e| e.caller == caller_id)
+            .collect()
     }
 
     /// Count how many times each function is called.

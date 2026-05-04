@@ -10,9 +10,18 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub enum EventSource {
-    TcpListener { port: u16 },
-    TcpConnection { fd: RawFd, sock_id: u32 },
-    Timer { fd: RawFd, timer_id: u64, interval_ms: u64 },
+    TcpListener {
+        port: u16,
+    },
+    TcpConnection {
+        fd: RawFd,
+        sock_id: u32,
+    },
+    Timer {
+        fd: RawFd,
+        timer_id: u64,
+        interval_ms: u64,
+    },
 }
 
 pub struct EventLoop {
@@ -48,7 +57,13 @@ impl EventLoop {
 
         let opt: i32 = 1;
         unsafe {
-            setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEADDR, &opt as *const _ as *const _, 4);
+            setsockopt(
+                fd,
+                libc::SOL_SOCKET,
+                libc::SO_REUSEADDR,
+                &opt as *const _ as *const _,
+                4,
+            );
         }
 
         let addr = libc::sockaddr_in {
@@ -104,7 +119,12 @@ impl EventLoop {
     }
 
     pub fn add_timer(&mut self, interval_ms: u64) -> io::Result<u64> {
-        let fd = unsafe { timerfd_create(libc::CLOCK_MONOTONIC, libc::TFD_CLOEXEC | libc::TFD_NONBLOCK) };
+        let fd = unsafe {
+            timerfd_create(
+                libc::CLOCK_MONOTONIC,
+                libc::TFD_CLOEXEC | libc::TFD_NONBLOCK,
+            )
+        };
         if fd < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -163,53 +183,48 @@ impl EventLoop {
             let fd = events[i].u64 as RawFd;
             if let Some(source) = self.sources.get(&fd) {
                 match source {
-                    EventSource::TcpListener { .. } => {
-                        loop {
-                            let mut addr: libc::sockaddr_in = unsafe { mem::zeroed() };
-                            let mut addrlen: libc::socklen_t =
-                                mem::size_of::<libc::sockaddr_in>() as _;
-                            let client_fd = unsafe {
-                                accept(
-                                    fd,
-                                    &mut addr as *mut _ as *mut libc::sockaddr,
-                                    &mut addrlen,
-                                )
-                            };
-                            if client_fd < 0 {
-                                break;
-                            }
-
-                            let sock_id = self.next_sock_id;
-                            self.next_sock_id += 1;
-
-                            let flags = unsafe { libc::fcntl(client_fd, libc::F_GETFL) };
-                            if flags >= 0 {
-                                unsafe { libc::fcntl(client_fd, libc::F_SETFL, flags | libc::O_NONBLOCK) };
-                            }
-
-                            self.push_network_connected(sock_id);
-
-                            let mut ev: epoll_event = unsafe { mem::zeroed() };
-                            ev.events = (libc::EPOLLIN | libc::EPOLLET) as _;
-                            ev.u64 = client_fd as u64;
-
-                            let ctl_ret = unsafe {
-                                epoll_ctl(self.epoll_fd, libc::EPOLL_CTL_ADD, client_fd, &mut ev)
-                            };
-                            if ctl_ret >= 0 {
-                                self.sources.insert(
-                                    client_fd,
-                                    EventSource::TcpConnection {
-                                        fd: client_fd,
-                                        sock_id,
-                                    },
-                                );
-                                event_count += 1;
-                            } else {
-                                unsafe { close(client_fd) };
-                            }
+                    EventSource::TcpListener { .. } => loop {
+                        let mut addr: libc::sockaddr_in = unsafe { mem::zeroed() };
+                        let mut addrlen: libc::socklen_t = mem::size_of::<libc::sockaddr_in>() as _;
+                        let client_fd = unsafe {
+                            accept(fd, &mut addr as *mut _ as *mut libc::sockaddr, &mut addrlen)
+                        };
+                        if client_fd < 0 {
+                            break;
                         }
-                    }
+
+                        let sock_id = self.next_sock_id;
+                        self.next_sock_id += 1;
+
+                        let flags = unsafe { libc::fcntl(client_fd, libc::F_GETFL) };
+                        if flags >= 0 {
+                            unsafe {
+                                libc::fcntl(client_fd, libc::F_SETFL, flags | libc::O_NONBLOCK)
+                            };
+                        }
+
+                        self.push_network_connected(sock_id);
+
+                        let mut ev: epoll_event = unsafe { mem::zeroed() };
+                        ev.events = (libc::EPOLLIN | libc::EPOLLET) as _;
+                        ev.u64 = client_fd as u64;
+
+                        let ctl_ret = unsafe {
+                            epoll_ctl(self.epoll_fd, libc::EPOLL_CTL_ADD, client_fd, &mut ev)
+                        };
+                        if ctl_ret >= 0 {
+                            self.sources.insert(
+                                client_fd,
+                                EventSource::TcpConnection {
+                                    fd: client_fd,
+                                    sock_id,
+                                },
+                            );
+                            event_count += 1;
+                        } else {
+                            unsafe { close(client_fd) };
+                        }
+                    },
                     EventSource::TcpConnection { fd, sock_id } => {
                         let fd = *fd;
                         let sock_id = *sock_id;

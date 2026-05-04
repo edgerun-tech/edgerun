@@ -57,7 +57,12 @@ fn main() -> Result<()> {
     let output = Arc::new(Mutex::new(Vec::new()));
     let messages = Arc::new(Mutex::new(Vec::new()));
     let event_queue = Arc::new(Mutex::new(parse_events(
-        &args.events.split(',').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect::<Vec<_>>(),
+        &args
+            .events
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
     )));
 
     let host = HostState {
@@ -105,11 +110,18 @@ fn main() -> Result<()> {
     linker.func_wrap(
         "env",
         "read_blob",
-        move |mut _caller: Caller<'_, HostState>, _hash_ptr: i32, _hash_len: i32, _dst_ptr: i32| -> i32 {
+        move |mut _caller: Caller<'_, HostState>,
+              _hash_ptr: i32,
+              _hash_len: i32,
+              _dst_ptr: i32|
+              -> i32 {
             if let Some(ref ctx) = exec_ctx_for_blob {
                 let ctx = ctx.lock().unwrap();
-                let result = app::check_capability(&ctx, capability_check::Operation::ReadBlob, None);
-                if result.decision != edgerun_proto::edgerun::v0::app::capability_result::Decision::Granted as i32 {
+                let result =
+                    app::check_capability(&ctx, capability_check::Operation::ReadBlob, None);
+                if result.decision
+                    != edgerun_proto::edgerun::v0::app::capability_result::Decision::Granted as i32
+                {
                     if verbose {
                         eprintln!("read_blob: capability denied");
                     }
@@ -128,8 +140,11 @@ fn main() -> Result<()> {
         move |_caller: Caller<'_, HostState>, _ptr: i32, _len: i32, _hash_out_ptr: i32| -> i32 {
             if let Some(ref ctx) = exec_ctx_for_wblob {
                 let ctx = ctx.lock().unwrap();
-                let result = app::check_capability(&ctx, capability_check::Operation::WriteBlob, None);
-                if result.decision != edgerun_proto::edgerun::v0::app::capability_result::Decision::Granted as i32 {
+                let result =
+                    app::check_capability(&ctx, capability_check::Operation::WriteBlob, None);
+                if result.decision
+                    != edgerun_proto::edgerun::v0::app::capability_result::Decision::Granted as i32
+                {
                     if verbose {
                         eprintln!("write_blob: capability denied");
                     }
@@ -154,8 +169,11 @@ fn main() -> Result<()> {
               -> i32 {
             if let Some(ref ctx) = exec_ctx_for_msg {
                 let ctx = ctx.lock().unwrap();
-                let result = app::check_capability(&ctx, capability_check::Operation::SendMessage, None);
-                if result.decision != edgerun_proto::edgerun::v0::app::capability_result::Decision::Granted as i32 {
+                let result =
+                    app::check_capability(&ctx, capability_check::Operation::SendMessage, None);
+                if result.decision
+                    != edgerun_proto::edgerun::v0::app::capability_result::Decision::Granted as i32
+                {
                     if verbose {
                         eprintln!("send_message: capability denied");
                     }
@@ -205,10 +223,7 @@ fn main() -> Result<()> {
             let event_len = event_data.len() as i32;
             if event_len > buf_len {
                 if verbose {
-                    eprintln!(
-                        "poll_event: buffer too small ({} > {})",
-                        event_len, buf_len
-                    );
+                    eprintln!("poll_event: buffer too small ({} > {})", event_len, buf_len);
                 }
                 queue.insert(0, event_data);
                 return -2;
@@ -222,7 +237,10 @@ fn main() -> Result<()> {
             let end = start + event_len as usize;
             if end > mem_data.len() {
                 if verbose {
-                    eprintln!("poll_event: out of bounds ptr={} len={}", buf_ptr, event_len);
+                    eprintln!(
+                        "poll_event: out of bounds ptr={} len={}",
+                        buf_ptr, event_len
+                    );
                 }
                 queue.insert(0, event_data);
                 return -1;
@@ -232,7 +250,11 @@ fn main() -> Result<()> {
                 eprintln!(
                     "poll_event: type={}, subtype={}",
                     event_data[0],
-                    if event_data.len() > 1 { event_data[1] } else { 0 }
+                    if event_data.len() > 1 {
+                        event_data[1]
+                    } else {
+                        0
+                    }
                 );
             }
             event_len
@@ -337,11 +359,15 @@ fn run_event_driven(
         .context("Failed to create event loop")?;
 
     if let Some(port) = args.listen {
-        event_loop.add_tcp_listener(port).context("Failed to add TCP listener")?;
+        event_loop
+            .add_tcp_listener(port)
+            .context("Failed to add TCP listener")?;
     }
 
     if let Some(interval_ms) = args.timer {
-        event_loop.add_timer(interval_ms).context("Failed to add timer")?;
+        event_loop
+            .add_timer(interval_ms)
+            .context("Failed to add timer")?;
     }
 
     if args.verbose {

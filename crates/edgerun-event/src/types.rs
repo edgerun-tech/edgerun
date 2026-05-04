@@ -277,12 +277,8 @@ impl Event {
         {
             return None;
         }
-        let payload_len = u32::from_le_bytes([
-            self.data[5],
-            self.data[6],
-            self.data[7],
-            self.data[8],
-        ]) as usize;
+        let payload_len =
+            u32::from_le_bytes([self.data[5], self.data[6], self.data[7], self.data[8]]) as usize;
         if self.data_len < 9 + payload_len {
             return None;
         }
@@ -335,53 +331,83 @@ impl Event {
     }
 }
 
-pub fn push_event_raw<const N: usize>(queue: &mut crate::queue::EventQueue<N>, event_type: u8, data: &[u8]) -> bool {
+pub fn push_event_raw<const N: usize>(
+    queue: &mut crate::queue::EventQueue<N>,
+    event_type: u8,
+    data: &[u8],
+) -> bool {
     if data.len() > Event::MAX_DATA_LEN {
         return false;
     }
     queue.push(event_type, data)
 }
 
-pub fn push_network_connected<const N: usize>(queue: &mut crate::queue::EventQueue<N>, sock_id: u32) -> bool {
+pub fn push_network_connected<const N: usize>(
+    queue: &mut crate::queue::EventQueue<N>,
+    sock_id: u32,
+) -> bool {
     let event = Event::network_connected(sock_id);
     queue.push(event.event_type.to_u8(), event.as_slice())
 }
 
-pub fn push_network_disconnected<const N: usize>(queue: &mut crate::queue::EventQueue<N>, sock_id: u32) -> bool {
+pub fn push_network_disconnected<const N: usize>(
+    queue: &mut crate::queue::EventQueue<N>,
+    sock_id: u32,
+) -> bool {
     let event = Event::network_disconnected(sock_id);
     queue.push(event.event_type.to_u8(), event.as_slice())
 }
 
-pub fn push_network_received<const N: usize>(queue: &mut crate::queue::EventQueue<N>, sock_id: u32, payload: &[u8]) -> bool {
+pub fn push_network_received<const N: usize>(
+    queue: &mut crate::queue::EventQueue<N>,
+    sock_id: u32,
+    payload: &[u8],
+) -> bool {
     match Event::network_received(sock_id, payload) {
         Some(event) => queue.push(event.event_type.to_u8(), event.as_slice()),
         None => false,
     }
 }
 
-pub fn push_network_error<const N: usize>(queue: &mut crate::queue::EventQueue<N>, sock_id: u32) -> bool {
+pub fn push_network_error<const N: usize>(
+    queue: &mut crate::queue::EventQueue<N>,
+    sock_id: u32,
+) -> bool {
     let event = Event::network_error(sock_id);
     queue.push(event.event_type.to_u8(), event.as_slice())
 }
 
-pub fn push_disk_read_done<const N: usize>(queue: &mut crate::queue::EventQueue<N>, op_id: u32, data: &[u8]) -> bool {
+pub fn push_disk_read_done<const N: usize>(
+    queue: &mut crate::queue::EventQueue<N>,
+    op_id: u32,
+    data: &[u8],
+) -> bool {
     match Event::disk_read_done(op_id, data) {
         Some(event) => queue.push(event.event_type.to_u8(), event.as_slice()),
         None => false,
     }
 }
 
-pub fn push_disk_write_done<const N: usize>(queue: &mut crate::queue::EventQueue<N>, op_id: u32) -> bool {
+pub fn push_disk_write_done<const N: usize>(
+    queue: &mut crate::queue::EventQueue<N>,
+    op_id: u32,
+) -> bool {
     let event = Event::disk_write_done(op_id);
     queue.push(event.event_type.to_u8(), event.as_slice())
 }
 
-pub fn push_disk_error<const N: usize>(queue: &mut crate::queue::EventQueue<N>, op_id: u32) -> bool {
+pub fn push_disk_error<const N: usize>(
+    queue: &mut crate::queue::EventQueue<N>,
+    op_id: u32,
+) -> bool {
     let event = Event::disk_error(op_id);
     queue.push(event.event_type.to_u8(), event.as_slice())
 }
 
-pub fn push_timer_fired<const N: usize>(queue: &mut crate::queue::EventQueue<N>, timer_id: u64) -> bool {
+pub fn push_timer_fired<const N: usize>(
+    queue: &mut crate::queue::EventQueue<N>,
+    timer_id: u64,
+) -> bool {
     let event = Event::timer_fired(timer_id);
     queue.push(event.event_type.to_u8(), event.as_slice())
 }

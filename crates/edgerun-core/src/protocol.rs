@@ -15,9 +15,7 @@ pub use edgerun_proto::edgerun::v0::{
         CostLimit, FederatedAggregateDescriptor, QueryRequest, QueryResultFragment,
         SnapshotDescriptor,
     },
-    app::{
-        CapabilityCheck, CapabilityResult, ExecutionContext,
-    },
+    app::{CapabilityCheck, CapabilityResult, ExecutionContext},
     common::{
         CipherSuite, CommandRef, DelegationRef, Digest, EncryptedEnvelope, EventRef, HeadRef,
         IdentityRef, NodeRef, ObjectRef, RateLimit, RepresentationRef, RevocationRef, Signature,
@@ -29,15 +27,15 @@ pub use edgerun_proto::edgerun::v0::{
     stream::{
         ActionLifecyclePayload, AppExecutionPayload, AppPackage, CollectionCreatedPayload,
         CollectionDeletedPayload, CommandEnvelope, CommandResultPayload, CommandSentPayload,
-        EventEnvelope, InstallAppPayload, NodeGenesisPayload, SecretDeletePayload, SecretPutPayload,
-        UninstallAppPayload,
+        EventEnvelope, InstallAppPayload, NodeGenesisPayload, SecretDeletePayload,
+        SecretPutPayload, UninstallAppPayload,
     },
     trust::{
         AggregateTrustPolicy, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor,
         ConstraintSet, DelegationRecord, RevocationRecord, RouteSelectionPolicy,
         RouteTrustAssignment, RouteTrustAssignments, ScopeDescriptor,
     },
-    ui::{UiNode, UiActionEvent, UiRenderRequest},
+    ui::{UiActionEvent, UiNode, UiRenderRequest},
 };
 
 // Proof types

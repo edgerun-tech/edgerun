@@ -174,30 +174,63 @@ mod tests {
 
     #[test]
     fn valid_transitions() {
-        assert!(can_transition(CanonicalOrderStatus::Created, CanonicalOrderStatus::AwaitingDeposit));
-        assert!(can_transition(CanonicalOrderStatus::AwaitingDeposit, CanonicalOrderStatus::DepositSeen));
-        assert!(can_transition(CanonicalOrderStatus::Exchanging, CanonicalOrderStatus::Sending));
-        assert!(can_transition(CanonicalOrderStatus::Sending, CanonicalOrderStatus::Completed));
+        assert!(can_transition(
+            CanonicalOrderStatus::Created,
+            CanonicalOrderStatus::AwaitingDeposit
+        ));
+        assert!(can_transition(
+            CanonicalOrderStatus::AwaitingDeposit,
+            CanonicalOrderStatus::DepositSeen
+        ));
+        assert!(can_transition(
+            CanonicalOrderStatus::Exchanging,
+            CanonicalOrderStatus::Sending
+        ));
+        assert!(can_transition(
+            CanonicalOrderStatus::Sending,
+            CanonicalOrderStatus::Completed
+        ));
     }
 
     #[test]
     fn terminal_no_transition() {
-        assert!(!can_transition(CanonicalOrderStatus::Completed, CanonicalOrderStatus::Exchanging));
-        assert!(!can_transition(CanonicalOrderStatus::Failed, CanonicalOrderStatus::Exchanging));
-        assert!(!can_transition(CanonicalOrderStatus::Refunded, CanonicalOrderStatus::Created));
+        assert!(!can_transition(
+            CanonicalOrderStatus::Completed,
+            CanonicalOrderStatus::Exchanging
+        ));
+        assert!(!can_transition(
+            CanonicalOrderStatus::Failed,
+            CanonicalOrderStatus::Exchanging
+        ));
+        assert!(!can_transition(
+            CanonicalOrderStatus::Refunded,
+            CanonicalOrderStatus::Created
+        ));
     }
 
     #[test]
     fn invalid_transitions() {
         // Can't go from Created to Completed directly (must go through flow)
-        assert!(!can_transition(CanonicalOrderStatus::Created, CanonicalOrderStatus::Completed));
+        assert!(!can_transition(
+            CanonicalOrderStatus::Created,
+            CanonicalOrderStatus::Completed
+        ));
         // Can't go from Sending back to Exchanging
-        assert!(!can_transition(CanonicalOrderStatus::Sending, CanonicalOrderStatus::Exchanging));
+        assert!(!can_transition(
+            CanonicalOrderStatus::Sending,
+            CanonicalOrderStatus::Exchanging
+        ));
     }
 
     #[test]
     fn same_state_idempotent() {
-        assert!(can_transition(CanonicalOrderStatus::Exchanging, CanonicalOrderStatus::Exchanging));
-        assert!(can_transition(CanonicalOrderStatus::Completed, CanonicalOrderStatus::Completed));
+        assert!(can_transition(
+            CanonicalOrderStatus::Exchanging,
+            CanonicalOrderStatus::Exchanging
+        ));
+        assert!(can_transition(
+            CanonicalOrderStatus::Completed,
+            CanonicalOrderStatus::Completed
+        ));
     }
 }

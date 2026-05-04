@@ -1,8 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{
-    parse_macro_input, Attribute, Data, DeriveInput, Field, Fields, Lit, Meta, Variant,
-};
+use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Fields, Lit, Meta, Variant};
 
 fn to_kebab_case(s: &str) -> String {
     let mut result = String::new();
@@ -79,7 +77,9 @@ fn parse_arg_attrs(field: &Field) -> ArgAttrs {
     attrs
 }
 
-fn collect_value(tokens: &mut std::iter::Peekable<proc_macro2::token_stream::IntoIter>) -> proc_macro2::TokenStream {
+fn collect_value(
+    tokens: &mut std::iter::Peekable<proc_macro2::token_stream::IntoIter>,
+) -> proc_macro2::TokenStream {
     let mut val = proc_macro2::TokenStream::new();
     while let Some(t) = tokens.peek() {
         if let proc_macro2::TokenTree::Punct(p) = t {
@@ -181,7 +181,10 @@ fn build_arg_expr(field_name: &str, attrs: &ArgAttrs, is_bool: bool) -> proc_mac
     let arg_long = if attrs.long.as_deref() == Some("") {
         to_kebab_case(field_name)
     } else {
-        attrs.long.clone().unwrap_or_else(|| to_kebab_case(field_name))
+        attrs
+            .long
+            .clone()
+            .unwrap_or_else(|| to_kebab_case(field_name))
     };
     let mut arg = quote! { edgerun_clap::cli::Arg::new(#field_name).long(#arg_long) };
     if is_bool {
@@ -273,8 +276,7 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                         })
                         .collect();
 
-                    let field_loads: Vec<_> =
-                        fields.iter().map(|f| build_field_load(f)).collect();
+                    let field_loads: Vec<_> = fields.iter().map(|f| build_field_load(f)).collect();
 
                     let from_body = if fields.is_empty() {
                         quote! { Self::#var_ident }
@@ -286,8 +288,10 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                 })
                 .collect();
 
-            let subcommand_names: Vec<_> =
-                variant_cmds.iter().map(|(n, _, _, _, _)| n.as_str()).collect();
+            let subcommand_names: Vec<_> = variant_cmds
+                .iter()
+                .map(|(n, _, _, _, _)| n.as_str())
+                .collect();
             let subcommand_idents: Vec<_> = variant_cmds
                 .iter()
                 .map(|(_, _, _, _, i)| quote! { Self::#i })
@@ -366,7 +370,8 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                     if is_positional {
                         let idx = positional_idx;
                         positional_idx += 1;
-                        let mut arg = quote! { edgerun_clap::cli::Arg::new(#field_name).positional() };
+                        let mut arg =
+                            quote! { edgerun_clap::cli::Arg::new(#field_name).positional() };
                         if let Some(h) = &attrs.help {
                             arg = quote! { #arg.help(#h) };
                         }

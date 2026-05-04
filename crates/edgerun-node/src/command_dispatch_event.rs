@@ -10,7 +10,9 @@ use edgerun_core::util::{bytes_to_hex, now_prost_timestamp};
 use edgerun_core::wire_command::command_hash;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::common::ObjectRef;
-use edgerun_proto::edgerun::v0::stream::{CommandDecision, CommandEnvelope, EventEnvelope, EventType};
+use edgerun_proto::edgerun::v0::stream::{
+    CommandDecision, CommandEnvelope, EventEnvelope, EventType,
+};
 use edgerun_storage::NodeStore;
 
 #[derive(Clone, Debug)]
@@ -97,12 +99,7 @@ pub fn append_command_result_event(
         let target_hex = bytes_to_hex(&target.node_id);
         let command_hash_hex = bytes_to_hex(&command_hash(command).value);
         let command_id_hex = bytes_to_hex(&command.command_id);
-        let _ = store.put_replay_entry(
-            &target_hex,
-            &command_hash_hex,
-            &command_id_hex,
-            seq as i64,
-        );
+        let _ = store.put_replay_entry(&target_hex, &command_hash_hex, &command_id_hex, seq as i64);
     }
 
     Ok(CommandResultEventWrite {

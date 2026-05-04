@@ -261,7 +261,9 @@ impl Command {
                     }
                     positional_idx += 1;
                 } else if !matches.map.contains_key(&arg.name) {
-                    matches.map.insert(arg.name.clone(), Value::String(default.clone()));
+                    matches
+                        .map
+                        .insert(arg.name.clone(), Value::String(default.clone()));
                 }
             }
         }

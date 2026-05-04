@@ -4,8 +4,8 @@
 //! groups are extracted. This router is the new front door.
 
 pub use crate::command_dispatch::{
-    create_node_genesis_payload, project_config, project_config_from_base,
-    project_controller_set, sign_event_envelope, CommandDispatchResult, ControllerSet,
+    create_node_genesis_payload, project_config, project_config_from_base, project_controller_set,
+    sign_event_envelope, CommandDispatchResult, ControllerSet,
 };
 
 use crate::command_authority::{command_authority_gate, CommandGateDecision};

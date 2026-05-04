@@ -39,44 +39,47 @@ impl Client {
         let mut buffer = String::new();
         let mut done = false;
 
-        self.http.execute_http1_body_chunks(&req, |chunk| {
-            if done {
-                return Ok(());
-            }
+        self.http
+            .execute_http1_body_chunks(&req, |chunk| {
+                if done {
+                    return Ok(());
+                }
 
-            if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-                buffer.push_str(&text);
+                if let Ok(text) = String::from_utf8(chunk.to_vec()) {
+                    buffer.push_str(&text);
 
-                while let Some(pos) = buffer.find("\n\n") {
-                    let message = buffer[..pos].to_string();
-                    buffer.drain(..pos + 2);
+                    while let Some(pos) = buffer.find("\n\n") {
+                        let message = buffer[..pos].to_string();
+                        buffer.drain(..pos + 2);
 
-                    for line in message.lines() {
-                        if line.starts_with("data: ") {
-                            let data = &line[6..];
-                            if data == "[DONE]" {
-                                done = true;
-                                return Ok(());
-                            }
-                            // Skip SSE comments
-                            if data.starts_with(':') {
-                                continue;
-                            }
-                            if let Ok(json) = from_slice(data.as_bytes()) {
-                                if let Some(content) = json["choices"][0]["delta"]["content"].as_str() {
-                                    print!("{}", content);
-                                    io::stdout().flush().ok();
-                                    full_response.push_str(content);
+                        for line in message.lines() {
+                            if line.starts_with("data: ") {
+                                let data = &line[6..];
+                                if data == "[DONE]" {
+                                    done = true;
+                                    return Ok(());
+                                }
+                                // Skip SSE comments
+                                if data.starts_with(':') {
+                                    continue;
+                                }
+                                if let Ok(json) = from_slice(data.as_bytes()) {
+                                    if let Some(content) =
+                                        json["choices"][0]["delta"]["content"].as_str()
+                                    {
+                                        print!("{}", content);
+                                        io::stdout().flush().ok();
+                                        full_response.push_str(content);
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            Ok(())
-        })
-        .await
-        .map_err(|e| format!("http stream: {}", e))?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| format!("http stream: {}", e))?;
 
         // Process any remaining buffer content
         if !buffer.is_empty() && !done {
@@ -153,7 +156,11 @@ fn execute_action(action: &Action) -> Result<String, String> {
             let path = Path::new(&action.payload);
             let content = std::fs::read_to_string(path)
                 .map_err(|e| format!("reading {}: {}", path.display(), e))?;
-            Ok(format!("Contents of {}:\n{}\n---END---", path.display(), content))
+            Ok(format!(
+                "Contents of {}:\n{}\n---END---",
+                path.display(),
+                content
+            ))
         }
         "edit-file" => {
             let parts: Vec<&str> = action.payload.splitn(3, '|').collect();
@@ -266,7 +273,11 @@ fn execute_action(action: &Action) -> Result<String, String> {
                 .map_err(|e| format!("replace fn body: {}", e))?;
             edgerun_edit::edit_ops::write_file(path, &file)
                 .map_err(|e| format!("write {}: {}", path.display(), e))?;
-            Ok(format!("Replaced body of fn {} in {}", parts[1], path.display()))
+            Ok(format!(
+                "Replaced body of fn {} in {}",
+                parts[1],
+                path.display()
+            ))
         }
         "add-derive" => {
             let parts: Vec<&str> = action.payload.splitn(3, '|').collect();
@@ -279,16 +290,23 @@ fn execute_action(action: &Action) -> Result<String, String> {
             if edgerun_edit::edit_ops::add_derive(&mut file, parts[1], parts[2])? {
                 edgerun_edit::edit_ops::write_file(path, &file)
                     .map_err(|e| format!("write {}: {}", path.display(), e))?;
-                Ok(format!("Added derive {} to {} in {}", parts[2], parts[1], path.display()))
+                Ok(format!(
+                    "Added derive {} to {} in {}",
+                    parts[2],
+                    parts[1],
+                    path.display()
+                ))
             } else {
                 Err(format!("type {} not found in {}", parts[1], path.display()))
             }
         }
         "spawn-agent" => {
-            let output = Command::new("/home/ken/edgerun_core/target/x86_64-unknown-linux-musl/release/zen-client")
-                .arg(&action.payload)
-                .output()
-                .map_err(|e| format!("spawn agent: {}", e))?;
+            let output = Command::new(
+                "/home/ken/edgerun_core/target/x86_64-unknown-linux-musl/release/zen-client",
+            )
+            .arg(&action.payload)
+            .output()
+            .map_err(|e| format!("spawn agent: {}", e))?;
             let stdout = String::from_utf8_lossy(&output.stdout);
             Ok(format!("Agent output: {}", stdout))
         }
@@ -361,9 +379,17 @@ fn build_repo_context() -> String {
 
 fn should_include_file(path: &str) -> bool {
     let exclude_patterns = [
-        "target/", "node_modules/", ".git/",
-        "Cargo.lock", "*.swp", "*.swo", ".DS_Store",
-        "*.o", "*.a", "*.so", "*.dylib",
+        "target/",
+        "node_modules/",
+        ".git/",
+        "Cargo.lock",
+        "*.swp",
+        "*.swo",
+        ".DS_Store",
+        "*.o",
+        "*.a",
+        "*.so",
+        "*.dylib",
     ];
 
     for pat in &exclude_patterns {
@@ -380,8 +406,7 @@ fn should_include_file(path: &str) -> bool {
 }
 
 fn load_prompt_from_file(path: &str) -> Result<String, String> {
-    std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read prompt file {}: {}", path, e))
+    std::fs::read_to_string(path).map_err(|e| format!("Failed to read prompt file {}: {}", path, e))
 }
 
 fn main() {
@@ -523,7 +548,11 @@ Figure out what you were built for and do what you think is best:
 
             messages.push(Message {
                 role: "assistant",
-                content: format!("{}\nActions: {:?}", text, actions.iter().map(|a| &a.action).collect::<Vec<_>>()),
+                content: format!(
+                    "{}\nActions: {:?}",
+                    text,
+                    actions.iter().map(|a| &a.action).collect::<Vec<_>>()
+                ),
             });
             messages.push(Message {
                 role: "user",

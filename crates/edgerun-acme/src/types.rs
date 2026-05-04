@@ -31,10 +31,14 @@ pub enum DirectoryUrl {
 impl DirectoryUrl {
     pub fn url(&self) -> Url {
         match self {
-            DirectoryUrl::LetsEncrypt => Url::parse("https://acme-v02.api.letsencrypt.org/directory")
-                .expect("built-in Let's Encrypt directory URL is valid"),
-            DirectoryUrl::LetsEncryptStaging => Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory")
-                .expect("built-in Let's Encrypt staging directory URL is valid"),
+            DirectoryUrl::LetsEncrypt => {
+                Url::parse("https://acme-v02.api.letsencrypt.org/directory")
+                    .expect("built-in Let's Encrypt directory URL is valid")
+            }
+            DirectoryUrl::LetsEncryptStaging => {
+                Url::parse("https://acme-staging-v02.api.letsencrypt.org/directory")
+                    .expect("built-in Let's Encrypt staging directory URL is valid")
+            }
             DirectoryUrl::Custom(u) => u.clone(),
         }
     }
@@ -730,7 +734,13 @@ mod tests {
 
     #[test]
     fn custom_directory_url_requires_https() {
-        assert!(DirectoryUrl::from_json(JsonValue::String("http://example.test/directory".to_string())).is_err());
-        assert!(DirectoryUrl::from_json(JsonValue::String("https://example.test/directory".to_string())).is_ok());
+        assert!(DirectoryUrl::from_json(JsonValue::String(
+            "http://example.test/directory".to_string()
+        ))
+        .is_err());
+        assert!(DirectoryUrl::from_json(JsonValue::String(
+            "https://example.test/directory".to_string()
+        ))
+        .is_ok());
     }
 }

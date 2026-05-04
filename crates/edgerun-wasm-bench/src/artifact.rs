@@ -1,6 +1,6 @@
 use anyhow::Result;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 pub struct ArtifactWriter {
     dir: PathBuf,

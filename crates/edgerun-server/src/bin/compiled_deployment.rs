@@ -115,14 +115,32 @@ pub const DEPLOYMENT: CompiledDeployment = CompiledDeployment {
             domain: "edgerun.tech",
             authoritative_dns: true,
             mailboxes: &[
-                CompiledMailbox { address: "ken@edgerun.tech", target: "ken@edgerun.tech" },
-                CompiledMailbox { address: "admin@edgerun.tech", target: "admin@edgerun.tech" },
-                CompiledMailbox { address: "dmarc-reports@edgerun.tech", target: "dmarc-reports@edgerun.tech" },
-                CompiledMailbox { address: "tls-reports@edgerun.tech", target: "tls-reports@edgerun.tech" },
+                CompiledMailbox {
+                    address: "ken@edgerun.tech",
+                    target: "ken@edgerun.tech",
+                },
+                CompiledMailbox {
+                    address: "admin@edgerun.tech",
+                    target: "admin@edgerun.tech",
+                },
+                CompiledMailbox {
+                    address: "dmarc-reports@edgerun.tech",
+                    target: "dmarc-reports@edgerun.tech",
+                },
+                CompiledMailbox {
+                    address: "tls-reports@edgerun.tech",
+                    target: "tls-reports@edgerun.tech",
+                },
             ],
             aliases: &[
-                CompiledAlias { address: "postmaster@edgerun.tech", target: "ken@edgerun.tech" },
-                CompiledAlias { address: "abuse@edgerun.tech", target: "ken@edgerun.tech" },
+                CompiledAlias {
+                    address: "postmaster@edgerun.tech",
+                    target: "ken@edgerun.tech",
+                },
+                CompiledAlias {
+                    address: "abuse@edgerun.tech",
+                    target: "ken@edgerun.tech",
+                },
             ],
             website: Some(CompiledWebsite {
                 domain: "edgerun.tech",
@@ -139,7 +157,5 @@ pub const DEPLOYMENT: CompiledDeployment = CompiledDeployment {
             website: None,
         },
     ],
-    external_cnames: &[
-        ("blog.edgerun.tech", "sylchi.github.io"),
-    ],
+    external_cnames: &[("blog.edgerun.tech", "sylchi.github.io")],
 };

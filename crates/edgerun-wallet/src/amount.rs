@@ -50,7 +50,11 @@ impl DecimalAmount {
 
         // Remove leading zeros from int part for clean mantissa
         let int_clean: alloc::string::String = int_part.trim_start_matches('0').into();
-        let int_clean = if int_clean.is_empty() { "0" } else { &int_clean };
+        let int_clean = if int_clean.is_empty() {
+            "0"
+        } else {
+            &int_clean
+        };
 
         let scale = frac_part.len() as u8;
         if scale > 38 {
@@ -60,7 +64,11 @@ impl DecimalAmount {
         // Build mantissa: int_part + frac_part (no decimal point)
         let mantissa_str = alloc::format!("{}{}", int_clean, frac_part);
         let mantissa_str = mantissa_str.trim_start_matches('0');
-        let mantissa_str = if mantissa_str.is_empty() { "0" } else { mantissa_str };
+        let mantissa_str = if mantissa_str.is_empty() {
+            "0"
+        } else {
+            mantissa_str
+        };
 
         let mantissa: u128 = mantissa_str.parse().ok()?;
 
@@ -69,7 +77,10 @@ impl DecimalAmount {
 
     /// Create from integer (scale = 0).
     pub fn from_integer(val: u128) -> Self {
-        Self { mantissa: val, scale: 0 }
+        Self {
+            mantissa: val,
+            scale: 0,
+        }
     }
 
     /// Get the mantissa (raw digits).
@@ -120,13 +131,19 @@ impl DecimalAmount {
             let extra = (target_scale - self.scale) as u32;
             let pow = 10u128.checked_pow(extra)?;
             let mantissa = self.mantissa.checked_mul(pow)?;
-            Some(Self { mantissa, scale: target_scale })
+            Some(Self {
+                mantissa,
+                scale: target_scale,
+            })
         } else {
             // Truncate (lossy)
             let reduce = (self.scale - target_scale) as u32;
             let pow = 10u128.checked_pow(reduce)?;
             let mantissa = self.mantissa / pow;
-            Some(Self { mantissa, scale: target_scale })
+            Some(Self {
+                mantissa,
+                scale: target_scale,
+            })
         }
     }
 
@@ -136,7 +153,10 @@ impl DecimalAmount {
         let a = self.normalize(max_scale)?;
         let b = other.normalize(max_scale)?;
         let mantissa = a.mantissa.checked_add(b.mantissa)?;
-        Some(Self { mantissa, scale: max_scale })
+        Some(Self {
+            mantissa,
+            scale: max_scale,
+        })
     }
 
     /// Checked subtraction. Returns None if result would be negative.
@@ -148,7 +168,10 @@ impl DecimalAmount {
             return None; // Would be negative
         }
         let mantissa = a.mantissa.checked_sub(b.mantissa)?;
-        Some(Self { mantissa, scale: max_scale })
+        Some(Self {
+            mantissa,
+            scale: max_scale,
+        })
     }
 
     /// Compare two amounts (normalize to same scale first).
@@ -167,7 +190,12 @@ impl DecimalAmount {
 
 impl fmt::Debug for DecimalAmount {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "DecimalAmount({}, scale={})", self.to_canonical_string(), self.scale)
+        write!(
+            f,
+            "DecimalAmount({}, scale={})",
+            self.to_canonical_string(),
+            self.scale
+        )
     }
 }
 
@@ -247,7 +275,7 @@ mod tests {
     #[test]
     fn add_diff_scales() {
         let a = DecimalAmount::parse("100.5").unwrap(); // scale 1
-        let b = DecimalAmount::parse("0.25").unwrap();   // scale 2
+        let b = DecimalAmount::parse("0.25").unwrap(); // scale 2
         let sum = a.checked_add(&b).unwrap();
         assert_eq!(sum.to_canonical_string(), "100.75");
     }

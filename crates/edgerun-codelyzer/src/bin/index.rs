@@ -18,18 +18,27 @@ use edgerun_codelyzer::{
     parser::{ParserPool, RawCallOwned, RawFunctionOwned},
     uir::CallKind,
 };
+use edgerun_crypto::sha1::{Digest, Sha1};
 use rayon::prelude::*;
 use rusqlite::{params, Connection, OpenFlags};
-use edgerun_crypto::sha1::{Digest, Sha1};
 
 // ─── File discovery ──────────────────────────────────────────────────
 
-const SOURCE_EXTENSIONS: &[&str] =
-    &["c", "h", "rs", "ts", "tsx", "js", "jsx", "mjs", "py", "go", "java"];
+const SOURCE_EXTENSIONS: &[&str] = &[
+    "c", "h", "rs", "ts", "tsx", "js", "jsx", "mjs", "py", "go", "java",
+];
 
 fn find_source_files(root: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    let skip_dirs = &["node_modules", ".git", "target", "dist", "build", "__pycache__", ".venv"];
+    let skip_dirs = &[
+        "node_modules",
+        ".git",
+        "target",
+        "dist",
+        "build",
+        "__pycache__",
+        ".venv",
+    ];
 
     fn walk(dir: &Path, files: &mut Vec<PathBuf>, skip: &[&str]) {
         if let Ok(entries) = fs::read_dir(dir) {
@@ -159,7 +168,10 @@ fn open_db(db_path: &Path) -> Connection {
 }
 
 fn ensure_codebase(conn: &Connection, root_path: &str) -> i64 {
-    let name = Path::new(root_path).file_name().and_then(|n| n.to_str()).unwrap_or(root_path);
+    let name = Path::new(root_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(root_path);
 
     conn.execute(
         "INSERT OR IGNORE INTO codebases (root_path, name) VALUES (?1, ?2)",
@@ -167,9 +179,11 @@ fn ensure_codebase(conn: &Connection, root_path: &str) -> i64 {
     )
     .ok();
 
-    conn.query_row("SELECT id FROM codebases WHERE root_path = ?1", params![root_path], |r| {
-        r.get::<_, i64>(0)
-    })
+    conn.query_row(
+        "SELECT id FROM codebases WHERE root_path = ?1",
+        params![root_path],
+        |r| r.get::<_, i64>(0),
+    )
     .expect("failed to get codebase id")
 }
 
@@ -231,8 +245,10 @@ fn build_call_pairs(
     functions: &[RawFunctionOwned],
     calls: &[RawCallOwned],
 ) -> Vec<(String, String, CallKind)> {
-    let func_ranges: Vec<(usize, usize)> =
-        functions.iter().map(|f| (f.start_byte, f.end_byte)).collect();
+    let func_ranges: Vec<(usize, usize)> = functions
+        .iter()
+        .map(|f| (f.start_byte, f.end_byte))
+        .collect();
 
     let mut result = Vec::new();
     for call in calls {
@@ -271,8 +287,10 @@ fn index_codebase(root: &Path, db_path: &Path, refresh: bool) {
     println!("[index] Parsing files in parallel...");
     let parse_start = Instant::now();
 
-    let results: Vec<Option<ParseResult>> =
-        files.par_iter().map(|path| parse_file(root, path)).collect();
+    let results: Vec<Option<ParseResult>> = files
+        .par_iter()
+        .map(|path| parse_file(root, path))
+        .collect();
 
     let results: Vec<ParseResult> = results.into_iter().flatten().collect();
     println!(
@@ -289,12 +307,22 @@ fn index_codebase(root: &Path, db_path: &Path, refresh: bool) {
     // Clear old data for refreshed files
     if refresh {
         let root_str = root.to_str().unwrap();
-        tx.execute("DELETE FROM functions WHERE file LIKE ?1 || '%'", params![root_str]).ok();
-        tx.execute("DELETE FROM edges WHERE caller LIKE ?1 || '%'", params![root_str]).ok();
+        tx.execute(
+            "DELETE FROM functions WHERE file LIKE ?1 || '%'",
+            params![root_str],
+        )
+        .ok();
+        tx.execute(
+            "DELETE FROM edges WHERE caller LIKE ?1 || '%'",
+            params![root_str],
+        )
+        .ok();
     }
 
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
-        as i64;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
 
     let mut func_count = 0;
     let mut edge_count = 0;
@@ -343,9 +371,14 @@ fn index_codebase(root: &Path, db_path: &Path, refresh: bool) {
                 .find('\n')
                 .map(|n| sig_start + n)
                 .unwrap_or(func.end_byte.min(content.len()));
-            let signature = content[sig_start..sig_end.min(content.len())].trim().to_string();
+            let signature = content[sig_start..sig_end.min(content.len())]
+                .trim()
+                .to_string();
 
-            let start_line = content[..func.start_byte.min(content.len())].lines().count() + 1;
+            let start_line = content[..func.start_byte.min(content.len())]
+                .lines()
+                .count()
+                + 1;
             let end_line = content[..func.end_byte.min(content.len())].lines().count() + 1;
 
             tx.execute(
@@ -373,7 +406,10 @@ fn index_codebase(root: &Path, db_path: &Path, refresh: bool) {
             file_name_to_id
                 .entry(result.rel_path.clone())
                 .or_default()
-                .insert(func.name.clone(), format!("{}::{}", result.rel_path, func.name));
+                .insert(
+                    func.name.clone(),
+                    format!("{}::{}", result.rel_path, func.name),
+                );
 
             name_to_ids
                 .entry(func.name.clone())
@@ -399,7 +435,12 @@ fn index_codebase(root: &Path, db_path: &Path, refresh: bool) {
             } else {
                 None
             }
-            .or_else(|| name_to_ids.get(&callee_name).and_then(|ids| ids.first()).cloned())
+            .or_else(|| {
+                name_to_ids
+                    .get(&callee_name)
+                    .and_then(|ids| ids.first())
+                    .cloned()
+            })
             .unwrap_or_else(|| callee_name.clone());
 
             let confidence = match kind {
@@ -454,7 +495,10 @@ fn index_codebase(root: &Path, db_path: &Path, refresh: bool) {
         db_start.elapsed().as_secs_f32()
     );
 
-    println!("[index] Total indexing time: {:.2}s", start.elapsed().as_secs_f32());
+    println!(
+        "[index] Total indexing time: {:.2}s",
+        start.elapsed().as_secs_f32()
+    );
 }
 
 fn content_line_at_byte(
@@ -465,7 +509,12 @@ fn content_line_at_byte(
 ) -> Option<i64> {
     let func = functions.iter().find(|f| f.name == caller_name)?;
     let content = fs::read_to_string(root.join(rel_path)).ok()?;
-    Some(content[..func.start_byte.min(content.len())].lines().count() as i64 + 1)
+    Some(
+        content[..func.start_byte.min(content.len())]
+            .lines()
+            .count() as i64
+            + 1,
+    )
 }
 
 fn languages_used(results: &[ParseResult]) -> Vec<String> {
@@ -524,7 +573,10 @@ fn query_db(db_path: &Path, args: &[String]) {
         "find" | "symbol" => {
             let pattern = args.get(1).expect("pattern required: find <pattern>");
             let kind = args.get(2).map(|s| s.as_str()).unwrap_or("function");
-            let limit = args.get(3).and_then(|s| s.parse::<i64>().ok()).unwrap_or(20);
+            let limit = args
+                .get(3)
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(20);
 
             let mut stmt = conn
                 .prepare(
@@ -653,7 +705,11 @@ fn query_db(db_path: &Path, args: &[String]) {
 
             let (total_funcs, total_files, total_langs): (i64, i64, i64) = stmt
                 .query_row([], |r| {
-                    Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, i64>(2)?,
+                    ))
                 })
                 .expect("failed to query");
 
@@ -676,7 +732,11 @@ fn query_db(db_path: &Path, args: &[String]) {
 
             let rows: Vec<_> = stmt
                 .query_map([], |r| {
-                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, i64>(2)?,
+                    ))
                 })
                 .expect("failed to query")
                 .filter_map(|r| r.ok())

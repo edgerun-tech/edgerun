@@ -16,12 +16,17 @@ impl TestSigner {
         let encoded = vk.to_encoded_point(false);
         let mut node_bytes = [0u8; 64];
         node_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-        Self { node_id: NodeID(node_bytes), key }
+        Self {
+            node_id: NodeID(node_bytes),
+            key,
+        }
     }
 }
 
 impl MeshSigner for TestSigner {
-    fn node_id(&self) -> NodeID { self.node_id }
+    fn node_id(&self) -> NodeID {
+        self.node_id
+    }
 
     fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 64], HardwareSigningError> {
         use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
@@ -46,7 +51,9 @@ fn genesis_has_seq_zero_and_no_prev_hash() {
 fn append_creates_contiguous_sequence() {
     let signer = TestSigner::new();
     let mut writer = StreamWriter::new("stream-1".into(), Arc::new(signer), 1000).unwrap();
-    for i in 0..3 { writer.append(100i32, 1, 1000 + i as i64).unwrap(); }
+    for i in 0..3 {
+        writer.append(100i32, 1, 1000 + i as i64).unwrap();
+    }
     assert_eq!(writer.head().unwrap().seq, 3);
 }
 
@@ -146,7 +153,9 @@ fn stream_writer_produces_valid_chain() {
     let mut writer = StreamWriter::new("stream-1".into(), Arc::new(signer), 1000).unwrap();
     let mut events = Vec::new();
     events.push(writer.head().unwrap().clone());
-    for i in 0..5 { events.push(writer.append(100i32, 1, 1000 + i as i64).unwrap()); }
+    for i in 0..5 {
+        events.push(writer.append(100i32, 1, 1000 + i as i64).unwrap());
+    }
     validate_stream(&events, &writer_id).unwrap();
 }
 
@@ -309,7 +318,10 @@ fn validate_stream_detects_fork_wrong_prev_hash() {
     };
     sign_event(&mut event1_correct, &signer).unwrap();
     events.push(event1_correct);
-    events[1].prev_event_hash = Some(Digest { algorithm: 1, value: vec![0xAB; 32] });
+    events[1].prev_event_hash = Some(Digest {
+        algorithm: 1,
+        value: vec![0xAB; 32],
+    });
     let err = validate_stream(&events, &signer.node_id()).unwrap_err();
     assert!(matches!(err, StreamError::InvalidPrevHash { .. }));
 }
@@ -351,7 +363,13 @@ fn verify_event_rejects_wrong_signature_length() {
     sign_event(&mut genesis, &signer).unwrap();
     genesis.signature.as_mut().unwrap().value.truncate(32);
     let err = verify_event(&genesis, &signer.node_id()).unwrap_err();
-    assert!(matches!(err, StreamError::InvalidSignature { expected: 64, actual: 32 }));
+    assert!(matches!(
+        err,
+        StreamError::InvalidSignature {
+            expected: 64,
+            actual: 32
+        }
+    ));
 }
 
 #[test]
@@ -361,7 +379,13 @@ fn verify_event_rejects_zero_length_signature() {
     sign_event(&mut genesis, &signer).unwrap();
     genesis.signature.as_mut().unwrap().value.clear();
     let err = verify_event(&genesis, &signer.node_id()).unwrap_err();
-    assert!(matches!(err, StreamError::InvalidSignature { expected: 64, actual: 0 }));
+    assert!(matches!(
+        err,
+        StreamError::InvalidSignature {
+            expected: 64,
+            actual: 0
+        }
+    ));
 }
 
 #[test]
@@ -373,7 +397,10 @@ fn verify_event_rejects_random_signature_bytes() {
     edgerun_crypto::fill_random(&mut rng_bytes).expect("random generation failed");
     genesis.signature.as_mut().unwrap().value = rng_bytes.to_vec();
     let err = verify_event(&genesis, &signer.node_id()).unwrap_err();
-    assert!(matches!(err, StreamError::InvalidSignatureFormat(_) | StreamError::SignatureVerification(_)));
+    assert!(matches!(
+        err,
+        StreamError::InvalidSignatureFormat(_) | StreamError::SignatureVerification(_)
+    ));
 }
 
 #[test]
@@ -427,7 +454,9 @@ fn validate_stream_single_genesis_is_valid() {
 fn validate_stream_long_chain_validates_correctly() {
     let signer = TestSigner::new();
     let mut w = StreamWriter::new("long-chain".into(), Arc::new(signer.clone()), 0).unwrap();
-    for i in 0..50 { w.append(1, 1, i).unwrap(); }
+    for i in 0..50 {
+        w.append(1, 1, i).unwrap();
+    }
     let events: Vec<_> = w.events().to_vec();
     let writer_id = w.writer();
     assert!(validate_stream(&events, &writer_id).is_ok());
@@ -488,40 +517,108 @@ fn event_metadata_is_none_by_default() {
 }
 
 #[test]
-fn error_display_empty_stream() { assert_eq!(StreamError::EmptyStream.to_string(), "stream is empty — no genesis event found"); }
+fn error_display_empty_stream() {
+    assert_eq!(
+        StreamError::EmptyStream.to_string(),
+        "stream is empty — no genesis event found"
+    );
+}
 
 #[test]
-fn error_display_missing_genesis() { assert_eq!(StreamError::MissingGenesis { first_seq: 5 }.to_string(), "first event is not genesis: seq=5"); }
+fn error_display_missing_genesis() {
+    assert_eq!(
+        StreamError::MissingGenesis { first_seq: 5 }.to_string(),
+        "first event is not genesis: seq=5"
+    );
+}
 
 #[test]
-fn error_display_genesis_has_prev_hash() { assert_eq!(StreamError::GenesisHasPrevHash.to_string(), "genesis event must not have prev_event_hash"); }
+fn error_display_genesis_has_prev_hash() {
+    assert_eq!(
+        StreamError::GenesisHasPrevHash.to_string(),
+        "genesis event must not have prev_event_hash"
+    );
+}
 
 #[test]
-fn error_display_sequence_gap() { assert_eq!(StreamError::SequenceGap { expected: 3, actual: 7 }.to_string(), "sequence gap at seq 7: expected 3"); }
+fn error_display_sequence_gap() {
+    assert_eq!(
+        StreamError::SequenceGap {
+            expected: 3,
+            actual: 7
+        }
+        .to_string(),
+        "sequence gap at seq 7: expected 3"
+    );
+}
 
 #[test]
 fn error_display_invalid_prev_hash() {
-    let e = StreamError::InvalidPrevHash { seq: 4, expected: Digest { algorithm: 1, value: vec![0u8; 32] }, actual: Digest { algorithm: 1, value: vec![1u8; 32] } };
+    let e = StreamError::InvalidPrevHash {
+        seq: 4,
+        expected: Digest {
+            algorithm: 1,
+            value: vec![0u8; 32],
+        },
+        actual: Digest {
+            algorithm: 1,
+            value: vec![1u8; 32],
+        },
+    };
     assert_eq!(e.to_string(), "invalid prev_hash at seq 4");
 }
 
 #[test]
-fn error_display_missing_signature() { assert_eq!(StreamError::MissingSignature.to_string(), "event signature is missing"); }
+fn error_display_missing_signature() {
+    assert_eq!(
+        StreamError::MissingSignature.to_string(),
+        "event signature is missing"
+    );
+}
 
 #[test]
-fn error_display_invalid_signature() { assert_eq!(StreamError::InvalidSignature { expected: 64, actual: 32 }.to_string(), "invalid signature length: expected 64, got 32"); }
+fn error_display_invalid_signature() {
+    assert_eq!(
+        StreamError::InvalidSignature {
+            expected: 64,
+            actual: 32
+        }
+        .to_string(),
+        "invalid signature length: expected 64, got 32"
+    );
+}
 
 #[test]
-fn error_display_invalid_signature_format() { assert_eq!(StreamError::InvalidSignatureFormat("bad scalars".into()).to_string(), "invalid signature format: bad scalars"); }
+fn error_display_invalid_signature_format() {
+    assert_eq!(
+        StreamError::InvalidSignatureFormat("bad scalars".into()).to_string(),
+        "invalid signature format: bad scalars"
+    );
+}
 
 #[test]
-fn error_display_invalid_public_key() { assert_eq!(StreamError::InvalidPublicKey("malformed point".into()).to_string(), "invalid public key: malformed point"); }
+fn error_display_invalid_public_key() {
+    assert_eq!(
+        StreamError::InvalidPublicKey("malformed point".into()).to_string(),
+        "invalid public key: malformed point"
+    );
+}
 
 #[test]
-fn error_display_signature_verification() { assert_eq!(StreamError::SignatureVerification("verify failed".into()).to_string(), "signature verification failed: verify failed"); }
+fn error_display_signature_verification() {
+    assert_eq!(
+        StreamError::SignatureVerification("verify failed".into()).to_string(),
+        "signature verification failed: verify failed"
+    );
+}
 
 #[test]
-fn error_display_hardware_signing() { assert_eq!(StreamError::HardwareSigning("tpm unavailable".into()).to_string(), "hardware signing failed: tpm unavailable"); }
+fn error_display_hardware_signing() {
+    assert_eq!(
+        StreamError::HardwareSigning("tpm unavailable".into()).to_string(),
+        "hardware signing failed: tpm unavailable"
+    );
+}
 
 #[test]
 fn error_is_std_error() {
@@ -550,7 +647,10 @@ fn validate_stream_genesis_not_at_seq_zero_rejected() {
 fn validate_stream_genesis_with_prev_hash_rejected() {
     let signer = TestSigner::new();
     let mut genesis = genesis_event(b"s", 0);
-    genesis.prev_event_hash = Some(Digest { algorithm: 1, value: vec![0u8; 32] });
+    genesis.prev_event_hash = Some(Digest {
+        algorithm: 1,
+        value: vec![0u8; 32],
+    });
     sign_event(&mut genesis, &signer).unwrap();
     let err = validate_stream(&[genesis], &signer.node_id()).unwrap_err();
     assert!(matches!(err, StreamError::GenesisHasPrevHash));

@@ -327,8 +327,14 @@ pub fn execute_query(
         }
     }
 
-    let proof_objects =
-        build_query_proof_objects(query, store, &event_refs, &snapshot_refs, &object_refs, signer);
+    let proof_objects = build_query_proof_objects(
+        query,
+        store,
+        &event_refs,
+        &snapshot_refs,
+        &object_refs,
+        signer,
+    );
 
     let mut fragment = QueryResultFragment {
         fragment_version: 1,
@@ -749,7 +755,11 @@ fn store_proof_object(
 ) {
     use edgerun_proto::edgerun::v0::common::ObjectKind;
 
-    match store.put_object(proof_bytes, ObjectKind::Proof as i32, &[signer.node_id().0.to_vec()]) {
+    match store.put_object(
+        proof_bytes,
+        ObjectKind::Proof as i32,
+        &[signer.node_id().0.to_vec()],
+    ) {
         Ok(object_ref) => proof_objects.push(object_ref),
         Err(e) => edgerun_log::warn!("failed to store query proof object: {}", e),
     }

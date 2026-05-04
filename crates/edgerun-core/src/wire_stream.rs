@@ -22,7 +22,9 @@ pub fn command_signable_wire_bytes(command: &CommandEnvelope) -> Vec<u8> {
 }
 
 pub fn command_full_wire_bytes(command: &CommandEnvelope) -> Vec<u8> {
-    edgerun_wire::canonical_bytes(&proto_boundary::command_envelope_from_proto(command.clone()))
+    edgerun_wire::canonical_bytes(&proto_boundary::command_envelope_from_proto(
+        command.clone(),
+    ))
 }
 
 pub fn command_result_wire_bytes(result: &CommandResultPayload) -> Vec<u8> {

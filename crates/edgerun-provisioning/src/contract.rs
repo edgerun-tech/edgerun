@@ -1,14 +1,14 @@
-use edgerun_proto::edgerun::v0::common::{Identity, Signature, Timestamp};
 use edgerun_crypto::{sign, verify, KeyPair, PublicKey};
+use edgerun_proto::edgerun::v0::common::{Identity, Signature, Timestamp};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Provisioning contract kind — enum, not bool
 /// Mirrors proto enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProvisioningKind {
-    Unspecified,  // Rejected
-    SingleNode,   // Normal path
-    Template,     // Reserved — not supported yet
+    Unspecified, // Rejected
+    SingleNode,  // Normal path
+    Template,    // Reserved — not supported yet
 }
 
 impl ProvisioningKind {
@@ -67,17 +67,17 @@ impl ProvisioningContract {
         hasher.update(self.version.as_bytes());
         hasher.finalize().to_vec()
     }
-    
+
     /// Verify the controller signature on this contract
     pub fn verify_signature(&self, controller_public_key: &PublicKey) -> bool {
         let Some(ref sig) = self.controller_signature else {
             return false;
         };
-        
+
         let payload = self.canonical_payload();
         verify(controller_public_key, payload.as_bytes(), sig)
     }
-    
+
     /// Build the canonical payload for signing
     fn canonical_payload(&self) -> String {
         format!(
@@ -89,7 +89,7 @@ impl ProvisioningContract {
             self.kind,
         )
     }
-    
+
     /// Check if this contract has expired
     pub fn is_expired(&self) -> bool {
         let now = SystemTime::now()
@@ -98,7 +98,7 @@ impl ProvisioningContract {
             .as_secs();
         now > self.expires_at.seconds as u64
     }
-    
+
     /// Check if this contract is single-use (not template)
     pub fn is_single_use(&self) -> bool {
         matches!(self.kind, ProvisioningKind::SingleNode)

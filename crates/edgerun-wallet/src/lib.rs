@@ -8,11 +8,11 @@ extern crate alloc;
 
 pub mod amount;
 pub mod asset;
-pub mod status;
 pub mod errors;
+pub mod status;
 
 // Re-exports
 pub use amount::DecimalAmount;
-pub use asset::{AssetRef, Asset, canonical_asset_id};
-pub use status::{CanonicalOrderStatus, is_terminal, can_transition};
+pub use asset::{canonical_asset_id, Asset, AssetRef};
 pub use errors::WalletError;
+pub use status::{can_transition, is_terminal, CanonicalOrderStatus};

@@ -75,7 +75,10 @@ fn make_app_instance_id() -> [u8; 16] {
     now.to_le_bytes()
 }
 
-fn command_to_event_bytes(cmd: &edgerun_proto::edgerun::v0::stream::CommandEnvelope, accepted: bool) -> Vec<u8> {
+fn command_to_event_bytes(
+    cmd: &edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+    accepted: bool,
+) -> Vec<u8> {
     // Bootstrap simulation - creates event bytes without faking CommandResultPayload
     // Real nodes use record_and_respond_with_result_object which builds proper payloads
     let event_type = if accepted {
@@ -87,13 +90,11 @@ fn command_to_event_bytes(cmd: &edgerun_proto::edgerun::v0::stream::CommandEnvel
     Vec::new()
 }
 
-fn run_bootstrap_loop(
-    wasm_path: &str,
-    verbose: bool,
-    node_identity: IdentityRef,
-) -> Result<bool> {
+fn run_bootstrap_loop(wasm_path: &str, verbose: bool, node_identity: IdentityRef) -> Result<bool> {
     let mut runtime = wasm_host::WasmRuntime::new(wasm_path, verbose)?;
-    let app_key = Arc::new(app_principal::AppKeyPair::generate(b"settings-app".to_vec())?);
+    let app_key = Arc::new(app_principal::AppKeyPair::generate(
+        b"settings-app".to_vec(),
+    )?);
     let context = wasm_host::ExecutionContext {
         node_identity: node_identity.clone(),
         app_instance_id: make_app_instance_id(),
@@ -143,33 +144,35 @@ fn run_bootstrap_loop(
             eprintln!("Dispatching {} command(s)", result.pending_commands.len());
         }
 
-        let dispatch_results =
-            bootstrap::simulate_bootstrap_commands(result.pending_commands.clone(), &mut bootstrap_state);
+        let dispatch_results = bootstrap::simulate_bootstrap_commands(
+            result.pending_commands.clone(),
+            &mut bootstrap_state,
+        );
 
-            for (cmd, dispatch) in result.pending_commands.iter().zip(dispatch_results.iter()) {
-                let cmd_type = CommandType::from_i32(cmd.command_type);
-                let event_bytes = command_to_event_bytes(cmd, dispatch.accepted);
-                event_results.push(event_bytes);
+        for (cmd, dispatch) in result.pending_commands.iter().zip(dispatch_results.iter()) {
+            let cmd_type = CommandType::from_i32(cmd.command_type);
+            let event_bytes = command_to_event_bytes(cmd, dispatch.accepted);
+            event_results.push(event_bytes);
 
-                if dispatch.accepted {
-                    if verbose {
-                        eprintln!("  command {:?} accepted", cmd_type);
+            if dispatch.accepted {
+                if verbose {
+                    eprintln!("  command {:?} accepted", cmd_type);
+                }
+                match cmd_type {
+                    Some(CommandType::CreateIdentity) | Some(CommandType::ImportIdentity) => {
+                        bootstrap_state.mark_identity_created();
                     }
-                    match cmd_type {
-                        Some(CommandType::CreateIdentity) | Some(CommandType::ImportIdentity) => {
-                            bootstrap_state.mark_identity_created();
-                        }
-                        Some(CommandType::AddController) => {
-                            bootstrap_state.mark_controller_added();
-                        }
-                        _ => {}
+                    Some(CommandType::AddController) => {
+                        bootstrap_state.mark_controller_added();
                     }
-                } else {
-                    if verbose {
-                        eprintln!("  command {:?} rejected: {}", cmd_type, dispatch.reason);
-                    }
+                    _ => {}
+                }
+            } else {
+                if verbose {
+                    eprintln!("  command {:?} rejected: {}", cmd_type, dispatch.reason);
                 }
             }
+        }
 
         if bootstrap_state.is_bootstrap_complete() {
             bootstrap_state.complete();
@@ -181,18 +184,17 @@ fn run_bootstrap_loop(
     }
 
     if iteration >= max_iterations {
-        eprintln!("Bootstrap exceeded max iterations ({}), aborting", max_iterations);
+        eprintln!(
+            "Bootstrap exceeded max iterations ({}), aborting",
+            max_iterations
+        );
     }
 
     Ok(bootstrap_state.is_bootstrap_complete())
 }
 
 #[cfg(feature = "gui")]
-fn run_gui_app(
-    wasm_path: &str,
-    verbose: bool,
-    ctx: wasm_host::ExecutionContext,
-) -> Result<()> {
+fn run_gui_app(wasm_path: &str, verbose: bool, ctx: wasm_host::ExecutionContext) -> Result<()> {
     use eframe::egui;
 
     let wasm = wasm_host::WasmRuntime::new(wasm_path, verbose)?;
@@ -280,11 +282,7 @@ fn run_gui_app(
 }
 
 #[cfg(not(feature = "gui"))]
-fn run_gui_app(
-    wasm_path: &str,
-    verbose: bool,
-    ctx: wasm_host::ExecutionContext,
-) -> Result<()> {
+fn run_gui_app(wasm_path: &str, verbose: bool, ctx: wasm_host::ExecutionContext) -> Result<()> {
     let mut runtime = wasm_host::WasmRuntime::new(wasm_path, verbose)?;
 
     if verbose {
@@ -352,7 +350,9 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let app_key = Arc::new(app_principal::AppKeyPair::generate(b"default-app".to_vec())?);
+    let app_key = Arc::new(app_principal::AppKeyPair::generate(
+        b"default-app".to_vec(),
+    )?);
     let ctx = wasm_host::ExecutionContext {
         node_identity,
         app_instance_id: make_app_instance_id(),

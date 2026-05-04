@@ -10,9 +10,7 @@
 pub mod command_handlers;
 
 // Re-export key types for handlers
-pub use command_handlers::{
-    control, custom, apps, identity, infrastructure, user, config,
-};
+pub use command_handlers::{apps, config, control, custom, identity, infrastructure, user};
 
 use crate::command_authority::{build_validation_context, check_replay_cache, CommandGateDecision};
 use crate::command_dispatch_payload::extract_payload_or_reject;
@@ -22,7 +20,6 @@ use edgerun_core::command::{
     command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
 };
 use edgerun_core::encrypted_envelope::validate_encrypted_envelope;
-use edgerun_proto::edgerun::v0::common::EncryptedEnvelope;
 use edgerun_core::result::Verdict;
 use edgerun_core::util::{
     now_prost_timestamp, now_unix_micros_u64, now_unix_millis_i64, now_unix_secs_i64,
@@ -33,6 +30,7 @@ use edgerun_core::validators_proto::{
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_json::Value as JsonValue;
+use edgerun_proto::edgerun::v0::common::EncryptedEnvelope;
 use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef, ObjectRef};
 use edgerun_proto::edgerun::v0::stream::{
     CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload,
@@ -123,8 +121,15 @@ pub fn dispatch_command(
         check_replay_cache(command, store, replay_cache)
     {
         return record_and_respond(
-            command, store, stream_id, signer, controllers,
-            true, "duplicate_command", Vec::new(), None,
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            true,
+            "duplicate_command",
+            Vec::new(),
+            None,
         );
     }
 
@@ -133,9 +138,15 @@ pub fn dispatch_command(
     let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
 
     let ctx = build_validation_context(
-        signer, replay_cache, revoked_delegations, trusted_root_ids,
-        local_assurance_class, exec_ctx,
-        &delegation_use_counts, &delegation_rate_events_ms, now_ms,
+        signer,
+        replay_cache,
+        revoked_delegations,
+        trusted_root_ids,
+        local_assurance_class,
+        exec_ctx,
+        &delegation_use_counts,
+        &delegation_rate_events_ms,
+        now_ms,
     );
 
     // Run full validation
@@ -149,20 +160,41 @@ pub fn dispatch_command(
                 .map(|r| r.as_str().to_string())
                 .unwrap_or_else(|| "rejected".into());
             return record_and_respond(
-                command, store, stream_id, signer, controllers,
-                false, &reason, Vec::new(), None,
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &reason,
+                Vec::new(),
+                None,
             );
         }
         Verdict::Defer => {
             return record_and_respond(
-                command, store, stream_id, signer, controllers,
-                false, "deferred", Vec::new(), None,
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                "deferred",
+                Vec::new(),
+                None,
             );
         }
         Verdict::Duplicate => {
             return record_and_respond(
-                command, store, stream_id, signer, controllers,
-                true, "duplicate_command", Vec::new(), None,
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                true,
+                "duplicate_command",
+                Vec::new(),
+                None,
             );
         }
         Verdict::Accept => {}
@@ -188,8 +220,15 @@ pub fn dispatch_command(
             .map(|r| r.as_str().to_string())
             .unwrap_or_else(|| "policy_denied".into());
         return record_and_respond(
-            command, store, stream_id, signer, controllers,
-            false, &reason, Vec::new(), None,
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            &reason,
+            Vec::new(),
+            None,
         );
     }
 
@@ -210,8 +249,15 @@ pub fn dispatch_command(
                 .map(|r| r.as_str().to_string())
                 .unwrap_or_else(|| "control_change_rejected".into());
             return record_and_respond(
-                command, store, stream_id, signer, controllers,
-                false, &reason, Vec::new(), None,
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+                false,
+                &reason,
+                Vec::new(),
+                None,
             );
         }
     }
@@ -219,15 +265,14 @@ pub fn dispatch_command(
     // Encrypted envelope validation
     let needs_encryption = matches!(
         CommandType::from_i32(command.command_type),
-        Some(
-            CommandType::StoreObject
-                | CommandType::ExecuteWorkload
-        )
+        Some(CommandType::StoreObject | CommandType::ExecuteWorkload)
     );
 
     if needs_encryption {
         let payload_bytes = match &command.payload {
-            Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(b)) => Some(b.clone()),
+            Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(
+                b,
+            )) => Some(b.clone()),
             _ => None,
         };
 
@@ -236,15 +281,29 @@ pub fn dispatch_command(
                 Ok(env) => {
                     if let Err(reason) = validate_encrypted_envelope(&env) {
                         return record_and_respond(
-                            command, store, stream_id, signer, controllers,
-                            false, &reason, Vec::new(), None,
+                            command,
+                            store,
+                            stream_id,
+                            signer,
+                            controllers,
+                            false,
+                            &reason,
+                            Vec::new(),
+                            None,
                         );
                     }
                 }
                 Err(_) => {
                     return record_and_respond(
-                        command, store, stream_id, signer, controllers,
-                        false, "PLAINTEXT_PAYLOAD_REJECTED", Vec::new(), None,
+                        command,
+                        store,
+                        stream_id,
+                        signer,
+                        controllers,
+                        false,
+                        "PLAINTEXT_PAYLOAD_REJECTED",
+                        Vec::new(),
+                        None,
                     );
                 }
             }
@@ -263,31 +322,60 @@ pub fn dispatch_command(
         x if x == CommandType::TransferControl as i32 => {
             control::dispatch_transfer_control(command, store, stream_id, signer, controllers)
         }
-        x if x == CommandType::PublishSnapshot as i32 => {
-            record_and_respond(
-                command, store, stream_id, signer, controllers,
-                false, "use_produce_snapshot_request", Vec::new(), None,
-            )
-        }
-        x if x == CommandType::FetchObject as i32 => {
-            record_and_respond(
-                command, store, stream_id, signer, controllers,
-                false, "use_fetch_object_request", Vec::new(), None,
-            )
-        }
-        x if x == CommandType::Query as i32 => {
-            record_and_respond(
-                command, store, stream_id, signer, controllers,
-                true, "", Vec::new(), None,
-            )
-        }
+        x if x == CommandType::PublishSnapshot as i32 => record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "use_produce_snapshot_request",
+            Vec::new(),
+            None,
+        ),
+        x if x == CommandType::FetchObject as i32 => record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "use_fetch_object_request",
+            Vec::new(),
+            None,
+        ),
+        x if x == CommandType::Query as i32 => record_and_respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            true,
+            "",
+            Vec::new(),
+            None,
+        ),
         x if x == CommandType::ExecuteWorkload as i32 => record_and_respond(
-            command, store, stream_id, signer, controllers,
-            false, "execute_workload_not_supported", Vec::new(), None,
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "execute_workload_not_supported",
+            Vec::new(),
+            None,
         ),
         x if x == CommandType::TerminateWorkload as i32 => record_and_respond(
-            command, store, stream_id, signer, controllers,
-            false, "terminate_workload_not_supported", Vec::new(), None,
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+            false,
+            "terminate_workload_not_supported",
+            Vec::new(),
+            None,
         ),
         x if x == CommandType::CreateDelegation as i32
             || x == CommandType::CreateRevocation as i32 =>
@@ -310,14 +398,30 @@ pub fn dispatch_command(
             identity::dispatch_import_identity(command, store, stream_id, signer, controllers)
         }
         x if x == CommandType::AddBootstrapNode as i32 => {
-            infrastructure::dispatch_add_bootstrap_node(command, store, stream_id, signer, controllers)
+            infrastructure::dispatch_add_bootstrap_node(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+            )
         }
         x if x == CommandType::AddReachabilityHint as i32 => {
-            infrastructure::dispatch_add_reachability_hint(command, store, stream_id, signer, controllers)
+            infrastructure::dispatch_add_reachability_hint(
+                command,
+                store,
+                stream_id,
+                signer,
+                controllers,
+            )
         }
-        x if x == CommandType::QueryNodeState as i32 => {
-            infrastructure::dispatch_query_node_state(command, store, stream_id, signer, controllers)
-        }
+        x if x == CommandType::QueryNodeState as i32 => infrastructure::dispatch_query_node_state(
+            command,
+            store,
+            stream_id,
+            signer,
+            controllers,
+        ),
         x if x == CommandType::RequestUserPresence as i32 => {
             user::dispatch_request_user_presence(command, store, stream_id, signer, controllers)
         }
@@ -327,13 +431,27 @@ pub fn dispatch_command(
         _ => {
             if command_type > 0 && command_type < 1000 {
                 record_and_respond(
-                    command, store, stream_id, signer, controllers,
-                    false, "unknown_command_type_reserved", Vec::new(), None,
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    false,
+                    "unknown_command_type_reserved",
+                    Vec::new(),
+                    None,
                 )
             } else {
                 record_and_respond(
-                    command, store, stream_id, signer, controllers,
-                    false, "unsupported_extension_command_type", Vec::new(), None,
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    controllers,
+                    false,
+                    "unsupported_extension_command_type",
+                    Vec::new(),
+                    None,
                 )
             }
         }

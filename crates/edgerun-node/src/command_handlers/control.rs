@@ -109,11 +109,8 @@ pub fn dispatch_remove_controller(
 
     edgerun_log::info!("controller removed");
 
-    let response = format!(
-        "controller removed: {}",
-        bytes_to_hex_prefixed(&target_id)
-    )
-    .into_bytes();
+    let response =
+        format!("controller removed: {}", bytes_to_hex_prefixed(&target_id)).into_bytes();
     record_and_respond(
         command,
         store,

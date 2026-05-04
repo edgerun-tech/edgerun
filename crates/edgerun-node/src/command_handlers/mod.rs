@@ -3,10 +3,10 @@
 //! Splits the monolithic command_dispatch.rs into focused modules
 //! organized by command type.
 
-pub mod control;        // add/remove/transfer controller
-pub mod custom;         // delegation/revocation
-pub mod apps;          // install/uninstall
-pub mod identity;      // create/import identity
+pub mod apps; // install/uninstall
+pub mod config;
+pub mod control; // add/remove/transfer controller
+pub mod custom; // delegation/revocation
+pub mod identity; // create/import identity
 pub mod infrastructure; // bootstrap/reachability/query
-pub mod user;          // user presence/signature requests
-pub mod config;        // update config
+pub mod user; // user presence/signature requests // update config

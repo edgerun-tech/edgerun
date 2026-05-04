@@ -9,10 +9,10 @@ mod system_info;
 mod wasm_samples;
 
 use artifact::ArtifactWriter;
-use bench_validation::ValidationBench;
-use bench_runtime::RuntimeBench;
 use bench_hostcall::HostcallBench;
 use bench_memory::MemoryBench;
+use bench_runtime::RuntimeBench;
+use bench_validation::ValidationBench;
 
 fn main() -> Result<()> {
     println!("EdgeRun WASM Benchmark Suite");
@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     let mut artifacts = ArtifactWriter::new("target/edgerun-bench/wasm/")?;
 
     system_info::collect(&mut artifacts)?;
-    
+
     wasm_samples::ensure_samples("crates/edgerun-wasm-bench/samples/")?;
 
     println!("[1/5] Validation Benchmark...");
@@ -54,9 +54,13 @@ fn generate_summary(artifacts: &mut ArtifactWriter) -> Result<()> {
 
     let sys_info = artifacts.read("system-info.txt")?;
     for line in sys_info.lines() {
-        if line.starts_with("Machine:") || line.starts_with("OS/") || 
-           line.starts_with("Rust ") || line.starts_with("Target:") || 
-           line.starts_with("Commit:") || line.starts_with("Date:") {
+        if line.starts_with("Machine:")
+            || line.starts_with("OS/")
+            || line.starts_with("Rust ")
+            || line.starts_with("Target:")
+            || line.starts_with("Commit:")
+            || line.starts_with("Date:")
+        {
             summary.push_str(line);
             summary.push_str("\n");
         }

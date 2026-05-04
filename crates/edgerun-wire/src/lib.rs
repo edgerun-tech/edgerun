@@ -106,7 +106,10 @@ impl<'a> WireReader<'a> {
     }
 
     pub fn take(&mut self, len: usize) -> Result<&'a [u8], WireError> {
-        let end = self.offset.checked_add(len).ok_or(WireError::LengthOverflow)?;
+        let end = self
+            .offset
+            .checked_add(len)
+            .ok_or(WireError::LengthOverflow)?;
         if end > self.input.len() {
             return Err(WireError::Eof);
         }
@@ -384,7 +387,10 @@ impl WireDecode for WireValue {
                 let len = input.read_len()?;
                 let mut values = Vec::with_capacity(len);
                 for _ in 0..len {
-                    values.push((WireValue::decode_wire(input)?, WireValue::decode_wire(input)?));
+                    values.push((
+                        WireValue::decode_wire(input)?,
+                        WireValue::decode_wire(input)?,
+                    ));
                 }
                 Ok(WireValue::Map(values))
             }

@@ -668,9 +668,7 @@ impl NodeStore {
         recipients: &[Vec<u8>],
     ) -> Result<String, StorageError> {
         if recipients.is_empty() {
-            return Err(StorageError::InvalidArgument(
-                "NO_RECIPIENT".into(),
-            ));
+            return Err(StorageError::InvalidArgument("NO_RECIPIENT".into()));
         }
         self.blobs.store(plaintext, recipients)
     }

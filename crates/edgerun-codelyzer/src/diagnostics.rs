@@ -85,7 +85,11 @@ fn current_timestamp() -> String {
 }
 
 fn command_exists(cmd: &str) -> bool {
-    Command::new(cmd).arg("--version").output().map(|o| o.status.success()).unwrap_or(false)
+    Command::new(cmd)
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 fn has_npx_tool(tool: &str) -> bool {
@@ -149,14 +153,25 @@ pub fn collect_all(root_dir: &str, graph: &GraphData) -> DiagnosticsReport {
     let mut missing_refs = Vec::new();
 
     if tools.iter().any(|t| t == "cargo") || tools.iter().any(|t| t == "clippy") {
-        run_rust_checks(root_dir, &mut diagnostics, &mut tests, &mut formatting_issues);
+        run_rust_checks(
+            root_dir,
+            &mut diagnostics,
+            &mut tests,
+            &mut formatting_issues,
+        );
     }
 
     if tools.iter().any(|t| t == "flake8")
         || tools.iter().any(|t| t == "pylint")
         || tools.iter().any(|t| t == "mypy")
     {
-        run_python_checks(root_dir, &tools, &mut diagnostics, &mut tests, &mut formatting_issues);
+        run_python_checks(
+            root_dir,
+            &tools,
+            &mut diagnostics,
+            &mut tests,
+            &mut formatting_issues,
+        );
     }
 
     if tools.iter().any(|t| t == "eslint")
@@ -238,7 +253,11 @@ fn run_rust_checks(
 
 fn parse_cargo_diagnostic(line: &str, _root_dir: &str) -> Option<Diagnostic> {
     if line.contains("error") || line.contains("warning") {
-        let severity = if line.contains("error") { "error" } else { "warning" };
+        let severity = if line.contains("error") {
+            "error"
+        } else {
+            "warning"
+        };
         let file = line.split(':').next().unwrap_or("").to_string();
         let line_num = line.split(':').nth(1).and_then(|n| n.trim().parse().ok());
         Some(Diagnostic {
@@ -291,8 +310,10 @@ fn run_python_checks(
     }
 
     if tools.iter().any(|t| t == "pytest") {
-        let out =
-            Command::new("pytest").args(["--collect-only", "-q"]).current_dir(root_dir).output();
+        let out = Command::new("pytest")
+            .args(["--collect-only", "-q"])
+            .current_dir(root_dir)
+            .output();
         if let Ok(o) = out {
             for line in String::from_utf8_lossy(&o.stdout).lines() {
                 if line.contains("::test_") || line.contains("::Test") {
@@ -309,7 +330,10 @@ fn run_python_checks(
     }
 
     if tools.iter().any(|t| t == "black") {
-        let out = Command::new("black").args(["--check", "."]).current_dir(root_dir).output();
+        let out = Command::new("black")
+            .args(["--check", "."])
+            .current_dir(root_dir)
+            .output();
         if let Ok(o) = out {
             if !o.status.success() {
                 for line in String::from_utf8_lossy(&o.stderr).lines() {
@@ -355,8 +379,10 @@ fn run_js_checks(
     }
 
     if tools.iter().any(|t| t == "npx:tsc") {
-        let out =
-            Command::new("npx").args(["--yes", "tsc", "--noEmit"]).current_dir(root_dir).output();
+        let out = Command::new("npx")
+            .args(["--yes", "tsc", "--noEmit"])
+            .current_dir(root_dir)
+            .output();
         if let Ok(o) = out {
             for line in String::from_utf8_lossy(&o.stderr)
                 .lines()
@@ -388,7 +414,9 @@ fn run_js_checks(
 
 fn run_c_checks(_root_dir: &str, tools: &[String], diagnostics: &mut Vec<Diagnostic>) {
     if tools.iter().any(|t| t == "cppcheck") {
-        let out = Command::new("cppcheck").args(["--enable=all", "--quiet", "."]).output();
+        let out = Command::new("cppcheck")
+            .args(["--enable=all", "--quiet", "."])
+            .output();
         if let Ok(o) = out {
             for line in String::from_utf8_lossy(&o.stderr)
                 .lines()
@@ -400,7 +428,9 @@ fn run_c_checks(_root_dir: &str, tools: &[String], diagnostics: &mut Vec<Diagnos
     }
 
     if tools.iter().any(|t| t == "clang-tidy") {
-        let out = Command::new("clang-tidy").args(["-p", "build", "."]).output();
+        let out = Command::new("clang-tidy")
+            .args(["-p", "build", "."])
+            .output();
         if let Ok(o) = out {
             for line in String::from_utf8_lossy(&o.stderr)
                 .lines()
@@ -485,7 +515,10 @@ fn parse_linter_line(line: &str, source: &str) -> Diagnostic {
     let parts: Vec<&str> = line.splitn(4, ": ").collect();
     let (file, line_num, col, severity, message) = if parts.len() >= 4 {
         let loc_parts: Vec<&str> = parts[0].split(':').collect();
-        let file = loc_parts.first().map(|s| s.trim().to_string()).unwrap_or_default();
+        let file = loc_parts
+            .first()
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
         let line_num = loc_parts.get(1).and_then(|s| s.trim().parse().ok());
         let col = loc_parts.get(2).and_then(|s| s.trim().parse().ok());
         let severity = if parts[1].contains("error") || parts[2].contains("error") {
@@ -495,10 +528,19 @@ fn parse_linter_line(line: &str, source: &str) -> Diagnostic {
         } else {
             "info"
         };
-        let message = parts.last().map(|s| s.trim().to_string()).unwrap_or_default();
+        let message = parts
+            .last()
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
         (file, line_num, col, severity, message)
     } else {
-        (line.trim().to_string(), None, None, "info", line.trim().to_string())
+        (
+            line.trim().to_string(),
+            None,
+            None,
+            "info",
+            line.trim().to_string(),
+        )
     };
 
     Diagnostic {
@@ -708,11 +750,22 @@ pub fn get_diagnostics_summary(root_dir: &str, graph: &GraphData) -> String {
     let mut md = String::new();
 
     if !report.linters_available.is_empty() {
-        md.push_str(&format!("## Available Tools\n{}\n", report.linters_available.join(", ")));
+        md.push_str(&format!(
+            "## Available Tools\n{}\n",
+            report.linters_available.join(", ")
+        ));
     }
 
-    let errors: Vec<_> = report.diagnostics.iter().filter(|d| d.severity == "error").collect();
-    let warnings: Vec<_> = report.diagnostics.iter().filter(|d| d.severity == "warning").collect();
+    let errors: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == "error")
+        .collect();
+    let warnings: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == "warning")
+        .collect();
     if !errors.is_empty() || !warnings.is_empty() {
         md.push_str(&format!(
             "## Lint Results\n- Errors: {}\n- Warnings: {}\n",
@@ -740,7 +793,10 @@ pub fn get_diagnostics_summary(root_dir: &str, graph: &GraphData) -> String {
     }
 
     if !report.tests.is_empty() {
-        md.push_str(&format!("## Tests\n- {} test files found\n", report.tests.len()));
+        md.push_str(&format!(
+            "## Tests\n- {} test files found\n",
+            report.tests.len()
+        ));
     }
 
     if !report.formatting_issues.is_empty() {
@@ -756,7 +812,10 @@ pub fn get_diagnostics_summary(root_dir: &str, graph: &GraphData) -> String {
             report.missing_references.len()
         ));
         for r in report.missing_references.iter().take(10) {
-            md.push_str(&format!("  - `{}` called from `{}`\n", r.name, r.referenced_by));
+            md.push_str(&format!(
+                "  - `{}` called from `{}`\n",
+                r.name, r.referenced_by
+            ));
         }
     }
 

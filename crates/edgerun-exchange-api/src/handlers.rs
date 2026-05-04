@@ -61,8 +61,10 @@ pub fn handle_quote(req: &Request) -> Response {
     };
 
     let routing_result = with_providers(|providers| {
-        with_ctx(|ctx| with_policy(|policy| edgerun_exchange::route_quote(&proto_req, providers, ctx, policy)))
-            .flatten()
+        with_ctx(|ctx| {
+            with_policy(|policy| edgerun_exchange::route_quote(&proto_req, providers, ctx, policy))
+        })
+        .flatten()
     })
     .flatten();
 
@@ -105,8 +107,14 @@ pub fn handle_quote(req: &Request) -> Response {
                 "pay_amount".into(),
                 JsonValue::String(provider_quote.pay_amount.to_string()),
             );
-            response.insert("rate".into(), JsonValue::String(provider_quote.rate.to_string()));
-            response.insert("expires_at_ms".into(), JsonValue::Number(provider_quote.expires_at_ms.into()));
+            response.insert(
+                "rate".into(),
+                JsonValue::String(provider_quote.rate.to_string()),
+            );
+            response.insert(
+                "expires_at_ms".into(),
+                JsonValue::Number(provider_quote.expires_at_ms.into()),
+            );
             if let Some(est) = provider_quote.estimated_seconds {
                 response.insert("estimated_seconds".into(), JsonValue::Number(est.into()));
             }
@@ -118,7 +126,10 @@ pub fn handle_quote(req: &Request) -> Response {
         }
         edgerun_exchange::router::QuoteRoutingResult::AllProvidersFailed { errors } => {
             let mut response = Map::new();
-            response.insert("error".into(), JsonValue::String("all providers failed".into()));
+            response.insert(
+                "error".into(),
+                JsonValue::String("all providers failed".into()),
+            );
             response.insert(
                 "errors".into(),
                 JsonValue::Array(errors.into_iter().map(JsonValue::String).collect()),
@@ -257,24 +268,51 @@ pub fn handle_order_status(req: &Request) -> Response {
             let mut response = Map::new();
             response.insert("id".into(), JsonValue::String(order_id.into()));
             response.insert("status".into(), JsonValue::String(status_str.into()));
-            response.insert("canonical_status".into(), JsonValue::Number((projection.canonical_status as i64).into()));
-            response.insert("deposit_address".into(), JsonValue::String(order.deposit_address));
-            response.insert("settlement_amount".into(), JsonValue::String(order.settlement_amount));
+            response.insert(
+                "canonical_status".into(),
+                JsonValue::Number((projection.canonical_status as i64).into()),
+            );
+            response.insert(
+                "deposit_address".into(),
+                JsonValue::String(order.deposit_address),
+            );
+            response.insert(
+                "settlement_amount".into(),
+                JsonValue::String(order.settlement_amount),
+            );
             response.insert("pay_amount".into(), JsonValue::String(order.pay_amount));
-            response.insert("event_count".into(), JsonValue::Number((projection.event_count as u64).into()));
+            response.insert(
+                "event_count".into(),
+                JsonValue::Number((projection.event_count as u64).into()),
+            );
             response.insert("terminal".into(), JsonValue::Bool(projection.terminal));
-            response.insert("manual_review_required".into(), JsonValue::Bool(projection.manual_review_required));
+            response.insert(
+                "manual_review_required".into(),
+                JsonValue::Bool(projection.manual_review_required),
+            );
             if let Some(status) = projection.latest_provider_status {
-                response.insert("latest_provider_status".into(), JsonValue::Number((status as i64).into()));
+                response.insert(
+                    "latest_provider_status".into(),
+                    JsonValue::Number((status as i64).into()),
+                );
             }
             if let Some(detail) = projection.latest_provider_status_string {
-                response.insert("latest_provider_status_detail".into(), JsonValue::String(detail));
+                response.insert(
+                    "latest_provider_status_detail".into(),
+                    JsonValue::String(detail),
+                );
             }
             if let Some(event_type) = projection.last_event_type {
-                response.insert("last_event_type".into(), JsonValue::String(event_type.into()));
+                response.insert(
+                    "last_event_type".into(),
+                    JsonValue::String(event_type.into()),
+                );
             }
             if let Some(updated_at_ms) = projection.updated_at_ms {
-                response.insert("updated_at_ms".into(), JsonValue::Number(updated_at_ms.into()));
+                response.insert(
+                    "updated_at_ms".into(),
+                    JsonValue::Number(updated_at_ms.into()),
+                );
             }
             json_response(200, JsonValue::Object(response))
         }
@@ -288,7 +326,10 @@ pub fn handle_order_status(req: &Request) -> Response {
 pub fn handle_assets(req: &Request) -> Response {
     let _ = req;
     let mut assets = Map::new();
-    assets.insert("USDT".into(), asset_info("Tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"));
+    assets.insert(
+        "USDT".into(),
+        asset_info("Tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"),
+    );
     assets.insert("BTC".into(), asset_info("Bitcoin", ""));
     assets.insert("ETH".into(), asset_info("Ethereum", ""));
     assets.insert("DOGE".into(), asset_info("Dogecoin", ""));
@@ -309,8 +350,14 @@ pub fn handle_assets(req: &Request) -> Response {
 pub fn handle_health(req: &Request) -> Response {
     let _ = req;
     let mut providers = Map::new();
-    providers.insert("SIDESHIFT".into(), JsonValue::String("not_implemented".into()));
-    providers.insert("CHANGENOW".into(), JsonValue::String("not_implemented".into()));
+    providers.insert(
+        "SIDESHIFT".into(),
+        JsonValue::String("not_implemented".into()),
+    );
+    providers.insert(
+        "CHANGENOW".into(),
+        JsonValue::String("not_implemented".into()),
+    );
     providers.insert("FFIO".into(), JsonValue::String("not_implemented".into()));
 
     let mut status = Map::new();
@@ -352,7 +399,8 @@ fn canonical_status_to_str(status: i32) -> &'static str {
 fn json_response(status: u16, body: JsonValue) -> Response {
     let body_str = to_string(&body).unwrap_or_else(|_| "{}".into());
     let mut resp = Response::json(StatusCode::new(status).unwrap(), &body_str);
-    resp.headers_mut().insert("Content-Type", "application/json".try_into().unwrap());
+    resp.headers_mut()
+        .insert("Content-Type", "application/json".try_into().unwrap());
     resp
 }
 
@@ -389,7 +437,9 @@ impl QuoteInput {
     fn from_json_value(json: &JsonValue) -> Result<Self, String> {
         let obj = json.as_object().ok_or("expected JSON object")?;
         let settlement = obj.get("settlement").ok_or("missing 'settlement'")?;
-        let settlement_obj = settlement.as_object().ok_or("'settlement' must be object")?;
+        let settlement_obj = settlement
+            .as_object()
+            .ok_or("'settlement' must be object")?;
         let settlement_symbol = settlement_obj
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -416,13 +466,22 @@ impl QuoteInput {
             "floating" => 2,
             _ => 1,
         });
-        let amount_side = obj.get("amount_side").and_then(|v| v.as_str()).map(|s| match s {
-            "settlement" => 1,
-            "pay" => 2,
-            _ => 1,
-        });
-        let refund_address = obj.get("refund_address").and_then(|v| v.as_str()).map(String::from);
-        let recipient_address = obj.get("recipient_address").and_then(|v| v.as_str()).map(String::from);
+        let amount_side = obj
+            .get("amount_side")
+            .and_then(|v| v.as_str())
+            .map(|s| match s {
+                "settlement" => 1,
+                "pay" => 2,
+                _ => 1,
+            });
+        let refund_address = obj
+            .get("refund_address")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let recipient_address = obj
+            .get("recipient_address")
+            .and_then(|v| v.as_str())
+            .map(String::from);
 
         Ok(QuoteInput {
             settlement_asset_id: alloc::format!(
@@ -457,7 +516,11 @@ impl edgerun_json::FromJson for OrderInput {
     fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
         let obj = match value {
             JsonValue::Object(o) => o,
-            _ => return Err(edgerun_json::JsonValueError::WrongType("expected object".into())),
+            _ => {
+                return Err(edgerun_json::JsonValueError::WrongType(
+                    "expected object".into(),
+                ))
+            }
         };
         let quote_id = obj
             .get("quote_id")
@@ -469,7 +532,14 @@ impl edgerun_json::FromJson for OrderInput {
             .and_then(|v| v.as_str())
             .ok_or_else(|| edgerun_json::JsonValueError::WrongType("missing destination".into()))?
             .to_string();
-        let refund_address = obj.get("refund_address").and_then(|v| v.as_str()).map(String::from);
-        Ok(OrderInput { quote_id, destination, refund_address })
+        let refund_address = obj
+            .get("refund_address")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        Ok(OrderInput {
+            quote_id,
+            destination,
+            refund_address,
+        })
     }
 }

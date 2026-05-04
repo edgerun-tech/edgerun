@@ -7,8 +7,8 @@ use crate::command_dispatch::{
 use crate::command_dispatch_event::record_action_event;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::stream::{
-    command_envelope, AddBootstrapNodePayload, AddReachabilityHintPayload,
-    CommandEnvelope, EventType, QueryNodeStatePayload,
+    command_envelope, AddBootstrapNodePayload, AddReachabilityHintPayload, CommandEnvelope,
+    EventType, QueryNodeStatePayload,
 };
 use edgerun_storage::NodeStore;
 use prost::Message;
@@ -64,12 +64,8 @@ pub fn dispatch_add_bootstrap_node(
     edgerun_log::info!("add_bootstrap_node: label={} address={}", label, address);
 
     let result_payload = build_command_result_payload(
-        command,
-        1, // CommandDecision::Committed
-        "",
-        None,
-        None,
-        None,
+        command, 1, // CommandDecision::Committed
+        "", None, None, None,
     );
     let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
@@ -131,19 +127,11 @@ pub fn dispatch_add_reachability_hint(
     let hint_type = hint_payload.hint_type.as_str();
     let value = &hint_payload.value;
 
-    edgerun_log::info!(
-        "add_reachability_hint: type={} value={}",
-        hint_type,
-        value
-    );
+    edgerun_log::info!("add_reachability_hint: type={} value={}", hint_type, value);
 
     let result_payload = build_command_result_payload(
-        command,
-        1, // CommandDecision::Committed
-        "",
-        None,
-        None,
-        None,
+        command, 1, // CommandDecision::Committed
+        "", None, None, None,
     );
     let response_bytes = prost::Message::encode_to_vec(&result_payload);
 

@@ -256,7 +256,10 @@ fn previous_line_hash(path: &PathBuf) -> io::Result<String> {
 
 fn insert_event_hash(body: &str, event_hash: &str) -> String {
     let without_opening_brace = body.strip_prefix('{').unwrap_or(body);
-    format!("{{\"event_hash\":\"{}\",{}", event_hash, without_opening_brace)
+    format!(
+        "{{\"event_hash\":\"{}\",{}",
+        event_hash, without_opening_brace
+    )
 }
 
 fn digest_ref(bytes: &[u8]) -> String {

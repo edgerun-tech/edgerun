@@ -63,14 +63,20 @@ pub fn fetch_commits(scan_root: &str, depth: Option<usize>) -> Vec<Commit> {
     let commits = parse_git_log(&text);
 
     // Make file paths relative to scan_root by stripping the repo_rel_path prefix
-    let strip_prefix =
-        if repo_rel_path.is_empty() { String::new() } else { format!("{}/", repo_rel_path) };
+    let strip_prefix = if repo_rel_path.is_empty() {
+        String::new()
+    } else {
+        format!("{}/", repo_rel_path)
+    };
 
     commits
         .into_iter()
         .map(|mut c| {
-            c.files =
-                c.files.into_iter().filter_map(|f| strip_git_path(&f, &strip_prefix)).collect();
+            c.files = c
+                .files
+                .into_iter()
+                .filter_map(|f| strip_git_path(&f, &strip_prefix))
+                .collect();
             c
         })
         .collect()
@@ -188,7 +194,8 @@ pub fn build_file_commit_map(commits: &[Commit]) -> HashMap<String, String> {
     let mut map: HashMap<String, String> = HashMap::new();
     for commit in commits {
         for file in &commit.files {
-            map.entry(file.clone()).or_insert_with(|| commit.hash.clone());
+            map.entry(file.clone())
+                .or_insert_with(|| commit.hash.clone());
         }
     }
     map
@@ -197,7 +204,10 @@ pub fn build_file_commit_map(commits: &[Commit]) -> HashMap<String, String> {
 /// Get commits that touched a specific file (newest first).
 #[allow(dead_code)]
 pub fn file_history<'a>(commits: &'a [Commit], file_path: &str) -> Vec<&'a Commit> {
-    commits.iter().filter(|c| c.files.iter().any(|f| f == file_path)).collect()
+    commits
+        .iter()
+        .filter(|c| c.files.iter().any(|f| f == file_path))
+        .collect()
 }
 
 /// Get all files changed in the last N commits.

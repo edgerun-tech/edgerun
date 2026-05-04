@@ -1,8 +1,8 @@
+use crate::artifact::ArtifactWriter;
 use anyhow::Result;
 use std::path::PathBuf;
 use std::time::Instant;
-use wasmparser::{Validator, Parser, Payload};
-use crate::artifact::ArtifactWriter;
+use wasmparser::{Parser, Payload, Validator};
 
 pub struct ValidationBench;
 
@@ -31,7 +31,7 @@ impl ValidationBench {
             };
 
             let file_size = wasm.len();
-            
+
             let cold_times = self.benchmark_cold(&wasm, 10)?;
             let warm_times = self.benchmark_warm(&wasm, 100)?;
 
@@ -46,8 +46,18 @@ impl ValidationBench {
             results.push_str(&format!("      \"warm_ms_median\": {},\n", warm_times.1));
             results.push_str(&format!("      \"warm_ms_p90\": {},\n", warm_times.2));
             results.push_str(&format!("      \"warm_ms_p99\": {},\n", warm_times.3));
-            results.push_str(&format!("      \"throughput_bytes_per_sec\": {}\n", if warm_times.1 > 0.0 { file_size as f64 / warm_times.1 * 1000.0 } else { 0.0 }));
-            results.push_str(&format!("    }}{}\n", if i < samples.len() - 1 { " " } else { "" }));
+            results.push_str(&format!(
+                "      \"throughput_bytes_per_sec\": {}\n",
+                if warm_times.1 > 0.0 {
+                    file_size as f64 / warm_times.1 * 1000.0
+                } else {
+                    0.0
+                }
+            ));
+            results.push_str(&format!(
+                "    }}{}\n",
+                if i < samples.len() - 1 { " " } else { "" }
+            ));
         }
 
         results.push_str("  ]\n");
@@ -59,7 +69,7 @@ impl ValidationBench {
 
     fn benchmark_cold(&self, wasm: &[u8], runs: usize) -> Result<(f64, f64)> {
         let mut times = Vec::with_capacity(runs);
-        
+
         for _ in 0..runs {
             let start = Instant::now();
             let mut validator = Validator::new();
@@ -69,12 +79,15 @@ impl ValidationBench {
         }
 
         times.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        Ok((times.first().copied().unwrap_or(0.0), times.last().copied().unwrap_or(0.0)))
+        Ok((
+            times.first().copied().unwrap_or(0.0),
+            times.last().copied().unwrap_or(0.0),
+        ))
     }
 
     fn benchmark_warm(&self, wasm: &[u8], runs: usize) -> Result<(f64, f64, f64, f64)> {
         let mut times = Vec::with_capacity(runs);
-        
+
         for _ in 0..runs {
             let start = Instant::now();
             let mut validator = Validator::new();
@@ -84,7 +97,7 @@ impl ValidationBench {
         }
 
         times.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        
+
         let n = times.len();
         let min = times.first().copied().unwrap_or(0.0);
         let median = times[n / 2];

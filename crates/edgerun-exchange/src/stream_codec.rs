@@ -22,8 +22,8 @@ use edgerun_proto::edgerun::v0::stream::{EventEnvelope, EventType};
 use edgerun_proto::edgerun::v0::wallet::v0::{
     wallet_exchange_event_payload, WalletDepositObservedPayload, WalletExchangeEventPayload,
     WalletManualReviewRequiredPayload, WalletOrderCompletedPayload, WalletOrderCreatedPayload,
-    WalletOrderFailedPayload, WalletOrderStatusChangedPayload,
-    WalletProviderStatusObservedPayload, WalletQuoteCreatedPayload,
+    WalletOrderFailedPayload, WalletOrderStatusChangedPayload, WalletProviderStatusObservedPayload,
+    WalletQuoteCreatedPayload,
 };
 
 use crate::events::ExchangeEvent;
@@ -38,7 +38,9 @@ pub struct ExchangeStreamPayload {
 
 fn encode_message<M: Message>(message: &M) -> Vec<u8> {
     let mut out = Vec::with_capacity(message.encoded_len());
-    message.encode(&mut out).expect("encoding to Vec cannot fail");
+    message
+        .encode(&mut out)
+        .expect("encoding to Vec cannot fail");
     out
 }
 
@@ -350,7 +352,10 @@ mod tests {
             expires_at_ms: 123,
             provider_code: "SIDESHIFT".into(),
         };
-        assert!(matches!(roundtrip(event), ExchangeEvent::QuoteCreated { .. }));
+        assert!(matches!(
+            roundtrip(event),
+            ExchangeEvent::QuoteCreated { .. }
+        ));
     }
 
     #[test]
@@ -365,7 +370,10 @@ mod tests {
             provider_code: "CHANGENOW".into(),
             created_at_ms: 456,
         };
-        assert!(matches!(roundtrip(event), ExchangeEvent::OrderCreated { .. }));
+        assert!(matches!(
+            roundtrip(event),
+            ExchangeEvent::OrderCreated { .. }
+        ));
     }
 
     #[test]
@@ -379,8 +387,14 @@ mod tests {
             observed_at_ms: 789,
         };
         let encoded = encode_exchange_event(&event);
-        assert_eq!(encoded.event_type, EventType::WalletOrderStatusChanged as i32);
-        assert!(matches!(decode_exchange_event(encoded.event_type, &encoded.payload_bytes), Some(ExchangeEvent::ProviderStatusObserved { .. })));
+        assert_eq!(
+            encoded.event_type,
+            EventType::WalletOrderStatusChanged as i32
+        );
+        assert!(matches!(
+            decode_exchange_event(encoded.event_type, &encoded.payload_bytes),
+            Some(ExchangeEvent::ProviderStatusObserved { .. })
+        ));
     }
 
     #[test]
@@ -394,14 +408,12 @@ mod tests {
             object_id: vec![1, 2, 3],
             object_kind: Some(exchange_payload_object_kind()),
         };
-        let envelope = build_exchange_event_envelope(
-            &event,
-            vec![9, 9, 9],
-            7,
-            None,
-            payload_object.clone(),
+        let envelope =
+            build_exchange_event_envelope(&event, vec![9, 9, 9], 7, None, payload_object.clone());
+        assert_eq!(
+            envelope.event_type,
+            EventType::WalletOrderStatusChanged as i32
         );
-        assert_eq!(envelope.event_type, EventType::WalletOrderStatusChanged as i32);
         assert_eq!(envelope.payload_object, Some(payload_object.clone()));
         assert_eq!(envelope.related_objects, vec![payload_object]);
     }

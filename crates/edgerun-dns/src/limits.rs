@@ -35,10 +35,7 @@ pub struct DnsSectionCounts {
 
 impl DnsSectionCounts {
     pub fn total_records(self) -> u32 {
-        self.questions as u32
-            + self.answers as u32
-            + self.authority as u32
-            + self.additional as u32
+        self.questions as u32 + self.answers as u32 + self.authority as u32 + self.additional as u32
     }
 }
 

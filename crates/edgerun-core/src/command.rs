@@ -61,7 +61,7 @@ pub struct CommandValidationContext<'a> {
     pub has_local_session: bool,
     /// Whether fresh user presence was established for this command.
     pub has_user_presence: bool,
-        /// Transport class used to deliver this command, if known.
+    /// Transport class used to deliver this command, if known.
     pub transport_class: Option<i32>,
     /// Location classes known for this command/session.
     pub location_classes: &'a [&'a str],

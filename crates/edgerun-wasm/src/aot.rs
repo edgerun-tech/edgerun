@@ -45,7 +45,13 @@ fn main() -> Result<()> {
     }
 
     if !args.run_artifact.is_empty() {
-        return run_artifact(&args.file, &args.run_artifact, &args.function, &args.args, args.verbose);
+        return run_artifact(
+            &args.file,
+            &args.run_artifact,
+            &args.function,
+            &args.args,
+            args.verbose,
+        );
     }
 
     compile_artifact(&args)
@@ -75,8 +81,12 @@ fn parse_args() -> Result<Args> {
             "--function" => out.function = next_value(&mut it, &arg)?,
             "--args" => out.args = next_value(&mut it, &arg)?,
             _ if arg.starts_with("--output=") => out.output = arg[9..].to_string(),
-            _ if arg.starts_with("--verify-artifact=") => out.verify_artifact = arg[18..].to_string(),
-            _ if arg.starts_with("--inspect-artifact=") => out.inspect_artifact = arg[19..].to_string(),
+            _ if arg.starts_with("--verify-artifact=") => {
+                out.verify_artifact = arg[18..].to_string()
+            }
+            _ if arg.starts_with("--inspect-artifact=") => {
+                out.inspect_artifact = arg[19..].to_string()
+            }
             _ if arg.starts_with("--run-artifact=") => out.run_artifact = arg[15..].to_string(),
             _ if arg.starts_with("--function=") => out.function = arg[11..].to_string(),
             _ if arg.starts_with("--args=") => out.args = arg[7..].to_string(),
@@ -89,7 +99,10 @@ fn parse_args() -> Result<Args> {
         out.file = first.clone();
     }
     if positional.len() > 1 {
-        bail!("unexpected positional arguments: {}", positional[1..].join(" "));
+        bail!(
+            "unexpected positional arguments: {}",
+            positional[1..].join(" ")
+        );
     }
 
     Ok(out)
@@ -207,7 +220,13 @@ fn verify_artifact(wasm_path: &str, artifact_path: &str, verbose: bool) -> Resul
         eprintln!("compiler: {}", decoded.compiler);
         eprintln!("functions: {}", decoded.functions.len());
         for f in &decoded.functions {
-            eprintln!("  {} #{} {}: {} bytes", f.name, f.index, f.sig, f.code.len());
+            eprintln!(
+                "  {} #{} {}: {} bytes",
+                f.name,
+                f.index,
+                f.sig,
+                f.code.len()
+            );
         }
     }
 
@@ -228,7 +247,10 @@ fn run_artifact(
 
     if verbose {
         eprintln!("artifact: {}", artifact_path);
-        eprintln!("function: {} #{} {}", function.name, function.index, function.sig);
+        eprintln!(
+            "function: {} #{} {}",
+            function.name, function.index, function.sig
+        );
         eprintln!("args: {:?}", args);
     }
 
@@ -249,7 +271,13 @@ fn inspect_artifact(artifact_path: &str) -> Result<()> {
     println!("  wasm_sha256: {}", hex32(&decoded.wasm_sha256));
     println!("  functions: {}", decoded.functions.len());
     for f in &decoded.functions {
-        println!("    #{} {} {}: {} bytes", f.index, f.name, f.sig, f.code.len());
+        println!(
+            "    #{} {} {}: {} bytes",
+            f.index,
+            f.name,
+            f.sig,
+            f.code.len()
+        );
     }
 
     Ok(())
@@ -271,10 +299,12 @@ fn parse_u64_arg(value: &str) -> Result<u64> {
         bail!("empty argument in --args list");
     }
     if let Some(hex) = value.strip_prefix("0x") {
-        return u64::from_str_radix(hex, 16).with_context(|| format!("invalid hex argument: {value}"));
+        return u64::from_str_radix(hex, 16)
+            .with_context(|| format!("invalid hex argument: {value}"));
     }
     if let Some(hex) = value.strip_prefix("0X") {
-        return u64::from_str_radix(hex, 16).with_context(|| format!("invalid hex argument: {value}"));
+        return u64::from_str_radix(hex, 16)
+            .with_context(|| format!("invalid hex argument: {value}"));
     }
     if value.starts_with('-') {
         let signed = value

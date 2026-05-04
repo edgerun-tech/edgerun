@@ -1,6 +1,6 @@
-use edgerun_core::{Identity, StreamId, EventId, Signature, Timestamp};
-use edgerun_crypto::{sign, KeyPair};
 use super::contract::ProvisioningContract;
+use edgerun_core::{EventId, Identity, Signature, StreamId, Timestamp};
+use edgerun_crypto::{sign, KeyPair};
 
 /// Node genesis claim
 /// Sent by node to controller via bootstrap coordinator
@@ -45,7 +45,7 @@ impl NodeGenesisClaim {
             node_signature: None,
         }
     }
-    
+
     /// Sign this claim with the node's keypair
     pub fn sign(&mut self, keypair: &KeyPair) -> Result<(), String> {
         let payload = self.canonical_payload();
@@ -57,17 +57,17 @@ impl NodeGenesisClaim {
             Err(e) => Err(format!("Failed to sign genesis claim: {:?}", e)),
         }
     }
-    
+
     /// Verify the node signature on this claim
     pub fn verify_signature(&self, node_public_key: &edgerun_crypto::PublicKey) -> bool {
         let Some(ref sig) = self.node_signature else {
             return false;
         };
-        
+
         let payload = self.canonical_payload();
         edgerun_crypto::verify(node_public_key, payload.as_bytes(), sig)
     }
-    
+
     /// Build canonical payload for signing/verification
     fn canonical_payload(&self) -> String {
         format!(
@@ -79,7 +79,7 @@ impl NodeGenesisClaim {
             self.node_genesis_event_hash,
         )
     }
-    
+
     /// Check if this claim commits to the given contract hash
     pub fn commits_to_contract(&self, contract_hash: &str) -> bool {
         self.provisioning_contract_hash == contract_hash

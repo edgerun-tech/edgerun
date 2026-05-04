@@ -393,13 +393,17 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
 
         let key_pair = std::sync::Arc::new(key_pair);
         let server_key_share = sh.server_key_share.clone();
-        let shared_secret = match edgerun_rt::spawn_blocking(move || key_pair.exchange(&server_key_share))
-            .await
-        {
-            Ok(Ok(s)) => s,
-            Ok(Err(e)) => return Err((TlsError::HandshakeFailure(e.to_string()), stream)),
-            Err(_) => return Err((TlsError::HandshakeFailure("blocking pool shutdown".into()), stream)),
-        };
+        let shared_secret =
+            match edgerun_rt::spawn_blocking(move || key_pair.exchange(&server_key_share)).await {
+                Ok(Ok(s)) => s,
+                Ok(Err(e)) => return Err((TlsError::HandshakeFailure(e.to_string()), stream)),
+                Err(_) => {
+                    return Err((
+                        TlsError::HandshakeFailure("blocking pool shutdown".into()),
+                        stream,
+                    ))
+                }
+            };
         let transcript_hash = hash.hash(&transcript);
 
         let mut ks = Tls13KeySchedule::new(hash.clone());
@@ -412,14 +416,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let server_hs_keys =
             server_write_keys(&server_hs_secret, negotiated_suite.key_len(), 12, &hash);
 
-        let mut write_cipher = match RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv) {
-            Ok(c) => c,
-            Err(e) => return Err((e, stream)),
-        };
-        let mut read_cipher = match RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv) {
-            Ok(c) => c,
-            Err(e) => return Err((e, stream)),
-        };
+        let mut write_cipher =
+            match RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv) {
+                Ok(c) => c,
+                Err(e) => return Err((e, stream)),
+            };
+        let mut read_cipher =
+            match RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv) {
+                Ok(c) => c,
+                Err(e) => return Err((e, stream)),
+            };
 
         let alpn_protocol = match async_read_encrypted_handshake_messages(
             &mut stream,
@@ -460,20 +466,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let server_app_keys =
             server_app_write_keys(&server_app, negotiated_suite.key_len(), 12, &hash);
 
-        let write_cipher = match RecordCipher::new(
-            &client_app_keys.write_key,
-            &client_app_keys.write_iv,
-        ) {
-            Ok(c) => ClientRecordCipher::Tls13(c),
-            Err(e) => return Err((e, stream)),
-        };
-        let read_cipher = match RecordCipher::new(
-            &server_app_keys.write_key,
-            &server_app_keys.write_iv,
-        ) {
-            Ok(c) => ClientRecordCipher::Tls13(c),
-            Err(e) => return Err((e, stream)),
-        };
+        let write_cipher =
+            match RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv) {
+                Ok(c) => ClientRecordCipher::Tls13(c),
+                Err(e) => return Err((e, stream)),
+            };
+        let read_cipher =
+            match RecordCipher::new(&server_app_keys.write_key, &server_app_keys.write_iv) {
+                Ok(c) => ClientRecordCipher::Tls13(c),
+                Err(e) => return Err((e, stream)),
+            };
 
         Ok(AsyncTlsStream {
             stream,
@@ -2215,7 +2217,9 @@ fn parse_hrr_selected_group(data: &[u8]) -> Result<crate::key_exchange::KeyExcha
         pos += ext_data_len;
     }
 
-    Err(TlsError::Protocol("HRR: no key_share extension found".into()))
+    Err(TlsError::Protocol(
+        "HRR: no key_share extension found".into(),
+    ))
 }
 
 /// Parse the cookie from a HelloRetryRequest (optional).

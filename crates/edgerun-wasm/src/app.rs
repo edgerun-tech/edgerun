@@ -1,6 +1,8 @@
 use anyhow::{bail, Context, Result};
 use edgerun_proto::edgerun::v0::{
-    app::{capability_check, capability_result, CapabilityCheck, CapabilityResult, ExecutionContext},
+    app::{
+        capability_check, capability_result, CapabilityCheck, CapabilityResult, ExecutionContext,
+    },
     common::{ExecutionClass, ObjectKind, ObjectRef},
     stream::AppPackage,
     trust::{CapabilityDescriptor, CapabilityKind, ConstraintSet, ScopeDescriptor, ScopeKind},
@@ -20,13 +22,8 @@ pub struct LoadedApp {
     pub domain: String,
 }
 
-pub fn load_app(
-    package_bytes: &[u8],
-    wasm_bytes: &[u8],
-    domain: &str,
-) -> Result<LoadedApp> {
-    let package = AppPackage::decode(package_bytes)
-        .context("failed to decode AppPackage")?;
+pub fn load_app(package_bytes: &[u8], wasm_bytes: &[u8], domain: &str) -> Result<LoadedApp> {
+    let package = AppPackage::decode(package_bytes).context("failed to decode AppPackage")?;
 
     validate_app_package(&package)?;
 
@@ -143,10 +140,7 @@ pub fn resolve_capabilities(
     Ok(())
 }
 
-pub fn build_execution_context(
-    app: &LoadedApp,
-    instance_id: &[u8],
-) -> ExecutionContext {
+pub fn build_execution_context(app: &LoadedApp, instance_id: &[u8]) -> ExecutionContext {
     ExecutionContext {
         version: 1,
         app_package: Some(ObjectRef {
@@ -167,9 +161,10 @@ pub fn check_capability(
 ) -> CapabilityResult {
     let op_i32 = operation as i32;
     let has_capability = ctx.granted_capabilities.iter().any(|cap| {
-        cap.actions.iter().any(|action| {
-            action_matches_operation(action, op_i32)
-        }) && scope_matches(cap, &scope)
+        cap.actions
+            .iter()
+            .any(|action| action_matches_operation(action, op_i32))
+            && scope_matches(cap, &scope)
     });
 
     if has_capability {
@@ -410,10 +405,7 @@ mod tests {
         };
 
         let result = check_capability(&ctx, capability_check::Operation::WriteBlob, None);
-        assert_eq!(
-            result.decision,
-            capability_result::Decision::Denied as i32
-        );
+        assert_eq!(result.decision, capability_result::Decision::Denied as i32);
     }
 
     #[test]
@@ -432,10 +424,7 @@ mod tests {
         };
 
         let result = check_capability(&ctx, capability_check::Operation::WriteBlob, None);
-        assert_eq!(
-            result.decision,
-            capability_result::Decision::Granted as i32
-        );
+        assert_eq!(result.decision, capability_result::Decision::Granted as i32);
     }
 
     #[test]
@@ -477,13 +466,11 @@ mod tests {
             entry: "main".to_string(),
             wasm_bytes: vec![],
             routes: HashMap::new(),
-            required_capabilities: vec![
-                CapabilityDescriptor {
-                    capability_kind: CapabilityKind::ExecuteWorkload as i32,
-                    actions: vec!["execution".to_string(), "read_blob".to_string()],
-                    ..Default::default()
-                },
-            ],
+            required_capabilities: vec![CapabilityDescriptor {
+                capability_kind: CapabilityKind::ExecuteWorkload as i32,
+                actions: vec!["execution".to_string(), "read_blob".to_string()],
+                ..Default::default()
+            }],
             granted_capabilities: Vec::new(),
             domain: "test".to_string(),
         };
@@ -495,8 +482,10 @@ mod tests {
         }];
 
         let result = resolve_capabilities(&mut app, &parent_policy, &[]);
-        assert!(result.is_err(),
-            "child should not be able to expand parent actions");
+        assert!(
+            result.is_err(),
+            "child should not be able to expand parent actions"
+        );
     }
 
     #[test]
@@ -522,10 +511,7 @@ mod tests {
         assert_eq!(ctx.instance_id, instance_id.to_vec());
         assert_eq!(ctx.domain, "isolated");
         assert_eq!(ctx.granted_capabilities.len(), 1);
-        assert_eq!(
-            ctx.execution_class,
-            ExecutionClass::LocalOnly as i32
-        );
+        assert_eq!(ctx.execution_class, ExecutionClass::LocalOnly as i32);
     }
 
     #[test]
@@ -555,10 +541,7 @@ mod tests {
         });
 
         let result = check_capability(&ctx, capability_check::Operation::ReadBlob, scope);
-        assert_eq!(
-            result.decision,
-            capability_result::Decision::Granted as i32
-        );
+        assert_eq!(result.decision, capability_result::Decision::Granted as i32);
     }
 
     #[test]
@@ -588,10 +571,6 @@ mod tests {
         });
 
         let result = check_capability(&ctx, capability_check::Operation::ReadBlob, scope);
-        assert_eq!(
-            result.decision,
-            capability_result::Decision::Denied as i32
-        );
+        assert_eq!(result.decision, capability_result::Decision::Denied as i32);
     }
 }
-

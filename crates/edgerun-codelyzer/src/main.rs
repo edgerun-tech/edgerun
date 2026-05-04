@@ -55,5 +55,8 @@ fn main() {
     }
 
     println!("Analyzing codebase at: {}", path);
-    println!("Use 'edgerun-codelyzer-index {}' to build the index database.", path);
+    println!(
+        "Use 'edgerun-codelyzer-index {}' to build the index database.",
+        path
+    );
 }

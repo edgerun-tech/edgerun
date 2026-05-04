@@ -73,10 +73,24 @@ const MIN_REPO_FILES: usize = 1;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum IndexState {
     NotIndexed,
-    Indexing { progress: f32, files_scanned: usize, total_files: usize },
-    Indexed { functions: usize, edges: usize, index_time_ms: u64 },
-    Stale { functions: usize, edges: usize, last_indexed: u64 },
-    Error { message: String },
+    Indexing {
+        progress: f32,
+        files_scanned: usize,
+        total_files: usize,
+    },
+    Indexed {
+        functions: usize,
+        edges: usize,
+        index_time_ms: u64,
+    },
+    Stale {
+        functions: usize,
+        edges: usize,
+        last_indexed: u64,
+    },
+    Error {
+        message: String,
+    },
 }
 
 /// Metadata about a discovered repository.
@@ -178,7 +192,9 @@ impl RepositoryRegistry {
 
     /// Manually add a repository by path.
     pub fn add_repo(&mut self, path: &str) -> Result<(), String> {
-        let path = Path::new(path).canonicalize().map_err(|e| format!("Invalid path: {}", e))?;
+        let path = Path::new(path)
+            .canonicalize()
+            .map_err(|e| format!("Invalid path: {}", e))?;
         let path_str = path.to_string_lossy().to_string();
 
         if self.repos.contains_key(&path_str) {
@@ -217,7 +233,9 @@ impl RepositoryRegistry {
         // Add newly discovered repos
         let before = self.repos.len();
         for repo in &found {
-            self.repos.entry(repo.path.clone()).or_insert_with(|| repo.clone());
+            self.repos
+                .entry(repo.path.clone())
+                .or_insert_with(|| repo.clone());
         }
 
         if self.repos.len() > before {
@@ -230,7 +248,10 @@ impl RepositoryRegistry {
     /// Index a repository (build the call graph).
     /// Returns immediately; indexing runs in background.
     pub fn start_indexing(&self, path: &str) -> Result<(), String> {
-        let repo = self.repos.get(path).ok_or_else(|| format!("Repository not found: {}", path))?;
+        let repo = self
+            .repos
+            .get(path)
+            .ok_or_else(|| format!("Repository not found: {}", path))?;
 
         if matches!(repo.index_state, IndexState::Indexing { .. }) {
             return Err("Repository is already being indexed".to_string());
@@ -345,11 +366,16 @@ fn read_git_remote(path: &str) -> Option<String> {
         Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
     } else {
         // Try 'git remote -v'
-        let output =
-            std::process::Command::new("git").args(["-C", path, "remote", "-v"]).output().ok()?;
+        let output = std::process::Command::new("git")
+            .args(["-C", path, "remote", "-v"])
+            .output()
+            .ok()?;
         if output.status.success() {
             let text = String::from_utf8_lossy(&output.stdout);
-            text.lines().next().and_then(|l| l.split_whitespace().nth(1)).map(String::from)
+            text.lines()
+                .next()
+                .and_then(|l| l.split_whitespace().nth(1))
+                .map(String::from)
         } else {
             None
         }
@@ -506,7 +532,9 @@ fn discover_git_repos_inner(
 /// Check if a directory name should be excluded.
 fn is_excluded(name: &str, extra: &[String]) -> bool {
     EXCLUDED_DIRS.contains(&name)
-        || extra.iter().any(|p| p.ends_with(name) || name.ends_with(p.as_str()))
+        || extra
+            .iter()
+            .any(|p| p.ends_with(name) || name.ends_with(p.as_str()))
 }
 
 /// Check if we should descend into a directory.
@@ -552,7 +580,9 @@ fn lang_from_ext(ext: &str) -> &'static str {
 // ─── Persistence ──────────────────────────────────────────────────────
 
 fn registry_dir() -> PathBuf {
-    dirs::data_dir().unwrap_or_else(|| PathBuf::from("/tmp")).join("codeanalyzer")
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join("codeanalyzer")
 }
 
 fn config_path() -> PathBuf {

@@ -16,12 +16,7 @@ struct Args {
     verbose: bool,
 }
 
-const WASI_PREFIXES: &[&str] = &[
-    "wasi_snapshot_preview1",
-    "wasi_ephemeral",
-    "wasi",
-    "wasi:",
-];
+const WASI_PREFIXES: &[&str] = &["wasi_snapshot_preview1", "wasi_ephemeral", "wasi", "wasi:"];
 
 #[derive(Clone, Copy, PartialEq)]
 enum ValType {
@@ -126,19 +121,12 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     let path = Path::new(&args.file);
-    let file_size = path
-        .metadata()
-        .context("Failed to read file")?
-        .len() as usize;
+    let file_size = path.metadata().context("Failed to read file")?.len() as usize;
 
     let max_size = args.max_size.unwrap_or(1024 * 1024);
 
     if file_size > max_size {
-        anyhow::bail!(
-            "File too large: {} bytes (max: {})",
-            file_size,
-            max_size
-        );
+        anyhow::bail!("File too large: {} bytes (max: {})", file_size, max_size);
     }
 
     if args.verbose {
@@ -184,13 +172,21 @@ fn check_exports(info: &ModuleInfo, args: &Args) -> Result<()> {
             if ty.params != expected_params {
                 anyhow::bail!(
                     "'run' export has wrong parameter types: expected (i32, i32), found ({})",
-                    ty.params.iter().map(format_val_type).collect::<Vec<_>>().join(", ")
+                    ty.params
+                        .iter()
+                        .map(format_val_type)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
             if ty.results != expected_results {
                 anyhow::bail!(
                     "'run' export has wrong result type: expected (i32), found ({})",
-                    ty.results.iter().map(format_val_type).collect::<Vec<_>>().join(", ")
+                    ty.results
+                        .iter()
+                        .map(format_val_type)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
             if args.verbose {
@@ -208,11 +204,7 @@ fn check_exports(info: &ModuleInfo, args: &Args) -> Result<()> {
 
 fn check_imports(info: &ModuleInfo, args: &Args) -> Result<()> {
     const ALLOWED: &[(&str, &[ValType], &[ValType])] = &[
-        (
-            "write_output",
-            &[ValType::I32, ValType::I32],
-            &[],
-        ),
+        ("write_output", &[ValType::I32, ValType::I32], &[]),
         (
             "send_message",
             &[ValType::I32, ValType::I32, ValType::I32, ValType::I32],
@@ -228,19 +220,12 @@ fn check_imports(info: &ModuleInfo, args: &Args) -> Result<()> {
             &[ValType::I32, ValType::I32, ValType::I32],
             &[ValType::I32],
         ),
-        (
-            "poll_event",
-            &[ValType::I32, ValType::I32],
-            &[ValType::I32],
-        ),
+        ("poll_event", &[ValType::I32, ValType::I32], &[ValType::I32]),
     ];
 
     for (full, type_idx) in &info.import_funcs {
         if is_wasi_module(full) {
-            anyhow::bail!(
-                "WASI imports are not allowed: found '{}'",
-                full
-            );
+            anyhow::bail!("WASI imports are not allowed: found '{}'", full);
         }
 
         let name = full.strip_prefix("env.").unwrap_or(full);
@@ -251,7 +236,11 @@ fn check_imports(info: &ModuleInfo, args: &Args) -> Result<()> {
             anyhow::bail!(
                 "Unknown import '{}' in 'env' namespace. Only these are allowed: {}",
                 full,
-                ALLOWED.iter().map(|(n, _, _)| *n).collect::<Vec<_>>().join(", ")
+                ALLOWED
+                    .iter()
+                    .map(|(n, _, _)| *n)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         }
 
@@ -262,16 +251,32 @@ fn check_imports(info: &ModuleInfo, args: &Args) -> Result<()> {
             anyhow::bail!(
                 "Import '{}' has wrong parameter types: expected ({}), found ({})",
                 full,
-                expected_params.iter().map(format_val_type).collect::<Vec<_>>().join(", "),
-                ty.params.iter().map(format_val_type).collect::<Vec<_>>().join(", ")
+                expected_params
+                    .iter()
+                    .map(format_val_type)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                ty.params
+                    .iter()
+                    .map(format_val_type)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         }
         if ty.results != *expected_results {
             anyhow::bail!(
                 "Import '{}' has wrong result types: expected ({}), found ({})",
                 full,
-                expected_results.iter().map(format_val_type).collect::<Vec<_>>().join(", "),
-                ty.results.iter().map(format_val_type).collect::<Vec<_>>().join(", ")
+                expected_results
+                    .iter()
+                    .map(format_val_type)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                ty.results
+                    .iter()
+                    .map(format_val_type)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         }
 

@@ -1,8 +1,9 @@
 //! Custom command handlers — delegation and revocation records.
 
 use crate::command_dispatch::{
-    command_ref_from, delegation_refs_from, record_and_respond, record_and_respond_with_result_object,
-    store_object_or_log, CommandDispatchResult, ControllerSet,
+    command_ref_from, delegation_refs_from, record_and_respond,
+    record_and_respond_with_result_object, store_object_or_log, CommandDispatchResult,
+    ControllerSet,
 };
 use crate::command_dispatch_event::record_action_event;
 use edgerun_core::result::Verdict;
@@ -356,12 +357,9 @@ pub fn dispatch_create_revocation(
         .map(|i| bytes_to_hex(&i.identity_id))
         .unwrap_or_default();
 
-    if let Err(e) = store.store_revocation(
-        &revocation_id_hex,
-        &delegation_id_hex,
-        &issuer_hex,
-        now_ms,
-    ) {
+    if let Err(e) =
+        store.store_revocation(&revocation_id_hex, &delegation_id_hex, &issuer_hex, now_ms)
+    {
         edgerun_log::warn!("failed to index revocation: {}", e);
         return record_and_respond(
             command,

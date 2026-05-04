@@ -41,7 +41,11 @@ impl FileChanges {
     /// All files that need re-parsing (added + modified).
     #[allow(dead_code)]
     pub fn changed_paths(&self) -> Vec<&str> {
-        self.added.iter().chain(self.modified.iter()).map(|f| f.path.as_str()).collect()
+        self.added
+            .iter()
+            .chain(self.modified.iter())
+            .map(|f| f.path.as_str())
+            .collect()
     }
 }
 
@@ -85,7 +89,12 @@ fn file_info(path: &Path, root: &Path) -> Option<FileInfo> {
     let metadata = fs::metadata(path).ok()?;
     let size = metadata.len();
 
-    let modified_ts = metadata.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    let modified_ts = metadata
+        .modified()
+        .ok()?
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_secs();
 
     let content = fs::read_to_string(path).ok()?;
     let hash = rolling_hash(content.as_bytes());
@@ -93,7 +102,13 @@ fn file_info(path: &Path, root: &Path) -> Option<FileInfo> {
     let language = lang_from_ext(path.extension()?.to_str()?);
     let rel = make_relative(path, root);
 
-    Some(FileInfo { path: rel, language: language.to_string(), size, modified_ts, hash })
+    Some(FileInfo {
+        path: rel,
+        language: language.to_string(),
+        size,
+        modified_ts,
+        hash,
+    })
 }
 
 /// Diff two snapshots. Uses path as the key.
@@ -152,7 +167,10 @@ fn lang_from_ext(ext: &str) -> &'static str {
 }
 
 fn make_relative(path: &Path, root: &Path) -> String {
-    path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace('\\', "/")
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
 // ─── Parse Cache ──────────────────────────────────────────────────────
@@ -197,7 +215,11 @@ impl ParseCache {
             HashMap::new()
         };
 
-        ParseCache { root_dir: root_dir.to_string(), entries, dirty: false }
+        ParseCache {
+            root_dir: root_dir.to_string(),
+            entries,
+            dirty: false,
+        }
     }
 
     /// Save the cache to disk if it has been modified.
@@ -240,7 +262,12 @@ impl ParseCache {
     ) {
         self.entries.insert(
             path,
-            CacheEntry { file_hash: hash, mtime, functions: result.functions, calls: result.calls },
+            CacheEntry {
+                file_hash: hash,
+                mtime,
+                functions: result.functions,
+                calls: result.calls,
+            },
         );
         self.dirty = true;
     }
@@ -248,7 +275,9 @@ impl ParseCache {
 
 /// Return the cache directory, creating it if needed.
 fn cache_dir() -> PathBuf {
-    dirs::cache_dir().unwrap_or_else(|| PathBuf::from("/tmp")).join("codeanalyzer")
+    dirs::cache_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join("codeanalyzer")
 }
 
 /// Compute the cache file path for a given root directory.

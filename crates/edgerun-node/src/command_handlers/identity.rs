@@ -62,12 +62,8 @@ pub fn dispatch_create_identity(
     edgerun_log::info!("create_identity: label={}", label);
 
     let result_payload = build_command_result_payload(
-        command,
-        1, // CommandDecision::Committed
-        "",
-        None,
-        None,
-        None,
+        command, 1, // CommandDecision::Committed
+        "", None, None, None,
     );
     let response_bytes = prost::Message::encode_to_vec(&result_payload);
 
@@ -135,12 +131,8 @@ pub fn dispatch_import_identity(
     edgerun_log::info!("import_identity: label={}", label);
 
     let result_payload = build_command_result_payload(
-        command,
-        1, // CommandDecision::Committed
-        "",
-        None,
-        None,
-        None,
+        command, 1, // CommandDecision::Committed
+        "", None, None, None,
     );
     let response_bytes = prost::Message::encode_to_vec(&result_payload);
 

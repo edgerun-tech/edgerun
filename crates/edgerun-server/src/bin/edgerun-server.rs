@@ -170,7 +170,13 @@ fn build_dns_zone(deployment: &CompiledDeployment) -> DnsZone {
 
     for domain in deployment.domains {
         if domain.authoritative_dns {
-            zone.add_caa(&zone_name(deployment.origin, domain.domain), false, "issue", "letsencrypt.org", 3600);
+            zone.add_caa(
+                &zone_name(deployment.origin, domain.domain),
+                false,
+                "issue",
+                "letsencrypt.org",
+                3600,
+            );
             zone.add_caa(
                 &zone_name(deployment.origin, domain.domain),
                 false,
@@ -183,11 +189,23 @@ fn build_dns_zone(deployment: &CompiledDeployment) -> DnsZone {
         if domain.mail_enabled() {
             let mail_host = mail_host_for_domain(deployment, domain.domain);
             zone.add_a(&zone_name(deployment.origin, &mail_host), ip, 3600);
-            zone.add_mx(&zone_name(deployment.origin, domain.domain), 0, &mail_host, 3600);
-            zone.add_txt(&zone_name(deployment.origin, domain.domain), "v=spf1 mx -all", 3600);
+            zone.add_mx(
+                &zone_name(deployment.origin, domain.domain),
+                0,
+                &mail_host,
+                3600,
+            );
+            zone.add_txt(
+                &zone_name(deployment.origin, domain.domain),
+                "v=spf1 mx -all",
+                3600,
+            );
             zone.add_txt(
                 &zone_name(deployment.origin, &format!("_dmarc.{}", domain.domain)),
-                &format!("v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@{}", deployment.origin),
+                &format!(
+                    "v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@{}",
+                    deployment.origin
+                ),
                 3600,
             );
             zone.add_txt(
@@ -257,7 +275,8 @@ fn load_dkim_signer(deployment: &CompiledDeployment) -> Option<DkimSigner> {
 // ===========================================================================
 
 fn load_tls_cert(deployment: &CompiledDeployment) -> Option<CertificateAndKey> {
-    if !Path::new(deployment.tls_cert_path).exists() || !Path::new(deployment.tls_key_path).exists() {
+    if !Path::new(deployment.tls_cert_path).exists() || !Path::new(deployment.tls_key_path).exists()
+    {
         edgerun_log::info!(
             "TLS certs not found at {} / {}, running without TLS",
             deployment.tls_cert_path,
@@ -301,8 +320,15 @@ fn load_tls_cert(deployment: &CompiledDeployment) -> Option<CertificateAndKey> {
 struct CompiledHttpApp;
 
 impl Handler for CompiledHttpApp {
-    fn handle(&self, req: Request) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
-        let host = req.uri().host().unwrap_or(DEPLOYMENT.origin).to_ascii_lowercase();
+    fn handle(
+        &self,
+        req: Request,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+        let host = req
+            .uri()
+            .host()
+            .unwrap_or(DEPLOYMENT.origin)
+            .to_ascii_lowercase();
         let host = host.trim_end_matches('.').to_string();
         let path = req.uri().path().to_string();
 
@@ -372,7 +398,11 @@ async fn provision_certs(
         let authz = client.get_authorization(authz_url).await?;
         edgerun_log::info!("ACME: authorization status = {:?}", authz.status);
 
-        let challenges = authz.challenges.as_ref().map(|v| v.as_slice()).unwrap_or(&[]);
+        let challenges = authz
+            .challenges
+            .as_ref()
+            .map(|v| v.as_slice())
+            .unwrap_or(&[]);
         let dns_challenge = challenges
             .iter()
             .find(|c| matches!(c.challenge_type, edgerun_acme::types::ChallengeType::Dns01));
@@ -391,7 +421,10 @@ async fn provision_certs(
         active_challenges.push((domain.clone(), dns_ch));
 
         let validated = client.validate_challenge(&challenge.url).await?;
-        edgerun_log::info!("ACME: challenge validated, status = {:?}", validated.status());
+        edgerun_log::info!(
+            "ACME: challenge validated, status = {:?}",
+            validated.status()
+        );
 
         let mut attempts = 0;
         while attempts < 30 {
@@ -440,7 +473,9 @@ async fn provision_certs(
         }
     }
 
-    Err(edgerun_acme::AcmeError::OrderInvalid("order not ready".into()))
+    Err(edgerun_acme::AcmeError::OrderInvalid(
+        "order not ready".into(),
+    ))
 }
 
 async fn acme_loop(
@@ -465,7 +500,10 @@ async fn acme_loop(
                 .as_secs();
             let days_left = cert_info.expires_at.saturating_sub(now) / 86400;
             if days_left > 30 {
-                edgerun_log::info!("ACME: certs valid for {} more days, sleeping 12h", days_left);
+                edgerun_log::info!(
+                    "ACME: certs valid for {} more days, sleeping 12h",
+                    days_left
+                );
                 for _ in 0..72 {
                     if shutdown.is_cancelled() {
                         break;
@@ -497,14 +535,18 @@ struct ExistingCertInfo {
     expires_at: u64,
 }
 
-fn check_existing_certs(deployment: &CompiledDeployment) -> Result<Option<ExistingCertInfo>, String> {
+fn check_existing_certs(
+    deployment: &CompiledDeployment,
+) -> Result<Option<ExistingCertInfo>, String> {
     if !Path::new(deployment.tls_cert_path).exists() {
         return Ok(None);
     }
 
     let pem = fs::read_to_string(deployment.tls_cert_path).map_err(|e| e.to_string())?;
     let cert = Certificate::from_pem(&pem)?;
-    Ok(Some(ExistingCertInfo { expires_at: cert.not_after }))
+    Ok(Some(ExistingCertInfo {
+        expires_at: cert.not_after,
+    }))
 }
 
 // ===========================================================================
@@ -598,8 +640,16 @@ fn run_send_system_report() -> ExitCode {
         DEPLOYMENT.hostname,
         DEPLOYMENT.origin,
         hex_bytes(&DEPLOYMENT.policy.controller_id),
-        if Path::new(DEPLOYMENT.tls_cert_path).exists() { "present" } else { "not provisioned" },
-        if Path::new(DEPLOYMENT.dkim_key_path).exists() { "present" } else { "missing" },
+        if Path::new(DEPLOYMENT.tls_cert_path).exists() {
+            "present"
+        } else {
+            "not provisioned"
+        },
+        if Path::new(DEPLOYMENT.dkim_key_path).exists() {
+            "present"
+        } else {
+            "missing"
+        },
         DEPLOYMENT.maildir_root,
         DEPLOYMENT.queue_data_root,
     );
@@ -631,11 +681,22 @@ fn print_compiled_plan() -> ExitCode {
     println!("origin={}", DEPLOYMENT.origin);
     println!("hostname={}", DEPLOYMENT.hostname);
     println!("controller={}", hex_bytes(&DEPLOYMENT.policy.controller_id));
-    println!("public_ipv4={}.{}.{}.{}", DEPLOYMENT.public_ipv4[0], DEPLOYMENT.public_ipv4[1], DEPLOYMENT.public_ipv4[2], DEPLOYMENT.public_ipv4[3]);
+    println!(
+        "public_ipv4={}.{}.{}.{}",
+        DEPLOYMENT.public_ipv4[0],
+        DEPLOYMENT.public_ipv4[1],
+        DEPLOYMENT.public_ipv4[2],
+        DEPLOYMENT.public_ipv4[3]
+    );
     println!("local_mail_domains={:?}", local_mail_domains(&DEPLOYMENT));
     println!("certificate_domains={:?}", DEPLOYMENT.certificate_domains());
     for domain in DEPLOYMENT.domains {
-        println!("domain={} authoritative_dns={} mail_enabled={}", domain.domain, domain.authoritative_dns, domain.mail_enabled());
+        println!(
+            "domain={} authoritative_dns={} mail_enabled={}",
+            domain.domain,
+            domain.authoritative_dns,
+            domain.mail_enabled()
+        );
         for mailbox in domain.mailboxes {
             println!("  mailbox={} target={}", mailbox.address, mailbox.target);
         }
@@ -643,7 +704,10 @@ fn print_compiled_plan() -> ExitCode {
             println!("  alias={} target={}", alias.address, alias.target);
         }
         if let Some(site) = domain.website {
-            println!("  website={} repo={} ref={} path={}", site.domain, site.repo, site.commit, site.path);
+            println!(
+                "  website={} repo={} ref={} path={}",
+                site.domain, site.repo, site.commit, site.path
+            );
         }
     }
     ExitCode::SUCCESS
@@ -730,9 +794,15 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         queue_data_root: Some(std::path::PathBuf::from(DEPLOYMENT.queue_data_root)),
         relay_dns_server: "1.1.1.1:53".to_string(),
         maildir_root: Some(std::path::PathBuf::from(DEPLOYMENT.maildir_root)),
-        dkim_domain: dkim_signer.as_ref().map(|_| DEPLOYMENT.dkim_domain.to_string()),
-        dkim_selector: dkim_signer.as_ref().map(|_| DEPLOYMENT.dkim_selector.to_string()),
-        dkim_key_path: dkim_signer.as_ref().map(|_| std::path::PathBuf::from(DEPLOYMENT.dkim_key_path)),
+        dkim_domain: dkim_signer
+            .as_ref()
+            .map(|_| DEPLOYMENT.dkim_domain.to_string()),
+        dkim_selector: dkim_signer
+            .as_ref()
+            .map(|_| DEPLOYMENT.dkim_selector.to_string()),
+        dkim_key_path: dkim_signer
+            .as_ref()
+            .map(|_| std::path::PathBuf::from(DEPLOYMENT.dkim_key_path)),
         tls_cert: tls_cert.clone(),
     };
 
@@ -753,8 +823,10 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .bind("0.0.0.0:80")
         .await
         .map_err(|e| {
-            Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
-                as Box<dyn std::error::Error + Send + Sync>
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
     let http_task = edgerun_rt::spawn(async move {
@@ -798,7 +870,9 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     )
                     .await;
                 }
-                Err(e) => edgerun_log::warn!("ACME init failed after {:?}: {}", init_start.elapsed(), e),
+                Err(e) => {
+                    edgerun_log::warn!("ACME init failed after {:?}: {}", init_start.elapsed(), e)
+                }
             }
         });
     }
@@ -828,7 +902,10 @@ fn load_or_create_acme_account(deployment: &CompiledDeployment) -> Option<Accoun
         match fs::read_to_string(deployment.acme_account_key_path) {
             Ok(pem) => match AccountKey::from_pem(&pem) {
                 Ok(key) => {
-                    edgerun_log::info!("ACME account key loaded from {}", deployment.acme_account_key_path);
+                    edgerun_log::info!(
+                        "ACME account key loaded from {}",
+                        deployment.acme_account_key_path
+                    );
                     return Some(key);
                 }
                 Err(e) => edgerun_log::warn!("Failed to parse ACME account key: {}", e),
@@ -844,7 +921,10 @@ fn load_or_create_acme_account(deployment: &CompiledDeployment) -> Option<Accoun
     if let Err(e) = fs::write(deployment.acme_account_key_path, key.pem()) {
         edgerun_log::warn!("Failed to save ACME account key: {}", e);
     } else {
-        edgerun_log::info!("ACME account key generated and saved to {}", deployment.acme_account_key_path);
+        edgerun_log::info!(
+            "ACME account key generated and saved to {}",
+            deployment.acme_account_key_path
+        );
     }
     Some(key)
 }

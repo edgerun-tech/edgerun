@@ -238,12 +238,24 @@ pub fn validate_stream(events: &[EventEnvelope], writer: &NodeID) -> Result<(), 
 #[derive(Debug)]
 pub enum StreamError {
     EmptyStream,
-    MissingGenesis { first_seq: u64 },
+    MissingGenesis {
+        first_seq: u64,
+    },
     GenesisHasPrevHash,
-    SequenceGap { expected: u64, actual: u64 },
-    InvalidPrevHash { seq: u64, expected: Digest, actual: Digest },
+    SequenceGap {
+        expected: u64,
+        actual: u64,
+    },
+    InvalidPrevHash {
+        seq: u64,
+        expected: Digest,
+        actual: Digest,
+    },
     MissingSignature,
-    InvalidSignature { expected: usize, actual: usize },
+    InvalidSignature {
+        expected: usize,
+        actual: usize,
+    },
     InvalidSignatureFormat(String),
     InvalidPublicKey(String),
     SignatureVerification(String),
@@ -260,12 +272,19 @@ impl core::fmt::Display for StreamError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::EmptyStream => write!(f, "stream is empty — no genesis event found"),
-            Self::MissingGenesis { first_seq } => write!(f, "first event is not genesis: seq={first_seq}"),
+            Self::MissingGenesis { first_seq } => {
+                write!(f, "first event is not genesis: seq={first_seq}")
+            }
             Self::GenesisHasPrevHash => write!(f, "genesis event must not have prev_event_hash"),
-            Self::SequenceGap { expected, actual } => write!(f, "sequence gap at seq {actual}: expected {expected}"),
+            Self::SequenceGap { expected, actual } => {
+                write!(f, "sequence gap at seq {actual}: expected {expected}")
+            }
             Self::InvalidPrevHash { seq, .. } => write!(f, "invalid prev_hash at seq {seq}"),
             Self::MissingSignature => write!(f, "event signature is missing"),
-            Self::InvalidSignature { expected, actual } => write!(f, "invalid signature length: expected {expected}, got {actual}"),
+            Self::InvalidSignature { expected, actual } => write!(
+                f,
+                "invalid signature length: expected {expected}, got {actual}"
+            ),
             Self::InvalidSignatureFormat(e) => write!(f, "invalid signature format: {e}"),
             Self::InvalidPublicKey(e) => write!(f, "invalid public key: {e}"),
             Self::SignatureVerification(e) => write!(f, "signature verification failed: {e}"),

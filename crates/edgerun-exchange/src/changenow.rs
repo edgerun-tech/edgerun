@@ -5,17 +5,15 @@
 
 extern crate alloc;
 
+use crate::provider::*;
 use alloc::string::String;
 use core::result::Result;
-use edgerun_http::{HttpClient, Method};
 use edgerun_http::client_middleware::Chain;
-use edgerun_json::{Map, JsonValue, ToJson, from_str, to_string};
-use edgerun_proto::edgerun::v0::wallet::v0::{
-    AssetRef, Quote, QuoteRequest,
-};
+use edgerun_http::{HttpClient, Method};
+use edgerun_json::{from_str, to_string, JsonValue, Map, ToJson};
+use edgerun_proto::edgerun::v0::wallet::v0::{AssetRef, Quote, QuoteRequest};
 use edgerun_rt::block_on;
 use edgerun_wallet::{DecimalAmount, WalletError};
-use crate::provider::*;
 
 const CHANGENOW_BASE_URL: &str = "https://api.changenow.io/api/v2";
 
@@ -63,7 +61,7 @@ impl ChangeNOWAdapter {
         body: Option<JsonValue>,
     ) -> Result<JsonValue, WalletError> {
         let url = format!("{}{}", CHANGENOW_BASE_URL, path);
-        
+
         let body_bytes = if let Some(b) = body {
             let body_str = to_string(&b).map_err(|e| WalletError::Serialization(e.to_string()))?;
             Some(body_str.into_bytes())
@@ -72,27 +70,35 @@ impl ChangeNOWAdapter {
         };
 
         let response = match method {
-            Method::GET => {
-                block_on(async { self.client.get(&url).await })
-            }
-            Method::POST => {
-                block_on(async { 
-                    self.client.post(&url, body_bytes.as_ref().map(|b| b.as_slice()).unwrap_or(b"")).await 
-                })
-            }
+            Method::GET => block_on(async { self.client.get(&url).await }),
+            Method::POST => block_on(async {
+                self.client
+                    .post(
+                        &url,
+                        body_bytes.as_ref().map(|b| b.as_slice()).unwrap_or(b""),
+                    )
+                    .await
+            }),
             _ => return Err(WalletError::HttpError("unsupported method".into())),
-        }.map_err(|e| WalletError::HttpError(e.to_string()))?;
+        }
+        .map_err(|e| WalletError::HttpError(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(WalletError::ProviderError(format!("ChangeNOW API error: HTTP {}", response.status().as_u16())));
+            return Err(WalletError::ProviderError(format!(
+                "ChangeNOW API error: HTTP {}",
+                response.status().as_u16()
+            )));
         }
 
         let body = response.body();
         if body.is_empty() {
-            return Err(WalletError::ProviderError("ChangeNOW API returned empty response".into()));
+            return Err(WalletError::ProviderError(
+                "ChangeNOW API returned empty response".into(),
+            ));
         }
 
-        let body_str = core::str::from_utf8(body).map_err(|e| WalletError::Serialization(e.to_string()))?;
+        let body_str =
+            core::str::from_utf8(body).map_err(|e| WalletError::Serialization(e.to_string()))?;
         from_str(body_str).map_err(|e| WalletError::Serialization(e.to_string()))
     }
 }
@@ -115,11 +121,20 @@ impl ExchangeProvider for ChangeNOWAdapter {
     fn supports_quote(&self, req: &QuoteRequest) -> bool {
         let (settle_sym, _) = Self::parse_asset_id(&req.settlement_asset_id);
         let (pay_sym, _) = Self::parse_asset_id(&req.pay_asset_id);
-        
+
         matches!(
-            (settle_sym.to_lowercase().as_str(), pay_sym.to_lowercase().as_str()),
-            ("usdt", "doge") | ("usdt", "btc") | ("usdt", "eth") | ("usdt", "sol") |
-            ("btc", "usdt") | ("eth", "usdt") | ("doge", "usdt") | ("sol", "usdt")
+            (
+                settle_sym.to_lowercase().as_str(),
+                pay_sym.to_lowercase().as_str()
+            ),
+            ("usdt", "doge")
+                | ("usdt", "btc")
+                | ("usdt", "eth")
+                | ("usdt", "sol")
+                | ("btc", "usdt")
+                | ("eth", "usdt")
+                | ("doge", "usdt")
+                | ("sol", "usdt")
         )
     }
 
@@ -132,41 +147,71 @@ impl ExchangeProvider for ChangeNOWAdapter {
         let (pay_sym, _) = Self::parse_asset_id(&req.pay_asset_id);
 
         let mut body = Map::new();
-        body.insert("fromCurrency".into(), JsonValue::String(pay_sym.to_lowercase()));
-        body.insert("toCurrency".into(), JsonValue::String(settle_sym.to_lowercase()));
-        
+        body.insert(
+            "fromCurrency".into(),
+            JsonValue::String(pay_sym.to_lowercase()),
+        );
+        body.insert(
+            "toCurrency".into(),
+            JsonValue::String(settle_sym.to_lowercase()),
+        );
+
         if !req.settlement_amount.is_empty() {
-            body.insert("toAmount".into(), JsonValue::String(req.settlement_amount.clone()));
+            body.insert(
+                "toAmount".into(),
+                JsonValue::String(req.settlement_amount.clone()),
+            );
         }
-        
+
         if !self.api_key.is_empty() {
             body.insert("apiKey".into(), JsonValue::String(self.api_key.clone()));
         }
 
-        let response = self.call_api(Method::POST, "/exchange/estimated-amount", Some(JsonValue::Object(body)))?;
+        let response = self.call_api(
+            Method::POST,
+            "/exchange/estimated-amount",
+            Some(JsonValue::Object(body)),
+        )?;
 
-        let obj = response.as_object().ok_or(WalletError::ProviderError("Invalid quote response from ChangeNOW".into()))?;
-        
-        let est_amount = obj.get("estimatedAmount").and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError("Missing estimatedAmount in ChangeNOW response".into()))?;
-        
-        let rate = obj.get("rate").and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError("Missing rate in ChangeNOW response".into()))?;
+        let obj = response.as_object().ok_or(WalletError::ProviderError(
+            "Invalid quote response from ChangeNOW".into(),
+        ))?;
+
+        let est_amount = obj.get("estimatedAmount").and_then(|v| v.as_str()).ok_or(
+            WalletError::ProviderError("Missing estimatedAmount in ChangeNOW response".into()),
+        )?;
+
+        let rate = obj
+            .get("rate")
+            .and_then(|v| v.as_str())
+            .ok_or(WalletError::ProviderError(
+                "Missing rate in ChangeNOW response".into(),
+            ))?;
 
         let settlement_amount = DecimalAmount::parse(est_amount)
             .ok_or_else(|| WalletError::InvalidDecimal(est_amount.into()))?;
-        
-        let rate_dec = DecimalAmount::parse(rate)
-            .ok_or_else(|| WalletError::InvalidDecimal(rate.into()))?;
-        
+
+        let rate_dec =
+            DecimalAmount::parse(rate).ok_or_else(|| WalletError::InvalidDecimal(rate.into()))?;
+
         // Calculate pay amount from settlement and rate
         let pay_amount = settlement_amount.clone(); // Approximation
 
         Ok(ProviderQuote {
             provider: ProviderCode::ChangeNOW,
             quote_id_internal: "changenow-live".into(),
-            settlement_asset: AssetRef { symbol: settle_sym, network: settle_net, contract: None, decimals: Some(6) },
-            pay_asset: AssetRef { symbol: pay_sym, network: "".into(), contract: None, decimals: Some(8) },
+            settlement_asset: AssetRef {
+                symbol: settle_sym,
+                network: settle_net,
+                contract: None,
+                decimals: Some(6),
+            },
+            pay_asset: AssetRef {
+                symbol: pay_sym,
+                network: "".into(),
+                contract: None,
+                decimals: Some(8),
+            },
             settlement_amount,
             pay_amount,
             rate: rate_dec,
@@ -184,22 +229,42 @@ impl ExchangeProvider for ChangeNOWAdapter {
         _ctx: &ProviderContext,
     ) -> Result<ProviderOrder, WalletError> {
         let mut body = Map::new();
-        body.insert("quoteId".into(), JsonValue::String(req.quote_id_internal.clone()));
-        body.insert("payoutAddress".into(), JsonValue::String(req.recipient_address.clone()));
-        
+        body.insert(
+            "quoteId".into(),
+            JsonValue::String(req.quote_id_internal.clone()),
+        );
+        body.insert(
+            "payoutAddress".into(),
+            JsonValue::String(req.recipient_address.clone()),
+        );
+
         if let Some(ref refund) = req.refund_address {
             body.insert("refundAddress".into(), JsonValue::String(refund.clone()));
         }
 
-        let response = self.call_api(Method::POST, "/exchange/create", Some(JsonValue::Object(body)))?;
+        let response = self.call_api(
+            Method::POST,
+            "/exchange/create",
+            Some(JsonValue::Object(body)),
+        )?;
 
-        let obj = response.as_object().ok_or(WalletError::ProviderError("Invalid order response from ChangeNOW".into()))?;
-        
-        let order_id = obj.get("id").and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError("Missing order ID in ChangeNOW response".into()))?;
-        
-        let deposit_address = obj.get("payinAddress").and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError("Missing payinAddress in ChangeNOW response".into()))?;
+        let obj = response.as_object().ok_or(WalletError::ProviderError(
+            "Invalid order response from ChangeNOW".into(),
+        ))?;
+
+        let order_id = obj
+            .get("id")
+            .and_then(|v| v.as_str())
+            .ok_or(WalletError::ProviderError(
+                "Missing order ID in ChangeNOW response".into(),
+            ))?;
+
+        let deposit_address =
+            obj.get("payinAddress")
+                .and_then(|v| v.as_str())
+                .ok_or(WalletError::ProviderError(
+                    "Missing payinAddress in ChangeNOW response".into(),
+                ))?;
 
         Ok(ProviderOrder {
             provider: ProviderCode::ChangeNOW,
@@ -217,14 +282,20 @@ impl ExchangeProvider for ChangeNOWAdapter {
         _ctx: &ProviderContext,
     ) -> Result<ProviderStatus, WalletError> {
         let path = format!("/exchange/order/{}", provider_order_id);
-        
+
         let response = self.call_api(Method::GET, &path, None)?;
 
-        let obj = response.as_object().ok_or(WalletError::ProviderError("Invalid order status from ChangeNOW".into()))?;
-        
-        let status_str = obj.get("status").and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError("Missing status in ChangeNOW response".into()))?;
-        
+        let obj = response.as_object().ok_or(WalletError::ProviderError(
+            "Invalid order status from ChangeNOW".into(),
+        ))?;
+
+        let status_str =
+            obj.get("status")
+                .and_then(|v| v.as_str())
+                .ok_or(WalletError::ProviderError(
+                    "Missing status in ChangeNOW response".into(),
+                ))?;
+
         let status = match status_str {
             "new" => 3,
             "waiting" => 4,
@@ -233,7 +304,12 @@ impl ExchangeProvider for ChangeNOWAdapter {
             "completed" => 7,
             "failed" => 8,
             "refunded" => 9,
-            _ => return Err(WalletError::ProviderError(format!("Unknown ChangeNOW status: {}", status_str))),
+            _ => {
+                return Err(WalletError::ProviderError(format!(
+                    "Unknown ChangeNOW status: {}",
+                    status_str
+                )))
+            }
         };
 
         Ok(ProviderStatus {

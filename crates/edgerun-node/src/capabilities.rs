@@ -133,7 +133,8 @@ pub fn record_capability_grant_event(
 ) -> Result<u64, Box<dyn std::error::Error>> {
     // Store the grant as an object
     let grant_bytes = grant.encode_to_vec();
-    let object_ref = store.put_object(&grant_bytes, KIND_PAYLOAD, &[signer.node_id().0.to_vec()])?;
+    let object_ref =
+        store.put_object(&grant_bytes, KIND_PAYLOAD, &[signer.node_id().0.to_vec()])?;
 
     // Append signed event (using the internal function from command_dispatch)
     let seq = crate::command_dispatch::append_signed_event(

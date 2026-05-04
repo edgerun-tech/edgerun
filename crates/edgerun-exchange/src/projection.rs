@@ -128,7 +128,10 @@ pub fn project_order(events: &[ExchangeEvent], order_id: &str) -> Option<Exchang
 }
 
 /// Project all events associated with a single order.
-pub fn project_order_events(events: Vec<&ExchangeEvent>, order_id: &str) -> Option<ExchangeOrderProjection> {
+pub fn project_order_events(
+    events: Vec<&ExchangeEvent>,
+    order_id: &str,
+) -> Option<ExchangeOrderProjection> {
     let mut projection = ExchangeOrderProjection::default();
     let mut seen_order = false;
 
@@ -149,7 +152,12 @@ pub fn is_terminal_status(status: i32) -> bool {
     matches!(status, 9 | 13 | 15 | 16 | 17 | 18) // completed/refunded/failed/rejected/on_hold/canceled
 }
 
-pub fn terminal_event_for_status(order_id: String, status: i32, reason: String, at_ms: u64) -> Option<ExchangeEvent> {
+pub fn terminal_event_for_status(
+    order_id: String,
+    status: i32,
+    reason: String,
+    at_ms: u64,
+) -> Option<ExchangeEvent> {
     match status {
         9 => Some(ExchangeEvent::OrderCompleted {
             order_id,

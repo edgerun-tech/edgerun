@@ -6,7 +6,10 @@ use edgerun_codelyzer::parser::ParserPool;
 
 fn main() {
     let dir = env::args().nth(1).expect("Usage: profile-files <path>");
-    let top_n: usize = env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(30);
+    let top_n: usize = env::args()
+        .nth(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30);
 
     let pool_start = Instant::now();
     let mut slow_files: Vec<(String, f64, usize)> = Vec::new();
@@ -26,7 +29,10 @@ fn main() {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                let name = path.file_name().map(|n| n.to_str().unwrap_or("")).unwrap_or("");
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_str().unwrap_or(""))
+                    .unwrap_or("");
                 if name.starts_with('.')
                     || name == "target"
                     || name == "node_modules"
@@ -74,9 +80,16 @@ fn main() {
     println!(
         "Parse failures:     {} ({:.1}%)",
         failed_files.len(),
-        if total_files > 0 { failed_files.len() as f64 / total_files as f64 * 100.0 } else { 0.0 }
+        if total_files > 0 {
+            failed_files.len() as f64 / total_files as f64 * 100.0
+        } else {
+            0.0
+        }
     );
-    println!("Total pool time:    {:.3}s", pool_start.elapsed().as_secs_f64());
+    println!(
+        "Total pool time:    {:.3}s",
+        pool_start.elapsed().as_secs_f64()
+    );
 
     println!("\n=== Top {} slowest files ===", top_n);
     for (i, (path, time, loc)) in slow_files.iter().take(top_n).enumerate() {

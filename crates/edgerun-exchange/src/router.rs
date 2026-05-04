@@ -5,11 +5,11 @@
 
 extern crate alloc;
 
+use crate::policy::RoutingPolicy;
+use crate::provider::{ExchangeProvider, ProviderContext, ProviderQuote};
 use alloc::vec::Vec;
 use edgerun_proto::edgerun::v0::wallet::v0::QuoteRequest;
 use edgerun_wallet::WalletError;
-use crate::provider::{ExchangeProvider, ProviderContext, ProviderQuote};
-use crate::policy::RoutingPolicy;
 
 /// Result of routing a quote request.
 #[derive(Debug)]
@@ -41,17 +41,11 @@ pub fn route_quote(
     let candidates: Vec<ProviderQuote> = providers
         .iter()
         .filter(|p| p.supports_quote(req))
-        .filter_map(|provider| {
-            match provider.quote(req, ctx) {
-                Ok(q) => Some(q),
-                Err(e) => {
-                    errors.push(alloc::format!(
-                        "{}: {}",
-                        provider.code().as_str(),
-                        e
-                    ));
-                    None
-                }
+        .filter_map(|provider| match provider.quote(req, ctx) {
+            Ok(q) => Some(q),
+            Err(e) => {
+                errors.push(alloc::format!("{}: {}", provider.code().as_str(), e));
+                None
             }
         })
         .collect();

@@ -27,10 +27,10 @@ use edgerun_exchange::provider::{ExchangeProvider, ProviderContext};
 use edgerun_http::{Handler, Request, Response};
 
 pub mod config;
-pub mod store;
-pub mod types;
 mod handlers;
 mod routes;
+pub mod store;
+pub mod types;
 
 pub use config::Config;
 pub use store::ExchangeStore;

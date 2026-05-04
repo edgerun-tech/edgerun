@@ -16,14 +16,12 @@
 //! Domain separation: "edgerun:v0:hash:encrypted-envelope"
 
 use crate::prelude::v1::*;
+use edgerun_crypto::aes_gcm;
 use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::{EncodedPoint, ToEncodedPoint};
 use edgerun_crypto::p256::PublicKey;
-use edgerun_crypto::aes_gcm;
 use edgerun_crypto::{Aead, AesGcmCipher, KeyInit, OsRng};
-use edgerun_proto::edgerun::v0::common::{
-    CipherSuite, EncryptedEnvelope, RecipientKey,
-};
+use edgerun_proto::edgerun::v0::common::{CipherSuite, EncryptedEnvelope, RecipientKey};
 use prost::Message;
 
 /// Domain string for encrypted envelope signature canonicalization.
@@ -102,8 +100,8 @@ fn ecdh_shared_secret(
     ephemeral_secret: &EphemeralSecret,
     recipient_pubkey: &[u8],
 ) -> Result<Vec<u8>, &'static str> {
-    let pk = PublicKey::from_sec1_bytes(recipient_pubkey)
-        .map_err(|_| "INVALID_RECIPIENT_PUBKEY")?;
+    let pk =
+        PublicKey::from_sec1_bytes(recipient_pubkey).map_err(|_| "INVALID_RECIPIENT_PUBKEY")?;
     let shared = ephemeral_secret.diffie_hellman(&pk);
     Ok(shared.raw_secret_bytes().to_vec())
 }
@@ -149,8 +147,7 @@ pub fn encrypt_envelope(
         let k_recipient = derive_key(&shared, b"edgerun:v0:ecdh:recipient-key");
 
         // Wrap K_msg with AES-GCM using K_recipient
-        let cipher = AesGcmCipher::new_from_slice(&k_recipient)
-            .map_err(|_| "AES_KEY_INIT")?;
+        let cipher = AesGcmCipher::new_from_slice(&k_recipient).map_err(|_| "AES_KEY_INIT")?;
         let mut key_nonce = [0u8; 12];
         edgerun_crypto::fill_random(&mut key_nonce).map_err(|_| "RNG_FAILURE")?;
         let nonce = aes_gcm::Nonce::from_slice(&key_nonce);
@@ -166,8 +163,7 @@ pub fn encrypt_envelope(
     }
 
     // Step 4: Encrypt payload with K_msg
-    let payload_cipher = AesGcmCipher::new_from_slice(&k_msg)
-        .map_err(|_| "AES_KEY_INIT")?;
+    let payload_cipher = AesGcmCipher::new_from_slice(&k_msg).map_err(|_| "AES_KEY_INIT")?;
     let mut nonce_bytes = [0u8; 12];
     edgerun_crypto::fill_random(&mut nonce_bytes).map_err(|_| "RNG_FAILURE")?;
     let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
@@ -216,8 +212,7 @@ pub fn decrypt_envelope(
     let k_recipient = derive_key(&shared, b"edgerun:v0:ecdh:recipient-key");
 
     // Unwrap message key
-    let cipher = AesGcmCipher::new_from_slice(&k_recipient)
-        .map_err(|_| "AES_KEY_INIT")?;
+    let cipher = AesGcmCipher::new_from_slice(&k_recipient).map_err(|_| "AES_KEY_INIT")?;
     let nonce = aes_gcm::Nonce::from_slice(&our_entry.key_nonce);
     let k_msg = cipher
         .decrypt(nonce, our_entry.encrypted_key.as_ref())
@@ -228,8 +223,7 @@ pub fn decrypt_envelope(
     }
 
     // Decrypt payload
-    let payload_cipher = AesGcmCipher::new_from_slice(&k_msg)
-        .map_err(|_| "AES_KEY_INIT")?;
+    let payload_cipher = AesGcmCipher::new_from_slice(&k_msg).map_err(|_| "AES_KEY_INIT")?;
     let nonce = aes_gcm::Nonce::from_slice(&env.nonce);
     let plaintext = payload_cipher
         .decrypt(nonce, env.ciphertext.as_ref())
@@ -287,7 +281,10 @@ mod tests {
     fn empty_ephemeral_pubkey_rejected() {
         let mut env = valid_envelope();
         env.ephemeral_pubkey.clear();
-        assert_eq!(validate_encrypted_envelope(&env), Err("EMPTY_EPHEMERAL_PUBKEY"));
+        assert_eq!(
+            validate_encrypted_envelope(&env),
+            Err("EMPTY_EPHEMERAL_PUBKEY")
+        );
     }
 
     #[test]
@@ -375,8 +372,8 @@ mod tests {
         let sender_pk_bytes = sender_pk.to_encoded_point(false).as_bytes().to_vec();
 
         // Signer closure
-        use edgerun_crypto::signature::Signer;
         use edgerun_crypto::p256::NistP256;
+        use edgerun_crypto::signature::Signer;
         let signer = |data: &[u8]| -> Vec<u8> {
             let sig: edgerun_crypto::ecdsa::Signature<NistP256> = sender_sk.sign(data);
             sig.to_bytes().to_vec()
@@ -411,8 +408,8 @@ mod tests {
         let sender_pk = sender_sk.verifying_key();
         let sender_pk_bytes = sender_pk.to_encoded_point(false).as_bytes().to_vec();
 
-        use edgerun_crypto::signature::Signer;
         use edgerun_crypto::p256::NistP256;
+        use edgerun_crypto::signature::Signer;
         let signer = |data: &[u8]| -> Vec<u8> {
             let sig: edgerun_crypto::ecdsa::Signature<NistP256> = sender_sk.sign(data);
             sig.to_bytes().to_vec()

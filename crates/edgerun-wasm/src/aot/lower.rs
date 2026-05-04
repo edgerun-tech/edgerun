@@ -2,7 +2,9 @@ use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
 use wasmparser::{BlockType, ExternalKind, MemArg, Operator, Payload, TypeRef};
 
-use super::ir::{verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, LoadKind, MemOp, StoreKind, ValueType};
+use super::ir::{
+    verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, LoadKind, MemOp, StoreKind, ValueType,
+};
 
 #[derive(Debug)]
 pub struct ParsedModule {
@@ -102,12 +104,16 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
                 let mut uses_memory = false;
                 let mut ops = Vec::new();
                 let mut type_stack = Vec::new();
-                let all_locals = current_locals_placeholder(&types, &func_type_indices, func_index, &locals)?;
+                let all_locals =
+                    current_locals_placeholder(&types, &func_type_indices, func_index, &locals)?;
                 let mut ops_reader = body.get_operators_reader()?;
                 while !ops_reader.eof() {
                     let op = ops_reader.read()?;
                     let lowered = lower_operator(op, &globals, &all_locals, &mut type_stack)?;
-                    if matches!(lowered, IrOp::Load(_, _) | IrOp::Store(_, _) | IrOp::MemoryCopy) {
+                    if matches!(
+                        lowered,
+                        IrOp::Load(_, _) | IrOp::Store(_, _) | IrOp::MemoryCopy | IrOp::MemoryFill
+                    ) {
                         uses_memory = true;
                     }
                     ops.push(lowered);
@@ -235,10 +241,17 @@ fn mem_op(memarg: MemArg) -> Result<MemOp> {
     if memarg.memory != 0 {
         bail!("baseline AOT only supports memory index 0");
     }
-    Ok(MemOp { offset: memarg.offset })
+    Ok(MemOp {
+        offset: memarg.offset,
+    })
 }
 
-fn lower_operator(op: Operator<'_>, globals: &[GlobalValue], locals: &[ValueType], stack: &mut Vec<ValueType>) -> Result<IrOp> {
+fn lower_operator(
+    op: Operator<'_>,
+    globals: &[GlobalValue],
+    locals: &[ValueType],
+    stack: &mut Vec<ValueType>,
+) -> Result<IrOp> {
     let lowered = match op {
         Operator::Nop => IrOp::Nop,
         Operator::Block { blockty } => {
@@ -333,12 +346,25 @@ fn lower_operator(op: Operator<'_>, globals: &[GlobalValue], locals: &[ValueType
             pop_ty(stack, ValueType::I32, "memory.copy destination")?;
             IrOp::MemoryCopy
         }
+        Operator::MemoryFill { mem } => {
+            if mem != 0 {
+                bail!("baseline AOT only supports memory.fill within memory 0");
+            }
+            pop_ty(stack, ValueType::I32, "memory.fill length")?;
+            pop_ty(stack, ValueType::I32, "memory.fill value")?;
+            pop_ty(stack, ValueType::I32, "memory.fill destination")?;
+            IrOp::MemoryFill
+        }
         Operator::Select => {
             pop_ty(stack, ValueType::I32, "select condition")?;
             let false_ty = pop_any(stack, "select false value")?;
             let true_ty = pop_any(stack, "select true value")?;
             if true_ty != false_ty {
-                bail!("select value type mismatch: true={} false={}", true_ty.as_str(), false_ty.as_str());
+                bail!(
+                    "select value type mismatch: true={} false={}",
+                    true_ty.as_str(),
+                    false_ty.as_str()
+                );
             }
             stack.push(true_ty);
             IrOp::Select(true_ty)
@@ -379,18 +405,29 @@ fn lower_operator(op: Operator<'_>, globals: &[GlobalValue], locals: &[ValueType
 }
 
 fn pop_any(stack: &mut Vec<ValueType>, label: &str) -> Result<ValueType> {
-    stack.pop().with_context(|| format!("stack underflow at {label}"))
+    stack
+        .pop()
+        .with_context(|| format!("stack underflow at {label}"))
 }
 
 fn pop_ty(stack: &mut Vec<ValueType>, expected: ValueType, label: &str) -> Result<()> {
     let actual = pop_any(stack, label)?;
     if actual != expected {
-        bail!("type mismatch at {label}: expected {}, found {}", expected.as_str(), actual.as_str());
+        bail!(
+            "type mismatch at {label}: expected {}, found {}",
+            expected.as_str(),
+            actual.as_str()
+        );
     }
     Ok(())
 }
 
-fn unary(stack: &mut Vec<ValueType>, input: ValueType, output: ValueType, op: IrOp) -> Result<IrOp> {
+fn unary(
+    stack: &mut Vec<ValueType>,
+    input: ValueType,
+    output: ValueType,
+    op: IrOp,
+) -> Result<IrOp> {
     pop_ty(stack, input, &op.render())?;
     stack.push(output);
     Ok(op)

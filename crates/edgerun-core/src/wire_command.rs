@@ -26,5 +26,8 @@ pub fn command_result_bytes(result: &CommandResultPayload) -> Vec<u8> {
 pub fn command_hash(command: &CommandEnvelope) -> Digest {
     let canonical = command_signable_bytes(command);
     let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_COMMAND_ENVELOPE, &canonical);
-    Digest { algorithm: 1, value: hash.to_vec() }
+    Digest {
+        algorithm: 1,
+        value: hash.to_vec(),
+    }
 }

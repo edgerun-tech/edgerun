@@ -4,7 +4,7 @@
 
 extern crate alloc;
 
-use edgerun_json::{Map, JsonValue, ToJson};
+use edgerun_json::{JsonValue, Map, ToJson};
 
 pub use edgerun_proto::edgerun::v0::wallet::v0::AssetRef;
 pub use edgerun_proto::edgerun::v0::wallet::v0::TxRef;
@@ -32,10 +32,14 @@ impl ToJson for ApiQuoteRequest {
         if let Some(ref amt) = self.amount {
             map.insert("amount".into(), amt.to_json());
         }
-        map.insert("mode".into(), match self.mode {
-            QuoteMode::PayIn => "pay_in",
-            QuoteMode::SettlementOut => "settlement_out",
-        }.to_json());
+        map.insert(
+            "mode".into(),
+            match self.mode {
+                QuoteMode::PayIn => "pay_in",
+                QuoteMode::SettlementOut => "settlement_out",
+            }
+            .to_json(),
+        );
         JsonValue::Object(map)
     }
 }
@@ -102,7 +106,10 @@ impl ToJson for ApiOrderResponse {
         let mut map = Map::new();
         map.insert("id".into(), self.id.to_json());
         map.insert("status".into(), self.status.to_json());
-        map.insert("settlement_address".into(), self.settlement_address.to_json());
+        map.insert(
+            "settlement_address".into(),
+            self.settlement_address.to_json(),
+        );
         map.insert("settlement_amount".into(), self.settlement_amount.to_json());
         if let Some(ref p) = self.pay_amount {
             map.insert("pay_amount".into(), p.to_json());

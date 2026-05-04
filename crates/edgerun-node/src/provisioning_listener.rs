@@ -2,8 +2,8 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use edgerun_json::{escape_json_string, Value as JsonValue};
 use edgerun_hardware_signing::NodeID;
+use edgerun_json::{escape_json_string, Value as JsonValue};
 use edgerun_rt::CancellationToken;
 use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
 
@@ -45,7 +45,7 @@ pub(crate) async fn run_provisioning_listener(
         }
 
         match listener.accept().await {
-        Ok((stream, peer_addr)) => {
+            Ok((stream, peer_addr)) => {
                 edgerun_log::info!("Provisioning connection from {peer_addr}");
                 let pin = pairing_pin.clone();
                 let pubkey = public_key_hex.clone();
@@ -110,8 +110,7 @@ pub(crate) async fn handle_provisioning_connection(
     let request = String::from_utf8_lossy(&buf[..n]).to_string();
     edgerun_log::debug!("Provisioning request: {request}");
 
-    let payload: JsonValue = match edgerun_json::from_json_slice(request.as_bytes())
-    {
+    let payload: JsonValue = match edgerun_json::from_json_slice(request.as_bytes()) {
         Ok(payload) => payload,
         Err(error) => {
             let body = response_err(&format!("invalid JSON: {error}"));
@@ -164,9 +163,8 @@ pub(crate) async fn handle_provisioning_connection(
             } else {
                 if let Some(path) = config_path {
                     if let Err(error) = persist_provisioned_signer_state(path, public_key_hex) {
-                        let status = response_err(&format!(
-                            "failed to persist provisioning state: {error}"
-                        ));
+                        let status =
+                            response_err(&format!("failed to persist provisioning state: {error}"));
                         stream
                             .write_all(status.as_bytes())
                             .await

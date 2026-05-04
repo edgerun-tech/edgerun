@@ -64,7 +64,9 @@ impl AotArtifact {
 impl DecodedAotArtifact {
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(bytes);
-        let magic = cursor.take_exact(MAGIC.len()).context("missing AOT artifact magic")?;
+        let magic = cursor
+            .take_exact(MAGIC.len())
+            .context("missing AOT artifact magic")?;
         if magic != MAGIC.as_slice() {
             bail!("invalid AOT artifact magic");
         }
@@ -163,7 +165,9 @@ impl<'a> Cursor<'a> {
     }
 
     fn bytes(&mut self, label: &str) -> Result<&'a [u8]> {
-        let len = self.u32().with_context(|| format!("missing {label} length"))? as usize;
+        let len = self
+            .u32()
+            .with_context(|| format!("missing {label} length"))? as usize;
         self.take_exact(len)
             .with_context(|| format!("missing {label} payload"))
     }

@@ -136,7 +136,10 @@ pub fn dispatch_uninstall_app(
         return record_and_respond(command, store, stream_id, signer, controllers, false, "app_id_required", Vec::new(), None);
     }
 
-    edgerun_log::info!("uninstall_app: app_id={}", bytes_to_hex(&app_id));
+    edgerun_log::info!(
+        "uninstall_app: app_id={}",
+        bytes_to_hex(&app_id)
+    );
 
     let mut found = false;
     if let Ok(Some(_app)) = store.get_app(&bytes_to_hex(&app_id)) {

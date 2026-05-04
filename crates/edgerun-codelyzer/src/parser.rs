@@ -133,14 +133,18 @@ pub struct ParserPool {
 impl ParserPool {
     /// Create a new empty parser pool.
     pub fn new() -> Self {
-        Self { parsers: HashMap::new() }
+        Self {
+            parsers: HashMap::new(),
+        }
     }
 
     /// Get or create a parser for the given language.
     fn get_or_insert(&mut self, lang: Lang) -> &mut Parser {
         self.parsers.entry(lang).or_insert_with(|| {
             let mut parser = Parser::new();
-            parser.set_language(&lang_to_tree_sitter(lang)).expect("failed to set language");
+            parser
+                .set_language(&lang_to_tree_sitter(lang))
+                .expect("failed to set language");
             parser
         })
     }
@@ -1136,12 +1140,14 @@ const arrow = () => { return 42; };
         let pairs = build_call_pairs_owned(&funcs, &calls);
         assert_eq!(pairs.len(), 2);
         // foo -> bar (resolved)
-        let foo_bar =
-            pairs.iter().find(|(caller, call)| *caller == "foo" && call.callee_name == "bar");
+        let foo_bar = pairs
+            .iter()
+            .find(|(caller, call)| *caller == "foo" && call.callee_name == "bar");
         assert!(foo_bar.is_some());
         // foo -> external (unresolved)
-        let foo_ext =
-            pairs.iter().find(|(caller, call)| *caller == "foo" && call.callee_name == "external");
+        let foo_ext = pairs
+            .iter()
+            .find(|(caller, call)| *caller == "foo" && call.callee_name == "external");
         assert!(foo_ext.is_some());
     }
 
@@ -1179,8 +1185,17 @@ void cleanup(void) {}
 "#;
         let result = parse_file("test.c", source).expect("parse failed");
         assert_eq!(result.functions.len(), 3);
-        assert!(result.functions.iter().any(|f| f.name == "main" && !f.is_static));
-        assert!(result.functions.iter().any(|f| f.name == "init" && f.is_static));
-        assert!(result.functions.iter().any(|f| f.name == "cleanup" && !f.is_static));
+        assert!(result
+            .functions
+            .iter()
+            .any(|f| f.name == "main" && !f.is_static));
+        assert!(result
+            .functions
+            .iter()
+            .any(|f| f.name == "init" && f.is_static));
+        assert!(result
+            .functions
+            .iter()
+            .any(|f| f.name == "cleanup" && !f.is_static));
     }
 }

@@ -15,7 +15,7 @@ use alloc::vec;
 #[cfg(feature = "std")]
 use std::vec;
 
-use edgerun_wire::{field, struct_value, u64v, bytes, WireEncode, WireValue};
+use edgerun_wire::{bytes, field, struct_value, u64v, WireEncode, WireValue};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DigestWire {
@@ -123,37 +123,55 @@ pub struct EventEnvelopeWire {
 
 impl WireEncode for DigestWire {
     fn encode_wire(&self, out: &mut Vec<u8>) {
-        struct_value(vec![field(1, u64v(self.algorithm as u64)), field(2, bytes(&self.value))]).encode_wire(out);
+        struct_value(vec![
+            field(1, u64v(self.algorithm as u64)),
+            field(2, bytes(&self.value)),
+        ])
+        .encode_wire(out);
     }
 }
 
 impl WireEncode for SignatureWire {
     fn encode_wire(&self, out: &mut Vec<u8>) {
-        struct_value(vec![field(1, u64v(self.algorithm as u64)), field(2, bytes(&self.value))]).encode_wire(out);
+        struct_value(vec![
+            field(1, u64v(self.algorithm as u64)),
+            field(2, bytes(&self.value)),
+        ])
+        .encode_wire(out);
     }
 }
 
 impl WireEncode for IdentityRefWire {
     fn encode_wire(&self, out: &mut Vec<u8>) {
         let mut fields = vec![field(1, bytes(&self.identity_id))];
-        if let Some(kind) = self.identity_kind { fields.push(field(2, u64v(kind as u64))); }
-        if let Some(key_hint) = &self.key_hint { fields.push(field(3, bytes(key_hint))); }
+        if let Some(kind) = self.identity_kind {
+            fields.push(field(2, u64v(kind as u64)));
+        }
+        if let Some(key_hint) = &self.key_hint {
+            fields.push(field(3, bytes(key_hint)));
+        }
         struct_value(fields).encode_wire(out);
     }
 }
 
 impl WireEncode for NodeRefWire {
-    fn encode_wire(&self, out: &mut Vec<u8>) { struct_value(vec![field(1, bytes(&self.node_id))]).encode_wire(out); }
+    fn encode_wire(&self, out: &mut Vec<u8>) {
+        struct_value(vec![field(1, bytes(&self.node_id))]).encode_wire(out);
+    }
 }
 
 impl WireEncode for StreamRefWire {
-    fn encode_wire(&self, out: &mut Vec<u8>) { struct_value(vec![field(1, bytes(&self.stream_id))]).encode_wire(out); }
+    fn encode_wire(&self, out: &mut Vec<u8>) {
+        struct_value(vec![field(1, bytes(&self.stream_id))]).encode_wire(out);
+    }
 }
 
 impl WireEncode for ObjectRefWire {
     fn encode_wire(&self, out: &mut Vec<u8>) {
         let mut fields = vec![field(1, bytes(&self.object_id))];
-        if let Some(kind) = self.object_kind { fields.push(field(2, u64v(kind as u64))); }
+        if let Some(kind) = self.object_kind {
+            fields.push(field(2, u64v(kind as u64)));
+        }
         struct_value(fields).encode_wire(out);
     }
 }
@@ -161,7 +179,9 @@ impl WireEncode for ObjectRefWire {
 impl WireEncode for CommandRefWire {
     fn encode_wire(&self, out: &mut Vec<u8>) {
         let mut fields = vec![field(1, bytes(&self.command_id))];
-        if let Some(hash) = &self.command_hash { fields.push(field(2, wire_value(hash))); }
+        if let Some(hash) = &self.command_hash {
+            fields.push(field(2, wire_value(hash)));
+        }
         struct_value(fields).encode_wire(out);
     }
 }
@@ -169,7 +189,9 @@ impl WireEncode for CommandRefWire {
 impl WireEncode for EventRefWire {
     fn encode_wire(&self, out: &mut Vec<u8>) {
         let mut fields = vec![field(1, bytes(&self.stream_id)), field(2, u64v(self.seq))];
-        if let Some(hash) = &self.event_hash { fields.push(field(3, wire_value(hash))); }
+        if let Some(hash) = &self.event_hash {
+            fields.push(field(3, wire_value(hash)));
+        }
         struct_value(fields).encode_wire(out);
     }
 }
@@ -177,7 +199,9 @@ impl WireEncode for EventRefWire {
 impl WireEncode for HeadRefWire {
     fn encode_wire(&self, out: &mut Vec<u8>) {
         let mut fields = vec![field(1, bytes(&self.stream_id)), field(2, u64v(self.seq))];
-        if let Some(hash) = &self.event_hash { fields.push(field(3, wire_value(hash))); }
+        if let Some(hash) = &self.event_hash {
+            fields.push(field(3, wire_value(hash)));
+        }
         struct_value(fields).encode_wire(out);
     }
 }
@@ -201,11 +225,21 @@ impl WireEncode for CommandEnvelopeWire {
             field(10, bytes(&self.idempotency_key)),
             field(17, bytes(&self.app_intent)),
         ];
-        if let Some(value) = &self.target_node { fields.push(field(3, wire_value(value))); }
-        if let Some(value) = &self.issuer { fields.push(field(4, wire_value(value))); }
-        if let Some(value) = &self.payload { fields.push(field(11, wire_value(value))); }
-        if let Some(value) = &self.command_metadata { fields.push(field(15, wire_value(value))); }
-        if let Some(value) = &self.signature { fields.push(field(16, wire_value(value))); }
+        if let Some(value) = &self.target_node {
+            fields.push(field(3, wire_value(value)));
+        }
+        if let Some(value) = &self.issuer {
+            fields.push(field(4, wire_value(value)));
+        }
+        if let Some(value) = &self.payload {
+            fields.push(field(11, wire_value(value)));
+        }
+        if let Some(value) = &self.command_metadata {
+            fields.push(field(15, wire_value(value)));
+        }
+        if let Some(value) = &self.signature {
+            fields.push(field(16, wire_value(value)));
+        }
         struct_value(fields).encode_wire(out);
     }
 }
@@ -225,11 +259,21 @@ impl WireEncode for CommandResultPayloadWire {
             field(4, u64v(self.decision as u64)),
             field(6, edgerun_wire::text(&self.reason_code)),
         ];
-        if let Some(value) = &self.command { fields.push(field(2, wire_value(value))); }
-        if let Some(value) = &self.issuer { fields.push(field(3, wire_value(value))); }
-        if let Some(value) = &self.decision_basis { fields.push(field(5, wire_value(value))); }
-        if let Some(value) = &self.effect_summary_object { fields.push(field(7, wire_value(value))); }
-        if let Some(value) = &self.result_object { fields.push(field(8, wire_value(value))); }
+        if let Some(value) = &self.command {
+            fields.push(field(2, wire_value(value)));
+        }
+        if let Some(value) = &self.issuer {
+            fields.push(field(3, wire_value(value)));
+        }
+        if let Some(value) = &self.decision_basis {
+            fields.push(field(5, wire_value(value)));
+        }
+        if let Some(value) = &self.effect_summary_object {
+            fields.push(field(7, wire_value(value)));
+        }
+        if let Some(value) = &self.result_object {
+            fields.push(field(8, wire_value(value)));
+        }
         struct_value(fields).encode_wire(out);
     }
 }
@@ -246,10 +290,18 @@ impl WireEncode for EventEnvelopeWire {
             field(11, list_value(&self.related_commands)),
             field(12, list_value(&self.related_objects)),
         ];
-        if let Some(value) = &self.prev_event_hash { fields.push(field(4, wire_value(value))); }
-        if let Some(value) = &self.payload_object { fields.push(field(9, wire_value(value))); }
-        if let Some(value) = &self.event_metadata { fields.push(field(15, wire_value(value))); }
-        if let Some(value) = &self.signature { fields.push(field(16, wire_value(value))); }
+        if let Some(value) = &self.prev_event_hash {
+            fields.push(field(4, wire_value(value)));
+        }
+        if let Some(value) = &self.payload_object {
+            fields.push(field(9, wire_value(value)));
+        }
+        if let Some(value) = &self.event_metadata {
+            fields.push(field(15, wire_value(value)));
+        }
+        if let Some(value) = &self.signature {
+            fields.push(field(16, wire_value(value)));
+        }
         struct_value(fields).encode_wire(out);
     }
 }
@@ -281,32 +333,58 @@ pub mod proto_boundary {
     use edgerun_proto::edgerun::v0::{common, stream};
 
     pub fn digest_from_proto(value: common::Digest) -> DigestWire {
-        DigestWire { algorithm: value.algorithm as u32, value: value.value }
+        DigestWire {
+            algorithm: value.algorithm as u32,
+            value: value.value,
+        }
     }
 
     pub fn signature_from_proto(value: common::Signature) -> SignatureWire {
-        SignatureWire { algorithm: value.algorithm as u32, value: value.value }
+        SignatureWire {
+            algorithm: value.algorithm as u32,
+            value: value.value,
+        }
     }
 
     pub fn identity_ref_from_proto(value: common::IdentityRef) -> IdentityRefWire {
-        IdentityRefWire { identity_id: value.identity_id, identity_kind: value.identity_kind.map(|v| v as u32), key_hint: value.key_hint }
+        IdentityRefWire {
+            identity_id: value.identity_id,
+            identity_kind: value.identity_kind.map(|v| v as u32),
+            key_hint: value.key_hint,
+        }
     }
 
-    pub fn node_ref_from_proto(value: common::NodeRef) -> NodeRefWire { NodeRefWire { node_id: value.node_id } }
+    pub fn node_ref_from_proto(value: common::NodeRef) -> NodeRefWire {
+        NodeRefWire {
+            node_id: value.node_id,
+        }
+    }
 
     pub fn object_ref_from_proto(value: common::ObjectRef) -> ObjectRefWire {
-        ObjectRefWire { object_id: value.object_id, object_kind: value.object_kind.map(|v| v as u32) }
+        ObjectRefWire {
+            object_id: value.object_id,
+            object_kind: value.object_kind.map(|v| v as u32),
+        }
     }
 
     pub fn command_ref_from_proto(value: common::CommandRef) -> CommandRefWire {
-        CommandRefWire { command_id: value.command_id, command_hash: value.command_hash.map(digest_from_proto) }
+        CommandRefWire {
+            command_id: value.command_id,
+            command_hash: value.command_hash.map(digest_from_proto),
+        }
     }
 
     pub fn event_ref_from_proto(value: common::EventRef) -> EventRefWire {
-        EventRefWire { stream_id: value.stream_id, seq: value.seq, event_hash: value.event_hash.map(digest_from_proto) }
+        EventRefWire {
+            stream_id: value.stream_id,
+            seq: value.seq,
+            event_hash: value.event_hash.map(digest_from_proto),
+        }
     }
 
-    pub fn command_result_from_proto(value: stream::CommandResultPayload) -> CommandResultPayloadWire {
+    pub fn command_result_from_proto(
+        value: stream::CommandResultPayload,
+    ) -> CommandResultPayloadWire {
         CommandResultPayloadWire {
             payload_version: value.payload_version,
             command: value.command.map(command_ref_from_proto),
@@ -321,8 +399,12 @@ pub mod proto_boundary {
 
     pub fn command_envelope_from_proto(value: stream::CommandEnvelope) -> CommandEnvelopeWire {
         let payload = value.payload.map(|payload| match payload {
-            stream::command_envelope::Payload::PayloadObject(value) => CommandPayloadWire::Object(object_ref_from_proto(value)),
-            stream::command_envelope::Payload::InlinePayload(value) => CommandPayloadWire::Inline(value),
+            stream::command_envelope::Payload::PayloadObject(value) => {
+                CommandPayloadWire::Object(object_ref_from_proto(value))
+            }
+            stream::command_envelope::Payload::InlinePayload(value) => {
+                CommandPayloadWire::Inline(value)
+            }
         });
         CommandEnvelopeWire {
             envelope_version: value.envelope_version,
@@ -348,9 +430,21 @@ pub mod proto_boundary {
             event_type: value.event_type as u32,
             event_version: value.event_version,
             payload_object: value.payload_object.map(object_ref_from_proto),
-            related_events: value.related_events.into_iter().map(event_ref_from_proto).collect(),
-            related_commands: value.related_commands.into_iter().map(command_ref_from_proto).collect(),
-            related_objects: value.related_objects.into_iter().map(object_ref_from_proto).collect(),
+            related_events: value
+                .related_events
+                .into_iter()
+                .map(event_ref_from_proto)
+                .collect(),
+            related_commands: value
+                .related_commands
+                .into_iter()
+                .map(command_ref_from_proto)
+                .collect(),
+            related_objects: value
+                .related_objects
+                .into_iter()
+                .map(object_ref_from_proto)
+                .collect(),
             event_metadata: value.event_metadata.map(object_ref_from_proto),
             signature: value.signature.map(signature_from_proto),
         }
@@ -376,7 +470,10 @@ mod tests {
             related_commands: Vec::new(),
             related_objects: Vec::new(),
             event_metadata: None,
-            signature: Some(SignatureWire { algorithm: 1, value: vec![0xab; 64] }),
+            signature: Some(SignatureWire {
+                algorithm: 1,
+                value: vec![0xab; 64],
+            }),
         };
         let full = canonical_bytes(&event);
         let signable = event.signable_bytes();
@@ -388,7 +485,10 @@ mod tests {
     fn command_result_wire_is_deterministic() {
         let value = CommandResultPayloadWire {
             payload_version: 1,
-            command: Some(CommandRefWire { command_id: b"cmd".to_vec(), command_hash: None }),
+            command: Some(CommandRefWire {
+                command_id: b"cmd".to_vec(),
+                command_hash: None,
+            }),
             issuer: None,
             decision: 1,
             decision_basis: None,

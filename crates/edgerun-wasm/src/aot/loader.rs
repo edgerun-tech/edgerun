@@ -1,5 +1,8 @@
 use anyhow::{bail, Context, Result};
-use libc::{mmap, mprotect, munmap, MAP_ANONYMOUS, MAP_FAILED, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
+use libc::{
+    mmap, mprotect, munmap, MAP_ANONYMOUS, MAP_FAILED, MAP_PRIVATE, PROT_EXEC, PROT_READ,
+    PROT_WRITE,
+};
 use std::ptr;
 
 use super::artifact::{DecodedAotArtifact, DecodedFunction};
@@ -76,9 +79,8 @@ impl LoadedFunction {
             );
         }
 
-        let f: extern "C" fn(u64, u64, u64, u64, u64, u64) -> u64 = unsafe {
-            std::mem::transmute(self.ptr)
-        };
+        let f: extern "C" fn(u64, u64, u64, u64, u64, u64) -> u64 =
+            unsafe { std::mem::transmute(self.ptr) };
         let mut a = [0u64; 6];
         a[..args.len()].copy_from_slice(args);
         let result = f(a[0], a[1], a[2], a[3], a[4], a[5]);
@@ -118,7 +120,10 @@ impl ParsedSig {
     }
 }
 
-pub fn find_function<'a>(artifact: &'a DecodedAotArtifact, selector: &str) -> Result<&'a DecodedFunction> {
+pub fn find_function<'a>(
+    artifact: &'a DecodedAotArtifact,
+    selector: &str,
+) -> Result<&'a DecodedFunction> {
     if let Ok(index) = selector.parse::<u32>() {
         return artifact
             .functions
