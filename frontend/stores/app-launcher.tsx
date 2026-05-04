@@ -41,6 +41,13 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): AppS
     }
   }
 
+  if (spec.kind === "overlay") {
+    const existingOverlays = surfaces.filter((s) => s.kind === "overlay")
+    for (const overlay of existingOverlays) {
+      closeAppSurface(overlay.id)
+    }
+  }
+
   if (!component) {
     const missing = getMissingCapabilities(app.appId, app.requiredCapabilityIds)
     if (missing.length > 0) {

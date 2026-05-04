@@ -17,8 +17,6 @@ export {
 export {
   getAppSurfaceSpec,
   getDefaultSurfaceSize,
-  registerAppSurfaceSpec,
-  enrichAppWithSurfaceSpec,
   type AppSurfaceSpec,
 } from "./app-surface-registry"
 
