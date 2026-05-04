@@ -16,7 +16,6 @@ import {
   Wallet,
   Calculator,
   Activity,
-  Sparkles,
   Workflow,
   Package,
   Mail,
@@ -41,6 +40,7 @@ export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   chat: <MessageSquare className="h-5 w-5" />,
   "trust-manager": <Shield className="h-5 w-5" />,
   "workflow-builder": <Workflow className="h-5 w-5" />,
+  finances: <Wallet className="h-5 w-5" />,
   wallet: <Wallet className="h-5 w-5" />,
   calculator: <Calculator className="h-5 w-5" />,
   help: <HelpCircle className="h-5 w-5" />,
@@ -67,7 +67,7 @@ export const BUILTIN_APPS: AppDefinition[] = [
   { appId: "people", name: "People", description: "Contacts, messages, and calls", iconId: "people", kind: "builtin", source: "builtin", componentKey: "people", requiredCapabilityIds: ["identity"], optionalCapabilityIds: ["voice_call", "messaging"], status: "available" },
   { appId: "trust-manager", name: "Trust Manager", description: "Inspect trust roots, delegations, capabilities, and audit trails", iconId: "trust-manager", kind: "builtin", source: "builtin", componentKey: "trust-manager", requiredCapabilityIds: ["identity"], optionalCapabilityIds: ["node_connection"], status: "available" },
   { appId: "workflow-builder", name: "Workflow Builder", description: "Create & manage automation workflows", iconId: "workflow-builder", kind: "builtin", source: "builtin", componentKey: "workflow-builder", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
-  { appId: "wallet", name: "Finances", description: "Portfolio, wallet transfers, and routed crypto exchange", iconId: "wallet", kind: "builtin", source: "demo", componentKey: "wallet", requiredCapabilityIds: ["identity", "payments"], optionalCapabilityIds: ["node_connection"], status: "demo" },
+  { appId: "finances", name: "Finances", description: "Finance hub for portfolio, wallet transfers, exchange, rewards, and settlement", iconId: "finances", kind: "builtin", source: "demo", componentKey: "finances", requiredCapabilityIds: ["identity", "payments"], optionalCapabilityIds: ["node_connection"], status: "demo" },
   { appId: "calculator", name: "Calculator", description: "System utility", iconId: "calculator", kind: "builtin", source: "builtin", componentKey: "calculator", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
   { appId: "help", name: "Help & Onboarding", description: "Platform guide & setup", iconId: "help", kind: "builtin", source: "builtin", componentKey: "help", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
   { appId: "gmail", name: "Gmail", description: "Read and send emails via Google", iconId: "gmail", kind: "builtin", source: "builtin", componentKey: "gmail", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
@@ -77,6 +77,9 @@ export const BUILTIN_APPS: AppDefinition[] = [
 export function getBuiltinApp(appId: string): AppDefinition | undefined {
   if (appId === "contacts" || appId === "calling" || appId === "chat") {
     return BUILTIN_APPS.find((a) => a.appId === "people")
+  }
+  if (appId === "wallet") {
+    return BUILTIN_APPS.find((a) => a.appId === "finances")
   }
   return BUILTIN_APPS.find((a) => a.appId === appId)
 }
