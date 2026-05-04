@@ -1,6 +1,6 @@
 //! Shared command result helpers.
 
-use edgerun_core::command::command_hash;
+use edgerun_core::wire_command::command_hash;
 use edgerun_proto::edgerun::v0::common::{CommandRef, ObjectRef};
 use edgerun_proto::edgerun::v0::stream::{CommandEnvelope, CommandResultPayload};
 
