@@ -4,6 +4,7 @@ import { useEffect, useCallback, useMemo } from "react"
 import { useStore } from "@nanostores/react"
 import { Window } from "./window"
 import { TopBar } from "./top-bar"
+import { DesktopTelemetry } from "./desktop-telemetry"
 import { launchApp, getAppIcon } from "@/stores/app-launcher"
 import { AuthOverlay } from "./auth-overlay"
 import { StageManager } from "./stage-manager"
@@ -145,6 +146,14 @@ export function Desktop() {
           />
 
           <div className="absolute inset-0 top-10 z-10">
+            <DesktopTelemetry
+              nodeCount={systemStats.nodeCount}
+              activeSessions={systemStats.activeSessions}
+              ramUsage={systemStats.ramUsage}
+              isConnected={systemStats.isConnected}
+              runningApps={windows.length}
+            />
+
             <StageManager
               windows={windows}
               focusedWindowId={focusedWindow}
