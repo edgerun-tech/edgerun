@@ -49,13 +49,13 @@ function appGroupRank(app: AppDefinition): number {
 export function AppStore({ onLaunchApp }: AppStoreProps) {
   const installedIds = useStore(installedAppIdsStore)
   useStore(localCapabilityGrantsStore)
-  useStore(appCatalogRegistry)
+  const catalogState = useStore(appCatalogRegistry)
   const apps = useMemo(() => {
     const merged = new Map<string, AppDefinition>()
     for (const app of listCatalogApps()) merged.set(app.appId, app)
     for (const app of listBuiltinApps()) merged.set(app.appId, app)
     return Array.from(merged.values()).sort((a, b) => appGroupRank(a) - appGroupRank(b) || a.name.localeCompare(b.name))
-  }, [useStore(appCatalogRegistry)])
+  }, [catalogState])
   const normalizedInstalledIds = useMemo(
     () => installedIds.map(normalizeAppId),
     [installedIds],
