@@ -15,15 +15,16 @@ The `.eraot` file is an optimization artifact. A runtime must be able to reject 
 `edgerun-aot` writes a deterministic `.eraot` file containing:
 
 - magic: `ERAOT001`
-- artifact version
+- artifact version: `2`
 - target triple string
 - compiler version string
 - SHA-256 of the input WASM
 - compiled functions
+- compact function signature string
 - rendered EdgeRun IR for audit/debugging
 - baseline x86_64 SysV machine-code bytes
 
-The artifact can now be decoded, inspected, and verified against the original WASM input hash.
+The artifact can now be decoded, inspected, verified against the original WASM input hash, and executed for simple integer functions.
 
 ## Current subset
 
@@ -96,9 +97,37 @@ Verify an artifact against the source WASM:
 cargo run -p edgerun-wasm --bin edgerun-aot -- app.wasm --verify-artifact app.eraot --verbose
 ```
 
+Run a verified artifact function by export name:
+
+```bash
+cargo run -p edgerun-wasm --bin edgerun-aot -- app.wasm --run-artifact app.eraot --function add --arg 40 --arg 2 --verbose
+```
+
+Run a verified artifact function by function index:
+
+```bash
+cargo run -p edgerun-wasm --bin edgerun-aot -- app.wasm --run-artifact app.eraot --function 0 --arg 40 --arg 2
+```
+
+Arguments are passed as unsigned 64-bit integer slots. Decimal, negative signed decimal, and `0x` hex forms are accepted. The loader masks `i32` return values to 32 bits.
+
+## Current execution loader
+
+The loader is intentionally narrow:
+
+- decodes `.eraot`
+- verifies the artifact hash against the original `.wasm`
+- checks target and compiler strings
+- selects a function by export name or function index
+- parses the compact integer signature
+- maps the function code into executable memory
+- calls it through a fixed six-argument C ABI shim
+
+This is a local developer harness, not the final production execution sandbox.
+
 ## Next compiler steps
 
-1. Add an mmap/executable loader for verified `.eraot` artifacts.
+1. Replace RWX mapping with write-then-exec mapping or memfd-backed executable pages.
 2. Add deterministic hostcall ABI lowering.
 3. Add memory load/store with explicit bounds traps.
 4. Add block/loop/br/br_if lowering.
