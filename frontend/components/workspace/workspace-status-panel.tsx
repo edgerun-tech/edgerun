@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react"
 import { useStore } from "@nanostores/react"
-import { Ban, Check, Filter, Plus, Tags, X } from "lucide-react"
+import { Ban, Filter, Plus, Tags } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { nodeFilterKeys, toggleXrayFilter, xrayState } from "@/features/xray/graph/graph-store"
 import type { XrayFilterKey } from "@/features/xray/graph/types"
@@ -16,31 +16,30 @@ type FilterItem = {
   key: XrayFilterKey
   label: string
   count: number
+  color: string
 }
 
-const FILTER_ORDER: Array<{ key: XrayFilterKey; label: string }> = [
-  { key: "file", label: "Files" },
-  { key: "function", label: "Functions" },
-  { key: "ui", label: "UI" },
-  { key: "runtime", label: "Runtime" },
-  { key: "storage", label: "Storage" },
-  { key: "network", label: "Network" },
-  { key: "crypto", label: "Crypto" },
-  { key: "agent", label: "Agent" },
-  { key: "rust", label: "Rust" },
-  { key: "typescript", label: "TypeScript" },
-  { key: "javascript", label: "JavaScript" },
-  { key: "go", label: "Go" },
-  { key: "python", label: "Python" },
-  { key: "c", label: "C" },
+const FILTER_ORDER: Array<{ key: XrayFilterKey; label: string; color: string }> = [
+  { key: "file", label: "Files", color: "bg-zinc-400" },
+  { key: "function", label: "Functions", color: "bg-sky-300" },
+  { key: "ui", label: "UI", color: "bg-sky-300" },
+  { key: "runtime", label: "Runtime", color: "bg-orange-400" },
+  { key: "storage", label: "Storage", color: "bg-yellow-300" },
+  { key: "network", label: "Network", color: "bg-cyan-400" },
+  { key: "crypto", label: "Crypto", color: "bg-red-400" },
+  { key: "agent", label: "Agent", color: "bg-zinc-500" },
+  { key: "rust", label: "Rust", color: "bg-orange-500" },
+  { key: "typescript", label: "TypeScript", color: "bg-blue-400" },
+  { key: "javascript", label: "JavaScript", color: "bg-yellow-300" },
+  { key: "go", label: "Go", color: "bg-cyan-300" },
+  { key: "python", label: "Python", color: "bg-green-400" },
+  { key: "c", label: "C", color: "bg-purple-400" },
 ]
 
 function buildFilters(state: ReturnType<typeof xrayState.get>): FilterItem[] {
   const counts = new Map<XrayFilterKey, number>()
   for (const node of state.nodes.values()) {
-    for (const key of nodeFilterKeys(node)) {
-      counts.set(key, (counts.get(key) || 0) + 1)
-    }
+    for (const key of nodeFilterKeys(node)) counts.set(key, (counts.get(key) || 0) + 1)
   }
   return FILTER_ORDER
     .map((item) => ({ ...item, count: counts.get(item.key) || 0 }))
@@ -95,7 +94,7 @@ export function WorkspaceStatusPanel({ className, surface = "floating" }: Worksp
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
-        <div className="space-y-1">
+        <div className="flex flex-wrap gap-1.5">
           {filters.map((filter) => {
             const hidden = state.hiddenFilterKeys.has(filter.key)
             return (
@@ -104,15 +103,13 @@ export function WorkspaceStatusPanel({ className, surface = "floating" }: Worksp
                 type="button"
                 onClick={() => toggleXrayFilter(filter.key)}
                 className={cn(
-                  "flex w-full min-w-0 items-center gap-2 rounded-lg bg-background/45 px-2 py-1.5 text-left text-[10px] transition-colors hover:bg-background/70",
-                  hidden && "opacity-45",
+                  "flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/45 px-2 py-1 text-[10px] transition-all hover:border-primary/30 hover:bg-background/70",
+                  hidden && "opacity-60 grayscale",
                 )}
                 title={hidden ? `Show ${filter.label}` : `Hide ${filter.label}`}
               >
-                <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-full", hidden ? "text-muted-foreground" : "text-[var(--status-online)]")}>
-                  {hidden ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-muted-foreground">{filter.label}</span>
+                <span className={cn("h-2 w-2 shrink-0 rounded-full", filter.color)} />
+                <span className="min-w-0 truncate text-muted-foreground">{filter.label}</span>
                 <span className="shrink-0 font-mono text-foreground">{filter.count}</span>
               </button>
             )
