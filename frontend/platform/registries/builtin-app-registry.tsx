@@ -86,8 +86,8 @@ export const BUILTIN_APPS: AppDefinition[] = [
   },
   {
     appId: "code-runner",
-    name: "Code Runner",
-    description: "Execute WASM modules",
+    name: "AS Compiler",
+    description: "Compile AssemblyScript to WASM in-browser",
     iconId: "code-runner",
     kind: "builtin",
     source: "builtin",
