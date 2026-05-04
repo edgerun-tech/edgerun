@@ -15,9 +15,13 @@ import { WorkflowBuilder } from "@/components/os/workflow-builder"
 import { FileManager } from "@/components/os/file-manager"
 import { GmailApp } from "@/components/os/gmail-app"
 import { SettingsApp } from "@/components/os/settings-app"
-import { launchApp } from "@/stores/app-launcher"
 
-export function BuiltinAppHost({ app }: { app: AppDefinition }) {
+interface BuiltinAppHostProps {
+  app: AppDefinition
+  onLaunchApp?: (app: AppDefinition) => void
+}
+
+export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
   switch (app.appId) {
     case "terminal":
       return <Terminal logs={[]} onCommand={() => {}} />
@@ -28,7 +32,7 @@ export function BuiltinAppHost({ app }: { app: AppDefinition }) {
     case "app-store":
       return (
         <AppStoreComponent
-          onLaunchApp={(a) => launchApp(a)}
+          onLaunchApp={(a) => onLaunchApp?.(a)}
           onAppBlocked={() => {}}
           runningApps={[]}
         />
