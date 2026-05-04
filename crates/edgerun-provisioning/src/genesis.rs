@@ -1,84 +1,58 @@
-use super::contract::ProvisioningContract;
-use edgerun_core::protocol::{Signature, Timestamp};
-type EventId = Vec<u8>;
-type StreamId = Vec<u8>;
-type Identity = edgerun_core::protocol::IdentityRef;
-/// Node genesis claim
-/// Sent by node to controller via bootstrap coordinator
+use edgerun_core::protocol::{IdentityRef, Signature, Timestamp};
+
+type Identity = IdentityRef;
+use crate::contract::{hex_encode, sign, verify, KeyPair, ProvisioningContract, PublicKey};
+
 #[derive(Debug, Clone)]
 pub struct NodeGenesisClaim {
-    pub version: String,
-    pub provisioning_id: String,
-    pub provisioning_contract_hash: String,
     pub node_identity: Identity,
-    pub controller: Identity,
-    pub node_stream_id: StreamId,
-    pub node_genesis_event_hash: String,
-    pub node_label: String,
-    pub build_artifact_hash: String,
-    pub config_hash: String,
-    pub boot_measurement_hash: Option<String>,
+    pub provisioning_contract_hash: String,
     pub created_at: Timestamp,
-    pub node_signature: Option<Signature>,
+    pub signature: Option<Signature>,
 }
 
 impl NodeGenesisClaim {
-    /// Create a new genesis claim
-    pub fn new(
-        contract: &ProvisioningContract,
-        node_identity: Identity,
-        node_stream_id: StreamId,
-        genesis_event_hash: String,
-    ) -> Self {
+    pub fn new(node_identity: Identity, contract: &ProvisioningContract) -> Self {
         Self {
-            version: contract.version.clone(),
-            provisioning_id: contract.provisioning_id.clone(),
-            provisioning_contract_hash: crate::contract::hex_encode(&contract.compute_hash()),
             node_identity,
-            controller: contract.controller.clone(),
-            node_stream_id,
-            node_genesis_event_hash: genesis_event_hash,
-            node_label: contract.node_label.clone(),
-            build_artifact_hash: contract.build_artifact_hash.clone(),
-            config_hash: contract.config_hash.clone(),
-            boot_measurement_hash: None,
+            provisioning_contract_hash: hex_encode(&contract.compute_hash()),
             created_at: Timestamp {
                 seconds: 0,
                 nanos: 0,
             },
-            node_signature: None,
+            signature: None,
         }
     }
 
-    /// Sign this claim with the node's keypair
-    pub Err(e) => Err(format!("Failed to sign genesis claim: {:?}", e)),
-        }
+    pub fn sign(&mut self, keypair: &KeyPair) -> Result<Signature, String> {
+        let payload = self.signing_payload();
+        let sig = Signature {
+            algorithm: 1,
+            value: sign(keypair, payload.as_bytes()),
+        };
+        self.signature = Some(sig.clone());
+        Ok(sig)
     }
 
-    /// Verify the node signature on this claim
     pub fn verify_signature(&self, node_public_key: &PublicKey) -> bool {
-        let Some(ref sig) = self.node_signature else {
+        let Some(sig) = self.signature.as_ref() else {
             return false;
         };
-
-        let payload = self.canonical_payload();
-        verify(node_public_key, payload.as_bytes(), sig)
+        let payload = self.signing_payload();
+        verify(node_public_key, payload.as_bytes(), &sig.value)
     }
 
-    /// Build canonical payload for signing/verification
-    fn canonical_payload(&self) -> String {
-        format!(
-            "version={};provisioning_id={};node_identity={};contract_hash={};genesis_hash={}",
-            self.version,
-            self.provisioning_id,
-            crate::contract::hex_encode(&self.node_identity.identity_id),
-            self.provisioning_contract_hash,
-            self.node_genesis_event_hash,
-        )
-    }
-
-    /// Check if this claim commits to the given contract hash
     pub fn commits_to_contract(&self, contract_hash: &str) -> bool {
         self.provisioning_contract_hash == contract_hash
+    }
+
+    fn signing_payload(&self) -> String {
+        format!(
+            "{}:{}:{}:{}",
+            hex_encode(&self.node_identity.identity_id),
+            self.provisioning_contract_hash,
+            self.created_at.seconds,
+            self.created_at.nanos
+        )
     }
 }

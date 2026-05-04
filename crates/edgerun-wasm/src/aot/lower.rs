@@ -1,9 +1,9 @@
-use anyhow::{bail, Context, Result};
-use std::collections::BTreeMap;
-use crate::wasmparser_mock::wasmparser::*;
 use super::ir::{
     verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, LoadKind, MemOp, StoreKind, ValueType,
 };
+use crate::wasmparser_mock::wasmparser::*;
+use anyhow::{bail, Context, Result};
+use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub struct ParsedModule {
@@ -235,7 +235,10 @@ fn normalize_function_ends(mut ops: Vec<IrOp>) -> Result<Vec<IrOp>> {
     Ok(ops)
 }
 
-fn parse_global_init(ty: ValueType, init_expr: wasmparser_mock::ConstExpr<'_>) -> Result<GlobalValue> {
+fn parse_global_init(
+    ty: ValueType,
+    init_expr: wasmparser_mock::ConstExpr<'_>,
+) -> Result<GlobalValue> {
     let mut reader = init_expr.get_operators_reader();
     let first = reader.read()?;
     let value = match (ty, first) {

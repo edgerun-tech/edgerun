@@ -1,34 +1,35 @@
-extern crate alloc;
-//! Comprehensive end-to-end test suite for all edgerun subsystems.
-//!
-//! This test suite validates that all components work together in real scenarios:
-//! - Node daemon lifecycle and health checks
-//! - TCP session establishment and communication
-//! - Command dispatch and validation pipeline
-//! - Storage and event stream operations
-//! - Capability invocation (local via Unix socket)
-//! - Ingress screening and rate limiting
-//! - Mesh networking (when hardware available)
-//! - OCI workload execution (native Linux namespaces, no Docker needed)
-//!
-//! # Running
-//!
-//! ```bash
-//! # Run all software E2E tests (no hardware required)
-//! cargo test -p edgerun-e2e -- --ignored
-//!
-//! # Run with hardware tests (requires actual devices)
-//! HARDWARE_E2E=1 cargo test -p edgerun-e2e -- --ignored
-//!
-//! # Run specific test
-//! cargo test -p edgerun-e2e e2e_node_lifecycle -- --ignored
-//! ```
-
 #![no_std]
+extern crate alloc;
 
 #[cfg(all(any(test, feature = "std"), not(target_os = "none")))]
 extern crate std;
 
+// Comprehensive end-to-end test suite for all edgerun subsystems.
+//
+// This test suite validates that all components work together in real scenarios:
+// - Node daemon lifecycle and health checks
+// - TCP session establishment and communication
+// - Command dispatch and validation pipeline
+// - Storage and event stream operations
+// - Capability invocation (local via Unix socket)
+// - Ingress screening and rate limiting
+// - Mesh networking (when hardware available)
+// - OCI workload execution (native Linux namespaces, no Docker needed)
+//
+// # Running
+//
+// ```bash
+// # Run all software E2E tests (no hardware required)
+// cargo test -p edgerun-e2e -- --ignored
+//
+// # Run with hardware tests (requires actual devices)
+// HARDWARE_E2E=1 cargo test -p edgerun-e2e -- --ignored
+//
+// # Run specific test
+// cargo test -p edgerun-e2e e2e_node_lifecycle -- --ignored
+// ```
+
+#[cfg(all(any(test, feature = "std"), not(target_os = "none")))]
 #[cfg(all(any(test, feature = "std"), not(target_os = "none")))]
 mod suite {
     use std::fs;
@@ -418,11 +419,7 @@ signer:
         };
 
         let record = edgerun_core::protocol::ProtocolRecord::IdentityRecord(
-            edgerun_core::protocol::IdentityRecord {
-                record_version: 0,
-                identity: None,
-                metadata: None,
-            },
+            edgerun_core::protocol::IdentityRecord::default(),
         );
         let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
         let sig = signer
@@ -439,12 +436,7 @@ signer:
         stream.flush().map_err(|e| e.to_string())?;
 
         let resp = read_frame(stream, 10).ok_or("no response from peer")?;
-        let accept = SessionAccept {
-            session_id: Vec::new(),
-            accepted_capabilities: Vec::new(),
-            responder: None,
-            signature: None,
-        };
+        let accept = SessionAccept::default();
 
         if accept.echoed_session_nonce != nonce {
             return Err("nonce mismatch".to_string());
@@ -713,12 +705,7 @@ signer:
             // Should get rejection or disconnect
             let resp = read_frame(&mut stream, 10);
             if let Some(data) = resp {
-                if let Ok(accept) = Ok::<SessionAccept, &'static str>(SessionAccept {
-                    session_id: Vec::new(),
-                    accepted_capabilities: Vec::new(),
-                    responder: None,
-                    signature: None,
-                }) {
+                if let Ok(accept) = Ok::<SessionAccept, &'static str>(SessionAccept::default()) {
                     assert!(
                         accept.echoed_session_nonce != nonce
                             || accept.selected_protocol_version == 0,

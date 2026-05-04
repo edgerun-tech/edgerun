@@ -1,5 +1,5 @@
-use anyhow::{bail, Context, Result};
 use crate::wasmparser_mock::wasmparser::*;
+use anyhow::{bail, Context, Result};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValueType {

@@ -14,7 +14,6 @@ mod wasmparser_mock {
     include!("wasmparser_mock.rs");
 }
 
-use wasmparser_mock::wasmparser::Validator;
 use anyhow::{bail, Context, Result};
 use artifact::{AotArtifact, CompiledFunction, DecodedAotArtifact};
 use loader::{find_function, LoadedFunction};
@@ -22,6 +21,7 @@ use lower::{lower_module, parse_module};
 use module_backend::X86_64ModuleBackend;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
+use wasmparser_mock::wasmparser::Validator;
 
 const TARGET: &str = "x86_64-linux-sysv";
 const COMPILER: &str = "edgerun-aot-baseline-v0";

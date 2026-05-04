@@ -114,10 +114,7 @@ impl Memory {
         Ok(())
     }
 
-    pub fn data_mut<'a>(
-        &self,
-        _store: &'a mut Store<impl std::any::Any>,
-    ) -> &'a mut [u8] {
+    pub fn data_mut<'a>(&self, _store: &'a mut Store<impl std::any::Any>) -> &'a mut [u8] {
         &mut []
     }
 }
@@ -143,4 +140,3 @@ impl Extern {
 
 // Re-export for convenience
 // (Removed incorrect pub use - types are accessed via wasmtime_mock::*)
-

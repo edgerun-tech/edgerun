@@ -240,14 +240,11 @@ fn run_gui_app(wasm_path: &str, verbose: bool, ctx: wasm_host::ExecutionContext)
                 if let Some(ui) = renderer.current_ui() {
                     eprintln!(
                         "Root node type: '{}', children: {}",
-                        ui.node_type,
+                        ui.r#type,
                         ui.children.len()
                     );
                     for (i, c) in ui.children.iter().enumerate() {
-                        eprintln!(
-                            "  child[{}]: type='{}', action={:?}",
-                            i, c.node_type, c.action
-                        );
+                        eprintln!("  child[{}]: type='{}', action={:?}", i, c.r#type, c.action);
                     }
                 }
             }
@@ -375,10 +372,10 @@ impl NativeRenderer {
 
     fn set_ui(&mut self, _bytes: &[u8]) -> bool {
         self.current = Some(edgerun_core::protocol::UiNode {
-            node_type: "root".to_string(),
+            r#type: "root".to_string(),
             props: Default::default(),
             children: Vec::new(),
-            text: String::new(),
+            action: String::new(),
         });
         true
     }

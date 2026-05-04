@@ -117,10 +117,7 @@ impl Memory {
         Ok(())
     }
 
-    pub fn data_mut<'a>(
-        &self,
-        _store: &'a mut Store<impl std::any::Any>,
-    ) -> &'a mut [u8] {
+    pub fn data_mut<'a>(&self, _store: &'a mut Store<impl std::any::Any>) -> &'a mut [u8] {
         &mut []
     }
 }

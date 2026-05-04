@@ -32,15 +32,15 @@ enum ValType {
     Ref,
 }
 
-impl From<wasmparser_mock::ValType> for ValType {
+impl From<wasmparser::ValType> for ValType {
     fn from(t: wasmparser_mock::ValType) -> Self {
         match t {
-            wasmparser_mock::ValType::I32 => ValType::I32,
-            wasmparser_mock::ValType::I64 => ValType::I64,
-            wasmparser_mock::ValType::F32 => ValType::F32,
-            wasmparser_mock::ValType::F64 => ValType::F64,
-            wasmparser_mock::ValType::V128 => ValType::V128,
-            wasmparser_mock::ValType::Ref(_) => ValType::Ref,
+            wasmparser::ValType::I32 => ValType::I32,
+            wasmparser::ValType::I64 => ValType::I64,
+            wasmparser::ValType::F32 => ValType::F32,
+            wasmparser::ValType::F64 => ValType::F64,
+            wasmparser::ValType::V128 => ValType::V128,
+            wasmparser::ValType::Ref(_) => ValType::Ref,
         }
     }
 }
