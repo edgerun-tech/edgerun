@@ -4,10 +4,10 @@
 //! changed only by signed stream commands, then derives the runtime plan.
 
 use crate::command_result_wire_codec::decode_command_result_payload;
+use crate::server_resource_wire_codec;
 use edgerun_core::collections::{HashMap, HashSet};
-use edgerun_proto::edgerun::v0::common::ObjectRef;
+use edgerun_proto::edgerun::v0::common::{CommandRef, ObjectRef};
 use edgerun_storage::NodeStore;
-use prost::Message;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CompiledBootstrapPolicy {
@@ -173,211 +173,22 @@ pub struct GenerationEvent {
     pub reason: String,
 }
 
-#[derive(Clone, PartialEq, Message)]
-pub struct ClaimDomainPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub domain: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct ReleaseDomainPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub domain: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct AddMailboxPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub address: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct RemoveMailboxPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub address: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct AddAliasPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub address: String,
-    #[prost(string, tag = "3")]
-    pub target: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct RemoveAliasPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub address: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct AuthorizeContentSourcePayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub repo: String,
-    #[prost(string, tag = "3")]
-    pub allowed_ref: String,
-    #[prost(string, repeated, tag = "4")]
-    pub allowed_paths: Vec<String>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct ContentRefPayload {
-    #[prost(string, tag = "1")]
-    pub repo: String,
-    #[prost(string, tag = "2")]
-    pub commit: String,
-    #[prost(string, tag = "3")]
-    pub path: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct PublishWebsitePayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub domain: String,
-    #[prost(message, optional, tag = "3")]
-    pub content_ref: Option<ContentRefPayload>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct UnpublishWebsitePayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub domain: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct SetAuthoritativeDnsPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub domain: String,
-    #[prost(bool, tag = "3")]
-    pub enabled: bool,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct RequestCertificatePayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub name: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct SetServicePolicyPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(string, tag = "2")]
-    pub service: String,
-    #[prost(string, tag = "3")]
-    pub policy: String,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct ServerResourceCommittedPayload {
-    #[prost(uint32, tag = "1")]
-    pub payload_version: u32,
-    #[prost(int32, tag = "2")]
-    pub event_kind: i32,
-    #[prost(bytes = "vec", tag = "3")]
-    pub event_payload: Vec<u8>,
-    #[prost(message, optional, tag = "4")]
-    pub origin_command: Option<edgerun_proto::edgerun::v0::common::CommandRef>,
-}
-
 pub fn is_server_resource_command(command_type: i32) -> bool {
     matches!(command_type, 1012..=1023)
 }
 
 pub fn decode_command_payload(command_type: i32, payload: &[u8]) -> Result<ServerResourceEvent, String> {
-    match command_type {
-        command_type::CLAIM_DOMAIN => {
-            let p = ClaimDomainPayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_domain(&p.domain)?;
-            Ok(ServerResourceEvent::ClaimDomain { domain: normalize_domain(&p.domain) })
-        }
-        command_type::RELEASE_DOMAIN => {
-            let p = ReleaseDomainPayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_domain(&p.domain)?;
-            Ok(ServerResourceEvent::ReleaseDomain { domain: normalize_domain(&p.domain) })
-        }
-        command_type::ADD_MAILBOX => {
-            let p = AddMailboxPayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_address(&p.address)?;
-            Ok(ServerResourceEvent::AddMailbox { address: normalize_address(&p.address) })
-        }
-        command_type::REMOVE_MAILBOX => {
-            let p = RemoveMailboxPayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_address(&p.address)?;
-            Ok(ServerResourceEvent::RemoveMailbox { address: normalize_address(&p.address) })
-        }
-        command_type::ADD_ALIAS => {
-            let p = AddAliasPayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_address(&p.address)?;
-            validate_address(&p.target)?;
-            Ok(ServerResourceEvent::AddAlias { address: normalize_address(&p.address), target: normalize_address(&p.target) })
-        }
-        command_type::REMOVE_ALIAS => {
-            let p = RemoveAliasPayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_address(&p.address)?;
-            Ok(ServerResourceEvent::RemoveAlias { address: normalize_address(&p.address) })
-        }
-        command_type::AUTHORIZE_CONTENT_SOURCE => {
-            let p = AuthorizeContentSourcePayload::decode(payload).map_err(|e| e.to_string())?;
-            if p.repo.trim().is_empty() { return Err("repo_required".into()); }
-            if p.allowed_ref.trim().is_empty() { return Err("allowed_ref_required".into()); }
-            if p.allowed_paths.is_empty() { return Err("allowed_paths_required".into()); }
-            Ok(ServerResourceEvent::AuthorizeContentSource { repo: p.repo, allowed_ref: p.allowed_ref, allowed_paths: p.allowed_paths })
-        }
-        command_type::PUBLISH_WEBSITE => {
-            let p = PublishWebsitePayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_domain(&p.domain)?;
-            let c = p.content_ref.ok_or_else(|| "content_ref_required".to_string())?;
-            let content_ref = ContentRef { repo: c.repo, commit: c.commit, path: c.path };
-            validate_content_ref(&content_ref)?;
-            Ok(ServerResourceEvent::PublishWebsite { domain: normalize_domain(&p.domain), content_ref })
-        }
-        command_type::UNPUBLISH_WEBSITE => {
-            let p = UnpublishWebsitePayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_domain(&p.domain)?;
-            Ok(ServerResourceEvent::UnpublishWebsite { domain: normalize_domain(&p.domain) })
-        }
-        command_type::SET_AUTHORITATIVE_DNS => {
-            let p = SetAuthoritativeDnsPayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_domain(&p.domain)?;
-            Ok(ServerResourceEvent::SetAuthoritativeDns { domain: normalize_domain(&p.domain), enabled: p.enabled })
-        }
-        command_type::REQUEST_CERTIFICATE => {
-            let p = RequestCertificatePayload::decode(payload).map_err(|e| e.to_string())?;
-            validate_domain(&p.name)?;
-            Ok(ServerResourceEvent::RequestCertificate { name: normalize_domain(&p.name) })
-        }
-        command_type::SET_SERVICE_POLICY => {
-            let p = SetServicePolicyPayload::decode(payload).map_err(|e| e.to_string())?;
-            if p.service.trim().is_empty() { return Err("service_required".into()); }
-            if p.policy.trim().is_empty() { return Err("policy_required".into()); }
-            Ok(ServerResourceEvent::SetServicePolicy { service: p.service, policy: p.policy })
-        }
-        _ => Err("not_server_resource_command".into()),
-    }
+    let event = server_resource_wire_codec::decode_command_payload(command_type, payload)?;
+    normalize_and_validate_event(event)
+}
+
+pub fn encode_committed_resource_event(event: &ServerResourceEvent, origin_command: Option<CommandRef>) -> Vec<u8> {
+    server_resource_wire_codec::encode_committed_resource_event(event, origin_command)
+}
+
+pub fn decode_committed_resource_event(payload: &[u8]) -> Result<ServerResourceEvent, String> {
+    let event = server_resource_wire_codec::decode_committed_resource_event(payload)?;
+    normalize_and_validate_event(event)
 }
 
 pub fn apply_server_resource_event(projection: &mut ServerResourceProjection, event: ServerResourceEvent) -> Result<(), String> {
@@ -492,47 +303,67 @@ pub fn compile_server_plan(projection: &ServerResourceProjection, node_facts: &N
     plan
 }
 
-pub fn encode_committed_resource_event(event: &ServerResourceEvent, origin_command: Option<edgerun_proto::edgerun::v0::common::CommandRef>) -> ServerResourceCommittedPayload {
-    let event_payload = match event {
-        ServerResourceEvent::ClaimDomain { domain } => ClaimDomainPayload { payload_version: 1, domain: domain.clone() }.encode_to_vec(),
-        ServerResourceEvent::ReleaseDomain { domain } => ReleaseDomainPayload { payload_version: 1, domain: domain.clone() }.encode_to_vec(),
-        ServerResourceEvent::AddMailbox { address } => AddMailboxPayload { payload_version: 1, address: address.clone() }.encode_to_vec(),
-        ServerResourceEvent::RemoveMailbox { address } => RemoveMailboxPayload { payload_version: 1, address: address.clone() }.encode_to_vec(),
-        ServerResourceEvent::AddAlias { address, target } => AddAliasPayload { payload_version: 1, address: address.clone(), target: target.clone() }.encode_to_vec(),
-        ServerResourceEvent::RemoveAlias { address } => RemoveAliasPayload { payload_version: 1, address: address.clone() }.encode_to_vec(),
-        ServerResourceEvent::AuthorizeContentSource { repo, allowed_ref, allowed_paths } => AuthorizeContentSourcePayload { payload_version: 1, repo: repo.clone(), allowed_ref: allowed_ref.clone(), allowed_paths: allowed_paths.clone() }.encode_to_vec(),
-        ServerResourceEvent::PublishWebsite { domain, content_ref } => PublishWebsitePayload { payload_version: 1, domain: domain.clone(), content_ref: Some(ContentRefPayload { repo: content_ref.repo.clone(), commit: content_ref.commit.clone(), path: content_ref.path.clone() }) }.encode_to_vec(),
-        ServerResourceEvent::UnpublishWebsite { domain } => UnpublishWebsitePayload { payload_version: 1, domain: domain.clone() }.encode_to_vec(),
-        ServerResourceEvent::SetAuthoritativeDns { domain, enabled } => SetAuthoritativeDnsPayload { payload_version: 1, domain: domain.clone(), enabled: *enabled }.encode_to_vec(),
-        ServerResourceEvent::RequestCertificate { name } => RequestCertificatePayload { payload_version: 1, name: name.clone() }.encode_to_vec(),
-        ServerResourceEvent::SetServicePolicy { service, policy } => SetServicePolicyPayload { payload_version: 1, service: service.clone(), policy: policy.clone() }.encode_to_vec(),
-    };
-    ServerResourceCommittedPayload { payload_version: 1, event_kind: event.kind() as i32, event_payload, origin_command }
-}
-
-pub fn decode_committed_resource_event(payload: &[u8]) -> Result<ServerResourceEvent, String> {
-    let committed = ServerResourceCommittedPayload::decode(payload).map_err(|e| e.to_string())?;
-    let command_type = match committed.event_kind {
-        1 => command_type::CLAIM_DOMAIN,
-        2 => command_type::RELEASE_DOMAIN,
-        3 => command_type::ADD_MAILBOX,
-        4 => command_type::REMOVE_MAILBOX,
-        5 => command_type::ADD_ALIAS,
-        6 => command_type::REMOVE_ALIAS,
-        7 => command_type::AUTHORIZE_CONTENT_SOURCE,
-        8 => command_type::PUBLISH_WEBSITE,
-        9 => command_type::UNPUBLISH_WEBSITE,
-        10 => command_type::SET_AUTHORITATIVE_DNS,
-        11 => command_type::REQUEST_CERTIFICATE,
-        12 => command_type::SET_SERVICE_POLICY,
-        _ => return Err("unknown_server_resource_event_kind".into()),
-    };
-    decode_command_payload(command_type, &committed.event_payload)
-}
-
 pub fn result_object_for_event(store: &mut NodeStore, stream_id: &[u8], event: &ServerResourceEvent) -> Result<ObjectRef, String> {
-    let payload = encode_committed_resource_event(event, None).encode_to_vec();
+    let payload = encode_committed_resource_event(event, None);
     store.put_object(&payload, edgerun_proto::edgerun::v0::common::ObjectKind::DerivedView as i32, &[stream_id.to_vec()]).map_err(|e| format!("storage_failed: {e}"))
+}
+
+fn normalize_and_validate_event(event: ServerResourceEvent) -> Result<ServerResourceEvent, String> {
+    match event {
+        ServerResourceEvent::ClaimDomain { domain } => {
+            validate_domain(&domain)?;
+            Ok(ServerResourceEvent::ClaimDomain { domain: normalize_domain(&domain) })
+        }
+        ServerResourceEvent::ReleaseDomain { domain } => {
+            validate_domain(&domain)?;
+            Ok(ServerResourceEvent::ReleaseDomain { domain: normalize_domain(&domain) })
+        }
+        ServerResourceEvent::AddMailbox { address } => {
+            validate_address(&address)?;
+            Ok(ServerResourceEvent::AddMailbox { address: normalize_address(&address) })
+        }
+        ServerResourceEvent::RemoveMailbox { address } => {
+            validate_address(&address)?;
+            Ok(ServerResourceEvent::RemoveMailbox { address: normalize_address(&address) })
+        }
+        ServerResourceEvent::AddAlias { address, target } => {
+            validate_address(&address)?;
+            validate_address(&target)?;
+            Ok(ServerResourceEvent::AddAlias { address: normalize_address(&address), target: normalize_address(&target) })
+        }
+        ServerResourceEvent::RemoveAlias { address } => {
+            validate_address(&address)?;
+            Ok(ServerResourceEvent::RemoveAlias { address: normalize_address(&address) })
+        }
+        ServerResourceEvent::AuthorizeContentSource { repo, allowed_ref, allowed_paths } => {
+            if repo.trim().is_empty() { return Err("repo_required".into()); }
+            if allowed_ref.trim().is_empty() { return Err("allowed_ref_required".into()); }
+            if allowed_paths.is_empty() { return Err("allowed_paths_required".into()); }
+            Ok(ServerResourceEvent::AuthorizeContentSource { repo, allowed_ref, allowed_paths })
+        }
+        ServerResourceEvent::PublishWebsite { domain, content_ref } => {
+            validate_domain(&domain)?;
+            validate_content_ref(&content_ref)?;
+            Ok(ServerResourceEvent::PublishWebsite { domain: normalize_domain(&domain), content_ref })
+        }
+        ServerResourceEvent::UnpublishWebsite { domain } => {
+            validate_domain(&domain)?;
+            Ok(ServerResourceEvent::UnpublishWebsite { domain: normalize_domain(&domain) })
+        }
+        ServerResourceEvent::SetAuthoritativeDns { domain, enabled } => {
+            validate_domain(&domain)?;
+            Ok(ServerResourceEvent::SetAuthoritativeDns { domain: normalize_domain(&domain), enabled })
+        }
+        ServerResourceEvent::RequestCertificate { name } => {
+            validate_domain(&name)?;
+            Ok(ServerResourceEvent::RequestCertificate { name: normalize_domain(&name) })
+        }
+        ServerResourceEvent::SetServicePolicy { service, policy } => {
+            if service.trim().is_empty() { return Err("service_required".into()); }
+            if policy.trim().is_empty() { return Err("policy_required".into()); }
+            Ok(ServerResourceEvent::SetServicePolicy { service, policy })
+        }
+    }
 }
 
 fn require_email(plan: &mut DerivedServerPlan) {
