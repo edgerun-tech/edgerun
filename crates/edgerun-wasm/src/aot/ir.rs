@@ -68,6 +68,7 @@ impl FuncSig {
 pub enum IrOp {
     I32Const(i32),
     I64Const(i64),
+    GlobalGet(u32, ValueType),
     LocalGet(u32),
     LocalSet(u32),
     LocalTee(u32),
@@ -108,6 +109,7 @@ impl IrOp {
         match self {
             Self::I32Const(v) => format!("i32.const {v}"),
             Self::I64Const(v) => format!("i64.const {v}"),
+            Self::GlobalGet(i, _) => format!("global.get {i}"),
             Self::LocalGet(i) => format!("local.get {i}"),
             Self::LocalSet(i) => format!("local.set {i}"),
             Self::LocalTee(i) => format!("local.tee {i}"),
@@ -151,6 +153,7 @@ pub struct FunctionIr {
     pub export_name: Option<String>,
     pub sig: FuncSig,
     pub locals: Vec<ValueType>,
+    pub global_values: Vec<GlobalValue>,
     pub ops: Vec<IrOp>,
 }
 
@@ -181,6 +184,21 @@ impl FunctionIr {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GlobalValue {
+    I32(i32),
+    I64(i64),
+}
+
+impl GlobalValue {
+    pub fn value_type(self) -> ValueType {
+        match self {
+            Self::I32(_) => ValueType::I32,
+            Self::I64(_) => ValueType::I64,
+        }
+    }
+}
+
 pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
     if ir.sig.results.len() > 1 {
         bail!("{} returns more than one value", ir.name());
@@ -196,6 +214,17 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
         match *op {
             IrOp::I32Const(_) => stack.push(ValueType::I32),
             IrOp::I64Const(_) => stack.push(ValueType::I64),
+            IrOp::GlobalGet(index, ty) => {
+                let global = ir
+                    .global_values
+                    .get(index as usize)
+                    .copied()
+                    .with_context(|| format!("{} references missing global {index}", ir.name()))?;
+                if global.value_type() != ty {
+                    bail!("{} global.get {} type mismatch", ir.name(), index);
+                }
+                stack.push(ty);
+            }
             IrOp::LocalGet(i) => stack.push(local_type(ir, i)?),
             IrOp::LocalSet(i) => {
                 let expected = local_type(ir, i)?;
