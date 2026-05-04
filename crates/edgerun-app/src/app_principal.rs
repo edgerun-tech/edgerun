@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
+use edgerun_core::protocol::{AppIntent, AppPrincipal};
 use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_crypto::sha2;
 use edgerun_crypto::sha2::Digest;
 use edgerun_crypto::signature::Verifier;
 use edgerun_crypto::Signer;
-use edgerun_core::protocol::{AppIntent, AppPrincipal};
 
 #[derive(Debug)]
 pub struct AppKeyPair {

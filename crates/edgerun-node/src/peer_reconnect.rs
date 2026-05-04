@@ -328,9 +328,7 @@ async fn handle_peer_messages<R, W>(
         }
 
         // Try CommandEnvelope
-        if let Ok(command) =
-            edgerun_core::protocol::CommandEnvelope::decode(&payload[..])
-        {
+        if let Ok(command) = edgerun_core::protocol::CommandEnvelope::decode(&payload[..]) {
             let raw = payload.clone();
 
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();

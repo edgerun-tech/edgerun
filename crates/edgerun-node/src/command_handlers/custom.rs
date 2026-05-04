@@ -6,12 +6,14 @@ use crate::command_dispatch::{
     ControllerSet,
 };
 use crate::command_dispatch_event::record_action_event;
+use edgerun_core::protocol::{CommandEnvelope, CommandType, EventType};
+use edgerun_core::protocol::{
+    DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord,
+};
 use edgerun_core::result::Verdict;
 use edgerun_core::util::bytes_to_hex;
 use edgerun_core::validators_proto::validate_delegation_chain;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_core::protocol::{CommandEnvelope, CommandType, EventType};
-use edgerun_core::protocol::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
 use edgerun_storage::NodeStore;
 use prost::Message;
 

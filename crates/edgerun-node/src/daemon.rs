@@ -37,12 +37,12 @@ async fn run_fetch_queue_consumer(
     store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
     cancel: CancellationToken,
 ) {
+    use edgerun_core::protocol::IdentityRef;
     use edgerun_core::protocol::{canonical_bytes, ProtocolRecord, Signature};
+    use edgerun_core::protocol::{QueryClass, QueryRequest};
+    use edgerun_core::protocol::{ScopeDescriptor, ScopeKind};
     use edgerun_core::result::Verdict;
     use edgerun_core::validators_proto::validate_query_result_fragment;
-    use edgerun_core::protocol::{QueryClass, QueryRequest};
-    use edgerun_core::protocol::IdentityRef;
-    use edgerun_core::protocol::{ScopeDescriptor, ScopeKind};
 
     if peers.is_empty() {
         edgerun_log::info!("no bootstrap peers configured, fetch queue consumer disabled");
@@ -164,9 +164,7 @@ async fn run_fetch_queue_consumer(
 
                     // Try to decode the response and store fetched objects
                     if let Ok(fragment) =
-                        edgerun_core::protocol::QueryResultFragment::decode(
-                            &fragment_bytes[..],
-                        )
+                        edgerun_core::protocol::QueryResultFragment::decode(&fragment_bytes[..])
                     {
                         let validation =
                             validate_query_result_fragment(&fragment, Some(&query.query_id), &[]);

@@ -216,8 +216,7 @@ fn delegation_hash(delegation: &DelegationRecord) -> Digest {
     let canonical = canonical_bytes(&record, true);
     let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_DELEGATION_RECORD, &canonical);
     Digest {
-        algorithm: edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256
-            as i32,
+        algorithm: edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256 as i32,
         value: hash.to_vec(),
     }
 }
@@ -399,9 +398,7 @@ fn validate_constraint_set(
     }
     for transport_class in &constraints.requires_transport_classes {
         if edgerun_core::protocol::TransportClass::from_i32(*transport_class)
-            .is_none_or(|class| {
-                class == edgerun_core::protocol::TransportClass::Unspecified
-            })
+            .is_none_or(|class| class == edgerun_core::protocol::TransportClass::Unspecified)
         {
             return Some(reject(
                 ReasonCode::StructuralInvalid,
@@ -422,8 +419,7 @@ fn validate_constraint_set(
         ));
     }
     if constraints.export_policy != 0
-        && edgerun_core::protocol::ExportPolicy::from_i32(constraints.export_policy)
-            .is_none()
+        && edgerun_core::protocol::ExportPolicy::from_i32(constraints.export_policy).is_none()
     {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -433,9 +429,7 @@ fn validate_constraint_set(
     }
     for execution_class in &constraints.execution_class_limits {
         if edgerun_core::protocol::ExecutionClass::from_i32(*execution_class)
-            .is_none_or(|class| {
-                class == edgerun_core::protocol::ExecutionClass::Unspecified
-            })
+            .is_none_or(|class| class == edgerun_core::protocol::ExecutionClass::Unspecified)
         {
             return Some(reject(
                 ReasonCode::StructuralInvalid,
@@ -445,9 +439,9 @@ fn validate_constraint_set(
         }
     }
     for storage_class in &constraints.storage_class_limits {
-        if edgerun_core::protocol::StorageClass::from_i32(*storage_class).is_none_or(
-            |class| class == edgerun_core::protocol::StorageClass::Unspecified,
-        ) {
+        if edgerun_core::protocol::StorageClass::from_i32(*storage_class)
+            .is_none_or(|class| class == edgerun_core::protocol::StorageClass::Unspecified)
+        {
             return Some(reject(
                 ReasonCode::StructuralInvalid,
                 Value::String(format!("{label} storage_class is invalid")),
@@ -595,9 +589,7 @@ fn validate_capability_descriptor(
         }
     }
     if edgerun_core::protocol::DelegationPolicy::from_i32(capability.delegation_policy)
-        .is_none_or(|policy| {
-            policy == edgerun_core::protocol::DelegationPolicy::Unspecified
-        })
+        .is_none_or(|policy| policy == edgerun_core::protocol::DelegationPolicy::Unspecified)
     {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -624,9 +616,7 @@ fn validate_capability_descriptor(
             return Some(result);
         }
         if edgerun_core::protocol::AssuranceClass::from_i32(assurance.required_class)
-            .is_none_or(|class| {
-                class == edgerun_core::protocol::AssuranceClass::Unspecified
-            })
+            .is_none_or(|class| class == edgerun_core::protocol::AssuranceClass::Unspecified)
         {
             return Some(reject(
                 ReasonCode::StructuralInvalid,
@@ -784,8 +774,8 @@ fn validate_delegation_record_structure(
 }
 
 fn required_capability_for_command(command_type: i32) -> Option<(i32, &'static str)> {
-    use edgerun_core::protocol::CommandType as Ct;
     use edgerun_core::protocol::CapabilityKind as Ck;
+    use edgerun_core::protocol::CommandType as Ct;
 
     match Ct::from_i32(command_type)? {
         Ct::Unspecified => None,
@@ -971,9 +961,8 @@ fn validate_effective_capability_for_command(
         ));
     }
     if !scope.target_object_kinds.is_empty() {
-        let Some(edgerun_core::protocol::command_envelope::Payload::PayloadObject(
-            payload_object,
-        )) = &command.payload
+        let Some(edgerun_core::protocol::command_envelope::Payload::PayloadObject(payload_object)) =
+            &command.payload
         else {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
@@ -1207,9 +1196,8 @@ fn validate_identity_ref(identity: &IdentityRef, label: &str) -> Option<Validati
         ));
     }
     if identity.identity_kind.is_some_and(|identity_kind| {
-        edgerun_core::protocol::IdentityKind::from_i32(identity_kind).is_none_or(
-            |kind| kind == edgerun_core::protocol::IdentityKind::Unspecified,
-        )
+        edgerun_core::protocol::IdentityKind::from_i32(identity_kind)
+            .is_none_or(|kind| kind == edgerun_core::protocol::IdentityKind::Unspecified)
     }) {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -1327,16 +1315,12 @@ fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationRes
 
     if let Some(payload) = &command.payload {
         match payload {
-            edgerun_core::protocol::command_envelope::Payload::PayloadObject(
-                object,
-            ) => {
+            edgerun_core::protocol::command_envelope::Payload::PayloadObject(object) => {
                 if let Some(result) = validate_object_ref(object, "command payload_object") {
                     return Some(result);
                 }
             }
-            edgerun_core::protocol::command_envelope::Payload::InlinePayload(
-                payload,
-            ) => {
+            edgerun_core::protocol::command_envelope::Payload::InlinePayload(payload) => {
                 if payload.is_empty() {
                     return Some(reject(
                         ReasonCode::StructuralInvalid,
@@ -2007,8 +1991,7 @@ fn attenuate_scope(
             empty_map(),
         ));
     };
-    let parent_kind =
-        edgerun_core::protocol::ScopeKind::from_i32(parent_scope.scope_kind);
+    let parent_kind = edgerun_core::protocol::ScopeKind::from_i32(parent_scope.scope_kind);
     let child_kind = edgerun_core::protocol::ScopeKind::from_i32(child_scope.scope_kind);
     if parent_kind == Some(edgerun_core::protocol::ScopeKind::GlobalWithConstraints) {
         if !time_window_allows(
@@ -2753,10 +2736,13 @@ mod tests {
         DelegationRecord, IdentityRef, NodeRef, ObjectRef, StreamRef,
     };
     use crate::result::Verdict;
-    use edgerun_crypto::p256::ecdsa::SigningKey;
-    use edgerun_core::protocol::{AssuranceClass, ExecutionClass, ObjectKind, RateLimit, Signature as ProtoSignature, StorageClass, TimeWindow, TransportClass};
     use edgerun_core::protocol::command_envelope::Payload;
+    use edgerun_core::protocol::{
+        AssuranceClass, ExecutionClass, ObjectKind, RateLimit, Signature as ProtoSignature,
+        StorageClass, TimeWindow, TransportClass,
+    };
     use edgerun_core::protocol::{CapabilityKind, DelegationPolicy, ScopeKind};
+    use edgerun_crypto::p256::ecdsa::SigningKey;
 
     fn test_signing_key() -> SigningKey {
         let bytes: [u8; 32] = [7u8; 32];
@@ -2984,7 +2970,8 @@ mod tests {
     ) {
         delegation.issuer.as_mut().unwrap().key_hint = Some(issuer_key_hint.to_vec());
         delegation.signature = None;
-        let canonical = canonical_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
+        let canonical =
+            canonical_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
         let sig = crate::crypto::sign_canonical_record(
             key,
             crate::crypto::SIG_DOMAIN_DELEGATION_RECORD,
@@ -5376,9 +5363,8 @@ mod tests {
             parent_delegation: Some(crate::protocol::DelegationRef {
                 delegation_id: b"deleg-1".to_vec(),
                 delegation_hash: Some(crate::protocol::Digest {
-                    algorithm:
-                        edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256
-                            as i32,
+                    algorithm: edgerun_core::protocol::digest::Algorithm::DigestAlgorithmSha256
+                        as i32,
                     value: vec![0xA5; 32],
                 }),
             }),
@@ -7241,7 +7227,8 @@ mod tests {
         };
         // Sign the delegation with domain separation (matches verify_canonical_record)
         delegation.signature = None;
-        let deleg_canonical = canonical_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
+        let deleg_canonical =
+            canonical_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
         let deleg_sig = crate::crypto::sign_canonical_record(
             &key,
             crate::crypto::SIG_DOMAIN_DELEGATION_RECORD,

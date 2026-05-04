@@ -401,9 +401,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
         }
 
         // Try CommandEnvelope
-        if let Ok(command) =
-            edgerun_core::protocol::CommandEnvelope::decode(&payload[..])
-        {
+        if let Ok(command) = edgerun_core::protocol::CommandEnvelope::decode(&payload[..]) {
             let raw = payload.clone();
 
             // Check if this is a snapshot publish command
@@ -440,20 +438,17 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             // Check if this is a fetch object command
             if command.command_type == CommandType::FetchObject as i32 {
                 // Decode the raw payload as proto CommandEnvelope to get payload_object
-                let proto_command =
-                    match edgerun_core::protocol::CommandEnvelope::decode(&raw[..]) {
-                        Ok(cmd) => cmd,
-                        Err(e) => {
-                            edgerun_log::warn!(
-                                "FETCH_OBJECT: failed to decode proto command: {}",
-                                e
-                            );
-                            let err = "FETCH_OBJECT: decode failed".to_string();
-                            let resp_frame = encode_tcp_frame(err.as_bytes());
-                            let _ = writer.write_all(&resp_frame).await;
-                            continue;
-                        }
-                    };
+                let proto_command = match edgerun_core::protocol::CommandEnvelope::decode(&raw[..])
+                {
+                    Ok(cmd) => cmd,
+                    Err(e) => {
+                        edgerun_log::warn!("FETCH_OBJECT: failed to decode proto command: {}", e);
+                        let err = "FETCH_OBJECT: decode failed".to_string();
+                        let resp_frame = encode_tcp_frame(err.as_bytes());
+                        let _ = writer.write_all(&resp_frame).await;
+                        continue;
+                    }
+                };
 
                 // Extract the ObjectRef from the proto command's payload_object
                 let object_ref = if let Some(ref obj) = proto_command.payload {
@@ -461,9 +456,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
                     match obj {
                         Payload::PayloadObject(obj) => obj.clone(),
                         Payload::InlinePayload(bytes) => {
-                            if let Ok(obj) =
-                                edgerun_core::protocol::ObjectRef::decode(&bytes[..])
-                            {
+                            if let Ok(obj) = edgerun_core::protocol::ObjectRef::decode(&bytes[..]) {
                                 obj
                             } else {
                                 edgerun_core::protocol::ObjectRef {

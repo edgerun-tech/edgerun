@@ -8,10 +8,10 @@ use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::{
     command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
 };
+use edgerun_core::protocol::CommandEnvelope;
 use edgerun_core::result::Verdict;
 use edgerun_core::util::now_unix_millis_i64;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_core::protocol::CommandEnvelope;
 use edgerun_storage::NodeStore;
 
 /// Check if a command is a duplicate using both persistent and in-memory replay caches.

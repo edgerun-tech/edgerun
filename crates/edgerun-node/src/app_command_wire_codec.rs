@@ -51,8 +51,11 @@ fn decode_top_struct(bytes: &[u8]) -> Result<Vec<edgerun_wire::WireField>, Strin
 
 fn decode_embedded_struct(bytes: &[u8]) -> Result<Vec<edgerun_wire::WireField>, String> {
     let mut reader = WireReader::new(bytes);
-    let value = WireValue::decode_wire(&mut reader).map_err(|e| format!("embedded_wire_decode_failed: {e:?}"))?;
-    if !reader.is_empty() { return Err("embedded_wire_trailing_bytes".into()); }
+    let value = WireValue::decode_wire(&mut reader)
+        .map_err(|e| format!("embedded_wire_decode_failed: {e:?}"))?;
+    if !reader.is_empty() {
+        return Err("embedded_wire_trailing_bytes".into());
+    }
     match value {
         WireValue::Struct(fields) => Ok(fields),
         other => Err(format!("expected_embedded_struct_got_{other:?}")),
@@ -60,10 +63,17 @@ fn decode_embedded_struct(bytes: &[u8]) -> Result<Vec<edgerun_wire::WireField>, 
 }
 
 fn find_field(fields: &[edgerun_wire::WireField], tag: u32) -> Option<&WireValue> {
-    fields.iter().find(|field| field.tag == tag).map(|field| &field.value)
+    fields
+        .iter()
+        .find(|field| field.tag == tag)
+        .map(|field| &field.value)
 }
 
-fn required_bytes(fields: &[edgerun_wire::WireField], tag: u32, name: &str) -> Result<Vec<u8>, String> {
+fn required_bytes(
+    fields: &[edgerun_wire::WireField],
+    tag: u32,
+    name: &str,
+) -> Result<Vec<u8>, String> {
     match find_field(fields, tag) {
         Some(WireValue::Bytes(value)) => Ok(value.clone()),
         Some(other) => Err(format!("{name}_expected_bytes_got_{other:?}")),
@@ -82,7 +92,9 @@ fn optional_text(fields: &[edgerun_wire::WireField], tag: u32) -> Result<Option<
 fn field_u32(fields: &[edgerun_wire::WireField], tag: u32) -> Result<Option<u32>, String> {
     match find_field(fields, tag) {
         None => Ok(None),
-        Some(WireValue::U64(value)) => u32::try_from(*value).map(Some).map_err(|_| format!("field_{tag}_u32_overflow")),
+        Some(WireValue::U64(value)) => u32::try_from(*value)
+            .map(Some)
+            .map_err(|_| format!("field_{tag}_u32_overflow")),
         Some(other) => Err(format!("field_{tag}_expected_u64_got_{other:?}")),
     }
 }

@@ -36,7 +36,11 @@ pub fn plan_server_resource_command(
     let desired_plan = compile_server_plan(&projection, &Default::default());
     let committed = encode_committed_resource_event(&resource_event, None);
     let result_object = store
-        .put_object(&committed, ObjectKind::DerivedView as i32, &[stream_id.to_vec()])
+        .put_object(
+            &committed,
+            ObjectKind::DerivedView as i32,
+            &[stream_id.to_vec()],
+        )
         .map_err(|e| format!("storage_failed: {e}"))?;
 
     Ok(ServerResourceDispatchPlan {
@@ -53,7 +57,15 @@ pub fn dispatch_server_resource_command(
     signer: &dyn MeshSigner,
 ) -> Result<(ServerResourceDispatchPlan, CommandResultEventWrite), String> {
     let plan = plan_server_resource_command(command, store, stream_id)?;
-    let event_write = append_command_result_event(command, store, stream_id, signer, true, "", Some(plan.result_object.clone()))?;
+    let event_write = append_command_result_event(
+        command,
+        store,
+        stream_id,
+        signer,
+        true,
+        "",
+        Some(plan.result_object.clone()),
+    )?;
     Ok((plan, event_write))
 }
 

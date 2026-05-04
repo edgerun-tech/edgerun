@@ -587,13 +587,13 @@ fn config_controllers_from_signer(signer: &dyn MeshSigner) -> Vec<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_core::protocol::QueryClass;
+    use edgerun_core::protocol::ScopeKind;
     use edgerun_core::protocol::{
         canonical_bytes, IdentityRef, NodeRef, ProtocolRecord, QueryRequest, ScopeDescriptor,
         Signature,
     };
     use edgerun_crypto::p256::ecdsa::SigningKey;
-    use edgerun_core::protocol::QueryClass;
-    use edgerun_core::protocol::ScopeKind;
 
     fn test_signing_key() -> SigningKey {
         SigningKey::from_bytes(&[42u8; 32].into()).unwrap()

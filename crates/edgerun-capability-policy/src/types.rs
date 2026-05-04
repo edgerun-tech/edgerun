@@ -8,8 +8,8 @@ use edgerun_capabilities::{
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
-use edgerun_crypto::sha2::Digest;
 use edgerun_core::protocol::{IdentityRef, NodeRef};
+use edgerun_crypto::sha2::Digest;
 use prost_types::{Duration as ProstDuration, Timestamp};
 
 #[derive(Clone, Debug, PartialEq, Eq)]

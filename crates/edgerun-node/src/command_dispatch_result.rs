@@ -1,8 +1,8 @@
 //! Shared command result helpers.
 
-use edgerun_core::wire_command::command_hash;
-use edgerun_core::protocol::{CommandRef, ObjectRef};
 use edgerun_core::protocol::{CommandEnvelope, CommandResultPayload};
+use edgerun_core::protocol::{CommandRef, ObjectRef};
+use edgerun_core::wire_command::command_hash;
 
 pub fn command_ref_from(command: &CommandEnvelope) -> CommandRef {
     CommandRef {

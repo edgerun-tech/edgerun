@@ -12,15 +12,14 @@ pub use prost_types::{Duration, Timestamp};
 pub use edgerun_proto::edgerun::v0::{
     access::{
         AggregateSummaryProof, CostLimit, EventSetProof, FederatedAggregateDescriptor,
-        ObjectAssertionProof, ProofBundle, QueryRequest, QueryResultFragment,
-        ResultFragmentProof, SnapshotDescriptor, SnapshotSetProof, StreamHeadsProof,
-        TrustPolicyProof,
+        ObjectAssertionProof, ProofBundle, QueryRequest, QueryResultFragment, ResultFragmentProof,
+        SnapshotDescriptor, SnapshotSetProof, StreamHeadsProof, TrustPolicyProof,
     },
     app::{CapabilityCheck, CapabilityResult, ExecutionContext},
     common::{
-        CheckpointRef, CipherSuite, CommandRef, DelegationRef, Digest, EncryptedEnvelope,
-        EventRef, HeadRef, IdentityRef, NodeRef, ObjectKind, ObjectRef, RateLimit,
-        RepresentationRef, RevocationRef, Signature, SnapshotRef, StreamRef, TimeWindow,
+        CheckpointRef, CipherSuite, CommandRef, DelegationRef, Digest, EncryptedEnvelope, EventRef,
+        HeadRef, IdentityRef, NodeRef, ObjectKind, ObjectRef, RateLimit, RepresentationRef,
+        RevocationRef, Signature, SnapshotRef, StreamRef, TimeWindow,
     },
     identity::IdentityRecord,
     network::{ReachabilityHint, RelayEnvelope, RouteAdvertisement, SessionAccept, SessionHello},
@@ -116,12 +115,22 @@ pub enum ProtocolRecord {
 pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> Vec<u8> {
     match record {
         ProtocolRecord::EventEnvelope(event) => {
-            if signable { crate::wire_stream::event_signable_wire_bytes(event) } else { crate::wire_stream::event_full_wire_bytes(event) }
+            if signable {
+                crate::wire_stream::event_signable_wire_bytes(event)
+            } else {
+                crate::wire_stream::event_full_wire_bytes(event)
+            }
         }
         ProtocolRecord::CommandEnvelope(command) => {
-            if signable { crate::wire_command::command_signable_bytes(command) } else { crate::wire_command::command_full_bytes(command) }
+            if signable {
+                crate::wire_command::command_signable_bytes(command)
+            } else {
+                crate::wire_command::command_full_bytes(command)
+            }
         }
-        ProtocolRecord::CommandResultPayload(result) => crate::wire_command::command_result_bytes(result),
+        ProtocolRecord::CommandResultPayload(result) => {
+            crate::wire_command::command_result_bytes(result)
+        }
         other => fallback_structural_bytes(other, signable),
     }
 }
@@ -194,7 +203,12 @@ fn fallback_structural_bytes(record: &ProtocolRecord, signable: bool) -> Vec<u8>
         ProtocolRecord::TrustPolicyProof(_) => "TrustPolicyProof",
         ProtocolRecord::ProofBundle(_) => "ProofBundle",
         ProtocolRecord::ReachabilityHint(_) => "ReachabilityHint",
-        ProtocolRecord::EventEnvelope(_) | ProtocolRecord::CommandEnvelope(_) | ProtocolRecord::CommandResultPayload(_) => unreachable!(),
+        ProtocolRecord::EventEnvelope(_)
+        | ProtocolRecord::CommandEnvelope(_)
+        | ProtocolRecord::CommandResultPayload(_) => unreachable!(),
     };
-    edgerun_wire::canonical_bytes(&edgerun_wire::struct_value(vec![edgerun_wire::field(1, edgerun_wire::text(name)), edgerun_wire::field(2, edgerun_wire::boolv(signable))]))
+    edgerun_wire::canonical_bytes(&edgerun_wire::struct_value(vec![
+        edgerun_wire::field(1, edgerun_wire::text(name)),
+        edgerun_wire::field(2, edgerun_wire::boolv(signable)),
+    ]))
 }

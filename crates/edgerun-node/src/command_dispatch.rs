@@ -20,6 +20,15 @@ use edgerun_core::command::{
     command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
 };
 use edgerun_core::encrypted_envelope::validate_encrypted_envelope;
+use edgerun_core::protocol::EncryptedEnvelope;
+use edgerun_core::protocol::{
+    CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload,
+    CommandType, EventType,
+};
+use edgerun_core::protocol::{CommandRef, EventRef, ObjectRef};
+use edgerun_core::protocol::{
+    DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord,
+};
 use edgerun_core::result::Verdict;
 use edgerun_core::util::{
     now_prost_timestamp, now_unix_micros_u64, now_unix_millis_i64, now_unix_secs_i64,
@@ -30,10 +39,6 @@ use edgerun_core::validators_proto::{
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_json::Value as JsonValue;
-use edgerun_core::protocol::EncryptedEnvelope;
-use edgerun_core::protocol::{CommandRef, EventRef, ObjectRef};
-use edgerun_core::protocol::{CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload, CommandType, EventType};
-use edgerun_core::protocol::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
 use edgerun_storage::NodeStore;
 use prost::Message;
 use std::sync::Arc;
@@ -265,9 +270,9 @@ pub fn dispatch_command(
 
     if needs_encryption {
         let payload_bytes = match &command.payload {
-            Some(edgerun_core::protocol::command_envelope::Payload::InlinePayload(
-                b,
-            )) => Some(b.clone()),
+            Some(edgerun_core::protocol::command_envelope::Payload::InlinePayload(b)) => {
+                Some(b.clone())
+            }
             _ => None,
         };
 

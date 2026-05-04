@@ -19,9 +19,9 @@ impl X86_64Backend {
                 IrOp::Block => controls.push(ControlFrame::block()),
                 IrOp::Loop => controls.push(ControlFrame::loop_at(code.len())),
                 IrOp::BlockEnd => {
-                    let frame = controls
-                        .pop()
-                        .ok_or_else(|| anyhow::anyhow!("block.end without matching control frame"))?;
+                    let frame = controls.pop().ok_or_else(|| {
+                        anyhow::anyhow!("block.end without matching control frame")
+                    })?;
                     patch_control_end(&mut code, frame)?;
                 }
                 IrOp::Br(depth) => emit_br(&mut code, &mut controls, depth)?,
@@ -142,7 +142,10 @@ impl Frame {
         if slots > 4096 {
             bail!("baseline backend refuses huge frame: {slots} slots");
         }
-        Ok(Self { local_slots, global_slots })
+        Ok(Self {
+            local_slots,
+            global_slots,
+        })
     }
 
     fn total_slots(&self) -> u32 {
@@ -261,21 +264,33 @@ impl Frame {
 
     fn local_slot(&self, index: u32) -> Result<u32> {
         if index >= self.local_slots {
-            bail!("local index {} outside frame with {} local slots", index, self.local_slots);
+            bail!(
+                "local index {} outside frame with {} local slots",
+                index,
+                self.local_slots
+            );
         }
         Ok(index)
     }
 
     fn global_slot(&self, index: u32) -> Result<u32> {
         if index >= self.global_slots {
-            bail!("global index {} outside frame with {} global slots", index, self.global_slots);
+            bail!(
+                "global index {} outside frame with {} global slots",
+                index,
+                self.global_slots
+            );
         }
         Ok(self.local_slots + index)
     }
 
     fn slot_disp(&self, slot: u32) -> Result<i32> {
         if slot >= self.total_slots() {
-            bail!("slot index {} outside frame with {} slots", slot, self.total_slots());
+            bail!(
+                "slot index {} outside frame with {} slots",
+                slot,
+                self.total_slots()
+            );
         }
         Ok(-8 * ((slot as i32) + 1))
     }
@@ -349,7 +364,10 @@ fn emit_memory_address(code: &mut Vec<u8>, mem: MemOp) -> Result<()> {
     emit_zero_extend_eax(code);
     if mem.offset > 0 {
         if mem.offset > i32::MAX as u64 {
-            bail!("memory offset too large for baseline x86_64 emitter: {}", mem.offset);
+            bail!(
+                "memory offset too large for baseline x86_64 emitter: {}",
+                mem.offset
+            );
         }
         code.extend_from_slice(&[0x48, 0x05]);
         code.extend_from_slice(&(mem.offset as i32).to_le_bytes());
@@ -435,16 +453,64 @@ fn emit_select(code: &mut Vec<u8>, ty: ValueType) {
     code.push(0x51);
 }
 
-fn emit_i32_add(code: &mut Vec<u8>) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x01, 0xC8]); code.push(0x50); }
-fn emit_i32_sub(code: &mut Vec<u8>) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x29, 0xC1]); code.push(0x51); }
-fn emit_i32_mul(code: &mut Vec<u8>) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x0F, 0xAF, 0xC1]); code.push(0x50); }
-fn emit_i64_add(code: &mut Vec<u8>) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x48, 0x01, 0xC8]); code.push(0x50); }
-fn emit_i64_sub(code: &mut Vec<u8>) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x48, 0x29, 0xC1]); code.push(0x51); }
-fn emit_i64_mul(code: &mut Vec<u8>) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x48, 0x0F, 0xAF, 0xC1]); code.push(0x50); }
-fn emit_i32_eqz(code: &mut Vec<u8>) { code.push(0x58); code.extend_from_slice(&[0x85, 0xC0]); emit_setcc_bool(code, SetCc::Eq); }
-fn emit_i64_eqz(code: &mut Vec<u8>) { code.push(0x58); code.extend_from_slice(&[0x48, 0x85, 0xC0]); emit_setcc_bool(code, SetCc::Eq); }
-fn emit_i32_cmp(code: &mut Vec<u8>, cc: SetCc) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x39, 0xC1]); emit_setcc_bool(code, cc); }
-fn emit_i64_cmp(code: &mut Vec<u8>, cc: SetCc) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x48, 0x39, 0xC1]); emit_setcc_bool(code, cc); }
+fn emit_i32_add(code: &mut Vec<u8>) {
+    code.push(0x58);
+    code.push(0x59);
+    code.extend_from_slice(&[0x01, 0xC8]);
+    code.push(0x50);
+}
+fn emit_i32_sub(code: &mut Vec<u8>) {
+    code.push(0x58);
+    code.push(0x59);
+    code.extend_from_slice(&[0x29, 0xC1]);
+    code.push(0x51);
+}
+fn emit_i32_mul(code: &mut Vec<u8>) {
+    code.push(0x58);
+    code.push(0x59);
+    code.extend_from_slice(&[0x0F, 0xAF, 0xC1]);
+    code.push(0x50);
+}
+fn emit_i64_add(code: &mut Vec<u8>) {
+    code.push(0x58);
+    code.push(0x59);
+    code.extend_from_slice(&[0x48, 0x01, 0xC8]);
+    code.push(0x50);
+}
+fn emit_i64_sub(code: &mut Vec<u8>) {
+    code.push(0x58);
+    code.push(0x59);
+    code.extend_from_slice(&[0x48, 0x29, 0xC1]);
+    code.push(0x51);
+}
+fn emit_i64_mul(code: &mut Vec<u8>) {
+    code.push(0x58);
+    code.push(0x59);
+    code.extend_from_slice(&[0x48, 0x0F, 0xAF, 0xC1]);
+    code.push(0x50);
+}
+fn emit_i32_eqz(code: &mut Vec<u8>) {
+    code.push(0x58);
+    code.extend_from_slice(&[0x85, 0xC0]);
+    emit_setcc_bool(code, SetCc::Eq);
+}
+fn emit_i64_eqz(code: &mut Vec<u8>) {
+    code.push(0x58);
+    code.extend_from_slice(&[0x48, 0x85, 0xC0]);
+    emit_setcc_bool(code, SetCc::Eq);
+}
+fn emit_i32_cmp(code: &mut Vec<u8>, cc: SetCc) {
+    code.push(0x58);
+    code.push(0x59);
+    code.extend_from_slice(&[0x39, 0xC1]);
+    emit_setcc_bool(code, cc);
+}
+fn emit_i64_cmp(code: &mut Vec<u8>, cc: SetCc) {
+    code.push(0x58);
+    code.push(0x59);
+    code.extend_from_slice(&[0x48, 0x39, 0xC1]);
+    emit_setcc_bool(code, cc);
+}
 
 fn emit_setcc_bool(code: &mut Vec<u8>, cc: SetCc) {
     code.extend_from_slice(&[0x0F, cc.opcode(), 0xC0]);
@@ -498,7 +564,11 @@ fn emit_br_if(code: &mut Vec<u8>, controls: &mut [ControlFrame], depth: u32) -> 
 
 fn control_index(controls: &[ControlFrame], depth: u32) -> Result<usize> {
     if depth as usize >= controls.len() {
-        bail!("branch depth {} outside {} open control frame(s)", depth, controls.len());
+        bail!(
+            "branch depth {} outside {} open control frame(s)",
+            depth,
+            controls.len()
+        );
     }
     Ok(controls.len() - 1 - depth as usize)
 }
@@ -523,7 +593,12 @@ fn patch_rel32(code: &mut [u8], imm_at: usize, target: usize) -> Result<()> {
         .checked_add(4)
         .ok_or_else(|| anyhow::anyhow!("jump patch offset overflow"))?;
     if jump_end > code.len() || target > code.len() {
-        bail!("invalid jump patch imm_at={} target={} len={}", imm_at, target, code.len());
+        bail!(
+            "invalid jump patch imm_at={} target={} len={}",
+            imm_at,
+            target,
+            code.len()
+        );
     }
     let rel = target as i64 - jump_end as i64;
     if rel < i32::MIN as i64 || rel > i32::MAX as i64 {

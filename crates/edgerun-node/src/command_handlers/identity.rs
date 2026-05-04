@@ -5,8 +5,10 @@ use crate::command_dispatch::{
     CommandDispatchResult, ControllerSet,
 };
 use crate::command_dispatch_event::record_action_event;
+use edgerun_core::protocol::{
+    command_envelope, CommandEnvelope, CreateIdentityPayload, EventType, ImportIdentityPayload,
+};
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_core::protocol::{command_envelope, CommandEnvelope, CreateIdentityPayload, EventType, ImportIdentityPayload};
 use edgerun_storage::NodeStore;
 
 pub fn dispatch_create_identity(
@@ -62,7 +64,8 @@ pub fn dispatch_create_identity(
         command, 1, // CommandDecision::Committed
         "", None, None, None,
     );
-    let response_bytes = crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
+    let response_bytes =
+        crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
 
     record_and_respond_with_result_object(
         command,
@@ -131,7 +134,8 @@ pub fn dispatch_import_identity(
         command, 1, // CommandDecision::Committed
         "", None, None, None,
     );
-    let response_bytes = crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
+    let response_bytes =
+        crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
 
     record_and_respond_with_result_object(
         command,

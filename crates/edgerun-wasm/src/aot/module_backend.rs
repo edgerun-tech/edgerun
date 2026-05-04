@@ -120,7 +120,10 @@ fn inline_callee_call(
 ) -> Result<()> {
     let expanded_callee = inline_calls(callee, functions, stack, depth)?;
     if expanded_callee.sig.results.len() > 1 {
-        bail!("AOT cannot inline multi-value return from {}", callee.name());
+        bail!(
+            "AOT cannot inline multi-value return from {}",
+            callee.name()
+        );
     }
 
     let local_base = caller.locals.len() as u32;
@@ -214,13 +217,22 @@ mod tests {
             1,
             vec![ValueType::I32],
             vec![ValueType::I32],
-            vec![IrOp::LocalGet(0), IrOp::Return, IrOp::I32Const(9), IrOp::End],
+            vec![
+                IrOp::LocalGet(0),
+                IrOp::Return,
+                IrOp::I32Const(9),
+                IrOp::End,
+            ],
         );
         let caller = function(
             0,
             vec![ValueType::I32],
             vec![ValueType::I32],
-            vec![IrOp::LocalGet(0), IrOp::Call(1, callee.sig.clone()), IrOp::End],
+            vec![
+                IrOp::LocalGet(0),
+                IrOp::Call(1, callee.sig.clone()),
+                IrOp::End,
+            ],
         );
 
         let module = X86_64ModuleBackend::compile_module(&[caller, callee]).unwrap();

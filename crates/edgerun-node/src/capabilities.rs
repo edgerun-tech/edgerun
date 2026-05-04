@@ -16,8 +16,8 @@ use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
 use edgerun_capability_policy::{
     PolicyContext, PolicyEngine, RevocationReason, SimplePolicyEngine,
 };
-use edgerun_hardware_signing::MeshSigner;
 use edgerun_core::protocol::EventType;
+use edgerun_hardware_signing::MeshSigner;
 use edgerun_remote_capability::{
     serve_one, FramedRemoteTransport, PolicyWrappedProvider, RemoteCapabilityProvider,
 };

@@ -13,8 +13,8 @@ use crate::command_dispatch_event::{append_command_result_event, CommandResultEv
 use crate::command_dispatch_server_resource::dispatch_server_resource_command_result;
 use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::CommandExecutionContext;
-use edgerun_hardware_signing::MeshSigner;
 use edgerun_core::protocol::{CommandDecision, CommandEnvelope, EventType};
+use edgerun_hardware_signing::MeshSigner;
 use edgerun_storage::NodeStore;
 
 pub fn dispatch_command(

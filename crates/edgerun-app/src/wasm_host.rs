@@ -298,15 +298,14 @@ impl WasmRuntime {
                     .as_micros() as i64
                     + (ttl_seconds as i64 * 1_000_000);
 
-                let event_bytes = Message::encode_to_vec(
-                    &edgerun_core::protocol::UserPresenceGrantedPayload {
+                let event_bytes =
+                    Message::encode_to_vec(&edgerun_core::protocol::UserPresenceGrantedPayload {
                         payload_version: 1,
                         presence_token: token.to_vec(),
                         app_id,
                         session_id,
                         expires_at,
-                    },
-                );
+                    });
                 {
                     let host = caller.data_mut();
                     host.pending_events.lock().unwrap().push(event_bytes);
@@ -382,16 +381,15 @@ impl WasmRuntime {
                     (app_id, verifying_key_bytes, signature)
                 };
 
-                let cmd_payload = Message::encode_to_vec(
-                    &edgerun_core::protocol::RequestSignaturePayload {
+                let cmd_payload =
+                    Message::encode_to_vec(&edgerun_core::protocol::RequestSignaturePayload {
                         payload_version: 1,
                         payload: payload.clone(),
                         human_readable: human_readable.clone(),
                         action: action.clone(),
                         session_id: session_id.clone(),
                         presence_token,
-                    },
-                );
+                    });
 
                 {
                     let host = caller.data_mut();
@@ -411,16 +409,15 @@ impl WasmRuntime {
                     data[out_sig..out_sig + sig_len].copy_from_slice(&signature[..sig_len]);
                 }
 
-                let event_bytes = Message::encode_to_vec(
-                    &edgerun_core::protocol::SignatureResponsePayload {
+                let event_bytes =
+                    Message::encode_to_vec(&edgerun_core::protocol::SignatureResponsePayload {
                         payload_version: 1,
                         app_id,
                         payload,
                         signature,
                         signing_key: verifying_key_bytes,
                         session_id,
-                    },
-                );
+                    });
                 {
                     let host = caller.data_mut();
                     host.pending_events.lock().unwrap().push(event_bytes);
@@ -578,11 +575,7 @@ fn build_command(
         payload: if payload.is_empty() {
             None
         } else {
-            Some(
-                edgerun_core::protocol::command_envelope::Payload::InlinePayload(
-                    payload,
-                ),
-            )
+            Some(edgerun_core::protocol::command_envelope::Payload::InlinePayload(payload))
         },
         delegation_chain,
         requested_assurance: None,
@@ -790,9 +783,7 @@ fn interpret_send_message(payload: &str) -> Option<CommandEnvelope> {
                 None
             } else {
                 Some(
-                    edgerun_core::protocol::command_envelope::Payload::InlinePayload(
-                        payload_bytes,
-                    ),
+                    edgerun_core::protocol::command_envelope::Payload::InlinePayload(payload_bytes),
                 )
             },
             delegation_chain: Vec::new(),

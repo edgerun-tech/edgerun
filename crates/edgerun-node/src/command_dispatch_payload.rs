@@ -12,6 +12,9 @@ pub fn inline_payload_bytes(command: &CommandEnvelope) -> Option<&[u8]> {
     }
 }
 
-pub fn required_inline_payload_bytes<'a>(command: &'a CommandEnvelope, payload_name: &str) -> Result<&'a [u8], String> {
+pub fn required_inline_payload_bytes<'a>(
+    command: &'a CommandEnvelope,
+    payload_name: &str,
+) -> Result<&'a [u8], String> {
     inline_payload_bytes(command).ok_or_else(|| format!("missing_{payload_name}"))
 }

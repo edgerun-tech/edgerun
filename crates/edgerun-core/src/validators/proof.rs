@@ -15,7 +15,11 @@ use crate::prelude::v1::*;
 
 use crate::result::{accept, defer, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::{mapping, ystr, Value};
-use edgerun_core::protocol::{AggregateSummaryProof, EventSetProof, FederatedAggregateDescriptor, ObjectAssertionProof, ProofBundle, ProofPayloadType, ResultFragmentProof, SnapshotSetProof, StreamHeadsProof, TrustPolicyProof};
+use edgerun_core::protocol::{
+    AggregateSummaryProof, EventSetProof, FederatedAggregateDescriptor, ObjectAssertionProof,
+    ProofBundle, ProofPayloadType, ResultFragmentProof, SnapshotSetProof, StreamHeadsProof,
+    TrustPolicyProof,
+};
 
 /// Structural validation result for a proof object.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,9 +57,8 @@ fn validate_identity_ref(
         });
     }
     if identity.identity_kind.is_some_and(|identity_kind| {
-        edgerun_core::protocol::IdentityKind::from_i32(identity_kind).is_none_or(
-            |kind| kind == edgerun_core::protocol::IdentityKind::Unspecified,
-        )
+        edgerun_core::protocol::IdentityKind::from_i32(identity_kind)
+            .is_none_or(|kind| kind == edgerun_core::protocol::IdentityKind::Unspecified)
     }) {
         return Some(ProofStructuralResult::Invalid {
             reason: invalid_kind_reason,
@@ -64,9 +67,7 @@ fn validate_identity_ref(
     None
 }
 
-fn validate_event_ref(
-    event: &edgerun_core::protocol::EventRef,
-) -> Option<ProofStructuralResult> {
+fn validate_event_ref(event: &edgerun_core::protocol::EventRef) -> Option<ProofStructuralResult> {
     if event.stream_id.is_empty() {
         return Some(ProofStructuralResult::Invalid {
             reason: "EventSetProof event_ref missing stream_id",
@@ -92,9 +93,7 @@ fn validate_event_ref(
     None
 }
 
-fn validate_head_ref(
-    head: &edgerun_core::protocol::HeadRef,
-) -> Option<ProofStructuralResult> {
+fn validate_head_ref(head: &edgerun_core::protocol::HeadRef) -> Option<ProofStructuralResult> {
     if head.stream_id.is_empty() {
         return Some(ProofStructuralResult::Invalid {
             reason: "StreamHeadsProof head_ref missing stream_id",
@@ -602,7 +601,9 @@ pub fn validate_federated_aggregate_descriptor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_core::protocol::{EventRef, HeadRef, IdentityKind, IdentityRef, ObjectKind, ObjectRef, SnapshotRef};
+    use edgerun_core::protocol::{
+        EventRef, HeadRef, IdentityKind, IdentityRef, ObjectKind, ObjectRef, SnapshotRef,
+    };
 
     #[test]
     fn stream_heads_proof_nonempty_is_valid() {

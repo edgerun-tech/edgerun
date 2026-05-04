@@ -5,8 +5,8 @@ use crate::command_dispatch::{
     CommandDispatchResult, ControllerSet,
 };
 use crate::command_dispatch_event::record_action_event;
-use edgerun_hardware_signing::MeshSigner;
 use edgerun_core::protocol::CommandEnvelope;
+use edgerun_hardware_signing::MeshSigner;
 use edgerun_storage::NodeStore;
 
 pub fn dispatch_update_config(
@@ -18,9 +18,9 @@ pub fn dispatch_update_config(
 ) -> CommandDispatchResult {
     // Extract config patch from payload (JSON format)
     let config_patch: Vec<u8> = match &command.payload {
-        Some(edgerun_core::protocol::command_envelope::Payload::InlinePayload(
-            bytes,
-        )) => bytes.clone(),
+        Some(edgerun_core::protocol::command_envelope::Payload::InlinePayload(bytes)) => {
+            bytes.clone()
+        }
         _ => {
             return record_and_respond(
                 command,

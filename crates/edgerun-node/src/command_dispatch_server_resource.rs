@@ -7,8 +7,8 @@ use crate::command_dispatch::CommandDispatchResult;
 use crate::server_resource_dispatch::{
     dispatch_server_resource_command, reject_server_resource_command,
 };
-use edgerun_hardware_signing::MeshSigner;
 use edgerun_core::protocol::{CommandDecision, CommandEnvelope, EventType};
+use edgerun_hardware_signing::MeshSigner;
 use edgerun_storage::NodeStore;
 
 pub fn dispatch_server_resource_command_result(

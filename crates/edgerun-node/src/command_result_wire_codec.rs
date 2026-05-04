@@ -7,8 +7,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use edgerun_core::protocol::{CommandRef, Digest, IdentityRef, ObjectRef};
 use edgerun_core::protocol::CommandResultPayload;
+use edgerun_core::protocol::{CommandRef, Digest, IdentityRef, ObjectRef};
 use edgerun_wire::{WireDecode, WireReader, WireValue};
 
 #[must_use]

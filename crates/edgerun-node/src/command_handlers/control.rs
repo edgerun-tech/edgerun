@@ -4,9 +4,9 @@ use crate::command_dispatch::{
     extract_identity_from_command, record_and_respond, CommandDispatchResult, ControllerSet,
 };
 use crate::command_dispatch_event::record_action_event;
+use edgerun_core::protocol::{CommandEnvelope, EventType};
 use edgerun_core::util::bytes_to_hex_prefixed;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_core::protocol::{CommandEnvelope, EventType};
 use edgerun_storage::NodeStore;
 
 pub fn dispatch_add_controller(

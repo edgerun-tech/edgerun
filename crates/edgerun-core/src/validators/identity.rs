@@ -209,8 +209,8 @@ pub fn validate_identity_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_core::protocol::{IdentityKind, IdentityRef, ObjectKind, ObjectRef, Signature};
     use edgerun_core::protocol::IdentityRecord;
+    use edgerun_core::protocol::{IdentityKind, IdentityRef, ObjectKind, ObjectRef, Signature};
 
     fn make_test_keypair() -> (
         edgerun_crypto::p256::ecdsa::SigningKey,

@@ -6,10 +6,13 @@ use crate::command_dispatch::{
     ControllerSet,
 };
 use crate::command_dispatch_event::record_action_event;
+use edgerun_core::protocol::{
+    command_envelope, CommandEnvelope, EventType, RequestSignaturePayload,
+    RequestUserPresencePayload, UserPresenceGrantedPayload, UserPresenceRequestPayload,
+};
 use edgerun_core::util::{now_unix_micros_u64, now_unix_millis_i64};
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_core::protocol::{command_envelope, CommandEnvelope, EventType, RequestSignaturePayload, RequestUserPresencePayload, UserPresenceGrantedPayload, UserPresenceRequestPayload};
 use edgerun_storage::NodeStore;
 
 pub fn dispatch_request_user_presence(
@@ -121,7 +124,8 @@ pub fn dispatch_request_user_presence(
         None,
         granted_obj_ref,
     );
-    let response_bytes = crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
+    let response_bytes =
+        crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
 
     // Write presence token to local session store for quick validation
     if let Some(ref token_store) = crate::get_local_session_store() {
@@ -230,7 +234,8 @@ pub fn dispatch_request_signature(
         command, 1, // CommandDecision::Committed
         "", None, None, None,
     );
-    let response_bytes = crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
+    let response_bytes =
+        crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
 
     // Write signature request token to local session store
     if let Some(ref token_store) = crate::get_local_session_store() {

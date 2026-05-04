@@ -255,7 +255,9 @@ fn mem_op(memarg: MemArg) -> Result<MemOp> {
     if memarg.memory != 0 {
         bail!("baseline AOT only supports memory index 0");
     }
-    Ok(MemOp { offset: memarg.offset })
+    Ok(MemOp {
+        offset: memarg.offset,
+    })
 }
 
 fn lower_operator(
@@ -371,7 +373,9 @@ fn lower_operator(
         }
         Operator::Call { function_index } => {
             if function_index < import_func_count {
-                bail!("baseline AOT does not support imported function calls yet: {function_index}");
+                bail!(
+                    "baseline AOT does not support imported function calls yet: {function_index}"
+                );
             }
             let sig = function_sigs
                 .get(function_index as usize)

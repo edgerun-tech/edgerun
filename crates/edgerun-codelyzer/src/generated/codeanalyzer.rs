@@ -235,7 +235,10 @@ pub mod binary {
         Ok(buf)
     }
 
-    pub fn encode_map_string_u32<W: Write>(w: &mut W, v: &std::collections::HashMap<String, u32>) -> std::io::Result<()> {
+    pub fn encode_map_string_u32<W: Write>(
+        w: &mut W,
+        v: &std::collections::HashMap<String, u32>,
+    ) -> std::io::Result<()> {
         encode_u32(w, v.len() as u32)?;
         for (key, val) in v {
             encode_string(w, key)?;
@@ -244,7 +247,9 @@ pub mod binary {
         Ok(())
     }
 
-    pub fn decode_map_string_u32<R: Read>(r: &mut R) -> std::io::Result<std::collections::HashMap<String, u32>> {
+    pub fn decode_map_string_u32<R: Read>(
+        r: &mut R,
+    ) -> std::io::Result<std::collections::HashMap<String, u32>> {
         let len = decode_u32(r)? as usize;
         let mut result = std::collections::HashMap::with_capacity(len);
         for _ in 0..len {
@@ -649,10 +654,24 @@ impl DiagnosticsReport {
 #[derive(Clone, PartialEq, Debug)]
 pub enum IndexStateEnum {
     NotIndexed,
-    Indexing { progress: f32, files_scanned: u32, total_files: u32 },
-    Indexed { functions: u32, edges: u32, index_time_ms: u64 },
-    Stale { functions: u32, edges: u32, last_indexed: u64 },
-    Error { message: String },
+    Indexing {
+        progress: f32,
+        files_scanned: u32,
+        total_files: u32,
+    },
+    Indexed {
+        functions: u32,
+        edges: u32,
+        index_time_ms: u64,
+    },
+    Stale {
+        functions: u32,
+        edges: u32,
+        last_indexed: u64,
+    },
+    Error {
+        message: String,
+    },
 }
 
 // IndexState message
@@ -668,19 +687,31 @@ impl IndexState {
             Some(IndexStateEnum::NotIndexed) => {
                 encode_u32(w, 1)?;
             }
-            Some(IndexStateEnum::Indexing { progress, files_scanned, total_files }) => {
+            Some(IndexStateEnum::Indexing {
+                progress,
+                files_scanned,
+                total_files,
+            }) => {
                 encode_u32(w, 2)?;
                 encode_f32(w, *progress)?;
                 encode_u32(w, *files_scanned)?;
                 encode_u32(w, *total_files)?;
             }
-            Some(IndexStateEnum::Indexed { functions, edges, index_time_ms }) => {
+            Some(IndexStateEnum::Indexed {
+                functions,
+                edges,
+                index_time_ms,
+            }) => {
                 encode_u32(w, 3)?;
                 encode_u32(w, *functions)?;
                 encode_u32(w, *edges)?;
                 encode_u64(w, *index_time_ms)?;
             }
-            Some(IndexStateEnum::Stale { functions, edges, last_indexed }) => {
+            Some(IndexStateEnum::Stale {
+                functions,
+                edges,
+                last_indexed,
+            }) => {
                 encode_u32(w, 4)?;
                 encode_u32(w, *functions)?;
                 encode_u32(w, *edges)?;
@@ -774,7 +805,10 @@ impl RepoInfo {
     }
 }
 
-fn encode_optional_index_state<W: std::io::Write>(w: &mut W, v: &Option<IndexState>) -> std::io::Result<()> {
+fn encode_optional_index_state<W: std::io::Write>(
+    w: &mut W,
+    v: &Option<IndexState>,
+) -> std::io::Result<()> {
     use binary::*;
     match v {
         Some(val) => {
@@ -1286,7 +1320,11 @@ impl ToolUseResponse {
             tools.push(ToolCallInfo::decode(r)?);
         }
         let error = decode_optional_string(r)?;
-        Ok(ToolUseResponse { reply, tools, error })
+        Ok(ToolUseResponse {
+            reply,
+            tools,
+            error,
+        })
     }
 }
 
@@ -1474,7 +1512,10 @@ impl GetViewResponse {
     }
 }
 
-fn encode_optional_view_data<W: std::io::Write>(w: &mut W, v: &Option<ViewData>) -> std::io::Result<()> {
+fn encode_optional_view_data<W: std::io::Write>(
+    w: &mut W,
+    v: &Option<ViewData>,
+) -> std::io::Result<()> {
     use binary::*;
     match v {
         Some(val) => {
@@ -1514,7 +1555,10 @@ impl GetReposResponse {
     }
 }
 
-fn encode_optional_repo_list<W: std::io::Write>(w: &mut W, v: &Option<RepoList>) -> std::io::Result<()> {
+fn encode_optional_repo_list<W: std::io::Write>(
+    w: &mut W,
+    v: &Option<RepoList>,
+) -> std::io::Result<()> {
     use binary::*;
     match v {
         Some(val) => {
@@ -1554,7 +1598,10 @@ impl SwitchRepoResponse {
     }
 }
 
-fn encode_optional_status_response<W: std::io::Write>(w: &mut W, v: &Option<StatusResponse>) -> std::io::Result<()> {
+fn encode_optional_status_response<W: std::io::Write>(
+    w: &mut W,
+    v: &Option<StatusResponse>,
+) -> std::io::Result<()> {
     use binary::*;
     match v {
         Some(val) => {
@@ -1565,7 +1612,9 @@ fn encode_optional_status_response<W: std::io::Write>(w: &mut W, v: &Option<Stat
     }
 }
 
-fn decode_optional_status_response<R: std::io::Read>(r: &mut R) -> std::io::Result<Option<StatusResponse>> {
+fn decode_optional_status_response<R: std::io::Read>(
+    r: &mut R,
+) -> std::io::Result<Option<StatusResponse>> {
     use binary::*;
     if decode_bool(r)? {
         Ok(Some(StatusResponse::decode(r)?))
@@ -1716,7 +1765,10 @@ impl GetConfigResponse {
     }
 }
 
-fn encode_optional_registry_config<W: std::io::Write>(w: &mut W, v: &Option<RegistryConfig>) -> std::io::Result<()> {
+fn encode_optional_registry_config<W: std::io::Write>(
+    w: &mut W,
+    v: &Option<RegistryConfig>,
+) -> std::io::Result<()> {
     use binary::*;
     match v {
         Some(val) => {
@@ -1727,7 +1779,9 @@ fn encode_optional_registry_config<W: std::io::Write>(w: &mut W, v: &Option<Regi
     }
 }
 
-fn decode_optional_registry_config<R: std::io::Read>(r: &mut R) -> std::io::Result<Option<RegistryConfig>> {
+fn decode_optional_registry_config<R: std::io::Read>(
+    r: &mut R,
+) -> std::io::Result<Option<RegistryConfig>> {
     use binary::*;
     if decode_bool(r)? {
         Ok(Some(RegistryConfig::decode(r)?))
@@ -1905,7 +1959,11 @@ impl NodeUpdate {
             modified.push(GraphNode::decode(r)?);
         }
         let removed = decode_repeated_string(r)?;
-        Ok(NodeUpdate { added, modified, removed })
+        Ok(NodeUpdate {
+            added,
+            modified,
+            removed,
+        })
     }
 }
 
@@ -1967,7 +2025,10 @@ impl GraphUpdate {
     }
 }
 
-fn encode_optional_node_update<W: std::io::Write>(w: &mut W, v: &Option<NodeUpdate>) -> std::io::Result<()> {
+fn encode_optional_node_update<W: std::io::Write>(
+    w: &mut W,
+    v: &Option<NodeUpdate>,
+) -> std::io::Result<()> {
     use binary::*;
     match v {
         Some(val) => {
@@ -1987,7 +2048,10 @@ fn decode_optional_node_update<R: std::io::Read>(r: &mut R) -> std::io::Result<O
     }
 }
 
-fn encode_optional_edge_update<W: std::io::Write>(w: &mut W, v: &Option<EdgeUpdate>) -> std::io::Result<()> {
+fn encode_optional_edge_update<W: std::io::Write>(
+    w: &mut W,
+    v: &Option<EdgeUpdate>,
+) -> std::io::Result<()> {
     use binary::*;
     match v {
         Some(val) => {

@@ -826,7 +826,9 @@ pub fn validate_route_advertisement(
 #[cfg(test)]
 mod proto_tests {
     use super::*;
-    use edgerun_core::protocol::{Directness, IdentityRef, NodeRef, ObjectKind, ObjectRef, Signature, TransportClass};
+    use edgerun_core::protocol::{
+        Directness, IdentityRef, NodeRef, ObjectKind, ObjectRef, Signature, TransportClass,
+    };
     use edgerun_core::protocol::{ReachabilityHint, RouteAdvertisement};
     use prost_types::Timestamp;
 

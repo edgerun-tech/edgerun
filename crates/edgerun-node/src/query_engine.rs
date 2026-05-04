@@ -15,9 +15,7 @@ pub enum QueryCostCheck {
 }
 
 /// Evaluates the query's cost_limit and returns allowed limits or denial reason.
-pub fn check_query_cost(
-    query: &edgerun_core::protocol::QueryRequest,
-) -> QueryCostCheck {
+pub fn check_query_cost(query: &edgerun_core::protocol::QueryRequest) -> QueryCostCheck {
     // Constants for v0 cost limits
     const DEFAULT_MAX_BYTES: usize = 10 * 1024 * 1024; // 10 MB
     const DEFAULT_MAX_RESULTS: usize = 10_000;
@@ -55,8 +53,8 @@ pub fn execute_query(
     responder_node_id: &NodeID,
     signer: &dyn MeshSigner,
 ) -> Vec<u8> {
-    use edgerun_core::protocol::{QueryClass, QueryResultFragment, ResultCompleteness};
     use edgerun_core::protocol::{EventRef, ObjectRef};
+    use edgerun_core::protocol::{QueryClass, QueryResultFragment, ResultCompleteness};
 
     // 1. Check cost limits before doing any work
     let (max_bytes, max_results) = match check_query_cost(query) {
@@ -393,9 +391,11 @@ pub fn execute_federated_query(
     remote_fragments: &[Vec<u8>],
     trusted_responders: &[Vec<u8>],
 ) -> Vec<u8> {
-    use edgerun_core::result::Verdict;
-    use edgerun_core::protocol::{FederatedAggregateDescriptor, QueryResultFragment, ResultCompleteness};
+    use edgerun_core::protocol::{
+        FederatedAggregateDescriptor, QueryResultFragment, ResultCompleteness,
+    };
     use edgerun_core::protocol::{IdentityRef, ObjectKind};
+    use edgerun_core::result::Verdict;
 
     let local_bytes = execute_query(query, store, local_stream_id, responder_node_id, signer);
     let Ok(mut aggregate) = QueryResultFragment::decode(&local_bytes[..]) else {
@@ -590,8 +590,7 @@ fn enforce_aggregate_result_limits(
         truncated = true;
     }
     if truncated {
-        aggregate.completeness =
-            edgerun_core::protocol::ResultCompleteness::Partial as i32;
+        aggregate.completeness = edgerun_core::protocol::ResultCompleteness::Partial as i32;
     }
 }
 
@@ -642,12 +641,14 @@ fn build_query_proof_objects(
     object_refs: &[edgerun_core::protocol::ObjectRef],
     signer: &dyn MeshSigner,
 ) -> Vec<edgerun_core::protocol::ObjectRef> {
+    use edgerun_core::protocol::{
+        EventSetProof, ObjectAssertionProof, ProofClass, SnapshotSetProof, StreamHeadsProof,
+    };
+    use edgerun_core::protocol::{HeadRef, ObjectKind};
     use edgerun_core::validators::{
         validate_event_set_proof, validate_object_assertion_proof, validate_snapshot_set_proof,
         ProofStructuralResult,
     };
-    use edgerun_core::protocol::{EventSetProof, ObjectAssertionProof, ProofClass, SnapshotSetProof, StreamHeadsProof};
-    use edgerun_core::protocol::{HeadRef, ObjectKind};
 
     let mut proof_objects = Vec::new();
 
@@ -895,9 +896,12 @@ fn build_signed_query_denial(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_core::protocol::{
+        CostLimit, ProofClass, QueryClass, QueryRequest, QueryResultFragment, ResultCompleteness,
+        StreamHeadsProof,
+    };
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_hardware_signing::{HardwareSigningError, MeshSigner};
-    use edgerun_core::protocol::{CostLimit, ProofClass, QueryClass, QueryRequest, QueryResultFragment, ResultCompleteness, StreamHeadsProof};
     use edgerun_storage::{BlobKeySource, NodeStoreConfig};
     use prost::Message;
     use std::sync::Arc;

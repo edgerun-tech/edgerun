@@ -4,11 +4,11 @@
 //! an `AssuranceClaim` that proves the command was executed at the requested
 //! assurance level (software, hardware-backed, or attested runtime).
 
+use edgerun_core::protocol::AssuranceClaim;
+use edgerun_core::protocol::ObjectKind;
 use edgerun_core::protocol::{canonical_bytes, ProtocolRecord};
 use edgerun_core::util::{now_unix_millis_i64, system_time_to_prost};
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_core::protocol::ObjectKind;
-use edgerun_core::protocol::AssuranceClaim;
 use edgerun_storage::NodeStore;
 use std::time::SystemTime;
 

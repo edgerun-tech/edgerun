@@ -220,12 +220,12 @@ impl MeshNode {
 mod tests {
     use super::*;
     use alloc::vec;
+    use edgerun_core::protocol::EventType;
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
     use edgerun_proto::edgerun::v0::common as proto_common;
     use edgerun_proto::edgerun::v0::stream as proto_stream;
-    use edgerun_core::protocol::EventType;
 
     struct TestSigner {
         node_id: NodeID,

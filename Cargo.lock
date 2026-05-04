@@ -1599,6 +1599,9 @@ dependencies = [
 [[package]]
 name = "edgerun-capabilities"
 version = "0.1.1"
+dependencies = [
+ "edgerun-proto",
+]
 
 [[package]]
 name = "edgerun-capability-policy"
@@ -1607,6 +1610,7 @@ dependencies = [
  "edgerun-capabilities",
  "edgerun-core",
  "edgerun-crypto",
+ "edgerun-proto",
 ]
 
 [[package]]
@@ -1771,6 +1775,7 @@ dependencies = [
  "edgerun-mgmt-bluetooth",
  "edgerun-microphone",
  "edgerun-npu",
+ "edgerun-proto",
  "edgerun-remote-capability",
  "edgerun-speaker",
  "edgerun-tpm",
@@ -2125,6 +2130,7 @@ dependencies = [
  "edgerun-hardware-signing",
  "edgerun-mesh",
  "edgerun-mesh-link",
+ "edgerun-proto",
  "edgerun-remote-capability",
 ]
 
@@ -2143,6 +2149,7 @@ dependencies = [
  "edgerun-mesh-link",
  "edgerun-mesh-session",
  "edgerun-network-interface",
+ "edgerun-proto",
  "edgerun-remote-capability",
  "libc",
 ]
@@ -2407,6 +2414,7 @@ dependencies = [
  "edgerun-input",
  "edgerun-microphone",
  "edgerun-npu",
+ "edgerun-proto",
  "edgerun-speaker",
  "edgerun-wifi",
 ]
