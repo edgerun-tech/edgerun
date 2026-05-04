@@ -70,6 +70,22 @@ pub mod capability_check {
         }
     }
 }
+impl Operation {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::ReadBlob),
+            2 => Some(Self::WriteBlob),
+            3 => Some(Self::SendMessage),
+            4 => Some(Self::NetworkBind),
+            5 => Some(Self::NetworkConnect),
+            6 => Some(Self::StorageAccess),
+            7 => Some(Self::Execution),
+            _ => None,
+        }
+    }
+}
+
 /// Result of a capability check
 #[derive(Clone, PartialEq)]
 pub struct CapabilityResult {
@@ -105,6 +121,16 @@ pub mod capability_result {
                 "DECISION_DENIED" => Some(Self::Denied),
                 _ => None,
             }
+        }
+    }
+}
+impl Decision {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Granted),
+            2 => Some(Self::Denied),
+            _ => None,
         }
     }
 }

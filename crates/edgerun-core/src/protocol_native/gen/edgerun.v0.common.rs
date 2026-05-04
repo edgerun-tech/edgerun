@@ -33,6 +33,16 @@ pub mod digest {
         }
     }
 }
+impl Algorithm {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::DigestAlgorithmUnspecified),
+            1 => Some(Self::DigestAlgorithmSha256),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub struct Signature {
     pub algorithm: i32,
@@ -69,6 +79,16 @@ pub mod signature {
         }
     }
 }
+impl Algorithm {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::SignatureAlgorithmUnspecified),
+            1 => Some(Self::SignatureAlgorithmEcdsaP256Sha256),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub struct TimeWindow {
     pub not_before: ::core::option::Option<crate::protocol::Timestamp>,
@@ -182,9 +202,19 @@ pub enum IdentityKind {
 }
 impl IdentityKind {
     pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::User),
+            2 => Some(Self::Node),
+            3 => Some(Self::Agent),
+            4 => Some(Self::Service),
+            5 => Some(Self::Other),
+            _ => None,
+        }
     }
+}
 
+impl IdentityKind {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -227,6 +257,25 @@ pub enum ObjectKind {
     AppPackage = 9,
     UiTree = 10,
 }
+impl ObjectKind {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Payload),
+            2 => Some(Self::Attachment),
+            3 => Some(Self::Snapshot),
+            4 => Some(Self::Manifest),
+            5 => Some(Self::Index),
+            6 => Some(Self::Command),
+            7 => Some(Self::Proof),
+            8 => Some(Self::DerivedView),
+            9 => Some(Self::AppPackage),
+            10 => Some(Self::UiTree),
+            _ => None,
+        }
+    }
+}
+
 impl ObjectKind {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
@@ -274,6 +323,18 @@ pub enum AssuranceClass {
     AttestedRuntime = 3,
 }
 impl AssuranceClass {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Software),
+            2 => Some(Self::HardwareBacked),
+            3 => Some(Self::AttestedRuntime),
+            _ => None,
+        }
+    }
+}
+
+impl AssuranceClass {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -309,6 +370,22 @@ pub enum TransportClass {
     StoreForward = 6,
     Other = 7,
 }
+impl TransportClass {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Ble),
+            2 => Some(Self::LanIp),
+            3 => Some(Self::Quic),
+            4 => Some(Self::WifiDirect),
+            5 => Some(Self::Relay),
+            6 => Some(Self::StoreForward),
+            7 => Some(Self::Other),
+            _ => None,
+        }
+    }
+}
+
 impl TransportClass {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
@@ -351,6 +428,19 @@ pub enum Directness {
     StoreForward = 4,
 }
 impl Directness {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Direct),
+            2 => Some(Self::Relayed),
+            3 => Some(Self::BridgeRequired),
+            4 => Some(Self::StoreForward),
+            _ => None,
+        }
+    }
+}
+
+impl Directness {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -385,6 +475,19 @@ pub enum StorageClass {
     Cold = 3,
     Archive = 4,
 }
+impl StorageClass {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Hot),
+            2 => Some(Self::Warm),
+            3 => Some(Self::Cold),
+            4 => Some(Self::Archive),
+            _ => None,
+        }
+    }
+}
+
 impl StorageClass {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
@@ -421,6 +524,20 @@ pub enum ExecutionClass {
     RedundantUntrusted = 4,
     Public = 5,
 }
+impl ExecutionClass {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::LocalOnly),
+            2 => Some(Self::TrustedPeer),
+            3 => Some(Self::TeeAllowed),
+            4 => Some(Self::RedundantUntrusted),
+            5 => Some(Self::Public),
+            _ => None,
+        }
+    }
+}
+
 impl ExecutionClass {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
@@ -475,6 +592,17 @@ pub enum CipherSuite {
     Xchacha20Poly1305 = 1,
     Aes256Gcm = 2,
 }
+impl CipherSuite {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Xchacha20Poly1305),
+            2 => Some(Self::Aes256Gcm),
+            _ => None,
+        }
+    }
+}
+
 impl CipherSuite {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///

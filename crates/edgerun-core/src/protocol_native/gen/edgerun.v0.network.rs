@@ -82,9 +82,19 @@ pub enum PayloadKind {
 }
 impl PayloadKind {
     pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Command),
+            2 => Some(Self::Query),
+            3 => Some(Self::ResultFragment),
+            4 => Some(Self::ObjectFragment),
+            5 => Some(Self::SessionMessage),
+            _ => None,
+        }
     }
+}
 
+impl PayloadKind {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable

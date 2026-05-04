@@ -116,9 +116,21 @@ pub enum CapabilityRole {
 }
 impl CapabilityRole {
     pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Input),
+            2 => Some(Self::Output),
+            3 => Some(Self::SecureElement),
+            4 => Some(Self::Communication),
+            5 => Some(Self::Storage),
+            6 => Some(Self::Execution),
+            7 => Some(Self::Derived),
+            _ => None,
+        }
     }
+}
 
+impl CapabilityRole {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -166,6 +178,26 @@ pub enum CapabilityModality {
     Computational = 10,
     Other = 11,
 }
+impl CapabilityModality {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Visual),
+            2 => Some(Self::Auditory),
+            3 => Some(Self::Touch),
+            4 => Some(Self::Biometric),
+            5 => Some(Self::Display),
+            6 => Some(Self::Radio),
+            7 => Some(Self::Cryptographic),
+            8 => Some(Self::Haptic),
+            9 => Some(Self::Text),
+            10 => Some(Self::Computational),
+            11 => Some(Self::Other),
+            _ => None,
+        }
+    }
+}
+
 impl CapabilityModality {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
@@ -224,6 +256,27 @@ pub enum CapabilityEventKind {
     Inference = 12,
 }
 impl CapabilityEventKind {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Visual),
+            2 => Some(Self::Auditory),
+            3 => Some(Self::Touch),
+            4 => Some(Self::Biometric),
+            5 => Some(Self::Display),
+            6 => Some(Self::Radio),
+            7 => Some(Self::Signing),
+            8 => Some(Self::Attestation),
+            9 => Some(Self::Haptic),
+            10 => Some(Self::Text),
+            11 => Some(Self::State),
+            12 => Some(Self::Inference),
+            _ => None,
+        }
+    }
+}
+
+impl CapabilityEventKind {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -280,6 +333,24 @@ pub enum CapabilityOperation {
     Invoke = 9,
 }
 impl CapabilityOperation {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Query),
+            2 => Some(Self::Observe),
+            3 => Some(Self::Capture),
+            4 => Some(Self::Control),
+            5 => Some(Self::Render),
+            6 => Some(Self::Sign),
+            7 => Some(Self::Attest),
+            8 => Some(Self::Verify),
+            9 => Some(Self::Invoke),
+            _ => None,
+        }
+    }
+}
+
+impl CapabilityOperation {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -323,6 +394,17 @@ pub enum CapabilityAccessClass {
     Derived = 2,
 }
 impl CapabilityAccessClass {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Raw),
+            2 => Some(Self::Derived),
+            _ => None,
+        }
+    }
+}
+
+impl CapabilityAccessClass {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -358,6 +440,24 @@ pub enum CapabilityConstraintKind {
     MaxBytes = 8,
     Scope = 9,
 }
+impl CapabilityConstraintKind {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::RequireUserPresence),
+            2 => Some(Self::RequireBiometric),
+            3 => Some(Self::RequireFreshness),
+            4 => Some(Self::RequireLocalOnly),
+            5 => Some(Self::RequireHardwareProtected),
+            6 => Some(Self::OneShot),
+            7 => Some(Self::RateLimited),
+            8 => Some(Self::MaxBytes),
+            9 => Some(Self::Scope),
+            _ => None,
+        }
+    }
+}
+
 impl CapabilityConstraintKind {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///

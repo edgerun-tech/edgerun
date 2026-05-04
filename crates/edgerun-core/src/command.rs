@@ -24,8 +24,9 @@
 fn validate_assurance_claim_satisfies_requirement(
     _claim: &crate::protocol::AssuranceClaim,
     _requirement: &crate::protocol::AssuranceRequirement,
-) -> bool {
-    true
+    _now_ms: i64,
+) -> crate::result::ValidationResult {
+    crate::result::ValidationResult::accept("assurance compatibility shim")
 }
 
 use crate::prelude::v1::*;
@@ -1843,7 +1844,7 @@ fn validate_delegation_chain(
         // Build signable form (signature absent) and canonical encode
         let mut signable = delegation.clone();
         signable.signature = None;
-        let canonical = crate::wire_command::command_full_bytes(&signable);
+        let canonical = canonical_bytes(&ProtocolRecord::DelegationRecord(signable.clone()), true);
 
         if !crate::crypto::verify_canonical_record(
             &verifying_key,

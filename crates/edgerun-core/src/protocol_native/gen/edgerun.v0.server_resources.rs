@@ -130,9 +130,26 @@ pub enum ServerResourceEventKind {
 }
 impl ServerResourceEventKind {
     pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::ClaimDomain),
+            2 => Some(Self::ReleaseDomain),
+            3 => Some(Self::AddMailbox),
+            4 => Some(Self::RemoveMailbox),
+            5 => Some(Self::AddAlias),
+            6 => Some(Self::RemoveAlias),
+            7 => Some(Self::AuthorizeContentSource),
+            8 => Some(Self::PublishWebsite),
+            9 => Some(Self::UnpublishWebsite),
+            10 => Some(Self::SetAuthoritativeDns),
+            11 => Some(Self::RequestCertificate),
+            12 => Some(Self::SetServicePolicy),
+            _ => None,
+        }
     }
+}
 
+impl ServerResourceEventKind {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -187,6 +204,21 @@ pub enum GenerationEventKind {
     Rollback = 5,
     Failed = 6,
 }
+impl GenerationEventKind {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Planned),
+            2 => Some(Self::Staged),
+            3 => Some(Self::HealthPassed),
+            4 => Some(Self::Promoted),
+            5 => Some(Self::Rollback),
+            6 => Some(Self::Failed),
+            _ => None,
+        }
+    }
+}
+
 impl GenerationEventKind {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///

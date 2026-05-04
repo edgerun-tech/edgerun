@@ -126,9 +126,17 @@ pub enum SnapshotCompleteness {
 }
 impl SnapshotCompleteness {
     pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Full),
+            2 => Some(Self::Partial),
+            3 => Some(Self::Bounded),
+            _ => None,
+        }
     }
+}
 
+impl SnapshotCompleteness {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -165,6 +173,23 @@ pub enum QueryClass {
     Search = 7,
     TrustState = 8,
 }
+impl QueryClass {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Head),
+            2 => Some(Self::Snapshot),
+            3 => Some(Self::EventRange),
+            4 => Some(Self::ObjectExistence),
+            5 => Some(Self::ObjectFetch),
+            6 => Some(Self::View),
+            7 => Some(Self::Search),
+            8 => Some(Self::TrustState),
+            _ => None,
+        }
+    }
+}
+
 impl QueryClass {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
@@ -210,6 +235,20 @@ pub enum ProofClass {
     SnapshotBase = 5,
 }
 impl ProofClass {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Signature),
+            2 => Some(Self::StreamHead),
+            3 => Some(Self::EventRef),
+            4 => Some(Self::ObjectRef),
+            5 => Some(Self::SnapshotBase),
+            _ => None,
+        }
+    }
+}
+
+impl ProofClass {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -246,6 +285,19 @@ pub enum ResultCompleteness {
     Denied = 3,
     MetadataOnly = 4,
 }
+impl ResultCompleteness {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::CompleteForLocalKnowledge),
+            2 => Some(Self::Partial),
+            3 => Some(Self::Denied),
+            4 => Some(Self::MetadataOnly),
+            _ => None,
+        }
+    }
+}
+
 impl ResultCompleteness {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
@@ -286,6 +338,22 @@ pub enum ProofPayloadType {
     AggregateSummary = 6,
     TrustPolicy = 7,
 }
+impl ProofPayloadType {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::StreamHeads),
+            2 => Some(Self::SnapshotSet),
+            3 => Some(Self::EventSet),
+            4 => Some(Self::ObjectAssertion),
+            5 => Some(Self::ResultFragment),
+            6 => Some(Self::AggregateSummary),
+            7 => Some(Self::TrustPolicy),
+            _ => None,
+        }
+    }
+}
+
 impl ProofPayloadType {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///

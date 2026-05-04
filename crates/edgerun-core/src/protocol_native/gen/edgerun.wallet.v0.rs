@@ -233,9 +233,16 @@ pub enum QuoteMode {
 }
 impl QuoteMode {
     pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
-        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Instant),
+            2 => Some(Self::Floating),
+            _ => None,
+        }
     }
+}
 
+impl QuoteMode {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -264,6 +271,17 @@ pub enum AmountSide {
     Settlement = 1,
     Pay = 2,
 }
+impl AmountSide {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Settlement),
+            2 => Some(Self::Pay),
+            _ => None,
+        }
+    }
+}
+
 impl AmountSide {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
@@ -310,6 +328,34 @@ pub enum CanonicalOrderStatus {
     Canceled = 18,
     PartialDeposits = 19,
 }
+impl CanonicalOrderStatus {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Quoted),
+            2 => Some(Self::QuoteExpired),
+            3 => Some(Self::Created),
+            4 => Some(Self::AwaitingDeposit),
+            5 => Some(Self::DepositSeen),
+            6 => Some(Self::DepositConfirmed),
+            7 => Some(Self::Exchanging),
+            8 => Some(Self::Sending),
+            9 => Some(Self::Completed),
+            10 => Some(Self::ActionRequired),
+            11 => Some(Self::RefundRequired),
+            12 => Some(Self::Refunding),
+            13 => Some(Self::Refunded),
+            14 => Some(Self::Expired),
+            15 => Some(Self::Failed),
+            16 => Some(Self::Rejected),
+            17 => Some(Self::OnHold),
+            18 => Some(Self::Canceled),
+            19 => Some(Self::PartialDeposits),
+            _ => None,
+        }
+    }
+}
+
 impl CanonicalOrderStatus {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
