@@ -10,7 +10,7 @@ import {
 } from "motion/react";
 import type { MotionValue } from "motion/react";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type FloatingDockItem = {
   title: string;
@@ -26,8 +26,46 @@ type FloatingDockContext = {
   items?: FloatingDockItem[];
 };
 
-type DockLane = "launcher" | "context";
-type DockMode = "icons" | "command";
+type DockPage = "people" | "launcher" | "command";
+type CommandPrefix = "/" | "#" | "?" | "~";
+
+type CommandSuggestion = {
+  value: string;
+  label: string;
+  prefix: CommandPrefix;
+};
+
+const COMMAND_PREFIXES: { prefix: CommandPrefix; label: string; title: string }[] = [
+  { prefix: "/", label: "General", title: "General command" },
+  { prefix: "#", label: "Terminal", title: "Send to terminal" },
+  { prefix: "?", label: "Help", title: "Help topics" },
+  { prefix: "~", label: "AI", title: "AI input" },
+];
+
+const SUGGESTIONS: CommandSuggestion[] = [
+  { prefix: "/", value: "/open settings", label: "Open Settings" },
+  { prefix: "/", value: "/open finances", label: "Open Finances" },
+  { prefix: "/", value: "/pin finances", label: "Pin finance overview" },
+  { prefix: "#", value: "#bun run build", label: "Build frontend" },
+  { prefix: "#", value: "#bun run lint", label: "Lint frontend" },
+  { prefix: "#", value: "#git status", label: "Git status" },
+  { prefix: "?", value: "?xray controls", label: "Xray controls" },
+  { prefix: "?", value: "?dock shortcuts", label: "Dock shortcuts" },
+  { prefix: "?", value: "?app surfaces", label: "App surfaces" },
+  { prefix: "~", value: "~summarize current graph", label: "Summarize graph" },
+  { prefix: "~", value: "~find duplicate components", label: "Find duplicate components" },
+  { prefix: "~", value: "~explain selected node", label: "Explain selected node" },
+];
+
+function commandPrefixFor(value: string): CommandPrefix {
+  const first = value.trimStart().slice(0, 1) as CommandPrefix;
+  return first === "#" || first === "?" || first === "~" || first === "/" ? first : "/";
+}
+
+function commandBody(value: string) {
+  const trimmed = value.trimStart();
+  return ["/", "#", "?", "~"].includes(trimmed[0] || "") ? trimmed.slice(1) : trimmed;
+}
 
 export const FloatingDock = ({
   items,
@@ -122,57 +160,71 @@ const FloatingDockDesktop = ({
   onCommandSubmit?: (command: string) => void;
 }) => {
   const mouseX = useMotionValue(Infinity);
-  const [lane, setLane] = useState<DockLane>("launcher");
-  const [mode, setMode] = useState<DockMode>("icons");
+  const [page, setPage] = useState<DockPage>("launcher");
   const [command, setCommand] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const hasContextLane = Boolean(context?.items?.length);
-  const contextItems = context?.items ?? [];
-  const visibleItems = lane === "context" && hasContextLane ? contextItems : launcherItems;
+  const peopleItems = context?.items ?? [];
+  const hasPeoplePage = Boolean(peopleItems.length);
+  const commandPrefix = commandPrefixFor(command);
+  const commandMode = COMMAND_PREFIXES.find((item) => item.prefix === commandPrefix) ?? COMMAND_PREFIXES[0];
+  const commandQuery = commandBody(command).toLowerCase();
+  const suggestions = useMemo(() => {
+    return SUGGESTIONS
+      .filter((item) => item.prefix === commandPrefix)
+      .filter((item) => !commandQuery || item.label.toLowerCase().includes(commandQuery) || item.value.toLowerCase().includes(commandQuery))
+      .slice(0, 4);
+  }, [commandPrefix, commandQuery]);
 
   useEffect(() => {
-    if (!hasContextLane && lane === "context") setLane("launcher");
-  }, [hasContextLane, lane]);
+    if (!hasPeoplePage && page === "people") setPage("launcher");
+  }, [hasPeoplePage, page]);
 
   useEffect(() => {
-    if (mode !== "command") return;
+    if (page !== "command") return;
     inputRef.current?.focus();
-  }, [mode]);
+  }, [page]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!event.ctrlKey || event.metaKey || event.altKey) return;
-      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
       event.preventDefault();
       event.stopPropagation();
 
-      if (event.key === "ArrowDown") {
-        setMode("command");
+      if (event.key === "ArrowLeft") {
+        setPage((current) => {
+          if (current === "command") return "launcher";
+          if (current === "launcher" && hasPeoplePage) return "people";
+          return current;
+        });
         return;
       }
 
-      if (event.key === "ArrowUp") {
-        setMode("icons");
-        return;
-      }
-
-      if (!hasContextLane) return;
-      if (event.key === "ArrowRight") setLane("context");
-      if (event.key === "ArrowLeft") setLane("launcher");
+      setPage((current) => {
+        if (current === "people") return "launcher";
+        if (current === "launcher") return "command";
+        return current;
+      });
     };
 
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [hasContextLane]);
+  }, [hasPeoplePage]);
 
   function submitCommand(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = command.trim();
     if (!value) return;
-    onCommandSubmit?.(value);
+    const normalized = ["/", "#", "?", "~"].includes(value[0] || "") ? value : `/${value}`;
+    onCommandSubmit?.(normalized);
     setCommand("");
-    setMode("icons");
+    setPage("launcher");
+  }
+
+  function applySuggestion(value: string) {
+    setCommand(value);
+    inputRef.current?.focus();
   }
 
   return (
@@ -184,24 +236,39 @@ const FloatingDockDesktop = ({
         "mx-auto hidden h-[58px] items-end rounded-2xl border border-border bg-background/90 px-4 pb-2 md:flex",
         className,
       )}
-      data-dock-lane={lane}
-      data-dock-mode={mode}
+      data-dock-page={page}
     >
       <div className="relative flex h-full min-w-0 items-end">
         <AnimatePresence mode="wait" initial={false}>
-          {mode === "command" ? (
+          {page === "command" ? (
             <motion.form
               key="command-entry"
-              initial={{ opacity: 0, y: 28 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 28 }}
+              initial={{ opacity: 0, x: 42 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 42 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               onSubmit={submitCommand}
-              className="flex h-10 w-[min(520px,calc(100vw-8rem))] items-center gap-2 rounded-full border border-border bg-card px-4"
+              className="relative flex h-10 w-[min(520px,calc(100vw-8rem))] items-center gap-2 rounded-full border border-border bg-card px-2"
             >
-              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                Command
-              </span>
+              <div className="flex shrink-0 items-center gap-1">
+                {COMMAND_PREFIXES.map((item) => (
+                  <button
+                    key={item.prefix}
+                    type="button"
+                    onClick={() => setCommand(`${item.prefix}${commandBody(command)}`)}
+                    className={cn(
+                      "flex h-7 w-7 items-center justify-center rounded-full font-mono text-xs transition-colors",
+                      commandPrefix === item.prefix
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-muted-foreground hover:text-foreground",
+                    )}
+                    aria-label={item.title}
+                    title={item.title}
+                  >
+                    {item.prefix}
+                  </button>
+                ))}
+              </div>
               <input
                 ref={inputRef}
                 value={command}
@@ -209,27 +276,43 @@ const FloatingDockDesktop = ({
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.preventDefault();
-                    setMode("icons");
+                    setPage("launcher");
                     setCommand("");
                   }
                 }}
-                placeholder="Type command..."
+                placeholder={`${commandMode.prefix} ${commandMode.label.toLowerCase()}...`}
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/45"
               />
+              {suggestions.length > 0 && (
+                <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 overflow-hidden rounded-2xl border border-border bg-card/95 p-1 shadow-2xl backdrop-blur-md">
+                  {suggestions.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => applySuggestion(item.value)}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-accent"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary font-mono text-[10px] text-muted-foreground">{item.prefix}</span>
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      <span className="truncate font-mono text-[10px] text-muted-foreground">{item.value}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </motion.form>
           ) : (
             <motion.div
-              key={lane}
-              initial={{ opacity: 0, x: lane === "context" ? 42 : -42 }}
+              key={page}
+              initial={{ opacity: 0, x: page === "people" ? -42 : 42 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: lane === "context" ? -42 : 42, y: 0 }}
+              exit={{ opacity: 0, x: page === "people" ? -42 : 42 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               className="flex items-end gap-4"
             >
-              {visibleItems.map((item) => (
+              {(page === "people" ? peopleItems : launcherItems).map((item) => (
                 <IconContainer
                   mouseX={mouseX}
-                  key={`${lane}-${item.kind || "app"}-${item.title}`}
+                  key={`${page}-${item.kind || "app"}-${item.title}`}
                   {...item}
                 />
               ))}
@@ -238,9 +321,9 @@ const FloatingDockDesktop = ({
         </AnimatePresence>
 
         <div className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] flex -translate-x-1/2 items-center gap-1.5">
-          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", lane === "launcher" && mode === "icons" ? "bg-primary" : "bg-muted-foreground/35")} />
-          {hasContextLane && <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", lane === "context" && mode === "icons" ? "bg-primary" : "bg-muted-foreground/35")} />}
-          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", mode === "command" ? "bg-primary" : "bg-muted-foreground/35")} />
+          {hasPeoplePage && <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "people" ? "bg-primary" : "bg-muted-foreground/35")} />}
+          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "launcher" ? "bg-primary" : "bg-muted-foreground/35")} />
+          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "command" ? "bg-primary" : "bg-muted-foreground/35")} />
         </div>
       </div>
     </motion.div>
