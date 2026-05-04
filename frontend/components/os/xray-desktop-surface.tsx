@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { Activity, Cpu, HardDrive, RadioTower, WalletCards } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { XrayViewport } from "@/features/xray/XrayViewport"
@@ -14,7 +15,7 @@ type XrayDesktopSurfaceProps = {
   isConnected: boolean
 }
 
-function MiniTile({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
+function MiniTile({ icon, label, value, sub }: { icon: ReactNode; label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-2xl border border-[var(--window-border)] bg-background/70 p-3 shadow-2xl backdrop-blur-md">
       <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -71,7 +72,7 @@ export function XrayDesktopSurface({
         />
       </div>
 
-      <div className="absolute inset-4 z-0 rounded-[28px] border border-white/5 bg-black/30 shadow-[0_0_120px_rgba(0,0,0,0.65)]">
+      <div className="absolute inset-y-4 left-[260px] right-[260px] z-0 rounded-[28px] border border-white/5 bg-black/30 shadow-[0_0_120px_rgba(0,0,0,0.65)] max-xl:left-4 max-xl:right-4">
         <div className="absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-background/65 px-3 py-1.5 backdrop-blur-md">
           <Badge variant="secondary" className="bg-primary/10 text-primary">
             <Activity className="h-3 w-3" /> XRAY
