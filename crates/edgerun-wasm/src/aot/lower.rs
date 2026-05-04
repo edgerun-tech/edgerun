@@ -255,9 +255,7 @@ fn mem_op(memarg: MemArg) -> Result<MemOp> {
     if memarg.memory != 0 {
         bail!("baseline AOT only supports memory index 0");
     }
-    Ok(MemOp {
-        offset: memarg.offset,
-    })
+    Ok(MemOp { offset: memarg.offset })
 }
 
 fn lower_operator(
@@ -343,6 +341,16 @@ fn lower_operator(
             stack.push(ValueType::I64);
             IrOp::Load(LoadKind::I64, mem_op(memarg)?)
         }
+        Operator::I32Load8U { memarg } => {
+            pop_ty(stack, ValueType::I32, "i32.load8_u address")?;
+            stack.push(ValueType::I32);
+            IrOp::Load(LoadKind::I32Load8U, mem_op(memarg)?)
+        }
+        Operator::I32Load8S { memarg } => {
+            pop_ty(stack, ValueType::I32, "i32.load8_s address")?;
+            stack.push(ValueType::I32);
+            IrOp::Load(LoadKind::I32Load8S, mem_op(memarg)?)
+        }
         Operator::I32Store { memarg } => {
             pop_ty(stack, ValueType::I32, "i32.store value")?;
             pop_ty(stack, ValueType::I32, "i32.store address")?;
@@ -352,6 +360,11 @@ fn lower_operator(
             pop_ty(stack, ValueType::I64, "i64.store value")?;
             pop_ty(stack, ValueType::I32, "i64.store address")?;
             IrOp::Store(StoreKind::I64, mem_op(memarg)?)
+        }
+        Operator::I32Store8 { memarg } => {
+            pop_ty(stack, ValueType::I32, "i32.store8 value")?;
+            pop_ty(stack, ValueType::I32, "i32.store8 address")?;
+            IrOp::Store(StoreKind::I32Store8, mem_op(memarg)?)
         }
         Operator::MemoryCopy { dst_mem, src_mem } => {
             if dst_mem != 0 || src_mem != 0 {
