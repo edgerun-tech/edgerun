@@ -68,7 +68,9 @@ impl FuncSig {
 pub enum IrOp {
     Nop,
     Block,
+    Loop,
     BlockEnd,
+    Br(u32),
     BrIf(u32),
     I32Const(i32),
     I64Const(i64),
@@ -114,7 +116,9 @@ impl IrOp {
         match self {
             Self::Nop => "nop".to_string(),
             Self::Block => "block".to_string(),
+            Self::Loop => "loop".to_string(),
             Self::BlockEnd => "block.end".to_string(),
+            Self::Br(depth) => format!("br {depth}"),
             Self::BrIf(depth) => format!("br_if {depth}"),
             Self::I32Const(v) => format!("i32.const {v}"),
             Self::I64Const(v) => format!("i64.const {v}"),
@@ -225,7 +229,12 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
 
     for op in &ir.ops {
         match *op {
-            IrOp::Nop | IrOp::Block | IrOp::BlockEnd => {}
+            IrOp::Nop | IrOp::Block | IrOp::Loop | IrOp::BlockEnd => {}
+            IrOp::Br(depth) => {
+                if depth != 0 {
+                    bail!("{} only supports br depth 0 for now", ir.name());
+                }
+            }
             IrOp::BrIf(depth) => {
                 if depth != 0 {
                     bail!("{} only supports br_if depth 0 for now", ir.name());
