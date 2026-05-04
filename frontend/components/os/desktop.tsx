@@ -25,6 +25,7 @@ import {
   pendingGateStore,
   stageModeStore,
   widgetVisibleStore,
+  desktopTelemetryVisibleStore,
   openWindow,
   closeWindow,
   focusWindow,
@@ -41,6 +42,7 @@ export function Desktop() {
   const pendingGate = useStore(pendingGateStore)
   const stageMode = useStore(stageModeStore)
   const widgetVisible = useStore(widgetVisibleStore)
+  const desktopTelemetryVisible = useStore(desktopTelemetryVisibleStore)
   const installedAppIds = useStore(installedAppIdsStore)
 
   const showDesktop = auth.authState === "authenticated" || auth.authState === "guest"
@@ -146,13 +148,15 @@ export function Desktop() {
           />
 
           <div className="absolute inset-0 top-10 z-10">
-            <DesktopTelemetry
-              nodeCount={systemStats.nodeCount}
-              activeSessions={systemStats.activeSessions}
-              ramUsage={systemStats.ramUsage}
-              isConnected={systemStats.isConnected}
-              runningApps={windows.length}
-            />
+            {desktopTelemetryVisible && (
+              <DesktopTelemetry
+                nodeCount={systemStats.nodeCount}
+                activeSessions={systemStats.activeSessions}
+                ramUsage={systemStats.ramUsage}
+                isConnected={systemStats.isConnected}
+                runningApps={windows.length}
+              />
+            )}
 
             <StageManager
               windows={windows}
