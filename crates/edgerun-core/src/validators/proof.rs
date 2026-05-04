@@ -126,7 +126,7 @@ fn validate_source_query_id(
 }
 
 fn validate_timestamp_shape(
-    timestamp: &prost_types::Timestamp,
+    timestamp: &crate::protocol::Timestamp,
     reason: &'static str,
 ) -> Option<ValidationResult> {
     if !(0..1_000_000_000).contains(&timestamp.nanos) {
@@ -1304,7 +1304,7 @@ mod tests {
                 identity_kind: None,
                 key_hint: None,
             }),
-            aggregated_at: Some(prost_types::Timestamp {
+            aggregated_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -1370,7 +1370,7 @@ mod tests {
     #[test]
     fn federated_aggregate_descriptor_invalid_aggregated_at_rejected() {
         let mut descriptor = valid_federated_aggregate_descriptor();
-        descriptor.aggregated_at = Some(prost_types::Timestamp {
+        descriptor.aggregated_at = Some(crate::protocol::Timestamp {
             seconds: 1_700_000_000,
             nanos: 1_000_000_000,
         });

@@ -40,13 +40,14 @@ pub mod command;
 pub mod conformance;
 pub mod crypto;
 pub mod fixed_point;
-#[path = "protocol_wire.rs"]
+#[path = "protocol_native/mod.rs"]
 pub mod protocol;
 pub mod result;
 pub mod util;
 pub mod validators;
 pub mod value;
 pub mod varint;
+#[cfg(feature = "proto-compat")]
 pub mod wire_boundary;
 pub mod wire_command;
 pub mod wire_stream;

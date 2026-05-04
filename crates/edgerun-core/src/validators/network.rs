@@ -554,7 +554,7 @@ fn validate_optional_object_ref(
 }
 
 fn validate_timestamp_shape(
-    timestamp: &prost_types::Timestamp,
+    timestamp: &crate::protocol::Timestamp,
     reason: &'static str,
 ) -> Option<ValidationResult> {
     if !(0..1_000_000_000).contains(&timestamp.nanos) {
@@ -824,11 +824,11 @@ pub fn validate_route_advertisement(adv: &crate::protocol::RouteAdvertisement) -
 #[cfg(test)]
 mod proto_tests {
     use super::*;
+    use crate::protocol::Timestamp;
     use crate::protocol::{
         Directness, IdentityRef, NodeRef, ObjectKind, ObjectRef, Signature, TransportClass,
     };
     use crate::protocol::{ReachabilityHint, RouteAdvertisement};
-    use prost_types::Timestamp;
 
     fn make_test_keypair() -> (edgerun_crypto::p256::ecdsa::SigningKey, Vec<u8>) {
         let sk = edgerun_crypto::p256::ecdsa::SigningKey::random(&mut edgerun_crypto::OsRng);

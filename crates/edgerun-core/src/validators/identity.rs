@@ -254,7 +254,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1, // ECDSA_P256
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -278,7 +278,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -300,7 +300,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -326,7 +326,7 @@ mod tests {
             identity_kind: 0, // UNSPECIFIED
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -348,7 +348,7 @@ mod tests {
             identity_kind: 999_999,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -370,7 +370,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 0, // UNSPECIFIED
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -391,7 +391,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: vec![0u8; 32], // wrong length
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -436,7 +436,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 1_000_000_000,
             }),
@@ -459,7 +459,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -481,7 +481,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -510,7 +510,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -535,7 +535,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk.clone(),
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -565,7 +565,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk2, // different key
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -588,7 +588,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -611,7 +611,7 @@ mod tests {
             identity_kind: IdentityKind::Other as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -634,7 +634,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -664,7 +664,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -694,7 +694,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -723,7 +723,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -752,7 +752,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),
@@ -781,7 +781,7 @@ mod tests {
             identity_kind: IdentityKind::Node as i32,
             key_algorithm: 1,
             public_key: pk,
-            created_at: Some(prost_types::Timestamp {
+            created_at: Some(crate::protocol::Timestamp {
                 seconds: 1_700_000_000,
                 nanos: 0,
             }),

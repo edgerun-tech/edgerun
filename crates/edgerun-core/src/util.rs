@@ -1,6 +1,6 @@
 use crate::prelude::v1::*;
 
-use prost_types::Timestamp;
+use crate::protocol::Timestamp;
 
 // ---------------------------------------------------------------------------
 // RFC3339 timestamp handling — delegates to edgerun-encoding
@@ -10,24 +10,24 @@ pub use edgerun_encoding::rfc3339::{
     canonical_time_string, format_rfc3339_utc, parse_rfc3339, DateTimeUtc, ParseRfc3339Error,
 };
 
-/// Parse an RFC3339 timestamp into `(seconds, nanos)` for `prost_types::Timestamp`.
+/// Parse an RFC3339 timestamp into `(seconds, nanos)` for `crate::protocol::Timestamp`.
 pub fn timestamp_parts(value: &str) -> Result<(i64, i32), ParseRfc3339Error> {
     let t = parse_rfc3339(value)?;
     Ok((t.unix_secs, t.nanos as i32))
 }
 
-/// Parse an RFC3339 timestamp into a `prost_types::Timestamp`.
+/// Parse an RFC3339 timestamp into a `crate::protocol::Timestamp`.
 pub fn parse_timestamp_value(value: &str) -> Result<Timestamp, ParseRfc3339Error> {
     let (seconds, nanos) = timestamp_parts(value)?;
     Ok(Timestamp { seconds, nanos })
 }
 
-/// Convert `SystemTime` to a `prost_types::Timestamp`.
-pub fn system_time_to_prost(time: std::time::SystemTime) -> prost_types::Timestamp {
+/// Convert `SystemTime` to a `crate::protocol::Timestamp`.
+pub fn system_time_to_prost(time: std::time::SystemTime) -> crate::protocol::Timestamp {
     let duration = time
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
-    prost_types::Timestamp {
+    crate::protocol::Timestamp {
         seconds: duration.as_secs() as i64,
         nanos: duration.subsec_nanos() as i32,
     }
@@ -82,7 +82,7 @@ pub fn now_unix_micros_u64() -> u64 {
 }
 
 /// Current Unix time as a protobuf timestamp.
-pub fn now_prost_timestamp() -> prost_types::Timestamp {
+pub fn now_prost_timestamp() -> crate::protocol::Timestamp {
     #[cfg(not(target_os = "none"))]
     {
         system_time_to_prost(std::time::SystemTime::now())
@@ -90,7 +90,7 @@ pub fn now_prost_timestamp() -> prost_types::Timestamp {
 
     #[cfg(target_os = "none")]
     {
-        prost_types::Timestamp {
+        crate::protocol::Timestamp {
             seconds: 0,
             nanos: 0,
         }
