@@ -41,6 +41,7 @@ pub mod conformance;
 pub mod crypto;
 pub mod encrypted_envelope;
 pub mod fixed_point;
+#[path = "protocol_wire.rs"]
 pub mod protocol;
 pub mod result;
 pub mod util;
