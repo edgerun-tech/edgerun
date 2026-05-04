@@ -27,6 +27,8 @@ import {
   addLog,
 } from "@/stores/desktop-store"
 
+const REMOVED_PINNED_APP_IDS = new Set(["network-monitor", "resource-monitor"])
+
 function ChatHead({ label, tone = "primary" }: { label: string; tone?: "primary" | "green" | "blue" | "amber" }) {
   const tones = {
     primary: "from-primary/80 to-primary/35",
@@ -55,7 +57,7 @@ export function Desktop() {
 
   const showDesktop = auth.authState === "authenticated" || auth.authState === "guest"
   const pinnedSurfaces = useMemo(
-    () => appSurfaces.filter((surface) => surface.kind === "pinned-widget"),
+    () => appSurfaces.filter((surface) => surface.kind === "pinned-widget" && !REMOVED_PINNED_APP_IDS.has(surface.appId)),
     [appSurfaces],
   )
 
@@ -73,6 +75,11 @@ export function Desktop() {
 
   useEffect(() => {
     setDockReady(true)
+  }, [])
+
+  useEffect(() => {
+    const stalePinnedSurfaces = appSurfacesStore.get().filter((surface) => REMOVED_PINNED_APP_IDS.has(surface.appId))
+    for (const surface of stalePinnedSurfaces) closeAppSurface(surface.id)
   }, [])
 
   useEffect(() => {
