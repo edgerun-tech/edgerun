@@ -17,24 +17,24 @@ import { installedAppIdsStore, CORE_APP_IDS } from "@/stores/installed-apps-stor
 import { grantLocalCapabilities } from "@/stores/local-capability-grants-store"
 import { Users } from "lucide-react"
 import {
-  windowsStore,
-  windowOrderStore,
-  focusedWindowStore,
+  appSurfacesStore,
+  appSurfaceOrderStore,
+  focusedAppSurfaceStore,
   systemStatsStore,
   pendingGateStore,
   widgetVisibleStore,
-  openWindow,
-  closeWindow,
-  focusWindow,
-  type OpenWindowDef,
+  openAppSurface,
+  closeAppSurface,
+  focusAppSurface,
+  type AppSurfaceDef,
 } from "@/stores/desktop-store"
 
 export function Desktop() {
   const auth = useAuth()
 
-  const windows = useStore(windowsStore)
-  const windowOrder = useStore(windowOrderStore)
-  const focusedWindow = useStore(focusedWindowStore)
+  const appSurfaces = useStore(appSurfacesStore)
+  const appSurfaceOrder = useStore(appSurfaceOrderStore)
+  const focusedAppSurface = useStore(focusedAppSurfaceStore)
   const systemStats = useStore(systemStatsStore)
   const pendingGate = useStore(pendingGateStore)
   const widgetVisible = useStore(widgetVisibleStore)
@@ -55,8 +55,8 @@ export function Desktop() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [handleKeyDown])
 
-  const handleCloseWindow = useCallback((id: string) => {
-    closeWindow(id)
+  const handleCloseSurface = useCallback((id: string) => {
+    closeAppSurface(id)
   }, [])
 
   const dockItems = useMemo(() => {
@@ -90,8 +90,8 @@ export function Desktop() {
   }, [])
 
   const openIdentitySetup = useCallback(async () => {
-    const authPromptWin: OpenWindowDef = {
-      id: "window-auth-prompt",
+    const authPromptSurface: AppSurfaceDef = {
+      id: "surface-auth-prompt",
       appId: "auth-prompt",
       title: "Set up Identity",
       icon: <Users className="h-4 w-4" />,
@@ -109,10 +109,11 @@ export function Desktop() {
           onClearError={auth.clearError}
         />
       ),
-      defaultPosition: { x: 250, y: 120 },
+      kind: "overlay",
+      dismissOnOutsideClick: true,
       defaultSize: { width: 420, height: 420 },
     }
-    openWindow(authPromptWin)
+    openAppSurface(authPromptSurface)
   }, [auth])
 
   if (!showDesktop) {
@@ -153,7 +154,7 @@ export function Desktop() {
           activeSessions={systemStats.activeSessions}
           ramUsage={systemStats.ramUsage}
           isConnected={systemStats.isConnected}
-          runningApps={windows.length}
+          runningApps={appSurfaces.length}
         />
 
         <WidgetPanel
@@ -180,11 +181,11 @@ export function Desktop() {
         ) : null}
 
         <AppOverlayHost
-          windows={windows}
-          windowOrder={windowOrder}
-          focusedWindowId={focusedWindow}
-          onFocus={focusWindow}
-          onClose={handleCloseWindow}
+          surfaces={appSurfaces}
+          surfaceOrder={appSurfaceOrder}
+          focusedSurfaceId={focusedAppSurface}
+          onFocus={focusAppSurface}
+          onClose={handleCloseSurface}
         />
 
         <WorkspaceStatusPanel />
