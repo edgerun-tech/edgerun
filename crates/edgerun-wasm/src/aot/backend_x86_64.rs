@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 
-use super::ir::{FunctionIr, IrOp};
+use super::ir::{FunctionIr, IrOp, ValueType};
 
 pub struct X86_64Backend;
 
@@ -15,14 +15,17 @@ impl X86_64Backend {
             match *op {
                 IrOp::I32Const(v) => emit_push_i32(&mut code, v),
                 IrOp::I64Const(v) => emit_push_i64(&mut code, v),
-                IrOp::LocalGet(i) => frame.emit_local_get(&mut code, i)?,
-                IrOp::LocalSet(i) => frame.emit_local_set(&mut code, i)?,
-                IrOp::LocalTee(i) => frame.emit_local_tee(&mut code, i)?,
-                IrOp::I32Add | IrOp::I64Add => emit_add(&mut code),
-                IrOp::I32Sub | IrOp::I64Sub => emit_sub(&mut code),
-                IrOp::I32Mul | IrOp::I64Mul => emit_mul(&mut code),
+                IrOp::LocalGet(i) => frame.emit_local_get(&mut code, i, local_type(ir, i)?)?,
+                IrOp::LocalSet(i) => frame.emit_local_set(&mut code, i, local_type(ir, i)?)?,
+                IrOp::LocalTee(i) => frame.emit_local_tee(&mut code, i, local_type(ir, i)?)?,
+                IrOp::I32Add => emit_i32_add(&mut code),
+                IrOp::I32Sub => emit_i32_sub(&mut code),
+                IrOp::I32Mul => emit_i32_mul(&mut code),
+                IrOp::I64Add => emit_i64_add(&mut code),
+                IrOp::I64Sub => emit_i64_sub(&mut code),
+                IrOp::I64Mul => emit_i64_mul(&mut code),
                 IrOp::Return | IrOp::End => {
-                    emit_return(&mut code, ir.sig.results.len());
+                    emit_return(&mut code, ir.sig.results.first().copied());
                     terminated = true;
                     break;
                 }
@@ -30,7 +33,7 @@ impl X86_64Backend {
         }
 
         if !terminated {
-            emit_return(&mut code, ir.sig.results.len());
+            emit_return(&mut code, ir.sig.results.first().copied());
         }
 
         Ok(code)
@@ -61,7 +64,7 @@ impl Frame {
         }
 
         for i in 0..ir.sig.params.len() as u32 {
-            self.emit_store_arg(code, i)?;
+            self.emit_store_arg(code, i, local_type(ir, i)?)?;
         }
         for i in ir.sig.params.len() as u32..self.slots {
             self.emit_zero_slot(code, i)?;
@@ -70,8 +73,11 @@ impl Frame {
         Ok(())
     }
 
-    fn emit_store_arg(&self, code: &mut Vec<u8>, index: u32) -> Result<()> {
+    fn emit_store_arg(&self, code: &mut Vec<u8>, index: u32, ty: ValueType) -> Result<()> {
         self.emit_arg_to_rax(code, index)?;
+        if ty == ValueType::I32 {
+            emit_zero_extend_eax(code);
+        }
         self.emit_store_rax_to_slot(code, index)
     }
 
@@ -96,19 +102,28 @@ impl Frame {
         Ok(())
     }
 
-    fn emit_local_get(&self, code: &mut Vec<u8>, index: u32) -> Result<()> {
+    fn emit_local_get(&self, code: &mut Vec<u8>, index: u32, ty: ValueType) -> Result<()> {
         self.emit_load_slot_to_rax(code, index)?;
+        if ty == ValueType::I32 {
+            emit_zero_extend_eax(code);
+        }
         code.push(0x50); // push rax
         Ok(())
     }
 
-    fn emit_local_set(&self, code: &mut Vec<u8>, index: u32) -> Result<()> {
+    fn emit_local_set(&self, code: &mut Vec<u8>, index: u32, ty: ValueType) -> Result<()> {
         code.push(0x58); // pop rax
+        if ty == ValueType::I32 {
+            emit_zero_extend_eax(code);
+        }
         self.emit_store_rax_to_slot(code, index)
     }
 
-    fn emit_local_tee(&self, code: &mut Vec<u8>, index: u32) -> Result<()> {
+    fn emit_local_tee(&self, code: &mut Vec<u8>, index: u32, ty: ValueType) -> Result<()> {
         code.push(0x58); // pop rax
+        if ty == ValueType::I32 {
+            emit_zero_extend_eax(code);
+        }
         self.emit_store_rax_to_slot(code, index)?;
         code.push(0x50); // push rax
         Ok(())
@@ -136,9 +151,17 @@ impl Frame {
     }
 }
 
+fn local_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
+    ir.locals
+        .get(index as usize)
+        .copied()
+        .ok_or_else(|| anyhow::anyhow!("local index {} outside function frame", index))
+}
+
 fn emit_push_i32(code: &mut Vec<u8>, value: i32) {
-    code.push(0x68); // push imm32, sign-extended by x86_64
+    code.push(0xB8); // mov eax, imm32; zero-extends into rax
     code.extend_from_slice(&value.to_le_bytes());
+    code.push(0x50); // push rax
 }
 
 fn emit_push_i64(code: &mut Vec<u8>, value: i64) {
@@ -147,30 +170,58 @@ fn emit_push_i64(code: &mut Vec<u8>, value: i64) {
     code.push(0x50); // push rax
 }
 
-fn emit_add(code: &mut Vec<u8>) {
+fn emit_i32_add(code: &mut Vec<u8>) {
+    code.push(0x58); // pop rax = rhs
+    code.push(0x59); // pop rcx = lhs
+    code.extend_from_slice(&[0x01, 0xC8]); // add eax, ecx; zero-extends into rax
+    code.push(0x50); // push rax
+}
+
+fn emit_i32_sub(code: &mut Vec<u8>) {
+    code.push(0x58); // pop rax = rhs
+    code.push(0x59); // pop rcx = lhs
+    code.extend_from_slice(&[0x29, 0xC1]); // sub ecx, eax; zero-extends rcx
+    code.push(0x51); // push rcx
+}
+
+fn emit_i32_mul(code: &mut Vec<u8>) {
+    code.push(0x58); // pop rax = rhs
+    code.push(0x59); // pop rcx = lhs
+    code.extend_from_slice(&[0x0F, 0xAF, 0xC1]); // imul eax, ecx; low 32-bit result, zero-extends into rax
+    code.push(0x50); // push rax
+}
+
+fn emit_i64_add(code: &mut Vec<u8>) {
     code.push(0x58); // pop rax = rhs
     code.push(0x59); // pop rcx = lhs
     code.extend_from_slice(&[0x48, 0x01, 0xC8]); // add rax, rcx
     code.push(0x50); // push rax
 }
 
-fn emit_sub(code: &mut Vec<u8>) {
+fn emit_i64_sub(code: &mut Vec<u8>) {
     code.push(0x58); // pop rax = rhs
     code.push(0x59); // pop rcx = lhs
     code.extend_from_slice(&[0x48, 0x29, 0xC1]); // sub rcx, rax
     code.push(0x51); // push rcx
 }
 
-fn emit_mul(code: &mut Vec<u8>) {
+fn emit_i64_mul(code: &mut Vec<u8>) {
     code.push(0x58); // pop rax = rhs
     code.push(0x59); // pop rcx = lhs
     code.extend_from_slice(&[0x48, 0x0F, 0xAF, 0xC1]); // imul rax, rcx
     code.push(0x50); // push rax
 }
 
-fn emit_return(code: &mut Vec<u8>, result_count: usize) {
-    if result_count == 1 {
+fn emit_zero_extend_eax(code: &mut Vec<u8>) {
+    code.extend_from_slice(&[0x89, 0xC0]); // mov eax, eax
+}
+
+fn emit_return(code: &mut Vec<u8>, result: Option<ValueType>) {
+    if let Some(ty) = result {
         code.push(0x58); // pop rax
+        if ty == ValueType::I32 {
+            emit_zero_extend_eax(code);
+        }
     }
     code.extend_from_slice(&[0x48, 0x89, 0xEC]); // mov rsp, rbp
     code.push(0x5D); // pop rbp
@@ -198,7 +249,7 @@ mod tests {
         verify_ir(&ir).unwrap();
         let code = X86_64Backend::compile(&ir).unwrap();
         assert!(code.starts_with(&[0x55, 0x48, 0x89, 0xE5]));
-        assert!(code.ends_with(&[0x48, 0x89, 0xEC, 0x5D, 0xC3]));
+        assert!(code.ends_with(&[0x89, 0xC0, 0x48, 0x89, 0xEC, 0x5D, 0xC3]));
     }
 
     #[test]
