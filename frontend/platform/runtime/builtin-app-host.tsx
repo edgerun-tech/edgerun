@@ -26,6 +26,10 @@ const PeopleApp = dynamic(
   () => import("@/components/os/people-app").then((mod) => mod.PeopleApp),
   { ssr: false, loading: LoadingApp },
 )
+const TrustManagerApp = dynamic(
+  () => import("@/components/os/trust-manager-app").then((mod) => mod.TrustManagerApp),
+  { ssr: false, loading: LoadingApp },
+)
 const WalletApp = dynamic(
   () => import("@/components/os/wallet-app").then((mod) => mod.WalletApp),
   { ssr: false, loading: LoadingApp },
@@ -79,6 +83,8 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
     case "calling":
     case "chat":
       return <PeopleApp />
+    case "trust-manager":
+      return <TrustManagerApp />
     case "wallet":
       return <WalletApp />
     case "calculator":
