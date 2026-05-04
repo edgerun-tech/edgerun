@@ -19,6 +19,21 @@ interface RenderInput {
   runtimeMode: boolean
 }
 
+export type ShaderUpdateResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export type RendererInfo = {
+  vendor: string
+  renderer: string
+  version: string
+  shadingLanguageVersion: string
+  maxTextureSize: number
+  maxVertexAttribs: number
+  maxVaryingVectors: number
+  maxFragmentUniformVectors: number
+}
+
 export class WebGLRenderer {
   private gl: WebGL2RenderingContext
   private nodeProgram: WebGLProgram
@@ -76,29 +91,69 @@ export class WebGLRenderer {
     this.glowSizes = new Float32Array(MAX_BUFFERED_NODES)
     this.glowSels = new Float32Array(MAX_BUFFERED_NODES)
 
-    // Cache GL locations once
-    const nPos = gl.getAttribLocation(this.nodeProgram, "a_position")
-    const nCol = gl.getAttribLocation(this.nodeProgram, "a_color")
-    const nSize = gl.getAttribLocation(this.nodeProgram, "a_size")
-    const nSel = gl.getAttribLocation(this.nodeProgram, "a_selected")
-    this.nodeLocations = {
-      pos: nPos, col: nCol, size: nSize, sel: nSel,
+    this.nodeLocations = this.cacheNodeLocations()
+    this.edgeLocations = this.cacheEdgeLocations()
+  }
+
+  private cacheNodeLocations() {
+    const gl = this.gl
+    return {
+      pos: gl.getAttribLocation(this.nodeProgram, "a_position"),
+      col: gl.getAttribLocation(this.nodeProgram, "a_color"),
+      size: gl.getAttribLocation(this.nodeProgram, "a_size"),
+      sel: gl.getAttribLocation(this.nodeProgram, "a_selected"),
       uRes: gl.getUniformLocation(this.nodeProgram, "u_resolution"),
       uZoom: gl.getUniformLocation(this.nodeProgram, "u_zoom"),
       uPan: gl.getUniformLocation(this.nodeProgram, "u_pan"),
       uYaw: gl.getUniformLocation(this.nodeProgram, "u_yaw"),
       uPitch: gl.getUniformLocation(this.nodeProgram, "u_pitch"),
     }
+  }
 
-    const ePos = gl.getAttribLocation(this.edgeProgram, "a_position")
-    const eCol = gl.getAttribLocation(this.edgeProgram, "a_color")
-    this.edgeLocations = {
-      pos: ePos, col: eCol,
+  private cacheEdgeLocations() {
+    const gl = this.gl
+    return {
+      pos: gl.getAttribLocation(this.edgeProgram, "a_position"),
+      col: gl.getAttribLocation(this.edgeProgram, "a_color"),
       uRes: gl.getUniformLocation(this.edgeProgram, "u_resolution"),
       uZoom: gl.getUniformLocation(this.edgeProgram, "u_zoom"),
       uPan: gl.getUniformLocation(this.edgeProgram, "u_pan"),
       uYaw: gl.getUniformLocation(this.edgeProgram, "u_yaw"),
       uPitch: gl.getUniformLocation(this.edgeProgram, "u_pitch"),
+    }
+  }
+
+  setNodeFragmentShader(fragmentSource: string): ShaderUpdateResult {
+    const source = fragmentSource.trim()
+    if (!source) return { ok: false, error: "Shader source is empty" }
+
+    try {
+      const nextProgram = buildNodeProgram(this.gl, source)
+      const previousProgram = this.nodeProgram
+      this.nodeProgram = nextProgram
+      this.nodeLocations = this.cacheNodeLocations()
+      this.gl.deleteProgram(previousProgram)
+      return { ok: true }
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  }
+
+  getRendererInfo(): RendererInfo {
+    const gl = this.gl
+    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info")
+    return {
+      vendor: String(debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR)),
+      renderer: String(debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)),
+      version: String(gl.getParameter(gl.VERSION)),
+      shadingLanguageVersion: String(gl.getParameter(gl.SHADING_LANGUAGE_VERSION)),
+      maxTextureSize: Number(gl.getParameter(gl.MAX_TEXTURE_SIZE)),
+      maxVertexAttribs: Number(gl.getParameter(gl.MAX_VERTEX_ATTRIBS)),
+      maxVaryingVectors: Number(gl.getParameter(gl.MAX_VARYING_VECTORS)),
+      maxFragmentUniformVectors: Number(gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)),
     }
   }
 
