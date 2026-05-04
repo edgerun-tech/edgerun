@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { Activity, Cpu, HardDrive, RadioTower, WalletCards } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { FinancesOverviewWidget } from "@/components/sections/finance-overviews"
+import { WorkspaceStatusPanel } from "@/components/workspace"
 import { XrayViewport } from "@/features/xray/XrayViewport"
 import { XrayInspector } from "@/features/xray/XrayInspector"
 import { XrayCommandSurface } from "@/features/xray/XrayCommandSurface"
@@ -131,12 +132,9 @@ export function XrayDesktopSurface({
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "right-bottom")}
           fallback={
-            <MiniTile
-              icon={<HardDrive className="h-3.5 w-3.5" />}
-              label="memory"
-              value={`${ramPercent}%`}
-              sub={`${ramUsage.used.toFixed(1)} / ${ramUsage.total} GB`}
-            />
+            <div className="min-h-0 overflow-hidden rounded-2xl border border-[var(--window-border)] bg-background/78 shadow-2xl backdrop-blur-md">
+              <WorkspaceStatusPanel surface="embedded" />
+            </div>
           }
         />
       </div>
@@ -164,13 +162,11 @@ export function XrayDesktopSurface({
       </div>
 
       <div className="absolute inset-y-4 left-[260px] right-[260px] z-0 rounded-[28px] border border-white/5 bg-black/30 shadow-[0_0_120px_rgba(0,0,0,0.65)] max-xl:left-4 max-xl:right-4 max-xl:top-14">
-        <div className="absolute left-1/2 top-4 z-20 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-background/65 px-3 py-1.5 backdrop-blur-md xl:flex">
-          <Badge variant="secondary" className="bg-primary/10 text-primary">
+        <div className="absolute left-1/2 top-4 z-20 hidden -translate-x-1/2 items-center gap-2 xl:flex">
+          <Badge variant="secondary" className="border-white/10 bg-background/70 text-primary backdrop-blur-md">
             <Activity className="h-3 w-3" /> XRAY
           </Badge>
-          <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-            graph workspace
-          </span>
+          <XrayCommandSurface surface="top" />
         </div>
 
         <div className="absolute inset-0 flex overflow-hidden rounded-[28px]">
@@ -180,10 +176,6 @@ export function XrayDesktopSurface({
           <div className="hidden shrink-0 lg:block">
             <XrayInspector />
           </div>
-        </div>
-
-        <div className="absolute inset-x-0 bottom-0 z-20 overflow-hidden rounded-b-[28px] border-t border-white/5">
-          <XrayCommandSurface />
         </div>
       </div>
     </div>
