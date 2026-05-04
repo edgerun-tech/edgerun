@@ -5,9 +5,9 @@
 
 use crate::command_dispatch_result::{build_command_result_payload, command_ref_from};
 use crate::command_result_codec::encode_command_result_payload;
-use edgerun_core::command::command_hash;
 use edgerun_core::protocol::Digest;
 use edgerun_core::util::{bytes_to_hex, now_prost_timestamp};
+use edgerun_core::wire_command::command_hash;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_proto::edgerun::v0::common::ObjectRef;
 use edgerun_proto::edgerun::v0::stream::{CommandDecision, CommandEnvelope, EventEnvelope, EventType};
