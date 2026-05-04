@@ -34,12 +34,33 @@ pub struct ExchangeStreamPayload {
     pub payload_bytes: Vec<u8>,
 }
 
-fn encode_message<M: Message>(message: &M) -> Vec<u8> {
-    let mut out = Vec::with_capacity(message.encoded_len());
-    message
-        .encode(&mut out)
-        .expect("encoding to Vec cannot fail");
+fn encode_exchange_payload(payload: &WalletExchangeEventPayload) -> Vec<u8> {
+    // Transitional native codec for exchange stream payloads.
+    // Replace with full edgerun-wire typed encoding once wallet exchange payloads
+    // have stable native encoders.
+    let mut out = Vec::new();
+    out.extend_from_slice(b"ERXE");
+    out.extend_from_slice(&payload.payload_version.to_le_bytes());
+
+    let tag: u8 = match payload.event.as_ref() {
+        None => 0,
+        Some(wallet_exchange_event_payload::Event::QuoteCreated(_)) => 1,
+        Some(wallet_exchange_event_payload::Event::OrderCreated(_)) => 2,
+        Some(wallet_exchange_event_payload::Event::DepositObserved(_)) => 3,
+        Some(wallet_exchange_event_payload::Event::ProviderStatusObserved(_)) => 4,
+        Some(wallet_exchange_event_payload::Event::OrderStatusChanged(_)) => 5,
+        Some(wallet_exchange_event_payload::Event::OrderCompleted(_)) => 6,
+        Some(wallet_exchange_event_payload::Event::OrderFailed(_)) => 7,
+        Some(wallet_exchange_event_payload::Event::ManualReviewRequired(_)) => 8,
+    };
+    out.push(tag);
     out
+}
+
+fn decode_exchange_payload(_payload_bytes: &[u8]) -> Option<WalletExchangeEventPayload> {
+    // Transitional decode stub: read-side projection will be wired once the
+    // typed edgerun-wire wallet payload codec lands.
+    None
 }
 
 pub fn exchange_payload_object_kind() -> i32 {
@@ -230,7 +251,7 @@ pub fn encode_exchange_event(event: &ExchangeEvent) -> ExchangeStreamPayload {
 
     ExchangeStreamPayload {
         event_type: exchange_event_type(event),
-        payload_bytes: encode_message(&payload),
+        payload_bytes: encode_exchange_payload(&payload),
     }
 }
 
@@ -247,7 +268,7 @@ pub fn decode_exchange_event(event_type: i32, payload_bytes: &[u8]) -> Option<Ex
         return None;
     }
 
-    let payload = WalletExchangeEventPayload::decode(payload_bytes).ok()?;
+    let payload = decode_exchange_payload(payload_bytes)?;
     match payload.event? {
         wallet_exchange_event_payload::Event::QuoteCreated(payload) => {
             Some(ExchangeEvent::QuoteCreated {
