@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react"
 import { useStore } from "@nanostores/react"
-import { xrayState, setViewTransform, selectNode } from "./graph/graph-store"
+import { xrayState, setViewTransform, selectNode, ensureCodeAnalyzerConnection } from "./graph/graph-store"
 import { WebGLRenderer } from "./render/webgl-renderer"
 import { runForceLayout } from "./layout/force-layout"
 import { runGlobeLayout } from "./layout/globe-layout"
@@ -37,6 +37,10 @@ export function XrayViewport() {
   }, [])
 
   useEffect(() => {
+    ensureCodeAnalyzerConnection()
+  }, [])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -64,7 +68,7 @@ export function XrayViewport() {
       renderer.destroy()
       window.removeEventListener("resize", onResize)
     }
-  }, [])
+  }, [renderFrame])
 
   useEffect(() => {
     const s = xrayState.get()
@@ -75,7 +79,7 @@ export function XrayViewport() {
     } else if (s.layout === "layers") {
       runLayerLayout(s.nodes)
     }
-  }, [state.layout])
+  }, [state.layout, state.nodes.size, state.edges.length])
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return
