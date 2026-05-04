@@ -7,7 +7,9 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use edgerun_proto::edgerun::v0::wallet::v0::{AssetRef, FeeBreakdown, Quote, QuoteRequest, TxRef};
+use edgerun_core::protocol::edgerun_wallet_v0::{
+    AssetRef, FeeBreakdown, Quote, QuoteRequest, TxRef,
+};
 use edgerun_wallet::{DecimalAmount, WalletError};
 
 /// Internal provider code (never in public API).

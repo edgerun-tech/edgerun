@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "EdgeRun Exchange — provider adapters and routing"
 
 [dependencies]
+edgerun-core = { version = "0.1", path = "../edgerun-core" }
 edgerun-wallet = { version = "0.1", path = "../edgerun-wallet" }
 edgerun-http = { version = "0.1", path = "../edgerun-http", features = ["client"] }
 edgerun-json = { version = "0.1", path = "../edgerun-json" }

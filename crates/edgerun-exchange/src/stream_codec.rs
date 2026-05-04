@@ -15,16 +15,14 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use prost::Message;
-
-use edgerun_core::protocol::{Digest, ObjectKind, ObjectRef};
-use edgerun_core::protocol::{EventEnvelope, EventType};
-use edgerun_proto::edgerun::v0::wallet::v0::{
+use edgerun_core::protocol::edgerun_wallet_v0::{
     wallet_exchange_event_payload, WalletDepositObservedPayload, WalletExchangeEventPayload,
     WalletManualReviewRequiredPayload, WalletOrderCompletedPayload, WalletOrderCreatedPayload,
     WalletOrderFailedPayload, WalletOrderStatusChangedPayload, WalletProviderStatusObservedPayload,
     WalletQuoteCreatedPayload,
 };
+use edgerun_core::protocol::{Digest, ObjectKind, ObjectRef};
+use edgerun_core::protocol::{EventEnvelope, EventType};
 
 use crate::events::ExchangeEvent;
 
