@@ -1,62 +1,75 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { AppDefinition } from "@/platform/types/app-definition"
 
+type WasmWorkerMessage =
+  | { type: "STATUS"; payload: string }
+  | { type: "BLOCKED"; payload: string[] }
+  | { type: "READY"; payload: { lines: string[] } }
+  | { type: "LOG"; payload: string }
+  | { type: "ERROR"; payload: string }
+
+function createWasmWorker(app: AppDefinition): Worker {
+  return new Worker(new URL("../../workers/wasm-app-worker.ts", import.meta.url), {
+    type: "module",
+    name: `edgerun-wasm-${app.appId}`,
+  })
+}
+
 export function WasmAppHost({ app }: { app: AppDefinition }) {
+  const workerRef = useRef<Worker | null>(null)
   const [status, setStatus] = useState("idle")
   const [details, setDetails] = useState<string[]>([])
 
   useEffect(() => {
-    let cancelled = false
+    const worker = createWasmWorker(app)
+    workerRef.current = worker
+    setStatus("starting")
+    setDetails([])
 
-    async function boot() {
-      setStatus("starting")
-      setDetails([])
-
-      if (!app.wasmUrl) {
-        setStatus("blocked")
-        setDetails(["No wasmUrl configured yet. Object-ref loading will be wired through the node/object store."])
-        return
-      }
-
-      try {
-        setStatus("fetching")
-        const response = await fetch(app.wasmUrl)
-        if (!response.ok) throw new Error(`failed to fetch wasm: ${response.status}`)
-        const bytes = new Uint8Array(await response.arrayBuffer())
-        if (cancelled) return
-
-        setStatus("instantiating")
-        const { instance } = await WebAssembly.instantiate(bytes, {
-          env: {
-            abort(message: number, fileName: number, line: number, column: number) {
-              throw new Error(`abort at ${line}:${column} message=${message} file=${fileName}`)
-            },
-          },
-        })
-
-        if (cancelled) return
-        const exports = Object.keys(instance.exports)
-        setStatus("ready")
-        setDetails([`loaded ${bytes.byteLength} bytes`, `exports: ${exports.join(", ") || "none"}`])
-      } catch (error) {
-        if (cancelled) return
-        setStatus("error")
-        setDetails([error instanceof Error ? error.message : String(error)])
+    worker.onmessage = (event: MessageEvent<WasmWorkerMessage>) => {
+      const msg = event.data
+      switch (msg.type) {
+        case "STATUS":
+          setStatus(msg.payload)
+          break
+        case "BLOCKED":
+          setStatus("blocked")
+          setDetails(msg.payload)
+          break
+        case "READY":
+          setStatus("ready")
+          setDetails(msg.payload.lines)
+          break
+        case "LOG":
+          setDetails((prev) => [...prev.slice(-100), msg.payload])
+          break
+        case "ERROR":
+          setStatus("error")
+          setDetails([msg.payload])
+          break
       }
     }
 
-    boot()
+    worker.onerror = (event) => {
+      setStatus("error")
+      setDetails([event.message || "WASM worker failed"])
+    }
+
+    worker.postMessage({ type: "BOOT", payload: { wasmUrl: app.wasmUrl ?? null } })
+
     return () => {
-      cancelled = true
+      worker.postMessage({ type: "STOP" })
+      worker.terminate()
+      workerRef.current = null
     }
   }, [app])
 
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
       <div className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
-        WASM App Host · {status}
+        WASM App Worker · {status}
       </div>
       <div className="flex-1 overflow-auto p-4 font-mono text-xs text-muted-foreground">
         {(details.length ? details : [app.description || "Waiting for WASM app..."]).map((line, index) => (
