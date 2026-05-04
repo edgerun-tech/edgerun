@@ -255,7 +255,9 @@ fn mem_op(memarg: MemArg) -> Result<MemOp> {
     if memarg.memory != 0 {
         bail!("baseline AOT only supports memory index 0");
     }
-    Ok(MemOp { offset: memarg.offset })
+    Ok(MemOp {
+        offset: memarg.offset,
+    })
 }
 
 fn lower_operator(
