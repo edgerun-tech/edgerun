@@ -29,12 +29,18 @@ pub enum LoadKind {
     I64,
     I32Load8U,
     I32Load8S,
+    I32Load16U,
+    I32Load16S,
 }
 
 impl LoadKind {
     pub fn result_type(self) -> ValueType {
         match self {
-            Self::I32 | Self::I32Load8U | Self::I32Load8S => ValueType::I32,
+            Self::I32
+            | Self::I32Load8U
+            | Self::I32Load8S
+            | Self::I32Load16U
+            | Self::I32Load16S => ValueType::I32,
             Self::I64 => ValueType::I64,
         }
     }
@@ -45,6 +51,8 @@ impl LoadKind {
             Self::I64 => "i64.load",
             Self::I32Load8U => "i32.load8_u",
             Self::I32Load8S => "i32.load8_s",
+            Self::I32Load16U => "i32.load16_u",
+            Self::I32Load16S => "i32.load16_s",
         }
     }
 }
@@ -54,12 +62,13 @@ pub enum StoreKind {
     I32,
     I64,
     I32Store8,
+    I32Store16,
 }
 
 impl StoreKind {
     pub fn value_type(self) -> ValueType {
         match self {
-            Self::I32 | Self::I32Store8 => ValueType::I32,
+            Self::I32 | Self::I32Store8 | Self::I32Store16 => ValueType::I32,
             Self::I64 => ValueType::I64,
         }
     }
@@ -69,6 +78,7 @@ impl StoreKind {
             Self::I32 => "i32.store",
             Self::I64 => "i64.store",
             Self::I32Store8 => "i32.store8",
+            Self::I32Store16 => "i32.store16",
         }
     }
 }
