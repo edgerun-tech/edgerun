@@ -45,8 +45,8 @@ struct Args {
     #[arg(long, default_value = "run")]
     function: String,
 
-    #[arg(long = "arg")]
-    arg_values: Vec<String>,
+    #[arg(long, default_value = "")]
+    args: String,
 
     #[arg(short, long)]
     verbose: bool,
@@ -64,7 +64,7 @@ fn main() -> Result<()> {
     }
 
     if let Some(path) = args.run_artifact.as_deref() {
-        return run_artifact(&args.file, path, &args.function, &args.arg_values, args.verbose);
+        return run_artifact(&args.file, path, &args.function, &args.args, args.verbose);
     }
 
     compile_artifact(&args)
@@ -173,15 +173,12 @@ fn run_artifact(
     wasm_path: &str,
     artifact_path: &str,
     function_selector: &str,
-    arg_values: &[String],
+    arg_values: &str,
     verbose: bool,
 ) -> Result<()> {
     let decoded = decode_verified_artifact(wasm_path, artifact_path)?;
     let function = find_function(&decoded, function_selector)?;
-    let args = arg_values
-        .iter()
-        .map(|v| parse_u64_arg(v))
-        .collect::<Result<Vec<_>>>()?;
+    let args = parse_arg_list(arg_values)?;
 
     if verbose {
         eprintln!("artifact: {}", artifact_path);
@@ -212,7 +209,21 @@ fn inspect_artifact(artifact_path: &str) -> Result<()> {
     Ok(())
 }
 
+fn parse_arg_list(values: &str) -> Result<Vec<u64>> {
+    let trimmed = values.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    trimmed
+        .split(',')
+        .map(|v| parse_u64_arg(v.trim()))
+        .collect()
+}
+
 fn parse_u64_arg(value: &str) -> Result<u64> {
+    if value.is_empty() {
+        bail!("empty argument in --args list");
+    }
     if let Some(hex) = value.strip_prefix("0x") {
         return u64::from_str_radix(hex, 16).with_context(|| format!("invalid hex argument: {value}"));
     }
