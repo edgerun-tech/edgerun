@@ -1,0 +1,44 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro"
+import { SiteHeader, LocaleSwitcher } from "@/components/site/SiteHeader"
+import { SiteFooter } from "@/components/site/SiteFooter"
+import { BenchmarkResultsPanel } from "@/components/benchmark/BenchmarkResultsPanel"
+import { locales, getLocaleCopy, type Locale } from "@/data/i18n"
+
+export function getStaticPaths() {
+  return locales.map((locale) => ({ params: { lang: locale } }))
+}
+
+const params = Astro.params.lang
+const isSupported = (locale: string | undefined): locale is Locale =>
+  locales.includes(locale as Locale)
+const copy = getLocaleCopy(params)
+const slug = isSupported(params) ? params : "en"
+---
+<BaseLayout
+  title={`${copy.resultsTitle} | EdgeRun`}
+  description={copy.resultsIntro}
+  lang={slug}
+  path={`/${slug}/benchmarks`}
+>
+  <SiteHeader
+    locale={slug}
+    homeLabel={copy.navHome}
+    methodologyLabel={copy.navMethodology}
+    benchmarksLabel={copy.navBenchmarks}
+  />
+  <main class="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <section class="space-y-4">
+      <h1 class="text-3xl font-semibold text-white">{copy.resultsTitle}</h1>
+      <p class="max-w-3xl text-sm text-slate-300">{copy.resultsIntro}</p>
+      <LocaleSwitcher current={slug} />
+    </section>
+    <BenchmarkResultsPanel
+      title={copy.resultsTitle}
+      intro={copy.resultsIntro}
+      class="mt-8"
+      client:idle
+    />
+  </main>
+  <SiteFooter />
+</BaseLayout>

@@ -1,0 +1,65 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro"
+import { SiteHeader, LocaleSwitcher } from "@/components/site/SiteHeader"
+import { SiteFooter } from "@/components/site/SiteFooter"
+import { MethodologyTemplate } from "@/components/blocks/MethodologyTemplate"
+import {
+  getLocaleCopy,
+  locales,
+  type Locale,
+} from "@/data/i18n"
+import { benchmarkResults } from "@/data/benchmarks"
+import { PageHeader, PageHeaderDescription, PageHeaderHeading } from "@/components/site/PageHeader"
+import { Callout } from "@/components/site/Callout"
+import { Button } from "@/components/ui/button"
+
+export function getStaticPaths() {
+  return locales.map((locale) => ({ params: { lang: locale } }))
+}
+
+const params = Astro.params.lang
+const copy = getLocaleCopy(params)
+const isSupported = (locale: string | undefined): locale is Locale =>
+  locales.includes(locale as Locale)
+const canonicalPath = `/${isSupported(params) ? params : "en"}`
+---
+<BaseLayout
+  title={`${copy.homeTitle} | EdgeRun`}
+  description={copy.homeLead}
+  lang={isSupported(params) ? params : "en"}
+  path={canonicalPath}
+>
+  <SiteHeader
+    locale={isSupported(params) ? params : "en"}
+    homeLabel={copy.navHome}
+    methodologyLabel={copy.navMethodology}
+    benchmarksLabel={copy.navBenchmarks}
+  />
+  <main class="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <PageHeader>
+      <PageHeaderHeading>{copy.homeTitle}</PageHeaderHeading>
+      <PageHeaderDescription>{copy.homeSubtitle}</PageHeaderDescription>
+      <p class="max-w-3xl text-sm text-slate-200">
+        Latest signal: {benchmarkResults[0]?.run.suite} —{" "}
+        {benchmarkResults[0]?.run.throughputOpsPerSec.toLocaleString()} ops/s, {benchmarkResults[0]?.run.latencyP99Ms}ms p99
+      </p>
+      <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+        <a href={`/${isSupported(params) ? params : "en"}/methodology`}>
+          <Button>{copy.homePrimaryCta}</Button>
+        </a>
+        <a href={`/${isSupported(params) ? params : "en"}/benchmarks`}>
+          <Button variant="secondary">{copy.homeSecondaryCta}</Button>
+        </a>
+      </div>
+    </PageHeader>
+
+    <section class="mt-8 grid gap-4">
+      <Callout class="reveal">
+        {copy.homeLead}
+      </Callout>
+      <LocaleSwitcher current={isSupported(params) ? params : "en"} />
+      <MethodologyTemplate copy={copy} />
+    </section>
+  </main>
+  <SiteFooter />
+</BaseLayout>
