@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useCallback, useRef, useState } from "react"
 import { Play, Loader2, Trash2, Copy, Check, Package } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -15,12 +15,22 @@ export function add(a: i32, b: i32): i32 {
   return a + b;
 }`
 
-type AscModule = {
-  default?: {
-    main: (args: string[], options: Record<string, unknown>) => Promise<{ error?: unknown }>
-  }
-  main?: (args: string[], options: Record<string, unknown>) => Promise<{ error?: unknown }>
-}
+type CompileResponse =
+  | {
+      id: number
+      ok: true
+      logs: string[]
+      wasm: Uint8Array
+      wasmSize: number
+      compileMs: number
+    }
+  | {
+      id: number
+      ok: false
+      logs: string[]
+      error: string
+      compileMs: number
+    }
 
 interface CodeRunnerProps {
   onOutput?: (output: string) => void
@@ -32,13 +42,36 @@ function stringifyExportResult(value: unknown): string {
   return String(value)
 }
 
-async function loadAssemblyScriptCompiler() {
-  const mod = (await import("assemblyscript/asc")) as AscModule
-  const asc = mod.default ?? mod
-  if (!asc?.main) {
-    throw new Error("AssemblyScript compiler loaded, but asc.main was not found")
-  }
-  return asc
+function createCompilerWorker(): Worker {
+  return new Worker(new URL("../../workers/assemblyscript-compiler-worker.ts", import.meta.url), {
+    type: "module",
+  })
+}
+
+function compileAssemblyScript(source: string): Promise<CompileResponse> {
+  const id = Date.now() + Math.floor(Math.random() * 1_000_000)
+  const worker = createCompilerWorker()
+
+  return new Promise((resolve) => {
+    worker.onmessage = (event: MessageEvent<CompileResponse>) => {
+      if (event.data.id !== id) return
+      worker.terminate()
+      resolve(event.data)
+    }
+
+    worker.onerror = (event) => {
+      worker.terminate()
+      resolve({
+        id,
+        ok: false,
+        logs: [],
+        error: event.message || "AssemblyScript compiler worker failed",
+        compileMs: 0,
+      })
+    }
+
+    worker.postMessage({ id, source })
+  })
 }
 
 export function CodeRunner({ onOutput }: CodeRunnerProps) {
@@ -48,8 +81,10 @@ export function CodeRunner({ onOutput }: CodeRunnerProps) {
   const [copied, setCopied] = useState(false)
   const [executionTime, setExecutionTime] = useState<number | null>(null)
   const [wasmSize, setWasmSize] = useState<number | null>(null)
+  const runIdRef = useRef(0)
 
   const runCode = useCallback(async () => {
+    const runId = ++runIdRef.current
     setIsRunning(true)
     setOutput([])
     setExecutionTime(null)
@@ -59,63 +94,20 @@ export function CodeRunner({ onOutput }: CodeRunnerProps) {
     const logs: string[] = []
 
     try {
-      logs.push("loading AssemblyScript compiler...")
-      const asc = await loadAssemblyScriptCompiler()
+      logs.push("starting AssemblyScript compiler worker...")
+      setOutput([...logs])
 
-      const files: Record<string, string | Uint8Array> = {
-        "assembly/index.ts": code,
+      const compiled = await compileAssemblyScript(code)
+      if (runId !== runIdRef.current) return
+
+      logs.push(...compiled.logs)
+
+      if (!compiled.ok) {
+        throw new Error(compiled.error)
       }
 
-      logs.push("compiling assembly/index.ts → module.wasm...")
-      const result = await asc.main(
-        [
-          "assembly/index.ts",
-          "--outFile",
-          "module.wasm",
-          "--runtime",
-          "stub",
-          "--optimize",
-          "--use",
-          "abort=",
-        ],
-        {
-          readFile(name: string) {
-            const normalized = name.replace(/^\.\//, "")
-            const file = files[normalized] ?? files[name]
-            if (file instanceof Uint8Array) return null
-            return file ?? null
-          },
-          writeFile(name: string, contents: string | Uint8Array) {
-            files[name] = contents
-          },
-          listFiles(dirname: string) {
-            const prefix = dirname.endsWith("/") ? dirname : `${dirname}/`
-            return Object.keys(files).filter((name) => name.startsWith(prefix))
-          },
-          stdout: {
-            write(text: string) {
-              if (text.trim()) logs.push(text.trimEnd())
-            },
-          },
-          stderr: {
-            write(text: string) {
-              if (text.trim()) logs.push(text.trimEnd())
-            },
-          },
-        }
-      )
-
-      if (result.error) {
-        throw result.error instanceof Error ? result.error : new Error(String(result.error))
-      }
-
-      const wasm = files["module.wasm"]
-      if (!(wasm instanceof Uint8Array)) {
-        throw new Error("AssemblyScript compiler did not emit module.wasm")
-      }
-
-      setWasmSize(wasm.byteLength)
-      logs.push(`compiled ${wasm.byteLength} byte wasm module`)
+      setWasmSize(compiled.wasmSize)
+      logs.push(`compiled ${compiled.wasmSize} byte wasm module in ${compiled.compileMs.toFixed(2)}ms`)
 
       const imports = {
         env: {
@@ -125,7 +117,7 @@ export function CodeRunner({ onOutput }: CodeRunnerProps) {
         },
       }
 
-      const { instance } = await WebAssembly.instantiate(wasm, imports)
+      const { instance } = await WebAssembly.instantiate(compiled.wasm, imports)
       const exports = instance.exports as Record<string, unknown>
       const exportNames = Object.keys(exports)
       logs.push(`exports: ${exportNames.join(", ") || "none"}`)
@@ -148,7 +140,7 @@ export function CodeRunner({ onOutput }: CodeRunnerProps) {
       setOutput(finalLogs)
       onOutput?.(finalLogs.join("\n"))
     } finally {
-      setIsRunning(false)
+      if (runId === runIdRef.current) setIsRunning(false)
     }
   }, [code, onOutput])
 
