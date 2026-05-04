@@ -1,16 +1,4 @@
-/**
- * Builtin app definitions for the EdgeRun dashboard.
- *
- * Replaces the hardcoded `availableApps` array that was in components/os/app-store.tsx.
- * Uses platform `AppDefinition` type from `platform/types/app-definition.ts`.
- *
- * No fake RAM/CPU/price as truth.
- * If unknown, show unknown.
- * If demo, label demo.
- * If measured, link to footprint evidence.
- */
-
-import type { AppDefinition, AppKind, AppSource } from "@/platform/types/app-definition"
+import type { AppDefinition, AppSource } from "@/platform/types/app-definition"
 import {
   Terminal,
   Code2,
@@ -34,10 +22,6 @@ import {
   Settings,
 } from "lucide-react"
 
-/**
- * Icon ID to Lucide icon component mapping.
- * Centralized here; component-registry maps iconId → ReactNode when rendering.
- */
 export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   terminal: <Terminal className="h-5 w-5" />,
   "code-runner": <Code2 className="h-5 w-5" />,
@@ -48,6 +32,7 @@ export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   "git-sync": <GitBranch className="h-5 w-5" />,
   "web-server": <Globe className="h-5 w-5" />,
   "compute-node": <Cpu className="h-5 w-5" />,
+  people: <Users className="h-5 w-5" />,
   contacts: <Users className="h-5 w-5" />,
   calling: <Phone className="h-5 w-5" />,
   chat: <MessageSquare className="h-5 w-5" />,
@@ -65,12 +50,6 @@ export function getIconById(iconId: string): React.ReactNode {
   return BUILTIN_ICON_MAP[iconId] || BUILTIN_ICON_MAP["wasm-generic"]
 }
 
-/**
- * Builtin app definitions.
- * No fake RAM/CPU/price.
- * `footprint` is only set when measured; otherwise undefined.
- * `source: "demo"` marks apps that are not real protocol-backed apps.
- */
 export const BUILTIN_APPS: AppDefinition[] = [
   {
     appId: "terminal",
@@ -181,40 +160,16 @@ export const BUILTIN_APPS: AppDefinition[] = [
     status: "available",
   },
   {
-    appId: "contacts",
-    name: "Contacts",
-    description: "Manage your peer network",
-    iconId: "contacts",
+    appId: "people",
+    name: "People",
+    description: "Contacts, messages, and calls",
+    iconId: "people",
     kind: "builtin",
     source: "builtin",
-    componentKey: "contacts",
+    componentKey: "people",
     requiredCapabilityIds: ["identity"],
-    optionalCapabilityIds: [],
+    optionalCapabilityIds: ["voice_call", "messaging"],
     status: "available",
-  },
-  {
-    appId: "calling",
-    name: "Calling",
-    description: "Encrypted P2P voice calls",
-    iconId: "calling",
-    kind: "builtin",
-    source: "demo", // no real protocol-backed calling yet
-    componentKey: "calling",
-    requiredCapabilityIds: ["identity", "voice_call"],
-    optionalCapabilityIds: [],
-    status: "demo",
-  },
-  {
-    appId: "chat",
-    name: "Chat",
-    description: "Messaging",
-    iconId: "chat",
-    kind: "builtin",
-    source: "demo", // no real E2E protocol-backed chat yet
-    componentKey: "chat-demo",
-    requiredCapabilityIds: ["identity"],
-    optionalCapabilityIds: [],
-    status: "demo",
   },
   {
     appId: "ai-assistant",
@@ -246,7 +201,7 @@ export const BUILTIN_APPS: AppDefinition[] = [
     description: "EDGE token & payments",
     iconId: "wallet",
     kind: "builtin",
-    source: "demo", // no real payment backend yet
+    source: "demo",
     componentKey: "wallet",
     requiredCapabilityIds: ["identity", "payments"],
     optionalCapabilityIds: [],
@@ -302,16 +257,13 @@ export const BUILTIN_APPS: AppDefinition[] = [
   },
 ]
 
-/**
- * Get builtin app by ID.
- */
 export function getBuiltinApp(appId: string): AppDefinition | undefined {
+  if (appId === "contacts" || appId === "calling" || appId === "chat") {
+    return BUILTIN_APPS.find((a) => a.appId === "people")
+  }
   return BUILTIN_APPS.find((a) => a.appId === appId)
 }
 
-/**
- * List all builtin apps, optionally filtered by source.
- */
 export function listBuiltinApps(source?: AppSource): AppDefinition[] {
   if (!source) return [...BUILTIN_APPS]
   return BUILTIN_APPS.filter((a) => a.source === source)
