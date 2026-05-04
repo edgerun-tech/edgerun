@@ -1,21 +1,10 @@
 //! edgerun Node Daemon (edgerund)
 //!
-//! Runs a single-writer stream node with mesh networking,
-//! command processing, and capability discovery.
-//!
-//! ## Usage
-//! ```text
-//! edgerund init --config node.yaml --software          # Dev-only: in-memory key
-//! edgerund run --config node.yaml --listen 0.0.0.0:8080  // Start daemon with TCP
-//! edgerund status --config node.yaml                   // Show node identity
-//! ```
-//!
-//! ## Security
-//! The node's private key NEVER leaves secure hardware. The config file only
-//! stores the public key (NodeID) and a reference to the hardware key handle.
-//! No `.key` file is ever written.
+//! Runs a single-writer stream node with mesh networking, command processing,
+//! and capability discovery.
 
 // Existing modules
+mod app_package_wire_codec;
 mod assurance;
 mod capabilities;
 mod capacity;
