@@ -66,6 +66,7 @@ impl FuncSig {
 
 #[derive(Clone, Debug)]
 pub enum IrOp {
+    Nop,
     I32Const(i32),
     I64Const(i64),
     GlobalGet(u32, ValueType),
@@ -108,6 +109,7 @@ pub enum IrOp {
 impl IrOp {
     pub fn render(&self) -> String {
         match self {
+            Self::Nop => "nop".to_string(),
             Self::I32Const(v) => format!("i32.const {v}"),
             Self::I64Const(v) => format!("i64.const {v}"),
             Self::GlobalGet(i, _) => format!("global.get {i}"),
@@ -178,6 +180,9 @@ impl FunctionIr {
             out.push('\n');
         }
         for op in &self.ops {
+            if matches!(op, IrOp::Nop) {
+                continue;
+            }
             out.push_str("  ");
             out.push_str(&op.render());
             out.push('\n');
@@ -214,6 +219,7 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
 
     for op in &ir.ops {
         match *op {
+            IrOp::Nop => {}
             IrOp::I32Const(_) => stack.push(ValueType::I32),
             IrOp::I64Const(_) => stack.push(ValueType::I64),
             IrOp::GlobalGet(index, ty) => {
