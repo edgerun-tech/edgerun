@@ -10,7 +10,7 @@ import {
 } from "motion/react";
 import type { MotionValue } from "motion/react";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from "react";
 
 type FloatingDockItem = {
   title: string;
@@ -172,7 +172,8 @@ const FloatingDockDesktop = ({
   const [currentPrefix, setCurrentPrefix] = useState<CommandPrefix>("/");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const peopleItems = context?.items ?? [];
+  const peopleItems = useMemo(() => context?.items ?? [], [context?.items]);
+  const launcherItemsStable = useMemo(() => launcherItems, [launcherItems]);
   const hasPeoplePage = Boolean(peopleItems.length);
   const commandPrefix = commandPrefixFor(command || currentPrefix);
   const commandMode = COMMAND_PREFIXES[commandPrefix];
@@ -220,17 +221,17 @@ const FloatingDockDesktop = ({
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [hasPeoplePage]);
 
-  function setPrefix(prefix: CommandPrefix) {
+  const setPrefix = useCallback((prefix: CommandPrefix) => {
     setCurrentPrefix(prefix);
     setCommand(`${prefix}${commandBody(command)}`);
     inputRef.current?.focus();
-  }
+  }, [command]);
 
-  function cyclePrefix() {
+  const cyclePrefix = useCallback(() => {
     setPrefix(nextPrefix(commandPrefix));
-  }
+  }, [commandPrefix, setPrefix]);
 
-  function submitCommand(event: React.FormEvent<HTMLFormElement>) {
+  const submitCommand = useCallback((event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const body = commandBody(command).trim();
     if (!body) return;
@@ -238,13 +239,13 @@ const FloatingDockDesktop = ({
     setCommand("");
     setCurrentPrefix("/");
     setPage("launcher");
-  }
+  }, [command, commandPrefix, onCommandSubmit]);
 
-  function applySuggestion(value: string) {
+  const applySuggestion = useCallback((value: string) => {
     setCommand(value);
     setCurrentPrefix(commandPrefixFor(value));
     inputRef.current?.focus();
-  }
+  }, []);
 
   return (
     <motion.div
@@ -256,6 +257,8 @@ const FloatingDockDesktop = ({
         className,
       )}
       data-dock-page={page}
+      role="toolbar"
+      aria-label="Application dock"
     >
       <div className="relative flex h-full min-w-0 items-end">
         <AnimatePresence mode="wait" initial={false}>
@@ -268,6 +271,8 @@ const FloatingDockDesktop = ({
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               onSubmit={submitCommand}
               className="relative flex h-10 w-[min(520px,calc(100vw-8rem))] items-center gap-2 rounded-full border border-border bg-card px-2"
+              role="search"
+              aria-label="Command input"
             >
               <button
                 type="button"
@@ -326,10 +331,10 @@ const FloatingDockDesktop = ({
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               className="flex items-end gap-4"
             >
-              {(page === "people" ? peopleItems : launcherItems).map((item) => (
+              {(page === "people" ? peopleItems : launcherItems).map((item, index) => (
                 <IconContainer
                   mouseX={mouseX}
-                  key={`${page}-${item.kind || "app"}-${item.title}`}
+                  key={`${page}-${item.kind || "app"}-${item.title}-${index}`}
                   {...item}
                 />
               ))}
@@ -337,10 +342,10 @@ const FloatingDockDesktop = ({
           )}
         </AnimatePresence>
 
-        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] flex -translate-x-1/2 items-center gap-1.5">
-          {hasPeoplePage && <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "people" ? "bg-primary" : "bg-muted-foreground/35")} />}
-          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "launcher" ? "bg-primary" : "bg-muted-foreground/35")} />
-          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "command" ? "bg-primary" : "bg-muted-foreground/35")} />
+        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] flex -translate-x-1/2 items-center gap-1.5" role="tablist" aria-label="Dock pages">
+          {hasPeoplePage && <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "people" ? "bg-primary" : "bg-muted-foreground/35")} role="tab" aria-selected={page === "people"} aria-label="People" />}
+          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "launcher" ? "bg-primary" : "bg-muted-foreground/35")} role="tab" aria-selected={page === "launcher"} aria-label="Launcher" />
+          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "command" ? "bg-primary" : "bg-muted-foreground/35")} role="tab" aria-selected={page === "command"} aria-label="Command" />
         </div>
       </div>
     </motion.div>
@@ -378,6 +383,15 @@ function IconContainer({
   const widthIcon = useSpring(widthTransformIcon, { mass: 0.1, stiffness: 150, damping: 12 });
   const heightIcon = useSpring(heightTransformIcon, { mass: 0.1, stiffness: 150, damping: 12 });
 
+  useEffect(() => {
+    return () => {
+      width.stop();
+      height.stop();
+      widthIcon.stop();
+      heightIcon.stop();
+    };
+  }, [width, height, widthIcon, heightIcon]);
+
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -391,6 +405,8 @@ function IconContainer({
       className="relative flex cursor-pointer items-center justify-center rounded-full border border-border bg-card transition-colors hover:bg-accent"
       aria-label={title}
       title={title}
+      role="button"
+      tabIndex={0}
     >
       <AnimatePresence>
         {hovered && (
