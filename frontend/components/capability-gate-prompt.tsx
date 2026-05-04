@@ -1,104 +1,83 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { Shield, X, KeyRound, Loader2 } from "lucide-react"
+import { Shield, X, Check, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { describeCapabilityList, riskTone } from "@/platform/capabilities/capability-catalog"
 
 interface CapabilityGatePromptProps {
   appName: string
   blockedCapabilities: string[]
-  onSetupIdentity: (name: string) => Promise<boolean>
+  onGrant: () => void
   onDismiss: () => void
 }
 
-export function CapabilityGatePrompt({ appName, blockedCapabilities, onSetupIdentity, onDismiss }: CapabilityGatePromptProps) {
-  const [name, setName] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleSetup = useCallback(async () => {
-    if (!name.trim()) {
-      setError("Enter a display name")
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      const ok = await onSetupIdentity(name.trim())
-      if (!ok) {
-        setError("Setup cancelled or failed")
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Setup failed")
-    } finally {
-      setLoading(false)
-    }
-  }, [name, onSetupIdentity])
+export function CapabilityGatePrompt({ appName, blockedCapabilities, onGrant, onDismiss }: CapabilityGatePromptProps) {
+  const capabilities = describeCapabilityList(blockedCapabilities)
+  const hasHighRisk = capabilities.some((cap) => cap.risk === "high")
 
   return (
     <div className="flex h-full flex-col p-4">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">Capability Required</h2>
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Permission request</h2>
+          <p className="text-xs text-muted-foreground">{appName} is asking for local capabilities.</p>
+        </div>
         <button onClick={onDismiss} className="rounded p-1 hover:bg-secondary">
           <X className="h-4 w-4 text-muted-foreground" />
         </button>
       </div>
 
-      <div className="mb-4 rounded-lg border border-border bg-secondary/30 p-3">
-        <div className="flex items-center gap-2 text-sm text-foreground">
-          <Shield className="h-4 w-4 text-[var(--status-warning)]" />
-          <span><strong>{appName}</strong> requires capabilities you don't have yet.</span>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1">
-          {blockedCapabilities.map((cap) => (
-            <span key={cap} className="rounded bg-[var(--status-error)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--status-error)]">
-              {cap}
-            </span>
-          ))}
+      <div className="mb-3 rounded-lg border border-border bg-secondary/30 p-3">
+        <div className="flex items-start gap-2 text-sm text-foreground">
+          <Shield className="mt-0.5 h-4 w-4 text-primary" />
+          <div>
+            <div className="font-medium">Why this appears</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Edgerun capabilities are bounded local permissions. Granting lets this app use only the listed actions for this app context. It does not give global control or permanent node authority.
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="mb-4">
-        <p className="mb-2 text-xs text-muted-foreground">
-          Set up your Edgerun identity (passkey/biometric) to unlock these features.
-        </p>
-        <label className="mb-1 block text-xs font-medium text-muted-foreground">Display Name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => { setName(e.target.value); setError(null) }}
-          placeholder="Your name"
-          className="w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/50"
-          onKeyDown={(e) => { if (e.key === "Enter") handleSetup() }}
-        />
-      </div>
-
-      {error && (
-        <div className="mb-3 rounded-md bg-[var(--status-error)]/10 px-3 py-2 text-xs text-[var(--status-error)]">
-          {error}
+      {hasHighRisk && (
+        <div className="mb-3 flex gap-2 rounded-lg border border-[var(--status-warning)]/20 bg-[var(--status-warning)]/10 p-3 text-xs text-[var(--status-warning)]">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          <span>One or more requested capabilities can affect private data, network behavior, payments, files, or live device access.</span>
         </div>
       )}
 
-      <button
-        onClick={handleSetup}
-        disabled={loading}
-        className={cn(
-          "flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-          loading
-            ? "bg-primary/50 text-primary-foreground/70"
-            : "bg-primary text-primary-foreground hover:bg-primary/90"
-        )}
-      >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-        {loading ? "Setting up..." : "Set up Identity"}
-      </button>
+      <div className="min-h-0 flex-1 overflow-auto space-y-2 pr-1">
+        {capabilities.map((cap) => (
+          <div key={cap.id} className="rounded-lg border border-border bg-card p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-sm font-medium text-foreground">{cap.label}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{cap.short}</div>
+              </div>
+              <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase", riskTone(cap.risk))}>
+                {cap.risk}
+              </span>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{cap.why}</p>
+          </div>
+        ))}
+      </div>
 
-      <button
-        onClick={onDismiss}
-        className="mt-2 w-full rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-secondary/80"
-      >
-        Maybe later
-      </button>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button
+          onClick={onDismiss}
+          className="rounded-md bg-secondary px-3 py-2 text-xs font-medium text-secondary-foreground hover:bg-secondary/80"
+        >
+          Not now
+        </button>
+        <button
+          onClick={onGrant}
+          className="flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <Check className="h-3.5 w-3.5" />
+          Grant and open
+        </button>
+      </div>
     </div>
   )
 }
