@@ -11,7 +11,7 @@ type WasmWorkerMessage =
   | { type: "ERROR"; payload: string }
 
 function createWasmWorker(app: AppDefinition): Worker {
-  return new Worker(new URL("../../workers/wasm-app-worker.ts", import.meta.url), {
+  return new Worker("/workers/wasm-app-worker.js", {
     type: "module",
     name: `edgerun-wasm-${app.appId}`,
   })
