@@ -34,6 +34,7 @@ impl X86_64Backend {
                 IrOp::LocalTee(i) => frame.emit_local_tee(&mut code, i, local_type(ir, i)?)?,
                 IrOp::Load(kind, mem) => emit_load(&mut code, kind, mem)?,
                 IrOp::Store(kind, mem) => emit_store(&mut code, kind, mem)?,
+                IrOp::Select(ty) => emit_select(&mut code, ty),
                 IrOp::I32Add => emit_i32_add(&mut code),
                 IrOp::I32Sub => emit_i32_sub(&mut code),
                 IrOp::I32Mul => emit_i32_mul(&mut code),
@@ -91,19 +92,11 @@ struct ControlFrame {
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum ControlKind {
-    Block,
-    Loop,
-}
+enum ControlKind { Block, Loop }
 
 impl ControlFrame {
-    fn block() -> Self {
-        Self { kind: ControlKind::Block, start: 0, end_patches: Vec::new() }
-    }
-
-    fn loop_at(start: usize) -> Self {
-        Self { kind: ControlKind::Loop, start, end_patches: Vec::new() }
-    }
+    fn block() -> Self { Self { kind: ControlKind::Block, start: 0, end_patches: Vec::new() } }
+    fn loop_at(start: usize) -> Self { Self { kind: ControlKind::Loop, start, end_patches: Vec::new() } }
 }
 
 fn emit_br(code: &mut Vec<u8>, controls: &mut [ControlFrame], depth: u32) -> Result<()> {
@@ -120,14 +113,12 @@ fn emit_br(code: &mut Vec<u8>, controls: &mut [ControlFrame], depth: u32) -> Res
 }
 
 fn emit_br_if(code: &mut Vec<u8>, controls: &mut [ControlFrame], depth: u32) -> Result<()> {
-    code.push(0x58); // pop rax = i32 condition
-    code.extend_from_slice(&[0x85, 0xC0]); // test eax, eax
-
+    code.push(0x58);
+    code.extend_from_slice(&[0x85, 0xC0]);
     let target_index = control_index(controls, depth)?;
-    code.extend_from_slice(&[0x0F, 0x85]); // jnz rel32
+    code.extend_from_slice(&[0x0F, 0x85]);
     let patch_at = code.len();
     code.extend_from_slice(&0i32.to_le_bytes());
-
     if controls[target_index].kind == ControlKind::Loop {
         patch_rel32(code, patch_at, controls[target_index].start)?;
     } else {
@@ -137,9 +128,7 @@ fn emit_br_if(code: &mut Vec<u8>, controls: &mut [ControlFrame], depth: u32) -> 
 }
 
 fn control_index(controls: &[ControlFrame], depth: u32) -> Result<usize> {
-    if depth as usize >= controls.len() {
-        bail!("branch depth {} outside {} open control frame(s)", depth, controls.len());
-    }
+    if depth as usize >= controls.len() { bail!("branch depth {} outside {} open control frame(s)", depth, controls.len()); }
     Ok(controls.len() - 1 - depth as usize)
 }
 
@@ -152,42 +141,27 @@ fn emit_jmp_rel32(code: &mut Vec<u8>, target: usize) -> Result<()> {
 
 fn patch_control_end(code: &mut [u8], frame: ControlFrame) -> Result<()> {
     let target = code.len();
-    for patch_at in frame.end_patches {
-        patch_rel32(code, patch_at, target)?;
-    }
+    for patch_at in frame.end_patches { patch_rel32(code, patch_at, target)?; }
     Ok(())
 }
 
 fn patch_rel32(code: &mut [u8], imm_at: usize, target: usize) -> Result<()> {
-    let jump_end = imm_at
-        .checked_add(4)
-        .ok_or_else(|| anyhow::anyhow!("jump patch offset overflow"))?;
-    if jump_end > code.len() || target > code.len() {
-        bail!("invalid jump patch imm_at={} target={} len={}", imm_at, target, code.len());
-    }
+    let jump_end = imm_at.checked_add(4).ok_or_else(|| anyhow::anyhow!("jump patch offset overflow"))?;
+    if jump_end > code.len() || target > code.len() { bail!("invalid jump patch imm_at={} target={} len={}", imm_at, target, code.len()); }
     let rel = (target as i64) - (jump_end as i64);
-    if rel < i32::MIN as i64 || rel > i32::MAX as i64 {
-        bail!("jump target out of rel32 range");
-    }
+    if rel < i32::MIN as i64 || rel > i32::MAX as i64 { bail!("jump target out of rel32 range"); }
     code[imm_at..jump_end].copy_from_slice(&(rel as i32).to_le_bytes());
     Ok(())
 }
 
-struct Frame {
-    local_slots: u32,
-    global_slots: u32,
-}
+struct Frame { local_slots: u32, global_slots: u32 }
 
 impl Frame {
     fn new(ir: &FunctionIr) -> Result<Self> {
         let local_slots = ir.locals.len() as u32;
         let global_slots = ir.global_values.len() as u32;
-        let slots = local_slots
-            .checked_add(global_slots)
-            .ok_or_else(|| anyhow::anyhow!("baseline backend frame slot overflow"))?;
-        if slots > 4096 {
-            bail!("baseline backend refuses huge frame: {slots} slots");
-        }
+        let slots = local_slots.checked_add(global_slots).ok_or_else(|| anyhow::anyhow!("baseline backend frame slot overflow"))?;
+        if slots > 4096 { bail!("baseline backend refuses huge frame: {slots} slots"); }
         Ok(Self { local_slots, global_slots })
     }
 
@@ -196,23 +170,14 @@ impl Frame {
     fn emit_prologue(&self, code: &mut Vec<u8>, ir: &FunctionIr) -> Result<()> {
         code.push(0x55);
         code.extend_from_slice(&[0x48, 0x89, 0xE5]);
-
         let frame_bytes = self.total_slots() * 8;
         if frame_bytes > 0 {
             code.extend_from_slice(&[0x48, 0x81, 0xEC]);
             code.extend_from_slice(&(frame_bytes as i32).to_le_bytes());
         }
-
-        for i in 0..ir.sig.params.len() as u32 {
-            self.emit_store_arg(code, i, local_type(ir, i)?)?;
-        }
-        for i in ir.sig.params.len() as u32..self.local_slots {
-            self.emit_zero_slot(code, i)?;
-        }
-        for (i, global) in ir.global_values.iter().copied().enumerate() {
-            self.emit_init_global(code, i as u32, global)?;
-        }
-
+        for i in 0..ir.sig.params.len() as u32 { self.emit_store_arg(code, i, local_type(ir, i)?)?; }
+        for i in ir.sig.params.len() as u32..self.local_slots { self.emit_zero_slot(code, i)?; }
+        for (i, global) in ir.global_values.iter().copied().enumerate() { self.emit_init_global(code, i as u32, global)?; }
         Ok(())
     }
 
@@ -237,14 +202,8 @@ impl Frame {
 
     fn emit_init_global(&self, code: &mut Vec<u8>, index: u32, global: GlobalValue) -> Result<()> {
         match global {
-            GlobalValue::I32(v) => {
-                code.push(0xB8);
-                code.extend_from_slice(&v.to_le_bytes());
-            }
-            GlobalValue::I64(v) => {
-                code.extend_from_slice(&[0x48, 0xB8]);
-                code.extend_from_slice(&v.to_le_bytes());
-            }
+            GlobalValue::I32(v) => { code.push(0xB8); code.extend_from_slice(&v.to_le_bytes()); }
+            GlobalValue::I64(v) => { code.extend_from_slice(&[0x48, 0xB8]); code.extend_from_slice(&v.to_le_bytes()); }
         }
         self.emit_store_rax_to_slot(code, self.global_slot(index)?)
     }
@@ -305,20 +264,9 @@ impl Frame {
         Ok(())
     }
 
-    fn local_slot(&self, index: u32) -> Result<u32> {
-        if index >= self.local_slots { bail!("local index {} outside frame with {} local slots", index, self.local_slots); }
-        Ok(index)
-    }
-
-    fn global_slot(&self, index: u32) -> Result<u32> {
-        if index >= self.global_slots { bail!("global index {} outside frame with {} global slots", index, self.global_slots); }
-        Ok(self.local_slots + index)
-    }
-
-    fn slot_disp(&self, slot: u32) -> Result<i32> {
-        if slot >= self.total_slots() { bail!("slot index {} outside frame with {} slots", slot, self.total_slots()); }
-        Ok(-8 * ((slot as i32) + 1))
-    }
+    fn local_slot(&self, index: u32) -> Result<u32> { if index >= self.local_slots { bail!("local index {} outside frame with {} local slots", index, self.local_slots); } Ok(index) }
+    fn global_slot(&self, index: u32) -> Result<u32> { if index >= self.global_slots { bail!("global index {} outside frame with {} global slots", index, self.global_slots); } Ok(self.local_slots + index) }
+    fn slot_disp(&self, slot: u32) -> Result<i32> { if slot >= self.total_slots() { bail!("slot index {} outside frame with {} slots", slot, self.total_slots()); } Ok(-8 * ((slot as i32) + 1)) }
 }
 
 #[derive(Clone, Copy)]
@@ -345,24 +293,15 @@ fn local_type(ir: &FunctionIr, index: u32) -> Result<ValueType> {
     ir.locals.get(index as usize).copied().ok_or_else(|| anyhow::anyhow!("local index {} outside function frame", index))
 }
 
-fn emit_push_i32(code: &mut Vec<u8>, value: i32) {
-    code.push(0xB8);
-    code.extend_from_slice(&value.to_le_bytes());
-    code.push(0x50);
-}
-
-fn emit_push_i64(code: &mut Vec<u8>, value: i64) {
-    code.extend_from_slice(&[0x48, 0xB8]);
-    code.extend_from_slice(&value.to_le_bytes());
-    code.push(0x50);
-}
+fn emit_push_i32(code: &mut Vec<u8>, value: i32) { code.push(0xB8); code.extend_from_slice(&value.to_le_bytes()); code.push(0x50); }
+fn emit_push_i64(code: &mut Vec<u8>, value: i64) { code.extend_from_slice(&[0x48, 0xB8]); code.extend_from_slice(&value.to_le_bytes()); code.push(0x50); }
 
 fn emit_memory_address(code: &mut Vec<u8>, mem: MemOp) -> Result<()> {
-    code.push(0x58); // pop rax = wasm i32 address
+    code.push(0x58);
     emit_zero_extend_eax(code);
     if mem.offset > 0 {
         if mem.offset > i32::MAX as u64 { bail!("memory offset too large for baseline x86_64 emitter: {}", mem.offset); }
-        code.extend_from_slice(&[0x48, 0x05]); // add rax, imm32
+        code.extend_from_slice(&[0x48, 0x05]);
         code.extend_from_slice(&(mem.offset as i32).to_le_bytes());
     }
     Ok(())
@@ -371,8 +310,8 @@ fn emit_memory_address(code: &mut Vec<u8>, mem: MemOp) -> Result<()> {
 fn emit_load(code: &mut Vec<u8>, kind: LoadKind, mem: MemOp) -> Result<()> {
     emit_memory_address(code, mem)?;
     match kind {
-        LoadKind::I32 => code.extend_from_slice(&[0x41, 0x8B, 0x04, 0x02]), // mov eax, [r10 + rax]
-        LoadKind::I64 => code.extend_from_slice(&[0x49, 0x8B, 0x04, 0x02]), // mov rax, [r10 + rax]
+        LoadKind::I32 => code.extend_from_slice(&[0x41, 0x8B, 0x04, 0x02]),
+        LoadKind::I64 => code.extend_from_slice(&[0x49, 0x8B, 0x04, 0x02]),
     }
     if matches!(kind, LoadKind::I32) { emit_zero_extend_eax(code); }
     code.push(0x50);
@@ -380,13 +319,25 @@ fn emit_load(code: &mut Vec<u8>, kind: LoadKind, mem: MemOp) -> Result<()> {
 }
 
 fn emit_store(code: &mut Vec<u8>, kind: StoreKind, mem: MemOp) -> Result<()> {
-    code.push(0x59); // pop rcx = value
-    emit_memory_address(code, mem)?; // pop rax = address
+    code.push(0x59);
+    emit_memory_address(code, mem)?;
     match kind {
-        StoreKind::I32 => code.extend_from_slice(&[0x41, 0x89, 0x0C, 0x02]), // mov [r10 + rax], ecx
-        StoreKind::I64 => code.extend_from_slice(&[0x49, 0x89, 0x0C, 0x02]), // mov [r10 + rax], rcx
+        StoreKind::I32 => code.extend_from_slice(&[0x41, 0x89, 0x0C, 0x02]),
+        StoreKind::I64 => code.extend_from_slice(&[0x49, 0x89, 0x0C, 0x02]),
     }
     Ok(())
+}
+
+fn emit_select(code: &mut Vec<u8>, ty: ValueType) {
+    code.push(0x58); // pop rax = condition
+    code.push(0x59); // pop rcx = false value
+    code.push(0x5A); // pop rdx = true value
+    code.extend_from_slice(&[0x85, 0xC0]); // test eax, eax
+    code.extend_from_slice(&[0x48, 0x0F, 0x45, 0xCA]); // cmovne rcx, rdx
+    if ty == ValueType::I32 {
+        code.extend_from_slice(&[0x89, 0xC9]); // mov ecx, ecx
+    }
+    code.push(0x51); // push selected value
 }
 
 fn emit_i32_add(code: &mut Vec<u8>) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x01, 0xC8]); code.push(0x50); }
@@ -401,19 +352,11 @@ fn emit_i64_eqz(code: &mut Vec<u8>) { code.push(0x58); code.extend_from_slice(&[
 fn emit_i32_cmp(code: &mut Vec<u8>, cc: SetCc) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x39, 0xC1]); emit_setcc_bool(code, cc); }
 fn emit_i64_cmp(code: &mut Vec<u8>, cc: SetCc) { code.push(0x58); code.push(0x59); code.extend_from_slice(&[0x48, 0x39, 0xC1]); emit_setcc_bool(code, cc); }
 
-fn emit_setcc_bool(code: &mut Vec<u8>, cc: SetCc) {
-    code.extend_from_slice(&[0x0F, cc.opcode(), 0xC0]);
-    code.extend_from_slice(&[0x0F, 0xB6, 0xC0]);
-    code.push(0x50);
-}
-
+fn emit_setcc_bool(code: &mut Vec<u8>, cc: SetCc) { code.extend_from_slice(&[0x0F, cc.opcode(), 0xC0]); code.extend_from_slice(&[0x0F, 0xB6, 0xC0]); code.push(0x50); }
 fn emit_zero_extend_eax(code: &mut Vec<u8>) { code.extend_from_slice(&[0x89, 0xC0]); }
 
 fn emit_return(code: &mut Vec<u8>, result: Option<ValueType>) {
-    if let Some(ty) = result {
-        code.push(0x58);
-        if ty == ValueType::I32 { emit_zero_extend_eax(code); }
-    }
+    if let Some(ty) = result { code.push(0x58); if ty == ValueType::I32 { emit_zero_extend_eax(code); } }
     code.extend_from_slice(&[0x48, 0x89, 0xEC]);
     code.push(0x5D);
     code.push(0xC3);
@@ -425,15 +368,7 @@ mod tests {
     use super::super::ir::{verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, LoadKind, MemOp, StoreKind, ValueType};
 
     fn test_ir(name: &str, sig: FuncSig, locals: Vec<ValueType>, ops: Vec<IrOp>) -> FunctionIr {
-        FunctionIr {
-            index: 0,
-            export_name: Some(name.to_string()),
-            sig,
-            locals,
-            global_values: Vec::new(),
-            uses_memory: false,
-            ops,
-        }
+        FunctionIr { index: 0, export_name: Some(name.to_string()), sig, locals, global_values: Vec::new(), uses_memory: false, ops }
     }
 
     #[test]
@@ -484,5 +419,13 @@ mod tests {
         let code = X86_64Backend::compile(&ir).unwrap();
         assert!(code.windows(4).any(|w| w == [0x41, 0x8B, 0x04, 0x02]));
         assert!(code.windows(4).any(|w| w == [0x41, 0x89, 0x0C, 0x02]));
+    }
+
+    #[test]
+    fn x86_supports_select_i32() {
+        let ir = test_ir("select", FuncSig { params: vec![ValueType::I32, ValueType::I32, ValueType::I32], results: vec![ValueType::I32] }, vec![ValueType::I32, ValueType::I32, ValueType::I32], vec![IrOp::LocalGet(0), IrOp::LocalGet(1), IrOp::LocalGet(2), IrOp::Select(ValueType::I32), IrOp::End]);
+        verify_ir(&ir).unwrap();
+        let code = X86_64Backend::compile(&ir).unwrap();
+        assert!(code.windows(4).any(|w| w == [0x48, 0x0F, 0x45, 0xCA]));
     }
 }
