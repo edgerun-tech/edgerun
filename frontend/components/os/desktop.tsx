@@ -2,7 +2,6 @@
 
 import { useEffect, useCallback, useMemo, useState } from "react"
 import { useStore } from "@nanostores/react"
-import { TopBar } from "./top-bar"
 import { XrayDesktopSurface } from "./xray-desktop-surface"
 import { AppOverlayHost } from "./app-overlay-host"
 import { launchApp, getAppIcon } from "@/stores/app-launcher"
@@ -14,7 +13,7 @@ import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
 import { FloatingDock, type FloatingDockContext } from "@/components/ui/floating-dock"
 import { installedAppIdsStore, CORE_APP_IDS } from "@/stores/installed-apps-store"
 import { grantLocalCapabilities } from "@/stores/local-capability-grants-store"
-import { MessageSquare, Phone, Users } from "lucide-react"
+import { MessageSquare, Phone } from "lucide-react"
 import {
   appSurfacesStore,
   appSurfaceOrderStore,
@@ -23,11 +22,9 @@ import {
   pendingGateStore,
   widgetVisibleStore,
   terminalLogsStore,
-  openAppSurface,
   closeAppSurface,
   focusAppSurface,
   addLog,
-  type AppSurfaceDef,
 } from "@/stores/desktop-store"
 
 function ChatHead({ label, tone = "primary" }: { label: string; tone?: "primary" | "green" | "blue" | "amber" }) {
@@ -202,33 +199,6 @@ export function Desktop() {
     launchApp(gate.app)
   }, [])
 
-  const openIdentitySetup = useCallback(async () => {
-    const authPromptSurface: AppSurfaceDef = {
-      id: "surface-auth-prompt",
-      appId: "auth-prompt",
-      title: "Set up Identity",
-      icon: <Users className="h-4 w-4" />,
-      component: (
-        <AuthOverlay
-          authState={auth.authState}
-          username={auth.username}
-          isLoading={auth.isLoading}
-          error={auth.error}
-          hasRegistered={auth.hasRegistered}
-          webAuthnAvailable={auth.webAuthnAvailable}
-          onRegister={auth.register}
-          onAuthenticate={auth.authenticate}
-          onContinueAsGuest={auth.continueAsGuest}
-          onClearError={auth.clearError}
-        />
-      ),
-      kind: "overlay",
-      dismissOnOutsideClick: true,
-      defaultSize: { width: 420, height: 420 },
-    }
-    openAppSurface(authPromptSurface)
-  }, [auth])
-
   if (!showDesktop) {
     return (
       <div className="relative h-screen w-screen overflow-hidden bg-background">
@@ -250,18 +220,7 @@ export function Desktop() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
-      <TopBar
-        nodeCount={systemStats.nodeCount}
-        activeSessions={systemStats.activeSessions}
-        ramUsage={systemStats.ramUsage}
-        isConnected={systemStats.isConnected}
-        username={auth.username}
-        isGuest={auth.authState === "guest"}
-        onLock={auth.lock}
-        onSignIn={openIdentitySetup}
-      />
-
-      <div className="absolute inset-0 top-10 z-10">
+      <div className="absolute inset-0 z-10">
         <XrayDesktopSurface
           nodeCount={systemStats.nodeCount}
           activeSessions={systemStats.activeSessions}
