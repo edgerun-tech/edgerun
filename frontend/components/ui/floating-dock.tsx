@@ -1,6 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { IconLayoutNavbarCollapse } from "@tabler/icons-react";
+import { PanelTopClose } from "lucide-react";
 import {
   AnimatePresence,
   motion,
@@ -149,7 +149,7 @@ const FloatingDockMobile = ({
         className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card hover:bg-accent"
         aria-label="Open app dock"
       >
-        <IconLayoutNavbarCollapse className="h-5 w-5" />
+        <PanelTopClose className="h-5 w-5" />
       </button>
     </div>
   );
@@ -331,7 +331,7 @@ const FloatingDockDesktop = ({
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               className="flex items-end gap-4"
             >
-              {(page === "people" ? peopleItems : launcherItems).map((item, index) => (
+              {(page === "people" ? peopleItems : launcherItemsStable).map((item, index) => (
                 <IconContainer
                   mouseX={mouseX}
                   key={`${page}-${item.kind || "app"}-${item.title}-${index}`}
