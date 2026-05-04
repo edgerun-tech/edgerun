@@ -181,11 +181,102 @@ function TrustSentence({ children }: { children: React.ReactNode }) {
 }
 
 function Landing({ enter }: { enter: () => void }) {
-  return <div className="flex min-h-screen flex-col bg-slate-950 text-slate-200"><main className="flex flex-1 flex-col items-center justify-center px-8 text-center"><div className="mb-8 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5"><Shield size={14} className="text-emerald-400" /><span className="text-xs font-medium text-emerald-300">Human-readable digital trust</span></div><h1 className="mb-4 font-mono text-6xl font-bold tracking-tighter text-slate-50">Trust Manager</h1><p className="mb-3 max-w-2xl text-xl text-slate-400">A human-readable policy layer for digital trust.</p><p className="mb-10 max-w-xl text-sm text-slate-500">Create portable Trust Capsules, delegate authority, route data between services, inspect trust chains, and keep signed proof of what happened.</p><div className="flex flex-wrap justify-center gap-3"><button onClick={enter} className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-medium text-white transition hover:bg-emerald-500"><Plus size={16} />Create Trust Capsule</button><button onClick={enter} className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-6 py-3 text-sm font-medium text-slate-300 transition hover:bg-slate-700"><Eye size={16} />Inspect Existing Trust</button></div></main><div className="mx-auto grid w-full max-w-5xl grid-cols-2 gap-4 px-8 pb-16 md:grid-cols-4">{[[Shield,"Portable Capsules"],[Layers,"Capability Permissions"],[Network,"Visual Trust Chains"],[Route,"Policy Routes"],[ScrollText,"Signed Logs"],[Globe,"OIDC Compatible"],[Lock,"No Server Secrets"],[Fingerprint,"Root Wizard"]].map(([Icon,label]) => { const I = Icon as LucideIcon; return <div key={String(label)} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-center"><div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800"><I size={16} className="text-emerald-400" /></div><div className="text-sm font-medium text-slate-200">{label}</div></div> })}</div></div>
+  return (
+    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-200">
+      <main className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+        <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5">
+          <Shield size={14} className="text-emerald-400" />
+          <span className="text-xs font-medium text-emerald-300">Human-readable digital trust</span>
+        </div>
+        <h1 className="mb-4 font-mono text-6xl font-bold tracking-tighter text-slate-50">Trust Manager</h1>
+        <p className="mb-3 max-w-2xl text-xl text-slate-400">A human-readable policy layer for digital trust.</p>
+        <p className="mb-10 max-w-xl text-sm text-slate-500">Create portable Trust Capsules, delegate authority, route data between services, inspect trust chains, and keep signed proof of what happened.</p>
+        <div className="flex flex-wrap justify-center gap-3">
+          <button onClick={enter} className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-medium text-white transition hover:bg-emerald-500">
+            <Plus size={16} />Create Trust Capsule
+          </button>
+          <button onClick={enter} className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-6 py-3 text-sm font-medium text-slate-300 transition hover:bg-slate-700">
+            <Eye size={16} />Inspect Existing Trust
+          </button>
+        </div>
+      </main>
+      <div className="mx-auto grid w-full max-w-5xl grid-cols-2 gap-4 px-8 pb-16 md:grid-cols-4">
+        {[["Shield","Portable Capsules"],["Layers","Capability Permissions"],["Network","Visual Trust Chains"],["Route","Policy Routes"],["ScrollText","Signed Logs"],["Globe","OIDC Compatible"],["Lock","No Server Secrets"],["Fingerprint","Root Wizard"]].map(([icon, label]) => {
+          const Icon = icon === "Shield" ? Shield : icon === "Layers" ? Layers : icon === "Network" ? Network : icon === "Route" ? Route : icon === "ScrollText" ? ScrollText : icon === "Globe" ? Globe : icon === "Lock" ? Lock : Fingerprint
+          return (
+            <div key={label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-center">
+              <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800">
+                <Icon size={16} className="text-emerald-400" />
+              </div>
+              <div className="text-sm font-medium text-slate-100">{label}</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function Dashboard() {
-  return <Section icon={BarChart2} title="Dashboard" subtitle="See who can do what, why they are trusted, and what happened."><div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{[["Trust Capsules","3","2 warnings",Shield],["Root Strength","2-of-3","Strong",Fingerprint],["Active Routes","12","3 need review",Route],["Events Today","143","All signed",ScrollText]].map(([label,value,sub,Icon]) => { const I = Icon as LucideIcon; return <Card key={String(label)}><I size={18} className="mb-3 text-emerald-400" /><div className="text-2xl font-bold text-slate-100">{value}</div><div className="text-xs text-slate-500">{label}</div><div className="text-xs text-slate-600">{sub}</div></Card> })}</div><div className="grid gap-6 lg:grid-cols-3"><Card><h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-300"><Shield size={14} className="text-emerald-400" />Trust Health</h3>{[["Root policy","Strong","ok"],["Recovery","Configured","ok"],["Revoked keys","1","warn"],["Unknown services","2","danger"],["Expiring delegations","4","warn"]].map(([label,value,status]) => <div key={label} className="mb-3 flex justify-between text-sm"><span className="text-slate-400">{label}</span><span className="font-medium text-slate-200">{value}</span></div>)}</Card><Card><h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-300"><Zap size={14} className="text-amber-400" />Quick Actions</h3>{["Review 3 routes", "4 delegations expiring", "2 unknown services", "Export Trust Capsule"].map(item => <div key={item} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-700/40 hover:text-slate-200"><ChevronRight size={12} />{item}</div>)}</Card><Card><h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-300"><Activity size={14} className="text-blue-400" />Root Evolution</h3>{["Created root", "Added Android Phone", "Changed policy to 2-of-2", "Added YubiKey", "Changed policy to 2-of-3", "Removed old phone"].map(item => <div key={item} className="mb-2 flex gap-2 text-xs text-slate-400"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />{item}</div>)}</Card></div><div className="space-y-2">{events.map((ev, i) => { const I = ev.icon; return <div key={ev.target} onClick={() => setOpen(open === i ? null : i)} className="cursor-pointer rounded-xl border border-slate-700/50 bg-slate-800/50 px-4 py-3 transition hover:bg-slate-800"><div className="flex items-center gap-3"><div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-700/60"><I size={13} className={ev.status === "danger" ? "text-red-400" : ev.status === "warn" ? "text-amber-400" : "text-emerald-400"} /></div><div className="min-w-0 flex-1 text-sm"><span className="font-medium text-slate-200">{ev.actor}</span><span className="text-slate-400"> {ev.action} </span><span className="text-slate-200">{ev.target}</span></div><span className="text-xs text-slate-600">{ev.time}</span><Badge status={ev.status === "ok" ? "ok" : ev.status === "warn" ? "warn" : "danger"}>{ev.status}</Badge></div>{open === i && <div className="ml-10 mt-3 border-t border-slate-700/50 pt-3 text-xs text-slate-400">Reason: {ev.reason}<br />Trust: Signed · Logged · Verifiable</div>}</div> })}</div></Section>
+  return (
+    <Section icon={BarChart2} title="Dashboard" subtitle="See who can do what, why they are trusted, and what happened.">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: "Trust Capsules", value: "3", sub: "2 warnings", Icon: Shield },
+          { label: "Root Strength", value: "2-of-3", sub: "Strong", Icon: Fingerprint },
+          { label: "Active Routes", value: "12", sub: "3 need review", Icon: Route },
+          { label: "Events Today", value: "143", sub: "All signed", Icon: ScrollText },
+        ].map(({ label, value, sub, Icon }) => (
+          <Card key={label}>
+            <Icon size={18} className="mb-3 text-emerald-400" />
+            <div className="text-2xl font-bold text-slate-100">{value}</div>
+            <div className="text-xs text-slate-500">{label}</div>
+            <div className="text-xs text-slate-600">{sub}</div>
+          </Card>
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-300">
+            <Shield size={14} className="text-emerald-400" />Trust Health
+          </h3>
+          {[
+            { label: "Root policy", value: "Strong", status: "ok" as const },
+            { label: "Recovery", value: "Configured", status: "ok" as const },
+            { label: "Revoked keys", value: "1", status: "warn" as const },
+            { label: "Unknown services", value: "2", status: "danger" as const },
+            { label: "Expiring delegations", value: "4", status: "warn" as const },
+          ].map(({ label, value, status }) => (
+            <div key={label} className="mb-3 flex justify-between text-sm">
+              <span className="text-slate-400">{label}</span>
+              <span className="font-medium text-slate-200">{value}</span>
+            </div>
+          ))}
+        </Card>
+        <Card>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-300">
+            <Zap size={14} className="text-amber-400" />Quick Actions
+          </h3>
+          {["Review 3 routes", "4 delegations expiring", "2 unknown services", "Export Trust Capsule"].map((item) => (
+            <div key={item} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-slate-700/40 hover:text-slate-200">
+              <ChevronRight size={12} />{item}
+            </div>
+          ))}
+        </Card>
+        <Card>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-300">
+            <Activity size={14} className="text-blue-400" />Root Evolution
+          </h3>
+          {["Created root", "Added Android Phone", "Changed policy to 2-of-2", "Added YubiKey", "Changed policy to 2-of-3", "Removed old phone"].map((item) => (
+            <div key={item} className="mb-3 flex items-start gap-2 text-sm">
+              <div className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500/60" />
+              <span className="text-slate-300">{item}</span>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </Section>
+  )
 }
 
 function Capsules() {

@@ -78,16 +78,9 @@ function bySlot(surfaces: AppSurfaceDef[] | undefined, slot: AppSurfaceSlot) {
 }
 
 export function XrayDesktopSurface({
-  nodeCount,
-  activeSessions,
-  ramUsage,
   runningApps,
-  isConnected,
   pinnedSurfaces = [],
 }: XrayDesktopSurfaceProps) {
-  const ramPercent = ramUsage.total > 0 ? Math.round((ramUsage.used / ramUsage.total) * 100) : 0
-  const edgePerHour = (nodeCount * 0.018 + activeSessions * 0.041).toFixed(3)
-
   return (
     <div className="absolute inset-0 z-0 overflow-hidden bg-zinc-950">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(120,119,198,0.16),transparent_36%),radial-gradient(circle_at_80%_10%,rgba(16,185,129,0.08),transparent_32%)]" />
