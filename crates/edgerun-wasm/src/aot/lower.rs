@@ -101,15 +101,23 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
                     }
                 }
 
+                let all_locals = current_locals(&types, &func_type_indices, func_index, &locals)?;
+                let sigs = function_sigs(&types, &func_type_indices)?;
+
                 let mut uses_memory = false;
                 let mut ops = Vec::new();
                 let mut type_stack = Vec::new();
-                let all_locals =
-                    current_locals_placeholder(&types, &func_type_indices, func_index, &locals)?;
                 let mut ops_reader = body.get_operators_reader()?;
                 while !ops_reader.eof() {
                     let op = ops_reader.read()?;
-                    let lowered = lower_operator(op, &globals, &all_locals, &mut type_stack)?;
+                    let lowered = lower_operator(
+                        op,
+                        &globals,
+                        &all_locals,
+                        &sigs,
+                        import_func_count,
+                        &mut type_stack,
+                    )?;
                     if matches!(
                         lowered,
                         IrOp::Load(_, _) | IrOp::Store(_, _) | IrOp::MemoryCopy | IrOp::MemoryFill
@@ -180,16 +188,10 @@ pub fn lower_module(module: ParsedModule) -> Result<Vec<FunctionIr>> {
         functions.push(ir);
     }
 
-    if module.import_func_count > 0 {
-        // Imported functions are allowed in the function index space, but this
-        // first compiler intentionally rejects call operators. Hostcall ABI
-        // lowering should be explicit in the next step.
-    }
-
     Ok(functions)
 }
 
-fn current_locals_placeholder(
+fn current_locals(
     types: &[FuncSig],
     func_type_indices: &[u32],
     func_index: u32,
@@ -204,6 +206,18 @@ fn current_locals_placeholder(
     let mut locals = sig.params.clone();
     locals.extend_from_slice(body_locals);
     Ok(locals)
+}
+
+fn function_sigs(types: &[FuncSig], func_type_indices: &[u32]) -> Result<Vec<FuncSig>> {
+    func_type_indices
+        .iter()
+        .map(|idx| {
+            types
+                .get(*idx as usize)
+                .cloned()
+                .with_context(|| format!("missing function type {idx}"))
+        })
+        .collect()
 }
 
 fn normalize_function_ends(mut ops: Vec<IrOp>) -> Result<Vec<IrOp>> {
@@ -241,15 +255,15 @@ fn mem_op(memarg: MemArg) -> Result<MemOp> {
     if memarg.memory != 0 {
         bail!("baseline AOT only supports memory index 0");
     }
-    Ok(MemOp {
-        offset: memarg.offset,
-    })
+    Ok(MemOp { offset: memarg.offset })
 }
 
 fn lower_operator(
     op: Operator<'_>,
     globals: &[GlobalValue],
     locals: &[ValueType],
+    function_sigs: &[FuncSig],
+    import_func_count: u32,
     stack: &mut Vec<ValueType>,
 ) -> Result<IrOp> {
     let lowered = match op {
@@ -354,6 +368,25 @@ fn lower_operator(
             pop_ty(stack, ValueType::I32, "memory.fill value")?;
             pop_ty(stack, ValueType::I32, "memory.fill destination")?;
             IrOp::MemoryFill
+        }
+        Operator::Call { function_index } => {
+            if function_index < import_func_count {
+                bail!("baseline AOT does not support imported function calls yet: {function_index}");
+            }
+            let sig = function_sigs
+                .get(function_index as usize)
+                .cloned()
+                .with_context(|| format!("call references missing function {function_index}"))?;
+            for expected in sig.params.iter().rev().copied() {
+                pop_ty(stack, expected, "call argument")?;
+            }
+            if sig.results.len() > 1 {
+                bail!("baseline AOT does not support multi-value call returns");
+            }
+            if let Some(result) = sig.results.first().copied() {
+                stack.push(result);
+            }
+            IrOp::Call(function_index, sig)
         }
         Operator::Select => {
             pop_ty(stack, ValueType::I32, "select condition")?;
