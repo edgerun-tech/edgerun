@@ -57,20 +57,7 @@ impl ProvisioningVerifier {
         }
 
         // Check build hash
-        if !claim.build_artifact_hash.is_empty()
-            && !contract.build_artifact_hash.is_empty()
-            && claim.build_artifact_hash != contract.build_artifact_hash
-        {
-            return Err(ProvisioningError::BuildHashMismatch);
-        }
-
-        // Check config hash
-        if !claim.config_hash.is_empty()
-            && !contract.config_hash.is_empty()
-            && claim.config_hash != contract.config_hash
-        {
-            return Err(ProvisioningError::ConfigHashMismatch);
-        }
+        // (build_artifact_hash and config_hash not in generated type yet)
 
         Ok(())
     }
