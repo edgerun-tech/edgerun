@@ -10,7 +10,25 @@ next.user-config.*
 # Environment variables
 .env*.local
 
-# Common ignores
-node_modules
+# Dependencies
+node_modules/
+
+# Next / React build output
 .next/
+out/
+
+# Test / coverage output
+coverage/
+playwright-report/
+test-results/
+
+# TypeScript incremental cache
+*.tsbuildinfo
+
+# Logs and OS files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 .DS_Store
