@@ -5,6 +5,7 @@
  * candidates may still live in their original folder and be re-exported here.
  */
 
+export { FinancesOverviewWidget } from "./finance-overviews"
 export { ResourceMonitor } from "@/components/os/resource-monitor"
 export { AgentActivityPanel } from "@/components/agents/AgentActivityPanel"
 export { AlertCenter } from "@/components/alerts/AlertCenter"
