@@ -5,7 +5,7 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
-  Github,
+  GitBranch,
   KeyRound,
   Link2,
   Lock,
@@ -95,7 +95,7 @@ const initialConnections: Connection[] = [
     authorityRef: "external:github:pending",
     proofRef: "oauth:github:pending",
     lastUsed: "never",
-    icon: Github,
+    icon: GitBranch,
   },
 ]
 
@@ -122,7 +122,7 @@ const initialRecords: TrustRecord[] = [
     detail: "Route is ready conceptually, but GitHub connection still needs real OAuth wiring.",
     authorityRef: "route:release-signing:v2",
     proofRef: "external:github:pending",
-    icon: Github,
+    icon: GitBranch,
   },
   {
     id: "invoice-route",
@@ -289,7 +289,7 @@ export function TrustManagerSurface() {
                 <section className="rounded-xl border border-border bg-card p-4 xl:col-span-2"><div className="mb-3 flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-primary" />Evidence</div><div className="grid gap-2 font-mono text-[11px]"><button onClick={() => copy(selected.authorityRef, "authority ref")} className="flex items-center justify-between gap-3 rounded-lg bg-background p-2 text-left ring-1 ring-border hover:ring-primary/40"><span className="text-muted-foreground">authority</span><span className="truncate">{selected.authorityRef}</span><Copy className="h-3 w-3" /></button><button onClick={() => copy(selected.proofRef, "proof ref")} className="flex items-center justify-between gap-3 rounded-lg bg-background p-2 text-left ring-1 ring-border hover:ring-primary/40"><span className="text-muted-foreground">proof</span><span className="truncate">{selected.proofRef}</span><Copy className="h-3 w-3" /></button></div></section>
               </div>
             </div>
-            <footer className="flex h-12 items-center justify-between border-t border-border bg-[var(--window-header)]/40 px-4"><p className="min-w-0 truncate text-[11px] text-muted-foreground">{message}</p><div className="flex gap-2">{selected.id === "github" && selected.status !== "connected" && selected.status !== "revoked" && <button onClick={connectGithub} className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"><Github className="mr-1 inline h-3 w-3" />Connect GitHub</button>}<button onClick={reviewSelected} className="rounded-md bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80">Review</button><button onClick={revokeSelected} className="rounded-md bg-[var(--status-error)]/10 px-3 py-1.5 text-xs font-medium text-[var(--status-error)] hover:bg-[var(--status-error)]/20"><Trash2 className="mr-1 inline h-3 w-3" />Revoke</button></div></footer>
+            <footer className="flex h-12 items-center justify-between border-t border-border bg-[var(--window-header)]/40 px-4"><p className="min-w-0 truncate text-[11px] text-muted-foreground">{message}</p><div className="flex gap-2">{selected.id === "github" && selected.status !== "connected" && selected.status !== "revoked" && <button onClick={connectGithub} className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"><GitBranch className="mr-1 inline h-3 w-3" />Connect GitHub</button>}<button onClick={reviewSelected} className="rounded-md bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80">Review</button><button onClick={revokeSelected} className="rounded-md bg-[var(--status-error)]/10 px-3 py-1.5 text-xs font-medium text-[var(--status-error)] hover:bg-[var(--status-error)]/20"><Trash2 className="mr-1 inline h-3 w-3" />Revoke</button></div></footer>
           </main>
         </>
       ) : (
