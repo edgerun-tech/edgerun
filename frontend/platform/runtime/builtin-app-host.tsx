@@ -46,8 +46,8 @@ const FileManagerApp = dynamic(
   () => import("@/components/os/file-manager").then((mod) => mod.FileManager),
   { ssr: false, loading: LoadingApp },
 )
-const StorageApp = dynamic(
-  () => import("@/components/os/storage-app").then((mod) => mod.StorageApp),
+const StorageDashboard = dynamic(
+  () => import("@/components/os/storage-dashboard").then((mod) => mod.StorageDashboard),
   { ssr: false, loading: LoadingApp },
 )
 const GmailApp = dynamic(
@@ -95,7 +95,7 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
     case "file-browser":
       return <FileManagerApp />
     case "storage":
-      return <StorageApp />
+      return <StorageDashboard />
     case "gmail":
       return <GmailApp />
     case "settings":
