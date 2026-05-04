@@ -11,9 +11,12 @@ import {
   getVisibleGraph,
 } from "./graph/graph-store"
 import { WebGLRenderer } from "./render/webgl-renderer"
+import { NODE_FS } from "./render/shaders"
 import { runForceLayout } from "./layout/force-layout"
 import { runGlobeLayout } from "./layout/globe-layout"
 import { runLayerLayout } from "./layout/layer-layout"
+
+const XRAY_NODE_SHADER_STORAGE_KEY = "edgerun.xray.nodeFragmentShader"
 
 function shortPath(path?: string) {
   if (!path) return "unknown"
@@ -48,6 +51,9 @@ export function XrayViewport() {
   const state = useStore(xrayState)
   const [isDragging, setIsDragging] = useState(false)
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null)
+  const [shaderOpen, setShaderOpen] = useState(false)
+  const [shaderSource, setShaderSource] = useState(NODE_FS)
+  const [shaderStatus, setShaderStatus] = useState("Built-in shader")
   const dragStart = useRef({ x: 0, y: 0 })
   const dragPanStart = useRef({ x: 0, y: 0 })
   const dragCameraStart = useRef({ yaw: 0, pitch: 0 })
@@ -75,6 +81,26 @@ export function XrayViewport() {
     })
   }, [])
 
+  const applyShader = useCallback((source: string, save: boolean) => {
+    const renderer = rendererRef.current
+    if (!renderer) return
+    const result = renderer.setNodeFragmentShader(source)
+    if (!result.ok) {
+      setShaderStatus(result.error)
+      return
+    }
+    if (save) window.localStorage.setItem(XRAY_NODE_SHADER_STORAGE_KEY, source)
+    setShaderStatus(save ? "Applied and saved" : "Applied for this session")
+    renderFrame()
+  }, [renderFrame])
+
+  const resetShader = useCallback(() => {
+    window.localStorage.removeItem(XRAY_NODE_SHADER_STORAGE_KEY)
+    setShaderSource(NODE_FS)
+    applyShader(NODE_FS, false)
+    setShaderStatus("Reset to built-in shader")
+  }, [applyShader])
+
   useEffect(() => {
     ensureCodeAnalyzerConnection()
   }, [])
@@ -86,6 +112,13 @@ export function XrayViewport() {
     const renderer = new WebGLRenderer(canvas)
     rendererRef.current = renderer
     renderer.resize()
+
+    const savedShader = window.localStorage.getItem(XRAY_NODE_SHADER_STORAGE_KEY)
+    if (savedShader?.trim()) {
+      setShaderSource(savedShader)
+      const result = renderer.setNodeFragmentShader(savedShader)
+      setShaderStatus(result.ok ? "Loaded saved shader" : result.error)
+    }
 
     const s = xrayState.get()
     const visible = getVisibleGraph(s)
@@ -106,6 +139,7 @@ export function XrayViewport() {
 
     return () => {
       renderer.destroy()
+      rendererRef.current = null
       window.removeEventListener("resize", onResize)
     }
   }, [renderFrame])
@@ -230,6 +264,29 @@ export function XrayViewport() {
         onWheel={handleWheel}
       />
 
+      <button type="button" onClick={() => setShaderOpen((open) => !open)} className="absolute left-3 top-3 z-[70] rounded-full border border-white/10 bg-black/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-primary shadow-xl backdrop-blur-md hover:bg-black/85">
+        shader
+      </button>
+
+      {shaderOpen ? (
+        <div className="absolute left-3 top-12 z-[75] flex max-h-[calc(100%-4.5rem)] w-[min(680px,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/88 text-xs shadow-2xl backdrop-blur-md">
+          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
+            <div className="min-w-0"><div className="font-medium text-foreground">Node fragment shader</div><div className="truncate font-mono text-[10px] text-muted-foreground">localStorage: {XRAY_NODE_SHADER_STORAGE_KEY}</div></div>
+            <button type="button" onClick={() => setShaderOpen(false)} className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground">close</button>
+          </div>
+          <div className="flex min-h-0 flex-col gap-2 p-3">
+            <textarea value={shaderSource} onChange={(event) => setShaderSource(event.target.value)} spellCheck={false} className="h-[420px] min-h-[240px] resize-none rounded-xl border border-white/10 bg-zinc-950/95 p-3 font-mono text-[11px] leading-relaxed text-foreground outline-none ring-primary/40 focus:ring-2" />
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => applyShader(shaderSource, true)} className="rounded-full bg-primary px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-primary-foreground hover:bg-primary/90">apply + save</button>
+              <button type="button" onClick={() => applyShader(shaderSource, false)} className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-foreground hover:bg-white/10">test only</button>
+              <button type="button" onClick={resetShader} className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground hover:bg-white/10 hover:text-foreground">reset</button>
+              <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">{shaderStatus}</span>
+            </div>
+            <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 p-2 font-mono text-[10px] leading-relaxed text-amber-100/80">Keep this GLSL contract: in vec4 v_color; in float v_selected; out vec4 fragColor; gl_PointCoord is available.</div>
+          </div>
+        </div>
+      ) : null}
+
       {inspectedNode ? (
         <div
           className="pointer-events-auto fixed z-[80] w-[320px] rounded-xl border border-white/10 bg-black/85 px-3 py-2 text-xs shadow-2xl backdrop-blur-md"
@@ -256,12 +313,7 @@ export function XrayViewport() {
           {inspectedRelations.length > 0 && (
             <div className="mt-2 max-h-36 space-y-1 overflow-auto">
               {inspectedRelations.map((relation, index) => (
-                <button
-                  key={`${relation.direction}-${relation.kind}-${relation.id}-${index}`}
-                  type="button"
-                  onClick={() => selectNode(relation.id)}
-                  className="flex w-full items-center gap-2 rounded-lg bg-white/5 px-2 py-1 text-left text-[10px] hover:bg-white/10"
-                >
+                <button key={`${relation.direction}-${relation.kind}-${relation.id}-${index}`} type="button" onClick={() => selectNode(relation.id)} className="flex w-full items-center gap-2 rounded-lg bg-white/5 px-2 py-1 text-left text-[10px] hover:bg-white/10">
                   <span className="shrink-0 font-mono text-primary">{relation.direction === "out" ? "→" : "←"}</span>
                   <span className="min-w-0 flex-1 truncate text-foreground">{relation.label}</span>
                   <span className="shrink-0 font-mono text-muted-foreground">{relation.kind}</span>
