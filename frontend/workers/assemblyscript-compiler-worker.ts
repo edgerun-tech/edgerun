@@ -13,6 +13,9 @@ type CompileResponse =
       wasm: Uint8Array
       wasmSize: number
       compileMs: number
+      instantiateMs: number
+      exports: string[]
+      runResult?: string
     }
   | {
       id: number
@@ -20,6 +23,7 @@ type CompileResponse =
       logs: string[]
       error: string
       compileMs: number
+      instantiateMs: number
     }
 
 type AscMainResult = {
@@ -37,6 +41,35 @@ const asc = ascModule as AscCompiler
 
 function normalizePath(path: string): string {
   return path.replace(/^\.\//, "")
+}
+
+function stringifyExportResult(value: unknown): string {
+  if (typeof value === "bigint") return value.toString()
+  if (value === undefined) return "undefined"
+  return String(value)
+}
+
+async function instantiateAndRun(wasm: Uint8Array) {
+  const started = performance.now()
+  const imports = {
+    env: {
+      abort(message: number, fileName: number, line: number, column: number) {
+        throw new Error(`abort at ${line}:${column} message=${message} file=${fileName}`)
+      },
+    },
+  }
+
+  const { instance } = await WebAssembly.instantiate(wasm, imports)
+  const exports = instance.exports as Record<string, unknown>
+  const exportNames = Object.keys(exports)
+  const callable = exports.run
+  const runResult = typeof callable === "function" ? stringifyExportResult(callable()) : undefined
+
+  return {
+    instantiateMs: performance.now() - started,
+    exports: exportNames,
+    runResult,
+  }
 }
 
 self.onmessage = async (event: MessageEvent<CompileRequest>) => {
@@ -99,13 +132,24 @@ self.onmessage = async (event: MessageEvent<CompileRequest>) => {
       throw new Error("AssemblyScript compiler did not emit module.wasm")
     }
 
+    const compileMs = performance.now() - started
+    logs.push(`compiled ${wasm.byteLength} byte wasm module in ${compileMs.toFixed(2)}ms`)
+
+    const run = await instantiateAndRun(wasm)
+    logs.push(`instantiated module in ${run.instantiateMs.toFixed(2)}ms`)
+    logs.push(`exports: ${run.exports.join(", ") || "none"}`)
+    logs.push(run.runResult === undefined ? "no exported run() function found; module compiled successfully" : `run() → ${run.runResult}`)
+
     const response: CompileResponse = {
       id,
       ok: true,
       logs,
       wasm,
       wasmSize: wasm.byteLength,
-      compileMs: performance.now() - started,
+      compileMs,
+      instantiateMs: run.instantiateMs,
+      exports: run.exports,
+      runResult: run.runResult,
     }
 
     self.postMessage(response, [wasm.buffer])
@@ -116,6 +160,7 @@ self.onmessage = async (event: MessageEvent<CompileRequest>) => {
       logs,
       error: error instanceof Error ? error.message : String(error),
       compileMs: performance.now() - started,
+      instantiateMs: 0,
     }
     self.postMessage(response)
   }
