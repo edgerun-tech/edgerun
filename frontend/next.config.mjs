@@ -1,12 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  allowedDevOrigins: [
+    "localhost",
+    "127.0.0.1",
+    "192.168.1.42",
+  ],
   images: {
     unoptimized: true,
   },
-  // Removed "output: export" to support API routes for Gmail OAuth
+  // Keep API routes enabled for Gmail OAuth and exchange proxy routes.
+  // Do not hide TypeScript build errors; surface them so UI drift is caught early.
   devIndicators: false,
 }
 
