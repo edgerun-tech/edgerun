@@ -77,7 +77,7 @@ export function Desktop() {
 
   useEffect(() => {
     if (!showDesktop) return
-    const PINNED_APP_IDS = ["network-monitor", "compute-node"]
+    const PINNED_APP_IDS = ["compute-node"]
     const surfaces = appSurfacesStore.get()
     for (const appId of PINNED_APP_IDS) {
       const alreadyPinned = surfaces.some((s) => s.appId === appId && s.kind === "pinned-widget")
