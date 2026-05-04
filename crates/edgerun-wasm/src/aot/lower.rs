@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
-use wasmparser::{ExternalKind, Operator, Payload, TypeRef};
+use wasmparser::{BlockType, ExternalKind, Operator, Payload, TypeRef};
 
 use super::ir::{verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, ValueType};
 
@@ -98,12 +98,13 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
                     }
                 }
 
-                let mut ops = Vec::new();
+                let mut raw_ops = Vec::new();
                 let mut ops_reader = body.get_operators_reader()?;
                 while !ops_reader.eof() {
                     let op = ops_reader.read()?;
-                    ops.push(lower_operator(op, &globals)?);
+                    raw_ops.push(lower_operator(op, &globals)?);
                 }
+                let ops = normalize_function_ends(raw_ops)?;
 
                 bodies.push(FunctionBody {
                     func_index,
@@ -172,6 +173,22 @@ pub fn lower_module(module: ParsedModule) -> Result<Vec<FunctionIr>> {
     Ok(functions)
 }
 
+fn normalize_function_ends(mut ops: Vec<IrOp>) -> Result<Vec<IrOp>> {
+    let last_real = ops
+        .iter()
+        .rposition(|op| !matches!(op, IrOp::Nop))
+        .context("function body has no terminating end")?;
+    for (idx, op) in ops.iter_mut().enumerate() {
+        if matches!(op, IrOp::End) && idx != last_real {
+            *op = IrOp::Nop;
+        }
+    }
+    if !matches!(ops[last_real], IrOp::End | IrOp::Return) {
+        bail!("function body does not end with end/return");
+    }
+    Ok(ops)
+}
+
 fn parse_global_init(ty: ValueType, init_expr: wasmparser::ConstExpr<'_>) -> Result<GlobalValue> {
     let mut reader = init_expr.get_operators_reader();
     let first = reader.read()?;
@@ -189,6 +206,13 @@ fn parse_global_init(ty: ValueType, init_expr: wasmparser::ConstExpr<'_>) -> Res
 
 fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
     Ok(match op {
+        Operator::Nop => IrOp::Nop,
+        Operator::Block { blockty } => {
+            if !matches!(blockty, BlockType::Empty) {
+                bail!("baseline AOT only supports empty block types for now: {blockty:?}");
+            }
+            IrOp::Nop
+        }
         Operator::I32Const { value } => IrOp::I32Const(value),
         Operator::I64Const { value } => IrOp::I64Const(value),
         Operator::GlobalGet { global_index } => {
