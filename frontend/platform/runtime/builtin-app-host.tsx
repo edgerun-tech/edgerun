@@ -4,9 +4,7 @@ import { Terminal } from "@/components/os/terminal"
 import { CodeRunner } from "@/components/os/code-runner"
 import { ResourceMonitor } from "@/components/os/resource-monitor"
 import { AppStore as AppStoreComponent } from "@/components/os/app-store"
-import { ContactsApp } from "@/components/os/contacts-app"
-import { CallingApp } from "@/components/os/calling-app"
-import { DemoChatApp as ChatApp } from "@/components/os/chat-app"
+import { PeopleApp } from "@/components/os/people-app"
 import { WalletApp } from "@/components/os/wallet-app"
 import { CalculatorApp } from "@/components/os/calculator-app"
 import { HelpApp } from "@/components/os/help-app"
@@ -37,12 +35,11 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
           runningApps={[]}
         />
       )
+    case "people":
     case "contacts":
-      return <ContactsApp />
     case "calling":
-      return <CallingApp />
     case "chat":
-      return <ChatApp />
+      return <PeopleApp />
     case "wallet":
       return <WalletApp />
     case "calculator":
