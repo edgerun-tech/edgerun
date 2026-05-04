@@ -2,12 +2,11 @@
 
 import { useEffect, useCallback, useMemo } from "react"
 import { useStore } from "@nanostores/react"
-import { Window } from "./window"
 import { TopBar } from "./top-bar"
-import { DesktopTelemetry } from "./desktop-telemetry"
+import { XrayDesktopSurface } from "./xray-desktop-surface"
+import { AppOverlayHost } from "./app-overlay-host"
 import { launchApp, getAppIcon } from "@/stores/app-launcher"
 import { AuthOverlay } from "./auth-overlay"
-import { StageManager } from "./stage-manager"
 import { WidgetPanel } from "./widget-panel"
 import { WorkspaceStatusPanel } from "@/components/workspace"
 import { useAuth } from "@/hooks/use-auth"
@@ -25,7 +24,6 @@ import {
   pendingGateStore,
   stageModeStore,
   widgetVisibleStore,
-  desktopTelemetryVisibleStore,
   openWindow,
   closeWindow,
   focusWindow,
@@ -40,9 +38,7 @@ export function Desktop() {
   const focusedWindow = useStore(focusedWindowStore)
   const systemStats = useStore(systemStatsStore)
   const pendingGate = useStore(pendingGateStore)
-  const stageMode = useStore(stageModeStore)
   const widgetVisible = useStore(widgetVisibleStore)
-  const desktopTelemetryVisible = useStore(desktopTelemetryVisibleStore)
   const installedAppIds = useStore(installedAppIdsStore)
 
   const showDesktop = auth.authState === "authenticated" || auth.authState === "guest"
@@ -120,7 +116,6 @@ export function Desktop() {
             isGuest={auth.authState === "guest"}
             onLock={auth.lock}
             onSignIn={async () => {
-              stageModeStore.set(false)
               const authPromptWin: OpenWindowDef = {
                 id: "window-auth-prompt",
                 appId: "auth-prompt",
@@ -148,22 +143,12 @@ export function Desktop() {
           />
 
           <div className="absolute inset-0 top-10 z-10">
-            {desktopTelemetryVisible && (
-              <DesktopTelemetry
-                nodeCount={systemStats.nodeCount}
-                activeSessions={systemStats.activeSessions}
-                ramUsage={systemStats.ramUsage}
-                isConnected={systemStats.isConnected}
-                runningApps={windows.length}
-              />
-            )}
-
-            <StageManager
-              windows={windows}
-              focusedWindowId={focusedWindow}
-              onFocus={focusWindow}
-              onClose={handleCloseWindow}
-              enabled={stageMode}
+            <XrayDesktopSurface
+              nodeCount={systemStats.nodeCount}
+              activeSessions={systemStats.activeSessions}
+              ramUsage={systemStats.ramUsage}
+              isConnected={systemStats.isConnected}
+              runningApps={windows.length}
             />
 
             <WidgetPanel
@@ -173,54 +158,29 @@ export function Desktop() {
 
             <FloatingDock
               items={dockItems as any}
-              desktopClassName="fixed bottom-4 left-1/2 -translate-x-1/2 z-40"
+              desktopClassName="fixed bottom-4 left-1/2 -translate-x-1/2 z-50"
             />
 
             {pendingGate && (
-              <Window
-                id="window-capability-gate"
-                title="Permission Request"
-                icon={<Users className="h-4 w-4" />}
-                defaultPosition={{ x: 250, y: 120 }}
-                defaultSize={{ width: 460, height: 520 }}
-                onClose={() => pendingGateStore.set(null)}
-                onFocus={() => focusWindow("window-capability-gate")}
-                isFocused={focusedWindow === "window-capability-gate"}
-                zIndex={windowOrder.length + 10}
-                stageHidden={false}
-                stageMode={false}
-              >
-                <CapabilityGatePrompt
-                  appName={pendingGate.app.name}
-                  blockedCapabilities={pendingGate.blocked}
-                  onGrant={grantPendingAndOpen}
-                  onDismiss={() => pendingGateStore.set(null)}
-                />
-              </Window>
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/35 p-6 backdrop-blur-[2px]">
+                <div className="w-[min(460px,calc(100vw-3rem))] overflow-hidden rounded-[28px] border border-white/10 bg-background/95 shadow-[0_32px_120px_rgba(0,0,0,0.78)]">
+                  <CapabilityGatePrompt
+                    appName={pendingGate.app.name}
+                    blockedCapabilities={pendingGate.blocked}
+                    onGrant={grantPendingAndOpen}
+                    onDismiss={() => pendingGateStore.set(null)}
+                  />
+                </div>
+              </div>
             )}
 
-            {windows.map((win) => {
-              const isStageHidden = stageMode && win.id !== focusedWindow
-              return (
-                <Window
-                  key={win.id}
-                  id={win.id}
-                  appId={win.appId}
-                  title={win.title}
-                  icon={win.icon}
-                  defaultPosition={win.defaultPosition}
-                  defaultSize={win.defaultSize}
-                  onClose={() => handleCloseWindow(win.id)}
-                  onFocus={() => focusWindow(win.id)}
-                  isFocused={focusedWindow === win.id}
-                  zIndex={windowOrder.indexOf(win.id) + 10}
-                  stageHidden={isStageHidden}
-                  stageMode={stageMode}
-                >
-                  {win.component}
-                </Window>
-              )
-            })}
+            <AppOverlayHost
+              windows={windows}
+              windowOrder={windowOrder}
+              focusedWindowId={focusedWindow}
+              onFocus={focusWindow}
+              onClose={handleCloseWindow}
+            />
 
             <WorkspaceStatusPanel />
           </div>
