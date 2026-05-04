@@ -37,7 +37,7 @@ pub fn make_mesh_command_handler(
         edgerun_rt::spawn(async move {
             let raw = decrypted.clone();
             if let Ok(command) =
-                edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&decrypted[..])
+                edgerun_core::protocol::CommandEnvelope::decode(&decrypted[..])
             {
                 // Fire-and-forget — no reply channel needed.
                 let _ = tx
@@ -53,7 +53,7 @@ pub fn make_mesh_command_handler(
 
             let raw = decrypted.clone();
             if let Ok(query) =
-                edgerun_proto::edgerun::v0::access::QueryRequest::decode(&decrypted[..])
+                edgerun_core::protocol::QueryRequest::decode(&decrypted[..])
             {
                 // Fire-and-forget — no reply channel needed.
                 let _ = tx

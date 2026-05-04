@@ -402,12 +402,12 @@ async fn handle_tcp_stream_common_with_session<R, W>(
 
         // Try CommandEnvelope
         if let Ok(command) =
-            edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&payload[..])
+            edgerun_core::protocol::CommandEnvelope::decode(&payload[..])
         {
             let raw = payload.clone();
 
             // Check if this is a snapshot publish command
-            use edgerun_proto::edgerun::v0::stream::CommandType;
+            use edgerun_core::protocol::CommandType;
             if command.command_type == CommandType::PublishSnapshot as i32 {
                 let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
                 if store_tx
@@ -441,7 +441,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             if command.command_type == CommandType::FetchObject as i32 {
                 // Decode the raw payload as proto CommandEnvelope to get payload_object
                 let proto_command =
-                    match edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&raw[..]) {
+                    match edgerun_core::protocol::CommandEnvelope::decode(&raw[..]) {
                         Ok(cmd) => cmd,
                         Err(e) => {
                             edgerun_log::warn!(
@@ -462,11 +462,11 @@ async fn handle_tcp_stream_common_with_session<R, W>(
                         Payload::PayloadObject(obj) => obj.clone(),
                         Payload::InlinePayload(bytes) => {
                             if let Ok(obj) =
-                                edgerun_proto::edgerun::v0::common::ObjectRef::decode(&bytes[..])
+                                edgerun_core::protocol::ObjectRef::decode(&bytes[..])
                             {
                                 obj
                             } else {
-                                edgerun_proto::edgerun::v0::common::ObjectRef {
+                                edgerun_core::protocol::ObjectRef {
                                     object_id: vec![],
                                     object_kind: None,
                                 }
@@ -474,7 +474,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
                         }
                     }
                 } else {
-                    edgerun_proto::edgerun::v0::common::ObjectRef {
+                    edgerun_core::protocol::ObjectRef {
                         object_id: vec![],
                         object_kind: None,
                     }
@@ -554,7 +554,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
         }
 
         // Try QueryRequest
-        if let Ok(query) = edgerun_proto::edgerun::v0::access::QueryRequest::decode(&payload[..]) {
+        if let Ok(query) = edgerun_core::protocol::QueryRequest::decode(&payload[..]) {
             let raw = payload.clone();
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
             if store_tx

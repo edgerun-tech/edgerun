@@ -21,7 +21,7 @@ use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::{EncodedPoint, ToEncodedPoint};
 use edgerun_crypto::p256::PublicKey;
 use edgerun_crypto::{Aead, AesGcmCipher, KeyInit, OsRng};
-use edgerun_proto::edgerun::v0::common::{CipherSuite, EncryptedEnvelope, RecipientKey};
+use edgerun_core::protocol::{CipherSuite, EncryptedEnvelope, RecipientKey};
 use prost::Message;
 
 /// Domain string for encrypted envelope signature canonicalization.

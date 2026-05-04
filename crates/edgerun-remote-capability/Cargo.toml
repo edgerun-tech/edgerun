@@ -22,11 +22,9 @@ edgerun-wifi = { version = "0.1", path = "../edgerun-wifi" }
 
 edgerun-npu = { version = "0.1", path = "../edgerun-npu" }
 edgerun-fingerprint = { version = "0.1", path = "../edgerun-fingerprint" }
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
-prost.workspace = true
 
 edgerun-core = { version = "0.1", path = "../edgerun-core" }
 

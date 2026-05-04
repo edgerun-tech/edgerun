@@ -329,7 +329,7 @@ async fn handle_peer_messages<R, W>(
 
         // Try CommandEnvelope
         if let Ok(command) =
-            edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&payload[..])
+            edgerun_core::protocol::CommandEnvelope::decode(&payload[..])
         {
             let raw = payload.clone();
 
@@ -363,7 +363,7 @@ async fn handle_peer_messages<R, W>(
         }
 
         // Try QueryRequest
-        if let Ok(query) = edgerun_proto::edgerun::v0::access::QueryRequest::decode(&payload[..]) {
+        if let Ok(query) = edgerun_core::protocol::QueryRequest::decode(&payload[..]) {
             let raw = payload.clone();
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
             if store_tx

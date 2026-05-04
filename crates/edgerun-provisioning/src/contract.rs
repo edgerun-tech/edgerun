@@ -1,5 +1,5 @@
 use edgerun_crypto::{sign, verify, KeyPair, PublicKey};
-use edgerun_proto::edgerun::v0::common::{Identity, Signature, Timestamp};
+use edgerun_core::protocol::{Identity, Signature, Timestamp};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Provisioning contract kind — enum, not bool

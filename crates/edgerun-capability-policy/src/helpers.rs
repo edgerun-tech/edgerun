@@ -10,7 +10,7 @@ use edgerun_capabilities::{
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
 use edgerun_crypto::sha2::Digest;
-use edgerun_proto::edgerun::v0::common::{IdentityRef, NodeRef};
+use edgerun_core::protocol::{IdentityRef, NodeRef};
 use prost_types::{Duration as ProstDuration, Timestamp};
 
 pub(crate) fn dedupe_i32(values: Vec<i32>) -> Vec<i32> {

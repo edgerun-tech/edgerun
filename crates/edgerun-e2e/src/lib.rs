@@ -423,7 +423,7 @@ signer:
             .sign_record(edgerun_core::crypto::SIG_DOMAIN_SESSION_HELLO, &canonical)
             .map_err(|e| e.to_string())?;
         let mut signed_hello = hello;
-        signed_hello.signature = Some(edgerun_proto::edgerun::v0::common::Signature {
+        signed_hello.signature = Some(edgerun_core::protocol::Signature {
             algorithm: 1,
             value: sig.to_vec(),
         });
@@ -689,7 +689,7 @@ signer:
                 session_nonce: nonce.clone(),
                 initiator_locators: vec![],
                 hello_metadata: None,
-                signature: Some(edgerun_proto::edgerun::v0::common::Signature {
+                signature: Some(edgerun_core::protocol::Signature {
                     algorithm: 1,
                     value: vec![0u8; MESH_SIGNATURE_LENGTH], // Forged
                 }),
@@ -1179,7 +1179,7 @@ signer:
 
         #[test]
         fn e2e_protobuf_roundtrip() {
-            use edgerun_proto::edgerun::v0::common::{IdentityKind, IdentityRef};
+            use edgerun_core::protocol::{IdentityKind, IdentityRef};
 
             let original = IdentityRef {
                 identity_id: vec![1, 2, 3, 4, 5],

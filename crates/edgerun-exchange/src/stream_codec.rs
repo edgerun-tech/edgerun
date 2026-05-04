@@ -17,8 +17,8 @@ use alloc::vec::Vec;
 
 use prost::Message;
 
-use edgerun_proto::edgerun::v0::common::{Digest, ObjectKind, ObjectRef};
-use edgerun_proto::edgerun::v0::stream::{EventEnvelope, EventType};
+use edgerun_core::protocol::{Digest, ObjectKind, ObjectRef};
+use edgerun_core::protocol::{EventEnvelope, EventType};
 use edgerun_proto::edgerun::v0::wallet::v0::{
     wallet_exchange_event_payload, WalletDepositObservedPayload, WalletExchangeEventPayload,
     WalletManualReviewRequiredPayload, WalletOrderCompletedPayload, WalletOrderCreatedPayload,

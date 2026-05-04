@@ -1,4 +1,4 @@
-use edgerun_proto::edgerun::v0::stream::{CommandEnvelope, CommandType};
+use edgerun_core::protocol::{CommandEnvelope, CommandType};
 
 #[derive(Debug, Clone)]
 pub struct SimulationResult {

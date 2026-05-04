@@ -40,9 +40,9 @@ async fn run_fetch_queue_consumer(
     use edgerun_core::protocol::{canonical_bytes, ProtocolRecord, Signature};
     use edgerun_core::result::Verdict;
     use edgerun_core::validators_proto::validate_query_result_fragment;
-    use edgerun_proto::edgerun::v0::access::{QueryClass, QueryRequest};
-    use edgerun_proto::edgerun::v0::common::IdentityRef;
-    use edgerun_proto::edgerun::v0::trust::{ScopeDescriptor, ScopeKind};
+    use edgerun_core::protocol::{QueryClass, QueryRequest};
+    use edgerun_core::protocol::IdentityRef;
+    use edgerun_core::protocol::{ScopeDescriptor, ScopeKind};
 
     if peers.is_empty() {
         edgerun_log::info!("no bootstrap peers configured, fetch queue consumer disabled");
@@ -164,7 +164,7 @@ async fn run_fetch_queue_consumer(
 
                     // Try to decode the response and store fetched objects
                     if let Ok(fragment) =
-                        edgerun_proto::edgerun::v0::access::QueryResultFragment::decode(
+                        edgerun_core::protocol::QueryResultFragment::decode(
                             &fragment_bytes[..],
                         )
                     {
@@ -257,7 +257,7 @@ async fn run_fetch_queue_consumer(
 /// Called from the store task's blocking thread — does direct blocking TCP I/O.
 pub fn send_command_to_peer(
     peer_addr: &str,
-    command: &edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+    command: &edgerun_core::protocol::CommandEnvelope,
     store: &mut NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
@@ -272,7 +272,7 @@ pub fn send_command_to_peer(
 /// Direct blocking TCP connection to send a command to a peer.
 fn send_command_to_peer_blocking(
     peer_addr: &str,
-    command: &edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+    command: &edgerun_core::protocol::CommandEnvelope,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     use std::io::{Read, Write};
     use std::net::TcpStream;
@@ -299,7 +299,7 @@ fn send_command_to_peer_blocking(
 /// Async version of send_command_to_peer -- no store mutation, just network I/O.
 pub async fn send_command_to_peer_async(
     peer_addr: &str,
-    command: &edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+    command: &edgerun_core::protocol::CommandEnvelope,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
 
@@ -334,7 +334,7 @@ pub async fn send_command_to_peer_async(
 /// Sends a QueryRequest to a peer over TCP and returns the QueryResultFragment bytes.
 pub async fn send_query_to_peer(
     peer_addr: &str,
-    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    query: &edgerun_core::protocol::QueryRequest,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
     let mut stream = edgerun_rt::timeout(
@@ -465,7 +465,7 @@ pub async fn cmd_run(
     });
     if head_result.is_none() {
         use edgerun_core::protocol::EventEnvelope;
-        use edgerun_proto::edgerun::v0::stream::EventType;
+        use edgerun_core::protocol::EventType;
 
         // Create and store the NodeGenesisPayload as an encrypted object
         let initial_controllers: Vec<Vec<u8>> = vec![node_id.0.to_vec()];

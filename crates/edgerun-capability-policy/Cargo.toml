@@ -11,8 +11,6 @@ description = "Capability attenuation and policy evaluation for Edgerun"
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
-prost-types.workspace = true
 edgerun-core = { version = "0.1", path = "../edgerun-core" }
 
 [lints]

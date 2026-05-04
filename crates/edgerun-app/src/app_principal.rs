@@ -5,7 +5,7 @@ use edgerun_crypto::sha2;
 use edgerun_crypto::sha2::Digest;
 use edgerun_crypto::signature::Verifier;
 use edgerun_crypto::Signer;
-use edgerun_proto::edgerun::v0::stream::{AppIntent, AppPrincipal};
+use edgerun_core::protocol::{AppIntent, AppPrincipal};
 
 #[derive(Debug)]
 pub struct AppKeyPair {

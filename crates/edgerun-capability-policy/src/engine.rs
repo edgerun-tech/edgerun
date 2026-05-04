@@ -11,7 +11,7 @@ use edgerun_capabilities::{
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
 use edgerun_crypto::sha2::Digest;
-use edgerun_proto::edgerun::v0::common::{IdentityRef, NodeRef};
+use edgerun_core::protocol::{IdentityRef, NodeRef};
 use prost_types::{Duration as ProstDuration, Timestamp};
 
 #[derive(Debug, Clone)]

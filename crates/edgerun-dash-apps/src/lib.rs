@@ -6,11 +6,9 @@ use edgerun_core::protocol::{
     QueryRequest, ScopeDescriptor,
 };
 use edgerun_encoding::hex::bytes_to_hex;
-use edgerun_proto::edgerun::v0::access::{ProofClass, QueryClass};
+use edgerun_core::protocol::{ProofClass, QueryClass};
 use edgerun_proto::edgerun::v0::common::IdentityKind;
-use edgerun_proto::edgerun::v0::trust::{
-    CapabilityKind, DelegationPolicy, ExportPolicy, ScopeKind,
-};
+use edgerun_core::protocol::{CapabilityKind, DelegationPolicy, ExportPolicy, ScopeKind};
 use std::format;
 
 #[link(wasm_import_module = "edgerun_host")]

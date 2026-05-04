@@ -6,7 +6,7 @@ use crate::command_dispatch::{
 };
 use crate::command_dispatch_event::record_action_event;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::stream::CommandEnvelope;
+use edgerun_core::protocol::CommandEnvelope;
 use edgerun_storage::NodeStore;
 
 pub fn dispatch_update_config(
@@ -63,7 +63,7 @@ pub fn dispatch_update_config(
 
     let patch_object = match store.put_object(
         &config_patch,
-        edgerun_proto::edgerun::v0::common::ObjectKind::DerivedView as i32,
+        edgerun_core::protocol::ObjectKind::DerivedView as i32,
         &[stream_id.to_vec()],
     ) {
         Ok(object_ref) => Some(object_ref),

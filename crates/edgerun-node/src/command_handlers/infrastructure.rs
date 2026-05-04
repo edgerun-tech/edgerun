@@ -6,10 +6,7 @@ use crate::command_dispatch::{
 };
 use crate::command_dispatch_event::record_action_event;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::stream::{
-    command_envelope, AddBootstrapNodePayload, AddReachabilityHintPayload, CommandEnvelope,
-    EventType, QueryNodeStatePayload,
-};
+use edgerun_core::protocol::{command_envelope, AddBootstrapNodePayload, AddReachabilityHintPayload, CommandEnvelope, EventType, QueryNodeStatePayload};
 use edgerun_storage::NodeStore;
 use prost::Message;
 

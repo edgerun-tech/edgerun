@@ -39,18 +39,13 @@ pub use edgerun_proto::edgerun::v0::{
 };
 
 // Proof types
-pub use edgerun_proto::edgerun::v0::access::{
-    AggregateSummaryProof, EventSetProof, ObjectAssertionProof, ProofBundle, ResultFragmentProof,
-    SnapshotSetProof, StreamHeadsProof, TrustPolicyProof,
-};
+pub use edgerun_core::protocol::{AggregateSummaryProof, EventSetProof, ObjectAssertionProof, ProofBundle, ResultFragmentProof, SnapshotSetProof, StreamHeadsProof, TrustPolicyProof};
 
 // CheckpointRef
 pub use edgerun_proto::edgerun::v0::common::CheckpointRef;
 
 // Enum types from proto (needed for event/command type fields)
-pub use edgerun_proto::edgerun::v0::stream::{
-    ActionStatus, CommandDecision, CommandType, EventType,
-};
+pub use edgerun_core::protocol::{ActionStatus, CommandDecision, CommandType, EventType};
 
 // ---------------------------------------------------------------------------
 // Unified ProtocolRecord enum — wraps all canonical types for hashing/signing

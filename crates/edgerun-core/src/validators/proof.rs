@@ -15,11 +15,7 @@ use crate::prelude::v1::*;
 
 use crate::result::{accept, defer, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::{mapping, ystr, Value};
-use edgerun_proto::edgerun::v0::access::{
-    AggregateSummaryProof, EventSetProof, FederatedAggregateDescriptor, ObjectAssertionProof,
-    ProofBundle, ProofPayloadType, ResultFragmentProof, SnapshotSetProof, StreamHeadsProof,
-    TrustPolicyProof,
-};
+use edgerun_core::protocol::{AggregateSummaryProof, EventSetProof, FederatedAggregateDescriptor, ObjectAssertionProof, ProofBundle, ProofPayloadType, ResultFragmentProof, SnapshotSetProof, StreamHeadsProof, TrustPolicyProof};
 
 /// Structural validation result for a proof object.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,15 +25,15 @@ pub enum ProofStructuralResult {
 }
 
 fn validate_object_ref(
-    object: &edgerun_proto::edgerun::v0::common::ObjectRef,
+    object: &edgerun_core::protocol::ObjectRef,
     reason: &'static str,
 ) -> Option<ProofStructuralResult> {
     if object.object_id.is_empty() {
         return Some(ProofStructuralResult::Invalid { reason });
     }
     if object.object_kind.is_some_and(|object_kind| {
-        edgerun_proto::edgerun::v0::common::ObjectKind::from_i32(object_kind)
-            .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified)
+        edgerun_core::protocol::ObjectKind::from_i32(object_kind)
+            .is_none_or(|kind| kind == edgerun_core::protocol::ObjectKind::Unspecified)
     }) {
         return Some(ProofStructuralResult::Invalid {
             reason: "ObjectRef object_kind is invalid",
@@ -47,7 +43,7 @@ fn validate_object_ref(
 }
 
 fn validate_identity_ref(
-    identity: &edgerun_proto::edgerun::v0::common::IdentityRef,
+    identity: &edgerun_core::protocol::IdentityRef,
     empty_reason: &'static str,
     invalid_kind_reason: &'static str,
 ) -> Option<ProofStructuralResult> {
@@ -606,9 +602,7 @@ pub fn validate_federated_aggregate_descriptor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_proto::edgerun::v0::common::{
-        EventRef, HeadRef, IdentityKind, IdentityRef, ObjectKind, ObjectRef, SnapshotRef,
-    };
+    use edgerun_core::protocol::{EventRef, HeadRef, IdentityKind, IdentityRef, ObjectKind, ObjectRef, SnapshotRef};
 
     #[test]
     fn stream_heads_proof_nonempty_is_valid() {
@@ -617,7 +611,7 @@ mod tests {
             heads: vec![HeadRef {
                 stream_id: vec![2],
                 seq: 3,
-                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                event_hash: Some(edgerun_core::protocol::Digest {
                     algorithm: 1,
                     value: vec![4; 32],
                 }),
@@ -636,7 +630,7 @@ mod tests {
             heads: vec![HeadRef {
                 stream_id: vec![2],
                 seq: 3,
-                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                event_hash: Some(edgerun_core::protocol::Digest {
                     algorithm: 1,
                     value: vec![4; 32],
                 }),
@@ -750,7 +744,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                event_hash: Some(edgerun_core::protocol::Digest {
                     algorithm: 1,
                     value: vec![2; 32],
                 }),
@@ -772,7 +766,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                event_hash: Some(edgerun_core::protocol::Digest {
                     algorithm: 1,
                     value: vec![2; 32],
                 }),
@@ -845,7 +839,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                event_hash: Some(edgerun_core::protocol::Digest {
                     algorithm: 0,
                     value: vec![2; 32],
                 }),
@@ -867,7 +861,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                event_hash: Some(edgerun_core::protocol::Digest {
                     algorithm: 1,
                     value: vec![2; 32],
                 }),
@@ -892,7 +886,7 @@ mod tests {
             events: vec![EventRef {
                 stream_id: vec![1],
                 seq: 1,
-                event_hash: Some(edgerun_proto::edgerun::v0::common::Digest {
+                event_hash: Some(edgerun_core::protocol::Digest {
                     algorithm: 1,
                     value: vec![2; 32],
                 }),
@@ -1017,7 +1011,7 @@ mod tests {
     #[test]
     fn result_fragment_proof_empty_query_id_is_invalid() {
         let proof = ResultFragmentProof {
-            fragment: Some(edgerun_proto::edgerun::v0::access::QueryResultFragment {
+            fragment: Some(edgerun_core::protocol::QueryResultFragment {
                 fragment_version: 1,
                 query_id: vec![],
                 responder: None,
@@ -1044,7 +1038,7 @@ mod tests {
     #[test]
     fn result_fragment_proof_with_query_id_is_valid() {
         let proof = ResultFragmentProof {
-            fragment: Some(edgerun_proto::edgerun::v0::access::QueryResultFragment {
+            fragment: Some(edgerun_core::protocol::QueryResultFragment {
                 fragment_version: 1,
                 query_id: vec![1],
                 responder: None,

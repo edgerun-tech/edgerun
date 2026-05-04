@@ -3,7 +3,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 
-use edgerun_proto::edgerun::v0::common::ObjectRef;
+use edgerun_core::protocol::ObjectRef;
 use edgerun_wire::{WireDecode, WireReader, WireValue};
 
 #[derive(Clone, Debug)]

@@ -13,7 +13,7 @@ use crate::command_result_wire_codec::encode_command_result_payload;
 use app_command_wire_codec::{decode_install_app_payload, decode_uninstall_app_payload};
 use edgerun_core::util::{bytes_to_hex, now_unix_millis_i64};
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::stream::{CommandEnvelope, CommandType};
+use edgerun_core::protocol::{CommandEnvelope, CommandType};
 use edgerun_storage::NodeStore;
 
 pub fn dispatch_install_app(

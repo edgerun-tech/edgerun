@@ -20,7 +20,7 @@ use crate::protocol::{
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::Value;
-use edgerun_proto::edgerun::v0::stream::{CollectionCreatedPayload, CollectionDeletedPayload};
+use edgerun_core::protocol::{CollectionCreatedPayload, CollectionDeletedPayload};
 
 // ---------------------------------------------------------------------------
 // Stream append validation (protobuf-native)
@@ -58,7 +58,7 @@ pub fn validate_stream_append(
         );
     }
     let Some(event_type) =
-        edgerun_proto::edgerun::v0::stream::EventType::from_i32(candidate.event_type)
+        edgerun_core::protocol::EventType::from_i32(candidate.event_type)
     else {
         return reject(
             ReasonCode::StructuralInvalid,
@@ -66,7 +66,7 @@ pub fn validate_stream_append(
             empty_map(),
         );
     };
-    if event_type == edgerun_proto::edgerun::v0::stream::EventType::Unspecified {
+    if event_type == edgerun_core::protocol::EventType::Unspecified {
         return reject(
             ReasonCode::StructuralInvalid,
             Value::String("invalid event_type".into()),
@@ -149,14 +149,14 @@ pub fn validate_stream_append(
     }
 
     let is_genesis = candidate.seq == 0;
-    if is_genesis && event_type != edgerun_proto::edgerun::v0::stream::EventType::NodeGenesis {
+    if is_genesis && event_type != edgerun_core::protocol::EventType::NodeGenesis {
         return reject(
             ReasonCode::StructuralInvalid,
             Value::String("seq 0 event must be EVENT_TYPE_NODE_GENESIS".into()),
             empty_map(),
         );
     }
-    if !is_genesis && event_type == edgerun_proto::edgerun::v0::stream::EventType::NodeGenesis {
+    if !is_genesis && event_type == edgerun_core::protocol::EventType::NodeGenesis {
         return reject(
             ReasonCode::StructuralInvalid,
             Value::String("EVENT_TYPE_NODE_GENESIS is only valid at seq 0".into()),
@@ -451,8 +451,8 @@ pub fn validate_command_result_payload(payload: &CommandResultPayload) -> Valida
     if let Some(result) = validate_identity_ref(Some(issuer), "CommandResultPayload issuer") {
         return result;
     }
-    if edgerun_proto::edgerun::v0::stream::CommandDecision::from_i32(payload.decision).is_none_or(
-        |decision| decision == edgerun_proto::edgerun::v0::stream::CommandDecision::Unspecified,
+    if edgerun_core::protocol::CommandDecision::from_i32(payload.decision).is_none_or(
+        |decision| decision == edgerun_core::protocol::CommandDecision::Unspecified,
     ) {
         return reject(
             ReasonCode::StructuralInvalid,
@@ -823,8 +823,8 @@ fn validate_object_ref_fields(
         ));
     }
     if let Some(object_kind) = object.object_kind {
-        if edgerun_proto::edgerun::v0::common::ObjectKind::from_i32(object_kind)
-            .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified)
+        if edgerun_core::protocol::ObjectKind::from_i32(object_kind)
+            .is_none_or(|kind| kind == edgerun_core::protocol::ObjectKind::Unspecified)
         {
             return Some(reject(
                 ReasonCode::StructuralInvalid,
@@ -1532,8 +1532,8 @@ fn validate_scope_descriptor(scope: &ScopeDescriptor, label: &str) -> Option<Val
         }
     }
     for object_kind in &scope.target_object_kinds {
-        if edgerun_proto::edgerun::v0::common::ObjectKind::from_i32(*object_kind)
-            .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified)
+        if edgerun_core::protocol::ObjectKind::from_i32(*object_kind)
+            .is_none_or(|kind| kind == edgerun_core::protocol::ObjectKind::Unspecified)
         {
             return Some(reject(
                 ReasonCode::StructuralInvalid,
@@ -2203,8 +2203,8 @@ pub fn validate_object_retrieval(
                 empty_map(),
             );
         }
-        if edgerun_proto::edgerun::v0::common::ObjectKind::from_i32(descriptor.object_kind)
-            .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified)
+        if edgerun_core::protocol::ObjectKind::from_i32(descriptor.object_kind)
+            .is_none_or(|kind| kind == edgerun_core::protocol::ObjectKind::Unspecified)
         {
             return reject(
                 ReasonCode::StructuralInvalid,
@@ -4185,7 +4185,7 @@ mod tests {
         RepresentationRef, RouteSelectionPolicy, RouteTrustAssignment, RouteTrustAssignments,
         SecretDeletePayload, SecretPutPayload, SnapshotRef, TimeWindow,
     };
-    use edgerun_proto::edgerun::v0::stream::{CollectionCreatedPayload, CollectionDeletedPayload};
+    use edgerun_core::protocol::{CollectionCreatedPayload, CollectionDeletedPayload};
 
     fn make_event(seq: u64, prev_hash: Option<crate::protocol::Digest>) -> EventEnvelope {
         EventEnvelope {
@@ -4373,7 +4373,7 @@ mod tests {
             completeness: edgerun_proto::edgerun::v0::access::SnapshotCompleteness::Full as i32,
             payload_object: Some(crate::protocol::ObjectRef {
                 object_id: b"obj-1".to_vec(),
-                object_kind: Some(edgerun_proto::edgerun::v0::common::ObjectKind::Snapshot as i32),
+                object_kind: Some(edgerun_core::protocol::ObjectKind::Snapshot as i32),
             }),
             supersedes: None,
             snapshot_metadata: None,
@@ -4610,7 +4610,7 @@ mod tests {
             payload_version: 1,
             command: Some(valid_command_ref()),
             issuer: Some(valid_identity_ref(b"issuer-1")),
-            decision: edgerun_proto::edgerun::v0::stream::CommandDecision::Committed as i32,
+            decision: edgerun_core::protocol::CommandDecision::Committed as i32,
             decision_basis: None,
             reason_code: String::new(),
             effect_summary_object: None,
@@ -4867,7 +4867,7 @@ mod tests {
     #[test]
     fn command_result_payload_invalid_decision_is_rejected() {
         let mut payload = valid_command_result_payload();
-        payload.decision = edgerun_proto::edgerun::v0::stream::CommandDecision::Unspecified as i32;
+        payload.decision = edgerun_core::protocol::CommandDecision::Unspecified as i32;
 
         let result = validate_command_result_payload(&payload);
 
@@ -5821,7 +5821,7 @@ mod tests {
         let mut snapshot = valid_snapshot_for_tests(b"trusted".to_vec());
         snapshot.payload_object = Some(ObjectRef {
             object_id: vec![0x44; 32],
-            object_kind: Some(edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified as i32),
+            object_kind: Some(edgerun_core::protocol::ObjectKind::Unspecified as i32),
         });
         sign_snapshot(&mut snapshot, &signing_key);
 
@@ -6025,7 +6025,7 @@ mod tests {
         let descriptor = LogicalObjectDescriptor {
             descriptor_version: 1,
             object_id: vec![0x22; 32],
-            object_kind: edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
+            object_kind: edgerun_core::protocol::ObjectKind::Payload as i32,
             object_schema_version: 1,
             canonicalization_id: "raw-bytes-v0".into(),
             canonical_digest: None,
@@ -6047,7 +6047,7 @@ mod tests {
         let descriptor = LogicalObjectDescriptor {
             descriptor_version: 1,
             object_id: vec![0x22; 32],
-            object_kind: edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
+            object_kind: edgerun_core::protocol::ObjectKind::Payload as i32,
             object_schema_version: 1,
             canonicalization_id: "raw-bytes-v0".into(),
             canonical_digest: Some(Digest {
@@ -6072,7 +6072,7 @@ mod tests {
         let descriptor = LogicalObjectDescriptor {
             descriptor_version: 1,
             object_id: vec![0x22; 32],
-            object_kind: edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
+            object_kind: edgerun_core::protocol::ObjectKind::Payload as i32,
             object_schema_version: 1,
             canonicalization_id: "raw-bytes-v0".into(),
             canonical_digest: Some(Digest {
@@ -6100,7 +6100,7 @@ mod tests {
         let descriptor = LogicalObjectDescriptor {
             descriptor_version: 1,
             object_id: vec![0x22; 32],
-            object_kind: edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
+            object_kind: edgerun_core::protocol::ObjectKind::Payload as i32,
             object_schema_version: 1,
             canonicalization_id: "raw-bytes-v0".into(),
             canonical_digest: Some(Digest {
@@ -6439,7 +6439,7 @@ mod tests {
     fn object_retrieval_rejects_invalid_manifest_object_kind() {
         let (header, mut manifest) = valid_manifest_header_and_manifest();
         manifest.object.as_mut().unwrap().object_kind =
-            Some(edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified as i32);
+            Some(edgerun_core::protocol::ObjectKind::Unspecified as i32);
 
         let result = validate_object_retrieval(None, Some(&header), Some(&manifest), None, None);
 

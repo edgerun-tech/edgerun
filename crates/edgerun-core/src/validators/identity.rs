@@ -29,7 +29,7 @@ use std::collections::BTreeMap;
 pub fn validate_identity_record(
     record: &edgerun_proto::edgerun::v0::identity::IdentityRecord,
 ) -> ValidationResult {
-    use edgerun_proto::edgerun::v0::common::{IdentityKind, ObjectKind};
+    use edgerun_core::protocol::{IdentityKind, ObjectKind};
     use edgerun_proto::edgerun::v0::identity::{IdentityRecord, KeyAlgorithm};
 
     // --- Required field checks ---
@@ -209,9 +209,7 @@ pub fn validate_identity_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_proto::edgerun::v0::common::{
-        IdentityKind, IdentityRef, ObjectKind, ObjectRef, Signature,
-    };
+    use edgerun_core::protocol::{IdentityKind, IdentityRef, ObjectKind, ObjectRef, Signature};
     use edgerun_proto::edgerun::v0::identity::IdentityRecord;
 
     fn make_test_keypair() -> (

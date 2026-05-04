@@ -507,7 +507,7 @@ use crate::crypto::{
     ECDSA_P256_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ECDSA_P256, SIG_DOMAIN_ROUTE_ADVERTISEMENT,
 };
 use crate::protocol::{canonical_bytes, IdentityRef, ObjectRef, ProtocolRecord};
-use edgerun_proto::edgerun::v0::common::{Directness, IdentityKind, ObjectKind, TransportClass};
+use edgerun_core::protocol::{Directness, IdentityKind, ObjectKind, TransportClass};
 
 fn validate_identity_ref(
     identity: &IdentityRef,
@@ -826,9 +826,7 @@ pub fn validate_route_advertisement(
 #[cfg(test)]
 mod proto_tests {
     use super::*;
-    use edgerun_proto::edgerun::v0::common::{
-        Directness, IdentityRef, NodeRef, ObjectKind, ObjectRef, Signature, TransportClass,
-    };
+    use edgerun_core::protocol::{Directness, IdentityRef, NodeRef, ObjectKind, ObjectRef, Signature, TransportClass};
     use edgerun_proto::edgerun::v0::network::{ReachabilityHint, RouteAdvertisement};
     use prost_types::Timestamp;
 

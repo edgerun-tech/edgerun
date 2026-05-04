@@ -4,7 +4,7 @@ use crate::prelude::v1::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use edgerun_proto::edgerun::v0::common::ObjectRef;
+use edgerun_core::protocol::ObjectRef;
 
 use crate::core::{cas::raw_object_ids, ContentStore, ObjectBytes};
 use crate::error::StorageError;

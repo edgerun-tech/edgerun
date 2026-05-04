@@ -14,7 +14,7 @@ use crate::command_dispatch_server_resource::dispatch_server_resource_command_re
 use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::CommandExecutionContext;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::stream::{CommandDecision, CommandEnvelope, EventType};
+use edgerun_core::protocol::{CommandDecision, CommandEnvelope, EventType};
 use edgerun_storage::NodeStore;
 
 pub fn dispatch_command(

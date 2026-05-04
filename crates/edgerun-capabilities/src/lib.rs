@@ -681,7 +681,7 @@ mod tests {
             grant_version: 1,
             grant_id: Vec::new(),
             issuer: None,
-            grantee: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            grantee: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![1, 2, 3],
                 identity_kind: None,
                 key_hint: None,
@@ -751,7 +751,7 @@ mod tests {
             grant_version: 1,
             grant_id: Vec::new(),
             issuer: None,
-            grantee: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            grantee: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![1],
                 identity_kind: None,
                 key_hint: None,
@@ -780,7 +780,7 @@ mod tests {
             grant_version: 1,
             grant_id: Vec::new(),
             issuer: None,
-            grantee: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            grantee: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![1],
                 identity_kind: None,
                 key_hint: None,
@@ -846,7 +846,7 @@ mod tests {
             grant_version: 1,
             grant_id: Vec::new(),
             issuer: None,
-            grantee: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            grantee: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![1],
                 identity_kind: None,
                 key_hint: None,

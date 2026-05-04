@@ -10,14 +10,14 @@
 //! `EventType::CapabilityRevoked` events. On startup, the event log is
 //! replayed to rebuild the grant state.
 
-use edgerun_proto::edgerun::v0::common::ObjectKind;
+use edgerun_core::protocol::ObjectKind;
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
 use edgerun_capability_policy::{
     PolicyContext, PolicyEngine, RevocationReason, SimplePolicyEngine,
 };
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::stream::EventType;
+use edgerun_core::protocol::EventType;
 use edgerun_remote_capability::{
     serve_one, FramedRemoteTransport, PolicyWrappedProvider, RemoteCapabilityProvider,
 };

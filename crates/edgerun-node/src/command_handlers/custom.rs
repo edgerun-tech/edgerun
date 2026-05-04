@@ -10,10 +10,8 @@ use edgerun_core::result::Verdict;
 use edgerun_core::util::bytes_to_hex;
 use edgerun_core::validators_proto::validate_delegation_chain;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::stream::{CommandEnvelope, CommandType, EventType};
-use edgerun_proto::edgerun::v0::trust::{
-    DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord,
-};
+use edgerun_core::protocol::{CommandEnvelope, CommandType, EventType};
+use edgerun_core::protocol::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
 use edgerun_storage::NodeStore;
 use prost::Message;
 
@@ -198,7 +196,7 @@ pub fn dispatch_create_delegation(
 
     // Reject if digest doesn't match (defensive)
     let object_ref_vec = match object_ref {
-        edgerun_proto::edgerun::v0::common::ObjectRef { .. } => vec![object_ref],
+        edgerun_core::protocol::ObjectRef { .. } => vec![object_ref],
         _ => vec![],
     };
 
@@ -385,7 +383,7 @@ pub fn dispatch_create_revocation(
     let delegations = delegation_refs_from(command);
 
     let object_ref_vec = match object_ref {
-        edgerun_proto::edgerun::v0::common::ObjectRef { .. } => vec![object_ref],
+        edgerun_core::protocol::ObjectRef { .. } => vec![object_ref],
         _ => vec![],
     };
 

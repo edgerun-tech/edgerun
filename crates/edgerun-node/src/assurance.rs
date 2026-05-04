@@ -7,7 +7,7 @@
 use edgerun_core::protocol::{canonical_bytes, ProtocolRecord};
 use edgerun_core::util::{now_unix_millis_i64, system_time_to_prost};
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::common::ObjectKind;
+use edgerun_core::protocol::ObjectKind;
 use edgerun_proto::edgerun::v0::trust::AssuranceClaim;
 use edgerun_storage::NodeStore;
 use std::time::SystemTime;
@@ -23,10 +23,10 @@ pub fn generate_and_record_assurance_claim(
     store: &mut NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
-    command: &edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+    command: &edgerun_core::protocol::CommandEnvelope,
     assurance_class: i32,
-) -> Option<edgerun_proto::edgerun::v0::common::ObjectRef> {
-    use edgerun_proto::edgerun::v0::common::{AssuranceClass, IdentityRef};
+) -> Option<edgerun_core::protocol::ObjectRef> {
+    use edgerun_core::protocol::{AssuranceClass, IdentityRef};
 
     let node_id = signer.node_id();
     let now = SystemTime::now();
@@ -36,7 +36,7 @@ pub fn generate_and_record_assurance_claim(
         claim_version: 1,
         subject: Some(
             edgerun_proto::edgerun::v0::trust::assurance_claim::Subject::SubjectNode(
-                edgerun_proto::edgerun::v0::common::NodeRef {
+                edgerun_core::protocol::NodeRef {
                     node_id: node_id.0.to_vec(),
                 },
             ),
@@ -71,7 +71,7 @@ pub fn generate_and_record_assurance_claim(
         };
 
     let mut signed_claim = claim;
-    signed_claim.signature = Some(edgerun_proto::edgerun::v0::common::Signature {
+    signed_claim.signature = Some(edgerun_core::protocol::Signature {
         algorithm: 1,
         value: sig_bytes.to_vec(),
     });

@@ -504,7 +504,7 @@ impl NodeStore {
         stream_id: &[u8],
         writer: Option<&edgerun_hardware_signing::NodeID>,
     ) -> Result<u64, StorageError> {
-        use edgerun_proto::edgerun::v0::stream::EventEnvelope;
+        use edgerun_core::protocol::EventEnvelope;
 
         let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
         let head = self.index.get_head(&stream_id_hex)?;
@@ -715,7 +715,7 @@ impl NodeStore {
         content: &[u8],
         object_kind: i32,
         recipients: &[Vec<u8>],
-    ) -> Result<edgerun_proto::edgerun::v0::common::ObjectRef, StorageError> {
+    ) -> Result<edgerun_core::protocol::ObjectRef, StorageError> {
         // Best-effort disk space check.
         if let Err(available) = self.check_disk_space() {
             edgerun_log::warn!("low disk space: {} bytes available", available);
@@ -736,7 +736,7 @@ impl NodeStore {
     /// Returns None if the object is not present locally.
     pub fn get_object(
         &self,
-        object_ref: &edgerun_proto::edgerun::v0::common::ObjectRef,
+        object_ref: &edgerun_core::protocol::ObjectRef,
     ) -> Result<Option<ObjectResult>, StorageError> {
         Ok(self
             .content
@@ -756,7 +756,7 @@ impl NodeStore {
     /// Returns None if the event has no payload_object or the object is missing.
     pub fn resolve_payload(
         &self,
-        payload_object_ref: &Option<edgerun_proto::edgerun::v0::common::ObjectRef>,
+        payload_object_ref: &Option<edgerun_core::protocol::ObjectRef>,
     ) -> Result<Option<Vec<u8>>, StorageError> {
         let Some(ref obj_ref) = payload_object_ref else {
             return Ok(None);
@@ -828,7 +828,7 @@ impl NodeStore {
         while let Some(entry) = self.index.dequeue_fetch()? {
             let success = match entry.target_type.as_str() {
                 "object" => {
-                    let obj_ref = edgerun_proto::edgerun::v0::common::ObjectRef {
+                    let obj_ref = edgerun_core::protocol::ObjectRef {
                         object_id: edgerun_core::util::hex_to_bytes(&entry.target_id)
                             .unwrap_or_default(),
                         object_kind: None,
@@ -1042,10 +1042,10 @@ impl NodeStore {
         signer: &dyn MeshSigner,
         view_type: &str,
         completeness: i32,
-    ) -> Result<edgerun_proto::edgerun::v0::access::SnapshotDescriptor, StorageError> {
-        use edgerun_proto::edgerun::v0::access::SnapshotDescriptor;
-        use edgerun_proto::edgerun::v0::common::{Digest, HeadRef, IdentityRef, StreamRef};
-        use edgerun_proto::edgerun::v0::trust::{ScopeDescriptor, ScopeKind};
+    ) -> Result<edgerun_core::protocol::SnapshotDescriptor, StorageError> {
+        use edgerun_core::protocol::SnapshotDescriptor;
+        use edgerun_core::protocol::{Digest, HeadRef, IdentityRef, StreamRef};
+        use edgerun_core::protocol::{ScopeDescriptor, ScopeKind};
 
         // Collect current stream heads
         let heads = self.list_stream_heads()?;
@@ -1166,7 +1166,7 @@ impl NodeStore {
     /// Returns the acceptance class: "accepted_trusted", "accepted_stale", or error.
     pub fn consume_snapshot(
         &self,
-        descriptor: &edgerun_proto::edgerun::v0::access::SnapshotDescriptor,
+        descriptor: &edgerun_core::protocol::SnapshotDescriptor,
         trusted_producers: &[Vec<u8>],
     ) -> Result<String, StorageError> {
         let validation =

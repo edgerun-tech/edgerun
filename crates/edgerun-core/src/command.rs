@@ -324,8 +324,8 @@ fn validate_object_ref(object: &ObjectRef, label: &str) -> Option<ValidationResu
         ));
     }
     if object.object_kind.is_some_and(|object_kind| {
-        edgerun_proto::edgerun::v0::common::ObjectKind::from_i32(object_kind)
-            .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified)
+        edgerun_core::protocol::ObjectKind::from_i32(object_kind)
+            .is_none_or(|kind| kind == edgerun_core::protocol::ObjectKind::Unspecified)
     }) {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -500,8 +500,8 @@ fn validate_scope_descriptor(
         }
     }
     for object_kind in &scope.target_object_kinds {
-        if edgerun_proto::edgerun::v0::common::ObjectKind::from_i32(*object_kind)
-            .is_none_or(|kind| kind == edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified)
+        if edgerun_core::protocol::ObjectKind::from_i32(*object_kind)
+            .is_none_or(|kind| kind == edgerun_core::protocol::ObjectKind::Unspecified)
         {
             return Some(reject(
                 ReasonCode::StructuralInvalid,
@@ -784,7 +784,7 @@ fn validate_delegation_record_structure(
 }
 
 fn required_capability_for_command(command_type: i32) -> Option<(i32, &'static str)> {
-    use edgerun_proto::edgerun::v0::stream::CommandType as Ct;
+    use edgerun_core::protocol::CommandType as Ct;
     use edgerun_proto::edgerun::v0::trust::CapabilityKind as Ck;
 
     match Ct::from_i32(command_type)? {
@@ -2754,12 +2754,9 @@ mod tests {
     };
     use crate::result::Verdict;
     use edgerun_crypto::p256::ecdsa::SigningKey;
-    use edgerun_proto::edgerun::v0::common::{
-        AssuranceClass, ExecutionClass, ObjectKind, RateLimit, Signature as ProtoSignature,
-        StorageClass, TimeWindow, TransportClass,
-    };
+    use edgerun_core::protocol::{AssuranceClass, ExecutionClass, ObjectKind, RateLimit, Signature as ProtoSignature, StorageClass, TimeWindow, TransportClass};
     use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
-    use edgerun_proto::edgerun::v0::trust::{CapabilityKind, DelegationPolicy, ScopeKind};
+    use edgerun_core::protocol::{CapabilityKind, DelegationPolicy, ScopeKind};
 
     fn test_signing_key() -> SigningKey {
         let bytes: [u8; 32] = [7u8; 32];
@@ -3305,7 +3302,7 @@ mod tests {
         let mut cmd = make_signed_command(&key, Some(hint));
         cmd.command_metadata = Some(ObjectRef {
             object_id: vec![0x33; 32],
-            object_kind: Some(edgerun_proto::edgerun::v0::common::ObjectKind::Unspecified as i32),
+            object_kind: Some(edgerun_core::protocol::ObjectKind::Unspecified as i32),
         });
         sign_command(&key, &mut cmd);
 

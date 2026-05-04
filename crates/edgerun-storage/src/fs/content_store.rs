@@ -1,7 +1,7 @@
 //! Filesystem content-addressed object backend.
 
 use crate::prelude::v1::*;
-use edgerun_proto::edgerun::v0::common::ObjectRef;
+use edgerun_core::protocol::ObjectRef;
 use std::sync::Arc;
 
 use crate::blobs::BlobStore;
@@ -40,7 +40,7 @@ impl ContentStore for FsContentStore {
             object_kind,
             object_schema_version: 1,
             canonicalization_id: "raw-bytes-v0".into(),
-            canonical_digest: Some(edgerun_proto::edgerun::v0::common::Digest {
+            canonical_digest: Some(edgerun_core::protocol::Digest {
                 algorithm: 1,
                 value: edgerun_core::crypto::sha256(content).to_vec().into(),
             }),

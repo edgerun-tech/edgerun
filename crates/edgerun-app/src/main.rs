@@ -4,8 +4,8 @@ mod wasm_host;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use edgerun_proto::edgerun::v0::common::IdentityRef;
-use edgerun_proto::edgerun::v0::stream::{CommandResultPayload, CommandType};
+use edgerun_core::protocol::IdentityRef;
+use edgerun_core::protocol::{CommandResultPayload, CommandType};
 use prost::Message;
 use std::sync::{Arc, Mutex};
 
@@ -76,15 +76,15 @@ fn make_app_instance_id() -> [u8; 16] {
 }
 
 fn command_to_event_bytes(
-    cmd: &edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+    cmd: &edgerun_core::protocol::CommandEnvelope,
     accepted: bool,
 ) -> Vec<u8> {
     // Bootstrap simulation - creates event bytes without faking CommandResultPayload
     // Real nodes use record_and_respond_with_result_object which builds proper payloads
     let event_type = if accepted {
-        edgerun_proto::edgerun::v0::stream::EventType::CommandCommitted
+        edgerun_core::protocol::EventType::CommandCommitted
     } else {
-        edgerun_proto::edgerun::v0::stream::EventType::CommandRejected
+        edgerun_core::protocol::EventType::CommandRejected
     };
     // Return minimal event bytes for bootstrap simulation only
     Vec::new()

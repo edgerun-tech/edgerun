@@ -225,7 +225,7 @@ mod tests {
     use edgerun_hardware_signing::MeshSigner;
     use edgerun_proto::edgerun::v0::common as proto_common;
     use edgerun_proto::edgerun::v0::stream as proto_stream;
-    use edgerun_proto::edgerun::v0::stream::EventType;
+    use edgerun_core::protocol::EventType;
 
     struct TestSigner {
         node_id: NodeID,

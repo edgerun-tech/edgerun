@@ -23,13 +23,11 @@ path = "src/aot.rs"
 [dependencies]
 anyhow = "1.0"
 edgerun-clap = { workspace = true, features = ["std"] }
-edgerun-proto = { workspace = true }
 edgerun-capabilities = { workspace = true }
 libc = { workspace = true }
 wasmparser = "0.224"
 wasmtime = "29"
 sha2 = { workspace = true }
-prost = { workspace = true }
 
 [lints]
 workspace = true

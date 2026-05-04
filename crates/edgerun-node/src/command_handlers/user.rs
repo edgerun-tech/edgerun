@@ -9,10 +9,7 @@ use crate::command_dispatch_event::record_action_event;
 use edgerun_core::util::{now_unix_micros_u64, now_unix_millis_i64};
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::stream::{
-    command_envelope, CommandEnvelope, EventType, RequestSignaturePayload,
-    RequestUserPresencePayload, UserPresenceGrantedPayload, UserPresenceRequestPayload,
-};
+use edgerun_core::protocol::{command_envelope, CommandEnvelope, EventType, RequestSignaturePayload, RequestUserPresencePayload, UserPresenceGrantedPayload, UserPresenceRequestPayload};
 use edgerun_storage::NodeStore;
 use prost::Message;
 
@@ -97,7 +94,7 @@ pub fn dispatch_request_user_presence(
     let request_bytes = Message::encode_to_vec(&request_payload);
     let request_obj = store.put_object(
         &request_bytes,
-        edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
+        edgerun_core::protocol::ObjectKind::Payload as i32,
         &[stream_id.to_vec()],
     );
 
@@ -112,7 +109,7 @@ pub fn dispatch_request_user_presence(
     let granted_bytes = Message::encode_to_vec(&granted_payload);
     let granted_obj = store.put_object(
         &granted_bytes,
-        edgerun_proto::edgerun::v0::common::ObjectKind::Payload as i32,
+        edgerun_core::protocol::ObjectKind::Payload as i32,
         &[stream_id.to_vec()],
     );
 

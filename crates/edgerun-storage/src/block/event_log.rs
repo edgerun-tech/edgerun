@@ -9,7 +9,7 @@ use std::cmp::min;
 use std::sync::{Arc, Mutex};
 
 use edgerun_core::protocol::EventEnvelope;
-use edgerun_proto::edgerun::v0::stream::EventEnvelope as ProtoEventEnvelope;
+use edgerun_core::protocol::EventEnvelope as ProtoEventEnvelope;
 use prost::Message;
 
 use crate::core::{

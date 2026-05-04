@@ -93,10 +93,10 @@ mod tests {
         CommandEnvelope {
             envelope_version: 1,
             command_id,
-            target_node: Some(edgerun_proto::edgerun::v0::common::NodeRef {
+            target_node: Some(edgerun_core::protocol::NodeRef {
                 node_id: target_node_id,
             }),
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: issuer_id,
                 identity_kind: Some(0),
                 key_hint: None,
@@ -143,7 +143,7 @@ mod tests {
     }
 
     fn sign_revocation_record(
-        revocation: &mut edgerun_proto::edgerun::v0::trust::RevocationRecord,
+        revocation: &mut edgerun_core::protocol::RevocationRecord,
         signer: &TestSigner,
     ) {
         revocation.signature = None;
@@ -169,7 +169,7 @@ mod tests {
     }
 
     fn sign_delegation_record(
-        delegation: &mut edgerun_proto::edgerun::v0::trust::DelegationRecord,
+        delegation: &mut edgerun_core::protocol::DelegationRecord,
         signer: &TestSigner,
     ) {
         delegation.signature = None;
@@ -194,15 +194,15 @@ mod tests {
         });
     }
 
-    fn valid_capability_descriptor() -> edgerun_proto::edgerun::v0::trust::CapabilityDescriptor {
-        edgerun_proto::edgerun::v0::trust::CapabilityDescriptor {
+    fn valid_capability_descriptor() -> edgerun_core::protocol::CapabilityDescriptor {
+        edgerun_core::protocol::CapabilityDescriptor {
             capability_version: 1,
             capability_kind: edgerun_proto::edgerun::v0::trust::CapabilityKind::NodeControl as i32,
             actions: vec!["delegate".into()],
             scope: Some(edgerun_proto::edgerun::v0::trust::ScopeDescriptor {
                 scope_version: 1,
                 scope_kind: edgerun_proto::edgerun::v0::trust::ScopeKind::Node as i32,
-                target_nodes: vec![edgerun_proto::edgerun::v0::common::NodeRef {
+                target_nodes: vec![edgerun_core::protocol::NodeRef {
                     node_id: b"node-a".to_vec(),
                 }],
                 target_streams: vec![],
@@ -304,7 +304,7 @@ bootstrap_peers: []
         let patch_ref = store
             .put_object(
                 br#"{"name":"projected","allowed_peers":["peer-b"]}"#,
-                edgerun_proto::edgerun::v0::common::ObjectKind::DerivedView as i32,
+                edgerun_core::protocol::ObjectKind::DerivedView as i32,
                 &[stream_id.to_vec()],
             )
             .unwrap();
@@ -321,7 +321,7 @@ bootstrap_peers: []
         let result_ref = store
             .put_object(
                 &prost::Message::encode_to_vec(&result_payload),
-                edgerun_proto::edgerun::v0::common::ObjectKind::Command as i32,
+                edgerun_core::protocol::ObjectKind::Command as i32,
                 &[stream_id.to_vec()],
             )
             .unwrap();
@@ -906,7 +906,7 @@ bootstrap_peers: []
     #[test]
     fn dispatch_custom_command_with_delegation_payload() {
         use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
-        use edgerun_proto::edgerun::v0::trust::DelegationRecord;
+        use edgerun_core::protocol::DelegationRecord;
 
         let mut store = test_store();
         let signer = TestSigner::new();
@@ -925,12 +925,12 @@ bootstrap_peers: []
         let delegation = DelegationRecord {
             record_version: 1,
             delegation_id: vec![1, 2, 3, 4],
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: initial_ctrl.clone(),
                 identity_kind: Some(2),
                 key_hint: None,
             }),
-            recipient: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            recipient: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![5, 6, 7],
                 identity_kind: Some(2),
                 key_hint: None,
@@ -974,7 +974,7 @@ bootstrap_peers: []
     #[test]
     fn dispatch_signed_delegation_payload_commits() {
         use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
-        use edgerun_proto::edgerun::v0::trust::DelegationRecord;
+        use edgerun_core::protocol::DelegationRecord;
 
         let mut store = test_store();
         let signer = TestSigner::new();
@@ -991,12 +991,12 @@ bootstrap_peers: []
         let mut delegation = DelegationRecord {
             record_version: 1,
             delegation_id: vec![1, 2, 3, 4],
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: initial_ctrl.clone(),
                 identity_kind: Some(2),
                 key_hint: None,
             }),
-            recipient: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            recipient: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![5, 6, 7],
                 identity_kind: Some(2),
                 key_hint: None,
@@ -1043,7 +1043,7 @@ bootstrap_peers: []
     #[test]
     fn dispatch_custom_command_with_revocation_payload() {
         use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
-        use edgerun_proto::edgerun::v0::trust::RevocationRecord;
+        use edgerun_core::protocol::RevocationRecord;
 
         let mut store = test_store();
         let signer = TestSigner::new();
@@ -1060,7 +1060,7 @@ bootstrap_peers: []
         let revocation = RevocationRecord {
             record_version: 1,
             revocation_id: vec![10, 20, 30],
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: initial_ctrl.clone(),
                 identity_kind: Some(2),
                 key_hint: None,
@@ -1075,7 +1075,7 @@ bootstrap_peers: []
             signature: None,
             target: Some(
                 edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(
-                    edgerun_proto::edgerun::v0::common::IdentityRef {
+                    edgerun_core::protocol::IdentityRef {
                         identity_id: vec![5, 6, 7],
                         identity_kind: Some(2),
                         key_hint: None,
@@ -1110,7 +1110,7 @@ bootstrap_peers: []
     #[test]
     fn dispatch_signed_revocation_payload_commits() {
         use edgerun_proto::edgerun::v0::stream::command_envelope::Payload;
-        use edgerun_proto::edgerun::v0::trust::{RevocationKind, RevocationRecord};
+        use edgerun_core::protocol::{RevocationKind, RevocationRecord};
 
         let mut store = test_store();
         let signer = TestSigner::new();
@@ -1127,7 +1127,7 @@ bootstrap_peers: []
         let mut revocation = RevocationRecord {
             record_version: 1,
             revocation_id: vec![10, 20, 30],
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: initial_ctrl.clone(),
                 identity_kind: Some(2),
                 key_hint: None,
@@ -1145,7 +1145,7 @@ bootstrap_peers: []
             signature: None,
             target: Some(
                 edgerun_proto::edgerun::v0::trust::revocation_record::Target::TargetIdentity(
-                    edgerun_proto::edgerun::v0::common::IdentityRef {
+                    edgerun_core::protocol::IdentityRef {
                         identity_id: vec![5, 6, 7],
                         identity_kind: Some(2),
                         key_hint: None,

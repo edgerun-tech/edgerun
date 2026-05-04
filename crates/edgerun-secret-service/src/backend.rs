@@ -10,9 +10,7 @@ use std::path::{Path, PathBuf};
 
 use edgerun_storage::{BlobKeySource, BlobStore, BlobStoreConfig, FileIndex};
 
-use edgerun_proto::edgerun::v0::stream::{
-    CollectionCreatedPayload, CollectionDeletedPayload, SecretDeletePayload, SecretPutPayload,
-};
+use edgerun_core::protocol::{CollectionCreatedPayload, CollectionDeletedPayload, SecretDeletePayload, SecretPutPayload};
 use prost::Message;
 
 // ===========================================================================

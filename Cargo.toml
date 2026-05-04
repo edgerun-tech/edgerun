@@ -167,7 +167,6 @@ function_casts_as_integer = "allow"
 [workspace.dependencies]
 # Core edgerun crates
 edgerun-core = { version = "0.1", path = "crates/edgerun-core" }
-edgerun-proto = { version = "0.1", path = "crates/edgerun-proto" }
 edgerun-proxy = { version = "0.1", path = "crates/edgerun-proxy" }
 edgerun-storage = { version = "0.1", path = "crates/edgerun-storage" }
 edgerun-stream = { version = "0.1", path = "crates/edgerun-stream" }
@@ -231,8 +230,6 @@ edgerun-sdk-macro = { version = "0.1", path = "crates/edgerun-sdk-macro" }
 # SHA-2 and libc-backed Linux shims are being retired from core storage paths.
 sha2 = { version = "0.10", default-features = false }
 libc = "0.2"
-prost = { version = "0.14", default-features = false }
-prost-types = { version = "0.14", default-features = false }
 
 [patch.crates-io]
 const-oid = { path = "crates/edgerun-crypto/vendor/const-oid-0.9" }

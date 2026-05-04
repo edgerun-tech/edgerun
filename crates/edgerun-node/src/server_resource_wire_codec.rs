@@ -9,7 +9,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::server_resources::{command_type, ContentRef, ServerResourceEvent};
-use edgerun_proto::edgerun::v0::common::CommandRef;
+use edgerun_core::protocol::CommandRef;
 use edgerun_wire::{
     field, struct_value, text, u64v, WireDecode, WireEncode, WireReader, WireValue,
 };

@@ -11,7 +11,7 @@ use edgerun_core::command::{
 use edgerun_core::result::Verdict;
 use edgerun_core::util::now_unix_millis_i64;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::stream::CommandEnvelope;
+use edgerun_core::protocol::CommandEnvelope;
 use edgerun_storage::NodeStore;
 
 /// Check if a command is a duplicate using both persistent and in-memory replay caches.

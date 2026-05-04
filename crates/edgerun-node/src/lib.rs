@@ -669,13 +669,13 @@ trust_nodes: []
         let mut node = Node::from_config(config, signer).unwrap();
 
         // Build a minimal command with empty command_id
-        let command = edgerun_proto::edgerun::v0::stream::CommandEnvelope {
+        let command = edgerun_core::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![], // empty -> structural reject
-            target_node: Some(edgerun_proto::edgerun::v0::common::NodeRef {
+            target_node: Some(edgerun_core::protocol::NodeRef {
                 node_id: node.identity().0.to_vec(),
             }),
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![1, 2, 3],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -707,13 +707,13 @@ trust_nodes: []
         let signer = Arc::new(TestSigner::new());
         let mut node = Node::from_config(config, signer).unwrap();
 
-        let command = edgerun_proto::edgerun::v0::stream::CommandEnvelope {
+        let command = edgerun_core::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
-            target_node: Some(edgerun_proto::edgerun::v0::common::NodeRef {
+            target_node: Some(edgerun_core::protocol::NodeRef {
                 node_id: vec![0u8; 64], // wrong target
             }),
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![1, 2, 3],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -742,11 +742,11 @@ trust_nodes: []
         let signer = Arc::new(TestSigner::new());
         let mut node = Node::from_config(config, signer).unwrap();
 
-        let command = edgerun_proto::edgerun::v0::stream::CommandEnvelope {
+        let command = edgerun_core::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: None, // no target
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![1, 2, 3],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -777,13 +777,13 @@ trust_nodes: []
 
         let initial_events = node.events().len();
 
-        let command = edgerun_proto::edgerun::v0::stream::CommandEnvelope {
+        let command = edgerun_core::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1],
-            target_node: Some(edgerun_proto::edgerun::v0::common::NodeRef {
+            target_node: Some(edgerun_core::protocol::NodeRef {
                 node_id: node.identity().0.to_vec(),
             }),
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![7, 8, 9],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -818,12 +818,12 @@ trust_nodes: []
         let grant = edgerun_capabilities::CapabilityGrant {
             grant_version: 1,
             grant_id: vec![1, 2, 3],
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![4, 5, 6],
                 identity_kind: Some(2),
                 key_hint: None,
             }),
-            grantee: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            grantee: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: vec![1, 2, 3],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -855,13 +855,13 @@ trust_nodes: []
 
         // Create a command that will pass structural validation but fail signature
         // We use a command_id that's non-empty and target that matches
-        let command = edgerun_proto::edgerun::v0::stream::CommandEnvelope {
+        let command = edgerun_core::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![10, 20, 30],
-            target_node: Some(edgerun_proto::edgerun::v0::common::NodeRef {
+            target_node: Some(edgerun_core::protocol::NodeRef {
                 node_id: node.identity().0.to_vec(),
             }),
-            issuer: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            issuer: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: node
                     .config()
                     .controllers
@@ -885,7 +885,7 @@ trust_nodes: []
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: Some(edgerun_proto::edgerun::v0::common::Signature {
+            signature: Some(edgerun_core::protocol::Signature {
                 algorithm: 1,
                 value: vec![0u8; 64], // bad signature
             }),

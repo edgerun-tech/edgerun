@@ -10,7 +10,6 @@ description = "End-to-end Edgerun protocol and node integration flows"
 
 [dependencies]
 edgerun-core = { version = "0.1", path = "../edgerun-core" }
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 edgerun-storage = { version = "0.1", path = "../edgerun-storage" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
@@ -18,7 +17,6 @@ edgerun-remote-capability = { version = "0.1", path = "../edgerun-remote-capabil
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../edgerun-mesh-link" }
 edgerun-mesh-session = { version = "0.1", path = "../edgerun-mesh-session" }
-prost.workspace = true
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 
 [features]

@@ -9,7 +9,6 @@ homepage.workspace = true
 description = "EdgeRun Wallet Instant Settlement — core types and logic"
 
 [dependencies]
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false }
 edgerun-json = { version = "0.1", path = "../edgerun-json" }
 edgerun-error = { version = "0.1", path = "../edgerun-error" }

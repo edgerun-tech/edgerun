@@ -10,8 +10,6 @@ description = "EdgeRun SDK for building WASM execution units"
 
 [dependencies]
 edgerun-sdk-macro = { path = "../edgerun-sdk-macro" }
-edgerun-proto = { workspace = true }
-prost = { workspace = true }
 
 [lints]
 workspace = true

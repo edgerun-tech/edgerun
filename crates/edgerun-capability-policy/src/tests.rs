@@ -14,7 +14,7 @@ use edgerun_capabilities::{
 };
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_proto::edgerun::v0::capability::CapabilityInvocation;
-use edgerun_proto::edgerun::v0::common::{IdentityRef, RateLimit};
+use edgerun_core::protocol::{IdentityRef, RateLimit};
 use prost_types::{Duration as ProstDuration, Timestamp};
 use std::collections::{BTreeSet, VecDeque};
 

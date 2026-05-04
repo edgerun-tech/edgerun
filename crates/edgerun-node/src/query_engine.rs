@@ -16,7 +16,7 @@ pub enum QueryCostCheck {
 
 /// Evaluates the query's cost_limit and returns allowed limits or denial reason.
 pub fn check_query_cost(
-    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    query: &edgerun_core::protocol::QueryRequest,
 ) -> QueryCostCheck {
     // Constants for v0 cost limits
     const DEFAULT_MAX_BYTES: usize = 10 * 1024 * 1024; // 10 MB
@@ -49,14 +49,14 @@ pub fn check_query_cost(
 
 /// Executes a QueryRequest against local state and returns a QueryResultFragment.
 pub fn execute_query(
-    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    query: &edgerun_core::protocol::QueryRequest,
     store: &mut NodeStore,
     local_stream_id: &[u8],
     responder_node_id: &NodeID,
     signer: &dyn MeshSigner,
 ) -> Vec<u8> {
-    use edgerun_proto::edgerun::v0::access::{QueryClass, QueryResultFragment, ResultCompleteness};
-    use edgerun_proto::edgerun::v0::common::{EventRef, ObjectRef};
+    use edgerun_core::protocol::{QueryClass, QueryResultFragment, ResultCompleteness};
+    use edgerun_core::protocol::{EventRef, ObjectRef};
 
     // 1. Check cost limits before doing any work
     let (max_bytes, max_results) = match check_query_cost(query) {
@@ -339,7 +339,7 @@ pub fn execute_query(
     let mut fragment = QueryResultFragment {
         fragment_version: 1,
         query_id: query.query_id.clone(),
-        responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+        responder: Some(edgerun_core::protocol::IdentityRef {
             identity_id: responder_node_id.0.to_vec(),
             identity_kind: Some(2), // NODE
             key_hint: Some(responder_node_id.0.to_vec()),
@@ -385,7 +385,7 @@ pub fn execute_query(
 /// non-empty. Accepted fragments are stored as immutable objects and referenced
 /// by a `FederatedAggregateDescriptor` object in the aggregate response.
 pub fn execute_federated_query(
-    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    query: &edgerun_core::protocol::QueryRequest,
     store: &mut NodeStore,
     local_stream_id: &[u8],
     responder_node_id: &NodeID,
@@ -394,10 +394,8 @@ pub fn execute_federated_query(
     trusted_responders: &[Vec<u8>],
 ) -> Vec<u8> {
     use edgerun_core::result::Verdict;
-    use edgerun_proto::edgerun::v0::access::{
-        FederatedAggregateDescriptor, QueryResultFragment, ResultCompleteness,
-    };
-    use edgerun_proto::edgerun::v0::common::{IdentityRef, ObjectKind};
+    use edgerun_core::protocol::{FederatedAggregateDescriptor, QueryResultFragment, ResultCompleteness};
+    use edgerun_core::protocol::{IdentityRef, ObjectKind};
 
     let local_bytes = execute_query(query, store, local_stream_id, responder_node_id, signer);
     let Ok(mut aggregate) = QueryResultFragment::decode(&local_bytes[..]) else {
@@ -522,8 +520,8 @@ pub fn execute_federated_query(
 }
 
 fn merge_fragment_refs(
-    aggregate: &mut edgerun_proto::edgerun::v0::access::QueryResultFragment,
-    fragment: &edgerun_proto::edgerun::v0::access::QueryResultFragment,
+    aggregate: &mut edgerun_core::protocol::QueryResultFragment,
+    fragment: &edgerun_core::protocol::QueryResultFragment,
 ) {
     for snapshot_ref in &fragment.snapshot_refs {
         if !aggregate.snapshot_refs.iter().any(|existing| {
@@ -561,8 +559,8 @@ fn merge_fragment_refs(
 }
 
 fn enforce_aggregate_result_limits(
-    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
-    aggregate: &mut edgerun_proto::edgerun::v0::access::QueryResultFragment,
+    query: &edgerun_core::protocol::QueryRequest,
+    aggregate: &mut edgerun_core::protocol::QueryResultFragment,
 ) {
     let mut limit = query.result_limit.map(|value| value as usize);
     if let Some(cost_limit) = query
@@ -600,7 +598,7 @@ fn enforce_aggregate_result_limits(
 fn build_federated_summary_payload(
     accepted: usize,
     skipped: usize,
-    responders: &[edgerun_proto::edgerun::v0::common::IdentityRef],
+    responders: &[edgerun_core::protocol::IdentityRef],
 ) -> Vec<u8> {
     let responder_ids = responders
         .iter()
@@ -620,7 +618,7 @@ fn build_federated_summary_payload(
 }
 
 fn sign_query_result_fragment(
-    fragment: &mut edgerun_proto::edgerun::v0::access::QueryResultFragment,
+    fragment: &mut edgerun_core::protocol::QueryResultFragment,
     signer: &dyn MeshSigner,
 ) {
     use edgerun_core::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT;
@@ -637,21 +635,19 @@ fn sign_query_result_fragment(
 }
 
 fn build_query_proof_objects(
-    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    query: &edgerun_core::protocol::QueryRequest,
     store: &mut NodeStore,
     event_refs: &[edgerun_proto::edgerun::v0::common::EventRef],
     snapshot_refs: &[edgerun_proto::edgerun::v0::common::SnapshotRef],
-    object_refs: &[edgerun_proto::edgerun::v0::common::ObjectRef],
+    object_refs: &[edgerun_core::protocol::ObjectRef],
     signer: &dyn MeshSigner,
-) -> Vec<edgerun_proto::edgerun::v0::common::ObjectRef> {
+) -> Vec<edgerun_core::protocol::ObjectRef> {
     use edgerun_core::validators::{
         validate_event_set_proof, validate_object_assertion_proof, validate_snapshot_set_proof,
         ProofStructuralResult,
     };
-    use edgerun_proto::edgerun::v0::access::{
-        EventSetProof, ObjectAssertionProof, ProofClass, SnapshotSetProof, StreamHeadsProof,
-    };
-    use edgerun_proto::edgerun::v0::common::{HeadRef, ObjectKind};
+    use edgerun_core::protocol::{EventSetProof, ObjectAssertionProof, ProofClass, SnapshotSetProof, StreamHeadsProof};
+    use edgerun_core::protocol::{HeadRef, ObjectKind};
 
     let mut proof_objects = Vec::new();
 
@@ -751,9 +747,9 @@ fn store_proof_object(
     store: &mut NodeStore,
     signer: &dyn MeshSigner,
     proof_bytes: &[u8],
-    proof_objects: &mut Vec<edgerun_proto::edgerun::v0::common::ObjectRef>,
+    proof_objects: &mut Vec<edgerun_core::protocol::ObjectRef>,
 ) {
-    use edgerun_proto::edgerun::v0::common::ObjectKind;
+    use edgerun_core::protocol::ObjectKind;
 
     match store.put_object(
         proof_bytes,
@@ -835,16 +831,16 @@ fn filter_events_by_time(
 
 /// Builds a denial QueryResultFragment when cost limits are exceeded.
 pub fn build_query_denial(
-    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    query: &edgerun_core::protocol::QueryRequest,
     responder_node_id: &NodeID,
     reason: &str,
 ) -> Vec<u8> {
-    use edgerun_proto::edgerun::v0::access::{QueryResultFragment, ResultCompleteness};
+    use edgerun_core::protocol::{QueryResultFragment, ResultCompleteness};
 
     let fragment = QueryResultFragment {
         fragment_version: 1,
         query_id: query.query_id.clone(),
-        responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+        responder: Some(edgerun_core::protocol::IdentityRef {
             identity_id: responder_node_id.0.to_vec(),
             identity_kind: Some(2),
             key_hint: Some(responder_node_id.0.to_vec()),
@@ -865,17 +861,17 @@ pub fn build_query_denial(
 }
 
 fn build_signed_query_denial(
-    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    query: &edgerun_core::protocol::QueryRequest,
     responder_node_id: &NodeID,
     reason: &str,
     signer: &dyn MeshSigner,
 ) -> Vec<u8> {
-    use edgerun_proto::edgerun::v0::access::{QueryResultFragment, ResultCompleteness};
+    use edgerun_core::protocol::{QueryResultFragment, ResultCompleteness};
 
     let mut fragment = QueryResultFragment {
         fragment_version: 1,
         query_id: query.query_id.clone(),
-        responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+        responder: Some(edgerun_core::protocol::IdentityRef {
             identity_id: responder_node_id.0.to_vec(),
             identity_kind: Some(2),
             key_hint: Some(responder_node_id.0.to_vec()),
@@ -901,10 +897,7 @@ mod tests {
     use super::*;
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_hardware_signing::{HardwareSigningError, MeshSigner};
-    use edgerun_proto::edgerun::v0::access::{
-        CostLimit, ProofClass, QueryClass, QueryRequest, QueryResultFragment, ResultCompleteness,
-        StreamHeadsProof,
-    };
+    use edgerun_core::protocol::{CostLimit, ProofClass, QueryClass, QueryRequest, QueryResultFragment, ResultCompleteness, StreamHeadsProof};
     use edgerun_storage::{BlobKeySource, NodeStoreConfig};
     use prost::Message;
     use std::sync::Arc;
@@ -1056,7 +1049,7 @@ mod tests {
         let mut remote_fragment = QueryResultFragment {
             fragment_version: 1,
             query_id: b"federated-query".to_vec(),
-            responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            responder: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: remote_signer.node_id().0.to_vec(),
                 identity_kind: Some(2),
                 key_hint: Some(remote_signer.node_id().0.to_vec()),
@@ -1128,7 +1121,7 @@ mod tests {
         let mut remote_fragment = QueryResultFragment {
             fragment_version: 1,
             query_id: b"federated-limits".to_vec(),
-            responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
+            responder: Some(edgerun_core::protocol::IdentityRef {
                 identity_id: remote_signer.node_id().0.to_vec(),
                 identity_kind: Some(2),
                 key_hint: Some(remote_signer.node_id().0.to_vec()),

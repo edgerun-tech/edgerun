@@ -11,7 +11,6 @@ description = "EdgeRun Exchange HTTP API service"
 [dependencies]
 edgerun-exchange = { version = "0.1", path = "../edgerun-exchange" }
 edgerun-wallet = { version = "0.1", path = "../edgerun-wallet" }
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 edgerun-http = { version = "0.1", path = "../edgerun-http", features = ["server", "runtime"] }
 edgerun-json = { version = "0.1", path = "../edgerun-json" }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }

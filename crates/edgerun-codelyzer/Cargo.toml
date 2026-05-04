@@ -36,7 +36,6 @@ regex = "1"
 dirs = "5"
 rayon = "1.10"
 rusqlite = { version = "0.31", features = ["bundled"] }
-prost = "0.13"
 
 [build-dependencies]
 prost-build = "0.13"

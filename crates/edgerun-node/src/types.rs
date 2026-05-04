@@ -5,7 +5,7 @@ pub enum StoreRequest {
     Command {
         /// The raw message bytes (for dedup hashing before decode).
         raw_bytes: Vec<u8>,
-        command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+        command: edgerun_core::protocol::CommandEnvelope,
         /// Peer identity for allowlist check.
         peer_id: Option<Vec<u8>>,
         /// Reply channel. `None` for fire-and-forget (e.g., mesh commands).
@@ -14,7 +14,7 @@ pub enum StoreRequest {
     Query {
         /// The raw message bytes (for dedup hashing before decode).
         raw_bytes: Vec<u8>,
-        query: edgerun_proto::edgerun::v0::access::QueryRequest,
+        query: edgerun_core::protocol::QueryRequest,
         /// Peer identity for allowlist check.
         peer_id: Option<Vec<u8>>,
         /// Reply channel. `None` for fire-and-forget (e.g., mesh commands).
@@ -23,7 +23,7 @@ pub enum StoreRequest {
     /// Build a signed advisory aggregate from local query results plus remote
     /// signed `QueryResultFragment` bytes.
     FederatedQuery {
-        query: edgerun_proto::edgerun::v0::access::QueryRequest,
+        query: edgerun_core::protocol::QueryRequest,
         remote_fragments: Vec<Vec<u8>>,
         trusted_responders: Vec<Vec<u8>>,
         reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
@@ -36,13 +36,13 @@ pub enum StoreRequest {
     },
     /// Fetch a local object by ObjectRef and return its content.
     FetchObject {
-        object_ref: edgerun_proto::edgerun::v0::common::ObjectRef,
+        object_ref: edgerun_core::protocol::ObjectRef,
         reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
     },
     /// Send a command to a remote peer over TCP and record CommandSent event.
     SendCommand {
         peer_addr: String,
-        command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+        command: edgerun_core::protocol::CommandEnvelope,
         reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
     },
     /// Dequeue one pending fetch entry from the queue (for remote peer querying).
@@ -99,7 +99,7 @@ pub struct MeshReply {
 /// An outbound command to be sent to a remote peer.
 pub struct OutboundCommand {
     pub peer_addr: String,
-    pub command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+    pub command: edgerun_core::protocol::CommandEnvelope,
     pub reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
 }
 
@@ -107,7 +107,7 @@ pub struct OutboundCommand {
 /// Uses `edgerun_rt::mpsc` (async-compatible channel) since the sender
 /// is on the mesh blocking thread and the receiver is on the store blocking thread.
 pub struct MeshCommandRequest {
-    pub command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+    pub command: edgerun_core::protocol::CommandEnvelope,
     pub raw_bytes: Vec<u8>,
     pub source: NodeID,
     pub reply_tx: edgerun_rt::oneshot::Sender<MeshReply>,

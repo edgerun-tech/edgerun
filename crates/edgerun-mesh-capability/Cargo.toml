@@ -14,8 +14,6 @@ edgerun-mesh-link = { version = "0.1", path = "../edgerun-mesh-link" }
 edgerun-remote-capability = { version = "0.1", path = "../edgerun-remote-capability" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
-prost.workspace = true
 
 [lints]
 workspace = true

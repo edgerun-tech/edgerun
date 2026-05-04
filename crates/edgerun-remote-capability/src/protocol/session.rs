@@ -11,8 +11,8 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
 pub fn session_open_as_request(
     open: &CapabilitySessionOpen,
     descriptor: &CapabilityDescriptor,
-    requester: Option<edgerun_proto::edgerun::v0::common::IdentityRef>,
-    requester_node: Option<edgerun_proto::edgerun::v0::common::NodeRef>,
+    requester: Option<edgerun_core::protocol::IdentityRef>,
+    requester_node: Option<edgerun_core::protocol::NodeRef>,
 ) -> edgerun_capabilities::CapabilityRequest {
     edgerun_capabilities::CapabilityRequest {
         request_version: open.version,
@@ -80,15 +80,15 @@ pub fn accept_session_open_unchecked(open: &CapabilitySessionOpen) -> Capability
 }
 
 /// Default requester identity for remote capability sessions.
-pub fn default_remote_requester() -> edgerun_proto::edgerun::v0::common::IdentityRef {
-    edgerun_proto::edgerun::v0::common::IdentityRef {
+pub fn default_remote_requester() -> edgerun_core::protocol::IdentityRef {
+    edgerun_core::protocol::IdentityRef {
         identity_id: b"remote-capability-client".to_vec(),
         identity_kind: None,
         key_hint: None,
     }
 }
 
-pub fn default_remote_requester_opt() -> Option<edgerun_proto::edgerun::v0::common::IdentityRef> {
+pub fn default_remote_requester_opt() -> Option<edgerun_core::protocol::IdentityRef> {
     Some(default_remote_requester())
 }
 

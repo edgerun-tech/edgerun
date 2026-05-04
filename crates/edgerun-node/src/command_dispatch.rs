@@ -31,14 +31,9 @@ use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_json::Value as JsonValue;
 use edgerun_proto::edgerun::v0::common::EncryptedEnvelope;
-use edgerun_proto::edgerun::v0::common::{CommandRef, EventRef, ObjectRef};
-use edgerun_proto::edgerun::v0::stream::{
-    CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload,
-    CommandType, EventType,
-};
-use edgerun_proto::edgerun::v0::trust::{
-    DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord,
-};
+use edgerun_core::protocol::{CommandRef, EventRef, ObjectRef};
+use edgerun_core::protocol::{CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload, CommandType, EventType};
+use edgerun_core::protocol::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
 use edgerun_storage::NodeStore;
 use prost::Message;
 use std::sync::Arc;

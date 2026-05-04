@@ -12,7 +12,6 @@ description = "End-to-end capability delegation scenarios for Edgerun"
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-capability-policy = { version = "0.1", path = "../edgerun-capability-policy" }
 edgerun-remote-capability = { version = "0.1", path = "../edgerun-remote-capability" }
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 edgerun-input = { version = "0.1", path = "../edgerun-input" }
 edgerun-evdev-input = { version = "0.1", path = "../edgerun-evdev-input" }
 edgerun-microphone = { version = "0.1", path = "../edgerun-microphone" }
@@ -30,7 +29,6 @@ edgerun-linux-npu = { version = "0.1", path = "../edgerun-linux-npu" }
 edgerun-goodix-fingerprint = { version = "0.1", path = "../edgerun-goodix-fingerprint" }
 edgerun-mgmt-bluetooth = { version = "0.1", path = "../edgerun-mgmt-bluetooth" }
 edgerun-linux-wifi = { version = "0.1", path = "../edgerun-linux-wifi" }
-prost.workspace = true
 
 [lints]
 workspace = true

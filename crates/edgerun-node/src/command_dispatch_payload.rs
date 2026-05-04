@@ -3,7 +3,7 @@
 //! Command payload decoding is intentionally not generic anymore. Each command
 //! family owns one explicit edgerun-wire codec instead of using prost::Message.
 
-use edgerun_proto::edgerun::v0::stream::{command_envelope, CommandEnvelope};
+use edgerun_core::protocol::{command_envelope, CommandEnvelope};
 
 pub fn inline_payload_bytes(command: &CommandEnvelope) -> Option<&[u8]> {
     match command.payload.as_ref()? {

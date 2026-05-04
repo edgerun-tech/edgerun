@@ -13,7 +13,6 @@ edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
 edgerun-camera-biometrics = { version = "0.1", path = "../edgerun-camera-biometrics" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
-edgerun-proto = { version = "0.1", path = "../edgerun-proto" }
 
 [dev-dependencies]
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }

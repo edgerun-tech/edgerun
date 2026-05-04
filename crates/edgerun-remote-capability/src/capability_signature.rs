@@ -28,7 +28,7 @@ use edgerun_proto::edgerun::v0::capability::{
     CapabilityGrant, CapabilityInvocation, CapabilityRequest, CapabilityResult,
     CapabilityRevocation,
 };
-use edgerun_proto::edgerun::v0::common::{signature, Signature};
+use edgerun_core::protocol::{signature, Signature};
 use prost::Message;
 
 /// The ECDSA P-256 algorithm identifier used in protobuf Signature messages.

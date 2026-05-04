@@ -12,7 +12,7 @@ use edgerun_exchange::{
     ExchangeEvent, ExchangeOrderProjection,
 };
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_proto::edgerun::v0::common::ObjectKind;
+use edgerun_core::protocol::ObjectKind;
 use edgerun_storage::NodeStore;
 
 fn node_stream_id(signer: &dyn MeshSigner) -> Vec<u8> {
