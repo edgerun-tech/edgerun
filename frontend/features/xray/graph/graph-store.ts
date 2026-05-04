@@ -24,6 +24,22 @@ function initialState(): XrayState {
   }
 }
 
+function applyGraphData(data: { nodes: any[]; edges: any[] }) {
+  const nodeMap = new Map()
+  for (const node of data.nodes) {
+    nodeMap.set(node.id, { ...node, x: node.x ?? 0, y: node.y ?? 0 })
+  }
+
+  xrayState.set({
+    ...xrayState.get(),
+    nodes: nodeMap,
+    edges: data.edges,
+    runtimeStats: createMockRuntimeStats(nodeMap),
+    loading: false,
+    error: null,
+  })
+}
+
 export const xrayState = atom<XrayState>(initialState())
 
 export function initCodeAnalyzerConnection(url?: string): void {
@@ -31,39 +47,29 @@ export function initCodeAnalyzerConnection(url?: string): void {
     wsService.disconnect()
   }
 
-  wsService = new CodeAnalyzerWsService({ wsUrl: url || "ws://localhost:13337/ws" })
+  const endpoint = url || "http://localhost:13337/graph"
+  const isHttp = endpoint.startsWith("http://") || endpoint.startsWith("https://")
+  const wsUrl = isHttp ? endpoint.replace(/^http/, "ws").replace(/\/graph$/, "/ws") : endpoint
+  const httpUrl = isHttp ? endpoint : endpoint.replace(/^ws/, "http").replace(/\/ws$/, "/graph")
+
+  wsService = new CodeAnalyzerWsService({ wsUrl, httpUrl })
 
   xrayState.set({ ...xrayState.get(), loading: true, error: null })
 
-  wsService.onGraphUpdate((data) => {
-    const nodeMap = new Map()
-    for (const node of data.nodes) {
-      nodeMap.set(node.id, { ...node, x: node.x ?? 0, y: node.y ?? 0 })
-    }
-
-    xrayState.set({
-      ...xrayState.get(),
-      nodes: nodeMap,
-      edges: data.edges,
-      runtimeStats: createMockRuntimeStats(nodeMap),
-      loading: false,
-      error: null,
-    })
-  })
+  wsService.onGraphUpdate(applyGraphData)
 
   wsService.onError((error) => {
-    console.error("[xray] WebSocket error:", error)
+    console.error("[xray] Code analyzer error:", error)
     xrayState.set({ ...xrayState.get(), loading: false, error: error.message })
   })
 
-  wsService.connect()
+  void wsService.loadGraph()
 }
 
 export function requestAnalysis(path: string): void {
-  if (wsService) {
-    xrayState.set({ ...xrayState.get(), loading: true })
-    wsService.requestAnalyze(path)
-  }
+  if (!wsService) initCodeAnalyzerConnection()
+  xrayState.set({ ...xrayState.get(), loading: true })
+  wsService?.requestAnalyze(path)
 }
 
 export function setLayout(layout: LayoutType) {
