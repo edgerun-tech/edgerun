@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
+import { useStore } from "@nanostores/react"
 import {
   Bell,
   Check,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
+import { desktopTelemetryVisibleStore } from "@/stores/desktop-store"
 import { cn } from "@/lib/utils"
 import { EdgerunLogo } from "./edgerun-logo"
 
@@ -119,7 +121,7 @@ function AppearancePanel() {
   const [globeOpacity, setGlobeOpacity] = useState(40)
   const [windowBlur, setWindowBlur] = useState(true)
   const [animations, setAnimations] = useState(true)
-  const [desktopTelemetry, setDesktopTelemetry] = useState(true)
+  const desktopTelemetry = useStore(desktopTelemetryVisibleStore)
   const [fontSize, setFontSize] = useState(13)
   const [dockPosition, setDockPosition] = useState("bottom")
 
@@ -149,7 +151,7 @@ function AppearancePanel() {
             </div>
             <SettingRow label="Window blur" sub="Frosted glass depth on app windows." right={<Switch checked={windowBlur} onCheckedChange={setWindowBlur} size="sm" />} />
             <SettingRow label="Animations" sub="Window, dock, and panel motion." right={<Switch checked={animations} onCheckedChange={setAnimations} size="sm" />} />
-            <SettingRow label="Background telemetry" sub="Conky-style resource and earnings layer behind windows." right={<Switch checked={desktopTelemetry} onCheckedChange={setDesktopTelemetry} size="sm" />} />
+            <SettingRow label="Background telemetry" sub="Conky-style resource and earnings layer behind windows." right={<Switch checked={desktopTelemetry} onCheckedChange={desktopTelemetryVisibleStore.set} size="sm" />} />
           </div>
         </SettingsCard>
 
