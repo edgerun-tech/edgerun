@@ -3,21 +3,23 @@ import { cn } from "@/lib/utils";
 import { IconLayoutNavbarCollapse } from "@tabler/icons-react";
 import {
   AnimatePresence,
-  MotionValue,
   motion,
   useMotionValue,
   useSpring,
   useTransform,
 } from "motion/react";
+import type { MotionValue } from "motion/react";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
+
+type FloatingDockItem = { title: string; icon: ReactNode; href?: string; onClick?: () => void };
 
 export const FloatingDock = ({
   items,
   desktopClassName,
   mobileClassName,
 }: {
-  items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void }[];
+  items: FloatingDockItem[];
   desktopClassName?: string;
   mobileClassName?: string;
 }) => {
@@ -33,7 +35,7 @@ const FloatingDockMobile = ({
   items,
   className,
 }: {
-  items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void }[];
+  items: FloatingDockItem[];
   className?: string;
 }) => {
   const [open, setOpen] = useState(false);
@@ -54,11 +56,14 @@ const FloatingDockMobile = ({
                 transition={{ delay: (items.length - 1 - idx) * 0.05 }}
               >
                 <button
+                  type="button"
                   onClick={() => {
                     item.onClick?.();
                     setOpen(false);
                   }}
                   className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card hover:bg-accent"
+                  aria-label={item.title}
+                  title={item.title}
                 >
                   <div className="h-4 w-4">{item.icon}</div>
                 </button>
@@ -68,8 +73,10 @@ const FloatingDockMobile = ({
         )}
       </AnimatePresence>
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card hover:bg-accent"
+        aria-label="Open app dock"
       >
         <IconLayoutNavbarCollapse className="h-5 w-5" />
       </button>
@@ -81,7 +88,7 @@ const FloatingDockDesktop = ({
   items,
   className,
 }: {
-  items: { title: string; icon: React.ReactNode; href?: string; onClick?: () => void }[];
+  items: FloatingDockItem[];
   className?: string;
 }) => {
   const mouseX = useMotionValue(Infinity);
@@ -105,16 +112,15 @@ function IconContainer({
   mouseX,
   title,
   icon,
-  href,
   onClick,
 }: {
-  mouseX: MotionValue;
+  mouseX: MotionValue<number>;
   title: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   href?: string;
   onClick?: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLButtonElement>(null);
 
   const distance = useTransform(mouseX, (val) => {
     const bounds = ref.current?.getBoundingClientRect() ?? { x: 0, width: 0 };
@@ -133,14 +139,17 @@ function IconContainer({
 
   const [hovered, setHovered] = useState(false);
 
-  const inner = (
-    <motion.div
+  return (
+    <motion.button
       ref={ref}
+      type="button"
       style={{ width, height }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onClick}
       className="relative flex cursor-pointer items-center justify-center rounded-full border border-border bg-card transition-colors hover:bg-accent"
+      aria-label={title}
+      title={title}
     >
       <AnimatePresence>
         {hovered && (
@@ -160,8 +169,6 @@ function IconContainer({
       >
         {icon}
       </motion.div>
-    </motion.div>
+    </motion.button>
   );
-
-  return inner;
 }
