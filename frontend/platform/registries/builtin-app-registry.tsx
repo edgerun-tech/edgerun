@@ -1,5 +1,6 @@
 import type { AppDefinition, AppSource } from "@/platform/types/app-definition"
 import {
+  Store,
   Terminal,
   Code2,
   Database,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react"
 
 export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
+  "app-store": <Store className="h-5 w-5" />,
   terminal: <Terminal className="h-5 w-5" />,
   "code-runner": <Code2 className="h-5 w-5" />,
   "db-explorer": <Database className="h-5 w-5" />,
@@ -51,6 +53,18 @@ export function getIconById(iconId: string): React.ReactNode {
 }
 
 export const BUILTIN_APPS: AppDefinition[] = [
+  {
+    appId: "app-store",
+    name: "App Store",
+    description: "Install, open, and uninstall apps",
+    iconId: "app-store",
+    kind: "builtin",
+    source: "builtin",
+    componentKey: "app-store",
+    requiredCapabilityIds: [],
+    optionalCapabilityIds: [],
+    status: "available",
+  },
   {
     appId: "terminal",
     name: "Terminal",
