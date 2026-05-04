@@ -18,6 +18,7 @@ pub fn call(root: &Path, args: Value) -> Result<Value, String> {
         "add_derive" => add_derive(root, args),
         "rename_type" => rename_type(root, args),
         "new_file" => new_file(root, args),
+        "remove_file" => remove_file(root, args),
         "incoming_refs" => incoming_refs(root, args),
         _ => Err(format!("unknown rust_ast op: {op}")),
     }
@@ -103,7 +104,10 @@ fn rename_type(root: &Path, args: Value) -> Result<Value, String> {
         let before = fs::read_to_string(&path).map_err(|err| format!("read failed: {err}"))?;
         let mut file = match edit_ops::parse_file(&path) { Ok(file) => file, Err(_) => continue };
         edit_ops::rename_type_in_file(&mut file, old, new);
-        let rendered = prettyplease::unparse(&file);
+        let temp = std::env::temp_dir().join("edgerun_codelyzer_rename_probe.rs");
+        edit_ops::write_file(&temp, &file)?;
+        let rendered = fs::read_to_string(&temp).map_err(|err| format!("read temp failed: {err}"))?;
+        let _ = fs::remove_file(&temp);
         if rendered != before {
             backup(&path)?;
             fs::write(&path, rendered).map_err(|err| format!("write failed: {err}"))?;
@@ -120,6 +124,13 @@ fn new_file(root: &Path, args: Value) -> Result<Value, String> {
     let content = args.get("content").and_then(Value::as_str).unwrap_or("");
     edit_ops::new_file(&path, content)?;
     Ok(json!({ "changed": true, "op": "new_file", "path": rel }))
+}
+
+fn remove_file(root: &Path, args: Value) -> Result<Value, String> {
+    let path = rust_path(root, &args)?;
+    backup(&path)?;
+    edit_ops::remove_file(&path)?;
+    Ok(json!({ "changed": true, "op": "remove_file" }))
 }
 
 fn incoming_refs(root: &Path, args: Value) -> Result<Value, String> {
