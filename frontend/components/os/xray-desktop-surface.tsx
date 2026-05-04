@@ -1,13 +1,13 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Activity, Cpu, HardDrive, RadioTower, WalletCards } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { Cpu, HardDrive, RadioTower, WalletCards } from "lucide-react"
 import { GlowingContainer } from "@/components/layouts/glowing-containers"
 import { FinancesOverviewWidget } from "@/components/sections/finance-overviews"
 import { WorkspaceStatusPanel } from "@/components/workspace"
 import { XrayViewport } from "@/features/xray/XrayViewport"
 import { XrayCommandSurface } from "@/features/xray/XrayCommandSurface"
+import { EdgerunLogo } from "./edgerun-logo"
 import type { AppSurfaceDef, AppSurfaceSlot } from "@/stores/desktop-store"
 
 type XrayDesktopSurfaceProps = {
@@ -99,7 +99,7 @@ export function XrayDesktopSurface({
     <div className="absolute inset-0 z-0 overflow-hidden bg-zinc-950">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(120,119,198,0.16),transparent_36%),radial-gradient(circle_at_80%_10%,rgba(16,185,129,0.08),transparent_32%)]" />
 
-      <div className="absolute inset-y-4 left-4 z-10 hidden w-56 grid-rows-2 gap-4 pt-12 pb-20 xl:grid">
+      <div className="absolute inset-y-4 left-4 z-10 hidden w-56 grid-rows-2 gap-4 pb-20 pt-4 xl:grid">
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "left-top")}
           fallback={
@@ -121,7 +121,7 @@ export function XrayDesktopSurface({
         />
       </div>
 
-      <div className="absolute inset-y-4 right-4 z-10 hidden w-56 grid-rows-2 gap-4 pt-12 pb-20 xl:grid">
+      <div className="absolute inset-y-4 right-4 z-10 hidden w-56 grid-rows-2 gap-4 pb-20 pt-4 xl:grid">
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "right-top")}
           fallback={
@@ -172,11 +172,12 @@ export function XrayDesktopSurface({
         spread={110}
         borderWidth={2}
       >
-        <div className="absolute left-1/2 top-4 z-20 hidden -translate-x-1/2 items-center gap-2 xl:flex">
-          <Badge variant="secondary" className="border-white/10 bg-background/70 text-primary backdrop-blur-md">
-            <Activity className="h-3 w-3" /> XRAY
-          </Badge>
-          <XrayCommandSurface surface="top" />
+        <div className="pointer-events-none absolute left-1/2 top-4 z-20 hidden -translate-x-1/2 text-primary/85 xl:block">
+          <EdgerunLogo variant="full" size="sm" />
+        </div>
+
+        <div className="absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 xl:block">
+          <XrayCommandSurface surface="vertical" />
         </div>
 
         <div className="absolute inset-0 overflow-hidden rounded-xl">
