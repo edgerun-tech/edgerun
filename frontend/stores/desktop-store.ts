@@ -44,6 +44,11 @@ export const widgetVisibleStore = persistentAtom("edgerun:widgetVisible", false,
   decode: (v) => v === "true",
 })
 
+export const desktopTelemetryVisibleStore = persistentAtom("edgerun:desktopTelemetryVisible", true, {
+  encode: String,
+  decode: (v) => v !== "false",
+})
+
 export const windowsStore = atom<OpenWindowDef[]>([])
 export const windowOrderStore = atom<string[]>([])
 export const focusedWindowStore = atom<string | null>(null)
