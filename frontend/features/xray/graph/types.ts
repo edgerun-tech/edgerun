@@ -88,6 +88,9 @@ export type XrayState = {
   zoom: number
   panX: number
   panY: number
+  yaw: number
+  pitch: number
+  /** @deprecated Use yaw. Kept during migration for older callers. */
   rotation: number
   loading: boolean
   error: string | null
