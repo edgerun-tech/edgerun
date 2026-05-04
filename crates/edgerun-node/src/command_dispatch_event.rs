@@ -4,7 +4,7 @@
 //! duplicated inside command handlers.
 
 use crate::command_dispatch_result::{build_command_result_payload, command_ref_from};
-use crate::command_result_codec::encode_command_result_payload;
+use crate::command_result_wire_codec::encode_command_result_payload;
 use edgerun_core::protocol::Digest;
 use edgerun_core::util::{bytes_to_hex, now_prost_timestamp};
 use edgerun_core::wire_command::command_hash;
