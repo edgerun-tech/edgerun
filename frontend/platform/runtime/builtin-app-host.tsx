@@ -81,6 +81,7 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
       return <PeopleApp />
     case "trust-manager":
       return <TrustManagerSurface />
+    case "finances":
     case "wallet":
       return <FinancesApp />
     case "calculator":
