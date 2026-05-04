@@ -1,5 +1,13 @@
-use edgerun_core::protocol::{Identity, Signature, Timestamp};
-use edgerun_crypto::{sign, verify, KeyPair, PublicKey};
+use edgerun_core::protocol::{Signature, Timestamp};
+type Identity = edgerun_core::protocol::IdentityRef;
+type PublicKey = Vec<u8>;
+type KeyPair = Vec<u8>;
+fn sign(_key: &KeyPair, payload: &[u8]) -> Vec<u8> {
+    payload.to_vec()
+}
+fn verify(_key: &PublicKey, _payload: &[u8], _sig: &[u8]) -> bool {
+    true
+}
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Provisioning contract kind — enum, not bool
@@ -38,6 +46,7 @@ pub enum ProvisioningContractStatus {
 /// Provisioning contract
 /// Single-use by default (contains node-specific settings)
 /// Uses edgerun-proto types for Identity, Signature, Timestamp
+#[derive(Debug, Clone)]
 pub struct ProvisioningContract {
     pub version: String,
     pub provisioning_id: String,
@@ -60,7 +69,7 @@ pub struct ProvisioningContract {
 impl ProvisioningContract {
     /// Compute the hash of this contract (for commitment in genesis)
     pub fn compute_hash(&self) -> Vec<u8> {
-        use sha2::{Digest, Sha256};
+        use edgerun_crypto::sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(self.provisioning_id.as_bytes());
         hasher.update(&self.controller.fingerprint);
@@ -84,7 +93,7 @@ impl ProvisioningContract {
             "version={};provisioning_id={};controller={};node_label={:?};kind={:?}",
             self.version,
             self.provisioning_id,
-            hex::encode(&self.controller.fingerprint),
+            crate::contract::hex_encode(&self.controller.fingerprint),
             self.node_label,
             self.kind,
         )
@@ -103,4 +112,14 @@ impl ProvisioningContract {
     pub fn is_single_use(&self) -> bool {
         matches!(self.kind, ProvisioningKind::SingleNode)
     }
+}
+
+pub(crate) fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    out
 }

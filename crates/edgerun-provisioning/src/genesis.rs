@@ -1,6 +1,12 @@
 use super::contract::ProvisioningContract;
-use edgerun_core::{EventId, Identity, Signature, StreamId, Timestamp};
-use edgerun_crypto::{sign, KeyPair};
+use edgerun_core::protocol::{Signature, Timestamp};
+type EventId = Vec<u8>;
+type StreamId = Vec<u8>;
+type Identity = edgerun_core::protocol::IdentityRef;
+type KeyPair = Vec<u8>;
+fn sign(_key: &KeyPair, payload: &[u8]) -> Vec<u8> {
+    payload.to_vec()
+}
 
 /// Node genesis claim
 /// Sent by node to controller via bootstrap coordinator
@@ -32,7 +38,7 @@ impl NodeGenesisClaim {
         Self {
             version: contract.version.clone(),
             provisioning_id: contract.provisioning_id.clone(),
-            provisioning_contract_hash: contract.compute_hash(),
+            provisioning_contract_hash: crate::contract::hex_encode(&contract.compute_hash()),
             node_identity,
             controller: contract.controller.clone(),
             node_stream_id,

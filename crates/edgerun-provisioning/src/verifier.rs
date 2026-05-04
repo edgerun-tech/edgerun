@@ -1,7 +1,7 @@
 use super::contract::ProvisioningContract;
 use super::errors::ProvisioningError;
 use super::genesis::NodeGenesisClaim;
-use edgerun_crypto::PublicKey;
+type PublicKey = Vec<u8>;
 
 /// Verifier for provisioning contracts and genesis claims
 pub struct ProvisioningVerifier;
@@ -47,7 +47,7 @@ impl ProvisioningVerifier {
         node_public_key: &PublicKey,
     ) -> Result<(), ProvisioningError> {
         // Check that claim commits to this contract
-        if !claim.commits_to_contract(&contract.compute_hash()) {
+        if !claim.commits_to_contract(&crate::contract::hex_encode(&contract.compute_hash())) {
             return Err(ProvisioningError::GenesisNotCommittedToContract);
         }
 

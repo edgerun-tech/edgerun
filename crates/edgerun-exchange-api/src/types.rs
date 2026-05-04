@@ -30,7 +30,7 @@ impl ToJson for ApiQuoteRequest {
         map.insert("settlement".into(), self.settlement.asset_ref_to_json());
         map.insert("pay".into(), self.pay.asset_ref_to_json());
         if let Some(ref amt) = self.amount {
-            map.insert("amount".into(), self.amountx_ref_to_json(t));
+            map.insert("amount".into(), self.amount.to_json());
         }
         map.insert(
             "mode".into(),
@@ -62,13 +62,10 @@ impl ToJson for ApiQuoteResponse {
         map.insert("id".into(), self.id.to_json());
         map.insert("settlement".into(), self.settlement.asset_ref_to_json());
         map.insert("pay".into(), self.pay.asset_ref_to_json());
-        map.insert(
-            "settlement_amount".into(),
-            self.settlement_amountx_ref_to_json(t),
-        );
-        map.insert("pay_amount".into(), self.pay_amountx_ref_to_json(t));
+        map.insert("settlement_amount".into(), self.settlement_amount.to_json());
+        map.insert("pay_amount".into(), self.pay_amount.to_json());
         map.insert("rate".into(), self.rate.to_json());
-        map.insert("expires_at".into(), self.expires_atx_ref_to_json(t));
+        map.insert("expires_at".into(), self.expires_at.to_json());
         JsonValue::Object(map)
     }
 }
@@ -113,10 +110,7 @@ impl ToJson for ApiOrderResponse {
             "settlement_address".into(),
             self.settlement_address.to_json(),
         );
-        map.insert(
-            "settlement_amount".into(),
-            self.settlement_amountx_ref_to_json(t),
-        );
+        map.insert("settlement_amount".into(), self.settlement_amount.to_json());
         if let Some(ref p) = self.pay_amount {
             map.insert("pay_amount".into(), p.to_json());
         }
@@ -171,7 +165,7 @@ impl ToJson for ApiAssetsResponse {
     fn to_json(&self) -> JsonValue {
         let mut map = Map::new();
         map.insert("assets".into(), self.assets.to_json());
-        map.insert("count".into(), self.countx_ref_to_json(t));
+        map.insert("count".into(), self.count.to_json());
         JsonValue::Object(map)
     }
 }
@@ -218,7 +212,7 @@ impl AssetRefJsonExt for AssetRef {
         let mut map = edgerun_json::Map::new();
         map.insert("symbol".into(), self.symbol.to_json());
         map.insert("network".into(), self.network.to_json());
-        map.insert("contract".into(), self.contractx_ref_to_json(t));
+        map.insert("contract".into(), self.contract.to_json());
         map.insert("decimals".into(), self.decimals.to_json());
         edgerun_json::JsonValue::Object(map)
     }

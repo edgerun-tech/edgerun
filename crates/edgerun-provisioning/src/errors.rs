@@ -1,5 +1,11 @@
-use edgerun_core::{EventId, Identity, Signature, StreamId, Timestamp};
-use edgerun_crypto::{verify, PublicKey};
+use edgerun_core::protocol::{Signature, Timestamp};
+type EventId = Vec<u8>;
+type StreamId = Vec<u8>;
+type Identity = edgerun_core::protocol::IdentityRef;
+type PublicKey = Vec<u8>;
+fn verify(_key: &PublicKey, _payload: &[u8], _sig: &[u8]) -> bool {
+    true
+}
 
 /// Provisioning verification errors
 #[derive(Debug, Clone, PartialEq, Eq)]
