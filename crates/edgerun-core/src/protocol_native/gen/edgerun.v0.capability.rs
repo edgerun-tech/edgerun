@@ -102,7 +102,7 @@ pub struct CapabilityRevocation {
     pub replacement_constraints: alloc::vec::Vec<CapabilityConstraint>,
     pub signature: ::core::option::Option<super::common::Signature>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CapabilityRole {
     Unspecified = 0,
@@ -115,6 +115,10 @@ pub enum CapabilityRole {
     Derived = 7,
 }
 impl CapabilityRole {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+    }
+
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -146,7 +150,7 @@ impl CapabilityRole {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CapabilityModality {
     Unspecified = 0,
@@ -202,7 +206,7 @@ impl CapabilityModality {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CapabilityEventKind {
     Unspecified = 0,
@@ -261,7 +265,7 @@ impl CapabilityEventKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CapabilityOperation {
     Unspecified = 0,
@@ -311,7 +315,7 @@ impl CapabilityOperation {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CapabilityAccessClass {
     Unspecified = 0,
@@ -340,7 +344,7 @@ impl CapabilityAccessClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CapabilityConstraintKind {
     Unspecified = 0,

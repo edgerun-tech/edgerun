@@ -134,7 +134,7 @@ pub struct RouteSelectionPolicy {
     pub require_active_session: ::core::option::Option<bool>,
     pub policy_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CapabilityKind {
     Unspecified = 0,
@@ -148,6 +148,10 @@ pub enum CapabilityKind {
     DecryptDomain = 8,
 }
 impl CapabilityKind {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+    }
+
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -181,7 +185,7 @@ impl CapabilityKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ScopeKind {
     Unspecified = 0,
@@ -228,7 +232,7 @@ impl ScopeKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum DelegationPolicy {
     Unspecified = 0,
@@ -257,7 +261,7 @@ impl DelegationPolicy {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ExportPolicy {
     Unspecified = 0,
@@ -292,7 +296,7 @@ impl ExportPolicy {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum RevocationKind {
     Unspecified = 0,

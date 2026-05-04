@@ -47,7 +47,7 @@ pub struct ChunkManifest {
     pub chunk_entries: alloc::vec::Vec<ChunkEntry>,
     pub manifest_metadata: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ChunkingMode {
     Unspecified = 0,
@@ -55,6 +55,10 @@ pub enum ChunkingMode {
     Manifest = 2,
 }
 impl ChunkingMode {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+    }
+
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable

@@ -116,7 +116,7 @@ pub struct ProofBundle {
     pub supporting_objects: alloc::vec::Vec<super::common::ObjectRef>,
     pub signature: ::core::option::Option<super::common::Signature>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum SnapshotCompleteness {
     Unspecified = 0,
@@ -125,6 +125,10 @@ pub enum SnapshotCompleteness {
     Bounded = 3,
 }
 impl SnapshotCompleteness {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+    }
+
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -148,7 +152,7 @@ impl SnapshotCompleteness {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum QueryClass {
     Unspecified = 0,
@@ -195,7 +199,7 @@ impl QueryClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ProofClass {
     Unspecified = 0,
@@ -233,7 +237,7 @@ impl ProofClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ResultCompleteness {
     Unspecified = 0,
@@ -270,7 +274,7 @@ impl ResultCompleteness {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ProofPayloadType {
     Unspecified = 0,

@@ -63,7 +63,6 @@ pub mod edgerun_wallet_v0;
 pub use access::*;
 pub use app::*;
 pub use appabi::*;
-pub use capability::*;
 pub use capability_runtime::*;
 pub use common::*;
 pub use edgerun_wallet_v0::*;
@@ -72,5 +71,19 @@ pub use network::*;
 pub use object::*;
 pub use server_resources::*;
 pub use stream::*;
-pub use trust::*;
 pub use ui::*;
+
+// Explicit reexports prevent name collisions between capability::* and trust::*.
+pub use capability::{
+    CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityEventKind,
+    CapabilityGrant, CapabilityInvocation, CapabilityModality, CapabilityOperation,
+    CapabilityRequest, CapabilityResult as CapabilityRuntimeResult, CapabilityRevocation,
+    CapabilityRole,
+};
+
+pub use trust::{
+    AggregateTrustPolicy, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor,
+    CapabilityKind, ConstraintSet, DelegationPolicy, DelegationRecord, ExportPolicy,
+    RevocationKind, RevocationRecord, RouteSelectionPolicy, RouteTrustAssignment,
+    RouteTrustAssignments, ScopeDescriptor, ScopeKind,
+};

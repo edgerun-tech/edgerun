@@ -25,7 +25,7 @@ pub struct CapabilityCheck {
 }
 /// Nested message and enum types in `CapabilityCheck`.
 pub mod capability_check {
-    #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
     #[repr(i32)]
     pub enum Operation {
         Unspecified = 0,
@@ -71,14 +71,14 @@ pub mod capability_check {
     }
 }
 /// Result of a capability check
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct CapabilityResult {
     pub decision: i32,
     pub reason: alloc::string::String,
 }
 /// Nested message and enum types in `CapabilityResult`.
 pub mod capability_result {
-    #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
     #[repr(i32)]
     pub enum Decision {
         Unspecified = 0,

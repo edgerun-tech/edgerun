@@ -6,7 +6,7 @@ pub struct Digest {
 }
 /// Nested message and enum types in `Digest`.
 pub mod digest {
-    #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
     #[repr(i32)]
     pub enum Algorithm {
         DigestAlgorithmUnspecified = 0,
@@ -40,7 +40,7 @@ pub struct Signature {
 }
 /// Nested message and enum types in `Signature`.
 pub mod signature {
-    #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
     #[repr(i32)]
     pub enum Algorithm {
         SignatureAlgorithmUnspecified = 0,
@@ -170,7 +170,7 @@ pub struct EncryptedEnvelope {
     /// ECDSA P-256 signature over (sender || recipients || ephemeral_pub || nonce || ciphertext)
     pub signature: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum IdentityKind {
     Unspecified = 0,
@@ -181,6 +181,10 @@ pub enum IdentityKind {
     Other = 5,
 }
 impl IdentityKind {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+    }
+
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -208,7 +212,7 @@ impl IdentityKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ObjectKind {
     Unspecified = 0,
@@ -261,7 +265,7 @@ impl ObjectKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum AssuranceClass {
     Unspecified = 0,
@@ -293,7 +297,7 @@ impl AssuranceClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum TransportClass {
     Unspecified = 0,
@@ -337,7 +341,7 @@ impl TransportClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum Directness {
     Unspecified = 0,
@@ -372,7 +376,7 @@ impl Directness {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum StorageClass {
     Unspecified = 0,
@@ -407,7 +411,7 @@ impl StorageClass {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ExecutionClass {
     Unspecified = 0,
@@ -464,7 +468,7 @@ impl ExecutionClass {
 // Domain separation: "edgerun:v0:hash:encrypted-envelope"
 // ===========================================================================
 
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CipherSuite {
     Unspecified = 0,

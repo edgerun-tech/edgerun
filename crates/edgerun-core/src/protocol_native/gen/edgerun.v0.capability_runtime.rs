@@ -10,7 +10,7 @@ pub struct CapabilitySessionOpen {
     pub requested_constraints: alloc::vec::Vec<super::capability::CapabilityConstraint>,
     pub correlation_id: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct CapabilitySessionAccept {
     pub version: u32,
     pub session_id: alloc::vec::Vec<u8>,
@@ -20,7 +20,7 @@ pub struct CapabilitySessionAccept {
     pub error_reason: alloc::string::String,
     pub grant_id: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct CapabilitySessionEvent {
     pub version: u32,
     pub session_id: alloc::vec::Vec<u8>,
@@ -29,18 +29,18 @@ pub struct CapabilitySessionEvent {
     pub payload_object: ::core::option::Option<super::common::ObjectRef>,
     pub inline_payload: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct CapabilitySessionClose {
     pub version: u32,
     pub session_id: alloc::vec::Vec<u8>,
     pub reason: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct CapabilityInvocationFrame {
     pub invocation: ::core::option::Option<super::capability::CapabilityInvocation>,
     pub inline_parameters: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct CapabilityResultFrame {
     pub result: ::core::option::Option<super::capability::CapabilityResult>,
     pub inline_payload: alloc::vec::Vec<u8>,
@@ -66,7 +66,7 @@ pub mod capability_remote_envelope {
         ResultFrame(super::CapabilityResultFrame),
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CapabilitySessionMode {
     Unspecified = 0,
@@ -74,6 +74,10 @@ pub enum CapabilitySessionMode {
     Stream = 2,
 }
 impl CapabilitySessionMode {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+    }
+
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable

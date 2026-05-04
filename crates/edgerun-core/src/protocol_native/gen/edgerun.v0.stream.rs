@@ -417,7 +417,7 @@ pub struct RequestSignaturePayload {
     /// Presence token (must be valid and unexpired)
     pub presence_token: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum EventType {
     Unspecified = 0,
@@ -450,6 +450,10 @@ pub enum EventType {
     WalletReceiptCreated = 25,
 }
 impl EventType {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+    }
+
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -515,7 +519,7 @@ impl EventType {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CommandDecision {
     Unspecified = 0,
@@ -544,7 +548,7 @@ impl CommandDecision {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ActionStatus {
     Unspecified = 0,
@@ -576,7 +580,7 @@ impl ActionStatus {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum CommandType {
     Unspecified = 0,

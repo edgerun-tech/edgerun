@@ -16,7 +16,7 @@
 // 1022 REQUEST_CERTIFICATE
 // 1023 SET_SERVICE_POLICY
 
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct CompiledBootstrapPolicyPayload {
     pub payload_version: u32,
     pub node_label: alloc::string::String,
@@ -24,86 +24,86 @@ pub struct CompiledBootstrapPolicyPayload {
     pub controller_id: alloc::vec::Vec<u8>,
     pub bootstrap_relays: alloc::vec::Vec<alloc::string::String>,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct ClaimDomainPayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct ReleaseDomainPayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct AddMailboxPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct RemoveMailboxPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct AddAliasPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
     pub target: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct RemoveAliasPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct AuthorizeContentSourcePayload {
     pub payload_version: u32,
     pub repo: alloc::string::String,
     pub allowed_ref: alloc::string::String,
     pub allowed_paths: alloc::vec::Vec<alloc::string::String>,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct ContentRef {
     pub repo: alloc::string::String,
     pub commit: alloc::string::String,
     pub path: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct PublishWebsitePayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
     pub content_ref: ::core::option::Option<ContentRef>,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct UnpublishWebsitePayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct SetAuthoritativeDnsPayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
     pub enabled: bool,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct RequestCertificatePayload {
     pub payload_version: u32,
     pub name: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct SetServicePolicyPayload {
     pub payload_version: u32,
     pub service: alloc::string::String,
     pub policy: alloc::string::String,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct ServerResourceCommittedPayload {
     pub payload_version: u32,
     pub event_kind: i32,
     pub event_payload: alloc::vec::Vec<u8>,
     pub origin_command: ::core::option::Option<super::common::CommandRef>,
 }
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Clone, PartialEq)]
 pub struct GenerationEventPayload {
     pub payload_version: u32,
     pub generation_id: alloc::vec::Vec<u8>,
@@ -111,7 +111,7 @@ pub struct GenerationEventPayload {
     pub plan_hash: alloc::vec::Vec<u8>,
     pub reason: alloc::string::String,
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ServerResourceEventKind {
     Unspecified = 0,
@@ -129,6 +129,10 @@ pub enum ServerResourceEventKind {
     SetServicePolicy = 12,
 }
 impl ServerResourceEventKind {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+    }
+
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -172,7 +176,7 @@ impl ServerResourceEventKind {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum GenerationEventKind {
     Unspecified = 0,

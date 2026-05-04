@@ -316,13 +316,17 @@ pub struct TimeResult {
 // ABI Version
 // ===========================================================================
 
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum AbiVersion {
     Unspecified = 0,
     V0 = 1,
 }
 impl AbiVersion {
+    pub fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        <Self as ::core::convert::TryFrom<i32>>::try_from(value).ok()
+    }
+
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
@@ -346,7 +350,7 @@ impl AbiVersion {
 // Host Operations
 // ===========================================================================
 
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum HostOp {
     Unspecified = 0,
@@ -421,7 +425,7 @@ impl HostOp {
 // ABI Status Codes
 // ===========================================================================
 
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum AbiStatus {
     Unspecified = 0,
@@ -481,7 +485,7 @@ impl AbiStatus {
 // Execution Mode
 // ===========================================================================
 
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum ExecutionMode {
     Unspecified = 0,
