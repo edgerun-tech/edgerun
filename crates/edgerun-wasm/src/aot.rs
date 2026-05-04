@@ -12,7 +12,6 @@ mod lower;
 use anyhow::{bail, Context, Result};
 use artifact::{AotArtifact, CompiledFunction, DecodedAotArtifact};
 use backend_x86_64::X86_64Backend;
-use edgerun_clap::Parser;
 use loader::{find_function, LoadedFunction};
 use lower::{lower_module, parse_module};
 use sha2::{Digest, Sha256};
@@ -21,39 +20,21 @@ use std::path::{Path, PathBuf};
 const TARGET: &str = "x86_64-linux-sysv";
 const COMPILER: &str = "edgerun-aot-baseline-v0";
 
-#[derive(Parser, Debug)]
-#[command(name = "edgerun-aot", about = "Compile, verify, inspect, or run deterministic EdgeRun WASM AOT artifacts")]
+#[derive(Debug, Default)]
 struct Args {
-    #[arg(default_value = "app.wasm")]
     file: String,
-
-    #[arg(short, long, default_value = "")]
     output: String,
-
-    #[arg(long)]
     emit_ir: bool,
-
-    #[arg(long, default_value = "")]
     verify_artifact: String,
-
-    #[arg(long, default_value = "")]
     inspect_artifact: String,
-
-    #[arg(long, default_value = "")]
     run_artifact: String,
-
-    #[arg(long, default_value = "run")]
     function: String,
-
-    #[arg(long, default_value = "")]
     args: String,
-
-    #[arg(short, long)]
     verbose: bool,
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let args = parse_args()?;
 
     if !args.inspect_artifact.is_empty() {
         return inspect_artifact(&args.inspect_artifact);
@@ -68,6 +49,71 @@ fn main() -> Result<()> {
     }
 
     compile_artifact(&args)
+}
+
+fn parse_args() -> Result<Args> {
+    let mut out = Args {
+        file: "app.wasm".to_string(),
+        function: "run".to_string(),
+        ..Args::default()
+    };
+
+    let mut positional = Vec::new();
+    let mut it = std::env::args().skip(1).peekable();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print_help();
+                std::process::exit(0);
+            }
+            "-v" | "--verbose" => out.verbose = true,
+            "--emit-ir" => out.emit_ir = true,
+            "-o" | "--output" => out.output = next_value(&mut it, &arg)?,
+            "--verify-artifact" => out.verify_artifact = next_value(&mut it, &arg)?,
+            "--inspect-artifact" => out.inspect_artifact = next_value(&mut it, &arg)?,
+            "--run-artifact" => out.run_artifact = next_value(&mut it, &arg)?,
+            "--function" => out.function = next_value(&mut it, &arg)?,
+            "--args" => out.args = next_value(&mut it, &arg)?,
+            _ if arg.starts_with("--output=") => out.output = arg[9..].to_string(),
+            _ if arg.starts_with("--verify-artifact=") => out.verify_artifact = arg[18..].to_string(),
+            _ if arg.starts_with("--inspect-artifact=") => out.inspect_artifact = arg[19..].to_string(),
+            _ if arg.starts_with("--run-artifact=") => out.run_artifact = arg[15..].to_string(),
+            _ if arg.starts_with("--function=") => out.function = arg[11..].to_string(),
+            _ if arg.starts_with("--args=") => out.args = arg[7..].to_string(),
+            _ if arg.starts_with('-') => bail!("unknown edgerun-aot option: {arg}"),
+            _ => positional.push(arg),
+        }
+    }
+
+    if let Some(first) = positional.first() {
+        out.file = first.clone();
+    }
+    if positional.len() > 1 {
+        bail!("unexpected positional arguments: {}", positional[1..].join(" "));
+    }
+
+    Ok(out)
+}
+
+fn next_value<I>(it: &mut std::iter::Peekable<I>, flag: &str) -> Result<String>
+where
+    I: Iterator<Item = String>,
+{
+    it.next()
+        .filter(|v| !v.is_empty())
+        .with_context(|| format!("missing value for {flag}"))
+}
+
+fn print_help() {
+    println!("edgerun-aot [app.wasm] [options]");
+    println!("  --emit-ir");
+    println!("  -o, --output <path>");
+    println!("  --inspect-artifact <path>");
+    println!("  --verify-artifact <path>");
+    println!("  --run-artifact <path>");
+    println!("  --function <name-or-index>      default: run");
+    println!("  --args <a,b,c>                 comma-separated integer args");
+    println!("  -v, --verbose");
 }
 
 fn compile_artifact(args: &Args) -> Result<()> {
