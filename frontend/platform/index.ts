@@ -11,6 +11,8 @@ export { buildCommandEnvelope, serializeCommandEnvelope, deserializeCommandEnvel
 export { fetchAppPackage, listInstalledApps } from "./protocol/apps"
 export { listAvailableCapabilities, listGrantsForApp } from "./protocol/capabilities"
 export { listProtocolApprovals, syncProtocolApprovals, approveProtocolApproval, rejectProtocolApproval } from "./protocol/approvals"
+export { invokeNodeTool, invokeCodelyzerTool, invokeXrayCommand } from "./protocol/tools"
+export type { NodeToolResult } from "./protocol/tools"
 
 // State stores
 export { nodeStore, refreshNodeStatus } from "./state/node-store"
