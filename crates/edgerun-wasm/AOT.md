@@ -23,6 +23,8 @@ The `.eraot` file is an optimization artifact. A runtime must be able to reject 
 - rendered EdgeRun IR for audit/debugging
 - baseline x86_64 SysV machine-code bytes
 
+The artifact can now be decoded, inspected, and verified against the original WASM input hash.
+
 ## Current subset
 
 The first compiler only accepts the small deterministic integer subset below:
@@ -30,6 +32,8 @@ The first compiler only accepts the small deterministic integer subset below:
 - `i32.const`
 - `i64.const`
 - `local.get`
+- `local.set`
+- `local.tee`
 - `i32.add`
 - `i32.sub`
 - `i32.mul`
@@ -38,6 +42,13 @@ The first compiler only accepts the small deterministic integer subset below:
 - `i64.mul`
 - `return`
 - `end`
+
+The x86_64 backend currently emits a simple stack-frame function:
+
+- parameters are copied from SysV argument registers into frame slots
+- non-parameter locals are zero-initialized
+- WASM operand stack values are represented with native push/pop operations
+- the function epilogue restores `rsp`/`rbp` before returning
 
 Unsupported on purpose for now:
 
@@ -53,6 +64,8 @@ Unsupported on purpose for now:
 - multi-value returns
 
 ## Usage
+
+Compile:
 
 ```bash
 cargo run -p edgerun-wasm --bin edgerun-aot -- app.wasm --emit-ir --verbose
@@ -70,13 +83,25 @@ Explicit output:
 cargo run -p edgerun-wasm --bin edgerun-aot -- app.wasm -o app.eraot
 ```
 
+Inspect an artifact:
+
+```bash
+cargo run -p edgerun-wasm --bin edgerun-aot -- --inspect-artifact app.eraot
+```
+
+Verify an artifact against the source WASM:
+
+```bash
+cargo run -p edgerun-wasm --bin edgerun-aot -- app.wasm --verify-artifact app.eraot --verbose
+```
+
 ## Next compiler steps
 
-1. Add a loader that mmaps/verifies `.eraot` artifacts and checks the embedded WASM hash.
+1. Add an mmap/executable loader for verified `.eraot` artifacts.
 2. Add deterministic hostcall ABI lowering.
-3. Add `local.set` and `local.tee`.
-4. Add memory load/store with explicit bounds traps.
-5. Add block/loop/br/br_if lowering.
+3. Add memory load/store with explicit bounds traps.
+4. Add block/loop/br/br_if lowering.
+5. Add direct/indirect calls with strict signature checks.
 6. Add aarch64 backend.
 7. Replace SHA-256 with the repo-wide EdgeRun crypto boundary once this path is wired into runtime artifacts.
 
