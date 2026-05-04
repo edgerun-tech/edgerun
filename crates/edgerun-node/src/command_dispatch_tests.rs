@@ -320,7 +320,7 @@ bootstrap_peers: []
         };
         let result_ref = store
             .put_object(
-                &prost::Message::encode_to_vec(&result_payload),
+                &crate::command_result_wire_codec::encode_command_result_payload(&result_payload),
                 edgerun_core::protocol::ObjectKind::Command as i32,
                 &[stream_id.to_vec()],
             )

@@ -11,7 +11,6 @@ use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_core::protocol::{command_envelope, CommandEnvelope, EventType, RequestSignaturePayload, RequestUserPresencePayload, UserPresenceGrantedPayload, UserPresenceRequestPayload};
 use edgerun_storage::NodeStore;
-use prost::Message;
 
 pub fn dispatch_request_user_presence(
     command: &CommandEnvelope,
@@ -122,7 +121,7 @@ pub fn dispatch_request_user_presence(
         None,
         granted_obj_ref,
     );
-    let response_bytes = prost::Message::encode_to_vec(&result_payload);
+    let response_bytes = crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
 
     // Write presence token to local session store for quick validation
     if let Some(ref token_store) = crate::get_local_session_store() {
@@ -231,7 +230,7 @@ pub fn dispatch_request_signature(
         command, 1, // CommandDecision::Committed
         "", None, None, None,
     );
-    let response_bytes = prost::Message::encode_to_vec(&result_payload);
+    let response_bytes = crate::command_result_wire_codec::encode_command_result_payload(&result_payload);
 
     // Write signature request token to local session store
     if let Some(ref token_store) = crate::get_local_session_store() {
