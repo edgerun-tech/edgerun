@@ -27,12 +27,50 @@ impl ValueType {
 pub enum LoadKind {
     I32,
     I64,
+    I32Load8U,
+    I32Load8S,
+}
+
+impl LoadKind {
+    pub fn result_type(self) -> ValueType {
+        match self {
+            Self::I32 | Self::I32Load8U | Self::I32Load8S => ValueType::I32,
+            Self::I64 => ValueType::I64,
+        }
+    }
+
+    pub fn render(self) -> &'static str {
+        match self {
+            Self::I32 => "i32.load",
+            Self::I64 => "i64.load",
+            Self::I32Load8U => "i32.load8_u",
+            Self::I32Load8S => "i32.load8_s",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StoreKind {
     I32,
     I64,
+    I32Store8,
+}
+
+impl StoreKind {
+    pub fn value_type(self) -> ValueType {
+        match self {
+            Self::I32 | Self::I32Store8 => ValueType::I32,
+            Self::I64 => ValueType::I64,
+        }
+    }
+
+    pub fn render(self) -> &'static str {
+        match self {
+            Self::I32 => "i32.store",
+            Self::I64 => "i64.store",
+            Self::I32Store8 => "i32.store8",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -150,10 +188,8 @@ impl IrOp {
             Self::LocalGet(i) => format!("local.get {i}"),
             Self::LocalSet(i) => format!("local.set {i}"),
             Self::LocalTee(i) => format!("local.tee {i}"),
-            Self::Load(LoadKind::I32, mem) => format!("i32.load offset={}", mem.offset),
-            Self::Load(LoadKind::I64, mem) => format!("i64.load offset={}", mem.offset),
-            Self::Store(StoreKind::I32, mem) => format!("i32.store offset={}", mem.offset),
-            Self::Store(StoreKind::I64, mem) => format!("i64.store offset={}", mem.offset),
+            Self::Load(kind, mem) => format!("{} offset={}", kind.render(), mem.offset),
+            Self::Store(kind, mem) => format!("{} offset={}", kind.render(), mem.offset),
             Self::MemoryCopy => "memory.copy".to_string(),
             Self::MemoryFill => "memory.fill".to_string(),
             Self::Call(index, sig) => format!("call {index} {}", sig.render()),
@@ -340,17 +376,10 @@ pub fn verify_ir(ir: &FunctionIr) -> Result<()> {
             }
             IrOp::Load(kind, _) => {
                 pop1(&mut stack, ValueType::I32, ir, op)?;
-                stack.push(match kind {
-                    LoadKind::I32 => ValueType::I32,
-                    LoadKind::I64 => ValueType::I64,
-                });
+                stack.push(kind.result_type());
             }
             IrOp::Store(kind, _) => {
-                let val_ty = match kind {
-                    StoreKind::I32 => ValueType::I32,
-                    StoreKind::I64 => ValueType::I64,
-                };
-                pop1(&mut stack, val_ty, ir, op)?;
+                pop1(&mut stack, kind.value_type(), ir, op)?;
                 pop1(&mut stack, ValueType::I32, ir, op)?;
             }
             IrOp::MemoryCopy | IrOp::MemoryFill => {
