@@ -34,12 +34,49 @@ export const installedApps = computed(appStore, (s) =>
 
 export const appCount = computed(appStore, (s) => s.apps.size)
 
+function bytesToHex(bytes?: Uint8Array): string {
+  if (!bytes || bytes.byteLength === 0) return ""
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
+export function appPackageId(app: edgerunStream.v0.stream.AppPackage): string {
+  return bytesToHex(app.wasm_object?.object_id) || app.name || "unknown-app"
+}
+
+function normalizeAppListPayload(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload
+  if (payload && typeof payload === "object" && Array.isArray((payload as { apps?: unknown[] }).apps)) {
+    return (payload as { apps: unknown[] }).apps
+  }
+  return []
+}
+
 export function getApp(appId: string): edgerunStream.v0.stream.AppPackage | undefined {
   return appStore.get().apps.get(appId)
 }
 
 export function listApps(): edgerunStream.v0.stream.AppPackage[] {
   return Array.from(appStore.get().apps.values())
+}
+
+export function upsertApp(app: edgerunStream.v0.stream.AppPackage): string {
+  const state = appStore.get()
+  const appId = appPackageId(app)
+  const apps = new Map(state.apps)
+  apps.set(appId, app)
+  appStore.set({ ...state, apps, lastRefresh: new Date().toISOString() })
+  return appId
+}
+
+export function removeApp(appId: string): void {
+  const state = appStore.get()
+  const apps = new Map(state.apps)
+  const principals = new Map(state.principals)
+  const grants = new Map(state.grants)
+  apps.delete(appId)
+  principals.delete(appId)
+  grants.delete(appId)
+  appStore.set({ ...state, apps, principals, grants, lastRefresh: new Date().toISOString() })
 }
 
 export function getAppPrincipal(appId: string): edgerunStream.v0.stream.AppPrincipal | undefined {
@@ -58,25 +95,26 @@ export async function loadApps(): Promise<void> {
     const response = await protocolClient.send({
       method: "GET",
       path: "/protocol/apps",
+      headers: { Accept: "application/json" },
     })
 
-    if (response.status === 200) {
-      const text = new TextDecoder().decode(response.body)
-      const items = JSON.parse(text) as Array<any>
-      const apps = items.map((obj) => edgerunStream.v0.stream.AppPackage.fromObject(obj))
-      const newApps = new Map<string, edgerunStream.v0.stream.AppPackage>()
-      for (const app of apps) {
-        newApps.set(app.name, app)
-      }
-      appStore.set({
-        ...appStore.get(),
-        apps: newApps,
-        isLoading: false,
-        lastRefresh: new Date().toISOString(),
-      })
-    } else {
+    if (response.status !== 200) {
       throw new Error(`Failed to load apps: ${response.status}`)
     }
+
+    const text = new TextDecoder().decode(response.body)
+    const parsed = JSON.parse(text)
+    const apps = normalizeAppListPayload(parsed).map((obj) => edgerunStream.v0.stream.AppPackage.fromObject(obj as any))
+    const newApps = new Map<string, edgerunStream.v0.stream.AppPackage>()
+    for (const app of apps) {
+      newApps.set(appPackageId(app), app)
+    }
+    appStore.set({
+      ...appStore.get(),
+      apps: newApps,
+      isLoading: false,
+      lastRefresh: new Date().toISOString(),
+    })
   } catch (err) {
     appStore.set({
       ...appStore.get(),
@@ -91,18 +129,20 @@ export async function loadAppGrants(appId: string): Promise<void> {
     const response = await protocolClient.send({
       method: "GET",
       path: `/protocol/app/${appId}/grants`,
+      headers: { Accept: "application/json" },
     })
 
     if (response.status === 200) {
       const text = new TextDecoder().decode(response.body)
-      const items = JSON.parse(text) as Array<any>
-      const grants = items.map((obj) => edgerunCap.v0.capability.CapabilityGrant.fromObject(obj))
+      const parsed = JSON.parse(text)
+      const items = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.grants) ? parsed.grants : []
+      const grants = items.map((obj: any) => edgerunCap.v0.capability.CapabilityGrant.fromObject(obj))
       const state = appStore.get()
       const newGrants = new Map(state.grants)
       newGrants.set(appId, grants)
       appStore.set({ ...state, grants: newGrants })
     }
   } catch {
-    // Silently fail for grants
+    // Grant loading is best-effort because native node/browser runtime may not expose it yet.
   }
 }
