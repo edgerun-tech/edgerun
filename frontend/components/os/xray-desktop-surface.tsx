@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { Cpu, HardDrive, RadioTower, WalletCards } from "lucide-react"
 import { GlowingContainer } from "@/components/layouts/glowing-containers"
+import { CodelyzerNetworkWidget } from "@/components/sections/codelyzer-network"
 import { FinancesOverviewWidget } from "@/components/sections/finance-overviews"
 import { WorkspaceStatusPanel } from "@/components/workspace"
 import { XrayViewport } from "@/features/xray/XrayViewport"
@@ -103,12 +104,9 @@ export function XrayDesktopSurface({
         <SurfaceSlot
           surface={bySlot(pinnedSurfaces, "left-top")}
           fallback={
-            <MiniTile
-              icon={<RadioTower className="h-3.5 w-3.5" />}
-              label="network"
-              value={`${nodeCount} peers`}
-              sub={isConnected ? "online · discovery active" : "offline"}
-            />
+            <GlowingContainer className="h-full min-h-0" contentClassName="h-full min-h-0 bg-background/78" proximity={52} spread={70} borderWidth={2}>
+              <CodelyzerNetworkWidget />
+            </GlowingContainer>
           }
         />
         <SurfaceSlot
