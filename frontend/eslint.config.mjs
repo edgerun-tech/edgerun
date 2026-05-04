@@ -1,37 +1,39 @@
 import js from "@eslint/js"
-import nextPlugin from "@next/eslint-plugin-next"
-import tsPlugin from "typescript-eslint"
-import reactHooks from "eslint-plugin-react-hooks"
-import reactRefresh from "eslint-plugin-react-refresh"
+import astro from "eslint-plugin-astro"
+import tsParser from "@typescript-eslint/parser"
+import tsPlugin from "@typescript-eslint/eslint-plugin"
 
 export default [
   {
     ignores: [
-      ".next/**",
-      "out/**",
-      "coverage/**",
-      "node_modules/**",
-      "public/workers/**",
-      "tsconfig.tsbuildinfo",
-      "next-env.d.ts",
-      "types/**/*.d.ts",
-      "gen/**/*.ts",
+      "node_modules/",
+      "dist/",
+      ".astro/",
+      "public/",
+      "scripts/",
+      "wrangler.toml",
     ],
   },
   js.configs.recommended,
-  ...tsPlugin.configs.recommended,
   {
+    files: ["**/*.astro"],
+    ...astro.configs["flat/recommended"],
+  },
+  {
+    files: ["**/*.{ts,tsx}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+      },
+    },
     plugins: {
-      "@next/next": nextPlugin,
-      "react-hooks": reactHooks,
-      "react-refresh": reactRefresh,
+      "@typescript-eslint": tsPlugin,
     },
     rules: {
-      ...nextPlugin.configs.recommended.rules,
-      ...nextPlugin.configs.coreWebVitals.rules,
-      "react-hooks/rules-of-hooks": "error",
-      "react-hooks/exhaustive-deps": "warn",
-      "react-refresh/only-export-components": "warn",
+      ...tsPlugin.configs.recommended.rules,
+      "no-console": "warn",
     },
   },
 ]
