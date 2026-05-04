@@ -4,6 +4,9 @@ use std::net::SocketAddr;
 #[derive(Clone, Debug)]
 pub struct HealthState {
     pub node_id: String,
+    /// Transitional compatibility field while daemon setup is moved from
+    /// configured stream ids to node-id-derived event identity.
+    pub stream_id: String,
     pub started_at: std::time::Instant,
 }
 
