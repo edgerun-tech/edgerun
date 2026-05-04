@@ -1854,7 +1854,7 @@ fn validate_delegation_chain(
         // Build signable form (signature absent) and canonical encode
         let mut signable = delegation.clone();
         signable.signature = None;
-        let canonical = prost::Message::encode_to_vec(&signable);
+        let canonical = crate::wire_command::command_full_bytes(&signable);
 
         if !crate::crypto::verify_canonical_record(
             &verifying_key,
@@ -2984,7 +2984,7 @@ mod tests {
     ) {
         delegation.issuer.as_mut().unwrap().key_hint = Some(issuer_key_hint.to_vec());
         delegation.signature = None;
-        let canonical = prost::Message::encode_to_vec(delegation);
+        let canonical = canonical_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
         let sig = crate::crypto::sign_canonical_record(
             key,
             crate::crypto::SIG_DOMAIN_DELEGATION_RECORD,
@@ -3482,7 +3482,7 @@ mod tests {
         fn sign_delegation(key: &SigningKey, deleg: &mut DelegationRecord, issuer_key_hint: &[u8]) {
             deleg.issuer.as_mut().unwrap().key_hint = Some(issuer_key_hint.to_vec());
             deleg.signature = None;
-            let canonical = prost::Message::encode_to_vec(deleg);
+            let canonical = canonical_bytes(&ProtocolRecord::DelegationRecord(deleg.clone()), true);
             // Use sign_canonical_record for domain-separated signing (matches verify_canonical_record)
             let sig = crate::crypto::sign_canonical_record(
                 key,
@@ -7241,7 +7241,7 @@ mod tests {
         };
         // Sign the delegation with domain separation (matches verify_canonical_record)
         delegation.signature = None;
-        let deleg_canonical = prost::Message::encode_to_vec(&delegation);
+        let deleg_canonical = canonical_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
         let deleg_sig = crate::crypto::sign_canonical_record(
             &key,
             crate::crypto::SIG_DOMAIN_DELEGATION_RECORD,
