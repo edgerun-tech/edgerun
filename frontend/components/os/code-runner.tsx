@@ -33,6 +33,9 @@ type CompileResponse =
       wasm: Uint8Array
       wasmSize: number
       compileMs: number
+      instantiateMs: number
+      exports: string[]
+      runResult?: string
     }
   | {
       id: number
@@ -40,16 +43,11 @@ type CompileResponse =
       logs: string[]
       error: string
       compileMs: number
+      instantiateMs: number
     }
 
 interface CodeRunnerProps {
   onOutput?: (output: string) => void
-}
-
-function stringifyExportResult(value: unknown): string {
-  if (typeof value === "bigint") return value.toString()
-  if (value === undefined) return "undefined"
-  return String(value)
 }
 
 function createCompilerWorker(): Worker {
@@ -77,6 +75,7 @@ function compileAssemblyScript(source: string): Promise<CompileResponse> {
         logs: [],
         error: event.message || "AssemblyScript compiler worker failed",
         compileMs: 0,
+        instantiateMs: 0,
       })
     }
 
@@ -117,28 +116,6 @@ export function CodeRunner({ onOutput }: CodeRunnerProps) {
       }
 
       setWasmSize(compiled.wasmSize)
-      logs.push(`compiled ${compiled.wasmSize} byte wasm module in ${compiled.compileMs.toFixed(2)}ms`)
-
-      const imports = {
-        env: {
-          abort(message: number, fileName: number, line: number, column: number) {
-            throw new Error(`abort at ${line}:${column} message=${message} file=${fileName}`)
-          },
-        },
-      }
-
-      const { instance } = await WebAssembly.instantiate(compiled.wasm, imports)
-      const exports = instance.exports as Record<string, unknown>
-      const exportNames = Object.keys(exports)
-      logs.push(`exports: ${exportNames.join(", ") || "none"}`)
-
-      const callable = exports.run
-      if (typeof callable === "function") {
-        const value = callable()
-        logs.push(`run() → ${stringifyExportResult(value)}`)
-      } else {
-        logs.push("no exported run() function found; module compiled successfully")
-      }
 
       const endTime = performance.now()
       setExecutionTime(endTime - startTime)
@@ -204,7 +181,7 @@ export function CodeRunner({ onOutput }: CodeRunnerProps) {
           )}
           {executionTime !== null && (
             <span className="font-mono text-xs text-muted-foreground">
-              {executionTime.toFixed(2)}ms
+              {executionTime.toFixed(2)}ms total
             </span>
           )}
           <button
