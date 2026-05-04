@@ -59,6 +59,38 @@ function edgeScore(edge: XrayEdge, degree: Map<string, number>) {
   return (degree.get(edge.source) || 0) + (degree.get(edge.target) || 0)
 }
 
+function stableHash(input: string) {
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+function zForNode(node: XrayNode, degree: number) {
+  const hash = stableHash(node.id)
+  const jitter = ((hash % 1000) / 1000 - 0.5) * 180
+  const layerBase: Record<string, number> = {
+    file: -260,
+    ui: 180,
+    api: 80,
+    runtime: 0,
+    protocol: -80,
+    storage: -150,
+    network: 220,
+    crypto: 260,
+    agent: 120,
+  }
+  const semantic = node.kind === "file" ? layerBase.file : layerBase[node.layer || "runtime"] ?? 0
+  const connectivity = Math.min(260, Math.sqrt(Math.max(0, degree)) * 34)
+  return semantic + connectivity + jitter
+}
+
+function withDepth(node: XrayNode, degree: number): XrayNode {
+  return { ...node, z: node.z ?? zForNode(node, degree) }
+}
+
 function projectGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
   const degree = new Map<string, number>()
   for (const edge of data.edges) {
@@ -78,7 +110,7 @@ function projectGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
     const file = node.source?.file
     if (!file || seenFiles.has(file)) continue
     seenFiles.add(file)
-    fileNodes.push({
+    const fileNode: XrayNode = {
       id: `file:${file}`,
       kind: "file",
       label: file.split("/").slice(-1)[0] || file,
@@ -88,7 +120,8 @@ function projectGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
       source: { file },
       x: 0,
       y: 0,
-    })
+    }
+    fileNodes.push(withDepth(fileNode, degree.get(node.id) || 0))
     if (fileNodes.length >= MAX_FILE_NODES) break
   }
 
@@ -100,6 +133,7 @@ function projectGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
       return (a.source?.file || "").localeCompare(b.source?.file || "")
     })
     .slice(0, Math.max(0, MAX_VISIBLE_NODES - fileNodes.length))
+    .map((node) => withDepth(node, degree.get(node.id) || 0))
 
   const visibleIds = new Set(rankedNodes.map((node) => node.id))
   for (const node of fileNodes) visibleIds.add(node.id)
@@ -135,7 +169,7 @@ function applyGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
   const projected = projectGraphData(data)
   const nodeMap = new Map<string, XrayNode>()
   for (const node of projected.nodes) {
-    nodeMap.set(node.id, { ...node, x: node.x ?? 0, y: node.y ?? 0 })
+    nodeMap.set(node.id, { ...node, x: node.x ?? 0, y: node.y ?? 0, z: node.z ?? 0 })
   }
 
   const current = xrayState.get()
@@ -223,6 +257,7 @@ export function setLayout(layout: LayoutType) {
   for (const node of s.nodes.values()) {
     node.prevX = node.x ?? 0
     node.prevY = node.y ?? 0
+    node.prevZ = node.z ?? 0
   }
   xrayState.set({ ...s, layout })
 }
