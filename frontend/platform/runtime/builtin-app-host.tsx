@@ -14,10 +14,6 @@ const CodeRunnerApp = dynamic(
   () => import("@/components/os/code-runner").then((mod) => mod.CodeRunner),
   { ssr: false, loading: LoadingApp },
 )
-const ResourceMonitorApp = dynamic(
-  () => import("@/components/os/resource-monitor").then((mod) => mod.ResourceMonitor),
-  { ssr: false, loading: LoadingApp },
-)
 const AppStoreApp = dynamic(
   () => import("@/components/os/app-store").then((mod) => mod.AppStore),
   { ssr: false, loading: LoadingApp },
@@ -74,8 +70,6 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
       return <TerminalApp logs={[]} onCommand={() => {}} />
     case "code-runner":
       return <CodeRunnerApp />
-    case "resource-monitor":
-      return <ResourceMonitorApp />
     case "app-store":
       return <AppStoreApp onLaunchApp={(a: AppDefinition) => onLaunchApp?.(a)} />
     case "people":
