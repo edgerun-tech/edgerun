@@ -25,7 +25,7 @@ mod command_dispatch_event;
 mod command_dispatch_payload;
 mod command_dispatch_result;
 mod command_dispatch_server_resource;
-mod command_result_codec;
+mod command_result_wire_codec;
 mod command_router;
 // mod metering;      // TODO: file missing — not needed for interface boundary
 // mod running_workloads; // TODO: file missing — not needed for interface boundary
