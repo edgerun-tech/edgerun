@@ -282,11 +282,19 @@ class BinaryReader {
 
   constructor(private readonly data: Uint8Array) {}
 
+  private checkBounds(bytes: number) {
+    if (this.offset + bytes > this.data.length) {
+      throw new Error(`BinaryReader: read past end (offset=${this.offset}, need=${bytes}, total=${this.data.length})`)
+    }
+  }
+
   bool(): boolean {
+    this.checkBounds(1)
     return this.data[this.offset++] !== 0
   }
 
   u32(): number {
+    this.checkBounds(4)
     const view = new DataView(this.data.buffer, this.data.byteOffset + this.offset, 4)
     const value = view.getUint32(0, true)
     this.offset += 4
@@ -295,6 +303,7 @@ class BinaryReader {
 
   string(): string {
     const len = this.u32()
+    this.checkBounds(len)
     const bytes = this.data.slice(this.offset, this.offset + len)
     this.offset += len
     return new TextDecoder().decode(bytes)

@@ -17,6 +17,7 @@ function initialState(): XrayState {
   return {
     nodes: graph.nodes,
     edges: graph.edges,
+    edgeIndex: buildEdgeIndex(graph.edges),
     runtimeStats: createMockRuntimeStats(graph.nodes),
     selectedId: null,
     hoveredId: null,
@@ -33,6 +34,17 @@ function initialState(): XrayState {
     loading: false,
     error: null,
   }
+}
+
+function buildEdgeIndex(edges: XrayEdge[]): Map<string, XrayEdge[]> {
+  const index = new Map<string, XrayEdge[]>()
+  for (const edge of edges) {
+    if (!index.has(edge.source)) index.set(edge.source, [])
+    if (!index.has(edge.target)) index.set(edge.target, [])
+    index.get(edge.source)!.push(edge)
+    if (edge.target !== edge.source) index.get(edge.target)!.push(edge)
+  }
+  return index
 }
 
 export function nodeFilterKeys(node: XrayNode): XrayFilterKey[] {
@@ -181,6 +193,7 @@ function applyGraphData(data: { nodes: XrayNode[]; edges: XrayEdge[] }) {
     ...current,
     nodes: nodeMap,
     edges: projected.edges,
+    edgeIndex: buildEdgeIndex(projected.edges),
     runtimeStats: createMockRuntimeStats(nodeMap),
     selectedId: null,
     hoveredId: null,
@@ -246,18 +259,27 @@ export function setHoveredNode(nodeId: string | null) {
   const s = xrayState.get()
   if (s.hoveredId === nodeId) return
   if (!nodeId) {
-    xrayState.set({ ...s, hoveredId: null, highlightedIds: s.selectedId ? buildRelatedSet(s.selectedId, s.edges) : new Set() })
+    xrayState.set({ ...s, hoveredId: null, highlightedIds: s.selectedId ? buildRelatedSet(s.selectedId, s.edges, s.edgeIndex) : new Set() })
     return
   }
-  xrayState.set({ ...s, hoveredId: nodeId, highlightedIds: buildRelatedSet(nodeId, s.edges) })
+  xrayState.set({ ...s, hoveredId: nodeId, highlightedIds: buildRelatedSet(nodeId, s.edges, s.edgeIndex) })
 }
 
-function buildRelatedSet(nodeId: string, edges: XrayEdge[]) {
+function buildRelatedSet(nodeId: string, edges: XrayEdge[], edgeIndex?: Map<string, XrayEdge[]>): Set<string> {
   const related = new Set<string>([nodeId])
-  for (const edge of edges) {
-    if (edge.source === nodeId) related.add(edge.target)
-    if (edge.target === nodeId) related.add(edge.source)
-    if (related.size > 80) break
+  const nodeEdges = edgeIndex?.get(nodeId)
+  if (nodeEdges) {
+    for (const edge of nodeEdges) {
+      if (edge.source === nodeId) related.add(edge.target)
+      else if (edge.target === nodeId) related.add(edge.source)
+      if (related.size > 80) break
+    }
+  } else {
+    for (const edge of edges) {
+      if (edge.source === nodeId) related.add(edge.target)
+      if (edge.target === nodeId) related.add(edge.source)
+      if (related.size > 80) break
+    }
   }
   return related
 }
@@ -281,7 +303,7 @@ export function focusNode(nodeId: string) {
   const s = xrayState.get()
   const node = s.nodes.get(nodeId)
   if (!node) return
-  xrayState.set({ ...s, selectedId: nodeId, highlightedIds: buildRelatedSet(nodeId, s.edges), panX: -(node.x ?? 0), panY: -(node.y ?? 0), zoom: 1.5 })
+  xrayState.set({ ...s, selectedId: nodeId, highlightedIds: buildRelatedSet(nodeId, s.edges, s.edgeIndex), panX: -(node.x ?? 0), panY: -(node.y ?? 0), zoom: 1.5 })
 }
 
 export function highlightNodes(nodeIds: string[]) {
@@ -291,7 +313,7 @@ export function highlightNodes(nodeIds: string[]) {
 
 export function clearHighlight() {
   const s = xrayState.get()
-  xrayState.set({ ...s, highlightedIds: s.selectedId ? buildRelatedSet(s.selectedId, s.edges) : new Set() })
+  xrayState.set({ ...s, highlightedIds: s.selectedId ? buildRelatedSet(s.selectedId, s.edges, s.edgeIndex) : new Set() })
 }
 
 export function selectNode(nodeId: string | null) {

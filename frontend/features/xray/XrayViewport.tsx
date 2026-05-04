@@ -21,16 +21,20 @@ function shortPath(path?: string) {
   return parts.length > 4 ? parts.slice(-4).join("/") : path
 }
 
-function relationList(nodeId: string | null, limit = 8) {
+function relationList(
+  nodeId: string | null,
+  nodes: Map<string, XrayNode>,
+  edges: XrayEdge[],
+  limit = 8,
+) {
   if (!nodeId) return []
-  const state = xrayState.get()
   const items: Array<{ id: string; label: string; kind: string; direction: "in" | "out" }> = []
-  for (const edge of state.edges) {
+  for (const edge of edges) {
     if (edge.source === nodeId) {
-      const node = state.nodes.get(edge.target)
+      const node = nodes.get(edge.target)
       if (node) items.push({ id: node.id, label: node.label, kind: edge.kind, direction: "out" })
     } else if (edge.target === nodeId) {
-      const node = state.nodes.get(edge.source)
+      const node = nodes.get(edge.source)
       if (node) items.push({ id: node.id, label: node.label, kind: edge.kind, direction: "in" })
     }
     if (items.length >= limit) break
@@ -198,7 +202,10 @@ export function XrayViewport() {
 
   const inspectedId = state.hoveredId || state.selectedId
   const inspectedNode = inspectedId ? state.nodes.get(inspectedId) : null
-  const inspectedRelations = useMemo(() => relationList(inspectedId, 8), [inspectedId, state.highlightedIds])
+  const inspectedRelations = useMemo(
+    () => relationList(inspectedId, state.nodes, state.edges, 8),
+    [inspectedId, state.nodes, state.edges],
+  )
   const relatedCount = state.highlightedIds.size > 0 ? state.highlightedIds.size - 1 : 0
 
   return (
@@ -243,9 +250,9 @@ export function XrayViewport() {
           <div className="mt-2 font-mono text-[10px] text-muted-foreground">{relatedCount} closest relation{relatedCount === 1 ? "" : "s"}</div>
           {inspectedRelations.length > 0 && (
             <div className="mt-2 max-h-36 space-y-1 overflow-auto">
-              {inspectedRelations.map((relation) => (
+              {inspectedRelations.map((relation, index) => (
                 <button
-                  key={`${relation.direction}-${relation.kind}-${relation.id}`}
+                  key={`${relation.direction}-${relation.kind}-${relation.id}-${index}`}
                   type="button"
                   onClick={() => selectNode(relation.id)}
                   className="flex w-full items-center gap-2 rounded-lg bg-white/5 px-2 py-1 text-left text-[10px] hover:bg-white/10"

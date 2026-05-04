@@ -78,6 +78,7 @@ export type XrayFilterKey =
 export type XrayState = {
   nodes: Map<string, XrayNode>
   edges: XrayEdge[]
+  edgeIndex: Map<string, XrayEdge[]>
   runtimeStats: Map<string, RuntimeNodeStats>
   selectedId: string | null
   hoveredId: string | null
