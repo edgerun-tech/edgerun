@@ -49,7 +49,7 @@ impl<T> Linker<T> {
         _func: F,
     ) -> Result<(), anyhow::Error>
     where
-        F: Fn() + 'static,
+        F: FnMut() + 'static,
     {
         Ok(())
     }

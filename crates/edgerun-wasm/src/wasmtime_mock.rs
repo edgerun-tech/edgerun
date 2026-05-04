@@ -42,12 +42,15 @@ impl<T> Linker<T> {
         }
     }
 
-    pub fn func_wrap<Params, Args>(
+    pub fn func_wrap<F>(
         &mut self,
         _module: &str,
         _name: &str,
-        _func: impl Fn(Params) + 'static,
-    ) -> Result<(), anyhow::Error> {
+        _func: F,
+    ) -> Result<(), anyhow::Error>
+    where
+        F: FnMut() + 'static,
+    {
         Ok(())
     }
 
