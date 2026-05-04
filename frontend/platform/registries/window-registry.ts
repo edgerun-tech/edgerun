@@ -37,6 +37,7 @@ const BUILTIN_SPECS: Record<string, WindowSpec> = {
   contacts: { defaultWidth: 720, defaultHeight: 520 },
   calling: { defaultWidth: 720, defaultHeight: 520 },
   chat: { defaultWidth: 720, defaultHeight: 520 },
+  "trust-manager": { defaultWidth: 980, defaultHeight: 640 },
   "ai-assistant": { defaultWidth: 500, defaultHeight: 550 },
   "workflow-builder": { defaultWidth: 900, defaultHeight: 600 },
   wallet: { defaultWidth: 360, defaultHeight: 520 },
