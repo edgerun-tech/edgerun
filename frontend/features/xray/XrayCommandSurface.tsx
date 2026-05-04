@@ -1,6 +1,8 @@
 "use client"
 
+import { useState, type ReactNode } from "react"
 import { useStore } from "@nanostores/react"
+import { Globe2, Layers3, Network, RotateCcw, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { xrayState, resetView, setLayout, setRuntimeMode } from "./graph/graph-store"
 import { setRuntimeOverlayEnabled } from "./runtime/runtime-store"
@@ -8,81 +10,103 @@ import type { LayoutType } from "./graph/types"
 
 type XrayCommandSurfaceProps = {
   className?: string
-  surface?: "top" | "bottom" | "inline"
+  surface?: "vertical" | "inline"
 }
 
-export function XrayCommandSurface({ className, surface = "top" }: XrayCommandSurfaceProps) {
+type IconActionProps = {
+  active?: boolean
+  label: string
+  children: ReactNode
+  onClick: () => void
+}
+
+function IconAction({ active, label, children, onClick }: IconActionProps) {
+  const [showTip, setShowTip] = useState(false)
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => {
+        window.setTimeout(() => setShowTip(true), 650)
+      }}
+      onMouseLeave={() => setShowTip(false)}
+      className={cn(
+        "group relative flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+        active ? "text-emerald-400" : "text-zinc-500 hover:text-zinc-300",
+      )}
+      aria-label={label}
+      title={label}
+    >
+      {children}
+      {active && <span className="absolute -right-1 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />}
+      {showTip && (
+        <span className="pointer-events-none absolute right-full mr-2 whitespace-nowrap rounded-md border border-border bg-card px-2 py-1 text-[10px] text-card-foreground shadow-xl">
+          {label}
+        </span>
+      )}
+    </button>
+  )
+}
+
+export function XrayCommandSurface({ className, surface = "vertical" }: XrayCommandSurfaceProps) {
   const state = useStore(xrayState)
-  const top = surface === "top"
+  const vertical = surface === "vertical"
+
+  const controls = [
+    {
+      key: "force",
+      label: "Force layout",
+      active: state.layout === "force",
+      icon: <Network className="h-4 w-4" />,
+      onClick: () => setLayout("force" as LayoutType),
+    },
+    {
+      key: "globe",
+      label: "Globe layout",
+      active: state.layout === "globe",
+      icon: <Globe2 className="h-4 w-4" />,
+      onClick: () => setLayout("globe" as LayoutType),
+    },
+    {
+      key: "layers",
+      label: "Layer layout",
+      active: state.layout === "layers",
+      icon: <Layers3 className="h-4 w-4" />,
+      onClick: () => setLayout("layers" as LayoutType),
+    },
+    {
+      key: "runtime",
+      label: state.runtimeMode ? "Runtime overlay on" : "Runtime overlay off",
+      active: state.runtimeMode,
+      icon: <Zap className="h-4 w-4" />,
+      onClick: () => {
+        setRuntimeMode(!state.runtimeMode)
+        setRuntimeOverlayEnabled(!state.runtimeMode)
+      },
+    },
+    {
+      key: "reset",
+      label: `Reset view · ${state.nodes.size} nodes · ${state.edges.length} edges`,
+      active: false,
+      icon: <RotateCcw className="h-4 w-4" />,
+      onClick: resetView,
+    },
+  ]
 
   return (
     <div
       className={cn(
-        "pointer-events-auto flex items-center gap-3 text-sm backdrop-blur-md",
-        top
-          ? "rounded-full border border-white/10 bg-background/70 px-3 py-1.5 shadow-2xl"
-          : surface === "bottom"
-            ? "h-12 border-t border-zinc-800 bg-zinc-950/90 px-4"
-            : "rounded-2xl border border-border bg-card/80 px-3 py-2",
+        "pointer-events-auto flex gap-1",
+        vertical ? "flex-col items-center" : "items-center",
         className,
       )}
     >
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500">Layout</span>
-        <div className="flex gap-1">
-          {(["force", "globe", "layers"] as LayoutType[]).map((layout) => (
-            <button
-              key={layout}
-              type="button"
-              onClick={() => setLayout(layout)}
-              className={cn(
-                "rounded px-2.5 py-1 text-xs font-mono transition-colors",
-                state.layout === layout
-                  ? "bg-zinc-700 text-zinc-100"
-                  : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300",
-              )}
-            >
-              {layout}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="h-6 w-px bg-zinc-800" />
-
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500">Runtime</span>
-        <button
-          type="button"
-          onClick={() => {
-            setRuntimeMode(!state.runtimeMode)
-            setRuntimeOverlayEnabled(!state.runtimeMode)
-          }}
-          className={cn(
-            "rounded px-2.5 py-1 text-xs font-mono transition-colors",
-            state.runtimeMode
-              ? "bg-emerald-800/60 text-emerald-300"
-              : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300",
-          )}
-        >
-          {state.runtimeMode ? "ON" : "OFF"}
-        </button>
-      </div>
-
-      <div className="h-6 w-px bg-zinc-800" />
-
-      <button
-        type="button"
-        onClick={resetView}
-        className="rounded bg-zinc-800/50 px-2.5 py-1 text-xs font-mono text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
-      >
-        Reset
-      </button>
-
-      <div className="hidden items-center gap-2 xl:flex">
-        <div className="h-6 w-px bg-zinc-800" />
-        <span className="text-xs font-mono text-zinc-600">{state.nodes.size} nodes · {state.edges.length} edges</span>
-      </div>
+      {controls.map((control) => (
+        <IconAction key={control.key} active={control.active} label={control.label} onClick={control.onClick}>
+          {control.icon}
+        </IconAction>
+      ))}
     </div>
   )
 }
