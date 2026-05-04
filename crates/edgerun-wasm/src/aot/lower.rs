@@ -1,8 +1,8 @@
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
-use wasmparser::{BlockType, ExternalKind, Operator, Payload, TypeRef};
+use wasmparser::{BlockType, ExternalKind, MemArg, Operator, Payload, TypeRef};
 
-use super::ir::{verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, ValueType};
+use super::ir::{verify_ir, FuncSig, FunctionIr, GlobalValue, IrOp, LoadKind, MemOp, StoreKind, ValueType};
 
 #[derive(Debug)]
 pub struct ParsedModule {
@@ -18,6 +18,7 @@ pub struct ParsedModule {
 struct FunctionBody {
     func_index: u32,
     locals: Vec<ValueType>,
+    uses_memory: bool,
     ops: Vec<IrOp>,
 }
 
@@ -98,17 +99,23 @@ pub fn parse_module(wasm: &[u8]) -> Result<ParsedModule> {
                     }
                 }
 
+                let mut uses_memory = false;
                 let mut ops = Vec::new();
                 let mut ops_reader = body.get_operators_reader()?;
                 while !ops_reader.eof() {
                     let op = ops_reader.read()?;
-                    ops.push(lower_operator(op, &globals)?);
+                    let lowered = lower_operator(op, &globals)?;
+                    if matches!(lowered, IrOp::Load(_, _) | IrOp::Store(_, _)) {
+                        uses_memory = true;
+                    }
+                    ops.push(lowered);
                 }
                 let ops = normalize_function_ends(ops)?;
 
                 bodies.push(FunctionBody {
                     func_index,
                     locals,
+                    uses_memory,
                     ops,
                 });
             }
@@ -157,6 +164,7 @@ pub fn lower_module(module: ParsedModule) -> Result<Vec<FunctionIr>> {
             sig,
             locals,
             global_values: module.globals.clone(),
+            uses_memory: body.uses_memory,
             ops: body.ops,
         };
 
@@ -204,6 +212,13 @@ fn parse_global_init(ty: ValueType, init_expr: wasmparser::ConstExpr<'_>) -> Res
     Ok(value)
 }
 
+fn mem_op(memarg: MemArg) -> Result<MemOp> {
+    if memarg.memory != 0 {
+        bail!("baseline AOT only supports memory index 0");
+    }
+    Ok(MemOp { offset: memarg.offset })
+}
+
 fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
     Ok(match op {
         Operator::Nop => IrOp::Nop,
@@ -240,6 +255,10 @@ fn lower_operator(op: Operator<'_>, globals: &[GlobalValue]) -> Result<IrOp> {
         Operator::LocalGet { local_index } => IrOp::LocalGet(local_index),
         Operator::LocalSet { local_index } => IrOp::LocalSet(local_index),
         Operator::LocalTee { local_index } => IrOp::LocalTee(local_index),
+        Operator::I32Load { memarg } => IrOp::Load(LoadKind::I32, mem_op(memarg)?),
+        Operator::I64Load { memarg } => IrOp::Load(LoadKind::I64, mem_op(memarg)?),
+        Operator::I32Store { memarg } => IrOp::Store(StoreKind::I32, mem_op(memarg)?),
+        Operator::I64Store { memarg } => IrOp::Store(StoreKind::I64, mem_op(memarg)?),
         Operator::I32Add => IrOp::I32Add,
         Operator::I32Sub => IrOp::I32Sub,
         Operator::I32Mul => IrOp::I32Mul,
