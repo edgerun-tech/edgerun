@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+if [ -d "$ROOT/frontend" ]; then
+  cd "$ROOT/frontend"
+  if command -v bun >/dev/null 2>&1; then
+    bun run inventory
+  else
+    npm run inventory
+  fi
+  git add COMPONENT_INVENTORY.md
+fi
