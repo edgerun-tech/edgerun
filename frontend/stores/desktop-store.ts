@@ -68,6 +68,12 @@ export const widgetVisibleStore = persistentAtom("edgerun:widgetVisible", false,
   decode: (v) => v === "true",
 })
 
+/** @deprecated Old conky layer was merged into XrayDesktopSurface responsive metrics. */
+export const desktopTelemetryVisibleStore = persistentAtom("edgerun:legacyDesktopTelemetryVisible", true, {
+  encode: String,
+  decode: (v) => v !== "false",
+})
+
 export const terminalLogsStore = atom<LogEntry[]>([])
 
 export const systemStatsStore = atom({
