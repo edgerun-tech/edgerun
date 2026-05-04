@@ -81,7 +81,6 @@ pub use trust::{
 };
 
 // Explicit reexports prevent name collisions between capability::* and trust::*.
-// The unqualified CapabilityDescriptor is the trust-layer descriptor used by command validation.
 pub use capability::{
     CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityEventKind,
     CapabilityGrant, CapabilityInvocation, CapabilityModality, CapabilityOperation,

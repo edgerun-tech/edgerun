@@ -47,7 +47,8 @@ pub fn validate_identity_record(record: &crate::protocol::IdentityRecord) -> Val
         );
     }
 
-    if IdentityKind::from(record.identity_kind).is_none_or(|kind| kind == IdentityKind::Unspecified)
+    if crate::protocol::enum_from_i32::<IdentityKind>(record.identity_kind)
+        .is_none_or(|kind| kind == IdentityKind::Unspecified)
     {
         return reject(
             ReasonCode::StructuralInvalid,
@@ -96,7 +97,7 @@ pub fn validate_identity_record(record: &crate::protocol::IdentityRecord) -> Val
     if let Some(identity) = &record.supersedes_identity {
         if identity.identity_id.is_empty()
             || identity.identity_kind.is_some_and(|identity_kind| {
-                IdentityKind::from(identity_kind)
+                crate::protocol::enum_from_i32::<IdentityKind>(identity_kind)
                     .is_none_or(|kind| kind == IdentityKind::Unspecified)
             })
         {
@@ -111,7 +112,8 @@ pub fn validate_identity_record(record: &crate::protocol::IdentityRecord) -> Val
     if record.assurance_claim_objects.iter().any(|object| {
         object.object_id.is_empty()
             || object.object_kind.is_some_and(|object_kind| {
-                ObjectKind::from(object_kind).is_none_or(|kind| kind == ObjectKind::Unspecified)
+                crate::protocol::enum_from_i32::<ObjectKind>(object_kind)
+                    .is_none_or(|kind| kind == ObjectKind::Unspecified)
             })
     }) {
         return reject(
@@ -124,7 +126,8 @@ pub fn validate_identity_record(record: &crate::protocol::IdentityRecord) -> Val
     if let Some(object) = &record.metadata_object {
         if object.object_id.is_empty()
             || object.object_kind.is_some_and(|object_kind| {
-                ObjectKind::from(object_kind).is_none_or(|kind| kind == ObjectKind::Unspecified)
+                crate::protocol::enum_from_i32::<ObjectKind>(object_kind)
+                    .is_none_or(|kind| kind == ObjectKind::Unspecified)
             })
         {
             return reject(

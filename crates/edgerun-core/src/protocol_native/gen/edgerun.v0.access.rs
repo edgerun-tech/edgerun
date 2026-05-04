@@ -124,6 +124,17 @@ pub enum SnapshotCompleteness {
     Partial = 2,
     Bounded = 3,
 }
+impl crate::protocol::NativeEnum for SnapshotCompleteness {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Full),
+            2 => Some(Self::Partial),
+            3 => Some(Self::Bounded),
+            _ => None,
+        }
+    }
+}
 
 impl SnapshotCompleteness {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -161,6 +172,22 @@ pub enum QueryClass {
     View = 6,
     Search = 7,
     TrustState = 8,
+}
+impl crate::protocol::NativeEnum for QueryClass {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Head),
+            2 => Some(Self::Snapshot),
+            3 => Some(Self::EventRange),
+            4 => Some(Self::ObjectExistence),
+            5 => Some(Self::ObjectFetch),
+            6 => Some(Self::View),
+            7 => Some(Self::Search),
+            8 => Some(Self::TrustState),
+            _ => None,
+        }
+    }
 }
 
 impl QueryClass {
@@ -207,6 +234,19 @@ pub enum ProofClass {
     ObjectRef = 4,
     SnapshotBase = 5,
 }
+impl crate::protocol::NativeEnum for ProofClass {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Signature),
+            2 => Some(Self::StreamHead),
+            3 => Some(Self::EventRef),
+            4 => Some(Self::ObjectRef),
+            5 => Some(Self::SnapshotBase),
+            _ => None,
+        }
+    }
+}
 
 impl ProofClass {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -244,6 +284,18 @@ pub enum ResultCompleteness {
     Partial = 2,
     Denied = 3,
     MetadataOnly = 4,
+}
+impl crate::protocol::NativeEnum for ResultCompleteness {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::CompleteForLocalKnowledge),
+            2 => Some(Self::Partial),
+            3 => Some(Self::Denied),
+            4 => Some(Self::MetadataOnly),
+            _ => None,
+        }
+    }
 }
 
 impl ResultCompleteness {
@@ -285,6 +337,21 @@ pub enum ProofPayloadType {
     ResultFragment = 5,
     AggregateSummary = 6,
     TrustPolicy = 7,
+}
+impl crate::protocol::NativeEnum for ProofPayloadType {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::StreamHeads),
+            2 => Some(Self::SnapshotSet),
+            3 => Some(Self::EventSet),
+            4 => Some(Self::ObjectAssertion),
+            5 => Some(Self::ResultFragment),
+            6 => Some(Self::AggregateSummary),
+            7 => Some(Self::TrustPolicy),
+            _ => None,
+        }
+    }
 }
 
 impl ProofPayloadType {

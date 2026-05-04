@@ -322,6 +322,15 @@ pub enum AbiVersion {
     Unspecified = 0,
     V0 = 1,
 }
+impl crate::protocol::NativeEnum for AbiVersion {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::V0),
+            _ => None,
+        }
+    }
+}
 
 impl AbiVersion {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -367,6 +376,30 @@ pub enum HostOp {
     LogObservation = 51,
     Random = 60,
     Time = 61,
+}
+impl crate::protocol::NativeEnum for HostOp {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::GetContext),
+            2 => Some(Self::GetGrantedCapabilities),
+            10 => Some(Self::RequestUserPresence),
+            11 => Some(Self::RequestSignature),
+            20 => Some(Self::RequestCapability),
+            21 => Some(Self::InvokeCapability),
+            22 => Some(Self::ReleaseCapability),
+            30 => Some(Self::PutObject),
+            31 => Some(Self::GetObject),
+            32 => Some(Self::Query),
+            40 => Some(Self::BuildCommand),
+            41 => Some(Self::SubmitCommand),
+            50 => Some(Self::EmitAppIntent),
+            51 => Some(Self::LogObservation),
+            60 => Some(Self::Random),
+            61 => Some(Self::Time),
+            _ => None,
+        }
+    }
 }
 
 impl HostOp {
@@ -439,6 +472,25 @@ pub enum AbiStatus {
     Unsupported = 10,
     InternalError = 11,
 }
+impl crate::protocol::NativeEnum for AbiStatus {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Ok),
+            2 => Some(Self::Denied),
+            3 => Some(Self::NotFound),
+            4 => Some(Self::InvalidRequest),
+            5 => Some(Self::InvalidCapability),
+            6 => Some(Self::Expired),
+            7 => Some(Self::QuotaExceeded),
+            8 => Some(Self::RequiresUserPresence),
+            9 => Some(Self::NondeterministicDenied),
+            10 => Some(Self::Unsupported),
+            11 => Some(Self::InternalError),
+            _ => None,
+        }
+    }
+}
 
 impl AbiStatus {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -493,6 +545,16 @@ pub enum ExecutionMode {
     Deterministic = 1,
     /// Interactive app/agent. Host calls allowed by explicit capabilities.
     Interactive = 2,
+}
+impl crate::protocol::NativeEnum for ExecutionMode {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Deterministic),
+            2 => Some(Self::Interactive),
+            _ => None,
+        }
+    }
 }
 
 impl ExecutionMode {

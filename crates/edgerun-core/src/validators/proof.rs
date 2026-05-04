@@ -36,7 +36,7 @@ fn validate_object_ref(
         return Some(ProofStructuralResult::Invalid { reason });
     }
     if object.object_kind.is_some_and(|object_kind| {
-        crate::protocol::ObjectKind::from(object_kind)
+        crate::protocol::enum_from_i32::<crate::protocol::ObjectKind>(object_kind)
             .is_none_or(|kind| kind == crate::protocol::ObjectKind::Unspecified)
     }) {
         return Some(ProofStructuralResult::Invalid {
@@ -57,7 +57,7 @@ fn validate_identity_ref(
         });
     }
     if identity.identity_kind.is_some_and(|identity_kind| {
-        crate::protocol::IdentityKind::from(identity_kind)
+        crate::protocol::enum_from_i32::<crate::protocol::IdentityKind>(identity_kind)
             .is_none_or(|kind| kind == crate::protocol::IdentityKind::Unspecified)
     }) {
         return Some(ProofStructuralResult::Invalid {
@@ -374,7 +374,9 @@ pub fn validate_proof_bundle(
         );
     }
 
-    let Some(payload_type) = ProofPayloadType::from(bundle.payload_type) else {
+    let Some(payload_type) =
+        crate::protocol::enum_from_i32::<ProofPayloadType>(bundle.payload_type)
+    else {
         return reject(
             ReasonCode::StructuralInvalid,
             mapping([("reason", ystr("invalid_payload_type"))]),

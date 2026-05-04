@@ -449,6 +449,38 @@ pub enum EventType {
     WalletPaymentRequestCreated = 24,
     WalletReceiptCreated = 25,
 }
+impl crate::protocol::NativeEnum for EventType {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::NodeGenesis),
+            2 => Some(Self::CommandSent),
+            3 => Some(Self::CommandCommitted),
+            4 => Some(Self::CommandRejected),
+            5 => Some(Self::ActionStarted),
+            6 => Some(Self::ActionCompleted),
+            7 => Some(Self::ActionFailed),
+            8 => Some(Self::CapabilityGranted),
+            9 => Some(Self::CapabilityRevoked),
+            10 => Some(Self::DelegationCreated),
+            11 => Some(Self::RevocationCreated),
+            12 => Some(Self::SecretPut),
+            13 => Some(Self::SecretDelete),
+            14 => Some(Self::CollectionCreated),
+            15 => Some(Self::CollectionDeleted),
+            17 => Some(Self::UserPresenceRequest),
+            18 => Some(Self::UserPresenceGranted),
+            19 => Some(Self::SignatureRequest),
+            20 => Some(Self::SignatureResponse),
+            21 => Some(Self::WalletQuoteCreated),
+            22 => Some(Self::WalletOrderCreated),
+            23 => Some(Self::WalletOrderStatusChanged),
+            24 => Some(Self::WalletPaymentRequestCreated),
+            25 => Some(Self::WalletReceiptCreated),
+            _ => None,
+        }
+    }
+}
 
 impl EventType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -523,6 +555,16 @@ pub enum CommandDecision {
     Committed = 1,
     Rejected = 2,
 }
+impl crate::protocol::NativeEnum for CommandDecision {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Committed),
+            2 => Some(Self::Rejected),
+            _ => None,
+        }
+    }
+}
 
 impl CommandDecision {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -553,6 +595,17 @@ pub enum ActionStatus {
     Started = 1,
     Completed = 2,
     Failed = 3,
+}
+impl crate::protocol::NativeEnum for ActionStatus {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Started),
+            2 => Some(Self::Completed),
+            3 => Some(Self::Failed),
+            _ => None,
+        }
+    }
 }
 
 impl ActionStatus {
@@ -633,6 +686,51 @@ pub enum CommandType {
     SetAuthoritativeDns = 1021,
     RequestCertificate = 1022,
     SetServicePolicy = 1023,
+}
+impl crate::protocol::NativeEnum for CommandType {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::AddController),
+            2 => Some(Self::RemoveController),
+            3 => Some(Self::TransferControl),
+            4 => Some(Self::PublishSnapshot),
+            5 => Some(Self::StoreObject),
+            6 => Some(Self::FetchObject),
+            7 => Some(Self::Query),
+            8 => Some(Self::ExecuteWorkload),
+            9 => Some(Self::TerminateWorkload),
+            10 => Some(Self::CreateDelegation),
+            11 => Some(Self::CreateRevocation),
+            12 => Some(Self::StoreAndForward),
+            13 => Some(Self::UpdateConfig),
+            14 => Some(Self::InstallApp),
+            15 => Some(Self::UninstallApp),
+            1001 => Some(Self::PutSecret),
+            1002 => Some(Self::DeleteSecret),
+            1003 => Some(Self::ListSecrets),
+            1004 => Some(Self::CreateIdentity),
+            1005 => Some(Self::ImportIdentity),
+            1006 => Some(Self::AddBootstrapNode),
+            1007 => Some(Self::AddReachabilityHint),
+            1008 => Some(Self::QueryNodeState),
+            1010 => Some(Self::RequestUserPresence),
+            1011 => Some(Self::RequestSignature),
+            1012 => Some(Self::ClaimDomain),
+            1013 => Some(Self::ReleaseDomain),
+            1014 => Some(Self::AddMailbox),
+            1015 => Some(Self::RemoveMailbox),
+            1016 => Some(Self::AddAlias),
+            1017 => Some(Self::RemoveAlias),
+            1018 => Some(Self::AuthorizeContentSource),
+            1019 => Some(Self::PublishWebsite),
+            1020 => Some(Self::UnpublishWebsite),
+            1021 => Some(Self::SetAuthoritativeDns),
+            1022 => Some(Self::RequestCertificate),
+            1023 => Some(Self::SetServicePolicy),
+            _ => None,
+        }
+    }
 }
 
 impl CommandType {

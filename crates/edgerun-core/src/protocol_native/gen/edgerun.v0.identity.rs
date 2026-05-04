@@ -18,6 +18,15 @@ pub enum KeyAlgorithm {
     Unspecified = 0,
     EcdsaP256 = 1,
 }
+impl crate::protocol::NativeEnum for KeyAlgorithm {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::EcdsaP256),
+            _ => None,
+        }
+    }
+}
 
 impl KeyAlgorithm {
     /// String value of the enum field names used in the ProtoBuf definition.

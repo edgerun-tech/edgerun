@@ -54,6 +54,16 @@ pub enum ChunkingMode {
     None = 1,
     Manifest = 2,
 }
+impl crate::protocol::NativeEnum for ChunkingMode {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::None),
+            2 => Some(Self::Manifest),
+            _ => None,
+        }
+    }
+}
 
 impl ChunkingMode {
     /// String value of the enum field names used in the ProtoBuf definition.

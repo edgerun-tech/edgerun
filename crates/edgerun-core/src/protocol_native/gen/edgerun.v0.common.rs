@@ -12,6 +12,16 @@ pub mod digest {
         DigestAlgorithmUnspecified = 0,
         DigestAlgorithmSha256 = 1,
     }
+    impl crate::protocol::NativeEnum for Algorithm {
+        fn from_i32(value: i32) -> Option<Self> {
+            match value {
+                0 => Some(Self::DigestAlgorithmUnspecified),
+                1 => Some(Self::DigestAlgorithmSha256),
+                _ => None,
+            }
+        }
+    }
+
     impl Algorithm {
         /// String value of the enum field names used in the ProtoBuf definition.
         ///
@@ -47,6 +57,16 @@ pub mod signature {
         SignatureAlgorithmUnspecified = 0,
         SignatureAlgorithmEcdsaP256Sha256 = 1,
     }
+    impl crate::protocol::NativeEnum for Algorithm {
+        fn from_i32(value: i32) -> Option<Self> {
+            match value {
+                0 => Some(Self::SignatureAlgorithmUnspecified),
+                1 => Some(Self::SignatureAlgorithmEcdsaP256Sha256),
+                _ => None,
+            }
+        }
+    }
+
     impl Algorithm {
         /// String value of the enum field names used in the ProtoBuf definition.
         ///
@@ -182,6 +202,19 @@ pub enum IdentityKind {
     Service = 4,
     Other = 5,
 }
+impl crate::protocol::NativeEnum for IdentityKind {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::User),
+            2 => Some(Self::Node),
+            3 => Some(Self::Agent),
+            4 => Some(Self::Service),
+            5 => Some(Self::Other),
+            _ => None,
+        }
+    }
+}
 
 impl IdentityKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -225,6 +258,24 @@ pub enum ObjectKind {
     DerivedView = 8,
     AppPackage = 9,
     UiTree = 10,
+}
+impl crate::protocol::NativeEnum for ObjectKind {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Payload),
+            2 => Some(Self::Attachment),
+            3 => Some(Self::Snapshot),
+            4 => Some(Self::Manifest),
+            5 => Some(Self::Index),
+            6 => Some(Self::Command),
+            7 => Some(Self::Proof),
+            8 => Some(Self::DerivedView),
+            9 => Some(Self::AppPackage),
+            10 => Some(Self::UiTree),
+            _ => None,
+        }
+    }
 }
 
 impl ObjectKind {
@@ -273,6 +324,17 @@ pub enum AssuranceClass {
     HardwareBacked = 2,
     AttestedRuntime = 3,
 }
+impl crate::protocol::NativeEnum for AssuranceClass {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Software),
+            2 => Some(Self::HardwareBacked),
+            3 => Some(Self::AttestedRuntime),
+            _ => None,
+        }
+    }
+}
 
 impl AssuranceClass {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -309,6 +371,21 @@ pub enum TransportClass {
     Relay = 5,
     StoreForward = 6,
     Other = 7,
+}
+impl crate::protocol::NativeEnum for TransportClass {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Ble),
+            2 => Some(Self::LanIp),
+            3 => Some(Self::Quic),
+            4 => Some(Self::WifiDirect),
+            5 => Some(Self::Relay),
+            6 => Some(Self::StoreForward),
+            7 => Some(Self::Other),
+            _ => None,
+        }
+    }
 }
 
 impl TransportClass {
@@ -352,6 +429,18 @@ pub enum Directness {
     BridgeRequired = 3,
     StoreForward = 4,
 }
+impl crate::protocol::NativeEnum for Directness {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Direct),
+            2 => Some(Self::Relayed),
+            3 => Some(Self::BridgeRequired),
+            4 => Some(Self::StoreForward),
+            _ => None,
+        }
+    }
+}
 
 impl Directness {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -387,6 +476,18 @@ pub enum StorageClass {
     Warm = 2,
     Cold = 3,
     Archive = 4,
+}
+impl crate::protocol::NativeEnum for StorageClass {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Hot),
+            2 => Some(Self::Warm),
+            3 => Some(Self::Cold),
+            4 => Some(Self::Archive),
+            _ => None,
+        }
+    }
 }
 
 impl StorageClass {
@@ -424,6 +525,19 @@ pub enum ExecutionClass {
     TeeAllowed = 3,
     RedundantUntrusted = 4,
     Public = 5,
+}
+impl crate::protocol::NativeEnum for ExecutionClass {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::LocalOnly),
+            2 => Some(Self::TrustedPeer),
+            3 => Some(Self::TeeAllowed),
+            4 => Some(Self::RedundantUntrusted),
+            5 => Some(Self::Public),
+            _ => None,
+        }
+    }
 }
 
 impl ExecutionClass {
@@ -479,6 +593,16 @@ pub enum CipherSuite {
     Unspecified = 0,
     Xchacha20Poly1305 = 1,
     Aes256Gcm = 2,
+}
+impl crate::protocol::NativeEnum for CipherSuite {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Xchacha20Poly1305),
+            2 => Some(Self::Aes256Gcm),
+            _ => None,
+        }
+    }
 }
 
 impl CipherSuite {

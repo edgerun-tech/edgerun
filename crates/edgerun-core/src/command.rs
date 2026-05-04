@@ -28,7 +28,9 @@ fn validate_assurance_claim_satisfies_requirement(
 ) -> crate::result::ValidationResult {
     crate::result::ValidationResult {
         verdict: crate::result::Verdict::Accept,
-        issues: alloc::vec::Vec::new(),
+        reason_code: "assurance_compatibility_shim",
+        derived: None,
+        post_state: None,
     }
 }
 
@@ -333,7 +335,7 @@ fn validate_object_ref(object: &ObjectRef, label: &str) -> Option<ValidationResu
         ));
     }
     if object.object_kind.is_some_and(|object_kind| {
-        crate::protocol::ObjectKind::from(object_kind)
+        crate::protocol::enum_from_i32::<crate::protocol::ObjectKind>(object_kind)
             .is_none_or(|kind| kind == crate::protocol::ObjectKind::Unspecified)
     }) {
         return Some(reject(
@@ -407,7 +409,7 @@ fn validate_constraint_set(
         }
     }
     for transport_class in &constraints.requires_transport_classes {
-        if crate::protocol::TransportClass::from(*transport_class)
+        if crate::protocol::enum_from_i32::<crate::protocol::TransportClass>(*transport_class)
             .is_none_or(|class| class == crate::protocol::TransportClass::Unspecified)
         {
             return Some(reject(
@@ -429,7 +431,10 @@ fn validate_constraint_set(
         ));
     }
     if constraints.export_policy != 0
-        && crate::protocol::ExportPolicy::from(constraints.export_policy).is_none()
+        && crate::protocol::enum_from_i32::<crate::protocol::ExportPolicy>(
+            constraints.export_policy,
+        )
+        .is_none()
     {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -438,7 +443,7 @@ fn validate_constraint_set(
         ));
     }
     for execution_class in &constraints.execution_class_limits {
-        if crate::protocol::ExecutionClass::from(*execution_class)
+        if crate::protocol::enum_from_i32::<crate::protocol::ExecutionClass>(*execution_class)
             .is_none_or(|class| class == crate::protocol::ExecutionClass::Unspecified)
         {
             return Some(reject(
@@ -449,7 +454,7 @@ fn validate_constraint_set(
         }
     }
     for storage_class in &constraints.storage_class_limits {
-        if crate::protocol::StorageClass::from(*storage_class)
+        if crate::protocol::enum_from_i32::<crate::protocol::StorageClass>(*storage_class)
             .is_none_or(|class| class == crate::protocol::StorageClass::Unspecified)
         {
             return Some(reject(
@@ -474,7 +479,7 @@ fn validate_scope_descriptor(
     if let Some(result) = validate_supported_version(scope.scope_version, label, "scope_version") {
         return Some(result);
     }
-    if crate::protocol::ScopeKind::from(scope.scope_kind)
+    if crate::protocol::enum_from_i32::<crate::protocol::ScopeKind>(scope.scope_kind)
         .is_none_or(|kind| kind == crate::protocol::ScopeKind::Unspecified)
     {
         return Some(reject(
@@ -504,7 +509,7 @@ fn validate_scope_descriptor(
         }
     }
     for object_kind in &scope.target_object_kinds {
-        if crate::protocol::ObjectKind::from(*object_kind)
+        if crate::protocol::enum_from_i32::<crate::protocol::ObjectKind>(*object_kind)
             .is_none_or(|kind| kind == crate::protocol::ObjectKind::Unspecified)
         {
             return Some(reject(
@@ -576,7 +581,7 @@ fn validate_capability_descriptor(
     {
         return Some(result);
     }
-    if crate::protocol::CapabilityKind::from(capability.capability_kind)
+    if crate::protocol::enum_from_i32::<crate::protocol::CapabilityKind>(capability.capability_kind)
         .is_none_or(|kind| kind == crate::protocol::CapabilityKind::Unspecified)
     {
         return Some(reject(
@@ -598,8 +603,10 @@ fn validate_capability_descriptor(
             return Some(result);
         }
     }
-    if crate::protocol::DelegationPolicy::from(capability.delegation_policy)
-        .is_none_or(|policy| policy == crate::protocol::DelegationPolicy::Unspecified)
+    if crate::protocol::enum_from_i32::<crate::protocol::DelegationPolicy>(
+        capability.delegation_policy,
+    )
+    .is_none_or(|policy| policy == crate::protocol::DelegationPolicy::Unspecified)
     {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -625,8 +632,10 @@ fn validate_capability_descriptor(
         ) {
             return Some(result);
         }
-        if crate::protocol::AssuranceClass::from(assurance.required_class)
-            .is_none_or(|class| class == crate::protocol::AssuranceClass::Unspecified)
+        if crate::protocol::enum_from_i32::<crate::protocol::AssuranceClass>(
+            assurance.required_class,
+        )
+        .is_none_or(|class| class == crate::protocol::AssuranceClass::Unspecified)
         {
             return Some(reject(
                 ReasonCode::StructuralInvalid,
@@ -838,7 +847,7 @@ fn assurance_claim_subject_matches_local_node(
 ) -> bool {
     matches!(
         &claim.subject,
-        Some(crate::protocol::assurance_claim::Subject::SubjectNode(node))
+        Some(crate::protocol::trust::assurance_claim::Subject::SubjectNode(node))
             if node.node_id == ctx.local_node_id.as_slice()
     )
 }
@@ -850,7 +859,7 @@ fn local_assurance_satisfies_requirement(
 ) -> Result<(), ValidationResult> {
     use crate::protocol::AssuranceClass;
 
-    if AssuranceClass::from(ctx.local_assurance_class).is_none() {
+    if crate::protocol::enum_from_i32::<AssuranceClass>(ctx.local_assurance_class).is_none() {
         return Err(reject(
             ReasonCode::StructuralInvalid,
             Value::String(format!(
@@ -1205,7 +1214,7 @@ fn validate_identity_ref(identity: &IdentityRef, label: &str) -> Option<Validati
         ));
     }
     if identity.identity_kind.is_some_and(|identity_kind| {
-        crate::protocol::IdentityKind::from(identity_kind)
+        crate::protocol::enum_from_i32::<crate::protocol::IdentityKind>(identity_kind)
             .is_none_or(|kind| kind == crate::protocol::IdentityKind::Unspecified)
     }) {
         return Some(reject(
@@ -1228,7 +1237,8 @@ fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationRes
         return Some(result);
     }
 
-    let Some(command_type) = CommandType::from(command.command_type) else {
+    let Some(command_type) = crate::protocol::enum_from_i32::<CommandType>(command.command_type)
+    else {
         return Some(reject(
             ReasonCode::StructuralInvalid,
             Value::String(format!(
@@ -1522,7 +1532,9 @@ pub fn validate_command(
             return result;
         }
 
-        let Some(required_class) = AssuranceClass::from(req.required_class) else {
+        let Some(required_class) =
+            crate::protocol::enum_from_i32::<AssuranceClass>(req.required_class)
+        else {
             return reject(
                 ReasonCode::StructuralInvalid,
                 Value::String(format!(
@@ -1998,8 +2010,10 @@ fn attenuate_scope(
             empty_map(),
         ));
     };
-    let parent_kind = crate::protocol::ScopeKind::from(parent_scope.scope_kind);
-    let child_kind = crate::protocol::ScopeKind::from(child_scope.scope_kind);
+    let parent_kind =
+        crate::protocol::enum_from_i32::<crate::protocol::ScopeKind>(parent_scope.scope_kind);
+    let child_kind =
+        crate::protocol::enum_from_i32::<crate::protocol::ScopeKind>(child_scope.scope_kind);
     if parent_kind == Some(crate::protocol::ScopeKind::GlobalWithConstraints) {
         if !time_window_allows(
             parent_scope.time_bounds.as_ref(),

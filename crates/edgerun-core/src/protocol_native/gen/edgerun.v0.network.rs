@@ -80,6 +80,19 @@ pub enum PayloadKind {
     ObjectFragment = 4,
     SessionMessage = 5,
 }
+impl crate::protocol::NativeEnum for PayloadKind {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Command),
+            2 => Some(Self::Query),
+            3 => Some(Self::ResultFragment),
+            4 => Some(Self::ObjectFragment),
+            5 => Some(Self::SessionMessage),
+            _ => None,
+        }
+    }
+}
 
 impl PayloadKind {
     /// String value of the enum field names used in the ProtoBuf definition.

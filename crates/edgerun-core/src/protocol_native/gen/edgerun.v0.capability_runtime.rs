@@ -73,6 +73,16 @@ pub enum CapabilitySessionMode {
     Unary = 1,
     Stream = 2,
 }
+impl crate::protocol::NativeEnum for CapabilitySessionMode {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Unary),
+            2 => Some(Self::Stream),
+            _ => None,
+        }
+    }
+}
 
 impl CapabilitySessionMode {
     /// String value of the enum field names used in the ProtoBuf definition.

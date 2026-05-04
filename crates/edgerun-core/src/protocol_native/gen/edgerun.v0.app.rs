@@ -37,6 +37,22 @@ pub mod capability_check {
         StorageAccess = 6,
         Execution = 7,
     }
+    impl crate::protocol::NativeEnum for Operation {
+        fn from_i32(value: i32) -> Option<Self> {
+            match value {
+                0 => Some(Self::Unspecified),
+                1 => Some(Self::ReadBlob),
+                2 => Some(Self::WriteBlob),
+                3 => Some(Self::SendMessage),
+                4 => Some(Self::NetworkBind),
+                5 => Some(Self::NetworkConnect),
+                6 => Some(Self::StorageAccess),
+                7 => Some(Self::Execution),
+                _ => None,
+            }
+        }
+    }
+
     impl Operation {
         /// String value of the enum field names used in the ProtoBuf definition.
         ///
@@ -86,6 +102,17 @@ pub mod capability_result {
         Granted = 1,
         Denied = 2,
     }
+    impl crate::protocol::NativeEnum for Decision {
+        fn from_i32(value: i32) -> Option<Self> {
+            match value {
+                0 => Some(Self::Unspecified),
+                1 => Some(Self::Granted),
+                2 => Some(Self::Denied),
+                _ => None,
+            }
+        }
+    }
+
     impl Decision {
         /// String value of the enum field names used in the ProtoBuf definition.
         ///

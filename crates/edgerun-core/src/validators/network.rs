@@ -522,7 +522,8 @@ fn validate_identity_ref(
         ));
     }
     if identity.identity_kind.is_some_and(|identity_kind| {
-        IdentityKind::from(identity_kind).is_none_or(|kind| kind == IdentityKind::Unspecified)
+        crate::protocol::enum_from_i32::<IdentityKind>(identity_kind)
+            .is_none_or(|kind| kind == IdentityKind::Unspecified)
     }) {
         return Some(reject(
             ReasonCode::StructuralInvalid,
@@ -540,7 +541,8 @@ fn validate_optional_object_ref(
     if let Some(object) = object {
         if object.object_id.is_empty()
             || object.object_kind.is_some_and(|object_kind| {
-                ObjectKind::from(object_kind).is_none_or(|kind| kind == ObjectKind::Unspecified)
+                crate::protocol::enum_from_i32::<ObjectKind>(object_kind)
+                    .is_none_or(|kind| kind == ObjectKind::Unspecified)
             })
         {
             return Some(reject(
@@ -666,7 +668,7 @@ pub fn validate_route_advertisement(adv: &crate::protocol::RouteAdvertisement) -
                 empty_map(),
             );
         }
-        if TransportClass::from(hint.transport_class)
+        if crate::protocol::enum_from_i32::<TransportClass>(hint.transport_class)
             .is_none_or(|class| class == TransportClass::Unspecified)
         {
             return reject(
@@ -682,7 +684,7 @@ pub fn validate_route_advertisement(adv: &crate::protocol::RouteAdvertisement) -
                 empty_map(),
             );
         }
-        if Directness::from(hint.directness)
+        if crate::protocol::enum_from_i32::<Directness>(hint.directness)
             .is_none_or(|directness| directness == Directness::Unspecified)
         {
             return reject(

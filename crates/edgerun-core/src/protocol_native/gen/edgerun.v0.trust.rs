@@ -147,6 +147,22 @@ pub enum CapabilityKind {
     ExecuteWorkload = 7,
     DecryptDomain = 8,
 }
+impl crate::protocol::NativeEnum for CapabilityKind {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::NodeControl),
+            2 => Some(Self::Query),
+            3 => Some(Self::SnapshotPublish),
+            4 => Some(Self::ObjectStore),
+            5 => Some(Self::ObjectFetch),
+            6 => Some(Self::Relay),
+            7 => Some(Self::ExecuteWorkload),
+            8 => Some(Self::DecryptDomain),
+            _ => None,
+        }
+    }
+}
 
 impl CapabilityKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -195,6 +211,22 @@ pub enum ScopeKind {
     WorkloadClass = 7,
     GlobalWithConstraints = 8,
 }
+impl crate::protocol::NativeEnum for ScopeKind {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Node),
+            2 => Some(Self::Stream),
+            3 => Some(Self::ObjectClass),
+            4 => Some(Self::View),
+            5 => Some(Self::Domain),
+            6 => Some(Self::QueryClass),
+            7 => Some(Self::WorkloadClass),
+            8 => Some(Self::GlobalWithConstraints),
+            _ => None,
+        }
+    }
+}
 
 impl ScopeKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -237,6 +269,16 @@ pub enum DelegationPolicy {
     NonDelegable = 1,
     DelegableWithAttenuation = 2,
 }
+impl crate::protocol::NativeEnum for DelegationPolicy {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::NonDelegable),
+            2 => Some(Self::DelegableWithAttenuation),
+            _ => None,
+        }
+    }
+}
 
 impl DelegationPolicy {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -268,6 +310,18 @@ pub enum ExportPolicy {
     QueryOnly = 2,
     SignOnly = 3,
     NoPlaintextExport = 4,
+}
+impl crate::protocol::NativeEnum for ExportPolicy {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::AllowExport),
+            2 => Some(Self::QueryOnly),
+            3 => Some(Self::SignOnly),
+            4 => Some(Self::NoPlaintextExport),
+            _ => None,
+        }
+    }
 }
 
 impl ExportPolicy {
@@ -306,6 +360,20 @@ pub enum RevocationKind {
     AssuranceClaim = 4,
     SnapshotTrust = 5,
     RepresentationAccess = 6,
+}
+impl crate::protocol::NativeEnum for RevocationKind {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Delegation),
+            2 => Some(Self::ControllerInstallation),
+            3 => Some(Self::IdentityTrust),
+            4 => Some(Self::AssuranceClaim),
+            5 => Some(Self::SnapshotTrust),
+            6 => Some(Self::RepresentationAccess),
+            _ => None,
+        }
+    }
 }
 
 impl RevocationKind {

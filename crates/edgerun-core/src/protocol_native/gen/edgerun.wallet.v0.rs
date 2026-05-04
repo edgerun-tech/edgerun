@@ -231,6 +231,16 @@ pub enum QuoteMode {
     Instant = 1,
     Floating = 2,
 }
+impl crate::protocol::NativeEnum for QuoteMode {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Instant),
+            2 => Some(Self::Floating),
+            _ => None,
+        }
+    }
+}
 
 impl QuoteMode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -260,6 +270,16 @@ pub enum AmountSide {
     Unspecified = 0,
     Settlement = 1,
     Pay = 2,
+}
+impl crate::protocol::NativeEnum for AmountSide {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Settlement),
+            2 => Some(Self::Pay),
+            _ => None,
+        }
+    }
 }
 
 impl AmountSide {
@@ -307,6 +327,33 @@ pub enum CanonicalOrderStatus {
     OnHold = 17,
     Canceled = 18,
     PartialDeposits = 19,
+}
+impl crate::protocol::NativeEnum for CanonicalOrderStatus {
+    fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Quoted),
+            2 => Some(Self::QuoteExpired),
+            3 => Some(Self::Created),
+            4 => Some(Self::AwaitingDeposit),
+            5 => Some(Self::DepositSeen),
+            6 => Some(Self::DepositConfirmed),
+            7 => Some(Self::Exchanging),
+            8 => Some(Self::Sending),
+            9 => Some(Self::Completed),
+            10 => Some(Self::ActionRequired),
+            11 => Some(Self::RefundRequired),
+            12 => Some(Self::Refunding),
+            13 => Some(Self::Refunded),
+            14 => Some(Self::Expired),
+            15 => Some(Self::Failed),
+            16 => Some(Self::Rejected),
+            17 => Some(Self::OnHold),
+            18 => Some(Self::Canceled),
+            19 => Some(Self::PartialDeposits),
+            _ => None,
+        }
+    }
 }
 
 impl CanonicalOrderStatus {
