@@ -34,6 +34,7 @@ mod hardware;
 mod ingress;
 mod init;
 mod server_resource_dispatch;
+mod server_resource_wire_codec;
 mod server_resources;
 mod session;
 
