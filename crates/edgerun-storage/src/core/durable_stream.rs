@@ -130,11 +130,6 @@ impl<L: EventLog> DurableStreamWriter<L> {
         &mut self.event_log
     }
 
-    /// Consume the durable writer and return its parts.
-    #[must_use]
-    pub fn into_parts(self) -> (StreamWriter<MeshProtocolSigner>, L, AppendReceipt) {
-        (self.writer, self.event_log, self.last_receipt)
-    }
 }
 
 #[cfg(test)]
