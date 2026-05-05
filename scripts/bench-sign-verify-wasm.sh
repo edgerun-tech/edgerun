@@ -18,6 +18,25 @@ TARGET_DIR="$(cargo_target_dir)"
 WASM="${TARGET_DIR}/${TARGET}/${PROFILE}/edgerun_sign_verify_e2e.wasm"
 OUT_DIR="${TARGET_DIR}/${TARGET}/${PROFILE}"
 
+wasm_opt_oz() {
+  local input="$1"
+  local output="$2"
+
+  if wasm-opt --enable-bulk-memory -Oz "$input" -o "$output" 2>/tmp/edgerun-wasm-opt.err; then
+    return 0
+  fi
+
+  # Older Binaryen builds have used a slightly different feature flag name in
+  # validator diagnostics. Retry with that spelling before giving up.
+  if wasm-opt --enable-bulk-memory-opt -Oz "$input" -o "$output" 2>/tmp/edgerun-wasm-opt.err; then
+    return 0
+  fi
+
+  echo "wasm-opt failed; stderr:" >&2
+  cat /tmp/edgerun-wasm-opt.err >&2
+  return 1
+}
+
 if ! rustup target list --installed | grep -qx "$TARGET"; then
   echo "Installing Rust target: $TARGET"
   rustup target add "$TARGET"
@@ -54,15 +73,18 @@ fi
 
 if command -v wasm-opt >/dev/null 2>&1; then
   OPT="${OUT_DIR}/edgerun_sign_verify_e2e.opt.wasm"
-  wasm-opt -Oz "$WASM" -o "$OPT"
-  opt_size=$(wc -c < "$OPT" | tr -d ' ')
-  echo "wasm_opt_Oz_path=$OPT"
-  echo "wasm_opt_Oz_bytes=$opt_size"
+  if wasm_opt_oz "$WASM" "$OPT"; then
+    opt_size=$(wc -c < "$OPT" | tr -d ' ')
+    echo "wasm_opt_Oz_path=$OPT"
+    echo "wasm_opt_Oz_bytes=$opt_size"
+  else
+    echo "wasm_opt_Oz_bytes=unavailable"
+  fi
 fi
 
 if command -v wasm2wat >/dev/null 2>&1; then
   echo "== wasm exports =="
-  wasm2wat "$WASM" | grep '^(export ' || true
+  wasm2wat --enable-bulk-memory "$WASM" | grep '^(export ' || wasm2wat "$WASM" | grep '^(export ' || true
 fi
 
 echo "== done =="
