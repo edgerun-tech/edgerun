@@ -159,6 +159,13 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::V
                 crate::wire_trust::assurance_claim_full_bytes(claim)
             }
         }
+        ProtocolRecord::RouteAdvertisement(route) => {
+            if signable {
+                crate::wire_network::route_advertisement_signable_bytes(route)
+            } else {
+                crate::wire_network::route_advertisement_full_bytes(route)
+            }
+        }
         ProtocolRecord::CommandResultPayload(payload) => {
             crate::wire_command::command_result_bytes(payload)
         }
@@ -166,7 +173,6 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::V
             edgerun_wire::field(
                 1,
                 edgerun_wire::text(match other {
-                    ProtocolRecord::RouteAdvertisement(_) => "RouteAdvertisement",
                     ProtocolRecord::SnapshotDescriptor(_) => "SnapshotDescriptor",
                     ProtocolRecord::ObjectRef(_) => "ObjectRef",
                     ProtocolRecord::Digest(_) => "Digest",
