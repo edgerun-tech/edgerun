@@ -261,7 +261,7 @@ impl VerifiableProtocolRecord for CommandEnvelope {
     }
 
     fn protocol_signature(&self) -> Option<&Signature> {
-        self.signature.as_ref()
+        self.signatures.first()
     }
 }
 

@@ -329,7 +329,7 @@ metadata:
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: None,
+            signatures: Vec::new(),
             app_intent: Vec::new(),
         };
 
@@ -379,7 +379,7 @@ metadata:
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: None,
+            signatures: Vec::new(),
             app_intent: Vec::new(),
         };
 
@@ -446,7 +446,7 @@ metadata:
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: None,
+            signatures: Vec::new(),
             app_intent: Vec::new(),
         };
 
@@ -564,7 +564,7 @@ metadata:
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: None,
+            signatures: Vec::new(),
             app_intent: Vec::new(),
         };
 
@@ -701,6 +701,14 @@ fn put_signature(out: &mut Vec<u8>, value: &Option<edgerun_core::protocol::Signa
     }
 }
 
+fn put_signatures(out: &mut Vec<u8>, values: &[edgerun_core::protocol::Signature]) {
+    put_u32(out, values.len() as u32);
+    for value in values {
+        put_i32(out, value.algorithm);
+        put_bytes(out, &value.value);
+    }
+}
+
 fn put_payload(
     out: &mut Vec<u8>,
     value: &Option<edgerun_core::protocol::command_envelope::Payload>,
@@ -741,7 +749,7 @@ fn encode_command_envelope_native(command: &edgerun_core::protocol::CommandEnvel
     put_u32(&mut out, command.delegation_chain.len() as u32);
     put_u8(&mut out, u8::from(command.requested_assurance.is_some()));
     put_object_ref(&mut out, &command.command_metadata);
-    put_signature(&mut out, &command.signature);
+    put_signatures(&mut out, &command.signatures);
     put_bytes(&mut out, &command.app_intent);
     put_payload(&mut out, &command.payload);
     out
@@ -854,15 +862,16 @@ impl<'a> CommandReader<'a> {
         }
     }
 
-    fn signature(&mut self) -> Option<Option<edgerun_core::protocol::Signature>> {
-        match self.u8()? {
-            0 => Some(None),
-            1 => Some(Some(edgerun_core::protocol::Signature {
+    fn signatures(&mut self) -> Option<Vec<edgerun_core::protocol::Signature>> {
+        let len = self.u32()? as usize;
+        let mut signatures = Vec::with_capacity(len);
+        for _ in 0..len {
+            signatures.push(edgerun_core::protocol::Signature {
                 algorithm: self.i32()?,
                 value: self.bytes()?,
-            })),
-            _ => None,
+            });
         }
+        Some(signatures)
     }
 
     fn payload(&mut self) -> Option<Option<edgerun_core::protocol::command_envelope::Payload>> {
@@ -919,7 +928,7 @@ fn decode_command_envelope_native(bytes: &[u8]) -> Option<edgerun_core::protocol
         return None;
     }
     let command_metadata = reader.object_ref()?;
-    let signature = reader.signature()?;
+    let signatures = reader.signatures()?;
     let app_intent = reader.bytes()?;
     let payload = reader.payload()?;
     if !reader.done() {
@@ -939,7 +948,7 @@ fn decode_command_envelope_native(bytes: &[u8]) -> Option<edgerun_core::protocol
         delegation_chain: Vec::new(),
         requested_assurance: None,
         command_metadata,
-        signature,
+        signatures,
         app_intent,
         payload,
     })

@@ -87,7 +87,7 @@ pub fn build_identity_routed_settlement_command(draft: SettlementCommandDraft) -
         delegation_chain: Vec::new(),
         requested_assurance: None,
         command_metadata: None,
-        signature: None,
+        signatures: Vec::new(),
         app_intent: encode_app_intent(&draft.app_intent),
         payload: Some(command_envelope::Payload::InlinePayload(
             draft.payload_bytes,

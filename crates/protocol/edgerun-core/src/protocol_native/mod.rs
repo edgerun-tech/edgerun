@@ -126,7 +126,7 @@ fn signable_record(record: &ProtocolRecord) -> ProtocolRecord {
     match record {
         ProtocolRecord::CommandEnvelope(value) => {
             let mut value = value.clone();
-            value.signature = None;
+            value.signatures.clear();
             ProtocolRecord::CommandEnvelope(value)
         }
         ProtocolRecord::EventEnvelope(value) => {

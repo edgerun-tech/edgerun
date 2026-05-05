@@ -1426,10 +1426,10 @@ pub fn validate_command(
     }
 
     // --- Step 2: Cryptographic validation ---
-    let Some(sig) = &command.signature else {
+    let Some(sig) = command.signatures.first() else {
         return reject(
             ReasonCode::CryptoInvalid,
-            Value::String("missing signature".into()),
+            Value::String("missing signatures".into()),
             empty_map(),
         );
     };
@@ -2673,10 +2673,10 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
         return result;
     }
 
-    let Some(sig) = &command.signature else {
+    let Some(sig) = command.signatures.first() else {
         return reject(
             ReasonCode::CryptoInvalid,
-            Value::String("missing signature".into()),
+            Value::String("missing signatures".into()),
             empty_map(),
         );
     };
@@ -2801,7 +2801,7 @@ mod tests {
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: None,
+            signatures: Vec::new(),
             app_intent: Vec::new(),
         }
     }
@@ -2815,7 +2815,7 @@ mod tests {
             &canonical,
         )
         .unwrap();
-        cmd.signature = Some(ProtoSignature {
+        cmd.signatures.push(ProtoSignature {
             algorithm: 1,
             value: sig,
         });
@@ -3012,7 +3012,7 @@ mod tests {
     #[test]
     fn command_with_invalid_signature_is_rejected() {
         let mut command = make_unsigned_command();
-        command.signature = Some(ProtoSignature {
+        command.signatures.push(ProtoSignature {
             algorithm: 1,
             value: vec![0u8; 64],
         });
@@ -3456,7 +3456,7 @@ mod tests {
     #[test]
     fn canonical_command_signable_vs_full() {
         let mut cmd = make_unsigned_command();
-        cmd.signature = Some(ProtoSignature {
+        cmd.signatures.push(ProtoSignature {
             algorithm: 1,
             value: vec![1; 64],
         });

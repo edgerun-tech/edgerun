@@ -48,7 +48,7 @@ pub struct CommandEnvelope {
     pub delegation_chain: alloc::vec::Vec<super::trust::DelegationRecord>,
     pub requested_assurance: ::core::option::Option<super::trust::AssuranceRequirement>,
     pub command_metadata: ::core::option::Option<super::common::ObjectRef>,
-    pub signature: ::core::option::Option<super::common::Signature>,
+    pub signatures: alloc::vec::Vec<super::common::Signature>,
     /// Serialized edgerun.v0.stream.AppIntent.
     /// App proves it authorized the exact command/payload.
     pub app_intent: alloc::vec::Vec<u8>,

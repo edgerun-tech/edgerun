@@ -705,7 +705,7 @@ trust_nodes: []
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: None,
+            signatures: Vec::new(),
             app_intent: Vec::new(),
         };
 
@@ -743,7 +743,7 @@ trust_nodes: []
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: None,
+            signatures: Vec::new(),
             app_intent: Vec::new(),
         };
 
@@ -776,7 +776,7 @@ trust_nodes: []
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: None,
+            signatures: Vec::new(),
             app_intent: Vec::new(),
         };
 
@@ -813,7 +813,7 @@ trust_nodes: []
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: None,
+            signatures: Vec::new(),
             app_intent: Vec::new(),
         };
 
@@ -900,10 +900,10 @@ trust_nodes: []
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signature: Some(edgerun_core::protocol::Signature {
+            signatures: vec![edgerun_core::protocol::Signature {
                 algorithm: 1,
                 value: vec![0u8; 64], // bad signature
-            }),
+            }],
             app_intent: Vec::new(),
         };
 
