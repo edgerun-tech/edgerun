@@ -64,6 +64,16 @@ impl ProtocolFamily {
             Self::RelayEnvelope => crypto::SIG_DOMAIN_RELAY_ENVELOPE,
         }
     }
+
+    /// Returns true only for families whose canonical signable bytes are backed
+    /// by concrete protocol encoders in edgerun-core today.
+    ///
+    /// Other families are listed here intentionally, but verification rejects
+    /// them until their canonicalization is implemented. This prevents the
+    /// placeholder ProtocolRecord fallback from becoming accidental authority.
+    pub fn canonicalization_is_implemented(self) -> bool {
+        matches!(self, Self::EventEnvelope | Self::CommandEnvelope)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,14 +125,33 @@ impl<'a> ProtocolSignerRef<'a> {
     }
 }
 
-pub fn protocol_record_hash(record: &ProtocolRecord, family: ProtocolFamily) -> Vec<u8> {
-    let canonical = protocol::canonical_bytes(record, true);
-    crypto::record_hash(family.hash_domain(), &canonical)
+pub fn protocol_record_hash(
+    record: &ProtocolRecord,
+    family: ProtocolFamily,
+) -> Result<Vec<u8>, ProtocolVerifyError> {
+    let canonical = protocol_signable_bytes(record, family)?;
+    Ok(crypto::record_hash(family.hash_domain(), &canonical))
 }
 
-pub fn protocol_signature_input(record: &ProtocolRecord, family: ProtocolFamily) -> Vec<u8> {
-    let hash = protocol_record_hash(record, family);
-    crypto::signature_input(family.sig_domain(), &hash)
+pub fn protocol_signature_input(
+    record: &ProtocolRecord,
+    family: ProtocolFamily,
+) -> Result<Vec<u8>, ProtocolVerifyError> {
+    let hash = protocol_record_hash(record, family)?;
+    Ok(crypto::signature_input(family.sig_domain(), &hash))
+}
+
+pub fn protocol_signable_bytes(
+    record: &ProtocolRecord,
+    family: ProtocolFamily,
+) -> Result<Vec<u8>, ProtocolVerifyError> {
+    match (family, record) {
+        (ProtocolFamily::EventEnvelope, ProtocolRecord::EventEnvelope(_))
+        | (ProtocolFamily::CommandEnvelope, ProtocolRecord::CommandEnvelope(_)) => {
+            Ok(protocol::canonical_bytes(record, true))
+        }
+        _ => Err(ProtocolVerifyError::UnsupportedFamily),
+    }
 }
 
 pub fn verify_protocol_record(
@@ -138,7 +167,7 @@ pub fn verify_protocol_record(
         return Err(ProtocolVerifyError::InvalidSignatureLength);
     }
 
-    let canonical = protocol::canonical_bytes(record, true);
+    let canonical = protocol_signable_bytes(record, family)?;
     let record_hash = crypto::record_hash(family.hash_domain(), &canonical);
     let verifying_key = signer.to_p256_verifying_key()?;
 
@@ -172,7 +201,7 @@ pub fn verify_protocol_record_hw(
         return Err(ProtocolVerifyError::InvalidSignatureLength);
     }
 
-    let canonical = protocol::canonical_bytes(record, true);
+    let canonical = protocol_signable_bytes(record, family)?;
     let record_hash = crypto::record_hash(family.hash_domain(), &canonical);
     let verifying_key = signer.to_p256_verifying_key()?;
 
@@ -301,7 +330,10 @@ pub fn verify_command_envelope(
     verify_signed_record(command, issuer)
 }
 
-/// Verify a delegation record when the caller already resolved the issuer key.
+/// Verification entry point for delegation records.
+///
+/// Currently returns UnsupportedFamily until DelegationRecord has concrete
+/// protocol canonicalization in edgerun-core.
 pub fn verify_delegation_record(
     delegation: &DelegationRecord,
     issuer: ProtocolSignerRef<'_>,
@@ -309,7 +341,10 @@ pub fn verify_delegation_record(
     verify_signed_record(delegation, issuer)
 }
 
-/// Verify a revocation record when the caller already resolved the issuer key.
+/// Verification entry point for revocation records.
+///
+/// Currently returns UnsupportedFamily until RevocationRecord has concrete
+/// protocol canonicalization in edgerun-core.
 pub fn verify_revocation_record(
     revocation: &RevocationRecord,
     issuer: ProtocolSignerRef<'_>,
@@ -317,6 +352,10 @@ pub fn verify_revocation_record(
     verify_signed_record(revocation, issuer)
 }
 
+/// Verification entry point for identity records.
+///
+/// Currently returns UnsupportedFamily until IdentityRecord has concrete
+/// protocol canonicalization in edgerun-core.
 pub fn verify_identity_record(
     identity: &IdentityRecord,
     signature: &Signature,
@@ -386,5 +425,13 @@ mod tests {
 
         let err = verify_event_envelope(&event, ProtocolSignerRef::P256Raw64(&writer)).unwrap_err();
         assert_eq!(err, ProtocolVerifyError::InvalidSignature);
+    }
+
+    #[test]
+    fn unsupported_placeholder_families_are_rejected() {
+        assert!(!ProtocolFamily::DelegationRecord.canonicalization_is_implemented());
+        let record = ProtocolRecord::DelegationRecord(DelegationRecord::default());
+        let err = protocol_record_hash(&record, ProtocolFamily::DelegationRecord).unwrap_err();
+        assert_eq!(err, ProtocolVerifyError::UnsupportedFamily);
     }
 }
