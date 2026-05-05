@@ -1,8 +1,11 @@
 //! Shared protocol utilities — line reader and ESMTP extension list.
 
 use crate::prelude::*;
+
+#[cfg(not(target_os = "none"))]
 use std::io;
 
+#[cfg(not(target_os = "none"))]
 use crate::rt::{AsyncRead, AsyncReadExt};
 
 /// Default ESMTP extensions advertised in EHLO.
@@ -22,10 +25,12 @@ pub const ESMTP_EXTENSIONS: &[&str] = &[
 ///
 /// Used by the SMTP client which stores the reader as a field.
 /// For the server session loop, prefer [`crate::server::read_line`] to avoid ownership issues.
+#[cfg(not(target_os = "none"))]
 pub struct SmtpReader<R> {
     reader: R,
 }
 
+#[cfg(not(target_os = "none"))]
 impl<R: AsyncRead + Unpin> SmtpReader<R> {
     pub fn new(reader: R) -> Self {
         Self { reader }
