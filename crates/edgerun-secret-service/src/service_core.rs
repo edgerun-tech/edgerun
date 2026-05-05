@@ -98,6 +98,59 @@ pub trait SecretStore {
     fn delete_secret_collection(&mut self, collection_name: &str) -> io::Result<u32>;
 }
 
+impl<T: SecretStore + ?Sized> SecretStore for &mut T {
+    fn put_secret(
+        &mut self,
+        collection: &str,
+        key: &str,
+        secret: &[u8],
+        label: &str,
+        attributes: &[(String, String)],
+    ) -> io::Result<()> {
+        (**self).put_secret(collection, key, secret, label, attributes)
+    }
+
+    fn get_secret(
+        &self,
+        collection: &str,
+        key: &str,
+    ) -> io::Result<Option<(Vec<u8>, CredentialMeta)>> {
+        (**self).get_secret(collection, key)
+    }
+
+    fn delete_secret(&mut self, collection: &str, key: &str) -> io::Result<bool> {
+        (**self).delete_secret(collection, key)
+    }
+
+    fn list_secrets(&self, collection: &str) -> io::Result<Vec<(String, CredentialMeta)>> {
+        (**self).list_secrets(collection)
+    }
+
+    fn search_secrets(
+        &self,
+        collection: &str,
+        attributes: &[(String, String)],
+    ) -> io::Result<Vec<(String, CredentialMeta)>> {
+        (**self).search_secrets(collection, attributes)
+    }
+
+    fn list_secret_collections(&self) -> io::Result<Vec<String>> {
+        (**self).list_secret_collections()
+    }
+
+    fn secret_collection_exists(&self, collection: &str) -> bool {
+        (**self).secret_collection_exists(collection)
+    }
+
+    fn create_secret_collection(&mut self, collection_name: &str, label: &str) -> io::Result<()> {
+        (**self).create_secret_collection(collection_name, label)
+    }
+
+    fn delete_secret_collection(&mut self, collection_name: &str) -> io::Result<u32> {
+        (**self).delete_secret_collection(collection_name)
+    }
+}
+
 pub struct SecretServiceCore<S> {
     store: S,
 }

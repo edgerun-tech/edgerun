@@ -16,6 +16,7 @@ use crate::dbus_wire::{decode_msg, encode_msg};
 use crate::session::{
     BiometricVerifier, NoBiometricVerifier, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
 };
+use crate::service_core::{SecretRequest, SecretResponse, SecretServiceCore};
 
 // ===========================================================================
 // Server
@@ -86,6 +87,10 @@ impl Server {
             serial: 0,
             verifier,
         })
+    }
+
+    fn dispatch_secret(&mut self, request: SecretRequest) -> io::Result<SecretResponse> {
+        SecretServiceCore::new(&mut self.backend).dispatch(request)
     }
 
     /// Accept one client connection — tries the bus first, then the standalone socket.
@@ -278,11 +283,10 @@ impl Server {
             label.replace(' ', "_")
         );
 
-        // Ensure the collection namespace exists (put a dummy entry to create it)
-        if !self.backend.collection_exists(&coll_path) {
-            // Just verify we can list it — namespace will be created on first put
-            let _ = self.backend.list(&coll_path);
-        }
+        let _ = self.dispatch_secret(SecretRequest::CreateCollection {
+            collection_name: Backend::coll_to_ns(&coll_path),
+            label: label.to_string(),
+        });
 
         Msg::ret(ser, client).body(
             vec![
@@ -305,9 +309,18 @@ impl Server {
         let mut unlocked = Vec::new();
 
         // Search across all collections
-        let collections = self.backend.list_collections().unwrap_or_default();
+        let collections = match self.dispatch_secret(SecretRequest::ListCollections) {
+            Ok(SecretResponse::Collections(collections)) => collections,
+            _ => Vec::new(),
+        };
         for coll in &collections {
-            let results = self.backend.search(coll, &attr_pairs).unwrap_or_default();
+            let results = match self.dispatch_secret(SecretRequest::Search {
+                collection: coll.clone(),
+                attributes: attr_pairs.clone(),
+            }) {
+                Ok(SecretResponse::Items(items)) => items,
+                _ => Vec::new(),
+            };
             for (key, _meta) in results {
                 let item_path = Backend::item_path(coll, &key);
                 unlocked.push(Val::O(item_path));
@@ -427,9 +440,16 @@ impl Server {
         let mut secrets_dict = Vec::new();
         for item_path in &item_paths {
             if let Some((coll, key)) = resolve_item_path(item_path) {
-                if let Ok(Some((secret_bytes, _meta))) = self.backend.get(&coll, &key) {
+                let secret_entry = match self.dispatch_secret(SecretRequest::Get {
+                    collection: coll,
+                    key,
+                }) {
+                    Ok(SecretResponse::Secret(entry)) => entry,
+                    _ => None,
+                };
+                if let Some(secret_entry) = secret_entry {
                     let secret_bytes_val: Vec<Val> =
-                        secret_bytes.iter().map(|&b| Val::Y(b)).collect();
+                        secret_entry.secret.iter().map(|&b| Val::Y(b)).collect();
                     let content_type = "text/plain; charset=utf8";
 
                     // Secret struct: (oa{sv}ays)
@@ -488,7 +508,12 @@ impl Server {
     /// ListItems (OUT Array<ObjectPath> items)
     fn list_items(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
         let coll = msg.path().unwrap_or("");
-        let items = self.backend.list(coll).unwrap_or_default();
+        let items = match self.dispatch_secret(SecretRequest::List {
+            collection: coll.to_string(),
+        }) {
+            Ok(SecretResponse::Items(items)) => items,
+            _ => Vec::new(),
+        };
 
         let item_paths: Vec<Val> = items
             .into_iter()
@@ -557,13 +582,19 @@ impl Server {
         let replace = msg.body.get(2).and_then(Val::b).unwrap_or(false);
 
         if replace {
-            let _ = self.backend.delete(coll, &item_key);
+            let _ = self.dispatch_secret(SecretRequest::Delete {
+                collection: coll.to_string(),
+                key: item_key.clone(),
+            });
         }
 
-        if let Err(e) = self
-            .backend
-            .put(coll, &item_key, &secret_bytes, &label, &attrs)
-        {
+        if let Err(e) = self.dispatch_secret(SecretRequest::Put {
+            collection: coll.to_string(),
+            key: item_key.clone(),
+            secret: secret_bytes,
+            label: label.clone(),
+            attributes: attrs,
+        }) {
             return Msg::err(
                 ser,
                 client,
@@ -580,11 +611,9 @@ impl Server {
     /// Delete a collection
     fn delete_collection(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
         let coll = msg.path().unwrap_or("");
-        let items = self.backend.list(coll).unwrap_or_default();
-
-        for (key, _) in items {
-            let _ = self.backend.delete(coll, &key);
-        }
+        let _ = self.dispatch_secret(SecretRequest::DeleteCollection {
+            collection_name: Backend::coll_to_ns(coll),
+        });
 
         // Remove alias if present
         self.aliases.retain(|_, v| v == coll);
@@ -628,17 +657,23 @@ impl Server {
             );
         };
 
-        let Ok(Some((secret_bytes, _meta))) = self.backend.get(&coll, &key) else {
-            return Msg::err(
-                ser,
-                client,
-                "org.freedesktop.Secret.Error.NoSuchItem",
-                "item not found",
-            );
+        let secret_entry = match self.dispatch_secret(SecretRequest::Get {
+            collection: coll.clone(),
+            key: key.clone(),
+        }) {
+            Ok(SecretResponse::Secret(Some(entry))) => entry,
+            _ => {
+                return Msg::err(
+                    ser,
+                    client,
+                    "org.freedesktop.Secret.Error.NoSuchItem",
+                    "item not found",
+                );
+            }
         };
 
         // Return as-is (plain mode)
-        let secret_bytes_val: Vec<Val> = secret_bytes.iter().map(|&b| Val::Y(b)).collect();
+        let secret_bytes_val: Vec<Val> = secret_entry.secret.iter().map(|&b| Val::Y(b)).collect();
 
         let secret_struct = Val::Str(vec![
             Val::O(session_path.to_string()),
@@ -663,7 +698,10 @@ impl Server {
             );
         };
 
-        let existed = self.backend.delete(&coll, &key).unwrap_or(false);
+        let existed = match self.dispatch_secret(SecretRequest::Delete { collection: coll, key }) {
+            Ok(SecretResponse::Deleted(existed)) => existed,
+            _ => false,
+        };
         if !existed {
             return Msg::err(
                 ser,
