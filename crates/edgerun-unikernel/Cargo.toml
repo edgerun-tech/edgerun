@@ -33,8 +33,8 @@ edgerun-oci = { version = "0.1", path = "../edgerun-oci", default-features = fal
 edgerun-edgefs = { version = "0.1", path = "../authority/edgerun-edgefs" }
 edgerun-storage = { version = "0.1", path = "../authority/edgerun-storage" }
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
-edgerun-display = { version = "0.1", path = "../edgerun-display" }
-edgerun-input = { version = "0.1", path = "../edgerun-input" }
+edgerun-display = { version = "0.1", path = "../device-types/edgerun-display" }
+edgerun-input = { version = "0.1", path = "../device-types/edgerun-input" }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 edgerun-virtio = { version = "0.1", path = "../edgerun-virtio" }
@@ -42,7 +42,7 @@ edgerun-rtl8125 = { version = "0.1", path = "../edgerun-rtl8125" }
 edgerun-event = { version = "0.1", path = "../edgerun-event", features = ["virtio"] }
 
 [target.'cfg(target_arch = "xtensa")'.dependencies]
-edgerun-wifi = { version = "0.1", path = "../edgerun-wifi", optional = true }
+edgerun-wifi = { version = "0.1", path = "../device-types/edgerun-wifi", optional = true }
 
 [lints]
 workspace = true

@@ -11,7 +11,7 @@ description = "Linux PCI device adapter for Edgerun"
 [dependencies]
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-edgerun-pci = { version = "0.1", path = "../edgerun-pci" }
+edgerun-pci = { version = "0.1", path = "../device-types/edgerun-pci" }
 
 [features]
 std = []

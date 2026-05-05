@@ -11,8 +11,8 @@ description = "Audio loopback calibration tools and primitives for Edgerun devic
 [dependencies]
 edgerun-alsa-microphone = { version = "0.1", path = "../edgerun-alsa-microphone" }
 edgerun-alsa-speaker = { version = "0.1", path = "../edgerun-alsa-speaker" }
-edgerun-microphone = { version = "0.1", path = "../edgerun-microphone" }
-edgerun-speaker = { version = "0.1", path = "../edgerun-speaker" }
+edgerun-microphone = { version = "0.1", path = "../device-types/edgerun-microphone" }
+edgerun-speaker = { version = "0.1", path = "../device-types/edgerun-speaker" }
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 
 [[bin]]

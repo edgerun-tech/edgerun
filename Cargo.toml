@@ -20,17 +20,17 @@ members = [
   "crates/edgerun-analytics",
   "crates/edgerun-audio-calibration",
   "crates/edgerun-audio-liveliness",
-  "crates/edgerun-biometrics",
+  "crates/device-types/edgerun-biometrics",
   "crates/edgerun-bench",
-  "crates/edgerun-bluetooth",
+  "crates/device-types/edgerun-bluetooth",
   "crates/edgerun-bluetooth-gatt",
   "crates/edgerun-tcl-ac",
   "crates/edgerun-tcl-ac-cli",
   "crates/edgerun-matter",
-  "crates/edgerun-camera-biometrics",
+  "crates/device-types/edgerun-camera-biometrics",
   "crates/capability/edgerun-capabilities",
   "crates/capability/edgerun-capability-policy",
-  "crates/edgerun-cec",
+  "crates/device-types/edgerun-cec",
   "crates/protocol/edgerun-core",
   "crates/edgerun-codex-boost",
   "crates/utility/edgerun-crypto",
@@ -44,20 +44,20 @@ members = [
   "crates/edgerun-dhcpv6",
   "crates/edgerun-dns",
   "crates/edgerun-drm-display",
-  "crates/edgerun-display",
+  "crates/device-types/edgerun-display",
   "crates/edgerun-edit",
   "crates/authority/edgerun-edgefs",
   "crates/utility/edgerun-encoding",
   "crates/utility/edgerun-error",
   "crates/edgerun-evdev-input",
   "crates/edgerun-face-detection",
-  "crates/edgerun-fingerprint",
+  "crates/device-types/edgerun-fingerprint",
   "crates/edgerun-goodix-fingerprint",
-  "crates/edgerun-gpu",
+  "crates/device-types/edgerun-gpu",
   "crates/identity/edgerun-hardware-signing",
   "crates/edgerun-http",
   "crates/utility/edgerun-hpack",
-  "crates/edgerun-input",
+  "crates/device-types/edgerun-input",
   "crates/utility/edgerun-json",
   "crates/edgerun-linux-cec",
   "crates/edgerun-linux-gpu",
@@ -76,16 +76,16 @@ members = [
   "crates/mesh/edgerun-mesh-link",
   "crates/mesh/edgerun-mesh-session",
   "crates/edgerun-mgmt-bluetooth",
-  "crates/edgerun-microphone",
-  "crates/edgerun-network-interface",
-  "crates/edgerun-nfc",
+  "crates/device-types/edgerun-microphone",
+  "crates/device-types/edgerun-network-interface",
+  "crates/device-types/edgerun-nfc",
   "crates/edgerun-passport-nfc",
   "crates/node/edgerun-node",
-  "crates/edgerun-npu",
+  "crates/device-types/edgerun-npu",
   "crates/edgerun-oauth",
   "crates/edgerun-oci",
-  "crates/edgerun-pci",
-  "crates/edgerun-power",
+  "crates/device-types/edgerun-pci",
+  "crates/device-types/edgerun-power",
   "crates/edgerun-quectel-ec200a",
   "crates/edgerun-proxy",
   "crates/utility/edgerun-qpack",
@@ -95,17 +95,17 @@ members = [
   "crates/node/edgerun-server",
   "crates/edgerun-email",
   "crates/edgerun-email-auth",
-  "crates/edgerun-speaker",
+  "crates/device-types/edgerun-speaker",
   "crates/authority/edgerun-storage",
   "crates/authority/edgerun-stream",
   "crates/edgerun-virtio",
   "crates/edgerun-tls",
   "crates/edgerun-tuya",
   "crates/identity/edgerun-tpm",
-  "crates/edgerun-usb",
+  "crates/device-types/edgerun-usb",
   "crates/edgerun-v4l2-camera",
   "crates/authority/edgerun-virtual-disk",
-  "crates/edgerun-wifi",
+  "crates/device-types/edgerun-wifi",
   "crates/identity/edgerun-yubikey",
   "crates/authority/edgerun-vfs",
   "crates/utility/edgerun-clap",
@@ -168,7 +168,7 @@ edgerun-mesh-link = { version = "0.1", path = "crates/mesh/edgerun-mesh-link" }
 edgerun-mesh-session = { version = "0.1", path = "crates/mesh/edgerun-mesh-session" }
 edgerun-mesh-capability = { version = "0.1", path = "crates/capability/edgerun-mesh-capability" }
 edgerun-secret-service = { version = "0.1", path = "crates/edgerun-secret-service" }
-edgerun-biometrics = { version = "0.1", path = "crates/edgerun-biometrics" }
+edgerun-biometrics = { version = "0.1", path = "crates/device-types/edgerun-biometrics" }
 edgerun-mgmt-bluetooth = { version = "0.1", path = "crates/edgerun-mgmt-bluetooth" }
 edgerun-bluetooth-gatt = { version = "0.1", path = "crates/edgerun-bluetooth-gatt" }
 edgerun-tcl-ac = { version = "0.1", path = "crates/edgerun-tcl-ac" }
@@ -176,7 +176,7 @@ edgerun-tcl-ac-cli = { version = "0.1", path = "crates/edgerun-tcl-ac-cli" }
 edgerun-matter = { version = "0.1", path = "crates/edgerun-matter" }
 edgerun-capability-policy = { version = "0.1", path = "crates/capability/edgerun-capability-policy" }
 edgerun-linux-wifi = { version = "0.1", path = "crates/edgerun-linux-wifi" }
-edgerun-input = { version = "0.1", path = "crates/edgerun-input" }
+edgerun-input = { version = "0.1", path = "crates/device-types/edgerun-input" }
 edgerun-oci = { version = "0.1", path = "crates/edgerun-oci" }
 edgerun-edgefs = { version = "0.1", path = "crates/authority/edgerun-edgefs" }
 edgerun-encoding = { version = "0.1", path = "crates/utility/edgerun-encoding" }
@@ -200,8 +200,8 @@ edgerun-sign-verify-e2e = { version = "0.1", path = "crates/protocol/edgerun-sig
 edgerun-json = { version = "0.1", path = "crates/utility/edgerun-json", default-features = false }
 edgerun-error = { version = "0.1", path = "crates/utility/edgerun-error" }
 edgerun-edit = { version = "0.1", path = "crates/edgerun-edit" }
-edgerun-display = { version = "0.1", path = "crates/edgerun-display" }
-edgerun-gpu = { version = "0.1", path = "crates/edgerun-gpu" }
+edgerun-display = { version = "0.1", path = "crates/device-types/edgerun-display" }
+edgerun-gpu = { version = "0.1", path = "crates/device-types/edgerun-gpu" }
 edgerun-clap = { version = "0.1", path = "crates/utility/edgerun-clap" }
 edgerun-clap-derive = { version = "0.1", path = "crates/utility/edgerun-clap-derive" }
 edgerun-codex-boost = { version = "0.1", path = "crates/edgerun-codex-boost" }

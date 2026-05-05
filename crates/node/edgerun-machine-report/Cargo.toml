@@ -15,10 +15,10 @@ edgerun-linux-netif = { version = "0.1", path = "../../edgerun-linux-netif" }
 edgerun-linux-pci = { version = "0.1", path = "../../edgerun-linux-pci" }
 edgerun-linux-usb = { version = "0.1", path = "../../edgerun-linux-usb" }
 edgerun-linux-wifi = { version = "0.1", path = "../../edgerun-linux-wifi" }
-edgerun-network-interface = { version = "0.1", path = "../../edgerun-network-interface" }
-edgerun-pci = { version = "0.1", path = "../../edgerun-pci" }
-edgerun-usb = { version = "0.1", path = "../../edgerun-usb" }
-edgerun-wifi = { version = "0.1", path = "../../edgerun-wifi" }
+edgerun-network-interface = { version = "0.1", path = "../../device-types/edgerun-network-interface" }
+edgerun-pci = { version = "0.1", path = "../../device-types/edgerun-pci" }
+edgerun-usb = { version = "0.1", path = "../../device-types/edgerun-usb" }
+edgerun-wifi = { version = "0.1", path = "../../device-types/edgerun-wifi" }
 
 [[bin]]
 name = "edgerun-machine-report"

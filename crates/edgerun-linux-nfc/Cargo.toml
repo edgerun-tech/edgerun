@@ -11,7 +11,7 @@ description = "Linux NFC adapter for Edgerun"
 [dependencies]
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-edgerun-nfc = { version = "0.1", path = "../edgerun-nfc" }
+edgerun-nfc = { version = "0.1", path = "../device-types/edgerun-nfc" }
 
 [[bin]]
 name = "linux-nfc-tool"

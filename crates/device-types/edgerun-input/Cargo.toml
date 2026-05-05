@@ -1,15 +1,15 @@
 [package]
-name = "edgerun-bluetooth"
+name = "edgerun-input"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Bluetooth capability abstractions for Edgerun"
+description = "Input device capability abstractions for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
+edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 
 [lints]
 workspace = true

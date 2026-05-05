@@ -9,10 +9,10 @@ homepage.workspace = true
 description = "Audio liveliness checks for Edgerun biometric workflows"
 
 [dependencies]
-edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
+edgerun-biometrics = { version = "0.1", path = "../device-types/edgerun-biometrics" }
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
-edgerun-microphone = { version = "0.1", path = "../edgerun-microphone" }
-edgerun-speaker = { version = "0.1", path = "../edgerun-speaker" }
+edgerun-microphone = { version = "0.1", path = "../device-types/edgerun-microphone" }
+edgerun-speaker = { version = "0.1", path = "../device-types/edgerun-speaker" }
 
 [lints]
 workspace = true

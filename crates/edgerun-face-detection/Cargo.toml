@@ -9,8 +9,8 @@ homepage.workspace = true
 description = "Face detection primitives for Edgerun camera biometrics"
 
 [dependencies]
-edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
-edgerun-camera-biometrics = { version = "0.1", path = "../edgerun-camera-biometrics" }
+edgerun-biometrics = { version = "0.1", path = "../device-types/edgerun-biometrics" }
+edgerun-camera-biometrics = { version = "0.1", path = "../device-types/edgerun-camera-biometrics" }
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 
 [lints.rust]

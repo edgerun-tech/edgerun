@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Goodix fingerprint sensor adapter for Edgerun"
 
 [dependencies]
-edgerun-fingerprint = { version = "0.1", path = "../edgerun-fingerprint" }
+edgerun-fingerprint = { version = "0.1", path = "../device-types/edgerun-fingerprint" }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 
 [dev-dependencies]

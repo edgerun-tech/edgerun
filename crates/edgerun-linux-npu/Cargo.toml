@@ -10,7 +10,7 @@ description = "Linux NPU discovery adapter for Edgerun"
 
 [dependencies]
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-edgerun-npu = { version = "0.1", path = "../edgerun-npu" }
+edgerun-npu = { version = "0.1", path = "../device-types/edgerun-npu" }
 
 [features]
 std = []

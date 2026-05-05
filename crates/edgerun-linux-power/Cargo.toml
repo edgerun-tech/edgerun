@@ -11,7 +11,7 @@ description = "Linux power management adapter for Edgerun"
 [dependencies]
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-edgerun-power = { version = "0.1", path = "../edgerun-power" }
+edgerun-power = { version = "0.1", path = "../device-types/edgerun-power" }
 
 [[bin]]
 name = "linux-power-tool"
