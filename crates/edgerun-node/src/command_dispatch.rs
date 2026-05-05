@@ -98,12 +98,18 @@ pub fn dispatch_command(
         accepted_assurance_claims: &exec_ctx.accepted_assurance_claims,
         has_local_session: exec_ctx.has_local_session,
         has_user_presence: exec_ctx.has_user_presence,
-        transport_class: exec_ctx.transport_class.as_deref().and_then(transport_class),
+        transport_class: exec_ctx
+            .transport_class
+            .as_deref()
+            .and_then(transport_class),
         location_classes: &location_classes,
         target_stream_id: exec_ctx.target_stream_id.as_deref(),
         target_view_type: exec_ctx.target_view_type.as_deref(),
         target_domain: exec_ctx.target_domain.as_deref(),
-        execution_class: exec_ctx.execution_class.as_deref().and_then(execution_class),
+        execution_class: exec_ctx
+            .execution_class
+            .as_deref()
+            .and_then(execution_class),
         storage_class: exec_ctx.storage_class.as_deref().and_then(storage_class),
     };
 
@@ -278,6 +284,49 @@ fn respond(
             reason_code: format!("decision_event_write_failed: {e}"),
             response_bytes: Vec::new(),
         },
+    }
+}
+
+fn command_is_duplicate(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    replay_cache: &HashMap<Vec<u8>, (Vec<u8>, i64)>,
+) -> bool {
+    let computed_hash = command_hash(command);
+    if let Some(target) = command.target_node.as_ref() {
+        let target_hex = edgerun_core::util::bytes_to_hex(&target.node_id);
+        let hash_hex = edgerun_core::util::bytes_to_hex(&computed_hash.value);
+        if matches!(store.get_replay_entry(&target_hex, &hash_hex), Ok(Some(_))) {
+            return true;
+        }
+    }
+    replay_cache.contains_key(&computed_hash.value)
+}
+
+fn transport_class(value: &str) -> Option<i32> {
+    match value {
+        "lan" => Some(1),
+        "mesh" => Some(2),
+        "internet" => Some(3),
+        _ => None,
+    }
+}
+
+fn execution_class(value: &str) -> Option<i32> {
+    match value {
+        "wasm" => Some(1),
+        "native" => Some(2),
+        "container" => Some(3),
+        _ => None,
+    }
+}
+
+fn storage_class(value: &str) -> Option<i32> {
+    match value {
+        "file" => Some(1),
+        "memory" => Some(2),
+        "object" => Some(3),
+        _ => None,
     }
 }
 
