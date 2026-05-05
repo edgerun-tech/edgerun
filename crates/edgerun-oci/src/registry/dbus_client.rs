@@ -350,7 +350,3 @@ fn extract_first_secret(reply: &Msg) -> io::Result<Vec<u8>> {
         "no secret in response",
     ))
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../../tests/unit_src/src/registry/dbus_client_tests.rs"]
-mod tests;

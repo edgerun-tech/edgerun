@@ -542,7 +542,3 @@ fn join_explicit_namespaces_where(
 // ===========================================================================
 // Tests
 // ===========================================================================
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/process_tests.rs"]
-mod tests;

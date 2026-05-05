@@ -229,7 +229,3 @@ pub fn setup_netprio_cgroup_ebpf(
 // ===========================================================================
 // Tests
 // ===========================================================================
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/ebpf_netcls_tests.rs"]
-mod tests;

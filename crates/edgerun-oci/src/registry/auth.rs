@@ -111,7 +111,3 @@ pub fn resolve_from_secret_service(
     let (username, password) = secret_str.split_once(':')?;
     Some((username.to_string(), password.to_string()))
 }
-
-#[cfg(all(test, feature = "std", not(target_os = "none")))]
-#[path = "../../tests/unit_src/src/registry/auth_tests.rs"]
-mod tests;

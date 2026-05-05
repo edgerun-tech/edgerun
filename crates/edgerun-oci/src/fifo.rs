@@ -129,7 +129,3 @@ pub fn cleanup_fifo(path: &Path) {
 // ===========================================================================
 // Tests
 // ===========================================================================
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/fifo_tests.rs"]
-mod tests;

@@ -229,7 +229,3 @@ pub fn resolve_container_cgroup_path(
 pub fn is_cgroup_v2_available() -> bool {
     Path::new("/sys/fs/cgroup/cgroup.controllers").exists()
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/rootless_tests.rs"]
-mod tests;

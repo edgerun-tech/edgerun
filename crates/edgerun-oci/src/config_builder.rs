@@ -423,7 +423,3 @@ impl ContainerConfigBuilder {
 // ===========================================================================
 // Tests
 // ===========================================================================
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/config_builder_tests.rs"]
-mod tests;

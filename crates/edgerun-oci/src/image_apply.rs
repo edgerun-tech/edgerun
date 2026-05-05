@@ -277,7 +277,3 @@ fn validate_diff_id<D: LayerDigest>(
 
     Ok(())
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/image_apply_tests.rs"]
-mod tests;

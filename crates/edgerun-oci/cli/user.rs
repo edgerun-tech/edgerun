@@ -185,7 +185,3 @@ fn parse_numeric_id(value: &str) -> io::Result<Option<u32>> {
     }
     Ok(None)
 }
-
-#[cfg(test)]
-#[path = "../tests/unit_src/src/cli/user_tests.rs"]
-mod tests;

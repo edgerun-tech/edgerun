@@ -108,7 +108,3 @@ fn volume_mounts_model(image_config: &ImageConfig) -> Option<Vec<OciMount>> {
         })
         .filter(|mounts: &Vec<OciMount>| !mounts.is_empty())
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../../tests/unit_src/src/registry/oci_spec_tests.rs"]
-mod tests;

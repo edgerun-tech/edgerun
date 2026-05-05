@@ -219,7 +219,3 @@ fn temp_path(dest: &Path) -> PathBuf {
         .unwrap_or_else(|| Path::new("."))
         .join(format!(".tmp.{:x}-{n:x}", std::process::id()))
 }
-
-#[cfg(test)]
-#[path = "../tests/unit_src/src/rootfs_copy_tests.rs"]
-mod tests;

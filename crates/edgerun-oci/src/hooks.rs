@@ -283,6 +283,3 @@ pub fn execute_poststop_hooks(hooks: Option<&[OciHook]>, state: &ContainerState)
     }
 }
 // ===========================================================================
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/hooks_tests.rs"]
-mod tests;

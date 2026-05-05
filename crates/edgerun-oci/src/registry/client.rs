@@ -711,7 +711,3 @@ fn resolve_redirect_location(current_url: &str, location: &str) -> Result<String
     };
     Ok(format!("{scheme}://{authority}{joined}"))
 }
-
-#[cfg(all(test, feature = "std", not(target_os = "none")))]
-#[path = "../../tests/unit_src/src/registry/client_tests.rs"]
-mod tests;

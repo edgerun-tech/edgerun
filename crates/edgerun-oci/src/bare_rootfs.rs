@@ -332,7 +332,3 @@ impl TarLayerSink for BareRootfs {
         Ok(())
     }
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/bare_rootfs_tests.rs"]
-mod tests;

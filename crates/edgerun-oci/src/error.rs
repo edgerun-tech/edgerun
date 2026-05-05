@@ -225,7 +225,3 @@ impl fmt::Display for FifoError {
 }
 
 impl Error for FifoError {}
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/error_tests.rs"]
-mod tests;

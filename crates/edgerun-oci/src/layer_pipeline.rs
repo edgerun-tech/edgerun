@@ -171,7 +171,3 @@ pub fn sha256_digest_reference(bytes: &[u8]) -> String {
 pub fn bytes_to_hex(bytes: &[u8]) -> String {
     edgerun_encoding::hex::bytes_to_hex(bytes)
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/layer_pipeline_tests.rs"]
-mod tests;

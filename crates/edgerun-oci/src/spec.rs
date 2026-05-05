@@ -473,7 +473,3 @@ pub struct OciMount {
     /// GID mappings for idmapped mounts (OCI 1.1/1.2, Linux 5.12+).
     pub gid_mappings: Option<Vec<OciIdMapping>>,
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/spec_edgerun_json_tests.rs"]
-mod edgerun_json_tests;

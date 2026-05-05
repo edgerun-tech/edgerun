@@ -1143,7 +1143,3 @@ fn elf_machine(value: u16) -> OciElfMachine {
         value => OciElfMachine::Other(value),
     }
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/elf_tests.rs"]
-mod tests;

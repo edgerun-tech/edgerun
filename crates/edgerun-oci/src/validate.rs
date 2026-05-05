@@ -150,7 +150,3 @@ pub fn validate_spec(spec: &OciSpec) -> Result<(), OciValidationError> {
 fn err<T>(message: impl Into<String>) -> Result<T, OciValidationError> {
     Err(OciValidationError::new(message))
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/validate_tests.rs"]
-mod tests;

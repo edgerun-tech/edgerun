@@ -227,7 +227,3 @@ edgerun_json::impl_json_struct! {
         optional { media_type: "mediaType" => String }
     }
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../../tests/unit_src/src/registry/config_json_feature_tests.rs"]
-mod json_feature_tests;

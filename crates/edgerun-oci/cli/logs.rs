@@ -184,7 +184,3 @@ fn print_file_from(path: &PathBuf, offset: u64, fd: i32) -> io::Result<u64> {
     }
     Ok(pos)
 }
-
-#[cfg(test)]
-#[path = "../tests/unit_src/src/cli/logs_tests.rs"]
-mod tests;

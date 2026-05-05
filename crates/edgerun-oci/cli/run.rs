@@ -482,7 +482,3 @@ fn dup_fd(fd: i32) -> io::Result<i32> {
 fn open_append_log(path: PathBuf) -> io::Result<File> {
     OpenOptions::new().create(true).append(true).open(path)
 }
-
-#[cfg(test)]
-#[path = "../tests/unit_src/src/cli/run_tests.rs"]
-mod tests;

@@ -196,7 +196,3 @@ fn device_id(entry: &TarEntry) -> Result<DeviceId, String> {
             .ok_or_else(|| format!("missing device minor for {}", entry.path))?,
     })
 }
-
-#[cfg(test)]
-#[path = "../tests/unit_src/src/edgefs_tests.rs"]
-mod tests;

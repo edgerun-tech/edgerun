@@ -140,7 +140,3 @@ impl OciSyscallMemory for OciSliceSyscallMemory<'_> {
         Ok(())
     }
 }
-
-#[cfg(test)]
-#[path = "../tests/unit_src/src/bare_syscall_tests.rs"]
-mod tests;

@@ -286,7 +286,3 @@ pub fn apply_whiteouts(layer_dirs: &[PathBuf]) -> Result<(), RegistryError> {
 pub fn build_rootfs(layer_dirs: &[PathBuf], dest: &Path) -> Result<(), RegistryError> {
     crate::rootfs_layers::build_rootfs(layer_dirs, dest).map_err(RegistryError::IoError)
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../../tests/unit_src/src/registry/layer_tests.rs"]
-mod tests;

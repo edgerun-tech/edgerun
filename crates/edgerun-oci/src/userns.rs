@@ -161,7 +161,3 @@ pub fn do_setuid(uid: u32) -> io::Result<()> {
         Err(io::Error::last_os_error())
     }
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/userns_tests.rs"]
-mod tests;

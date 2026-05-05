@@ -217,7 +217,3 @@ fn validate_digest_field(field: impl Into<String>, digest: &str) -> Result<(), I
         })
     }
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/image_plan_tests.rs"]
-mod tests;

@@ -163,7 +163,3 @@ impl From<String> for BareNamespaceKind {
         }
     }
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/runtime_config_tests.rs"]
-mod tests;

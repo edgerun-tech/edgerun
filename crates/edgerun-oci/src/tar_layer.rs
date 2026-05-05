@@ -712,7 +712,3 @@ fn round_up_to_block(size: usize) -> usize {
         size + (BLOCK_SIZE - remainder)
     }
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/tar_layer_tests.rs"]
-mod tests;

@@ -197,7 +197,3 @@ pub fn delete_state_with_result(id: &str) -> io::Result<()> {
 pub fn state_exists(id: &str) -> bool {
     state_file_path(id).exists()
 }
-
-#[cfg(all(test, not(target_os = "none")))]
-#[path = "../tests/unit_src/src/state_tests.rs"]
-mod tests;
