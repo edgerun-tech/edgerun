@@ -6,8 +6,13 @@
 //! Literals: `{N}\r\n` followed by N bytes of data.
 
 use crate::prelude::*;
+
+#[cfg(target_os = "none")]
+use edgerun_encoding::io;
+#[cfg(not(target_os = "none"))]
 use std::io;
 
+#[cfg(not(target_os = "none"))]
 use crate::rt::AsyncReadExt;
 
 // ===========================================================================
@@ -41,11 +46,13 @@ pub enum ImapToken {
 
 /// Reads IMAP commands line-by-line from an async reader.
 /// Handles literal blocks by reading the specified number of bytes after `{N}\r\n`.
+#[cfg(not(target_os = "none"))]
 pub struct ImapReader<R> {
     reader: R,
     line_buf: String,
 }
 
+#[cfg(not(target_os = "none"))]
 impl<R: crate::rt::AsyncRead + Unpin> ImapReader<R> {
     pub fn new(reader: R) -> Self {
         Self {

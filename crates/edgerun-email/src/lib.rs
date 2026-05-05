@@ -37,7 +37,6 @@ pub(crate) mod prelude {
 
 #[cfg(not(target_os = "none"))]
 pub mod command_middleware;
-#[cfg(not(target_os = "none"))]
 pub mod imap;
 pub mod lmtp;
 #[cfg(not(target_os = "none"))]
