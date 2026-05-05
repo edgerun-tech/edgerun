@@ -28,7 +28,6 @@ logging_matches="$(
   --glob '!crates/edgerun-bench/**' \
   --glob '!crates/edgerun-clap/**' \
   --glob '!crates/edgerun-e2e/**' \
-  --glob '!crates/edgerun-e2e-capability/**' \
   --glob '!crates/edgerun-marketplace-cli/**' \
   --glob '!crates/edgerun-oci/src/cli/**' \
   --glob '!crates/edgerun-oci/tests/contest/**' \

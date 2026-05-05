@@ -1,6 +1,6 @@
 .PHONY: check test build release docker-build install-ert version
 .PHONY: marketplace-localnet marketplace-localnet-status marketplace-localnet-stop marketplace-stress
-.PHONY: e2e e2e-full e2e-hardware e2e-mesh e2e-conformance e2e-runner
+.PHONY: e2e e2e-full e2e-mesh e2e-conformance e2e-runner
 
 # Run local CI checks (format, clippy, check, release build)
 check:
@@ -60,10 +60,6 @@ e2e:
 # Run full E2E suite including hardware tests (requires HARDWARE_E2E=1)
 e2e-full:
 	HARDWARE_E2E=1 bash scripts/e2e-test-runner.sh --all
-
-# Run hardware capability E2E tests (requires actual devices)
-e2e-hardware:
-	HARDWARE_E2E=1 cargo test -p edgerun-e2e-capability -- --ignored
 
 # Run mesh integration tests (requires root for network namespaces)
 e2e-mesh:
