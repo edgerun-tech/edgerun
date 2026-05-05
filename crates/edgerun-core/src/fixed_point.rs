@@ -118,13 +118,11 @@ impl FixedPoint16 {
     pub fn format(&self) -> [u8; 16] {
         let int_part = self.0 >> 16;
         let frac_part = self.0 & 0xFFFF;
-        // frac_part / 65536 * 10000 = frac_part * 10000 / 65536
         let frac_4digits = ((frac_part as u64) * 10000 / 65536) as u32;
 
         let mut buf = [0u8; 16];
         let mut len;
 
-        // Write integer part
         if int_part == 0 {
             buf[0] = b'0';
             len = 1;
@@ -146,7 +144,6 @@ impl FixedPoint16 {
         buf[len] = b'.';
         len += 1;
 
-        // Write 4 fractional digits
         for shift in [3, 2, 1, 0] {
             let digit = (frac_4digits / 10u32.pow(shift)) % 10;
             buf[len] = digit as u8 + b'0';
@@ -174,19 +171,19 @@ mod tests {
     #[test]
     fn from_ratio_half() {
         let fp = FixedPoint16::from_ratio(1, 2);
-        assert_eq!(fp.to_raw(), 32768); // 0.5 = 0x8000
+        assert_eq!(fp.to_raw(), 32768);
     }
 
     #[test]
     fn from_ratio_one_and_half() {
         let fp = FixedPoint16::from_ratio(3, 2);
-        assert_eq!(fp.to_raw(), 98304); // 1.5 = 0x1_8000
+        assert_eq!(fp.to_raw(), 98304);
     }
 
     #[test]
     fn from_ratio_double() {
         let fp = FixedPoint16::from_ratio(2, 1);
-        assert_eq!(fp.to_raw(), 131072); // 2.0 = 0x2_0000
+        assert_eq!(fp.to_raw(), 131072);
     }
 
     #[test]
@@ -197,36 +194,36 @@ mod tests {
 
     #[test]
     fn to_int_truncates() {
-        let fp = FixedPoint16::from_ratio(7, 2); // 3.5
+        let fp = FixedPoint16::from_ratio(7, 2);
         assert_eq!(fp.to_int(), 3);
     }
 
     #[test]
     fn mul_u64() {
-        let fp = FixedPoint16::from_ratio(3, 2); // 1.5
+        let fp = FixedPoint16::from_ratio(3, 2);
         assert_eq!(fp.mul_u64(1000), 1500);
     }
 
     #[test]
     fn mul_u32() {
-        let fp = FixedPoint16::from_ratio(5, 2); // 2.5
+        let fp = FixedPoint16::from_ratio(5, 2);
         assert_eq!(fp.mul_u32(100), 250);
     }
 
     #[test]
     fn mul_fp() {
-        let a = FixedPoint16::from_ratio(3, 2); // 1.5
-        let b = FixedPoint16::from_ratio(2, 1); // 2.0
+        let a = FixedPoint16::from_ratio(3, 2);
+        let b = FixedPoint16::from_ratio(2, 1);
         let result = a.mul_fp(b);
-        assert_eq!(result.to_raw(), FixedPoint16::from_ratio(3, 1).to_raw()); // 3.0
+        assert_eq!(result.to_raw(), FixedPoint16::from_ratio(3, 1).to_raw());
     }
 
     #[test]
     fn div_fp() {
-        let a = FixedPoint16::from_ratio(3, 1); // 3.0
-        let b = FixedPoint16::from_ratio(2, 1); // 2.0
+        let a = FixedPoint16::from_ratio(3, 1);
+        let b = FixedPoint16::from_ratio(2, 1);
         let result = a.div_fp(b);
-        assert_eq!(result.to_raw(), FixedPoint16::from_ratio(3, 2).to_raw()); // 1.5
+        assert_eq!(result.to_raw(), FixedPoint16::from_ratio(3, 2).to_raw());
     }
 
     #[test]
@@ -240,15 +237,13 @@ mod tests {
     fn sub_saturates() {
         let a = FixedPoint16::from_ratio(1, 4);
         let b = FixedPoint16::from_ratio(3, 4);
-        assert!(a.sub(b).is_zero()); // saturates at 0
+        assert!(a.sub(b).is_zero());
     }
 
     #[test]
     fn mul_compute_core_us() {
-        // Simulate: 4 physical cores running for 1_000_000 µs
-        // With a CPU multiplier of 2.5x (2.5 reference cores per physical core)
-        let physical_core_us: u64 = 4_000_000; // 4 cores * 1_000_000 µs
-        let cpu_multiplier = FixedPoint16::from_ratio(5, 2); // 2.5x
+        let physical_core_us: u64 = 4_000_000;
+        let cpu_multiplier = FixedPoint16::from_ratio(5, 2);
         let billable_rc_us = cpu_multiplier.mul_u64(physical_core_us);
         assert_eq!(billable_rc_us, 10_000_000);
     }
@@ -256,7 +251,7 @@ mod tests {
     #[test]
     fn format_one() {
         let buf = FixedPoint16::ONE.format();
-        let s = std::str::from_utf8(&buf).unwrap().trim_end_matches('\0');
+        let s = core::str::from_utf8(&buf).unwrap().trim_end_matches('\0');
         assert_eq!(s, "1.0000");
     }
 
@@ -264,7 +259,7 @@ mod tests {
     fn format_half() {
         let fp = FixedPoint16::from_ratio(1, 2);
         let buf = fp.format();
-        let s = std::str::from_utf8(&buf).unwrap().trim_end_matches('\0');
+        let s = core::str::from_utf8(&buf).unwrap().trim_end_matches('\0');
         assert_eq!(s, "0.5000");
     }
 
@@ -272,7 +267,7 @@ mod tests {
     fn format_two_and_half() {
         let fp = FixedPoint16::from_ratio(5, 2);
         let buf = fp.format();
-        let s = std::str::from_utf8(&buf).unwrap().trim_end_matches('\0');
+        let s = core::str::from_utf8(&buf).unwrap().trim_end_matches('\0');
         assert_eq!(s, "2.5000");
     }
 
@@ -286,7 +281,6 @@ mod tests {
 
     #[test]
     fn from_ratio_large_performance() {
-        // Modern EPYC might be 10x the reference (e.g., Pi 4)
         let fp = FixedPoint16::from_ratio(10, 1);
         assert_eq!(fp.to_int(), 10);
         assert_eq!(fp.mul_u64(1_000_000), 10_000_000);
