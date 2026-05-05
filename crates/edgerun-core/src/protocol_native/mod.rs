@@ -131,6 +131,27 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::V
                 crate::wire_stream::event_full_wire_bytes(event)
             }
         }
+        ProtocolRecord::DelegationRecord(delegation) => {
+            if signable {
+                crate::wire_trust::delegation_record_signable_bytes(delegation)
+            } else {
+                crate::wire_trust::delegation_record_full_bytes(delegation)
+            }
+        }
+        ProtocolRecord::RevocationRecord(revocation) => {
+            if signable {
+                crate::wire_trust::revocation_record_signable_bytes(revocation)
+            } else {
+                crate::wire_trust::revocation_record_full_bytes(revocation)
+            }
+        }
+        ProtocolRecord::IdentityRecord(identity) => {
+            if signable {
+                crate::wire_trust::identity_record_signable_bytes(identity)
+            } else {
+                crate::wire_trust::identity_record_full_bytes(identity)
+            }
+        }
         ProtocolRecord::CommandResultPayload(payload) => {
             crate::wire_command::command_result_bytes(payload)
         }
@@ -138,14 +159,12 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::V
             edgerun_wire::field(
                 1,
                 edgerun_wire::text(match other {
-                    ProtocolRecord::DelegationRecord(_) => "DelegationRecord",
-                    ProtocolRecord::RevocationRecord(_) => "RevocationRecord",
-                    ProtocolRecord::IdentityRecord(_) => "IdentityRecord",
                     ProtocolRecord::RouteAdvertisement(_) => "RouteAdvertisement",
                     ProtocolRecord::SnapshotDescriptor(_) => "SnapshotDescriptor",
                     ProtocolRecord::ObjectRef(_) => "ObjectRef",
                     ProtocolRecord::Digest(_) => "Digest",
                     ProtocolRecord::Signature(_) => "Signature",
+                    ProtocolRecord::AssuranceClaim(_) => "AssuranceClaim",
                     _ => "ProtocolRecord",
                 })
             ),
