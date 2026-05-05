@@ -29,6 +29,23 @@ macro_rules! eprintln {
     ($($arg:tt)*) => {};
 }
 
+/// Core no_std prelude for edgerun-core internals.
+///
+/// This is intentionally alloc/core only. It is not a fake std shim and does
+/// not expose filesystem, process, environment, wall-clock, or host I/O APIs.
+pub mod prelude {
+    pub mod v1 {
+        pub use alloc::borrow::ToOwned;
+        pub use alloc::boxed::Box;
+        pub use alloc::collections::{BTreeMap, BTreeSet};
+        pub use alloc::format;
+        pub use alloc::string::{String, ToString};
+        pub use alloc::vec;
+        pub use alloc::vec::Vec;
+        pub use core::prelude::rust_2021::*;
+    }
+}
+
 pub mod command;
 #[cfg(feature = "conformance")]
 pub mod conformance;
