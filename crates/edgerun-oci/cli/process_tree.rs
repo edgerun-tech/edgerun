@@ -1,5 +1,6 @@
 //! Host process-tree helpers for lifecycle commands.
 
+use crate::libc;
 use crate::prelude::*;
 use std::io;
 use std::os::raw::c_int;

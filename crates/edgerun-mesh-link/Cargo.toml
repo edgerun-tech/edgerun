@@ -13,7 +13,6 @@ edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-libc.workspace = true
 edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interface" }
 
 [dev-dependencies]

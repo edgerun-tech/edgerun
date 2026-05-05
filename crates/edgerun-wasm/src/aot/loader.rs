@@ -1,11 +1,28 @@
 use anyhow::{bail, Context, Result};
-use libc::{
-    mmap, mprotect, munmap, MAP_ANONYMOUS, MAP_FAILED, MAP_PRIVATE, PROT_EXEC, PROT_READ,
-    PROT_WRITE,
-};
+use core::ffi::c_void;
 use std::ptr;
 
 use super::artifact::{DecodedAotArtifact, DecodedFunction};
+
+const PROT_READ: i32 = 0x1;
+const PROT_WRITE: i32 = 0x2;
+const PROT_EXEC: i32 = 0x4;
+const MAP_PRIVATE: i32 = 0x02;
+const MAP_ANONYMOUS: i32 = 0x20;
+const MAP_FAILED: *mut c_void = !0usize as *mut c_void;
+
+unsafe extern "C" {
+    fn mmap(
+        addr: *mut c_void,
+        len: usize,
+        prot: i32,
+        flags: i32,
+        fd: i32,
+        offset: isize,
+    ) -> *mut c_void;
+    fn mprotect(addr: *mut c_void, len: usize, prot: i32) -> i32;
+    fn munmap(addr: *mut c_void, len: usize) -> i32;
+}
 
 pub struct LoadedFunction {
     ptr: *mut u8,

@@ -4,6 +4,7 @@
 //! setup that must happen in the forked child before the container process
 //! is exec'd.
 
+use crate::libc;
 use crate::prelude::*;
 use std::fs;
 use std::io;

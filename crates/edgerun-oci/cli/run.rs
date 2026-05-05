@@ -5,6 +5,7 @@
 //!   `ert run --rm alpine:latest echo hello`
 //!   `ert run --name mycontainer --images-dir /mnt/img nginx:latest`
 
+use crate::libc;
 use crate::prelude::*;
 use std::fs::{self, File, OpenOptions};
 use std::io;

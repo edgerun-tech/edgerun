@@ -15,6 +15,38 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+#[cfg(not(target_os = "none"))]
+mod libc {
+    #[allow(non_camel_case_types)]
+    pub type c_char = i8;
+    #[allow(non_camel_case_types)]
+    pub type c_ulong = u64;
+    #[allow(non_camel_case_types)]
+    pub type fsblkcnt_t = u64;
+    #[allow(non_camel_case_types)]
+    pub type fsfilcnt_t = u64;
+
+    #[repr(C)]
+    pub struct statvfs {
+        pub f_bsize: c_ulong,
+        pub f_frsize: c_ulong,
+        pub f_blocks: fsblkcnt_t,
+        pub f_bfree: fsblkcnt_t,
+        pub f_bavail: fsblkcnt_t,
+        pub f_files: fsfilcnt_t,
+        pub f_ffree: fsfilcnt_t,
+        pub f_favail: fsfilcnt_t,
+        pub f_fsid: c_ulong,
+        pub f_flag: c_ulong,
+        pub f_namemax: c_ulong,
+        pub __f_spare: [i32; 6],
+    }
+
+    unsafe extern "C" {
+        pub fn statvfs(path: *const c_char, buf: *mut statvfs) -> i32;
+    }
+}
+
 use crate::blobs::{BlobKeySource, BlobStore};
 use crate::block::{BlockStorage, BlockStreamStore};
 use crate::core::{ContentStore, EventLocation, ScannedEvent};

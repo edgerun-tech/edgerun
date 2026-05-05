@@ -87,7 +87,7 @@ impl UdpBroadcastSocket {
         // Set non-blocking so pump() can return quickly on host socket builds.
         #[cfg(target_os = "linux")]
         unsafe {
-            libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);
+            fcntl(fd, F_SETFL, O_NONBLOCK);
         }
 
         Ok(Self {

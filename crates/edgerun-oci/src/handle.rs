@@ -1,5 +1,6 @@
 //! `RunningContainer` handle — await, kill, cgroup kill.
 
+use crate::libc;
 use crate::prelude::*;
 use std::fs;
 use std::io;

@@ -118,35 +118,30 @@ pub mod result {
     pub use core::result::*;
 }
 
-#[cfg(not(unix))]
 pub mod libc {
     #[allow(non_camel_case_types)]
     pub type c_void = core::ffi::c_void;
     #[allow(non_camel_case_types)]
     pub type off_t = i64;
+    #[allow(non_camel_case_types)]
+    pub type c_ulong = u64;
 
     pub const PROT_READ: i32 = 1;
     pub const PROT_WRITE: i32 = 2;
     pub const MAP_SHARED: i32 = 1;
     pub const MAP_FAILED: *mut c_void = usize::MAX as *mut c_void;
 
-    pub unsafe fn ioctl<A>(_fd: i32, _request: u64, _arg: A) -> i32 {
-        -1
-    }
-
-    pub unsafe fn mmap(
-        _addr: *mut c_void,
-        _len: usize,
-        _prot: i32,
-        _flags: i32,
-        _fd: i32,
-        _offset: off_t,
-    ) -> *mut c_void {
-        MAP_FAILED
-    }
-
-    pub unsafe fn munmap(_addr: *mut c_void, _len: usize) -> i32 {
-        0
+    unsafe extern "C" {
+        pub fn ioctl(fd: i32, request: c_ulong, ...) -> i32;
+        pub fn mmap(
+            addr: *mut c_void,
+            len: usize,
+            prot: i32,
+            flags: i32,
+            fd: i32,
+            offset: off_t,
+        ) -> *mut c_void;
+        pub fn munmap(addr: *mut c_void, len: usize) -> i32;
     }
 }
 

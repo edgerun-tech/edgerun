@@ -158,27 +158,17 @@ pub mod result {
     pub use core::result::*;
 }
 
-#[cfg(not(unix))]
 pub mod libc {
     #[allow(non_camel_case_types)]
     pub type c_char = i8;
     #[allow(non_camel_case_types)]
     pub type c_void = core::ffi::c_void;
 
-    pub unsafe fn inotify_init1(_flags: i32) -> i32 {
-        -1
-    }
-
-    pub unsafe fn read(_fd: i32, _buf: *mut c_void, _len: usize) -> isize {
-        -1
-    }
-
-    pub unsafe fn close(_fd: i32) -> i32 {
-        0
-    }
-
-    pub unsafe fn inotify_add_watch(_fd: i32, _path: *const i8, _mask: u32) -> i32 {
-        -1
+    unsafe extern "C" {
+        pub fn inotify_init1(flags: i32) -> i32;
+        pub fn read(fd: i32, buf: *mut c_void, len: usize) -> isize;
+        pub fn close(fd: i32) -> i32;
+        pub fn inotify_add_watch(fd: i32, path: *const i8, mask: u32) -> i32;
     }
 }
 

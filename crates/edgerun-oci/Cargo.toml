@@ -33,12 +33,8 @@ std = [
     "dep:edgerun-rt",
     "dep:edgerun-secret-service",
     "dep:edgerun-core",
-    "dep:libc",
     "zstd",
 ]
-
-[target.'cfg(not(target_os = "none"))'.dependencies]
-libc = { version = "0.2", optional = true }
 
 [[bin]]
 name = "ert"

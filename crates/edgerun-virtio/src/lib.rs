@@ -5,6 +5,9 @@
 
 use core::sync::atomic::{fence, Ordering};
 
+#[cfg(test)]
+extern crate std;
+
 pub const VIRTIO_VENDOR_ID: u16 = 0x1af4;
 pub const VIRTIO_MODERN_DEVICE_ID_NET: u16 = 0x1041;
 pub const VIRTIO_MODERN_DEVICE_ID_BLK: u16 = 0x1042;
@@ -45,6 +48,7 @@ const VIRTIO_PCI_CAP_DEVICE_CFG: u8 = 4;
 const QUEUE_SIZE: usize = 16;
 const RX_QUEUE: u16 = 0;
 const TX_QUEUE: u16 = 1;
+const CONSOLE_RX_QUEUE: u16 = 0;
 const CONSOLE_TX_QUEUE: u16 = 1;
 const NET_HDR_LEN: usize = core::mem::size_of::<VirtioNetHdr>();
 const BUFFER_SIZE: usize = 2048;
@@ -284,7 +288,23 @@ static mut RNG_DATA: RngData = RngData([0; 256]);
 struct ConsoleDescTable([VirtqDesc; QUEUE_SIZE]);
 
 #[repr(align(16))]
+#[derive(Clone, Copy)]
 struct ConsoleData([u8; 256]);
+
+static mut CONSOLE_RX_DESC: ConsoleDescTable = ConsoleDescTable([EMPTY_DESC; QUEUE_SIZE]);
+static mut CONSOLE_RX_AVAIL: VirtqAvail = VirtqAvail {
+    flags: 0,
+    idx: 0,
+    ring: [0; QUEUE_SIZE],
+    used_event: 0,
+};
+static mut CONSOLE_RX_USED: VirtqUsed = VirtqUsed {
+    flags: 0,
+    idx: 0,
+    ring: [EMPTY_USED_ELEM; QUEUE_SIZE],
+    avail_event: 0,
+};
+static mut CONSOLE_RX_DATA: [ConsoleData; QUEUE_SIZE] = [ConsoleData([0; 256]); QUEUE_SIZE];
 
 static mut CONSOLE_DESC: ConsoleDescTable = ConsoleDescTable([EMPTY_DESC; QUEUE_SIZE]);
 static mut CONSOLE_AVAIL: VirtqAvail = VirtqAvail {
@@ -374,31 +394,17 @@ impl VirtNet {
             return false;
         }
 
-        enable_pci_memory_and_bus_master(self.bus, self.slot, self.func);
-        write_common_status(self.common_cfg, 0);
-        write_common_status(self.common_cfg, VIRTIO_CONFIG_STATUS_ACKNOWLEDGE);
-        write_common_status(
+        let Some(features) = negotiate_modern_features(
             self.common_cfg,
-            VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER,
-        );
-
-        self.host_features = read_device_features(self.common_cfg);
-        self.features =
-            self.host_features & (VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS);
-        if self.features & VIRTIO_F_VERSION_1 == 0 {
-            fail_device(self.common_cfg);
+            self.bus,
+            self.slot,
+            self.func,
+            VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS,
+        ) else {
             return false;
-        }
-
-        write_driver_features(self.common_cfg, self.features);
-        write_common_status(
-            self.common_cfg,
-            common_status(self.common_cfg) | VIRTIO_CONFIG_STATUS_FEATURES_OK,
-        );
-        if common_status(self.common_cfg) & VIRTIO_CONFIG_STATUS_FEATURES_OK == 0 {
-            fail_device(self.common_cfg);
-            return false;
-        }
+        };
+        self.host_features = features.host;
+        self.features = features.driver;
 
         if self.features & VIRTIO_NET_F_MAC != 0 {
             for i in 0..6 {
@@ -437,7 +443,7 @@ impl VirtNet {
                 core::ptr::addr_of_mut!(RX_USED) as u64,
             )
         };
-        if !setup_split_queue(
+        if configure_split_queue(
             self.common_cfg,
             RX_QUEUE,
             QUEUE_SIZE as u16,
@@ -445,7 +451,9 @@ impl VirtNet {
             rx_desc,
             rx_avail,
             rx_used,
-        ) {
+        )
+        .is_none()
+        {
             fail_device(self.common_cfg);
             return false;
         }
@@ -457,7 +465,7 @@ impl VirtNet {
                 core::ptr::addr_of_mut!(TX_USED) as u64,
             )
         };
-        if !setup_split_queue(
+        if configure_split_queue(
             self.common_cfg,
             TX_QUEUE,
             QUEUE_SIZE as u16,
@@ -465,7 +473,9 @@ impl VirtNet {
             tx_desc,
             tx_avail,
             tx_used,
-        ) {
+        )
+        .is_none()
+        {
             fail_device(self.common_cfg);
             return false;
         }
@@ -538,7 +548,11 @@ impl VirtNet {
                 },
             );
 
-            post_split_queue_descriptor(core::ptr::addr_of_mut!(TX_AVAIL), desc_id);
+            post_split_queue_descriptor(
+                core::ptr::addr_of_mut!(TX_AVAIL),
+                QUEUE_SIZE as u16,
+                desc_id,
+            );
             self.tx_submitted = self.tx_submitted.wrapping_add(1);
         }
 
@@ -554,7 +568,7 @@ impl VirtNet {
                 return None;
             }
 
-            let elem = split_queue_used_elem(used, self.rx_last_used_idx);
+            let elem = split_queue_used_elem(used, QUEUE_SIZE as u16, self.rx_last_used_idx);
             self.rx_last_used_idx = self.rx_last_used_idx.wrapping_add(1);
 
             let desc_id = elem.id as usize;
@@ -644,14 +658,14 @@ impl VirtNet {
     }
 
     unsafe fn post_rx_descriptor(&self, desc_id: u16) {
-        post_split_queue_descriptor(core::ptr::addr_of_mut!(RX_AVAIL), desc_id);
+        post_split_queue_descriptor(core::ptr::addr_of_mut!(RX_AVAIL), self.queue_size, desc_id);
     }
 
     unsafe fn reap_tx_used(&mut self) {
         let used = core::ptr::addr_of!(TX_USED);
         let used_idx = split_queue_used_idx(used);
         while self.tx_last_used_idx != used_idx {
-            let elem = split_queue_used_elem(used, self.tx_last_used_idx);
+            let elem = split_queue_used_elem(used, QUEUE_SIZE as u16, self.tx_last_used_idx);
             if elem.id < QUEUE_SIZE as u32 {
                 self.tx_free_mask |= 1u16 << elem.id;
             }
@@ -679,6 +693,46 @@ impl Default for VirtNet {
     fn default() -> Self {
         Self::new()
     }
+}
+
+struct NegotiatedFeatures {
+    host: u64,
+    driver: u64,
+}
+
+fn negotiate_modern_features(
+    common_cfg: *mut u8,
+    bus: u8,
+    slot: u8,
+    func: u8,
+    supported_features: u64,
+) -> Option<NegotiatedFeatures> {
+    enable_pci_memory_and_bus_master(bus, slot, func);
+    write_common_status(common_cfg, 0);
+    write_common_status(common_cfg, VIRTIO_CONFIG_STATUS_ACKNOWLEDGE);
+    write_common_status(
+        common_cfg,
+        VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER,
+    );
+
+    let host = read_device_features(common_cfg);
+    let driver = host & supported_features;
+    if driver & VIRTIO_F_VERSION_1 == 0 {
+        fail_device(common_cfg);
+        return None;
+    }
+
+    write_driver_features(common_cfg, driver);
+    write_common_status(
+        common_cfg,
+        common_status(common_cfg) | VIRTIO_CONFIG_STATUS_FEATURES_OK,
+    );
+    if common_status(common_cfg) & VIRTIO_CONFIG_STATUS_FEATURES_OK == 0 {
+        fail_device(common_cfg);
+        return None;
+    }
+
+    Some(NegotiatedFeatures { host, driver })
 }
 
 fn enable_pci_memory_and_bus_master(bus: u8, slot: u8, func: u8) {
@@ -734,18 +788,20 @@ fn read_queue_notify_off(common_cfg: *const u8) -> u16 {
     read_u16(unsafe { common_cfg.add(30) })
 }
 
-fn setup_split_queue(
+fn configure_split_queue(
     common_cfg: *mut u8,
     queue: u16,
-    queue_size: u16,
+    max_queue_size: u16,
     min_queue_size: u16,
     desc: u64,
     driver: u64,
     device: u64,
-) -> bool {
+) -> Option<u16> {
     select_queue(common_cfg, queue);
-    if read_queue_size(common_cfg) < min_queue_size {
-        return false;
+    let host_queue_size = read_queue_size(common_cfg);
+    let queue_size = core::cmp::min(host_queue_size, max_queue_size);
+    if queue_size < min_queue_size {
+        return None;
     }
 
     write_u16(unsafe { common_cfg.add(24) }, queue_size);
@@ -753,7 +809,7 @@ fn setup_split_queue(
     write_u64(unsafe { common_cfg.add(40) }, driver);
     write_u64(unsafe { common_cfg.add(48) }, device);
     write_u16(unsafe { common_cfg.add(28) }, 1);
-    true
+    Some(queue_size)
 }
 
 fn notify_split_queue(notify_cfg: *mut u8, notify_off_multiplier: u32, queue_off: u16, queue: u16) {
@@ -761,10 +817,17 @@ fn notify_split_queue(notify_cfg: *mut u8, notify_off_multiplier: u32, queue_off
     write_u16(unsafe { notify_cfg.add(offset) }, queue);
 }
 
-unsafe fn post_split_queue_descriptor(avail: *mut VirtqAvail, desc_id: u16) {
+unsafe fn post_split_queue_descriptor(avail: *mut VirtqAvail, queue_size: u16, desc_id: u16) {
+    if queue_size == 0 {
+        return;
+    }
+
     let idx = read_volatile_u16(core::ptr::addr_of!((*avail).idx));
     core::ptr::write_volatile(
-        (*avail).ring.as_mut_ptr().add((idx as usize) % QUEUE_SIZE),
+        (*avail)
+            .ring
+            .as_mut_ptr()
+            .add((idx as usize) % queue_size as usize),
         desc_id,
     );
     fence(Ordering::SeqCst);
@@ -775,8 +838,12 @@ unsafe fn split_queue_used_idx(used: *const VirtqUsed) -> u16 {
     read_volatile_u16(core::ptr::addr_of!((*used).idx))
 }
 
-unsafe fn split_queue_used_elem(used: *const VirtqUsed, used_idx: u16) -> VirtqUsedElem {
-    let ring_idx = (used_idx as usize) % QUEUE_SIZE;
+unsafe fn split_queue_used_elem(
+    used: *const VirtqUsed,
+    queue_size: u16,
+    used_idx: u16,
+) -> VirtqUsedElem {
+    let ring_idx = (used_idx as usize) % queue_size as usize;
     read_volatile_used_elem((*used).ring.as_ptr().add(ring_idx))
 }
 
@@ -828,31 +895,17 @@ impl VirtBlk {
             return false;
         }
 
-        enable_pci_memory_and_bus_master(self.bus, self.slot, self.func);
-        write_common_status(self.common_cfg, 0);
-        write_common_status(self.common_cfg, VIRTIO_CONFIG_STATUS_ACKNOWLEDGE);
-        write_common_status(
+        let Some(features) = negotiate_modern_features(
             self.common_cfg,
-            VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER,
-        );
-
-        self.host_features = read_device_features(self.common_cfg);
-        self.features = self.host_features
-            & (VIRTIO_F_VERSION_1 | VIRTIO_BLK_F_RO | VIRTIO_BLK_F_BLK_SIZE | VIRTIO_BLK_F_FLUSH);
-        if self.features & VIRTIO_F_VERSION_1 == 0 {
-            fail_device(self.common_cfg);
+            self.bus,
+            self.slot,
+            self.func,
+            VIRTIO_F_VERSION_1 | VIRTIO_BLK_F_RO | VIRTIO_BLK_F_BLK_SIZE | VIRTIO_BLK_F_FLUSH,
+        ) else {
             return false;
-        }
-
-        write_driver_features(self.common_cfg, self.features);
-        write_common_status(
-            self.common_cfg,
-            common_status(self.common_cfg) | VIRTIO_CONFIG_STATUS_FEATURES_OK,
-        );
-        if common_status(self.common_cfg) & VIRTIO_CONFIG_STATUS_FEATURES_OK == 0 {
-            fail_device(self.common_cfg);
-            return false;
-        }
+        };
+        self.host_features = features.host;
+        self.features = features.driver;
 
         self.sectors = read_u64(self.device_cfg);
         self.read_only = self.features & VIRTIO_BLK_F_RO != 0;
@@ -865,12 +918,7 @@ impl VirtBlk {
         }
 
         select_queue(self.common_cfg, 0);
-        self.queue_size = read_queue_size(self.common_cfg);
         self.queue_notify_off = read_queue_notify_off(self.common_cfg);
-        if self.queue_size < 3 {
-            fail_device(self.common_cfg);
-            return false;
-        }
 
         let (desc, avail, used) = unsafe {
             (
@@ -879,10 +927,13 @@ impl VirtBlk {
                 core::ptr::addr_of_mut!(BLK_USED) as u64,
             )
         };
-        if !setup_split_queue(self.common_cfg, 0, QUEUE_SIZE as u16, 3, desc, avail, used) {
+        let Some(queue_size) =
+            configure_split_queue(self.common_cfg, 0, QUEUE_SIZE as u16, 3, desc, avail, used)
+        else {
             fail_device(self.common_cfg);
             return false;
-        }
+        };
+        self.queue_size = queue_size;
 
         unsafe {
             self.init_queue();
@@ -1014,7 +1065,7 @@ impl VirtBlk {
             },
         );
 
-        post_split_queue_descriptor(core::ptr::addr_of_mut!(BLK_AVAIL), 0);
+        post_split_queue_descriptor(core::ptr::addr_of_mut!(BLK_AVAIL), self.queue_size, 0);
         self.notify_queue();
 
         let mut spins = 0;
@@ -1086,38 +1137,20 @@ impl VirtRng {
             return false;
         }
 
-        enable_pci_memory_and_bus_master(self.bus, self.slot, self.func);
-        write_common_status(self.common_cfg, 0);
-        write_common_status(self.common_cfg, VIRTIO_CONFIG_STATUS_ACKNOWLEDGE);
-        write_common_status(
+        let Some(features) = negotiate_modern_features(
             self.common_cfg,
-            VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER,
-        );
-
-        self.host_features = read_device_features(self.common_cfg);
-        self.features = self.host_features & VIRTIO_F_VERSION_1;
-        if self.features & VIRTIO_F_VERSION_1 == 0 {
-            fail_device(self.common_cfg);
+            self.bus,
+            self.slot,
+            self.func,
+            VIRTIO_F_VERSION_1,
+        ) else {
             return false;
-        }
-
-        write_driver_features(self.common_cfg, self.features);
-        write_common_status(
-            self.common_cfg,
-            common_status(self.common_cfg) | VIRTIO_CONFIG_STATUS_FEATURES_OK,
-        );
-        if common_status(self.common_cfg) & VIRTIO_CONFIG_STATUS_FEATURES_OK == 0 {
-            fail_device(self.common_cfg);
-            return false;
-        }
+        };
+        self.host_features = features.host;
+        self.features = features.driver;
 
         select_queue(self.common_cfg, 0);
-        self.queue_size = read_queue_size(self.common_cfg);
         self.queue_notify_off = read_queue_notify_off(self.common_cfg);
-        if self.queue_size < 1 {
-            fail_device(self.common_cfg);
-            return false;
-        }
 
         let (desc, avail, used) = unsafe {
             (
@@ -1126,10 +1159,13 @@ impl VirtRng {
                 core::ptr::addr_of_mut!(RNG_USED) as u64,
             )
         };
-        if !setup_split_queue(self.common_cfg, 0, QUEUE_SIZE as u16, 1, desc, avail, used) {
+        let Some(queue_size) =
+            configure_split_queue(self.common_cfg, 0, QUEUE_SIZE as u16, 1, desc, avail, used)
+        else {
             fail_device(self.common_cfg);
             return false;
-        }
+        };
+        self.queue_size = queue_size;
 
         unsafe {
             self.init_queue();
@@ -1191,7 +1227,7 @@ impl VirtRng {
             },
         );
 
-        post_split_queue_descriptor(core::ptr::addr_of_mut!(RNG_AVAIL), 0);
+        post_split_queue_descriptor(core::ptr::addr_of_mut!(RNG_AVAIL), self.queue_size, 0);
         self.notify_queue();
 
         let mut spins = 0;
@@ -1203,7 +1239,11 @@ impl VirtRng {
             core::hint::spin_loop();
         }
 
-        let elem = split_queue_used_elem(core::ptr::addr_of!(RNG_USED), self.last_used_idx);
+        let elem = split_queue_used_elem(
+            core::ptr::addr_of!(RNG_USED),
+            self.queue_size,
+            self.last_used_idx,
+        );
         self.last_used_idx = self.last_used_idx.wrapping_add(1);
         if elem.id != 0 {
             return 0;
@@ -1244,6 +1284,9 @@ pub struct VirtConsole {
     notify_cfg: *mut u8,
     isr_cfg: *mut u8,
     notify_off_multiplier: u32,
+    rx_notify_off: u16,
+    rx_queue_size: u16,
+    rx_last_used_idx: u16,
     tx_notify_off: u16,
     tx_queue_size: u16,
     tx_last_used_idx: u16,
@@ -1263,6 +1306,9 @@ impl VirtConsole {
             notify_cfg: core::ptr::null_mut(),
             isr_cfg: core::ptr::null_mut(),
             notify_off_multiplier: 0,
+            rx_notify_off: 0,
+            rx_queue_size: 0,
+            rx_last_used_idx: 0,
             tx_notify_off: 0,
             tx_queue_size: 0,
             tx_last_used_idx: 0,
@@ -1274,38 +1320,44 @@ impl VirtConsole {
             return false;
         }
 
-        enable_pci_memory_and_bus_master(self.bus, self.slot, self.func);
-        write_common_status(self.common_cfg, 0);
-        write_common_status(self.common_cfg, VIRTIO_CONFIG_STATUS_ACKNOWLEDGE);
-        write_common_status(
+        let Some(features) = negotiate_modern_features(
             self.common_cfg,
-            VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER,
-        );
+            self.bus,
+            self.slot,
+            self.func,
+            VIRTIO_F_VERSION_1,
+        ) else {
+            return false;
+        };
+        self.host_features = features.host;
+        self.features = features.driver;
 
-        self.host_features = read_device_features(self.common_cfg);
-        self.features = self.host_features & VIRTIO_F_VERSION_1;
-        if self.features & VIRTIO_F_VERSION_1 == 0 {
+        select_queue(self.common_cfg, CONSOLE_RX_QUEUE);
+        self.rx_notify_off = read_queue_notify_off(self.common_cfg);
+
+        let (rx_desc, rx_avail, rx_used) = unsafe {
+            (
+                core::ptr::addr_of_mut!(CONSOLE_RX_DESC.0) as u64,
+                core::ptr::addr_of_mut!(CONSOLE_RX_AVAIL) as u64,
+                core::ptr::addr_of_mut!(CONSOLE_RX_USED) as u64,
+            )
+        };
+        let Some(rx_queue_size) = configure_split_queue(
+            self.common_cfg,
+            CONSOLE_RX_QUEUE,
+            QUEUE_SIZE as u16,
+            1,
+            rx_desc,
+            rx_avail,
+            rx_used,
+        ) else {
             fail_device(self.common_cfg);
             return false;
-        }
-
-        write_driver_features(self.common_cfg, self.features);
-        write_common_status(
-            self.common_cfg,
-            common_status(self.common_cfg) | VIRTIO_CONFIG_STATUS_FEATURES_OK,
-        );
-        if common_status(self.common_cfg) & VIRTIO_CONFIG_STATUS_FEATURES_OK == 0 {
-            fail_device(self.common_cfg);
-            return false;
-        }
+        };
+        self.rx_queue_size = rx_queue_size;
 
         select_queue(self.common_cfg, CONSOLE_TX_QUEUE);
-        self.tx_queue_size = read_queue_size(self.common_cfg);
         self.tx_notify_off = read_queue_notify_off(self.common_cfg);
-        if self.tx_queue_size < 1 {
-            fail_device(self.common_cfg);
-            return false;
-        }
 
         let (desc, avail, used) = unsafe {
             (
@@ -1314,7 +1366,7 @@ impl VirtConsole {
                 core::ptr::addr_of_mut!(CONSOLE_USED) as u64,
             )
         };
-        if !setup_split_queue(
+        let Some(tx_queue_size) = configure_split_queue(
             self.common_cfg,
             CONSOLE_TX_QUEUE,
             QUEUE_SIZE as u16,
@@ -1322,12 +1374,14 @@ impl VirtConsole {
             desc,
             avail,
             used,
-        ) {
+        ) else {
             fail_device(self.common_cfg);
             return false;
-        }
+        };
+        self.tx_queue_size = tx_queue_size;
 
         unsafe {
+            self.init_rx_queue();
             self.init_tx_queue();
         }
 
@@ -1336,6 +1390,35 @@ impl VirtConsole {
             common_status(self.common_cfg) | VIRTIO_CONFIG_STATUS_DRIVER_OK,
         );
         true
+    }
+
+    pub fn recv(&mut self, buf: &mut [u8]) -> Option<usize> {
+        unsafe {
+            let used = core::ptr::addr_of_mut!(CONSOLE_RX_USED);
+            let used_idx = split_queue_used_idx(used);
+            if used_idx == self.rx_last_used_idx {
+                return None;
+            }
+
+            let elem = split_queue_used_elem(used, self.rx_queue_size, self.rx_last_used_idx);
+            self.rx_last_used_idx = self.rx_last_used_idx.wrapping_add(1);
+
+            let desc_id = elem.id as usize;
+            if desc_id >= self.rx_queue_size as usize {
+                return None;
+            }
+
+            let len = core::cmp::min(elem.len as usize, buf.len());
+            if len != 0 {
+                let src = (core::ptr::addr_of!(CONSOLE_RX_DATA) as *const ConsoleData).add(desc_id)
+                    as *const u8;
+                core::ptr::copy_nonoverlapping(src, buf.as_mut_ptr(), len);
+            }
+
+            self.post_rx_descriptor(desc_id as u16);
+            self.notify_rx_queue();
+            Some(len)
+        }
     }
 
     pub fn write_all(&mut self, bytes: &[u8]) -> bool {
@@ -1370,6 +1453,31 @@ impl VirtConsole {
         core::ptr::write_bytes(core::ptr::addr_of_mut!(CONSOLE_DATA.0) as *mut u8, 0, 256);
     }
 
+    unsafe fn init_rx_queue(&mut self) {
+        self.rx_last_used_idx = 0;
+        write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_RX_AVAIL.idx), 0);
+        write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_RX_USED.idx), 0);
+        core::ptr::write_bytes(
+            core::ptr::addr_of_mut!(CONSOLE_RX_DATA) as *mut u8,
+            0,
+            QUEUE_SIZE * 256,
+        );
+
+        for i in 0..self.rx_queue_size as usize {
+            let buffer = (core::ptr::addr_of_mut!(CONSOLE_RX_DATA) as *mut ConsoleData).add(i);
+            core::ptr::write(
+                (core::ptr::addr_of_mut!(CONSOLE_RX_DESC.0) as *mut VirtqDesc).add(i),
+                VirtqDesc {
+                    addr: buffer as u64,
+                    len: 256,
+                    flags: VIRTQ_DESC_F_WRITE,
+                    next: 0,
+                },
+            );
+            self.post_rx_descriptor(i as u16);
+        }
+    }
+
     unsafe fn write_chunk(&mut self, bytes: &[u8]) -> usize {
         let len = core::cmp::min(bytes.len(), 256);
         if len == 0 {
@@ -1393,7 +1501,11 @@ impl VirtConsole {
             },
         );
 
-        post_split_queue_descriptor(core::ptr::addr_of_mut!(CONSOLE_AVAIL), 0);
+        post_split_queue_descriptor(
+            core::ptr::addr_of_mut!(CONSOLE_AVAIL),
+            self.tx_queue_size,
+            0,
+        );
         self.notify_tx_queue();
 
         let mut spins = 0;
@@ -1405,7 +1517,11 @@ impl VirtConsole {
             core::hint::spin_loop();
         }
 
-        let elem = split_queue_used_elem(core::ptr::addr_of!(CONSOLE_USED), self.tx_last_used_idx);
+        let elem = split_queue_used_elem(
+            core::ptr::addr_of!(CONSOLE_USED),
+            self.tx_queue_size,
+            self.tx_last_used_idx,
+        );
         self.tx_last_used_idx = self.tx_last_used_idx.wrapping_add(1);
         if elem.id == 0 {
             len
@@ -1420,6 +1536,23 @@ impl VirtConsole {
             self.notify_off_multiplier,
             self.tx_notify_off,
             CONSOLE_TX_QUEUE,
+        );
+    }
+
+    unsafe fn post_rx_descriptor(&self, desc_id: u16) {
+        post_split_queue_descriptor(
+            core::ptr::addr_of_mut!(CONSOLE_RX_AVAIL),
+            self.rx_queue_size,
+            desc_id,
+        );
+    }
+
+    fn notify_rx_queue(&self) {
+        notify_split_queue(
+            self.notify_cfg,
+            self.notify_off_multiplier,
+            self.rx_notify_off,
+            CONSOLE_RX_QUEUE,
         );
     }
 }
@@ -1721,3 +1854,99 @@ fn port_outl(port: u16, value: u32) {
 #[inline]
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
 fn port_outl(_port: u16, _value: u32) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[repr(C, align(8))]
+    struct TestCommonConfig([u8; 64]);
+
+    #[test]
+    fn virtio_net_header_matches_modern_layout() {
+        assert_eq!(core::mem::size_of::<VirtioNetHdr>(), 12);
+        assert_eq!(NET_HDR_LEN, 12);
+    }
+
+    #[test]
+    fn split_virtqueue_layout_matches_spec_basics() {
+        assert_eq!(core::mem::size_of::<VirtqDesc>(), 16);
+        assert_eq!(core::mem::align_of::<VirtqDesc>(), 8);
+        assert_eq!(core::mem::align_of::<VirtqAvail>(), 2);
+        assert_eq!(core::mem::align_of::<VirtqUsed>(), 4);
+    }
+
+    #[test]
+    fn pci_address_masks_register_offset() {
+        assert_eq!(pci_address(1, 2, 3, 0x10), 0x8001_1310);
+        assert_eq!(pci_address(1, 2, 3, 0x13), 0x8001_1310);
+    }
+
+    #[test]
+    fn split_queue_setup_clamps_to_host_queue_size() {
+        let mut common = TestCommonConfig([0; 64]);
+        let common_cfg = common.0.as_mut_ptr();
+
+        write_u16(unsafe { common_cfg.add(24) }, 4);
+        let configured =
+            configure_split_queue(common_cfg, 2, QUEUE_SIZE as u16, 3, 0x1000, 0x2000, 0x3000);
+
+        assert_eq!(configured, Some(4));
+        assert_eq!(read_u16(unsafe { common_cfg.add(22) }), 2);
+        assert_eq!(read_u16(unsafe { common_cfg.add(24) }), 4);
+        assert_eq!(read_u16(unsafe { common_cfg.add(28) }), 1);
+        assert_eq!(read_u64(unsafe { common_cfg.add(32) }), 0x1000);
+        assert_eq!(read_u64(unsafe { common_cfg.add(40) }), 0x2000);
+        assert_eq!(read_u64(unsafe { common_cfg.add(48) }), 0x3000);
+    }
+
+    #[test]
+    fn split_queue_setup_rejects_too_small_host_queue() {
+        let mut common = TestCommonConfig([0; 64]);
+        let common_cfg = common.0.as_mut_ptr();
+
+        write_u16(unsafe { common_cfg.add(24) }, 2);
+
+        assert_eq!(
+            configure_split_queue(common_cfg, 2, QUEUE_SIZE as u16, 3, 0x1000, 0x2000, 0x3000),
+            None
+        );
+        assert_eq!(read_u16(unsafe { common_cfg.add(28) }), 0);
+    }
+
+    #[test]
+    fn virtnet_defaults_are_uninitialized_and_link_down() {
+        let mut net = VirtNet::new();
+
+        assert_eq!(net.get_mac(), [0; 6]);
+        assert_eq!(net.mtu(), 1500);
+        assert!(!net.is_link_up());
+        assert_eq!(net.tx_free_mask, TX_FREE_ALL_MASK);
+        assert!(!net.send(&[]));
+    }
+
+    #[test]
+    fn virtblk_defaults_reject_io_until_initialized() {
+        let mut blk = VirtBlk::new();
+        let sector = [0u8; SECTOR_SIZE];
+        let mut out = [0u8; SECTOR_SIZE];
+
+        assert!(!blk.is_read_only());
+        assert_eq!(blk.block_size(), SECTOR_SIZE as u32);
+        assert_eq!(blk.sectors(), 0);
+        assert!(!blk.read_sector(0, &mut out));
+        assert!(!blk.write_sector(0, &sector));
+    }
+
+    #[test]
+    fn empty_rng_and_console_requests_are_noops() {
+        let mut rng = VirtRng::new();
+        let mut console = VirtConsole::new();
+        let mut empty = [];
+        let mut input = [0u8; 8];
+
+        assert!(rng.fill_bytes(&mut empty));
+        assert_eq!(console.recv(&mut input), None);
+        assert!(console.write_all(&[]));
+    }
+}

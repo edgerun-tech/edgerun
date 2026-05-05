@@ -1,5 +1,6 @@
 //! Features command implementation — outputs supported features as OCI features JSON.
 
+use crate::libc;
 use crate::prelude::*;
 use std::io;
 

@@ -1,3 +1,4 @@
+use crate::libc;
 use crate::prelude::*;
 use std::ffi::CString;
 use std::fs;

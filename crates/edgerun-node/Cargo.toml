@@ -86,7 +86,6 @@ edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signin
 edgerun-json = { version = "0.1", path = "../edgerun-json" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-libc.workspace = true
 edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
 edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interface" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"] }

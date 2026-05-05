@@ -134,54 +134,37 @@ pub mod vec {
     pub use alloc::vec::*;
 }
 
-#[cfg(not(unix))]
 pub mod libc {
+    use core::ffi::c_void;
+
     pub const AF_NETLINK: i32 = 16;
     pub const SOCK_RAW: i32 = 3;
     pub const NLMSG_ERROR: i32 = 2;
     pub const NLMSG_DONE: i32 = 3;
     pub const NLM_F_MULTI: i32 = 2;
 
-    pub unsafe fn socket(_domain: i32, _ty: i32, _protocol: i32) -> i32 {
-        -1
-    }
-
-    pub unsafe fn getpid() -> i32 {
-        0
-    }
-
-    pub unsafe fn bind<T>(_fd: i32, _addr: *const T, _len: u32) -> i32 {
-        -1
-    }
-
-    pub unsafe fn close(_fd: i32) -> i32 {
-        0
-    }
-
-    pub unsafe fn sendto<T, U>(
-        _fd: i32,
-        _buf: *const T,
-        _len: usize,
-        _flags: i32,
-        _addr: *const U,
-        _addrlen: u32,
-    ) -> isize {
-        -1
-    }
-
-    pub unsafe fn recvfrom<T, U>(
-        _fd: i32,
-        _buf: *mut T,
-        _len: usize,
-        _flags: i32,
-        _addr: *mut U,
-        _addrlen: *mut u32,
-    ) -> isize {
-        -1
-    }
-
-    pub unsafe fn if_nametoindex(_name: *const i8) -> u32 {
-        0
+    unsafe extern "C" {
+        pub fn socket(domain: i32, ty: i32, protocol: i32) -> i32;
+        pub fn getpid() -> i32;
+        pub fn bind(fd: i32, addr: *const c_void, len: u32) -> i32;
+        pub fn close(fd: i32) -> i32;
+        pub fn sendto(
+            fd: i32,
+            buf: *const c_void,
+            len: usize,
+            flags: i32,
+            addr: *const c_void,
+            addrlen: u32,
+        ) -> isize;
+        pub fn recvfrom(
+            fd: i32,
+            buf: *mut c_void,
+            len: usize,
+            flags: i32,
+            addr: *mut c_void,
+            addrlen: *mut u32,
+        ) -> isize;
+        pub fn if_nametoindex(name: *const i8) -> u32;
     }
 }
 

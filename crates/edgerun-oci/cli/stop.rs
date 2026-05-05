@@ -1,5 +1,6 @@
 //! Stop command implementation.
 
+use crate::libc;
 use crate::prelude::*;
 use std::io;
 use std::thread;

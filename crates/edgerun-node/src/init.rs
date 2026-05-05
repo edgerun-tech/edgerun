@@ -8,6 +8,35 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+mod libc {
+    #[allow(non_camel_case_types)]
+    pub type c_int = i32;
+    #[allow(non_camel_case_types)]
+    pub type sighandler_t = usize;
+
+    pub const SIGTERM: c_int = 15;
+    pub const SIGINT: c_int = 2;
+    pub const SIGHUP: c_int = 1;
+    pub const SIGCHLD: c_int = 17;
+    pub const WNOHANG: c_int = 1;
+    pub const STDERR_FILENO: c_int = 2;
+
+    unsafe extern "C" {
+        pub fn signal(signum: c_int, handler: sighandler_t) -> sighandler_t;
+        pub fn write(fd: c_int, buf: *const core::ffi::c_void, count: usize) -> isize;
+        pub fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
+        pub fn getpid() -> c_int;
+        pub fn mount(
+            source: *const i8,
+            target: *const i8,
+            fstype: *const i8,
+            flags: usize,
+            data: *const core::ffi::c_void,
+        ) -> c_int;
+        pub fn sethostname(name: *const i8, len: usize) -> c_int;
+    }
+}
+
 /// Global flag set when shutdown is requested.
 /// Used only by the raw signal handler in init mode — the async signal
 /// path in daemon.rs uses CancellationToken directly.

@@ -20,7 +20,6 @@ edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
-libc.workspace = true
 edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
 edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interface" }
 

@@ -74,6 +74,8 @@ pub mod accountability;
 pub mod bare_rootfs;
 pub mod bare_syscall;
 #[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod libc;
+#[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod bundle;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod cgroups;

@@ -182,7 +182,11 @@ fn is_git_path(path: &Path) -> bool {
 fn main() {
     let cli = Cli::from_args();
 
-    if unsafe { libc::getuid() } != 0 {
+    unsafe extern "C" {
+        fn getuid() -> u32;
+    }
+
+    if unsafe { getuid() } != 0 {
         eprintln!("Error: Must run as root (sudo)");
         std::process::exit(1);
     }

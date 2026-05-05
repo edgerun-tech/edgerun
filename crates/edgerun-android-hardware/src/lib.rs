@@ -29,6 +29,16 @@ pub mod ffi {
     pub use core::ffi::*;
 }
 
+#[cfg(all(feature = "android-real", target_os = "android"))]
+pub mod libc {
+    pub const RTLD_LAZY: i32 = 1;
+
+    unsafe extern "C" {
+        pub fn dlopen(filename: *const i8, flags: i32) -> *mut core::ffi::c_void;
+        pub fn dlsym(handle: *mut core::ffi::c_void, symbol: *const i8) -> *mut core::ffi::c_void;
+    }
+}
+
 mod audio;
 mod biometric;
 mod camera;

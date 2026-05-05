@@ -1,5 +1,6 @@
 //! Logs command implementation.
 
+use crate::libc;
 use crate::prelude::*;
 use std::fs::File;
 use std::io::{self, Read, Write};

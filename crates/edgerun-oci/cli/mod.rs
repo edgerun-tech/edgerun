@@ -1,5 +1,6 @@
 //! CLI argument parsing and command dispatch for ert.
 
+use crate::libc;
 use crate::prelude::*;
 use std::io;
 use std::path::PathBuf;

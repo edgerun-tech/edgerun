@@ -35,7 +35,7 @@ fn create_device(path: &str, major: u64, minor: u64, mode: u32) {
         Ok(path) => path,
         Err(_) => return,
     };
-    let _ = unsafe { mknod(path_c.as_ptr(), S_IFCHR | mode, dev) };
+    let _ = unsafe { mknod(path_c.as_ptr(), S_IFCHR | mode, dev.into()) };
 }
 
 fn create_spec_device(device: &OciLinuxDevice) -> io::Result<()> {
@@ -60,7 +60,7 @@ fn create_spec_device(device: &OciLinuxDevice) -> io::Result<()> {
     };
 
     let dev = makedev(major, minor);
-    libc_unit(unsafe { mknod(path_c.as_ptr(), dev_type | mode, dev) })?;
+    libc_unit(unsafe { mknod(path_c.as_ptr(), dev_type | mode, dev.into()) })?;
 
     if device.uid.is_some() || device.gid.is_some() {
         let uid = device.uid.unwrap_or(u32::MAX);

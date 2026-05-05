@@ -25,7 +25,6 @@ edgerun-core = { version = "0.1", path = "../edgerun-core" }
 anyhow = "1.0"
 edgerun-clap = { workspace = true, features = ["std"] }
 edgerun-capabilities = { workspace = true }
-libc = { workspace = true }
 sha2 = { workspace = true }
 
 [lints]

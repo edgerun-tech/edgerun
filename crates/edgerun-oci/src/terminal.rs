@@ -1,5 +1,6 @@
 //! Terminal and Unix fd-passing helpers shared by run/exec setup.
 
+use crate::libc;
 use std::io;
 use std::os::raw::{c_char, c_int};
 

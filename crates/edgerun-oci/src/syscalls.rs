@@ -2,6 +2,7 @@
 //!
 //! No libc crate — just direct `extern "C"` declarations and `std::os::raw`.
 
+use crate::libc;
 use crate::prelude::*;
 use std::ffi::CString;
 use std::io;
@@ -25,7 +26,7 @@ extern "C" {
     ) -> c_int;
     pub fn pivot_root(new_root: *const c_char, put_old: *const c_char) -> c_int;
     pub fn umount2(target: *const c_char, flags: c_int) -> c_int;
-    pub fn mknod(path: *const c_char, mode: c_uint, dev: c_uint) -> c_int;
+    pub fn mknod(path: *const c_char, mode: c_uint, dev: u64) -> c_int;
     pub fn chown(path: *const c_char, owner: u32, group: u32) -> c_int;
     pub fn setuid(uid: u32) -> c_int;
     pub fn setgid(gid: u32) -> c_int;

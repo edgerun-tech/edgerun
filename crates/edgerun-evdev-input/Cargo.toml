@@ -14,9 +14,6 @@ edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 edgerun-input = { version = "0.1", path = "../edgerun-input" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 
-[target.'cfg(unix)'.dependencies]
-libc.workspace = true
-
 [features]
 std = []
 

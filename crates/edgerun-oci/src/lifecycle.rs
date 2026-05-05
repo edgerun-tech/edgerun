@@ -15,6 +15,7 @@
 //!
 //! Hook failure semantics: error → stop container (except poststop: warn + continue)
 
+use crate::libc;
 use crate::prelude::*;
 use std::ffi::CString;
 use std::fs;

@@ -4,6 +4,7 @@
 //! relying on external tools. Supports --cwd, --env, --user, --terminal,
 //! and --process (JSON process config) flags.
 
+use crate::libc;
 use crate::prelude::*;
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};

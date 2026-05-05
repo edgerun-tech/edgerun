@@ -13,8 +13,5 @@ edgerun-core = { version = "0.1", path = "../edgerun-core" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 
-[target.'cfg(unix)'.dependencies]
-libc.workspace = true
-
 [lints]
 workspace = true

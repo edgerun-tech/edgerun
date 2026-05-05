@@ -2,6 +2,7 @@
 //!
 //! Uses the library lifecycle to run hooks with full OCI spec compliance.
 
+use crate::libc;
 use crate::cli::process_tree::{signal_tree, wait_tree_dead};
 use crate::cli::{parse_cli_args, required_positional, split_cli_prefix, GlobalOpts};
 use crate::prelude::*;

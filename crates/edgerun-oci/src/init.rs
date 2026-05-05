@@ -10,6 +10,7 @@
 //! 3. Reaps ALL zombie children via `waitpid(-1)` (not just the workload)
 //! 4. Exits with the workload's exit code
 
+use crate::libc;
 use crate::prelude::*;
 use std::io;
 

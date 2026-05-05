@@ -220,7 +220,6 @@ pub mod vec {
     pub use alloc::vec::*;
 }
 
-#[cfg(not(unix))]
 pub mod libc {
     pub const F_GETFL: i32 = 3;
     pub const F_SETFL: i32 = 4;
@@ -233,16 +232,10 @@ pub mod libc {
         pub revents: i16,
     }
 
-    pub unsafe fn ioctl<T>(_fd: i32, _request: usize, _arg: T) -> i32 {
-        -1
-    }
-
-    pub unsafe fn fcntl(_fd: i32, _cmd: i32, _arg: i32) -> i32 {
-        -1
-    }
-
-    pub unsafe fn poll(_fds: *mut pollfd, _nfds: usize, _timeout: i32) -> i32 {
-        0
+    unsafe extern "C" {
+        pub fn ioctl(fd: i32, request: usize, ...) -> i32;
+        pub fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;
+        pub fn poll(fds: *mut pollfd, nfds: usize, timeout: i32) -> i32;
     }
 }
 

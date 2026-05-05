@@ -5,6 +5,16 @@
 /// exceed available capacity.
 use std::sync::RwLock;
 
+mod libc {
+    pub const _SC_PAGESIZE: i32 = 30;
+    pub const _SC_NPROCESSORS_ONLN: i32 = 84;
+    pub const _SC_PHYS_PAGES: i32 = 85;
+
+    unsafe extern "C" {
+        pub fn sysconf(name: i32) -> isize;
+    }
+}
+
 /// Hardware capacity discovered at node boot.
 pub struct NodeCapacity {
     /// Total physical CPU cores

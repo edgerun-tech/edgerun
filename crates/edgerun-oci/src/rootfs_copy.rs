@@ -1,5 +1,6 @@
 //! Filesystem tree copy helpers for rootfs materialization and layer merging.
 
+use crate::libc;
 use crate::prelude::*;
 use std::fs;
 use std::io;

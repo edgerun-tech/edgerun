@@ -330,7 +330,6 @@ dependencies = [
  "edgerun-linux-sysfs",
  "edgerun-log",
  "edgerun-npu",
- "libc",
 ]
 
 [[package]]
@@ -349,7 +348,6 @@ dependencies = [
  "edgerun-biometrics",
  "edgerun-capabilities",
  "edgerun-input",
- "libc",
  "once_cell",
 ]
 
@@ -415,7 +413,6 @@ dependencies = [
  "edgerun-capabilities",
  "edgerun-encoding",
  "edgerun-linux-sysfs",
- "libc",
 ]
 
 [[package]]
@@ -652,7 +649,6 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-input",
  "edgerun-linux-sysfs",
- "libc",
 ]
 
 [[package]]
@@ -776,7 +772,6 @@ name = "edgerun-inotify"
 version = "0.1.1"
 dependencies = [
  "edgerun-linux-sysfs",
- "libc",
 ]
 
 [[package]]
@@ -886,7 +881,6 @@ dependencies = [
  "edgerun-log",
  "edgerun-network-interface",
  "edgerun-wifi",
- "libc",
 ]
 
 [[package]]
@@ -955,7 +949,6 @@ dependencies = [
  "edgerun-mesh-session",
  "edgerun-network-interface",
  "edgerun-remote-capability",
- "libc",
 ]
 
 [[package]]
@@ -967,7 +960,6 @@ dependencies = [
  "edgerun-hardware-signing",
  "edgerun-mesh",
  "edgerun-network-interface",
- "libc",
 ]
 
 [[package]]
@@ -1075,7 +1067,6 @@ dependencies = [
  "edgerun-wifi",
  "edgerun-wire",
  "edgerun-yubikey",
- "libc",
 ]
 
 [[package]]
@@ -1112,7 +1103,6 @@ dependencies = [
  "edgerun-rt",
  "edgerun-secret-service",
  "edgerun-storage",
- "libc",
  "miniz_oxide",
  "ruzstd",
 ]
@@ -1294,7 +1284,6 @@ dependencies = [
  "edgerun-log",
  "edgerun-rt",
  "edgerun-stream",
- "libc",
 ]
 
 [[package]]
@@ -1433,7 +1422,6 @@ dependencies = [
  "edgerun-log",
  "edgerun-regex",
  "edgerun-rt",
- "libc",
 ]
 
 [[package]]
@@ -1484,7 +1472,6 @@ dependencies = [
  "edgerun-core",
  "edgerun-encoding",
  "edgerun-linux-sysfs",
- "libc",
 ]
 
 [[package]]

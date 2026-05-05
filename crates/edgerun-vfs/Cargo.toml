@@ -19,7 +19,6 @@ edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
-libc = { version = "0.2", optional = true }
 edgerun-inotify = { version = "0.1", path = "../edgerun-inotify", optional = true }
 
 [[bin]]
@@ -37,4 +36,4 @@ workspace = true
 
 [features]
 std = []
-mount = ["std", "dep:libc", "dep:edgerun-inotify"]
+mount = ["std", "dep:edgerun-inotify"]

@@ -17,9 +17,6 @@ edgerun-crypto = { workspace = true, default-features = false, features = ["aead
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
-[target.'cfg(not(target_os = "none"))'.dependencies]
-libc.workspace = true
-
 [features]
 bare-rt = []
 

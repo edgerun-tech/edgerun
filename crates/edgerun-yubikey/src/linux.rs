@@ -111,12 +111,11 @@ pub mod path {
     pub use edgerun_linux_sysfs::path::*;
 }
 
-#[cfg(not(unix))]
 pub mod libc {
     pub const O_NONBLOCK: i32 = 0x800;
 
-    pub unsafe fn ioctl<A>(_fd: i32, _request: u32, _arg: A) -> i32 {
-        -1
+    unsafe extern "C" {
+        pub fn ioctl(fd: i32, request: u64, arg: *mut core::ffi::c_void) -> i32;
     }
 }
 
@@ -464,7 +463,7 @@ impl LinuxUsbYubiKey {
 
         // Reset the device to ensure clean state
         unsafe {
-            let rc = libc::ioctl(raw_fd, USBDEVFS_RESET as _, 0);
+            let rc = libc::ioctl(raw_fd, USBDEVFS_RESET as _, core::ptr::null_mut());
             if rc < 0 {
                 // Reset may fail if device is busy; continue anyway
             }
@@ -472,7 +471,13 @@ impl LinuxUsbYubiKey {
 
         // Claim the CCID interface (usually interface 0 or 1)
         let interface = info.interface;
-        let rc = unsafe { libc::ioctl(raw_fd, USBDEVFS_CLAIMINTERFACE as _, &interface) };
+        let rc = unsafe {
+            libc::ioctl(
+                raw_fd,
+                USBDEVFS_CLAIMINTERFACE as _,
+                (&interface as *const u8).cast_mut().cast(),
+            )
+        };
         if rc < 0 {
             return Err(YubiKeyError::Provider(format!(
                 "failed to claim interface {interface}: {}",
@@ -520,7 +525,13 @@ impl LinuxUsbYubiKey {
             data: desc.as_mut_ptr(),
             timeout: 1000,
         };
-        let rc = unsafe { libc::ioctl(fd.as_raw_fd(), USBDEVFS_CONTROL as _, &mut ctrl) };
+        let rc = unsafe {
+            libc::ioctl(
+                fd.as_raw_fd(),
+                USBDEVFS_CONTROL as _,
+                (&mut ctrl as *mut UsbDevFsCtrl).cast(),
+            )
+        };
         if rc < 0 {
             return Err(YubiKeyError::Provider("control transfer failed".into()));
         }
@@ -559,7 +570,7 @@ impl LinuxUsbYubiKey {
             libc::ioctl(
                 self.fd.as_raw_fd(),
                 USBDEVFS_RELEASEINTERFACE as _,
-                &self.interface,
+                (&self.interface as *const u8).cast_mut().cast(),
             )
         };
         if rc < 0 {

@@ -4,6 +4,7 @@
 //! When running as root: `/run/edgerun-oci/<id>/`
 //! When running rootless: `$XDG_RUNTIME_DIR/edgerun-oci/<id>/` or `$HOME/.local/state/edgerun-oci/<id>/`
 
+use crate::libc;
 use crate::prelude::*;
 use crate::util::StringResultExt;
 use std::fs;

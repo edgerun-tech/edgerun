@@ -7,9 +7,26 @@ use std::mem::size_of;
 use std::os::fd::{AsRawFd, RawFd};
 use std::time::Duration;
 
-#[cfg(not(unix))]
 mod libc {
     pub const EINPROGRESS: i32 = 115;
+    pub const F_GETFL: i32 = 3;
+    pub const F_SETFL: i32 = 4;
+    pub const O_NONBLOCK: i32 = 0x800;
+    pub const SOL_SOCKET: i32 = 1;
+    pub const SO_ERROR: i32 = 4;
+    #[allow(non_camel_case_types)]
+    pub type socklen_t = u32;
+
+    unsafe extern "C" {
+        pub fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;
+        pub fn getsockopt(
+            fd: i32,
+            level: i32,
+            optname: i32,
+            optval: *mut core::ffi::c_void,
+            optlen: *mut socklen_t,
+        ) -> i32;
+    }
 }
 
 pub struct L2capSocket {

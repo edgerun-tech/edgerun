@@ -1,5 +1,6 @@
 //! OCI idmapped mount setup.
 
+use crate::libc;
 use crate::prelude::*;
 use std::ffi::CString;
 use std::io;

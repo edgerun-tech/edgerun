@@ -1,5 +1,6 @@
 //! Shared child-process environment and exec helpers.
 
+use crate::libc;
 use crate::prelude::*;
 use core::fmt;
 use std::ffi::CString;

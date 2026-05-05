@@ -5,6 +5,7 @@
 //! which forwards to the child workload. Other signals go directly to PID.
 //! No-op for stopped containers (OCI kill_no_effect behavior).
 
+use crate::libc;
 use crate::prelude::*;
 use std::io;
 use std::os::raw::c_int;

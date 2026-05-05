@@ -206,12 +206,15 @@ unsafe extern "C" {
         optval: *const c_void,
         optlen: u32,
     ) -> c_int;
+    fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int;
     fn close(fd: c_int) -> c_int;
 }
 
 const AF_PACKET: c_int = 17;
 const SOCK_RAW: c_int = 3;
 const SOL_SOCKET: c_int = 1;
+const F_SETFL: c_int = 4;
+const O_NONBLOCK: c_int = 0x800;
 
 #[repr(C)]
 struct SockaddrLl {

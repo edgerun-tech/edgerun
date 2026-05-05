@@ -1,5 +1,6 @@
 //! Ps command implementation — lists processes in the container.
 
+use crate::libc;
 use crate::prelude::*;
 use std::fs;
 use std::io;

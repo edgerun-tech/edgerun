@@ -5,6 +5,7 @@
 //! - Device creation from spec's `linux.devices`
 //! - Overlay whiteout char device handling (0:0 device check)
 
+use crate::libc;
 use crate::prelude::*;
 pub use crate::rootfs_layers::{apply_whiteouts, build_rootfs};
 use std::ffi::CString;

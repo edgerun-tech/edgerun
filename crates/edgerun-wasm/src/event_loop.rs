@@ -1,12 +1,102 @@
-use libc::{
-    accept, bind, close, epoll_create1, epoll_ctl, epoll_event, epoll_wait, listen, read, recv,
-    setsockopt, socket, timerfd_create, timerfd_settime,
-};
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::mem;
 use std::os::fd::RawFd;
 use std::sync::{Arc, Mutex};
+
+mod linux_abi {
+    use core::ffi::c_void;
+
+    pub const AF_INET: i32 = 2;
+    pub const SOCK_STREAM: i32 = 1;
+    pub const SOL_SOCKET: i32 = 1;
+    pub const SO_REUSEADDR: i32 = 2;
+    pub const F_GETFL: i32 = 3;
+    pub const F_SETFL: i32 = 4;
+    pub const O_NONBLOCK: i32 = 0x800;
+    pub const EPOLLIN: u32 = 0x001;
+    pub const EPOLLET: u32 = 0x8000_0000;
+    pub const EPOLL_CTL_ADD: i32 = 1;
+    pub const CLOCK_MONOTONIC: i32 = 1;
+    pub const TFD_CLOEXEC: i32 = 0o2000000;
+    pub const TFD_NONBLOCK: i32 = 0o0004000;
+
+    pub type Socklen = u32;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct InAddr {
+        pub s_addr: u32,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Sockaddr {
+        pub sa_family: u16,
+        pub sa_data: [u8; 14],
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct SockaddrIn {
+        pub sin_family: u16,
+        pub sin_port: u16,
+        pub sin_addr: InAddr,
+        pub sin_zero: [u8; 8],
+    }
+
+    #[repr(C, packed)]
+    #[derive(Clone, Copy)]
+    pub struct EpollEvent {
+        pub events: u32,
+        pub u64: u64,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Timespec {
+        pub tv_sec: i64,
+        pub tv_nsec: i64,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Itimerspec {
+        pub it_interval: Timespec,
+        pub it_value: Timespec,
+    }
+
+    unsafe extern "C" {
+        pub fn accept(fd: i32, addr: *mut Sockaddr, addrlen: *mut Socklen) -> i32;
+        pub fn bind(fd: i32, addr: *const Sockaddr, len: Socklen) -> i32;
+        pub fn close(fd: i32) -> i32;
+        pub fn epoll_create1(flags: i32) -> i32;
+        pub fn epoll_ctl(epfd: i32, op: i32, fd: i32, event: *mut EpollEvent) -> i32;
+        pub fn epoll_wait(epfd: i32, events: *mut EpollEvent, maxevents: i32, timeout: i32)
+            -> i32;
+        pub fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32;
+        pub fn listen(fd: i32, backlog: i32) -> i32;
+        pub fn read(fd: i32, buf: *mut c_void, count: usize) -> isize;
+        pub fn recv(fd: i32, buf: *mut c_void, len: usize, flags: i32) -> isize;
+        pub fn setsockopt(
+            fd: i32,
+            level: i32,
+            optname: i32,
+            optval: *const c_void,
+            optlen: Socklen,
+        ) -> i32;
+        pub fn socket(domain: i32, ty: i32, protocol: i32) -> i32;
+        pub fn timerfd_create(clockid: i32, flags: i32) -> i32;
+        pub fn timerfd_settime(
+            fd: i32,
+            flags: i32,
+            new_value: *const Itimerspec,
+            old_value: *mut Itimerspec,
+        ) -> i32;
+    }
+}
+
+use linux_abi::*;
 
 #[derive(Debug)]
 pub enum EventSource {
@@ -50,7 +140,7 @@ impl EventLoop {
     }
 
     pub fn add_tcp_listener(&mut self, port: u16) -> io::Result<()> {
-        let fd = unsafe { socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
+        let fd = unsafe { socket(AF_INET, SOCK_STREAM, 0) };
         if fd < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -59,17 +149,17 @@ impl EventLoop {
         unsafe {
             setsockopt(
                 fd,
-                libc::SOL_SOCKET,
-                libc::SO_REUSEADDR,
+                SOL_SOCKET,
+                SO_REUSEADDR,
                 &opt as *const _ as *const _,
                 4,
             );
         }
 
-        let addr = libc::sockaddr_in {
-            sin_family: libc::AF_INET as _,
+        let addr = SockaddrIn {
+            sin_family: AF_INET as _,
             sin_port: port.to_be(),
-            sin_addr: libc::in_addr {
+            sin_addr: InAddr {
                 s_addr: u32::from_be_bytes([127, 0, 0, 1]).to_be(),
             },
             sin_zero: [0; 8],
@@ -78,8 +168,8 @@ impl EventLoop {
         let ret = unsafe {
             bind(
                 fd,
-                &addr as *const _ as *const libc::sockaddr,
-                mem::size_of::<libc::sockaddr_in>() as _,
+                (&addr as *const SockaddrIn).cast(),
+                mem::size_of::<SockaddrIn>() as _,
             )
         };
         if ret < 0 {
@@ -92,20 +182,20 @@ impl EventLoop {
             return Err(io::Error::last_os_error());
         }
 
-        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        let flags = unsafe { fcntl(fd, F_GETFL, 0) };
         if flags < 0 {
             unsafe { close(fd) };
             return Err(io::Error::last_os_error());
         }
-        if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        if unsafe { fcntl(fd, F_SETFL, flags | O_NONBLOCK) } < 0 {
             unsafe { close(fd) };
             return Err(io::Error::last_os_error());
         }
 
-        let mut ev: epoll_event = unsafe { mem::zeroed() };
-        ev.events = libc::EPOLLIN as _;
+        let mut ev: EpollEvent = unsafe { mem::zeroed() };
+        ev.events = EPOLLIN as _;
         ev.u64 = fd as u64;
-        if unsafe { epoll_ctl(self.epoll_fd, libc::EPOLL_CTL_ADD, fd, &mut ev) } < 0 {
+        if unsafe { epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, fd, &mut ev) } < 0 {
             unsafe { close(fd) };
             return Err(io::Error::last_os_error());
         }
@@ -121,20 +211,20 @@ impl EventLoop {
     pub fn add_timer(&mut self, interval_ms: u64) -> io::Result<u64> {
         let fd = unsafe {
             timerfd_create(
-                libc::CLOCK_MONOTONIC,
-                libc::TFD_CLOEXEC | libc::TFD_NONBLOCK,
+                CLOCK_MONOTONIC,
+                TFD_CLOEXEC | TFD_NONBLOCK,
             )
         };
         if fd < 0 {
             return Err(io::Error::last_os_error());
         }
 
-        let itimerspec = libc::itimerspec {
-            it_interval: libc::timespec {
+        let itimerspec = Itimerspec {
+            it_interval: Timespec {
                 tv_sec: (interval_ms / 1000) as _,
                 tv_nsec: ((interval_ms % 1000) * 1_000_000) as _,
             },
-            it_value: libc::timespec {
+            it_value: Timespec {
                 tv_sec: (interval_ms / 1000) as _,
                 tv_nsec: ((interval_ms % 1000) * 1_000_000) as _,
             },
@@ -145,10 +235,10 @@ impl EventLoop {
             return Err(io::Error::last_os_error());
         }
 
-        let mut ev: epoll_event = unsafe { mem::zeroed() };
-        ev.events = libc::EPOLLIN as _;
+        let mut ev: EpollEvent = unsafe { mem::zeroed() };
+        ev.events = EPOLLIN as _;
         ev.u64 = fd as u64;
-        if unsafe { epoll_ctl(self.epoll_fd, libc::EPOLL_CTL_ADD, fd, &mut ev) } < 0 {
+        if unsafe { epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, fd, &mut ev) } < 0 {
             unsafe { close(fd) };
             return Err(io::Error::last_os_error());
         }
@@ -172,7 +262,7 @@ impl EventLoop {
     }
 
     pub fn run_once(&mut self, timeout_ms: i32) -> io::Result<usize> {
-        let mut events: [epoll_event; 16] = unsafe { mem::zeroed() };
+        let mut events: [EpollEvent; 16] = unsafe { mem::zeroed() };
         let nfds = unsafe { epoll_wait(self.epoll_fd, events.as_mut_ptr(), 16, timeout_ms) };
         if nfds < 0 {
             return Err(io::Error::last_os_error());
@@ -184,10 +274,10 @@ impl EventLoop {
             if let Some(source) = self.sources.get(&fd) {
                 match source {
                     EventSource::TcpListener { .. } => loop {
-                        let mut addr: libc::sockaddr_in = unsafe { mem::zeroed() };
-                        let mut addrlen: libc::socklen_t = mem::size_of::<libc::sockaddr_in>() as _;
+                        let mut addr: SockaddrIn = unsafe { mem::zeroed() };
+                        let mut addrlen: Socklen = mem::size_of::<SockaddrIn>() as _;
                         let client_fd = unsafe {
-                            accept(fd, &mut addr as *mut _ as *mut libc::sockaddr, &mut addrlen)
+                            accept(fd, (&mut addr as *mut SockaddrIn).cast(), &mut addrlen)
                         };
                         if client_fd < 0 {
                             break;
@@ -196,21 +286,21 @@ impl EventLoop {
                         let sock_id = self.next_sock_id;
                         self.next_sock_id += 1;
 
-                        let flags = unsafe { libc::fcntl(client_fd, libc::F_GETFL) };
+                        let flags = unsafe { fcntl(client_fd, F_GETFL, 0) };
                         if flags >= 0 {
                             unsafe {
-                                libc::fcntl(client_fd, libc::F_SETFL, flags | libc::O_NONBLOCK)
+                                fcntl(client_fd, F_SETFL, flags | O_NONBLOCK)
                             };
                         }
 
                         self.push_network_connected(sock_id);
 
-                        let mut ev: epoll_event = unsafe { mem::zeroed() };
-                        ev.events = (libc::EPOLLIN | libc::EPOLLET) as _;
+                        let mut ev: EpollEvent = unsafe { mem::zeroed() };
+                        ev.events = (EPOLLIN | EPOLLET) as _;
                         ev.u64 = client_fd as u64;
 
                         let ctl_ret = unsafe {
-                            epoll_ctl(self.epoll_fd, libc::EPOLL_CTL_ADD, client_fd, &mut ev)
+                            epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, client_fd, &mut ev)
                         };
                         if ctl_ret >= 0 {
                             self.sources.insert(
