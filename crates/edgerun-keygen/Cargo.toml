@@ -11,6 +11,7 @@ description = "Generate local EdgeRun node identities and hand private key mater
 [dependencies]
 edgerun-core = { workspace = true, default-features = false }
 edgerun-sign-p256 = { workspace = true, default-features = false }
+edgerun-verify = { workspace = true, default-features = false }
 
 [features]
 default = []
