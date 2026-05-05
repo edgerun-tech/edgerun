@@ -107,7 +107,6 @@ members = [
   "crates/edgerun-vfs",
   "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
-  "crates/edgerun-crate-analyzer",
   "crates/edgerun-wire",
   "crates/edgerun-sdk",
   "crates/edgerun-sdk-macro",

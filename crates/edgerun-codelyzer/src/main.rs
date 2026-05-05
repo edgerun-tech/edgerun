@@ -5,7 +5,6 @@ mod edit;
 mod filesystem;
 mod git;
 mod parser;
-mod repo_registry;
 mod tools;
 mod uir;
 

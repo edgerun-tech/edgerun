@@ -27,6 +27,7 @@ impl CallKind {
         }
     }
 
+    #[allow(dead_code)]
     pub fn label(&self) -> &'static str {
         match self {
             CallKind::Direct => "direct",
@@ -45,6 +46,7 @@ pub struct Function {
     pub language: String,
     pub file: String,
     pub is_static: bool,
+    #[allow(dead_code)]
     pub last_modified_commit: Option<String>,
 }
 

@@ -1,8 +1,0 @@
-use std::path::{Path, PathBuf};
-use crate::gitvisible::*;
-use crate::crate_model::CrateIdentity;
-
-pub fn index_crate_sources(crate_dir: &Path) -> (Vec<PathBuf>, usize) {
-    let policy = load_visibility_policy(crate_dir);
-    collect_visible_files(crate_dir, &policy)
-}

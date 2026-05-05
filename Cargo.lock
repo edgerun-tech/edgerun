@@ -556,10 +556,12 @@ dependencies = [
 name = "edgerun-codelyzer"
 version = "0.1.1"
 dependencies = [
+ "chrono",
  "dirs",
  "edgerun-crypto",
  "edgerun-edit",
  "edgerun-glob",
+ "edgerun-json",
  "edgerun-regex",
  "edgerun-vfs",
  "grep",
@@ -585,16 +587,6 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-json",
  "edgerun-wire",
-]
-
-[[package]]
-name = "edgerun-crate-analyzer"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "edgerun-glob",
- "edgerun-json",
- "serde",
 ]
 
 [[package]]
@@ -1526,6 +1518,13 @@ dependencies = [
  "edgerun-core",
  "edgerun-encoding",
  "edgerun-linux-sysfs",
+]
+
+[[package]]
+name = "edgerun-verify"
+version = "0.1.1"
+dependencies = [
+ "edgerun-core",
 ]
 
 [[package]]
