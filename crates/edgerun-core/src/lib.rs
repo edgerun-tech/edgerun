@@ -1,7 +1,8 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
+
+#[cfg(all(not(target_os = "none"), feature = "conformance"))]
 extern crate std;
 
 #[cfg(all(not(target_os = "none"), feature = "conformance"))]
@@ -18,22 +19,15 @@ macro_rules! eprintln {
     };
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", not(feature = "conformance")))]
 macro_rules! println {
     ($($arg:tt)*) => {};
 }
 
-#[cfg(all(target_os = "none", feature = "conformance"))]
+#[cfg(any(target_os = "none", not(feature = "conformance")))]
 macro_rules! eprintln {
     ($($arg:tt)*) => {};
 }
-
-#[cfg(target_os = "none")]
-extern crate self as std;
-
-#[path = "std.rs"]
-mod std_compat;
-pub use std_compat::*;
 
 pub mod command;
 #[cfg(feature = "conformance")]
