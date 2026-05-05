@@ -1079,22 +1079,20 @@ impl NodeStore {
             .iter()
             .any(|trusted| trusted == &producer.identity_id)
         {
-            return Err(StorageError::Decode("snapshot producer is not trusted".into()));
+            return Err(StorageError::Decode(
+                "snapshot producer is not trusted".into(),
+            ));
         }
         let signature = descriptor
             .signature
             .as_ref()
             .ok_or_else(|| StorageError::Decode("snapshot signature is missing".into()))?;
         let producer_key: [u8; 64] =
-            producer
-                .identity_id
-                .as_slice()
-                .try_into()
-                .map_err(|_| {
-                    StorageError::Decode("snapshot producer key must be 64 bytes".into())
-                })?;
-        let verifying_key =
-            edgerun_core::crypto::node_id_to_verifying_key(&producer_key).ok_or_else(|| {
+            producer.identity_id.as_slice().try_into().map_err(|_| {
+                StorageError::Decode("snapshot producer key must be 64 bytes".into())
+            })?;
+        let verifying_key = edgerun_core::crypto::node_id_to_verifying_key(&producer_key)
+            .ok_or_else(|| {
                 StorageError::Decode("snapshot producer key is not a valid P-256 key".into())
             })?;
         let canonical = edgerun_core::protocol::canonical_bytes(
@@ -1489,6 +1487,69 @@ fn validate_scanned_event_locations(scanned: &[ScannedEvent]) -> Result<(), Stor
                 edgerun_core::util::bytes_to_hex(&event_hash)
             )));
         }
+    }
+
+    Ok(())
+}
+
+fn validate_scanned_stream_chains(scanned: &[ScannedEvent]) -> Result<(), StorageError> {
+    let mut current_stream: Option<&[u8]> = None;
+    let mut expected_seq = 0u64;
+    let mut previous_hash: Option<Vec<u8>> = None;
+
+    for scanned_event in scanned {
+        let event = &scanned_event.event;
+        if current_stream != Some(event.stream_id.as_slice()) {
+            current_stream = Some(event.stream_id.as_slice());
+            expected_seq = 0;
+            previous_hash = None;
+        }
+
+        if event.seq != expected_seq {
+            return Err(StorageError::Decode(format!(
+                "scanned stream {} has seq {}, expected {}",
+                edgerun_core::util::bytes_to_hex(&event.stream_id),
+                event.seq,
+                expected_seq
+            )));
+        }
+
+        match (event.seq, &event.prev_event_hash, &previous_hash) {
+            (0, Some(_), _) => {
+                return Err(StorageError::Decode(format!(
+                    "scanned stream {} genesis has prev hash",
+                    edgerun_core::util::bytes_to_hex(&event.stream_id)
+                )));
+            }
+            (0, None, _) => {}
+            (_, Some(prev), Some(expected)) if prev.value == *expected => {}
+            (_, Some(prev), Some(expected)) => {
+                return Err(StorageError::Decode(format!(
+                    "scanned stream {} seq {} prev hash mismatch: envelope has {}, expected {}",
+                    edgerun_core::util::bytes_to_hex(&event.stream_id),
+                    event.seq,
+                    edgerun_core::util::bytes_to_hex(&prev.value),
+                    edgerun_core::util::bytes_to_hex(expected)
+                )));
+            }
+            (_, None, _) => {
+                return Err(StorageError::Decode(format!(
+                    "scanned stream {} seq {} is missing prev hash",
+                    edgerun_core::util::bytes_to_hex(&event.stream_id),
+                    event.seq
+                )));
+            }
+            (_, Some(_), None) => {
+                return Err(StorageError::Decode(format!(
+                    "scanned stream {} seq {} has no previous event",
+                    edgerun_core::util::bytes_to_hex(&event.stream_id),
+                    event.seq
+                )));
+            }
+        }
+
+        previous_hash = Some(scanned_event.location.event_hash.clone());
+        expected_seq = expected_seq.saturating_add(1);
     }
 
     Ok(())
