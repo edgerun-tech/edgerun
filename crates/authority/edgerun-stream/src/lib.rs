@@ -318,12 +318,10 @@ impl From<edgerun_verify::ProtocolVerifyError> for StreamError {
                 Self::UnsupportedAlgorithm
             }
             edgerun_verify::ProtocolVerifyError::InvalidPublicKey => Self::InvalidPublicKey,
-            edgerun_verify::ProtocolVerifyError::InvalidSignatureLength => {
-                Self::InvalidSignature {
-                    expected: 64,
-                    actual: 0,
-                }
-            }
+            edgerun_verify::ProtocolVerifyError::InvalidSignatureLength => Self::InvalidSignature {
+                expected: 64,
+                actual: 0,
+            },
             edgerun_verify::ProtocolVerifyError::InvalidSignature => Self::SignatureVerification,
             edgerun_verify::ProtocolVerifyError::UnsupportedFamily => Self::UnsupportedFamily,
             edgerun_verify::ProtocolVerifyError::MissingWriterIdentity

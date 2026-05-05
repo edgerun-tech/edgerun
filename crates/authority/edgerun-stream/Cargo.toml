@@ -10,10 +10,11 @@ description = "Single-writer stream sequencing, hash-linking, signing, and verif
 
 [dependencies]
 edgerun-core = { workspace = true, default-features = false }
-edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
-edgerun-hardware-signing = { workspace = true }
 edgerun-sign = { workspace = true, default-features = false }
 edgerun-verify = { workspace = true, default-features = false }
+
+[dev-dependencies]
+edgerun-sign-p256 = { workspace = true, default-features = false }
 
 [features]
 default = []

@@ -1164,14 +1164,13 @@ impl VirtNet {
         self.ensure_initialized()?;
 
         unsafe {
-            let used = core::ptr::addr_of_mut!(RX_USED);
-            let used_idx = split_queue_used_idx(used);
-            if used_idx == self.rx_last_used_idx {
+            let Some(elem) = take_next_used_completion(
+                core::ptr::addr_of!(RX_USED),
+                QUEUE_SIZE as u16,
+                &mut self.rx_last_used_idx,
+            ) else {
                 return Ok(None);
-            }
-
-            let elem = split_queue_used_elem(used, QUEUE_SIZE as u16, self.rx_last_used_idx);
-            self.rx_last_used_idx = self.rx_last_used_idx.wrapping_add(1);
+            };
 
             let desc_id = elem.id as usize;
             if desc_id >= self.queue_size as usize {
@@ -1280,13 +1279,12 @@ impl VirtNet {
 
     unsafe fn reap_tx_used(&mut self) {
         let used = core::ptr::addr_of!(TX_USED);
-        let used_idx = split_queue_used_idx(used);
-        while self.tx_last_used_idx != used_idx {
-            let elem = split_queue_used_elem(used, QUEUE_SIZE as u16, self.tx_last_used_idx);
+        while let Some(elem) =
+            take_next_used_completion(used, QUEUE_SIZE as u16, &mut self.tx_last_used_idx)
+        {
             if elem.id < QUEUE_SIZE as u32 {
                 self.tx_free_mask |= 1u16 << elem.id;
             }
-            self.tx_last_used_idx = self.tx_last_used_idx.wrapping_add(1);
             self.tx_completed = self.tx_completed.wrapping_add(1);
         }
     }
@@ -1417,6 +1415,21 @@ unsafe fn split_queue_used_elem(
 ) -> VirtqUsedElem {
     let ring_idx = (used_idx as usize) % queue_size as usize;
     read_volatile_used_elem((*used).ring.as_ptr().add(ring_idx))
+}
+
+unsafe fn take_next_used_completion(
+    used: *const VirtqUsed,
+    queue_size: u16,
+    last_used_idx: &mut u16,
+) -> Option<VirtqUsedElem> {
+    let used_idx = split_queue_used_idx(used);
+    if used_idx == *last_used_idx {
+        return None;
+    }
+
+    let elem = split_queue_used_elem(used, queue_size, *last_used_idx);
+    *last_used_idx = (*last_used_idx).wrapping_add(1);
+    Some(elem)
 }
 
 unsafe fn take_single_used_completion(
@@ -2162,14 +2175,13 @@ impl VirtConsole {
         self.ensure_initialized()?;
 
         unsafe {
-            let used = core::ptr::addr_of_mut!(CONSOLE_RX_USED);
-            let used_idx = split_queue_used_idx(used);
-            if used_idx == self.rx_last_used_idx {
+            let Some(elem) = take_next_used_completion(
+                core::ptr::addr_of!(CONSOLE_RX_USED),
+                self.rx_queue_size,
+                &mut self.rx_last_used_idx,
+            ) else {
                 return Ok(None);
-            }
-
-            let elem = split_queue_used_elem(used, self.rx_queue_size, self.rx_last_used_idx);
-            self.rx_last_used_idx = self.rx_last_used_idx.wrapping_add(1);
+            };
 
             let desc_id = elem.id as usize;
             if desc_id >= self.rx_queue_size as usize {
@@ -2911,6 +2923,35 @@ mod tests {
                 .is_none()
         );
         assert_eq!(last, 1);
+    }
+
+    #[test]
+    fn next_used_completion_drains_multi_entry_queues() {
+        let mut used = VirtqUsed {
+            flags: 0,
+            idx: 3,
+            ring: [VirtqUsedElem { id: 0, len: 0 }; QUEUE_SIZE],
+            avail_event: 0,
+        };
+        used.ring[0] = VirtqUsedElem { id: 2, len: 20 };
+        used.ring[1] = VirtqUsedElem { id: 4, len: 40 };
+        used.ring[2] = VirtqUsedElem { id: 6, len: 60 };
+        let mut last = 0;
+
+        let first =
+            unsafe { take_next_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.unwrap();
+        let second =
+            unsafe { take_next_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.unwrap();
+        let third =
+            unsafe { take_next_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.unwrap();
+
+        assert_eq!((first.id, first.len), (2, 20));
+        assert_eq!((second.id, second.len), (4, 40));
+        assert_eq!((third.id, third.len), (6, 60));
+        assert_eq!(last, 3);
+        assert!(
+            unsafe { take_next_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.is_none()
+        );
     }
 
     #[test]
