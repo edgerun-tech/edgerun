@@ -6,11 +6,15 @@ use alloc::vec::Vec;
 
 use edgerun_core::crypto::{self, SigningKey};
 use edgerun_core::protocol::{EventEnvelope, ProtocolRecord, Signature};
+use edgerun_keygen::MemoryKeyStore;
+use edgerun_node_bootstrap::{bootstrap_new_node, BootstrapConfig};
 use edgerun_sign_p256::P256ProtocolSigner;
 use edgerun_verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum E2eError {
+    Keygen,
+    Bootstrap,
     Sign,
     Verify,
 }
@@ -21,6 +25,16 @@ pub struct SignVerifyReport {
     pub record_hash_len: usize,
     pub public_key_len: usize,
     pub stream_id_len: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BootstrapReport {
+    pub node_id_len: usize,
+    pub stored_key_len: usize,
+    pub genesis_signature_len: usize,
+    pub genesis_stream_id_len: usize,
+    pub genesis_seq: u64,
+    pub store_len: usize,
 }
 
 pub fn deterministic_signing_key(seed_byte: u8) -> SigningKey {
@@ -36,6 +50,33 @@ pub fn sample_event(public_key_raw64: &[u8; 64], seq: u64) -> EventEnvelope {
         event_version: 1,
         ..EventEnvelope::default()
     }
+}
+
+pub fn bootstrap_roundtrip() -> Result<BootstrapReport, E2eError> {
+    let mut store = MemoryKeyStore::new();
+    let result = bootstrap_new_node(&mut store, BootstrapConfig::default())
+        .map_err(|_| E2eError::Bootstrap)?;
+    let signature_len = result
+        .genesis_event
+        .signature
+        .as_ref()
+        .map(|signature| signature.value.len())
+        .ok_or(E2eError::Bootstrap)?;
+
+    verify_event_envelope(
+        &result.genesis_event,
+        ProtocolSignerRef::P256Raw64(&result.node_id),
+    )
+    .map_err(|_| E2eError::Verify)?;
+
+    Ok(BootstrapReport {
+        node_id_len: result.node_id.len(),
+        stored_key_len: result.stored_key.len(),
+        genesis_signature_len: signature_len,
+        genesis_stream_id_len: result.genesis_event.stream_id.len(),
+        genesis_seq: result.genesis_event.seq,
+        store_len: store.len(),
+    })
 }
 
 pub fn sign_verify_event_roundtrip() -> Result<SignVerifyReport, E2eError> {
@@ -82,8 +123,33 @@ pub extern "C" fn edgerun_sign_verify_e2e_roundtrip() -> u32 {
                 2
             }
         }
-        Err(E2eError::Sign) => 10,
-        Err(E2eError::Verify) => 11,
+        Err(E2eError::Keygen) => 9,
+        Err(E2eError::Bootstrap) => 10,
+        Err(E2eError::Sign) => 11,
+        Err(E2eError::Verify) => 12,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn edgerun_bootstrap_e2e_roundtrip() -> u32 {
+    match bootstrap_roundtrip() {
+        Ok(report) => {
+            if report.node_id_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
+                && report.stored_key_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
+                && report.genesis_signature_len == crypto::ECDSA_P256_SIGNATURE_LEN
+                && report.genesis_stream_id_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
+                && report.genesis_seq == 0
+                && report.store_len == 1
+            {
+                0
+            } else {
+                2
+            }
+        }
+        Err(E2eError::Keygen) => 9,
+        Err(E2eError::Bootstrap) => 10,
+        Err(E2eError::Sign) => 11,
+        Err(E2eError::Verify) => 12,
     }
 }
 
@@ -137,6 +203,15 @@ pub fn verify_event_only(iterations: usize) -> Result<usize, E2eError> {
         ok += 1;
     }
 
+    Ok(ok)
+}
+
+pub fn bootstrap_only(iterations: usize) -> Result<usize, E2eError> {
+    let mut ok = 0usize;
+    for _ in 0..iterations {
+        bootstrap_roundtrip()?;
+        ok += 1;
+    }
     Ok(ok)
 }
 
@@ -217,6 +292,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bootstrap_roundtrip_works() {
+        let report = bootstrap_roundtrip().unwrap();
+        assert_eq!(report.node_id_len, 64);
+        assert_eq!(report.stored_key_len, 64);
+        assert_eq!(report.genesis_signature_len, 64);
+        assert_eq!(report.genesis_stream_id_len, 64);
+        assert_eq!(report.genesis_seq, 0);
+        assert_eq!(report.store_len, 1);
+    }
+
+    #[test]
     fn roundtrip_works() {
         let report = sign_verify_event_roundtrip().unwrap();
         assert_eq!(report.signature_len, 64);
@@ -229,5 +315,6 @@ mod tests {
     fn sign_and_verify_many() {
         assert_eq!(sign_event_only(8).unwrap().len(), 8);
         assert_eq!(verify_event_only(8).unwrap(), 8);
+        assert_eq!(bootstrap_only(2).unwrap(), 2);
     }
 }
