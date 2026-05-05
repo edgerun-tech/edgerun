@@ -3,10 +3,10 @@ use alloc::sync::Arc;
 
 use edgerun_dns::record::DnsRecordType;
 use edgerun_dns::zone::DnsZone;
-use edgerun_encoding::base64url_nopad_encode;
 use edgerun_rt::RwLock;
 
 use crate::account::AccountKey;
+use crate::challenge_material::{dns_01_record_name, dns_01_record_value};
 
 #[derive(Clone)]
 pub struct DnsChallenge {
@@ -18,12 +18,8 @@ pub struct DnsChallenge {
 impl DnsChallenge {
     pub fn new(domain: &str, token: &str, account_key: &AccountKey) -> Self {
         let thumbprint = account_key.thumbprint_b64();
-        let key_authorization = format!("{}.{}", token, thumbprint);
-
-        let digest = edgerun_crypto::sha256(key_authorization.as_bytes());
-        let txt_value = base64url_nopad_encode(&digest);
-
-        let txt_record_name = format!("_acme-challenge.{}", domain);
+        let txt_value = dns_01_record_value(token, &thumbprint);
+        let txt_record_name = dns_01_record_name(domain);
 
         Self {
             domain: domain.to_string(),

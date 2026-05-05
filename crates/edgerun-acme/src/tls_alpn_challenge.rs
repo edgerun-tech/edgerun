@@ -1,7 +1,8 @@
 use crate::prelude::v1::*;
 
-use edgerun_encoding::base64url_nopad_encode;
 use edgerun_rt::RwLock;
+
+use crate::challenge_material::tls_alpn_01_challenge_value;
 
 #[derive(Clone)]
 pub struct TlsAlpnChallenge {
@@ -11,12 +12,9 @@ pub struct TlsAlpnChallenge {
 
 impl TlsAlpnChallenge {
     pub fn new(domain: &str, token: &str, thumbprint: &str) -> Self {
-        let key_authorization = format!("{}.{}", token, thumbprint);
-        let digest = edgerun_crypto::sha256(key_authorization.as_bytes());
-
         Self {
             domain: domain.to_string(),
-            challenge_value: base64url_nopad_encode(&digest),
+            challenge_value: tls_alpn_01_challenge_value(token, thumbprint),
         }
     }
 

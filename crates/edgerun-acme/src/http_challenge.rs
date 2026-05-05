@@ -4,9 +4,12 @@ use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
 
-use edgerun_encoding::base64url_nopad_encode;
 use edgerun_http::{Handler, Request, Response, StatusCode};
 use edgerun_rt::RwLock;
+
+use crate::challenge_material::{
+    http_01_challenge_path, key_authorization, key_authorization_digest,
+};
 
 #[derive(Clone)]
 pub struct HttpChallengeHandler {
@@ -23,12 +26,11 @@ impl HttpChallengeHandler {
     }
 
     pub fn compute_key_authorization(token: &str, thumbprint: &str) -> String {
-        format!("{}.{}", token, thumbprint)
+        key_authorization(token, thumbprint)
     }
 
     pub fn compute_digest(token: &str, thumbprint: &str) -> String {
-        let key_authz = Self::compute_key_authorization(token, thumbprint);
-        base64url_nopad_encode(&edgerun_crypto::sha256(key_authz.as_bytes()))
+        key_authorization_digest(token, thumbprint)
     }
 }
 
@@ -37,7 +39,7 @@ impl Handler for HttpChallengeHandler {
         Box::pin(async move {
             let path = _req.uri().path();
 
-            let expected_path = format!("/.well-known/acme-challenge/{}", self.token);
+            let expected_path = http_01_challenge_path(&self.token);
 
             if path == expected_path {
                 Response::text(StatusCode::new(200).unwrap(), &self.key_authorization)
@@ -65,13 +67,13 @@ impl HttpChallengeServer {
     pub fn add_challenge(&self, token: &str) -> String {
         let key_authz = HttpChallengeHandler::compute_key_authorization(token, &self.thumbprint);
         let handler = HttpChallengeHandler::new(token, &key_authz);
-        let path = format!("/.well-known/acme-challenge/{}", token);
+        let path = http_01_challenge_path(token);
         self.handlers.write().insert(path.clone(), handler);
         key_authz
     }
 
     pub fn remove_challenge(&self, token: &str) {
-        let path = format!("/.well-known/acme-challenge/{}", token);
+        let path = http_01_challenge_path(token);
         self.handlers.write().remove(&path);
     }
 

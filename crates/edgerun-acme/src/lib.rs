@@ -72,6 +72,7 @@ pub mod sync {
 mod account;
 mod cert_store;
 mod challenge;
+pub mod challenge_material;
 mod client;
 mod dns_challenge;
 mod error;

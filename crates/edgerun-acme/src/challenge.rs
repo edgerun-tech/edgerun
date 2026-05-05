@@ -1,6 +1,7 @@
 use crate::prelude::v1::*;
 use edgerun_url::Url;
 
+use crate::challenge_material::key_authorization;
 use crate::types::{ChallengeStatus, ChallengeType};
 
 #[derive(Debug, Clone)]
@@ -43,7 +44,7 @@ impl Challenge {
 
     pub fn key_authorization(&self, thumbprint: &str) -> String {
         if let Some(token) = &self.inner.token {
-            format!("{}.{}", token, thumbprint)
+            key_authorization(token, thumbprint)
         } else {
             thumbprint.to_string()
         }
