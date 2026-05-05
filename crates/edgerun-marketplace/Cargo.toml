@@ -10,6 +10,7 @@ description = "EdgeRun marketplace domain types, fee policy, and projections"
 
 [dependencies]
 edgerun-core = { workspace = true }
+edgerun-exchange = { workspace = true }
 edgerun-wire = { workspace = true }
 
 [lints]

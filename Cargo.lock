@@ -867,6 +867,7 @@ name = "edgerun-marketplace"
 version = "0.1.1"
 dependencies = [
  "edgerun-core",
+ "edgerun-exchange",
  "edgerun-wire",
 ]
 

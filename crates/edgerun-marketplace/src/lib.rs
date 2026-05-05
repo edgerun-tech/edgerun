@@ -10,10 +10,18 @@
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
+use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use edgerun_core::protocol::{CapabilityDescriptor, Digest, IdentityRef, NodeRef, ObjectRef};
+use edgerun_core::protocol::edgerun_wallet_v0::{PaymentRequest, Receipt};
+use edgerun_core::protocol::{
+    CapabilityDescriptor, CommandEnvelope, Digest, IdentityRef, NodeRef, ObjectRef, Timestamp,
+};
+use edgerun_exchange::{
+    archive_payment_request_intent, build_app_intent, build_identity_routed_settlement_command,
+    SettlementCommandDraft,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MarketplaceError {
@@ -24,6 +32,7 @@ pub enum MarketplaceError {
     NotPaid,
     ListingNotActive,
     PackageMismatch,
+    ReceiptMismatch(&'static str),
 }
 
 impl core::fmt::Display for MarketplaceError {
@@ -36,6 +45,7 @@ impl core::fmt::Display for MarketplaceError {
             Self::NotPaid => f.write_str("marketplace checkout is not paid"),
             Self::ListingNotActive => f.write_str("marketplace listing is not active"),
             Self::PackageMismatch => f.write_str("marketplace package mismatch"),
+            Self::ReceiptMismatch(reason) => write!(f, "marketplace receipt mismatch: {reason}"),
         }
     }
 }
@@ -194,6 +204,19 @@ pub struct MarketplaceCheckout {
     pub fee_policy: MarketplaceFeePolicy,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct MarketplaceSettlementCommandDraft {
+    pub command_id: Vec<u8>,
+    pub target_node: NodeRef,
+    pub issuer: Option<IdentityRef>,
+    pub command_type: i32,
+    pub issued_at: Option<Timestamp>,
+    pub expires_at: Option<Timestamp>,
+    pub idempotency_key: Vec<u8>,
+    pub app_id: Vec<u8>,
+    pub app_signature: Vec<u8>,
+}
+
 #[derive(
     Clone,
     Debug,
@@ -306,6 +329,118 @@ pub fn validate_listing(listing: &MarketplaceListing) -> Result<(), MarketplaceE
     validate_fee_policy(&listing.fee_policy)
 }
 
+pub fn build_payment_request_for_listing(
+    listing: &MarketplaceListing,
+    request_id: impl Into<String>,
+    created_at_ms: u64,
+    expires_at_ms: u64,
+    pay_asset_id: Option<String>,
+) -> Result<PaymentRequest, MarketplaceError> {
+    validate_listing(listing)?;
+    if listing.status != ListingStatus::Active as i32 {
+        return Err(MarketplaceError::ListingNotActive);
+    }
+
+    Ok(PaymentRequest {
+        request_id: request_id.into(),
+        settlement_asset_id: listing.seller_settlement_asset.clone(),
+        settlement_amount: listing.price_amount.clone(),
+        recipient_address: Some(listing.seller_settlement_address.clone()),
+        description: Some(format!("marketplace listing {}", listing.listing_id)),
+        created_at_ms,
+        expires_at_ms,
+        pay_asset_id,
+    })
+}
+
+pub fn create_checkout_for_listing(
+    listing: &MarketplaceListing,
+    checkout_id: impl Into<String>,
+    payment_request_id: impl Into<String>,
+    buyer_node: Option<NodeRef>,
+    install_target_node: Option<NodeRef>,
+) -> Result<MarketplaceCheckout, MarketplaceError> {
+    validate_listing(listing)?;
+    if listing.status != ListingStatus::Active as i32 {
+        return Err(MarketplaceError::ListingNotActive);
+    }
+
+    Ok(MarketplaceCheckout {
+        checkout_id: checkout_id.into(),
+        listing_id: listing.listing_id.clone(),
+        buyer_node,
+        install_target_node,
+        payment_request_id: payment_request_id.into(),
+        quote_id: String::new(),
+        order_id: String::new(),
+        receipt_id: String::new(),
+        status: CheckoutStatus::Created as i32,
+        fee_policy: listing.fee_policy.clone(),
+    })
+}
+
+pub fn build_settlement_command_for_payment_request(
+    payment_request: &PaymentRequest,
+    draft: MarketplaceSettlementCommandDraft,
+) -> CommandEnvelope {
+    let payload_bytes = archive_payment_request_intent(payment_request);
+    let app_intent = build_app_intent(draft.app_id, payload_bytes.clone(), draft.app_signature);
+
+    build_identity_routed_settlement_command(SettlementCommandDraft {
+        command_id: draft.command_id,
+        target_node: draft.target_node,
+        issuer: draft.issuer,
+        command_type: draft.command_type,
+        issued_at: draft.issued_at,
+        expires_at: draft.expires_at,
+        idempotency_key: draft.idempotency_key,
+        app_intent,
+        payload_bytes,
+    })
+}
+
+pub fn checkout_paid_event_from_receipt(
+    checkout: &MarketplaceCheckout,
+    listing: &MarketplaceListing,
+    receipt: &Receipt,
+    paid_at_ms: u64,
+) -> Result<MarketplaceEvent, MarketplaceError> {
+    if checkout.listing_id != listing.listing_id {
+        return Err(MarketplaceError::ReceiptMismatch(
+            "checkout does not reference listing",
+        ));
+    }
+    if checkout.fee_policy != listing.fee_policy {
+        return Err(MarketplaceError::ReceiptMismatch(
+            "checkout fee policy differs from listing",
+        ));
+    }
+    if receipt.receipt_id.is_empty() {
+        return Err(MarketplaceError::MissingField("receipt_id"));
+    }
+    if !checkout.order_id.is_empty() && receipt.order_id != checkout.order_id {
+        return Err(MarketplaceError::ReceiptMismatch(
+            "receipt order does not match checkout",
+        ));
+    }
+    if receipt.settlement_asset_id != listing.seller_settlement_asset {
+        return Err(MarketplaceError::ReceiptMismatch(
+            "receipt settlement asset does not match listing",
+        ));
+    }
+    if receipt.settlement_amount != listing.price_amount {
+        return Err(MarketplaceError::ReceiptMismatch(
+            "receipt settlement amount does not match listing",
+        ));
+    }
+
+    Ok(MarketplaceEvent::CheckoutPaid {
+        checkout_id: checkout.checkout_id.clone(),
+        receipt_id: receipt.receipt_id.clone(),
+        paid_at_ms,
+    })
+}
+
 pub fn project_marketplace_events(events: &[MarketplaceEvent]) -> MarketplaceProjection {
     let mut projection = MarketplaceProjection::default();
     for event in events {
@@ -416,6 +551,8 @@ fn require_non_empty(value: &str, field: &'static str) -> Result<(), Marketplace
 mod tests {
     use super::*;
     use alloc::vec;
+    use edgerun_core::protocol::command_envelope;
+    use edgerun_core::protocol::{AppIntent, CommandType};
 
     fn fee_policy() -> MarketplaceFeePolicy {
         MarketplaceFeePolicy {
@@ -481,6 +618,22 @@ mod tests {
         }
     }
 
+    fn receipt() -> Receipt {
+        Receipt {
+            receipt_id: "receipt-1".into(),
+            order_id: "order-1".into(),
+            settlement_asset_id: "USDT:tron".into(),
+            pay_asset_id: "BTC:bitcoin".into(),
+            settlement_amount: "25.00".into(),
+            pay_amount: "0.00025".into(),
+            deposit_tx: None,
+            payout_tx: None,
+            completed_at_ms: 1_700_000_100_000,
+            receipt_hash: b"receipt-hash".to_vec(),
+            receipt_signature: None,
+        }
+    }
+
     #[test]
     fn fee_policy_requires_recipients_for_nonzero_fees() {
         let mut policy = fee_policy();
@@ -506,6 +659,74 @@ mod tests {
     }
 
     #[test]
+    fn payment_request_from_listing_targets_seller_settlement() {
+        let request = build_payment_request_for_listing(
+            &listing(),
+            "pr-1",
+            1_700_000_000_000,
+            1_700_000_900_000,
+            Some("BTC:bitcoin".into()),
+        )
+        .expect("active listing should produce payment request");
+
+        assert_eq!(request.request_id, "pr-1");
+        assert_eq!(request.settlement_asset_id, "USDT:tron");
+        assert_eq!(request.settlement_amount, "25.00");
+        assert_eq!(request.recipient_address.as_deref(), Some("seller-address"));
+        assert_eq!(request.pay_asset_id.as_deref(), Some("BTC:bitcoin"));
+    }
+
+    #[test]
+    fn settlement_command_carries_listing_payment_request_intent() {
+        let request = build_payment_request_for_listing(
+            &listing(),
+            "pr-1",
+            1_700_000_000_000,
+            1_700_000_900_000,
+            None,
+        )
+        .expect("payment request");
+
+        let command = build_settlement_command_for_payment_request(
+            &request,
+            MarketplaceSettlementCommandDraft {
+                command_id: b"cmd-checkout-1".to_vec(),
+                target_node: NodeRef {
+                    node_id: b"settlement-node".to_vec(),
+                },
+                issuer: None,
+                command_type: CommandType::StoreAndForward as i32,
+                issued_at: None,
+                expires_at: None,
+                idempotency_key: b"checkout-1".to_vec(),
+                app_id: b"marketplace-app".to_vec(),
+                app_signature: b"signature-placeholder".to_vec(),
+            },
+        );
+
+        assert_eq!(
+            command.target_node.unwrap().node_id,
+            b"settlement-node".to_vec()
+        );
+
+        let intent =
+            edgerun_wire::from_bytes::<AppIntent, edgerun_wire::WireError>(&command.app_intent)
+                .expect("app intent should decode");
+        assert_eq!(intent.app_id, b"marketplace-app".to_vec());
+
+        match command.payload {
+            Some(command_envelope::Payload::InlinePayload(bytes)) => {
+                let decoded =
+                    edgerun_wire::from_bytes::<PaymentRequest, edgerun_wire::WireError>(&bytes)
+                        .expect("payment request should decode");
+                assert_eq!(decoded, request);
+                assert_eq!(intent.payload, bytes);
+            }
+            _ => panic!("settlement command should carry inline payment request"),
+        }
+    }
+
+    #[test]
     fn projection_marks_checkout_paid_from_committed_events() {
         let events = vec![
             MarketplaceEvent::PackagePublished(package()),
@@ -523,6 +744,40 @@ mod tests {
 
         assert_eq!(checkout.status, CheckoutStatus::Paid as i32);
         assert_eq!(checkout.receipt_id, "receipt-1");
+    }
+
+    #[test]
+    fn receipt_matching_listing_creates_paid_event() {
+        let mut checkout = checkout();
+        checkout.order_id = "order-1".into();
+
+        let event =
+            checkout_paid_event_from_receipt(&checkout, &listing(), &receipt(), 1_700_000_100_000)
+                .expect("receipt should match checkout");
+
+        assert_eq!(
+            event,
+            MarketplaceEvent::CheckoutPaid {
+                checkout_id: "checkout-1".into(),
+                receipt_id: "receipt-1".into(),
+                paid_at_ms: 1_700_000_100_000,
+            }
+        );
+    }
+
+    #[test]
+    fn receipt_amount_mismatch_is_rejected() {
+        let mut checkout = checkout();
+        checkout.order_id = "order-1".into();
+        let mut receipt = receipt();
+        receipt.settlement_amount = "24.99".into();
+
+        assert_eq!(
+            checkout_paid_event_from_receipt(&checkout, &listing(), &receipt, 1),
+            Err(MarketplaceError::ReceiptMismatch(
+                "receipt settlement amount does not match listing"
+            ))
+        );
     }
 
     #[test]

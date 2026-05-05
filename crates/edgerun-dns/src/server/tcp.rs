@@ -19,9 +19,10 @@ use crate::compat::AsyncTcpListener;
 use crate::compat::AsyncTcpStream;
 use crate::compat::AsyncWrite;
 
-use super::query::{handle_query, ParseError, ServerState};
 use super::RateLimiter;
+use super::query::{ParseError, ServerState, handle_query};
 use crate::message::{DnsMessage, DnsResponseCode};
+use crate::tcp_frame::{dns_tcp_frame_len, encode_dns_tcp_frame};
 
 /// Run the TCP accept loop — spawns a handler for each connection.
 /// Runs until shutdown is requested.
@@ -78,17 +79,11 @@ pub async fn handle_tcp_connection_raw(
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "incomplete TCP length",
-                ))
+                ));
             }
             Err(e) => return Err(e),
         }
-        let msg_len = u16::from_be_bytes(len_buf) as usize;
-        if msg_len == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "zero TCP message length",
-            ));
-        }
+        let msg_len = dns_tcp_frame_len(len_buf)?;
 
         let mut query_buf = vec![0u8; msg_len];
         tcp_read_exact(&stream_mutex, &mut query_buf).await?;
@@ -149,17 +144,18 @@ async fn tcp_write_length_prefixed(
     stream_mutex: &Arc<crate::std::sync::Mutex<Arc<AsyncTcpStream>>>,
     data: &[u8],
 ) -> io::Result<()> {
-    let len_bytes = (data.len() as u16).to_be_bytes();
+    let frame = encode_dns_tcp_frame(data)?;
 
     poll_fn(|cx| {
         let guard = stream_mutex.lock().unwrap();
         let stream_ptr = Arc::as_ptr(&guard) as *mut AsyncTcpStream;
         let stream_mut = unsafe { &mut *stream_ptr };
-        Pin::new(stream_mut).poll_write(cx, &len_bytes)
+        Pin::new(stream_mut).poll_write(cx, &frame[..2])
     })
     .await?;
 
     let mut written = 0;
+    let data = &frame[2..];
     while written < data.len() {
         let n = poll_fn(|cx| {
             let guard = stream_mutex.lock().unwrap();
