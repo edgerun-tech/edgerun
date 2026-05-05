@@ -152,6 +152,13 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::V
                 crate::wire_trust::identity_record_full_bytes(identity)
             }
         }
+        ProtocolRecord::AssuranceClaim(claim) => {
+            if signable {
+                crate::wire_trust::assurance_claim_signable_bytes(claim)
+            } else {
+                crate::wire_trust::assurance_claim_full_bytes(claim)
+            }
+        }
         ProtocolRecord::CommandResultPayload(payload) => {
             crate::wire_command::command_result_bytes(payload)
         }
@@ -164,7 +171,6 @@ pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::V
                     ProtocolRecord::ObjectRef(_) => "ObjectRef",
                     ProtocolRecord::Digest(_) => "Digest",
                     ProtocolRecord::Signature(_) => "Signature",
-                    ProtocolRecord::AssuranceClaim(_) => "AssuranceClaim",
                     _ => "ProtocolRecord",
                 })
             ),
