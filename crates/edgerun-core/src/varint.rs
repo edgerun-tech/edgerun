@@ -2,12 +2,11 @@
 //!
 //! Delegates to `edgerun_encoding::varint`.
 
-use crate::prelude::v1::*;
-
 pub use edgerun_encoding::varint::{decode_varint_slice, encode_varint, VarintError};
 
-/// Decodes a varint from a `Read` source (backward-compatible wrapper).
+/// Decodes a varint from a `Read` source (backward-compatible host wrapper).
 /// Returns `Ok(None)` on EOF (no bytes read), `Err` on partial read.
+#[cfg(feature = "std")]
 pub fn decode_varint_from_read<R: std::io::Read>(r: &mut R) -> std::io::Result<Option<u64>> {
     let mut buf = [0u8; 1];
     let mut result: u64 = 0;
