@@ -128,12 +128,7 @@ impl MeshNode {
     /// Queues a command to be sent to a remote node.
     /// The command will be signed and sent on the next tick.
     pub fn send_command(&mut self, dest: NodeID, command: &CommandEnvelope) {
-        let mut buf = Vec::new();
-        {
-            buf.extend_from_slice(b"edgerun-command-native-v0");
-            Ok::<(), core::convert::Infallible>(())
-        }
-        .unwrap_or_default();
+        let buf = encode_command_envelope_native(command);
         let mut frame = MeshFrame::from_payload(dest, buf);
         self.sign_frame(&mut frame);
         self.mesh_link.queue_frame(frame);
@@ -339,8 +334,7 @@ metadata:
         };
 
         // Encode and deliver as a frame
-        let mut buf = Vec::new();
-        buf.extend_from_slice(b"edgerun-command-native-v0");
+        let buf = encode_command_envelope_native(&command);
         let mut frame = MeshFrame::from_payload(node.identity(), buf);
         frame.header.src = node.identity();
         frame.signature = [0u8; 64];
@@ -390,8 +384,7 @@ metadata:
         };
 
         // Encode and deliver as a frame (fake signature)
-        let mut buf = Vec::new();
-        buf.extend_from_slice(b"edgerun-command-native-v0");
+        let buf = encode_command_envelope_native(&command);
         let mut frame = MeshFrame::from_payload(bob.identity(), buf);
         frame.header.src = node_a_id;
         frame.signature = [0u8; 64];
@@ -575,8 +568,7 @@ metadata:
             app_intent: Vec::new(),
         };
 
-        let mut buf = Vec::new();
-        buf.extend_from_slice(b"edgerun-command-native-v0");
+        let buf = encode_command_envelope_native(&command);
         let frame = MeshFrame::from_payload(node.identity(), buf);
         let decoded = MeshNode::decode_command(&frame);
         assert!(decoded.is_some());
@@ -609,8 +601,348 @@ metadata:
     }
 }
 
-fn decode_command_envelope_native(
-    _bytes: &[u8],
-) -> Option<edgerun_core::protocol::CommandEnvelope> {
-    None
+const COMMAND_ENVELOPE_MAGIC: &[u8; 4] = b"ERKC";
+
+fn put_u8(out: &mut Vec<u8>, value: u8) {
+    out.push(value);
+}
+
+fn put_u32(out: &mut Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn put_i32(out: &mut Vec<u8>, value: i32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn put_u64(out: &mut Vec<u8>, value: u64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn put_i64(out: &mut Vec<u8>, value: i64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn put_bytes(out: &mut Vec<u8>, value: &[u8]) {
+    put_u32(out, value.len() as u32);
+    out.extend_from_slice(value);
+}
+
+fn put_timestamp(out: &mut Vec<u8>, value: &Option<edgerun_core::protocol::Timestamp>) {
+    match value {
+        Some(value) => {
+            put_u8(out, 1);
+            put_i64(out, value.seconds);
+            put_i32(out, value.nanos);
+        }
+        None => put_u8(out, 0),
+    }
+}
+
+fn put_node_ref(out: &mut Vec<u8>, value: &Option<edgerun_core::protocol::NodeRef>) {
+    match value {
+        Some(value) => {
+            put_u8(out, 1);
+            put_bytes(out, &value.node_id);
+        }
+        None => put_u8(out, 0),
+    }
+}
+
+fn put_identity_ref(out: &mut Vec<u8>, value: &Option<edgerun_core::protocol::IdentityRef>) {
+    match value {
+        Some(value) => {
+            put_u8(out, 1);
+            put_bytes(out, &value.identity_id);
+            match value.identity_kind {
+                Some(kind) => {
+                    put_u8(out, 1);
+                    put_i32(out, kind);
+                }
+                None => put_u8(out, 0),
+            }
+            match value.key_hint.as_ref() {
+                Some(key_hint) => {
+                    put_u8(out, 1);
+                    put_bytes(out, key_hint);
+                }
+                None => put_u8(out, 0),
+            }
+        }
+        None => put_u8(out, 0),
+    }
+}
+
+fn put_object_ref(out: &mut Vec<u8>, value: &Option<edgerun_core::protocol::ObjectRef>) {
+    match value {
+        Some(value) => {
+            put_u8(out, 1);
+            put_bytes(out, &value.object_id);
+            match value.object_kind {
+                Some(kind) => {
+                    put_u8(out, 1);
+                    put_i32(out, kind);
+                }
+                None => put_u8(out, 0),
+            }
+        }
+        None => put_u8(out, 0),
+    }
+}
+
+fn put_signature(out: &mut Vec<u8>, value: &Option<edgerun_core::protocol::Signature>) {
+    match value {
+        Some(value) => {
+            put_u8(out, 1);
+            put_i32(out, value.algorithm);
+            put_bytes(out, &value.value);
+        }
+        None => put_u8(out, 0),
+    }
+}
+
+fn put_payload(
+    out: &mut Vec<u8>,
+    value: &Option<edgerun_core::protocol::command_envelope::Payload>,
+) {
+    match value {
+        None => put_u8(out, 0),
+        Some(edgerun_core::protocol::command_envelope::Payload::PayloadObject(value)) => {
+            put_u8(out, 1);
+            put_bytes(out, &value.object_id);
+            match value.object_kind {
+                Some(kind) => {
+                    put_u8(out, 1);
+                    put_i32(out, kind);
+                }
+                None => put_u8(out, 0),
+            }
+        }
+        Some(edgerun_core::protocol::command_envelope::Payload::InlinePayload(value)) => {
+            put_u8(out, 2);
+            put_bytes(out, value);
+        }
+    }
+}
+
+fn encode_command_envelope_native(command: &edgerun_core::protocol::CommandEnvelope) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(COMMAND_ENVELOPE_MAGIC);
+    put_u32(&mut out, command.envelope_version);
+    put_bytes(&mut out, &command.command_id);
+    put_node_ref(&mut out, &command.target_node);
+    put_identity_ref(&mut out, &command.issuer);
+    put_i32(&mut out, command.command_type);
+    put_u32(&mut out, command.command_version);
+    put_timestamp(&mut out, &command.issued_at);
+    put_timestamp(&mut out, &command.not_before);
+    put_timestamp(&mut out, &command.expires_at);
+    put_bytes(&mut out, &command.idempotency_key);
+    put_u32(&mut out, command.delegation_chain.len() as u32);
+    put_u8(&mut out, u8::from(command.requested_assurance.is_some()));
+    put_object_ref(&mut out, &command.command_metadata);
+    put_signature(&mut out, &command.signature);
+    put_bytes(&mut out, &command.app_intent);
+    put_payload(&mut out, &command.payload);
+    out
+}
+
+struct CommandReader<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> CommandReader<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, pos: 0 }
+    }
+
+    fn take(&mut self, len: usize) -> Option<&'a [u8]> {
+        let end = self.pos.checked_add(len)?;
+        let chunk = self.bytes.get(self.pos..end)?;
+        self.pos = end;
+        Some(chunk)
+    }
+
+    fn u8(&mut self) -> Option<u8> {
+        Some(*self.take(1)?.first()?)
+    }
+
+    fn u32(&mut self) -> Option<u32> {
+        Some(u32::from_le_bytes(self.take(4)?.try_into().ok()?))
+    }
+
+    fn i32(&mut self) -> Option<i32> {
+        Some(i32::from_le_bytes(self.take(4)?.try_into().ok()?))
+    }
+
+    fn u64(&mut self) -> Option<u64> {
+        Some(u64::from_le_bytes(self.take(8)?.try_into().ok()?))
+    }
+
+    fn i64(&mut self) -> Option<i64> {
+        Some(i64::from_le_bytes(self.take(8)?.try_into().ok()?))
+    }
+
+    fn bytes(&mut self) -> Option<Vec<u8>> {
+        let len = self.u32()? as usize;
+        Some(self.take(len)?.to_vec())
+    }
+
+    fn timestamp(&mut self) -> Option<Option<edgerun_core::protocol::Timestamp>> {
+        match self.u8()? {
+            0 => Some(None),
+            1 => Some(Some(edgerun_core::protocol::Timestamp {
+                seconds: self.i64()?,
+                nanos: self.i32()?,
+            })),
+            _ => None,
+        }
+    }
+
+    fn node_ref(&mut self) -> Option<Option<edgerun_core::protocol::NodeRef>> {
+        match self.u8()? {
+            0 => Some(None),
+            1 => Some(Some(edgerun_core::protocol::NodeRef {
+                node_id: self.bytes()?,
+            })),
+            _ => None,
+        }
+    }
+
+    fn identity_ref(&mut self) -> Option<Option<edgerun_core::protocol::IdentityRef>> {
+        match self.u8()? {
+            0 => Some(None),
+            1 => {
+                let identity_id = self.bytes()?;
+                let identity_kind = match self.u8()? {
+                    0 => None,
+                    1 => Some(self.i32()?),
+                    _ => return None,
+                };
+                let key_hint = match self.u8()? {
+                    0 => None,
+                    1 => Some(self.bytes()?),
+                    _ => return None,
+                };
+                Some(Some(edgerun_core::protocol::IdentityRef {
+                    identity_id,
+                    identity_kind,
+                    key_hint,
+                }))
+            }
+            _ => None,
+        }
+    }
+
+    fn object_ref(&mut self) -> Option<Option<edgerun_core::protocol::ObjectRef>> {
+        match self.u8()? {
+            0 => Some(None),
+            1 => {
+                let object_id = self.bytes()?;
+                let object_kind = match self.u8()? {
+                    0 => None,
+                    1 => Some(self.i32()?),
+                    _ => return None,
+                };
+                Some(Some(edgerun_core::protocol::ObjectRef {
+                    object_id,
+                    object_kind,
+                }))
+            }
+            _ => None,
+        }
+    }
+
+    fn signature(&mut self) -> Option<Option<edgerun_core::protocol::Signature>> {
+        match self.u8()? {
+            0 => Some(None),
+            1 => Some(Some(edgerun_core::protocol::Signature {
+                algorithm: self.i32()?,
+                value: self.bytes()?,
+            })),
+            _ => None,
+        }
+    }
+
+    fn payload(
+        &mut self,
+    ) -> Option<Option<edgerun_core::protocol::command_envelope::Payload>> {
+        match self.u8()? {
+            0 => Some(None),
+            1 => {
+                let object_id = self.bytes()?;
+                let object_kind = match self.u8()? {
+                    0 => None,
+                    1 => Some(self.i32()?),
+                    _ => return None,
+                };
+                Some(Some(
+                    edgerun_core::protocol::command_envelope::Payload::PayloadObject(
+                        edgerun_core::protocol::ObjectRef {
+                            object_id,
+                            object_kind,
+                        },
+                    ),
+                ))
+            }
+            2 => Some(Some(
+                edgerun_core::protocol::command_envelope::Payload::InlinePayload(self.bytes()?),
+            )),
+            _ => None,
+        }
+    }
+
+    fn done(&self) -> bool {
+        self.pos == self.bytes.len()
+    }
+}
+
+fn decode_command_envelope_native(bytes: &[u8]) -> Option<edgerun_core::protocol::CommandEnvelope> {
+    let mut reader = CommandReader::new(bytes);
+    if reader.take(COMMAND_ENVELOPE_MAGIC.len())? != COMMAND_ENVELOPE_MAGIC {
+        return None;
+    }
+    let envelope_version = reader.u32()?;
+    let command_id = reader.bytes()?;
+    let target_node = reader.node_ref()?;
+    let issuer = reader.identity_ref()?;
+    let command_type = reader.i32()?;
+    let command_version = reader.u32()?;
+    let issued_at = reader.timestamp()?;
+    let not_before = reader.timestamp()?;
+    let expires_at = reader.timestamp()?;
+    let idempotency_key = reader.bytes()?;
+    let delegation_count = reader.u32()?;
+    if delegation_count != 0 {
+        return None;
+    }
+    if reader.u8()? != 0 {
+        return None;
+    }
+    let command_metadata = reader.object_ref()?;
+    let signature = reader.signature()?;
+    let app_intent = reader.bytes()?;
+    let payload = reader.payload()?;
+    if !reader.done() {
+        return None;
+    }
+    Some(edgerun_core::protocol::CommandEnvelope {
+        envelope_version,
+        command_id,
+        target_node,
+        issuer,
+        command_type,
+        command_version,
+        issued_at,
+        not_before,
+        expires_at,
+        idempotency_key,
+        delegation_chain: Vec::new(),
+        requested_assurance: None,
+        command_metadata,
+        signature,
+        app_intent,
+        payload,
+    })
 }

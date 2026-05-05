@@ -9,7 +9,6 @@ mod capabilities;
 mod capacity;
 mod command_dispatch;
 mod command_dispatch_event;
-mod command_dispatch_payload;
 mod command_dispatch_result;
 // mod metering;      // TODO: file missing — not needed for interface boundary
 // mod running_workloads; // TODO: file missing — not needed for interface boundary
@@ -17,7 +16,6 @@ mod command_dispatch_result;
 mod hardware;
 mod ingress;
 mod init;
-mod session;
 mod stream_append;
 
 // Extracted modules
@@ -26,17 +24,11 @@ mod config;
 mod daemon;
 mod health;
 mod init_cmd;
-mod mesh_store_provider;
-mod peer_reconnect;
 mod query_engine;
 mod signer;
 mod status_cmd;
-mod store_task;
-mod tcp_server;
 
 mod provisioning_listener;
-
-mod types;
 
 fn main() {
     cli::main()

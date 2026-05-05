@@ -505,7 +505,12 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
 
+    fn init_test_node_id() {
+        let _ = init_node_id(vec![0x55; 32]);
+    }
+
     fn tmp_root() -> PathBuf {
+        init_test_node_id();
         static C: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = C.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let p = std::env::temp_dir().join(format!("ss_test_{}_{}", std::process::id(), n));

@@ -6,7 +6,7 @@
 //! ## Usage
 //! ```text
 //! edgerund init --config node.yaml --software          # Dev-only: in-memory key
-//! edgerund run --config node.yaml --listen 0.0.0.0:8080  # Start daemon with TCP
+//! edgerund run --config node.yaml                        # Start daemon
 //! edgerund status --config node.yaml                   # Show node identity
 //! ```
 //!
@@ -19,13 +19,10 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use crate::config::parse_config;
-use crate::config::NodeConfig;
 use crate::daemon::cmd_run;
 use crate::init_cmd::{
     cmd_init, cmd_init_encrypted, cmd_init_provisioned, cmd_provision, cmd_unlock,
 };
-use crate::signer::load_signer_from_config;
 use crate::status_cmd::cmd_status;
 
 /// Parsed CLI arguments.

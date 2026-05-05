@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn block_event_log_crosses_sector_boundaries() {
-        let device = InMemoryBlockDevice::new(16, 16);
+        let device = InMemoryBlockDevice::new(16, 32);
         let mut log = BlockEventLog::open(device).unwrap();
 
         let mut envelope = envelope(b"boundary-stream", 0, 2);
@@ -581,9 +581,8 @@ mod tests {
 }
 
 fn decode_event_envelope_wire(
-    _bytes: &[u8],
+    bytes: &[u8],
 ) -> Result<edgerun_core::protocol::EventEnvelope, StorageError> {
-    Err(StorageError::Decode(
-        "native event wire decode not wired yet".to_string(),
-    ))
+    edgerun_core::wire_stream::decode_event_full_wire_bytes(bytes)
+        .map_err(|e| StorageError::Decode(e.to_string()))
 }

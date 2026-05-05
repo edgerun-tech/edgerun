@@ -140,6 +140,75 @@ pub fn verify_event_only(iterations: usize) -> Result<usize, E2eError> {
     Ok(ok)
 }
 
+pub fn signed_events(iterations: usize) -> Result<(Vec<EventEnvelope>, [u8; 64]), E2eError> {
+    let signing_key = deterministic_signing_key(14);
+    let signer = P256ProtocolSigner::new(signing_key);
+    let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let mut events = Vec::with_capacity(iterations);
+
+    for seq in 0..iterations as u64 {
+        let mut event = sample_event(&public_key, seq);
+        let signed = signer
+            .sign_record(
+                &ProtocolRecord::EventEnvelope(event.clone()),
+                ProtocolFamily::EventEnvelope,
+            )
+            .map_err(|_| E2eError::Sign)?;
+        event.signature = Some(signed.signature);
+        events.push(event);
+    }
+
+    Ok((events, public_key))
+}
+
+pub fn verify_prebuilt_events(events: &[EventEnvelope], public_key: &[u8; 64]) -> Result<usize, E2eError> {
+    let mut ok = 0usize;
+    for event in events {
+        verify_event_envelope(event, ProtocolSignerRef::P256Raw64(public_key))
+            .map_err(|_| E2eError::Verify)?;
+        ok += 1;
+    }
+    Ok(ok)
+}
+
+pub fn canonicalize_event_only(iterations: usize) -> usize {
+    let signing_key = deterministic_signing_key(15);
+    let signer = P256ProtocolSigner::new(signing_key);
+    let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let mut total = 0usize;
+
+    for seq in 0..iterations as u64 {
+        let event = sample_event(&public_key, seq);
+        let bytes = edgerun_verify::protocol_signable_bytes(
+            &ProtocolRecord::EventEnvelope(event),
+            ProtocolFamily::EventEnvelope,
+        )
+        .expect("event canonicalization should be implemented");
+        total += bytes.len();
+    }
+
+    total
+}
+
+pub fn hash_event_only(iterations: usize) -> usize {
+    let signing_key = deterministic_signing_key(16);
+    let signer = P256ProtocolSigner::new(signing_key);
+    let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let mut total = 0usize;
+
+    for seq in 0..iterations as u64 {
+        let event = sample_event(&public_key, seq);
+        let hash = edgerun_verify::protocol_record_hash(
+            &ProtocolRecord::EventEnvelope(event),
+            ProtocolFamily::EventEnvelope,
+        )
+        .expect("event hashing should be implemented");
+        total += hash.len();
+    }
+
+    total
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

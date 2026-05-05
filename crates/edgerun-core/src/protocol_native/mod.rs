@@ -161,6 +161,11 @@ fn signable_record(record: &ProtocolRecord) -> ProtocolRecord {
             value.signature = None;
             ProtocolRecord::AssuranceClaim(value)
         }
+        ProtocolRecord::SnapshotDescriptor(value) => {
+            let mut value = value.clone();
+            value.signature = None;
+            ProtocolRecord::SnapshotDescriptor(value)
+        }
         other => other.clone(),
     }
 }

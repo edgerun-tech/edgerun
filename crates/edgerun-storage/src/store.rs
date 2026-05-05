@@ -1018,12 +1018,10 @@ impl NodeStore {
         };
 
         // Sign the descriptor with domain separation
-        let record =
-            edgerun_core::protocol::ProtocolRecord::ObjectRef(edgerun_core::protocol::ObjectRef {
-                object_id: Vec::new(),
-                object_kind: None,
-            });
-        let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
+        let canonical = edgerun_core::protocol::canonical_bytes(
+            &edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone()),
+            true,
+        );
         let sig = signer
             .sign_record(
                 edgerun_core::crypto::SIG_DOMAIN_SNAPSHOT_DESCRIPTOR,
@@ -1077,6 +1075,42 @@ impl NodeStore {
             .producer
             .as_ref()
             .ok_or_else(|| StorageError::Decode("producer is missing".into()))?;
+        if !trusted_producers
+            .iter()
+            .any(|trusted| trusted == &producer.identity_id)
+        {
+            return Err(StorageError::Decode("snapshot producer is not trusted".into()));
+        }
+        let signature = descriptor
+            .signature
+            .as_ref()
+            .ok_or_else(|| StorageError::Decode("snapshot signature is missing".into()))?;
+        let producer_key: [u8; 64] =
+            producer
+                .identity_id
+                .as_slice()
+                .try_into()
+                .map_err(|_| {
+                    StorageError::Decode("snapshot producer key must be 64 bytes".into())
+                })?;
+        let verifying_key =
+            edgerun_core::crypto::node_id_to_verifying_key(&producer_key).ok_or_else(|| {
+                StorageError::Decode("snapshot producer key is not a valid P-256 key".into())
+            })?;
+        let canonical = edgerun_core::protocol::canonical_bytes(
+            &edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone()),
+            true,
+        );
+        if !edgerun_core::crypto::verify_canonical_record_hw(
+            &verifying_key,
+            edgerun_core::crypto::SIG_DOMAIN_SNAPSHOT_DESCRIPTOR,
+            &canonical,
+            &signature.value,
+        ) {
+            return Err(StorageError::Decode(
+                "snapshot signature verification failed".into(),
+            ));
+        }
         let producer_hex = edgerun_core::util::bytes_to_hex(&producer.identity_id);
 
         // Store as object (if payload_object is present)
@@ -1228,6 +1262,7 @@ impl NodeStore {
         });
 
         validate_scanned_event_locations(&scanned)?;
+        validate_scanned_stream_chains(&scanned)?;
 
         self.index.clear()?;
 

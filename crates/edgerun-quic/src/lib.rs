@@ -213,7 +213,7 @@ mod integration_tests {
         let encrypted = server_prot.protect(server_header, server_msg).unwrap();
 
         // Client decrypts using server_app_secret (which is client's read key)
-        let decrypted = client_prot.unprotect(server_header, 1, &encrypted).unwrap();
+        let decrypted = client_prot.unprotect(server_header, 0, &encrypted).unwrap();
         assert_eq!(&decrypted, server_msg);
     }
 
@@ -276,7 +276,8 @@ mod integration_tests {
             .unwrap();
 
         // Build full client transcript for app key derivation
-        let client_transcript = client.transcript().to_vec();
+        let mut client_transcript = client.transcript().to_vec();
+        client_transcript.extend_from_slice(&client_finished);
         let client_result = client
             .build_result(&[0x01, 0x02, 0x03, 0x04], &client_transcript)
             .unwrap();

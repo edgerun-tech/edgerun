@@ -1,7 +1,7 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use edgerun_sign_verify_e2e::{sign_event_only, sign_verify_event_roundtrip, verify_event_only};
+use edgerun_sign_verify_e2e::{canonicalize_event_only, hash_event_only, sign_event_only, sign_verify_event_roundtrip, signed_events, verify_event_only, verify_prebuilt_events};
 
 fn bench_once(name: &str, iterations: usize, mut f: impl FnMut(usize)) {
     let start = Instant::now();
@@ -48,4 +48,23 @@ fn main() {
         let ok = verify_event_only(n).expect("verify benchmark should pass");
         black_box(ok);
     });
+
+    let (events, public_key) = signed_events(iterations).expect("prebuild signed events should pass");
+
+    bench_once("verify_event_only", iterations, |n| {
+        let ok = verify_prebuilt_events(&events[..n], &public_key)
+            .expect("verify-only benchmark should pass");
+        black_box(ok);
+    });
+
+    bench_once("canonicalize_event", iterations, |n| {
+        let bytes = canonicalize_event_only(n);
+        black_box(bytes);
+    });
+
+    bench_once("hash_event", iterations, |n| {
+        let bytes = hash_event_only(n);
+        black_box(bytes);
+    });
+
 }
