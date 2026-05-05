@@ -11,6 +11,12 @@ use edgerun_core::protocol::{
 
 pub use edgerun_core::protocol::Signature as ProtocolSignature;
 
+/// Signed protocol record families that can become durable facts, signed
+/// advisory evidence, or signed access artifacts.
+///
+/// Transport session handshakes and relay carriage envelopes are deliberately
+/// not part of this enum. They may be authenticated by transport-specific
+/// handshakes, but they are not core authority records.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolFamily {
     EventEnvelope,
@@ -23,9 +29,6 @@ pub enum ProtocolFamily {
     QueryRequest,
     QueryResultFragment,
     RouteAdvertisement,
-    SessionHello,
-    SessionAccept,
-    RelayEnvelope,
 }
 
 impl ProtocolFamily {
@@ -41,9 +44,6 @@ impl ProtocolFamily {
             Self::QueryRequest => crypto::HASH_DOMAIN_QUERY_REQUEST,
             Self::QueryResultFragment => crypto::HASH_DOMAIN_QUERY_RESULT_FRAGMENT,
             Self::RouteAdvertisement => crypto::HASH_DOMAIN_ROUTE_ADVERTISEMENT,
-            Self::SessionHello => crypto::HASH_DOMAIN_SESSION_HELLO,
-            Self::SessionAccept => crypto::HASH_DOMAIN_SESSION_ACCEPT,
-            Self::RelayEnvelope => crypto::HASH_DOMAIN_RELAY_ENVELOPE,
         }
     }
 
@@ -59,9 +59,6 @@ impl ProtocolFamily {
             Self::QueryRequest => crypto::SIG_DOMAIN_QUERY_REQUEST,
             Self::QueryResultFragment => crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT,
             Self::RouteAdvertisement => crypto::SIG_DOMAIN_ROUTE_ADVERTISEMENT,
-            Self::SessionHello => crypto::SIG_DOMAIN_SESSION_HELLO,
-            Self::SessionAccept => crypto::SIG_DOMAIN_SESSION_ACCEPT,
-            Self::RelayEnvelope => crypto::SIG_DOMAIN_RELAY_ENVELOPE,
         }
     }
 
