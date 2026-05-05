@@ -1,17 +1,17 @@
 [package]
-name = "edgerun-yubikey"
+name = "edgerun-bluetooth-gatt"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "YubiKey signing provider for Edgerun hardware identities"
+description = "Bluetooth GATT support for Edgerun device capabilities"
 
 [dependencies]
-edgerun-core = { version = "0.1", path = "../../protocol/edgerun-core" }
-edgerun-linux-sysfs = { version = "0.1", path = "../../linux-adapters/edgerun-linux-sysfs" }
+edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 
 [lints]
 workspace = true

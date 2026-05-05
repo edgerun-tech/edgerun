@@ -1423,33 +1423,33 @@ unsafe fn take_single_used_completion(
     used: *const VirtqUsed,
     queue_size: u16,
     last_used_idx: &mut u16,
-) -> Option<VirtqUsedElem> {
+) -> VirtioResult<Option<VirtqUsedElem>> {
     let used_idx = split_queue_used_idx(used);
     if used_idx == *last_used_idx {
-        return None;
+        return Ok(None);
     }
 
     let elem = split_queue_used_elem(used, queue_size, *last_used_idx);
     let next_used_idx = last_used_idx.wrapping_add(1);
     if used_idx != next_used_idx {
         *last_used_idx = used_idx;
-        return None;
+        return Err(VirtioError::InvalidUsedDescriptor);
     }
 
     *last_used_idx = next_used_idx;
-    Some(elem)
+    Ok(Some(elem))
 }
 
-unsafe fn wait_for_used_completion(used: *const VirtqUsed, last_used_idx: u16) -> bool {
+unsafe fn wait_for_used_completion(used: *const VirtqUsed, last_used_idx: u16) -> VirtioResult<()> {
     let mut spins = 0;
     while split_queue_used_idx(used) == last_used_idx {
         spins += 1;
         if spins > VIRTIO_POLL_SPINS {
-            return false;
+            return Err(VirtioError::DeviceTimeout);
         }
         core::hint::spin_loop();
     }
-    true
+    Ok(())
 }
 
 pub struct VirtBlk {
@@ -1561,9 +1561,7 @@ impl VirtBlk {
         }
 
         unsafe {
-            if !self.submit_request(VIRTIO_BLK_T_IN, sector, SECTOR_SIZE, true) {
-                return Err(VirtioError::DeviceError);
-            }
+            self.submit_request(VIRTIO_BLK_T_IN, sector, SECTOR_SIZE, true)?;
             core::ptr::copy_nonoverlapping(
                 core::ptr::addr_of!(BLK_DATA.0) as *const u8,
                 out.as_mut_ptr(),
@@ -1592,9 +1590,7 @@ impl VirtBlk {
         let mut sector = start_sector;
         while offset < out.len() {
             let chunk_len = core::cmp::min(SECTOR_SIZE, out.len() - offset);
-            if !self.read_sectors_chunk(sector, &mut out[offset..offset + chunk_len]) {
-                return Err(VirtioError::DeviceError);
-            }
+            self.read_sectors_chunk(sector, &mut out[offset..offset + chunk_len])?;
             offset += chunk_len;
             sector += (chunk_len / SECTOR_SIZE) as u64;
         }
@@ -1623,11 +1619,7 @@ impl VirtBlk {
                 core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
                 SECTOR_SIZE,
             );
-            if self.submit_request(VIRTIO_BLK_T_OUT, sector, SECTOR_SIZE, false) {
-                Ok(())
-            } else {
-                Err(VirtioError::DeviceError)
-            }
+            self.submit_request(VIRTIO_BLK_T_OUT, sector, SECTOR_SIZE, false)
         }
     }
 
@@ -1656,9 +1648,7 @@ impl VirtBlk {
         let mut sector = start_sector;
         while offset < data.len() {
             let chunk_len = core::cmp::min(SECTOR_SIZE, data.len() - offset);
-            if !self.write_sectors_chunk(sector, &data[offset..offset + chunk_len]) {
-                return Err(VirtioError::DeviceError);
-            }
+            self.write_sectors_chunk(sector, &data[offset..offset + chunk_len])?;
             offset += chunk_len;
             sector += (chunk_len / SECTOR_SIZE) as u64;
         }
@@ -1674,11 +1664,7 @@ impl VirtBlk {
         if self.features & VIRTIO_BLK_F_FLUSH == 0 {
             return Ok(());
         }
-        if unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, 0, false) } {
-            Ok(())
-        } else {
-            Err(VirtioError::DeviceError)
-        }
+        unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, 0, false) }
     }
 
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
@@ -1719,33 +1705,34 @@ impl VirtBlk {
         Some((len / SECTOR_SIZE) as u32)
     }
 
-    fn read_sectors_chunk(&mut self, sector: u64, out: &mut [u8]) -> bool {
+    fn read_sectors_chunk(&mut self, sector: u64, out: &mut [u8]) -> VirtioResult<()> {
         let Some(sector_count) = Self::chunk_sector_count(out.len()) else {
-            return false;
+            return Err(VirtioError::InvalidBufferLength);
         };
         if !self.sector_range_in_bounds(sector, sector_count as u64) {
-            return false;
+            return Err(VirtioError::OutOfRange);
         }
 
         unsafe {
-            if !self.submit_request(VIRTIO_BLK_T_IN, sector, out.len(), true) {
-                return false;
-            }
+            self.submit_request(VIRTIO_BLK_T_IN, sector, out.len(), true)?;
             core::ptr::copy_nonoverlapping(
                 core::ptr::addr_of!(BLK_DATA.0) as *const u8,
                 out.as_mut_ptr(),
                 out.len(),
             );
         }
-        true
+        Ok(())
     }
 
-    fn write_sectors_chunk(&mut self, sector: u64, data: &[u8]) -> bool {
+    fn write_sectors_chunk(&mut self, sector: u64, data: &[u8]) -> VirtioResult<()> {
         let Some(sector_count) = Self::chunk_sector_count(data.len()) else {
-            return false;
+            return Err(VirtioError::InvalidBufferLength);
         };
-        if self.read_only || !self.sector_range_in_bounds(sector, sector_count as u64) {
-            return false;
+        if self.read_only {
+            return Err(VirtioError::ReadOnly);
+        }
+        if !self.sector_range_in_bounds(sector, sector_count as u64) {
+            return Err(VirtioError::OutOfRange);
         }
 
         unsafe {
@@ -1776,26 +1763,31 @@ impl VirtBlk {
         sector: u64,
         data_len: usize,
         read: bool,
-    ) -> bool {
+    ) -> VirtioResult<()> {
         if !self.prepare_request_descriptors(request_type, sector, data_len, read) {
-            return false;
+            return Err(VirtioError::InvalidBufferLength);
         }
 
         post_split_queue_descriptor(core::ptr::addr_of_mut!(BLK_AVAIL), self.queue_size, 0);
         self.notify_queue();
 
-        if !wait_for_used_completion(core::ptr::addr_of!(BLK_USED), self.last_used_idx) {
-            return false;
-        }
+        wait_for_used_completion(core::ptr::addr_of!(BLK_USED), self.last_used_idx)?;
 
         let Some(elem) = take_single_used_completion(
             core::ptr::addr_of!(BLK_USED),
             self.queue_size,
             &mut self.last_used_idx,
-        ) else {
-            return false;
+        )?
+        else {
+            return Err(VirtioError::InvalidUsedDescriptor);
         };
-        elem.id == 0 && read_u8(core::ptr::addr_of!(BLK_STATUS)) == VIRTIO_BLK_S_OK
+        if elem.id != 0 {
+            return Err(VirtioError::InvalidUsedDescriptor);
+        }
+        if read_u8(core::ptr::addr_of!(BLK_STATUS)) != VIRTIO_BLK_S_OK {
+            return Err(VirtioError::DeviceError);
+        }
+        Ok(())
     }
 
     unsafe fn prepare_request_descriptors(
@@ -1952,7 +1944,7 @@ impl VirtRng {
 
         let mut offset = 0;
         while offset < out.len() {
-            let written = unsafe { self.request_entropy(&mut out[offset..]) };
+            let written = unsafe { self.request_entropy(&mut out[offset..])? };
             if written == 0 {
                 return Err(VirtioError::DeviceError);
             }
@@ -1992,10 +1984,10 @@ impl VirtRng {
         core::ptr::write_bytes(core::ptr::addr_of_mut!(RNG_DATA.0) as *mut u8, 0, 256);
     }
 
-    unsafe fn request_entropy(&mut self, out: &mut [u8]) -> usize {
+    unsafe fn request_entropy(&mut self, out: &mut [u8]) -> VirtioResult<usize> {
         let request_len = core::cmp::min(out.len(), 256);
         if request_len == 0 {
-            return 0;
+            return Ok(0);
         }
 
         let desc = core::ptr::addr_of_mut!(RNG_DESC.0) as *mut VirtqDesc;
@@ -2012,28 +2004,30 @@ impl VirtRng {
         post_split_queue_descriptor(core::ptr::addr_of_mut!(RNG_AVAIL), self.queue_size, 0);
         self.notify_queue();
 
-        if !wait_for_used_completion(core::ptr::addr_of!(RNG_USED), self.last_used_idx) {
-            return 0;
-        }
+        wait_for_used_completion(core::ptr::addr_of!(RNG_USED), self.last_used_idx)?;
 
         let Some(elem) = take_single_used_completion(
             core::ptr::addr_of!(RNG_USED),
             self.queue_size,
             &mut self.last_used_idx,
-        ) else {
-            return 0;
+        )?
+        else {
+            return Err(VirtioError::InvalidUsedDescriptor);
         };
         if elem.id != 0 {
-            return 0;
+            return Err(VirtioError::InvalidUsedDescriptor);
         }
 
         let len = core::cmp::min(elem.len as usize, request_len);
+        if len == 0 {
+            return Err(VirtioError::InvalidUsedLength);
+        }
         core::ptr::copy_nonoverlapping(
             core::ptr::addr_of!(RNG_DATA.0) as *const u8,
             out.as_mut_ptr(),
             len,
         );
-        len
+        Ok(len)
     }
 
     fn notify_queue(&self) {
@@ -2209,7 +2203,7 @@ impl VirtConsole {
 
         let mut offset = 0;
         while offset < bytes.len() {
-            let written = unsafe { self.write_chunk(&bytes[offset..]) };
+            let written = unsafe { self.write_chunk(&bytes[offset..])? };
             if written == 0 {
                 return Err(VirtioError::DeviceError);
             }
@@ -2278,10 +2272,10 @@ impl VirtConsole {
         }
     }
 
-    unsafe fn write_chunk(&mut self, bytes: &[u8]) -> usize {
+    unsafe fn write_chunk(&mut self, bytes: &[u8]) -> VirtioResult<usize> {
         let len = core::cmp::min(bytes.len(), CONSOLE_BUFFER_SIZE);
         if len == 0 {
-            return 0;
+            return Ok(0);
         }
 
         core::ptr::copy_nonoverlapping(
@@ -2308,21 +2302,20 @@ impl VirtConsole {
         );
         self.notify_tx_queue();
 
-        if !wait_for_used_completion(core::ptr::addr_of!(CONSOLE_USED), self.tx_last_used_idx) {
-            return 0;
-        }
+        wait_for_used_completion(core::ptr::addr_of!(CONSOLE_USED), self.tx_last_used_idx)?;
 
         let Some(elem) = take_single_used_completion(
             core::ptr::addr_of!(CONSOLE_USED),
             self.tx_queue_size,
             &mut self.tx_last_used_idx,
-        ) else {
-            return 0;
+        )?
+        else {
+            return Err(VirtioError::InvalidUsedDescriptor);
         };
         if elem.id == 0 {
-            len
+            Ok(len)
         } else {
-            0
+            Err(VirtioError::InvalidUsedDescriptor)
         }
     }
 
@@ -2905,14 +2898,17 @@ mod tests {
         };
         let mut last = 0;
 
-        let elem =
-            unsafe { take_single_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.unwrap();
+        let elem = unsafe { take_single_used_completion(&used, QUEUE_SIZE as u16, &mut last) }
+            .unwrap()
+            .unwrap();
 
         assert_eq!(elem.id, 7);
         assert_eq!(elem.len, 11);
         assert_eq!(last, 1);
         assert!(
-            unsafe { take_single_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.is_none()
+            unsafe { take_single_used_completion(&used, QUEUE_SIZE as u16, &mut last) }
+                .unwrap()
+                .is_none()
         );
         assert_eq!(last, 1);
     }
@@ -2927,9 +2923,10 @@ mod tests {
         };
         let mut last = 0;
 
-        assert!(
-            unsafe { take_single_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.is_none()
-        );
+        assert!(matches!(
+            unsafe { take_single_used_completion(&used, QUEUE_SIZE as u16, &mut last) },
+            Err(VirtioError::InvalidUsedDescriptor)
+        ));
         assert_eq!(last, 3);
     }
 

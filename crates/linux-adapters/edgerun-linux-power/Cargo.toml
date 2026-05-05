@@ -1,0 +1,25 @@
+[package]
+name = "edgerun-linux-power"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Linux power management adapter for Edgerun"
+
+[dependencies]
+edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
+edgerun-power = { version = "0.1", path = "../../device-types/edgerun-power" }
+
+[[bin]]
+name = "linux-power-tool"
+path = "src/bin/linux-power-tool.rs"
+required-features = ["std"]
+
+[lints]
+workspace = true
+
+[features]
+std = []

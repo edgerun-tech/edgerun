@@ -50,7 +50,8 @@ pub use block::{
     PartitionEntry, PartitionError, PartitionKind, PartitionTable, PartitionTableKind,
 };
 pub use core::{
-    canonical_event_hash, derive_logical_object_id, derive_representation_id, DurableStreamWriter,
+    canonical_event_hash, derive_logical_object_id, derive_representation_id, AppendReceipt,
+    DurableStreamWriter, EventLog,
 };
 pub use credentials::CredentialStore;
 pub use error::StorageError;

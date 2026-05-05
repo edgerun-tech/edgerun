@@ -19,7 +19,7 @@ edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
-edgerun-inotify = { version = "0.1", path = "../../edgerun-inotify", optional = true }
+edgerun-inotify = { version = "0.1", path = "../../linux-adapters/edgerun-inotify", optional = true }
 
 [[bin]]
 name = "mount_ramfs"

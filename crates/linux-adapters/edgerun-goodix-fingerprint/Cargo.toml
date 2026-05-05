@@ -1,0 +1,27 @@
+[package]
+name = "edgerun-goodix-fingerprint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Goodix fingerprint sensor adapter for Edgerun"
+
+[dependencies]
+edgerun-fingerprint = { version = "0.1", path = "../../device-types/edgerun-fingerprint" }
+edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
+
+[dev-dependencies]
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
+
+[[bin]]
+name = "goodix_tool"
+path = "src/bin/goodix-tool.rs"
+required-features = ["std"]
+
+[features]
+std = []
+
+[lints]
+workspace = true
