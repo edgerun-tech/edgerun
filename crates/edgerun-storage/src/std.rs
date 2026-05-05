@@ -291,27 +291,7 @@ pub mod fs {
         }
     }
 
-    impl edgerun_core::io::Read for File {
-        fn read_exact(&mut self, buf: &mut [u8]) -> edgerun_core::io::Result<()> {
-            io::Read::read_exact(self, buf).map_err(to_core_io_error)
-        }
-    }
 
-    impl edgerun_core::io::Write for File {
-        fn write_all(&mut self, buf: &[u8]) -> edgerun_core::io::Result<()> {
-            io::Write::write_all(self, buf).map_err(to_core_io_error)
-        }
-    }
-
-    fn to_core_io_error(err: io::Error) -> edgerun_core::io::Error {
-        let kind = match err.kind() {
-            io::ErrorKind::UnexpectedEof => edgerun_core::io::ErrorKind::UnexpectedEof,
-            io::ErrorKind::InvalidData => edgerun_core::io::ErrorKind::InvalidData,
-            io::ErrorKind::NotFound => edgerun_core::io::ErrorKind::NotFound,
-            _ => edgerun_core::io::ErrorKind::Other,
-        };
-        edgerun_core::io::Error::new(kind, err)
-    }
 
     impl io::Seek for File {
         fn seek(&mut self, _pos: io::SeekFrom) -> io::Result<u64> {

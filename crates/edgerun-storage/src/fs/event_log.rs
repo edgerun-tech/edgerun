@@ -203,9 +203,6 @@ fn varint_is_unexpected_eof(err: &edgerun_core::io::Error) -> bool {
 }
 
 #[cfg(not(target_os = "none"))]
-fn varint_is_unexpected_eof(err: &std::io::Error) -> bool {
-    err.kind() == std::io::ErrorKind::UnexpectedEof
-}
 
 #[cfg(target_os = "none")]
 fn varint_io_to_storage_io(err: edgerun_core::io::Error) -> StorageError {
@@ -219,9 +216,6 @@ fn varint_io_to_storage_io(err: edgerun_core::io::Error) -> StorageError {
 }
 
 #[cfg(not(target_os = "none"))]
-fn varint_io_to_storage_io(err: std::io::Error) -> StorageError {
-    StorageError::Io(err)
-}
 
 
 fn decode_varint_from_read<R: Read>(r: &mut R) -> std::io::Result<Option<u64>> {
@@ -261,13 +255,7 @@ fn decode_varint_from_read<R: Read>(r: &mut R) -> std::io::Result<Option<u64>> {
     }
 }
 
-fn varint_is_unexpected_eof(err: &std::io::Error) -> bool {
-    err.kind() == std::io::ErrorKind::UnexpectedEof
-}
 
-fn varint_io_to_storage_io(err: std::io::Error) -> StorageError {
-    StorageError::Io(err)
-}
 
 #[cfg(test)]
 mod tests {
