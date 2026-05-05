@@ -4,7 +4,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 target="${TARGET:-x86_64-unknown-none}"
 profile="${PROFILE:-release}"
-build_dir="$repo_root/target/$target/$profile"
+cargo_target_dir="$(
+    cd "$repo_root"
+    cargo metadata --no-deps --format-version 1 |
+        sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p'
+)"
+cargo_target_dir="${cargo_target_dir:-$repo_root/target}"
+build_dir="$cargo_target_dir/$target/$profile"
 kernel_elf="$build_dir/edgerun-unikernel"
 kernel_bin="${KERNEL_BIN:-/tmp/edgerun.bin}"
 boot_obj="${BOOT_OBJ:-/tmp/edgerun-qemu-boot.o}"
@@ -12,7 +18,7 @@ boot_bin="${BOOT_BIN:-/tmp/edgerun-qemu-boot.bin}"
 boot_sector="${BOOT_SECTOR:-/tmp/edgerun-qemu-boot-512.bin}"
 timeout_seconds="${QEMU_TIMEOUT:-8}"
 qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu.log}"
-expected_marker="${QEMU_EXPECT:-VirtIO found}"
+expected_marker="${QEMU_EXPECT:-VirtIO net init ok}"
 qemu_net_dump="${QEMU_NET_DUMP:-}"
 qemu_netdev="${QEMU_NETDEV:-user,id=n0}"
 qemu_tpm_socket="${QEMU_TPM_SOCKET:-}"

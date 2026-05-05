@@ -4940,14 +4940,10 @@ async fn run_configured_oci_pull(config: &boot_config::BootConfig) {
     }
 
     rt::log::log(1, "Bare OCI pull into EdgeFS start");
-    let Some(mut block) = edgerun_virtio::find_virtio_blk() else {
+    let Some(block) = edgerun_virtio::find_initialized_virtio_blk() else {
         rt::log::log(1, "Bare OCI pull no VirtIO block device");
         return;
     };
-    if !block.init() {
-        rt::log::log(1, "Bare OCI pull VirtIO block init failed");
-        return;
-    }
 
     let mut storage = disk_boot::RtBlockDeviceStorage::new(block);
     let edgefs_key = [0x42u8; 32];
@@ -5145,8 +5141,8 @@ fn fill_bare_random_source(out: &mut [u8]) -> edgerun_crypto::error::Result<()> 
         return Ok(());
     }
 
-    if let Some(mut rng) = edgerun_virtio::find_virtio_rng() {
-        if rng.init() && rng.fill_bytes(out) {
+    if let Some(mut rng) = edgerun_virtio::find_initialized_virtio_rng() {
+        if rng.fill_bytes(out) {
             return Ok(());
         }
     }
@@ -5299,14 +5295,10 @@ fn find_initialized_bare_nic() -> Option<BareNic> {
         rt::log::log(1, "No RTL8125 found");
     }
 
-    if let Some(virtio) = edgerun_virtio::find_virtio_net() {
+    if let Some(virtio) = edgerun_virtio::find_initialized_virtio_net() {
         rt::log::log(1, "VirtIO net found");
-        let mut net = BareNic::Virtio(virtio);
-        if net.init() {
-            rt::log::log(1, "VirtIO net init ok");
-            return Some(net);
-        }
-        rt::log::log(1, "VirtIO net init failed");
+        rt::log::log(1, "VirtIO net init ok");
+        return Some(BareNic::Virtio(virtio));
     } else {
         rt::log::log(1, "No VirtIO net found");
     }
@@ -5441,18 +5433,14 @@ pub unsafe extern "C" fn kernel_main() -> ! {
     edgerun_crypto::rng::register_random_source(fill_bare_random_source);
 
     let mut rng = Rng::new_from_entropy();
-    if let Some(mut virtio_rng) = edgerun_virtio::find_virtio_rng() {
-        if virtio_rng.init() {
-            let mut virtio_entropy = [0u8; 32];
-            if virtio_rng.fill_bytes(&mut virtio_entropy) {
-                rng.mix_entropy(&virtio_entropy);
-                edgerun_crypto::rng::mix_entropy(&virtio_entropy);
-                rt::log::log(1, "RNG mixed VirtIO entropy");
-            } else {
-                rt::log::log(1, "VirtIO RNG read failed");
-            }
+    if let Some(mut virtio_rng) = edgerun_virtio::find_initialized_virtio_rng() {
+        let mut virtio_entropy = [0u8; 32];
+        if virtio_rng.fill_bytes(&mut virtio_entropy) {
+            rng.mix_entropy(&virtio_entropy);
+            edgerun_crypto::rng::mix_entropy(&virtio_entropy);
+            rt::log::log(1, "RNG mixed VirtIO entropy");
         } else {
-            rt::log::log(1, "VirtIO RNG init failed");
+            rt::log::log(1, "VirtIO RNG read failed");
         }
     } else {
         rt::log::log(1, "No VirtIO RNG found");
@@ -5472,37 +5460,32 @@ pub unsafe extern "C" fn kernel_main() -> ! {
 
     rt::log::log(1, "Looking for VirtIO...");
 
-    if let Some(mut console) = edgerun_virtio::find_virtio_console() {
-        if console.init() {
-            let _ = console.write_all(b"edgerun: virtio-console online\n");
-            rt::log::log(1, "VirtIO console init ok");
-        } else {
-            rt::log::log(1, "VirtIO console init failed");
-        }
+    if let Some(mut console) = edgerun_virtio::find_initialized_virtio_console() {
+        let _ = console.write_all(b"edgerun: virtio-console online\n");
+        rt::log::log(1, "VirtIO console init ok");
     } else {
         rt::log::log(1, "No VirtIO console found");
     }
 
-    if let Some(mut block) = edgerun_virtio::find_virtio_blk() {
+    if let Some(mut block) = edgerun_virtio::find_initialized_virtio_blk() {
         rt::log::log(1, "VirtIO block device found");
-        if block.init() {
-            rt::log::log(1, "VirtIO block init ok");
-            let mut first_sector = [0u8; 512];
-            if block.read_sector(0, &mut first_sector) {
-                rt::log::log(1, "VirtIO block first sector read ok");
+        rt::log::log(1, "VirtIO block init ok");
+        let mut first_sector = [0u8; 512];
+        if block.read_sector(0, &mut first_sector) {
+            rt::log::log(1, "VirtIO block first sector read ok");
+        } else {
+            rt::log::log(1, "VirtIO block first sector read failed");
+        }
+        if block.read_sector(0, &mut first_sector) {
+            rt::log::log(1, "VirtIO block second sector read ok");
+        } else {
+            rt::log::log(1, "VirtIO block second sector read failed");
+        }
+        if first_sector[510] == 0x55 && first_sector[511] == 0xaa {
+            let mut partition_sector = [0u8; 512];
+            if block.read_sector(2048, &mut partition_sector) {
+                rt::log::log(1, "VirtIO block partition sector read ok");
             } else {
-                rt::log::log(1, "VirtIO block first sector read failed");
-            }
-            if block.read_sector(0, &mut first_sector) {
-                rt::log::log(1, "VirtIO block second sector read ok");
-            } else {
-                rt::log::log(1, "VirtIO block second sector read failed");
-            }
-            if first_sector[510] == 0x55 && first_sector[511] == 0xaa {
-                let mut partition_sector = [0u8; 512];
-                if block.read_sector(2048, &mut partition_sector) {
-                    rt::log::log(1, "VirtIO block partition sector read ok");
-                } else {
                     rt::log::log(1, "VirtIO block partition sector read failed");
                 }
                 if block.read_sector(2112, &mut partition_sector) {

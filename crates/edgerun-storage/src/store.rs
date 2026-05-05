@@ -1818,7 +1818,7 @@ mod tests {
 
         let stored = store.get_event(stream_id, 0).unwrap().unwrap();
         assert!(stored.signature.is_some());
-        assert!(edgerun_stream::verify_event(&stored, &signer.node_id()).is_ok());
+        assert!(edgerun_stream::verify_event(&stored, &signer.node_id().0).is_ok());
         assert_eq!(store.get_head(stream_id).unwrap().unwrap().0, 0);
 
         let _ = std::fs::remove_dir_all(data_root);
@@ -1829,22 +1829,22 @@ mod tests {
         let data_root = tmp_data_root();
         let (store, _device) = make_block_store(data_root.clone());
         let signer = TestSigner::new();
-        let stream_id = b"signed-validated-stream";
+        let stream_id = signer.node_id().0;
 
-        let mut first = event(stream_id, 0, None);
+        let mut first = event(&stream_id, 0, None);
         edgerun_stream::sign_event(&mut first, &signer).unwrap();
         store.append_event_blocking(first).unwrap();
-        let first = store.get_event(stream_id, 0).unwrap().unwrap();
+        let first = store.get_event(&stream_id, 0).unwrap().unwrap();
         let first_hash = crate::core::canonical_event_hash(&first).value;
 
-        let mut second = event(stream_id, 1, Some(first_hash));
+        let mut second = event(&stream_id, 1, Some(first_hash));
         edgerun_stream::sign_event(&mut second, &signer).unwrap();
         store.append_event_blocking(second).unwrap();
 
-        assert_eq!(store.validate_stream_chain(stream_id).unwrap(), 2);
+        assert_eq!(store.validate_stream_chain(&stream_id).unwrap(), 2);
         assert_eq!(
             store
-                .validate_stream_chain_with_writer(stream_id, &signer.node_id())
+                .validate_stream_chain_with_writer(&stream_id, &signer.node_id())
                 .unwrap(),
             2
         );
@@ -1858,14 +1858,14 @@ mod tests {
         let (store, _device) = make_block_store(data_root.clone());
         let signer = TestSigner::new();
         let wrong_signer = TestSigner::new();
-        let stream_id = b"wrong-writer-stream";
+        let stream_id = signer.node_id().0;
 
-        let mut event = event(stream_id, 0, None);
+        let mut event = event(&stream_id, 0, None);
         edgerun_stream::sign_event(&mut event, &signer).unwrap();
         store.append_event_blocking(event).unwrap();
 
         let err = store
-            .validate_stream_chain_with_writer(stream_id, &wrong_signer.node_id())
+            .validate_stream_chain_with_writer(&stream_id, &wrong_signer.node_id())
             .unwrap_err();
         assert!(matches!(err, StorageError::Stream(_)));
 

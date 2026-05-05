@@ -843,6 +843,15 @@ fn release_driver(claimed: &AtomicBool) {
     claimed.store(false, Ordering::Release);
 }
 
+fn mmio_transport_for_device(base: *mut u8, device_type: u32) -> Option<VirtioTransport> {
+    let transport = VirtioTransport::mmio(base)?;
+    if read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }) == device_type {
+        Some(transport)
+    } else {
+        None
+    }
+}
+
 macro_rules! init_fail {
     ($self:expr) => {{
         $self.release_claim();
@@ -853,6 +862,34 @@ macro_rules! init_fail {
         $self.release_claim();
         return false;
     }};
+}
+
+macro_rules! impl_driver_common {
+    ($claim:ident) => {
+        pub fn is_initialized(&self) -> bool {
+            self.transport().is_some_and(VirtioTransport::driver_ok)
+        }
+
+        pub fn take_interrupt_status(&self) -> VirtioInterruptStatus {
+            self.transport()
+                .map(VirtioTransport::take_interrupt_status)
+                .unwrap_or_default()
+        }
+
+        fn transport(&self) -> Option<VirtioTransport> {
+            self.transport.transport()
+        }
+
+        fn release_claim(&mut self) {
+            if self.claimed {
+                if let Some(transport) = self.transport() {
+                    transport.reset();
+                }
+                release_driver(&$claim);
+                self.claimed = false;
+            }
+        }
+    };
 }
 
 pub struct VirtNet {
@@ -887,6 +924,8 @@ pub struct VirtNetStats {
 }
 
 impl VirtNet {
+    impl_driver_common!(NET_CLAIMED);
+
     pub const fn new() -> Self {
         Self {
             mac: [0; 6],
@@ -1014,10 +1053,6 @@ impl VirtNet {
         self.link_up
     }
 
-    pub fn is_initialized(&self) -> bool {
-        self.transport().is_some_and(VirtioTransport::driver_ok)
-    }
-
     pub fn refresh_status(&mut self) -> bool {
         if !self.is_initialized() || self.transport.device_cfg.is_null() {
             return false;
@@ -1032,12 +1067,6 @@ impl VirtNet {
         }
 
         true
-    }
-
-    pub fn take_interrupt_status(&self) -> VirtioInterruptStatus {
-        self.transport()
-            .map(VirtioTransport::take_interrupt_status)
-            .unwrap_or_default()
     }
 
     pub fn mtu(&self) -> u16 {
@@ -1162,10 +1191,7 @@ impl VirtNet {
 
     pub fn from_mmio_base(base: usize) -> Option<Self> {
         let base = base as *mut u8;
-        let transport = VirtioTransport::mmio(base)?;
-        if read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }) != VIRTIO_DEVICE_TYPE_NET {
-            return None;
-        }
+        let transport = mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_NET)?;
         if !claim_driver(&NET_CLAIMED) {
             return None;
         }
@@ -1174,10 +1200,6 @@ impl VirtNet {
         net.claimed = true;
         net.transport = DriverTransport::from_mmio(base, transport.device_cfg());
         Some(net)
-    }
-
-    fn transport(&self) -> Option<VirtioTransport> {
-        self.transport.transport()
     }
 
     unsafe fn init_rx_queue(&mut self) {
@@ -1241,16 +1263,6 @@ impl VirtNet {
             }
             self.tx_last_used_idx = self.tx_last_used_idx.wrapping_add(1);
             self.tx_completed = self.tx_completed.wrapping_add(1);
-        }
-    }
-
-    fn release_claim(&mut self) {
-        if self.claimed {
-            if let Some(transport) = self.transport() {
-                transport.reset();
-            }
-            release_driver(&NET_CLAIMED);
-            self.claimed = false;
         }
     }
 
@@ -1387,6 +1399,18 @@ unsafe fn take_single_used_completion(
     Some(elem)
 }
 
+unsafe fn wait_for_used_completion(used: *const VirtqUsed, last_used_idx: u16) -> bool {
+    let mut spins = 0;
+    while split_queue_used_idx(used) == last_used_idx {
+        spins += 1;
+        if spins > VIRTIO_POLL_SPINS {
+            return false;
+        }
+        core::hint::spin_loop();
+    }
+    true
+}
+
 pub struct VirtBlk {
     features: u64,
     host_features: u64,
@@ -1403,6 +1427,8 @@ pub struct VirtBlk {
 unsafe impl Send for VirtBlk {}
 
 impl VirtBlk {
+    impl_driver_common!(BLK_CLAIMED);
+
     pub const fn new() -> Self {
         Self {
             features: 0,
@@ -1478,10 +1504,6 @@ impl VirtBlk {
 
     pub fn sectors(&self) -> u64 {
         self.sectors
-    }
-
-    pub fn is_initialized(&self) -> bool {
-        self.transport().is_some_and(VirtioTransport::driver_ok)
     }
 
     pub fn read_sector(&mut self, sector: u64, out: &mut [u8]) -> bool {
@@ -1583,12 +1605,6 @@ impl VirtBlk {
         unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, 0, false) }
     }
 
-    pub fn take_interrupt_status(&self) -> VirtioInterruptStatus {
-        self.transport()
-            .map(VirtioTransport::take_interrupt_status)
-            .unwrap_or_default()
-    }
-
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
         let mapped = MappedModernVirtioDevice::map(device)?;
         if !claim_driver(&BLK_CLAIMED) {
@@ -1602,10 +1618,7 @@ impl VirtBlk {
 
     pub fn from_mmio_base(base: usize) -> Option<Self> {
         let base = base as *mut u8;
-        let transport = VirtioTransport::mmio(base)?;
-        if read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }) != VIRTIO_DEVICE_TYPE_BLK {
-            return None;
-        }
+        let transport = mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_BLK)?;
         if !claim_driver(&BLK_CLAIMED) {
             return None;
         }
@@ -1614,10 +1627,6 @@ impl VirtBlk {
         blk.claimed = true;
         blk.transport = DriverTransport::from_mmio(base, transport.device_cfg());
         Some(blk)
-    }
-
-    fn transport(&self) -> Option<VirtioTransport> {
-        self.transport.transport()
     }
 
     fn sector_range_in_bounds(&self, start_sector: u64, sector_count: u64) -> bool {
@@ -1699,13 +1708,8 @@ impl VirtBlk {
         post_split_queue_descriptor(core::ptr::addr_of_mut!(BLK_AVAIL), self.queue_size, 0);
         self.notify_queue();
 
-        let mut spins = 0;
-        while split_queue_used_idx(core::ptr::addr_of!(BLK_USED)) == self.last_used_idx {
-            spins += 1;
-            if spins > VIRTIO_POLL_SPINS {
-                return false;
-            }
-            core::hint::spin_loop();
+        if !wait_for_used_completion(core::ptr::addr_of!(BLK_USED), self.last_used_idx) {
+            return false;
         }
 
         let Some(elem) = take_single_used_completion(
@@ -1778,16 +1782,6 @@ impl VirtBlk {
             transport.notify_split_queue(self.queue_notify_off, 0);
         }
     }
-
-    fn release_claim(&mut self) {
-        if self.claimed {
-            if let Some(transport) = self.transport() {
-                transport.reset();
-            }
-            release_driver(&BLK_CLAIMED);
-            self.claimed = false;
-        }
-    }
 }
 
 impl Drop for VirtBlk {
@@ -1805,14 +1799,7 @@ impl Default for VirtBlk {
 pub struct VirtRng {
     features: u64,
     host_features: u64,
-    bus: u8,
-    slot: u8,
-    func: u8,
-    mmio: bool,
-    common_cfg: *mut u8,
-    notify_cfg: *mut u8,
-    isr_cfg: *mut u8,
-    notify_off_multiplier: u32,
+    transport: DriverTransport,
     queue_notify_off: u16,
     queue_size: u16,
     last_used_idx: u16,
@@ -1822,18 +1809,13 @@ pub struct VirtRng {
 unsafe impl Send for VirtRng {}
 
 impl VirtRng {
+    impl_driver_common!(RNG_CLAIMED);
+
     pub const fn new() -> Self {
         Self {
             features: 0,
             host_features: 0,
-            bus: 0,
-            slot: 0,
-            func: 0,
-            mmio: false,
-            common_cfg: core::ptr::null_mut(),
-            notify_cfg: core::ptr::null_mut(),
-            isr_cfg: core::ptr::null_mut(),
-            notify_off_multiplier: 0,
+            transport: DriverTransport::empty(),
             queue_notify_off: 0,
             queue_size: 0,
             last_used_idx: 0,
@@ -1893,12 +1875,6 @@ impl VirtRng {
         true
     }
 
-    pub fn take_interrupt_status(&self) -> VirtioInterruptStatus {
-        self.transport()
-            .map(VirtioTransport::take_interrupt_status)
-            .unwrap_or_default()
-    }
-
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
         let mapped = MappedModernVirtioDevice::map(device)?;
         if !claim_driver(&RNG_CLAIMED) {
@@ -1906,54 +1882,21 @@ impl VirtRng {
         }
         let mut rng = Self::new();
         rng.claimed = true;
-        rng.bus = mapped.bus;
-        rng.slot = mapped.slot;
-        rng.func = mapped.func;
-        rng.mmio = false;
-        rng.common_cfg = mapped.common_cfg;
-        rng.notify_cfg = mapped.notify_cfg;
-        rng.isr_cfg = mapped.isr_cfg;
-        rng.notify_off_multiplier = mapped.notify_off_multiplier;
+        rng.transport = DriverTransport::from_modern(mapped, core::ptr::null_mut());
         Some(rng)
     }
 
     pub fn from_mmio_base(base: usize) -> Option<Self> {
         let base = base as *mut u8;
-        VirtioTransport::mmio(base)?;
-        if read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }) != VIRTIO_DEVICE_TYPE_RNG {
-            return None;
-        }
+        mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_RNG)?;
         if !claim_driver(&RNG_CLAIMED) {
             return None;
         }
 
         let mut rng = Self::new();
         rng.claimed = true;
-        rng.mmio = true;
-        rng.common_cfg = base;
-        rng.notify_cfg = base;
+        rng.transport = DriverTransport::from_mmio(base, core::ptr::null_mut());
         Some(rng)
-    }
-
-    pub fn is_initialized(&self) -> bool {
-        self.transport().is_some_and(VirtioTransport::driver_ok)
-    }
-
-    fn transport(&self) -> Option<VirtioTransport> {
-        if self.mmio {
-            VirtioTransport::mmio(self.common_cfg)
-        } else {
-            VirtioTransport::modern_pci(
-                self.bus,
-                self.slot,
-                self.func,
-                self.common_cfg,
-                self.notify_cfg,
-                core::ptr::null_mut(),
-                self.isr_cfg,
-                self.notify_off_multiplier,
-            )
-        }
     }
 
     unsafe fn init_queue(&mut self) {
@@ -1983,13 +1926,8 @@ impl VirtRng {
         post_split_queue_descriptor(core::ptr::addr_of_mut!(RNG_AVAIL), self.queue_size, 0);
         self.notify_queue();
 
-        let mut spins = 0;
-        while split_queue_used_idx(core::ptr::addr_of!(RNG_USED)) == self.last_used_idx {
-            spins += 1;
-            if spins > VIRTIO_POLL_SPINS {
-                return 0;
-            }
-            core::hint::spin_loop();
+        if !wait_for_used_completion(core::ptr::addr_of!(RNG_USED), self.last_used_idx) {
+            return 0;
         }
 
         let Some(elem) = take_single_used_completion(
@@ -2017,16 +1955,6 @@ impl VirtRng {
             transport.notify_split_queue(self.queue_notify_off, 0);
         }
     }
-
-    fn release_claim(&mut self) {
-        if self.claimed {
-            if let Some(transport) = self.transport() {
-                transport.reset();
-            }
-            release_driver(&RNG_CLAIMED);
-            self.claimed = false;
-        }
-    }
 }
 
 impl Drop for VirtRng {
@@ -2044,14 +1972,7 @@ impl Default for VirtRng {
 pub struct VirtConsole {
     features: u64,
     host_features: u64,
-    bus: u8,
-    slot: u8,
-    func: u8,
-    mmio: bool,
-    common_cfg: *mut u8,
-    notify_cfg: *mut u8,
-    isr_cfg: *mut u8,
-    notify_off_multiplier: u32,
+    transport: DriverTransport,
     rx_notify_off: u16,
     rx_queue_size: u16,
     rx_last_used_idx: u16,
@@ -2064,18 +1985,13 @@ pub struct VirtConsole {
 unsafe impl Send for VirtConsole {}
 
 impl VirtConsole {
+    impl_driver_common!(CONSOLE_CLAIMED);
+
     pub const fn new() -> Self {
         Self {
             features: 0,
             host_features: 0,
-            bus: 0,
-            slot: 0,
-            func: 0,
-            mmio: false,
-            common_cfg: core::ptr::null_mut(),
-            notify_cfg: core::ptr::null_mut(),
-            isr_cfg: core::ptr::null_mut(),
-            notify_off_multiplier: 0,
+            transport: DriverTransport::empty(),
             rx_notify_off: 0,
             rx_queue_size: 0,
             rx_last_used_idx: 0,
@@ -2204,12 +2120,6 @@ impl VirtConsole {
         true
     }
 
-    pub fn take_interrupt_status(&self) -> VirtioInterruptStatus {
-        self.transport()
-            .map(VirtioTransport::take_interrupt_status)
-            .unwrap_or_default()
-    }
-
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
         let mapped = MappedModernVirtioDevice::map(device)?;
         if !claim_driver(&CONSOLE_CLAIMED) {
@@ -2217,54 +2127,21 @@ impl VirtConsole {
         }
         let mut console = Self::new();
         console.claimed = true;
-        console.bus = mapped.bus;
-        console.slot = mapped.slot;
-        console.func = mapped.func;
-        console.mmio = false;
-        console.common_cfg = mapped.common_cfg;
-        console.notify_cfg = mapped.notify_cfg;
-        console.isr_cfg = mapped.isr_cfg;
-        console.notify_off_multiplier = mapped.notify_off_multiplier;
+        console.transport = DriverTransport::from_modern(mapped, core::ptr::null_mut());
         Some(console)
     }
 
     pub fn from_mmio_base(base: usize) -> Option<Self> {
         let base = base as *mut u8;
-        VirtioTransport::mmio(base)?;
-        if read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }) != VIRTIO_DEVICE_TYPE_CONSOLE {
-            return None;
-        }
+        mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_CONSOLE)?;
         if !claim_driver(&CONSOLE_CLAIMED) {
             return None;
         }
 
         let mut console = Self::new();
         console.claimed = true;
-        console.mmio = true;
-        console.common_cfg = base;
-        console.notify_cfg = base;
+        console.transport = DriverTransport::from_mmio(base, core::ptr::null_mut());
         Some(console)
-    }
-
-    pub fn is_initialized(&self) -> bool {
-        self.transport().is_some_and(VirtioTransport::driver_ok)
-    }
-
-    fn transport(&self) -> Option<VirtioTransport> {
-        if self.mmio {
-            VirtioTransport::mmio(self.common_cfg)
-        } else {
-            VirtioTransport::modern_pci(
-                self.bus,
-                self.slot,
-                self.func,
-                self.common_cfg,
-                self.notify_cfg,
-                core::ptr::null_mut(),
-                self.isr_cfg,
-                self.notify_off_multiplier,
-            )
-        }
     }
 
     unsafe fn init_tx_queue(&mut self) {
@@ -2333,13 +2210,8 @@ impl VirtConsole {
         );
         self.notify_tx_queue();
 
-        let mut spins = 0;
-        while split_queue_used_idx(core::ptr::addr_of!(CONSOLE_USED)) == self.tx_last_used_idx {
-            spins += 1;
-            if spins > VIRTIO_POLL_SPINS {
-                return 0;
-            }
-            core::hint::spin_loop();
+        if !wait_for_used_completion(core::ptr::addr_of!(CONSOLE_USED), self.tx_last_used_idx) {
+            return 0;
         }
 
         let Some(elem) = take_single_used_completion(
@@ -2373,16 +2245,6 @@ impl VirtConsole {
     fn notify_rx_queue(&self) {
         if let Some(transport) = self.transport() {
             transport.notify_split_queue(self.rx_notify_off, CONSOLE_RX_QUEUE);
-        }
-    }
-
-    fn release_claim(&mut self) {
-        if self.claimed {
-            if let Some(transport) = self.transport() {
-                transport.reset();
-            }
-            release_driver(&CONSOLE_CLAIMED);
-            self.claimed = false;
         }
     }
 }

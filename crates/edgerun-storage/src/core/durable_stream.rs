@@ -4,9 +4,9 @@ use alloc::sync::Arc;
 
 use crate::prelude::v1::*;
 use edgerun_core::protocol::EventEnvelope;
+use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_sign::{ProtocolSignError, ProtocolSigner};
 use edgerun_stream::{StreamId, StreamWriter};
-use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_verify::ProtocolFamily;
 
 use crate::core::{AppendReceipt, EventLog};
@@ -129,7 +129,6 @@ impl<L: EventLog> DurableStreamWriter<L> {
     pub fn event_log_mut(&mut self) -> &mut L {
         &mut self.event_log
     }
-
 }
 
 #[cfg(test)]
@@ -143,7 +142,8 @@ mod tests {
     fn new_persists_signed_genesis() {
         let signer = Arc::new(TestSigner::new());
         let stream_id = signer.node_id().0;
-        let writer = DurableStreamWriter::new(stream_id, signer, 1_000, MemEventLog::new()).unwrap();
+        let writer =
+            DurableStreamWriter::new(stream_id, signer, 1_000, MemEventLog::new()).unwrap();
 
         let scanned = writer.event_log().scan().unwrap();
         assert_eq!(scanned.len(), 1);
@@ -159,7 +159,8 @@ mod tests {
     fn append_persists_contiguous_signed_events() {
         let signer = Arc::new(TestSigner::new());
         let stream_id = signer.node_id().0;
-        let mut writer = DurableStreamWriter::new(stream_id, signer, 1_000, MemEventLog::new()).unwrap();
+        let mut writer =
+            DurableStreamWriter::new(stream_id, signer, 1_000, MemEventLog::new()).unwrap();
 
         let receipt = writer.append(100, 1, 1_001).unwrap();
         let scanned = writer.event_log().scan().unwrap();

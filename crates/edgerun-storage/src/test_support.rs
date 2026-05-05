@@ -1,4 +1,7 @@
+use crate::prelude::v1::Vec;
 use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
+use edgerun_sign::{ProtocolSignError, ProtocolSigner};
+use edgerun_verify::ProtocolFamily;
 
 #[derive(Clone)]
 pub(crate) struct TestSigner {
@@ -41,5 +44,25 @@ impl MeshSigner for TestSigner {
         let mut bytes = [0u8; 64];
         bytes.copy_from_slice(&sig.to_bytes());
         Ok(bytes)
+    }
+}
+
+impl ProtocolSigner for TestSigner {
+    fn signature_algorithm(&self) -> i32 {
+        edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
+    }
+
+    fn sign_signature_input(
+        &self,
+        _family: ProtocolFamily,
+        signature_input: &[u8],
+    ) -> Result<Vec<u8>, ProtocolSignError> {
+        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+
+        let sig: edgerun_crypto::p256::ecdsa::Signature = self
+            .key
+            .sign_prehash(signature_input)
+            .map_err(|_| ProtocolSignError::SignerFailed)?;
+        Ok(sig.to_bytes().to_vec())
     }
 }

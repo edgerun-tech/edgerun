@@ -207,25 +207,6 @@ fn path_part_to_string(part: &std::ffi::OsStr) -> Option<String> {
     part.to_str().map(ToOwned::to_owned)
 }
 
-#[cfg(target_os = "none")]
-fn varint_is_unexpected_eof(err: &edgerun_core::io::Error) -> bool {
-    err.kind() == edgerun_core::io::ErrorKind::UnexpectedEof
-}
-
-#[cfg(not(target_os = "none"))]
-#[cfg(target_os = "none")]
-fn varint_io_to_storage_io(err: edgerun_core::io::Error) -> StorageError {
-    let kind = match err.kind() {
-        edgerun_core::io::ErrorKind::UnexpectedEof => std::io::ErrorKind::UnexpectedEof,
-        edgerun_core::io::ErrorKind::InvalidData => std::io::ErrorKind::InvalidData,
-        edgerun_core::io::ErrorKind::NotFound => std::io::ErrorKind::NotFound,
-        edgerun_core::io::ErrorKind::Other => std::io::ErrorKind::Other,
-    };
-    StorageError::Io(std::io::Error::new(kind, err))
-}
-
-#[cfg(not(target_os = "none"))]
-
 fn decode_varint_from_read<R: Read>(r: &mut R) -> std::io::Result<Option<u64>> {
     let mut buf = [0u8; 1];
     let mut result: u64 = 0;
