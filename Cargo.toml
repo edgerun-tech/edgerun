@@ -73,7 +73,6 @@ members = [
   "crates/edgerun-machine-report",
   "crates/edgerun-mesh",
   "crates/edgerun-mesh-capability",
-  "crates/edgerun-mesh-daemon",
   "crates/edgerun-mesh-link",
   "crates/edgerun-mesh-session",
   "crates/edgerun-mgmt-bluetooth",
@@ -168,7 +167,6 @@ edgerun-mesh = { version = "0.1", path = "crates/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "crates/edgerun-mesh-link" }
 edgerun-mesh-session = { version = "0.1", path = "crates/edgerun-mesh-session" }
 edgerun-mesh-capability = { version = "0.1", path = "crates/edgerun-mesh-capability" }
-edgerun-mesh-daemon = { version = "0.1", path = "crates/edgerun-mesh-daemon" }
 edgerun-secret-service = { version = "0.1", path = "crates/edgerun-secret-service" }
 edgerun-biometrics = { version = "0.1", path = "crates/edgerun-biometrics" }
 edgerun-mgmt-bluetooth = { version = "0.1", path = "crates/edgerun-mgmt-bluetooth" }

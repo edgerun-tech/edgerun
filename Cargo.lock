@@ -779,6 +779,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-core",
  "edgerun-sign-p256",
+ "edgerun-verify",
 ]
 
 [[package]]
@@ -926,24 +927,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-mesh-daemon"
-version = "0.1.1"
-dependencies = [
- "edgerun-capabilities",
- "edgerun-core",
- "edgerun-crypto",
- "edgerun-hardware-signing",
- "edgerun-linux-netif",
- "edgerun-log",
- "edgerun-mesh",
- "edgerun-mesh-capability",
- "edgerun-mesh-link",
- "edgerun-mesh-session",
- "edgerun-network-interface",
- "edgerun-remote-capability",
-]
-
-[[package]]
 name = "edgerun-mesh-link"
 version = "0.1.1"
 dependencies = [
@@ -1036,7 +1019,6 @@ dependencies = [
  "edgerun-machine-report",
  "edgerun-mesh",
  "edgerun-mesh-capability",
- "edgerun-mesh-daemon",
  "edgerun-mesh-link",
  "edgerun-mesh-session",
  "edgerun-mgmt-bluetooth",

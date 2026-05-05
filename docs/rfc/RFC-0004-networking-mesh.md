@@ -65,7 +65,7 @@ Tie-breaking: highest score → preferred advertiser → preferred next-hop → 
 | `edgerun-mesh` | ✅ Functional (180 tests) | Mesh networking protocol definition, routing table, discovery, peer management |
 | `edgerun-mesh-link` | ✅ Functional (82 tests) | Raw Ethernet (AF_PACKET), multicast UDP, IP tunnel, UDP broadcast |
 | `edgerun-mesh-capability` | ✅ Functional (66 tests) | Capability exchange over mesh (transport, server, client, dispatcher, inbox) |
-| `edgerun-mesh-daemon` | ✅ Functional (34 tests) | Event loop: interface discovery, heartbeat, ECDH handshakes, session encryption, outbound queue |
+| `edgerun-mesh-capability` | ✅ Functional | Capability envelope queueing across the rkyv mesh boundary |
 | `edgerun-mesh-session` | ✅ Functional (67 tests) | ECDH handshakes, AES-GCM session encryption, replay protection, rekey support |
 
 ### edgerun-dns / edgerun-dhcp / edgerun-dhcpv6

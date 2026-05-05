@@ -75,7 +75,6 @@ edgerun-storage = { version = "0.1", path = "../edgerun-storage" }
 edgerun-remote-capability = { version = "0.1", path = "../edgerun-remote-capability" }
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../edgerun-mesh-link" }
-edgerun-mesh-daemon = { version = "0.1", path = "../edgerun-mesh-daemon" }
 edgerun-mesh-capability = { version = "0.1", path = "../edgerun-mesh-capability" }
 edgerun-mesh-session = { version = "0.1", path = "../edgerun-mesh-session" }
 edgerun-exchange = { version = "0.1", path = "../edgerun-exchange" }

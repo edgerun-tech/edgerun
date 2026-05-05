@@ -73,6 +73,32 @@ const PCI_COMMAND_MEMORY: u16 = 0x0002;
 const PCI_COMMAND_BUS_MASTER: u16 = 0x0004;
 const PCI_STATUS_CAPABILITIES: u16 = 0x0010;
 
+const VIRTIO_MMIO_MAGIC: u32 = 0x7472_6976;
+const VIRTIO_MMIO_VERSION_MODERN: u32 = 2;
+const VIRTIO_MMIO_VENDOR_ID: u16 = 0xffff;
+const VIRTIO_MMIO_MAGIC_VALUE: usize = 0x000;
+const VIRTIO_MMIO_VERSION: usize = 0x004;
+const VIRTIO_MMIO_DEVICE_ID: usize = 0x008;
+const VIRTIO_MMIO_VENDOR: usize = 0x00c;
+const VIRTIO_MMIO_DEVICE_FEATURES: usize = 0x010;
+const VIRTIO_MMIO_DEVICE_FEATURES_SEL: usize = 0x014;
+const VIRTIO_MMIO_DRIVER_FEATURES: usize = 0x020;
+const VIRTIO_MMIO_DRIVER_FEATURES_SEL: usize = 0x024;
+const VIRTIO_MMIO_QUEUE_SEL: usize = 0x030;
+const VIRTIO_MMIO_QUEUE_NUM_MAX: usize = 0x034;
+const VIRTIO_MMIO_QUEUE_NUM: usize = 0x038;
+const VIRTIO_MMIO_QUEUE_READY: usize = 0x044;
+const VIRTIO_MMIO_QUEUE_NOTIFY: usize = 0x050;
+const VIRTIO_MMIO_INTERRUPT_ACK: usize = 0x064;
+const VIRTIO_MMIO_STATUS: usize = 0x070;
+const VIRTIO_MMIO_QUEUE_DESC_LOW: usize = 0x080;
+const VIRTIO_MMIO_QUEUE_DESC_HIGH: usize = 0x084;
+const VIRTIO_MMIO_QUEUE_DRIVER_LOW: usize = 0x090;
+const VIRTIO_MMIO_QUEUE_DRIVER_HIGH: usize = 0x094;
+const VIRTIO_MMIO_QUEUE_DEVICE_LOW: usize = 0x0a0;
+const VIRTIO_MMIO_QUEUE_DEVICE_HIGH: usize = 0x0a4;
+const VIRTIO_MMIO_CONFIG: usize = 0x100;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VirtioTransportKind {
     ModernPci,
@@ -88,6 +114,7 @@ pub struct VirtioDeviceInfo {
     pub bus: u8,
     pub slot: u8,
     pub func: u8,
+    pub mmio_base: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -138,6 +165,9 @@ enum VirtioTransport {
         isr_cfg: *mut u8,
         notify_off_multiplier: u32,
     },
+    Mmio {
+        base: *mut u8,
+    },
 }
 
 impl VirtioTransport {
@@ -165,15 +195,112 @@ impl VirtioTransport {
         })
     }
 
+    fn mmio(base: *mut u8) -> Option<Self> {
+        if base.is_null()
+            || read_u32(unsafe { base.add(VIRTIO_MMIO_MAGIC_VALUE) }) != VIRTIO_MMIO_MAGIC
+        {
+            return None;
+        }
+        if read_u32(unsafe { base.add(VIRTIO_MMIO_VERSION) }) != VIRTIO_MMIO_VERSION_MODERN {
+            return None;
+        }
+
+        Some(Self::Mmio { base })
+    }
+
     fn common_cfg(self) -> *mut u8 {
         match self {
             Self::ModernPci { common_cfg, .. } => common_cfg,
+            Self::Mmio { base } => base,
         }
     }
 
     fn device_cfg(self) -> *mut u8 {
         match self {
             Self::ModernPci { device_cfg, .. } => device_cfg,
+            Self::Mmio { base } => unsafe { base.add(VIRTIO_MMIO_CONFIG) },
+        }
+    }
+
+    fn status(self) -> u8 {
+        match self {
+            Self::ModernPci { common_cfg, .. } => read_u8(unsafe { common_cfg.add(20) }),
+            Self::Mmio { base } => read_u32(unsafe { base.add(VIRTIO_MMIO_STATUS) }) as u8,
+        }
+    }
+
+    fn write_status(self, status: u8) {
+        match self {
+            Self::ModernPci { common_cfg, .. } => write_u8(unsafe { common_cfg.add(20) }, status),
+            Self::Mmio { base } => {
+                write_u32(unsafe { base.add(VIRTIO_MMIO_STATUS) }, status as u32)
+            }
+        }
+    }
+
+    fn read_device_features(self) -> u64 {
+        match self {
+            Self::ModernPci { common_cfg, .. } => read_device_features(common_cfg),
+            Self::Mmio { base } => {
+                write_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES_SEL) }, 0);
+                let low = read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES) }) as u64;
+                write_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES_SEL) }, 1);
+                let high = read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES) }) as u64;
+                low | (high << 32)
+            }
+        }
+    }
+
+    fn write_driver_features(self, features: u64) {
+        match self {
+            Self::ModernPci { common_cfg, .. } => write_driver_features(common_cfg, features),
+            Self::Mmio { base } => {
+                write_u32(unsafe { base.add(VIRTIO_MMIO_DRIVER_FEATURES_SEL) }, 0);
+                write_u32(
+                    unsafe { base.add(VIRTIO_MMIO_DRIVER_FEATURES) },
+                    features as u32,
+                );
+                write_u32(unsafe { base.add(VIRTIO_MMIO_DRIVER_FEATURES_SEL) }, 1);
+                write_u32(
+                    unsafe { base.add(VIRTIO_MMIO_DRIVER_FEATURES) },
+                    (features >> 32) as u32,
+                );
+            }
+        }
+    }
+
+    fn select_queue(self, queue: u16) {
+        match self {
+            Self::ModernPci { common_cfg, .. } => write_u16(unsafe { common_cfg.add(22) }, queue),
+            Self::Mmio { base } => {
+                write_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_SEL) }, queue as u32)
+            }
+        }
+    }
+
+    fn read_queue_size(self) -> u16 {
+        match self {
+            Self::ModernPci { common_cfg, .. } => read_u16(unsafe { common_cfg.add(24) }),
+            Self::Mmio { base } => read_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_NUM_MAX) }) as u16,
+        }
+    }
+
+    fn write_queue_ready(self, ready: bool) {
+        match self {
+            Self::ModernPci { common_cfg, .. } => {
+                write_u16(unsafe { common_cfg.add(28) }, u16::from(ready))
+            }
+            Self::Mmio { base } => write_u32(
+                unsafe { base.add(VIRTIO_MMIO_QUEUE_READY) },
+                u32::from(ready),
+            ),
+        }
+    }
+
+    fn read_queue_notify_off(self) -> u16 {
+        match self {
+            Self::ModernPci { common_cfg, .. } => read_u16(unsafe { common_cfg.add(30) }),
+            Self::Mmio { .. } => 0,
         }
     }
 
@@ -184,6 +311,10 @@ impl VirtioTransport {
                 notify_off_multiplier,
                 ..
             } => notify_split_queue(notify_cfg, notify_off_multiplier, queue_off, queue),
+            Self::Mmio { base } => {
+                let _ = queue_off;
+                write_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_NOTIFY) }, queue as u32);
+            }
         }
     }
 
@@ -192,36 +323,30 @@ impl VirtioTransport {
             Self::ModernPci { location, .. } => {
                 enable_pci_memory_and_bus_master(location.bus, location.slot, location.func)
             }
+            Self::Mmio { .. } => {}
         }
     }
 
     fn fail(self) {
-        fail_device(self.common_cfg());
+        self.write_status(self.status() | VIRTIO_CONFIG_STATUS_FAILED);
     }
 
     fn negotiate_features(self, supported_features: u64) -> Option<NegotiatedFeatures> {
         self.enable();
-        let common_cfg = self.common_cfg();
-        write_common_status(common_cfg, 0);
-        write_common_status(common_cfg, VIRTIO_CONFIG_STATUS_ACKNOWLEDGE);
-        write_common_status(
-            common_cfg,
-            VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER,
-        );
+        self.write_status(0);
+        self.write_status(VIRTIO_CONFIG_STATUS_ACKNOWLEDGE);
+        self.write_status(VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER);
 
-        let host = read_device_features(common_cfg);
+        let host = self.read_device_features();
         let driver = host & supported_features;
         if driver & VIRTIO_F_VERSION_1 == 0 {
             self.fail();
             return None;
         }
 
-        write_driver_features(common_cfg, driver);
-        write_common_status(
-            common_cfg,
-            common_status(common_cfg) | VIRTIO_CONFIG_STATUS_FEATURES_OK,
-        );
-        if common_status(common_cfg) & VIRTIO_CONFIG_STATUS_FEATURES_OK == 0 {
+        self.write_driver_features(driver);
+        self.write_status(self.status() | VIRTIO_CONFIG_STATUS_FEATURES_OK);
+        if self.status() & VIRTIO_CONFIG_STATUS_FEATURES_OK == 0 {
             self.fail();
             return None;
         }
@@ -238,15 +363,50 @@ impl VirtioTransport {
         driver: u64,
         device: u64,
     ) -> Option<u16> {
-        configure_split_queue(
-            self.common_cfg(),
-            queue,
-            max_queue_size,
-            min_queue_size,
-            desc,
-            driver,
-            device,
-        )
+        self.select_queue(queue);
+        let host_queue_size = self.read_queue_size();
+        let queue_size = core::cmp::min(host_queue_size, max_queue_size);
+        if queue_size < min_queue_size {
+            return None;
+        }
+
+        match self {
+            Self::ModernPci { common_cfg, .. } => {
+                write_u16(unsafe { common_cfg.add(24) }, queue_size);
+                write_u64(unsafe { common_cfg.add(32) }, desc);
+                write_u64(unsafe { common_cfg.add(40) }, driver);
+                write_u64(unsafe { common_cfg.add(48) }, device);
+            }
+            Self::Mmio { base } => {
+                write_u32(
+                    unsafe { base.add(VIRTIO_MMIO_QUEUE_NUM) },
+                    queue_size as u32,
+                );
+                write_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_DESC_LOW) }, desc as u32);
+                write_u32(
+                    unsafe { base.add(VIRTIO_MMIO_QUEUE_DESC_HIGH) },
+                    (desc >> 32) as u32,
+                );
+                write_u32(
+                    unsafe { base.add(VIRTIO_MMIO_QUEUE_DRIVER_LOW) },
+                    driver as u32,
+                );
+                write_u32(
+                    unsafe { base.add(VIRTIO_MMIO_QUEUE_DRIVER_HIGH) },
+                    (driver >> 32) as u32,
+                );
+                write_u32(
+                    unsafe { base.add(VIRTIO_MMIO_QUEUE_DEVICE_LOW) },
+                    device as u32,
+                );
+                write_u32(
+                    unsafe { base.add(VIRTIO_MMIO_QUEUE_DEVICE_HIGH) },
+                    (device >> 32) as u32,
+                );
+            }
+        }
+        self.write_queue_ready(true);
+        Some(queue_size)
     }
 }
 
@@ -481,6 +641,7 @@ pub struct VirtNet {
     bus: u8,
     slot: u8,
     func: u8,
+    mmio: bool,
     common_cfg: *mut u8,
     notify_cfg: *mut u8,
     device_cfg: *mut u8,
@@ -520,6 +681,7 @@ impl VirtNet {
             bus: 0,
             slot: 0,
             func: 0,
+            mmio: false,
             common_cfg: core::ptr::null_mut(),
             notify_cfg: core::ptr::null_mut(),
             device_cfg: core::ptr::null_mut(),
@@ -541,16 +703,7 @@ impl VirtNet {
     }
 
     pub fn init(&mut self) -> bool {
-        let Some(transport) = VirtioTransport::modern_pci(
-            self.bus,
-            self.slot,
-            self.func,
-            self.common_cfg,
-            self.notify_cfg,
-            self.device_cfg,
-            self.isr_cfg,
-            self.notify_off_multiplier,
-        ) else {
+        let Some(transport) = self.transport() else {
             return false;
         };
         if transport.device_cfg().is_null() {
@@ -579,21 +732,21 @@ impl VirtNet {
             self.link_up = true;
         }
 
-        select_queue(self.common_cfg, RX_QUEUE);
-        self.queue_size = read_queue_size(self.common_cfg);
-        self.rx_notify_off = read_queue_notify_off(self.common_cfg);
+        transport.select_queue(RX_QUEUE);
+        self.queue_size = transport.read_queue_size();
+        self.rx_notify_off = transport.read_queue_notify_off();
 
         if self.queue_size < QUEUE_SIZE as u16 {
             transport.fail();
             return false;
         }
 
-        select_queue(self.common_cfg, TX_QUEUE);
-        if read_queue_size(self.common_cfg) < QUEUE_SIZE as u16 {
+        transport.select_queue(TX_QUEUE);
+        if transport.read_queue_size() < QUEUE_SIZE as u16 {
             transport.fail();
             return false;
         }
-        self.tx_notify_off = read_queue_notify_off(self.common_cfg);
+        self.tx_notify_off = transport.read_queue_notify_off();
 
         let (rx_desc, rx_avail, rx_used) = unsafe {
             (
@@ -644,10 +797,7 @@ impl VirtNet {
             self.init_tx_queue();
         }
 
-        write_common_status(
-            self.common_cfg,
-            common_status(self.common_cfg) | VIRTIO_CONFIG_STATUS_DRIVER_OK,
-        );
+        transport.write_status(transport.status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
         self.notify_queue(RX_QUEUE);
 
         true
@@ -782,12 +932,45 @@ impl VirtNet {
         net.bus = mapped.bus;
         net.slot = mapped.slot;
         net.func = mapped.func;
+        net.mmio = false;
         net.common_cfg = mapped.common_cfg;
         net.notify_cfg = mapped.notify_cfg;
         net.device_cfg = mapped.device_cfg;
         net.isr_cfg = mapped.isr_cfg;
         net.notify_off_multiplier = mapped.notify_off_multiplier;
         Some(net)
+    }
+
+    pub fn from_mmio_base(base: usize) -> Option<Self> {
+        let base = base as *mut u8;
+        let transport = VirtioTransport::mmio(base)?;
+        if read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }) != VIRTIO_DEVICE_TYPE_NET {
+            return None;
+        }
+
+        let mut net = Self::new();
+        net.mmio = true;
+        net.common_cfg = base;
+        net.notify_cfg = base;
+        net.device_cfg = transport.device_cfg();
+        Some(net)
+    }
+
+    fn transport(&self) -> Option<VirtioTransport> {
+        if self.mmio {
+            VirtioTransport::mmio(self.common_cfg)
+        } else {
+            VirtioTransport::modern_pci(
+                self.bus,
+                self.slot,
+                self.func,
+                self.common_cfg,
+                self.notify_cfg,
+                self.device_cfg,
+                self.isr_cfg,
+                self.notify_off_multiplier,
+            )
+        }
     }
 
     unsafe fn init_rx_queue(&mut self) {
@@ -860,12 +1043,9 @@ impl VirtNet {
             TX_QUEUE => self.tx_notify_off,
             _ => return,
         };
-        notify_split_queue(
-            self.notify_cfg,
-            self.notify_off_multiplier,
-            notify_off,
-            queue,
-        );
+        if let Some(transport) = self.transport() {
+            transport.notify_split_queue(notify_off, queue);
+        }
     }
 }
 
@@ -1055,6 +1235,7 @@ pub struct VirtBlk {
     bus: u8,
     slot: u8,
     func: u8,
+    mmio: bool,
     common_cfg: *mut u8,
     notify_cfg: *mut u8,
     device_cfg: *mut u8,
@@ -1078,6 +1259,7 @@ impl VirtBlk {
             bus: 0,
             slot: 0,
             func: 0,
+            mmio: false,
             common_cfg: core::ptr::null_mut(),
             notify_cfg: core::ptr::null_mut(),
             device_cfg: core::ptr::null_mut(),
@@ -1093,16 +1275,7 @@ impl VirtBlk {
     }
 
     pub fn init(&mut self) -> bool {
-        let Some(transport) = VirtioTransport::modern_pci(
-            self.bus,
-            self.slot,
-            self.func,
-            self.common_cfg,
-            self.notify_cfg,
-            self.device_cfg,
-            self.isr_cfg,
-            self.notify_off_multiplier,
-        ) else {
+        let Some(transport) = self.transport() else {
             return false;
         };
         if transport.device_cfg().is_null() {
@@ -1127,8 +1300,8 @@ impl VirtBlk {
             return false;
         }
 
-        select_queue(self.common_cfg, 0);
-        self.queue_notify_off = read_queue_notify_off(self.common_cfg);
+        transport.select_queue(0);
+        self.queue_notify_off = transport.read_queue_notify_off();
 
         let (desc, avail, used) = unsafe {
             (
@@ -1149,10 +1322,7 @@ impl VirtBlk {
             self.init_queue();
         }
 
-        write_common_status(
-            self.common_cfg,
-            common_status(self.common_cfg) | VIRTIO_CONFIG_STATUS_DRIVER_OK,
-        );
+        transport.write_status(transport.status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
         true
     }
 
@@ -1258,12 +1428,45 @@ impl VirtBlk {
         blk.bus = mapped.bus;
         blk.slot = mapped.slot;
         blk.func = mapped.func;
+        blk.mmio = false;
         blk.common_cfg = mapped.common_cfg;
         blk.notify_cfg = mapped.notify_cfg;
         blk.device_cfg = mapped.device_cfg;
         blk.isr_cfg = mapped.isr_cfg;
         blk.notify_off_multiplier = mapped.notify_off_multiplier;
         Some(blk)
+    }
+
+    pub fn from_mmio_base(base: usize) -> Option<Self> {
+        let base = base as *mut u8;
+        let transport = VirtioTransport::mmio(base)?;
+        if read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }) != VIRTIO_DEVICE_TYPE_BLK {
+            return None;
+        }
+
+        let mut blk = Self::new();
+        blk.mmio = true;
+        blk.common_cfg = base;
+        blk.notify_cfg = base;
+        blk.device_cfg = transport.device_cfg();
+        Some(blk)
+    }
+
+    fn transport(&self) -> Option<VirtioTransport> {
+        if self.mmio {
+            VirtioTransport::mmio(self.common_cfg)
+        } else {
+            VirtioTransport::modern_pci(
+                self.bus,
+                self.slot,
+                self.func,
+                self.common_cfg,
+                self.notify_cfg,
+                self.device_cfg,
+                self.isr_cfg,
+                self.notify_off_multiplier,
+            )
+        }
     }
 
     fn sector_range_in_bounds(&self, start_sector: u64, sector_count: u64) -> bool {
@@ -1347,12 +1550,9 @@ impl VirtBlk {
     }
 
     fn notify_queue(&self) {
-        notify_split_queue(
-            self.notify_cfg,
-            self.notify_off_multiplier,
-            self.queue_notify_off,
-            0,
-        );
+        if let Some(transport) = self.transport() {
+            transport.notify_split_queue(self.queue_notify_off, 0);
+        }
     }
 }
 
@@ -1368,6 +1568,7 @@ pub struct VirtRng {
     bus: u8,
     slot: u8,
     func: u8,
+    mmio: bool,
     common_cfg: *mut u8,
     notify_cfg: *mut u8,
     isr_cfg: *mut u8,
@@ -1387,6 +1588,7 @@ impl VirtRng {
             bus: 0,
             slot: 0,
             func: 0,
+            mmio: false,
             common_cfg: core::ptr::null_mut(),
             notify_cfg: core::ptr::null_mut(),
             isr_cfg: core::ptr::null_mut(),
@@ -1398,16 +1600,7 @@ impl VirtRng {
     }
 
     pub fn init(&mut self) -> bool {
-        let Some(transport) = VirtioTransport::modern_pci(
-            self.bus,
-            self.slot,
-            self.func,
-            self.common_cfg,
-            self.notify_cfg,
-            core::ptr::null_mut(),
-            self.isr_cfg,
-            self.notify_off_multiplier,
-        ) else {
+        let Some(transport) = self.transport() else {
             return false;
         };
 
@@ -1417,8 +1610,8 @@ impl VirtRng {
         self.host_features = features.host;
         self.features = features.driver;
 
-        select_queue(self.common_cfg, 0);
-        self.queue_notify_off = read_queue_notify_off(self.common_cfg);
+        transport.select_queue(0);
+        self.queue_notify_off = transport.read_queue_notify_off();
 
         let (desc, avail, used) = unsafe {
             (
@@ -1439,10 +1632,7 @@ impl VirtRng {
             self.init_queue();
         }
 
-        write_common_status(
-            self.common_cfg,
-            common_status(self.common_cfg) | VIRTIO_CONFIG_STATUS_DRIVER_OK,
-        );
+        transport.write_status(transport.status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
         true
     }
 
@@ -1464,11 +1654,43 @@ impl VirtRng {
         rng.bus = mapped.bus;
         rng.slot = mapped.slot;
         rng.func = mapped.func;
+        rng.mmio = false;
         rng.common_cfg = mapped.common_cfg;
         rng.notify_cfg = mapped.notify_cfg;
         rng.isr_cfg = mapped.isr_cfg;
         rng.notify_off_multiplier = mapped.notify_off_multiplier;
         Some(rng)
+    }
+
+    pub fn from_mmio_base(base: usize) -> Option<Self> {
+        let base = base as *mut u8;
+        VirtioTransport::mmio(base)?;
+        if read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }) != VIRTIO_DEVICE_TYPE_RNG {
+            return None;
+        }
+
+        let mut rng = Self::new();
+        rng.mmio = true;
+        rng.common_cfg = base;
+        rng.notify_cfg = base;
+        Some(rng)
+    }
+
+    fn transport(&self) -> Option<VirtioTransport> {
+        if self.mmio {
+            VirtioTransport::mmio(self.common_cfg)
+        } else {
+            VirtioTransport::modern_pci(
+                self.bus,
+                self.slot,
+                self.func,
+                self.common_cfg,
+                self.notify_cfg,
+                core::ptr::null_mut(),
+                self.isr_cfg,
+                self.notify_off_multiplier,
+            )
+        }
     }
 
     unsafe fn init_queue(&mut self) {
@@ -1527,12 +1749,9 @@ impl VirtRng {
     }
 
     fn notify_queue(&self) {
-        notify_split_queue(
-            self.notify_cfg,
-            self.notify_off_multiplier,
-            self.queue_notify_off,
-            0,
-        );
+        if let Some(transport) = self.transport() {
+            transport.notify_split_queue(self.queue_notify_off, 0);
+        }
     }
 }
 
@@ -1548,6 +1767,7 @@ pub struct VirtConsole {
     bus: u8,
     slot: u8,
     func: u8,
+    mmio: bool,
     common_cfg: *mut u8,
     notify_cfg: *mut u8,
     isr_cfg: *mut u8,
@@ -1570,6 +1790,7 @@ impl VirtConsole {
             bus: 0,
             slot: 0,
             func: 0,
+            mmio: false,
             common_cfg: core::ptr::null_mut(),
             notify_cfg: core::ptr::null_mut(),
             isr_cfg: core::ptr::null_mut(),
@@ -1584,16 +1805,7 @@ impl VirtConsole {
     }
 
     pub fn init(&mut self) -> bool {
-        let Some(transport) = VirtioTransport::modern_pci(
-            self.bus,
-            self.slot,
-            self.func,
-            self.common_cfg,
-            self.notify_cfg,
-            core::ptr::null_mut(),
-            self.isr_cfg,
-            self.notify_off_multiplier,
-        ) else {
+        let Some(transport) = self.transport() else {
             return false;
         };
 
@@ -1603,8 +1815,8 @@ impl VirtConsole {
         self.host_features = features.host;
         self.features = features.driver;
 
-        select_queue(self.common_cfg, CONSOLE_RX_QUEUE);
-        self.rx_notify_off = read_queue_notify_off(self.common_cfg);
+        transport.select_queue(CONSOLE_RX_QUEUE);
+        self.rx_notify_off = transport.read_queue_notify_off();
 
         let (rx_desc, rx_avail, rx_used) = unsafe {
             (
@@ -1626,8 +1838,8 @@ impl VirtConsole {
         };
         self.rx_queue_size = rx_queue_size;
 
-        select_queue(self.common_cfg, CONSOLE_TX_QUEUE);
-        self.tx_notify_off = read_queue_notify_off(self.common_cfg);
+        transport.select_queue(CONSOLE_TX_QUEUE);
+        self.tx_notify_off = transport.read_queue_notify_off();
 
         let (desc, avail, used) = unsafe {
             (
@@ -1654,10 +1866,7 @@ impl VirtConsole {
             self.init_tx_queue();
         }
 
-        write_common_status(
-            self.common_cfg,
-            common_status(self.common_cfg) | VIRTIO_CONFIG_STATUS_DRIVER_OK,
-        );
+        transport.write_status(transport.status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
         true
     }
 
@@ -1708,11 +1917,43 @@ impl VirtConsole {
         console.bus = mapped.bus;
         console.slot = mapped.slot;
         console.func = mapped.func;
+        console.mmio = false;
         console.common_cfg = mapped.common_cfg;
         console.notify_cfg = mapped.notify_cfg;
         console.isr_cfg = mapped.isr_cfg;
         console.notify_off_multiplier = mapped.notify_off_multiplier;
         Some(console)
+    }
+
+    pub fn from_mmio_base(base: usize) -> Option<Self> {
+        let base = base as *mut u8;
+        VirtioTransport::mmio(base)?;
+        if read_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }) != VIRTIO_DEVICE_TYPE_CONSOLE {
+            return None;
+        }
+
+        let mut console = Self::new();
+        console.mmio = true;
+        console.common_cfg = base;
+        console.notify_cfg = base;
+        Some(console)
+    }
+
+    fn transport(&self) -> Option<VirtioTransport> {
+        if self.mmio {
+            VirtioTransport::mmio(self.common_cfg)
+        } else {
+            VirtioTransport::modern_pci(
+                self.bus,
+                self.slot,
+                self.func,
+                self.common_cfg,
+                self.notify_cfg,
+                core::ptr::null_mut(),
+                self.isr_cfg,
+                self.notify_off_multiplier,
+            )
+        }
     }
 
     unsafe fn init_tx_queue(&mut self) {
@@ -1800,12 +2041,9 @@ impl VirtConsole {
     }
 
     fn notify_tx_queue(&self) {
-        notify_split_queue(
-            self.notify_cfg,
-            self.notify_off_multiplier,
-            self.tx_notify_off,
-            CONSOLE_TX_QUEUE,
-        );
+        if let Some(transport) = self.transport() {
+            transport.notify_split_queue(self.tx_notify_off, CONSOLE_TX_QUEUE);
+        }
     }
 
     unsafe fn post_rx_descriptor(&self, desc_id: u16) {
@@ -1817,12 +2055,9 @@ impl VirtConsole {
     }
 
     fn notify_rx_queue(&self) {
-        notify_split_queue(
-            self.notify_cfg,
-            self.notify_off_multiplier,
-            self.rx_notify_off,
-            CONSOLE_RX_QUEUE,
-        );
+        if let Some(transport) = self.transport() {
+            transport.notify_split_queue(self.rx_notify_off, CONSOLE_RX_QUEUE);
+        }
     }
 }
 
@@ -1876,6 +2111,55 @@ pub fn find_virtio_console() -> Option<VirtConsole> {
     None
 }
 
+pub fn find_virtio_net_mmio(base: usize) -> Option<VirtNet> {
+    VirtNet::from_mmio_base(base)
+}
+
+pub fn find_virtio_blk_mmio(base: usize) -> Option<VirtBlk> {
+    VirtBlk::from_mmio_base(base)
+}
+
+pub fn find_virtio_rng_mmio(base: usize) -> Option<VirtRng> {
+    VirtRng::from_mmio_base(base)
+}
+
+pub fn find_virtio_console_mmio(base: usize) -> Option<VirtConsole> {
+    VirtConsole::from_mmio_base(base)
+}
+
+pub fn virtio_mmio_device_info(base: usize) -> Option<VirtioDeviceInfo> {
+    let base_ptr = base as *mut u8;
+    VirtioTransport::mmio(base_ptr)?;
+    let device_type = read_u32(unsafe { base_ptr.add(VIRTIO_MMIO_DEVICE_ID) });
+    if device_type == 0 {
+        return None;
+    }
+
+    Some(VirtioDeviceInfo {
+        transport: VirtioTransportKind::Mmio,
+        device_type,
+        vendor_id: read_u32(unsafe { base_ptr.add(VIRTIO_MMIO_VENDOR) }) as u16,
+        device_id: 0,
+        bus: 0,
+        slot: 0,
+        func: 0,
+        mmio_base: base,
+    })
+}
+
+pub fn scan_virtio_mmio_devices(bases: &[usize], out: &mut [VirtioDeviceInfo]) -> usize {
+    let mut found = 0;
+    for &base in bases {
+        if let Some(info) = virtio_mmio_device_info(base) {
+            if found < out.len() {
+                out[found] = info;
+            }
+            found += 1;
+        }
+    }
+    found
+}
+
 pub fn scan_virtio_devices(out: &mut [VirtioDeviceInfo]) -> usize {
     #[cfg(target_arch = "x86_64")]
     {
@@ -1926,6 +2210,7 @@ fn scan_modern_virtio_pci_devices(out: &mut [VirtioDeviceInfo]) -> usize {
                                     bus,
                                     slot,
                                     func,
+                                    mmio_base: 0,
                                 };
                             }
                             found += 1;
@@ -2203,6 +2488,27 @@ mod tests {
     #[repr(C, align(8))]
     struct TestCommonConfig([u8; 64]);
 
+    #[repr(C, align(8))]
+    struct TestMmio([u8; 0x200]);
+
+    fn init_test_mmio(mmio: &mut TestMmio, device_type: u32) -> *mut u8 {
+        let base = mmio.0.as_mut_ptr();
+        write_u32(
+            unsafe { base.add(VIRTIO_MMIO_MAGIC_VALUE) },
+            VIRTIO_MMIO_MAGIC,
+        );
+        write_u32(
+            unsafe { base.add(VIRTIO_MMIO_VERSION) },
+            VIRTIO_MMIO_VERSION_MODERN,
+        );
+        write_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_ID) }, device_type);
+        write_u32(
+            unsafe { base.add(VIRTIO_MMIO_VENDOR) },
+            VIRTIO_MMIO_VENDOR_ID as u32,
+        );
+        base
+    }
+
     #[test]
     fn virtio_net_header_matches_modern_layout() {
         assert_eq!(core::mem::size_of::<VirtioNetHdr>(), 12);
@@ -2303,6 +2609,130 @@ mod tests {
             4,
         )
         .is_none());
+    }
+
+    #[test]
+    fn mmio_transport_requires_magic_and_modern_version() {
+        let mut mmio = TestMmio([0; 0x200]);
+        let base = init_test_mmio(&mut mmio, VIRTIO_DEVICE_TYPE_NET);
+
+        assert!(VirtioTransport::mmio(base).is_some());
+        write_u32(unsafe { base.add(VIRTIO_MMIO_MAGIC_VALUE) }, 0);
+        assert!(VirtioTransport::mmio(base).is_none());
+
+        write_u32(
+            unsafe { base.add(VIRTIO_MMIO_MAGIC_VALUE) },
+            VIRTIO_MMIO_MAGIC,
+        );
+        write_u32(unsafe { base.add(VIRTIO_MMIO_VERSION) }, 1);
+        assert!(VirtioTransport::mmio(base).is_none());
+    }
+
+    #[test]
+    fn mmio_device_info_and_constructors_validate_device_type() {
+        let mut mmio = TestMmio([0; 0x200]);
+        let base = init_test_mmio(&mut mmio, VIRTIO_DEVICE_TYPE_RNG) as usize;
+
+        let info = virtio_mmio_device_info(base).unwrap();
+        assert_eq!(info.transport, VirtioTransportKind::Mmio);
+        assert_eq!(info.device_type, VIRTIO_DEVICE_TYPE_RNG);
+        assert_eq!(info.vendor_id, VIRTIO_MMIO_VENDOR_ID);
+        assert_eq!(info.mmio_base, base);
+
+        assert!(VirtRng::from_mmio_base(base).is_some());
+        assert!(VirtBlk::from_mmio_base(base).is_none());
+        assert!(VirtNet::from_mmio_base(0).is_none());
+    }
+
+    #[test]
+    fn scan_mmio_devices_counts_all_matches_and_stores_prefix() {
+        let mut rng_mmio = TestMmio([0; 0x200]);
+        let mut blk_mmio = TestMmio([0; 0x200]);
+        let rng_base = init_test_mmio(&mut rng_mmio, VIRTIO_DEVICE_TYPE_RNG) as usize;
+        let blk_base = init_test_mmio(&mut blk_mmio, VIRTIO_DEVICE_TYPE_BLK) as usize;
+        let bases = [0, rng_base, blk_base];
+        let mut out = [VirtioDeviceInfo {
+            transport: VirtioTransportKind::ModernPci,
+            device_type: 0,
+            vendor_id: 0,
+            device_id: 0,
+            bus: 0,
+            slot: 0,
+            func: 0,
+            mmio_base: 0,
+        }];
+
+        assert_eq!(scan_virtio_mmio_devices(&bases, &mut out), 2);
+        assert_eq!(out[0].transport, VirtioTransportKind::Mmio);
+        assert_eq!(out[0].device_type, VIRTIO_DEVICE_TYPE_RNG);
+        assert_eq!(out[0].mmio_base, rng_base);
+    }
+
+    #[test]
+    fn mmio_feature_negotiation_writes_status_and_driver_features() {
+        let mut mmio = TestMmio([0; 0x200]);
+        let base = init_test_mmio(&mut mmio, VIRTIO_DEVICE_TYPE_RNG);
+        let transport = VirtioTransport::mmio(base).unwrap();
+
+        write_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES) }, 0);
+        write_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES_SEL) }, 1);
+        write_u32(
+            unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES) },
+            (VIRTIO_F_VERSION_1 >> 32) as u32,
+        );
+
+        let negotiated = transport.negotiate_features(VIRTIO_F_VERSION_1).unwrap();
+        assert_eq!(negotiated.driver, VIRTIO_F_VERSION_1);
+        assert_eq!(
+            read_u32(unsafe { base.add(VIRTIO_MMIO_DRIVER_FEATURES_SEL) }),
+            1
+        );
+        assert_eq!(
+            read_u32(unsafe { base.add(VIRTIO_MMIO_DRIVER_FEATURES) }),
+            (VIRTIO_F_VERSION_1 >> 32) as u32
+        );
+        assert_eq!(
+            read_u32(unsafe { base.add(VIRTIO_MMIO_STATUS) }) as u8,
+            VIRTIO_CONFIG_STATUS_ACKNOWLEDGE
+                | VIRTIO_CONFIG_STATUS_DRIVER
+                | VIRTIO_CONFIG_STATUS_FEATURES_OK
+        );
+    }
+
+    #[test]
+    fn mmio_queue_setup_writes_split_queue_registers() {
+        let mut mmio = TestMmio([0; 0x200]);
+        let base = init_test_mmio(&mut mmio, VIRTIO_DEVICE_TYPE_RNG);
+        let transport = VirtioTransport::mmio(base).unwrap();
+
+        write_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_NUM_MAX) }, 8);
+        let queue_size = transport
+            .configure_split_queue(3, 16, 1, 0x1122_3344_5566_7788, 0x2233_4455, 0x3344_5566)
+            .unwrap();
+
+        assert_eq!(queue_size, 8);
+        assert_eq!(read_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_SEL) }), 3);
+        assert_eq!(read_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_NUM) }), 8);
+        assert_eq!(
+            read_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_DESC_LOW) }),
+            0x5566_7788
+        );
+        assert_eq!(
+            read_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_DESC_HIGH) }),
+            0x1122_3344
+        );
+        assert_eq!(
+            read_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_DRIVER_LOW) }),
+            0x2233_4455
+        );
+        assert_eq!(
+            read_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_DEVICE_LOW) }),
+            0x3344_5566
+        );
+        assert_eq!(read_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_READY) }), 1);
+
+        transport.notify_split_queue(0, 3);
+        assert_eq!(read_u32(unsafe { base.add(VIRTIO_MMIO_QUEUE_NOTIFY) }), 3);
     }
 
     #[test]
