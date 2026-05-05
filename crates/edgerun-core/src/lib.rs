@@ -2,29 +2,29 @@
 
 extern crate alloc;
 
-#[cfg(all(not(target_os = "none"), feature = "conformance"))]
+#[cfg(feature = "std")]
 extern crate std;
 
-#[cfg(all(not(target_os = "none"), feature = "conformance"))]
+#[cfg(feature = "conformance")]
 macro_rules! println {
     ($($arg:tt)*) => {
         std::println!($($arg)*)
     };
 }
 
-#[cfg(all(not(target_os = "none"), feature = "conformance"))]
+#[cfg(feature = "conformance")]
 macro_rules! eprintln {
     ($($arg:tt)*) => {
         std::eprintln!($($arg)*)
     };
 }
 
-#[cfg(any(target_os = "none", not(feature = "conformance")))]
+#[cfg(not(feature = "conformance"))]
 macro_rules! println {
     ($($arg:tt)*) => {};
 }
 
-#[cfg(any(target_os = "none", not(feature = "conformance")))]
+#[cfg(not(feature = "conformance"))]
 macro_rules! eprintln {
     ($($arg:tt)*) => {};
 }
