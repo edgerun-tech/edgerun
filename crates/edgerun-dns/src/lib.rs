@@ -86,6 +86,7 @@ pub mod record;
 pub mod resolv_conf;
 pub mod resolver;
 pub mod server;
+pub mod tcp_frame;
 pub mod tftp;
 #[cfg(feature = "tsig")]
 pub mod tsig;
@@ -149,4 +150,8 @@ pub use server::query::{
     MAX_UDP_RESPONSE, ServerState, handle_query, handle_query_without_forwarding,
 };
 pub use server::{DnsServer, DnsServerConfig};
+pub use tcp_frame::{
+    DnsTcpFrameDecoder, DnsTcpFrameError, decode_single_dns_tcp_frame, dns_tcp_frame_len,
+    encode_dns_tcp_frame,
+};
 pub use zone::DnsZone;
