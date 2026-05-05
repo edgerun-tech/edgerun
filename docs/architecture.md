@@ -96,3 +96,159 @@ The authoritative high-level references are:
 
 Delete or update documents that introduce independent protocol rules, duplicate
 old crate maps, or describe modules that do not exist.
+
+## Target domain folder layout
+
+The flat `crates/` tree is becoming hard to navigate. The target shape should be
+foldered by domain while preserving crate names, package names, and public APIs.
+The folder name is navigation and ownership metadata, not part of the package
+identity.
+
+```text
+crates/
+  protocol/
+    edgerun-wire
+    edgerun-core
+    edgerun-verify
+    edgerun-sign
+    edgerun-sign-p256
+    edgerun-keygen
+    edgerun-node-bootstrap
+    edgerun-sign-verify-e2e
+  authority/
+    edgerun-stream
+    edgerun-storage
+    edgerun-edgefs
+    edgerun-vfs
+    edgerun-virtual-disk
+  node/
+    edgerun-node
+    edgerun-server
+    edgerun-machine-report
+  capability/
+    edgerun-capabilities
+    edgerun-capability-policy
+    edgerun-remote-capability
+    edgerun-mesh-capability
+  mesh/
+    edgerun-mesh
+    edgerun-mesh-link
+    edgerun-mesh-session
+  identity/
+    edgerun-hardware-signing
+    edgerun-tpm
+    edgerun-yubikey
+    edgerun-android-keystore
+  service/
+    edgerun-http
+    edgerun-tls
+    edgerun-quic
+    edgerun-dns
+    edgerun-dhcp
+    edgerun-dhcpv6
+    edgerun-email
+    edgerun-email-auth
+    edgerun-acme
+    edgerun-oauth
+    edgerun-proxy
+    edgerun-oci
+    edgerun-analytics
+    edgerun-edit
+    edgerun-exchange
+    edgerun-exchange-api
+    zen-client
+  device-types/
+    edgerun-bluetooth
+    edgerun-biometrics
+    edgerun-camera-biometrics
+    edgerun-cec
+    edgerun-display
+    edgerun-fingerprint
+    edgerun-gpu
+    edgerun-input
+    edgerun-microphone
+    edgerun-network-interface
+    edgerun-nfc
+    edgerun-npu
+    edgerun-pci
+    edgerun-power
+    edgerun-speaker
+    edgerun-usb
+    edgerun-wifi
+  linux-adapters/
+    edgerun-alsa-microphone
+    edgerun-alsa-speaker
+    edgerun-amd-xdna
+    edgerun-bluetooth-gatt
+    edgerun-drm-display
+    edgerun-evdev-input
+    edgerun-face-detection
+    edgerun-goodix-fingerprint
+    edgerun-linux-cec
+    edgerun-linux-gpu
+    edgerun-linux-netif
+    edgerun-linux-nfc
+    edgerun-linux-npu
+    edgerun-linux-pci
+    edgerun-linux-power
+    edgerun-linux-sysfs
+    edgerun-linux-usb
+    edgerun-linux-wifi
+    edgerun-mgmt-bluetooth
+    edgerun-passport-nfc
+    edgerun-v4l2-camera
+  bare-target/
+    edgerun-rt
+    edgerun-platform
+    edgerun-unikernel
+    edgerun-virtio
+    edgerun-rtl8125
+    edgerun-ipxe
+    edgerun-tftp
+    edgerun-event
+  appliance/
+    edgerun-tcl-ac
+    edgerun-tcl-ac-cli
+    edgerun-matter
+    edgerun-tuya
+    edgerun-quectel-ec200a
+  utility/
+    edgerun-crypto
+    edgerun-encoding
+    edgerun-json
+    edgerun-log
+    edgerun-clap
+    edgerun-clap-derive
+    edgerun-url
+    edgerun-glob
+    edgerun-regex
+    edgerun-error
+    edgerun-hpack
+    edgerun-qpack
+    edgerun-bench
+```
+
+### Migration order for domain folders
+
+1. Normalize internal dependencies to use `[workspace.dependencies]` where the
+   workspace already defines the crate. This reduces relative `../crate` path
+   churn before moves.
+2. Move low-dependency utility crates first: `utility/`, then `protocol/`.
+3. Move authority crates next: `authority/`, then update node/storage dependents.
+4. Move service and device domains in separate commits so failures localize to a
+   domain.
+5. Move active bare-target work last, especially `edgerun-unikernel`,
+   `edgerun-virtio`, and scripts that assume `crates/<name>` paths.
+6. Keep package names unchanged. Do not rename crates during folder migration.
+7. After each domain move, run `cargo metadata --no-deps --format-version 1` and
+   `cargo check --workspace` before continuing.
+
+### Folder move rules
+
+- Do not leave compatibility symlinks or forwarding crates.
+- Do not move active work in the same commit as unrelated folder moves.
+- Do not use folder moves to hide stale crates; delete stale crates first.
+- Update `Cargo.toml` workspace members and path dependencies in the same commit
+  as each domain move.
+- Prefer domain commits over one huge repository-wide move so breakage identifies
+  the affected domain.
