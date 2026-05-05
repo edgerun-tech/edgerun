@@ -271,7 +271,7 @@ pub fn validate_stream(events: &[EventEnvelope], writer: &StreamId) -> Result<()
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StreamError {
     EmptyStream,
     MissingGenesis {

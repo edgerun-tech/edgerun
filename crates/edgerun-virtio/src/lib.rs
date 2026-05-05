@@ -1565,7 +1565,7 @@ impl VirtBlk {
         if self.features & VIRTIO_BLK_F_FLUSH == 0 {
             return true;
         }
-        unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, SECTOR_SIZE, false) }
+        unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, 0, false) }
     }
 
     pub fn take_interrupt_status(&self) -> VirtioInterruptStatus {
@@ -1701,49 +1701,9 @@ impl VirtBlk {
         data_len: usize,
         read: bool,
     ) -> bool {
-        if data_len > SECTOR_SIZE {
+        if !self.prepare_request_descriptors(request_type, sector, data_len, read) {
             return false;
         }
-
-        BLK_HEADER = VirtioBlkReqHeader {
-            request_type,
-            reserved: 0,
-            sector,
-        };
-        BLK_STATUS = 0xff;
-
-        let desc = core::ptr::addr_of_mut!(BLK_DESC.0) as *mut VirtqDesc;
-        core::ptr::write(
-            desc,
-            VirtqDesc {
-                addr: core::ptr::addr_of!(BLK_HEADER) as u64,
-                len: core::mem::size_of::<VirtioBlkReqHeader>() as u32,
-                flags: VIRTQ_DESC_F_NEXT,
-                next: 1,
-            },
-        );
-        core::ptr::write(
-            desc.add(1),
-            VirtqDesc {
-                addr: core::ptr::addr_of_mut!(BLK_DATA.0) as u64,
-                len: data_len as u32,
-                flags: if read {
-                    VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT
-                } else {
-                    VIRTQ_DESC_F_NEXT
-                },
-                next: 2,
-            },
-        );
-        core::ptr::write(
-            desc.add(2),
-            VirtqDesc {
-                addr: core::ptr::addr_of_mut!(BLK_STATUS) as u64,
-                len: 1,
-                flags: VIRTQ_DESC_F_WRITE,
-                next: 0,
-            },
-        );
 
         post_split_queue_descriptor(core::ptr::addr_of_mut!(BLK_AVAIL), self.queue_size, 0);
         self.notify_queue();
@@ -1765,6 +1725,61 @@ impl VirtBlk {
             return false;
         };
         elem.id == 0 && read_u8(core::ptr::addr_of!(BLK_STATUS)) == VIRTIO_BLK_S_OK
+    }
+
+    unsafe fn prepare_request_descriptors(
+        &mut self,
+        request_type: u32,
+        sector: u64,
+        data_len: usize,
+        read: bool,
+    ) -> bool {
+        if data_len > SECTOR_SIZE {
+            return false;
+        }
+        BLK_HEADER = VirtioBlkReqHeader {
+            request_type,
+            reserved: 0,
+            sector,
+        };
+        BLK_STATUS = 0xff;
+
+        let desc = core::ptr::addr_of_mut!(BLK_DESC.0) as *mut VirtqDesc;
+        let has_data = data_len != 0;
+        core::ptr::write(
+            desc,
+            VirtqDesc {
+                addr: core::ptr::addr_of!(BLK_HEADER) as u64,
+                len: core::mem::size_of::<VirtioBlkReqHeader>() as u32,
+                flags: VIRTQ_DESC_F_NEXT,
+                next: if has_data { 1 } else { 2 },
+            },
+        );
+        if has_data {
+            core::ptr::write(
+                desc.add(1),
+                VirtqDesc {
+                    addr: core::ptr::addr_of_mut!(BLK_DATA.0) as u64,
+                    len: data_len as u32,
+                    flags: if read {
+                        VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT
+                    } else {
+                        VIRTQ_DESC_F_NEXT
+                    },
+                    next: 2,
+                },
+            );
+        }
+        core::ptr::write(
+            desc.add(2),
+            VirtqDesc {
+                addr: core::ptr::addr_of_mut!(BLK_STATUS) as u64,
+                len: 1,
+                flags: VIRTQ_DESC_F_WRITE,
+                next: 0,
+            },
+        );
+        true
     }
 
     fn notify_queue(&self) {
