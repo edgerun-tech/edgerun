@@ -40,7 +40,7 @@ build:
 
 # Build and install ert binary to system PATH
 install-ert:
-	cargo build -p edgerun-oci-runtime --release
+	cargo build -p edgerun-oci --release
 	sudo cp target/x86_64-unknown-linux-musl/release/ert /usr/local/bin/ert
 	sudo chmod 755 /usr/local/bin/ert
 	@echo "Installed ert to /usr/local/bin/ert"

@@ -177,7 +177,6 @@ cargo clippy --fix
 - [Fuzzing Guide](docs/FUZZING.md)
 - [Miri Guide](docs/MIRI.md)
 - [Setup Guide](SETUP.md)
-- [Status](STATUS.md)
 
 ---
 

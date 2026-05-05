@@ -7,9 +7,8 @@ No Docker, no runc, no systemd, no libc crate. Just raw syscalls and `std`.
 
 ## Current status
 
-The workspace package is `edgerun-oci`; the old `edgerun-oci-runtime`
-package name is stale. Source lives in `crates/edgerun-oci/`, with the CLI
-entry point at `src/bin/edgerun-oci.rs`.
+The workspace package is `edgerun-oci`. Source lives in `crates/edgerun-oci/`,
+with the CLI entry point at `src/bin/edgerun-oci.rs`.
 
 As of 2026-04-29, `cargo metadata --no-deps --format-version 1` succeeds for
 the root workspace. The runtime is not yet production-ready as a `runc`/`crun`

@@ -41,7 +41,7 @@ func Cmd() *cobra.Command {
 	})
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "oci-runtime",
+		Use:   "oci",
 		Short: "Run OCI runtime conformance tests",
 		RunE:  testOCIRuntime,
 	})
@@ -192,7 +192,7 @@ func testOCIRuntime(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Println("Running OCI runtime conformance tests...")
-	return runCmd(root, "cargo", "test", "-p", "edgerun-oci-runtime", "--test", "conformance", "--", "--test-threads=1")
+	return runCmd(root, "cargo", "test", "-p", "edgerun-oci", "--test", "conformance", "--", "--test-threads=1")
 }
 
 func testOCIRunc(cmd *cobra.Command, args []string) error {
