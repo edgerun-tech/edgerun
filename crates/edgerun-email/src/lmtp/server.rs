@@ -18,8 +18,9 @@ use crate::rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
-use crate::server::read_line;
+use crate::lmtp::session_core::LmtpCommand;
 use crate::server::ConnectionInterceptor;
+use crate::server::read_line;
 use crate::smtp::server::{MailHandler, MemoryMailStore};
 use crate::smtp::types::{
     DsnNotify, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse,
@@ -386,10 +387,11 @@ async fn handle_connection(
         last_activity = std::time::Instant::now();
         command_count += 1;
 
-        let cmd = match SmtpCommand::parse(&line) {
-            Ok(c) => c,
+        let cmd = match LmtpCommand::parse(&line) {
+            Ok(LmtpCommand::Lhlo(domain)) => SmtpCommand::Ehlo(domain),
+            Ok(LmtpCommand::Smtp(command)) => command,
             Err(e) => {
-                send_response(&mut stream, &SmtpResponse::syntax_error(&e.to_string())).await?;
+                send_response(&mut stream, &SmtpResponse::syntax_error(&e)).await?;
                 continue;
             }
         };
