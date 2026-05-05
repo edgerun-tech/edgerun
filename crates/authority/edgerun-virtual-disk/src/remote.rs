@@ -12,17 +12,12 @@ use edgerun_encoding::io::{self, Read, Write};
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_rt::Mutex;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-use std::fs::{self, File, OpenOptions};
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-use std::io::{self, Read, Seek, SeekFrom, Write};
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-use std::os::unix::net::{UnixListener, UnixStream};
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-use std::path::Path;
+use std::io::{self, Read, Write};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::sync::Mutex;
+
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
+pub use host::{FileBlockBackend, TcpBlockServer, UnixBlockServer};
 
 pub const BLOCK_PROTOCOL_VERSION: u16 = 1;
 const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
@@ -80,7 +75,7 @@ impl From<io::Error> for BlockError {
     }
 }
 
-impl<B: BlockBackend> BlockBackend for Arc<B> {
+impl<B: BlockBackend + ?Sized> BlockBackend for Arc<B> {
     fn info(&self) -> BlockDeviceInfo {
         self.as_ref().info()
     }
@@ -106,7 +101,7 @@ impl<B: BlockBackend> BlockBackend for Arc<B> {
     }
 }
 
-pub trait BlockBackend: Send + Sync + 'static {
+pub trait BlockBackend {
     fn info(&self) -> BlockDeviceInfo;
     fn read_blocks(&self, lba: u64, blocks: u32, out: &mut [u8]) -> Result<(), BlockError>;
     fn write_blocks(&self, lba: u64, blocks: u32, data: &[u8]) -> Result<(), BlockError>;
@@ -218,121 +213,6 @@ impl BlockBackend for MemoryBlockBackend {
 
     fn write_zeroes(&self, lba: u64, blocks: u32) -> Result<(), BlockError> {
         self.discard_blocks(lba, blocks)
-    }
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-#[derive(Debug)]
-pub struct FileBlockBackend {
-    info: BlockDeviceInfo,
-    file: Mutex<File>,
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl FileBlockBackend {
-    pub fn open(
-        path: impl AsRef<Path>,
-        block_size: u32,
-        readonly: bool,
-    ) -> Result<Self, BlockError> {
-        let path = path.as_ref();
-        if block_size == 0 {
-            return Err(BlockError::ProtocolError("block size must be > 0".into()));
-        }
-        let metadata = fs::metadata(path).map_err(BlockError::from)?;
-        let len = metadata.len();
-        let block_size_u64 = u64::from(block_size);
-        if len % block_size_u64 != 0 {
-            return Err(BlockError::Misaligned);
-        }
-        let file = OpenOptions::new()
-            .read(true)
-            .write(!readonly)
-            .open(path)
-            .map_err(BlockError::from)?;
-        let info = BlockDeviceInfo {
-            block_size,
-            block_count: len / block_size_u64,
-            readonly,
-            supports_flush: true,
-            supports_discard: false,
-            supports_write_zeroes: true,
-            model: "edgerun-file-backend".into(),
-            serial: path.display().to_string(),
-        };
-        validate_device_info(&info)?;
-        Ok(Self {
-            info,
-            file: Mutex::new(file),
-        })
-    }
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl BlockBackend for FileBlockBackend {
-    fn info(&self) -> BlockDeviceInfo {
-        self.info.clone()
-    }
-
-    fn read_blocks(&self, lba: u64, blocks: u32, out: &mut [u8]) -> Result<(), BlockError> {
-        validate_transfer(&self.info, lba, blocks, out.len())?;
-        let offset = byte_offset(&self.info, lba)?;
-        let mut file = self
-            .file
-            .lock()
-            .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
-        file.seek(SeekFrom::Start(offset))
-            .map_err(BlockError::from)?;
-        file.read_exact(out).map_err(BlockError::from)?;
-        Ok(())
-    }
-
-    fn write_blocks(&self, lba: u64, blocks: u32, data: &[u8]) -> Result<(), BlockError> {
-        if self.info.readonly {
-            return Err(BlockError::ReadOnly);
-        }
-        validate_transfer(&self.info, lba, blocks, data.len())?;
-        let offset = byte_offset(&self.info, lba)?;
-        let mut file = self
-            .file
-            .lock()
-            .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
-        file.seek(SeekFrom::Start(offset))
-            .map_err(BlockError::from)?;
-        file.write_all(data).map_err(BlockError::from)?;
-        Ok(())
-    }
-
-    fn flush(&self) -> Result<(), BlockError> {
-        let file = self
-            .file
-            .lock()
-            .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
-        file.sync_all().map_err(BlockError::from)
-    }
-
-    fn write_zeroes(&self, lba: u64, blocks: u32) -> Result<(), BlockError> {
-        if self.info.readonly {
-            return Err(BlockError::ReadOnly);
-        }
-        let len = checked_len_bytes(&self.info, blocks)?;
-        let offset = byte_offset(&self.info, lba)?;
-        let mut file = self
-            .file
-            .lock()
-            .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
-        file.seek(SeekFrom::Start(offset))
-            .map_err(BlockError::from)?;
-        const ZERO_CHUNK_LEN: usize = 1024 * 1024;
-        let zero_chunk = [0_u8; ZERO_CHUNK_LEN];
-        let mut remaining = len;
-        while remaining > 0 {
-            let chunk_len = remaining.min(ZERO_CHUNK_LEN);
-            file.write_all(&zero_chunk[..chunk_len])
-                .map_err(BlockError::from)?;
-            remaining -= chunk_len;
-        }
-        Ok(())
     }
 }
 
@@ -645,22 +525,6 @@ impl<T: Read + Write> BlockClient<T> {
     }
 }
 
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl BlockClient<UnixStream> {
-    pub fn connect_unix(path: impl AsRef<Path>) -> Result<Self, BlockError> {
-        let stream = UnixStream::connect(path).map_err(BlockError::from)?;
-        Ok(Self::new(stream))
-    }
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl BlockClient<TcpStream> {
-    pub fn connect_tcp(addr: impl ToSocketAddrs) -> Result<Self, BlockError> {
-        let stream = TcpStream::connect(addr).map_err(BlockError::from)?;
-        Ok(Self::new(stream))
-    }
-}
-
 pub struct BlockServer<T, B> {
     stream: T,
     backend: B,
@@ -693,89 +557,6 @@ impl<T: Read + Write, B: BlockBackend> BlockServer<T, B> {
     }
 }
 
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-pub struct UnixBlockServer<B> {
-    listener: UnixListener,
-    backend: Arc<B>,
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl<B: BlockBackend> UnixBlockServer<B> {
-    pub fn bind(path: impl AsRef<Path>, backend: B) -> Result<Self, BlockError> {
-        Self::bind_shared(path, Arc::new(backend))
-    }
-
-    pub fn bind_shared(path: impl AsRef<Path>, backend: Arc<B>) -> Result<Self, BlockError> {
-        let path = path.as_ref();
-        if path.exists() {
-            fs::remove_file(path).map_err(BlockError::from)?;
-        }
-        let listener = UnixListener::bind(path).map_err(BlockError::from)?;
-        Ok(Self { listener, backend })
-    }
-
-    pub fn local_addr(&self) -> Result<std::os::unix::net::SocketAddr, BlockError> {
-        self.listener.local_addr().map_err(BlockError::from)
-    }
-
-    pub fn accept_once(&self) -> Result<(), BlockError> {
-        let (stream, _) = self.listener.accept().map_err(BlockError::from)?;
-        let mut server = BlockServer::new(stream, Arc::clone(&self.backend));
-        server.serve_until_eof()
-    }
-
-    pub fn serve_forever(&self) -> Result<(), BlockError> {
-        loop {
-            self.accept_once()?;
-        }
-    }
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl<B> Drop for UnixBlockServer<B> {
-    fn drop(&mut self) {
-        if let Ok(addr) = self.listener.local_addr() {
-            if let Some(path) = addr.as_pathname() {
-                let _ = fs::remove_file(path);
-            }
-        }
-    }
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-pub struct TcpBlockServer<B> {
-    listener: TcpListener,
-    backend: Arc<B>,
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl<B: BlockBackend> TcpBlockServer<B> {
-    pub fn bind(addr: impl ToSocketAddrs, backend: B) -> Result<Self, BlockError> {
-        Self::bind_shared(addr, Arc::new(backend))
-    }
-
-    pub fn bind_shared(addr: impl ToSocketAddrs, backend: Arc<B>) -> Result<Self, BlockError> {
-        let listener = TcpListener::bind(addr).map_err(BlockError::from)?;
-        Ok(Self { listener, backend })
-    }
-
-    pub fn local_addr(&self) -> Result<std::net::SocketAddr, BlockError> {
-        self.listener.local_addr().map_err(BlockError::from)
-    }
-
-    pub fn accept_once(&self) -> Result<(), BlockError> {
-        let (stream, _) = self.listener.accept().map_err(BlockError::from)?;
-        let mut server = BlockServer::new(stream, Arc::clone(&self.backend));
-        server.serve_until_eof()
-    }
-
-    pub fn serve_forever(&self) -> Result<(), BlockError> {
-        loop {
-            self.accept_once()?;
-        }
-    }
-}
-
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 #[derive(Debug)]
 pub struct FileBlockBackend;
@@ -795,6 +576,240 @@ pub struct UnixBlockServer<B> {
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 pub struct TcpBlockServer<B> {
     _backend: core::marker::PhantomData<B>,
+}
+
+pub mod protocol {
+    pub use super::{
+        checked_len_bytes, handle_request, validate_range, BlockBackend, BlockDeviceInfo,
+        BlockError, BlockRequest, BlockResponse, MemoryBlockBackend, RequestId,
+        BLOCK_PROTOCOL_VERSION,
+    };
+}
+
+pub mod transport {
+    pub use super::{
+        receive_request, receive_response, send_request, send_response, BlockClient, BlockServer,
+    };
+}
+
+pub mod wire {
+    pub use super::{
+        decode_request_frame, decode_response_frame, encode_request_frame, encode_response_frame,
+    };
+}
+
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
+pub mod host {
+    use super::*;
+    use std::fs::{self, File, OpenOptions};
+    use std::io::{Read, Seek, SeekFrom, Write};
+    use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+    use std::os::unix::net::{UnixListener, UnixStream};
+    use std::path::Path;
+
+    #[derive(Debug)]
+    pub struct FileBlockBackend {
+        info: BlockDeviceInfo,
+        file: Mutex<File>,
+    }
+
+    impl FileBlockBackend {
+        pub fn open(
+            path: impl AsRef<Path>,
+            block_size: u32,
+            readonly: bool,
+        ) -> Result<Self, BlockError> {
+            let path = path.as_ref();
+            if block_size == 0 {
+                return Err(BlockError::ProtocolError("block size must be > 0".into()));
+            }
+            let metadata = fs::metadata(path).map_err(BlockError::from)?;
+            let len = metadata.len();
+            let block_size_u64 = u64::from(block_size);
+            if len % block_size_u64 != 0 {
+                return Err(BlockError::Misaligned);
+            }
+            let file = OpenOptions::new()
+                .read(true)
+                .write(!readonly)
+                .open(path)
+                .map_err(BlockError::from)?;
+            let info = BlockDeviceInfo {
+                block_size,
+                block_count: len / block_size_u64,
+                readonly,
+                supports_flush: true,
+                supports_discard: false,
+                supports_write_zeroes: true,
+                model: "edgerun-file-backend".into(),
+                serial: path.display().to_string(),
+            };
+            validate_device_info(&info)?;
+            Ok(Self {
+                info,
+                file: Mutex::new(file),
+            })
+        }
+    }
+
+    impl BlockBackend for FileBlockBackend {
+        fn info(&self) -> BlockDeviceInfo {
+            self.info.clone()
+        }
+
+        fn read_blocks(&self, lba: u64, blocks: u32, out: &mut [u8]) -> Result<(), BlockError> {
+            validate_transfer(&self.info, lba, blocks, out.len())?;
+            let offset = byte_offset(&self.info, lba)?;
+            let mut file = self
+                .file
+                .lock()
+                .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
+            file.seek(SeekFrom::Start(offset))
+                .map_err(BlockError::from)?;
+            file.read_exact(out).map_err(BlockError::from)?;
+            Ok(())
+        }
+
+        fn write_blocks(&self, lba: u64, blocks: u32, data: &[u8]) -> Result<(), BlockError> {
+            if self.info.readonly {
+                return Err(BlockError::ReadOnly);
+            }
+            validate_transfer(&self.info, lba, blocks, data.len())?;
+            let offset = byte_offset(&self.info, lba)?;
+            let mut file = self
+                .file
+                .lock()
+                .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
+            file.seek(SeekFrom::Start(offset))
+                .map_err(BlockError::from)?;
+            file.write_all(data).map_err(BlockError::from)?;
+            Ok(())
+        }
+
+        fn flush(&self) -> Result<(), BlockError> {
+            let file = self
+                .file
+                .lock()
+                .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
+            file.sync_all().map_err(BlockError::from)
+        }
+
+        fn write_zeroes(&self, lba: u64, blocks: u32) -> Result<(), BlockError> {
+            if self.info.readonly {
+                return Err(BlockError::ReadOnly);
+            }
+            let len = checked_len_bytes(&self.info, blocks)?;
+            let offset = byte_offset(&self.info, lba)?;
+            let mut file = self
+                .file
+                .lock()
+                .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
+            file.seek(SeekFrom::Start(offset))
+                .map_err(BlockError::from)?;
+            const ZERO_CHUNK_LEN: usize = 1024 * 1024;
+            let zero_chunk = [0_u8; ZERO_CHUNK_LEN];
+            let mut remaining = len;
+            while remaining > 0 {
+                let chunk_len = remaining.min(ZERO_CHUNK_LEN);
+                file.write_all(&zero_chunk[..chunk_len])
+                    .map_err(BlockError::from)?;
+                remaining -= chunk_len;
+            }
+            Ok(())
+        }
+    }
+
+    impl BlockClient<UnixStream> {
+        pub fn connect_unix(path: impl AsRef<Path>) -> Result<Self, BlockError> {
+            let stream = UnixStream::connect(path).map_err(BlockError::from)?;
+            Ok(Self::new(stream))
+        }
+    }
+
+    impl BlockClient<TcpStream> {
+        pub fn connect_tcp(addr: impl ToSocketAddrs) -> Result<Self, BlockError> {
+            let stream = TcpStream::connect(addr).map_err(BlockError::from)?;
+            Ok(Self::new(stream))
+        }
+    }
+
+    pub struct UnixBlockServer<B> {
+        listener: UnixListener,
+        backend: Arc<B>,
+    }
+
+    impl<B: BlockBackend + Send + Sync + 'static> UnixBlockServer<B> {
+        pub fn bind(path: impl AsRef<Path>, backend: B) -> Result<Self, BlockError> {
+            Self::bind_shared(path, Arc::new(backend))
+        }
+
+        pub fn bind_shared(path: impl AsRef<Path>, backend: Arc<B>) -> Result<Self, BlockError> {
+            let path = path.as_ref();
+            if path.exists() {
+                fs::remove_file(path).map_err(BlockError::from)?;
+            }
+            let listener = UnixListener::bind(path).map_err(BlockError::from)?;
+            Ok(Self { listener, backend })
+        }
+
+        pub fn local_addr(&self) -> Result<std::os::unix::net::SocketAddr, BlockError> {
+            self.listener.local_addr().map_err(BlockError::from)
+        }
+
+        pub fn accept_once(&self) -> Result<(), BlockError> {
+            let (stream, _) = self.listener.accept().map_err(BlockError::from)?;
+            let mut server = BlockServer::new(stream, Arc::clone(&self.backend));
+            server.serve_until_eof()
+        }
+
+        pub fn serve_forever(&self) -> Result<(), BlockError> {
+            loop {
+                self.accept_once()?;
+            }
+        }
+    }
+
+    impl<B> Drop for UnixBlockServer<B> {
+        fn drop(&mut self) {
+            if let Ok(addr) = self.listener.local_addr() {
+                if let Some(path) = addr.as_pathname() {
+                    let _ = fs::remove_file(path);
+                }
+            }
+        }
+    }
+
+    pub struct TcpBlockServer<B> {
+        listener: TcpListener,
+        backend: Arc<B>,
+    }
+
+    impl<B: BlockBackend + Send + Sync + 'static> TcpBlockServer<B> {
+        pub fn bind(addr: impl ToSocketAddrs, backend: B) -> Result<Self, BlockError> {
+            Self::bind_shared(addr, Arc::new(backend))
+        }
+
+        pub fn bind_shared(addr: impl ToSocketAddrs, backend: Arc<B>) -> Result<Self, BlockError> {
+            let listener = TcpListener::bind(addr).map_err(BlockError::from)?;
+            Ok(Self { listener, backend })
+        }
+
+        pub fn local_addr(&self) -> Result<std::net::SocketAddr, BlockError> {
+            self.listener.local_addr().map_err(BlockError::from)
+        }
+
+        pub fn accept_once(&self) -> Result<(), BlockError> {
+            let (stream, _) = self.listener.accept().map_err(BlockError::from)?;
+            let mut server = BlockServer::new(stream, Arc::clone(&self.backend));
+            server.serve_until_eof()
+        }
+
+        pub fn serve_forever(&self) -> Result<(), BlockError> {
+            loop {
+                self.accept_once()?;
+            }
+        }
+    }
 }
 
 pub fn send_request<W: Write>(writer: &mut W, request: &BlockRequest) -> Result<(), BlockError> {
@@ -1336,6 +1351,10 @@ mod tests {
     use crate::image::{create, VirtualDiskFormat, VirtualDiskSpec};
     #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     use std::env;
+    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
+    use std::fs;
+    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
+    use std::os::unix::net::UnixStream;
     #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     use std::thread;
 

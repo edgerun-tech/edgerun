@@ -88,7 +88,7 @@ fn run() -> Result<(), BlockError> {
     }
 }
 
-fn serve_backend<B: BlockBackend>(
+fn serve_backend<B: BlockBackend + Send + Sync + 'static>(
     transport: &str,
     endpoint: &str,
     backend: Arc<B>,
@@ -128,7 +128,7 @@ fn serve_backend<B: BlockBackend>(
     }
 }
 
-fn serve_websocket<B: BlockBackend>(
+fn serve_websocket<B: BlockBackend + Send + Sync + 'static>(
     endpoint: &str,
     backend: Arc<B>,
     geometry: Option<(u64, u32)>,

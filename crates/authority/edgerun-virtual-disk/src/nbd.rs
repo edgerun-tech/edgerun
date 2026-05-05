@@ -76,7 +76,7 @@ impl Default for NbdExport {
 #[derive(Clone)]
 pub struct NbdExportEntry {
     pub export: NbdExport,
-    pub backend: Arc<dyn BlockBackend>,
+    pub backend: Arc<dyn BlockBackend + Send + Sync>,
 }
 
 impl core::fmt::Debug for NbdExportEntry {
