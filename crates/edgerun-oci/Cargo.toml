@@ -33,7 +33,6 @@ std = [
     "dep:edgerun-rt",
     "dep:edgerun-secret-service",
     "dep:edgerun-core",
-    "zstd",
 ]
 
 [[bin]]

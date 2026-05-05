@@ -12,7 +12,6 @@ description = "EdgeRun Wallet Instant Settlement — core types and logic"
 edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
 edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false }
 edgerun-json = { version = "0.1", path = "../utility/edgerun-json" }
-edgerun-error = { version = "0.1", path = "../utility/edgerun-error" }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 
 [dev-dependencies]

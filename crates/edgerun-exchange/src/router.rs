@@ -8,7 +8,7 @@ extern crate alloc;
 use crate::policy::RoutingPolicy;
 use crate::provider::{ExchangeProvider, ProviderContext, ProviderQuote};
 use alloc::vec::Vec;
-use edgerun_core::protocol::edgerun_wallet_v0::QuoteRequest;
+use edgerun_core::protocol::edgerun_wallet_v0::{FeeBreakdown, QuoteRequest};
 use edgerun_wallet::WalletError;
 
 /// Result of routing a quote request.
@@ -42,7 +42,7 @@ pub fn route_quote(
         .iter()
         .filter(|p| p.supports_quote(req))
         .filter_map(|provider| match provider.quote(req, ctx) {
-            Ok(q) => Some(q),
+            Ok(q) => Some(apply_routing_policy(q, policy)),
             Err(e) => {
                 errors.push(alloc::format!("{}: {}", provider.code().as_str(), e));
                 None
@@ -74,4 +74,22 @@ fn score_and_select(mut candidates: Vec<ProviderQuote>, _policy: &RoutingPolicy)
     });
 
     candidates.into_iter().next().expect("non-empty candidates")
+}
+
+fn apply_routing_policy(mut quote: ProviderQuote, policy: &RoutingPolicy) -> ProviderQuote {
+    match quote.fees.as_mut() {
+        Some(fees) => {
+            fees.edgerun_bps = policy.edgerun_bps.to_string();
+        }
+        None => {
+            quote.fees = Some(FeeBreakdown {
+                edgerun_bps: policy.edgerun_bps.to_string(),
+                provider_bps: "0".into(),
+                network_fee_settlement: "0".into(),
+                network_fee_pay: "0".into(),
+                total_fee_usd_estimate: "0".into(),
+            });
+        }
+    }
+    quote
 }

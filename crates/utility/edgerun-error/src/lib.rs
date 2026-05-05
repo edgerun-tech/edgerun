@@ -2,7 +2,7 @@
 //!
 //! Supports:
 //! - Unit variants: `#[error("message")]`
-//! - Variants with a single field: `#[error("message: {0}")]`
+//! - Variants with unnamed fields: `#[error("message: {0}")]`
 
 use proc_macro::TokenStream;
 use quote::quote;
@@ -27,7 +27,7 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
         let discriminant = variant
             .discriminant
             .as_ref()
-            .map(|(Eq, d)| quote!(#d))
+            .map(|(_, d)| quote!(#d))
             .unwrap_or_else(|| quote!());
 
         let mut format_string = None;
@@ -77,7 +77,7 @@ pub fn error_derive(input: TokenStream) -> TokenStream {
                 }
             }
             _ => {
-                panic!("Error derive: variant must have 0 or 1 fields");
+                panic!("Error derive: variant fields must be unit or unnamed");
             }
         }
     }

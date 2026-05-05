@@ -6,6 +6,7 @@
 extern crate alloc;
 
 use crate::provider::*;
+use crate::provider_mapping::map_provider_status;
 use alloc::string::String;
 use core::result::Result;
 use edgerun_core::protocol::edgerun_wallet_v0::{AssetRef, Quote, QuoteRequest};
@@ -178,6 +179,11 @@ impl ExchangeProvider for SideShiftAdapter {
                 "settleAmount".into(),
                 JsonValue::String(req.settlement_amount.clone()),
             );
+        } else if !req.pay_amount.is_empty() {
+            body.insert(
+                "depositAmount".into(),
+                JsonValue::String(req.pay_amount.clone()),
+            );
         }
 
         if !self.affiliate_id.is_empty() {
@@ -333,21 +339,7 @@ impl ExchangeProvider for SideShiftAdapter {
                     "Missing status in SideShift response".into(),
                 ))?;
 
-        let status = match status_str {
-            "created" => 3,
-            "awaiting_deposit" => 4,
-            "deposit_received" => 5,
-            "processing" => 6,
-            "completed" => 7,
-            "failed" => 8,
-            "cancelled" => 9,
-            _ => {
-                return Err(WalletError::ProviderError(format!(
-                    "Unknown SideShift status: {}",
-                    status_str
-                )))
-            }
-        };
+        let status = map_provider_status(ProviderCode::SideShift.as_str(), status_str);
 
         Ok(ProviderStatus {
             provider: ProviderCode::SideShift,

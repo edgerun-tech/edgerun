@@ -6,6 +6,7 @@
 extern crate alloc;
 
 use crate::provider::*;
+use crate::provider_mapping::map_provider_status;
 use alloc::string::String;
 use core::result::Result;
 use edgerun_core::protocol::edgerun_wallet_v0::{AssetRef, Quote, QuoteRequest};
@@ -161,6 +162,11 @@ impl ExchangeProvider for ChangeNOWAdapter {
                 "toAmount".into(),
                 JsonValue::String(req.settlement_amount.clone()),
             );
+        } else if !req.pay_amount.is_empty() {
+            body.insert(
+                "fromAmount".into(),
+                JsonValue::String(req.pay_amount.clone()),
+            );
         }
 
         if !self.api_key.is_empty() {
@@ -296,21 +302,7 @@ impl ExchangeProvider for ChangeNOWAdapter {
                     "Missing status in ChangeNOW response".into(),
                 ))?;
 
-        let status = match status_str {
-            "new" => 3,
-            "waiting" => 4,
-            "confirming" => 5,
-            "exchanging" => 6,
-            "completed" => 7,
-            "failed" => 8,
-            "refunded" => 9,
-            _ => {
-                return Err(WalletError::ProviderError(format!(
-                    "Unknown ChangeNOW status: {}",
-                    status_str
-                )))
-            }
-        };
+        let status = map_provider_status(ProviderCode::ChangeNOW.as_str(), status_str);
 
         Ok(ProviderStatus {
             provider: ProviderCode::ChangeNOW,

@@ -341,10 +341,13 @@ mod provider_mapping_tests {
     fn test_sideshift_known_statuses() {
         assert_eq!(map_provider_status("SIDESHIFT", "pending"), 3); // CREATED
         assert_eq!(map_provider_status("SIDESHIFT", "awaiting_deposit"), 4); // AWAITING_DEPOSIT
+        assert_eq!(map_provider_status("SIDESHIFT", "deposit_received"), 5); // DEPOSIT_SEEN
+        assert_eq!(map_provider_status("SIDESHIFT", "processing"), 7); // EXCHANGING
         assert_eq!(map_provider_status("SIDESHIFT", "completed"), 9); // COMPLETED
         assert_eq!(map_provider_status("SIDESHIFT", "failed"), 15); // FAILED
         assert_eq!(map_provider_status("SIDESHIFT", "refunded"), 13); // REFUNDED
         assert_eq!(map_provider_status("SIDESHIFT", "expired"), 14); // EXPIRED
+        assert_eq!(map_provider_status("SIDESHIFT", "cancelled"), 18); // CANCELED
     }
 
     #[test]
@@ -352,6 +355,7 @@ mod provider_mapping_tests {
         assert_eq!(map_provider_status("CHANGENOW", "new"), 3); // CREATED
         assert_eq!(map_provider_status("CHANGENOW", "waiting"), 4); // AWAITING_DEPOSIT
         assert_eq!(map_provider_status("CHANGENOW", "finished"), 9); // COMPLETED
+        assert_eq!(map_provider_status("CHANGENOW", "completed"), 9); // COMPLETED
         assert_eq!(map_provider_status("CHANGENOW", "failed"), 15); // FAILED
         assert_eq!(map_provider_status("CHANGENOW", "refunded"), 13); // REFUNDED
     }
@@ -365,6 +369,136 @@ mod provider_mapping_tests {
     #[test]
     fn test_unknown_provider_maps_to_on_hold() {
         assert_eq!(map_provider_status("UNKNOWN_PROVIDER", "anything"), 17); // ON_HOLD
+    }
+}
+
+mod routing_tests {
+    extern crate alloc;
+
+    use alloc::boxed::Box;
+    use alloc::rc::Rc;
+    use core::cell::RefCell;
+    use edgerun_core::protocol::edgerun_wallet_v0::{AssetRef, Quote, QuoteRequest};
+    use edgerun_exchange::policy::RoutingPolicy;
+    use edgerun_exchange::provider::{
+        ExchangeProvider, ProviderCode, ProviderContext, ProviderFeatures, ProviderOrder,
+        ProviderOrderRequest, ProviderQuote, ProviderStatus,
+    };
+    use edgerun_exchange::router::{route_quote, QuoteRoutingResult};
+    use edgerun_http::client_middleware::Chain;
+    use edgerun_http::HttpClient;
+    use edgerun_wallet::{DecimalAmount, WalletError};
+
+    #[derive(Clone)]
+    struct MockProvider {
+        quote: ProviderQuote,
+    }
+
+    impl ExchangeProvider for MockProvider {
+        fn code(&self) -> ProviderCode {
+            self.quote.provider
+        }
+
+        fn features(&self) -> ProviderFeatures {
+            ProviderFeatures {
+                supports_fixed_rate: true,
+                supports_float_rate: true,
+                supports_refund_address: true,
+                requires_destination_tag: false,
+                min_confirmations: 1,
+            }
+        }
+
+        fn supports_quote(&self, _req: &QuoteRequest) -> bool {
+            true
+        }
+
+        fn quote(
+            &self,
+            _req: &QuoteRequest,
+            _ctx: &ProviderContext,
+        ) -> Result<ProviderQuote, WalletError> {
+            Ok(self.quote.clone())
+        }
+
+        fn create_order(
+            &self,
+            _quote: &Quote,
+            _req: &ProviderOrderRequest,
+            _ctx: &ProviderContext,
+        ) -> Result<ProviderOrder, WalletError> {
+            Err(WalletError::ProviderError("unused".into()))
+        }
+
+        fn get_order_status(
+            &self,
+            _provider_order_id: &str,
+            _ctx: &ProviderContext,
+        ) -> Result<ProviderStatus, WalletError> {
+            Err(WalletError::ProviderError("unused".into()))
+        }
+    }
+
+    fn test_ctx() -> ProviderContext {
+        ProviderContext {
+            http_client: Rc::new(RefCell::new(Chain::new(HttpClient::new()).build())),
+            timeout_ms: 1000,
+        }
+    }
+
+    fn quote(rate: &str) -> ProviderQuote {
+        ProviderQuote {
+            provider: ProviderCode::SideShift,
+            quote_id_internal: "provider-quote".into(),
+            settlement_asset: AssetRef {
+                symbol: "USDT".into(),
+                network: "tron".into(),
+                contract: None,
+                decimals: Some(6),
+            },
+            pay_asset: AssetRef {
+                symbol: "BTC".into(),
+                network: "bitcoin".into(),
+                contract: None,
+                decimals: Some(8),
+            },
+            settlement_amount: DecimalAmount::parse("100").unwrap(),
+            pay_amount: DecimalAmount::parse("0.001").unwrap(),
+            rate: DecimalAmount::parse(rate).unwrap(),
+            quote_mode: 1,
+            expires_at_ms: 9999999999999,
+            estimated_seconds: Some(600),
+            fees: None,
+        }
+    }
+
+    #[test]
+    fn route_quote_applies_edgerun_commission_policy() {
+        let req = QuoteRequest {
+            settlement_asset_id: "USDT:tron".into(),
+            pay_asset_id: "BTC:bitcoin".into(),
+            settlement_amount: "100".into(),
+            pay_amount: "".into(),
+            quote_mode: 1,
+            amount_side: 1,
+            refund_address: None,
+            recipient_address: None,
+        };
+        let providers: alloc::vec::Vec<Box<dyn ExchangeProvider>> =
+            alloc::vec![Box::new(MockProvider {
+                quote: quote("100000"),
+            })];
+        let policy = RoutingPolicy {
+            edgerun_bps: 45,
+            ..RoutingPolicy::default()
+        };
+
+        let result = route_quote(&req, &providers, &test_ctx(), &policy);
+        let QuoteRoutingResult::Quote(quote) = result else {
+            panic!("expected quote");
+        };
+        let fees = quote.fees.expect("policy should attach fee disclosure");
+        assert_eq!(fees.edgerun_bps, "45");
     }
 }
 

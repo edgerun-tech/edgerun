@@ -15,10 +15,13 @@ pub fn map_provider_status(provider_code: &str, provider_status: &str) -> i32 {
     // SideShift status mappings
     let sideshift_mappings: &[(&str, i32)] = &[
         ("pending", 3),           // CREATED
+        ("created", 3),           // CREATED
         ("awaiting_deposit", 4),  // AWAITING_DEPOSIT
         ("deposit_seen", 5),      // DEPOSIT_SEEN
+        ("deposit_received", 5),  // DEPOSIT_SEEN
         ("deposit_confirmed", 6), // DEPOSIT_CONFIRMED
         ("exchanging", 7),        // EXCHANGING
+        ("processing", 7),        // EXCHANGING
         ("sending", 8),           // SENDING
         ("completed", 9),         // COMPLETED
         ("failed", 15),           // FAILED
@@ -27,6 +30,7 @@ pub fn map_provider_status(provider_code: &str, provider_status: &str) -> i32 {
         ("refunded", 13),         // REFUNDED
         ("expired", 14),          // EXPIRED
         ("on_hold", 17),          // ON_HOLD
+        ("cancelled", 18),        // CANCELED
     ];
 
     // ChangeNOW status mappings
@@ -37,6 +41,7 @@ pub fn map_provider_status(provider_code: &str, provider_status: &str) -> i32 {
         ("exchanging", 7), // EXCHANGING
         ("sending", 8),    // SENDING
         ("finished", 9),   // COMPLETED
+        ("completed", 9),  // COMPLETED
         ("failed", 15),    // FAILED
         ("refunded", 13),  // REFUNDED
         ("expired", 14),   // EXPIRED

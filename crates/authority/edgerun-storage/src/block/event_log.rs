@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn block_event_log_append_read_scan() {
-        let device = InMemoryBlockDevice::new(16, 32);
+        let device = InMemoryBlockDevice::new(16, 96);
         let mut log = BlockEventLog::open(device).unwrap();
 
         let e1 = envelope(b"stream-a", 0, 1);
@@ -517,7 +517,7 @@ mod tests {
 
     #[test]
     fn block_event_log_recovers_cursor() {
-        let mut device = InMemoryBlockDevice::new(16, 32);
+        let mut device = InMemoryBlockDevice::new(16, 96);
         let mut log = BlockEventLog::open(device.clone()).unwrap();
         let e1 = envelope(b"stream", 0, 1);
         let e2 = envelope(b"stream", 1, 1);

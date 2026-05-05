@@ -4,8 +4,9 @@ use edgerun_codex_boost::decode_record;
 use edgerun_codex_boost::CodexBoostRecord;
 use edgerun_json::parse_json;
 use edgerun_json::parse_json_tape;
+use edgerun_json::to_string as json_to_string;
 use edgerun_json::CompiledTapeKey;
-use serde_json::Value as SerdeJsonValue;
+use edgerun_json::JsonValue;
 use std::hint::black_box;
 use std::time::Duration;
 use std::time::Instant;
@@ -22,8 +23,6 @@ fn main() {
         let text = text_materialize(&record);
         let text_bytes = text.as_bytes().to_vec();
         let json = json_materialize(&record);
-        let serde_parsed: SerdeJsonValue =
-            serde_json::from_str(&json).expect("parse serde_json fixture");
         let edgerun_owned = parse_json(&json).expect("parse edgerun_json fixture");
         let edgerun_tape = parse_json_tape(&json).expect("parse edgerun_json tape fixture");
         let edgerun_tape_root = edgerun_tape.root(&json).expect("tape root");
@@ -53,24 +52,6 @@ fn main() {
             let bytes = black_box(&text_bytes).clone();
             black_box(bytes.len())
         });
-        bench_once(body_bytes, "serde_json_parse_lookup", iterations, || {
-            let parsed: SerdeJsonValue =
-                serde_json::from_str(black_box(&json)).expect("parse serde_json");
-            black_box(parsed["body"].as_str().map(str::len).unwrap_or_default())
-        });
-        bench_once(
-            body_bytes,
-            "serde_json_lookup_preparsed",
-            iterations,
-            || {
-                black_box(
-                    black_box(&serde_parsed)["body"]
-                        .as_str()
-                        .map(str::len)
-                        .unwrap_or_default(),
-                )
-            },
-        );
         bench_once(body_bytes, "edgerun_json_owned_lookup", iterations, || {
             let parsed = parse_json(black_box(&json)).expect("parse edgerun_json");
             black_box(parsed.required_str("body").expect("body").len())
@@ -174,7 +155,7 @@ fn json_materialize(record: &CodexBoostRecord) -> String {
         "{{\"schema_version\":{},\"kind\":\"{:?}\",\"source\":{},\"body\":{}}}",
         record.schema_version,
         record.kind,
-        serde_json::to_string(&record.source).expect("json source string"),
-        serde_json::to_string(&record.body).expect("json body string")
+        json_to_string(&JsonValue::from(record.source.as_str())).expect("json source string"),
+        json_to_string(&JsonValue::from(record.body.as_str())).expect("json body string")
     )
 }

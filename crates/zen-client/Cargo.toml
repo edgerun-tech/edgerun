@@ -7,4 +7,8 @@ edition = "2021"
 edgerun-http = { workspace = true, features = ["client", "tls"] }
 edgerun-json = { workspace = true }
 edgerun-rt = { workspace = true }
-edgerun-edit = { workspace = true, features = ["std"] }
+edgerun-edit = { workspace = true, features = ["std"], optional = true }
+
+[features]
+default = []
+ast-edit = ["dep:edgerun-edit"]

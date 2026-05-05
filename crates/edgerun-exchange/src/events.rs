@@ -18,7 +18,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 /// Exchange event types. Every event is immutable once recorded.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExchangeEvent {
     /// User requested a quote — the quote object is created.
     QuoteCreated {

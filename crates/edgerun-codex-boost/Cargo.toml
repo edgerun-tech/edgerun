@@ -12,11 +12,10 @@ description = "Edgerun rkyv bridge records for local Codex context"
 edgerun-capabilities = { workspace = true }
 edgerun-capability-policy = { workspace = true }
 edgerun-core = { workspace = true }
-edgerun-hardware-signing = { workspace = true }
 edgerun-json = { workspace = true }
+edgerun-sign = { workspace = true }
 edgerun-storage = { workspace = true }
 edgerun-wire = { workspace = true, default-features = false }
-serde_json = "1"
 
 [[bin]]
 name = "edgerun-codex-boost-bench"

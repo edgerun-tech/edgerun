@@ -4,8 +4,6 @@
 //! concrete Edgerun-backed context record without adding a second wire format
 //! or a compatibility path.
 
-use std::sync::Arc;
-
 use edgerun_capabilities::CapabilityDescriptor;
 use edgerun_capabilities::CapabilityError;
 use edgerun_capabilities::CapabilityGrant;
@@ -19,8 +17,7 @@ use edgerun_core::protocol::EventType;
 use edgerun_core::protocol::IdentityKind;
 use edgerun_core::protocol::IdentityRef;
 use edgerun_core::protocol::NodeRef;
-use edgerun_hardware_signing::MeshSigner;
-use edgerun_hardware_signing::NodeID;
+use edgerun_sign::ProtocolSigner;
 use edgerun_storage::core::AppendReceipt;
 use edgerun_storage::core::EventLog;
 use edgerun_storage::DurableStreamWriter;
@@ -31,6 +28,7 @@ use edgerun_wire::Serialize;
 use edgerun_wire::WireError;
 
 pub const WIRE_PROTOCOL: &str = edgerun_wire::WIRE_PROTOCOL;
+pub type AgentNodeId = [u8; edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN];
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(crate = edgerun_wire)]
@@ -74,14 +72,14 @@ pub fn access_record(bytes: &[u8]) -> Result<&edgerun_wire::Archived<CodexBoostR
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AgentIdentity {
-    node_id: NodeID,
+    node_id: AgentNodeId,
     identity_ref: IdentityRef,
     node_ref: NodeRef,
 }
 
 impl AgentIdentity {
-    pub fn from_node_id(node_id: NodeID) -> Self {
-        let identity_id = node_id.0.to_vec();
+    pub fn from_node_id(node_id: AgentNodeId) -> Self {
+        let identity_id = node_id.to_vec();
         Self {
             node_id,
             identity_ref: IdentityRef {
@@ -90,13 +88,13 @@ impl AgentIdentity {
                 key_hint: Some(identity_id[..8].to_vec()),
             },
             node_ref: NodeRef {
-                node_id: node_id.0.to_vec(),
+                node_id: node_id.to_vec(),
             },
         }
     }
 
     #[must_use]
-    pub fn node_id(&self) -> NodeID {
+    pub fn node_id(&self) -> AgentNodeId {
         self.node_id
     }
 
@@ -146,21 +144,21 @@ impl From<CapabilityError> for AgentRuntimeError {
     }
 }
 
-pub struct AgentRuntime<L> {
+pub struct AgentRuntime<L, S> {
     identity: AgentIdentity,
-    stream: DurableStreamWriter<L>,
+    stream: DurableStreamWriter<L, S>,
     policy: SimplePolicyEngine,
 }
 
-impl<L: EventLog> AgentRuntime<L> {
+impl<L: EventLog, S: ProtocolSigner> AgentRuntime<L, S> {
     pub fn new(
-        signer: Arc<dyn MeshSigner>,
+        node_id: AgentNodeId,
+        signer: S,
         recorded_at_ms: i64,
         event_log: L,
     ) -> Result<Self, AgentRuntimeError> {
-        let identity = AgentIdentity::from_node_id(signer.node_id());
-        let stream =
-            DurableStreamWriter::new(signer.node_id().0, signer, recorded_at_ms, event_log)?;
+        let identity = AgentIdentity::from_node_id(node_id);
+        let stream = DurableStreamWriter::new(node_id, signer, recorded_at_ms, event_log)?;
         let policy = SimplePolicyEngine::new(Some(identity.identity_ref.clone()));
         Ok(Self {
             identity,
@@ -175,7 +173,7 @@ impl<L: EventLog> AgentRuntime<L> {
     }
 
     #[must_use]
-    pub fn stream(&self) -> &DurableStreamWriter<L> {
+    pub fn stream(&self) -> &DurableStreamWriter<L, S> {
         &self.stream
     }
 
@@ -271,7 +269,7 @@ mod tests {
     use edgerun_capabilities::CapabilityOperation;
     use edgerun_capabilities::CapabilityRole;
     use edgerun_capabilities::CapabilitySelector;
-    use edgerun_hardware_signing::HardwareSigningError;
+    use edgerun_sign::{ProtocolSignError, SignableProtocolFamily as ProtocolFamily};
     use edgerun_storage::MemEventLog;
 
     #[test]
@@ -292,11 +290,12 @@ mod tests {
 
     #[test]
     fn agent_runtime_owns_identity_and_records_signed_agency_events() {
-        let signer = Arc::new(FixedSigner::new(7));
+        let signer = FixedSigner::new(7);
+        let node_id = signer.node_id();
         let mut runtime =
-            AgentRuntime::new(signer.clone(), 1_000, MemEventLog::new()).expect("create runtime");
+            AgentRuntime::new(node_id, signer, 1_000, MemEventLog::new()).expect("create runtime");
 
-        assert_eq!(runtime.identity().node_id(), signer.node_id());
+        assert_eq!(runtime.identity().node_id(), node_id);
         assert_eq!(
             runtime.identity().identity_ref().identity_kind,
             Some(IdentityKind::Agent as i32)
@@ -324,9 +323,10 @@ mod tests {
 
     #[test]
     fn agent_runtime_turns_allowed_capability_request_into_grant_event() {
-        let signer = Arc::new(FixedSigner::new(9));
+        let signer = FixedSigner::new(9);
+        let node_id = signer.node_id();
         let mut runtime =
-            AgentRuntime::new(signer, 1_000, MemEventLog::new()).expect("create runtime");
+            AgentRuntime::new(node_id, signer, 1_000, MemEventLog::new()).expect("create runtime");
         let descriptor = capability_descriptor(
             "codex-tool",
             "local-shell",
@@ -388,34 +388,36 @@ mod tests {
     }
 
     struct FixedSigner {
-        node_id: NodeID,
+        node_id: AgentNodeId,
     }
 
     impl FixedSigner {
         fn new(seed: u8) -> Self {
             Self {
-                node_id: NodeID([seed; 64]),
+                node_id: [seed; 64],
             }
+        }
+
+        fn node_id(&self) -> AgentNodeId {
+            self.node_id
         }
     }
 
-    impl MeshSigner for FixedSigner {
-        fn node_id(&self) -> NodeID {
-            self.node_id
+    impl ProtocolSigner for FixedSigner {
+        fn signature_algorithm(&self) -> i32 {
+            edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
         }
 
-        fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 64], HardwareSigningError> {
-            let mut signature = [0u8; 64];
-            signature[..32].copy_from_slice(digest);
-            signature[32..].copy_from_slice(&self.node_id.0[..32]);
+        fn sign_signature_input(
+            &self,
+            _family: ProtocolFamily,
+            signature_input: &[u8],
+        ) -> Result<Vec<u8>, ProtocolSignError> {
+            let digest = edgerun_core::crypto::sha256(signature_input);
+            let mut signature = vec![0u8; 64];
+            signature[..32].copy_from_slice(&digest);
+            signature[32..].copy_from_slice(&self.node_id[..32]);
             Ok(signature)
-        }
-
-        fn sign_message_var(&self, message: &[u8]) -> Result<[u8; 64], HardwareSigningError> {
-            let digest = edgerun_core::crypto::sha256(message);
-            let mut digest_array = [0u8; 32];
-            digest_array.copy_from_slice(&digest);
-            self.sign_digest(&digest_array)
         }
     }
 }

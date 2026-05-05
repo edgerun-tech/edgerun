@@ -14,7 +14,7 @@ path = "src/bin/edgerun-server.rs"
 required-features = ["std", "smtp", "imap", "dns", "tls"]
 
 [dependencies]
-edgerun-http = { version = "0.1", path = "../../edgerun-http", default-features = false, features = ["connection-middleware", "http-compression", "server"] }
+edgerun-http = { version = "0.1", path = "../../edgerun-http", default-features = false, features = ["connection-middleware", "server"] }
 edgerun-email = { version = "0.1", path = "../../edgerun-email", optional = true }
 edgerun-dns = { version = "0.1", path = "../../edgerun-dns", default-features = false, optional = true }
 edgerun-acme = { version = "0.1", path = "../../edgerun-acme", features = ["dns_challenge"] }
@@ -42,6 +42,7 @@ tftp = ["dep:edgerun-tftp", "edgerun-tftp/server"]
 proxy = ["dep:edgerun-proxy"]
 tls = ["dep:edgerun-tls", "edgerun-http/tls"]
 http3 = ["tls", "edgerun-http/http3"]
+http-compression = ["edgerun-http/http-compression"]
 
 [lints]
 workspace = true

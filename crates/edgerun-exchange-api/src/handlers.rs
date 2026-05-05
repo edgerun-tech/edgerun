@@ -49,13 +49,19 @@ pub fn handle_quote(req: &Request) -> Response {
         Err(e) => return json_error(400, &e),
     };
 
+    let amount_side = input.amount_side.unwrap_or(1);
+    let amount = input.amount.clone().unwrap_or_default();
     let proto_req = QuoteRequest {
         settlement_asset_id: input.settlement_asset_id.clone(),
         pay_asset_id: input.pay_asset_id.clone(),
-        settlement_amount: input.amount.clone().unwrap_or_default(),
-        pay_amount: "".into(),
+        settlement_amount: if amount_side == 1 {
+            amount.clone()
+        } else {
+            "".into()
+        },
+        pay_amount: if amount_side == 2 { amount } else { "".into() },
         quote_mode: input.mode.unwrap_or(1),
-        amount_side: input.amount_side.unwrap_or(1),
+        amount_side,
         refund_address: input.refund_address.clone(),
         recipient_address: input.recipient_address.clone(),
     };
@@ -117,6 +123,24 @@ pub fn handle_quote(req: &Request) -> Response {
             );
             if let Some(est) = provider_quote.estimated_seconds {
                 response.insert("estimated_seconds".into(), JsonValue::Number(est.into()));
+            }
+            if let Some(fees) = provider_quote.fees {
+                let mut fee_json = Map::new();
+                fee_json.insert("edgerun_bps".into(), JsonValue::String(fees.edgerun_bps));
+                fee_json.insert("provider_bps".into(), JsonValue::String(fees.provider_bps));
+                fee_json.insert(
+                    "network_fee_settlement".into(),
+                    JsonValue::String(fees.network_fee_settlement),
+                );
+                fee_json.insert(
+                    "network_fee_pay".into(),
+                    JsonValue::String(fees.network_fee_pay),
+                );
+                fee_json.insert(
+                    "total_fee_usd_estimate".into(),
+                    JsonValue::String(fees.total_fee_usd_estimate),
+                );
+                response.insert("fees".into(), JsonValue::Object(fee_json));
             }
 
             json_response(200, JsonValue::Object(response))

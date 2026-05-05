@@ -13,7 +13,6 @@
 
 extern crate alloc;
 
-use alloc::string::String;
 use alloc::vec::Vec;
 
 use edgerun_core::protocol::edgerun_wallet_v0::{
@@ -31,291 +30,19 @@ use crate::events::ExchangeEvent;
 pub struct ExchangeStreamPayload {
     /// Existing protocol `EventEnvelope.event_type` value.
     pub event_type: i32,
-    /// Rkyv-normalized native `WalletExchangeEventPayload` bytes.
+    /// Rkyv archive of native `WalletExchangeEventPayload`.
     pub payload_bytes: Vec<u8>,
 }
 
-const EXCHANGE_PAYLOAD_MAGIC: &[u8; 4] = b"ERXE";
-
-fn put_u8(out: &mut Vec<u8>, value: u8) {
-    out.push(value);
-}
-
-fn put_u32(out: &mut Vec<u8>, value: u32) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn put_i32(out: &mut Vec<u8>, value: i32) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn put_u64(out: &mut Vec<u8>, value: u64) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn put_string(out: &mut Vec<u8>, value: &str) {
-    put_u32(out, value.len() as u32);
-    out.extend_from_slice(value.as_bytes());
-}
-
-fn put_option_string(out: &mut Vec<u8>, value: &Option<String>) {
-    match value {
-        Some(value) => {
-            put_u8(out, 1);
-            put_string(out, value);
-        }
-        None => put_u8(out, 0),
-    }
-}
-
-struct PayloadReader<'a> {
-    bytes: &'a [u8],
-    pos: usize,
-}
-
-impl<'a> PayloadReader<'a> {
-    fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, pos: 0 }
-    }
-
-    fn take(&mut self, len: usize) -> Option<&'a [u8]> {
-        let end = self.pos.checked_add(len)?;
-        let chunk = self.bytes.get(self.pos..end)?;
-        self.pos = end;
-        Some(chunk)
-    }
-
-    fn u8(&mut self) -> Option<u8> {
-        Some(*self.take(1)?.first()?)
-    }
-
-    fn u32(&mut self) -> Option<u32> {
-        Some(u32::from_le_bytes(self.take(4)?.try_into().ok()?))
-    }
-
-    fn i32(&mut self) -> Option<i32> {
-        Some(i32::from_le_bytes(self.take(4)?.try_into().ok()?))
-    }
-
-    fn u64(&mut self) -> Option<u64> {
-        Some(u64::from_le_bytes(self.take(8)?.try_into().ok()?))
-    }
-
-    fn string(&mut self) -> Option<String> {
-        let len = self.u32()? as usize;
-        String::from_utf8(self.take(len)?.to_vec()).ok()
-    }
-
-    fn option_string(&mut self) -> Option<Option<String>> {
-        match self.u8()? {
-            0 => Some(None),
-            1 => Some(Some(self.string()?)),
-            _ => None,
-        }
-    }
-
-    fn done(&self) -> bool {
-        self.pos == self.bytes.len()
-    }
-}
-
 fn encode_exchange_payload(payload: &WalletExchangeEventPayload) -> Vec<u8> {
-    let mut out = Vec::new();
-    out.extend_from_slice(EXCHANGE_PAYLOAD_MAGIC);
-    put_u32(&mut out, payload.payload_version);
-
-    let tag: u8 = match payload.event.as_ref() {
-        None => 0,
-        Some(wallet_exchange_event_payload::Event::QuoteCreated(_)) => 1,
-        Some(wallet_exchange_event_payload::Event::OrderCreated(_)) => 2,
-        Some(wallet_exchange_event_payload::Event::DepositObserved(_)) => 3,
-        Some(wallet_exchange_event_payload::Event::ProviderStatusObserved(_)) => 4,
-        Some(wallet_exchange_event_payload::Event::OrderStatusChanged(_)) => 5,
-        Some(wallet_exchange_event_payload::Event::OrderCompleted(_)) => 6,
-        Some(wallet_exchange_event_payload::Event::OrderFailed(_)) => 7,
-        Some(wallet_exchange_event_payload::Event::ManualReviewRequired(_)) => 8,
-    };
-    put_u8(&mut out, tag);
-    match payload.event.as_ref() {
-        None => {}
-        Some(wallet_exchange_event_payload::Event::QuoteCreated(payload)) => {
-            put_u32(&mut out, payload.payload_version);
-            put_string(&mut out, &payload.quote_id);
-            put_string(&mut out, &payload.settlement_asset_id);
-            put_string(&mut out, &payload.pay_asset_id);
-            put_string(&mut out, &payload.settlement_amount);
-            put_string(&mut out, &payload.pay_amount);
-            put_string(&mut out, &payload.rate);
-            put_u64(&mut out, payload.expires_at_ms);
-            put_option_string(&mut out, &payload.provider_code_internal);
-        }
-        Some(wallet_exchange_event_payload::Event::OrderCreated(payload)) => {
-            put_u32(&mut out, payload.payload_version);
-            put_string(&mut out, &payload.order_id);
-            put_string(&mut out, &payload.quote_id);
-            put_string(&mut out, &payload.provider_order_id_internal);
-            put_string(&mut out, &payload.deposit_address);
-            put_string(&mut out, &payload.recipient_address);
-            put_option_string(&mut out, &payload.refund_address);
-            put_option_string(&mut out, &payload.provider_code_internal);
-            put_u64(&mut out, payload.created_at_ms);
-        }
-        Some(wallet_exchange_event_payload::Event::DepositObserved(payload)) => {
-            put_u32(&mut out, payload.payload_version);
-            put_string(&mut out, &payload.order_id);
-            put_string(&mut out, &payload.tx_id);
-            put_string(&mut out, &payload.network);
-            put_string(&mut out, &payload.amount);
-            put_u64(&mut out, payload.confirmations);
-            put_u64(&mut out, payload.observed_at_ms);
-        }
-        Some(wallet_exchange_event_payload::Event::ProviderStatusObserved(payload)) => {
-            put_u32(&mut out, payload.payload_version);
-            put_string(&mut out, &payload.order_id);
-            put_option_string(&mut out, &payload.provider_code_internal);
-            put_string(&mut out, &payload.provider_order_id_internal);
-            put_string(&mut out, &payload.provider_status_string);
-            put_i32(&mut out, payload.mapped_canonical_status);
-            put_u64(&mut out, payload.observed_at_ms);
-        }
-        Some(wallet_exchange_event_payload::Event::OrderStatusChanged(payload)) => {
-            put_u32(&mut out, payload.payload_version);
-            put_string(&mut out, &payload.order_id);
-            put_i32(&mut out, payload.from_status);
-            put_i32(&mut out, payload.to_status);
-            put_string(&mut out, &payload.reason);
-            put_u64(&mut out, payload.changed_at_ms);
-        }
-        Some(wallet_exchange_event_payload::Event::OrderCompleted(payload)) => {
-            put_u32(&mut out, payload.payload_version);
-            put_string(&mut out, &payload.order_id);
-            put_option_string(&mut out, &payload.payout_tx_id);
-            put_option_string(&mut out, &payload.payout_network);
-            put_u64(&mut out, payload.completed_at_ms);
-        }
-        Some(wallet_exchange_event_payload::Event::OrderFailed(payload)) => {
-            put_u32(&mut out, payload.payload_version);
-            put_string(&mut out, &payload.order_id);
-            put_string(&mut out, &payload.reason);
-            put_u64(&mut out, payload.failed_at_ms);
-        }
-        Some(wallet_exchange_event_payload::Event::ManualReviewRequired(payload)) => {
-            put_u32(&mut out, payload.payload_version);
-            put_string(&mut out, &payload.order_id);
-            put_string(&mut out, &payload.reason);
-            put_i32(&mut out, payload.canonical_status);
-            put_i32(&mut out, payload.provider_status);
-            put_u64(&mut out, payload.flagged_at_ms);
-        }
-    }
-    out
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+        .expect("wallet exchange event payload must serialize through the rkyv wire boundary")
+        .into_vec()
 }
 
 fn decode_exchange_payload(payload_bytes: &[u8]) -> Option<WalletExchangeEventPayload> {
-    let mut reader = PayloadReader::new(payload_bytes);
-    if reader.take(EXCHANGE_PAYLOAD_MAGIC.len())? != EXCHANGE_PAYLOAD_MAGIC {
-        return None;
-    }
-    let payload_version = reader.u32()?;
-    let tag = reader.u8()?;
-    let event = match tag {
-        0 => None,
-        1 => Some(wallet_exchange_event_payload::Event::QuoteCreated(
-            WalletQuoteCreatedPayload {
-                payload_version: reader.u32()?,
-                quote_id: reader.string()?,
-                settlement_asset_id: reader.string()?,
-                pay_asset_id: reader.string()?,
-                settlement_amount: reader.string()?,
-                pay_amount: reader.string()?,
-                rate: reader.string()?,
-                expires_at_ms: reader.u64()?,
-                provider_code_internal: reader.option_string()?,
-            },
-        )),
-        2 => Some(wallet_exchange_event_payload::Event::OrderCreated(
-            WalletOrderCreatedPayload {
-                payload_version: reader.u32()?,
-                order_id: reader.string()?,
-                quote_id: reader.string()?,
-                provider_order_id_internal: reader.string()?,
-                deposit_address: reader.string()?,
-                recipient_address: reader.string()?,
-                refund_address: reader.option_string()?,
-                provider_code_internal: reader.option_string()?,
-                created_at_ms: reader.u64()?,
-            },
-        )),
-        3 => Some(wallet_exchange_event_payload::Event::DepositObserved(
-            WalletDepositObservedPayload {
-                payload_version: reader.u32()?,
-                order_id: reader.string()?,
-                tx_id: reader.string()?,
-                network: reader.string()?,
-                amount: reader.string()?,
-                confirmations: reader.u64()?,
-                observed_at_ms: reader.u64()?,
-            },
-        )),
-        4 => Some(
-            wallet_exchange_event_payload::Event::ProviderStatusObserved(
-                WalletProviderStatusObservedPayload {
-                    payload_version: reader.u32()?,
-                    order_id: reader.string()?,
-                    provider_code_internal: reader.option_string()?,
-                    provider_order_id_internal: reader.string()?,
-                    provider_status_string: reader.string()?,
-                    mapped_canonical_status: reader.i32()?,
-                    observed_at_ms: reader.u64()?,
-                },
-            ),
-        ),
-        5 => Some(wallet_exchange_event_payload::Event::OrderStatusChanged(
-            WalletOrderStatusChangedPayload {
-                payload_version: reader.u32()?,
-                order_id: reader.string()?,
-                from_status: reader.i32()?,
-                to_status: reader.i32()?,
-                reason: reader.string()?,
-                changed_at_ms: reader.u64()?,
-            },
-        )),
-        6 => Some(wallet_exchange_event_payload::Event::OrderCompleted(
-            WalletOrderCompletedPayload {
-                payload_version: reader.u32()?,
-                order_id: reader.string()?,
-                payout_tx_id: reader.option_string()?,
-                payout_network: reader.option_string()?,
-                completed_at_ms: reader.u64()?,
-            },
-        )),
-        7 => Some(wallet_exchange_event_payload::Event::OrderFailed(
-            WalletOrderFailedPayload {
-                payload_version: reader.u32()?,
-                order_id: reader.string()?,
-                reason: reader.string()?,
-                failed_at_ms: reader.u64()?,
-            },
-        )),
-        8 => Some(wallet_exchange_event_payload::Event::ManualReviewRequired(
-            WalletManualReviewRequiredPayload {
-                payload_version: reader.u32()?,
-                order_id: reader.string()?,
-                reason: reader.string()?,
-                canonical_status: reader.i32()?,
-                provider_status: reader.i32()?,
-                flagged_at_ms: reader.u64()?,
-            },
-        )),
-        _ => return None,
-    };
-    if !reader.done() {
-        return None;
-    }
-    Some(WalletExchangeEventPayload {
-        payload_version,
-        event,
-    })
+    edgerun_wire::from_bytes::<WalletExchangeEventPayload, edgerun_wire::WireError>(payload_bytes)
+        .ok()
 }
 
 pub fn exchange_payload_object_kind() -> i32 {
@@ -626,10 +353,7 @@ mod tests {
             expires_at_ms: 123,
             provider_code: "SIDESHIFT".into(),
         };
-        assert!(matches!(
-            roundtrip(event),
-            ExchangeEvent::QuoteCreated { .. }
-        ));
+        assert_eq!(roundtrip(event.clone()), event);
     }
 
     #[test]
@@ -644,10 +368,7 @@ mod tests {
             provider_code: "CHANGENOW".into(),
             created_at_ms: 456,
         };
-        assert!(matches!(
-            roundtrip(event),
-            ExchangeEvent::OrderCreated { .. }
-        ));
+        assert_eq!(roundtrip(event.clone()), event);
     }
 
     #[test]

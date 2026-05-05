@@ -10,6 +10,7 @@ description = "EdgeRun Exchange — provider adapters and routing"
 
 [dependencies]
 edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
+edgerun-wire = { version = "0.1", path = "../protocol/edgerun-wire" }
 edgerun-wallet = { version = "0.1", path = "../edgerun-wallet" }
 edgerun-http = { version = "0.1", path = "../edgerun-http", features = ["client"] }
 edgerun-json = { version = "0.1", path = "../utility/edgerun-json" }

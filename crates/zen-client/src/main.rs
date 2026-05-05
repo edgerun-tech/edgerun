@@ -183,6 +183,7 @@ fn execute_action(action: &Action) -> Result<String, String> {
                 .map_err(|e| format!("writing {}: {}", path.display(), e))?;
             Ok(format!("Edited {}", path.display()))
         }
+        #[cfg(feature = "ast-edit")]
         "add-use" => {
             let parts: Vec<&str> = action.payload.splitn(2, '|').collect();
             if parts.len() != 2 {
@@ -198,6 +199,9 @@ fn execute_action(action: &Action) -> Result<String, String> {
                 .map_err(|e| format!("write {}: {}", path.display(), e))?;
             Ok(format!("Added use {} to {}", use_path, path.display()))
         }
+        #[cfg(not(feature = "ast-edit"))]
+        "add-use" => ast_edit_disabled("add-use"),
+        #[cfg(feature = "ast-edit")]
         "rename-type" => {
             let parts: Vec<&str> = action.payload.splitn(3, '|').collect();
             if parts.len() != 3 {
@@ -211,6 +215,9 @@ fn execute_action(action: &Action) -> Result<String, String> {
                 .map_err(|e| format!("write {}: {}", path.display(), e))?;
             Ok(format!("Renamed type in {}", path.display()))
         }
+        #[cfg(not(feature = "ast-edit"))]
+        "rename-type" => ast_edit_disabled("rename-type"),
+        #[cfg(feature = "ast-edit")]
         "add-fn" => {
             let parts: Vec<&str> = action.payload.splitn(3, '|').collect();
             if parts.len() != 3 {
@@ -225,6 +232,9 @@ fn execute_action(action: &Action) -> Result<String, String> {
                 .map_err(|e| format!("write {}: {}", path.display(), e))?;
             Ok(format!("Added fn {} to {}", parts[1], path.display()))
         }
+        #[cfg(not(feature = "ast-edit"))]
+        "add-fn" => ast_edit_disabled("add-fn"),
+        #[cfg(feature = "ast-edit")]
         "remove-fn" => {
             let parts: Vec<&str> = action.payload.splitn(2, '|').collect();
             if parts.len() != 2 {
@@ -241,12 +251,26 @@ fn execute_action(action: &Action) -> Result<String, String> {
                 Err(format!("fn {} not found", parts[1]))
             }
         }
+        #[cfg(not(feature = "ast-edit"))]
+        "remove-fn" => ast_edit_disabled("remove-fn"),
+        #[cfg(feature = "ast-edit")]
         "list-files" => {
             let path = Path::new(&action.payload);
             let files = edgerun_edit::edit_ops::list_file(path)
                 .map_err(|e| format!("list {}: {}", path.display(), e))?;
             Ok(format!("Files in {}: {:?}", path.display(), files))
         }
+        #[cfg(not(feature = "ast-edit"))]
+        "list-files" => {
+            let path = Path::new(&action.payload);
+            let entries = std::fs::read_dir(path)
+                .map_err(|e| format!("list {}: {}", path.display(), e))?
+                .filter_map(Result::ok)
+                .map(|entry| entry.path().display().to_string())
+                .collect::<Vec<_>>();
+            Ok(format!("Files in {}: {:?}", path.display(), entries))
+        }
+        #[cfg(feature = "ast-edit")]
         "find-fn" => {
             let parts: Vec<&str> = action.payload.splitn(2, '|').collect();
             if parts.len() != 2 {
@@ -261,6 +285,9 @@ fn execute_action(action: &Action) -> Result<String, String> {
                 Err(format!("fn {} not found", parts[1]))
             }
         }
+        #[cfg(not(feature = "ast-edit"))]
+        "find-fn" => ast_edit_disabled("find-fn"),
+        #[cfg(feature = "ast-edit")]
         "replace-fn-body" => {
             let parts: Vec<&str> = action.payload.splitn(3, '|').collect();
             if parts.len() != 3 {
@@ -279,6 +306,9 @@ fn execute_action(action: &Action) -> Result<String, String> {
                 path.display()
             ))
         }
+        #[cfg(not(feature = "ast-edit"))]
+        "replace-fn-body" => ast_edit_disabled("replace-fn-body"),
+        #[cfg(feature = "ast-edit")]
         "add-derive" => {
             let parts: Vec<&str> = action.payload.splitn(3, '|').collect();
             if parts.len() != 3 {
@@ -300,17 +330,26 @@ fn execute_action(action: &Action) -> Result<String, String> {
                 Err(format!("type {} not found in {}", parts[1], path.display()))
             }
         }
+        #[cfg(not(feature = "ast-edit"))]
+        "add-derive" => ast_edit_disabled("add-derive"),
         "spawn-agent" => {
             let exe = std::env::current_exe().map_err(|e| format!("locate zen-client: {}", e))?;
             let output = Command::new(exe)
-            .arg(&action.payload)
-            .output()
-            .map_err(|e| format!("spawn agent: {}", e))?;
+                .arg(&action.payload)
+                .output()
+                .map_err(|e| format!("spawn agent: {}", e))?;
             let stdout = String::from_utf8_lossy(&output.stdout);
             Ok(format!("Agent output: {}", stdout))
         }
         _ => Err(format!("unknown action: {}", action.action)),
     }
+}
+
+#[cfg(not(feature = "ast-edit"))]
+fn ast_edit_disabled(action: &str) -> Result<String, String> {
+    Err(format!(
+        "{action} requires building zen-client with the `ast-edit` feature"
+    ))
 }
 
 fn gather_system_info() -> String {
