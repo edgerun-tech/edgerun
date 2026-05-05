@@ -192,11 +192,8 @@ initial_grants: []
     }
     println!("  Config:     {}", path.display());
     println!();
-    println!("Start the node with:");
-    println!(
-        "  edgerund run --config {} --listen 0.0.0.0:8080",
-        path.display()
-    );
+    println!("Inspect the node with:");
+    println!("  edgerund status --config {}", path.display());
     println!();
 
     // Run benchmarks and cache performance certificate
@@ -314,12 +311,9 @@ initial_grants: []
     println!("  Key file:   {}", key_path.display());
     println!("  Config:     {}", path.display());
     println!();
-    println!("To start the node, set the passphrase and run:");
+    println!("To inspect the node, set the passphrase and run:");
     println!("  export EDGERUN_KEY_PASSPHRASE='{}'", passphrase);
-    println!(
-        "  edgerund run --config {} --listen 0.0.0.0:8080",
-        path.display()
-    );
+    println!("  edgerund status --config {}", path.display());
     println!();
     println!(
         "IMPORTANT: Keep the key file safe. Without the passphrase, the key cannot be recovered."
@@ -383,8 +377,8 @@ pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Op
     );
 
     let config_yaml = format!(
-        r#"# edgerun Node Configuration (provisioning mode)
-# Run `edgerund run --config <config>` to start in provisioning mode
+r#"# edgerun Node Configuration (provisioning mode)
+# Use `edgerund status --config <config>` to inspect the generated identity
 stream_id: "{stream_id}"
 name: "{node_name}"
 {controller_config}
