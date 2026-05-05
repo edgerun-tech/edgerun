@@ -1,7 +1,8 @@
-//! edgerun Stream — the append-only, single-writer event log.
+//! edgerun-stream — single-writer event stream sequencing and validation.
 //!
-//! Events are signed over rkyv archived bytes with the signature
-//! field omitted.
+//! This crate owns stream order and prev-hash linkage. It does not own a
+//! separate signing implementation. Signing goes through `edgerun-sign` and
+//! verification goes through `edgerun-verify`.
 
 #![no_std]
 
@@ -9,69 +10,52 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
-use alloc::sync::Arc;
 use edgerun_core::prelude::v1::*;
 use edgerun_core::protocol::Timestamp;
 use edgerun_core::protocol::{
     CommandRef, DelegationRef, Digest, EventEnvelope, EventRef, EventType, ObjectRef,
-    RevocationRef, Signature,
+    ProtocolRecord, RevocationRef,
 };
-use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
+use edgerun_sign::{ProtocolSignError, ProtocolSigner};
+use edgerun_verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
+
+pub type StreamId = [u8; 64];
 
 /// A stream writer maintains the current stream head and produces signed events.
-pub struct StreamWriter {
-    stream_id: Vec<u8>,
+pub struct StreamWriter<S> {
+    stream_id: StreamId,
     head: Option<EventEnvelope>,
     events: Vec<EventEnvelope>,
-    signer: Arc<dyn MeshSigner>,
+    signer: S,
 }
 
-impl StreamWriter {
+impl<S: ProtocolSigner> StreamWriter<S> {
     /// Creates a new stream writer, producing the genesis event.
-    pub fn new(
-        stream_id: String,
-        signer: Arc<dyn MeshSigner>,
-        recorded_at_ms: i64,
-    ) -> Result<Self, StreamError> {
-        let stream_id_bytes = stream_id.as_bytes().to_vec();
-        let mut event = genesis_event(&stream_id_bytes, recorded_at_ms);
-        sign_event(&mut event, signer.as_ref())?;
+    pub fn new(stream_id: StreamId, signer: S, recorded_at_ms: i64) -> Result<Self, StreamError> {
+        let mut event = genesis_event(&stream_id, recorded_at_ms);
+        sign_event(&mut event, &signer)?;
         Ok(Self {
-            stream_id: stream_id_bytes,
+            stream_id,
             head: Some(event.clone()),
             events: vec![event],
             signer,
         })
     }
 
-    /// Appends a new event to the stream and signs it.
+    /// Appends a new event and signs it.
     pub fn append(
         &mut self,
         event_type: i32,
         event_version: u32,
         recorded_at_ms: i64,
     ) -> Result<EventEnvelope, StreamError> {
-        let prev = self.head.as_ref().ok_or(StreamError::EmptyStream)?;
-        let prev_hash = compute_event_hash(prev);
-        let mut event = EventEnvelope {
-            envelope_version: 1,
-            stream_id: self.stream_id.clone(),
-            seq: prev.seq + 1,
-            prev_event_hash: Some(prev_hash),
+        let draft = EventDraft {
             event_type,
             event_version,
             recorded_at: Some(ms_to_timestamp(recorded_at_ms)),
-            effective_at: None,
-            payload_object: None,
-            related_events: Vec::new(),
-            related_commands: Vec::new(),
-            related_objects: Vec::new(),
-            related_delegations: Vec::new(),
-            related_revocations: Vec::new(),
-            event_metadata: None,
-            signature: None,
+            ..EventDraft::default()
         };
-        sign_event(&mut event, self.signer.as_ref())?;
+        let event = build_signed_event(&self.stream_id, self.head.as_ref(), draft, &self.signer)?;
         self.events.push(event.clone());
         self.head = Some(event.clone());
         Ok(event)
@@ -88,13 +72,13 @@ impl StreamWriter {
     }
 
     #[must_use]
-    pub fn stream_id(&self) -> &[u8] {
+    pub fn stream_id(&self) -> &StreamId {
         &self.stream_id
     }
 
     #[must_use]
-    pub fn writer(&self) -> NodeID {
-        self.signer.node_id()
+    pub fn signer(&self) -> &S {
+        &self.signer
     }
 }
 
@@ -116,17 +100,31 @@ pub struct EventDraft {
 
 /// Builds and signs the next event for `stream_id`.
 ///
-/// The stream layer owns sequence assignment, prev-event hash linkage, and
-/// signing. Storage callers should append the returned event unchanged.
-pub fn build_signed_event(
-    stream_id: &[u8],
+/// The stream layer owns sequence assignment and prev-event hash linkage.
+/// The protocol signer owns only signing.
+pub fn build_signed_event<S: ProtocolSigner>(
+    stream_id: &StreamId,
     previous: Option<&EventEnvelope>,
     draft: EventDraft,
-    signer: &dyn MeshSigner,
+    signer: &S,
+) -> Result<EventEnvelope, StreamError> {
+    let mut event = build_unsigned_event(stream_id, previous, draft)?;
+    sign_event(&mut event, signer)?;
+    Ok(event)
+}
+
+/// Builds the next unsigned event for `stream_id`.
+///
+/// This is useful for stores/runtimes that want to inspect or enrich the event
+/// before signing through their selected signer implementation.
+pub fn build_unsigned_event(
+    stream_id: &StreamId,
+    previous: Option<&EventEnvelope>,
+    draft: EventDraft,
 ) -> Result<EventEnvelope, StreamError> {
     let (seq, prev_event_hash) = match previous {
         Some(prev) => {
-            if prev.stream_id != stream_id {
+            if prev.stream_id != stream_id.as_slice() {
                 return Err(StreamError::StreamMismatch);
             }
             (prev.seq + 1, Some(compute_event_hash(prev)))
@@ -134,7 +132,7 @@ pub fn build_signed_event(
         None => (0, None),
     };
 
-    let mut event = EventEnvelope {
+    Ok(EventEnvelope {
         envelope_version: 1,
         stream_id: stream_id.to_vec(),
         seq,
@@ -151,12 +149,10 @@ pub fn build_signed_event(
         related_revocations: draft.related_revocations,
         event_metadata: draft.event_metadata,
         signature: None,
-    };
-    sign_event(&mut event, signer)?;
-    Ok(event)
+    })
 }
 
-fn genesis_event(stream_id: &[u8], recorded_at_ms: i64) -> EventEnvelope {
+pub fn genesis_event(stream_id: &StreamId, recorded_at_ms: i64) -> EventEnvelope {
     EventEnvelope {
         envelope_version: 1,
         stream_id: stream_id.to_vec(),
@@ -190,19 +186,20 @@ pub fn event_signable_bytes(event: &EventEnvelope) -> Vec<u8> {
     edgerun_core::wire_stream::event_signable_wire_bytes(event)
 }
 
-/// Signs an event envelope using edgerun-wire bytes with the signature omitted.
-pub fn sign_event(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<(), StreamError> {
-    use edgerun_core::crypto::SIG_DOMAIN_EVENT_ENVELOPE;
-    let canonical = event_signable_bytes(event);
-    let sig = signer.sign_record(SIG_DOMAIN_EVENT_ENVELOPE, &canonical)?;
-    event.signature = Some(Signature {
-        algorithm: 1,
-        value: sig.to_vec(),
-    });
+/// Signs an event envelope using the shared protocol signer path.
+pub fn sign_event<S: ProtocolSigner>(
+    event: &mut EventEnvelope,
+    signer: &S,
+) -> Result<(), StreamError> {
+    let signed = signer.sign_protocol_record(
+        &ProtocolRecord::EventEnvelope(event.clone()),
+        ProtocolFamily::EventEnvelope,
+    )?;
+    event.signature = Some(signed.signature);
     Ok(())
 }
 
-/// Computes the deterministic event hash for prev_hash linkage.
+/// Computes the deterministic event hash for prev-hash linkage.
 #[must_use]
 pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
     let canonical = event_signable_bytes(event);
@@ -217,41 +214,13 @@ pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
 }
 
 /// Verifies the event signature against the given writer identity.
-pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), StreamError> {
-    use edgerun_core::crypto::{
-        verify_canonical_record, verify_canonical_record_hw, SIG_DOMAIN_EVENT_ENVELOPE,
-    };
-    let sig = event
-        .signature
-        .as_ref()
-        .ok_or(StreamError::MissingSignature)?;
-    if sig.value.len() != 64 {
-        return Err(StreamError::InvalidSignature {
-            expected: 64,
-            actual: sig.value.len(),
-        });
-    }
-
-    let canonical = event_signable_bytes(event);
-
-    let mut sec1 = [0u8; 65];
-    sec1[0] = 0x04;
-    sec1[1..].copy_from_slice(&writer.0);
-    let vk = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1)
-        .map_err(|e| StreamError::InvalidPublicKey(e.to_string()))?;
-
-    if !verify_canonical_record(&vk, SIG_DOMAIN_EVENT_ENVELOPE, &canonical, &sig.value)
-        && !verify_canonical_record_hw(&vk, SIG_DOMAIN_EVENT_ENVELOPE, &canonical, &sig.value)
-    {
-        return Err(StreamError::SignatureVerification(
-            "invalid signature".into(),
-        ));
-    }
+pub fn verify_event(event: &EventEnvelope, writer: &StreamId) -> Result<(), StreamError> {
+    verify_event_envelope(event, ProtocolSignerRef::P256Raw64(writer))?;
     Ok(())
 }
 
 /// Validates an entire stream from genesis.
-pub fn validate_stream(events: &[EventEnvelope], writer: &NodeID) -> Result<(), StreamError> {
+pub fn validate_stream(events: &[EventEnvelope], writer: &StreamId) -> Result<(), StreamError> {
     if events.is_empty() {
         return Err(StreamError::EmptyStream);
     }
@@ -265,12 +234,18 @@ pub fn validate_stream(events: &[EventEnvelope], writer: &NodeID) -> Result<(), 
     if genesis.prev_event_hash.is_some() {
         return Err(StreamError::GenesisHasPrevHash);
     }
+    if genesis.stream_id != writer.as_slice() {
+        return Err(StreamError::StreamMismatch);
+    }
     verify_event(genesis, writer)?;
 
     for i in 1..events.len() {
         let prev = &events[i - 1];
         let curr = &events[i];
 
+        if curr.stream_id != writer.as_slice() {
+            return Err(StreamError::StreamMismatch);
+        }
         if curr.seq != prev.seq + 1 {
             return Err(StreamError::SequenceGap {
                 expected: prev.seq + 1,
@@ -296,7 +271,7 @@ pub fn validate_stream(events: &[EventEnvelope], writer: &NodeID) -> Result<(), 
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StreamError {
     EmptyStream,
     MissingGenesis {
@@ -317,23 +292,50 @@ pub enum StreamError {
         expected: usize,
         actual: usize,
     },
-    InvalidSignatureFormat(String),
-    InvalidPublicKey(String),
-    SignatureVerification(String),
-    HardwareSigning(String),
+    InvalidPublicKey,
+    InvalidSignatureValue,
+    UnsupportedAlgorithm,
+    SignatureVerification,
+    SignerFailed,
     StreamMismatch,
+    UnsupportedFamily,
 }
 
-impl From<HardwareSigningError> for StreamError {
-    fn from(e: HardwareSigningError) -> Self {
-        Self::HardwareSigning(e.to_string())
+impl From<ProtocolSignError> for StreamError {
+    fn from(value: ProtocolSignError) -> Self {
+        match value {
+            ProtocolSignError::UnsupportedFamily => Self::UnsupportedFamily,
+            ProtocolSignError::SignerFailed => Self::SignerFailed,
+        }
+    }
+}
+
+impl From<edgerun_verify::ProtocolVerifyError> for StreamError {
+    fn from(value: edgerun_verify::ProtocolVerifyError) -> Self {
+        match value {
+            edgerun_verify::ProtocolVerifyError::MissingSignature => Self::MissingSignature,
+            edgerun_verify::ProtocolVerifyError::UnsupportedSignatureAlgorithm => {
+                Self::UnsupportedAlgorithm
+            }
+            edgerun_verify::ProtocolVerifyError::InvalidPublicKey => Self::InvalidPublicKey,
+            edgerun_verify::ProtocolVerifyError::InvalidSignatureLength => {
+                Self::InvalidSignature {
+                    expected: 64,
+                    actual: 0,
+                }
+            }
+            edgerun_verify::ProtocolVerifyError::InvalidSignature => Self::SignatureVerification,
+            edgerun_verify::ProtocolVerifyError::UnsupportedFamily => Self::UnsupportedFamily,
+            edgerun_verify::ProtocolVerifyError::MissingWriterIdentity
+            | edgerun_verify::ProtocolVerifyError::MissingIssuerIdentity => Self::InvalidPublicKey,
+        }
     }
 }
 
 impl core::fmt::Display for StreamError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::EmptyStream => write!(f, "stream is empty — no genesis event found"),
+            Self::EmptyStream => write!(f, "stream is empty; no genesis event found"),
             Self::MissingGenesis { first_seq } => {
                 write!(f, "first event is not genesis: seq={first_seq}")
             }
@@ -347,11 +349,13 @@ impl core::fmt::Display for StreamError {
                 f,
                 "invalid signature length: expected {expected}, got {actual}"
             ),
-            Self::InvalidSignatureFormat(e) => write!(f, "invalid signature format: {e}"),
-            Self::InvalidPublicKey(e) => write!(f, "invalid public key: {e}"),
-            Self::SignatureVerification(e) => write!(f, "signature verification failed: {e}"),
-            Self::HardwareSigning(e) => write!(f, "hardware signing failed: {e}"),
-            Self::StreamMismatch => write!(f, "previous event belongs to a different stream"),
+            Self::InvalidPublicKey => write!(f, "invalid public key"),
+            Self::InvalidSignatureValue => write!(f, "invalid signature value"),
+            Self::UnsupportedAlgorithm => write!(f, "unsupported signature algorithm"),
+            Self::SignatureVerification => write!(f, "signature verification failed"),
+            Self::SignerFailed => write!(f, "signer failed"),
+            Self::StreamMismatch => write!(f, "event belongs to a different stream"),
+            Self::UnsupportedFamily => write!(f, "unsupported protocol family"),
         }
     }
 }
