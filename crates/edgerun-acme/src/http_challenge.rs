@@ -4,8 +4,6 @@ use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
 
-use sha2::{Digest, Sha256};
-
 use edgerun_encoding::base64url_nopad_encode;
 use edgerun_http::{Handler, Request, Response, StatusCode};
 use edgerun_rt::RwLock;
@@ -30,9 +28,7 @@ impl HttpChallengeHandler {
 
     pub fn compute_digest(token: &str, thumbprint: &str) -> String {
         let key_authz = Self::compute_key_authorization(token, thumbprint);
-        let mut hasher = Sha256::new();
-        hasher.update(key_authz.as_bytes());
-        base64url_nopad_encode(&hasher.finalize())
+        base64url_nopad_encode(&edgerun_crypto::sha256(key_authz.as_bytes()))
     }
 }
 

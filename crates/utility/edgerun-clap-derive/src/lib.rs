@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Fields, Lit, Meta, Variant};
+use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Fields, Lit, Meta};
 
 fn to_kebab_case(s: &str) -> String {
     let mut result = String::new();
@@ -368,7 +368,6 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                         && !attrs.is_subcommand;
 
                     if is_positional {
-                        let idx = positional_idx;
                         positional_idx += 1;
                         let mut arg =
                             quote! { edgerun_clap::cli::Arg::new(#field_name).positional() };

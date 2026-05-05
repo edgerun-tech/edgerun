@@ -8,7 +8,7 @@ pub(crate) fn create_tar_from_dir(dir: &Path) -> io::Result<Vec<u8>> {
     let mut tar = Vec::new();
     append_tar_dir(&mut tar, dir, Path::new(""))?;
     tar.extend_from_slice(&[0u8; 1024]);
-    Ok(gzip_bytes(&tar))
+    gzip_bytes(&tar)
 }
 
 fn append_tar_dir(out: &mut Vec<u8>, dir: &Path, rel: &Path) -> io::Result<()> {
@@ -182,21 +182,30 @@ fn write_checksum(field: &mut [u8], value: u32) {
     field.copy_from_slice(encoded.as_bytes());
 }
 
-fn gzip_bytes(data: &[u8]) -> Vec<u8> {
+#[cfg(feature = "gzip")]
+fn gzip_bytes(data: &[u8]) -> io::Result<Vec<u8>> {
     let mut out = Vec::new();
     out.extend_from_slice(&[0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255]);
     out.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(data, 6));
     out.extend_from_slice(&edgerun_encoding::crc32::crc32(data).to_le_bytes());
     out.extend_from_slice(&(data.len() as u32).to_le_bytes());
-    out
+    Ok(out)
+}
+
+#[cfg(not(feature = "gzip"))]
+fn gzip_bytes(_data: &[u8]) -> io::Result<Vec<u8>> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "OCI gzip layer support is disabled",
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tar_layer::{
-        apply_uncompressed_tar_layer, decompress_gzip_layer, TarEntry, TarLayerSink,
-    };
+    #[cfg(feature = "gzip")]
+    use crate::tar_layer::{apply_uncompressed_tar_layer, decompress_gzip_layer};
+    use crate::tar_layer::{TarEntry, TarLayerSink};
     use std::path::PathBuf;
 
     #[derive(Default)]
@@ -223,6 +232,7 @@ mod tests {
         p
     }
 
+    #[cfg(feature = "gzip")]
     fn pushed_entries(dir: &Path) -> Vec<TarEntry> {
         let gzip = create_tar_from_dir(dir).unwrap();
         let tar = decompress_gzip_layer(&gzip).unwrap();
@@ -231,6 +241,7 @@ mod tests {
         sink.entries
     }
 
+    #[cfg(feature = "gzip")]
     #[test]
     fn create_tar_from_dir_orders_entries_deterministically() {
         let root = tmp_dir("order");
@@ -248,6 +259,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
+    #[cfg(feature = "gzip")]
     #[test]
     fn create_tar_from_dir_supports_ustar_prefix_paths() {
         let root = tmp_dir("long");

@@ -297,7 +297,7 @@ impl ImapClient {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "unexpected response",
-                ))
+                ));
             }
         }
 
@@ -335,7 +335,7 @@ impl ImapClient {
                     return Err(io::Error::new(
                         io::ErrorKind::UnexpectedEof,
                         "server disconnected",
-                    ))
+                    ));
                 }
             };
 
@@ -398,7 +398,7 @@ impl ImapClient {
                     return Err(io::Error::new(
                         io::ErrorKind::UnexpectedEof,
                         "server disconnected",
-                    ))
+                    ));
                 }
             };
 

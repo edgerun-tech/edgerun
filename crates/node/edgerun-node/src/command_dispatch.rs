@@ -3,11 +3,11 @@
 use crate::config::NodeConfig;
 use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::{
-    CommandExecutionContext, CommandValidationContext, command_hash, validate_command,
+    command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
 };
 use edgerun_core::protocol::{
-    CommandDecision, CommandEnvelope, CommandType, EventType, ObjectKind, ObjectRef,
-    command_envelope, enum_from_i32,
+    command_envelope, enum_from_i32, CommandDecision, CommandEnvelope, CommandType, EventType,
+    ObjectKind, ObjectRef,
 };
 use edgerun_core::result::Verdict;
 use edgerun_core::util::now_unix_millis_i64;

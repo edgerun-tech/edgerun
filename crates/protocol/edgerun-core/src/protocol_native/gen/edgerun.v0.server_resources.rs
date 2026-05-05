@@ -15,7 +15,14 @@
 // 1021 SET_AUTHORITATIVE_DNS
 // 1022 REQUEST_CERTIFICATE
 // 1023 SET_SERVICE_POLICY
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct CompiledBootstrapPolicyPayload {
     pub payload_version: u32,
@@ -24,44 +31,93 @@ pub struct CompiledBootstrapPolicyPayload {
     pub controller_id: alloc::vec::Vec<u8>,
     pub bootstrap_relays: alloc::vec::Vec<alloc::string::String>,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct ClaimDomainPayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct ReleaseDomainPayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct AddMailboxPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct RemoveMailboxPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct AddAliasPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
     pub target: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct RemoveAliasPayload {
     pub payload_version: u32,
     pub address: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct AuthorizeContentSourcePayload {
     pub payload_version: u32,
@@ -69,47 +125,96 @@ pub struct AuthorizeContentSourcePayload {
     pub allowed_ref: alloc::string::String,
     pub allowed_paths: alloc::vec::Vec<alloc::string::String>,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct ContentRef {
     pub repo: alloc::string::String,
     pub commit: alloc::string::String,
     pub path: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct PublishWebsitePayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
     pub content_ref: ::core::option::Option<ContentRef>,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct UnpublishWebsitePayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct SetAuthoritativeDnsPayload {
     pub payload_version: u32,
     pub domain: alloc::string::String,
     pub enabled: bool,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct RequestCertificatePayload {
     pub payload_version: u32,
     pub name: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct SetServicePolicyPayload {
     pub payload_version: u32,
     pub service: alloc::string::String,
     pub policy: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct ServerResourceCommittedPayload {
     pub payload_version: u32,
@@ -117,7 +222,14 @@ pub struct ServerResourceCommittedPayload {
     pub event_payload: alloc::vec::Vec<u8>,
     pub origin_command: ::core::option::Option<super::common::CommandRef>,
 }
-#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct GenerationEventPayload {
     pub payload_version: u32,

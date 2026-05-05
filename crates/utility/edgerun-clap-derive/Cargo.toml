@@ -1,11 +1,11 @@
 [package]
 name = "edgerun-clap-derive"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-publish.workspace = true
-repository.workspace = true
-homepage.workspace = true
+version = "0.1.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/Sylchi/edgerun_reference_core"
+homepage = "https://github.com/Sylchi/edgerun_reference_core"
 description = "Derive macros for edgerun-clap"
 
 [lib]
@@ -15,6 +15,3 @@ proc-macro = true
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full", "parsing", "extra-traits", "printing"] }
-
-[lints]
-workspace = true

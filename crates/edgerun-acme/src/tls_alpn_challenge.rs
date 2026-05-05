@@ -1,5 +1,4 @@
 use crate::prelude::v1::*;
-use sha2::{Digest, Sha256};
 
 use edgerun_encoding::base64url_nopad_encode;
 use edgerun_rt::RwLock;
@@ -13,10 +12,7 @@ pub struct TlsAlpnChallenge {
 impl TlsAlpnChallenge {
     pub fn new(domain: &str, token: &str, thumbprint: &str) -> Self {
         let key_authorization = format!("{}.{}", token, thumbprint);
-
-        let mut hasher = Sha256::new();
-        hasher.update(key_authorization.as_bytes());
-        let digest = hasher.finalize();
+        let digest = edgerun_crypto::sha256(key_authorization.as_bytes());
 
         Self {
             domain: domain.to_string(),

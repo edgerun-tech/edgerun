@@ -124,9 +124,6 @@ pub(crate) async fn handle_provisioning_connection(
 
     let msg_type = json_text(payload.get("type"), "type").unwrap_or_default();
     let pin = json_text(payload.get("pin"), "pin").unwrap_or_default();
-    let passphrase = json_text(payload.get("passphrase"), "passphrase")
-        .or_else(|| json_text(payload.get("password"), "password"))
-        .unwrap_or_default();
     let node_id = json_text(payload.get("node_id"), "node_id").unwrap_or_default();
     let skip_local_checks = payload
         .get("skip_checks")
@@ -141,65 +138,17 @@ pub(crate) async fn handle_provisioning_connection(
             if let Some(expected) = expected_pin {
                 if pin != *expected {
                     response_err("PIN mismatch")
-                } else if passphrase.len() < 8 {
-                    response_err("passphrase too short")
                 } else {
-                    if let Some(path) = config_path {
-                        if let Err(error) = persist_provisioned_signer_state(path, public_key_hex) {
-                            let status = response_err(&format!(
-                                "failed to persist provisioning state: {error}"
-                            ));
-                            stream
-                                .write_all(status.as_bytes())
-                                .await
-                                .map_err(|error| error.to_string())?;
-                            return Ok(());
-                        }
-                    }
-                    response_ok("provisioning_accepted")
+                    persist_provisioning_response(config_path, public_key_hex)
                 }
-            } else if passphrase.len() < 8 {
-                response_err("passphrase too short")
             } else {
-                if let Some(path) = config_path {
-                    if let Err(error) = persist_provisioned_signer_state(path, public_key_hex) {
-                        let status =
-                            response_err(&format!("failed to persist provisioning state: {error}"));
-                        stream
-                            .write_all(status.as_bytes())
-                            .await
-                            .map_err(|error| error.to_string())?;
-                        return Ok(());
-                    }
-                }
-                response_ok("provisioning_accepted")
+                persist_provisioning_response(config_path, public_key_hex)
             }
         } else {
-            if let Some(path) = config_path {
-                if let Err(error) = persist_provisioned_signer_state(path, public_key_hex) {
-                    let status =
-                        response_err(&format!("failed to persist provisioning state: {error}"));
-                    stream
-                        .write_all(status.as_bytes())
-                        .await
-                        .map_err(|error| error.to_string())?;
-                    return Ok(());
-                }
-            }
-            response_ok("provisioning_accepted")
+            persist_provisioning_response(config_path, public_key_hex)
         }
     } else if msg_type == "complete" {
-        if !bypass_security && passphrase.len() < 8 {
-            response_err("passphrase too short")
-        } else {
-            response_ok("genesis_completed")
-        }
-    } else if msg_type == "unlock" {
-        if !bypass_security && passphrase.len() < 8 {
-            response_err("passphrase too short")
-        } else {
-            response_ok("unlock_accepted")
-        }
+        response_ok("genesis_completed")
     } else {
         response_err(&format!("unknown message type: {msg_type}"))
     };
@@ -209,6 +158,15 @@ pub(crate) async fn handle_provisioning_connection(
         .await
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+fn persist_provisioning_response(config_path: Option<&Path>, public_key_hex: &str) -> String {
+    if let Some(path) = config_path {
+        if let Err(error) = persist_provisioned_signer_state(path, public_key_hex) {
+            return response_err(&format!("failed to persist provisioning state: {error}"));
+        }
+    }
+    response_ok("provisioning_accepted")
 }
 
 fn persist_provisioned_signer_state(

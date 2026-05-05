@@ -9,6 +9,7 @@ use edgerun_core::protocol::{ProtocolRecord, Signature};
 use edgerun_sign::{ProtocolSignError, ProtocolSigner, ProtocolSigningOutput};
 use edgerun_verify::ProtocolFamily;
 
+#[derive(Clone)]
 pub struct P256ProtocolSigner {
     signing_key: SigningKey,
 }

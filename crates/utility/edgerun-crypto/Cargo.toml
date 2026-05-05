@@ -30,6 +30,7 @@ edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-feat
 default = []
 full = [
     "aead",
+    "aes",
     "des",
     "ed25519",
     "hmac",
@@ -39,7 +40,8 @@ full = [
     "sha1",
     "x25519",
 ]
-aead = ["dep:aes-gcm"]
+aead = ["aes", "dep:aes-gcm"]
+aes = []
 des = ["dep:des"]
 ed25519 = ["dep:ed25519-dalek", "dep:signature"]
 hmac = ["dep:hmac-crate"]

@@ -8,12 +8,12 @@ use crate::std::time::{Duration, Instant};
 use super::duid::Duid;
 use super::lease::Dhcpv6Lease;
 use super::message::{
-    Dhcpv6Message, Dhcpv6MsgType, TransactionId, ALL_DHCP_RELAY_AND_SERVERS, DHCPV6_CLIENT_PORT,
-    DHCPV6_SERVER_PORT,
+    ALL_DHCP_RELAY_AND_SERVERS, DHCPV6_CLIENT_PORT, DHCPV6_SERVER_PORT, Dhcpv6Message,
+    Dhcpv6MsgType, TransactionId,
 };
 use super::options::{
-    Dhcpv6Option, StatusCode, OPT_DNS_SERVERS, OPT_DOMAIN_LIST, OPT_IAADDR, OPT_IA_NA,
-    OPT_RAPID_COMMIT, OPT_SERVERID,
+    Dhcpv6Option, OPT_DNS_SERVERS, OPT_DOMAIN_LIST, OPT_IA_NA, OPT_IAADDR, OPT_RAPID_COMMIT,
+    OPT_SERVERID, StatusCode,
 };
 
 /// DHCPv6 client state machine.
@@ -79,7 +79,7 @@ impl Dhcpv6Client {
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
                     "No Advertise received",
-                ))
+                ));
             }
         };
 
@@ -171,7 +171,7 @@ impl Dhcpv6Client {
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
                     "No Reply to Information-Request",
-                ))
+                ));
             }
         };
 

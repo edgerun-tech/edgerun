@@ -80,9 +80,7 @@ impl MeshNetwork {
         to: &NodeID,
         command: &edgerun_core::protocol::CommandEnvelope,
     ) -> Result<(), String> {
-        let node = self
-            .get_node_mut(from)
-            .ok_or("source node not found")?;
+        let node = self.get_node_mut(from).ok_or("source node not found")?;
         node.send_command(*to, command);
         Ok(())
     }
@@ -90,9 +88,7 @@ impl MeshNetwork {
     /// Drains pending outbound frames from a node.
     /// These can be delivered to another node's `deliver_inbound_frame`.
     pub fn drain_node_outbound(&mut self, node_id: &NodeID) -> Result<Vec<Vec<u8>>, String> {
-        let node = self
-            .get_node_mut(node_id)
-            .ok_or("node not found")?;
+        let node = self.get_node_mut(node_id).ok_or("node not found")?;
         node.drain_outbound_frames()
     }
 }
@@ -101,46 +97,16 @@ impl MeshNetwork {
 mod tests {
     use super::*;
     use edgerun_core::protocol::{CommandEnvelope, IdentityRef, NodeRef};
-    use edgerun_hardware_signing::MeshSigner;
-    use edgerun_mesh::EventType;
     use edgerun_crypto::rand_core::RngCore;
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_hardware_signing::MeshSigner;
+    use edgerun_keygen::generate_node_signing_key;
+    use edgerun_mesh::EventType;
 
+    use crate::signer::SyncSoftwareSigner as TestSigner;
 
-    struct TestSigner {
-        node_id: NodeID,
-        key: edgerun_crypto::p256::ecdsa::SigningKey,
-    }
-
-    impl TestSigner {
-        fn new() -> Self {
-            let key = edgerun_crypto::random_p256_signing_key();
-            let vk = key.verifying_key();
-            let encoded = vk.to_encoded_point(false);
-            let mut node_bytes = [0u8; 64];
-            node_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            Self {
-                node_id: NodeID(node_bytes),
-                key,
-            }
-        }
-    }
-
-    impl MeshSigner for TestSigner {
-        fn node_id(&self) -> NodeID {
-            self.node_id
-        }
-
-        fn sign_digest(
-            &self,
-            digest: &[u8; 32],
-        ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: edgerun_crypto::p256::ecdsa::Signature =
-                self.key.sign_prehash(digest).unwrap();
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&sig.to_bytes());
-            Ok(bytes)
-        }
+    fn test_signer() -> TestSigner {
+        let (key, _) = generate_node_signing_key();
+        TestSigner::new(key)
     }
 
     const TEST_CONFIG: &str = r#"
@@ -156,9 +122,9 @@ metadata:
     #[test]
     fn mesh_network_connects_two_nodes() {
         // Create two nodes
-        let signer_a = Box::new(TestSigner::new());
+        let signer_a = Box::new(test_signer());
         let node_a_id = signer_a.node_id();
-        let signer_b = Box::new(TestSigner::new());
+        let signer_b = Box::new(test_signer());
         let node_b_id = signer_b.node_id();
 
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
@@ -201,7 +167,9 @@ metadata:
         };
 
         // Send command through mesh
-        network.send_command(&node_a_id, &node_b_id, &command).unwrap();
+        network
+            .send_command(&node_a_id, &node_b_id, &command)
+            .unwrap();
 
         // Tick to deliver
         let processed = network.tick_all().unwrap();

@@ -1,5 +1,4 @@
 extern crate alloc;
-use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
@@ -10,6 +9,7 @@ use core::result::Result::{Err, Ok};
 use edgerun_bluetooth_gatt::sync::RwLock;
 use edgerun_bluetooth_gatt::{format_gatt_uuid, AttProtocol, GattError, L2capSocket};
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
+use edgerun_crypto::aes::{Aes128, AES_BLOCK_SIZE};
 use edgerun_crypto::{hmac_sha256, sha256, OsRng, RngCore};
 #[cfg(not(target_os = "none"))]
 use std::sync::RwLock;
@@ -1055,46 +1055,49 @@ fn now_ms() -> u64 {
 }
 
 fn aes128_cbc_encrypt_pkcs7(key: &[u8; 16], iv: &[u8; 16], payload: &[u8]) -> Vec<u8> {
-    let cipher = aes::Aes128::new(GenericArray::from_slice(key));
-    let pad_len = 16 - (payload.len() % 16);
+    let cipher = Aes128::new(key);
+    let pad_len = AES_BLOCK_SIZE - (payload.len() % AES_BLOCK_SIZE);
     let mut out = Vec::with_capacity(payload.len() + pad_len);
     out.extend_from_slice(payload);
     out.extend(core::iter::repeat(pad_len as u8).take(pad_len));
 
     let mut previous = *iv;
-    for block in out.chunks_exact_mut(16) {
-        for i in 0..16 {
+    for block in out.chunks_exact_mut(AES_BLOCK_SIZE) {
+        for i in 0..AES_BLOCK_SIZE {
             block[i] ^= previous[i];
         }
-        cipher.encrypt_block(GenericArray::from_mut_slice(block));
-        previous.copy_from_slice(block);
+        let mut plaintext = [0u8; AES_BLOCK_SIZE];
+        plaintext.copy_from_slice(block);
+        let encrypted = cipher.encrypt_block(&plaintext);
+        block.copy_from_slice(&encrypted);
+        previous = encrypted;
     }
 
     out
 }
 
 fn aes128_cbc_decrypt_pkcs7(key: &[u8; 16], iv: &[u8; 16], payload: &[u8]) -> Option<Vec<u8>> {
-    if payload.is_empty() || payload.len() % 16 != 0 {
+    if payload.is_empty() || payload.len() % AES_BLOCK_SIZE != 0 {
         return None;
     }
 
-    let cipher = aes::Aes128::new(GenericArray::from_slice(key));
+    let cipher = Aes128::new(key);
     let mut out = Vec::with_capacity(payload.len());
     let mut previous = *iv;
 
-    for block in payload.chunks_exact(16) {
-        let mut decrypted = [0u8; 16];
-        decrypted.copy_from_slice(block);
-        cipher.decrypt_block(GenericArray::from_mut_slice(&mut decrypted));
-        for i in 0..16 {
+    for block in payload.chunks_exact(AES_BLOCK_SIZE) {
+        let mut encrypted = [0u8; AES_BLOCK_SIZE];
+        encrypted.copy_from_slice(block);
+        let mut decrypted = cipher.decrypt_block(&encrypted);
+        for i in 0..AES_BLOCK_SIZE {
             decrypted[i] ^= previous[i];
         }
         out.extend_from_slice(&decrypted);
-        previous.copy_from_slice(block);
+        previous = encrypted;
     }
 
     let pad_len = *out.last()? as usize;
-    if pad_len == 0 || pad_len > 16 || pad_len > out.len() {
+    if pad_len == 0 || pad_len > AES_BLOCK_SIZE || pad_len > out.len() {
         return None;
     }
     if !out[out.len() - pad_len..]

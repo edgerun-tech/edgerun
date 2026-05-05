@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
+use edgerun_keygen::{generate_node_signing_key, node_id_from_signing_key};
+use edgerun_seal::seal_node_signing_key;
 use edgerun_yubikey::YubiKeySigningKey;
 
 use crate::config::{parse_config, NodeConfig};
@@ -33,18 +35,8 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!("WARNING: --software generates an INSECURE key stored in the config file.");
         eprintln!("This is for development/testing only. NEVER use in production.");
         eprintln!();
-        let mut key_bytes = [0u8; 32];
-        edgerun_crypto::fill_random(&mut key_bytes).expect("random generation failed");
-        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into())
-            .unwrap_or_else(|e| {
-                eprintln!("error: failed to create signing key: {}", e);
-                std::process::exit(1);
-            });
-        let verifying_key = signing_key.verifying_key();
-        let encoded = verifying_key.to_encoded_point(false);
-        let mut node_id_bytes = [0u8; 64];
-        node_id_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-        let node_id = NodeID(node_id_bytes);
+        let (signing_key, identity) = generate_node_signing_key();
+        let node_id = NodeID(identity.node_id);
         let key_hex = edgerun_core::util::bytes_to_hex(&signing_key.to_bytes());
         let signer_block = format!(
             r#"signer:
@@ -247,22 +239,14 @@ pub fn cmd_init_encrypted(
     }
 
     eprintln!("Generating ECDSA P-256 signing key...");
-    let mut key_bytes = [0u8; 32];
-    edgerun_crypto::fill_random(&mut key_bytes).expect("random generation failed");
-    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into())
-        .unwrap_or_else(|e| {
-            eprintln!("error: failed to create signing key: {}", e);
-            std::process::exit(1);
-        });
-
-    let verifying_key = signing_key.verifying_key();
-    let encoded = verifying_key.to_encoded_point(false);
-    let mut node_id_bytes = [0u8; 64];
-    node_id_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-    let node_id = NodeID(node_id_bytes);
+    let (signing_key, identity) = generate_node_signing_key();
+    let node_id = NodeID(identity.node_id);
 
     eprintln!("Encrypting key with AES-256-GCM (PBKDF2 100k iterations)...");
-    let encrypted_data = edgerun_crypto::encrypt_signing_key(&signing_key, &passphrase);
+    let encrypted_data = seal_node_signing_key(&signing_key, &passphrase).unwrap_or_else(|e| {
+        eprintln!("error: failed to seal signing key: {:?}", e);
+        std::process::exit(1);
+    });
 
     eprintln!("Writing encrypted key to: {}", key_path.display());
     std::fs::write(key_path, &encrypted_data).unwrap_or_else(|e| {
@@ -334,18 +318,9 @@ pub fn generate_pairing_pin() -> String {
 }
 
 pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Option<String>) {
-    let mut key_bytes = [0u8; 32];
-    edgerun_crypto::fill_random(&mut key_bytes).expect("random generation failed");
-    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into())
-        .unwrap_or_else(|e| {
-            eprintln!("error: failed to create signing key: {}", e);
-            std::process::exit(1);
-        });
-    let verifying_key = signing_key.verifying_key();
-    let encoded = verifying_key.to_encoded_point(false);
-    let mut node_id_bytes = [0u8; 64];
-    node_id_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-    let node_id = NodeID(node_id_bytes);
+    let (signing_key, _) = generate_node_signing_key();
+    let node_id = NodeID(node_id_from_signing_key(&signing_key));
+    let key_hex = edgerun_core::util::bytes_to_hex(&signing_key.to_bytes());
 
     let pairing_pin = generate_pairing_pin();
     let stream_id = format!("stream-{}", node_id.short());
@@ -368,16 +343,17 @@ pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Op
         r#"signer:
   type: "provisioned"
   public_key_hex: "{node_id_hex}"
+  private_key_hex: "{key_hex}"
   state: "provisioning"
   pairing_pin: "{pin}"
-  passphrase_env: "EDGERUN_KEY_PASSPHRASE"
 "#,
         node_id_hex = node_id.to_hex(),
+        key_hex = key_hex,
         pin = pairing_pin,
     );
 
     let config_yaml = format!(
-r#"# edgerun Node Configuration (provisioning mode)
+        r#"# edgerun Node Configuration (provisioning mode)
 # Use `edgerund status --config <config>` to inspect the generated identity
 stream_id: "{stream_id}"
 name: "{node_name}"
@@ -417,15 +393,11 @@ metadata:
     );
     eprintln!();
     eprintln!("The node is now advertising in provisioning mode.");
-    eprintln!("Once provisioned, the password will be required on boot.");
+    eprintln!("Control is bound to the generated node private key in this config.");
+    eprintln!("Protect and back up this config; there is no provisioning password recovery path.");
 }
 
-pub fn cmd_provision(
-    config_path: &PathBuf,
-    pin: &str,
-    password: Option<String>,
-    target_addr: Option<String>,
-) {
+pub fn cmd_provision(config_path: &PathBuf, pin: &str, target_addr: Option<String>) {
     let yaml = fs::read_to_string(config_path).unwrap_or_else(|e| {
         eprintln!("error: failed to read config: {}", e);
         std::process::exit(1);
@@ -455,30 +427,18 @@ pub fn cmd_provision(
         std::process::exit(1);
     }
 
-    let passphrase = password.unwrap_or_else(|| {
-        eprintln!("Enter password: ");
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input).expect("read failed");
-        input.trim().to_string()
-    });
-
-    if passphrase.len() < 8 {
-        eprintln!("error: password must be at least 8 characters");
-        std::process::exit(1);
-    }
-
     let target = target_addr.unwrap_or_else(|| "127.0.0.1:35630".to_string());
     eprintln!("Connecting to {}...", target);
 
-    if let Err(e) = provision_sync(&target, pin, &passphrase, &signer_config.public_key_hex) {
+    if let Err(e) = provision_sync(&target, pin, &signer_config.public_key_hex) {
         eprintln!("error: provisioning failed: {}", e);
         std::process::exit(1);
     }
 
-    eprintln!("\nPassword will be required on every boot.");
+    eprintln!("\nProvisioning accepted. The node is controlled by its generated private key.");
 }
 
-fn provision_sync(target: &str, pin: &str, passphrase: &str, node_id: &str) -> Result<(), String> {
+fn provision_sync(target: &str, pin: &str, node_id: &str) -> Result<(), String> {
     use std::io::{Read, Write};
     use std::net::TcpStream;
 
@@ -488,8 +448,8 @@ fn provision_sync(target: &str, pin: &str, passphrase: &str, node_id: &str) -> R
         .map_err(|e| e.to_string())?;
 
     let payload = format!(
-        "{{\"type\":\"provision\",\"pin\":\"{}\",\"password\":\"{}\",\"node_id\":\"{}\"}}",
-        pin, passphrase, node_id
+        "{{\"type\":\"provision\",\"pin\":\"{}\",\"node_id\":\"{}\"}}",
+        pin, node_id
     );
 
     stream
@@ -506,74 +466,6 @@ fn provision_sync(target: &str, pin: &str, passphrase: &str, node_id: &str) -> R
     }
 
     eprintln!("Provisioning request sent.");
-    Ok(())
-}
-
-pub fn cmd_unlock(config_path: &PathBuf, password: Option<String>, target_addr: Option<String>) {
-    let yaml = fs::read_to_string(config_path).unwrap_or_else(|e| {
-        eprintln!("error: failed to read config: {}", e);
-        std::process::exit(1);
-    });
-    let config = parse_config(&yaml).unwrap_or_else(|e| {
-        eprintln!("error: invalid config: {}", e);
-        std::process::exit(1);
-    });
-
-    let Some(signer_config) = &config.signer else {
-        eprintln!("error: no signer in config");
-        std::process::exit(1);
-    };
-
-    let passphrase = password.unwrap_or_else(|| {
-        eprintln!("Enter password: ");
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input).expect("read failed");
-        input.trim().to_string()
-    });
-
-    if passphrase.len() < 8 {
-        eprintln!("error: password must be at least 8 characters");
-        std::process::exit(1);
-    }
-
-    let target = target_addr.unwrap_or_else(|| "127.0.0.1:35630".to_string());
-    eprintln!("Sending unlock to {}...", target);
-
-    if let Err(e) = unlock_sync(&target, &passphrase, &signer_config.public_key_hex) {
-        eprintln!("error: unlock failed: {}", e);
-        std::process::exit(1);
-    }
-
-    eprintln!("Unlock request sent.");
-}
-
-fn unlock_sync(target: &str, passphrase: &str, node_id: &str) -> Result<(), String> {
-    use std::io::{Read, Write};
-    use std::net::TcpStream;
-
-    let mut stream = TcpStream::connect(target).map_err(|e| e.to_string())?;
-    stream
-        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
-        .map_err(|e| e.to_string())?;
-
-    let payload = format!(
-        "{{\"type\":\"unlock\",\"password\":\"{}\",\"node_id\":\"{}\"}}",
-        passphrase, node_id
-    );
-
-    stream
-        .write_all(payload.as_bytes())
-        .map_err(|e| e.to_string())?;
-    stream.flush().map_err(|e| e.to_string())?;
-
-    let mut buf = [0u8; 256];
-    let n = stream.read(&mut buf).map_err(|e| e.to_string())?;
-
-    if n > 0 {
-        let response = String::from_utf8_lossy(&buf[..n]);
-        eprintln!("Response: {}", response);
-    }
-
     Ok(())
 }
 

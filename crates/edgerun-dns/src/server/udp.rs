@@ -12,8 +12,8 @@ use alloc::{
 
 use crate::compat::AsyncUdpSocket;
 
-use super::query::{handle_query, ParseError, ServerState};
 use super::RateLimiter;
+use super::query::{ParseError, ServerState, handle_query};
 use crate::limits::parse_dns_message_bounded;
 use crate::message::{DnsMessage, DnsResponseCode};
 

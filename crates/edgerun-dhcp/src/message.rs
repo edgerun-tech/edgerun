@@ -350,7 +350,7 @@ impl DhcpMessage {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "Invalid DHCP op",
-                ))
+                ));
             }
         };
 

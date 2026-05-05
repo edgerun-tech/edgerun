@@ -10,4 +10,5 @@ pub mod cli;
 
 pub use cli::{Arg, ArgGroup, ArgMatches, Command, FromArgMatches, Parser};
 
+#[cfg(feature = "derive")]
 pub use edgerun_clap_derive::{arg, command, Parser, Subcommand};

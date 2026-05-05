@@ -14,6 +14,7 @@ edgerun-sign = { workspace = true, default-features = false }
 edgerun-verify = { workspace = true, default-features = false }
 
 [dev-dependencies]
+edgerun-keygen = { workspace = true, default-features = false }
 edgerun-sign-p256 = { workspace = true, default-features = false }
 
 [features]

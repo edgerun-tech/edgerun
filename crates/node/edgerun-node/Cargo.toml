@@ -68,13 +68,16 @@ edgerun-capability-policy = { version = "0.1", path = "../../capability/edgerun-
 edgerun-stream = { version = "0.1", path = "../../authority/edgerun-stream" }
 edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage" }
 edgerun-sign = { version = "0.1", path = "../../protocol/edgerun-sign" }
+edgerun-sign-p256 = { workspace = true }
+edgerun-keygen = { workspace = true }
+edgerun-seal = { workspace = true }
 edgerun-remote-capability = { version = "0.1", path = "../../capability/edgerun-remote-capability" }
 edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link" }
 edgerun-mesh-capability = { version = "0.1", path = "../../capability/edgerun-mesh-capability" }
 edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session" }
 edgerun-exchange = { version = "0.1", path = "../../edgerun-exchange" }
-edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256", "pbkdf2"] }
+edgerun-crypto = { workspace = true, default-features = false }
 edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }

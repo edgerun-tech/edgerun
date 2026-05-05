@@ -8,9 +8,11 @@ use edgerun_core::crypto::{self, SigningKey};
 use edgerun_sign_p256::P256ProtocolSigner;
 
 pub type NodeId = [u8; crypto::ECDSA_P256_PUBLIC_KEY_LEN];
+pub type NodeSigningKey = SigningKey;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeygenError {
+    InvalidKey,
     StoreFailed,
 }
 
@@ -37,8 +39,16 @@ pub trait GeneratedKeyStore {
 
 pub fn generate_node_signing_key() -> (SigningKey, GeneratedNodeIdentity) {
     let signing_key = crypto::random_p256_signing_key();
-    let node_id = crypto::verifying_key_to_node_id(signing_key.verifying_key());
+    let node_id = node_id_from_signing_key(&signing_key);
     (signing_key, GeneratedNodeIdentity { node_id })
+}
+
+pub fn node_id_from_signing_key(signing_key: &SigningKey) -> NodeId {
+    crypto::verifying_key_to_node_id(signing_key.verifying_key())
+}
+
+pub fn node_signing_key_from_bytes(bytes: [u8; 32]) -> Result<SigningKey, KeygenError> {
+    SigningKey::from_bytes(&bytes.into()).map_err(|_| KeygenError::InvalidKey)
 }
 
 pub fn generate_node_identity_into<S: GeneratedKeyStore>(
@@ -143,8 +153,8 @@ mod tests {
             .unwrap();
         event.signature = Some(signed.signature);
 
-        let verified = verify_event_envelope(&event, ProtocolSignerRef::P256Raw64(&node.node_id))
-            .unwrap();
+        let verified =
+            verify_event_envelope(&event, ProtocolSignerRef::P256Raw64(&node.node_id)).unwrap();
         assert_eq!(verified.family, ProtocolFamily::EventEnvelope);
     }
 

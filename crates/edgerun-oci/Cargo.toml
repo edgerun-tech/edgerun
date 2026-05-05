@@ -19,13 +19,14 @@ edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
 edgerun-secret-service = { version = "0.1", path = "../edgerun-secret-service", optional = true }
 edgerun-core = { version = "0.1", path = "../protocol/edgerun-core", optional = true }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
-miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"] }
+miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"], optional = true }
 ruzstd = { version = "0.8.2", default-features = false, optional = true }
 
 [features]
 default = []
 registry-client = ["dep:edgerun-http"]
 edgefs = ["dep:edgerun-edgefs", "dep:edgerun-storage"]
+gzip = ["dep:miniz_oxide"]
 zstd = ["dep:ruzstd"]
 std = [
     "registry-client",

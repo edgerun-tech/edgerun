@@ -1,5 +1,8 @@
 [workspace]
 resolver = "2"
+exclude = [
+  "crates/utility/edgerun-clap-derive",
+]
 
 members = [
   "crates/utility/edgerun-glob",
@@ -38,6 +41,7 @@ members = [
   "crates/protocol/edgerun-sign",
   "crates/protocol/edgerun-sign-p256",
   "crates/protocol/edgerun-keygen",
+  "crates/protocol/edgerun-seal",
   "crates/protocol/edgerun-node-bootstrap",
   "crates/protocol/edgerun-sign-verify-e2e",
   "crates/edgerun-dhcp",
@@ -109,7 +113,6 @@ members = [
   "crates/identity/edgerun-yubikey",
   "crates/authority/edgerun-vfs",
   "crates/utility/edgerun-clap",
-  "crates/utility/edgerun-clap-derive",
   "crates/protocol/edgerun-wire",
   "crates/edgerun-event",
   "crates/edgerun-wallet",
@@ -196,6 +199,7 @@ edgerun-verify = { version = "0.1", path = "crates/protocol/edgerun-verify", def
 edgerun-sign = { version = "0.1", path = "crates/protocol/edgerun-sign", default-features = false }
 edgerun-sign-p256 = { version = "0.1", path = "crates/protocol/edgerun-sign-p256", default-features = false }
 edgerun-keygen = { version = "0.1", path = "crates/protocol/edgerun-keygen", default-features = false }
+edgerun-seal = { version = "0.1", path = "crates/protocol/edgerun-seal", default-features = false }
 edgerun-node-bootstrap = { version = "0.1", path = "crates/protocol/edgerun-node-bootstrap", default-features = false }
 edgerun-sign-verify-e2e = { version = "0.1", path = "crates/protocol/edgerun-sign-verify-e2e", default-features = false }
 edgerun-json = { version = "0.1", path = "crates/utility/edgerun-json", default-features = false }
@@ -204,7 +208,6 @@ edgerun-edit = { version = "0.1", path = "crates/edgerun-edit" }
 edgerun-display = { version = "0.1", path = "crates/device-types/edgerun-display" }
 edgerun-gpu = { version = "0.1", path = "crates/device-types/edgerun-gpu" }
 edgerun-clap = { version = "0.1", path = "crates/utility/edgerun-clap" }
-edgerun-clap-derive = { version = "0.1", path = "crates/utility/edgerun-clap-derive" }
 edgerun-codex-boost = { version = "0.1", path = "crates/edgerun-codex-boost" }
 edgerun-virtio = { version = "0.1", path = "crates/edgerun-virtio" }
 edgerun-event = { version = "0.1", path = "crates/edgerun-event" }

@@ -32,6 +32,7 @@ pub fn layer_compression(media_type: Option<&str>) -> OciLayerCompression {
     }
 }
 
+#[cfg(feature = "gzip")]
 pub fn decompress_gzip_layer(data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError> {
     if data.len() < 18 || data[0] != 0x1f || data[1] != 0x8b || data[2] != 8 {
         return Err(TarLayerApplyError::Decompress("invalid gzip header".into()));
@@ -99,6 +100,13 @@ pub fn decompress_gzip_layer(data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError>
     }
 
     Ok(out)
+}
+
+#[cfg(not(feature = "gzip"))]
+pub fn decompress_gzip_layer(_data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError> {
+    Err(TarLayerApplyError::UnsupportedMediaType(Some(
+        "application/vnd.oci.image.layer.v1.tar+gzip".into(),
+    )))
 }
 
 #[cfg(feature = "zstd")]

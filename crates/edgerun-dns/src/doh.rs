@@ -15,7 +15,7 @@ use alloc::{
 };
 
 use super::cache::DnsCache;
-use super::server::{handle_query, ServerState};
+use super::server::{ServerState, handle_query};
 use crate::message::{DnsMessage, DnsResponseCode};
 
 /// DNS-over-HTTPS server configuration.

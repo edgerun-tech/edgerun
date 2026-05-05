@@ -1,0 +1,20 @@
+[package]
+name = "edgerun-seal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "no_std sealing and unsealing helpers for local EdgeRun secret material"
+
+[dependencies]
+edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "pbkdf2"] }
+edgerun-keygen = { workspace = true, default-features = false }
+
+[features]
+default = []
+std = ["edgerun-keygen/std"]
+
+[lints]
+workspace = true

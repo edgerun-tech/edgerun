@@ -134,7 +134,13 @@ fn invoke_protocol_tool(body: &str) -> (&'static str, String) {
         "xray.viewport.focus_node" => write_viewport_command("focus_node", body),
         "xray.viewport.show_related" => write_viewport_command("show_related", body),
         "xray.viewport.set_camera" => write_viewport_command("set_camera", body),
-        _ => ("200 OK", format!(r#"{{"status":"blocked","error":"unknown tool {}"}}"#, escape_json(&tool_id))),
+        _ => (
+            "200 OK",
+            format!(
+                r#"{{"status":"blocked","error":"unknown tool {}"}}"#,
+                escape_json(&tool_id)
+            ),
+        ),
     }
 }
 
@@ -339,7 +345,9 @@ fn local_control_dir() -> PathBuf {
         return PathBuf::from(xdg).join("edgerun-node-control");
     }
     if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".cache").join("edgerun-node-control");
+        return PathBuf::from(home)
+            .join(".cache")
+            .join("edgerun-node-control");
     }
     PathBuf::from("/tmp").join("edgerun-node-control")
 }

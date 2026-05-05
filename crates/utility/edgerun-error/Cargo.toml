@@ -11,9 +11,5 @@ description = "Zero-dependency error derive"
 [lib]
 proc-macro = true
 
-[dependencies]
-quote = "1"
-syn = "2"
-
 [lints]
 workspace = true

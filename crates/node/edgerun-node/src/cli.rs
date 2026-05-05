@@ -17,9 +17,7 @@
 use std::env;
 use std::path::PathBuf;
 
-use crate::init_cmd::{
-    cmd_init, cmd_init_encrypted, cmd_init_provisioned, cmd_provision, cmd_unlock,
-};
+use crate::init_cmd::{cmd_init, cmd_init_encrypted, cmd_init_provisioned, cmd_provision};
 use crate::status_cmd::cmd_status;
 
 /// Parsed CLI arguments.
@@ -43,12 +41,6 @@ pub enum Command {
     Provision {
         config: PathBuf,
         pin: String,
-        password: Option<String>,
-        target_addr: Option<String>,
-    },
-    Unlock {
-        config: PathBuf,
-        password: Option<String>,
         target_addr: Option<String>,
     },
     Status {
@@ -125,17 +117,16 @@ pub fn parse_args() -> Result<Command, String> {
         "provision" => {
             let mut config = PathBuf::from("node.yaml");
             let mut pin = String::new();
-            let mut password = None;
             let mut target_addr = None;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
                     "--config" => { i += 1; config = PathBuf::from(&args[i]); }
                     "--pin" => { i += 1; pin = args[i].clone(); }
-                    "--password" => { i += 1; password = Some(args[i].clone()); }
+                    "--password" => { return Err("error: provisioning passwords are not supported; node control uses the generated private key".into()); }
                     "--target" => { i += 1; target_addr = Some(args[i].clone()); }
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund provision --config path --pin PIN [--password pass] [--target addr]".into());
+                        return Err("Usage: edgerund provision --config path --pin PIN [--target addr]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }
@@ -144,26 +135,7 @@ pub fn parse_args() -> Result<Command, String> {
             if pin.is_empty() {
                 return Err("error: --pin is required".into());
             }
-            Ok(Command::Provision { config, pin, password, target_addr })
-        }
-        "unlock" => {
-            let mut config = PathBuf::from("node.yaml");
-            let mut password = None;
-            let mut target_addr = None;
-            let mut i = 1;
-            while i < args.len() {
-                match args[i].as_str() {
-                    "--config" => { i += 1; config = PathBuf::from(&args[i]); }
-                    "--password" => { i += 1; password = Some(args[i].clone()); }
-                    "--target" => { i += 1; target_addr = Some(args[i].clone()); }
-                    "--help" | "-h" => {
-                        return Err("Usage: edgerund unlock [--config path] [--password pass] [--target addr]".into());
-                    }
-                    other => return Err(format!("unknown option: {}", other)),
-                }
-                i += 1;
-            }
-            Ok(Command::Unlock { config, password, target_addr })
+            Ok(Command::Provision { config, pin, target_addr })
         }
         "status" => {
             let mut config = PathBuf::from("node.yaml");
@@ -221,17 +193,9 @@ pub fn main() {
         Command::Provision {
             config,
             pin,
-            password,
             target_addr,
         } => {
-            cmd_provision(&config, &pin, password, target_addr);
-        }
-        Command::Unlock {
-            config,
-            password,
-            target_addr,
-        } => {
-            cmd_unlock(&config, password, target_addr);
+            cmd_provision(&config, &pin, target_addr);
         }
         Command::Status { config } => {
             cmd_status(&config);

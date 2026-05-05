@@ -15,7 +15,7 @@ impl Aes128 {
     pub fn new(key: &[u8; 16]) -> Self {
         let mut round_keys = [0u8; 176];
         round_keys[..16].copy_from_slice(key);
-        expand_key(&mut round_keys, 10);
+        expand_key(&mut round_keys, 4, 10);
         Self { round_keys }
     }
 
@@ -77,7 +77,7 @@ impl Aes256 {
     pub fn new(key: &[u8; 32]) -> Self {
         let mut round_keys = [0u8; 240];
         round_keys[..32].copy_from_slice(key);
-        expand_key(&mut round_keys, 14);
+        expand_key(&mut round_keys, 8, 14);
         Self { round_keys }
     }
 
@@ -144,8 +144,7 @@ const RCON_TABLE: [u8; 11] = [
     0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
 ];
 
-fn expand_key(round_keys: &mut [u8], nr: usize) {
-    let nk = round_keys.len() / 4 / (nr + 1);
+fn expand_key(round_keys: &mut [u8], nk: usize, nr: usize) {
     for i in nk..4 * (nr + 1) {
         let mut temp = [
             round_keys[(i - 1) * 4],
@@ -154,16 +153,15 @@ fn expand_key(round_keys: &mut [u8], nr: usize) {
             round_keys[(i - 1) * 4 + 3],
         ];
         if i % nk == 0 {
-            let t = temp[0];
-            temp[0] = SBOX[temp[1] as usize] ^ temp[2] ^ RCON_TABLE[i / nk];
-            temp[1] = SBOX[temp[2] as usize] ^ temp[3];
-            temp[2] = SBOX[temp[3] as usize] ^ t;
-            temp[3] = SBOX[t as usize] ^ temp[1];
+            temp.rotate_left(1);
+            for byte in &mut temp {
+                *byte = SBOX[*byte as usize];
+            }
+            temp[0] ^= RCON_TABLE[i / nk];
         } else if nk > 6 && i % nk == 4 {
-            temp[0] = SBOX[temp[0] as usize];
-            temp[1] = SBOX[temp[1] as usize];
-            temp[2] = SBOX[temp[2] as usize];
-            temp[3] = SBOX[temp[3] as usize];
+            for byte in &mut temp {
+                *byte = SBOX[*byte as usize];
+            }
         }
         let j = (i - nk) * 4;
         let k = i * 4;
@@ -249,12 +247,10 @@ fn inv_mix_columns(state: &mut [u8; 16]) {
         let b = state[i + 1];
         let c = state[i + 2];
         let d = state[i + 3];
-        let x = xtime(xtime(xtime(a ^ c)));
-        let y = xtime(xtime(xtime(b ^ d)));
-        state[i] ^= x ^ xtime(a ^ b);
-        state[i + 1] ^= y ^ xtime(b ^ c);
-        state[i + 2] ^= x ^ xtime(c ^ d);
-        state[i + 3] ^= y ^ xtime(d ^ a);
+        state[i] = gf_mul(a, 0x0e) ^ gf_mul(b, 0x0b) ^ gf_mul(c, 0x0d) ^ gf_mul(d, 0x09);
+        state[i + 1] = gf_mul(a, 0x09) ^ gf_mul(b, 0x0e) ^ gf_mul(c, 0x0b) ^ gf_mul(d, 0x0d);
+        state[i + 2] = gf_mul(a, 0x0d) ^ gf_mul(b, 0x09) ^ gf_mul(c, 0x0e) ^ gf_mul(d, 0x0b);
+        state[i + 3] = gf_mul(a, 0x0b) ^ gf_mul(b, 0x0d) ^ gf_mul(c, 0x09) ^ gf_mul(d, 0x0e);
     }
 }
 
@@ -264,5 +260,61 @@ fn xtime(x: u8) -> u8 {
         ((x << 1) ^ 0x11b) as u8
     } else {
         (x << 1) as u8
+    }
+}
+
+fn gf_mul(mut x: u8, mut y: u8) -> u8 {
+    let mut out = 0;
+    while y != 0 {
+        if y & 1 != 0 {
+            out ^= x;
+        }
+        x = xtime(x);
+        y >>= 1;
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Aes128, Aes256};
+
+    #[test]
+    fn aes128_matches_nist_vector() {
+        let key = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f,
+        ];
+        let plaintext = [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ];
+        let ciphertext = [
+            0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4,
+            0xc5, 0x5a,
+        ];
+        let cipher = Aes128::new(&key);
+
+        assert_eq!(cipher.encrypt_block(&plaintext), ciphertext);
+        assert_eq!(cipher.decrypt_block(&ciphertext), plaintext);
+    }
+
+    #[test]
+    fn aes256_matches_nist_vector() {
+        let key = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+            0x1c, 0x1d, 0x1e, 0x1f,
+        ];
+        let plaintext = [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+            0xee, 0xff,
+        ];
+        let ciphertext = [
+            0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf, 0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49,
+            0x60, 0x89,
+        ];
+
+        assert_eq!(Aes256::new(&key).encrypt_block(&plaintext), ciphertext);
     }
 }

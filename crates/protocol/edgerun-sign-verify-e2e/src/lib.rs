@@ -4,9 +4,9 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use edgerun_core::crypto::{self, SigningKey};
+use edgerun_core::crypto::{ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN};
 use edgerun_core::protocol::{EventEnvelope, EventType, ProtocolRecord, Signature};
-use edgerun_keygen::MemoryKeyStore;
+use edgerun_keygen::{node_signing_key_from_bytes, MemoryKeyStore, NodeSigningKey};
 use edgerun_node_bootstrap::{bootstrap_new_node, BootstrapConfig};
 use edgerun_sign_p256::P256ProtocolSigner;
 use edgerun_stream::{build_signed_event, validate_stream, EventDraft};
@@ -60,9 +60,8 @@ pub struct AgentNodeReport {
     pub all_events_signed: bool,
 }
 
-pub fn deterministic_signing_key(seed_byte: u8) -> SigningKey {
-    let bytes: [u8; 32] = [seed_byte; 32];
-    SigningKey::from_bytes(&bytes.into()).expect("deterministic test key is valid")
+pub fn deterministic_signing_key(seed_byte: u8) -> NodeSigningKey {
+    node_signing_key_from_bytes([seed_byte; 32]).expect("deterministic test key is valid")
 }
 
 pub fn sample_event(public_key_raw64: &[u8; 64], seq: u64) -> EventEnvelope {
@@ -105,7 +104,7 @@ pub fn bootstrap_roundtrip() -> Result<BootstrapReport, E2eError> {
 pub fn stream_roundtrip() -> Result<StreamReport, E2eError> {
     let signing_key = deterministic_signing_key(21);
     let signer = P256ProtocolSigner::new(signing_key);
-    let node_id = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let node_id = signer.raw_public_key();
 
     let mut genesis = edgerun_stream::genesis_event(&node_id, 0);
     edgerun_stream::sign_event(&mut genesis, &signer).map_err(|_| E2eError::Stream)?;
@@ -197,7 +196,7 @@ pub fn agent_node_roundtrip() -> Result<AgentNodeReport, E2eError> {
 pub fn sign_verify_event_roundtrip() -> Result<SignVerifyReport, E2eError> {
     let signing_key = deterministic_signing_key(11);
     let signer = P256ProtocolSigner::new(signing_key);
-    let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let public_key = signer.raw_public_key();
     let mut event = sample_event(&public_key, 1);
 
     let signed = signer
@@ -228,7 +227,7 @@ pub fn sign_verify_event_roundtrip() -> Result<SignVerifyReport, E2eError> {
 pub extern "C" fn edgerun_agent_node_e2e_roundtrip() -> u32 {
     match agent_node_roundtrip() {
         Ok(report) => {
-            if report.node_id_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
+            if report.node_id_len == ECDSA_P256_PUBLIC_KEY_LEN
                 && report.store_len == 1
                 && report.event_count == 3
                 && report.genesis_seq == 0
@@ -254,10 +253,10 @@ pub extern "C" fn edgerun_agent_node_e2e_roundtrip() -> u32 {
 pub extern "C" fn edgerun_sign_verify_e2e_roundtrip() -> u32 {
     match sign_verify_event_roundtrip() {
         Ok(report) => {
-            if report.signature_len == crypto::ECDSA_P256_SIGNATURE_LEN
+            if report.signature_len == ECDSA_P256_SIGNATURE_LEN
                 && report.record_hash_len == 32
-                && report.public_key_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
-                && report.stream_id_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
+                && report.public_key_len == ECDSA_P256_PUBLIC_KEY_LEN
+                && report.stream_id_len == ECDSA_P256_PUBLIC_KEY_LEN
             {
                 0
             } else {
@@ -276,10 +275,10 @@ pub extern "C" fn edgerun_sign_verify_e2e_roundtrip() -> u32 {
 pub extern "C" fn edgerun_bootstrap_e2e_roundtrip() -> u32 {
     match bootstrap_roundtrip() {
         Ok(report) => {
-            if report.node_id_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
-                && report.stored_key_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
-                && report.genesis_signature_len == crypto::ECDSA_P256_SIGNATURE_LEN
-                && report.genesis_stream_id_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
+            if report.node_id_len == ECDSA_P256_PUBLIC_KEY_LEN
+                && report.stored_key_len == ECDSA_P256_PUBLIC_KEY_LEN
+                && report.genesis_signature_len == ECDSA_P256_SIGNATURE_LEN
+                && report.genesis_stream_id_len == ECDSA_P256_PUBLIC_KEY_LEN
                 && report.genesis_seq == 0
                 && report.store_len == 1
             {
@@ -304,7 +303,7 @@ pub extern "C" fn edgerun_stream_e2e_roundtrip() -> u32 {
                 && report.genesis_seq == 0
                 && report.next_seq == 1
                 && report.next_has_prev_hash
-                && report.next_signature_len == crypto::ECDSA_P256_SIGNATURE_LEN
+                && report.next_signature_len == ECDSA_P256_SIGNATURE_LEN
             {
                 0
             } else {
@@ -321,18 +320,18 @@ pub extern "C" fn edgerun_stream_e2e_roundtrip() -> u32 {
 
 #[no_mangle]
 pub extern "C" fn edgerun_sign_verify_e2e_signature_len() -> u32 {
-    crypto::ECDSA_P256_SIGNATURE_LEN as u32
+    ECDSA_P256_SIGNATURE_LEN as u32
 }
 
 #[no_mangle]
 pub extern "C" fn edgerun_sign_verify_e2e_public_key_len() -> u32 {
-    crypto::ECDSA_P256_PUBLIC_KEY_LEN as u32
+    ECDSA_P256_PUBLIC_KEY_LEN as u32
 }
 
 pub fn sign_event_only(iterations: usize) -> Result<Vec<Signature>, E2eError> {
     let signing_key = deterministic_signing_key(12);
     let signer = P256ProtocolSigner::new(signing_key);
-    let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let public_key = signer.raw_public_key();
     let mut signatures = Vec::with_capacity(iterations);
 
     for seq in 0..iterations as u64 {
@@ -352,7 +351,7 @@ pub fn sign_event_only(iterations: usize) -> Result<Vec<Signature>, E2eError> {
 pub fn verify_event_only(iterations: usize) -> Result<usize, E2eError> {
     let signing_key = deterministic_signing_key(13);
     let signer = P256ProtocolSigner::new(signing_key);
-    let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let public_key = signer.raw_public_key();
     let mut ok = 0usize;
 
     for seq in 0..iterations as u64 {
@@ -402,7 +401,7 @@ pub fn agent_node_only(iterations: usize) -> Result<usize, E2eError> {
 pub fn signed_events(iterations: usize) -> Result<(Vec<EventEnvelope>, [u8; 64]), E2eError> {
     let signing_key = deterministic_signing_key(14);
     let signer = P256ProtocolSigner::new(signing_key);
-    let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let public_key = signer.raw_public_key();
     let mut events = Vec::with_capacity(iterations);
 
     for seq in 0..iterations as u64 {
@@ -436,7 +435,7 @@ pub fn verify_prebuilt_events(
 pub fn wire_event_only(iterations: usize) -> usize {
     let signing_key = deterministic_signing_key(15);
     let signer = P256ProtocolSigner::new(signing_key);
-    let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let public_key = signer.raw_public_key();
     let mut total = 0usize;
 
     for seq in 0..iterations as u64 {
@@ -455,7 +454,7 @@ pub fn wire_event_only(iterations: usize) -> usize {
 pub fn hash_event_only(iterations: usize) -> usize {
     let signing_key = deterministic_signing_key(16);
     let signer = P256ProtocolSigner::new(signing_key);
-    let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
+    let public_key = signer.raw_public_key();
     let mut total = 0usize;
 
     for seq in 0..iterations as u64 {

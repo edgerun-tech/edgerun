@@ -19,6 +19,64 @@ pub mod mesh_node;
 
 mod protocol_signer;
 
+#[cfg(test)]
+pub(crate) mod test_support {
+    use alloc::format;
+    use std::sync::Mutex;
+
+    use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
+    use edgerun_keygen::{generate_node_signing_key, node_id_from_signing_key, NodeSigningKey};
+    use edgerun_sign::{ProtocolSigner, SignableProtocolFamily};
+    use edgerun_sign_p256::P256ProtocolSigner;
+
+    pub(crate) struct TestSigner {
+        node_id: NodeID,
+        signer: Mutex<P256ProtocolSigner>,
+    }
+
+    impl TestSigner {
+        pub(crate) fn generate() -> Self {
+            let (key, _) = generate_node_signing_key();
+            Self::new(key)
+        }
+
+        fn new(key: NodeSigningKey) -> Self {
+            let node_id = NodeID(node_id_from_signing_key(&key));
+            Self {
+                node_id,
+                signer: Mutex::new(P256ProtocolSigner::new(key)),
+            }
+        }
+    }
+
+    impl MeshSigner for TestSigner {
+        fn node_id(&self) -> NodeID {
+            self.node_id
+        }
+
+        fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 64], HardwareSigningError> {
+            self.sign_message_var(digest)
+        }
+
+        fn sign_message_var(&self, message: &[u8]) -> Result<[u8; 64], HardwareSigningError> {
+            let signer = self
+                .signer
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let signature = signer
+                .sign_signature_input(SignableProtocolFamily::EventEnvelope, message)
+                .map_err(|error| HardwareSigningError::Provider(format!("{error:?}")))?;
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&signature);
+            Ok(bytes)
+        }
+
+        fn as_any(&self) -> &dyn core::any::Any {
+            self
+        }
+    }
+}
+
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -28,7 +86,7 @@ use core::fmt;
 
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_capability_policy::SimplePolicyEngine;
-use edgerun_core::command::{CommandValidationContext, validate_command};
+use edgerun_core::command::{validate_command, CommandValidationContext};
 use edgerun_core::protocol::{CommandEnvelope, EventEnvelope, EventType};
 use edgerun_core::result::Verdict;
 use edgerun_core::util::now_unix_millis_i64 as now_ms;
@@ -401,47 +459,14 @@ fn parse_list(val: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use alloc::vec;
-    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
     use std::sync::Arc;
 
-    struct TestSigner {
-        node_id: NodeID,
-        key: edgerun_crypto::p256::ecdsa::SigningKey,
-    }
+    use crate::test_support::TestSigner;
 
-    impl TestSigner {
-        fn new() -> Self {
-            let key = edgerun_crypto::random_p256_signing_key();
-            let vk = key.verifying_key();
-            let encoded = vk.to_encoded_point(false);
-            let mut node_bytes = [0u8; 64];
-            node_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            Self {
-                node_id: NodeID(node_bytes),
-                key,
-            }
-        }
-    }
-
-    impl MeshSigner for TestSigner {
-        fn node_id(&self) -> NodeID {
-            self.node_id
-        }
-
-        fn sign_digest(
-            &self,
-            digest: &[u8; 32],
-        ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: edgerun_crypto::p256::ecdsa::Signature =
-                self.key.sign_prehash(digest).map_err(|e| {
-                    edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string())
-                })?;
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&sig.to_bytes());
-            Ok(bytes)
-        }
+    fn test_signer() -> TestSigner {
+        TestSigner::generate()
     }
 
     const TEST_CONFIG: &str = r#"
@@ -622,7 +647,7 @@ trust_nodes: []
     #[test]
     fn node_creates_from_config() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let expected_id = signer.node_id();
         let node = Node::from_config(config, signer).unwrap();
 
@@ -632,7 +657,7 @@ trust_nodes: []
     #[test]
     fn node_genesis_event_present() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let node = Node::from_config(config, signer).unwrap();
 
         let events = node.events();
@@ -643,7 +668,7 @@ trust_nodes: []
     #[test]
     fn node_can_use_caller_provided_event_log() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let node = Node::from_config_with_event_log(config, signer, MemEventLog::new()).unwrap();
 
         let scanned = node.event_log().scan().unwrap();
@@ -655,7 +680,7 @@ trust_nodes: []
     #[test]
     fn node_config_accessor() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let node = Node::from_config(config.clone(), signer).unwrap();
 
         assert_eq!(node.config().stream_id, config.stream_id);
@@ -665,7 +690,7 @@ trust_nodes: []
     #[test]
     fn node_head_returns_genesis() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let node = Node::from_config(config, signer).unwrap();
 
         let head = node.head();
@@ -680,7 +705,7 @@ trust_nodes: []
     #[test]
     fn node_rejects_command_with_empty_command_id() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
         // Build a minimal command with empty command_id
@@ -719,7 +744,7 @@ trust_nodes: []
     #[test]
     fn node_rejects_command_targeting_wrong_node() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
         let command = edgerun_core::protocol::CommandEnvelope {
@@ -754,7 +779,7 @@ trust_nodes: []
     #[test]
     fn node_rejects_command_without_target() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
         let command = edgerun_core::protocol::CommandEnvelope {
@@ -787,7 +812,7 @@ trust_nodes: []
     #[test]
     fn node_records_rejection_event_for_bad_command() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
         let initial_events = node.events().len();
@@ -826,7 +851,7 @@ trust_nodes: []
     #[test]
     fn node_install_grant() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
         // Install a grant — should not panic
@@ -865,7 +890,7 @@ trust_nodes: []
     #[test]
     fn replay_cache_populated_on_accept() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Arc::new(TestSigner::new());
+        let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
         // Create a command that will pass structural validation but fail signature

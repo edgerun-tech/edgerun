@@ -219,44 +219,13 @@ mod tests {
     use alloc::vec;
     use edgerun_core::protocol::common as proto_common;
     use edgerun_core::protocol::EventType;
-    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
 
-    struct TestSigner {
-        node_id: NodeID,
-        key: edgerun_crypto::p256::ecdsa::SigningKey,
-    }
+    use crate::test_support::TestSigner;
 
-    impl TestSigner {
-        fn new() -> Self {
-            let key = edgerun_crypto::random_p256_signing_key();
-            let vk = key.verifying_key();
-            let encoded = vk.to_encoded_point(false);
-            let mut node_bytes = [0u8; 64];
-            node_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            Self {
-                node_id: NodeID(node_bytes),
-                key,
-            }
-        }
-    }
-
-    impl MeshSigner for TestSigner {
-        fn node_id(&self) -> NodeID {
-            self.node_id
-        }
-
-        fn sign_digest(
-            &self,
-            digest: &[u8; 32],
-        ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: edgerun_crypto::p256::ecdsa::Signature =
-                self.key.sign_prehash(digest).unwrap();
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&sig.to_bytes());
-            Ok(bytes)
-        }
+    fn test_signer() -> TestSigner {
+        TestSigner::generate()
     }
 
     const TEST_CONFIG: &str = r#"
@@ -272,8 +241,8 @@ metadata:
     #[test]
     fn mesh_node_creates_with_genesis() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
-        let node = MeshNode::from_config(config, Box::new(TestSigner::new())).unwrap();
+        let signer = Box::new(test_signer());
+        let node = MeshNode::from_config(config, Box::new(test_signer())).unwrap();
 
         // Should have genesis event
         assert_eq!(node.events().len(), 1);
@@ -283,7 +252,7 @@ metadata:
     #[test]
     fn mesh_node_has_identity() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = TestSigner::new();
+        let signer = test_signer();
         let expected_id = signer.node_id();
         let node = MeshNode::from_config(config, Box::new(signer)).unwrap();
 
@@ -293,7 +262,7 @@ metadata:
     #[test]
     fn mesh_node_tick_processes_nothing_when_idle() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         // Tick with no inbound frames — should process 0
@@ -304,7 +273,7 @@ metadata:
     #[test]
     fn mesh_node_records_commands_in_stream() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         // Build a command using the proto type directly
@@ -349,12 +318,12 @@ metadata:
     #[test]
     fn two_nodes_exchange_signed_commands() {
         let config_a = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer_a = Box::new(TestSigner::new());
+        let signer_a = Box::new(test_signer());
         let node_a_id = signer_a.node_id();
         let _alice = MeshNode::from_config(config_a, signer_a).unwrap();
 
         let config_b = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer_b = Box::new(TestSigner::new());
+        let signer_b = Box::new(test_signer());
         let mut bob = MeshNode::from_config(config_b, signer_b).unwrap();
 
         // Build a command using the proto type directly
@@ -409,7 +378,7 @@ metadata:
     #[test]
     fn mesh_node_router_is_accessible() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         // Should be able to get mutable access to the router
@@ -421,7 +390,7 @@ metadata:
     #[test]
     fn mesh_node_send_command_queues_frame() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         let dest = NodeID([0xAAu8; 64]);
@@ -462,7 +431,7 @@ metadata:
     #[test]
     fn mesh_node_identity_is_consistent() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let expected = signer.node_id();
         let node = MeshNode::from_config(config, signer).unwrap();
 
@@ -474,7 +443,7 @@ metadata:
     #[test]
     fn mesh_node_events_accessor() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, signer).unwrap();
 
         let events = node.events();
@@ -485,7 +454,7 @@ metadata:
     #[test]
     fn mesh_node_install_grant() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         let grant = edgerun_capabilities::CapabilityGrant {
@@ -520,7 +489,7 @@ metadata:
     #[test]
     fn mesh_node_multiple_ticks_are_idempotent() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         // Multiple idle ticks should all return 0 processed
@@ -533,7 +502,7 @@ metadata:
     #[test]
     fn mesh_node_decode_command_returns_none_for_garbage() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, signer).unwrap();
 
         let frame = MeshFrame::from_payload(node.identity(), vec![0xFF, 0xFE, 0xFD]);
@@ -544,7 +513,7 @@ metadata:
     #[test]
     fn mesh_node_decode_command_parses_valid_envelope() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, signer).unwrap();
 
         let command = edgerun_core::protocol::stream::CommandEnvelope {
@@ -578,7 +547,7 @@ metadata:
     #[test]
     fn mesh_node_frame_with_dest_preserves_payload() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, signer).unwrap();
 
         let original_frame = MeshFrame::from_payload(node.identity(), vec![1, 2, 3, 4]);
@@ -595,7 +564,7 @@ metadata:
         // This tests that the error path works when node creation fails
         // We use a valid config so this should succeed
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Box::new(test_signer());
         let result = MeshNode::from_config(config, signer);
         assert!(result.is_ok());
     }

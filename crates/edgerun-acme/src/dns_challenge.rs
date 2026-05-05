@@ -5,7 +5,6 @@ use edgerun_dns::record::DnsRecordType;
 use edgerun_dns::zone::DnsZone;
 use edgerun_encoding::base64url_nopad_encode;
 use edgerun_rt::RwLock;
-use sha2::{Digest, Sha256};
 
 use crate::account::AccountKey;
 
@@ -21,9 +20,7 @@ impl DnsChallenge {
         let thumbprint = account_key.thumbprint_b64();
         let key_authorization = format!("{}.{}", token, thumbprint);
 
-        let mut hasher = Sha256::new();
-        hasher.update(key_authorization.as_bytes());
-        let digest = hasher.finalize();
+        let digest = edgerun_crypto::sha256(key_authorization.as_bytes());
         let txt_value = base64url_nopad_encode(&digest);
 
         let txt_record_name = format!("_acme-challenge.{}", domain);

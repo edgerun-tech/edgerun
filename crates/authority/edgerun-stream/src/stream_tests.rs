@@ -1,14 +1,15 @@
 use super::*;
 
-use edgerun_core::crypto;
+use edgerun_core::crypto::{ECDSA_P256_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ECDSA_P256};
+use edgerun_keygen::{node_signing_key_from_bytes, NodeSigningKey};
 use edgerun_sign_p256::P256ProtocolSigner;
 
 fn signer(seed: u8) -> P256ProtocolSigner {
     P256ProtocolSigner::new(signing_key(seed))
 }
 
-fn signing_key(seed: u8) -> crypto::SigningKey {
-    crypto::SigningKey::from_bytes(&[seed; 32].into()).unwrap()
+fn signing_key(seed: u8) -> NodeSigningKey {
+    node_signing_key_from_bytes([seed; 32]).unwrap()
 }
 
 fn stream_id(seed: u8) -> StreamId {
@@ -49,11 +50,8 @@ fn sign_event_uses_protocol_signer_and_verifier_accepts_it() {
     sign_event(&mut event, &signer).unwrap();
     let signature = event.signature.as_ref().unwrap();
 
-    assert_eq!(
-        signature.algorithm,
-        crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
-    );
-    assert_eq!(signature.value.len(), crypto::ECDSA_P256_SIGNATURE_LEN);
+    assert_eq!(signature.algorithm, SIGNATURE_ALGORITHM_ECDSA_P256 as i32);
+    assert_eq!(signature.value.len(), ECDSA_P256_SIGNATURE_LEN);
     verify_event(&event, &id).unwrap();
 }
 

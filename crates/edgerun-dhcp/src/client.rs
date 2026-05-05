@@ -8,7 +8,7 @@ use edgerun_rt::{Instant, SocketAddr, UdpSocket};
 
 use super::lease::Lease;
 use super::message::io;
-use super::message::{DhcpMessage, DhcpMessageType, DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
+use super::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT, DhcpMessage, DhcpMessageType};
 
 pub struct DhcpClient {
     socket: UdpSocket,

@@ -82,14 +82,11 @@ pub enum Jwk {
 
 impl Jwk {
     pub fn thumbprint(&self) -> Vec<u8> {
-        use sha2::{Digest, Sha256};
         let jwk_json = match self {
             Jwk::RSA { n, e } => format!(r#"{{"e":"{e}","kty":"RSA","n":"{n}"}}"#),
             Jwk::EC { crv, x, y } => format!(r#"{{"crv":"{crv}","kty":"EC","x":"{x}","y":"{y}"}}"#),
         };
-        let mut hasher = Sha256::new();
-        hasher.update(jwk_json.as_bytes());
-        hasher.finalize().to_vec()
+        edgerun_crypto::sha256(jwk_json.as_bytes()).to_vec()
     }
 }
 
@@ -722,12 +719,7 @@ mod tests {
             y: "y-coordinate".to_string(),
         };
         let expected_json = r#"{"crv":"P-256","kty":"EC","x":"x-coordinate","y":"y-coordinate"}"#;
-        let expected = {
-            use sha2::{Digest, Sha256};
-            let mut hasher = Sha256::new();
-            hasher.update(expected_json.as_bytes());
-            hasher.finalize().to_vec()
-        };
+        let expected = edgerun_crypto::sha256(expected_json.as_bytes()).to_vec();
 
         assert_eq!(jwk.thumbprint(), expected);
     }

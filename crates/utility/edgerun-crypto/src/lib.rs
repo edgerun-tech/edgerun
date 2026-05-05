@@ -7,7 +7,7 @@ extern crate std;
 
 #[cfg(feature = "aead")]
 pub mod aead;
-#[cfg(feature = "aead")]
+#[cfg(feature = "aes")]
 pub mod aes;
 #[cfg(feature = "des")]
 pub mod des;
@@ -16,19 +16,19 @@ pub mod rng;
 pub mod sha;
 
 #[cfg(feature = "aead")]
-pub use ::aes_gcm;
+pub use aes_gcm;
 #[cfg(feature = "p256")]
-pub use ::ecdsa;
+pub use ecdsa;
 #[cfg(feature = "ed25519")]
-pub use ::ed25519_dalek;
+pub use ed25519_dalek;
 #[cfg(feature = "p256")]
-pub use ::elliptic_curve;
+pub use elliptic_curve;
 #[cfg(feature = "p256")]
-pub use ::p256;
+pub use p256;
 #[cfg(feature = "rsa")]
-pub use ::rsa;
+pub use rsa;
 #[cfg(feature = "x25519")]
-pub use ::x25519_dalek;
+pub use x25519_dalek;
 
 use crate::error::{CryptoError, Result};
 

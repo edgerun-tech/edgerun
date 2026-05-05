@@ -11,10 +11,11 @@ description = "Zero-dependency drop-in replacement for clap crate"
 [features]
 default = []
 std = ["edgerun-json/std"]
+derive = ["dep:edgerun-clap-derive"]
 
 [dependencies]
 edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
-edgerun-clap-derive = { version = "0.1", path = "../edgerun-clap-derive" }
+edgerun-clap-derive = { version = "0.1", path = "../edgerun-clap-derive", optional = true }
 
 [lints]
 workspace = true

@@ -301,7 +301,6 @@ dependencies = [
  "edgerun-secret-service",
  "edgerun-tls",
  "edgerun-url",
- "sha2",
 ]
 
 [[package]]
@@ -595,10 +594,6 @@ dependencies = [
 [[package]]
 name = "edgerun-error"
 version = "0.1.1"
-dependencies = [
- "quote",
- "syn",
-]
 
 [[package]]
 name = "edgerun-evdev-input"
@@ -976,6 +971,7 @@ dependencies = [
  "edgerun-hardware-signing",
  "edgerun-input",
  "edgerun-json",
+ "edgerun-keygen",
  "edgerun-linux-cec",
  "edgerun-linux-gpu",
  "edgerun-linux-netif",
@@ -1001,6 +997,9 @@ dependencies = [
  "edgerun-power",
  "edgerun-remote-capability",
  "edgerun-rt",
+ "edgerun-seal",
+ "edgerun-sign",
+ "edgerun-sign-p256",
  "edgerun-speaker",
  "edgerun-storage",
  "edgerun-stream",
@@ -1160,6 +1159,14 @@ name = "edgerun-rtl8125"
 version = "0.1.0"
 
 [[package]]
+name = "edgerun-seal"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-keygen",
+]
+
+[[package]]
 name = "edgerun-secret-service"
 version = "0.1.1"
 dependencies = [
@@ -1237,9 +1244,11 @@ dependencies = [
  "edgerun-core",
  "edgerun-crypto",
  "edgerun-encoding",
+ "edgerun-keygen",
  "edgerun-log",
  "edgerun-rt",
  "edgerun-sign",
+ "edgerun-sign-p256",
  "edgerun-stream",
  "edgerun-verify",
  "edgerun-virtual-disk",
@@ -1250,6 +1259,7 @@ name = "edgerun-stream"
 version = "0.1.1"
 dependencies = [
  "edgerun-core",
+ "edgerun-keygen",
  "edgerun-sign",
  "edgerun-sign-p256",
  "edgerun-verify",
@@ -1259,7 +1269,6 @@ dependencies = [
 name = "edgerun-tcl-ac"
 version = "0.1.1"
 dependencies = [
- "aes",
  "edgerun-bluetooth-gatt",
  "edgerun-capabilities",
  "edgerun-crypto",

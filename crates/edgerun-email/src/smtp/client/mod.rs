@@ -280,7 +280,7 @@ impl SmtpClient {
                 return Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "server disconnected",
-                ))
+                ));
             }
         };
 
@@ -315,7 +315,7 @@ impl SmtpClient {
                         return Err(io::Error::new(
                             io::ErrorKind::UnexpectedEof,
                             "server disconnected",
-                        ))
+                        ));
                     }
                 };
                 let is_final = next_line.as_bytes().get(3) != Some(&b'-');

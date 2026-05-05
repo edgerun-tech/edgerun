@@ -81,6 +81,7 @@ impl ExchangeOrderProjection {
                 ..
             } => {
                 self.canonical_status = *to_status;
+                self.terminal = is_terminal_status(*to_status);
                 self.updated_at_ms = Some(*changed_at_ms);
             }
             ExchangeEvent::OrderCompleted {
