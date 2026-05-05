@@ -2,9 +2,9 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use edgerun_sign_verify_e2e::{
-    bootstrap_only, bootstrap_roundtrip, canonicalize_event_only, hash_event_only, sign_event_only,
-    sign_verify_event_roundtrip, signed_events, stream_only, stream_roundtrip, verify_event_only,
-    verify_prebuilt_events,
+    agent_node_only, agent_node_roundtrip, bootstrap_only, bootstrap_roundtrip,
+    canonicalize_event_only, hash_event_only, sign_event_only, sign_verify_event_roundtrip,
+    signed_events, stream_only, stream_roundtrip, verify_event_only, verify_prebuilt_events,
 };
 
 fn bench_once(name: &str, iterations: usize, mut f: impl FnMut(usize)) {
@@ -58,6 +58,19 @@ fn main() {
         stream.next_signature_len,
     );
 
+    let agent = agent_node_roundtrip().expect("agent node roundtrip should pass");
+    println!(
+        "agent_node: node_id_len={} store_len={} event_count={} genesis_seq={} action_started_seq={} action_completed_seq={} action_completed_has_prev_hash={} all_events_signed={}",
+        agent.node_id_len,
+        agent.store_len,
+        agent.event_count,
+        agent.genesis_seq,
+        agent.action_started_seq,
+        agent.action_completed_seq,
+        agent.action_completed_has_prev_hash,
+        agent.all_events_signed,
+    );
+
     let report = sign_verify_event_roundtrip().expect("roundtrip should pass");
     println!(
         "roundtrip: signature_len={} record_hash_len={} public_key_len={} stream_id_len={}",
@@ -71,6 +84,11 @@ fn main() {
 
     bench_once("stream", iterations, |n| {
         let ok = stream_only(n).expect("stream benchmark should pass");
+        black_box(ok);
+    });
+
+    bench_once("agent_node", iterations, |n| {
+        let ok = agent_node_only(n).expect("agent node benchmark should pass");
         black_box(ok);
     });
 

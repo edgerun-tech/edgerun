@@ -48,6 +48,18 @@ pub struct StreamReport {
     pub next_signature_len: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentNodeReport {
+    pub node_id_len: usize,
+    pub store_len: usize,
+    pub event_count: usize,
+    pub genesis_seq: u64,
+    pub action_started_seq: u64,
+    pub action_completed_seq: u64,
+    pub action_completed_has_prev_hash: bool,
+    pub all_events_signed: bool,
+}
+
 pub fn deterministic_signing_key(seed_byte: u8) -> SigningKey {
     let bytes: [u8; 32] = [seed_byte; 32];
     SigningKey::from_bytes(&bytes.into()).expect("deterministic test key is valid")
@@ -126,6 +138,62 @@ pub fn stream_roundtrip() -> Result<StreamReport, E2eError> {
     })
 }
 
+pub fn agent_node_roundtrip() -> Result<AgentNodeReport, E2eError> {
+    let mut store = MemoryKeyStore::new();
+    let result = bootstrap_new_node(&mut store, BootstrapConfig::default())
+        .map_err(|_| E2eError::Bootstrap)?;
+    let node_id = result.node_id;
+    let signer = store.get(&node_id).ok_or(E2eError::Bootstrap)?;
+
+    verify_event_envelope(
+        &result.genesis_event,
+        ProtocolSignerRef::P256Raw64(&node_id),
+    )
+    .map_err(|_| E2eError::Verify)?;
+
+    let action_started = build_signed_event(
+        &node_id,
+        Some(&result.genesis_event),
+        EventDraft {
+            event_type: EventType::ActionStarted as i32,
+            event_version: 1,
+            ..EventDraft::default()
+        },
+        signer,
+    )
+    .map_err(|_| E2eError::Stream)?;
+
+    let action_completed = build_signed_event(
+        &node_id,
+        Some(&action_started),
+        EventDraft {
+            event_type: EventType::ActionCompleted as i32,
+            event_version: 1,
+            ..EventDraft::default()
+        },
+        signer,
+    )
+    .map_err(|_| E2eError::Stream)?;
+
+    let events = alloc::vec![
+        result.genesis_event.clone(),
+        action_started.clone(),
+        action_completed.clone()
+    ];
+    validate_stream(&events, &node_id).map_err(|_| E2eError::Stream)?;
+
+    Ok(AgentNodeReport {
+        node_id_len: node_id.len(),
+        store_len: store.len(),
+        event_count: events.len(),
+        genesis_seq: result.genesis_event.seq,
+        action_started_seq: action_started.seq,
+        action_completed_seq: action_completed.seq,
+        action_completed_has_prev_hash: action_completed.prev_event_hash.is_some(),
+        all_events_signed: events.iter().all(|event| event.signature.is_some()),
+    })
+}
+
 pub fn sign_verify_event_roundtrip() -> Result<SignVerifyReport, E2eError> {
     let signing_key = deterministic_signing_key(11);
     let signer = P256ProtocolSigner::new(signing_key);
@@ -154,6 +222,32 @@ pub fn sign_verify_event_roundtrip() -> Result<SignVerifyReport, E2eError> {
         public_key_len: public_key.len(),
         stream_id_len: event.stream_id.len(),
     })
+}
+
+#[no_mangle]
+pub extern "C" fn edgerun_agent_node_e2e_roundtrip() -> u32 {
+    match agent_node_roundtrip() {
+        Ok(report) => {
+            if report.node_id_len == crypto::ECDSA_P256_PUBLIC_KEY_LEN
+                && report.store_len == 1
+                && report.event_count == 3
+                && report.genesis_seq == 0
+                && report.action_started_seq == 1
+                && report.action_completed_seq == 2
+                && report.action_completed_has_prev_hash
+                && report.all_events_signed
+            {
+                0
+            } else {
+                2
+            }
+        }
+        Err(E2eError::Keygen) => 9,
+        Err(E2eError::Bootstrap) => 10,
+        Err(E2eError::Sign) => 11,
+        Err(E2eError::Verify) => 12,
+        Err(E2eError::Stream) => 13,
+    }
 }
 
 #[no_mangle]
@@ -296,6 +390,15 @@ pub fn stream_only(iterations: usize) -> Result<usize, E2eError> {
     Ok(ok)
 }
 
+pub fn agent_node_only(iterations: usize) -> Result<usize, E2eError> {
+    let mut ok = 0usize;
+    for _ in 0..iterations {
+        agent_node_roundtrip()?;
+        ok += 1;
+    }
+    Ok(ok)
+}
+
 pub fn signed_events(iterations: usize) -> Result<(Vec<EventEnvelope>, [u8; 64]), E2eError> {
     let signing_key = deterministic_signing_key(14);
     let signer = P256ProtocolSigner::new(signing_key);
@@ -383,6 +486,19 @@ mod tests {
     }
 
     #[test]
+    fn agent_node_roundtrip_works() {
+        let report = agent_node_roundtrip().unwrap();
+        assert_eq!(report.node_id_len, 64);
+        assert_eq!(report.store_len, 1);
+        assert_eq!(report.event_count, 3);
+        assert_eq!(report.genesis_seq, 0);
+        assert_eq!(report.action_started_seq, 1);
+        assert_eq!(report.action_completed_seq, 2);
+        assert!(report.action_completed_has_prev_hash);
+        assert!(report.all_events_signed);
+    }
+
+    #[test]
     fn bootstrap_roundtrip_works() {
         let report = bootstrap_roundtrip().unwrap();
         assert_eq!(report.node_id_len, 64);
@@ -408,5 +524,6 @@ mod tests {
         assert_eq!(verify_event_only(8).unwrap(), 8);
         assert_eq!(bootstrap_only(2).unwrap(), 2);
         assert_eq!(stream_only(2).unwrap(), 2);
+        assert_eq!(agent_node_only(2).unwrap(), 2);
     }
 }
