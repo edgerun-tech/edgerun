@@ -38,7 +38,7 @@ sudo mkdir -p "$CONFIG_DIR"
 # Install config if not exists
 if [ ! -f "$CONFIG_DIR/config.toml" ]; then
     echo "Installing default config..."
-    sudo cp crates/edgerun-vfs/edgerun-vfs.toml.example "$CONFIG_DIR/config.toml"
+    sudo cp crates/authority/edgerun-vfs/edgerun-vfs.toml.example "$CONFIG_DIR/config.toml"
     echo "Edit $CONFIG_DIR/config.toml to add your directories"
 else
     echo "Config already exists, skipping..."
@@ -46,7 +46,7 @@ fi
 
 # Install systemd service
 echo "Installing systemd service..."
-sudo cp crates/edgerun-vfs/edgerun-vfs@.service "$SERVICE_DIR/"
+sudo cp crates/authority/edgerun-vfs/edgerun-vfs@.service "$SERVICE_DIR/"
 sudo systemctl daemon-reload
 
 echo

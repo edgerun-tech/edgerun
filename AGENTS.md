@@ -11,8 +11,8 @@ concrete protocol type at the rkyv boundary or leave a loud breakpoint.
 2. `crates/edgerun-wire/src/lib.rs`
 3. `crates/protocol/edgerun-core/src/protocol_native/mod.rs`
 4. `crates/protocol/edgerun-core/src/{crypto.rs,command.rs,validators/*.rs}`
-5. `crates/edgerun-stream/src/lib.rs`
-6. `crates/edgerun-storage/src/{lib.rs,core,store.rs,fs,event_log.rs,file_index.rs,blobs.rs}`
+5. `crates/authority/edgerun-stream/src/lib.rs`
+6. `crates/authority/edgerun-storage/src/{lib.rs,core,store.rs,fs,event_log.rs,file_index.rs,blobs.rs}`
 7. `crates/edgerun-node/src/lib.rs`
 8. Mesh and capability crates: `edgerun-mesh*`, `edgerun-remote-capability`,
    `edgerun-capabilities`, `edgerun-capability-policy`

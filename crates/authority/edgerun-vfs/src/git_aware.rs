@@ -278,8 +278,8 @@ mod tests {
 
         assert!(persist.should_persist(Path::new("Cargo.toml")));
         assert!(persist.should_persist(Path::new("README.md")));
-        assert!(persist.should_persist(Path::new("crates/edgerun-vfs/src/lib.rs")));
-        assert!(persist.should_persist(Path::new("crates/edgerun-vfs/Cargo.toml")));
+        assert!(persist.should_persist(Path::new("crates/authority/edgerun-vfs/src/lib.rs")));
+        assert!(persist.should_persist(Path::new("crates/authority/edgerun-vfs/Cargo.toml")));
 
         assert!(!persist.should_persist(Path::new("target/debug/main")));
         assert!(!persist.should_persist(Path::new("target/release/edgerun-agent")));

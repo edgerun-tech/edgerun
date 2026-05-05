@@ -65,8 +65,8 @@ edgerun-wire = { workspace = true }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-capability-policy = { version = "0.1", path = "../edgerun-capability-policy" }
-edgerun-stream = { version = "0.1", path = "../edgerun-stream" }
-edgerun-storage = { version = "0.1", path = "../edgerun-storage" }
+edgerun-stream = { version = "0.1", path = "../authority/edgerun-stream" }
+edgerun-storage = { version = "0.1", path = "../authority/edgerun-storage" }
 edgerun-remote-capability = { version = "0.1", path = "../edgerun-remote-capability" }
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../edgerun-mesh-link" }
@@ -117,7 +117,7 @@ edgerun-linux-power = { version = "0.1", path = "../edgerun-linux-power", option
 edgerun-cec = { version = "0.1", path = "../edgerun-cec", optional = true }
 edgerun-linux-cec = { version = "0.1", path = "../edgerun-linux-cec", optional = true }
 edgerun-amd-xdna = { version = "0.1", path = "../edgerun-amd-xdna", optional = true }
-edgerun-virtual-disk = { version = "0.1", path = "../edgerun-virtual-disk", optional = true }
+edgerun-virtual-disk = { version = "0.1", path = "../authority/edgerun-virtual-disk", optional = true }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", optional = true }
 edgerun-oci = { version = "0.1", path = "../edgerun-oci", optional = true }
 edgerun-android-keystore = { version = "0.1", path = "../edgerun-android-keystore", optional = true }

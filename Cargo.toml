@@ -45,7 +45,7 @@ members = [
   "crates/edgerun-drm-display",
   "crates/edgerun-display",
   "crates/edgerun-edit",
-  "crates/edgerun-edgefs",
+  "crates/authority/edgerun-edgefs",
   "crates/utility/edgerun-encoding",
   "crates/utility/edgerun-error",
   "crates/edgerun-evdev-input",
@@ -95,18 +95,18 @@ members = [
   "crates/edgerun-email",
   "crates/edgerun-email-auth",
   "crates/edgerun-speaker",
-  "crates/edgerun-storage",
-  "crates/edgerun-stream",
+  "crates/authority/edgerun-storage",
+  "crates/authority/edgerun-stream",
   "crates/edgerun-virtio",
   "crates/edgerun-tls",
   "crates/edgerun-tuya",
   "crates/edgerun-tpm",
   "crates/edgerun-usb",
   "crates/edgerun-v4l2-camera",
-  "crates/edgerun-virtual-disk",
+  "crates/authority/edgerun-virtual-disk",
   "crates/edgerun-wifi",
   "crates/edgerun-yubikey",
-  "crates/edgerun-vfs",
+  "crates/authority/edgerun-vfs",
   "crates/utility/edgerun-clap",
   "crates/utility/edgerun-clap-derive",
   "crates/edgerun-wire",
@@ -156,8 +156,8 @@ function_casts_as_integer = "allow"
 [workspace.dependencies]
 edgerun-core = { version = "0.1", path = "crates/protocol/edgerun-core", default-features = false }
 edgerun-proxy = { version = "0.1", path = "crates/edgerun-proxy" }
-edgerun-storage = { version = "0.1", path = "crates/edgerun-storage" }
-edgerun-stream = { version = "0.1", path = "crates/edgerun-stream" }
+edgerun-storage = { version = "0.1", path = "crates/authority/edgerun-storage" }
+edgerun-stream = { version = "0.1", path = "crates/authority/edgerun-stream" }
 edgerun-http = { version = "0.1", path = "crates/edgerun-http", default-features = false }
 edgerun-node = { version = "0.1", path = "crates/edgerun-node" }
 edgerun-hardware-signing = { version = "0.1", path = "crates/edgerun-hardware-signing" }
@@ -177,7 +177,7 @@ edgerun-capability-policy = { version = "0.1", path = "crates/edgerun-capability
 edgerun-linux-wifi = { version = "0.1", path = "crates/edgerun-linux-wifi" }
 edgerun-input = { version = "0.1", path = "crates/edgerun-input" }
 edgerun-oci = { version = "0.1", path = "crates/edgerun-oci" }
-edgerun-edgefs = { version = "0.1", path = "crates/edgerun-edgefs" }
+edgerun-edgefs = { version = "0.1", path = "crates/authority/edgerun-edgefs" }
 edgerun-encoding = { version = "0.1", path = "crates/utility/edgerun-encoding" }
 edgerun-acme = { version = "0.1", path = "crates/edgerun-acme" }
 edgerun-dns = { version = "0.1", path = "crates/edgerun-dns" }
