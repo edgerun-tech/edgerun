@@ -77,7 +77,7 @@ pub use protocol::{
     RemoteCapabilityTransport, RemoteInvocationResult,
 };
 pub use transport::MemoryRemoteTransport;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 pub use transport::{accept_tcp, accept_unix, FramedRemoteTransport};
 
 #[cfg(test)]

@@ -109,7 +109,7 @@ pub(crate) mod test_policy {
 
 /// Session harness: opens a session with a provider over an in-process
 /// Unix socket pair (server thread + client transport).
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 pub(crate) mod session_harness {
     use crate::prelude::v1::*;
     use edgerun_capabilities::{CapabilityAccessClass, CapabilityOperation};

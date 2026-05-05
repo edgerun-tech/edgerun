@@ -23,10 +23,11 @@ edgerun-wifi = { version = "0.1", path = "../edgerun-wifi" }
 [[bin]]
 name = "edgerun-machine-report"
 path = "src/main.rs"
-required-features = ["std"]
+required-features = ["linux-bin"]
 
 [features]
 std = []
+linux-bin = []
 
 [lints]
 workspace = true

@@ -1,11 +1,11 @@
 //! Transport implementations: framed (Unix/TCP) and in-memory.
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 mod framed;
 mod memory;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 pub use framed::FramedRemoteTransport;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 pub use framed::{accept_tcp, accept_unix};
 pub use memory::MemoryRemoteTransport;

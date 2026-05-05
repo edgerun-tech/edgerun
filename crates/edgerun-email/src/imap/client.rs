@@ -13,7 +13,7 @@ use crate::rt::{
     AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, ConnectFuture,
 };
 
-#[cfg(feature = "tls")]
+#[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
 use edgerun_tls::AsyncTlsStream;
 
 use crate::imap::message::{ImapCommand, ImapResponse, ImapResult};
@@ -26,16 +26,20 @@ use crate::server::read_line;
 
 enum ImapTransport {
     Plain(AsyncTcpStream),
-    #[cfg(feature = "tls")]
+    #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
     Tls(AsyncTlsStream<AsyncTcpStream>),
+    #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
+    Placeholder,
 }
 
 impl ImapTransport {
     fn is_tls(&self) -> bool {
         match self {
             ImapTransport::Plain(_) => false,
-            #[cfg(feature = "tls")]
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
             ImapTransport::Tls(_) => true,
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
+            ImapTransport::Placeholder => false,
         }
     }
 }
@@ -48,8 +52,12 @@ impl AsyncRead for ImapTransport {
     ) -> std::task::Poll<io::Result<usize>> {
         match &mut *self {
             ImapTransport::Plain(s) => std::pin::Pin::new(s).poll_read(cx, buf),
-            #[cfg(feature = "tls")]
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
             ImapTransport::Tls(s) => std::pin::Pin::new(s).poll_read(cx, buf),
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
+            ImapTransport::Placeholder => {
+                std::task::Poll::Ready(Err(io::Error::other("imap transport placeholder")))
+            }
         }
     }
 }
@@ -62,8 +70,12 @@ impl AsyncWrite for ImapTransport {
     ) -> std::task::Poll<io::Result<usize>> {
         match &mut *self {
             ImapTransport::Plain(s) => std::pin::Pin::new(s).poll_write(cx, buf),
-            #[cfg(feature = "tls")]
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
             ImapTransport::Tls(s) => std::pin::Pin::new(s).poll_write(cx, buf),
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
+            ImapTransport::Placeholder => {
+                std::task::Poll::Ready(Err(io::Error::other("imap transport placeholder")))
+            }
         }
     }
 
@@ -73,8 +85,12 @@ impl AsyncWrite for ImapTransport {
     ) -> std::task::Poll<io::Result<()>> {
         match &mut *self {
             ImapTransport::Plain(s) => std::pin::Pin::new(s).poll_flush(cx),
-            #[cfg(feature = "tls")]
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
             ImapTransport::Tls(s) => std::pin::Pin::new(s).poll_flush(cx),
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
+            ImapTransport::Placeholder => {
+                std::task::Poll::Ready(Err(io::Error::other("imap transport placeholder")))
+            }
         }
     }
 
@@ -84,8 +100,12 @@ impl AsyncWrite for ImapTransport {
     ) -> std::task::Poll<io::Result<()>> {
         match &mut *self {
             ImapTransport::Plain(s) => std::pin::Pin::new(s).poll_shutdown(cx),
-            #[cfg(feature = "tls")]
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
             ImapTransport::Tls(s) => std::pin::Pin::new(s).poll_shutdown(cx),
+            #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
+            ImapTransport::Placeholder => {
+                std::task::Poll::Ready(Err(io::Error::other("imap transport placeholder")))
+            }
         }
     }
 }
@@ -125,7 +145,7 @@ impl ImapClient {
         client.do_capability().await?;
 
         // Auto-STARTTLS if supported
-        #[cfg(feature = "tls")]
+        #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
         {
             let has_starttls = client.capabilities.iter().any(|c| c == "STARTTLS");
             if has_starttls {
@@ -262,7 +282,7 @@ impl ImapClient {
         }
     }
 
-    #[cfg(feature = "tls")]
+    #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
     async fn do_starttls(&mut self, server_name: &str) -> io::Result<()> {
         let resp = self.send_command("STARTTLS").await?;
         match resp {
@@ -286,6 +306,9 @@ impl ImapClient {
             ImapTransport::Plain(s) => s,
             ImapTransport::Tls(_) => {
                 return Err(io::Error::other("already using TLS"));
+            }
+            ImapTransport::Placeholder => {
+                return Err(io::Error::other("imap transport placeholder"));
             }
         };
 
@@ -842,8 +865,9 @@ impl ImapClient {
 }
 
 impl ImapTransport {
+    #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
     fn placeholder() -> Self {
-        ImapTransport::Plain(AsyncTcpStream::from_fd(-1))
+        ImapTransport::Placeholder
     }
 }
 

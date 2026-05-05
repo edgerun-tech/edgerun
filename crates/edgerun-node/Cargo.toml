@@ -85,7 +85,7 @@ edgerun-log = { version = "0.1", path = "../edgerun-log" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", default-features = false }
 edgerun-json = { version = "0.1", path = "../edgerun-json" }
 
-[target.'cfg(not(target_os = "none"))'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 libc.workspace = true
 edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
 edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interface" }

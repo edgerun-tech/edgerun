@@ -121,9 +121,7 @@ impl SmtpTransport {
         match self {
             SmtpTransport::Tls(_) => Err(io::Error::other("already using TLS")),
             SmtpTransport::Plain(stream) => {
-                let fd = stream.into_fd();
-                let tcp = AsyncTcpStream::from_raw(fd);
-                let mut tls_stream = AsyncTlsServerStream::new(tcp);
+                let mut tls_stream = AsyncTlsServerStream::new(stream);
                 tls_stream
                     .handshake(cert_and_key)
                     .await

@@ -12,8 +12,6 @@ description = "Bluetooth GATT support for Edgerun device capabilities"
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-
-[target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
 [lints]

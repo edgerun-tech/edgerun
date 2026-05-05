@@ -1695,6 +1695,7 @@ fn read_volatile_used_elem(ptr: *const VirtqUsedElem) -> VirtqUsedElem {
 }
 
 #[inline]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn port_inl(port: u16) -> u32 {
     let value: u32;
     unsafe {
@@ -1704,8 +1705,19 @@ fn port_inl(port: u16) -> u32 {
 }
 
 #[inline]
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+fn port_inl(_port: u16) -> u32 {
+    u32::MAX
+}
+
+#[inline]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn port_outl(port: u16, value: u32) {
     unsafe {
         core::arch::asm!("out dx, eax", in("dx") port, in("eax") value, options(nomem, nostack, preserves_flags));
     }
 }
+
+#[inline]
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+fn port_outl(_port: u16, _value: u32) {}

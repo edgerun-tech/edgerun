@@ -24,6 +24,11 @@ pub mod collections {
     pub use alloc::collections::{BTreeMap, BTreeMap as HashMap, BTreeSet, BTreeSet as HashSet};
 }
 
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod collections {
+    pub use std::collections::*;
+}
+
 #[cfg(target_os = "none")]
 pub mod env {
     use crate::path::PathBuf;
@@ -34,9 +39,19 @@ pub mod env {
     }
 }
 
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod env {
+    pub use std::env::*;
+}
+
 #[cfg(target_os = "none")]
 pub mod ffi {
     pub use core::ffi::*;
+}
+
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod ffi {
+    pub use std::ffi::*;
 }
 
 #[cfg(target_os = "none")]
@@ -114,6 +129,11 @@ pub mod fs {
     }
 }
 
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod fs {
+    pub use std::fs::*;
+}
+
 #[cfg(target_os = "none")]
 pub mod io {
     use core::fmt;
@@ -184,6 +204,11 @@ pub mod io {
     pub type Result<T> = core::result::Result<T, Error>;
 }
 
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod io {
+    pub use std::io::*;
+}
+
 #[cfg(target_os = "none")]
 pub mod os {
     pub mod fd {
@@ -210,9 +235,21 @@ pub mod os {
     }
 }
 
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod os {
+    pub mod raw {
+        pub use std::os::raw::*;
+    }
+}
+
 #[cfg(target_os = "none")]
 pub mod mem {
     pub use core::mem::*;
+}
+
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod mem {
+    pub use std::mem::*;
 }
 
 #[cfg(target_os = "none")]
@@ -364,6 +401,11 @@ pub mod path {
     }
 }
 
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod path {
+    pub use std::path::*;
+}
+
 #[cfg(target_os = "none")]
 pub mod time {
     pub use core::time::Duration;
@@ -388,9 +430,19 @@ pub mod time {
     }
 }
 
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod time {
+    pub use std::time::*;
+}
+
 #[cfg(target_os = "none")]
 pub mod option {
     pub use core::option::*;
+}
+
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod option {
+    pub use std::option::*;
 }
 
 #[cfg(target_os = "none")]
@@ -398,9 +450,19 @@ pub mod result {
     pub use core::result::*;
 }
 
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod result {
+    pub use std::result::*;
+}
+
 #[cfg(target_os = "none")]
 pub mod string {
     pub use alloc::string::*;
+}
+
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod string {
+    pub use std::string::*;
 }
 
 #[cfg(target_os = "none")]
@@ -408,17 +470,22 @@ pub mod vec {
     pub use alloc::vec::*;
 }
 
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub mod vec {
+    pub use std::vec::*;
+}
+
 use crate::prelude::v1::*;
 use std::collections::HashMap;
-#[cfg(not(target_os = "none"))]
-use std::fs;
-#[cfg(not(target_os = "none"))]
-use std::io;
+use std::fs as host_fs;
+#[cfg(all(not(unix), not(target_os = "none")))]
+use std::io as host_io;
 use std::os::raw::{c_char, c_int, c_ulong};
 use std::path::{Path, PathBuf};
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(unix)]
 unsafe extern "C" {
     fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int;
     fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
@@ -432,7 +499,9 @@ unsafe extern "C" {
 /// Read a sysfs file and return the trimmed contents, or `None` on error.
 #[must_use]
 pub fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|v| v.trim().to_string())
+    host_fs::read_to_string(path)
+        .ok()
+        .map(|v| v.trim().to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -539,7 +608,7 @@ pub fn parse_display_mode_line(line: &str) -> Option<SysfsDisplayMode> {
 
 #[must_use]
 pub fn parse_uevent_map(path: &Path) -> HashMap<String, String> {
-    let Some(raw) = fs::read_to_string(path).ok() else {
+    let Some(raw) = host_fs::read_to_string(path).ok() else {
         return HashMap::new();
     };
     raw.lines()
@@ -572,20 +641,54 @@ const AF_INET: c_int = 2;
 const SOCK_DGRAM: c_int = 2;
 
 /// Open a UDP datagram socket suitable for ioctl calls.
+#[cfg(unix)]
 pub fn open_ioctl_socket() -> Result<c_int, std::io::Error> {
     let fd = unsafe { socket(AF_INET, SOCK_DGRAM, 0) };
     if fd < 0 {
-        return Err(io::Error::last_os_error());
+        return Err(std::io::Error::last_os_error());
     }
     Ok(fd)
+}
+
+/// Open a UDP datagram socket suitable for ioctl calls.
+#[cfg(target_os = "none")]
+pub fn open_ioctl_socket() -> Result<c_int, std::io::Error> {
+    Err(io::Error::new(io::ErrorKind::Other))
+}
+
+/// Open a UDP datagram socket suitable for ioctl calls.
+#[cfg(all(not(unix), not(target_os = "none")))]
+pub fn open_ioctl_socket() -> Result<c_int, std::io::Error> {
+    Err(host_io::Error::new(
+        host_io::ErrorKind::Other,
+        "ioctl sockets are unavailable on this target",
+    ))
 }
 
 /// Close an ioctl socket file descriptor.
 ///
 /// # Safety
 /// `fd` must be a valid file descriptor returned from `open_ioctl_socket`.
+#[cfg(unix)]
 pub unsafe fn close_ioctl_fd(fd: c_int) {
     close(fd);
+}
+
+/// Close an ioctl socket file descriptor.
+///
+/// # Safety
+/// `fd` must be a valid file descriptor returned from `open_ioctl_socket`.
+#[cfg(not(unix))]
+pub unsafe fn close_ioctl_fd(_fd: c_int) {}
+
+/// Perform an ioctl call.
+///
+/// # Safety
+/// `fd` must be a valid file descriptor, and `request`/`...` must match
+/// the expected ioctl signature for the given fd.
+#[cfg(unix)]
+pub unsafe fn ioctl_call(fd: c_int, request: c_ulong, arg: *mut std::ffi::c_void) -> c_int {
+    ioctl(fd, request, arg)
 }
 
 /// Perform an ioctl call.
@@ -593,8 +696,9 @@ pub unsafe fn close_ioctl_fd(fd: c_int) {
 /// # Safety
 /// `fd` must be a valid file descriptor, and `request`/`...` must match
 /// the expected ioctl signature for the given fd.
-pub unsafe fn ioctl_call(fd: c_int, request: c_ulong, arg: *mut std::ffi::c_void) -> c_int {
-    ioctl(fd, request, arg)
+#[cfg(not(unix))]
+pub unsafe fn ioctl_call(_fd: c_int, _request: c_ulong, _arg: *mut std::ffi::c_void) -> c_int {
+    -1
 }
 
 /// Fill the first 16 bytes of an ifreq-style name buffer.
@@ -669,7 +773,7 @@ pub fn temp_root(prefix: &str) -> PathBuf {
         .unwrap()
         .as_nanos();
     let root = std::env::temp_dir().join(format!("{prefix}-{unique}"));
-    fs::create_dir_all(&root).unwrap();
+    host_fs::create_dir_all(&root).unwrap();
     root
 }
 

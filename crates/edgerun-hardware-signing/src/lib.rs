@@ -26,7 +26,7 @@ pub mod tpm;
 #[cfg(feature = "android-keystore")]
 pub mod android_keystore;
 
-#[cfg(feature = "yubikey")]
+#[cfg(all(feature = "yubikey", target_os = "linux"))]
 pub mod yubikey;
 
 #[cfg(feature = "tpm")]
@@ -37,7 +37,7 @@ pub use android_keystore::{
     sign_record_with_android_keystore_provider, AndroidKeystoreHardwareKeyAdapter,
 };
 
-#[cfg(feature = "yubikey")]
+#[cfg(all(feature = "yubikey", target_os = "linux"))]
 pub use yubikey::{sign_record_with_yubikey_provider, YubiKeyHardwareKeyAdapter};
 
 // ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ pub enum HardwareSigningError {
     Tpm(edgerun_tpm::TpmError),
     #[cfg(feature = "android-keystore")]
     AndroidKeystore(edgerun_android_keystore::AndroidKeystoreError),
-    #[cfg(feature = "yubikey")]
+    #[cfg(all(feature = "yubikey", target_os = "linux"))]
     YubiKey(edgerun_yubikey::YubiKeyError),
     UnsupportedAlgorithm(HardwareSignatureAlgorithm),
     Validation(HardwareValidationIssue),
@@ -236,7 +236,7 @@ impl core::fmt::Display for HardwareSigningError {
             Self::Tpm(err) => write!(f, "TPM error: {err}"),
             #[cfg(feature = "android-keystore")]
             Self::AndroidKeystore(err) => write!(f, "Android Keystore error: {err}"),
-            #[cfg(feature = "yubikey")]
+            #[cfg(all(feature = "yubikey", target_os = "linux"))]
             Self::YubiKey(err) => write!(f, "YubiKey error: {err}"),
             Self::UnsupportedAlgorithm(algorithm) => {
                 write!(f, "unsupported hardware signature algorithm: {algorithm:?}")
@@ -263,7 +263,7 @@ impl From<edgerun_android_keystore::AndroidKeystoreError> for HardwareSigningErr
     }
 }
 
-#[cfg(feature = "yubikey")]
+#[cfg(all(feature = "yubikey", target_os = "linux"))]
 impl From<edgerun_yubikey::YubiKeyError> for HardwareSigningError {
     fn from(value: edgerun_yubikey::YubiKeyError) -> Self {
         Self::YubiKey(value)

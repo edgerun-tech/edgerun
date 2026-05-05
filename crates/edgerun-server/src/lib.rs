@@ -62,12 +62,12 @@ use edgerun_http::server::{BoundHttpServer, HttpServer};
 
 #[cfg(all(
     any(feature = "imap", feature = "smtp", feature = "lmtp"),
-    not(target_os = "none")
+    all(not(target_os = "none"), not(target_arch = "wasm32"))
 ))]
 pub mod connection_interceptor_adapter;
 #[cfg(all(
     any(feature = "imap", feature = "smtp", feature = "lmtp"),
-    not(target_os = "none")
+    all(not(target_os = "none"), not(target_arch = "wasm32"))
 ))]
 use connection_interceptor_adapter::ConnectionInterceptorAdapter;
 
@@ -598,14 +598,17 @@ impl Server {
             };
         #[cfg(all(
             any(feature = "imap", feature = "smtp", feature = "lmtp"),
-            not(target_os = "none")
+            all(not(target_os = "none"), not(target_arch = "wasm32"))
         ))]
         let connection_interceptor = Arc::new(ConnectionInterceptorAdapter::new(Arc::clone(
             &connection_middleware,
         )))
             as Arc<dyn edgerun_email::server::ConnectionInterceptor>;
 
-        #[cfg(all(feature = "imap", not(target_os = "none")))]
+        #[cfg(all(
+            feature = "imap",
+            all(not(target_os = "none"), not(target_arch = "wasm32"))
+        ))]
         let imap_server = if let Some(config) = self.imap {
             let imap_config = edgerun_email::imap::server::ImapServerConfig {
                 bind_addr: config.bind_addr,
@@ -627,7 +630,10 @@ impl Server {
             None
         };
 
-        #[cfg(all(feature = "smtp", not(target_os = "none")))]
+        #[cfg(all(
+            feature = "smtp",
+            all(not(target_os = "none"), not(target_arch = "wasm32"))
+        ))]
         let smtp_server = if let Some(config) = self.smtp {
             let smtp_config = edgerun_email::smtp::server::SmtpServerConfig {
                 bind_addr: config.bind_addr,
@@ -659,7 +665,10 @@ impl Server {
             None
         };
 
-        #[cfg(all(feature = "lmtp", not(target_os = "none")))]
+        #[cfg(all(
+            feature = "lmtp",
+            all(not(target_os = "none"), not(target_arch = "wasm32"))
+        ))]
         let lmtp_server = if let Some(config) = self.lmtp {
             let lmtp_config = edgerun_email::lmtp::server::LmtpServerConfig {
                 bind_addr: config.bind_addr,
@@ -684,11 +693,20 @@ impl Server {
             dhcp: dhcp_server,
             #[cfg(feature = "tftp")]
             tftp: tftp_server,
-            #[cfg(all(feature = "imap", not(target_os = "none")))]
+            #[cfg(all(
+                feature = "imap",
+                all(not(target_os = "none"), not(target_arch = "wasm32"))
+            ))]
             imap: imap_server,
-            #[cfg(all(feature = "smtp", not(target_os = "none")))]
+            #[cfg(all(
+                feature = "smtp",
+                all(not(target_os = "none"), not(target_arch = "wasm32"))
+            ))]
             smtp: smtp_server,
-            #[cfg(all(feature = "lmtp", not(target_os = "none")))]
+            #[cfg(all(
+                feature = "lmtp",
+                all(not(target_os = "none"), not(target_arch = "wasm32"))
+            ))]
             lmtp: lmtp_server,
             #[cfg(feature = "proxy")]
             proxy: proxy_server,
@@ -712,11 +730,20 @@ pub struct BoundServer {
     dhcp: Option<edgerun_dhcp::DhcpServer>,
     #[cfg(feature = "tftp")]
     tftp: Option<edgerun_tftp::TftpServer>,
-    #[cfg(all(feature = "imap", not(target_os = "none")))]
+    #[cfg(all(
+        feature = "imap",
+        all(not(target_os = "none"), not(target_arch = "wasm32"))
+    ))]
     imap: Option<edgerun_email::imap::ImapServer>,
-    #[cfg(all(feature = "smtp", not(target_os = "none")))]
+    #[cfg(all(
+        feature = "smtp",
+        all(not(target_os = "none"), not(target_arch = "wasm32"))
+    ))]
     smtp: Option<edgerun_email::smtp::SmtpServer>,
-    #[cfg(all(feature = "lmtp", not(target_os = "none")))]
+    #[cfg(all(
+        feature = "lmtp",
+        all(not(target_os = "none"), not(target_arch = "wasm32"))
+    ))]
     lmtp: Option<edgerun_email::lmtp::LmtpServer>,
     #[cfg(feature = "proxy")]
     proxy: Option<edgerun_proxy::ProxyServer>,
@@ -792,21 +819,30 @@ impl BoundServer {
         }
 
         // IMAP
-        #[cfg(all(feature = "imap", not(target_os = "none")))]
+        #[cfg(all(
+            feature = "imap",
+            all(not(target_os = "none"), not(target_arch = "wasm32"))
+        ))]
         if let Some(imap) = self.imap.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move { imap.run(token).await }));
         }
 
         // SMTP
-        #[cfg(all(feature = "smtp", not(target_os = "none")))]
+        #[cfg(all(
+            feature = "smtp",
+            all(not(target_os = "none"), not(target_arch = "wasm32"))
+        ))]
         if let Some(smtp) = self.smtp.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move { smtp.run(token).await }));
         }
 
         // LMTP
-        #[cfg(all(feature = "lmtp", not(target_os = "none")))]
+        #[cfg(all(
+            feature = "lmtp",
+            all(not(target_os = "none"), not(target_arch = "wasm32"))
+        ))]
         if let Some(lmtp) = self.lmtp.take() {
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move { lmtp.run(token).await }));

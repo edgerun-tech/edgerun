@@ -7,6 +7,11 @@ use std::mem::size_of;
 use std::os::fd::{AsRawFd, RawFd};
 use std::time::Duration;
 
+#[cfg(not(unix))]
+mod libc {
+    pub const EINPROGRESS: i32 = 115;
+}
+
 pub struct L2capSocket {
     fd: RawFd,
     local_addr_type: u8,
@@ -349,37 +354,47 @@ impl L2capSocket {
     }
 
     fn wait_for_connect(&self, timeout_ms: i32) -> GattResult<()> {
-        let mut pollfd = PollFd {
-            fd: self.fd,
-            events: 0x0004,
-            revents: 0,
-        };
-        let poll_rc = unsafe { poll(&mut pollfd, 1, timeout_ms) };
-        if poll_rc < 0 {
-            return Err(GattError::PollFailed("connect poll failed".to_string()));
+        #[cfg(not(unix))]
+        {
+            let _ = timeout_ms;
+            return Err(GattError::SocketFailed(
+                "L2CAP connect polling requires Unix sockets".to_string(),
+            ));
         }
-        if poll_rc == 0 {
-            return Err(GattError::Timeout(timeout_ms as u32));
-        }
+        #[cfg(unix)]
+        {
+            let mut pollfd = PollFd {
+                fd: self.fd,
+                events: 0x0004,
+                revents: 0,
+            };
+            let poll_rc = unsafe { poll(&mut pollfd, 1, timeout_ms) };
+            if poll_rc < 0 {
+                return Err(GattError::PollFailed("connect poll failed".to_string()));
+            }
+            if poll_rc == 0 {
+                return Err(GattError::Timeout(timeout_ms as u32));
+            }
 
-        let mut so_error: i32 = 0;
-        let mut len = size_of::<i32>() as libc::socklen_t;
-        let rc = unsafe {
-            libc::getsockopt(
-                self.fd,
-                libc::SOL_SOCKET,
-                libc::SO_ERROR,
-                (&mut so_error as *mut i32).cast(),
-                &mut len,
-            )
-        };
-        if rc < 0 {
-            return Err(GattError::from(io::Error::last_os_error()));
+            let mut so_error: i32 = 0;
+            let mut len = size_of::<i32>() as libc::socklen_t;
+            let rc = unsafe {
+                libc::getsockopt(
+                    self.fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_ERROR,
+                    (&mut so_error as *mut i32).cast(),
+                    &mut len,
+                )
+            };
+            if rc < 0 {
+                return Err(GattError::from(io::Error::last_os_error()));
+            }
+            if so_error != 0 {
+                return Err(GattError::from(io::Error::from_raw_os_error(so_error)));
+            }
+            Ok(())
         }
-        if so_error != 0 {
-            return Err(GattError::from(io::Error::from_raw_os_error(so_error)));
-        }
-        Ok(())
     }
 }
 
