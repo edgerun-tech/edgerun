@@ -56,7 +56,6 @@ pub use alloc::format;
 pub use core::{cmp, convert, fmt, option, result, slice, str};
 
 pub mod adapters;
-pub mod capability_signature;
 pub mod policy;
 pub mod protocol;
 pub mod transport;
