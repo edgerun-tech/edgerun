@@ -244,6 +244,76 @@ struct MappedModernVirtioDevice {
 }
 
 #[derive(Clone, Copy)]
+struct DriverTransport {
+    bus: u8,
+    slot: u8,
+    func: u8,
+    mmio: bool,
+    common_cfg: *mut u8,
+    notify_cfg: *mut u8,
+    device_cfg: *mut u8,
+    isr_cfg: *mut u8,
+    notify_off_multiplier: u32,
+}
+
+impl DriverTransport {
+    const fn empty() -> Self {
+        Self {
+            bus: 0,
+            slot: 0,
+            func: 0,
+            mmio: false,
+            common_cfg: core::ptr::null_mut(),
+            notify_cfg: core::ptr::null_mut(),
+            device_cfg: core::ptr::null_mut(),
+            isr_cfg: core::ptr::null_mut(),
+            notify_off_multiplier: 0,
+        }
+    }
+
+    fn from_modern(mapped: MappedModernVirtioDevice, device_cfg: *mut u8) -> Self {
+        Self {
+            bus: mapped.bus,
+            slot: mapped.slot,
+            func: mapped.func,
+            mmio: false,
+            common_cfg: mapped.common_cfg,
+            notify_cfg: mapped.notify_cfg,
+            device_cfg,
+            isr_cfg: mapped.isr_cfg,
+            notify_off_multiplier: mapped.notify_off_multiplier,
+        }
+    }
+
+    fn from_mmio(base: *mut u8, device_cfg: *mut u8) -> Self {
+        Self {
+            mmio: true,
+            common_cfg: base,
+            notify_cfg: base,
+            device_cfg,
+            ..Self::empty()
+        }
+    }
+
+    fn transport(self) -> Option<VirtioTransport> {
+        if self.mmio {
+            VirtioTransport::mmio(self.common_cfg)
+        } else {
+            VirtioTransport::modern_pci(
+                self.bus,
+                self.slot,
+                self.func,
+                self.common_cfg,
+                self.notify_cfg,
+                self.device_cfg,
+                self.isr_cfg,
+                self.notify_off_multiplier,
+            )
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 struct PciLocation {
     bus: u8,
     slot: u8,
