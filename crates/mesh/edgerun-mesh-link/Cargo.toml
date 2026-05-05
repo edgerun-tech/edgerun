@@ -10,13 +10,13 @@ description = "Mesh link discovery and transport helpers for Edgerun"
 
 [dependencies]
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
-edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
+edgerun-hardware-signing = { version = "0.1", path = "../../edgerun-hardware-signing" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interface" }
+edgerun-network-interface = { version = "0.1", path = "../../edgerun-network-interface" }
 
 [dev-dependencies]
-edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
+edgerun-core = { version = "0.1", path = "../../protocol/edgerun-core" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
 

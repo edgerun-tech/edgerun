@@ -70,10 +70,10 @@ members = [
   "crates/edgerun-linux-wifi",
   "crates/utility/edgerun-log",
   "crates/edgerun-machine-report",
-  "crates/edgerun-mesh",
+  "crates/mesh/edgerun-mesh",
   "crates/capability/edgerun-mesh-capability",
-  "crates/edgerun-mesh-link",
-  "crates/edgerun-mesh-session",
+  "crates/mesh/edgerun-mesh-link",
+  "crates/mesh/edgerun-mesh-session",
   "crates/edgerun-mgmt-bluetooth",
   "crates/edgerun-microphone",
   "crates/edgerun-network-interface",
@@ -162,9 +162,9 @@ edgerun-http = { version = "0.1", path = "crates/edgerun-http", default-features
 edgerun-node = { version = "0.1", path = "crates/edgerun-node" }
 edgerun-hardware-signing = { version = "0.1", path = "crates/edgerun-hardware-signing" }
 edgerun-capabilities = { version = "0.1", path = "crates/capability/edgerun-capabilities" }
-edgerun-mesh = { version = "0.1", path = "crates/edgerun-mesh" }
-edgerun-mesh-link = { version = "0.1", path = "crates/edgerun-mesh-link" }
-edgerun-mesh-session = { version = "0.1", path = "crates/edgerun-mesh-session" }
+edgerun-mesh = { version = "0.1", path = "crates/mesh/edgerun-mesh" }
+edgerun-mesh-link = { version = "0.1", path = "crates/mesh/edgerun-mesh-link" }
+edgerun-mesh-session = { version = "0.1", path = "crates/mesh/edgerun-mesh-session" }
 edgerun-mesh-capability = { version = "0.1", path = "crates/capability/edgerun-mesh-capability" }
 edgerun-secret-service = { version = "0.1", path = "crates/edgerun-secret-service" }
 edgerun-biometrics = { version = "0.1", path = "crates/edgerun-biometrics" }
