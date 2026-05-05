@@ -3,7 +3,8 @@ use std::time::Instant;
 
 use edgerun_sign_verify_e2e::{
     bootstrap_only, bootstrap_roundtrip, canonicalize_event_only, hash_event_only, sign_event_only,
-    sign_verify_event_roundtrip, signed_events, verify_event_only, verify_prebuilt_events,
+    sign_verify_event_roundtrip, signed_events, stream_only, stream_roundtrip, verify_event_only,
+    verify_prebuilt_events,
 };
 
 fn bench_once(name: &str, iterations: usize, mut f: impl FnMut(usize)) {
@@ -47,6 +48,16 @@ fn main() {
         bootstrap.store_len,
     );
 
+    let stream = stream_roundtrip().expect("stream roundtrip should pass");
+    println!(
+        "stream: event_count={} genesis_seq={} next_seq={} next_has_prev_hash={} next_signature_len={}",
+        stream.event_count,
+        stream.genesis_seq,
+        stream.next_seq,
+        stream.next_has_prev_hash,
+        stream.next_signature_len,
+    );
+
     let report = sign_verify_event_roundtrip().expect("roundtrip should pass");
     println!(
         "roundtrip: signature_len={} record_hash_len={} public_key_len={} stream_id_len={}",
@@ -55,6 +66,11 @@ fn main() {
 
     bench_once("bootstrap", iterations, |n| {
         let ok = bootstrap_only(n).expect("bootstrap benchmark should pass");
+        black_box(ok);
+    });
+
+    bench_once("stream", iterations, |n| {
+        let ok = stream_only(n).expect("stream benchmark should pass");
         black_box(ok);
     });
 
