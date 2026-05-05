@@ -17,7 +17,7 @@ edgerun-edgefs = { workspace = true, optional = true }
 edgerun-storage = { workspace = true, optional = true }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
 edgerun-secret-service = { version = "0.1", path = "../edgerun-secret-service", optional = true }
-edgerun-core = { version = "0.1", path = "../edgerun-core", optional = true }
+edgerun-core = { version = "0.1", path = "../protocol/edgerun-core", optional = true }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"] }
 ruzstd = { version = "0.8.2", default-features = false, optional = true }

@@ -31,7 +31,7 @@ logging_matches="$(
   --glob '!crates/edgerun-marketplace-cli/**' \
   --glob '!crates/edgerun-oci/src/cli/**' \
   --glob '!crates/edgerun-oci/tests/contest/**' \
-  --glob '!crates/edgerun-core/src/lib.rs' || true
+  --glob '!crates/protocol/edgerun-core/src/lib.rs' || true
 )"
 logging_matches="$(printf '%s\n' "$logging_matches" | grep -v ':[[:space:]]*///' | grep -v ':[[:space:]]*//!' | grep -v ':[[:space:]]*//' || true)"
 if [ -n "$logging_matches" ]; then

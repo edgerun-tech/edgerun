@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Remote capability transport over the Edgerun mesh"
 
 [dependencies]
-edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 
 [lints]

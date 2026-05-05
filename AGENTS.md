@@ -9,8 +9,8 @@ concrete protocol type at the rkyv boundary or leave a loud breakpoint.
 
 1. `README.md`
 2. `crates/edgerun-wire/src/lib.rs`
-3. `crates/edgerun-core/src/protocol_native/mod.rs`
-4. `crates/edgerun-core/src/{crypto.rs,command.rs,validators/*.rs}`
+3. `crates/protocol/edgerun-core/src/protocol_native/mod.rs`
+4. `crates/protocol/edgerun-core/src/{crypto.rs,command.rs,validators/*.rs}`
 5. `crates/edgerun-stream/src/lib.rs`
 6. `crates/edgerun-storage/src/{lib.rs,core,store.rs,fs,event_log.rs,file_index.rs,blobs.rs}`
 7. `crates/edgerun-node/src/lib.rs`

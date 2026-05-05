@@ -11,8 +11,8 @@ description = "Core Edgerun protocol types, validation, commands, and crypto-fac
 [dependencies]
 edgerun-wire = { workspace = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "p256", "aead"] }
-edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false }
-edgerun-json = { version = "0.1", path = "../utility/edgerun-json", default-features = false }
+edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false }
+edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false }
 
 [features]
 default = []

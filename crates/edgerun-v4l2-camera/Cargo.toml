@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Linux V4L2 camera adapter for Edgerun"
 
 [dependencies]
-edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
 edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
 edgerun-camera-biometrics = { version = "0.1", path = "../edgerun-camera-biometrics" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }

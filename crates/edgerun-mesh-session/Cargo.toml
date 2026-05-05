@@ -12,7 +12,7 @@ description = "Authenticated mesh session establishment for Edgerun"
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256"] }
-edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
 
 [lints]
 workspace = true

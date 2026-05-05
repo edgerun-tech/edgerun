@@ -60,7 +60,7 @@ all-hardware = [
 ]
 
 [dependencies]
-edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
 edgerun-wire = { workspace = true }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }

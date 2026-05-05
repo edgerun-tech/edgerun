@@ -10,7 +10,7 @@ description = "Durable event, object, index, and blob storage for Edgerun nodes"
 
 [dependencies]
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
-edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
 edgerun-sign = { workspace = true, default-features = false }
 edgerun-stream = { version = "0.1", path = "../edgerun-stream" }
 edgerun-verify = { workspace = true, default-features = false }

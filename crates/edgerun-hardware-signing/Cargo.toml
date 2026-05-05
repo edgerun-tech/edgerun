@@ -19,7 +19,7 @@ yubikey = ["dep:edgerun-yubikey"]
 all-hardware = ["tpm", "android-keystore", "yubikey"]
 
 [dependencies]
-edgerun-core = { version = "0.1", path = "../edgerun-core" }
+edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
 edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
 edgerun-tpm = { version = "0.1", path = "../edgerun-tpm", optional = true }
 edgerun-android-keystore = { version = "0.1", path = "../edgerun-android-keystore", optional = true }
