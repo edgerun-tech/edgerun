@@ -1,15 +1,8 @@
-//! Bridges `edgerun-remote-capability` onto the edgerun mesh.
+//! Rkyv-only capability envelope plumbing for the edgerun mesh.
 //!
-//! Provides:
-//! - **`MeshCapabilityTransport`** — wraps the mesh to send/receive
-//!   `CapabilityRemoteEnvelope` native capability messages routed by `NodeID`.
-//! - **`MeshCapabilityServer`** — hosts local `RemoteCapabilityProvider`
-//!   instances and serves inbound requests routed to this node.
-//! - **`MeshCapabilityClient`** — initiates sessions with remote nodes
-//!   by NodeID, sending invocations and receiving results.
-//!
-//! The mesh handles delivery — this layer only deals in capability
-//! protocol messages wrapped in mesh frames.
+//! The former byte-codec client/server/transport layer has been removed.
+//! Mesh capability code only queues and drains shared `CapabilityRemoteEnvelope`
+//! values across the single rkyv-normalized capability boundary.
 
 #![no_std]
 
@@ -97,7 +90,7 @@ use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteCapabilityTransp
 pub use inbox::EnvelopeInbox;
 
 /// Shared outbound queue: (destination NodeID, serialized native payload).
-/// Used by `MeshCapabilityTransport::send()` to push frames that the daemon
+/// Used to push frames that the daemon
 /// will drain, encrypt, and send.
 ///
 /// Thread-safe via `Arc<Mutex<>>` to allow future multi-threaded mesh daemons.
