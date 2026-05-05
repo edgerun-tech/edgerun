@@ -1,6 +1,8 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(target_os = "linux")]
+extern crate std;
 
 #[cfg(target_os = "linux")]
 #[path = "linux.rs"]

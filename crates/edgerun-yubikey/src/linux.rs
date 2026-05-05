@@ -3,12 +3,6 @@
 extern crate alloc;
 use edgerun_encoding::byteorder::{read_u16_be, read_u16_le, read_u32_le};
 
-#[cfg(unix)]
-extern crate std;
-
-#[cfg(not(unix))]
-extern crate self as std;
-
 #[cfg(not(unix))]
 pub mod error {
     pub use core::error::*;

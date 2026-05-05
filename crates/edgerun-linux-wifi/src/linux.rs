@@ -1,14 +1,6 @@
 #![allow(unused_must_use)]
 
 #[macro_use]
-extern crate alloc;
-
-#[cfg(unix)]
-extern crate std;
-
-#[cfg(not(unix))]
-extern crate self as std;
-
 #[cfg(not(unix))]
 pub mod fs {
     pub use edgerun_linux_sysfs::fs::*;
@@ -94,6 +86,7 @@ pub mod time {
 
 #[cfg(not(unix))]
 pub mod ffi {
+    use alloc::vec;
     use alloc::vec::Vec;
     use core::fmt;
 
@@ -192,6 +185,7 @@ pub mod libc {
     }
 }
 
+use alloc::vec;
 use edgerun_linux_sysfs::prelude::v1::*;
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};

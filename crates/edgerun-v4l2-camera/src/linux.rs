@@ -1,11 +1,3 @@
-extern crate alloc;
-
-#[cfg(unix)]
-extern crate std;
-
-#[cfg(not(unix))]
-extern crate self as std;
-
 pub mod prelude {
     pub mod v1 {
         pub use alloc::format;

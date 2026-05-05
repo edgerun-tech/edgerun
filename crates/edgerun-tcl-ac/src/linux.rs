@@ -1,7 +1,4 @@
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
-extern crate std;
-
 use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
 use alloc::format;
 use alloc::string::{String, ToString};

@@ -1,11 +1,3 @@
-extern crate alloc;
-
-#[cfg(not(target_os = "none"))]
-extern crate std;
-
-#[cfg(target_os = "none")]
-extern crate self as std;
-
 #[cfg(target_os = "none")]
 pub use edgerun_linux_sysfs::prelude;
 #[cfg(target_os = "none")]

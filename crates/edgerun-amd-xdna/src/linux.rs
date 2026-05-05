@@ -1,11 +1,3 @@
-extern crate alloc;
-
-#[cfg(unix)]
-extern crate std;
-
-#[cfg(not(unix))]
-extern crate self as std;
-
 #[cfg(not(unix))]
 pub mod collections {
     pub use alloc::collections::BTreeSet as HashSet;

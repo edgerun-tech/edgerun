@@ -1,8 +1,3 @@
-extern crate alloc;
-
-#[cfg(not(target_os = "none"))]
-extern crate std;
-
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;

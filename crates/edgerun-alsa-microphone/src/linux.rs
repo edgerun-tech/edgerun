@@ -6,14 +6,6 @@
 //! Audio capture uses proper ALSA PCM ioctls (hw_params, prepare, readi_frames)
 //! rather than raw file reads which require OSS emulation.
 
-extern crate alloc;
-
-#[cfg(unix)]
-extern crate std;
-
-#[cfg(not(unix))]
-extern crate self as std;
-
 pub mod prelude {
     pub mod v1 {
         pub use alloc::format;
