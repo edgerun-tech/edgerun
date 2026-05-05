@@ -5,10 +5,11 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use edgerun_core::crypto::{self, SigningKey};
-use edgerun_core::protocol::{EventEnvelope, ProtocolRecord, Signature};
+use edgerun_core::protocol::{EventEnvelope, EventType, ProtocolRecord, Signature};
 use edgerun_keygen::MemoryKeyStore;
 use edgerun_node_bootstrap::{bootstrap_new_node, BootstrapConfig};
 use edgerun_sign_p256::P256ProtocolSigner;
+use edgerun_stream::{build_signed_event, validate_stream, EventDraft};
 use edgerun_verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,6 +18,7 @@ pub enum E2eError {
     Bootstrap,
     Sign,
     Verify,
+    Stream,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +37,15 @@ pub struct BootstrapReport {
     pub genesis_stream_id_len: usize,
     pub genesis_seq: u64,
     pub store_len: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StreamReport {
+    pub event_count: usize,
+    pub genesis_seq: u64,
+    pub next_seq: u64,
+    pub next_has_prev_hash: bool,
+    pub next_signature_len: usize,
 }
 
 pub fn deterministic_signing_key(seed_byte: u8) -> SigningKey {
@@ -76,6 +87,42 @@ pub fn bootstrap_roundtrip() -> Result<BootstrapReport, E2eError> {
         genesis_stream_id_len: result.genesis_event.stream_id.len(),
         genesis_seq: result.genesis_event.seq,
         store_len: store.len(),
+    })
+}
+
+pub fn stream_roundtrip() -> Result<StreamReport, E2eError> {
+    let signing_key = deterministic_signing_key(21);
+    let signer = P256ProtocolSigner::new(signing_key);
+    let node_id = crypto::verifying_key_to_node_id(&signer.verifying_key());
+
+    let mut genesis = edgerun_stream::genesis_event(&node_id, 0);
+    edgerun_stream::sign_event(&mut genesis, &signer).map_err(|_| E2eError::Stream)?;
+
+    let next = build_signed_event(
+        &node_id,
+        Some(&genesis),
+        EventDraft {
+            event_type: EventType::ActionStarted as i32,
+            event_version: 1,
+            ..EventDraft::default()
+        },
+        &signer,
+    )
+    .map_err(|_| E2eError::Stream)?;
+
+    let events = alloc::vec![genesis.clone(), next.clone()];
+    validate_stream(&events, &node_id).map_err(|_| E2eError::Stream)?;
+
+    Ok(StreamReport {
+        event_count: events.len(),
+        genesis_seq: genesis.seq,
+        next_seq: next.seq,
+        next_has_prev_hash: next.prev_event_hash.is_some(),
+        next_signature_len: next
+            .signature
+            .as_ref()
+            .map(|signature| signature.value.len())
+            .unwrap_or(0),
     })
 }
 
@@ -127,6 +174,7 @@ pub extern "C" fn edgerun_sign_verify_e2e_roundtrip() -> u32 {
         Err(E2eError::Bootstrap) => 10,
         Err(E2eError::Sign) => 11,
         Err(E2eError::Verify) => 12,
+        Err(E2eError::Stream) => 13,
     }
 }
 
@@ -150,6 +198,30 @@ pub extern "C" fn edgerun_bootstrap_e2e_roundtrip() -> u32 {
         Err(E2eError::Bootstrap) => 10,
         Err(E2eError::Sign) => 11,
         Err(E2eError::Verify) => 12,
+        Err(E2eError::Stream) => 13,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn edgerun_stream_e2e_roundtrip() -> u32 {
+    match stream_roundtrip() {
+        Ok(report) => {
+            if report.event_count == 2
+                && report.genesis_seq == 0
+                && report.next_seq == 1
+                && report.next_has_prev_hash
+                && report.next_signature_len == crypto::ECDSA_P256_SIGNATURE_LEN
+            {
+                0
+            } else {
+                2
+            }
+        }
+        Err(E2eError::Keygen) => 9,
+        Err(E2eError::Bootstrap) => 10,
+        Err(E2eError::Sign) => 11,
+        Err(E2eError::Verify) => 12,
+        Err(E2eError::Stream) => 13,
     }
 }
 
@@ -210,6 +282,15 @@ pub fn bootstrap_only(iterations: usize) -> Result<usize, E2eError> {
     let mut ok = 0usize;
     for _ in 0..iterations {
         bootstrap_roundtrip()?;
+        ok += 1;
+    }
+    Ok(ok)
+}
+
+pub fn stream_only(iterations: usize) -> Result<usize, E2eError> {
+    let mut ok = 0usize;
+    for _ in 0..iterations {
+        stream_roundtrip()?;
         ok += 1;
     }
     Ok(ok)
@@ -292,6 +373,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn stream_roundtrip_works() {
+        let report = stream_roundtrip().unwrap();
+        assert_eq!(report.event_count, 2);
+        assert_eq!(report.genesis_seq, 0);
+        assert_eq!(report.next_seq, 1);
+        assert!(report.next_has_prev_hash);
+        assert_eq!(report.next_signature_len, 64);
+    }
+
+    #[test]
     fn bootstrap_roundtrip_works() {
         let report = bootstrap_roundtrip().unwrap();
         assert_eq!(report.node_id_len, 64);
@@ -316,5 +407,6 @@ mod tests {
         assert_eq!(sign_event_only(8).unwrap().len(), 8);
         assert_eq!(verify_event_only(8).unwrap(), 8);
         assert_eq!(bootstrap_only(2).unwrap(), 2);
+        assert_eq!(stream_only(2).unwrap(), 2);
     }
 }
