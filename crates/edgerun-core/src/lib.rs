@@ -6,6 +6,7 @@ extern crate alloc;
 extern crate std;
 
 #[cfg(feature = "conformance")]
+#[allow(unused_macros)]
 macro_rules! println {
     ($($arg:tt)*) => {
         std::println!($($arg)*)
@@ -13,6 +14,7 @@ macro_rules! println {
 }
 
 #[cfg(feature = "conformance")]
+#[allow(unused_macros)]
 macro_rules! eprintln {
     ($($arg:tt)*) => {
         std::eprintln!($($arg)*)
@@ -20,11 +22,13 @@ macro_rules! eprintln {
 }
 
 #[cfg(not(feature = "conformance"))]
+#[allow(unused_macros)]
 macro_rules! println {
     ($($arg:tt)*) => {};
 }
 
 #[cfg(not(feature = "conformance"))]
+#[allow(unused_macros)]
 macro_rules! eprintln {
     ($($arg:tt)*) => {};
 }
