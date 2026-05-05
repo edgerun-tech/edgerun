@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "no_std protocol verifier for EdgeRun v0 canonical records"
 
 [dependencies]
-edgerun-core = { workspace = true }
+edgerun-core = { workspace = true, default-features = false }
 
 [features]
 default = []
