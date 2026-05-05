@@ -17,7 +17,7 @@ use host_std::net::UdpSocket as StdUdpSocket;
 #[cfg(not(target_os = "none"))]
 use host_std::net::{TcpListener as StdTcpListener, TcpStream as StdTcpStream};
 
-pub use edgerun_rt::{Duration, Instant, sleep, spawn, timeout};
+pub use edgerun_rt::{sleep, spawn, timeout, Duration, Instant};
 
 #[cfg(not(target_os = "none"))]
 const HOST_UDP_IDLE_TICK: host_std::time::Duration = host_std::time::Duration::from_millis(500);

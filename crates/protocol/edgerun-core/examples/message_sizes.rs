@@ -239,7 +239,10 @@ fn main() {
     );
     print_row("SessionHello", wire_len!(&session_hello()));
     print_row("SessionAccept", wire_len!(&session_accept()));
-    print_row("RelayEnvelope object payload", wire_len!(&relay_envelope_object()));
+    print_row(
+        "RelayEnvelope object payload",
+        wire_len!(&relay_envelope_object()),
+    );
     print_row(
         "RelayEnvelope object minimal",
         wire_len!(&relay_envelope_object_minimal()),

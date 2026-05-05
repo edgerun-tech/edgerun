@@ -11,8 +11,8 @@ use alloc::{
 };
 
 use super::record::{
-    DnsRecordData, DnsRecordType, decode_domain_name, encode_domain_name,
-    encode_domain_name_compressed,
+    decode_domain_name, encode_domain_name, encode_domain_name_compressed, DnsRecordData,
+    DnsRecordType,
 };
 use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
 

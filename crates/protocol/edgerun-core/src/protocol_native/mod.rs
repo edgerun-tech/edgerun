@@ -5,13 +5,35 @@
 //! derive in this module.
 
 extern crate alloc;
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct Timestamp {
     pub seconds: i64,
     pub nanos: i32,
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub struct Duration {
     pub seconds: i64,
@@ -94,7 +116,9 @@ where
 pub trait NativeEnum: Sized {
     fn from_i32(value: i32) -> Option<Self>;
 }
-#[derive(Clone, Debug, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[derive(
+    Clone, Debug, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize,
+)]
 #[rkyv(crate = edgerun_wire)]
 pub enum ProtocolRecord {
     CommandEnvelope(CommandEnvelope),

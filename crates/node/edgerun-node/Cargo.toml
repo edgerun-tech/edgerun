@@ -15,12 +15,19 @@ required-features = ["std"]
 
 [features]
 std = ["edgerun-tpm/std"]
-default = ["std", "all-hardware", "oci", "compositor", "protocols"]
+default = [
+    "std",
+    "all-hardware",
+    "oci",
+    "compositor",
+    "protocols",
+]
 protocols = ["tls", "quic", "tftp", "acme"]
 tls = ["dep:edgerun-tls"]
 quic = ["dep:edgerun-quic", "tls"]
 tftp = ["dep:edgerun-tftp"]
 acme = ["dep:edgerun-acme"]
+android-keystore = ["dep:edgerun-android-keystore"]
 oci = [
     "dep:edgerun-oci",
     "edgerun-oci/std",

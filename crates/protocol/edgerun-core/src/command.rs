@@ -37,8 +37,8 @@ fn validate_assurance_claim_satisfies_requirement(
 use crate::prelude::v1::*;
 
 use crate::protocol::{
-    protocol_wire_bytes, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor, CommandEnvelope,
-    CommandType, DelegationRecord, Digest, IdentityRef, ObjectRef, ProtocolRecord,
+    protocol_wire_bytes, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor,
+    CommandEnvelope, CommandType, DelegationRecord, Digest, IdentityRef, ObjectRef, ProtocolRecord,
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::Value;
@@ -1859,7 +1859,8 @@ fn validate_delegation_chain(
         // Build signable form (signature absent) and canonical encode
         let mut signable = delegation.clone();
         signable.signature = None;
-        let canonical = protocol_wire_bytes(&ProtocolRecord::DelegationRecord(signable.clone()), true);
+        let canonical =
+            protocol_wire_bytes(&ProtocolRecord::DelegationRecord(signable.clone()), true);
 
         if !crate::crypto::verify_canonical_record(
             &verifying_key,
@@ -3486,7 +3487,8 @@ mod tests {
         fn sign_delegation(key: &SigningKey, deleg: &mut DelegationRecord, issuer_key_hint: &[u8]) {
             deleg.issuer.as_mut().unwrap().key_hint = Some(issuer_key_hint.to_vec());
             deleg.signature = None;
-            let canonical = protocol_wire_bytes(&ProtocolRecord::DelegationRecord(deleg.clone()), true);
+            let canonical =
+                protocol_wire_bytes(&ProtocolRecord::DelegationRecord(deleg.clone()), true);
             // Use sign_canonical_record for domain-separated signing (matches verify_canonical_record)
             let sig = crate::crypto::sign_canonical_record(
                 key,

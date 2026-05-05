@@ -311,20 +311,18 @@ mod tests {
         assert!(msgs.len() >= 3);
 
         // First and last should have SOA
-        assert!(
-            msgs.first()
-                .unwrap()
-                .answers
-                .iter()
-                .any(|r| r.rtype == DnsRecordType::SOA)
-        );
-        assert!(
-            msgs.last()
-                .unwrap()
-                .answers
-                .iter()
-                .any(|r| r.rtype == DnsRecordType::SOA)
-        );
+        assert!(msgs
+            .first()
+            .unwrap()
+            .answers
+            .iter()
+            .any(|r| r.rtype == DnsRecordType::SOA));
+        assert!(msgs
+            .last()
+            .unwrap()
+            .answers
+            .iter()
+            .any(|r| r.rtype == DnsRecordType::SOA));
 
         // All should have same ID
         for msg in &msgs {

@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use core::net::Ipv4Addr;
 
 use super::lease::LeasePool;
-use super::message::{DHCP_CLIENT_PORT, DhcpMessage, DhcpMessageType, NetworkConfig};
+use super::message::{DhcpMessage, DhcpMessageType, NetworkConfig, DHCP_CLIENT_PORT};
 
 pub struct DhcpServerConfig {
     pub server_ip: Ipv4Addr,

@@ -2,9 +2,9 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use edgerun_sign_verify_e2e::{
-    agent_node_only, agent_node_roundtrip, bootstrap_only, bootstrap_roundtrip,
-    wire_event_only, hash_event_only, sign_event_only, sign_verify_event_roundtrip,
-    signed_events, stream_only, stream_roundtrip, verify_event_only, verify_prebuilt_events,
+    agent_node_only, agent_node_roundtrip, bootstrap_only, bootstrap_roundtrip, hash_event_only,
+    sign_event_only, sign_verify_event_roundtrip, signed_events, stream_only, stream_roundtrip,
+    verify_event_only, verify_prebuilt_events, wire_event_only,
 };
 
 fn bench_once(name: &str, iterations: usize, mut f: impl FnMut(usize)) {

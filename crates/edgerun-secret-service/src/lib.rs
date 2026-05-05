@@ -87,9 +87,9 @@ pub use backend::{
 };
 #[cfg(unix)]
 pub use dbus_bus::BusConnection;
-pub use session::{
-    BiometricVerifier, NoBiometricVerifier, Session, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
-};
 pub use service_core::{
     MemorySecretStore, SecretEntry, SecretRequest, SecretResponse, SecretServiceCore, SecretStore,
+};
+pub use session::{
+    BiometricVerifier, NoBiometricVerifier, Session, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
 };

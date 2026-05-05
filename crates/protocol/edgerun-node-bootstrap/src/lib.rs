@@ -112,7 +112,10 @@ mod tests {
         assert_eq!(store.len(), 1);
         assert_eq!(result.node_id, result.genesis_event.stream_id.as_slice());
         assert_eq!(result.genesis_event.seq, 0);
-        assert_eq!(result.genesis_event.event_type, EventType::NodeGenesis as i32);
+        assert_eq!(
+            result.genesis_event.event_type,
+            EventType::NodeGenesis as i32
+        );
         assert!(result.genesis_event.signature.is_some());
 
         let verified = verify_event_envelope(

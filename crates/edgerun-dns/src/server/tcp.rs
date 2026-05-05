@@ -19,8 +19,8 @@ use crate::compat::AsyncTcpListener;
 use crate::compat::AsyncTcpStream;
 use crate::compat::AsyncWrite;
 
+use super::query::{handle_query, ParseError, ServerState};
 use super::RateLimiter;
-use super::query::{ParseError, ServerState, handle_query};
 use crate::message::{DnsMessage, DnsResponseCode};
 use crate::tcp_frame::{dns_tcp_frame_len, encode_dns_tcp_frame};
 

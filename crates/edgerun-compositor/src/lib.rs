@@ -21,3 +21,32 @@ pub mod resource;
 pub mod server;
 pub mod vt;
 pub mod wire;
+
+pub struct CompositorCapabilityReport {
+    pub globals: usize,
+    pub wl_compositor_version: u32,
+    pub registry_probe_ok: bool,
+    pub wire_probe_bytes: usize,
+}
+
+pub fn capability_report() -> CompositorCapabilityReport {
+    let (_, globals) = protocol::dispatch::assign_globals(1);
+
+    let mut registry = resource::Registry::new();
+    registry.register(
+        2,
+        protocol::wl_compositor::WL_COMPOSITOR,
+        protocol::wl_compositor::WL_COMPOSITOR_VERSION,
+        1,
+    );
+    let registry_probe_ok = registry.interface(2) == Some(protocol::wl_compositor::WL_COMPOSITOR);
+
+    let wire_probe = protocol::wl_compositor::surface_enter_event(3, 4);
+
+    CompositorCapabilityReport {
+        globals: globals.len(),
+        wl_compositor_version: protocol::wl_compositor::WL_COMPOSITOR_VERSION,
+        registry_probe_ok,
+        wire_probe_bytes: usize::from(wire_probe.size),
+    }
+}

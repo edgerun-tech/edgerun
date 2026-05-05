@@ -211,11 +211,9 @@ impl<S: SecretStore> SecretServiceCore<S> {
                 let collections = self.store.list_secret_collections()?;
                 Ok(SecretResponse::Collections(collections))
             }
-            SecretRequest::CollectionExists { collection } => {
-                Ok(SecretResponse::Exists(
-                    self.store.secret_collection_exists(&collection),
-                ))
-            }
+            SecretRequest::CollectionExists { collection } => Ok(SecretResponse::Exists(
+                self.store.secret_collection_exists(&collection),
+            )),
             SecretRequest::CreateCollection {
                 collection_name,
                 label,
@@ -367,7 +365,11 @@ impl SecretStore for MemorySecretStore {
         }
         Ok(items
             .into_iter()
-            .filter(|(_, meta)| attributes.iter().all(|(k, v)| meta.attributes.get(k) == Some(v)))
+            .filter(|(_, meta)| {
+                attributes
+                    .iter()
+                    .all(|(k, v)| meta.attributes.get(k) == Some(v))
+            })
             .collect())
     }
 

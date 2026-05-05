@@ -6,9 +6,9 @@ use alloc::sync::Arc;
 use core::net::Ipv4Addr;
 use core::time::Duration;
 
-use edgerun_rt::{CancellationToken, Mutex, SocketAddr, UdpSocket, sleep};
+use edgerun_rt::{sleep, CancellationToken, Mutex, SocketAddr, UdpSocket};
 
-use super::message::{DHCP_SERVER_PORT, io};
+use super::message::{io, DHCP_SERVER_PORT};
 use super::server_core::DhcpServerCore;
 
 pub use super::server_core::DhcpServerConfig;

@@ -573,12 +573,10 @@ mod tests {
             assert!(!needs_tcp);
             assert_eq!(response.header.response_code, DnsResponseCode::NoError);
             assert!(response.answers.is_empty());
-            assert!(
-                response
-                    .authority
-                    .iter()
-                    .any(|record| record.rtype == DnsRecordType::NSEC)
-            );
+            assert!(response
+                .authority
+                .iter()
+                .any(|record| record.rtype == DnsRecordType::NSEC));
         });
     }
 }

@@ -8,21 +8,19 @@ use alloc::vec::Vec;
 use core::hint::black_box;
 
 use edgerun_core::protocol::{
-    Digest, EventType, ProtocolRecord, Signature, capability_runtime::CapabilityRemoteEnvelope,
+    capability_runtime::CapabilityRemoteEnvelope, Digest, EventType, ProtocolRecord, Signature,
 };
 use edgerun_email::imap::session_core::{
     ImapPeerContext, ImapSessionConfig, ImapSessionCore, RejectAllImapPolicy,
 };
-use edgerun_email::lmtp::session_core::{
-    AllowAllLmtpPolicy, LmtpSessionConfig, LmtpSessionCore,
-};
+use edgerun_email::lmtp::session_core::{AllowAllLmtpPolicy, LmtpSessionConfig, LmtpSessionCore};
 use edgerun_email::smtp::session_core::{
     AllowAllSmtpPolicy, SmtpPeerContext, SmtpSessionConfig, SmtpSessionCore,
 };
 use edgerun_mesh::{LocalNode, MeshFrame, MeshRoute, MeshRouter, MeshRoutingTable, NodeID};
 use edgerun_remote_capability::MemoryRemoteTransport;
-use edgerun_storage::MemEventLog;
 use edgerun_storage::core::EventLog;
+use edgerun_storage::MemEventLog;
 use edgerun_tftp::message::TftpMessage;
 
 fn len_u32(len: usize) -> u32 {

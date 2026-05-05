@@ -110,11 +110,7 @@ impl LmtpSessionCore {
         )
     }
 
-    pub fn handle_line<P: LmtpSessionPolicy>(
-        &mut self,
-        line: &str,
-        policy: &P,
-    ) -> LmtpSessionStep {
+    pub fn handle_line<P: LmtpSessionPolicy>(&mut self, line: &str, policy: &P) -> LmtpSessionStep {
         if self.state == SmtpState::Data {
             return self.handle_data_line(line);
         }
@@ -168,9 +164,9 @@ impl LmtpSessionCore {
                     action: LmtpSessionAction::Quit,
                 }
             }
-            LmtpCommand::Smtp(_) => LmtpSessionStep::continue_with(
-                SmtpResponse::command_not_implemented("LMTP"),
-            ),
+            LmtpCommand::Smtp(_) => {
+                LmtpSessionStep::continue_with(SmtpResponse::command_not_implemented("LMTP"))
+            }
         }
     }
 

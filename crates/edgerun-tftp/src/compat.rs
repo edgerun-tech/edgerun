@@ -5,7 +5,7 @@ use alloc::string::ToString;
 use crate::std::io;
 use crate::std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-pub use edgerun_rt::{CancellationToken, Duration, sleep};
+pub use edgerun_rt::{sleep, CancellationToken, Duration};
 
 pub struct AsyncUdpSocket(edgerun_rt::UdpSocket);
 

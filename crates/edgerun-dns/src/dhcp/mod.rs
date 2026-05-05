@@ -5,8 +5,8 @@
 //! second DHCP implementation.
 
 pub use edgerun_dhcp::{
-    DhcpClient, DhcpError, DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, DhcpServer, Ipv4Addr,
-    Lease, NetworkConfig, OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_MACHINE_ID,
-    OPT_CLIENT_NDI, OPT_HOST_NAME, OPT_TFTP_SERVER_NAME, OPT_VENDOR_ENCAP, PxeClientArch, client,
-    lease, message, options, server,
+    client, lease, message, options, server, DhcpClient, DhcpError, DhcpMessage, DhcpMessageType,
+    DhcpOp, DhcpOptions, DhcpServer, Ipv4Addr, Lease, NetworkConfig, PxeClientArch,
+    OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_MACHINE_ID, OPT_CLIENT_NDI, OPT_HOST_NAME,
+    OPT_TFTP_SERVER_NAME, OPT_VENDOR_ENCAP,
 };

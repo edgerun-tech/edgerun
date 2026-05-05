@@ -254,8 +254,8 @@ fn verify_signature(
             }
             // Verify ECDSA P-256 signature using edgerun-crypto
             // ECDSA P-256-SHA256: the library hashes signed_data internally via Sha256
-            use edgerun_crypto::p256::EncodedPoint;
             use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
+            use edgerun_crypto::p256::EncodedPoint;
             use edgerun_crypto::signature::Verifier;
 
             let point_bytes;

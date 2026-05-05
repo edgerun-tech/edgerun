@@ -6,7 +6,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::message::{DEFAULT_BLKSIZE, DEFAULT_TIMEOUT, TftpError, TftpMessage, TftpOptions};
+use crate::message::{TftpError, TftpMessage, TftpOptions, DEFAULT_BLKSIZE, DEFAULT_TIMEOUT};
 
 pub trait TftpReadProvider {
     fn file_size(&self, filename: &str) -> Option<u64>;

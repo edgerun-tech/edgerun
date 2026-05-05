@@ -12,8 +12,8 @@ use alloc::{
 
 use crate::compat::AsyncUdpSocket;
 
+use super::query::{handle_query, udp_response_wire, ParseError, ServerState};
 use super::RateLimiter;
-use super::query::{ParseError, ServerState, handle_query, udp_response_wire};
 use crate::message::{DnsMessage, DnsResponseCode};
 
 /// Run the UDP receive loop (async, runs until shutdown).

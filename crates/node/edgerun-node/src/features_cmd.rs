@@ -69,16 +69,20 @@ fn run_self_test() -> Result<String, String> {
     }
 
     let network = run_network_self_test()?;
+    let hardware = hardware_self_test()?;
+    let identity = identity_self_test()?;
     let _ = fs::remove_file(&copied);
 
     Ok(format!(
-        "{{\"self_test\":\"ok\",\"source\":\"{}\",\"copy\":\"{}\",\"bytes\":{},\"copied_features\":{},\"child\":{},\"network\":{}}}",
+        "{{\"self_test\":\"ok\",\"source\":\"{}\",\"copy\":\"{}\",\"bytes\":{},\"copied_features\":{},\"child\":{},\"network\":{},\"hardware\":{},\"identity\":{}}}",
         escape_json(&current.display().to_string()),
         escape_json(&copied.display().to_string()),
         current_meta.len(),
         features.trim(),
         child.trim(),
-        network
+        network,
+        hardware,
+        identity
     ))
 }
 
@@ -127,22 +131,125 @@ fn run_network_self_test() -> Result<String, String> {
     let tls = tls_self_test()?;
     let quic = quic_self_test()?;
     let acme = acme_self_test()?;
+    let compositor = compositor_self_test()?;
     let port_80 = probe_bind_port(80);
     let port_53_tcp = probe_bind_port(53);
     let port_53_udp = probe_bind_udp_port(53);
 
     Ok(format!(
-        "{{\"http\":{},\"dns\":{},\"tftp\":{},\"tls\":{},\"quic\":{},\"acme\":{},\"ports\":{{\"tcp_80\":\"{}\",\"tcp_53\":\"{}\",\"udp_53\":\"{}\"}}}}",
+        "{{\"http\":{},\"dns\":{},\"tftp\":{},\"tls\":{},\"quic\":{},\"acme\":{},\"compositor\":{},\"ports\":{{\"tcp_80\":\"{}\",\"tcp_53\":\"{}\",\"udp_53\":\"{}\"}}}}",
         http,
         dns,
         tftp,
         tls,
         quic,
         acme,
+        compositor,
         escape_json(&port_80),
         escape_json(&port_53_tcp),
         escape_json(&port_53_udp),
     ))
+}
+
+#[cfg(feature = "compositor")]
+fn compositor_self_test() -> Result<String, String> {
+    let report = edgerun_compositor::capability_report();
+    if !report.registry_probe_ok {
+        return Err("compositor registry probe failed".into());
+    }
+    if report.globals == 0 {
+        return Err("compositor advertised no globals".into());
+    }
+    if report.wire_probe_bytes == 0 {
+        return Err("compositor wire probe was empty".into());
+    }
+
+    Ok(format!(
+        "{{\"status\":\"ok\",\"globals\":{},\"wl_compositor_version\":{},\"wire_probe_bytes\":{}}}",
+        report.globals, report.wl_compositor_version, report.wire_probe_bytes
+    ))
+}
+
+#[cfg(not(feature = "compositor"))]
+fn compositor_self_test() -> Result<String, String> {
+    Ok("{\"status\":\"not_compiled\"}".to_string())
+}
+
+#[cfg(feature = "all-hardware")]
+fn hardware_self_test() -> Result<String, String> {
+    let inventory = crate::hardware::HardwareInventory::discover();
+    Ok(format!(
+        concat!(
+            "{{",
+            "\"status\":\"ok\",",
+            "\"platform\":\"{}\",",
+            "\"gpus\":{},",
+            "\"displays\":{},",
+            "\"input\":{},",
+            "\"audio_input\":{},",
+            "\"audio_output\":{},",
+            "\"cameras\":{},",
+            "\"fingerprint\":{},",
+            "\"bluetooth\":{},",
+            "\"wifi\":{},",
+            "\"usb\":{},",
+            "\"pci\":{},",
+            "\"nfc\":{},",
+            "\"npu\":{},",
+            "\"power\":{},",
+            "\"cec\":{},",
+            "\"keystore\":{}",
+            "}}"
+        ),
+        escape_json(inventory.platform),
+        inventory.gpus.len(),
+        inventory.displays.len(),
+        inventory.input_devices.len(),
+        inventory.audio_input.len(),
+        inventory.audio_output.len(),
+        inventory.camera.len(),
+        inventory.fingerprint_readers.len(),
+        inventory.bluetooth_controllers.len(),
+        inventory.wifi_interfaces.len(),
+        inventory.usb_devices.len(),
+        inventory.pci_devices.len(),
+        inventory.nfc_adapters.len(),
+        inventory.npu_devices.len(),
+        inventory.power_supplies.len(),
+        inventory.cec_adapters.len(),
+        inventory.keystore.len()
+    ))
+}
+
+#[cfg(not(feature = "all-hardware"))]
+fn hardware_self_test() -> Result<String, String> {
+    Ok("{\"status\":\"not_compiled\"}".to_string())
+}
+
+fn identity_self_test() -> Result<String, String> {
+    let android_keystore = android_keystore_self_test()?;
+    Ok(format!("{{\"android_keystore\":{android_keystore}}}"))
+}
+
+#[cfg(feature = "android-keystore")]
+fn android_keystore_self_test() -> Result<String, String> {
+    let input = edgerun_android_keystore::signature_input_for_record(
+        "edgerun:v0:sig:self-test",
+        &[9u8; 32],
+    );
+    if input.is_empty() {
+        return Err("android keystore signature input was empty".into());
+    }
+
+    Ok(format!(
+        "{{\"status\":\"ok\",\"signature_input_bytes\":{},\"provider\":\"trait-boundary\"}}",
+        input.len()
+    ))
+}
+
+#[cfg(not(feature = "android-keystore"))]
+fn android_keystore_self_test() -> Result<String, String> {
+    Ok("{\"status\":\"not_compiled\"}".to_string())
 }
 
 #[cfg(feature = "acme")]
@@ -172,6 +279,7 @@ fn acme_self_test() -> Result<String, String> {
     Ok("{\"status\":\"not_compiled\"}".to_string())
 }
 
+#[cfg(feature = "tftp")]
 fn tftp_loopback_self_test() -> Result<String, String> {
     let socket = UdpSocket::bind(("127.0.0.1", 0)).map_err(|e| format!("tftp bind: {e}"))?;
     let addr = socket
@@ -244,6 +352,11 @@ fn tftp_loopback_self_test() -> Result<String, String> {
         escape_json(&addr.to_string()),
         data.len()
     ))
+}
+
+#[cfg(not(feature = "tftp"))]
+fn tftp_loopback_self_test() -> Result<String, String> {
+    Ok("{\"status\":\"not_compiled\"}".to_string())
 }
 
 #[cfg(feature = "tls")]
@@ -345,6 +458,7 @@ fn quic_self_test() -> Result<String, String> {
     Ok("{\"status\":\"not_compiled\"}".to_string())
 }
 
+#[cfg(feature = "tftp")]
 fn build_tftp_rrq(filename: &str, mode: &str) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(&edgerun_tftp::OP_RRQ.to_be_bytes());
@@ -355,6 +469,7 @@ fn build_tftp_rrq(filename: &str, mode: &str) -> Vec<u8> {
     out
 }
 
+#[cfg(feature = "tftp")]
 fn validate_tftp_rrq(packet: &[u8], expected_filename: &str) -> Result<(), String> {
     if packet.len() < 4 {
         return Err("TFTP RRQ too short".into());
@@ -375,6 +490,7 @@ fn validate_tftp_rrq(packet: &[u8], expected_filename: &str) -> Result<(), Strin
     Ok(())
 }
 
+#[cfg(feature = "tftp")]
 fn validate_tftp_ack(packet: &[u8], expected_block: u16) -> Result<(), String> {
     if packet.len() != 4 {
         return Err(format!("TFTP ACK wrong size: {}", packet.len()));
@@ -387,6 +503,7 @@ fn validate_tftp_ack(packet: &[u8], expected_block: u16) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "tftp")]
 fn parse_tftp_data(packet: &[u8], expected_block: u16) -> Result<&[u8], String> {
     if packet.len() < 4 {
         return Err("TFTP DATA too short".into());
@@ -673,6 +790,7 @@ fn feature_report_json() -> String {
             "\"quic\":{},",
             "\"tftp\":{},",
             "\"acme\":{},",
+            "\"android_keystore\":{},",
             "\"compositor\":{},",
             "\"hardware\":{},",
             "\"all_hardware\":{}",
@@ -693,6 +811,7 @@ fn feature_report_json() -> String {
         cfg!(feature = "quic"),
         cfg!(feature = "tftp"),
         cfg!(feature = "acme"),
+        cfg!(feature = "android-keystore"),
         cfg!(feature = "compositor"),
         cfg!(feature = "hardware"),
         cfg!(feature = "all-hardware"),
@@ -757,7 +876,10 @@ fn compiled_components_json() -> String {
         parts.push("\"acme\"");
         parts.push("\"acme-dns-01\"");
     }
-    if cfg!(feature = "compositor") {
+    if cfg!(feature = "android-keystore") {
+        parts.push("\"android-keystore\"");
+    }
+    if compositor_compiled() {
         parts.push("\"compositor\"");
     }
     if cfg!(feature = "hardware") {
@@ -784,6 +906,16 @@ fn compiled_components_json() -> String {
     }
 
     parts.join(",")
+}
+
+#[cfg(feature = "compositor")]
+fn compositor_compiled() -> bool {
+    edgerun_compositor::capability_report().registry_probe_ok
+}
+
+#[cfg(not(feature = "compositor"))]
+fn compositor_compiled() -> bool {
+    false
 }
 
 fn escape_json(value: &str) -> String {

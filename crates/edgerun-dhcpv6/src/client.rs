@@ -8,12 +8,12 @@ use crate::std::time::{Duration, Instant};
 use super::duid::Duid;
 use super::lease::Dhcpv6Lease;
 use super::message::{
-    ALL_DHCP_RELAY_AND_SERVERS, DHCPV6_CLIENT_PORT, DHCPV6_SERVER_PORT, Dhcpv6Message,
-    Dhcpv6MsgType, TransactionId,
+    Dhcpv6Message, Dhcpv6MsgType, TransactionId, ALL_DHCP_RELAY_AND_SERVERS, DHCPV6_CLIENT_PORT,
+    DHCPV6_SERVER_PORT,
 };
 use super::options::{
-    Dhcpv6Option, OPT_DNS_SERVERS, OPT_DOMAIN_LIST, OPT_IA_NA, OPT_IAADDR, OPT_RAPID_COMMIT,
-    OPT_SERVERID, StatusCode,
+    Dhcpv6Option, StatusCode, OPT_DNS_SERVERS, OPT_DOMAIN_LIST, OPT_IAADDR, OPT_IA_NA,
+    OPT_RAPID_COMMIT, OPT_SERVERID,
 };
 
 /// DHCPv6 client state machine.

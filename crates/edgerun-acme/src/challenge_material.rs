@@ -44,6 +44,9 @@ mod tests {
             http_01_challenge_path("token"),
             "/.well-known/acme-challenge/token"
         );
-        assert_eq!(dns_01_record_name("example.com"), "_acme-challenge.example.com");
+        assert_eq!(
+            dns_01_record_name("example.com"),
+            "_acme-challenge.example.com"
+        );
     }
 }

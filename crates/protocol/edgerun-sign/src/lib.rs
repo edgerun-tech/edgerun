@@ -10,7 +10,7 @@ use edgerun_core::protocol::{
     ProtocolRecord, RevocationRecord, RouteAdvertisement, Signature, SnapshotDescriptor,
 };
 use edgerun_verify::{
-    ProtocolFamily, ProtocolVerifyError, protocol_record_hash, protocol_signable_wire_bytes,
+    protocol_record_hash, protocol_signable_wire_bytes, ProtocolFamily, ProtocolVerifyError,
 };
 
 pub use edgerun_verify::ProtocolFamily as SignableProtocolFamily;

@@ -98,10 +98,10 @@ pub use cache::DnsCache;
 pub use doh::{DohServer, DohServerConfig};
 pub use dot::{DotServer, DotServerConfig};
 pub use limits::{
-    DnsSectionCounts, MAX_DNS_MESSAGE_LEN, MAX_DNS_QUESTIONS, MAX_DNS_SECTION_RECORDS,
-    dns_section_counts, parse_dns_message_bounded, validate_dns_wire_bounds,
+    dns_section_counts, parse_dns_message_bounded, validate_dns_wire_bounds, DnsSectionCounts,
+    MAX_DNS_MESSAGE_LEN, MAX_DNS_QUESTIONS, MAX_DNS_SECTION_RECORDS,
 };
-pub use resolver::{RecursiveResolver, RootHint, default_root_hints};
+pub use resolver::{default_root_hints, RecursiveResolver, RootHint};
 pub use server::RateLimiter;
 #[cfg(feature = "tsig")]
 pub use tsig::{TsigAlgorithm, TsigError, TsigKey, TsigSigner, TsigVerifier};
@@ -129,7 +129,7 @@ pub use resolv_conf::{Nameserver, ResolvConf};
 pub use client::DnsClient;
 #[cfg(feature = "dnssec")]
 pub use dnssec::{
-    DnssecResult, compute_key_tag, validate_response, verify_chain_of_trust, verify_rrsig,
+    compute_key_tag, validate_response, verify_chain_of_trust, verify_rrsig, DnssecResult,
 };
 #[cfg(feature = "dnssec")]
 pub use dnssec::{
@@ -144,14 +144,14 @@ pub use dnssec::{
 pub use dnssec::{sign_zone_ecdsap256, sign_zone_ed25519};
 pub use message::{DnsHeader, DnsMessage, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};
-pub use name::{NameError, normalize_name, validate_name};
+pub use name::{normalize_name, validate_name, NameError};
 pub use record::{DnsRecordData, DnsRecordType};
 pub use server::query::{
-    MAX_UDP_RESPONSE, ServerState, handle_query, handle_query_without_forwarding,
+    handle_query, handle_query_without_forwarding, ServerState, MAX_UDP_RESPONSE,
 };
 pub use server::{DnsServer, DnsServerConfig};
 pub use tcp_frame::{
-    DnsTcpFrameDecoder, DnsTcpFrameError, decode_single_dns_tcp_frame, dns_tcp_frame_len,
-    encode_dns_tcp_frame,
+    decode_single_dns_tcp_frame, dns_tcp_frame_len, encode_dns_tcp_frame, DnsTcpFrameDecoder,
+    DnsTcpFrameError,
 };
 pub use zone::DnsZone;

@@ -6,7 +6,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::limits::{MAX_DNS_MESSAGE_LEN, validate_dns_wire_bounds};
+use crate::limits::{validate_dns_wire_bounds, MAX_DNS_MESSAGE_LEN};
 use crate::std::io;
 
 const DNS_TCP_LENGTH_LEN: usize = 2;
