@@ -7,7 +7,7 @@ The first bridge transport is USB Serial/JTAG on `/dev/ttyACM0`. This keeps the 
 ## Build
 
 ```bash
-cd /home/ken/edgerun_core/devices/edgerun-tcl-bridge-esp32s3
+cd devices/edgerun-tcl-bridge-esp32s3
 . /home/ken/export-esp.sh
 cargo +esp check
 cargo +esp build --release
@@ -16,7 +16,7 @@ cargo +esp build --release
 ## Flash
 
 ```bash
-cd /home/ken/edgerun_core/devices/edgerun-tcl-bridge-esp32s3
+cd devices/edgerun-tcl-bridge-esp32s3
 . /home/ken/export-esp.sh
 espflash flash --chip esp32s3 --port /dev/ttyACM0 --before usb-reset --monitor --non-interactive target/xtensa-esp32s3-none-elf/release/edgerun-tcl-bridge-esp32s3
 ```

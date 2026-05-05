@@ -1,5 +1,0 @@
-   Compiling edgerun-web-ui v0.1.1 (/home/ken/edgerun_core/crates/edgerun-web-ui)
-   Compiling edgerun-blog v0.1.1 (/home/ken/edgerun_core/crates/edgerun-blog)
-   Compiling edgerun-git v0.1.1 (/home/ken/edgerun_core/crates/edgerun-git)
-   Compiling edgerun-server v0.1.1 (/home/ken/edgerun_core/crates/edgerun-server)
-    Finished `release` profile [optimized] target(s) in 32.96s

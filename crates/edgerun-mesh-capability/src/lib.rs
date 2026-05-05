@@ -1,8 +1,7 @@
-//! Rkyv-only capability envelope plumbing for the edgerun mesh.
+//! Capability envelope queues for the edgerun mesh.
 //!
-//! The former byte-codec client/server/transport layer has been removed.
-//! Mesh capability code only queues and drains shared `CapabilityRemoteEnvelope`
-//! values across the single rkyv-normalized capability boundary.
+//! Mesh capability code queues and drains shared `CapabilityRemoteEnvelope`
+//! values across the rkyv-normalized capability boundary.
 
 #![no_std]
 
@@ -73,15 +72,10 @@ pub mod result {
 mod inbox;
 
 use crate::collections::VecDeque;
-use crate::prelude::v1::*;
 use crate::sync::{Arc, Mutex};
-use edgerun_capabilities::CapabilityError;
-use edgerun_core::protocol::capability_runtime::{
-    capability_remote_envelope, CapabilityRemoteEnvelope,
-};
+use alloc::vec::Vec;
+use edgerun_core::protocol::capability_runtime::CapabilityRemoteEnvelope;
 use edgerun_hardware_signing::NodeID;
-use edgerun_mesh_link::MeshLink;
-use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteCapabilityTransport};
 
 pub use inbox::EnvelopeInbox;
 

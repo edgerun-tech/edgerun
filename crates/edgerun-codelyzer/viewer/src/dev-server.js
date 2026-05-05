@@ -27,7 +27,7 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-analyzePath ??= process.env.CODEANALYZE_PATH ?? "/home/ken/edgerun_reference_core/crates/edgerun-agent";
+analyzePath ??= process.env.CODEANALYZE_PATH ?? process.cwd();
 
 console.log(`🚀 Dev server on http://localhost:${port}`);
 console.log(`   Backend: managed (port 13337)`);

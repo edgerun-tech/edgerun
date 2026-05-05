@@ -10,11 +10,7 @@ description = "Remote capability transport over the Edgerun mesh"
 
 [dependencies]
 edgerun-core = { version = "0.1", path = "../edgerun-core" }
-edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
-edgerun-mesh-link = { version = "0.1", path = "../edgerun-mesh-link" }
-edgerun-remote-capability = { version = "0.1", path = "../edgerun-remote-capability" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 
 [lints]
 workspace = true

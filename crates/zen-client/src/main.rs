@@ -301,9 +301,8 @@ fn execute_action(action: &Action) -> Result<String, String> {
             }
         }
         "spawn-agent" => {
-            let output = Command::new(
-                "/home/ken/edgerun_core/target/x86_64-unknown-linux-musl/release/zen-client",
-            )
+            let exe = std::env::current_exe().map_err(|e| format!("locate zen-client: {}", e))?;
+            let output = Command::new(exe)
             .arg(&action.payload)
             .output()
             .map_err(|e| format!("spawn agent: {}", e))?;

@@ -6,7 +6,7 @@ max_ram_mb = 8192
 
 # Working directories to load
 [[workspace]]
-path = "/home/ken/edgerun_core"
+path = "/path/to/edgerun"
 name = "edgerun"
 
 [[workspace]]

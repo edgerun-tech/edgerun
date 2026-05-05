@@ -1,6 +1,5 @@
 [Unit]
 Description=edgerun DNS Server
-Documentation=file:///home/ken/edgerun_core/crates/edgerun-dns
 After=network-online.target
 Wants=network-online.target
 

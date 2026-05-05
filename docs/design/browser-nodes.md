@@ -39,7 +39,7 @@ invocation and records the outcome in its own stream.
   model for remote capability providers.
 - `edgerun-node`: command, query, store, controller, and stream semantics for
   protocol nodes.
-- `edgerun-web-ui`: host-rendered shell and bootstrap surface for browser nodes.
+- `edgerun-dash-webapp`: host-rendered shell and bootstrap surface for browser nodes.
 - `edgerun-vfs`, `edgerun-virtual-disk`, `edgerun-edgefs`: possible storage
   providers behind file/object capabilities, not ambient filesystem access for
   Wasm agents.
@@ -176,7 +176,7 @@ Agents should own:
 
 Implemented in code today:
 
-- `edgerun-web-ui` can embed a JSON list of workspace modules in the page shell.
+- `edgerun-dash-webapp` can embed a JSON list of workspace modules in the page shell.
 - Dash has native HTML surfaces for Build Log, Code, and Mail.
 - `edgerun-capabilities` and `edgerun-remote-capability` provide protocol
   building blocks for descriptors, grants, sessions, and invocation envelopes.
@@ -209,7 +209,7 @@ Not implemented yet:
    browser node policy.
 2. Replace hardcoded Dash `WorkspaceModule` data with config-derived catalog
    output.
-3. Define the minimal Wasm host-call ABI in `edgerun-web-ui` docs and bootstrap
+3. Define the minimal Wasm host-call ABI in `edgerun-dash-webapp` docs and bootstrap
    code.
 4. Add a browser-friendly transport bridge for `edgerun-remote-capability`
    envelopes.

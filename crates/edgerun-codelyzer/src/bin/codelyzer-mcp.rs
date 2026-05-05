@@ -4,7 +4,7 @@
 //! bridge payloads remain rkyv-only.
 //!
 //! Usage:
-//!   cargo run -p edgerun-codelyzer --bin codelyzer-mcp -- /home/ken/edgerun
+//!   cargo run -p edgerun-codelyzer --bin codelyzer-mcp -- /path/to/edgerun
 //!
 //! Tools cover graph inspection, Rust AST edits via edgerun-edit, conservative
 //! non-Rust text edits gated by explicit user approval, and Xray viewport

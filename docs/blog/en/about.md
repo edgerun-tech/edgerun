@@ -45,10 +45,8 @@ This model is already serving real workloads in this deployment.
   and the runtime web surfaces.
 - the build log (this page), source surface, and mail surface are published from
   the same server process.
-- `edgerun-git` exposes a controlled public slice of source code and crate
-  metadata.
-- `edgerun-blog` publishes notes from Markdown and code state in the same
-  deployment boundary.
+- the dashboard and build-log surfaces publish checked-in operational state from
+  the same deployment boundary.
 
 ## What new avenues this opens up
 
@@ -77,4 +75,3 @@ Contact is still by email at
 
 The blog and content are meant to stay grounded: every post should be tied to
 actual checked-in code paths, live state, and real deployment behavior.
-
