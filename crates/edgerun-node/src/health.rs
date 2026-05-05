@@ -1,6 +1,5 @@
 use std::fs;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 /// Shared health state updated by the daemon.
@@ -24,9 +23,6 @@ pub struct HealthState {
 /// - GET  /protocol/approvals/<id>/approve
 /// - GET  /protocol/approvals/<id>/reject
 /// - POST /protocol/tools/invoke
-/// - GET  /codelyzer/graph
-/// - GET  /codelyzer/connections
-/// - GET  /codelyzer/viewport-command
 pub async fn run_health_server(port: u16, state: HealthState) {
     use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
 
@@ -92,9 +88,6 @@ fn route_local_http(
         ("GET", "/protocol/capabilities") => ("200 OK", capabilities_json()),
         ("GET", "/protocol/approvals") => ("200 OK", approvals_json()),
         ("POST", "/protocol/tools/invoke") => invoke_protocol_tool(body),
-        ("GET", "/codelyzer/graph") => proxy_codelyzer("/graph"),
-        ("GET", "/codelyzer/connections") => proxy_codelyzer("/connections"),
-        ("GET", "/codelyzer/viewport-command") => viewport_command_json(),
         _ => ("404 Not Found", r#"{"error":"not_found"}"#.to_string()),
     }
 }
@@ -121,11 +114,11 @@ fn node_status_json(state: &HealthState) -> String {
 }
 
 fn apps_json() -> String {
-    r#"{"apps":[{"id":"codelyzer","name":"Codelyzer","status":"available","routes":["/protocol/tools/invoke","/codelyzer/graph","/codelyzer/connections","/codelyzer/viewport-command"]},{"id":"xray","name":"Xray","status":"available"}]}"#.to_string()
+    r#"{"apps":[{"id":"xray","name":"Xray","status":"available"}]}"#.to_string()
 }
 
 fn capabilities_json() -> String {
-    r#"{"capabilities":[{"id":"repo_read","name":"Read repository data","status":"granted"},{"id":"repo_text_edit","name":"Text edit repository files","status":"requires_user_approval"},{"id":"repo_rust_ast_edit","name":"AST-safe Rust editing","status":"requires_user_approval"},{"id":"xray_viewport_control","name":"Control Xray viewport","status":"granted"},{"id":"node_connection","name":"Talk to local EdgeRun node","status":"granted"}]}"#.to_string()
+    r#"{"capabilities":[{"id":"xray_viewport_control","name":"Control Xray viewport","status":"granted"},{"id":"node_connection","name":"Talk to local EdgeRun node","status":"granted"}]}"#.to_string()
 }
 
 fn invoke_protocol_tool(body: &str) -> (&'static str, String) {
@@ -138,41 +131,10 @@ fn invoke_protocol_tool(body: &str) -> (&'static str, String) {
     }
 
     match tool_id.as_str() {
-        "codelyzer.graph.summary" => proxy_tool_result("codelyzer.graph.summary", "/graph"),
-        "codelyzer.graph.search_symbols" => proxy_tool_result("codelyzer.graph.search_symbols", "/graph"),
-        "codelyzer.graph.related_nodes" => proxy_tool_result("codelyzer.graph.related_nodes", "/graph"),
-        "codelyzer.graph.read_file" => ("200 OK", r#"{"status":"blocked","error":"read_file through node tool protocol is not wired yet; use codelyzer MCP read_file or frontend protocol read helper"}"#.to_string()),
-        "codelyzer.rust_ast.replace_fn_body"
-        | "codelyzer.rust_ast.add_fn"
-        | "codelyzer.rust_ast.add_use"
-        | "codelyzer.rust_ast.add_derive"
-        | "codelyzer.rust_ast.rename_type"
-        | "codelyzer.text.replace_text" => pending_tool_approval(&tool_id, body),
         "xray.viewport.focus_node" => write_viewport_command("focus_node", body),
         "xray.viewport.show_related" => write_viewport_command("show_related", body),
         "xray.viewport.set_camera" => write_viewport_command("set_camera", body),
         _ => ("200 OK", format!(r#"{{"status":"blocked","error":"unknown tool {}"}}"#, escape_json(&tool_id))),
-    }
-}
-
-fn proxy_tool_result(tool_id: &str, path: &str) -> (&'static str, String) {
-    match http_get_local("127.0.0.1:13337", path) {
-        Ok(body) => (
-            "200 OK",
-            format!(
-                r#"{{"status":"executed","result":{},"evidenceRefs":["tool:{}"]}}"#,
-                if body.trim().is_empty() {
-                    "{}"
-                } else {
-                    body.trim()
-                },
-                escape_json(tool_id),
-            ),
-        ),
-        Err(err) => (
-            "200 OK",
-            format!(r#"{{"status":"failed","error":"{}"}}"#, escape_json(&err)),
-        ),
     }
 }
 
@@ -236,7 +198,7 @@ fn pending_tool_approval(tool_id: &str, body: &str) -> (&'static str, String) {
 }
 
 fn write_viewport_command(command_type: &str, body: &str) -> (&'static str, String) {
-    let dir = codelyzer_cache_dir();
+    let dir = local_control_dir();
     if let Err(err) = fs::create_dir_all(&dir) {
         return (
             "500 Internal Server Error",
@@ -326,14 +288,6 @@ fn approvals_json() -> String {
     format!(r#"{{"approvals":[{}]}}"#, approvals.join(","))
 }
 
-fn viewport_command_json() -> (&'static str, String) {
-    let path = codelyzer_cache_dir().join("viewport-command.json");
-    match fs::read_to_string(&path) {
-        Ok(body) => ("200 OK", body),
-        Err(_) => ("200 OK", r#"{"type":"none"}"#.to_string()),
-    }
-}
-
 fn parse_approval_decision_path(path: &str) -> Option<(&str, &str)> {
     let rest = path.strip_prefix("/protocol/approvals/")?;
     if let Some(id) = rest.strip_suffix("/approve") {
@@ -377,46 +331,17 @@ fn decide_approval(approval_id: &str, decision: &str) -> (&'static str, String) 
 }
 
 fn approval_dir() -> PathBuf {
-    codelyzer_cache_dir().join("permissions")
+    local_control_dir().join("permissions")
 }
 
-fn codelyzer_cache_dir() -> PathBuf {
+fn local_control_dir() -> PathBuf {
     if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
-        return PathBuf::from(xdg).join("edgerun-codelyzer");
+        return PathBuf::from(xdg).join("edgerun-node-control");
     }
     if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".cache").join("edgerun-codelyzer");
+        return PathBuf::from(home).join(".cache").join("edgerun-node-control");
     }
-    PathBuf::from("/tmp").join("edgerun-codelyzer")
-}
-
-fn proxy_codelyzer(path: &str) -> (&'static str, String) {
-    match http_get_local("127.0.0.1:13337", path) {
-        Ok(body) => ("200 OK", body),
-        Err(err) => (
-            "503 Service Unavailable",
-            format!(
-                r#"{{"error":"codelyzer_unavailable","detail":"{}"}}"#,
-                escape_json(&err)
-            ),
-        ),
-    }
-}
-
-fn http_get_local(addr: &str, path: &str) -> Result<String, String> {
-    let mut stream = TcpStream::connect(addr).map_err(|err| err.to_string())?;
-    let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
-        path, addr
-    );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|err| err.to_string())?;
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(|err| err.to_string())?;
-    Ok(response.split("\r\n\r\n").nth(1).unwrap_or("").to_string())
+    PathBuf::from("/tmp").join("edgerun-node-control")
 }
 
 fn extract_nested_input_string(raw: &str, key: &str) -> Option<String> {

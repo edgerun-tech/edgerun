@@ -23,16 +23,16 @@ wasm_opt_oz() {
   local input="$1"
   local output="$2"
 
-  if wasm-opt --enable-bulk-memory -Oz "$input" -o "$output" 2>/tmp/edgerun-wasm-opt.err; then
+  if wasm-opt --enable-bulk-memory -Oz "$input" -o "$output" 2>/tmp/edgerun-sign-verify-wasm-opt.err; then
     return 0
   fi
 
-  if wasm-opt --enable-bulk-memory-opt -Oz "$input" -o "$output" 2>/tmp/edgerun-wasm-opt.err; then
+  if wasm-opt --enable-bulk-memory-opt -Oz "$input" -o "$output" 2>/tmp/edgerun-sign-verify-wasm-opt.err; then
     return 0
   fi
 
   echo "wasm-opt failed; stderr:" >&2
-  cat /tmp/edgerun-wasm-opt.err >&2
+  cat /tmp/edgerun-sign-verify-wasm-opt.err >&2
   return 1
 }
 

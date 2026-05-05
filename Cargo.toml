@@ -95,6 +95,7 @@ members = [
   "crates/edgerun-email",
   "crates/edgerun-email-auth",
   "crates/edgerun-speaker",
+  "crates/edgerun-storage",
   "crates/edgerun-stream",
   "crates/edgerun-virtio",
   "crates/edgerun-tls",
@@ -202,7 +203,6 @@ edgerun-display = { version = "0.1", path = "crates/edgerun-display" }
 edgerun-gpu = { version = "0.1", path = "crates/edgerun-gpu" }
 edgerun-clap = { version = "0.1", path = "crates/edgerun-clap" }
 edgerun-clap-derive = { version = "0.1", path = "crates/edgerun-clap-derive" }
-edgerun-wasm = { version = "0.1", path = "crates/edgerun-wasm" }
 edgerun-virtio = { version = "0.1", path = "crates/edgerun-virtio" }
 edgerun-event = { version = "0.1", path = "crates/edgerun-event" }
 edgerun-wallet = { version = "0.1", path = "crates/edgerun-wallet" }
