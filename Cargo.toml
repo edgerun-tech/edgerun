@@ -127,11 +127,6 @@ homepage = "https://github.com/Sylchi/edgerun_reference_core"
 rust-version = "1.81"
 version = "0.1.1"
 
-# Release management:
-# - Git tags matching v* trigger the GitHub release workflow.
-# - Workspace crates are not publishable by default while the v0 surface is
-#   alpha. See RELEASE.md before enabling crates.io publication for a crate.
-
 [profile.release]
 panic = "abort"
 opt-level = 3
@@ -160,8 +155,7 @@ deprecated = "allow"
 function_casts_as_integer = "allow"
 
 [workspace.dependencies]
-# Core edgerun crates
-edgerun-core = { version = "0.1", path = "crates/edgerun-core" }
+edgerun-core = { version = "0.1", path = "crates/edgerun-core", default-features = false }
 edgerun-proxy = { version = "0.1", path = "crates/edgerun-proxy" }
 edgerun-storage = { version = "0.1", path = "crates/edgerun-storage" }
 edgerun-stream = { version = "0.1", path = "crates/edgerun-stream" }
@@ -197,14 +191,11 @@ edgerun-email = { version = "0.1", path = "crates/edgerun-email" }
 edgerun-log = { version = "0.1", path = "crates/edgerun-log" }
 edgerun-rt = { version = "0.1", path = "crates/edgerun-rt" }
 edgerun-wire = { version = "0.1", path = "crates/edgerun-wire", default-features = false }
-# Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { version = "0.1", path = "crates/edgerun-crypto", default-features = false }
 edgerun-verify = { version = "0.1", path = "crates/edgerun-verify", default-features = false }
-# edgerun-json native JSON APIs
 edgerun-json = { version = "0.1", path = "crates/edgerun-json", default-features = false }
 edgerun-error = { version = "0.1", path = "crates/edgerun-error" }
 edgerun-edit = { version = "0.1", path = "crates/edgerun-edit" }
-# Browser deps
 edgerun-display = { version = "0.1", path = "crates/edgerun-display" }
 edgerun-gpu = { version = "0.1", path = "crates/edgerun-gpu" }
 edgerun-clap = { version = "0.1", path = "crates/edgerun-clap" }
@@ -218,12 +209,7 @@ edgerun-exchange-api = { version = "0.1", path = "crates/edgerun-exchange-api" }
 edgerun-exchange-worker = { version = "0.1", path = "crates/edgerun-exchange-worker" }
 edgerun-sdk = { version = "0.1", path = "crates/edgerun-sdk" }
 edgerun-sdk-macro = { version = "0.1", path = "crates/edgerun-sdk-macro" }
-# edgerun-wgpu = { path = "crates/edgerun-wgpu" }
-# edgerun-rasterizer = { path = "crates/edgerun-rasterizer" }
-# edgerun-css-cascade = { path = "crates/edgerun-css-cascade" }
 
-# Temporary external compatibility boundary. These stay only while protobuf,
-# SHA-2 and libc-backed Linux shims are being retired from core storage paths.
 prost = { version = "0.13", default-features = false }
 prost-types = { version = "0.13", default-features = false }
 sha2 = { version = "0.10", default-features = false }
