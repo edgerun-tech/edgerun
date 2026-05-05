@@ -43,6 +43,7 @@ pub mod protocol;
 pub mod relay;
 #[cfg(not(target_os = "none"))]
 pub mod server;
+pub mod session_core;
 pub mod types;
 
 #[cfg(not(target_os = "none"))]
@@ -55,7 +56,11 @@ pub use relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};
 pub use server::handler::{AuthCredentials, AuthResult};
 #[cfg(not(target_os = "none"))]
 pub use server::{MailHandler, MemoryMailStore, SmtpServer, SmtpServerConfig};
+pub use session_core::{
+    extract_domain_from_address, AllowAllSmtpPolicy, SmtpPeerContext, SmtpSessionAction,
+    SmtpSessionAuth, SmtpSessionConfig, SmtpSessionCore, SmtpSessionPolicy, SmtpSessionStep,
+};
 pub use types::{
-    DsnNotify, DsnRet, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse,
-    SmtpResponseCode, SmtpState, get_date, get_from_address, get_subject, parse_headers,
+    get_date, get_from_address, get_subject, parse_headers, DsnNotify, DsnRet, EnhancedStatusCode,
+    MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
 };
