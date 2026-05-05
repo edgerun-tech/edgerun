@@ -43,7 +43,6 @@
 //!
 //! # See Also
 //!
-//! - [H2SPEC_ANALYSIS.md](../H2SPEC_ANALYSIS.md) for the h2spec analysis process
 //! - [RFC 9113](https://www.rfc-editor.org/rfc/rfc9113) — HTTP/2 Specification
 //! - [RFC 7540 §5.1](https://www.rfc-editor.org/rfc/rfc7540.html#section-5.1) — Stream States
 

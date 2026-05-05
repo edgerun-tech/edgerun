@@ -29,7 +29,8 @@ modern transport layers through host and bare-metal runtime integration.
 | [`stream.rs`](src/http2/stream.rs) | Stream state machine (RFC 7540 §5.1) | 6 |
 | [`flow_control.rs`](src/http2/flow_control.rs) | Connection/stream windows | 10 |
 
-See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis process.
+The active HTTP/2 conformance surface is the `edgerun-http` test suite plus the
+`cmd/edgerun test h2spec` runner.
 
 ## HTTP/3 Implementation Status
 

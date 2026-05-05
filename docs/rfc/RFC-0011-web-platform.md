@@ -33,9 +33,9 @@ Web platform crates provide generated type definitions for ECMAScript, Fetch, En
 ### edgerun-http
 
 **Status:** ⚠️ Partial
-**Tests:** H2 conformance analysis in progress
+**Tests:** `edgerun-http` unit tests and the `cmd/edgerun test h2spec` runner
 
-**Purpose:** HTTP implementation. Has detailed H2 spec analysis (`H2SPEC_ANALYSIS.md`) and conformance report (`CONFORMANCE_REPORT.md`).
+**Purpose:** HTTP implementation.
 
 ### edgerun-tls
 

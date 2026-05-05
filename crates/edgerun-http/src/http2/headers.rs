@@ -30,7 +30,6 @@
 //!
 //! # See Also
 //!
-//! - [H2SPEC_ANALYSIS.md](../H2SPEC_ANALYSIS.md) for the h2spec analysis process
 //! - [RFC 9113 §8.1](https://www.rfc-editor.org/rfc/rfc9113.html#name-http-fields) — HTTP Fields
 //! - [RFC 9113 §8.2](https://www.rfc-editor.org/rfc/rfc9113.html#name-http-field-validity) — HTTP Field Validity
 
