@@ -13,6 +13,7 @@ use crate::codealyzer::footprint;
 use crate::codealyzer::benchmarks;
 use crate::codealyzer::standards;
 use crate::codealyzer::render;
+use crate::timestamp_now;
 
 pub fn generate_report(
     crate_name: &str,
@@ -79,7 +80,7 @@ pub fn generate_report(
         benchmarks: benchmark_artifacts,
         standards,
         visibility: visibility_report,
-        generated_at: chrono::offset::Local::now().to_rfc3339(),
+        generated_at: timestamp_now(),
         parser_confidence: "lexical".into(),
     })
 }

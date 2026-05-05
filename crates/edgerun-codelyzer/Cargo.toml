@@ -27,16 +27,9 @@ tree-sitter-python = { version = "0.23", optional = true }
 tree-sitter-go = { version = "0.23", optional = true }
 tree-sitter-java = { version = "0.23", optional = true }
 tree-sitter-javascript = { version = "0.23", optional = true }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-chrono = "0.4"
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
 edgerun-edit = { path = "../edgerun-edit", features = ["std"] }
 edgerun-json = { path = "../edgerun-json", features = ["toml"] }
 edgerun-glob.workspace = true
 edgerun-regex.workspace = true
 edgerun-vfs = { path = "../edgerun-vfs", optional = true }
-grep = "0.3"
-regex = "1"
-dirs = "5"
-rayon = "1.10"

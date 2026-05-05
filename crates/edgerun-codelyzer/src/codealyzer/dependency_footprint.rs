@@ -2,8 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-
-use chrono::offset::Local;
+use std::time::SystemTime;
 
 use crate::codealyzer::errors::AnalyzerError;
 use edgerun_json::impl_json_struct;
@@ -461,7 +460,10 @@ pub fn collect_dependency_footprints(
 
     Ok(DependencyFootprintReport {
         workspace_root: workspace_root.display().to_string(),
-        generated_at: Local::now().to_rfc3339(),
+        generated_at: SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_secs().to_string())
+            .unwrap_or_default(),
         summary,
         crates: crate_entries,
         distinct_external_dependencies: distinct_dependencies,
@@ -845,7 +847,10 @@ fn ratio_percent(part: u64, total: u64) -> f64 {
 fn empty_report(workspace_root: &Path) -> DependencyFootprintReport {
     DependencyFootprintReport {
         workspace_root: workspace_root.display().to_string(),
-        generated_at: Local::now().to_rfc3339(),
+        generated_at: SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_secs().to_string())
+            .unwrap_or_default(),
         summary: DependencyFootprintSummary {
             workspace_root_crate_count: 0,
             crates_with_external_dependencies: 0,

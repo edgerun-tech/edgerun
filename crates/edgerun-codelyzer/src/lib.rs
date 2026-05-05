@@ -19,6 +19,14 @@ pub mod tools;
 #[allow(dead_code)]
 pub mod uir;
 
+/// Returns a current timestamp string (Unix seconds) without chrono.
+pub fn timestamp_now() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs().to_string())
+        .unwrap_or_default()
+}
+
 // Custom binary protocol - no protobuf, no external dependencies
 pub mod generated {
     #[allow(dead_code)]
