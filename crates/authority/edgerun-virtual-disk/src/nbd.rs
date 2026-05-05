@@ -605,7 +605,7 @@ fn read_u64<T: Read>(stream: &mut T) -> Result<u64, BlockError> {
     Ok(read_u64_be(&bytes, 0))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(any(target_os = "none", target_arch = "wasm32"))))]
 mod tests {
     use super::*;
     use crate::remote::{BlockDeviceInfo, MemoryBlockBackend};

@@ -1332,10 +1332,14 @@ impl<'a> Cursor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     use crate::image::{create, VirtualDiskFormat, VirtualDiskSpec};
+    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     use std::env;
+    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     use std::thread;
 
+    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     fn temp_dir() -> std::path::PathBuf {
         let mut path = env::temp_dir();
         path.push(format!(
@@ -1444,6 +1448,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     fn client_and_server_exchange_requests() {
         let (client_stream, server_stream) = UnixStream::pair().unwrap();
         let backend = MemoryBlockBackend::new(test_info()).unwrap();
@@ -1464,6 +1469,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     fn file_backend_reads_and_writes_blocks() {
         let root = temp_dir();
         fs::create_dir_all(&root).unwrap();
@@ -1491,6 +1497,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     fn unix_listener_server_accepts_client_connection() {
         let root = temp_dir();
         fs::create_dir_all(&root).unwrap();

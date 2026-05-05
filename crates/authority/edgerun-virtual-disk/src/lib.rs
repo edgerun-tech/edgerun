@@ -153,8 +153,8 @@ mod tests {
     use alloc::boxed::Box;
     use alloc::format;
     use alloc::string::ToString;
+    use alloc::sync::Arc;
     use alloc::vec;
-    use std::sync::Arc;
 
     // Tests for re-exported types from the image module
 
@@ -205,9 +205,12 @@ mod tests {
 
     #[test]
     fn virtual_disk_error_display() {
-        let err = VirtualDiskError::Io(std::io::Error::from_raw_os_error(2));
-        let msg = format!("{err}");
-        assert!(!msg.is_empty());
+        #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
+        {
+            let err = VirtualDiskError::Io(std::io::Error::from_raw_os_error(2));
+            let msg = format!("{err}");
+            assert!(!msg.is_empty());
+        }
 
         let err = VirtualDiskError::InvalidArgument("bad path");
         let msg = format!("{err}");
@@ -216,7 +219,7 @@ mod tests {
 
     #[test]
     fn virtual_disk_error_is_std_error() {
-        let err: Box<dyn std::error::Error> = Box::new(VirtualDiskError::InvalidArgument("test"));
+        let err: Box<dyn core::error::Error> = Box::new(VirtualDiskError::InvalidArgument("test"));
         assert!(!err.to_string().is_empty());
     }
 
@@ -376,7 +379,7 @@ mod tests {
 
     #[test]
     fn block_error_is_std_error() {
-        let err: Box<dyn std::error::Error> = Box::new(BlockError::OutOfRange);
+        let err: Box<dyn core::error::Error> = Box::new(BlockError::OutOfRange);
         assert!(!err.to_string().is_empty());
     }
 
