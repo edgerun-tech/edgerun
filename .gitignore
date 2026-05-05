@@ -17,6 +17,7 @@ env/
 build/
 dist/
 target/
+target*/
 out/
 *.egg-info/
 
