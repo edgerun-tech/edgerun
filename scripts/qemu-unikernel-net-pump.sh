@@ -6,6 +6,7 @@ qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu-net-pump.log}"
 qemu_net_dump="${QEMU_NET_DUMP:-/tmp/edgerun-qemu-net-pump.pcap}"
 mcast_addr="${QEMU_SOCKET_MCAST_ADDR:-230.0.0.1}"
 mcast_port="${QEMU_SOCKET_MCAST_PORT:-$((20000 + $$ % 20000))}"
+start_wait_seconds="${QEMU_NET_PUMP_START_WAIT:-60}"
 
 rm -f "$qemu_log" "$qemu_net_dump"
 
@@ -22,7 +23,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for _ in $(seq 1 100); do
+for _ in $(seq 1 $((start_wait_seconds * 10))); do
     if grep -q "Net pump started" "$qemu_log" 2>/dev/null; then
         break
     fi

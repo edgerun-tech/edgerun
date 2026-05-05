@@ -5509,118 +5509,112 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             rt::log::log(1, "VirtIO block has no partitions");
         } else {
             match edgerun_storage::detect_partitions(&mut storage) {
-                    Ok(table) if !table.partitions.is_empty() => {
-                        rt::log::log(1, "VirtIO block partition table detected");
-                        let mut handled_boot_config = false;
-                        for partition in &table.partitions {
-                            if handled_boot_config {
-                                break;
+                Ok(table) if !table.partitions.is_empty() => {
+                    rt::log::log(1, "VirtIO block partition table detected");
+                    let mut handled_boot_config = false;
+                    for partition in &table.partitions {
+                        if handled_boot_config {
+                            break;
+                        }
+                        let mut partition_boot_sector = [0u8; 512];
+                        match edgerun_storage::BlockStorage::read_sector(
+                            &mut storage,
+                            partition.start_lba,
+                            &mut partition_boot_sector,
+                        ) {
+                            Ok(()) if partition_boot_sector.iter().all(|byte| *byte == 0) => {
+                                rt::log::log(1, "VirtIO partition is blank")
                             }
-                            let mut partition_boot_sector = [0u8; 512];
-                            match edgerun_storage::BlockStorage::read_sector(
-                                &mut storage,
-                                partition.start_lba,
-                                &mut partition_boot_sector,
-                            ) {
-                                Ok(()) if partition_boot_sector.iter().all(|byte| *byte == 0) => {
-                                    rt::log::log(1, "VirtIO partition is blank")
+                            Ok(()) => {
+                                rt::log::log(1, "VirtIO block partitions detected");
+                                let mut partition_storage = disk_boot::RtPartitionStorage::new(
+                                    &mut storage,
+                                    partition.start_lba,
+                                    partition.sectors,
+                                );
+                                let mut fat_root_sector = [0u8; 512];
+                                match edgerun_storage::BlockStorage::read_sector(
+                                    &mut partition_storage,
+                                    260,
+                                    &mut fat_root_sector,
+                                ) {
+                                    Ok(()) => rt::log::log(1, "VirtIO FAT relative root read ok"),
+                                    Err(_) => {
+                                        rt::log::log(1, "VirtIO FAT relative root read failed")
+                                    }
                                 }
-                                Ok(()) => {
-                                    rt::log::log(1, "VirtIO block partitions detected");
-                                    let mut partition_storage = disk_boot::RtPartitionStorage::new(
-                                        &mut storage,
-                                        partition.start_lba,
-                                        partition.sectors,
-                                    );
-                                    let mut fat_root_sector = [0u8; 512];
-                                    match edgerun_storage::BlockStorage::read_sector(
-                                        &mut partition_storage,
-                                        260,
-                                        &mut fat_root_sector,
-                                    ) {
-                                        Ok(()) => {
-                                            rt::log::log(1, "VirtIO FAT relative root read ok")
-                                        }
-                                        Err(_) => {
-                                            rt::log::log(1, "VirtIO FAT relative root read failed")
-                                        }
-                                    }
-                                    rt::log::log(1, "VirtIO opening FAT boot partition");
-                                    let mut boot_config = None;
-                                    match edgerun_storage::FatReadOnly::open(partition_storage) {
-                                        Ok(mut fat) => {
-                                            rt::log::log(1, "VirtIO FAT boot partition open ok");
-                                            match fat.root_entries() {
-                                                Ok(_) => rt::log::log(
-                                                    1,
-                                                    "VirtIO FAT root directory read ok",
-                                                ),
-                                                Err(_) => rt::log::log(
-                                                    1,
-                                                    "VirtIO FAT root directory read failed",
-                                                ),
-                                            }
-                                            rt::log::log(1, "VirtIO FAT boot config read start");
-                                            match fat.read_file("/edgerun/boot.cfg") {
-                                                Ok(bytes) => {
-                                                    rt::log::log(
-                                                        1,
-                                                        "VirtIO FAT boot config bytes read ok",
-                                                    );
-                                                    match boot_config::BootConfig::parse(&bytes) {
-                                                        Ok(config) => {
-                                                            rt::log::log(
-                                                                1,
-                                                                "VirtIO FAT boot config read ok",
-                                                            );
-                                                            active_boot_config =
-                                                                Some(config.clone());
-                                                            boot_config = Some(config);
-                                                        }
-                                                        Err(_) => rt::log::log(
-                                                            1,
-                                                            "VirtIO FAT boot config parse failed",
-                                                        ),
-                                                    }
-                                                }
-                                                Err(_) => rt::log::log(
-                                                    1,
-                                                    "VirtIO FAT boot config missing",
-                                                ),
-                                            }
-                                        }
-                                        Err(_) => rt::log::log(1, "VirtIO partition is not FAT"),
-                                    }
-                                    if let Some(config) = boot_config.as_ref() {
-                                        let edgefs_key = [0x42u8; 32];
-                                        let edgefs_fs_id = [0x24u8; 16];
-                                        match disk_boot::open_configured_edgefs(
-                                            &mut storage,
-                                            config,
-                                            edgefs_key,
-                                            edgefs_fs_id,
-                                        ) {
+                                rt::log::log(1, "VirtIO opening FAT boot partition");
+                                let mut boot_config = None;
+                                match edgerun_storage::FatReadOnly::open(partition_storage) {
+                                    Ok(mut fat) => {
+                                        rt::log::log(1, "VirtIO FAT boot partition open ok");
+                                        match fat.root_entries() {
                                             Ok(_) => {
-                                                rt::log::log(1, "VirtIO EdgeFS boot target open ok")
+                                                rt::log::log(1, "VirtIO FAT root directory read ok")
                                             }
                                             Err(_) => rt::log::log(
                                                 1,
-                                                "VirtIO EdgeFS boot target open failed",
+                                                "VirtIO FAT root directory read failed",
                                             ),
                                         }
-                                        handled_boot_config = true;
+                                        rt::log::log(1, "VirtIO FAT boot config read start");
+                                        match fat.read_file("/edgerun/boot.cfg") {
+                                            Ok(bytes) => {
+                                                rt::log::log(
+                                                    1,
+                                                    "VirtIO FAT boot config bytes read ok",
+                                                );
+                                                match boot_config::BootConfig::parse(&bytes) {
+                                                    Ok(config) => {
+                                                        rt::log::log(
+                                                            1,
+                                                            "VirtIO FAT boot config read ok",
+                                                        );
+                                                        active_boot_config = Some(config.clone());
+                                                        boot_config = Some(config);
+                                                    }
+                                                    Err(_) => rt::log::log(
+                                                        1,
+                                                        "VirtIO FAT boot config parse failed",
+                                                    ),
+                                                }
+                                            }
+                                            Err(_) => {
+                                                rt::log::log(1, "VirtIO FAT boot config missing")
+                                            }
+                                        }
                                     }
+                                    Err(_) => rt::log::log(1, "VirtIO partition is not FAT"),
                                 }
-                                Err(_) => rt::log::log(1, "VirtIO partition read failed"),
+                                if let Some(config) = boot_config.as_ref() {
+                                    let edgefs_key = [0x42u8; 32];
+                                    let edgefs_fs_id = [0x24u8; 16];
+                                    match disk_boot::open_configured_edgefs(
+                                        &mut storage,
+                                        config,
+                                        edgefs_key,
+                                        edgefs_fs_id,
+                                    ) {
+                                        Ok(_) => {
+                                            rt::log::log(1, "VirtIO EdgeFS boot target open ok")
+                                        }
+                                        Err(_) => {
+                                            rt::log::log(1, "VirtIO EdgeFS boot target open failed")
+                                        }
+                                    }
+                                    handled_boot_config = true;
+                                }
                             }
+                            Err(_) => rt::log::log(1, "VirtIO partition read failed"),
                         }
                     }
-                    Ok(_) => {
-                        rt::log::log(1, "VirtIO block has no partitions");
-                    }
-                    Err(_) => {
-                        rt::log::log(1, "VirtIO block partition scan failed");
-                    }
+                }
+                Ok(_) => {
+                    rt::log::log(1, "VirtIO block has no partitions");
+                }
+                Err(_) => {
+                    rt::log::log(1, "VirtIO block partition scan failed");
+                }
             }
         }
     } else {

@@ -1,0 +1,21 @@
+[package]
+name = "edgerun-codex-boost"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun rkyv bridge records for local Codex context"
+
+[dependencies]
+edgerun-json = { workspace = true }
+edgerun-wire = { workspace = true, default-features = false }
+serde_json = "1"
+
+[[bin]]
+name = "edgerun-codex-boost-bench"
+path = "src/bin/bench.rs"
+
+[lints]
+workspace = true

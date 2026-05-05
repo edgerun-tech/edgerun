@@ -9,4 +9,4 @@
 pub const WIRE_PROTOCOL: &str = "rkyv";
 
 pub use rkyv::rancor::Error as WireError;
-pub use rkyv::{Archive, Deserialize, Serialize};
+pub use rkyv::*;

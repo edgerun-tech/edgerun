@@ -128,6 +128,24 @@ pub struct VirtioInterruptStatus {
     pub config_change: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VirtioError {
+    NotInitialized,
+    MissingDeviceConfig,
+    InvalidFrameLength,
+    InvalidBufferLength,
+    OutOfRange,
+    ReadOnly,
+    NoTxDescriptor,
+    NoPacket,
+    InvalidUsedDescriptor,
+    InvalidUsedLength,
+    DeviceTimeout,
+    DeviceError,
+}
+
+pub type VirtioResult<T> = Result<T, VirtioError>;
+
 impl VirtioInterruptStatus {
     fn from_raw(raw: u8) -> Self {
         Self {
@@ -1054,9 +1072,12 @@ impl VirtNet {
     }
 
     pub fn refresh_status(&mut self) -> bool {
-        if !self.is_initialized() || self.transport.device_cfg.is_null() {
-            return false;
-        }
+        self.try_refresh_status().is_ok()
+    }
+
+    pub fn try_refresh_status(&mut self) -> VirtioResult<()> {
+        self.ensure_initialized()?;
+        self.ensure_device_config()?;
 
         if self.features & VIRTIO_NET_F_STATUS != 0 {
             self.status = read_u16(unsafe { self.transport.device_cfg.add(6) });
@@ -1066,7 +1087,7 @@ impl VirtNet {
             self.link_up = true;
         }
 
-        true
+        Ok(())
     }
 
     pub fn mtu(&self) -> u16 {
@@ -1090,19 +1111,21 @@ impl VirtNet {
     }
 
     pub fn send(&mut self, data: &[u8]) -> bool {
-        if !self.is_initialized() {
-            return false;
-        }
+        self.try_send(data).is_ok()
+    }
+
+    pub fn try_send(&mut self, data: &[u8]) -> VirtioResult<()> {
+        self.ensure_initialized()?;
 
         let Some(frame_len) = net_tx_frame_len(data.len()) else {
-            return false;
+            return Err(VirtioError::InvalidFrameLength);
         };
 
         unsafe {
             self.reap_tx_used();
             let desc_id = match self.take_tx_descriptor() {
                 Some(desc_id) => desc_id,
-                None => return false,
+                None => return Err(VirtioError::NoTxDescriptor),
             };
 
             let buffer = (core::ptr::addr_of_mut!(TX_BUFFERS.0) as *mut [u8; BUFFER_SIZE])
@@ -1130,19 +1153,21 @@ impl VirtNet {
         }
 
         self.notify_queue(TX_QUEUE);
-        true
+        Ok(())
     }
 
     pub fn recv(&mut self, buf: &mut [u8]) -> Option<usize> {
-        if !self.is_initialized() {
-            return None;
-        }
+        self.try_recv(buf).ok().flatten()
+    }
+
+    pub fn try_recv(&mut self, buf: &mut [u8]) -> VirtioResult<Option<usize>> {
+        self.ensure_initialized()?;
 
         unsafe {
             let used = core::ptr::addr_of_mut!(RX_USED);
             let used_idx = split_queue_used_idx(used);
             if used_idx == self.rx_last_used_idx {
-                return None;
+                return Ok(None);
             }
 
             let elem = split_queue_used_elem(used, QUEUE_SIZE as u16, self.rx_last_used_idx);
@@ -1151,14 +1176,14 @@ impl VirtNet {
             let desc_id = elem.id as usize;
             if desc_id >= self.queue_size as usize {
                 self.rx_invalid = self.rx_invalid.wrapping_add(1);
-                return None;
+                return Err(VirtioError::InvalidUsedDescriptor);
             }
 
             let Some(payload_len) = net_rx_payload_len(elem.len) else {
                 self.rx_invalid = self.rx_invalid.wrapping_add(1);
                 self.post_rx_descriptor(desc_id as u16);
                 self.notify_queue(RX_QUEUE);
-                return None;
+                return Err(VirtioError::InvalidUsedLength);
             };
             let len = core::cmp::min(payload_len, buf.len());
             if len == 0 {
@@ -1174,7 +1199,7 @@ impl VirtNet {
 
             self.post_rx_descriptor(desc_id as u16);
             self.notify_queue(RX_QUEUE);
-            Some(len)
+            Ok(Some(len))
         }
     }
 
@@ -1274,6 +1299,22 @@ impl VirtNet {
         };
         if let Some(transport) = self.transport() {
             transport.notify_split_queue(notify_off, queue);
+        }
+    }
+
+    fn ensure_initialized(&self) -> VirtioResult<()> {
+        if self.is_initialized() {
+            Ok(())
+        } else {
+            Err(VirtioError::NotInitialized)
+        }
+    }
+
+    fn ensure_device_config(&self) -> VirtioResult<()> {
+        if self.transport.device_cfg.is_null() {
+            Err(VirtioError::MissingDeviceConfig)
+        } else {
+            Ok(())
         }
     }
 }
@@ -1507,13 +1548,21 @@ impl VirtBlk {
     }
 
     pub fn read_sector(&mut self, sector: u64, out: &mut [u8]) -> bool {
-        if !self.is_initialized() || out.len() != SECTOR_SIZE || sector >= self.sectors {
-            return false;
+        self.try_read_sector(sector, out).is_ok()
+    }
+
+    pub fn try_read_sector(&mut self, sector: u64, out: &mut [u8]) -> VirtioResult<()> {
+        self.ensure_initialized()?;
+        if out.len() != SECTOR_SIZE {
+            return Err(VirtioError::InvalidBufferLength);
+        }
+        if sector >= self.sectors {
+            return Err(VirtioError::OutOfRange);
         }
 
         unsafe {
             if !self.submit_request(VIRTIO_BLK_T_IN, sector, SECTOR_SIZE, true) {
-                return false;
+                return Err(VirtioError::DeviceError);
             }
             core::ptr::copy_nonoverlapping(
                 core::ptr::addr_of!(BLK_DATA.0) as *const u8,
@@ -1521,17 +1570,22 @@ impl VirtBlk {
                 SECTOR_SIZE,
             );
         }
-        true
+        Ok(())
     }
 
     pub fn read_sectors(&mut self, start_sector: u64, out: &mut [u8]) -> bool {
-        if !self.is_initialized() || out.len() % SECTOR_SIZE != 0 {
-            return false;
+        self.try_read_sectors(start_sector, out).is_ok()
+    }
+
+    pub fn try_read_sectors(&mut self, start_sector: u64, out: &mut [u8]) -> VirtioResult<()> {
+        self.ensure_initialized()?;
+        if out.len() % SECTOR_SIZE != 0 {
+            return Err(VirtioError::InvalidBufferLength);
         }
 
         let sector_count = (out.len() / SECTOR_SIZE) as u64;
         if !self.sector_range_in_bounds(start_sector, sector_count) {
-            return false;
+            return Err(VirtioError::OutOfRange);
         }
 
         let mut offset = 0;
@@ -1539,21 +1593,28 @@ impl VirtBlk {
         while offset < out.len() {
             let chunk_len = core::cmp::min(SECTOR_SIZE, out.len() - offset);
             if !self.read_sectors_chunk(sector, &mut out[offset..offset + chunk_len]) {
-                return false;
+                return Err(VirtioError::DeviceError);
             }
             offset += chunk_len;
             sector += (chunk_len / SECTOR_SIZE) as u64;
         }
-        true
+        Ok(())
     }
 
     pub fn write_sector(&mut self, sector: u64, data: &[u8]) -> bool {
-        if !self.is_initialized()
-            || self.read_only
-            || data.len() != SECTOR_SIZE
-            || sector >= self.sectors
-        {
-            return false;
+        self.try_write_sector(sector, data).is_ok()
+    }
+
+    pub fn try_write_sector(&mut self, sector: u64, data: &[u8]) -> VirtioResult<()> {
+        self.ensure_initialized()?;
+        if self.read_only {
+            return Err(VirtioError::ReadOnly);
+        }
+        if data.len() != SECTOR_SIZE {
+            return Err(VirtioError::InvalidBufferLength);
+        }
+        if sector >= self.sectors {
+            return Err(VirtioError::OutOfRange);
         }
 
         unsafe {
@@ -1562,24 +1623,33 @@ impl VirtBlk {
                 core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
                 SECTOR_SIZE,
             );
-            self.submit_request(VIRTIO_BLK_T_OUT, sector, SECTOR_SIZE, false)
+            if self.submit_request(VIRTIO_BLK_T_OUT, sector, SECTOR_SIZE, false) {
+                Ok(())
+            } else {
+                Err(VirtioError::DeviceError)
+            }
         }
     }
 
     pub fn write_sectors(&mut self, start_sector: u64, data: &[u8]) -> bool {
-        if !self.is_initialized() || data.len() % SECTOR_SIZE != 0 {
-            return false;
+        self.try_write_sectors(start_sector, data).is_ok()
+    }
+
+    pub fn try_write_sectors(&mut self, start_sector: u64, data: &[u8]) -> VirtioResult<()> {
+        self.ensure_initialized()?;
+        if data.len() % SECTOR_SIZE != 0 {
+            return Err(VirtioError::InvalidBufferLength);
         }
 
         let sector_count = (data.len() / SECTOR_SIZE) as u64;
         if !self.sector_range_in_bounds(start_sector, sector_count) {
-            return false;
+            return Err(VirtioError::OutOfRange);
         }
         if sector_count == 0 {
-            return true;
+            return Ok(());
         }
         if self.read_only {
-            return false;
+            return Err(VirtioError::ReadOnly);
         }
 
         let mut offset = 0;
@@ -1587,22 +1657,28 @@ impl VirtBlk {
         while offset < data.len() {
             let chunk_len = core::cmp::min(SECTOR_SIZE, data.len() - offset);
             if !self.write_sectors_chunk(sector, &data[offset..offset + chunk_len]) {
-                return false;
+                return Err(VirtioError::DeviceError);
             }
             offset += chunk_len;
             sector += (chunk_len / SECTOR_SIZE) as u64;
         }
-        true
+        Ok(())
     }
 
     pub fn flush(&mut self) -> bool {
-        if !self.is_initialized() {
-            return false;
-        }
+        self.try_flush().is_ok()
+    }
+
+    pub fn try_flush(&mut self) -> VirtioResult<()> {
+        self.ensure_initialized()?;
         if self.features & VIRTIO_BLK_F_FLUSH == 0 {
-            return true;
+            return Ok(());
         }
-        unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, 0, false) }
+        if unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, 0, false) } {
+            Ok(())
+        } else {
+            Err(VirtioError::DeviceError)
+        }
     }
 
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
@@ -1782,6 +1858,14 @@ impl VirtBlk {
             transport.notify_split_queue(self.queue_notify_off, 0);
         }
     }
+
+    fn ensure_initialized(&self) -> VirtioResult<()> {
+        if self.is_initialized() {
+            Ok(())
+        } else {
+            Err(VirtioError::NotInitialized)
+        }
+    }
 }
 
 impl Drop for VirtBlk {
@@ -1860,19 +1944,21 @@ impl VirtRng {
     }
 
     pub fn fill_bytes(&mut self, out: &mut [u8]) -> bool {
-        if !self.is_initialized() {
-            return false;
-        }
+        self.try_fill_bytes(out).is_ok()
+    }
+
+    pub fn try_fill_bytes(&mut self, out: &mut [u8]) -> VirtioResult<()> {
+        self.ensure_initialized()?;
 
         let mut offset = 0;
         while offset < out.len() {
             let written = unsafe { self.request_entropy(&mut out[offset..]) };
             if written == 0 {
-                return false;
+                return Err(VirtioError::DeviceError);
             }
             offset += written;
         }
-        true
+        Ok(())
     }
 
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
@@ -1953,6 +2039,14 @@ impl VirtRng {
     fn notify_queue(&self) {
         if let Some(transport) = self.transport() {
             transport.notify_split_queue(self.queue_notify_off, 0);
+        }
+    }
+
+    fn ensure_initialized(&self) -> VirtioResult<()> {
+        if self.is_initialized() {
+            Ok(())
+        } else {
+            Err(VirtioError::NotInitialized)
         }
     }
 }
@@ -2067,15 +2161,17 @@ impl VirtConsole {
     }
 
     pub fn recv(&mut self, buf: &mut [u8]) -> Option<usize> {
-        if !self.is_initialized() {
-            return None;
-        }
+        self.try_recv(buf).ok().flatten()
+    }
+
+    pub fn try_recv(&mut self, buf: &mut [u8]) -> VirtioResult<Option<usize>> {
+        self.ensure_initialized()?;
 
         unsafe {
             let used = core::ptr::addr_of_mut!(CONSOLE_RX_USED);
             let used_idx = split_queue_used_idx(used);
             if used_idx == self.rx_last_used_idx {
-                return None;
+                return Ok(None);
             }
 
             let elem = split_queue_used_elem(used, self.rx_queue_size, self.rx_last_used_idx);
@@ -2083,13 +2179,13 @@ impl VirtConsole {
 
             let desc_id = elem.id as usize;
             if desc_id >= self.rx_queue_size as usize {
-                return None;
+                return Err(VirtioError::InvalidUsedDescriptor);
             }
 
             let Some(rx_len) = console_rx_len(elem.len) else {
                 self.post_rx_descriptor(desc_id as u16);
                 self.notify_rx_queue();
-                return None;
+                return Err(VirtioError::InvalidUsedLength);
             };
             let len = core::cmp::min(rx_len, buf.len());
             if len != 0 {
@@ -2100,24 +2196,26 @@ impl VirtConsole {
 
             self.post_rx_descriptor(desc_id as u16);
             self.notify_rx_queue();
-            Some(len)
+            Ok(Some(len))
         }
     }
 
     pub fn write_all(&mut self, bytes: &[u8]) -> bool {
-        if !self.is_initialized() {
-            return false;
-        }
+        self.try_write_all(bytes).is_ok()
+    }
+
+    pub fn try_write_all(&mut self, bytes: &[u8]) -> VirtioResult<()> {
+        self.ensure_initialized()?;
 
         let mut offset = 0;
         while offset < bytes.len() {
             let written = unsafe { self.write_chunk(&bytes[offset..]) };
             if written == 0 {
-                return false;
+                return Err(VirtioError::DeviceError);
             }
             offset += written;
         }
-        true
+        Ok(())
     }
 
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
@@ -2245,6 +2343,14 @@ impl VirtConsole {
     fn notify_rx_queue(&self) {
         if let Some(transport) = self.transport() {
             transport.notify_split_queue(self.rx_notify_off, CONSOLE_RX_QUEUE);
+        }
+    }
+
+    fn ensure_initialized(&self) -> VirtioResult<()> {
+        if self.is_initialized() {
+            Ok(())
+        } else {
+            Err(VirtioError::NotInitialized)
         }
     }
 }
@@ -3267,6 +3373,66 @@ mod tests {
         assert!(!blk.read_sectors(1, &mut empty));
         assert!(!blk.read_sectors(0, &mut out[..SECTOR_SIZE - 1]));
         assert!(!blk.write_sectors(0, &sector[..SECTOR_SIZE - 1]));
+    }
+
+    #[test]
+    fn typed_errors_report_uninitialized_io() {
+        let mut net = VirtNet::new();
+        let mut blk = VirtBlk::new();
+        let mut rng = VirtRng::new();
+        let mut console = VirtConsole::new();
+        let mut byte = [0u8; 1];
+
+        assert_eq!(net.try_refresh_status(), Err(VirtioError::NotInitialized));
+        assert_eq!(net.try_send(&[]), Err(VirtioError::NotInitialized));
+        assert_eq!(net.try_recv(&mut byte), Err(VirtioError::NotInitialized));
+        assert_eq!(blk.try_flush(), Err(VirtioError::NotInitialized));
+        assert_eq!(
+            blk.try_read_sector(0, &mut [0u8; SECTOR_SIZE]),
+            Err(VirtioError::NotInitialized)
+        );
+        assert_eq!(
+            rng.try_fill_bytes(&mut byte),
+            Err(VirtioError::NotInitialized)
+        );
+        assert_eq!(console.try_write_all(&[]), Err(VirtioError::NotInitialized));
+        assert_eq!(
+            console.try_recv(&mut byte),
+            Err(VirtioError::NotInitialized)
+        );
+    }
+
+    #[test]
+    fn typed_errors_validate_block_requests_before_device_io() {
+        let _guard = driver_claim_test_lock();
+        let mut blk_mmio = TestMmio([0; 0x200]);
+        let base_ptr = init_test_mmio(&mut blk_mmio, VIRTIO_DEVICE_TYPE_BLK);
+        let base = base_ptr as usize;
+        write_u32(
+            unsafe { base_ptr.add(VIRTIO_MMIO_STATUS) },
+            VIRTIO_CONFIG_STATUS_DRIVER_OK as u32,
+        );
+        let mut blk = VirtBlk::from_mmio_base(base).unwrap();
+        blk.sectors = 4;
+
+        let mut short = [0u8; SECTOR_SIZE - 1];
+        let sector = [0u8; SECTOR_SIZE];
+
+        assert_eq!(
+            blk.try_read_sector(0, &mut short),
+            Err(VirtioError::InvalidBufferLength)
+        );
+        assert_eq!(
+            blk.try_read_sector(4, &mut [0u8; SECTOR_SIZE]),
+            Err(VirtioError::OutOfRange)
+        );
+        assert_eq!(
+            blk.try_read_sectors(3, &mut [0u8; SECTOR_SIZE * 2]),
+            Err(VirtioError::OutOfRange)
+        );
+
+        blk.read_only = true;
+        assert_eq!(blk.try_write_sector(0, &sector), Err(VirtioError::ReadOnly));
     }
 
     #[test]
