@@ -67,10 +67,6 @@ pub use adapters::{
     DisplayRemoteAdapter, InputRemoteAdapter, MicrophoneRemoteAdapter, PairedCameraRemoteAdapter,
     SpeakerRemoteAdapter, WifiControlRemoteAdapter, WifiRemoteAdapter,
 };
-pub use capability_signature::{
-    sign_grant, sign_invocation, sign_request, sign_result, sign_revocation, verify_grant,
-    verify_invocation, verify_request, verify_result, verify_revocation,
-};
 pub use policy::{IntoPolicyWrappedProvider, PolicyWrappedProvider, SessionGrantBinding};
 pub use protocol::{
     accept_session_open_unchecked, capability_error_result, capability_remote_envelope,

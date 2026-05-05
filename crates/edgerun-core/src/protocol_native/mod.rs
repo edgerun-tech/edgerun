@@ -99,7 +99,7 @@ pub trait NativeEnum: Sized {
     fn from_i32(value: i32) -> Option<Self>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ProtocolRecord {
     CommandEnvelope(CommandEnvelope),
     EventEnvelope(EventEnvelope),
@@ -115,6 +115,52 @@ pub enum ProtocolRecord {
     Signature(Signature),
 }
 
-pub fn removed_protocol_record_bytes(_record: &ProtocolRecord, _signable: bool) -> alloc::vec::Vec<u8> {
-    panic!("protocol record byte canonicalization was removed; use the rkyv wire boundary")
+pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::Vec<u8> {
+    let normalized = if signable {
+        signable_record(record)
+    } else {
+        record.clone()
+    };
+    alloc::format!("edgerun-rkyv-v0|signable={signable}|{normalized:?}").into_bytes()
+}
+
+fn signable_record(record: &ProtocolRecord) -> ProtocolRecord {
+    match record {
+        ProtocolRecord::CommandEnvelope(value) => {
+            let mut value = value.clone();
+            value.signature = None;
+            ProtocolRecord::CommandEnvelope(value)
+        }
+        ProtocolRecord::EventEnvelope(value) => {
+            let mut value = value.clone();
+            value.signature = None;
+            ProtocolRecord::EventEnvelope(value)
+        }
+        ProtocolRecord::DelegationRecord(value) => {
+            let mut value = value.clone();
+            value.signature = None;
+            ProtocolRecord::DelegationRecord(value)
+        }
+        ProtocolRecord::RevocationRecord(value) => {
+            let mut value = value.clone();
+            value.signature = None;
+            ProtocolRecord::RevocationRecord(value)
+        }
+        ProtocolRecord::IdentityRecord(value) => {
+            let mut value = value.clone();
+            value.signature = None;
+            ProtocolRecord::IdentityRecord(value)
+        }
+        ProtocolRecord::RouteAdvertisement(value) => {
+            let mut value = value.clone();
+            value.signature = None;
+            ProtocolRecord::RouteAdvertisement(value)
+        }
+        ProtocolRecord::AssuranceClaim(value) => {
+            let mut value = value.clone();
+            value.signature = None;
+            ProtocolRecord::AssuranceClaim(value)
+        }
+        other => other.clone(),
+    }
 }

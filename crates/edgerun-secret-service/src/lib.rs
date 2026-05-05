@@ -80,7 +80,7 @@ pub mod dbus_types;
 pub mod dbus_wire;
 pub mod session;
 
-pub use backend::{no_op_event_recorder, Backend, CredentialMeta, SecretEventRecorder};
+pub use backend::{init_node_id, no_op_event_recorder, Backend, CredentialMeta, SecretEventRecorder};
 #[cfg(unix)]
 pub use dbus_bus::BusConnection;
 pub use session::{

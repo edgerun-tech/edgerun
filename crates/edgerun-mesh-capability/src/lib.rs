@@ -94,11 +94,7 @@ use edgerun_hardware_signing::NodeID;
 use edgerun_mesh_link::MeshLink;
 use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteCapabilityTransport};
 
-pub use client::MeshCapabilityClient;
-pub use dispatcher::MeshEnvelopeDispatcher;
 pub use inbox::EnvelopeInbox;
-pub use server::MeshCapabilityServer;
-pub use transport::MeshCapabilityTransport;
 
 /// Shared outbound queue: (destination NodeID, serialized native payload).
 /// Used by `MeshCapabilityTransport::send()` to push frames that the daemon

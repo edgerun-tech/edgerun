@@ -5,7 +5,6 @@ use edgerun_encoding::byteorder::read_u64_be;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_rt::{AsyncReadExt, AsyncWriteExt, CancellationToken};
 
-use crate::command_query_wire_codec;
 use crate::session::{self, SessionState};
 use crate::tcp_server::{encode_tcp_frame, SessionContext, TCP_MAX_FRAME_SIZE};
 use crate::types::StoreRequest;
@@ -259,11 +258,11 @@ where
 /// Run the message loop for a peer connection.
 async fn handle_peer_messages<R, W>(
     reader: &mut R,
-    writer: &mut W,
+    _writer: &mut W,
     read_buf: &mut Vec<u8>,
     rate_limiter: &mut crate::ingress::TokenBucket,
-    store_tx: &edgerun_rt::mpsc::Sender<StoreRequest>,
-    session: &SessionState,
+    _store_tx: &edgerun_rt::mpsc::Sender<StoreRequest>,
+    _session: &SessionState,
 ) where
     R: edgerun_rt::AsyncRead + Unpin,
     W: edgerun_rt::AsyncWrite + Unpin,
@@ -317,7 +316,7 @@ async fn handle_peer_messages<R, W>(
             }
         }
 
-        let payload: Vec<u8> = {
+        let _payload: Vec<u8> = {
             let frame = read_buf.drain(..total_needed).collect::<Vec<u8>>();
             frame.into_iter().skip(8).collect()
         };
@@ -328,70 +327,6 @@ async fn handle_peer_messages<R, W>(
             return;
         }
 
-        // Try CommandEnvelope
-        if let Some((command, raw)) =
-            command_query_wire_codec::decode_command_transport(&payload[..])
-        {
-            let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-            if store_tx
-                .send(StoreRequest::Command {
-                    raw_bytes: raw,
-                    command,
-                    peer_id: None,
-                    reply_tx: Some(reply_tx),
-                })
-                .await
-                .is_err()
-            {
-                return;
-            }
-            match reply_rx.await {
-                Ok(crate::types::StoreResponse::Ok(resp_payload)) => {
-                    let resp_frame = encode_tcp_frame(&resp_payload);
-                    if writer.write_all(&resp_frame).await.is_err() {
-                        return;
-                    }
-                }
-                Ok(crate::types::StoreResponse::Rejected(_reason)) => {
-                    edgerun_log::debug!("peer message screened");
-                    return;
-                }
-                Err(_) => return,
-            }
-            continue;
-        }
-
-        // Try QueryRequest
-        if let Some((query, raw)) = command_query_wire_codec::decode_query_transport(&payload[..]) {
-            let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-            if store_tx
-                .send(StoreRequest::Query {
-                    raw_bytes: raw,
-                    query,
-                    peer_id: None,
-                    reply_tx: Some(reply_tx),
-                })
-                .await
-                .is_err()
-            {
-                return;
-            }
-            match reply_rx.await {
-                Ok(crate::types::StoreResponse::Ok(resp_payload)) => {
-                    let resp_frame = encode_tcp_frame(&resp_payload);
-                    if writer.write_all(&resp_frame).await.is_err() {
-                        return;
-                    }
-                }
-                Ok(crate::types::StoreResponse::Rejected(_reason)) => {
-                    edgerun_log::debug!("peer query screened");
-                    return;
-                }
-                Err(_) => return,
-            }
-            continue;
-        }
-
-        edgerun_log::debug!("peer received unrecognized message type");
+        edgerun_log::debug!("peer received non-session payload without an active rkyv decoder");
     }
 }

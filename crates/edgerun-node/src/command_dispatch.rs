@@ -6,10 +6,9 @@ use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::{
     command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
 };
-use edgerun_core::encrypted_envelope::validate_encrypted_envelope;
 use edgerun_core::protocol::{
-    command_envelope, CommandDecision, CommandEnvelope, CommandType, EventType, IdentityKind,
-    IdentityRef, ObjectKind, ObjectRef,
+    command_envelope, enum_from_i32, CommandDecision, CommandEnvelope, CommandType, EventType,
+    ObjectKind, ObjectRef,
 };
 use edgerun_core::result::Verdict;
 use edgerun_core::util::now_unix_millis_i64;
@@ -34,18 +33,6 @@ impl ControllerSet {
 
     pub fn remove(&mut self, identity_id: &Vec<u8>) -> bool {
         self.controllers.remove(identity_id)
-    }
-
-    pub fn contains(&self, identity_id: &Vec<u8>) -> bool {
-        self.controllers.contains(identity_id)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &Vec<u8>> {
-        self.controllers.iter()
-    }
-
-    pub fn controller_ids(&self) -> Vec<Vec<u8>> {
-        self.to_vec()
     }
 
     pub fn to_vec(&self) -> Vec<Vec<u8>> {
@@ -126,7 +113,7 @@ pub fn dispatch_command(
         return respond(command, store, stream_id, signer, false, reason);
     }
 
-    match CommandType::from_i32(command.command_type) {
+    match command_type(command) {
         Some(CommandType::AddController) => {
             let id = extract_identity_from_command(command);
             if id.is_empty() {
@@ -238,17 +225,19 @@ pub fn dispatch_command(
 
 fn validate_payload_boundary(command: &CommandEnvelope) -> Result<(), &'static str> {
     if matches!(
-        CommandType::from_i32(command.command_type),
+        command_type(command),
         Some(CommandType::StoreObject | CommandType::ExecuteWorkload)
     ) {
-        let Some(command_envelope::Payload::InlinePayload(bytes)) = &command.payload else {
-            return Ok(());
-        };
-        let env = edgerun_core::protocol::EncryptedEnvelope::decode(bytes.as_slice())
-            .map_err(|_| "PLAINTEXT_PAYLOAD_REJECTED")?;
-        validate_encrypted_envelope(&env).map_err(|_| "invalid_encrypted_payload")?;
+        if matches!(&command.payload, Some(command_envelope::Payload::InlinePayload(bytes)) if !bytes.is_empty())
+        {
+            return Err("PLAINTEXT_PAYLOAD_REJECTED");
+        }
     }
     Ok(())
+}
+
+fn command_type(command: &CommandEnvelope) -> Option<CommandType> {
+    enum_from_i32(command.command_type)
 }
 
 fn respond(
@@ -399,12 +388,4 @@ pub fn create_node_genesis_payload(
             object_id: bytes,
             object_kind: Some(ObjectKind::Payload as i32),
         })
-}
-
-pub fn identity_ref(id: Vec<u8>) -> IdentityRef {
-    IdentityRef {
-        identity_id: id.clone(),
-        identity_kind: Some(IdentityKind::Node as i32),
-        key_hint: Some(id),
-    }
 }

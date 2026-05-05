@@ -35,7 +35,7 @@ pub struct ProtocolSigningInput {
     pub signature_input: Vec<u8>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProtocolSigningOutput {
     pub family: ProtocolFamily,
     pub signature: Signature,

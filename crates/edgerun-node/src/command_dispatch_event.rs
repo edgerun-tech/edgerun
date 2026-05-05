@@ -4,9 +4,9 @@
 //! duplicated inside command handlers.
 
 use crate::command_dispatch_result::command_ref_from;
+use edgerun_core::command::command_hash;
 use edgerun_core::protocol::{CommandEnvelope, EventType, ObjectRef};
 use edgerun_core::util::{bytes_to_hex, now_protocol_timestamp};
-use edgerun_core::command::command_hash;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_storage::NodeStore;
 
@@ -24,7 +24,7 @@ pub fn append_command_result_event(
     stream_id: &[u8],
     signer: &dyn MeshSigner,
     committed: bool,
-    reason_code: &str,
+    _reason_code: &str,
     result_object: Option<ObjectRef>,
 ) -> Result<CommandResultEventWrite, String> {
     let event_type = if committed {

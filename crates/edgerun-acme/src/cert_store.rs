@@ -155,6 +155,10 @@ mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    fn init_test_node_id() {
+        let _ = edgerun_secret_service::init_node_id(vec![0xAC; 32]);
+    }
+
     fn temp_root(name: &str) -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -165,6 +169,7 @@ mod tests {
 
     #[test]
     fn store_load_list_delete_roundtrip() {
+        init_test_node_id();
         let root = temp_root("cert-store");
         let mut store = CertStore::new(root.clone(), "acme").expect("store");
         let example_cert =
@@ -209,6 +214,7 @@ mod tests {
 
     #[test]
     fn store_rejects_certificate_for_different_domain() {
+        init_test_node_id();
         let root = temp_root("cert-store-mismatch");
         let mut store = CertStore::new(root.clone(), "acme").expect("store");
         let cert = edgerun_tls::generate_self_signed(&["other.example.com"]).expect("cert");

@@ -4,10 +4,9 @@ use std::sync::Arc;
 use edgerun_encoding::byteorder::read_u64_be;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 
-use crate::command_query_wire_codec;
 use crate::ingress;
 use crate::session;
-use crate::types::{StoreRequest, StoreResponse};
+use crate::types::StoreRequest;
 
 pub const TCP_MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
 
@@ -318,10 +317,10 @@ where
 /// Common frame handling logic for TCP connections with session state.
 async fn handle_tcp_stream_common_with_session<R, W>(
     reader: &mut R,
-    writer: &mut W,
+    _writer: &mut W,
     read_buf: &mut Vec<u8>,
     conn_rate_limiter: &mut ingress::TokenBucket,
-    store_tx: &edgerun_rt::mpsc::Sender<StoreRequest>,
+    _store_tx: &edgerun_rt::mpsc::Sender<StoreRequest>,
     _session: &session::SessionState,
 ) where
     R: edgerun_rt::AsyncRead + Unpin,
@@ -398,168 +397,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             }
         }
 
-        // Try CommandEnvelope
-        if let Some((command, raw)) =
-            command_query_wire_codec::decode_command_transport(&payload[..])
-        {
-            let proto_command = command.clone();
-
-            // Check if this is a snapshot publish command
-            use edgerun_core::protocol::CommandType;
-            if command.command_type == CommandType::PublishSnapshot as i32 {
-                let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-                if store_tx
-                    .send(StoreRequest::ProduceSnapshot {
-                        view_type: "stream_heads".to_string(),
-                        completeness: 1, // FULL
-                        reply_tx,
-                    })
-                    .await
-                    .is_err()
-                {
-                    return;
-                }
-                match reply_rx.await {
-                    Ok(StoreResponse::Ok(resp_payload)) => {
-                        let resp_frame = encode_tcp_frame(&resp_payload);
-                        if writer.write_all(&resp_frame).await.is_err() {
-                            return;
-                        }
-                    }
-                    Ok(StoreResponse::Rejected(_reason)) => {
-                        edgerun_log::debug!("TCP snapshot production screened");
-                        return;
-                    }
-                    Err(_) => return,
-                }
-                continue;
-            }
-
-            // Check if this is a fetch object command
-            if command.command_type == CommandType::FetchObject as i32 {
-                // Decode the raw payload as proto CommandEnvelope to get payload_object
-                // Extract the ObjectRef from the proto command's payload_object
-                let object_ref = match command_query_wire_codec::payload_object_ref(&proto_command)
-                {
-                    Some(object_ref) => object_ref,
-                    None => {
-                        edgerun_log::warn!("FETCH_OBJECT: no object reference provided");
-                        let err_resp = "FETCH_OBJECT: no object reference provided".to_string();
-                        let resp_frame = encode_tcp_frame(err_resp.as_bytes());
-                        let _ = writer.write_all(&resp_frame).await;
-                        continue;
-                    }
-                };
-
-                if object_ref.object_id.is_empty() {
-                    edgerun_log::warn!("FETCH_OBJECT: no object reference provided");
-                    let err_resp = "FETCH_OBJECT: no object reference provided".to_string();
-                    let resp_frame = encode_tcp_frame(err_resp.as_bytes());
-                    let _ = writer.write_all(&resp_frame).await;
-                    continue;
-                }
-
-                let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-                if store_tx
-                    .send(StoreRequest::FetchObject {
-                        object_ref,
-                        reply_tx,
-                    })
-                    .await
-                    .is_err()
-                {
-                    return;
-                }
-                match reply_rx.await {
-                    Ok(StoreResponse::Ok(resp_payload)) => {
-                        let resp_frame = encode_tcp_frame(&resp_payload);
-                        if writer.write_all(&resp_frame).await.is_err() {
-                            return;
-                        }
-                    }
-                    Ok(StoreResponse::Rejected(_reason)) => {
-                        edgerun_log::debug!("TCP fetch object screened");
-                        return;
-                    }
-                    Err(_) => return,
-                }
-                continue;
-            }
-
-            let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-            if store_tx
-                .send(StoreRequest::Command {
-                    raw_bytes: raw,
-                    command,
-                    peer_id: None,
-                    reply_tx: Some(reply_tx),
-                })
-                .await
-                .is_err()
-            {
-                return;
-            }
-            match reply_rx.await {
-                Ok(StoreResponse::Ok(resp_payload)) => {
-                    let response = if resp_payload.is_empty() {
-                        b"ok".as_slice()
-                    } else {
-                        resp_payload.as_slice()
-                    };
-                    let resp_frame = encode_tcp_frame(response);
-                    if writer.write_all(&resp_frame).await.is_err() {
-                        return;
-                    }
-                }
-                Ok(StoreResponse::Rejected(reason)) => {
-                    edgerun_log::debug!("TCP message screened");
-                    let resp = format!("rejected: {:?}", reason);
-                    let resp_frame = encode_tcp_frame(resp.as_bytes());
-                    if writer.write_all(&resp_frame).await.is_err() {
-                        return;
-                    }
-                }
-                Err(_) => return,
-            }
-            continue;
-        }
-
-        // Try QueryRequest
-        if let Some((query, raw)) = command_query_wire_codec::decode_query_transport(&payload[..]) {
-            let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
-            if store_tx
-                .send(StoreRequest::Query {
-                    raw_bytes: raw,
-                    query,
-                    peer_id: None,
-                    reply_tx: Some(reply_tx),
-                })
-                .await
-                .is_err()
-            {
-                return;
-            }
-            match reply_rx.await {
-                Ok(StoreResponse::Ok(resp_payload)) => {
-                    let resp_frame = encode_tcp_frame(&resp_payload);
-                    if writer.write_all(&resp_frame).await.is_err() {
-                        return;
-                    }
-                }
-                Ok(StoreResponse::Rejected(reason)) => {
-                    edgerun_log::debug!("TCP query screened");
-                    let resp = format!("rejected: {:?}", reason);
-                    let resp_frame = encode_tcp_frame(resp.as_bytes());
-                    if writer.write_all(&resp_frame).await.is_err() {
-                        return;
-                    }
-                }
-                Err(_) => return,
-            }
-            continue;
-        }
-
-        edgerun_log::debug!("TCP received unrecognized message type");
+        edgerun_log::debug!("TCP received non-session payload without an active rkyv decoder");
     }
 }
 
