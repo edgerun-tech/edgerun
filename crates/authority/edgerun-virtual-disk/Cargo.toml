@@ -12,6 +12,7 @@ description = "Virtual block device and network block protocol support for Edger
 edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
+edgerun-wire = { workspace = true, default-features = false }
 
 [[bin]]
 name = "nbd-attach"

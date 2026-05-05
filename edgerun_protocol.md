@@ -1414,28 +1414,26 @@ Removed legacy byte paths MUST NOT be reintroduced as schema bridges, generated 
 
 ### 17.1 Goals
 
-Canonicalization makes these things unambiguous:
+The rkyv boundary makes these things unambiguous:
 - what exactly is hashed
 - what exactly is signed
 - what exactly defines logical object identity
 - what exactly defines stored representation identity
-- how two implementations arrive at the same bytes before hashing
+- how implementations reach the same bytes before hashing
 
-This section is normative.
-
-Canonical bytes for every protocol message **are** the deterministic rkyv wire encoding of the normalized message. No intermediate encoding layer is required.
+This section is normative. Internal protocol bytes for hashing, signing, storage, transport payloads, caches, and local bridges are rkyv-family archive bytes of concrete native protocol records. There is no alternate Edgerun internal wire protocol.
 
 ### 17.2 Required algorithms in v0
 
 Core v0 requires:
 - hash / digest: **SHA-256**
 - signature: **ECDSA P-256 with SHA-256**
-- rkyv serialization: **rkyv** semantics (ascending native field order, deterministic rkyv archive encoding)
+- internal wire: **rkyv** archives of native protocol records
 
 ### 17.3 Identifier classes
 
 #### Content-derived identifiers
-Deterministic from canonical content.
+Deterministic from rkyv signable or object bytes.
 
 Examples:
 - `event_hash`
@@ -1467,8 +1465,7 @@ Recommended:
 ```text
 identity_id = SHA256(
   "edgerun:v0:id:identity" || 0x00 ||
-  uint32_be(key_algorithm) || 0x00 ||
-  public_key_bytes
+  rkyv_archive(IdentityRecord_signable_or_key_form)
 )
 ```
 
@@ -1476,61 +1473,53 @@ Recommended, not universally mandatory, but once chosen for a deployment it shou
 
 ### 17.5 Rkyv archive encoding v0
 
-The canonical encoding for every protocol message is its **rkyv wire format**, produced with deterministic semantics:
-
-- Fields are emitted in ascending native field order.
-- Repeated fields preserve element order.
-- Absent optional fields are omitted from the wire encoding.
-- Oneof fields emit only the selected variant.
-- Unknown wire fields are dropped and never participate in canonicalization.
-
-`rkyv` produces this output deterministically in Rust. Implementations in other languages **MUST** produce byte-identical output for the same semantic input.
+The canonical internal bytes for a protocol record are the rkyv-family archive bytes of the concrete native type at the boundary. Implementations MUST use the protocol-native record shape for that family and version.
 
 Used for:
 - hashing
 - signing
 - object identity for structured logical objects
+- event log record bodies
+- internal transport payloads
+- caches and local bridge payloads
 
-### 17.6 Deterministic rkyv requirement
+### 17.6 Deterministic archive requirement
 
-A conforming implementation **MUST** produce identical rkyv wire bytes for any protocol message given the same semantic content. This is the single canonicalization requirement.
+A conforming implementation MUST produce identical signable bytes for the same semantic record, family, and version. The archived byte shape is cryptographic semantics.
 
-To guarantee determinism:
-- native fields are part of cryptographic semantics
-- native fields **MUST NEVER** be renumbered
-- native fields **MUST NEVER** be reused
-- new fields **MUST** use new higher native fields
-- enum values use their numeric wire form
-- integers use rkyv rkyv archive encoding
+To preserve determinism:
+- native record shape is versioned and cryptographically significant
+- authority-bearing fields MUST NOT be reordered or reinterpreted within a version
+- removed fields MUST fail at migration boundaries rather than being hidden by compatibility shims
+- new semantics require a new record or family version when old readers cannot preserve meaning
+- enum values use the native protocol enum mapping for the family version
 
 ### 17.7 Rkyv-normalized record
 
-For any protocol message `M`, its canonical form is:
+For any protocol message `M`, its internal byte form is:
 
 ```text
-canonical_bytes = rkyv_encode(normalize(M))
+wire_bytes = rkyv_archive(normalize(M))
 ```
 
-Where `normalize(M)` produces a message instance with:
-- absent optional fields set to the language's "not present" representation
-- repeated empty fields encoded as empty lists (not omitted from the semantic value)
-- enum values mapped to their numeric wire value
+Where `normalize(M)` produces the concrete native record instance for the target family and version, with optional fields represented as the native absent value and repeated fields in their semantic order.
 
 ### 17.8 Signable form vs full form
 
 For any signed record family:
 
 #### Signable form
-The protocol message with `signature` set to absent / `null`.
+The protocol record with `signature` absent.
 
 Used for:
 - hashing for signature purposes
 - record hash derivation
+- stream previous-hash linkage
 
 #### Full form
-The protocol message with actual signature present.
+The protocol record with actual signature present.
 
-Used when the signed record itself is stored as a logical object.
+Used when the signed record itself is stored, transported, or archived as a logical object.
 
 ### 17.9 Domain separation
 
@@ -1539,7 +1528,7 @@ Every cryptographic input uses an ASCII domain tag followed by a zero byte separ
 General form:
 
 ```text
-domain_tag || 0x00 || canonical_bytes
+domain_tag || 0x00 || payload_bytes
 ```
 
 Examples:
@@ -1548,8 +1537,12 @@ Examples:
 - `edgerun:v0:hash:delegation-record`
 - `edgerun:v0:hash:revocation-record`
 - `edgerun:v0:hash:snapshot-descriptor`
+- `edgerun:v0:hash:logical-object-descriptor`
+- `edgerun:v0:hash:stored-representation-header`
+- `edgerun:v0:hash:chunk-manifest`
 - `edgerun:v0:object`
 - `edgerun:v0:representation-bytes`
+- `edgerun:v0:chunk-bytes`
 - `edgerun:v0:sig:event-envelope`
 - `edgerun:v0:sig:command-envelope`
 - `edgerun:v0:sig:delegation-record`
@@ -1562,7 +1555,7 @@ For every signable family:
 
 ```text
 record_hash = SHA256(
-  hash_domain_tag || 0x00 || rkyv_encode(signable_form)
+  hash_domain_tag || 0x00 || rkyv_archive(signable_form)
 )
 ```
 
@@ -1593,6 +1586,8 @@ Verification:
 ECDSA_P256_SHA256_verify(public_key, sig_input, signature)
 ```
 
+Hardware signers that require a fixed-size prehash sign SHA-256 of `sig_input` at the signer boundary, while preserving the same record hash and domain tags.
+
 ### 17.12 Family-specific hash meanings
 
 - `event_hash = hash(EventEnvelope_signable_form)`
@@ -1602,12 +1597,12 @@ ECDSA_P256_SHA256_verify(public_key, sig_input, signature)
 
 ### 17.13 Logical object canonicalization classes
 
-Every logical object declares a `canonicalization_id`.
+Every logical object declares a `canonicalization_id`. For structured Edgerun objects, the canonicalization id names the rkyv-native family and version.
 
 v0 recognizes:
 
-#### `rkyv-v0:<full_message_name>:<schema_version>`
-Canonical bytes are `rkyv_encode(full_form_of_message)`.
+#### `rkyv-v0:<native_record_name>:<schema_version>`
+Canonical bytes are `rkyv_archive(full_form_of_record)`.
 
 #### `raw-bytes-v0`
 Canonical bytes are exact raw bytes.
@@ -1646,21 +1641,31 @@ chunk_digest = SHA256(
 )
 ```
 
-### 17.17 Signature field handling in object identity
+### 17.17 Event log framing
+
+Durable event logs store full event wire bytes, not an alternate event schema. The hosted append-log profile frames each event as:
+
+```text
+varint(wire_len) || event_full_wire_bytes
+```
+
+The body is the current Edgerun event wire record. Index and stream-head hashes are computed from EventEnvelope signable bytes with the event-envelope hash domain.
+
+### 17.18 Signature field handling in object identity
 
 If a signable record is itself stored as a logical object:
 - `record_hash` uses signable form with `signature` absent
 - `object_id` uses full form with actual signature present
 
-### 17.18 Canonical field evolution rule
+### 17.19 Native field evolution rule
 
-Because canonicalization uses native field order:
-- native fields are permanent
-- native fields are cryptographically significant
-- adding a field means adding a new higher-number field
-- removing a field from meaning requires deprecation, not renumbering
+Because archive bytes are cryptographic input:
+- native record layout is versioned semantics
+- authority-bearing fields are cryptographically significant
+- incompatible changes require a new record or family version
+- removed byte paths are migrated explicitly, not hidden behind compatibility adapters
 
-### 17.19 Minimal family map
+### 17.20 Minimal family map
 
 Signable families:
 - `IdentityRecord`
@@ -1683,13 +1688,13 @@ Non-signable but canonicalizable structured object families:
 - `ChunkManifest`
 - structured payload messages stored as objects
 
-### 17.20 Conformance requirement
+### 17.21 Conformance requirement
 
-A conforming implementation **MUST** be able to produce identical rkyv wire bytes for the same semantic record as any other conforming implementation.
+A conforming implementation MUST be able to produce identical rkyv-family signable bytes for the same semantic record, family, and version as any other conforming implementation.
 
-### 17.21 Test vectors
+### 17.22 Test vectors
 
-Before implementation is considered stable, the protocol **SHOULD** publish cross-language test vectors for at minimum:
+Before implementation is considered stable, the protocol SHOULD publish cross-implementation test vectors for at minimum:
 - one EventEnvelope
 - one CommandEnvelope
 - one DelegationRecord
@@ -1700,8 +1705,8 @@ Before implementation is considered stable, the protocol **SHOULD** publish cros
 - one signed SessionHello
 
 Each test vector should include:
-- semantic message content
-- rkyv wire hex
+- semantic record content
+- rkyv wire hex for signable and full forms where applicable
 - record hash hex
 - signature input hex
 - signature hex
@@ -2402,812 +2407,28 @@ Use `replication` for durability movement, `access` for obtaining useful informa
 
 ## Appendix E. Native rkyv record layout
 
-### `edgerun/v0/common.proto`
-
-```proto
-syntax = "proto3";
-
-package edgerun.v0.common;
-
-import "google/rkyv/timestamp.proto";
-import "google/rkyv/duration.proto";
-
-enum IdentityKind {
-  IDENTITY_KIND_UNSPECIFIED = 0;
-  IDENTITY_KIND_USER = 1;
-  IDENTITY_KIND_NODE = 2;
-  IDENTITY_KIND_AGENT = 3;
-  IDENTITY_KIND_SERVICE = 4;
-  IDENTITY_KIND_OTHER = 5;
-}
-
-enum ObjectKind {
-  OBJECT_KIND_UNSPECIFIED = 0;
-  OBJECT_KIND_PAYLOAD = 1;
-  OBJECT_KIND_ATTACHMENT = 2;
-  OBJECT_KIND_SNAPSHOT = 3;
-  OBJECT_KIND_MANIFEST = 4;
-  OBJECT_KIND_INDEX = 5;
-  OBJECT_KIND_COMMAND = 6;
-  OBJECT_KIND_PROOF = 7;
-  OBJECT_KIND_DERIVED_VIEW = 8;
-}
-
-enum AssuranceClass {
-  ASSURANCE_CLASS_UNSPECIFIED = 0;
-  ASSURANCE_CLASS_SOFTWARE = 1;
-  ASSURANCE_CLASS_HARDWARE_BACKED = 2;
-  ASSURANCE_CLASS_ATTESTED_RUNTIME = 3;
-}
-
-enum TransportClass {
-  TRANSPORT_CLASS_UNSPECIFIED = 0;
-  TRANSPORT_CLASS_BLE = 1;
-  TRANSPORT_CLASS_LAN_IP = 2;
-  TRANSPORT_CLASS_QUIC = 3;
-  TRANSPORT_CLASS_WIFI_DIRECT = 4;
-  TRANSPORT_CLASS_RELAY = 5;
-  TRANSPORT_CLASS_STORE_FORWARD = 6;
-  TRANSPORT_CLASS_OTHER = 7;
-}
-
-enum Directness {
-  DIRECTNESS_UNSPECIFIED = 0;
-  DIRECTNESS_DIRECT = 1;
-  DIRECTNESS_RELAYED = 2;
-  DIRECTNESS_BRIDGE_REQUIRED = 3;
-  DIRECTNESS_STORE_FORWARD = 4;
-}
-
-enum StorageClass {
-  STORAGE_CLASS_UNSPECIFIED = 0;
-  STORAGE_CLASS_HOT = 1;
-  STORAGE_CLASS_WARM = 2;
-  STORAGE_CLASS_COLD = 3;
-  STORAGE_CLASS_ARCHIVE = 4;
-}
-
-enum ExecutionClass {
-  EXECUTION_CLASS_UNSPECIFIED = 0;
-  EXECUTION_CLASS_LOCAL_ONLY = 1;
-  EXECUTION_CLASS_TRUSTED_PEER = 2;
-  EXECUTION_CLASS_TEE_ALLOWED = 3;
-  EXECUTION_CLASS_REDUNDANT_UNTRUSTED = 4;
-  EXECUTION_CLASS_PUBLIC = 5;
-}
-
-message Digest {
-  enum Algorithm {
-    DIGEST_ALGORITHM_UNSPECIFIED = 0;
-    DIGEST_ALGORITHM_SHA256 = 1;
-  }
-
-  Algorithm algorithm = 1;
-  bytes value = 2;
-}
-
-message Signature {
-  enum Algorithm {
-    SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
-    SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 = 1;
-  }
-
-  Algorithm algorithm = 1;
-  bytes value = 2;
-}
-
-message TimeWindow {
-  google.rkyv.Timestamp not_before = 1;
-  google.rkyv.Timestamp expires_at = 2;
-}
-
-message RateLimit {
-  uint64 max_operations = 1;
-  google.rkyv.Duration per = 2;
-}
-
-message IdentityRef {
-  bytes identity_id = 1;
-  optional IdentityKind identity_kind = 2;
-  optional bytes key_hint = 3;
-}
-
-message NodeRef {
-  bytes node_id = 1;
-}
-
-message StreamRef {
-  bytes stream_id = 1;
-}
-
-message EventRef {
-  bytes stream_id = 1;
-  uint64 seq = 2;
-  Digest event_hash = 3;
-}
-
-message HeadRef {
-  bytes stream_id = 1;
-  uint64 seq = 2;
-  Digest event_hash = 3;
-}
-
-message CheckpointRef {
-  optional bytes checkpoint_id = 1;
-  repeated HeadRef heads = 2;
-}
-
-message ObjectRef {
-  bytes object_id = 1;
-  optional ObjectKind object_kind = 2;
-}
-
-message RepresentationRef {
-  bytes representation_id = 1;
-  bytes object_id = 2;
-}
-
-message CommandRef {
-  bytes command_id = 1;
-  Digest command_hash = 2;
-}
-
-message DelegationRef {
-  bytes delegation_id = 1;
-  Digest delegation_hash = 2;
-}
-
-message RevocationRef {
-  bytes revocation_id = 1;
-  Digest revocation_hash = 2;
-}
-
-message SnapshotRef {
-  bytes snapshot_id = 1;
-  optional bytes object_id = 2;
-}
-```
-
-### `edgerun/v0/identity.proto`
-
-```proto
-syntax = "proto3";
-
-package edgerun.v0.identity;
-
-import "google/rkyv/timestamp.proto";
-import "edgerun/v0/common.proto";
-
-enum KeyAlgorithm {
-  KEY_ALGORITHM_UNSPECIFIED = 0;
-  KEY_ALGORITHM_ECDSA_P256 = 1;
-}
-
-message IdentityRecord {
-  uint32 record_version = 1;
-  bytes identity_id = 2;
-  edgerun.v0.common.IdentityKind identity_kind = 3;
-  KeyAlgorithm key_algorithm = 4;
-  bytes public_key = 5;
-  google.rkyv.Timestamp created_at = 6;
-  edgerun.v0.common.IdentityRef supersedes_identity = 7;
-  repeated edgerun.v0.common.ObjectRef assurance_claim_objects = 8;
-  edgerun.v0.common.ObjectRef metadata_object = 9;
-  edgerun.v0.common.Signature signature = 10;
-}
-```
-
-### `edgerun/v0/trust.proto`
-
-```proto
-syntax = "proto3";
-
-package edgerun.v0.trust;
-
-import "google/rkyv/timestamp.proto";
-import "google/rkyv/duration.proto";
-import "edgerun/v0/common.proto";
-
-enum CapabilityKind {
-  CAPABILITY_KIND_UNSPECIFIED = 0;
-  CAPABILITY_KIND_NODE_CONTROL = 1;
-  CAPABILITY_KIND_QUERY = 2;
-  CAPABILITY_KIND_SNAPSHOT_PUBLISH = 3;
-  CAPABILITY_KIND_OBJECT_STORE = 4;
-  CAPABILITY_KIND_OBJECT_FETCH = 5;
-  CAPABILITY_KIND_RELAY = 6;
-  CAPABILITY_KIND_EXECUTE_WORKLOAD = 7;
-  CAPABILITY_KIND_DECRYPT_DOMAIN = 8;
-}
-
-enum ScopeKind {
-  SCOPE_KIND_UNSPECIFIED = 0;
-  SCOPE_KIND_NODE = 1;
-  SCOPE_KIND_STREAM = 2;
-  SCOPE_KIND_OBJECT_CLASS = 3;
-  SCOPE_KIND_VIEW = 4;
-  SCOPE_KIND_DOMAIN = 5;
-  SCOPE_KIND_QUERY_CLASS = 6;
-  SCOPE_KIND_WORKLOAD_CLASS = 7;
-  SCOPE_KIND_GLOBAL_WITH_CONSTRAINTS = 8;
-}
-
-enum DelegationPolicy {
-  DELEGATION_POLICY_UNSPECIFIED = 0;
-  DELEGATION_POLICY_NON_DELEGABLE = 1;
-  DELEGATION_POLICY_DELEGABLE_WITH_ATTENUATION = 2;
-}
-
-enum ExportPolicy {
-  EXPORT_POLICY_UNSPECIFIED = 0;
-  EXPORT_POLICY_ALLOW_EXPORT = 1;
-  EXPORT_POLICY_QUERY_ONLY = 2;
-  EXPORT_POLICY_SIGN_ONLY = 3;
-  EXPORT_POLICY_NO_PLAINTEXT_EXPORT = 4;
-}
-
-enum RevocationKind {
-  REVOCATION_KIND_UNSPECIFIED = 0;
-  REVOCATION_KIND_DELEGATION = 1;
-  REVOCATION_KIND_CONTROLLER_INSTALLATION = 2;
-  REVOCATION_KIND_IDENTITY_TRUST = 3;
-  REVOCATION_KIND_ASSURANCE_CLAIM = 4;
-  REVOCATION_KIND_SNAPSHOT_TRUST = 5;
-  REVOCATION_KIND_REPRESENTATION_ACCESS = 6;
-}
-
-message AssuranceClaim {
-  uint32 claim_version = 1;
-
-  oneof subject {
-    edgerun.v0.common.IdentityRef subject_identity = 2;
-    edgerun.v0.common.NodeRef subject_node = 3;
-  }
-
-  edgerun.v0.common.AssuranceClass assurance_class = 4;
-  edgerun.v0.common.IdentityRef attester = 5;
-  google.rkyv.Timestamp issued_at = 6;
-  google.rkyv.Timestamp expires_at = 7;
-  edgerun.v0.common.ObjectRef evidence_object = 8;
-  string claim_note = 9;
-  edgerun.v0.common.Signature signature = 10;
-}
-
-message AssuranceRequirement {
-  uint32 assurance_version = 1;
-  edgerun.v0.common.AssuranceClass required_class = 2;
-  repeated edgerun.v0.common.IdentityRef acceptable_attesters = 3;
-  google.rkyv.Duration max_evidence_age = 4;
-  edgerun.v0.common.ObjectRef assurance_metadata = 5;
-}
-
-message ScopeDescriptor {
-  uint32 scope_version = 1;
-  ScopeKind scope_kind = 2;
-  repeated edgerun.v0.common.NodeRef target_nodes = 3;
-  repeated edgerun.v0.common.StreamRef target_streams = 4;
-  repeated edgerun.v0.common.ObjectKind target_object_kinds = 5;
-  repeated string target_view_types = 6;
-  repeated string target_domains = 7;
-  edgerun.v0.common.TimeWindow time_bounds = 8;
-  edgerun.v0.common.ObjectRef scope_metadata = 9;
-}
-
-message ConstraintSet {
-  uint32 constraint_version = 1;
-  google.rkyv.Timestamp not_before = 2;
-  google.rkyv.Timestamp expires_at = 3;
-  optional uint64 max_uses = 4;
-  edgerun.v0.common.RateLimit rate_limit = 5;
-  optional bool requires_local_session = 6;
-  optional bool requires_user_presence = 7;
-  repeated edgerun.v0.common.TransportClass requires_transport_classes = 8;
-  repeated string requires_location_classes = 9;
-  ExportPolicy export_policy = 10;
-  repeated edgerun.v0.common.ExecutionClass execution_class_limits = 11;
-  repeated edgerun.v0.common.StorageClass storage_class_limits = 12;
-  edgerun.v0.common.ObjectRef constraint_metadata = 13;
-}
-
-message CapabilityDescriptor {
-  uint32 capability_version = 1;
-  CapabilityKind capability_kind = 2;
-  repeated string actions = 3;
-  ScopeDescriptor scope = 4;
-  ConstraintSet constraints = 5;
-  DelegationPolicy delegation_policy = 6;
-  AssuranceRequirement minimum_assurance = 7;
-  edgerun.v0.common.ObjectRef capability_metadata = 8;
-}
-
-message DelegationRecord {
-  uint32 record_version = 1;
-  bytes delegation_id = 2;
-  edgerun.v0.common.IdentityRef issuer = 3;
-  edgerun.v0.common.IdentityRef recipient = 4;
-  google.rkyv.Timestamp issued_at = 5;
-  google.rkyv.Timestamp not_before = 6;
-  google.rkyv.Timestamp expires_at = 7;
-  CapabilityDescriptor capability = 8;
-  edgerun.v0.common.DelegationRef parent_delegation = 9;
-  repeated edgerun.v0.common.IdentityRef revocation_authorities = 10;
-  edgerun.v0.common.ObjectRef delegation_metadata = 11;
-  edgerun.v0.common.Signature signature = 12;
-}
-
-message RevocationRecord {
-  uint32 record_version = 1;
-  bytes revocation_id = 2;
-  edgerun.v0.common.IdentityRef issuer = 3;
-  google.rkyv.Timestamp issued_at = 4;
-  google.rkyv.Timestamp effective_at = 5;
-  RevocationKind revocation_kind = 6;
-
-  oneof target {
-    edgerun.v0.common.DelegationRef target_delegation = 7;
-    edgerun.v0.common.IdentityRef target_identity = 8;
-    edgerun.v0.common.NodeRef target_node = 9;
-    edgerun.v0.common.ObjectRef target_object = 10;
-  }
-
-  ScopeDescriptor scope_override = 11;
-  string reason_code = 12;
-  bytes replacement_id = 13;
-  edgerun.v0.common.ObjectRef revocation_metadata = 14;
-  edgerun.v0.common.Signature signature = 15;
-}
-```
-
-### `edgerun/v0/stream.proto`
-
-```proto
-syntax = "proto3";
-
-package edgerun.v0.stream;
-
-import "google/rkyv/timestamp.proto";
-import "edgerun/v0/common.proto";
-import "edgerun/v0/trust.proto";
-
-enum EventType {
-  EVENT_TYPE_UNSPECIFIED = 0;
-  EVENT_TYPE_NODE_GENESIS = 1;
-  EVENT_TYPE_COMMAND_SENT = 2;
-  EVENT_TYPE_COMMAND_COMMITTED = 3;
-  EVENT_TYPE_COMMAND_REJECTED = 4;
-  EVENT_TYPE_ACTION_STARTED = 5;
-  EVENT_TYPE_ACTION_COMPLETED = 6;
-  EVENT_TYPE_ACTION_FAILED = 7;
-  // Secret service events
-  EVENT_TYPE_SECRET_PUT = 8;
-  EVENT_TYPE_SECRET_DELETE = 9;
-  EVENT_TYPE_COLLECTION_CREATED = 10;
-  EVENT_TYPE_COLLECTION_DELETED = 11;
-}
-
-enum CommandDecision {
-  COMMAND_DECISION_UNSPECIFIED = 0;
-  COMMAND_DECISION_COMMITTED = 1;
-  COMMAND_DECISION_REJECTED = 2;
-}
-
-enum ActionStatus {
-  ACTION_STATUS_UNSPECIFIED = 0;
-  ACTION_STATUS_STARTED = 1;
-  ACTION_STATUS_COMPLETED = 2;
-  ACTION_STATUS_FAILED = 3;
-}
-
-enum CommandType {
-  COMMAND_TYPE_UNSPECIFIED = 0;
-  COMMAND_TYPE_ADD_CONTROLLER = 1;
-  COMMAND_TYPE_REMOVE_CONTROLLER = 2;
-  COMMAND_TYPE_TRANSFER_CONTROL = 3;
-  COMMAND_TYPE_PUBLISH_SNAPSHOT = 4;
-  COMMAND_TYPE_STORE_OBJECT = 5;
-  COMMAND_TYPE_FETCH_OBJECT = 6;
-  COMMAND_TYPE_QUERY = 7;
-  COMMAND_TYPE_EXECUTE_WORKLOAD = 8;
-  COMMAND_TYPE_TERMINATE_WORKLOAD = 9;
-  // Core trust commands
-  COMMAND_TYPE_CREATE_DELEGATION = 10;
-  COMMAND_TYPE_CREATE_REVOCATION = 11;
-  COMMAND_TYPE_STORE_AND_FORWARD = 12;
-  // Extension range: implementations MAY add command types starting here.
-  // Unknown extension types MUST be rejected unless local policy explicitly allows them.
-  reserved 13 to 999;
-  reserved "COMMAND_TYPE_CUSTOM";
-  // Implementation-specific extensions start at 1000.
-  COMMAND_TYPE_PUT_SECRET = 1001;
-  COMMAND_TYPE_DELETE_SECRET = 1002;
-  COMMAND_TYPE_LIST_SECRETS = 1003;
-}
-
-message EventEnvelope {
-  uint32 envelope_version = 1;
-  bytes stream_id = 2;
-  uint64 seq = 3;
-  edgerun.v0.common.Digest prev_event_hash = 4;
-  EventType event_type = 5;
-  uint32 event_version = 6;
-  google.rkyv.Timestamp recorded_at = 7;
-  google.rkyv.Timestamp effective_at = 8;
-  edgerun.v0.common.ObjectRef payload_object = 9;
-  repeated edgerun.v0.common.EventRef related_events = 10;
-  repeated edgerun.v0.common.CommandRef related_commands = 11;
-  repeated edgerun.v0.common.ObjectRef related_objects = 12;
-  repeated edgerun.v0.common.DelegationRef related_delegations = 13;
-  repeated edgerun.v0.common.RevocationRef related_revocations = 14;
-  edgerun.v0.common.ObjectRef event_metadata = 15;
-  edgerun.v0.common.Signature signature = 16;
-}
-
-message NodeGenesisPayload {
-  uint32 payload_version = 1;
-  bytes node_id = 2;
-  edgerun.v0.common.IdentityRef primary_node_identity = 3;
-  repeated edgerun.v0.common.IdentityRef initial_controllers = 4;
-  edgerun.v0.common.ObjectRef initial_policy_object = 5;
-  repeated edgerun.v0.common.ObjectRef bootstrap_records = 6;
-  repeated edgerun.v0.common.ObjectRef assurance_claims = 7;
-  repeated string node_roles = 8;
-  edgerun.v0.common.ObjectRef genesis_metadata = 9;
-}
-
-message CommandEnvelope {
-  uint32 envelope_version = 1;
-  bytes command_id = 2;
-  edgerun.v0.common.NodeRef target_node = 3;
-  edgerun.v0.common.IdentityRef issuer = 4;
-  CommandType command_type = 5;
-  uint32 command_version = 6;
-  google.rkyv.Timestamp issued_at = 7;
-  google.rkyv.Timestamp not_before = 8;
-  google.rkyv.Timestamp expires_at = 9;
-  bytes idempotency_key = 10;
-
-  oneof payload {
-    edgerun.v0.common.ObjectRef payload_object = 11;
-    bytes inline_payload = 12;
-  }
-
-  repeated edgerun.v0.trust.DelegationRecord delegation_chain = 13;
-  edgerun.v0.trust.AssuranceRequirement requested_assurance = 14;
-  edgerun.v0.common.ObjectRef command_metadata = 15;
-  edgerun.v0.common.Signature signature = 16;
-}
-
-message CommandSentPayload {
-  uint32 payload_version = 1;
-  edgerun.v0.common.CommandRef command = 2;
-  edgerun.v0.common.NodeRef target_node = 3;
-  edgerun.v0.common.ObjectRef send_metadata = 4;
-}
-
-message CommandResultPayload {
-  uint32 payload_version = 1;
-  edgerun.v0.common.CommandRef command = 2;
-  edgerun.v0.common.IdentityRef issuer = 3;
-  CommandDecision decision = 4;
-  edgerun.v0.common.ObjectRef decision_basis = 5;
-  string reason_code = 6;
-  edgerun.v0.common.ObjectRef effect_summary_object = 7;
-  edgerun.v0.common.ObjectRef result_object = 8;
-}
-
-message ActionLifecyclePayload {
-  uint32 payload_version = 1;
-  edgerun.v0.common.CommandRef origin_command = 2;
-  bytes action_instance_id = 3;
-  ActionStatus status = 4;
-  edgerun.v0.common.ObjectRef result_object = 5;
-  edgerun.v0.common.ObjectRef error_object = 6;
-  edgerun.v0.common.ObjectRef progress_object = 7;
-  edgerun.v0.common.ObjectRef action_metadata = 8;
-}
-
-// Secret service payloads — stored as payload_object in EventEnvelopes.
-// The secret value is NEVER in the payload; only metadata is recorded.
-// The secret itself lives in the encrypted BlobStore.
-
-message SecretPutPayload {
-  uint32 payload_version = 1;
-  string namespace = 2;
-  string key = 3;
-  string label = 4;
-  map<string, string> attributes = 5;
-  string secret_blob_id = 6;
-}
-
-message SecretDeletePayload {
-  uint32 payload_version = 1;
-  string namespace = 2;
-  string key = 3;
-  string label = 4;
-  string reason = 5;
-}
-
-message CollectionCreatedPayload {
-  uint32 payload_version = 1;
-  string collection_name = 2;
-  string label = 3;
-}
-
-message CollectionDeletedPayload {
-  uint32 payload_version = 1;
-  string collection_name = 2;
-  uint32 items_removed = 3;
-}
-```
-
-### `edgerun/v0/object.proto`
-
-```proto
-syntax = "proto3";
-
-package edgerun.v0.object;
-
-import "google/rkyv/timestamp.proto";
-import "edgerun/v0/common.proto";
-
-enum ChunkingMode {
-  CHUNKING_MODE_UNSPECIFIED = 0;
-  CHUNKING_MODE_NONE = 1;
-  CHUNKING_MODE_MANIFEST = 2;
-}
-
-message LogicalObjectDescriptor {
-  uint32 descriptor_version = 1;
-  bytes object_id = 2;
-  edgerun.v0.common.ObjectKind object_kind = 3;
-  uint32 object_schema_version = 4;
-  string canonicalization_id = 5;
-  edgerun.v0.common.Digest canonical_digest = 6;
-  uint64 canonical_size = 7;
-  google.rkyv.Timestamp created_at = 8;
-  edgerun.v0.common.IdentityRef producer = 9;
-  edgerun.v0.common.ObjectRef describes_object = 10;
-  edgerun.v0.common.ObjectRef object_metadata = 11;
-}
-
-message StoredRepresentationHeader {
-  uint32 header_version = 1;
-  bytes representation_id = 2;
-  edgerun.v0.common.ObjectRef object = 3;
-  edgerun.v0.common.Digest representation_digest = 4;
-  optional uint64 plaintext_size = 5;
-  uint64 stored_size = 6;
-  string encryption_scheme = 7;
-  string compression_scheme = 8;
-  ChunkingMode chunking_mode = 9;
-  edgerun.v0.common.ObjectRef chunk_manifest_object = 10;
-  edgerun.v0.common.ObjectRef access_package_object = 11;
-  google.rkyv.Timestamp created_at = 12;
-  edgerun.v0.common.ObjectRef representation_metadata = 13;
-}
-
-message ChunkEntry {
-  uint32 index = 1;
-  bytes chunk_representation_id = 2;
-  edgerun.v0.common.Digest chunk_digest = 3;
-  uint64 offset = 4;
-  uint64 length = 5;
-}
-
-message ChunkManifest {
-  uint32 manifest_version = 1;
-  edgerun.v0.common.ObjectRef object = 2;
-  edgerun.v0.common.RepresentationRef representation = 3;
-  uint32 chunk_count = 4;
-  uint64 total_stored_size = 5;
-  repeated ChunkEntry chunk_entries = 6;
-  edgerun.v0.common.ObjectRef manifest_metadata = 7;
-}
-```
-
-### `edgerun/v0/access.proto`
-
-```proto
-syntax = "proto3";
-
-package edgerun.v0.access;
-
-import "google/rkyv/timestamp.proto";
-import "google/rkyv/duration.proto";
-import "edgerun/v0/common.proto";
-import "edgerun/v0/trust.proto";
-
-enum SnapshotCompleteness {
-  SNAPSHOT_COMPLETENESS_UNSPECIFIED = 0;
-  SNAPSHOT_COMPLETENESS_FULL = 1;
-  SNAPSHOT_COMPLETENESS_PARTIAL = 2;
-  SNAPSHOT_COMPLETENESS_BOUNDED = 3;
-}
-
-enum QueryClass {
-  QUERY_CLASS_UNSPECIFIED = 0;
-  QUERY_CLASS_HEAD = 1;
-  QUERY_CLASS_SNAPSHOT = 2;
-  QUERY_CLASS_EVENT_RANGE = 3;
-  QUERY_CLASS_OBJECT_EXISTENCE = 4;
-  QUERY_CLASS_OBJECT_FETCH = 5;
-  QUERY_CLASS_VIEW = 6;
-  QUERY_CLASS_SEARCH = 7;
-  QUERY_CLASS_TRUST_STATE = 8;
-}
-
-enum ProofClass {
-  PROOF_CLASS_UNSPECIFIED = 0;
-  PROOF_CLASS_SIGNATURE = 1;
-  PROOF_CLASS_STREAM_HEAD = 2;
-  PROOF_CLASS_EVENT_REF = 3;
-  PROOF_CLASS_OBJECT_REF = 4;
-  PROOF_CLASS_SNAPSHOT_BASE = 5;
-}
-
-enum ResultCompleteness {
-  RESULT_COMPLETENESS_UNSPECIFIED = 0;
-  RESULT_COMPLETENESS_COMPLETE_FOR_LOCAL_KNOWLEDGE = 1;
-  RESULT_COMPLETENESS_PARTIAL = 2;
-  RESULT_COMPLETENESS_DENIED = 3;
-  RESULT_COMPLETENESS_METADATA_ONLY = 4;
-}
-
-message CostLimit {
-  optional uint64 max_results = 1;
-  optional uint64 max_total_bytes = 2;
-  google.rkyv.Duration max_wall_time = 3;
-  optional uint32 max_federated_responders = 4;
-}
-
-message SnapshotDescriptor {
-  uint32 descriptor_version = 1;
-  bytes snapshot_id = 2;
-  string view_type = 3;
-  uint32 view_version = 4;
-  edgerun.v0.common.IdentityRef producer = 5;
-  google.rkyv.Timestamp produced_at = 6;
-  repeated edgerun.v0.common.HeadRef base_heads = 7;
-  repeated edgerun.v0.common.CheckpointRef base_checkpoints = 8;
-  edgerun.v0.trust.ScopeDescriptor scope = 9;
-  SnapshotCompleteness completeness = 10;
-  edgerun.v0.common.ObjectRef payload_object = 11;
-  edgerun.v0.common.SnapshotRef supersedes = 12;
-  edgerun.v0.common.ObjectRef snapshot_metadata = 13;
-  edgerun.v0.common.Signature signature = 14;
-}
-
-message QueryRequest {
-  uint32 request_version = 1;
-  bytes query_id = 2;
-  edgerun.v0.common.IdentityRef requester = 3;
-  edgerun.v0.trust.ScopeDescriptor target_scope = 4;
-  QueryClass query_class = 5;
-  edgerun.v0.common.TimeWindow time_window = 6;
-  edgerun.v0.common.CheckpointRef checkpoint_base = 7;
-  optional uint64 result_limit = 8;
-  CostLimit cost_limit = 9;
-  repeated ProofClass required_proof_classes = 10;
-  edgerun.v0.common.ObjectRef query_payload_object = 11;
-  edgerun.v0.common.Signature signature = 12;
-}
-
-message QueryResultFragment {
-  uint32 fragment_version = 1;
-  bytes query_id = 2;
-  edgerun.v0.common.IdentityRef responder = 3;
-  google.rkyv.Timestamp answered_at = 4;
-  ResultCompleteness completeness = 5;
-  repeated edgerun.v0.common.SnapshotRef snapshot_refs = 6;
-  repeated edgerun.v0.common.EventRef event_refs = 7;
-  repeated edgerun.v0.common.ObjectRef object_refs = 8;
-  repeated edgerun.v0.common.ObjectRef proof_objects = 9;
-  string omission_reason = 10;
-  edgerun.v0.common.ObjectRef bundled_result_object = 11;
-  edgerun.v0.common.ObjectRef result_metadata = 12;
-  edgerun.v0.common.Signature signature = 13;
-}
-
-message FederatedAggregateDescriptor {
-  uint32 descriptor_version = 1;
-  bytes aggregate_id = 2;
-  bytes source_query_id = 3;
-  edgerun.v0.common.IdentityRef aggregator = 4;
-  google.rkyv.Timestamp aggregated_at = 5;
-  repeated edgerun.v0.common.ObjectRef input_fragments = 6;
-  edgerun.v0.common.ObjectRef aggregation_policy_object = 7;
-  edgerun.v0.common.ObjectRef payload_object = 8;
-  edgerun.v0.common.Signature signature = 9;
-}
-```
-
-### `edgerun/v0/network.proto`
-
-```proto
-syntax = "proto3";
-
-package edgerun.v0.network;
-
-import "google/rkyv/timestamp.proto";
-import "edgerun/v0/common.proto";
-
-enum PayloadKind {
-  PAYLOAD_KIND_UNSPECIFIED = 0;
-  PAYLOAD_KIND_COMMAND = 1;
-  PAYLOAD_KIND_QUERY = 2;
-  PAYLOAD_KIND_RESULT_FRAGMENT = 3;
-  PAYLOAD_KIND_OBJECT_FRAGMENT = 4;
-  PAYLOAD_KIND_SESSION_MESSAGE = 5;
-}
-
-message ReachabilityHint {
-  uint32 hint_version = 1;
-  edgerun.v0.common.NodeRef subject_node = 2;
-  edgerun.v0.common.TransportClass transport_class = 3;
-  bytes locator_payload = 4;
-  edgerun.v0.common.Directness directness = 5;
-  google.rkyv.Timestamp valid_after = 6;
-  google.rkyv.Timestamp valid_until = 7;
-  optional uint64 cost_hint = 8;
-  optional uint64 quality_hint = 9;
-  edgerun.v0.common.IdentityRef issuer = 10;
-  edgerun.v0.common.Signature signature = 11;
-}
-
-message RouteAdvertisement {
-  uint32 advertisement_version = 1;
-  edgerun.v0.common.NodeRef target_node = 2;
-  edgerun.v0.common.IdentityRef advertiser = 3;
-  edgerun.v0.common.NodeRef next_hop_node = 4;
-  repeated ReachabilityHint reachability = 5;
-  edgerun.v0.common.ObjectRef metric_hint = 6;
-  google.rkyv.Timestamp advertised_at = 7;
-  google.rkyv.Timestamp expires_at = 8;
-  edgerun.v0.common.ObjectRef route_metadata = 9;
-  edgerun.v0.common.Signature signature = 10;
-}
-
-message SessionHello {
-  uint32 message_version = 1;
-  edgerun.v0.common.IdentityRef initiator = 2;
-  edgerun.v0.common.NodeRef target_node = 3;
-  repeated string supported_transport_features = 4;
-  repeated uint32 supported_protocol_versions = 5;
-  bytes session_nonce = 6;
-  repeated ReachabilityHint initiator_locators = 7;
-  edgerun.v0.common.ObjectRef hello_metadata = 8;
-  edgerun.v0.common.Signature signature = 9;
-}
-
-message SessionAccept {
-  uint32 message_version = 1;
-  edgerun.v0.common.IdentityRef responder = 2;
-  bytes echoed_session_nonce = 3;
-  uint32 selected_protocol_version = 4;
-  repeated string selected_transport_features = 5;
-  repeated ReachabilityHint responder_locators = 6;
-  edgerun.v0.common.ObjectRef accept_metadata = 7;
-  edgerun.v0.common.Signature signature = 8;
-}
-
-message RelayEnvelope {
-  uint32 envelope_version = 1;
-  bytes relay_message_id = 2;
-  edgerun.v0.common.IdentityRef original_sender = 3;
-  edgerun.v0.common.NodeRef intended_recipient_node = 4;
-  repeated edgerun.v0.common.IdentityRef relay_chain = 5;
-  PayloadKind payload_kind = 6;
-
-  oneof payload {
-    edgerun.v0.common.ObjectRef payload_object = 7;
-    bytes inline_payload = 8;
-  }
-
-  google.rkyv.Timestamp store_until = 9;
-  edgerun.v0.common.ObjectRef relay_metadata = 10;
-  edgerun.v0.common.Signature signature = 11;
-}
-```
+The internal protocol records live as native Rust types in `crates/protocol/edgerun-core/src/protocol_native/`. Generated files under `protocol_native/gen/` are generated by the rkyv-native pipeline and are part of the native protocol shape, not a legacy schema bridge.
+
+Current native families include:
+
+- `edgerun.v0.access`
+- `edgerun.v0.app`
+- `edgerun.v0.appabi`
+- `edgerun.v0.capability`
+- `edgerun.v0.capability_runtime`
+- `edgerun.v0.common`
+- `edgerun.v0.identity`
+- `edgerun.v0.network`
+- `edgerun.v0.object`
+- `edgerun.v0.server_resources`
+- `edgerun.v0.stream`
+- `edgerun.v0.trust`
+- `edgerun.v0.ui`
+- `edgerun.wallet.v0`
+
+The public `ProtocolRecord` enum identifies records that participate directly in shared hashing and signing helpers, including command envelopes, event envelopes, command results, delegation records, revocation records, identity records, route advertisements, assurance claims, snapshot descriptors, object refs, digests, and signatures.
+
+The wire boundary is exported by `edgerun-wire`; its `WIRE_PROTOCOL` value is `rkyv`. Any additional local framing, such as varint event-log length prefixes, frames rkyv-family protocol bytes and does not define a second protocol.
 
 ## Appendix F. Reference repository layout
 

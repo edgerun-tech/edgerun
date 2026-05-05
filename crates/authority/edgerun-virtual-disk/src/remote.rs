@@ -11,6 +11,7 @@ use edgerun_encoding::byteorder::{read_u16_le, read_u32_le, read_u64_le};
 use edgerun_encoding::io::{self, Read, Write};
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_rt::Mutex;
+use edgerun_wire::{Archive, Deserialize, Serialize, WireError};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::io::{self, Read, Write};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
@@ -22,7 +23,8 @@ pub use host::{FileBlockBackend, TcpBlockServer, UnixBlockServer};
 pub const BLOCK_PROTOCOL_VERSION: u16 = 1;
 const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct BlockDeviceInfo {
     pub block_size: u32,
     pub block_count: u64,
@@ -40,7 +42,8 @@ impl BlockDeviceInfo {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub enum BlockError {
     OutOfRange,
     ReadOnly,
@@ -218,7 +221,8 @@ impl BlockBackend for MemoryBlockBackend {
 
 pub type RequestId = u64;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub enum BlockRequest {
     Handshake {
         protocol_version: u16,
@@ -251,7 +255,8 @@ pub enum BlockRequest {
     Ping,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub enum BlockResponse {
     HandshakeAck {
         protocol_version: u16,
@@ -982,156 +987,30 @@ fn decode_frame(frame: &[u8]) -> Result<Vec<u8>, BlockError> {
 }
 
 fn encode_request(request: &BlockRequest) -> Result<Vec<u8>, BlockError> {
-    let mut bytes = Vec::new();
-    match request {
-        BlockRequest::Handshake { protocol_version } => {
-            push_u8(&mut bytes, 0);
-            push_u16(&mut bytes, *protocol_version);
-        }
-        BlockRequest::GetInfo => push_u8(&mut bytes, 1),
-        BlockRequest::Read {
-            request_id,
-            lba,
-            blocks,
-        } => {
-            push_u8(&mut bytes, 2);
-            push_u64(&mut bytes, *request_id);
-            push_u64(&mut bytes, *lba);
-            push_u32(&mut bytes, *blocks);
-        }
-        BlockRequest::Write {
-            request_id,
-            lba,
-            blocks,
-            data,
-        } => {
-            push_u8(&mut bytes, 3);
-            push_u64(&mut bytes, *request_id);
-            push_u64(&mut bytes, *lba);
-            push_u32(&mut bytes, *blocks);
-            push_bytes(&mut bytes, data)?;
-        }
-        BlockRequest::Flush { request_id } => {
-            push_u8(&mut bytes, 4);
-            push_u64(&mut bytes, *request_id);
-        }
-        BlockRequest::Discard {
-            request_id,
-            lba,
-            blocks,
-        } => {
-            push_u8(&mut bytes, 5);
-            push_u64(&mut bytes, *request_id);
-            push_u64(&mut bytes, *lba);
-            push_u32(&mut bytes, *blocks);
-        }
-        BlockRequest::WriteZeroes {
-            request_id,
-            lba,
-            blocks,
-        } => {
-            push_u8(&mut bytes, 6);
-            push_u64(&mut bytes, *request_id);
-            push_u64(&mut bytes, *lba);
-            push_u32(&mut bytes, *blocks);
-        }
-        BlockRequest::Ping => push_u8(&mut bytes, 7),
-    }
-    Ok(bytes)
+    Ok(edgerun_wire::to_bytes::<WireError>(request)
+        .map_err(map_wire_error)?
+        .into_vec())
 }
 
 fn decode_request(payload: &[u8]) -> Result<BlockRequest, BlockError> {
-    let mut cursor = Cursor::new(payload);
-    let tag = cursor.read_u8()?;
-    let request = match tag {
-        0 => BlockRequest::Handshake {
-            protocol_version: cursor.read_u16()?,
-        },
-        1 => BlockRequest::GetInfo,
-        2 => BlockRequest::Read {
-            request_id: cursor.read_u64()?,
-            lba: cursor.read_u64()?,
-            blocks: cursor.read_u32()?,
-        },
-        3 => BlockRequest::Write {
-            request_id: cursor.read_u64()?,
-            lba: cursor.read_u64()?,
-            blocks: cursor.read_u32()?,
-            data: cursor.read_bytes()?,
-        },
-        4 => BlockRequest::Flush {
-            request_id: cursor.read_u64()?,
-        },
-        5 => BlockRequest::Discard {
-            request_id: cursor.read_u64()?,
-            lba: cursor.read_u64()?,
-            blocks: cursor.read_u32()?,
-        },
-        6 => BlockRequest::WriteZeroes {
-            request_id: cursor.read_u64()?,
-            lba: cursor.read_u64()?,
-            blocks: cursor.read_u32()?,
-        },
-        7 => BlockRequest::Ping,
-        _ => {
-            return Err(BlockError::ProtocolError(format!(
-                "unknown request tag {tag}"
-            )));
-        }
-    };
-    cursor.finish()?;
-    Ok(request)
+    edgerun_wire::from_bytes::<BlockRequest, WireError>(payload).map_err(map_wire_error)
 }
 
 fn encode_response(response: &BlockResponse) -> Result<Vec<u8>, BlockError> {
-    let mut bytes = Vec::new();
-    match response {
-        BlockResponse::HandshakeAck { protocol_version } => {
-            push_u8(&mut bytes, 0);
-            push_u16(&mut bytes, *protocol_version);
-        }
-        BlockResponse::Info(info) => {
-            push_u8(&mut bytes, 1);
-            encode_device_info(&mut bytes, info)?;
-        }
-        BlockResponse::ReadResult { request_id, data } => {
-            push_u8(&mut bytes, 2);
-            push_u64(&mut bytes, *request_id);
-            push_bytes(&mut bytes, data)?;
-        }
-        BlockResponse::WriteAck { request_id } => {
-            push_u8(&mut bytes, 3);
-            push_u64(&mut bytes, *request_id);
-        }
-        BlockResponse::FlushAck { request_id } => {
-            push_u8(&mut bytes, 4);
-            push_u64(&mut bytes, *request_id);
-        }
-        BlockResponse::DiscardAck { request_id } => {
-            push_u8(&mut bytes, 5);
-            push_u64(&mut bytes, *request_id);
-        }
-        BlockResponse::WriteZeroesAck { request_id } => {
-            push_u8(&mut bytes, 6);
-            push_u64(&mut bytes, *request_id);
-        }
-        BlockResponse::Pong => push_u8(&mut bytes, 7),
-        BlockResponse::Error { request_id, error } => {
-            push_u8(&mut bytes, 8);
-            match request_id {
-                Some(value) => {
-                    push_u8(&mut bytes, 1);
-                    push_u64(&mut bytes, *value);
-                }
-                None => push_u8(&mut bytes, 0),
-            }
-            encode_block_error(&mut bytes, error)?;
-        }
-    }
-    Ok(bytes)
+    Ok(edgerun_wire::to_bytes::<WireError>(response)
+        .map_err(map_wire_error)?
+        .into_vec())
 }
 
 fn decode_response(payload: &[u8]) -> Result<BlockResponse, BlockError> {
+    edgerun_wire::from_bytes::<BlockResponse, WireError>(payload).map_err(map_wire_error)
+}
+
+fn map_wire_error(error: WireError) -> BlockError {
+    BlockError::ProtocolError(format!("rkyv wire error: {error}"))
+}
+
+fn decode_response_legacy(payload: &[u8]) -> Result<BlockResponse, BlockError> {
     let mut cursor = Cursor::new(payload);
     let tag = cursor.read_u8()?;
     let response = match tag {

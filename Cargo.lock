@@ -1390,6 +1390,7 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-rt",
+ "edgerun-wire",
 ]
 
 [[package]]
