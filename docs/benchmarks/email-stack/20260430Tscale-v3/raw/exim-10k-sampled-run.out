@@ -1,2 +1,0 @@
-CONTAINER ID  IMAGE                                      COMMAND               CREATED        STATUS        PORTS                   NAMES
-98ec6f40079f  localhost/edgerun-email-bench-exim:latest  sh -c exim -bd -C...  2 seconds ago  Up 2 seconds  127.0.0.1:2525->25/tcp  edgerun-email-bench-exim

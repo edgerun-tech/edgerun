@@ -1,3 +1,0 @@
-$ podman logs --tail 240 edgerun-email-bench-mox
-v0.0.15-go1.24.2
-linux/amd64

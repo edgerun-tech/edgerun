@@ -1,3 +1,0 @@
-$ timeout 300 ./scripts/benchmark-email-podman.sh run mox
-CONTAINER ID  IMAGE                                     COMMAND               CREATED        STATUS        PORTS                                                                                                                                                           NAMES
-29379d77e051  localhost/edgerun-email-bench-mox:latest  /usr/local/bin/ru...  2 seconds ago  Up 2 seconds  127.0.0.1:1143->1143/tcp, 127.0.0.1:2525->1025/tcp, 127.0.0.1:18080->1080/tcp, 25/tcp, 80/tcp, 143/tcp, 443/tcp, 465/tcp, 587/tcp, 993/tcp, 1443/tcp, 8010/tcp  edgerun-email-bench-mox

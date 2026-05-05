@@ -22,10 +22,6 @@ The page you are reading is part of a single deployment surface that also hosts:
 That shape is deliberate: the log should describe what already moves the real
 service, not a separate “marketing deployment.”
 
-## Start here
-
-1. [About Edgerun](./about.md)
-
 ## Current platform achievements
 
 - Identity-first event model with explicit command commit semantics in this surface.

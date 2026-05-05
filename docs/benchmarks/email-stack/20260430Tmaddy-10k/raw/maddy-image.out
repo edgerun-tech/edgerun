@@ -1,2 +1,0 @@
-$ podman image inspect localhost/edgerun-email-bench-maddy:latest --format id={{.Id}} created={{.Created}} size={{.Size}}
-id=c2a7a57e00aaa1ad2fb7acfe41e6e2c0328fbf44e8c16f1738f189422aaee3df created=2026-04-30 04:21:08.796527223 +0000 UTC size=58114574

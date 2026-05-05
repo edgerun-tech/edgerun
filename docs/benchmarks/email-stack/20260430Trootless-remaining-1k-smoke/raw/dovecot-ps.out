@@ -1,2 +1,0 @@
-$ podman ps --filter name=edgerun-email-bench-dovecot --format {{.Names}} {{.Status}} {{.Ports}}
-edgerun-email-bench-dovecot Up 2 seconds 127.0.0.1:1143->143/tcp

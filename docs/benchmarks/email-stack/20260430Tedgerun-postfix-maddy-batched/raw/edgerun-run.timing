@@ -1,5 +1,0 @@
-command=./scripts/benchmark-email-podman.sh run edgerun 
-status=0
-started_ms=1777530261903
-ended_ms=1777530264111
-elapsed_ms=2208

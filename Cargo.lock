@@ -341,17 +341,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-android-hardware"
-version = "0.1.1"
-dependencies = [
- "edgerun-android-keystore",
- "edgerun-biometrics",
- "edgerun-capabilities",
- "edgerun-input",
- "once_cell",
-]
-
-[[package]]
 name = "edgerun-android-keystore"
 version = "0.1.1"
 dependencies = [
@@ -945,7 +934,6 @@ dependencies = [
  "edgerun-alsa-microphone",
  "edgerun-alsa-speaker",
  "edgerun-amd-xdna",
- "edgerun-android-hardware",
  "edgerun-android-keystore",
  "edgerun-audio-calibration",
  "edgerun-audio-liveliness",

@@ -1,4 +1,0 @@
-$ ./scripts/benchmark-email-podman.sh notes maddy
-Maddy: integrated SMTP/IMAP server. The benchmark image uses the official
-foxcpp/maddy image with a local-only no-TLS test config, one local domain, and
-one benchmark account created during image build.

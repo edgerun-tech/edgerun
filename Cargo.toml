@@ -16,7 +16,6 @@ members = [
   "crates/edgerun-alsa-speaker",
   "crates/edgerun-acme",
   "crates/edgerun-amd-xdna",
-  "crates/edgerun-android-hardware",
   "crates/edgerun-android-keystore",
   "crates/edgerun-analytics",
   "crates/edgerun-audio-calibration",

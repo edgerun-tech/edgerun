@@ -1,2 +1,0 @@
-$ podman ps --filter name=edgerun-email-bench-mox --format {{.Names}} {{.Status}} {{.Ports}}
-edgerun-email-bench-mox Up 2 seconds 127.0.0.1:1143->1143/tcp, 127.0.0.1:2525->1025/tcp, 127.0.0.1:18080->1080/tcp, 25/tcp, 80/tcp, 143/tcp, 443/tcp, 465/tcp, 587/tcp, 993/tcp, 1443/tcp, 8010/tcp

@@ -1,5 +1,0 @@
-command=./scripts/benchmark-email-podman.sh build opensmtpd 
-status=0
-started_ms=1777519507385
-ended_ms=1777519507511
-elapsed_ms=126

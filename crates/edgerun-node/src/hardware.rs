@@ -393,96 +393,11 @@ pub fn check_android_keystore_available() -> bool {
 }
 
 // ===========================================================================
-// Android Hardware (NDK-backed providers)
-// ===========================================================================
-
-#[cfg(target_os = "android")]
-mod android_hw {
-    use edgerun_android_hardware::{
-        AndroidAudioInputProvider, AndroidAudioOutputProvider, AndroidBiometricProvider,
-        AndroidCameraProvider, AndroidDisplayProvider, AndroidInputProvider,
-        AndroidLocationProvider, AndroidPowerProvider, AndroidSensorProvider,
-    };
-
-    pub fn discover_input() -> Vec<String> {
-        vec!["AInput (NDK libinput.so)".into()]
-    }
-
-    pub fn discover_audio_input() -> Vec<String> {
-        vec!["AAudio capture (NDK libaaudio.so)".into()]
-    }
-
-    pub fn discover_audio_output() -> Vec<String> {
-        vec!["AAudio playback (NDK libaaudio.so)".into()]
-    }
-
-    pub fn discover_sensors() -> Vec<String> {
-        vec!["ASensorManager (NDK libsensor.so)".into()]
-    }
-
-    pub fn discover_display() -> Vec<String> {
-        vec!["ANativeWindow (NDK libnative_window.so)".into()]
-    }
-
-    pub fn discover_camera() -> Vec<String> {
-        vec!["Camera2 NDK (libcamera2_ndk.so)".into()]
-    }
-
-    pub fn discover_biometric() -> Vec<String> {
-        vec!["BiometricPrompt (JNI)".into()]
-    }
-
-    pub fn discover_location() -> Vec<String> {
-        vec!["LocationManager (JNI)".into()]
-    }
-
-    pub fn discover_power() -> Vec<String> {
-        let mut items = Vec::new();
-        // Read Android power info from sysfs (available on all Android)
-        if let Ok(content) = std::fs::read_to_string("/sys/class/power_supply/battery/capacity") {
-            items.push(format!("Battery: {}%", content.trim()));
-        }
-        if let Ok(status) = std::fs::read_to_string("/sys/class/power_supply/battery/status") {
-            items.push(format!("Charging: {}", status.trim()));
-        }
-        items.push("BatteryManager (JNI)".into());
-        items
-    }
-
-    pub fn discover_keystore() -> Vec<String> {
-        vec!["android.security.keystore (JNI)".into()]
-    }
-}
-
-#[cfg(target_os = "android")]
-pub fn discover_android_hardware() -> Vec<String> {
-    use android_hw::*;
-    let mut items = Vec::new();
-    items.extend(discover_input());
-    items.extend(discover_audio_input());
-    items.extend(discover_audio_output());
-    items.extend(discover_sensors());
-    items.extend(discover_display());
-    items.extend(discover_camera());
-    items.extend(discover_biometric());
-    items.extend(discover_location());
-    items.extend(discover_power());
-    items.extend(discover_keystore());
-    items
-}
-
-// On Linux, use the existing discovery
-#[cfg(not(target_os = "android"))]
-pub fn discover_android_hardware() -> Vec<String> {
-    Vec::new()
-}
-
-// ===========================================================================
 // Aggregated hardware inventory
 // ===========================================================================
 
 /// Full hardware inventory for this machine.
-/// Platform-specific: Linux drivers on Linux, NDK/JNI on Android.
+/// Platform-specific: Linux drivers on Linux.
 pub struct HardwareInventory {
     pub platform: &'static str,
     pub gpus: Vec<String>,
@@ -507,39 +422,6 @@ pub struct HardwareInventory {
 }
 
 impl HardwareInventory {
-    /// Discover all hardware on this machine — platform-aware.
-    #[cfg(target_os = "android")]
-    pub fn discover() -> Self {
-        // On Android: use NDK/JNI providers
-        let android = discover_android_hardware();
-        Self {
-            platform: "android",
-            gpus: vec![],     // TODO: Android GPU via EGL
-            displays: vec![], // TODO: ANativeWindow
-            input_devices: vec!["AInput (NDK)".into()],
-            audio_input: vec!["AAudio capture".into()],
-            audio_output: vec!["AAudio playback".into()],
-            sensors: vec!["ASensorManager".into()],
-            camera: vec!["Camera2 NDK".into()],
-            fingerprint_readers: vec![],
-            bluetooth_controllers: vec![],
-            wifi_interfaces: vec![],
-            usb_devices: vec![],
-            pci_devices: vec![],
-            nfc_adapters: vec![],
-            npu_devices: vec![],
-            power_supplies: android
-                .iter()
-                .filter(|s| s.contains("Battery") || s.contains("Charging"))
-                .cloned()
-                .collect(),
-            cec_adapters: vec![],
-            biometric: vec!["BiometricPrompt (JNI)".into()],
-            location: vec!["LocationManager (JNI)".into()],
-            keystore: vec!["android.security.keystore (JNI)".into()],
-        }
-    }
-
     /// Discover all hardware on Linux machines (requires `all-hardware` feature).
     #[cfg(all(not(target_os = "android"), feature = "all-hardware"))]
     pub fn discover() -> Self {

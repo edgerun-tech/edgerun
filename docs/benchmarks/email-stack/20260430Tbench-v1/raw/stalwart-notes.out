@@ -1,5 +1,0 @@
-$ ./scripts/benchmark-email-podman.sh notes stalwart
-Stalwart: modern integrated comparison target. Official Docker documentation
-uses stalwartlabs/stalwart:latest and exposes SMTP/IMAP/admin ports. It is easy
-to start as a container, but a fair benchmark still needs first-run domain,
-account, storage, and anti-relay configuration before SMTP/IMAP load tests.

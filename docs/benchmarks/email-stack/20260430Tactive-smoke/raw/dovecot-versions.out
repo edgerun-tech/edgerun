@@ -1,5 +1,0 @@
-$ ./scripts/benchmark-email-podman.sh versions dovecot
-dovecot_version=2.4.1-4 (7d8c0e5759)
-ca-certificates	20250419
-dovecot-core	1:2.4.1+dfsg1-6+deb13u4
-dovecot-imapd	1:2.4.1+dfsg1-6+deb13u4

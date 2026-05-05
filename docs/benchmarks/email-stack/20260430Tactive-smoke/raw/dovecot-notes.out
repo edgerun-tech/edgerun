@@ -1,4 +1,0 @@
-$ ./scripts/benchmark-email-podman.sh notes dovecot
-Dovecot: medium difficulty as the IMAP half of traditional stacks. It does not
-conflict with MTAs, but a benchmark needs explicit passdb/userdb and Maildir
-configuration to avoid relying on host PAM/users.

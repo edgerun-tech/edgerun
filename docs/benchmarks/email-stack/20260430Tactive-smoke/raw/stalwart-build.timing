@@ -1,5 +1,0 @@
-command=./scripts/benchmark-email-podman.sh build stalwart 
-status=0
-started_ms=1777525528048
-ended_ms=1777525528157
-elapsed_ms=109

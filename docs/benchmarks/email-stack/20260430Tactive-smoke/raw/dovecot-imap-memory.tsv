@@ -1,3 +1,0 @@
-timestamp_ms stats
-1777525515093 name=edgerun-email-bench-dovecot cpu=2.16% mem=8.983MB / 65.1GB net=858B / 472B block=0B / 24.58kB pids=8
-1777525515613 name=edgerun-email-bench-dovecot cpu=25.25% mem=8.385MB / 65.1GB net=858B / 472B block=0B / 1.146MB pids=6

@@ -1,4 +1,0 @@
-timestamp_ms stats
-1777525524668 name=edgerun-email-bench-mox cpu=9.24% mem=21.25MB / 65.1GB net=918B / 1.182kB block=0B / 0B pids=17
-1777525525190 name=edgerun-email-bench-mox cpu=10.19% mem=24.02MB / 65.1GB net=26.28kB / 19.35kB block=0B / 0B pids=21
-1777525525716 name=edgerun-email-bench-mox cpu=16.58% mem=27.02MB / 65.1GB net=75.7kB / 53.57kB block=0B / 0B pids=21

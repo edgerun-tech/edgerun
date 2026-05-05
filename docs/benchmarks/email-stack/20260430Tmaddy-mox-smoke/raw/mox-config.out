@@ -1,4 +1,0 @@
-$ ./scripts/benchmark-email-podman.sh config mox
-FROM r.xmox.nl/mox:latest
-ENTRYPOINT ["sh", "-c"]
-CMD ["mox version && tail -f /dev/null"]

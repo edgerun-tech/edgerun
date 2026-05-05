@@ -1,2 +1,0 @@
-edgerun-server: config dns_servers=0 dns_zones=0 smtp_servers=1 imap_servers=1
-edgerun-server: running 3 service task(s)

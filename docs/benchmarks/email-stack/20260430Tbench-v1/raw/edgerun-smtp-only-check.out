@@ -1,2 +1,0 @@
-dns_servers=0 dns_zones=0 smtp_servers=1 imap_servers=0
-smtp_server=benchmark.local local_domains=example.test users=1

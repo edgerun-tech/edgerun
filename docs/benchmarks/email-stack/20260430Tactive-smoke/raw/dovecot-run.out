@@ -1,3 +1,0 @@
-$ timeout 300 ./scripts/benchmark-email-podman.sh run dovecot
-CONTAINER ID  IMAGE                                         COMMAND     CREATED        STATUS        PORTS                    NAMES
-4d591464a4dc  localhost/edgerun-email-bench-dovecot:latest  dovecot -F  2 seconds ago  Up 3 seconds  127.0.0.1:1143->143/tcp  edgerun-email-bench-dovecot

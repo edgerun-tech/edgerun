@@ -1,4 +1,0 @@
-$ ./scripts/benchmark-email-podman.sh notes opensmtpd
-OpenSMTPD: low/medium difficulty for SMTP-only. The local-only config is small
-and readable. Host install conflicts through mail-transport-agent. IMAP still
-requires a separate service.

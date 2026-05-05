@@ -1,5 +1,0 @@
-command=./scripts/benchmark-email-podman.sh stop maddy 
-status=0
-started_ms=1777523183639
-ended_ms=1777523183844
-elapsed_ms=205

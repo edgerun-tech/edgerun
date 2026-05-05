@@ -1,2 +1,0 @@
-$ podman stats --no-stream --format name={{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} block={{.BlockIO}} pids={{.PIDs}}
-name=edgerun-email-bench-opensmtpd cpu=1.35% mem=11.89MB / 2.069GB net=0B / 516B block=0B / 0B pids=7

@@ -30,11 +30,6 @@ hardware = [
     "dep:edgerun-speaker",
     "dep:edgerun-audio-liveliness",
 ]
-android-hardware = [
-    "dep:edgerun-android-hardware",
-    "dep:edgerun-android-keystore",
-    "edgerun-hardware-signing/android-keystore",
-]
 all-hardware = [
     "hardware",
     "dep:edgerun-linux-gpu",
@@ -125,7 +120,6 @@ edgerun-amd-xdna = { version = "0.1", path = "../edgerun-amd-xdna", optional = t
 edgerun-virtual-disk = { version = "0.1", path = "../edgerun-virtual-disk", optional = true }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", optional = true }
 edgerun-oci = { version = "0.1", path = "../edgerun-oci", optional = true }
-edgerun-android-hardware = { version = "0.1", path = "../edgerun-android-hardware", optional = true }
 edgerun-android-keystore = { version = "0.1", path = "../edgerun-android-keystore", optional = true }
 
 [dev-dependencies]

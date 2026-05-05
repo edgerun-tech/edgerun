@@ -1,5 +1,0 @@
-command=./scripts/benchmark-email-podman.sh run postfix 
-status=0
-started_ms=1777518277807
-ended_ms=1777518280004
-elapsed_ms=2197
