@@ -6,6 +6,7 @@ cd "$ROOT"
 
 CRATE="edgerun-sign-verify-e2e"
 TARGET="wasm32-unknown-unknown"
+HOST_TARGET="$(rustc -vV | awk '/^host:/ { print $2 }')"
 PROFILE="release"
 BENCH_ITERS="${1:-1000}"
 
@@ -26,8 +27,6 @@ wasm_opt_oz() {
     return 0
   fi
 
-  # Older Binaryen builds have used a slightly different feature flag name in
-  # validator diagnostics. Retry with that spelling before giving up.
   if wasm-opt --enable-bulk-memory-opt -Oz "$input" -o "$output" 2>/tmp/edgerun-wasm-opt.err; then
     return 0
   fi
@@ -42,11 +41,17 @@ if ! rustup target list --installed | grep -qx "$TARGET"; then
   rustup target add "$TARGET"
 fi
 
+if ! rustup target list --installed | grep -qx "$HOST_TARGET"; then
+  echo "Installing Rust host target: $HOST_TARGET"
+  rustup target add "$HOST_TARGET"
+fi
+
 echo "== native tests =="
-cargo test -p "$CRATE"
+echo "host_target=$HOST_TARGET"
+cargo test -p "$CRATE" --target "$HOST_TARGET"
 
 echo "== native benchmark =="
-cargo run --release -p "$CRATE" --bin edgerun-sign-verify-bench -- "$BENCH_ITERS"
+cargo run --release -p "$CRATE" --target "$HOST_TARGET" --bin edgerun-sign-verify-bench -- "$BENCH_ITERS"
 
 echo "== wasm build =="
 cargo build --release -p "$CRATE" --no-default-features --target "$TARGET"
