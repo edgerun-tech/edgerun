@@ -34,6 +34,7 @@ members = [
   "crates/edgerun-cec",
   "crates/edgerun-core",
   "crates/edgerun-crypto",
+  "crates/edgerun-verify",
   "crates/edgerun-dhcp",
   "crates/edgerun-dhcpv6",
   "crates/edgerun-dns",
@@ -201,6 +202,7 @@ edgerun-rt = { version = "0.1", path = "crates/edgerun-rt" }
 edgerun-wire = { version = "0.1", path = "crates/edgerun-wire", default-features = false }
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { version = "0.1", path = "crates/edgerun-crypto", default-features = false }
+edgerun-verify = { version = "0.1", path = "crates/edgerun-verify", default-features = false }
 # edgerun-json native JSON APIs
 edgerun-json = { version = "0.1", path = "crates/edgerun-json", default-features = false }
 edgerun-error = { version = "0.1", path = "crates/edgerun-error" }
