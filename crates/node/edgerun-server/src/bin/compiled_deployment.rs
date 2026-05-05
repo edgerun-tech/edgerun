@@ -57,6 +57,8 @@ pub struct CompiledDeployment {
     pub tls_cert_path: &'static str,
     pub tls_key_path: &'static str,
     pub acme_account_key_path: &'static str,
+    pub runtime_root: &'static str,
+    pub sqlite_path: &'static str,
     pub acme_contact: &'static str,
     pub domains: &'static [CompiledDomain],
     pub external_cnames: &'static [(&'static str, &'static str)],
@@ -109,6 +111,8 @@ pub const DEPLOYMENT: CompiledDeployment = CompiledDeployment {
     tls_cert_path: "/etc/edgerun/server/tls/fullchain.pem",
     tls_key_path: "/etc/edgerun/server/tls/privkey.pem",
     acme_account_key_path: "/etc/edgerun/server/acme-account.pem",
+    runtime_root: "/var/lib/edgerun/.edgerun",
+    sqlite_path: "/var/lib/edgerun/.edgerun/runtime.sqlite3",
     acme_contact: "ken@edgerun.tech",
     domains: &[
         CompiledDomain {

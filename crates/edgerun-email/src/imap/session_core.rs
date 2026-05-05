@@ -32,7 +32,7 @@ pub struct ImapPeerContext {
 }
 
 pub trait ImapSessionPolicy {
-    fn authenticate(&self, _user: &str, _password: &str) -> Option<String> {
+    fn authenticate(&self, _user: &str, _token: &str) -> Option<String> {
         None
     }
 }
@@ -107,11 +107,7 @@ impl ImapSessionCore {
         ))
     }
 
-    pub fn handle_line<P: ImapSessionPolicy>(
-        &mut self,
-        line: &str,
-        policy: &P,
-    ) -> ImapSessionStep {
+    pub fn handle_line<P: ImapSessionPolicy>(&mut self, line: &str, policy: &P) -> ImapSessionStep {
         let (tag, command_name, args) = match parser::parse_command_line(line) {
             Ok(parsed) => parsed,
             Err(err) => {
@@ -163,7 +159,6 @@ impl ImapSessionCore {
                 }
             }
             ImapCommand::Starttls => self.handle_starttls(tag),
-            ImapCommand::Login { user, password } => self.handle_login(tag, user, password, policy),
             ImapCommand::Authenticate { mechanism } => {
                 if self.state != ImapState::NotAuthenticated {
                     return ImapSessionStep::continue_with(ImapResponse::bad(
@@ -262,42 +257,15 @@ impl ImapSessionCore {
             return ImapSessionStep::continue_with(ImapResponse::bad(tag, "TLS already active"));
         }
         if !self.config.starttls_available {
-            return ImapSessionStep::continue_with(ImapResponse::bad(tag, "STARTTLS not available"));
+            return ImapSessionStep::continue_with(ImapResponse::bad(
+                tag,
+                "STARTTLS not available",
+            ));
         }
         ImapSessionStep::action(
             ImapSessionAction::StartTls,
             ImapResponse::ok(tag, "Begin TLS negotiation now"),
         )
-    }
-
-    fn handle_login<P: ImapSessionPolicy>(
-        &mut self,
-        tag: &str,
-        user: String,
-        password: String,
-        policy: &P,
-    ) -> ImapSessionStep {
-        if self.state != ImapState::NotAuthenticated {
-            return ImapSessionStep::continue_with(ImapResponse::bad(
-                tag,
-                "Already authenticated",
-            ));
-        }
-        if self.config.tls_configured && !self.peer.tls_active {
-            return ImapSessionStep::continue_with(ImapResponse::bad(
-                tag,
-                "TLS required before LOGIN",
-            ));
-        }
-
-        match policy.authenticate(&user, &password) {
-            Some(identity) => {
-                self.state = ImapState::Authenticated;
-                self.authenticated_user = Some(identity);
-                ImapSessionStep::continue_with(ImapResponse::ok(tag, "LOGIN completed"))
-            }
-            None => ImapSessionStep::continue_with(ImapResponse::no(tag, "Authentication failed")),
-        }
     }
 
     fn capabilities(&self) -> Vec<&'static str> {
@@ -329,32 +297,36 @@ mod tests {
     struct OneUser;
 
     impl ImapSessionPolicy for OneUser {
-        fn authenticate(&self, user: &str, password: &str) -> Option<String> {
-            (user == "user" && password == "pass").then(|| user.to_string())
+        fn authenticate(&self, user: &str, token: &str) -> Option<String> {
+            (user == "user" && token == "pass").then(|| user.to_string())
         }
     }
 
     #[test]
     fn imap_session_rejects_selected_commands_before_login() {
-        let mut core = ImapSessionCore::new(ImapSessionConfig::default(), ImapPeerContext::default());
+        let mut core =
+            ImapSessionCore::new(ImapSessionConfig::default(), ImapPeerContext::default());
         let step = core.handle_line("A001 FETCH 1:* (FLAGS)", &OneUser);
         assert_eq!(core.state, ImapState::NotAuthenticated);
         assert!(matches!(step.responses[0], ImapResponse::Tagged { .. }));
     }
 
     #[test]
-    fn imap_session_login_advances_state_without_transport() {
-        let mut core = ImapSessionCore::new(ImapSessionConfig::default(), ImapPeerContext::default());
-        let step = core.handle_line("A001 LOGIN user pass", &OneUser);
-        assert_eq!(core.state, ImapState::Authenticated);
-        assert_eq!(core.authenticated_user.as_deref(), Some("user"));
+    fn imap_session_login_is_rejected_without_transport() {
+        let mut core =
+            ImapSessionCore::new(ImapSessionConfig::default(), ImapPeerContext::default());
+        let step = core.handle_line("A001 LOGIN user token", &OneUser);
+        assert_eq!(core.state, ImapState::NotAuthenticated);
+        assert_eq!(core.authenticated_user.as_deref(), None);
         assert!(matches!(step.action, ImapSessionAction::Continue));
     }
 
     #[test]
     fn imap_session_select_returns_adapter_action() {
-        let mut core = ImapSessionCore::new(ImapSessionConfig::default(), ImapPeerContext::default());
-        core.handle_line("A001 LOGIN user pass", &OneUser);
+        let mut core =
+            ImapSessionCore::new(ImapSessionConfig::default(), ImapPeerContext::default());
+        core.state = ImapState::Authenticated;
+        core.authenticated_user = Some("user".to_string());
         let step = core.handle_line("A002 SELECT INBOX", &OneUser);
         assert_eq!(core.state, ImapState::Selected);
         assert_eq!(core.selected_mailbox.as_deref(), Some("INBOX"));

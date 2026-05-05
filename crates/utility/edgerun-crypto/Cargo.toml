@@ -19,7 +19,6 @@ signature = { version = "2", default-features = false, optional = true }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"], optional = true }
 des = { version = "0.8", default-features = false, optional = true }
 hmac-crate = { package = "hmac", version = "0.12", default-features = false, optional = true }
-pbkdf2-crate = { package = "pbkdf2", version = "0.12", default-features = false, features = ["hmac"], optional = true }
 rsa = { version = "0.9", default-features = false, features = ["sha2", "pem"], optional = true }
 sha1-crate = { package = "sha1", version = "0.10", default-features = false, optional = true }
 x25519-dalek = { version = "2", default-features = false, features = ["static_secrets"], optional = true }
@@ -34,7 +33,6 @@ full = [
     "des",
     "ed25519",
     "hmac",
-    "pbkdf2",
     "p256",
     "rsa",
     "sha1",
@@ -45,7 +43,6 @@ aes = []
 des = ["dep:des"]
 ed25519 = ["dep:ed25519-dalek", "dep:signature"]
 hmac = ["dep:hmac-crate"]
-pbkdf2 = ["dep:pbkdf2-crate", "hmac"]
 p256 = ["dep:p256", "dep:ecdsa", "dep:elliptic-curve", "dep:signature"]
 rsa = ["dep:rsa"]
 sha1 = ["dep:sha1-crate"]

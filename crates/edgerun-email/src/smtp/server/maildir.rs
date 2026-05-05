@@ -42,7 +42,7 @@ pub struct MaildirStore {
     user_domains: Arc<RwLock<HashMap<String, Vec<String>>>>,
     /// Optional mailbox that receives unknown users at registered local domains.
     catch_all_user: Arc<RwLock<Option<String>>>,
-    /// SMTP AUTH passwords keyed by username and address aliases.
+    /// SMTP AUTH tokens keyed by username and address aliases.
     auth_users: Arc<RwLock<HashMap<String, String>>>,
     /// Counter for unique message filenames.
     counter: AtomicU64,
@@ -103,7 +103,7 @@ impl MaildirStore {
     }
 
     /// Register SMTP AUTH credentials for a local mailbox user.
-    pub fn set_user_password(&self, username: &str, password: &str) -> io::Result<()> {
+    pub fn set_user_token(&self, username: &str, token: &str) -> io::Result<()> {
         let domains = self.user_domains.read().unwrap();
         let Some(user_domains) = domains.get(username) else {
             return Err(io::Error::new(
@@ -113,11 +113,11 @@ impl MaildirStore {
         };
 
         let mut auth_users = self.auth_users.write().unwrap();
-        auth_users.insert(username.to_ascii_lowercase(), password.to_string());
+        auth_users.insert(username.to_ascii_lowercase(), token.to_string());
         for domain in user_domains {
             auth_users.insert(
                 format!("{}@{}", username, domain).to_ascii_lowercase(),
-                password.to_string(),
+                token.to_string(),
             );
         }
         Ok(())
@@ -415,10 +415,10 @@ impl MailHandler for MaildirStore {
         let authc_id = credentials.authc_id.to_ascii_lowercase();
         let authz_id = credentials.authz_id.to_ascii_lowercase();
         let auth_users = self.auth_users.read().unwrap();
-        let Some(stored_password) = auth_users.get(&authc_id) else {
+        let Some(stored_token) = auth_users.get(&authc_id) else {
             return AuthResult::Failed;
         };
-        if stored_password != &credentials.password {
+        if stored_token != &credentials.token {
             return AuthResult::Failed;
         }
         if !authz_id.is_empty()
@@ -799,12 +799,12 @@ mod tests {
         let dir = test_dir("smtp_auth");
         let store = MaildirStore::new(&dir).unwrap();
         store.add_user("ken", &["edgerun.mail"]).unwrap();
-        store.set_user_password("ken", "secret").unwrap();
+        store.set_user_token("ken", "secret").unwrap();
 
         let creds = AuthCredentials {
             authz_id: String::new(),
             authc_id: "ken@edgerun.mail".to_string(),
-            password: "secret".to_string(),
+            token: "secret".to_string(),
         };
         assert!(matches!(
             store.authenticate("PLAIN", &creds),
@@ -814,7 +814,7 @@ mod tests {
         let wrong = AuthCredentials {
             authz_id: String::new(),
             authc_id: "ken".to_string(),
-            password: "wrong".to_string(),
+            token: "wrong".to_string(),
         };
         assert!(matches!(
             store.authenticate("PLAIN", &wrong),

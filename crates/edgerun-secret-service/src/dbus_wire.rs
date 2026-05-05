@@ -640,7 +640,7 @@ mod tests {
         let secret = Val::Str(vec![
             Val::O("/org/freedesktop/secrets/session/s1".into()),
             Val::Dict(vec![]),
-            Val::Arr(b"my-password".iter().map(|&b| Val::Y(b)).collect()),
+            Val::Arr(b"my-token".iter().map(|&b| Val::Y(b)).collect()),
             Val::S("text/plain".into()),
         ]);
         let mut w = Wtr::new();
@@ -652,7 +652,7 @@ mod tests {
         assert_eq!(fields.len(), 4);
         assert_eq!(fields[0].o(), Some("/org/freedesktop/secrets/session/s1"));
         if let Val::Arr(arr) = &fields[2] {
-            assert_eq!(arr.len(), 11);
+            assert_eq!(arr.len(), 8);
         } else {
             panic!("field 2 not array");
         }

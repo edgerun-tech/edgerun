@@ -150,8 +150,8 @@ pub fn build_auth_command(auth: &TpmAuthCommand) -> Vec<u8> {
     out
 }
 
-/// Build a password authorization area (no session wrapper).
-pub fn build_password_auth_area(auth: &TpmPasswordAuthSession) -> Vec<u8> {
+/// Build a auth-value authorization area (no session wrapper).
+pub fn build_auth_value_area(auth: &TpmAuthValueSession) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + 2 + 1 + 2 + auth.auth_value.len());
     out.extend_from_slice(&TPM_RS_PW.to_be_bytes());
     out.extend_from_slice(&0u16.to_be_bytes());

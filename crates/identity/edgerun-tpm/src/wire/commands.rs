@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use crate::constants::*;
 use crate::types::*;
 use crate::wire::{
-    build_auth_command, build_password_auth_area, encode_command_header, encode_name_algorithm,
+    build_auth_command, build_auth_value_area, encode_command_header, encode_name_algorithm,
     encode_symmetric_definition,
 };
 
@@ -17,10 +17,10 @@ pub fn build_sign_command(params: &TpmSignCommandParams) -> Vec<u8> {
     build_sign_command_body(params, None)
 }
 
-/// Build a TPM2_Sign command with password authorization.
-pub fn build_sign_command_with_password_auth(
+/// Build a TPM2_Sign command with auth-value authorization.
+pub fn build_sign_command_with_auth_value(
     params: &TpmSignCommandParams,
-    auth: &TpmPasswordAuthSession,
+    auth: &TpmAuthValueSession,
 ) -> Vec<u8> {
     build_sign_command_body(params, Some(auth))
 }
@@ -64,10 +64,10 @@ pub fn build_sign_command_with_policy_session(
     out
 }
 
-/// Core sign command builder — shared by password and no-auth variants.
+/// Core sign command builder — shared by auth-value and no-auth variants.
 fn build_sign_command_body(
     params: &TpmSignCommandParams,
-    auth: Option<&TpmPasswordAuthSession>,
+    auth: Option<&TpmAuthValueSession>,
 ) -> Vec<u8> {
     let mut parameters = Vec::new();
     parameters.extend_from_slice(&params.key_handle.0.to_be_bytes());
@@ -98,7 +98,7 @@ fn build_sign_command_body(
             out
         }
         Some(auth) => {
-            let auth_area = build_password_auth_area(auth);
+            let auth_area = build_auth_value_area(auth);
             let mut out = Vec::with_capacity(10 + parameters.len() + 4 + auth_area.len());
             encode_command_header(
                 TpmCommandHeader {

@@ -540,8 +540,8 @@ enum AuthExchangeState {
     Plain,
     /// LOGIN: challenge "Username:" sent, expecting base64 username next.
     LoginUsername,
-    /// LOGIN: username received, "Password:" challenge sent, expecting password next.
-    LoginPassword { username: String },
+    /// LOGIN: username received, "Token:" challenge sent, expecting token next.
+    LoginToken { username: String },
 }
 
 async fn handle_connection(
@@ -1049,10 +1049,10 @@ async fn handle_auth_response(
                 .and_then(|b| String::from_utf8(b).ok())
                 .unwrap_or_default();
             send_response(transport, &SmtpResponse::auth_continue("UGFzc3dvcmQ6")).await?;
-            Ok(AuthExchangeState::LoginPassword { username })
+            Ok(AuthExchangeState::LoginToken { username })
         }
-        AuthExchangeState::LoginPassword { username } => {
-            let password = base64_decode_raw(line)
+        AuthExchangeState::LoginToken { username } => {
+            let token = base64_decode_raw(line)
                 .ok()
                 .map(|b| String::from_utf8_lossy(&b).to_string())
                 .unwrap_or_default();
@@ -1060,7 +1060,7 @@ async fn handle_auth_response(
                 b"\0".as_slice(),
                 username.as_bytes(),
                 b"\0",
-                password.as_bytes(),
+                token.as_bytes(),
             ]
             .concat();
             let creds = AuthCredentials::from_plain(&cred_bytes)?;
@@ -1503,7 +1503,7 @@ async fn handle_command(
                     }
                 }
                 "LOGIN" => {
-                    // Two-step challenge: "Username:" then "Password:"
+                    // Two-step challenge: "Username:" then "Token:"
                     send_response(transport, &SmtpResponse::auth_continue("VXNlcm5hbWU6")).await?;
                     *auth_exchange = AuthExchangeState::LoginUsername;
                 }

@@ -14,8 +14,6 @@ pub struct ProxyConfig {
     pub bind_addr: String,
     pub socks5_bind_addr: Option<String>,
     pub upstream_proxy: Option<String>,
-    pub username: Option<String>,
-    pub password: Option<String>,
     pub connect_timeout: Duration,
     pub tunnel_buffer_size: usize,
     pub tunnel_read_timeout: Duration,
@@ -29,8 +27,6 @@ impl Default for ProxyConfig {
             bind_addr: "0.0.0.0:8080".to_string(),
             socks5_bind_addr: None,
             upstream_proxy: None,
-            username: None,
-            password: None,
             connect_timeout: Duration::from_secs(30),
             tunnel_buffer_size: 64 * 1024,
             tunnel_read_timeout: Duration::from_secs(60),
@@ -336,15 +332,8 @@ async fn handle_socks5(
     let method_count = buffer[1] as usize;
     let methods = buffer.get(2..2 + method_count).unwrap_or(&[]);
     let has_no_auth = methods.contains(&0x00);
-    let has_userpass = methods.contains(&0x02);
 
-    let method = if has_userpass {
-        0x02
-    } else if has_no_auth {
-        0x00
-    } else {
-        0xFF
-    };
+    let method = if has_no_auth { 0x00 } else { 0xFF };
 
     if method == 0xFF {
         socket.write_all(&[SOCKS5_VERSION, 0xFF]).await?;
@@ -355,10 +344,6 @@ async fn handle_socks5(
     }
 
     socket.write_all(&[SOCKS5_VERSION, method]).await?;
-
-    if method == 0x02 {
-        authenticate_socks5(&mut socket, &config).await?
-    }
 
     let n = socket.read(&mut buffer).await?;
     if n < 5 || buffer[0] != SOCKS5_VERSION || buffer[2] != 0x00 {
@@ -453,55 +438,6 @@ async fn handle_socks5(
         Err(_) => {
             send_socks_reply(&mut socket, SOCKS5_REP_TTL_EXPIRED, SOCKS5_ATYP_IPV4, "", 0).await
         }
-    }
-}
-
-async fn authenticate_socks5(
-    socket: &mut Arc<AsyncTcpStream>,
-    config: &ProxyConfig,
-) -> std::io::Result<()> {
-    let mut buffer = vec![0u8; 515];
-    let n = socket.read(&mut buffer).await?;
-    if n < 3 || buffer[0] != 0x01 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid auth version",
-        ));
-    }
-
-    let user_len = buffer[1] as usize;
-    if n < 2 + user_len + 1 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "truncated credentials",
-        ));
-    }
-    let pass_len = buffer[2 + user_len] as usize;
-    if n < 2 + user_len + 1 + pass_len {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "truncated credentials",
-        ));
-    }
-
-    let username = String::from_utf8_lossy(&buffer[2..2 + user_len]).to_string();
-    let password =
-        String::from_utf8_lossy(&buffer[2 + user_len + 1..2 + user_len + 1 + pass_len]).to_string();
-
-    let valid = match (&config.username, &config.password) {
-        (Some(u), Some(p)) => u == &username && p == &password,
-        _ => false,
-    };
-
-    if valid {
-        socket.write_all(&[0x01, 0x00]).await?;
-        Ok(())
-    } else {
-        socket.write_all(&[0x01, 0x01]).await?;
-        Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "invalid credentials",
-        ))
     }
 }
 

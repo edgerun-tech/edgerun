@@ -15,11 +15,20 @@ required-features = ["std"]
 
 [features]
 std = ["edgerun-tpm/std"]
-default = ["all-hardware", "oci"]
+default = ["std", "all-hardware", "oci", "compositor", "protocols"]
+protocols = ["tls", "quic", "tftp", "acme"]
+tls = ["dep:edgerun-tls"]
+quic = ["dep:edgerun-quic", "tls"]
+tftp = ["dep:edgerun-tftp"]
+acme = ["dep:edgerun-acme"]
 oci = [
     "dep:edgerun-oci",
     "edgerun-oci/std",
+    "edgerun-oci/edgefs",
+    "edgerun-oci/gzip",
+    "edgerun-oci/zstd",
 ]
+compositor = ["dep:edgerun-compositor"]
 hardware = [
     "dep:edgerun-evdev-input",
     "dep:edgerun-alsa-speaker",
@@ -82,6 +91,10 @@ edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
+edgerun-tls = { workspace = true, optional = true }
+edgerun-quic = { workspace = true, features = ["std"], optional = true }
+edgerun-tftp = { workspace = true, features = ["server"], optional = true }
+edgerun-acme = { workspace = true, features = ["dns_challenge"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 edgerun-linux-netif = { version = "0.1", path = "../../linux-adapters/edgerun-linux-netif" }
@@ -125,6 +138,7 @@ edgerun-virtual-disk = { version = "0.1", path = "../../authority/edgerun-virtua
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", optional = true }
 edgerun-oci = { version = "0.1", path = "../../edgerun-oci", optional = true }
 edgerun-android-keystore = { version = "0.1", path = "../../identity/edgerun-android-keystore", optional = true }
+edgerun-compositor = { version = "0.1", path = "../../edgerun-compositor", optional = true }
 
 [dev-dependencies]
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }

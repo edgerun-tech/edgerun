@@ -94,15 +94,15 @@ impl LinuxTpmSigningKey {
     }
 
     pub fn with_auth_value(mut self, auth_value: impl Into<Vec<u8>>) -> Self {
-        self.authorization_mode = TpmAuthorizationMode::Password(TpmPasswordAuthSession {
+        self.authorization_mode = TpmAuthorizationMode::AuthValue(TpmAuthValueSession {
             auth_value: auth_value.into(),
             session_attributes: 0,
         });
         self
     }
 
-    pub fn with_password_auth_session(mut self, auth: TpmPasswordAuthSession) -> Self {
-        self.authorization_mode = TpmAuthorizationMode::Password(auth);
+    pub fn with_auth_value_session(mut self, auth: TpmAuthValueSession) -> Self {
+        self.authorization_mode = TpmAuthorizationMode::AuthValue(auth);
         self
     }
 

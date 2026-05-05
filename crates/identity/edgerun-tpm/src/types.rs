@@ -148,9 +148,9 @@ pub struct TpmHashResponse {
     pub validation: TpmHashCheckTicket,
 }
 
-/// Password-based authorization session data.
+/// Auth-value authorization session data.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TpmPasswordAuthSession {
+pub struct TpmAuthValueSession {
     pub auth_value: Vec<u8>,
     pub session_attributes: u8,
 }
@@ -282,7 +282,7 @@ impl std::error::Error for TpmError {}
 #[derive(Clone, Debug)]
 pub enum TpmAuthorizationMode {
     None,
-    Password(TpmPasswordAuthSession),
+    AuthValue(TpmAuthValueSession),
     Policy(TpmPolicySessionRunner),
 }
 

@@ -34,7 +34,7 @@ use crate::imap::types::{FetchAttr, Flags, Mailbox, MailboxStatus, Message, Sear
 pub struct MaildirImapStore {
     /// Root of the Maildir hierarchy (same as MaildirStore's root).
     root: PathBuf,
-    /// User passwords: username -> password (plaintext, for testing only).
+    /// User tokens: username -> token (plaintext, for testing only).
     users: Arc<RwLock<HashMap<String, String>>>,
     /// Global UID counter (across all mailboxes).
     next_uid: AtomicU32,
@@ -58,12 +58,12 @@ impl MaildirImapStore {
         })
     }
 
-    /// Add a user with password.
-    pub fn add_user(&self, username: &str, password: &str) {
+    /// Add a user with token.
+    pub fn add_user(&self, username: &str, token: &str) {
         self.users
             .write()
             .unwrap()
-            .insert(username.to_string(), password.to_string());
+            .insert(username.to_string(), token.to_string());
     }
 
     /// Check if a user exists.
@@ -372,10 +372,10 @@ impl Drop for MaildirStatusLock {
 // ===========================================================================
 
 impl MailStore for MaildirImapStore {
-    fn authenticate(&self, user: &str, password: &str) -> io::Result<Option<String>> {
+    fn authenticate(&self, user: &str, token: &str) -> io::Result<Option<String>> {
         let users = self.users.read().unwrap();
         if let Some(stored) = users.get(user) {
-            if stored == password {
+            if stored == token {
                 return Ok(Some(user.to_string()));
             }
         }

@@ -30,6 +30,8 @@ edgerun-proxy = { version = "0.1", path = "../../edgerun-proxy", optional = true
 edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-tls = { version = "0.1", path = "../../edgerun-tls", optional = true }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
+rusqlite = { version = "0.32", default-features = false, features = ["bundled"], optional = true }
+
 [features]
 default = ["smtp", "imap", "lmtp", "dns", "dhcp", "tftp", "tls"]
 std = []
@@ -43,6 +45,7 @@ proxy = ["dep:edgerun-proxy"]
 tls = ["dep:edgerun-tls", "edgerun-http/tls"]
 http3 = ["tls", "edgerun-http/http3"]
 http-compression = ["edgerun-http/http-compression"]
+sqlite = ["std", "dep:rusqlite"]
 
 [lints]
 workspace = true

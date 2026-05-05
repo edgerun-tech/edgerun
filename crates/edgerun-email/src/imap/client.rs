@@ -438,24 +438,6 @@ impl ImapClient {
         self.selected_mailbox.as_deref()
     }
 
-    pub async fn login(&mut self, user: &str, password: &str) -> io::Result<()> {
-        let cmd = format!("LOGIN {} {}", user, password);
-        let resp = self.send_command(&cmd).await?;
-        match resp {
-            ImapResponse::Tagged {
-                result: ImapResult::Ok,
-                ..
-            } => Ok(()),
-            ImapResponse::Tagged { message, .. } => {
-                Err(io::Error::new(io::ErrorKind::PermissionDenied, message))
-            }
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "unexpected response",
-            )),
-        }
-    }
-
     pub async fn logout(&mut self) -> io::Result<()> {
         let _ = self.send_command("LOGOUT").await?;
         Ok(())

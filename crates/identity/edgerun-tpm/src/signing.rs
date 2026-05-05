@@ -30,15 +30,15 @@ impl<T> TpmTransportSigningKey<T> {
     }
 
     pub fn with_auth_value(mut self, auth_value: impl Into<Vec<u8>>) -> Self {
-        self.authorization_mode = TpmAuthorizationMode::Password(TpmPasswordAuthSession {
+        self.authorization_mode = TpmAuthorizationMode::AuthValue(TpmAuthValueSession {
             auth_value: auth_value.into(),
             session_attributes: 0,
         });
         self
     }
 
-    pub fn with_password_auth_session(mut self, auth: TpmPasswordAuthSession) -> Self {
-        self.authorization_mode = TpmAuthorizationMode::Password(auth);
+    pub fn with_auth_value_session(mut self, auth: TpmAuthValueSession) -> Self {
+        self.authorization_mode = TpmAuthorizationMode::AuthValue(auth);
         self
     }
 
@@ -220,13 +220,13 @@ pub fn sign_prehashed_with_device<T: TpmTransport>(
 ) -> Result<TpmParsedSignature, TpmError> {
     match authorization_mode {
         TpmAuthorizationMode::None => {
-            let empty_auth = TpmPasswordAuthSession {
+            let empty_auth = TpmAuthValueSession {
                 auth_value: Vec::new(),
                 session_attributes: 0,
             };
-            device.sign_raw_with_password_auth(params, &empty_auth)
+            device.sign_raw_with_auth_value(params, &empty_auth)
         }
-        TpmAuthorizationMode::Password(auth) => device.sign_raw_with_password_auth(params, auth),
+        TpmAuthorizationMode::AuthValue(auth) => device.sign_raw_with_auth_value(params, auth),
         TpmAuthorizationMode::Policy(runner) => runner.sign_authorized(device, params),
     }
 }

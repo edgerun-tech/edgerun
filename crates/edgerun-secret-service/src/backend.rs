@@ -771,7 +771,7 @@ mod tests {
             "GitHub",
             &[
                 ("server".into(), "github.com".into()),
-                ("type".into(), "token".into()),
+                ("type".into(), "access".into()),
             ],
         )
         .unwrap();
@@ -795,7 +795,7 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].1.label, "GitHub");
 
-        let results = be.search(coll, &[("type".into(), "token".into())]).unwrap();
+        let results = be.search(coll, &[("type".into(), "access".into())]).unwrap();
         assert_eq!(results.len(), 1);
     }
 
@@ -864,7 +864,7 @@ mod tests {
     fn item_key_deterministic_across_backends() {
         let attrs = vec![
             ("server".into(), "github.com".into()),
-            ("type".into(), "password".into()),
+            ("type".into(), "token".into()),
         ];
         let a = Backend::item_key("My Label", &attrs);
         let b = Backend::item_key("My Label", &attrs);
@@ -966,7 +966,7 @@ mod tests {
             "GitHub",
             &[
                 ("server".into(), "github.com".into()),
-                ("type".into(), "password".into()),
+                ("type".into(), "access".into()),
             ],
         )
         .unwrap();
@@ -997,7 +997,7 @@ mod tests {
                 coll,
                 &[
                     ("server".into(), "github.com".into()),
-                    ("type".into(), "password".into()),
+                    ("type".into(), "access".into()),
                 ],
             )
             .unwrap();

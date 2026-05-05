@@ -44,7 +44,7 @@ enum Command {
     },
     Provision {
         ssid: String,
-        password: String,
+        token: String,
         bind_code: String,
     },
     ProvisionFile {
@@ -121,9 +121,9 @@ fn main() {
         Command::Pair { address } => do_pair(&address),
         Command::Provision {
             ssid,
-            password,
+            token,
             bind_code,
-        } => do_provision(&ssid, &password, &bind_code),
+        } => do_provision(&ssid, &token, &bind_code),
         Command::ProvisionFile { path, bind_code } => do_provision_file(&path, &bind_code),
         Command::ProvisionBindFile {
             wifi_path,
@@ -190,7 +190,7 @@ fn parse_args() -> Command {
         },
         "provision" => Command::Provision {
             ssid: args.get(1).cloned().unwrap_or_default(),
-            password: args.get(2).cloned().unwrap_or_default(),
+            token: args.get(2).cloned().unwrap_or_default(),
             bind_code: args.get(3).cloned().unwrap_or_default(),
         },
         "provision-file" => Command::ProvisionFile {
@@ -672,14 +672,14 @@ fn do_status() {
     })
 }
 
-fn do_provision(ssid: &str, password: &str, bind_code: &str) {
-    if ssid.is_empty() || password.is_empty() {
-        eprintln!("Usage: tcl-ac provision <ssid> <password> [bind-code]");
+fn do_provision(ssid: &str, token: &str, bind_code: &str) {
+    if ssid.is_empty() || token.is_empty() {
+        eprintln!("Usage: tcl-ac provision <ssid> <token> [bind-code]");
         process::exit(1);
     }
 
     with_client(|client| {
-        match client.provision_wifi_responses(ssid, password, bind_code, None, None, 60_000) {
+        match client.provision_wifi_responses(ssid, token, bind_code, None, None, 60_000) {
             Ok(responses) if responses.is_empty() => {
                 println!("Provisioning payload accepted; no indication response was received.");
                 Ok(())
@@ -699,8 +699,8 @@ fn do_provision(ssid: &str, password: &str, bind_code: &str) {
 }
 
 fn do_provision_file(path: &str, bind_code: &str) {
-    let (ssid, password) = read_wifi_credentials(path);
-    do_provision(&ssid, &password, bind_code);
+    let (ssid, token) = read_wifi_credentials(path);
+    do_provision(&ssid, &token, bind_code);
 }
 
 fn do_provision_bind_file(wifi_path: &str, bind_path: &str) {
@@ -708,7 +708,7 @@ fn do_provision_bind_file(wifi_path: &str, bind_path: &str) {
         eprintln!("Usage: tcl-ac provision-bind-file <wifi-file> <bind-response-json>");
         process::exit(1);
     }
-    let (ssid, password) = read_wifi_credentials(wifi_path);
+    let (ssid, token) = read_wifi_credentials(wifi_path);
     let bind_path = expand_home(bind_path);
     let bind_data = match fs::read_to_string(&bind_path) {
         Ok(data) => data,
@@ -728,7 +728,7 @@ fn do_provision_bind_file(wifi_path: &str, bind_path: &str) {
     with_client(|client| {
         match client.provision_wifi_with_commission_responses(
             &ssid,
-            &password,
+            &token,
             &bind_code,
             server_host.as_deref(),
             server_host_v2.as_deref(),
@@ -763,12 +763,12 @@ fn do_softap_provision(wifi_path: &str, bind_path: &str, device_ip: &str) {
         process::exit(1);
     }
 
-    let (ssid, password) = read_wifi_credentials(wifi_path);
+    let (ssid, token) = read_wifi_credentials(wifi_path);
     let commissioning = read_commissioning_data(Some(bind_path));
     let client = TclAcClient::new();
     let payload = client.build_legacy_provision_payload_with_hosts(
         &ssid,
-        &password,
+        &token,
         &commissioning.bind_code,
         commissioning.server_host.as_deref(),
         commissioning.server_host_v2.as_deref(),
@@ -791,7 +791,7 @@ fn do_softap_provision(wifi_path: &str, bind_path: &str, device_ip: &str) {
         "Trying SoftAP TCP XML provisioning on {}:10000...",
         device_ip
     );
-    let tcp_response = softap_tcp_provision(device_ip, &ssid, &password);
+    let tcp_response = softap_tcp_provision(device_ip, &ssid, &token);
     if let Some(response) = tcp_response {
         println!("SoftAP TCP response: {}", response.trim());
         if let Some(code) = xml_tag_value(&response, "errcode") {
@@ -848,7 +848,7 @@ fn softap_udp_provision(device_ip: &str, payload: &str) -> Option<String> {
     mac
 }
 
-fn softap_tcp_provision(device_ip: &str, ssid: &str, password: &str) -> Option<String> {
+fn softap_tcp_provision(device_ip: &str, ssid: &str, token: &str) -> Option<String> {
     let target: SocketAddr = match format!("{device_ip}:10000").parse() {
         Ok(target) => target,
         Err(err) => {
@@ -865,8 +865,8 @@ fn softap_tcp_provision(device_ip: &str, ssid: &str, password: &str) -> Option<S
     };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let request = format!(
-        "<setReq><ssid>{}</ssid><password>{}</password></setReq>",
-        ssid, password
+        "<setReq><ssid>{}</ssid><token>{}</token></setReq>",
+        ssid, token
     );
     if let Err(err) = stream.write_all(request.as_bytes()) {
         eprintln!("SoftAP TCP write failed: {}", err);
@@ -917,7 +917,7 @@ struct TclSession {
 struct LoginRequest {
     channel: String,
     username: String,
-    password: String,
+    token: String,
     captcha_rule: i32,
     os_type: i32,
     os_version: String,
@@ -991,7 +991,7 @@ edgerun_json::impl_json_struct! {
         required {
             channel: "channel" => String,
             username: "username" => String,
-            password: "password" => String,
+            token: "token" => String,
             captcha_rule: "captchaRule" => i32,
             os_type: "osType" => i32,
             os_version: "osVersion" => String,
@@ -1077,15 +1077,15 @@ fn do_login(account: &str, out_path: &str) {
     }
 
     let login_config = LoginConfig::from_env();
-    let password = env::var("TCL_PASSWORD")
+    let token = env::var("TCL_PASSWORD")
         .ok()
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| read_secret_prompt("TCL password: "));
+        .unwrap_or_else(|| read_secret_prompt("TCL token: "));
 
     let request = LoginRequest {
         channel: "app".to_string(),
         username: account.to_string(),
-        password: md5_hex(&password),
+        token: md5_hex(&token),
         captcha_rule: 2,
         os_type: 1,
         os_version: env::var("TCL_OS_VERSION").unwrap_or_else(|_| "Android 15".to_string()),
@@ -1093,7 +1093,7 @@ fn do_login(account: &str, out_path: &str) {
         client_version: env::var("TCL_HOME_VERSION").unwrap_or_else(|_| "6.1.1".to_string()),
         device_model: env::var("TCL_DEVICE_MODEL").unwrap_or_else(|_| "Linux laptop".to_string()),
     };
-    drop(password);
+    drop(token);
 
     let body = json_or_exit(&request, "login request");
     let url = format!(
@@ -1376,7 +1376,7 @@ fn do_diagnose_provision(address: &str, wifi_path: &str, bind_path: Option<&str>
         process::exit(2);
     }
 
-    let (ssid, password) = read_wifi_credentials(wifi_path);
+    let (ssid, token) = read_wifi_credentials(wifi_path);
     let commissioning = read_commissioning_data(bind_path);
     let client = TclAcClient::new();
 
@@ -1415,7 +1415,7 @@ fn do_diagnose_provision(address: &str, wifi_path: &str, bind_path: Option<&str>
     println!("Sending provisioning payload and waiting for BLE indications...");
     match client.provision_wifi_with_commission_responses(
         &ssid,
-        &password,
+        &token,
         &commissioning.bind_code,
         commissioning.server_host.as_deref(),
         commissioning.server_host_v2.as_deref(),
@@ -1456,12 +1456,12 @@ fn read_wifi_credentials(path: &str) -> (String, String) {
     };
     let mut lines = data.lines().map(str::trim).filter(|line| !line.is_empty());
     let ssid = lines.next().unwrap_or_default();
-    let password = lines.next().unwrap_or_default();
-    if ssid.is_empty() || password.is_empty() {
-        eprintln!("Wi-Fi credential file must contain SSID on line 1 and password on line 2");
+    let token = lines.next().unwrap_or_default();
+    if ssid.is_empty() || token.is_empty() {
+        eprintln!("Wi-Fi credential file must contain SSID on line 1 and token on line 2");
         process::exit(1);
     }
-    (ssid.to_string(), password.to_string())
+    (ssid.to_string(), token.to_string())
 }
 
 fn required_env(name: &str) -> String {
@@ -1570,12 +1570,12 @@ fn read_secret_prompt(prompt: &str) -> String {
         println!();
     }
     if let Err(err) = read_result {
-        eprintln!("Failed to read password: {}", err);
+        eprintln!("Failed to read token: {}", err);
         process::exit(1);
     }
     let value = value.trim_end_matches(['\r', '\n']).to_string();
     if value.is_empty() {
-        eprintln!("Password cannot be empty.");
+        eprintln!("Token cannot be empty.");
         process::exit(2);
     }
     value
@@ -2179,7 +2179,7 @@ mod tests {
         let request = LoginRequest {
             channel: "app".to_string(),
             username: "user@example.test".to_string(),
-            password: "hash".to_string(),
+            token: "hash".to_string(),
             captcha_rule: 2,
             os_type: 1,
             os_version: "Android 15".to_string(),

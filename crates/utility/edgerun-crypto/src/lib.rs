@@ -174,97 +174,6 @@ pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {
     }
 }
 
-#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
-const ENCRYPTED_P256_KEY_MAGIC: &[u8] = b"EDGERUN-P256-GCM1";
-#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
-const ENCRYPTED_P256_SALT_LEN: usize = 16;
-#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
-const ENCRYPTED_P256_NONCE_LEN: usize = 12;
-#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
-const ENCRYPTED_P256_PBKDF2_ITERATIONS: u32 = 100_000;
-#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
-const P256_PRIVATE_KEY_LEN: usize = 32;
-
-#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
-fn derive_p256_encryption_key(passphrase: &str, salt: &[u8]) -> [u8; 32] {
-    pbkdf2_crate::pbkdf2_hmac_array::<sha::Sha256, 32>(
-        passphrase.as_bytes(),
-        salt,
-        ENCRYPTED_P256_PBKDF2_ITERATIONS,
-    )
-}
-
-#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
-pub fn encrypt_signing_key(
-    signing_key: &p256::ecdsa::SigningKey,
-    passphrase: &str,
-) -> alloc::vec::Vec<u8> {
-    let mut salt = [0u8; ENCRYPTED_P256_SALT_LEN];
-    let _ = fill_random(&mut salt);
-    let mut nonce_bytes = [0u8; ENCRYPTED_P256_NONCE_LEN];
-    let _ = fill_random(&mut nonce_bytes);
-
-    let encryption_key = derive_p256_encryption_key(passphrase, &salt);
-    let cipher = aes_gcm::Aes256Gcm::new(aes_gcm::Key::<aes_gcm::Aes256Gcm>::from_slice(
-        &encryption_key,
-    ));
-    let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
-    let key_bytes = signing_key.to_bytes();
-    let ciphertext = cipher
-        .encrypt(nonce, key_bytes.as_slice())
-        .expect("AES-GCM encryption failed");
-
-    let mut out = alloc::vec::Vec::with_capacity(
-        ENCRYPTED_P256_KEY_MAGIC.len()
-            + ENCRYPTED_P256_SALT_LEN
-            + ENCRYPTED_P256_NONCE_LEN
-            + ciphertext.len(),
-    );
-    out.extend_from_slice(ENCRYPTED_P256_KEY_MAGIC);
-    out.extend_from_slice(&salt);
-    out.extend_from_slice(&nonce_bytes);
-    out.extend_from_slice(&ciphertext);
-    out
-}
-
-#[cfg(all(feature = "p256", feature = "aead", feature = "pbkdf2"))]
-pub fn decrypt_signing_key(
-    encrypted_data: &[u8],
-    passphrase: &str,
-) -> Result<p256::ecdsa::SigningKey> {
-    let header_len = ENCRYPTED_P256_KEY_MAGIC.len();
-    let min_len = header_len + ENCRYPTED_P256_SALT_LEN + ENCRYPTED_P256_NONCE_LEN;
-    if encrypted_data.len() <= min_len
-        || !encrypted_data
-            .get(..header_len)
-            .is_some_and(|header| header == ENCRYPTED_P256_KEY_MAGIC)
-    {
-        return Err(CryptoError::InvalidKey);
-    }
-
-    let salt_start = header_len;
-    let nonce_start = salt_start + ENCRYPTED_P256_SALT_LEN;
-    let ciphertext_start = nonce_start + ENCRYPTED_P256_NONCE_LEN;
-    let salt = &encrypted_data[salt_start..nonce_start];
-    let nonce = aes_gcm::Nonce::from_slice(&encrypted_data[nonce_start..ciphertext_start]);
-    let ciphertext = &encrypted_data[ciphertext_start..];
-
-    let encryption_key = derive_p256_encryption_key(passphrase, salt);
-    let cipher = aes_gcm::Aes256Gcm::new(aes_gcm::Key::<aes_gcm::Aes256Gcm>::from_slice(
-        &encryption_key,
-    ));
-    let plaintext = cipher
-        .decrypt(nonce, ciphertext)
-        .map_err(|_| CryptoError::DecryptionFailed)?;
-    if plaintext.len() != P256_PRIVATE_KEY_LEN {
-        return Err(CryptoError::InvalidKey);
-    }
-
-    let mut key_bytes = [0u8; P256_PRIVATE_KEY_LEN];
-    key_bytes.copy_from_slice(&plaintext);
-    p256::ecdsa::SigningKey::from_bytes(&key_bytes.into()).map_err(|_| CryptoError::InvalidKey)
-}
-
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CipherSuite {
@@ -349,11 +258,6 @@ pub mod hkdf {
 pub mod hmac {
     pub use crate::hmac_sha256 as HMAC;
     pub use hmac_crate::{Hmac, Mac};
-}
-
-#[cfg(feature = "pbkdf2")]
-pub mod pbkdf2 {
-    pub use pbkdf2_crate::{pbkdf2, pbkdf2_hmac_array};
 }
 
 #[cfg(feature = "sha1")]

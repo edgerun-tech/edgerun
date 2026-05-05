@@ -74,8 +74,6 @@ pub mod accountability;
 pub mod bare_rootfs;
 pub mod bare_syscall;
 #[cfg(all(feature = "std", not(target_os = "none")))]
-pub mod libc;
-#[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod bundle;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod cgroups;
@@ -102,6 +100,8 @@ pub mod handle;
 pub mod hooks;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod init;
+#[cfg(all(feature = "std", not(target_os = "none")))]
+pub mod libc;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod lifecycle;
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -251,7 +251,7 @@ pub use validate::{host_arch, host_os, validate_spec, OciValidationError};
     all(feature = "std", not(target_os = "none"))
 ))]
 pub use edgerun_http::auth::parse_bearer_auth;
-pub use registry::auth::{decode_basic_auth, RegistryAuth};
+pub use registry::auth::RegistryAuth;
 #[cfg(any(
     feature = "registry-client",
     all(feature = "std", not(target_os = "none"))

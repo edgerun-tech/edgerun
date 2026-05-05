@@ -75,14 +75,13 @@ impl<T: TpmTransport> TpmDevice<T> {
         parse_sign_response(&response)
     }
 
-    /// Sign a pre-hashed digest with password authorization.
-    pub fn sign_raw_with_password_auth(
+    /// Sign a pre-hashed digest with auth-value authorization.
+    pub fn sign_raw_with_auth_value(
         &mut self,
         params: &TpmSignCommandParams,
-        auth: &TpmPasswordAuthSession,
+        auth: &TpmAuthValueSession,
     ) -> Result<TpmParsedSignature, TpmError> {
-        let response =
-            self.transmit_command(&build_sign_command_with_password_auth(params, auth))?;
+        let response = self.transmit_command(&build_sign_command_with_auth_value(params, auth))?;
         parse_sign_response(&response)
     }
 
@@ -202,7 +201,7 @@ impl<T: FixedTpmTransport + TpmTransport> TpmDevice<T> {
         self.response_code_from_fixed(&cmd, &mut response)
     }
 
-    /// Send TPM2_Sign with an empty password authorization session and return
+    /// Send TPM2_Sign with an empty auth-value authorization session and return
     /// only the raw response code.
     pub fn sign_response_code(&mut self, handle: TpmHandle, digest: &[u8; 32]) -> u32 {
         let mut signature = [0u8; 64];
@@ -212,7 +211,7 @@ impl<T: FixedTpmTransport + TpmTransport> TpmDevice<T> {
         }
     }
 
-    /// Send TPM2_Sign with an empty password authorization session and write a
+    /// Send TPM2_Sign with an empty auth-value authorization session and write a
     /// raw P-256 ECDSA signature (`r || s`) into caller-owned storage.
     pub fn sign_p256_sha256_into(
         &mut self,

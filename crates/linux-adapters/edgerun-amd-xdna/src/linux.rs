@@ -607,12 +607,10 @@ fn wait_cmd(fd: RawFd, syncobj_handle: u32, timeout_ms: u32) -> Result<(), Capab
         pad: [0; 8],
     };
 
-    #[cfg(not(unix))]
-    let wait_ioctl = DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT as u64;
-    #[cfg(all(unix, target_env = "gnu"))]
+    #[cfg(any(not(unix), all(unix, target_env = "gnu")))]
     let wait_ioctl = DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT as libc::c_ulong;
     #[cfg(all(unix, not(target_env = "gnu")))]
-    let wait_ioctl = DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT;
+    let wait_ioctl = DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT as libc::c_ulong;
     let ret = unsafe { libc::ioctl(fd, wait_ioctl, &mut wait) };
 
     if ret < 0 {

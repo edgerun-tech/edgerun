@@ -13,10 +13,10 @@ use crate::backend::Backend;
 use crate::dbus_bus::BusConnection;
 use crate::dbus_types::*;
 use crate::dbus_wire::{decode_msg, encode_msg};
+use crate::service_core::{SecretRequest, SecretResponse, SecretServiceCore};
 use crate::session::{
     BiometricVerifier, NoBiometricVerifier, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
 };
-use crate::service_core::{SecretRequest, SecretResponse, SecretServiceCore};
 
 // ===========================================================================
 // Server
@@ -698,7 +698,10 @@ impl Server {
             );
         };
 
-        let existed = match self.dispatch_secret(SecretRequest::Delete { collection: coll, key }) {
+        let existed = match self.dispatch_secret(SecretRequest::Delete {
+            collection: coll,
+            key,
+        }) {
             Ok(SecretResponse::Deleted(existed)) => existed,
             _ => false,
         };
@@ -1589,14 +1592,14 @@ mod tests {
         };
 
         // Put a secret
-        let key = Backend::item_key("My Password", &[("service".into(), "example.com".into())]);
+        let key = Backend::item_key("My Token", &[("service".into(), "example.com".into())]);
         server
             .backend
             .put(
                 "/org/freedesktop/secrets/collections/default",
                 &key,
-                b"my-super-secret-password",
-                "My Password",
+                b"my-super-secret-token",
+                "My Token",
                 &[("service".into(), "example.com".into())],
             )
             .unwrap();

@@ -382,10 +382,8 @@ impl RegistryClient {
             .method(edgerun_http::Method::GET)
             .uri(&url);
 
-        let creds = match &self.auth {
-            RegistryAuth::Basic { username, password } => {
-                Some((username.clone(), password.clone()))
-            }
+        let token = match &self.auth {
+            RegistryAuth::Bearer { token } => Some(token.clone()),
             #[cfg(all(feature = "std", not(target_os = "none")))]
             RegistryAuth::FromSecretService {
                 data_root,
@@ -402,10 +400,8 @@ impl RegistryClient {
             _ => None,
         };
 
-        if let Some((username, password)) = creds {
-            let auth_str = format!("{}:{}", username, password);
-            let encoded = edgerun_encoding::base64::standard_encode(auth_str.as_bytes());
-            builder = builder.header("Authorization", &format!("Basic {}", encoded));
+        if let Some(token) = token {
+            builder = builder.header("Authorization", &format!("Bearer {}", token));
         }
 
         let request = builder.build()?;

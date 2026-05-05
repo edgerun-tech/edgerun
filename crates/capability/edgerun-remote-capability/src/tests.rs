@@ -9,7 +9,6 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::os::unix::net::UnixStream;
 use std::rc::Rc;
 
 use crate::prelude::v1::*;
@@ -68,7 +67,7 @@ use crate::protocol::{
 };
 use crate::pump_one_event;
 use crate::serve_one;
-use crate::transport::{FramedRemoteTransport, MemoryRemoteTransport};
+use crate::transport::MemoryRemoteTransport;
 use edgerun_biometrics::{BiometricModality, BiometricState};
 use edgerun_capability_policy::PolicyEngine;
 

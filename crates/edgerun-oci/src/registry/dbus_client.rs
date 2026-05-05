@@ -106,10 +106,7 @@ impl SecretClient {
         Ok(())
     }
 
-    /// Store a registry credential in the secret service.
-    ///
-    /// The credential is stored in the `registry` collection. The secret value
-    /// should be in `username:password` format.
+    /// Store a registry bearer token in the secret service.
     pub fn store_registry_credential(
         &mut self,
         registry_host: &str,

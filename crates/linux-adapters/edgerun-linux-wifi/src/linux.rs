@@ -2231,7 +2231,7 @@ impl WifiController for LinuxWifiBackend {
         }
     }
 
-    fn connect(&self, ssid: &str, passphrase: Option<&str>) -> Result<(), CapabilityError> {
+    fn connect(&self, ssid: &str) -> Result<(), CapabilityError> {
         let ifindex = get_ifindex(&self.interface.name)?;
 
         // Enable the interface
@@ -2240,15 +2240,8 @@ impl WifiController for LinuxWifiBackend {
         // Ensure station mode
         nl80211_set_interface_type(ifindex, NL80211_IFTYPE_STATION)?;
 
-        if let Some(pass) = passphrase {
-            // WPA-PSK connection — derive PMK and pass to kernel
-            // so it handles the 4-way handshake internally
-            let pmk = derive_wpa_pmk(pass, ssid.as_bytes());
-            nl80211_connect_wpa(ifindex, ssid.as_bytes(), None, None, Some(&pmk))?;
-        } else {
-            // Open network — associate without auth
-            nl80211_connect_wpa(ifindex, ssid.as_bytes(), None, None, None)?;
-        }
+        // Open network only. Shared-secret Wi-Fi is intentionally unsupported.
+        nl80211_connect_wpa(ifindex, ssid.as_bytes(), None, None, None)?;
 
         Ok(())
     }
@@ -2341,31 +2334,12 @@ impl WifiAccessPointController for LinuxWifiBackend {
 }
 
 // ============================================================================
-// WPA/WPA2 PSK derivation and EAPOL Key handling
+// EAPOL Key handling
 // ============================================================================
 
 /// Parse a MAC address string like "AA:BB:CC:DD:EE:FF" into bytes.
 fn parse_mac_string(s: &str) -> Option<[u8; 6]> {
     edgerun_encoding::hex::parse_mac(s)
-}
-
-/// Derive the Pairwise Master Key (PMK) from a WPA passphrase using PBKDF2-SHA1.
-///
-/// This implements the algorithm from IEEE 802.11i / WPA spec:
-/// PMK = PBKDF2-SHA1(passphrase, SSID, SSID_len, 4096, 256)
-///
-/// The `passphrase` should be 8-63 ASCII characters.
-/// The `ssid` is the network SSID as bytes.
-/// Returns a 32-byte PMK.
-pub fn derive_wpa_pmk(passphrase: &str, ssid: &[u8]) -> [u8; 32] {
-    use edgerun_crypto::hmac::Hmac;
-    use edgerun_crypto::pbkdf2::pbkdf2;
-    use edgerun_crypto::sha1::Sha1;
-
-    let mut pmk = [0u8; 32];
-    // WPA uses 4096 iterations per spec
-    pbkdf2::<Hmac<Sha1>>(passphrase.as_bytes(), ssid, 4096, &mut pmk);
-    pmk
 }
 
 /// EAPOL-Key frame constants
@@ -2519,7 +2493,7 @@ pub fn parse_eapol_key_frame(data: &[u8]) -> Result<ParsedEapolKey, &'static str
 ///                  Min(ANonce, SNonce) || Max(ANonce, SNonce))
 ///
 /// Where:
-/// - PMK: Pairwise Master Key (from passphrase)
+/// - PMK: Pairwise Master Key
 /// - AA: Authenticator Address (AP's BSSID)
 /// - SA: Supplicant Address (STA's MAC)
 /// - ANonce: Authenticator's nonce (from Message 1)

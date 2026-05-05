@@ -328,7 +328,7 @@ impl Unpin for BufferedImapTransport {}
 /// Trait for a pluggable mailbox backend.
 pub trait MailStore: Send + Sync + 'static {
     /// Authenticate a user. Returns the username on success.
-    fn authenticate(&self, user: &str, password: &str) -> io::Result<Option<String>>;
+    fn authenticate(&self, user: &str, token: &str) -> io::Result<Option<String>>;
 
     /// List mailboxes matching a pattern.
     fn list(&self, reference: &str, pattern: &str) -> io::Result<Vec<Mailbox>>;
@@ -421,7 +421,7 @@ pub trait MailStore: Send + Sync + 'static {
 /// Simple in-memory mailbox implementation.
 pub struct MemoryStore {
     mailboxes: std::sync::Mutex<HashMap<String, Vec<Message>>>,
-    users: std::sync::Mutex<HashMap<String, String>>, // username -> password
+    users: std::sync::Mutex<HashMap<String, String>>, // username -> token
     subscriptions: std::sync::Mutex<std::collections::HashSet<String>>, // subscribed mailboxes
     quotas: std::sync::Mutex<HashMap<String, Quota>>, // mailbox -> quota info
     next_uid: std::sync::Mutex<u32>,
@@ -451,11 +451,11 @@ impl MemoryStore {
         store
     }
 
-    pub fn add_user(&self, username: &str, password: &str) {
+    pub fn add_user(&self, username: &str, token: &str) {
         self.users
             .lock()
             .unwrap()
-            .insert(username.to_string(), password.to_string());
+            .insert(username.to_string(), token.to_string());
     }
 }
 
@@ -466,10 +466,10 @@ impl Default for MemoryStore {
 }
 
 impl MailStore for MemoryStore {
-    fn authenticate(&self, user: &str, password: &str) -> io::Result<Option<String>> {
+    fn authenticate(&self, user: &str, token: &str) -> io::Result<Option<String>> {
         let users = self.users.lock().unwrap();
         if let Some(stored_pass) = users.get(user) {
-            if stored_pass == password {
+            if stored_pass == token {
                 return Ok(Some(user.to_string()));
             }
         }
@@ -2121,25 +2121,6 @@ async fn dispatch_command(
             Ok(ImapResponse::ok(tag, "LOGOUT completed"))
         }
 
-        ImapCommand::Login { user, password } => {
-            if *state != ImapState::NotAuthenticated {
-                return Ok(ImapResponse::no(tag, "Already authenticated"));
-            }
-
-            match store.authenticate(user, password) {
-                Ok(Some(username)) => {
-                    *state = ImapState::Authenticated;
-                    *authenticated_user = Some(username.clone());
-                    edgerun_log::info!("edgerun-imap: user {} authenticated", username);
-                    Ok(ImapResponse::ok(
-                        tag,
-                        &format!("LOGIN completed for {}", username),
-                    ))
-                }
-                _ => Ok(ImapResponse::no(tag, "LOGIN failed")),
-            }
-        }
-
         ImapCommand::Authenticate { mechanism } => {
             if *state != ImapState::NotAuthenticated {
                 return Ok(ImapResponse::no(tag, "Already authenticated"));
@@ -2147,87 +2128,8 @@ async fn dispatch_command(
 
             let mech = mechanism.to_uppercase();
 
-            if mech == "PLAIN" {
-                // Send continuation for base64-encoded credentials
-                transport.write_all(b"+ \r\n").await?;
-                transport.flush().await?;
-
-                let creds = transport.read_line().await?.unwrap_or_default();
-                if let Ok(bytes) = base64_decode(&creds) {
-                    if let Ok(s) = std::str::from_utf8(&bytes) {
-                        let parts: Vec<&str> = s.split('\0').collect();
-                        if parts.len() >= 3 {
-                            let username = parts[1];
-                            let password = parts[2];
-
-                            match store.authenticate(username, password) {
-                                Ok(Some(uname)) => {
-                                    *state = ImapState::Authenticated;
-                                    *authenticated_user = Some(uname.clone());
-                                    edgerun_log::info!(
-                                        "edgerun-imap: user {} authenticated (PLAIN)",
-                                        uname
-                                    );
-                                    return Ok(ImapResponse::ok(
-                                        tag,
-                                        &format!("AUTHENTICATE completed for {}", uname),
-                                    ));
-                                }
-                                _ => return Ok(ImapResponse::no(tag, "AUTHENTICATE failed")),
-                            }
-                        }
-                    }
-                }
-                Ok(ImapResponse::no(
-                    tag,
-                    "AUTHENTICATE failed: invalid credentials",
-                ))
-            } else if mech == "LOGIN" {
-                // LOGIN mechanism: two base64 challenge/responses
-                // Challenge 1: "Username:"
-                transport.write_all(b"+ VXNlcm5hbWU6\r\n").await?;
-                transport.flush().await?;
-
-                let username_b64 = transport.read_line().await?.unwrap_or_default();
-                let username = if let Ok(bytes) = base64_decode(&username_b64) {
-                    String::from_utf8(bytes).map_err(|_| {
-                        io::Error::new(io::ErrorKind::InvalidData, "invalid username")
-                    })?
-                } else {
-                    return Ok(ImapResponse::no(
-                        tag,
-                        "AUTHENTICATE failed: invalid username",
-                    ));
-                };
-
-                // Challenge 2: "Password:"
-                transport.write_all(b"+ UGFzc3dvcmQ6\r\n").await?;
-                transport.flush().await?;
-
-                let password_b64 = transport.read_line().await?.unwrap_or_default();
-                let password = if let Ok(bytes) = base64_decode(&password_b64) {
-                    String::from_utf8(bytes).map_err(|_| {
-                        io::Error::new(io::ErrorKind::InvalidData, "invalid password")
-                    })?
-                } else {
-                    return Ok(ImapResponse::no(
-                        tag,
-                        "AUTHENTICATE failed: invalid password",
-                    ));
-                };
-
-                match store.authenticate(&username, &password) {
-                    Ok(Some(uname)) => {
-                        *state = ImapState::Authenticated;
-                        *authenticated_user = Some(uname.clone());
-                        edgerun_log::info!("edgerun-imap: user {} authenticated (LOGIN)", uname);
-                        Ok(ImapResponse::ok(
-                            tag,
-                            &format!("AUTHENTICATE completed for {}", uname),
-                        ))
-                    }
-                    _ => Ok(ImapResponse::no(tag, "AUTHENTICATE failed")),
-                }
+            if mech == "PLAIN" || mech == "LOGIN" {
+                Ok(ImapResponse::no(tag, "AUTHENTICATE mechanism disabled"))
             } else {
                 Ok(ImapResponse::no(
                     tag,

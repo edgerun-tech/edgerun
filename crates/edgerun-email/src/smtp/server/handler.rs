@@ -105,13 +105,13 @@ pub struct AuthCredentials {
     pub authz_id: String,
     /// Authentication identity (who the client claims to be).
     pub authc_id: String,
-    /// Password / secret.
-    pub password: String,
+    /// Token / secret.
+    pub token: String,
 }
 
 impl AuthCredentials {
     /// Decode SASL PLAIN mechanism payload.
-    /// Format: `authz_id\0authc_id\0password`
+    /// Format: `authz_id\0authc_id\0token`
     pub fn from_plain(payload: &[u8]) -> io::Result<Self> {
         let text = std::str::from_utf8(payload)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -120,14 +120,14 @@ impl AuthCredentials {
         if parts.len() < 3 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "SASL PLAIN requires authz_id\\0authc_id\\0password",
+                "SASL PLAIN requires authz_id\\0authc_id\\0token",
             ));
         }
 
         Ok(Self {
             authz_id: parts[0].to_string(),
             authc_id: parts[1].to_string(),
-            password: parts[2].to_string(),
+            token: parts[2].to_string(),
         })
     }
 }
@@ -150,12 +150,12 @@ impl MemoryMailStore {
         }
     }
 
-    /// Add a test user with a plaintext password.
-    pub fn add_user(&self, email: &str, password: &str) {
+    /// Add a test user with a plaintext token.
+    pub fn add_user(&self, email: &str, token: &str) {
         let mut mailboxes = self.mailboxes.lock().unwrap();
         mailboxes.insert(email.to_string(), Vec::new());
         let mut users = self.users.lock().unwrap();
-        users.insert(email.to_string(), password.to_string());
+        users.insert(email.to_string(), token.to_string());
     }
 }
 
@@ -199,7 +199,7 @@ impl MailHandler for MemoryMailStore {
             "PLAIN" | "LOGIN" => {
                 let users = self.users.lock().unwrap();
                 if let Some(stored_pass) = users.get(&credentials.authc_id) {
-                    if stored_pass == &credentials.password {
+                    if stored_pass == &credentials.token {
                         return AuthResult::Authenticated(credentials.authc_id.clone());
                     }
                 }
@@ -216,22 +216,22 @@ mod tests {
 
     #[test]
     fn test_plain_decode() {
-        // "\0user@example.com\0password"
-        let payload = b"\x00user@example.com\x00password";
+        // "\0user@example.com\0token"
+        let payload = b"\x00user@example.com\x00token";
         let creds = AuthCredentials::from_plain(payload).unwrap();
         assert_eq!(creds.authz_id, "");
         assert_eq!(creds.authc_id, "user@example.com");
-        assert_eq!(creds.password, "password");
+        assert_eq!(creds.token, "token");
     }
 
     #[test]
     fn test_plain_decode_with_authz() {
-        // "admin\0user@example.com\0password"
-        let payload = b"admin\x00user@example.com\x00password";
+        // "admin\0user@example.com\0token"
+        let payload = b"admin\x00user@example.com\x00token";
         let creds = AuthCredentials::from_plain(payload).unwrap();
         assert_eq!(creds.authz_id, "admin");
         assert_eq!(creds.authc_id, "user@example.com");
-        assert_eq!(creds.password, "password");
+        assert_eq!(creds.token, "token");
     }
 
     #[test]
@@ -247,7 +247,7 @@ mod tests {
         let creds = AuthCredentials {
             authz_id: String::new(),
             authc_id: "user@example.com".to_string(),
-            password: "secret123".to_string(),
+            token: "secret123".to_string(),
         };
         match store.authenticate("PLAIN", &creds) {
             AuthResult::Authenticated(id) => assert_eq!(id, "user@example.com"),
@@ -263,7 +263,7 @@ mod tests {
         let creds = AuthCredentials {
             authz_id: String::new(),
             authc_id: "user@example.com".to_string(),
-            password: "wrong".to_string(),
+            token: "wrong".to_string(),
         };
         assert!(matches!(
             store.authenticate("PLAIN", &creds),
@@ -277,7 +277,7 @@ mod tests {
         let creds = AuthCredentials {
             authz_id: String::new(),
             authc_id: "user".to_string(),
-            password: "pass".to_string(),
+            token: "pass".to_string(),
         };
         assert!(matches!(
             store.authenticate("CRAM-MD5", &creds),

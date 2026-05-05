@@ -671,18 +671,13 @@ impl TclAcClient {
     pub fn provision_wifi(
         &self,
         ssid: &str,
-        password: &str,
+        token: &str,
         bind_code: &str,
         tenant_id: Option<&str>,
         new_product_key: Option<&str>,
     ) -> Result<Option<String>, CapabilityError> {
-        let payload = self.build_legacy_provision_payload(
-            ssid,
-            password,
-            bind_code,
-            tenant_id,
-            new_product_key,
-        );
+        let payload =
+            self.build_legacy_provision_payload(ssid, token, bind_code, tenant_id, new_product_key);
         self.send_raw_command(payload.as_bytes())?;
 
         match self.wait_for_raw_value(15_000) {
@@ -699,19 +694,14 @@ impl TclAcClient {
     pub fn provision_wifi_responses(
         &self,
         ssid: &str,
-        password: &str,
+        token: &str,
         bind_code: &str,
         tenant_id: Option<&str>,
         new_product_key: Option<&str>,
         timeout_ms: i32,
     ) -> Result<Vec<String>, CapabilityError> {
-        let payload = self.build_legacy_provision_payload(
-            ssid,
-            password,
-            bind_code,
-            tenant_id,
-            new_product_key,
-        );
+        let payload =
+            self.build_legacy_provision_payload(ssid, token, bind_code, tenant_id, new_product_key);
         self.send_raw_command(payload.as_bytes())?;
 
         let start = now_ms();
@@ -740,7 +730,7 @@ impl TclAcClient {
     pub fn provision_wifi_with_commission_responses(
         &self,
         ssid: &str,
-        password: &str,
+        token: &str,
         bind_code: &str,
         server_host: Option<&str>,
         server_host_v2: Option<&str>,
@@ -750,7 +740,7 @@ impl TclAcClient {
     ) -> Result<Vec<String>, CapabilityError> {
         let payload = self.build_legacy_provision_payload_with_hosts(
             ssid,
-            password,
+            token,
             bind_code,
             server_host,
             server_host_v2,
@@ -785,14 +775,14 @@ impl TclAcClient {
     pub fn build_legacy_provision_payload(
         &self,
         ssid: &str,
-        password: &str,
+        token: &str,
         bind_code: &str,
         tenant_id: Option<&str>,
         new_product_key: Option<&str>,
     ) -> String {
         self.build_legacy_provision_payload_with_hosts(
             ssid,
-            password,
+            token,
             bind_code,
             Some("prod-center.aws.tcljd.com"),
             Some("prod-center.aws.tcljd.com"),
@@ -804,7 +794,7 @@ impl TclAcClient {
     pub fn build_legacy_provision_payload_with_hosts(
         &self,
         ssid: &str,
-        password: &str,
+        token: &str,
         bind_code: &str,
         server_host: Option<&str>,
         server_host_v2: Option<&str>,
@@ -815,7 +805,7 @@ impl TclAcClient {
         let mut params = Vec::new();
         push_json_field(&mut params, "bindCode", bind_code);
         push_json_field(&mut params, "ssid", ssid);
-        push_json_field(&mut params, "password", password);
+        push_json_field(&mut params, "token", token);
         params.push(format!("\"timestamp\":{}", now_ms() / 1000));
         params.push("\"timezone\":7".to_string());
         push_json_field(&mut params, "timearea", "Asia/Bangkok");

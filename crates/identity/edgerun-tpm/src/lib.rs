@@ -84,17 +84,16 @@ pub use signing::{
 pub use tis::TisTpmTransport;
 pub use traits::{FixedTpmTransport, TpmSigningKey, TpmTransport};
 pub use types::{
-    TpmAssuranceLevel, TpmAuthCommand, TpmEccCurve, TpmError, TpmHandle, TpmHashParams, TpmKeyInfo,
-    TpmNameAlgorithm, TpmParsedSignature, TpmPasswordAuthSession, TpmPolicySession,
+    TpmAssuranceLevel, TpmAuthCommand, TpmAuthValueSession, TpmEccCurve, TpmError, TpmHandle,
+    TpmHashParams, TpmKeyInfo, TpmNameAlgorithm, TpmParsedSignature, TpmPolicySession,
     TpmPublicAreaInfo, TpmPublicObjectType, TpmReadPublicInfo, TpmSignCommandParams,
     TpmSignatureAlgorithm, TpmSignatureScheme,
 };
 pub use wire::commands::{
     build_get_random_command, build_hash_command, build_policy_authorize_command,
     build_policy_command_code_command, build_policy_pcr_command, build_read_public_command,
-    build_sign_command, build_sign_command_with_password_auth,
-    build_sign_command_with_policy_session, build_start_auth_session_command,
-    build_startup_command, build_verify_signature_command,
+    build_sign_command, build_sign_command_with_auth_value, build_sign_command_with_policy_session,
+    build_start_auth_session_command, build_startup_command, build_verify_signature_command,
 };
 pub use wire::parse::{
     ensure_success_response, infer_signature_algorithm, key_info_from_read_public,
@@ -102,7 +101,7 @@ pub use wire::parse::{
     parse_response_header, parse_sign_response, parse_start_auth_session_response,
 };
 pub use wire::{
-    build_auth_command, build_password_auth_area, encode_command_header, encode_name_algorithm,
+    build_auth_command, build_auth_value_area, encode_command_header, encode_name_algorithm,
     encode_parsed_signature, encode_symmetric_definition, read_tpm2b, read_u16, read_u32,
 };
 
@@ -433,16 +432,16 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Password auth area
+    // Auth-value auth area
     // -----------------------------------------------------------------------
 
     #[test]
-    fn build_password_auth_area_with_empty_auth() {
-        let auth = TpmPasswordAuthSession {
+    fn build_auth_value_area_with_empty_auth() {
+        let auth = TpmAuthValueSession {
             auth_value: Vec::new(),
             session_attributes: 0,
         };
-        let area = build_password_auth_area(&auth);
+        let area = build_auth_value_area(&auth);
         // handle(4) + nonce(2) + attrs(1) + hmac_len(2) + hmac(0)
         assert_eq!(area.len(), 4 + 2 + 1 + 2);
         assert_eq!(&area[..4], &TPM_RS_PW.to_be_bytes());

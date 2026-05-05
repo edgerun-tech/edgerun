@@ -852,7 +852,7 @@ mod tests {
 
         let header_list = decoder.decode(&hex_dump).ok().unwrap();
 
-        assert_eq!(header_list, [(b"password".to_vec(), b"secret".to_vec()),]);
+        assert_eq!(header_list, [(b"token".to_vec(), b"secret".to_vec()),]);
         // Nothing was added to the dynamic table
         assert_eq!(decoder.header_table.dynamic_table.len(), 0);
     }

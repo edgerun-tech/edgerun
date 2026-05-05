@@ -229,7 +229,7 @@ mod tests {
 
         let persist = GitAwarePersist::new(tmp.path());
         assert!(persist.should_persist(Path::new("secrets/api_key.txt")));
-        assert!(persist.should_persist(Path::new("secrets/sub/password.txt")));
+        assert!(persist.should_persist(Path::new("secrets/sub/token.txt")));
         assert!(!persist.should_persist(Path::new("src/main.rs")));
     }
 

@@ -148,7 +148,10 @@ pub unsafe fn CMSG_FIRSTHDR(msg: *const msghdr) -> *mut cmsghdr {
 }
 
 pub unsafe fn CMSG_DATA(cmsg: *const cmsghdr) -> *mut u8 {
-    unsafe { cmsg.cast::<u8>().add(cmsg_align(core::mem::size_of::<cmsghdr>())) as *mut u8 }
+    unsafe {
+        cmsg.cast::<u8>()
+            .add(cmsg_align(core::mem::size_of::<cmsghdr>())) as *mut u8
+    }
 }
 
 pub fn WIFEXITED(status: c_int) -> bool {

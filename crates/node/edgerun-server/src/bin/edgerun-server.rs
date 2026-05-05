@@ -37,6 +37,68 @@ use edgerun_server::{ImapConfig, Server, SmtpConfig};
 use edgerun_tls::certificate::Certificate;
 use edgerun_tls::CertificateAndKey;
 
+#[cfg(feature = "sqlite")]
+mod host_sqlite {
+    use super::CompiledDeployment;
+    use rusqlite::{params, Connection};
+    use std::fs;
+    use std::path::Path;
+
+    pub fn initialize(deployment: &CompiledDeployment) -> Result<(), rusqlite::Error> {
+        if let Some(parent) = Path::new(deployment.sqlite_path).parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        let conn = Connection::open(deployment.sqlite_path)?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS runtime_meta (
+                key TEXT PRIMARY KEY NOT NULL,
+                value BLOB NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS derived_object_index (
+                object_id BLOB PRIMARY KEY NOT NULL,
+                stream_id BLOB NOT NULL,
+                seq INTEGER NOT NULL,
+                representation_id BLOB NOT NULL,
+                content_type TEXT,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS admin_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_time INTEGER NOT NULL,
+                subject TEXT NOT NULL,
+                action TEXT NOT NULL,
+                outcome TEXT NOT NULL
+            );",
+        )?;
+
+        let now = unix_now();
+        conn.execute(
+            "INSERT INTO runtime_meta(key, value, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            params!["node_label", deployment.policy.node_label.as_bytes(), now],
+        )?;
+        conn.execute(
+            "INSERT INTO runtime_meta(key, value, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            params!["origin", deployment.origin.as_bytes(), now],
+        )?;
+        Ok(())
+    }
+
+    fn unix_now() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    }
+}
+
 // ===========================================================================
 // DNS SOA config
 // ===========================================================================
@@ -333,6 +395,18 @@ impl Handler for CompiledHttpApp {
         let path = req.uri().path().to_string();
 
         Box::pin(async move {
+            if path == "/admin" || path == "/admin/" || path == "/admin/index.html" {
+                return Response::html(StatusCode::new(200).unwrap(), admin_index_html())
+                    .with_header("Cache-Control", "no-store");
+            }
+
+            if path == "/admin/app.css" {
+                return Response::new(StatusCode::new(200).unwrap())
+                    .with_header("Content-Type", "text/css; charset=utf-8")
+                    .with_header("Cache-Control", "no-store")
+                    .with_body(admin_css().as_bytes().to_vec());
+            }
+
             for domain in DEPLOYMENT.domains {
                 let mta_sts_host = format!("mta-sts.{}", domain.domain);
                 if host == mta_sts_host && path == "/.well-known/mta-sts.txt" {
@@ -366,6 +440,69 @@ impl Handler for CompiledHttpApp {
             Response::not_found()
         })
     }
+}
+
+fn admin_index_html() -> &'static str {
+    r#"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Edgerun Admin</title>
+<link rel="stylesheet" href="/admin/app.css">
+</head>
+<body>
+<main>
+  <section class="top">
+    <div>
+      <p class="eyebrow">edgerun node</p>
+      <h1>Runtime</h1>
+    </div>
+    <span class="state">online</span>
+  </section>
+  <section class="grid">
+    <article>
+      <p>Node</p>
+      <strong>edgerun-tech-main-server</strong>
+    </article>
+    <article>
+      <p>Origin</p>
+      <strong>edgerun.tech</strong>
+    </article>
+    <article>
+      <p>HTTP</p>
+      <strong>0.0.0.0:80</strong>
+    </article>
+    <article>
+      <p>DNS</p>
+      <strong>0.0.0.0:53</strong>
+    </article>
+    <article>
+      <p>SMTP</p>
+      <strong>0.0.0.0:25</strong>
+    </article>
+    <article>
+      <p>IMAP</p>
+      <strong>0.0.0.0:143</strong>
+    </article>
+  </section>
+  <section class="panel">
+    <h2>Storage</h2>
+    <dl>
+      <div><dt>Runtime root</dt><dd>/var/lib/edgerun/.edgerun</dd></div>
+      <div><dt>Maildir</dt><dd>/var/lib/edgerun/mail/maildirs</dd></div>
+      <div><dt>Queue</dt><dd>/var/lib/edgerun/mail/queue</dd></div>
+      <div><dt>Derived DB</dt><dd>/var/lib/edgerun/.edgerun/runtime.sqlite3</dd></div>
+    </dl>
+  </section>
+</main>
+</body>
+</html>
+"#
+}
+
+fn admin_css() -> &'static str {
+    r#"*{box-sizing:border-box}body{margin:0;background:#f7f7f4;color:#161616;font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1120px;margin:0 auto;padding:32px 20px 48px}.top{display:flex;align-items:end;justify-content:space-between;border-bottom:1px solid #d9d8d1;padding-bottom:18px}.eyebrow{margin:0 0 6px;color:#61615b;text-transform:uppercase;font-size:12px}h1{margin:0;font-size:34px;line-height:1.05;font-weight:720}h2{margin:0 0 16px;font-size:18px}.state{display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border:1px solid #1f7a45;background:#e7f6ec;color:#155b32;border-radius:4px;font-weight:650}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:22px 0}.grid article,.panel{background:#fff;border:1px solid #deddd6;border-radius:6px}.grid article{padding:16px;min-width:0}.grid p{margin:0 0 7px;color:#66665f}.grid strong{display:block;overflow-wrap:anywhere;font-size:17px}.panel{padding:18px}dl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0}dl div{border-top:1px solid #ecebe5;padding-top:12px;min-width:0}dt{color:#66665f;margin-bottom:4px}dd{margin:0;font-weight:620;overflow-wrap:anywhere}@media (max-width:760px){main{padding:22px 14px}.top{align-items:start}.grid,dl{grid-template-columns:1fr}h1{font-size:28px}}"#
 }
 
 fn hex_bytes(bytes: &[u8]) -> String {
@@ -681,6 +818,8 @@ fn print_compiled_plan() -> ExitCode {
     println!("origin={}", DEPLOYMENT.origin);
     println!("hostname={}", DEPLOYMENT.hostname);
     println!("controller={}", hex_bytes(&DEPLOYMENT.policy.controller_id));
+    println!("runtime_root={}", DEPLOYMENT.runtime_root);
+    println!("sqlite_path={}", DEPLOYMENT.sqlite_path);
     println!(
         "public_ipv4={}.{}.{}.{}",
         DEPLOYMENT.public_ipv4[0],
@@ -769,6 +908,12 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let base_zone = build_dns_zone(&DEPLOYMENT);
     edgerun_log::info!("DNS zone built for {}", DEPLOYMENT.origin);
+
+    #[cfg(feature = "sqlite")]
+    {
+        host_sqlite::initialize(&DEPLOYMENT)?;
+        edgerun_log::info!("SQLite derived store ready at {}", DEPLOYMENT.sqlite_path);
+    }
 
     let dns_config = DnsServerConfig {
         bind_addr: "0.0.0.0:53".to_string(),

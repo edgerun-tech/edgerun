@@ -29,9 +29,6 @@ pub enum ImapCommand {
     Starttls,
     /// `AUTHENTICATE <mechanism>` — SASL authentication.
     Authenticate { mechanism: String },
-    /// `LOGIN <user> <password>` — Plain-text login.
-    Login { user: String, password: String },
-
     // -- State: Authenticated --
     /// `SELECT <mailbox>` — Open mailbox in read-write mode.
     Select { mailbox: String },
@@ -164,16 +161,11 @@ impl ImapCommand {
             "LOGOUT" => Ok(Self::Logout),
             "STARTTLS" => Ok(Self::Starttls),
             "LOGIN" => {
-                if args.len() < 2 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "LOGIN requires user and password",
-                    ));
-                }
-                Ok(Self::Login {
-                    user: args[0].clone(),
-                    password: args[1].clone(),
-                })
+                let _ = args;
+                Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "LOGIN is not supported",
+                ))
             }
             "SELECT" => {
                 if args.is_empty() {
@@ -976,21 +968,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_login() {
-        let cmd = ImapCommand::parse(
+    fn parse_login_is_rejected() {
+        let err = ImapCommand::parse(
             "A001",
             "LOGIN",
-            &["user".to_string(), "pass".to_string()],
+            &["user".to_string(), "secret".to_string()],
             None,
         )
-        .unwrap();
-        match cmd {
-            ImapCommand::Login { user, password } => {
-                assert_eq!(user, "user");
-                assert_eq!(password, "pass");
-            }
-            _ => panic!("expected Login"),
-        }
+        .unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
     }
 
     #[test]
