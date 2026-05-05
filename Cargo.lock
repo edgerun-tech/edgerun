@@ -1004,6 +1004,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-node-bootstrap"
+version = "0.1.1"
+dependencies = [
+ "edgerun-core",
+ "edgerun-keygen",
+ "edgerun-sign-p256",
+ "edgerun-verify",
+]
+
+[[package]]
 name = "edgerun-npu"
 version = "0.1.1"
 dependencies = [
