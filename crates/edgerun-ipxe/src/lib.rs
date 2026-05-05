@@ -72,6 +72,7 @@ pub struct UndiInfo {
 }
 
 #[no_mangle]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub unsafe extern "C" fn undi_call(func: u16, pxenv: &mut Pxenv) {
     core::arch::asm!(
         "int 0x1a",
@@ -79,6 +80,10 @@ pub unsafe extern "C" fn undi_call(func: u16, pxenv: &mut Pxenv) {
         in("si") pxenv,
     );
 }
+
+#[no_mangle]
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+pub unsafe extern "C" fn undi_call(_func: u16, _pxenv: &mut Pxenv) {}
 
 pub unsafe fn call_undi(func: u16, pxenv: &mut Pxenv) {
     undi_call(func, pxenv);

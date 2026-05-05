@@ -2,10 +2,10 @@
 
 extern crate alloc;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 extern crate std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 extern crate self as std;
 
 pub mod prelude {
@@ -18,12 +18,12 @@ pub mod prelude {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod collections {
     pub use alloc::collections::BTreeMap;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod fs {
     use crate::{io, path::PathBuf};
     use alloc::string::String;
@@ -60,7 +60,7 @@ pub mod fs {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod io {
     use core::fmt;
 
@@ -110,14 +110,14 @@ pub mod io {
     pub type Result<T> = core::result::Result<T, Error>;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod os {
     pub mod fd {
         pub type RawFd = i32;
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod path {
     use alloc::string::{String, ToString};
     use core::fmt;
@@ -189,7 +189,7 @@ pub mod path {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod time {
     use core::fmt;
     pub use core::time::Duration;
@@ -223,22 +223,22 @@ pub mod time {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod option {
     pub use core::option::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod result {
     pub use core::result::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod string {
     pub use alloc::string::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod vec {
     pub use alloc::vec::*;
 }
@@ -253,9 +253,9 @@ use edgerun_bluetooth::{
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_encoding::byteorder::{read_u16_le, read_u32_le};
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::fs;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::io;
 use std::mem::size_of;
 use std::os::fd::RawFd;

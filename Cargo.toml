@@ -111,8 +111,6 @@ members = [
   "crates/edgerun-clap",
   "crates/edgerun-clap-derive",
   "crates/edgerun-wire",
-  "crates/edgerun-sdk",
-  "crates/edgerun-sdk-macro",
   "crates/edgerun-event",
   "crates/edgerun-wallet",
   "crates/edgerun-exchange",
@@ -213,8 +211,6 @@ edgerun-wallet = { version = "0.1", path = "crates/edgerun-wallet" }
 edgerun-exchange = { version = "0.1", path = "crates/edgerun-exchange" }
 edgerun-exchange-api = { version = "0.1", path = "crates/edgerun-exchange-api" }
 edgerun-exchange-worker = { version = "0.1", path = "crates/edgerun-exchange-worker" }
-edgerun-sdk = { version = "0.1", path = "crates/edgerun-sdk" }
-edgerun-sdk-macro = { version = "0.1", path = "crates/edgerun-sdk-macro" }
 
 sha2 = { version = "0.10", default-features = false }
 libc = "0.2"

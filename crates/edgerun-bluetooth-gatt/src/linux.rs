@@ -323,12 +323,12 @@ impl L2capSocket {
     }
 
     pub fn set_nonblocking(&self, nonblock: bool) -> GattResult<()> {
-        #[cfg(target_os = "none")]
+        #[cfg(not(unix))]
         {
             let _ = nonblock;
             return Ok(());
         }
-        #[cfg(not(target_os = "none"))]
+        #[cfg(unix)]
         {
             let flags = unsafe { libc::fcntl(self.fd, libc::F_GETFL, 0) };
             if flags < 0 {

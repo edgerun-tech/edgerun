@@ -4,18 +4,18 @@
 extern crate alloc;
 use edgerun_encoding::byteorder::{read_u16_be, read_u16_le, read_u32_le};
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 extern crate std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 extern crate self as std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod error {
     pub use core::error::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod fs {
     use crate::io;
 
@@ -59,7 +59,7 @@ pub mod fs {
     pub use edgerun_linux_sysfs::fs::read_dir;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod io {
     pub use edgerun_linux_sysfs::io::*;
 
@@ -84,7 +84,7 @@ pub mod io {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod os {
     pub mod unix {
         pub mod fs {
@@ -113,12 +113,12 @@ pub mod os {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod path {
     pub use edgerun_linux_sysfs::path::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod libc {
     pub const O_NONBLOCK: i32 = 0x800;
 

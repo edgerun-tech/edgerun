@@ -14,7 +14,7 @@ edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 edgerun-npu = { version = "0.1", path = "../edgerun-npu" }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
-[target.'cfg(not(target_os = "none"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
 [[bin]]

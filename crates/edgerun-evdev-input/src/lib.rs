@@ -2,10 +2,10 @@
 
 extern crate alloc;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 extern crate std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 extern crate self as std;
 
 pub mod prelude {
@@ -18,7 +18,7 @@ pub mod prelude {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod fs {
     use crate::{io, path::PathBuf};
     use alloc::string::String;
@@ -80,7 +80,7 @@ pub mod fs {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod io {
     use core::fmt;
 
@@ -142,12 +142,12 @@ pub mod io {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod mem {
     pub use core::mem::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod os {
     pub mod fd {
         pub type RawFd = i32;
@@ -169,12 +169,12 @@ pub mod os {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod path {
     pub use edgerun_linux_sysfs::path::{Path, PathBuf};
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod time {
     pub use core::time::Duration;
 
@@ -205,32 +205,32 @@ pub mod time {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod str {
     pub use core::str::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod option {
     pub use core::option::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod result {
     pub use core::result::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod string {
     pub use alloc::string::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod vec {
     pub use alloc::vec::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod libc {
     pub const F_GETFL: i32 = 3;
     pub const F_SETFL: i32 = 4;
@@ -263,13 +263,13 @@ use edgerun_input::{
     InputDeviceKind, InputEventKind, InputEventRecord,
 };
 use edgerun_linux_sysfs::read_trimmed;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::fs::{self, File, OpenOptions};
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 use std::fs::{File, OpenOptions};
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 use std::io::Read;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::io::{self, Read};
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::raw::c_int;

@@ -2,10 +2,10 @@
 
 extern crate alloc;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 extern crate std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 extern crate self as std;
 
 pub mod prelude {
@@ -18,12 +18,12 @@ pub mod prelude {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod collections {
     pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod fs {
     use crate::{io, path::PathBuf};
 
@@ -81,7 +81,7 @@ pub mod fs {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod io {
     use core::fmt;
 
@@ -129,7 +129,7 @@ pub mod io {
     pub type Result<T> = core::result::Result<T, Error>;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod os {
     pub mod fd {
         pub trait AsRawFd {
@@ -153,7 +153,7 @@ pub mod os {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod path {
     use alloc::string::{String, ToString};
     use core::fmt;
@@ -207,14 +207,14 @@ pub mod path {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod thread {
     use crate::time::Duration;
 
     pub fn sleep(_duration: Duration) {}
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod time {
     pub use core::time::Duration;
 
@@ -264,27 +264,27 @@ pub mod time {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod error {
     pub use core::error::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod option {
     pub use core::option::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod result {
     pub use core::result::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod string {
     pub use alloc::string::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod vec {
     pub use alloc::vec::*;
 }
@@ -301,15 +301,15 @@ use edgerun_camera_biometrics::{
     CameraVerification, CameraVerifyRequest, PairedCameraBiometricReader, PairedCameraFrame,
 };
 use std::collections::HashMap;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::fs;
 use std::fs::File;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::io;
 use std::os::fd::AsRawFd;
 use std::os::raw::{c_int, c_ulong, c_void};
 use std::path::{Path, PathBuf};
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 

@@ -2,18 +2,18 @@
 
 extern crate alloc;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 extern crate std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 extern crate self as std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod collections {
     pub use alloc::collections::BTreeSet as HashSet;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod fs {
     use crate::io;
 
@@ -48,17 +48,17 @@ pub mod fs {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod io {
     pub use edgerun_linux_sysfs::io::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod mem {
     pub use core::mem::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod os {
     pub mod fd {
         pub type RawFd = i32;
@@ -80,17 +80,17 @@ pub mod os {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod path {
     pub use edgerun_linux_sysfs::path::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod ptr {
     pub use core::ptr::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod time {
     #[derive(Clone, Copy, Debug)]
     pub struct Instant;
@@ -118,17 +118,17 @@ pub mod time {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod option {
     pub use core::option::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod result {
     pub use core::result::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod libc {
     #[allow(non_camel_case_types)]
     pub type c_void = core::ffi::c_void;
@@ -622,11 +622,11 @@ fn wait_cmd(fd: RawFd, syncobj_handle: u32, timeout_ms: u32) -> Result<(), Capab
         pad: [0; 8],
     };
 
-    #[cfg(target_os = "none")]
+    #[cfg(not(unix))]
     let wait_ioctl = DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT as u64;
-    #[cfg(all(not(target_os = "none"), target_env = "gnu"))]
+    #[cfg(all(unix, target_env = "gnu"))]
     let wait_ioctl = DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT as libc::c_ulong;
-    #[cfg(all(not(target_os = "none"), not(target_env = "gnu")))]
+    #[cfg(all(unix, not(target_env = "gnu")))]
     let wait_ioctl = DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT;
     let ret = unsafe { libc::ioctl(fd, wait_ioctl, &mut wait) };
 

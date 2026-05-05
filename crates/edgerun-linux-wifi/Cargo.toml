@@ -18,7 +18,7 @@ edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "pbkdf2", "sha1"] }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
 
-[target.'cfg(not(target_os = "none"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
 [features]

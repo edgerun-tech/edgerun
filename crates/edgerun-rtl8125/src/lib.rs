@@ -456,6 +456,10 @@ impl Default for Rtl8125 {
 }
 
 pub fn find_rtl8125() -> Option<Rtl8125> {
+    if !pci_config_io_available() {
+        return None;
+    }
+
     for bus in 0..=255 {
         for slot in 0..32 {
             let functions = if pci_read_u8(bus, slot, 0, PCI_HEADER_TYPE) & 0x80 != 0 {
@@ -477,6 +481,11 @@ pub fn find_rtl8125() -> Option<Rtl8125> {
         }
     }
     None
+}
+
+#[inline]
+const fn pci_config_io_available() -> bool {
+    cfg!(any(target_arch = "x86", target_arch = "x86_64"))
 }
 
 fn tx_opts1(entry: usize, len: usize) -> u32 {
@@ -581,6 +590,7 @@ fn pci_write_u16(bus: u8, slot: u8, func: u8, offset: u8, value: u16) {
 }
 
 #[inline]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn outl(port: u16, value: u32) {
     unsafe {
         core::arch::asm!(
@@ -593,6 +603,11 @@ fn outl(port: u16, value: u32) {
 }
 
 #[inline]
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+fn outl(_port: u16, _value: u32) {}
+
+#[inline]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn inl(port: u16) -> u32 {
     let value: u32;
     unsafe {
@@ -604,6 +619,12 @@ fn inl(port: u16) -> u32 {
         );
     }
     value
+}
+
+#[inline]
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+fn inl(_port: u16) -> u32 {
+    u32::MAX
 }
 
 #[cfg(test)]

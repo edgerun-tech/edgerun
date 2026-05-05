@@ -13,7 +13,7 @@ edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 
-[target.'cfg(not(target_os = "none"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
 [lints]

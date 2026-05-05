@@ -4,18 +4,18 @@
 
 extern crate alloc;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 extern crate std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 extern crate self as std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod cmp {
     pub use core::cmp::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod ffi {
     use alloc::vec::Vec;
 
@@ -55,17 +55,56 @@ pub mod ffi {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod io {
-    pub use edgerun_linux_sysfs::io::*;
+    use core::fmt;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ErrorKind {
+        Other,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct Error {
+        kind: ErrorKind,
+    }
+
+    impl Error {
+        #[must_use]
+        pub const fn new(kind: ErrorKind) -> Self {
+            Self { kind }
+        }
+
+        #[must_use]
+        pub const fn last_os_error() -> Self {
+            Self {
+                kind: ErrorKind::Other,
+            }
+        }
+
+        #[must_use]
+        pub const fn kind(&self) -> ErrorKind {
+            self.kind
+        }
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("I/O error")
+        }
+    }
+
+    impl core::error::Error for Error {}
+
+    pub type Result<T> = core::result::Result<T, Error>;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod mem {
     pub use core::mem::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod os {
     pub mod fd {
         pub trait IntoRawFd {
@@ -92,7 +131,7 @@ pub mod os {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod path {
     pub struct Path;
 
@@ -104,22 +143,22 @@ pub mod path {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod slice {
     pub use core::slice::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod option {
     pub use core::option::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod result {
     pub use core::result::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod libc {
     #[allow(non_camel_case_types)]
     pub type c_char = i8;
@@ -152,7 +191,7 @@ use core::fmt::Write;
 use core::ops::Drop;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{Err, Ok};
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::io;
 use std::os::fd::{FromRawFd, IntoRawFd};
 use std::os::unix::ffi::OsStrExt;

@@ -10,10 +10,10 @@
 
 extern crate alloc;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 extern crate std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 extern crate self as std;
 
 pub mod prelude {
@@ -26,13 +26,13 @@ pub mod prelude {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod ffi {
     #[allow(non_camel_case_types)]
     pub type c_long = i64;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod fs {
     use crate::{io, path::PathBuf};
     use alloc::string::String;
@@ -95,7 +95,7 @@ pub mod fs {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod io {
     use core::fmt;
 
@@ -138,12 +138,12 @@ pub mod io {
     pub type Result<T> = core::result::Result<T, Error>;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod mem {
     pub use core::mem::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod os {
     pub mod fd {
         pub trait AsRawFd {
@@ -163,7 +163,7 @@ pub mod os {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod path {
     use alloc::string::{String, ToString};
     use core::ops::Deref;
@@ -218,7 +218,7 @@ pub mod path {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod time {
     pub use core::time::Duration;
 
@@ -245,22 +245,22 @@ pub mod time {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod option {
     pub use core::option::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod result {
     pub use core::result::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod string {
     pub use alloc::string::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod vec {
     pub use alloc::vec::*;
 }
@@ -272,11 +272,11 @@ use edgerun_microphone::{
     AudioCaptureRequest, MicrophoneDevice, MicrophoneInfo, MicrophoneSampleFormat,
 };
 use std::ffi::c_long;
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 use std::fs::OpenOptions;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::fs::{self, OpenOptions};
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::io;
 use std::os::fd::AsRawFd;
 use std::path::Path;

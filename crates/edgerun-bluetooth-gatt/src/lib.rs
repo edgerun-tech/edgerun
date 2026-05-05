@@ -2,33 +2,33 @@
 
 extern crate alloc;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 extern crate std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 extern crate self as std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod cmp {
     pub use core::cmp::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod collections {
     pub use alloc::collections::BTreeMap as HashMap;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod io {
     pub use edgerun_linux_sysfs::io::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod mem {
     pub use core::mem::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod os {
     pub mod fd {
         pub type RawFd = i32;
@@ -39,12 +39,12 @@ pub mod os {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod slice {
     pub use core::slice::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod sync {
     pub use alloc::sync::Arc;
     pub mod atomic {
@@ -127,7 +127,7 @@ pub mod sync {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod thread {
     pub fn spawn<F, T>(_f: F) -> JoinHandle<T>
     where
@@ -140,7 +140,7 @@ pub mod thread {
     pub struct JoinHandle<T>(core::marker::PhantomData<T>);
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod time {
     #[derive(Clone, Copy, Debug, Default)]
     pub struct Duration {

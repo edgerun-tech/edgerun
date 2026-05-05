@@ -4,13 +4,13 @@
 #[macro_use]
 extern crate alloc;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 extern crate std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 extern crate self as std;
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod fs {
     pub use edgerun_linux_sysfs::fs::*;
 
@@ -19,17 +19,17 @@ pub mod fs {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod io {
     pub use edgerun_linux_sysfs::io::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod mem {
     pub use core::mem::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod os {
     pub mod raw {
         pub use edgerun_linux_sysfs::os::raw::{c_char, c_ulong};
@@ -42,34 +42,34 @@ pub mod os {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod path {
     pub use edgerun_linux_sysfs::path::{Path, PathBuf};
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod ptr {
     pub use core::ptr::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod slice {
     pub use core::slice::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod str {
     pub use core::str::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod thread {
     use crate::time::Duration;
 
     pub fn sleep(_duration: Duration) {}
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod time {
     pub use core::time::Duration;
 
@@ -93,7 +93,7 @@ pub mod time {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod ffi {
     use alloc::vec::Vec;
     use core::fmt;
@@ -122,27 +122,27 @@ pub mod ffi {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod option {
     pub use core::option::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod result {
     pub use core::result::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod string {
     pub use alloc::string::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod vec {
     pub use alloc::vec::*;
 }
 
-#[cfg(target_os = "none")]
+#[cfg(not(unix))]
 pub mod libc {
     pub const AF_NETLINK: i32 = 16;
     pub const SOCK_RAW: i32 = 3;
@@ -210,11 +210,11 @@ use edgerun_wifi::{
     WifiAccessPointController, WifiAccessPointState, WifiController, WifiInterfaceInfo,
     WifiInterfaceMode, WifiNetworkObservation, WifiPowerState, WifiScanResult, WifiScanner,
 };
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::fs;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::io;
-#[cfg(not(target_os = "none"))]
+#[cfg(unix)]
 use std::mem;
 use std::os::raw::{c_char, c_ulong};
 use std::os::unix::io::RawFd;
