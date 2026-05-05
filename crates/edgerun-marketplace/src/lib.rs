@@ -128,6 +128,27 @@ pub struct MarketplaceFeePolicy {
     Clone,
     Debug,
     PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+pub struct MarketplacePayoutSplit {
+    pub asset_id: String,
+    pub gross_minor_units: u128,
+    pub seller_minor_units: u128,
+    pub edgerun_fee_minor_units: u128,
+    pub app_fee_minor_units: u128,
+    pub seller_recipient: SettlementAddress,
+    pub edgerun_recipient: Option<SettlementAddress>,
+    pub app_recipient: Option<SettlementAddress>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
     edgerun_wire::Archive,
     edgerun_wire::Serialize,
     edgerun_wire::Deserialize,
@@ -304,6 +325,35 @@ pub fn validate_fee_policy(policy: &MarketplaceFeePolicy) -> Result<(), Marketpl
         validate_settlement_address(policy.app_recipient.as_ref(), "app fee recipient")?;
     }
     Ok(())
+}
+
+pub fn calculate_payout_split_minor_units(
+    listing: &MarketplaceListing,
+    gross_minor_units: u128,
+) -> Result<MarketplacePayoutSplit, MarketplaceError> {
+    validate_listing(listing)?;
+    let edgerun_fee_minor_units = bps_amount(gross_minor_units, listing.fee_policy.edgerun_bps)?;
+    let app_fee_minor_units = bps_amount(gross_minor_units, listing.fee_policy.app_bps)?;
+    let total_fee_minor_units = edgerun_fee_minor_units
+        .checked_add(app_fee_minor_units)
+        .ok_or(MarketplaceError::InvalidFeePolicy("fee amount overflow"))?;
+    let seller_minor_units = gross_minor_units.checked_sub(total_fee_minor_units).ok_or(
+        MarketplaceError::InvalidFeePolicy("fee amount exceeds gross amount"),
+    )?;
+
+    Ok(MarketplacePayoutSplit {
+        asset_id: listing.seller_settlement_asset.clone(),
+        gross_minor_units,
+        seller_minor_units,
+        edgerun_fee_minor_units,
+        app_fee_minor_units,
+        seller_recipient: SettlementAddress {
+            asset_id: listing.seller_settlement_asset.clone(),
+            address: listing.seller_settlement_address.clone(),
+        },
+        edgerun_recipient: listing.fee_policy.edgerun_recipient.clone(),
+        app_recipient: listing.fee_policy.app_recipient.clone(),
+    })
 }
 
 pub fn validate_listing(listing: &MarketplaceListing) -> Result<(), MarketplaceError> {
@@ -547,6 +597,15 @@ fn require_non_empty(value: &str, field: &'static str) -> Result<(), Marketplace
     }
 }
 
+fn bps_amount(gross_minor_units: u128, bps: u32) -> Result<u128, MarketplaceError> {
+    gross_minor_units
+        .checked_mul(u128::from(bps))
+        .and_then(|value| value.checked_div(10_000))
+        .ok_or(MarketplaceError::InvalidFeePolicy(
+            "fee calculation overflow",
+        ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -655,6 +714,33 @@ mod tests {
             Err(MarketplaceError::InvalidFeePolicy(
                 "fee split exceeds maximum total basis points"
             ))
+        );
+    }
+
+    #[test]
+    fn payout_split_calculates_non_custodial_fee_outputs() {
+        let split = calculate_payout_split_minor_units(&listing(), 2_500_000)
+            .expect("valid listing should calculate split");
+
+        assert_eq!(split.asset_id, "USDT:tron");
+        assert_eq!(split.gross_minor_units, 2_500_000);
+        assert_eq!(split.edgerun_fee_minor_units, 75_000);
+        assert_eq!(split.app_fee_minor_units, 25_000);
+        assert_eq!(split.seller_minor_units, 2_400_000);
+        assert_eq!(split.seller_recipient.address, "seller-address");
+        assert_eq!(
+            split
+                .edgerun_recipient
+                .as_ref()
+                .map(|value| value.address.as_str()),
+            Some("edgerun-fee-address")
+        );
+        assert_eq!(
+            split
+                .app_recipient
+                .as_ref()
+                .map(|value| value.address.as_str()),
+            Some("app-fee-address")
         );
     }
 
