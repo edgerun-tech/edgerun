@@ -26,6 +26,7 @@ pub mod lease;
 pub mod message;
 pub mod options;
 pub mod server;
+pub mod server_core;
 pub mod std;
 
 pub use client::Dhcpv6Client;
@@ -34,3 +35,4 @@ pub use lease::{Dhcpv6Lease, LeaseState, PrefixLease};
 pub use message::{Dhcpv6Message, Dhcpv6MsgType, TransactionId};
 pub use options::{Dhcpv6Option, IaNaOption, IaPdOption, IaTaOption};
 pub use server::Dhcpv6Server;
+pub use server_core::{Dhcpv6Datagram, Dhcpv6ServerConfig, Dhcpv6ServerCore};
