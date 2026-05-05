@@ -232,6 +232,7 @@ struct ModernVirtioDevice {
     isr: Option<VirtioPciCap>,
 }
 
+#[derive(Clone, Copy)]
 struct MappedModernVirtioDevice {
     bus: u8,
     slot: u8,
@@ -860,15 +861,7 @@ pub struct VirtNet {
     status: u16,
     features: u64,
     host_features: u64,
-    bus: u8,
-    slot: u8,
-    func: u8,
-    mmio: bool,
-    common_cfg: *mut u8,
-    notify_cfg: *mut u8,
-    device_cfg: *mut u8,
-    isr_cfg: *mut u8,
-    notify_off_multiplier: u32,
+    transport: DriverTransport,
     queue_size: u16,
     rx_notify_off: u16,
     tx_notify_off: u16,
@@ -901,15 +894,7 @@ impl VirtNet {
             status: 0,
             features: 0,
             host_features: 0,
-            bus: 0,
-            slot: 0,
-            func: 0,
-            mmio: false,
-            common_cfg: core::ptr::null_mut(),
-            notify_cfg: core::ptr::null_mut(),
-            device_cfg: core::ptr::null_mut(),
-            isr_cfg: core::ptr::null_mut(),
-            notify_off_multiplier: 0,
+            transport: DriverTransport::empty(),
             queue_size: 0,
             rx_notify_off: 0,
             tx_notify_off: 0,
@@ -944,12 +929,12 @@ impl VirtNet {
 
         if self.features & VIRTIO_NET_F_MAC != 0 {
             for i in 0..6 {
-                self.mac[i] = read_u8(unsafe { self.device_cfg.add(i) });
+                self.mac[i] = read_u8(unsafe { self.transport.device_cfg.add(i) });
             }
         }
 
         if self.features & VIRTIO_NET_F_STATUS != 0 {
-            self.status = read_u16(unsafe { self.device_cfg.add(6) });
+            self.status = read_u16(unsafe { self.transport.device_cfg.add(6) });
             self.link_up = (self.status & VIRTIO_NET_S_LINK_UP) != 0;
         } else {
             self.status = VIRTIO_NET_S_LINK_UP;
@@ -1034,12 +1019,12 @@ impl VirtNet {
     }
 
     pub fn refresh_status(&mut self) -> bool {
-        if !self.is_initialized() || self.device_cfg.is_null() {
+        if !self.is_initialized() || self.transport.device_cfg.is_null() {
             return false;
         }
 
         if self.features & VIRTIO_NET_F_STATUS != 0 {
-            self.status = read_u16(unsafe { self.device_cfg.add(6) });
+            self.status = read_u16(unsafe { self.transport.device_cfg.add(6) });
             self.link_up = (self.status & VIRTIO_NET_S_LINK_UP) != 0;
         } else {
             self.status = VIRTIO_NET_S_LINK_UP;
@@ -1171,15 +1156,7 @@ impl VirtNet {
         }
         let mut net = Self::new();
         net.claimed = true;
-        net.bus = mapped.bus;
-        net.slot = mapped.slot;
-        net.func = mapped.func;
-        net.mmio = false;
-        net.common_cfg = mapped.common_cfg;
-        net.notify_cfg = mapped.notify_cfg;
-        net.device_cfg = mapped.device_cfg;
-        net.isr_cfg = mapped.isr_cfg;
-        net.notify_off_multiplier = mapped.notify_off_multiplier;
+        net.transport = DriverTransport::from_modern(mapped, mapped.device_cfg);
         Some(net)
     }
 
@@ -1195,28 +1172,12 @@ impl VirtNet {
 
         let mut net = Self::new();
         net.claimed = true;
-        net.mmio = true;
-        net.common_cfg = base;
-        net.notify_cfg = base;
-        net.device_cfg = transport.device_cfg();
+        net.transport = DriverTransport::from_mmio(base, transport.device_cfg());
         Some(net)
     }
 
     fn transport(&self) -> Option<VirtioTransport> {
-        if self.mmio {
-            VirtioTransport::mmio(self.common_cfg)
-        } else {
-            VirtioTransport::modern_pci(
-                self.bus,
-                self.slot,
-                self.func,
-                self.common_cfg,
-                self.notify_cfg,
-                self.device_cfg,
-                self.isr_cfg,
-                self.notify_off_multiplier,
-            )
-        }
+        self.transport.transport()
     }
 
     unsafe fn init_rx_queue(&mut self) {
@@ -1429,15 +1390,7 @@ unsafe fn take_single_used_completion(
 pub struct VirtBlk {
     features: u64,
     host_features: u64,
-    bus: u8,
-    slot: u8,
-    func: u8,
-    mmio: bool,
-    common_cfg: *mut u8,
-    notify_cfg: *mut u8,
-    device_cfg: *mut u8,
-    isr_cfg: *mut u8,
-    notify_off_multiplier: u32,
+    transport: DriverTransport,
     queue_notify_off: u16,
     queue_size: u16,
     last_used_idx: u16,
@@ -1454,15 +1407,7 @@ impl VirtBlk {
         Self {
             features: 0,
             host_features: 0,
-            bus: 0,
-            slot: 0,
-            func: 0,
-            mmio: false,
-            common_cfg: core::ptr::null_mut(),
-            notify_cfg: core::ptr::null_mut(),
-            device_cfg: core::ptr::null_mut(),
-            isr_cfg: core::ptr::null_mut(),
-            notify_off_multiplier: 0,
+            transport: DriverTransport::empty(),
             queue_notify_off: 0,
             queue_size: 0,
             last_used_idx: 0,
@@ -1489,10 +1434,10 @@ impl VirtBlk {
         self.host_features = features.host;
         self.features = features.driver;
 
-        self.sectors = read_u64(self.device_cfg);
+        self.sectors = read_u64(self.transport.device_cfg);
         self.read_only = self.features & VIRTIO_BLK_F_RO != 0;
         if self.features & VIRTIO_BLK_F_BLK_SIZE != 0 {
-            self.block_size = read_u32(unsafe { self.device_cfg.add(20) });
+            self.block_size = read_u32(unsafe { self.transport.device_cfg.add(20) });
         }
         if self.sectors == 0 || self.block_size != SECTOR_SIZE as u32 {
             init_fail!(self, transport);
@@ -1651,15 +1596,7 @@ impl VirtBlk {
         }
         let mut blk = Self::new();
         blk.claimed = true;
-        blk.bus = mapped.bus;
-        blk.slot = mapped.slot;
-        blk.func = mapped.func;
-        blk.mmio = false;
-        blk.common_cfg = mapped.common_cfg;
-        blk.notify_cfg = mapped.notify_cfg;
-        blk.device_cfg = mapped.device_cfg;
-        blk.isr_cfg = mapped.isr_cfg;
-        blk.notify_off_multiplier = mapped.notify_off_multiplier;
+        blk.transport = DriverTransport::from_modern(mapped, mapped.device_cfg);
         Some(blk)
     }
 
@@ -1675,28 +1612,12 @@ impl VirtBlk {
 
         let mut blk = Self::new();
         blk.claimed = true;
-        blk.mmio = true;
-        blk.common_cfg = base;
-        blk.notify_cfg = base;
-        blk.device_cfg = transport.device_cfg();
+        blk.transport = DriverTransport::from_mmio(base, transport.device_cfg());
         Some(blk)
     }
 
     fn transport(&self) -> Option<VirtioTransport> {
-        if self.mmio {
-            VirtioTransport::mmio(self.common_cfg)
-        } else {
-            VirtioTransport::modern_pci(
-                self.bus,
-                self.slot,
-                self.func,
-                self.common_cfg,
-                self.notify_cfg,
-                self.device_cfg,
-                self.isr_cfg,
-                self.notify_off_multiplier,
-            )
-        }
+        self.transport.transport()
     }
 
     fn sector_range_in_bounds(&self, start_sector: u64, sector_count: u64) -> bool {
