@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Tuya device discovery and control support for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false, features = ["aead", "hmac"] }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-json = { version = "0.1", path = "../utility/edgerun-json", default-features = false }

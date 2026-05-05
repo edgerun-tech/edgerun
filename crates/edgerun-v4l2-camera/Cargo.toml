@@ -12,7 +12,7 @@ description = "Linux V4L2 camera adapter for Edgerun"
 edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
 edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
 edgerun-camera-biometrics = { version = "0.1", path = "../edgerun-camera-biometrics" }
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 
 [dev-dependencies]

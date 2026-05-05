@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Linux HDMI-CEC adapter for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 edgerun-cec = { version = "0.1", path = "../edgerun-cec" }
 edgerun-linux-gpu = { version = "0.1", path = "../edgerun-linux-gpu" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }

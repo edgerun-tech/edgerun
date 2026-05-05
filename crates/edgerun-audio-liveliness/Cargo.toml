@@ -10,7 +10,7 @@ description = "Audio liveliness checks for Edgerun biometric workflows"
 
 [dependencies]
 edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 edgerun-microphone = { version = "0.1", path = "../edgerun-microphone" }
 edgerun-speaker = { version = "0.1", path = "../edgerun-speaker" }
 

@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Capability and delegation data structures for Edgerun"
 
 [dependencies]
-edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
+edgerun-core = { version = "0.1", path = "../../protocol/edgerun-core" }
 
 [lints]
 workspace = true

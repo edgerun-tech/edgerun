@@ -11,7 +11,7 @@ description = "Face detection primitives for Edgerun camera biometrics"
 [dependencies]
 edgerun-biometrics = { version = "0.1", path = "../edgerun-biometrics" }
 edgerun-camera-biometrics = { version = "0.1", path = "../edgerun-camera-biometrics" }
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 
 [lints.rust]
 unused = "warn"

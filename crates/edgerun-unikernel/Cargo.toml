@@ -32,7 +32,7 @@ edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-
 edgerun-oci = { version = "0.1", path = "../edgerun-oci", default-features = false, features = ["registry-client", "edgefs"] }
 edgerun-edgefs = { version = "0.1", path = "../authority/edgerun-edgefs" }
 edgerun-storage = { version = "0.1", path = "../authority/edgerun-storage" }
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 edgerun-display = { version = "0.1", path = "../edgerun-display" }
 edgerun-input = { version = "0.1", path = "../edgerun-input" }
 

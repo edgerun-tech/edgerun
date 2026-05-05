@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "USB capability abstractions for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 
 [lints]
 workspace = true

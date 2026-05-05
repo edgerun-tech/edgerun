@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "ALSA microphone adapter for Edgerun audio capture capabilities"
 
 [dependencies]
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
 edgerun-microphone = { version = "0.1", path = "../edgerun-microphone" }
 
 [[bin]]
