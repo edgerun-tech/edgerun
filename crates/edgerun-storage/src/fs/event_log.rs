@@ -12,6 +12,16 @@ use crate::core::{
 };
 use crate::error::StorageError;
 
+
+fn varint_is_unexpected_eof(err: &std::io::Error) -> bool {
+    err.kind() == std::io::ErrorKind::UnexpectedEof
+}
+
+fn varint_io_to_storage_io(err: std::io::Error) -> StorageError {
+    StorageError::Io(err)
+}
+
+
 /// Hosted filesystem event log using `{events_dir}/{stream_id_hex}.log`.
 #[derive(Clone, Debug)]
 pub struct FsEventLog {

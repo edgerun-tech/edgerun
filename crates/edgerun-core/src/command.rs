@@ -2921,9 +2921,9 @@ mod tests {
         static EMPTY_LOCATION_CLASSES: [&str; 0] = [];
         CommandValidationContext {
             local_node_id: &LOCAL_NODE_ID,
-            replay_cache: &EMPTY_CACHE,
+            replay_cache: &empty_cache,
             revoked_delegation_ids: &EMPTY_REVOKED,
-            delegation_use_counts: &EMPTY_DELEGATION_USES,
+            delegation_use_counts: &EMPTY_DELEGATION_USES,,
             delegation_rate_events_ms: &EMPTY_DELEGATION_RATE_EVENTS,
             now_ms: 1_700_000_000_000,
             trusted_root_ids: &EMPTY_ROOTS,
