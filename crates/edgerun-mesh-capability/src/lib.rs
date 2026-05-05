@@ -70,11 +70,7 @@ pub mod result {
     pub use core::result::*;
 }
 
-mod client;
-mod dispatcher;
 mod inbox;
-mod server;
-mod transport;
 
 use crate::collections::VecDeque;
 use crate::prelude::v1::*;
@@ -95,6 +91,3 @@ pub use inbox::EnvelopeInbox;
 ///
 /// Thread-safe via `Arc<Mutex<>>` to allow future multi-threaded mesh daemons.
 pub type OutboundQueue = Arc<Mutex<VecDeque<(NodeID, Vec<u8>)>>>;
-
-#[cfg(test)]
-mod tests;
