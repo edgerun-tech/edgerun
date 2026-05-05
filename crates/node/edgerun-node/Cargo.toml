@@ -1,0 +1,130 @@
+[package]
+name = "edgerun-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun node orchestration, command dispatch, query, and daemon runtime"
+
+[[bin]]
+name = "edgerund"
+path = "src/main.rs"
+required-features = ["std"]
+
+[features]
+std = ["edgerun-tpm/std"]
+default = ["all-hardware", "oci"]
+oci = [
+    "dep:edgerun-oci",
+    "edgerun-oci/std",
+]
+hardware = [
+    "dep:edgerun-evdev-input",
+    "dep:edgerun-alsa-speaker",
+    "dep:edgerun-alsa-microphone",
+    "dep:edgerun-microphone",
+    "dep:edgerun-v4l2-camera",
+    "dep:edgerun-camera-biometrics",
+    "dep:edgerun-speaker",
+    "dep:edgerun-audio-liveliness",
+]
+all-hardware = [
+    "hardware",
+    "dep:edgerun-linux-gpu",
+    "dep:edgerun-drm-display",
+    "dep:edgerun-fingerprint",
+    "dep:edgerun-goodix-fingerprint",
+    "dep:edgerun-audio-calibration",
+    "dep:edgerun-biometrics",
+    "dep:edgerun-bluetooth",
+    "dep:edgerun-mgmt-bluetooth",
+    "dep:edgerun-wifi",
+    "dep:edgerun-linux-wifi",
+    "dep:edgerun-usb",
+    "dep:edgerun-linux-usb",
+    "dep:edgerun-pci",
+    "dep:edgerun-linux-pci",
+    "dep:edgerun-nfc",
+    "dep:edgerun-linux-nfc",
+    "dep:edgerun-npu",
+    "dep:edgerun-linux-npu",
+    "dep:edgerun-power",
+    "dep:edgerun-linux-power",
+    "dep:edgerun-cec",
+    "dep:edgerun-linux-cec",
+    "dep:edgerun-amd-xdna",
+    "dep:edgerun-virtual-disk",
+    "dep:edgerun-machine-report",
+]
+
+[dependencies]
+edgerun-core = { version = "0.1", path = "../../protocol/edgerun-core" }
+edgerun-wire = { workspace = true }
+edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
+edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
+edgerun-capability-policy = { version = "0.1", path = "../../capability/edgerun-capability-policy" }
+edgerun-stream = { version = "0.1", path = "../../authority/edgerun-stream" }
+edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage" }
+edgerun-remote-capability = { version = "0.1", path = "../../capability/edgerun-remote-capability" }
+edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
+edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link" }
+edgerun-mesh-capability = { version = "0.1", path = "../../capability/edgerun-mesh-capability" }
+edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session" }
+edgerun-exchange = { version = "0.1", path = "../../edgerun-exchange" }
+edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256", "pbkdf2"] }
+edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
+edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
+edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }
+edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+edgerun-linux-netif = { version = "0.1", path = "../../edgerun-linux-netif" }
+edgerun-network-interface = { version = "0.1", path = "../../edgerun-network-interface" }
+edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"] }
+edgerun-tpm = { version = "0.1", path = "../../identity/edgerun-tpm" }
+edgerun-yubikey = { version = "0.1", path = "../../identity/edgerun-yubikey" }
+edgerun-evdev-input = { version = "0.1", path = "../../edgerun-evdev-input", optional = true }
+edgerun-alsa-speaker = { version = "0.1", path = "../../edgerun-alsa-speaker", optional = true }
+edgerun-alsa-microphone = { version = "0.1", path = "../../edgerun-alsa-microphone", optional = true }
+edgerun-microphone = { version = "0.1", path = "../../edgerun-microphone", optional = true }
+edgerun-v4l2-camera = { version = "0.1", path = "../../edgerun-v4l2-camera", optional = true }
+edgerun-camera-biometrics = { version = "0.1", path = "../../edgerun-camera-biometrics", optional = true }
+edgerun-speaker = { version = "0.1", path = "../../edgerun-speaker", optional = true }
+edgerun-audio-liveliness = { version = "0.1", path = "../../edgerun-audio-liveliness", optional = true }
+edgerun-linux-gpu = { version = "0.1", path = "../../edgerun-linux-gpu", optional = true }
+edgerun-drm-display = { version = "0.1", path = "../../edgerun-drm-display", optional = true }
+edgerun-input = { version = "0.1", path = "../../edgerun-input", optional = true }
+edgerun-fingerprint = { version = "0.1", path = "../../edgerun-fingerprint", optional = true }
+edgerun-goodix-fingerprint = { version = "0.1", path = "../../edgerun-goodix-fingerprint", optional = true }
+edgerun-audio-calibration = { version = "0.1", path = "../../edgerun-audio-calibration", optional = true }
+edgerun-biometrics = { version = "0.1", path = "../../edgerun-biometrics", optional = true }
+edgerun-bluetooth = { version = "0.1", path = "../../edgerun-bluetooth", optional = true }
+edgerun-mgmt-bluetooth = { version = "0.1", path = "../../edgerun-mgmt-bluetooth", optional = true }
+edgerun-wifi = { version = "0.1", path = "../../edgerun-wifi", optional = true }
+edgerun-linux-wifi = { version = "0.1", path = "../../edgerun-linux-wifi", optional = true }
+edgerun-usb = { version = "0.1", path = "../../edgerun-usb", optional = true }
+edgerun-linux-usb = { version = "0.1", path = "../../edgerun-linux-usb", optional = true }
+edgerun-pci = { version = "0.1", path = "../../edgerun-pci", optional = true }
+edgerun-linux-pci = { version = "0.1", path = "../../edgerun-linux-pci", optional = true }
+edgerun-nfc = { version = "0.1", path = "../../edgerun-nfc", optional = true }
+edgerun-linux-nfc = { version = "0.1", path = "../../edgerun-linux-nfc", optional = true }
+edgerun-npu = { version = "0.1", path = "../../edgerun-npu", optional = true }
+edgerun-linux-npu = { version = "0.1", path = "../../edgerun-linux-npu", optional = true }
+edgerun-power = { version = "0.1", path = "../../edgerun-power", optional = true }
+edgerun-linux-power = { version = "0.1", path = "../../edgerun-linux-power", optional = true }
+edgerun-cec = { version = "0.1", path = "../../edgerun-cec", optional = true }
+edgerun-linux-cec = { version = "0.1", path = "../../edgerun-linux-cec", optional = true }
+edgerun-amd-xdna = { version = "0.1", path = "../../edgerun-amd-xdna", optional = true }
+edgerun-virtual-disk = { version = "0.1", path = "../../authority/edgerun-virtual-disk", optional = true }
+edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", optional = true }
+edgerun-oci = { version = "0.1", path = "../../edgerun-oci", optional = true }
+edgerun-android-keystore = { version = "0.1", path = "../../identity/edgerun-android-keystore", optional = true }
+
+[dev-dependencies]
+edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }
+edgerun-alsa-microphone = { version = "0.1", path = "../../edgerun-alsa-microphone" }
+
+[lints]
+workspace = true

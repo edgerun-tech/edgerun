@@ -70,7 +70,7 @@ members = [
   "crates/edgerun-linux-usb",
   "crates/edgerun-linux-wifi",
   "crates/utility/edgerun-log",
-  "crates/edgerun-machine-report",
+  "crates/node/edgerun-machine-report",
   "crates/mesh/edgerun-mesh",
   "crates/capability/edgerun-mesh-capability",
   "crates/mesh/edgerun-mesh-link",
@@ -80,7 +80,7 @@ members = [
   "crates/edgerun-network-interface",
   "crates/edgerun-nfc",
   "crates/edgerun-passport-nfc",
-  "crates/edgerun-node",
+  "crates/node/edgerun-node",
   "crates/edgerun-npu",
   "crates/edgerun-oauth",
   "crates/edgerun-oci",
@@ -92,7 +92,7 @@ members = [
   "crates/edgerun-quic",
   "crates/capability/edgerun-remote-capability",
   "crates/edgerun-secret-service",
-  "crates/edgerun-server",
+  "crates/node/edgerun-server",
   "crates/edgerun-email",
   "crates/edgerun-email-auth",
   "crates/edgerun-speaker",
@@ -160,7 +160,7 @@ edgerun-proxy = { version = "0.1", path = "crates/edgerun-proxy" }
 edgerun-storage = { version = "0.1", path = "crates/authority/edgerun-storage" }
 edgerun-stream = { version = "0.1", path = "crates/authority/edgerun-stream" }
 edgerun-http = { version = "0.1", path = "crates/edgerun-http", default-features = false }
-edgerun-node = { version = "0.1", path = "crates/edgerun-node" }
+edgerun-node = { version = "0.1", path = "crates/node/edgerun-node" }
 edgerun-hardware-signing = { version = "0.1", path = "crates/identity/edgerun-hardware-signing" }
 edgerun-capabilities = { version = "0.1", path = "crates/capability/edgerun-capabilities" }
 edgerun-mesh = { version = "0.1", path = "crates/mesh/edgerun-mesh" }
