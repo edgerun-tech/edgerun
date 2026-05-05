@@ -153,6 +153,10 @@ impl VirtioDeviceInfo {
         }
     }
 
+    pub fn open_initialized_net(self) -> Option<VirtNet> {
+        initialized_device(self.open_net()?, VirtNet::init)
+    }
+
     pub fn open_blk(self) -> Option<VirtBlk> {
         if self.device_type != VIRTIO_DEVICE_TYPE_BLK {
             return None;
@@ -165,6 +169,10 @@ impl VirtioDeviceInfo {
             }
             VirtioTransportKind::Mmio => VirtBlk::from_mmio_base(self.mmio_base),
         }
+    }
+
+    pub fn open_initialized_blk(self) -> Option<VirtBlk> {
+        initialized_device(self.open_blk()?, VirtBlk::init)
     }
 
     pub fn open_rng(self) -> Option<VirtRng> {
@@ -181,6 +189,10 @@ impl VirtioDeviceInfo {
         }
     }
 
+    pub fn open_initialized_rng(self) -> Option<VirtRng> {
+        initialized_device(self.open_rng()?, VirtRng::init)
+    }
+
     pub fn open_console(self) -> Option<VirtConsole> {
         if self.device_type != VIRTIO_DEVICE_TYPE_CONSOLE {
             return None;
@@ -193,6 +205,10 @@ impl VirtioDeviceInfo {
             }
             VirtioTransportKind::Mmio => VirtConsole::from_mmio_base(self.mmio_base),
         }
+    }
+
+    pub fn open_initialized_console(self) -> Option<VirtConsole> {
+        initialized_device(self.open_console()?, VirtConsole::init)
     }
 }
 
@@ -429,6 +445,10 @@ impl VirtioTransport {
 
     fn fail(self) {
         self.write_status(self.status() | VIRTIO_CONFIG_STATUS_FAILED);
+    }
+
+    fn driver_ok(self) -> bool {
+        self.status() & VIRTIO_CONFIG_STATUS_DRIVER_OK != 0
     }
 
     fn reset(self) {
@@ -939,8 +959,12 @@ impl VirtNet {
         self.link_up
     }
 
+    pub fn is_initialized(&self) -> bool {
+        self.transport().is_some_and(VirtioTransport::driver_ok)
+    }
+
     pub fn refresh_status(&mut self) -> bool {
-        if self.device_cfg.is_null() {
+        if !self.is_initialized() || self.device_cfg.is_null() {
             return false;
         }
 
@@ -966,8 +990,10 @@ impl VirtNet {
     }
 
     pub fn stats(&mut self) -> VirtNetStats {
-        unsafe {
-            self.reap_tx_used();
+        if self.is_initialized() {
+            unsafe {
+                self.reap_tx_used();
+            }
         }
 
         VirtNetStats {
@@ -980,6 +1006,10 @@ impl VirtNet {
     }
 
     pub fn send(&mut self, data: &[u8]) -> bool {
+        if !self.is_initialized() {
+            return false;
+        }
+
         let Some(frame_len) = net_tx_frame_len(data.len()) else {
             return false;
         };
@@ -1020,6 +1050,10 @@ impl VirtNet {
     }
 
     pub fn recv(&mut self, buf: &mut [u8]) -> Option<usize> {
+        if !self.is_initialized() {
+            return None;
+        }
+
         unsafe {
             let used = core::ptr::addr_of_mut!(RX_USED);
             let used_idx = split_queue_used_idx(used);
@@ -1431,8 +1465,12 @@ impl VirtBlk {
         self.sectors
     }
 
+    pub fn is_initialized(&self) -> bool {
+        self.transport().is_some_and(VirtioTransport::driver_ok)
+    }
+
     pub fn read_sector(&mut self, sector: u64, out: &mut [u8]) -> bool {
-        if out.len() != SECTOR_SIZE || sector >= self.sectors {
+        if !self.is_initialized() || out.len() != SECTOR_SIZE || sector >= self.sectors {
             return false;
         }
 
@@ -1450,7 +1488,7 @@ impl VirtBlk {
     }
 
     pub fn read_sectors(&mut self, start_sector: u64, out: &mut [u8]) -> bool {
-        if out.len() % SECTOR_SIZE != 0 {
+        if !self.is_initialized() || out.len() % SECTOR_SIZE != 0 {
             return false;
         }
 
@@ -1473,7 +1511,11 @@ impl VirtBlk {
     }
 
     pub fn write_sector(&mut self, sector: u64, data: &[u8]) -> bool {
-        if self.read_only || data.len() != SECTOR_SIZE || sector >= self.sectors {
+        if !self.is_initialized()
+            || self.read_only
+            || data.len() != SECTOR_SIZE
+            || sector >= self.sectors
+        {
             return false;
         }
 
@@ -1488,7 +1530,7 @@ impl VirtBlk {
     }
 
     pub fn write_sectors(&mut self, start_sector: u64, data: &[u8]) -> bool {
-        if data.len() % SECTOR_SIZE != 0 {
+        if !self.is_initialized() || data.len() % SECTOR_SIZE != 0 {
             return false;
         }
 
@@ -1517,6 +1559,9 @@ impl VirtBlk {
     }
 
     pub fn flush(&mut self) -> bool {
+        if !self.is_initialized() {
+            return false;
+        }
         if self.features & VIRTIO_BLK_F_FLUSH == 0 {
             return true;
         }
@@ -1827,6 +1872,10 @@ impl VirtRng {
     }
 
     pub fn fill_bytes(&mut self, out: &mut [u8]) -> bool {
+        if !self.is_initialized() {
+            return false;
+        }
+
         let mut offset = 0;
         while offset < out.len() {
             let written = unsafe { self.request_entropy(&mut out[offset..]) };
@@ -1878,6 +1927,10 @@ impl VirtRng {
         rng.common_cfg = base;
         rng.notify_cfg = base;
         Some(rng)
+    }
+
+    pub fn is_initialized(&self) -> bool {
+        self.transport().is_some_and(VirtioTransport::driver_ok)
     }
 
     fn transport(&self) -> Option<VirtioTransport> {
@@ -2092,6 +2145,10 @@ impl VirtConsole {
     }
 
     pub fn recv(&mut self, buf: &mut [u8]) -> Option<usize> {
+        if !self.is_initialized() {
+            return None;
+        }
+
         unsafe {
             let used = core::ptr::addr_of_mut!(CONSOLE_RX_USED);
             let used_idx = split_queue_used_idx(used);
@@ -2126,6 +2183,10 @@ impl VirtConsole {
     }
 
     pub fn write_all(&mut self, bytes: &[u8]) -> bool {
+        if !self.is_initialized() {
+            return false;
+        }
+
         let mut offset = 0;
         while offset < bytes.len() {
             let written = unsafe { self.write_chunk(&bytes[offset..]) };
@@ -2177,6 +2238,10 @@ impl VirtConsole {
         console.common_cfg = base;
         console.notify_cfg = base;
         Some(console)
+    }
+
+    pub fn is_initialized(&self) -> bool {
+        self.transport().is_some_and(VirtioTransport::driver_ok)
     }
 
     fn transport(&self) -> Option<VirtioTransport> {
@@ -2337,6 +2402,14 @@ impl Default for VirtConsole {
     }
 }
 
+fn initialized_device<T>(mut device: T, init: fn(&mut T) -> bool) -> Option<T> {
+    if init(&mut device) {
+        Some(device)
+    } else {
+        None
+    }
+}
+
 pub fn find_virtio_net() -> Option<VirtNet> {
     #[cfg(target_arch = "x86_64")]
     {
@@ -2346,6 +2419,10 @@ pub fn find_virtio_net() -> Option<VirtNet> {
 
     #[allow(unreachable_code)]
     None
+}
+
+pub fn find_initialized_virtio_net() -> Option<VirtNet> {
+    initialized_device(find_virtio_net()?, VirtNet::init)
 }
 
 pub fn find_virtio_blk() -> Option<VirtBlk> {
@@ -2359,6 +2436,10 @@ pub fn find_virtio_blk() -> Option<VirtBlk> {
     None
 }
 
+pub fn find_initialized_virtio_blk() -> Option<VirtBlk> {
+    initialized_device(find_virtio_blk()?, VirtBlk::init)
+}
+
 pub fn find_virtio_rng() -> Option<VirtRng> {
     #[cfg(target_arch = "x86_64")]
     {
@@ -2368,6 +2449,10 @@ pub fn find_virtio_rng() -> Option<VirtRng> {
 
     #[allow(unreachable_code)]
     None
+}
+
+pub fn find_initialized_virtio_rng() -> Option<VirtRng> {
+    initialized_device(find_virtio_rng()?, VirtRng::init)
 }
 
 pub fn find_virtio_console() -> Option<VirtConsole> {
@@ -2381,20 +2466,40 @@ pub fn find_virtio_console() -> Option<VirtConsole> {
     None
 }
 
+pub fn find_initialized_virtio_console() -> Option<VirtConsole> {
+    initialized_device(find_virtio_console()?, VirtConsole::init)
+}
+
 pub fn find_virtio_net_mmio(base: usize) -> Option<VirtNet> {
     VirtNet::from_mmio_base(base)
+}
+
+pub fn find_initialized_virtio_net_mmio(base: usize) -> Option<VirtNet> {
+    initialized_device(find_virtio_net_mmio(base)?, VirtNet::init)
 }
 
 pub fn find_virtio_blk_mmio(base: usize) -> Option<VirtBlk> {
     VirtBlk::from_mmio_base(base)
 }
 
+pub fn find_initialized_virtio_blk_mmio(base: usize) -> Option<VirtBlk> {
+    initialized_device(find_virtio_blk_mmio(base)?, VirtBlk::init)
+}
+
 pub fn find_virtio_rng_mmio(base: usize) -> Option<VirtRng> {
     VirtRng::from_mmio_base(base)
 }
 
+pub fn find_initialized_virtio_rng_mmio(base: usize) -> Option<VirtRng> {
+    initialized_device(find_virtio_rng_mmio(base)?, VirtRng::init)
+}
+
 pub fn find_virtio_console_mmio(base: usize) -> Option<VirtConsole> {
     VirtConsole::from_mmio_base(base)
+}
+
+pub fn find_initialized_virtio_console_mmio(base: usize) -> Option<VirtConsole> {
+    initialized_device(find_virtio_console_mmio(base)?, VirtConsole::init)
 }
 
 pub fn virtio_mmio_device_info(base: usize) -> Option<VirtioDeviceInfo> {
@@ -2789,6 +2894,19 @@ mod tests {
         base
     }
 
+    fn set_mmio_modern_features(base: *mut u8, features: u64) {
+        write_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES_SEL) }, 0);
+        write_u32(
+            unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES) },
+            features as u32,
+        );
+        write_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES_SEL) }, 1);
+        write_u32(
+            unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES) },
+            (features >> 32) as u32,
+        );
+    }
+
     #[test]
     fn virtio_net_header_matches_modern_layout() {
         assert_eq!(core::mem::size_of::<VirtioNetHdr>(), 12);
@@ -3051,17 +3169,34 @@ mod tests {
     }
 
     #[test]
+    fn initialized_mmio_rng_helper_returns_ready_device() {
+        let _guard = driver_claim_test_lock();
+        let mut rng_mmio = TestMmio([0; 0x200]);
+        let base_ptr = init_test_mmio(&mut rng_mmio, VIRTIO_DEVICE_TYPE_RNG);
+        let base = base_ptr as usize;
+
+        set_mmio_modern_features(base_ptr, VIRTIO_F_VERSION_1);
+        write_u32(unsafe { base_ptr.add(VIRTIO_MMIO_QUEUE_NUM_MAX) }, 1);
+
+        let rng = find_initialized_virtio_rng_mmio(base).unwrap();
+
+        assert!(rng.is_initialized());
+        assert_eq!(
+            read_u32(unsafe { base_ptr.add(VIRTIO_MMIO_STATUS) }) as u8,
+            VIRTIO_CONFIG_STATUS_ACKNOWLEDGE
+                | VIRTIO_CONFIG_STATUS_DRIVER
+                | VIRTIO_CONFIG_STATUS_FEATURES_OK
+                | VIRTIO_CONFIG_STATUS_DRIVER_OK
+        );
+    }
+
+    #[test]
     fn mmio_feature_negotiation_writes_status_and_driver_features() {
         let mut mmio = TestMmio([0; 0x200]);
         let base = init_test_mmio(&mut mmio, VIRTIO_DEVICE_TYPE_RNG);
         let transport = VirtioTransport::mmio(base).unwrap();
 
-        write_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES) }, 0);
-        write_u32(unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES_SEL) }, 1);
-        write_u32(
-            unsafe { base.add(VIRTIO_MMIO_DEVICE_FEATURES) },
-            (VIRTIO_F_VERSION_1 >> 32) as u32,
-        );
+        set_mmio_modern_features(base, VIRTIO_F_VERSION_1);
 
         let negotiated = transport.negotiate_features(VIRTIO_F_VERSION_1).unwrap();
         assert_eq!(negotiated.driver, VIRTIO_F_VERSION_1);
@@ -3259,8 +3394,8 @@ mod tests {
         assert_eq!(blk.sectors(), 0);
         assert!(!blk.read_sector(0, &mut out));
         assert!(!blk.write_sector(0, &sector));
-        assert!(blk.read_sectors(0, &mut empty));
-        assert!(blk.write_sectors(0, &empty));
+        assert!(!blk.read_sectors(0, &mut empty));
+        assert!(!blk.write_sectors(0, &empty));
         assert!(!blk.read_sectors(1, &mut empty));
         assert!(!blk.read_sectors(0, &mut out[..SECTOR_SIZE - 1]));
         assert!(!blk.write_sectors(0, &sector[..SECTOR_SIZE - 1]));
@@ -3286,14 +3421,14 @@ mod tests {
     }
 
     #[test]
-    fn empty_rng_and_console_requests_are_noops() {
+    fn uninitialized_rng_and_console_reject_io() {
         let mut rng = VirtRng::new();
         let mut console = VirtConsole::new();
         let mut empty = [];
         let mut input = [0u8; 8];
 
-        assert!(rng.fill_bytes(&mut empty));
+        assert!(!rng.fill_bytes(&mut empty));
         assert_eq!(console.recv(&mut input), None);
-        assert!(console.write_all(&[]));
+        assert!(!console.write_all(&[]));
     }
 }
