@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use edgerun_core::crypto;
 use edgerun_core::protocol::{
     self, AssuranceClaim, CommandEnvelope, DelegationRecord, EventEnvelope, IdentityRecord,
-    ProtocolRecord, RevocationRecord, RouteAdvertisement, Signature,
+    ProtocolRecord, RevocationRecord, RouteAdvertisement, Signature, SnapshotDescriptor,
 };
 
 pub use edgerun_core::protocol::Signature as ProtocolSignature;
@@ -73,6 +73,7 @@ impl ProtocolFamily {
                 | Self::RevocationRecord
                 | Self::IdentityRecord
                 | Self::AssuranceClaim
+                | Self::SnapshotDescriptor
                 | Self::RouteAdvertisement
         )
     }
@@ -154,6 +155,7 @@ pub fn protocol_signable_wire_bytes(
         | (ProtocolFamily::RevocationRecord, ProtocolRecord::RevocationRecord(_))
         | (ProtocolFamily::IdentityRecord, ProtocolRecord::IdentityRecord(_))
         | (ProtocolFamily::AssuranceClaim, ProtocolRecord::AssuranceClaim(_))
+        | (ProtocolFamily::SnapshotDescriptor, ProtocolRecord::SnapshotDescriptor(_))
         | (ProtocolFamily::RouteAdvertisement, ProtocolRecord::RouteAdvertisement(_)) => {
             Ok(protocol::protocol_wire_bytes(record, true))
         }
@@ -298,6 +300,20 @@ impl VerifiableProtocolRecord for AssuranceClaim {
 
     fn protocol_record(&self) -> ProtocolRecord {
         ProtocolRecord::AssuranceClaim(self.clone())
+    }
+
+    fn protocol_signature(&self) -> Option<&Signature> {
+        self.signature.as_ref()
+    }
+}
+
+impl VerifiableProtocolRecord for SnapshotDescriptor {
+    fn protocol_family(&self) -> ProtocolFamily {
+        ProtocolFamily::SnapshotDescriptor
+    }
+
+    fn protocol_record(&self) -> ProtocolRecord {
+        ProtocolRecord::SnapshotDescriptor(self.clone())
     }
 
     fn protocol_signature(&self) -> Option<&Signature> {

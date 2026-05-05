@@ -1,11 +1,10 @@
 use crate::prelude::v1::Vec;
-use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
 use edgerun_sign::{ProtocolSignError, ProtocolSigner};
 use edgerun_verify::ProtocolFamily;
 
 #[derive(Clone)]
 pub(crate) struct TestSigner {
-    node_id: NodeID,
+    node_id: [u8; 64],
     key: edgerun_crypto::p256::ecdsa::SigningKey,
 }
 
@@ -17,33 +16,13 @@ impl TestSigner {
         let mut node_bytes = [0u8; 64];
         node_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
         Self {
-            node_id: NodeID(node_bytes),
+            node_id: node_bytes,
             key,
         }
     }
-}
 
-impl MeshSigner for TestSigner {
-    fn node_id(&self) -> NodeID {
+    pub(crate) fn node_id(&self) -> [u8; 64] {
         self.node_id
-    }
-
-    fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 64], HardwareSigningError> {
-        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-
-        let sig: edgerun_crypto::p256::ecdsa::Signature = self.key.sign_prehash(digest).unwrap();
-        let mut bytes = [0u8; 64];
-        bytes.copy_from_slice(&sig.to_bytes());
-        Ok(bytes)
-    }
-
-    fn sign_message_var(&self, message: &[u8]) -> Result<[u8; 64], HardwareSigningError> {
-        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-
-        let sig: edgerun_crypto::p256::ecdsa::Signature = self.key.sign_prehash(message).unwrap();
-        let mut bytes = [0u8; 64];
-        bytes.copy_from_slice(&sig.to_bytes());
-        Ok(bytes)
     }
 }
 

@@ -1229,7 +1229,6 @@ dependencies = [
  "edgerun-core",
  "edgerun-crypto",
  "edgerun-encoding",
- "edgerun-hardware-signing",
  "edgerun-log",
  "edgerun-rt",
  "edgerun-sign",

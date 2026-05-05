@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 
 use edgerun_core::protocol::{
     AssuranceClaim, CommandEnvelope, DelegationRecord, EventEnvelope, IdentityRecord,
-    ProtocolRecord, RevocationRecord, RouteAdvertisement, Signature,
+    ProtocolRecord, RevocationRecord, RouteAdvertisement, Signature, SnapshotDescriptor,
 };
 use edgerun_verify::{
     protocol_record_hash, protocol_signable_wire_bytes, ProtocolFamily, ProtocolVerifyError,
@@ -143,6 +143,16 @@ pub fn sign_assurance_claim<S: ProtocolSigner>(
     signer.sign_protocol_record(
         &ProtocolRecord::AssuranceClaim(claim.clone()),
         ProtocolFamily::AssuranceClaim,
+    )
+}
+
+pub fn sign_snapshot_descriptor<S: ProtocolSigner + ?Sized>(
+    signer: &S,
+    descriptor: &SnapshotDescriptor,
+) -> Result<ProtocolSigningOutput, ProtocolSignError> {
+    signer.sign_protocol_record(
+        &ProtocolRecord::SnapshotDescriptor(descriptor.clone()),
+        ProtocolFamily::SnapshotDescriptor,
     )
 }
 

@@ -1,13 +1,9 @@
 //! Direct signed-stream persistence helpers.
 
-use alloc::sync::Arc;
-
 use crate::prelude::v1::*;
 use edgerun_core::protocol::EventEnvelope;
-use edgerun_hardware_signing::{MeshSigner, NodeID};
-use edgerun_sign::{ProtocolSignError, ProtocolSigner};
+use edgerun_sign::ProtocolSigner;
 use edgerun_stream::{StreamId, StreamWriter};
-use edgerun_verify::ProtocolFamily;
 
 use crate::core::{AppendReceipt, EventLog};
 use crate::error::StorageError;
@@ -18,48 +14,21 @@ use crate::error::StorageError;
 /// `prev_event_hash`, and signatures. This type adds durable append as part of
 /// the same operation so callers cannot accidentally create signed events that
 /// are never written to the authoritative log.
-pub struct DurableStreamWriter<L> {
-    writer: StreamWriter<MeshProtocolSigner>,
+pub struct DurableStreamWriter<L, S> {
+    writer: StreamWriter<S>,
     event_log: L,
     last_receipt: AppendReceipt,
 }
 
-struct MeshProtocolSigner {
-    signer: Arc<dyn MeshSigner>,
-}
-
-impl MeshProtocolSigner {
-    fn new(signer: Arc<dyn MeshSigner>) -> Self {
-        Self { signer }
-    }
-}
-
-impl ProtocolSigner for MeshProtocolSigner {
-    fn signature_algorithm(&self) -> i32 {
-        edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
-    }
-
-    fn sign_signature_input(
-        &self,
-        _family: ProtocolFamily,
-        signature_input: &[u8],
-    ) -> Result<Vec<u8>, ProtocolSignError> {
-        self.signer
-            .sign_message_var(signature_input)
-            .map(|signature| signature.to_vec())
-            .map_err(|_| ProtocolSignError::SignerFailed)
-    }
-}
-
-impl<L: EventLog> DurableStreamWriter<L> {
+impl<L: EventLog, S: ProtocolSigner> DurableStreamWriter<L, S> {
     /// Create a stream, sign the genesis event, and persist it immediately.
     pub fn new(
         stream_id: StreamId,
-        signer: Arc<dyn MeshSigner>,
+        signer: S,
         recorded_at_ms: i64,
         mut event_log: L,
     ) -> Result<Self, StorageError> {
-        let writer = StreamWriter::new(stream_id, MeshProtocolSigner::new(signer), recorded_at_ms)?;
+        let writer = StreamWriter::new(stream_id, signer, recorded_at_ms)?;
         let genesis = writer.head().ok_or_else(|| {
             StorageError::Stream("stream writer did not produce a genesis event".into())
         })?;
@@ -115,8 +84,8 @@ impl<L: EventLog> DurableStreamWriter<L> {
 
     /// Returns the writer identity.
     #[must_use]
-    pub fn writer(&self) -> NodeID {
-        NodeID(*self.writer.stream_id())
+    pub fn writer(&self) -> &StreamId {
+        self.writer.stream_id()
     }
 
     /// Borrow the underlying event log.
@@ -140,8 +109,8 @@ mod tests {
 
     #[test]
     fn new_persists_signed_genesis() {
-        let signer = Arc::new(TestSigner::new());
-        let stream_id = signer.node_id().0;
+        let signer = TestSigner::new();
+        let stream_id = signer.node_id();
         let writer =
             DurableStreamWriter::new(stream_id, signer, 1_000, MemEventLog::new()).unwrap();
 
@@ -157,8 +126,8 @@ mod tests {
 
     #[test]
     fn append_persists_contiguous_signed_events() {
-        let signer = Arc::new(TestSigner::new());
-        let stream_id = signer.node_id().0;
+        let signer = TestSigner::new();
+        let stream_id = signer.node_id();
         let mut writer =
             DurableStreamWriter::new(stream_id, signer, 1_000, MemEventLog::new()).unwrap();
 

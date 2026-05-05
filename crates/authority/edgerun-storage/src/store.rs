@@ -103,7 +103,8 @@ impl ControllerSet {
         self.controllers.iter().cloned().collect()
     }
 }
-use edgerun_hardware_signing::MeshSigner;
+use edgerun_sign::ProtocolSigner;
+use edgerun_verify::{verify_protocol_record, ProtocolFamily, ProtocolSignerRef};
 
 /// Configuration for the unified node storage.
 #[derive(Clone, Debug)]
@@ -482,7 +483,7 @@ impl NodeStore {
     pub fn validate_stream_chain_with_writer(
         &self,
         stream_id: &[u8],
-        writer: &edgerun_hardware_signing::NodeID,
+        writer: &[u8],
     ) -> Result<u64, StorageError> {
         self.validate_stream_chain_inner(stream_id, Some(writer))
     }
@@ -490,7 +491,7 @@ impl NodeStore {
     fn validate_stream_chain_inner(
         &self,
         stream_id: &[u8],
-        writer: Option<&edgerun_hardware_signing::NodeID>,
+        writer: Option<&[u8]>,
     ) -> Result<u64, StorageError> {
         let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
         let head = self.index.get_head(&stream_id_hex)?;
@@ -542,7 +543,10 @@ impl NodeStore {
         }
 
         if let Some(writer) = writer {
-            edgerun_stream::validate_stream(&events, &writer.0)?;
+            let writer: &[u8; edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN] = writer
+                .try_into()
+                .map_err(|_| StorageError::Stream("stream writer key must be 64 bytes".into()))?;
+            edgerun_stream::validate_stream(&events, writer)?;
         }
 
         Ok(events.len() as u64)
@@ -959,7 +963,8 @@ impl NodeStore {
     /// Returns the signed `SnapshotDescriptor`.
     pub fn produce_snapshot(
         &self,
-        signer: &dyn MeshSigner,
+        signer: &(impl ProtocolSigner + ?Sized),
+        producer_node_id: &[u8],
         view_type: &str,
         completeness: i32,
     ) -> Result<edgerun_core::protocol::SnapshotDescriptor, StorageError> {
@@ -1000,7 +1005,12 @@ impl NodeStore {
                 edgerun_core::crypto::sha256(format!("{}-{}", view_type, now_secs).as_bytes());
             format!("snap-{}", edgerun_core::util::bytes_to_hex(&digest[..8]))
         };
-        let node_id = signer.node_id();
+        if producer_node_id.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
+            return Err(StorageError::Encode(
+                "snapshot producer node id must be 64 bytes".into(),
+            ));
+        }
+        let node_id = producer_node_id.to_vec();
         // Store base_heads as simple delimited text: stream_hex:seq:hash_hex;...
         let base_heads_text: String = heads
             .iter()
@@ -1012,7 +1022,7 @@ impl NodeStore {
         let payload_object_ref = self.put_object(
             base_heads_text.as_bytes(),
             3, /* OBJECT_KIND_SNAPSHOT */
-            &[node_id.0.to_vec()],
+            core::slice::from_ref(&node_id),
         )?;
 
         let mut descriptor = SnapshotDescriptor {
@@ -1021,9 +1031,9 @@ impl NodeStore {
             view_type: view_type.to_string(),
             view_version: 1,
             producer: Some(IdentityRef {
-                identity_id: node_id.0.to_vec(),
+                identity_id: node_id.clone(),
                 identity_kind: Some(2), // NODE
-                key_hint: Some(node_id.0.to_vec()),
+                key_hint: Some(node_id.clone()),
             }),
             produced_at: Some(edgerun_core::protocol::Timestamp {
                 seconds: now_seconds,
@@ -1049,23 +1059,11 @@ impl NodeStore {
             signature: None,
         };
 
-        // Sign the descriptor with domain separation
-        let canonical = edgerun_core::protocol::protocol_wire_bytes(
-            &edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone()),
-            true,
-        );
-        let sig = signer
-            .sign_record(
-                edgerun_core::crypto::SIG_DOMAIN_SNAPSHOT_DESCRIPTOR,
-                &canonical,
-            )
-            .map_err(|e| StorageError::Encode(format!("snapshot signing failed: {}", e)))?;
-        descriptor.signature = Some(edgerun_core::protocol::Signature {
-            algorithm: 1,
-            value: sig.to_vec(),
-        });
+        let signed = edgerun_sign::sign_snapshot_descriptor(signer, &descriptor)
+            .map_err(|e| StorageError::Encode(format!("snapshot signing failed: {e:?}")))?;
+        descriptor.signature = Some(signed.signature);
 
-        let producer_hex = edgerun_core::util::bytes_to_hex(&node_id.0);
+        let producer_hex = edgerun_core::util::bytes_to_hex(&node_id);
 
         self.index.put_snapshot(
             &snapshot_id,
@@ -1123,24 +1121,13 @@ impl NodeStore {
             producer.identity_id.as_slice().try_into().map_err(|_| {
                 StorageError::Decode("snapshot producer key must be 64 bytes".into())
             })?;
-        let verifying_key = edgerun_core::crypto::node_id_to_verifying_key(&producer_key)
-            .ok_or_else(|| {
-                StorageError::Decode("snapshot producer key is not a valid P-256 key".into())
-            })?;
-        let canonical = edgerun_core::protocol::protocol_wire_bytes(
+        verify_protocol_record(
             &edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone()),
-            true,
-        );
-        if !edgerun_core::crypto::verify_canonical_record_hw(
-            &verifying_key,
-            edgerun_core::crypto::SIG_DOMAIN_SNAPSHOT_DESCRIPTOR,
-            &canonical,
-            &signature.value,
-        ) {
-            return Err(StorageError::Decode(
-                "snapshot signature verification failed".into(),
-            ));
-        }
+            ProtocolFamily::SnapshotDescriptor,
+            signature,
+            ProtocolSignerRef::P256Raw64(&producer_key),
+        )
+        .map_err(|_| StorageError::Decode("snapshot signature verification failed".into()))?;
         let producer_hex = edgerun_core::util::bytes_to_hex(&producer.identity_id);
 
         // Store as object (if payload_object is present)
@@ -1649,12 +1636,12 @@ mod tests {
             .expect("append genesis");
 
         let descriptor = store
-            .produce_snapshot(&signer, "timeline", 1)
+            .produce_snapshot(&signer, &signer.node_id(), "timeline", 1)
             .expect("produce snapshot");
 
         let producer = descriptor.producer.as_ref().expect("producer");
-        assert_eq!(producer.identity_id, signer.node_id().0.to_vec());
-        assert_eq!(producer.key_hint, Some(signer.node_id().0.to_vec()));
+        assert_eq!(producer.identity_id, signer.node_id().to_vec());
+        assert_eq!(producer.key_hint, Some(signer.node_id().to_vec()));
 
         let result = edgerun_core::result::accept(
             edgerun_core::value::Value::Null,
@@ -1674,14 +1661,14 @@ mod tests {
             .expect("append genesis");
 
         let mut descriptor = store
-            .produce_snapshot(&signer, "timeline", 1)
+            .produce_snapshot(&signer, &signer.node_id(), "timeline", 1)
             .expect("produce snapshot");
         if let Some(signature) = &mut descriptor.signature {
             signature.value[0] ^= 0xFF;
         }
 
         let err = store
-            .consume_snapshot(&descriptor, &[signer.node_id().0.to_vec()])
+            .consume_snapshot(&descriptor, &[signer.node_id().to_vec()])
             .unwrap_err();
         assert!(matches!(err, StorageError::Decode(_)));
     }
@@ -1818,7 +1805,7 @@ mod tests {
 
         let stored = store.get_event(stream_id, 0).unwrap().unwrap();
         assert!(stored.signature.is_some());
-        assert!(edgerun_stream::verify_event(&stored, &signer.node_id().0).is_ok());
+        assert!(edgerun_stream::verify_event(&stored, &signer.node_id()).is_ok());
         assert_eq!(store.get_head(stream_id).unwrap().unwrap().0, 0);
 
         let _ = std::fs::remove_dir_all(data_root);
@@ -1829,7 +1816,7 @@ mod tests {
         let data_root = tmp_data_root();
         let (store, _device) = make_block_store(data_root.clone());
         let signer = TestSigner::new();
-        let stream_id = signer.node_id().0;
+        let stream_id = signer.node_id();
 
         let mut first = event(&stream_id, 0, None);
         edgerun_stream::sign_event(&mut first, &signer).unwrap();
@@ -1858,7 +1845,7 @@ mod tests {
         let (store, _device) = make_block_store(data_root.clone());
         let signer = TestSigner::new();
         let wrong_signer = TestSigner::new();
-        let stream_id = signer.node_id().0;
+        let stream_id = signer.node_id();
 
         let mut event = event(&stream_id, 0, None);
         edgerun_stream::sign_event(&mut event, &signer).unwrap();
