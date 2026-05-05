@@ -69,3 +69,22 @@ jobs:
 
       - name: Release binary check
         run: cargo check -p edgerun-node
+
+  crate-analyzer:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Run crate analyzer
+        run: |
+          mkdir -p target/crate-analyzer
+          cargo run -p edgerun-crate-analyzer --bin analyze-workspace -- --json --out target/crate-analyzer > target/crate-analyzer/workspace-summary.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: edgerun-crate-analyzer-report
+          path: target/crate-analyzer

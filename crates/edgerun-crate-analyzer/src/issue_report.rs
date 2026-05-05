@@ -63,7 +63,7 @@ pub fn generate_local_issue(
         issue.insert("file".into(), JsonValue::String(f.to_string_lossy().into()));
     }
     if let Some(l) = line {
-        issue.insert("line".into(), JsonValue::Number((*l as u64).into()));
+        issue.insert("line".into(), JsonValue::Number((l as u64).into()));
     }
     if let Some(s) = severity {
         issue.insert("severity".into(), JsonValue::String(format!("{:?}", s)));

@@ -34,7 +34,11 @@ pub fn generate_report(
     identity.visible_files = visible_files.clone();
     identity.hidden_files_count = hidden_count;
 
-    let dependencies = dependency_analyzer::analyze_dependencies(&cargo_toml_path, workspace_root)?;
+    let dependencies = dependency_analyzer::analyze_dependencies(
+        &cargo_toml_path,
+        workspace_root,
+        &visible_files,
+    )?;
 
     let (public_api, _api_count) = api_analyzer::analyze_public_api(&visible_files);
 
@@ -46,7 +50,7 @@ pub fn generate_report(
     all_findings.append(&mut unsafe_findings);
     all_findings.append(&mut security_findings);
 
-    let test_info = tests::collect_test_info(crate_path);
+    let test_info = tests::collect_test_info(crate_path, &public_api);
 
     let footprint = footprint::collect_footprint(crate_path, "idle");
 

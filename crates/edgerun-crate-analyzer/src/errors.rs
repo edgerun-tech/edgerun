@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use edgerun_json::{JsonValue, ToJson, FromJson};
+use edgerun_json::{JsonValue, ToJson};
 
 #[derive(Debug, Clone)]
 pub enum AnalyzerError {
@@ -21,7 +21,7 @@ impl ToJson for AnalyzerError {
             }
             AnalyzerError::ParseError { file, message } => {
                 let mut map = edgerun_json::Map::new();
-                map.insert("file".into(), file.to_json());
+                map.insert("file".into(), file.to_string_lossy().into_owned().to_json());
                 map.insert("message".into(), message.to_json());
                 JsonValue::Object(map)
             }
@@ -44,30 +44,6 @@ impl ToJson for AnalyzerError {
     }
 }
 
-impl FromJson for AnalyzerError {
-    fn from_json(value: &JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
-        let obj = value.as_object().ok_or("expected object")?;
-        if let Some(v) = obj.get("CrateNotFound") {
-            return Ok(AnalyzerError::CrateNotFound(FromJson::from_json(v)?));
-        }
-        if let (Some(f), Some(m)) = (obj.get("file"), obj.get("message")) {
-            return Ok(AnalyzerError::ParseError {
-                file: FromJson::from_json(f)?,
-                message: FromJson::from_json(m)?,
-            });
-        }
-        if let Some(v) = obj.get("IoError") {
-            return Ok(AnalyzerError::IoError(FromJson::from_json(v)?));
-        }
-        if let Some(v) = obj.get("NotImplemented") {
-            return Ok(AnalyzerError::NotImplemented(FromJson::from_json(v)?));
-        }
-        if let Some(v) = obj.get("VisibilityViolation") {
-            return Ok(AnalyzerError::VisibilityViolation(FromJson::from_json(v)?));
-        }
-        Err("unknown error variant".into())
-    }
-}
 
 impl std::fmt::Display for AnalyzerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -1,5 +1,7 @@
 use std::path::PathBuf;
+
 use crate::crate_model::*;
+use edgerun_json::ToJson;
 
 pub fn render_html_report(report: &CrateReport) -> String {
     let mut html = String::new();
@@ -29,17 +31,53 @@ fn render_summary(report: &CrateReport) -> String {
     let mut s = String::new();
     s.push_str(&format!("<h1>{}</h1>\n", report.identity.name));
     s.push_str(&format!("<p>Version: {}</p>\n", report.identity.version));
+    s.push_str(&format!("<p>Type: {}</p>\n", report.identity.crate_type.as_str()));
     s.push_str(&format!("<p>Status: analyzed</p>\n"));
-    s.push_str(&format!("<p>Visibility: {}</p>\n", if report.visibility.hidden_count > 0 { "public subset" } else { "fully public" }));
+    s.push_str(&format!(
+        "<p>Visibility: {}</p>\n",
+        if report.visibility.hidden_count > 0 { "public subset" } else { "fully public" }
+    ));
+    s.push_str(&format!(
+        "<p>Compile check: {} (code={})</p>\n",
+        report.test_info.compile_status.as_deref().unwrap_or("not run"),
+        report
+            .test_info
+            .compile_exit_code
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "n/a".to_string())
+    ));
+    s.push_str(&format!(
+        "<p>Functionality coverage: {}/{} ({:}%)</p>\n",
+        report.test_info.functionality_coverage.covered_items,
+        report.test_info.functionality_coverage.public_items,
+        report.test_info.functionality_coverage.coverage_percent
+    ));
     s.push_str(&format!("<p>Tests: {} passing / {} failing / {} ignored</p>\n",
         report.test_info.passing.unwrap_or(0),
         report.test_info.failing.unwrap_or(0),
         report.test_info.ignored));
     s.push_str(&format!("<p>Public API items: {}</p>\n", report.public_api.len()));
-    s.push_str(&format!("<p>Dependencies: {} internal / {} external</p>\n",
+    s.push_str(&format!(
+        "<p>Dependencies: {} internal / {} external</p>\n",
         report.dependencies.iter().filter(|d| d.is_workspace).count(),
-        report.dependencies.iter().filter(|d| !d.is_workspace).count()));
-    s.push_str(&format!("<p>Unsafe: {} blocks</p>\n", report.security_findings.iter().filter(|f| f.title.contains("Unsafe")).count()));
+        report.dependencies.iter().filter(|d| !d.is_workspace).count()
+    ));
+    s.push_str(&format!(
+        "<p>Dependency weight: {} total references</p>\n",
+        report
+            .dependencies
+            .iter()
+            .map(|dep| dep.weight)
+            .sum::<usize>()
+    ));
+    s.push_str(&format!(
+        "<p>Unsafe: {} blocks</p>\n",
+        report
+            .security_findings
+            .iter()
+            .filter(|f| f.title.contains("Unsafe"))
+            .count()
+    ));
     s.push_str(&format!("<p>Security findings: {}</p>\n", report.security_findings.len()));
     s.push_str(&format!("<p>Generated: {}</p>\n", report.generated_at));
     s.push_str(&format!("<p>Parser confidence: {}</p>\n", report.parser_confidence));
@@ -47,10 +85,19 @@ fn render_summary(report: &CrateReport) -> String {
 }
 
 fn render_dependencies(report: &CrateReport) -> String {
-    let mut s = String::from("<h2>Dependencies</h2>\n<table border=\"1\"><tr><th>Dependency</th><th>Kind</th><th>Optional</th><th>Features</th><th>Reason</th><th>Visible</th></tr>\n");
+    let mut s = String::from("<h2>Dependencies</h2>\n<table border=\"1\"><tr><th>Dependency</th><th>Kind</th><th>Source</th><th>Optional</th><th>Weight</th><th>Features</th><th>Reason</th><th>Visible</th></tr>\n");
     for dep in &report.dependencies {
-        s.push_str(&format!("<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td></tr>\n",
-            dep.name, dep.kind, dep.optional, dep.features, dep.reason.as_deref().unwrap_or("-"), dep.is_visible));
+        s.push_str(&format!(
+            "<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td></tr>\n",
+            dep.name,
+            dep.kind,
+            dep.source.as_str(),
+            dep.optional,
+            dep.weight,
+            dep.features,
+            dep.reason.as_deref().unwrap_or("-"),
+            dep.is_visible
+        ));
     }
     s.push_str("</table>\n");
     s
@@ -68,8 +115,14 @@ fn render_public_api(report: &CrateReport) -> String {
 fn render_call_graph(report: &CrateReport) -> String {
     let mut s = String::from("<h2>Call Graph</h2>\n<table border=\"1\"><tr><th>Caller</th><th>Callee</th><th>File</th><th>Line</th><th>Confidence</th></tr>\n");
     for edge in &report.call_graph {
-        s.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:?}</td></tr>\n",
-            edge.caller, edge.callee, edge.file.display(), edge.line, edge.confidence));
+        s.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:?}</td></tr>\n",
+            edge.caller,
+            edge.callee,
+            edge.file.display(),
+            edge.line,
+            edge.confidence
+        ));
     }
     s.push_str("</table>\n");
     s
@@ -82,10 +135,18 @@ fn render_security(report: &CrateReport) -> String {
     } else {
         s.push_str("<table border=\"1\"><tr><th>ID</th><th>Severity</th><th>Title</th><th>File</th><th>Line</th><th>Confidence</th></tr>\n");
         for f in &report.security_findings {
-            s.push_str(&format!("<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td><td>{}</td><td>{:?}</td></tr>\n",
-                f.id, f.severity, f.title,
-                f.file.as_ref().map(|p| p.display().to_string()).unwrap_or("-".into()),
-                f.line.unwrap_or(0), f.confidence));
+            s.push_str(&format!(
+                "<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td><td>{}</td><td>{:?}</td></tr>\n",
+                f.id,
+                f.severity,
+                f.title,
+                f.file
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "-".to_string()),
+                f.line.unwrap_or(0),
+                f.confidence
+            ));
         }
         s.push_str("</table>\n");
     }
@@ -96,7 +157,16 @@ fn render_tests(report: &CrateReport) -> String {
     let mut s = String::from("<h2>Tests</h2>\n");
     s.push_str(&format!("<p>Total: {}</p>\n", report.test_info.total));
     s.push_str(&format!("<p>Unit: {} | Integration: {} | Doc: {}</p>\n",
-        report.test_info.unit_tests, report.test_info.integration_tests, report.test_info.doc_tests));
+        report.test_info.unit_tests,
+        report.test_info.integration_tests,
+        report.test_info.doc_tests));
+    s.push_str(&format!("<p>Compile status: {}</p>\n", report.test_info.compile_status.as_deref().unwrap_or("unknown")));
+    s.push_str(&format!(
+        "<p>Functionality coverage: {}/{} ({}%)</p>\n",
+        report.test_info.functionality_coverage.covered_items,
+        report.test_info.functionality_coverage.public_items,
+        report.test_info.functionality_coverage.coverage_percent,
+    ));
     s.push_str(&format!("<p>Status: {}</p>\n", report.test_info.last_run_status.as_deref().unwrap_or("unknown")));
     s
 }

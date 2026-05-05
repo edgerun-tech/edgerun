@@ -4,6 +4,7 @@ pub mod call_graph;
 pub mod cargo_toml;
 pub mod crate_model;
 pub mod dependency_analyzer;
+pub mod dependency_footprint;
 pub mod errors;
 pub mod footprint;
 pub mod gitvisible;
@@ -22,3 +23,5 @@ pub mod workspace;
 
 pub use crate_model::*;
 pub use errors::*;
+pub use dependency_footprint::{collect_dependency_footprints, write_dependency_footprints};
+pub use report::{generate_report, save_report};

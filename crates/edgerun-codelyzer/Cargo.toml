@@ -38,14 +38,3 @@ grep = "0.3"
 regex = "1"
 dirs = "5"
 rayon = "1.10"
-rusqlite = { version = "0.31", features = ["bundled"] }
-
-[build-dependencies]
-# prost-build removed - using custom binary protocol
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-
-[[bench]]
-name = "parser"
-harness = false
