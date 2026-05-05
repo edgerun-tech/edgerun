@@ -22,6 +22,7 @@ fn varint_io_to_storage_io(err: std::io::Error) -> StorageError {
 }
 
 
+
 /// Hosted filesystem event log using `{events_dir}/{stream_id_hex}.log`.
 #[derive(Clone, Debug)]
 pub struct FsEventLog {
