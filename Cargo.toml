@@ -110,7 +110,7 @@ members = [
   "crates/authority/edgerun-vfs",
   "crates/utility/edgerun-clap",
   "crates/utility/edgerun-clap-derive",
-  "crates/edgerun-wire",
+  "crates/protocol/edgerun-wire",
   "crates/edgerun-event",
   "crates/edgerun-wallet",
   "crates/edgerun-exchange",
@@ -189,7 +189,7 @@ edgerun-regex = { version = "0.1", path = "crates/utility/edgerun-regex" }
 edgerun-email = { version = "0.1", path = "crates/edgerun-email" }
 edgerun-log = { version = "0.1", path = "crates/utility/edgerun-log" }
 edgerun-rt = { version = "0.1", path = "crates/edgerun-rt" }
-edgerun-wire = { version = "0.1", path = "crates/edgerun-wire", default-features = false }
+edgerun-wire = { version = "0.1", path = "crates/protocol/edgerun-wire", default-features = false }
 edgerun-crypto = { version = "0.1", path = "crates/utility/edgerun-crypto", default-features = false }
 edgerun-verify = { version = "0.1", path = "crates/protocol/edgerun-verify", default-features = false }
 edgerun-sign = { version = "0.1", path = "crates/protocol/edgerun-sign", default-features = false }

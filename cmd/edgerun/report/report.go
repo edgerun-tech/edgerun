@@ -95,7 +95,7 @@ func reportAuditRkyv(cmd *cobra.Command, args []string) error {
     if err != nil {
         return err
     }
-    boundary := filepath.Join(root, "crates/edgerun-wire/src/lib.rs")
+    boundary := filepath.Join(root, "crates/protocol/edgerun-wire/src/lib.rs")
     fmt.Println("Rkyv Protocol Boundary Report")
     fmt.Println("=============================")
     if _, err := os.Stat(boundary); err != nil {
