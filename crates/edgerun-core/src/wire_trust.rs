@@ -7,6 +7,7 @@
 use alloc::vec::Vec;
 
 use crate::protocol::*;
+use crate::protocol::trust::assurance_claim::Subject as AssuranceSubject;
 use crate::protocol::trust::revocation_record::Target as RevocationTarget;
 use edgerun_wire::{bytes, boolv, canonical_bytes, field, i64v, struct_value, text, u64v, WireValue};
 
@@ -38,6 +39,16 @@ pub fn revocation_record_signable_bytes(value: &RevocationRecord) -> Vec<u8> {
 #[must_use]
 pub fn revocation_record_full_bytes(value: &RevocationRecord) -> Vec<u8> {
     canonical_bytes(&revocation_record_value(value, false))
+}
+
+#[must_use]
+pub fn assurance_claim_signable_bytes(value: &AssuranceClaim) -> Vec<u8> {
+    canonical_bytes(&assurance_claim_value(value, true))
+}
+
+#[must_use]
+pub fn assurance_claim_full_bytes(value: &AssuranceClaim) -> Vec<u8> {
+    canonical_bytes(&assurance_claim_value(value, false))
 }
 
 fn digest_value(value: &Digest) -> WireValue {
@@ -265,6 +276,38 @@ fn identity_record_value(value: &IdentityRecord, signable: bool) -> WireValue {
     struct_value(fields)
 }
 
+fn assurance_claim_value(value: &AssuranceClaim, signable: bool) -> WireValue {
+    let mut fields = alloc::vec![
+        field(1, u64v(value.claim_version as u64)),
+        field(4, u64v(value.assurance_class as u64)),
+        field(9, text(&value.claim_note)),
+    ];
+    if let Some(subject) = &value.subject {
+        match subject {
+            AssuranceSubject::SubjectIdentity(v) => fields.push(field(2, identity_ref_value(v))),
+            AssuranceSubject::SubjectNode(v) => fields.push(field(3, node_ref_value(v))),
+        }
+    }
+    if let Some(v) = &value.attester {
+        fields.push(field(5, identity_ref_value(v)));
+    }
+    if let Some(v) = &value.issued_at {
+        fields.push(field(6, timestamp_value(v)));
+    }
+    if let Some(v) = &value.expires_at {
+        fields.push(field(7, timestamp_value(v)));
+    }
+    if let Some(v) = &value.evidence_object {
+        fields.push(field(8, object_ref_value(v)));
+    }
+    if !signable {
+        if let Some(v) = &value.signature {
+            fields.push(field(10, signature_value(v)));
+        }
+    }
+    struct_value(fields)
+}
+
 fn delegation_record_value(value: &DelegationRecord, signable: bool) -> WireValue {
     let mut fields = alloc::vec![
         field(1, u64v(value.record_version as u64)),
@@ -371,6 +414,25 @@ mod tests {
         });
         let signable = identity_record_signable_bytes(&record);
         let full = identity_record_full_bytes(&record);
+        assert_eq!(without, signable);
+        assert_ne!(signable, full);
+    }
+
+    #[test]
+    fn assurance_claim_signable_bytes_drop_signature() {
+        let mut claim = AssuranceClaim {
+            claim_version: 1,
+            assurance_class: 1,
+            claim_note: "ok".into(),
+            ..AssuranceClaim::default()
+        };
+        let without = assurance_claim_signable_bytes(&claim);
+        claim.signature = Some(Signature {
+            algorithm: 1,
+            value: alloc::vec![0xab; 64],
+        });
+        let signable = assurance_claim_signable_bytes(&claim);
+        let full = assurance_claim_full_bytes(&claim);
         assert_eq!(without, signable);
         assert_ne!(signable, full);
     }
