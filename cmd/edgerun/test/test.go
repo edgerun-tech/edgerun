@@ -67,13 +67,6 @@ func Cmd() *cobra.Command {
 	})
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "android [start|stop|test|shell]",
-		Short: "Manage Android emulator and run tests",
-		Args:  cobra.MaximumNArgs(1),
-		RunE:  testAndroid,
-	})
-
-	cmd.AddCommand(&cobra.Command{
 		Use:   "miri",
 		Short: "Run Miri memory safety checks",
 		RunE:  testMiri,
@@ -234,60 +227,6 @@ func testOCIDind(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("Running Docker-in-Docker test...")
 	return runCmd(root, "bash", "tests/dind/run.sh")
-}
-
-func testAndroid(cmd *cobra.Command, args []string) error {
-	action := ""
-	if len(args) > 0 {
-		action = args[0]
-	}
-
-	androidHome := os.Getenv("ANDROID_HOME")
-	if androidHome == "" {
-		return fmt.Errorf("ANDROID_HOME not set")
-	}
-
-	switch action {
-	case "start", "":
-		fmt.Println("Starting Android emulator...")
-		avd := os.Getenv("ANDROID_AVD")
-		if avd == "" {
-			avd = "edgerun-test"
-		}
-		// Create AVD if not exists
-		runCmdSilent("", androidHome+"/cmdline-tools/latest/bin/avdmanager", "list", "avd")
-		// Start emulator headless
-		cmd := exec.Command(androidHome+"/emulator/emulator", "-avd", avd, "-no-window", "-no-audio", "-gpu", "swiftshader_indirect")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		fmt.Println("Waiting for boot completion...")
-		// Wait for boot
-		for i := 0; i < 120; i++ {
-			out, _ := runCmdSilent("", androidHome+"/platform-tools/adb", "shell", "getprop", "sys.boot_completed")
-			if strings.TrimSpace(string(out)) == "1" {
-				fmt.Println("Emulator booted.")
-				return nil
-			}
-		}
-		return fmt.Errorf("emulator did not boot within 2 minutes")
-	case "stop":
-		fmt.Println("Stopping Android emulator...")
-		return runCmd("", "pkill", "-f", "emulator")
-	case "test":
-		fmt.Println("Running Android hardware tests...")
-		root, err := findRepoRoot()
-		if err != nil {
-			return err
-		}
-		return runCmd(root, "cargo", "test", "-p", "edgerun-android-hardware", "-p", "edgerun-android-keystore")
-	case "shell":
-		return runCmd("", os.Getenv("ANDROID_HOME")+"/platform-tools/adb", "shell")
-	default:
-		return fmt.Errorf("unknown action: %s (use start, stop, test, shell)", action)
-	}
 }
 
 func testMiri(cmd *cobra.Command, args []string) error {

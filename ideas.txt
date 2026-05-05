@@ -1,3 +1,0 @@
-browser tabs as nodes, edgerun runtime in wasm? webrtc for comms, server can mediate
-browser jobs, compiling, github actions
-mqtt in browser/ client, streams
