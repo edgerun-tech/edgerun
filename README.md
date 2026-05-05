@@ -26,6 +26,9 @@ The v0 protocol has five central rules:
 
 ## Implementation Map
 
+For a fuller architecture and consolidation map, see `docs/architecture.md`.
+
+
 | Layer | Main crates | What the code actually does |
 |---|---|---|
 | Protocol core | `edgerun-core`, `edgerun-wire` | Owns native protocol records, rkyv wire boundary exports, domain-separated hashes/signature inputs, and command/stream/delegation/snapshot/query/network/identity/proof/trust validation. |
