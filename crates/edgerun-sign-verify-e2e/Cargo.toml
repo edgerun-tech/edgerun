@@ -18,7 +18,7 @@ edgerun-sign = { workspace = true, default-features = false }
 edgerun-sign-p256 = { workspace = true, default-features = false }
 edgerun-keygen = { workspace = true, default-features = false }
 edgerun-node-bootstrap = { workspace = true, default-features = false }
-edgerun-stream = { workspace = true, default-features = false }
+edgerun-stream = { workspace = true }
 
 [features]
 default = ["std"]

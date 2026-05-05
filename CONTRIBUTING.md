@@ -2,7 +2,7 @@
 
 Edgerun Core is a protocol-first Rust workspace. Before changing core behavior,
 preserve the rkyv wire boundary and the protocol invariants documented in
-`AGENTS.md` and `docs/rfc/RFC-0001-protocol-core.md`.
+`AGENTS.md` and `README.md`.
 
 ## License
 

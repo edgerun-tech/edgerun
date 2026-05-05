@@ -1197,6 +1197,7 @@ dependencies = [
  "edgerun-node-bootstrap",
  "edgerun-sign",
  "edgerun-sign-p256",
+ "edgerun-stream",
  "edgerun-verify",
 ]
 
