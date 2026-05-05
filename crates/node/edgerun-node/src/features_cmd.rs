@@ -787,11 +787,20 @@ fn feature_report_json() -> String {
             "\"oci_gzip\":{},",
             "\"oci_zstd\":{},",
             "\"tls\":{},",
+            "\"https\":{},",
             "\"quic\":{},",
             "\"tftp\":{},",
             "\"acme\":{},",
+            "\"http\":{},",
+            "\"dns\":{},",
+            "\"dhcp\":{},",
+            "\"smtp\":{},",
+            "\"imap\":{},",
+            "\"proxy\":{},",
+            "\"sqlite\":{},",
             "\"android_keystore\":{},",
             "\"compositor\":{},",
+            "\"display\":{},",
             "\"hardware\":{},",
             "\"all_hardware\":{}",
             "}},",
@@ -808,11 +817,20 @@ fn feature_report_json() -> String {
         cfg!(feature = "oci"),
         cfg!(feature = "oci"),
         cfg!(feature = "tls"),
+        cfg!(feature = "https"),
         cfg!(feature = "quic"),
         cfg!(feature = "tftp"),
         cfg!(feature = "acme"),
+        cfg!(feature = "http"),
+        cfg!(feature = "dns"),
+        cfg!(feature = "dhcp"),
+        cfg!(feature = "smtp"),
+        cfg!(feature = "imap"),
+        cfg!(feature = "proxy"),
+        cfg!(feature = "sqlite"),
         cfg!(feature = "android-keystore"),
         cfg!(feature = "compositor"),
+        display_compiled(),
         cfg!(feature = "hardware"),
         cfg!(feature = "all-hardware"),
         compiled_components_json(),
@@ -866,6 +884,9 @@ fn compiled_components_json() -> String {
     if cfg!(feature = "tls") {
         parts.push("\"tls\"");
     }
+    if cfg!(feature = "https") {
+        parts.push("\"https\"");
+    }
     if cfg!(feature = "quic") {
         parts.push("\"quic\"");
     }
@@ -875,6 +896,27 @@ fn compiled_components_json() -> String {
     if cfg!(feature = "acme") {
         parts.push("\"acme\"");
         parts.push("\"acme-dns-01\"");
+    }
+    if cfg!(feature = "http") {
+        parts.push("\"http\"");
+    }
+    if cfg!(feature = "dns") {
+        parts.push("\"dns\"");
+    }
+    if cfg!(feature = "dhcp") {
+        parts.push("\"dhcp\"");
+    }
+    if cfg!(feature = "smtp") {
+        parts.push("\"smtp\"");
+    }
+    if cfg!(feature = "imap") {
+        parts.push("\"imap\"");
+    }
+    if cfg!(feature = "proxy") {
+        parts.push("\"proxy\"");
+    }
+    if cfg!(feature = "sqlite") {
+        parts.push("\"sqlite\"");
     }
     if cfg!(feature = "android-keystore") {
         parts.push("\"android-keystore\"");
@@ -890,7 +932,6 @@ fn compiled_components_json() -> String {
     }
     if cfg!(feature = "all-hardware") {
         parts.push("\"gpu\"");
-        parts.push("\"drm-display\"");
         parts.push("\"fingerprint\"");
         parts.push("\"bluetooth\"");
         parts.push("\"wifi\"");
@@ -904,6 +945,9 @@ fn compiled_components_json() -> String {
         parts.push("\"virtual-disk\"");
         parts.push("\"machine-report\"");
     }
+    if display_compiled() {
+        parts.push("\"drm-display\"");
+    }
 
     parts.join(",")
 }
@@ -916,6 +960,10 @@ fn compositor_compiled() -> bool {
 #[cfg(not(feature = "compositor"))]
 fn compositor_compiled() -> bool {
     false
+}
+
+fn display_compiled() -> bool {
+    cfg!(feature = "display") || cfg!(feature = "all-hardware")
 }
 
 fn escape_json(value: &str) -> String {

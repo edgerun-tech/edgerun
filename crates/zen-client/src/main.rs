@@ -117,10 +117,11 @@ struct Message {
 fn parse_response(text: &str) -> (String, Vec<Action>) {
     let mut actions = Vec::new();
     let mut clean = String::new();
-    let mut chars = text.char_indices();
+    let mut idx = 0;
 
-    while let Some((idx, c)) = chars.next() {
-        if c == '[' && text[idx..].starts_with("[action:") {
+    while idx < text.len() {
+        let rest = &text[idx..];
+        if rest.starts_with("[action:") {
             let start = idx + 8;
             if let Some(end) = text[start..].find(']') {
                 let inner = &text[start..start + end];
@@ -130,15 +131,14 @@ fn parse_response(text: &str) -> (String, Vec<Action>) {
                         payload: inner[colon + 1..].to_string(),
                     });
                 }
-                for _ in 0..(8 + end + 1) {
-                    if chars.next().is_none() {
-                        break;
-                    }
-                }
+                idx = start + end + 1;
                 continue;
             }
         }
-        clean.push(c);
+
+        let ch = rest.chars().next().expect("idx is within text");
+        clean.push(ch);
+        idx += ch.len_utf8();
     }
 
     (clean.trim().to_string(), actions)
@@ -148,6 +148,39 @@ fn parse_response(text: &str) -> (String, Vec<Action>) {
 struct Action {
     action: String,
     payload: String,
+}
+
+#[derive(Debug, Clone)]
+struct ToolResult {
+    action: String,
+    ok: bool,
+    output: String,
+}
+
+impl ToolResult {
+    fn success(action: &Action, output: String) -> Self {
+        Self {
+            action: action.action.clone(),
+            ok: true,
+            output,
+        }
+    }
+
+    fn failure(action: &Action, output: String) -> Self {
+        Self {
+            action: action.action.clone(),
+            ok: false,
+            output,
+        }
+    }
+
+    fn as_prompt_text(&self) -> String {
+        let status = if self.ok { "success" } else { "failed" };
+        format!(
+            "tool: {}\nstatus: {}\noutput:\n{}\n---END TOOL RESULT---",
+            self.action, status, self.output
+        )
+    }
 }
 
 fn execute_action(action: &Action) -> Result<String, String> {
@@ -474,7 +507,8 @@ fn main() {
     let result: Result<(), String> = edgerun_rt::block_on(async {
         let client = Client::new();
 
-        let self_source = std::fs::read_to_string("crates/zen-client/src/main.rs")
+        let self_source = std::fs::read_to_string("zen-client/src/main.rs")
+            .or_else(|_| std::fs::read_to_string("crates/zen-client/src/main.rs"))
             .unwrap_or_else(|_| "Failed to read self source".to_string());
 
         let system_info = gather_system_info();
@@ -502,19 +536,22 @@ fn main() {
 ```
 
 ## Available Tools
+Call tools by emitting one or more exact action tokens in your response:
+`[action:tool-name:payload]`
+
 | Tool | Format | Purpose |
 |------|--------|---------|
-| read-file | `read-file:path` | Read file contents |
-| edit-file | `edit-file:path|old|new` | AST-level code edit |
-| add-use | `add-use:path|use_stmt` | Add import |
-| rename-type | `rename-type:path|old|new` | Rename type |
-| add-fn | `add-fn:path|name|body` | Add function |
-| remove-fn | `remove-fn:path|name` | Remove function |
-| replace-fn-body | `replace-fn-body:path|name|new_body` | Replace function body |
-| add-derive | `add-derive:path|type|derive` | Add derive attribute |
-| find-fn | `find-fn:path|name` | Find function |
-| list-files | `list-files:path` | List directory |
-| spawn-agent | `spawn-agent:prompt` | Spawn new agent |
+| read-file | `[action:read-file:path]` | Read file contents |
+| edit-file | `[action:edit-file:path|old|new]` | Exact text replacement |
+| add-use | `[action:add-use:path|use_stmt]` | Add import |
+| rename-type | `[action:rename-type:path|old|new]` | Rename type |
+| add-fn | `[action:add-fn:path|name|body]` | Add function |
+| remove-fn | `[action:remove-fn:path|name]` | Remove function |
+| replace-fn-body | `[action:replace-fn-body:path|name|new_body]` | Replace function body |
+| add-derive | `[action:add-derive:path|type|derive]` | Add derive attribute |
+| find-fn | `[action:find-fn:path|name]` | Find function |
+| list-files | `[action:list-files:path]` | List directory |
+| spawn-agent | `[action:spawn-agent:prompt]` | Spawn new agent |
 
 ## Your Purpose
 Figure out what you were built for and do what you think is best:
@@ -574,12 +611,12 @@ Figure out what you were built for and do what you think is best:
             for action in &actions {
                 match execute_action(action) {
                     Ok(msg) => {
-                        println!("  [executed] {}", msg);
-                        results.push(format!("{}: success", action.action));
+                        println!("  [executed] {}", msg.lines().next().unwrap_or(&msg));
+                        results.push(ToolResult::success(action, msg));
                     }
                     Err(e) => {
                         eprintln!("  [failed] {}: {}", action.action, e);
-                        results.push(format!("{}: failed - {}", action.action, e));
+                        results.push(ToolResult::failure(action, e));
                     }
                 }
             }
@@ -594,7 +631,14 @@ Figure out what you were built for and do what you think is best:
             });
             messages.push(Message {
                 role: "user",
-                content: format!("Results:\n{}", results.join("\n")),
+                content: format!(
+                    "Tool results:\n{}",
+                    results
+                        .iter()
+                        .map(ToolResult::as_prompt_text)
+                        .collect::<Vec<_>>()
+                        .join("\n\n")
+                ),
             });
 
             if messages.len() > 22 {
@@ -606,5 +650,36 @@ Figure out what you were built for and do what you think is best:
     if let Err(e) = result {
         eprintln!("Error: {}", e);
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_response_removes_action_without_eating_following_text() {
+        let (text, actions) =
+            parse_response("Read this [action:read-file:zen-client/src/main.rs] then continue.");
+
+        assert_eq!(text, "Read this  then continue.");
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].action, "read-file");
+        assert_eq!(actions[0].payload, "zen-client/src/main.rs");
+    }
+
+    #[test]
+    fn tool_result_prompt_includes_real_output() {
+        let action = Action {
+            action: "read-file".to_string(),
+            payload: "foo.rs".to_string(),
+        };
+
+        let result = ToolResult::success(&action, "fn main() {}".to_string());
+        let prompt = result.as_prompt_text();
+
+        assert!(prompt.contains("tool: read-file"));
+        assert!(prompt.contains("status: success"));
+        assert!(prompt.contains("fn main() {}"));
     }
 }

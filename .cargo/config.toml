@@ -32,9 +32,9 @@ rustflags = ["-C", "relocation-model=static"]
 linker = "/home/ken/edgerun_core/devices/edgerun-tcl-usb-ap-bridge/.embuild/espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc"
 
 [build]
-# WebAssembly builds are the default workspace target during the current
-# bootstrap/runtime boundary work. Platform targets remain explicit overrides.
-target = "wasm32-unknown-unknown"
+# Native Linux is the default workspace target for local development and tests.
+# Platform targets remain explicit overrides.
+target = "x86_64-unknown-linux-gnu"
 
 # Android cross-compilation — override with --target
 # Set ANDROID_NDK_ROOT to your NDK installation path

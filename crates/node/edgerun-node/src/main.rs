@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+mod bind_check;
 mod capacity;
 mod command_dispatch;
 mod command_dispatch_event;

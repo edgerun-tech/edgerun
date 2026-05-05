@@ -35,7 +35,6 @@ members = [
   "crates/capability/edgerun-capability-policy",
   "crates/device-types/edgerun-cec",
   "crates/protocol/edgerun-core",
-  "crates/edgerun-codex-boost",
   "crates/edgerun-compositor",
   "crates/utility/edgerun-crypto",
   "crates/protocol/edgerun-verify",
@@ -213,7 +212,6 @@ edgerun-edit = { version = "0.1", path = "crates/edgerun-edit" }
 edgerun-display = { version = "0.1", path = "crates/device-types/edgerun-display" }
 edgerun-gpu = { version = "0.1", path = "crates/device-types/edgerun-gpu" }
 edgerun-clap = { version = "0.1", path = "crates/utility/edgerun-clap" }
-edgerun-codex-boost = { version = "0.1", path = "crates/edgerun-codex-boost" }
 edgerun-virtio = { version = "0.1", path = "crates/edgerun-virtio" }
 edgerun-event = { version = "0.1", path = "crates/edgerun-event" }
 edgerun-wallet = { version = "0.1", path = "crates/edgerun-wallet" }

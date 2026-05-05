@@ -17,6 +17,7 @@
 use std::env;
 use std::path::PathBuf;
 
+use crate::bind_check::cmd_bind_check;
 use crate::features_cmd::{cmd_features, cmd_self_test, cmd_self_test_child};
 use crate::init_cmd::{cmd_init, cmd_init_encrypted, cmd_init_provisioned, cmd_provision};
 use crate::status_cmd::cmd_status;
@@ -47,6 +48,9 @@ pub enum Command {
         config: PathBuf,
     },
     Features,
+    BindCheck {
+        standard_ports: bool,
+    },
     SelfTest,
     SelfTestChild,
 }
@@ -213,6 +217,21 @@ pub fn parse_args() -> Result<Command, String> {
             Ok(Command::Status { config })
         }
         "features" | "capabilities" => Ok(Command::Features),
+        "bind-check" => {
+            let mut standard_ports = false;
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--standard-ports" => standard_ports = true,
+                    "--help" | "-h" => {
+                        return Err("Usage: edgerund bind-check [--standard-ports]".into());
+                    }
+                    other => return Err(format!("unknown option: {}", other)),
+                }
+                i += 1;
+            }
+            Ok(Command::BindCheck { standard_ports })
+        }
         "self-test" => Ok(Command::SelfTest),
         "self-test-child" => Ok(Command::SelfTestChild),
         "help" | "--help" | "-h" => Err(help_text()),
@@ -263,6 +282,9 @@ pub fn main() {
         Command::Features => {
             cmd_features();
         }
+        Command::BindCheck { standard_ports } => {
+            cmd_bind_check(standard_ports);
+        }
         Command::SelfTest => {
             cmd_self_test();
         }
@@ -273,5 +295,5 @@ pub fn main() {
 }
 
 fn help_text() -> String {
-    "edgerun Node Daemon\n\nCommands:\n  init              Generate node identity\n  init-encrypted    Generate encrypted software identity\n  init-provisioned  Generate provisioned node identity\n  provision         Provision a node with a controller\n  status            Show node identity\n  features          Show compiled-in features/capabilities\n  self-test         Copy this executable and test the copy\n  help              Show this help".into()
+    "edgerun Node Daemon\n\nCommands:\n  init              Generate node identity\n  init-encrypted    Generate encrypted software identity\n  init-provisioned  Generate provisioned node identity\n  provision         Provision a node with a controller\n  status            Show node identity\n  features          Show compiled-in features/capabilities\n  bind-check        Bind enabled service listeners and report them\n  self-test         Copy this executable and test the copy\n  help              Show this help".into()
 }

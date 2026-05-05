@@ -479,19 +479,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-codex-boost"
-version = "0.1.1"
-dependencies = [
- "edgerun-capabilities",
- "edgerun-capability-policy",
- "edgerun-core",
- "edgerun-json",
- "edgerun-sign",
- "edgerun-storage",
- "edgerun-wire",
-]
-
-[[package]]
 name = "edgerun-compositor"
 version = "0.1.1"
 dependencies = [
@@ -1000,6 +987,7 @@ dependencies = [
  "edgerun-compositor",
  "edgerun-core",
  "edgerun-crypto",
+ "edgerun-dhcp",
  "edgerun-drm-display",
  "edgerun-encoding",
  "edgerun-evdev-input",
@@ -1007,6 +995,7 @@ dependencies = [
  "edgerun-fingerprint",
  "edgerun-goodix-fingerprint",
  "edgerun-hardware-signing",
+ "edgerun-http",
  "edgerun-input",
  "edgerun-json",
  "edgerun-keygen",
@@ -1033,10 +1022,12 @@ dependencies = [
  "edgerun-oci",
  "edgerun-pci",
  "edgerun-power",
+ "edgerun-proxy",
  "edgerun-quic",
  "edgerun-remote-capability",
  "edgerun-rt",
  "edgerun-seal",
+ "edgerun-server",
  "edgerun-sign",
  "edgerun-sign-p256",
  "edgerun-speaker",
@@ -1051,6 +1042,7 @@ dependencies = [
  "edgerun-wifi",
  "edgerun-wire",
  "edgerun-yubikey",
+ "rusqlite",
 ]
 
 [[package]]

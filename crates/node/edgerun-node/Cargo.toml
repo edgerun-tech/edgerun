@@ -21,12 +21,40 @@ default = [
     "oci",
     "compositor",
     "protocols",
+    "service-suite",
 ]
 protocols = ["tls", "quic", "tftp", "acme"]
 tls = ["dep:edgerun-tls"]
-quic = ["dep:edgerun-quic", "tls"]
+quic = ["dep:edgerun-quic", "tls", "edgerun-server?/http3"]
 tftp = ["dep:edgerun-tftp"]
 acme = ["dep:edgerun-acme"]
+service-suite = [
+    "http",
+    "https",
+    "dns",
+    "dhcp",
+    "smtp",
+    "imap",
+    "proxy",
+    "sqlite",
+]
+full = [
+    "std",
+    "all-hardware",
+    "oci",
+    "compositor",
+    "protocols",
+    "service-suite",
+]
+display = ["dep:edgerun-drm-display"]
+http = ["dep:edgerun-http", "dep:edgerun-server", "edgerun-http/server", "edgerun-server/std"]
+https = ["http", "tls", "edgerun-http/tls", "edgerun-server/tls"]
+dns = ["http", "edgerun-server/dns"]
+dhcp = ["http", "dep:edgerun-dhcp", "edgerun-server/dhcp"]
+smtp = ["http", "edgerun-server/smtp"]
+imap = ["http", "edgerun-server/imap"]
+proxy = ["http", "dep:edgerun-proxy", "edgerun-server/proxy"]
+sqlite = ["http", "dep:rusqlite", "edgerun-server/sqlite"]
 android-keystore = ["dep:edgerun-android-keystore"]
 oci = [
     "dep:edgerun-oci",
@@ -102,6 +130,11 @@ edgerun-tls = { workspace = true, optional = true }
 edgerun-quic = { workspace = true, features = ["std"], optional = true }
 edgerun-tftp = { workspace = true, features = ["server"], optional = true }
 edgerun-acme = { workspace = true, features = ["dns_challenge"], optional = true }
+edgerun-http = { workspace = true, optional = true }
+edgerun-server = { version = "0.1", path = "../edgerun-server", default-features = false, optional = true }
+edgerun-dhcp = { version = "0.1", path = "../../edgerun-dhcp", optional = true }
+edgerun-proxy = { workspace = true, optional = true }
+rusqlite = { version = "0.32", default-features = false, features = ["bundled"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 edgerun-linux-netif = { version = "0.1", path = "../../linux-adapters/edgerun-linux-netif" }
