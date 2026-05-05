@@ -257,17 +257,19 @@ fn decode_exchange_payload(payload_bytes: &[u8]) -> Option<WalletExchangeEventPa
                 observed_at_ms: reader.u64()?,
             },
         )),
-        4 => Some(wallet_exchange_event_payload::Event::ProviderStatusObserved(
-            WalletProviderStatusObservedPayload {
-                payload_version: reader.u32()?,
-                order_id: reader.string()?,
-                provider_code_internal: reader.option_string()?,
-                provider_order_id_internal: reader.string()?,
-                provider_status_string: reader.string()?,
-                mapped_canonical_status: reader.i32()?,
-                observed_at_ms: reader.u64()?,
-            },
-        )),
+        4 => Some(
+            wallet_exchange_event_payload::Event::ProviderStatusObserved(
+                WalletProviderStatusObservedPayload {
+                    payload_version: reader.u32()?,
+                    order_id: reader.string()?,
+                    provider_code_internal: reader.option_string()?,
+                    provider_order_id_internal: reader.string()?,
+                    provider_status_string: reader.string()?,
+                    mapped_canonical_status: reader.i32()?,
+                    observed_at_ms: reader.u64()?,
+                },
+            ),
+        ),
         5 => Some(wallet_exchange_event_payload::Event::OrderStatusChanged(
             WalletOrderStatusChangedPayload {
                 payload_version: reader.u32()?,

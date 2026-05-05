@@ -161,7 +161,10 @@ pub fn signed_events(iterations: usize) -> Result<(Vec<EventEnvelope>, [u8; 64])
     Ok((events, public_key))
 }
 
-pub fn verify_prebuilt_events(events: &[EventEnvelope], public_key: &[u8; 64]) -> Result<usize, E2eError> {
+pub fn verify_prebuilt_events(
+    events: &[EventEnvelope],
+    public_key: &[u8; 64],
+) -> Result<usize, E2eError> {
     let mut ok = 0usize;
     for event in events {
         verify_event_envelope(event, ProtocolSignerRef::P256Raw64(public_key))

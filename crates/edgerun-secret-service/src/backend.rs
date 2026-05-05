@@ -450,7 +450,10 @@ impl Backend {
             collection_name: collection_name.into(),
             label: label.into(),
         };
-        (self.record_event)("collection_created", encode_collection_created_payload(&payload))
+        (self.record_event)(
+            "collection_created",
+            encode_collection_created_payload(&payload),
+        )
     }
 
     /// Deletes a collection (records the event and removes items from index).
@@ -472,7 +475,10 @@ impl Backend {
             collection_name: collection_name.into(),
             items_removed: count,
         };
-        (self.record_event)("collection_deleted", encode_collection_deleted_payload(&payload))?;
+        (self.record_event)(
+            "collection_deleted",
+            encode_collection_deleted_payload(&payload),
+        )?;
 
         Ok(count)
     }
@@ -1211,7 +1217,9 @@ fn decode_secret_delete_payload(bytes: &[u8]) -> Result<SecretDeletePayload, &'s
     })
 }
 
-fn decode_collection_deleted_payload(bytes: &[u8]) -> Result<CollectionDeletedPayload, &'static str> {
+fn decode_collection_deleted_payload(
+    bytes: &[u8],
+) -> Result<CollectionDeletedPayload, &'static str> {
     let mut reader = SecretPayloadReader::new(bytes);
     let payload_version = reader.header(4)?;
     let collection_name = reader.string()?;

@@ -111,7 +111,8 @@ mod tests {
             .unwrap();
         event.signature = Some(signed.signature);
 
-        let verified = verify_event_envelope(&event, ProtocolSignerRef::P256Raw64(&writer)).unwrap();
+        let verified =
+            verify_event_envelope(&event, ProtocolSignerRef::P256Raw64(&writer)).unwrap();
         assert_eq!(verified.family, ProtocolFamily::EventEnvelope);
         assert_eq!(verified.record_hash, signed.record_hash);
     }

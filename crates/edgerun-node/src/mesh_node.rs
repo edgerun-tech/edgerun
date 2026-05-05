@@ -865,9 +865,7 @@ impl<'a> CommandReader<'a> {
         }
     }
 
-    fn payload(
-        &mut self,
-    ) -> Option<Option<edgerun_core::protocol::command_envelope::Payload>> {
+    fn payload(&mut self) -> Option<Option<edgerun_core::protocol::command_envelope::Payload>> {
         match self.u8()? {
             0 => Some(None),
             1 => {

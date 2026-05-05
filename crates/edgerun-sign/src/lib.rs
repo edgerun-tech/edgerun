@@ -8,7 +8,9 @@ use edgerun_core::protocol::{
     AssuranceClaim, CommandEnvelope, DelegationRecord, EventEnvelope, IdentityRecord,
     ProtocolRecord, RevocationRecord, RouteAdvertisement, Signature,
 };
-use edgerun_verify::{protocol_record_hash, protocol_signable_bytes, ProtocolFamily, ProtocolVerifyError};
+use edgerun_verify::{
+    protocol_record_hash, protocol_signable_bytes, ProtocolFamily, ProtocolVerifyError,
+};
 
 pub use edgerun_verify::ProtocolFamily as SignableProtocolFamily;
 

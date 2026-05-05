@@ -9,11 +9,6 @@ homepage.workspace = true
 description = "Unified multi-protocol server: HTTP, SMTP, IMAP, LMTP, DNS, DHCP, TFTP, Proxy"
 
 [[bin]]
-name = "http-server"
-path = "src/bin/http-server.rs"
-required-features = ["std", "http3"]
-
-[[bin]]
 name = "edgerun-server"
 path = "src/bin/edgerun-server.rs"
 required-features = ["std", "smtp", "imap", "dns", "tls"]

@@ -1,7 +1,7 @@
 //! edgerun Stream — the append-only, single-writer event log.
 //!
 //! Events are signed over rkyv archived bytes with the signature
-//! field omitted. 
+//! field omitted.
 
 #![no_std]
 
