@@ -4,32 +4,22 @@
 ///
 /// Scans directories for tracked source files, computes a fast content hash,
 /// and diffs snapshots to detect new / modified / deleted files.
-use std::collections::HashMap;
-use std::{fs, path::Path, time::UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 /// Extensions we care about.
 const TRACKED_EXTS: &[&str] = &[".c", ".h", ".rs", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".go", ".java"];
 
 const IGNORED_DIRS: &[&str] = &[
-    ".git",
-    ".next",
-    ".turbo",
-    "build",
-    "coverage",
-    "dist",
-    "node_modules",
-    "out",
-    "target",
-    "third_party",
-    "vendor",
+    ".git", ".next", ".turbo", "build", "coverage", "dist", "node_modules", "out", "target",
+    "third_party", "vendor",
 ];
 
-const IGNORED_GENERATED_PREFIXES: &[&str] = &[
-    "zerrors_",
-    "zsyscall_",
-    "zsysnum_",
-    "ztypes_",
-];
+const IGNORED_GENERATED_PREFIXES: &[&str] = &["zerrors_", "zsyscall_", "zsysnum_", "ztypes_"];
 
 /// Metadata about a single tracked source file.
 #[derive(Debug, Clone)]
@@ -82,7 +72,7 @@ pub fn scan_dir(root: &str) -> Vec<FileInfo> {
 }
 
 fn scan_recursive(root: &Path, current: &Path, out: &mut Vec<FileInfo>) {
-    let Ok(entries) = fs::read_dir(current) else {
+    let Ok(entries) = std::fs::read_dir(current) else {
         return;
     };
 
@@ -97,95 +87,44 @@ fn scan_recursive(root: &Path, current: &Path, out: &mut Vec<FileInfo>) {
         if path.is_dir() {
             scan_recursive(root, &path, out);
         } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            let dot_ext = format!(".{}", ext);
+            let dot_ext = format!(".{ext}");
             if TRACKED_EXTS.contains(&dot_ext.as_str()) {
-                if let Some(info) = file_info(&path, root) {
-                    out.push(info);
-                }
+                let rel = path
+                    .strip_prefix(root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .to_string();
+                let metadata = path.metadata().ok();
+                let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+                let modified_ts = metadata
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let hash = compute_hash(&path);
+                out.push(FileInfo {
+                    path: rel,
+                    language: ext_to_lang(ext),
+                    size,
+                    modified_ts,
+                    hash,
+                });
             }
         }
     }
 }
 
 fn should_skip_dir_or_file(name: &str) -> bool {
-    if name.starts_with('.') && name != ".storybook" {
-        return true;
-    }
     if IGNORED_DIRS.contains(&name) {
         return true;
     }
-    IGNORED_GENERATED_PREFIXES.iter().any(|prefix| name.starts_with(prefix))
-}
-
-fn file_info(path: &Path, root: &Path) -> Option<FileInfo> {
-    let metadata = fs::metadata(path).ok()?;
-    let size = metadata.len();
-
-    let modified_ts = metadata
-        .modified()
-        .ok()?
-        .duration_since(UNIX_EPOCH)
-        .ok()?
-        .as_secs();
-
-    let content = fs::read_to_string(path).ok()?;
-    let hash = rolling_hash(content.as_bytes());
-
-    let language = lang_from_ext(path.extension()?.to_str()?);
-    let rel = make_relative(path, root);
-
-    Some(FileInfo {
-        path: rel,
-        language: language.to_string(),
-        size,
-        modified_ts,
-        hash,
-    })
-}
-
-/// Diff two snapshots. Uses path as the key.
-#[allow(dead_code)]
-pub fn diff_files(old: &[FileInfo], new: &[FileInfo]) -> FileChanges {
-    let old_map: HashMap<&str, &FileInfo> = old.iter().map(|f| (f.path.as_str(), f)).collect();
-    let new_map: HashMap<&str, &FileInfo> = new.iter().map(|f| (f.path.as_str(), f)).collect();
-
-    let mut changes = FileChanges::default();
-
-    // Detect added and modified
-    for (path, &new_info) in &new_map {
-        if let Some(&old_info) = old_map.get(path) {
-            if old_info.hash != new_info.hash {
-                changes.modified.push(new_info.clone());
-            } else {
-                changes.unchanged.push(new_info.clone());
-            }
-        } else {
-            changes.added.push(new_info.clone());
-        }
+    if IGNORED_GENERATED_PREFIXES.iter().any(|p| name.starts_with(p)) {
+        return true;
     }
-
-    // Detect deleted
-    for (path, &old_info) in &old_map {
-        if !new_map.contains_key(path) {
-            changes.deleted.push(old_info.clone());
-        }
-    }
-
-    changes
+    false
 }
 
-/// Fast non-cryptographic rolling hash (FNV-1a variant on bytes).
-/// Good enough for content-change detection; very fast.
-pub fn rolling_hash(data: &[u8]) -> u64 {
-    let mut hash: u64 = 0xcbf29ce484222325; // FNV offset basis
-    for &byte in data {
-        hash ^= byte as u64;
-        hash = hash.wrapping_mul(0x100000001b3); // FNV prime
-    }
-    hash
-}
-
-fn lang_from_ext(ext: &str) -> &'static str {
+fn ext_to_lang(ext: &str) -> String {
     match ext {
         "c" | "h" => "c",
         "rs" => "rust",
@@ -196,42 +135,63 @@ fn lang_from_ext(ext: &str) -> &'static str {
         "java" => "java",
         _ => "unknown",
     }
+    .to_string()
 }
 
-fn make_relative(path: &Path, root: &Path) -> String {
-    path.strip_prefix(root)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .replace('\\', "/")
+fn compute_hash(path: &Path) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    if let Ok(bytes) = std::fs::read(path) {
+        bytes.hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
-/// Load the full repo into a VFS, excluding build/output dirs.
-/// Requires the `vfs` feature and edgerun-vfs as a dependency.
-#[cfg(feature = "vfs")]
-pub fn load_vfs(root: &str) -> Result<edgerun_vfs::SharedVFS, String> {
-    use edgerun_vfs::VirtualFileSystem;
-
-    let exclude_dirs = &["target", "node_modules", ".git", "build", "dist", "out", "coverage", ".next", ".turbo", "third_party", "vendor"];
-
-    let vfs = VirtualFileSystem::load_excluding(root, exclude_dirs)
-        .map_err(|e| format!("VFS load failed: {e}"))?;
-
-    Ok(std::sync::Arc::new(std::sync::RwLock::new(vfs)))
-}
-
-// ─── Parse Cache ──────────────────────────────────────────────────────
-
-use std::path::PathBuf;
-
-use serde::{Deserialize, Serialize};
+// ─── Parse Cache ──────────────────────────────────────────────
 
 /// A cache entry for a single parsed file.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CacheEntry {
     pub file_hash: u64,
     pub mtime: u64,
     pub functions: Vec<crate::parser::RawFunctionOwned>,
     pub calls: Vec<crate::parser::RawCallOwned>,
+}
+
+impl CacheEntry {
+    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+        use crate::generated::codeanalyzer::binary::*;
+        encode_u64(w, self.file_hash)?;
+        encode_u64(w, self.mtime)?;
+        // encode repeated RawFunctionOwned
+        encode_u64(w, self.functions.len() as u64)?;
+        for f in &self.functions {
+            f.encode(w)?;
+        }
+        // encode repeated RawCallOwned
+        encode_u64(w, self.calls.len() as u64)?;
+        for c in &self.calls {
+            c.encode(w)?;
+        }
+        Ok(())
+    }
+
+    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
+        use crate::generated::codeanalyzer::binary::*;
+        let file_hash = decode_u64(r)?;
+        let mtime = decode_u64(r)?;
+        let fn_count = decode_u64(r)? as usize;
+        let mut functions = Vec::with_capacity(fn_count);
+        for _ in 0..fn_count {
+            functions.push(crate::parser::RawFunctionOwned::decode(r)?);
+        }
+        let call_count = decode_u64(r)? as usize;
+        let mut calls = Vec::with_capacity(call_count);
+        for _ in 0..call_count {
+            calls.push(crate::parser::RawCallOwned::decode(r)?);
+        }
+        Ok(Self { file_hash, mtime, functions, calls })
+    }
 }
 
 /// Persistent parse cache that stores parsed results on disk.
@@ -246,14 +206,28 @@ pub struct ParseCache {
 
 impl ParseCache {
     /// Load the cache from disk. The cache file is stored under
-    /// ~/.cache/codeanalyzer/<hash(root_dir)>.json.
+    /// <cache_dir>/<hash(root_dir)>.bin.
     pub fn load(root_dir: &str) -> Self {
         let cache_dir = cache_dir();
         let cache_file = cache_file_path(&cache_dir, root_dir);
 
         let entries = if cache_file.exists() {
-            if let Ok(content) = std::fs::read_to_string(&cache_file) {
-                serde_json::from_str(&content).unwrap_or_default()
+            if let Ok(bytes) = std::fs::read(&cache_file) {
+                let mut cursor = std::io::Cursor::new(bytes);
+                let count = crate::generated::codeanalyzer::binary::decode_u64(&mut cursor).ok();
+                if let Some(count) = count {
+                    let mut map = HashMap::new();
+                    for _ in 0..count {
+                        let key = crate::generated::codeanalyzer::binary::decode_string(&mut cursor).ok();
+                        let val = CacheEntry::decode(&mut cursor).ok();
+                        if let (Some(k), Some(v)) = (key, val) {
+                            map.insert(k, v);
+                        }
+                    }
+                    map
+                } else {
+                    HashMap::new()
+                }
             } else {
                 HashMap::new()
             }
@@ -279,10 +253,14 @@ impl ParseCache {
             return;
         }
         let cache_file = cache_file_path(&cache_dir, &self.root_dir);
-        if let Ok(content) = serde_json::to_string(&self.entries) {
-            if let Err(e) = std::fs::write(&cache_file, content) {
-                eprintln!("warn: failed to write cache: {e}");
-            }
+        let mut buf: Vec<u8> = Vec::new();
+        crate::generated::codeanalyzer::binary::encode_u64(&mut buf, self.entries.len() as u64).ok();
+        for (key, val) in &self.entries {
+            crate::generated::codeanalyzer::binary::encode_string(&mut buf, key).ok();
+            val.encode(&mut buf).ok();
+        }
+        if let Err(e) = std::fs::write(&cache_file, buf) {
+            eprintln!("warn: failed to write cache: {e}");
         }
         self.dirty = false;
     }
