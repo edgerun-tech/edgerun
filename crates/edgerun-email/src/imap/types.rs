@@ -1,8 +1,14 @@
 //! Core IMAP types — mailboxes, flags, envelopes, and session state.
 
 use crate::prelude::*;
-use std::net::SocketAddr;
+
+#[cfg(not(target_os = "none"))]
 use std::time::SystemTime;
+
+#[cfg(not(target_os = "none"))]
+pub type ImapInternalDate = SystemTime;
+#[cfg(target_os = "none")]
+pub type ImapInternalDate = u64;
 
 // ===========================================================================
 // Session State
@@ -267,7 +273,7 @@ pub struct Message {
     /// System and keyword flags.
     pub flags: Flags,
     /// Internal date/time (when the message was received/appended).
-    pub internal_date: SystemTime,
+    pub internal_date: ImapInternalDate,
     /// Size in bytes (RFC 822 size).
     pub size: usize,
     /// Parsed envelope.
@@ -277,7 +283,7 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn new(uid: u32, seq: u32, rfc822: Vec<u8>, internal_date: SystemTime) -> Self {
+    pub fn new(uid: u32, seq: u32, rfc822: Vec<u8>, internal_date: ImapInternalDate) -> Self {
         let size = rfc822.len();
         Self {
             uid,

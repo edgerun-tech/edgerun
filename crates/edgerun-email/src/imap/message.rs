@@ -3,6 +3,10 @@
 //! Defines the full set of IMAP4rev1 commands (RFC 3501) and their typed representations.
 
 use crate::prelude::*;
+
+#[cfg(target_os = "none")]
+use edgerun_encoding::io;
+#[cfg(not(target_os = "none"))]
 use std::io;
 
 use crate::imap::types::{FetchAttr, SearchKey};
@@ -357,7 +361,7 @@ impl ImapCommand {
                     let size_str = args[i].trim_start_matches('{').trim_end_matches('}');
                     literal_size = size_str
                         .parse::<usize>()
-                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
                 }
 
                 Ok(Self::Append {
