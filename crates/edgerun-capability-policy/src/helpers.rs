@@ -9,7 +9,7 @@ use edgerun_capabilities::{
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
-use edgerun_core::protocol::{Duration as ProstDuration, Timestamp};
+use edgerun_core::protocol::{Duration as ProtocolDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, NodeRef};
 use edgerun_crypto::sha2::Digest;
 
@@ -133,7 +133,7 @@ pub(crate) fn system_time_from_timestamp(value: &Timestamp) -> Option<SystemTime
     Some(UNIX_EPOCH + Duration::new(value.seconds as u64, value.nanos as u32))
 }
 
-pub(crate) fn duration_from_prost(value: &ProstDuration) -> Option<Duration> {
+pub(crate) fn duration_from_protocol(value: &ProtocolDuration) -> Option<Duration> {
     if value.seconds < 0 || value.nanos < 0 {
         return None;
     }

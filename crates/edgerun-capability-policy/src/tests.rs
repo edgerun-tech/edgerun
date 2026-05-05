@@ -13,7 +13,7 @@ use edgerun_capabilities::{
     CapabilityRequest, CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
 use edgerun_core::protocol::capability::CapabilityInvocation;
-use edgerun_core::protocol::{Duration as ProstDuration, Timestamp};
+use edgerun_core::protocol::{Duration as ProtocolDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, RateLimit};
 use edgerun_crypto::rand_core::RngCore;
 use std::collections::{BTreeSet, VecDeque};
@@ -63,7 +63,7 @@ fn request_for(descriptor: &CapabilityDescriptor) -> CapabilityRequest {
         requested_operations: vec![CapabilityOperation::Query as i32],
         requested_constraints: Vec::new(),
         purpose: "test".into(),
-        requested_duration: Some(ProstDuration {
+        requested_duration: Some(ProtocolDuration {
             seconds: 60,
             nanos: 0,
         }),
@@ -857,7 +857,7 @@ fn enforces_rate_limited_constraint() {
         duration_value: None,
         rate_limit: Some(RateLimit {
             max_operations: 1,
-            per: Some(ProstDuration {
+            per: Some(ProtocolDuration {
                 seconds: 60,
                 nanos: 0,
             }),
@@ -897,7 +897,7 @@ fn rate_limit_resets_after_window() {
         duration_value: None,
         rate_limit: Some(RateLimit {
             max_operations: 1,
-            per: Some(ProstDuration {
+            per: Some(ProtocolDuration {
                 seconds: 10,
                 nanos: 0,
             }),
@@ -944,7 +944,7 @@ fn rate_limit_with_higher_max_allows_burst() {
         duration_value: None,
         rate_limit: Some(RateLimit {
             max_operations: 3,
-            per: Some(ProstDuration {
+            per: Some(ProtocolDuration {
                 seconds: 60,
                 nanos: 0,
             }),
@@ -1667,31 +1667,31 @@ fn system_time_from_timestamp_negative_nanos() {
 }
 
 #[test]
-fn duration_from_prost_valid() {
-    let d = ProstDuration {
+fn duration_from_protocol_valid() {
+    let d = ProtocolDuration {
         seconds: 120,
         nanos: 500_000_000,
     };
-    let result = duration_from_prost(&d).unwrap();
+    let result = duration_from_protocol(&d).unwrap();
     assert_eq!(result, Duration::new(120, 500_000_000));
 }
 
 #[test]
-fn duration_from_prost_negative_seconds() {
-    let d = ProstDuration {
+fn duration_from_protocol_negative_seconds() {
+    let d = ProtocolDuration {
         seconds: -1,
         nanos: 0,
     };
-    assert!(duration_from_prost(&d).is_none());
+    assert!(duration_from_protocol(&d).is_none());
 }
 
 #[test]
-fn duration_from_prost_negative_nanos() {
-    let d = ProstDuration {
+fn duration_from_protocol_negative_nanos() {
+    let d = ProtocolDuration {
         seconds: 0,
         nanos: -1,
     };
-    assert!(duration_from_prost(&d).is_none());
+    assert!(duration_from_protocol(&d).is_none());
 }
 
 #[test]

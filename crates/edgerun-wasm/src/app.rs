@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn conformance_app_object_id_known_vector() {
-        let package_bytes = include_bytes!("../../../proto/edgerun/v0/app.proto");
+        let package_bytes = b"rkyv-app-package-conformance-vector";
         let object_id = compute_app_object_id(package_bytes);
 
         assert_eq!(object_id.len(), 32);

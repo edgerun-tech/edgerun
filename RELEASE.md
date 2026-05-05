@@ -30,8 +30,7 @@ Before promoting any crate to crates.io, that crate must have:
 
 Initial candidates for crates.io, after cleanup, are:
 
-- `edgerun-proto`;
-- `edgerun-core`;
+- - `edgerun-core`;
 - `edgerun-stream`;
 - `edgerun-storage`;
 - `edgerun-crypto`;

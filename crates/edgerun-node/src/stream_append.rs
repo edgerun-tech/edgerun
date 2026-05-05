@@ -24,7 +24,7 @@ pub fn append_command_stream_event(
         edgerun_stream::EventDraft {
             event_type: event_type as i32,
             event_version,
-            recorded_at: Some(edgerun_core::util::now_prost_timestamp()),
+            recorded_at: Some(edgerun_core::util::now_protocol_timestamp()),
             payload_object,
             related_commands,
             related_delegations,

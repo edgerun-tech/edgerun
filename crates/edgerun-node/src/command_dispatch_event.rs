@@ -6,7 +6,7 @@
 use crate::command_dispatch_result::{build_command_result_payload, command_ref_from};
 use crate::command_result_wire_codec::encode_command_result_payload;
 use edgerun_core::protocol::{CommandDecision, CommandEnvelope, EventType, ObjectKind, ObjectRef};
-use edgerun_core::util::{bytes_to_hex, now_prost_timestamp};
+use edgerun_core::util::{bytes_to_hex, now_protocol_timestamp};
 use edgerun_core::wire_command::command_hash;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_storage::NodeStore;
@@ -63,7 +63,7 @@ pub fn append_command_result_event(
         edgerun_stream::EventDraft {
             event_type: event_type as i32,
             event_version: 1,
-            recorded_at: Some(now_prost_timestamp()),
+            recorded_at: Some(now_protocol_timestamp()),
             effective_at: None,
             payload_object: Some(payload_object),
             related_events: Vec::new(),

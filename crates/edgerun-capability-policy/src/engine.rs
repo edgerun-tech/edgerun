@@ -10,7 +10,7 @@ use edgerun_capabilities::{
     CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRevocation, CapabilityRole, CapabilitySelector,
 };
-use edgerun_core::protocol::{Duration as ProstDuration, Timestamp};
+use edgerun_core::protocol::{Duration as ProtocolDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, NodeRef};
 use edgerun_crypto::sha2::Digest;
 
@@ -221,7 +221,7 @@ impl SimplePolicyEngine {
         let duration = request
             .requested_duration
             .as_ref()
-            .and_then(duration_from_prost)
+            .and_then(duration_from_protocol)
             .unwrap_or(self.default_grant_duration)
             .min(self.max_grant_duration);
         Some(now + duration)
@@ -231,7 +231,7 @@ impl SimplePolicyEngine {
         constraint: &CapabilityConstraint,
     ) -> Option<(u64, Duration)> {
         let rate_limit = constraint.rate_limit.as_ref()?;
-        let per = duration_from_prost(rate_limit.per.as_ref()?)?;
+        let per = duration_from_protocol(rate_limit.per.as_ref()?)?;
         Some((rate_limit.max_operations, per))
     }
 

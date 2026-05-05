@@ -39,7 +39,7 @@ concrete protocol type at the rkyv boundary or leave a loud breakpoint.
 - External service protocols such as HTTP, DNS, TLS, QUIC, HPACK, QPACK, DHCP,
   and NFC keep their own standards-defined encodings. They are not Edgerun
   internal wire protocols.
-- Do not reintroduce generated schema files or alternate canonical encoders.
+- Do not reintroduce rkyv files or alternate canonical encoders.
 - Do not hide breakage with compatibility adapters. Break loudly, then migrate
   the caller to rkyv.
 

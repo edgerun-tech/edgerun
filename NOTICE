@@ -8,7 +8,7 @@ generated/reference material with separate notices, including:
 - `crates/edgerun-json`: dual MIT/Apache-2.0 licensed crate material;
 - `crates/edgerun-crypto/vendor/const-oid-0.9`: RustCrypto const-oid material
   under `Apache-2.0 OR MIT`;
-- protocol/reference documents and test corpora under `docs/`, `proto/`, and
+- protocol/reference documents and test corpora under `docs/`/` and
   `corpus/`, which should retain their own source/license notes where present.
 
 Downstream distributors should inspect crate-local LICENSE/NOTICE files and

@@ -1,7 +1,7 @@
 //! Native Edgerun protocol types.
 //!
 //! This module is generated from the old Rust-shaped Rust files, but it is
-//! plain Rust inside edgerun-core. There is no edgerun-proto crate and no prost
+//! plain Rust inside edgerun-core. There is only the native rkyv protocol boundary
 //! derive in this module.
 
 extern crate alloc;

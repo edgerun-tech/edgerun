@@ -1,6 +1,6 @@
 //! Public API types for exchange service.
 //!
-//! Uses canonical proto types from edgerun-proto.
+//! Uses rkyv-normalized protocol types from edgerun-core.
 
 extern crate alloc;
 

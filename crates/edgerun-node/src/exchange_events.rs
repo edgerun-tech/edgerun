@@ -6,7 +6,7 @@
 //! appends signed envelopes to the node's single stream.
 
 use edgerun_core::protocol::ObjectKind;
-use edgerun_core::util::now_prost_timestamp;
+use edgerun_core::util::now_protocol_timestamp;
 use edgerun_exchange::{
     decode_exchange_event, encode_exchange_event, exchange_event_type, project_order,
     ExchangeEvent, ExchangeOrderProjection,
@@ -63,7 +63,7 @@ pub fn append_exchange_event_to_node_stream_with_recipients(
         edgerun_stream::EventDraft {
             event_type: exchange_event_type(event),
             event_version: 1,
-            recorded_at: Some(now_prost_timestamp()),
+            recorded_at: Some(now_protocol_timestamp()),
             payload_object: Some(payload_object.clone()),
             related_objects: vec![payload_object],
             ..Default::default()

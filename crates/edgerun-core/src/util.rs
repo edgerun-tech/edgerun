@@ -25,7 +25,7 @@ pub fn parse_timestamp_value(value: &str) -> Result<Timestamp, ParseRfc3339Error
 
 /// Convert host wall-clock time to a `crate::protocol::Timestamp`.
 #[cfg(feature = "std")]
-pub fn system_time_to_prost(time: std::time::SystemTime) -> crate::protocol::Timestamp {
+pub fn system_time_to_protocol(time: std::time::SystemTime) -> crate::protocol::Timestamp {
     let duration = time
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
@@ -84,10 +84,10 @@ pub fn now_unix_micros_u64() -> u64 {
 }
 
 /// Current Unix time as a protocol timestamp.
-pub fn now_prost_timestamp() -> crate::protocol::Timestamp {
+pub fn now_protocol_timestamp() -> crate::protocol::Timestamp {
     #[cfg(feature = "std")]
     {
-        return system_time_to_prost(std::time::SystemTime::now());
+        return system_time_to_protocol(std::time::SystemTime::now());
     }
 
     #[cfg(not(feature = "std"))]

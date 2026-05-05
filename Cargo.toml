@@ -214,8 +214,6 @@ edgerun-exchange-worker = { version = "0.1", path = "crates/edgerun-exchange-wor
 edgerun-sdk = { version = "0.1", path = "crates/edgerun-sdk" }
 edgerun-sdk-macro = { version = "0.1", path = "crates/edgerun-sdk-macro" }
 
-prost = { version = "0.13", default-features = false }
-prost-types = { version = "0.13", default-features = false }
 sha2 = { version = "0.10", default-features = false }
 libc = "0.2"
 
