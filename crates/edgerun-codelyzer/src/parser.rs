@@ -1,6 +1,5 @@
-use std::{borrow::Cow, collections::HashMap, fs};
+use std::{borrow::Cow, collections::HashMap, fs, io::{Read, Write}};
 
-use edgerun_json::{self, ToJson, FromJson, JsonValue, Map};
 use tree_sitter::{Language, Node, Parser};
 
 // Language grammars - feature gated
@@ -47,27 +46,27 @@ pub struct RawFunctionOwned {
     pub is_macro_def: bool,
 }
 
-impl ToJson for RawFunctionOwned {
-    fn to_json(&self) -> JsonValue {
-        let mut m = Map::new();
-        m.push_field("name", &self.name);
-        m.push_field("start_byte", &self.start_byte);
-        m.push_field("end_byte", &self.end_byte);
-        m.push_field("is_static", &self.is_static);
-        m.push_field("is_macro_def", &self.is_macro_def);
-        JsonValue::Object(m)
+impl RawFunctionOwned {
+    /// Encode to binary format for cache file.
+    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+        use crate::generated::codeanalyzer::binary::*;
+        encode_string(w, &self.name)?;
+        encode_u64(w, self.start_byte as u64)?;
+        encode_u64(w, self.end_byte as u64)?;
+        encode_bool(w, self.is_static)?;
+        encode_bool(w, self.is_macro_def)?;
+        Ok(())
     }
-}
 
-impl FromJson for RawFunctionOwned {
-    fn from_json(value: &JsonValue) -> Option<Self> {
-        let obj = value.as_object()?;
-        Some(Self {
-            name: obj.get_str("name")?.to_string(),
-            start_byte: obj.get_u64("start_byte")? as usize,
-            end_byte: obj.get_u64("end_byte")? as usize,
-            is_static: obj.get_bool("is_static")?,
-            is_macro_def: obj.get_bool("is_macro_def")?,
+    /// Decode from binary format.
+    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
+        use crate::generated::codeanalyzer::binary::*;
+        Ok(Self {
+            name: decode_string(r)?,
+            start_byte: decode_u64(r)? as usize,
+            end_byte: decode_u64(r)? as usize,
+            is_static: decode_bool(r)?,
+            is_macro_def: decode_bool(r)?,
         })
     }
 }
@@ -90,37 +89,37 @@ pub struct RawCallOwned {
     pub kind: CallKind,
 }
 
-impl ToJson for RawCallOwned {
-    fn to_json(&self) -> JsonValue {
-        let mut m = Map::new();
-        m.push_field("callee_name", &self.callee_name);
-        m.push_field("start_byte", &self.start_byte);
-        m.push_field("end_byte", &self.end_byte);
-        m.push_field("kind", &self.kind);
-        JsonValue::Object(m)
+impl RawCallOwned {
+    /// Encode to binary format for cache file.
+    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+        use crate::generated::codeanalyzer::binary::*;
+        encode_string(w, &self.callee_name)?;
+        encode_u64(w, self.start_byte as u64)?;
+        encode_u64(w, self.end_byte as u64)?;
+        let kind_tag: u8 = match self.kind {
+            CallKind::Call => 0,
+            CallKind::Macro => 1,
+            CallKind::Indirect => 2,
+        };
+        w.write_all(&[kind_tag])?;
+        Ok(())
     }
-}
 
-impl FromJson for RawCallOwned {
-    fn from_json(value: &JsonValue) -> Option<Self> {
-        let obj = value.as_object()?;
-        Some(Self {
-            callee_name: obj.get_str("callee_name")?.to_string(),
-            start_byte: obj.get_u64("start_byte")? as usize,
-            end_byte: obj.get_u64("end_byte")? as usize,
-            kind: obj.get("kind").and_then(|v| {
-                if let Some(s) = v.as_str() {
-                    match s {
-                        "Call" => Some(CallKind::Call),
-                        "Macro" => Some(CallKind::Macro),
-                        "Indirect" => Some(CallKind::Indirect),
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            })?,
-        })
+    /// Decode from binary format.
+    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
+        use crate::generated::codeanalyzer::binary::*;
+        let callee_name = decode_string(r)?;
+        let start_byte = decode_u64(r)? as usize;
+        let end_byte = decode_u64(r)? as usize;
+        let mut kind_tag = [0u8];
+        r.read_exact(&mut kind_tag)?;
+        let kind = match kind_tag[0] {
+            0 => CallKind::Call,
+            1 => CallKind::Macro,
+            2 => CallKind::Indirect,
+            _ => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid CallKind")),
+        };
+        Ok(Self { callee_name, start_byte, end_byte, kind })
     }
 }
 
@@ -154,22 +153,21 @@ pub struct CachedParseResult {
     pub calls: Vec<RawCallOwned>,
 }
 
-impl ToJson for CachedParseResult {
-    fn to_json(&self) -> JsonValue {
-        let mut m = Map::new();
-        m.push_field("functions", &self.functions);
-        m.push_field("calls", &self.calls);
-        JsonValue::Object(m)
+impl CachedParseResult {
+    /// Encode to binary format for cache file.
+    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+        use crate::generated::codeanalyzer::binary::*;
+        encode_repeated(w, &self.functions)?;
+        encode_repeated(w, &self.calls)?;
+        Ok(())
     }
-}
 
-impl FromJson for CachedParseResult {
-    fn from_json(value: &JsonValue) -> Option<Self> {
-        let obj = value.as_object()?;
-        Some(Self {
-            functions: obj.get_obj_vec("functions")?,
-            calls: obj.get_obj_vec("calls")?,
-        })
+    /// Decode from binary format.
+    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
+        use crate::generated::codeanalyzer::binary::*;
+        let functions = decode_repeated(r)?;
+        let calls = decode_repeated(r)?;
+        Ok(Self { functions, calls })
     }
 }
 

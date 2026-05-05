@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     env,
     fs,
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -15,7 +16,7 @@ use std::{
 ///
 /// Scans configured directories for git repositories, indexes them on demand,
 /// and provides fast switching between indexed repos in the viewer.
-use edgerun_json::{self, ToJson, FromJson, JsonValue, Map};
+use crate::generated::codeanalyzer::binary;
 
 /// Default directories to scan for repositories.
 const DEFAULT_SCAN_ROOTS: &[&str] = &["/home", "/Users", "/opt", "/var/src", "/srv"];
@@ -94,65 +95,62 @@ pub enum IndexState {
     },
 }
 
-impl ToJson for IndexState {
-    fn to_json(&self) -> JsonValue {
-        let mut m = Map::new();
+impl IndexState {
+    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
         match self {
             IndexState::NotIndexed => {
-                m.push_field("type", "NotIndexed");
+                w.write_all(&[0])?;
             }
             IndexState::Indexing { progress, files_scanned, total_files } => {
-                m.push_field("type", "Indexing");
-                m.push_field("progress", progress);
-                m.push_field("files_scanned", &(*files_scanned as u64));
-                m.push_field("total_files", &(*total_files as u64));
+                w.write_all(&[1])?;
+                binary::encode_f32(w, *progress)?;
+                binary::encode_u64(w, *files_scanned as u64)?;
+                binary::encode_u64(w, *total_files as u64)?;
             }
             IndexState::Indexed { functions, edges, index_time_ms } => {
-                m.push_field("type", "Indexed");
-                m.push_field("functions", &(*functions as u64));
-                m.push_field("edges", &(*edges as u64));
-                m.push_field("index_time_ms", index_time_ms);
+                w.write_all(&[2])?;
+                binary::encode_u64(w, *functions as u64)?;
+                binary::encode_u64(w, *edges as u64)?;
+                binary::encode_u64(w, *index_time_ms)?;
             }
             IndexState::Stale { functions, edges, last_indexed } => {
-                m.push_field("type", "Stale");
-                m.push_field("functions", &(*functions as u64));
-                m.push_field("edges", &(*edges as u64));
-                m.push_field("last_indexed", last_indexed);
+                w.write_all(&[3])?;
+                binary::encode_u64(w, *functions as u64)?;
+                binary::encode_u64(w, *edges as u64)?;
+                binary::encode_u64(w, *last_indexed)?;
             }
             IndexState::Error { message } => {
-                m.push_field("type", "Error");
-                m.push_field("message", message);
+                w.write_all(&[4])?;
+                binary::encode_string(w, message)?;
             }
         }
-        JsonValue::Object(m)
+        Ok(())
     }
-}
 
-impl FromJson for IndexState {
-    fn from_json(value: &JsonValue) -> Option<Self> {
-        let obj = value.as_object()?;
-        let type_str = obj.get_str("type")?;
-        match type_str {
-            "NotIndexed" => Some(IndexState::NotIndexed),
-            "Indexing" => Some(IndexState::Indexing {
-                progress: obj.get_f64("progress")? as f32,
-                files_scanned: obj.get_u64("files_scanned")? as usize,
-                total_files: obj.get_u64("total_files")? as usize,
+    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
+        let mut tag = [0u8];
+        r.read_exact(&mut tag)?;
+        match tag[0] {
+            0 => Ok(IndexState::NotIndexed),
+            1 => Ok(IndexState::Indexing {
+                progress: binary::decode_f32(r)?,
+                files_scanned: binary::decode_u64(r)? as usize,
+                total_files: binary::decode_u64(r)? as usize,
             }),
-            "Indexed" => Some(IndexState::Indexed {
-                functions: obj.get_u64("functions")? as usize,
-                edges: obj.get_u64("edges")? as usize,
-                index_time_ms: obj.get_u64("index_time_ms")?,
+            2 => Ok(IndexState::Indexed {
+                functions: binary::decode_u64(r)? as usize,
+                edges: binary::decode_u64(r)? as usize,
+                index_time_ms: binary::decode_u64(r)?,
             }),
-            "Stale" => Some(IndexState::Stale {
-                functions: obj.get_u64("functions")? as usize,
-                edges: obj.get_u64("edges")? as usize,
-                last_indexed: obj.get_u64("last_indexed")?,
+            3 => Ok(IndexState::Stale {
+                functions: binary::decode_u64(r)? as usize,
+                edges: binary::decode_u64(r)? as usize,
+                last_indexed: binary::decode_u64(r)?,
             }),
-            "Error" => Some(IndexState::Error {
-                message: obj.get_str("message")?.to_string(),
+            4 => Ok(IndexState::Error {
+                message: binary::decode_string(r)?,
             }),
-            _ => None,
+            _ => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid IndexState tag")),
         }
     }
 }
@@ -172,37 +170,33 @@ pub struct RepoInfo {
     pub added_at: u64, // epoch seconds when added to registry
 }
 
-impl ToJson for RepoInfo {
-    fn to_json(&self) -> JsonValue {
-        let mut m = Map::new();
-        m.push_field("path", &self.path);
-        m.push_field("name", &self.name);
-        m.push_field("is_git_repo", &self.is_git_repo);
-        m.push_field("git_remote", &self.git_remote);
-        m.push_field("file_count", &(self.file_count as u64));
-        m.push_field("total_size_bytes", &self.total_size_bytes);
-        m.push_field("last_modified", &self.last_modified);
-        m.push_field("index_state", &self.index_state);
-        m.push_field("languages", &self.languages);
-        m.push_field("added_at", &self.added_at);
-        JsonValue::Object(m)
+impl RepoInfo {
+    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+        binary::encode_string(w, &self.path)?;
+        binary::encode_string(w, &self.name)?;
+        binary::encode_bool(w, self.is_git_repo)?;
+        binary::encode_optional_string(w, &self.git_remote)?;
+        binary::encode_u64(w, self.file_count as u64)?;
+        binary::encode_u64(w, self.total_size_bytes)?;
+        binary::encode_u64(w, self.last_modified)?;
+        self.index_state.encode(w)?;
+        binary::encode_repeated_string(w, &self.languages)?;
+        binary::encode_u64(w, self.added_at)?;
+        Ok(())
     }
-}
 
-impl FromJson for RepoInfo {
-    fn from_json(value: &JsonValue) -> Option<Self> {
-        let obj = value.as_object()?;
-        Some(Self {
-            path: obj.get_str("path")?.to_string(),
-            name: obj.get_str("name")?.to_string(),
-            is_git_repo: obj.get_bool("is_git_repo")?,
-            git_remote: obj.get_str("git_remote").map(|s| s.to_string()),
-            file_count: obj.get_u64("file_count")? as usize,
-            total_size_bytes: obj.get_u64("total_size_bytes")?,
-            last_modified: obj.get_u64("last_modified")?,
-            index_state: FromJson::from_json(obj.get("index_state")?)?,
-            languages: obj.get_obj_vec("languages").unwrap_or_default(),
-            added_at: obj.get_u64("added_at")?,
+    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
+        Ok(Self {
+            path: binary::decode_string(r)?,
+            name: binary::decode_string(r)?,
+            is_git_repo: binary::decode_bool(r)?,
+            git_remote: binary::decode_optional_string(r)?,
+            file_count: binary::decode_u64(r)? as usize,
+            total_size_bytes: binary::decode_u64(r)?,
+            last_modified: binary::decode_u64(r)?,
+            index_state: IndexState::decode(r)?,
+            languages: binary::decode_repeated_string(r)?,
+            added_at: binary::decode_u64(r)?,
         })
     }
 }
@@ -220,27 +214,21 @@ pub struct RegistryConfig {
     pub auto_discover: bool,
 }
 
-impl ToJson for RegistryConfig {
-    fn to_json(&self) -> JsonValue {
-        let mut m = Map::new();
-        m.push_field("scan_roots", &self.scan_roots);
-        m.push_field("excluded_paths", &self.excluded_paths);
-        m.push_field("max_concurrent_index", &(self.max_concurrent_index as u64));
-        m.push_field("auto_discover", &self.auto_discover);
-        JsonValue::Object(m)
+impl RegistryConfig {
+    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+        binary::encode_repeated_string(w, &self.scan_roots)?;
+        binary::encode_repeated_string(w, &self.excluded_paths)?;
+        binary::encode_u64(w, self.max_concurrent_index as u64)?;
+        binary::encode_bool(w, self.auto_discover)?;
+        Ok(())
     }
-}
 
-impl FromJson for RegistryConfig {
-    fn from_json(value: &JsonValue) -> Option<Self> {
-        let obj = value.as_object()?;
-        Some(Self {
-            scan_roots: obj.get_obj_vec("scan_roots").unwrap_or_else(|| {
-                DEFAULT_SCAN_ROOTS.iter().map(|s| s.to_string()).collect()
-            }),
-            excluded_paths: obj.get_obj_vec("excluded_paths").unwrap_or_default(),
-            max_concurrent_index: obj.get_u64("max_concurrent_index").unwrap_or(2) as usize,
-            auto_discover: obj.get_bool("auto_discover").unwrap_or(true),
+    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
+        Ok(Self {
+            scan_roots: binary::decode_repeated_string(r)?,
+            excluded_paths: binary::decode_repeated_string(r)?,
+            max_concurrent_index: binary::decode_u64(r)? as usize,
+            auto_discover: binary::decode_bool(r)?,
         })
     }
 }
