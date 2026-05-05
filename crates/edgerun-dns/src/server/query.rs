@@ -39,6 +39,25 @@ pub struct ParseError;
 ///
 /// If the response exceeds `MAX_UDP_RESPONSE` bytes, `needs_tcp` is true.
 pub async fn handle_query(wire: &[u8], state: &ServerState) -> Result<(Vec<u8>, bool), ParseError> {
+    handle_query_with_forwarding(wire, state, true).await
+}
+
+/// Process a DNS query without opening upstream sockets.
+///
+/// This is the protocol-only authoritative path for runtimes that provide
+/// their own forwarding adapter or intentionally disable recursion.
+pub async fn handle_query_without_forwarding(
+    wire: &[u8],
+    state: &ServerState,
+) -> Result<(Vec<u8>, bool), ParseError> {
+    handle_query_with_forwarding(wire, state, false).await
+}
+
+async fn handle_query_with_forwarding(
+    wire: &[u8],
+    state: &ServerState,
+    allow_forwarding: bool,
+) -> Result<(Vec<u8>, bool), ParseError> {
     let query = parse_dns_message_bounded(wire).map_err(|_| ParseError)?;
 
     if query.header.is_response {
@@ -50,7 +69,7 @@ pub async fn handle_query(wire: &[u8], state: &ServerState) -> Result<(Vec<u8>, 
 
     // Dispatch by opcode
     match query.header.opcode {
-        DnsOpcode::Query => handle_standard_query(&query, wire, state).await,
+        DnsOpcode::Query => handle_standard_query(&query, wire, state, allow_forwarding).await,
         DnsOpcode::Notify => handle_notify_query(&query).await,
         DnsOpcode::Update => handle_update_query(&query).await,
         DnsOpcode::IQuery | DnsOpcode::Status => Ok((
@@ -65,6 +84,7 @@ async fn handle_standard_query(
     query: &DnsMessage,
     wire: &[u8],
     state: &ServerState,
+    allow_forwarding: bool,
 ) -> Result<(Vec<u8>, bool), ParseError> {
     // Handle AXFR queries (zone transfer — must be over TCP, but we handle it here)
     let question = match query.questions.first() {
@@ -136,7 +156,11 @@ async fn handle_standard_query(
         }
 
         // Try forwarding if upstream is configured
-        let forward_addr = state.forward_to.read().await.clone();
+        let forward_addr = if allow_forwarding {
+            state.forward_to.read().await.clone()
+        } else {
+            None
+        };
         if let Some(ref upstream) = forward_addr {
             match forward_query(upstream, wire).await {
                 Ok(forwarded) => {
@@ -507,10 +531,12 @@ mod tests {
             assert!(!needs_tcp);
             assert_eq!(response.header.response_code, DnsResponseCode::NoError);
             assert!(response.answers.is_empty());
-            assert!(response
-                .authority
-                .iter()
-                .any(|record| record.rtype == DnsRecordType::NSEC));
+            assert!(
+                response
+                    .authority
+                    .iter()
+                    .any(|record| record.rtype == DnsRecordType::NSEC)
+            );
         });
     }
 }

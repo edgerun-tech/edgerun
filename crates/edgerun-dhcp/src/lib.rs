@@ -44,6 +44,7 @@ pub mod lease;
 pub mod message;
 pub mod options;
 pub mod server;
+pub mod server_core;
 
 pub use client::DhcpClient;
 pub use lease::Lease;
@@ -56,3 +57,4 @@ pub use message::{
     OPT_TFTP_SERVER_NAME, OPT_VENDOR_ENCAP,
 };
 pub use server::DhcpServer;
+pub use server_core::{DhcpDatagram, DhcpServerConfig, DhcpServerCore};

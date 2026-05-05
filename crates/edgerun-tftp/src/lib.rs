@@ -7,10 +7,12 @@ extern crate alloc;
 pub mod blob_provider;
 pub mod compat;
 pub mod message;
+pub mod protocol;
 pub mod server;
 pub mod std;
 
 pub use compat::CancellationToken;
+pub use protocol::{TftpDatagram, TftpPeerId, TftpReadCore, TftpReadProvider};
 pub use server::TftpServer;
 
 pub const TFTP_PORT: u16 = 69;
