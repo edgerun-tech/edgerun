@@ -46,6 +46,18 @@ pub mod prelude {
     }
 }
 
+/// Alloc-only collection aliases used by existing core validators.
+///
+/// This is an explicit no_std boundary, not a `std` compatibility layer.
+/// `HashMap`/`HashSet` are deterministic BTree-backed aliases until a real
+/// hash dependency is introduced deliberately.
+pub mod collections {
+    pub use alloc::collections::{BTreeMap, BTreeSet};
+
+    pub type HashMap<K, V> = BTreeMap<K, V>;
+    pub type HashSet<T> = BTreeSet<T>;
+}
+
 pub mod command;
 #[cfg(feature = "conformance")]
 pub mod conformance;
