@@ -1,4 +1,5 @@
 use crate::prelude::v1::*;
+use core::{error, fmt};
 
 use crate::protocol::Timestamp;
 
@@ -22,7 +23,8 @@ pub fn parse_timestamp_value(value: &str) -> Result<Timestamp, ParseRfc3339Error
     Ok(Timestamp { seconds, nanos })
 }
 
-/// Convert `SystemTime` to a `crate::protocol::Timestamp`.
+/// Convert host wall-clock time to a `crate::protocol::Timestamp`.
+#[cfg(feature = "std")]
 pub fn system_time_to_prost(time: std::time::SystemTime) -> crate::protocol::Timestamp {
     let duration = time
         .duration_since(std::time::UNIX_EPOCH)
@@ -35,15 +37,15 @@ pub fn system_time_to_prost(time: std::time::SystemTime) -> crate::protocol::Tim
 
 /// Current Unix time in seconds.
 pub fn now_unix_secs_i64() -> i64 {
-    #[cfg(not(target_os = "none"))]
+    #[cfg(feature = "std")]
     {
-        std::time::SystemTime::now()
+        return std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs() as i64
+            .as_secs() as i64;
     }
 
-    #[cfg(target_os = "none")]
+    #[cfg(not(feature = "std"))]
     {
         0
     }
@@ -51,15 +53,15 @@ pub fn now_unix_secs_i64() -> i64 {
 
 /// Current Unix time in milliseconds.
 pub fn now_unix_millis_i64() -> i64 {
-    #[cfg(not(target_os = "none"))]
+    #[cfg(feature = "std")]
     {
-        std::time::SystemTime::now()
+        return std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis() as i64
+            .as_millis() as i64;
     }
 
-    #[cfg(target_os = "none")]
+    #[cfg(not(feature = "std"))]
     {
         0
     }
@@ -67,28 +69,28 @@ pub fn now_unix_millis_i64() -> i64 {
 
 /// Current Unix time in microseconds.
 pub fn now_unix_micros_u64() -> u64 {
-    #[cfg(not(target_os = "none"))]
+    #[cfg(feature = "std")]
     {
-        std::time::SystemTime::now()
+        return std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_micros() as u64
+            .as_micros() as u64;
     }
 
-    #[cfg(target_os = "none")]
+    #[cfg(not(feature = "std"))]
     {
         0
     }
 }
 
-/// Current Unix time as a protobuf timestamp.
+/// Current Unix time as a protocol timestamp.
 pub fn now_prost_timestamp() -> crate::protocol::Timestamp {
-    #[cfg(not(target_os = "none"))]
+    #[cfg(feature = "std")]
     {
-        system_time_to_prost(std::time::SystemTime::now())
+        return system_time_to_prost(std::time::SystemTime::now());
     }
 
-    #[cfg(target_os = "none")]
+    #[cfg(not(feature = "std"))]
     {
         crate::protocol::Timestamp {
             seconds: 0,
@@ -108,13 +110,13 @@ pub enum HexError {
     OddLength,
 }
 
-impl std::fmt::Display for HexError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for HexError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("invalid hexadecimal string")
     }
 }
 
-impl std::error::Error for HexError {}
+impl error::Error for HexError {}
 
 fn map_hex_error(e: edgerun_encoding::hex::HexError) -> HexError {
     match e {
