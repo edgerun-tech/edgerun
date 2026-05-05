@@ -26,7 +26,7 @@ use edgerun_exchange::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MarketplaceError {
     MissingField(&'static str),
-    InvalidFeePolicy(&'static str),
+    InvalidCommissionPolicy(&'static str),
     InvalidStatus(&'static str),
     NotFound(&'static str),
     NotPaid,
@@ -39,7 +39,9 @@ impl core::fmt::Display for MarketplaceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::MissingField(field) => write!(f, "missing marketplace field: {field}"),
-            Self::InvalidFeePolicy(reason) => write!(f, "invalid marketplace fee policy: {reason}"),
+            Self::InvalidCommissionPolicy(reason) => {
+                write!(f, "invalid marketplace commission policy: {reason}")
+            }
             Self::InvalidStatus(reason) => write!(f, "invalid marketplace status: {reason}"),
             Self::NotFound(entity) => write!(f, "marketplace entity not found: {entity}"),
             Self::NotPaid => f.write_str("marketplace checkout is not paid"),
@@ -116,12 +118,14 @@ pub struct SettlementAddress {
     edgerun_wire::Deserialize,
 )]
 #[rkyv(crate = edgerun_wire)]
-pub struct MarketplaceFeePolicy {
+pub struct MarketplaceCommissionPolicy {
     pub edgerun_bps: u32,
     pub app_bps: u32,
+    pub affiliate_bps: u32,
     pub max_total_bps: u32,
     pub edgerun_recipient: Option<SettlementAddress>,
     pub app_recipient: Option<SettlementAddress>,
+    pub affiliate_recipient: Option<SettlementAddress>,
 }
 
 #[derive(
@@ -138,11 +142,13 @@ pub struct MarketplacePayoutSplit {
     pub asset_id: String,
     pub gross_minor_units: u128,
     pub seller_minor_units: u128,
-    pub edgerun_fee_minor_units: u128,
-    pub app_fee_minor_units: u128,
+    pub edgerun_commission_minor_units: u128,
+    pub app_commission_minor_units: u128,
+    pub affiliate_commission_minor_units: u128,
     pub seller_recipient: SettlementAddress,
     pub edgerun_recipient: Option<SettlementAddress>,
     pub app_recipient: Option<SettlementAddress>,
+    pub affiliate_recipient: Option<SettlementAddress>,
 }
 
 #[derive(
@@ -198,7 +204,7 @@ pub struct MarketplaceListing {
     pub price_amount: String,
     pub seller_settlement_asset: String,
     pub seller_settlement_address: String,
-    pub fee_policy: MarketplaceFeePolicy,
+    pub commission_policy: MarketplaceCommissionPolicy,
     pub status: i32,
     pub expires_at_ms: u64,
 }
@@ -222,7 +228,7 @@ pub struct MarketplaceCheckout {
     pub order_id: String,
     pub receipt_id: String,
     pub status: i32,
-    pub fee_policy: MarketplaceFeePolicy,
+    pub commission_policy: MarketplaceCommissionPolicy,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -307,22 +313,36 @@ pub fn decode_marketplace_event(payload: &[u8]) -> Option<MarketplaceEvent> {
     edgerun_wire::from_bytes::<MarketplaceEvent, edgerun_wire::WireError>(payload).ok()
 }
 
-pub fn validate_fee_policy(policy: &MarketplaceFeePolicy) -> Result<(), MarketplaceError> {
+pub fn validate_commission_policy(
+    policy: &MarketplaceCommissionPolicy,
+) -> Result<(), MarketplaceError> {
     let total_bps = policy
         .edgerun_bps
         .checked_add(policy.app_bps)
-        .ok_or(MarketplaceError::InvalidFeePolicy("basis points overflow"))?;
+        .and_then(|value| value.checked_add(policy.affiliate_bps))
+        .ok_or(MarketplaceError::InvalidCommissionPolicy(
+            "basis points overflow",
+        ))?;
 
     if total_bps > policy.max_total_bps {
-        return Err(MarketplaceError::InvalidFeePolicy(
-            "fee split exceeds maximum total basis points",
+        return Err(MarketplaceError::InvalidCommissionPolicy(
+            "commission split exceeds maximum total basis points",
         ));
     }
     if policy.edgerun_bps > 0 {
-        validate_settlement_address(policy.edgerun_recipient.as_ref(), "edgerun fee recipient")?;
+        validate_settlement_address(
+            policy.edgerun_recipient.as_ref(),
+            "edgerun commission recipient",
+        )?;
     }
     if policy.app_bps > 0 {
-        validate_settlement_address(policy.app_recipient.as_ref(), "app fee recipient")?;
+        validate_settlement_address(policy.app_recipient.as_ref(), "app commission recipient")?;
+    }
+    if policy.affiliate_bps > 0 {
+        validate_settlement_address(
+            policy.affiliate_recipient.as_ref(),
+            "affiliate commission recipient",
+        )?;
     }
     Ok(())
 }
@@ -332,27 +352,38 @@ pub fn calculate_payout_split_minor_units(
     gross_minor_units: u128,
 ) -> Result<MarketplacePayoutSplit, MarketplaceError> {
     validate_listing(listing)?;
-    let edgerun_fee_minor_units = bps_amount(gross_minor_units, listing.fee_policy.edgerun_bps)?;
-    let app_fee_minor_units = bps_amount(gross_minor_units, listing.fee_policy.app_bps)?;
-    let total_fee_minor_units = edgerun_fee_minor_units
-        .checked_add(app_fee_minor_units)
-        .ok_or(MarketplaceError::InvalidFeePolicy("fee amount overflow"))?;
-    let seller_minor_units = gross_minor_units.checked_sub(total_fee_minor_units).ok_or(
-        MarketplaceError::InvalidFeePolicy("fee amount exceeds gross amount"),
-    )?;
+    let edgerun_commission_minor_units =
+        bps_amount(gross_minor_units, listing.commission_policy.edgerun_bps)?;
+    let app_commission_minor_units =
+        bps_amount(gross_minor_units, listing.commission_policy.app_bps)?;
+    let affiliate_commission_minor_units =
+        bps_amount(gross_minor_units, listing.commission_policy.affiliate_bps)?;
+    let total_commission_minor_units = edgerun_commission_minor_units
+        .checked_add(app_commission_minor_units)
+        .and_then(|value| value.checked_add(affiliate_commission_minor_units))
+        .ok_or(MarketplaceError::InvalidCommissionPolicy(
+            "commission amount overflow",
+        ))?;
+    let seller_minor_units = gross_minor_units
+        .checked_sub(total_commission_minor_units)
+        .ok_or(MarketplaceError::InvalidCommissionPolicy(
+            "commission amount exceeds gross amount",
+        ))?;
 
     Ok(MarketplacePayoutSplit {
         asset_id: listing.seller_settlement_asset.clone(),
         gross_minor_units,
         seller_minor_units,
-        edgerun_fee_minor_units,
-        app_fee_minor_units,
+        edgerun_commission_minor_units,
+        app_commission_minor_units,
+        affiliate_commission_minor_units,
         seller_recipient: SettlementAddress {
             asset_id: listing.seller_settlement_asset.clone(),
             address: listing.seller_settlement_address.clone(),
         },
-        edgerun_recipient: listing.fee_policy.edgerun_recipient.clone(),
-        app_recipient: listing.fee_policy.app_recipient.clone(),
+        edgerun_recipient: listing.commission_policy.edgerun_recipient.clone(),
+        app_recipient: listing.commission_policy.app_recipient.clone(),
+        affiliate_recipient: listing.commission_policy.affiliate_recipient.clone(),
     })
 }
 
@@ -376,7 +407,7 @@ pub fn validate_listing(listing: &MarketplaceListing) -> Result<(), MarketplaceE
     ) {
         return Err(MarketplaceError::InvalidStatus("unknown listing status"));
     }
-    validate_fee_policy(&listing.fee_policy)
+    validate_commission_policy(&listing.commission_policy)
 }
 
 pub fn build_payment_request_for_listing(
@@ -425,7 +456,7 @@ pub fn create_checkout_for_listing(
         order_id: String::new(),
         receipt_id: String::new(),
         status: CheckoutStatus::Created as i32,
-        fee_policy: listing.fee_policy.clone(),
+        commission_policy: listing.commission_policy.clone(),
     })
 }
 
@@ -460,9 +491,9 @@ pub fn checkout_paid_event_from_receipt(
             "checkout does not reference listing",
         ));
     }
-    if checkout.fee_policy != listing.fee_policy {
+    if checkout.commission_policy != listing.commission_policy {
         return Err(MarketplaceError::ReceiptMismatch(
-            "checkout fee policy differs from listing",
+            "checkout commission policy differs from listing",
         ));
     }
     if receipt.receipt_id.is_empty() {
@@ -601,8 +632,8 @@ fn bps_amount(gross_minor_units: u128, bps: u32) -> Result<u128, MarketplaceErro
     gross_minor_units
         .checked_mul(u128::from(bps))
         .and_then(|value| value.checked_div(10_000))
-        .ok_or(MarketplaceError::InvalidFeePolicy(
-            "fee calculation overflow",
+        .ok_or(MarketplaceError::InvalidCommissionPolicy(
+            "commission calculation overflow",
         ))
 }
 
@@ -613,18 +644,23 @@ mod tests {
     use edgerun_core::protocol::command_envelope;
     use edgerun_core::protocol::{AppIntent, CommandType};
 
-    fn fee_policy() -> MarketplaceFeePolicy {
-        MarketplaceFeePolicy {
+    fn commission_policy() -> MarketplaceCommissionPolicy {
+        MarketplaceCommissionPolicy {
             edgerun_bps: 300,
             app_bps: 100,
+            affiliate_bps: 50,
             max_total_bps: 500,
             edgerun_recipient: Some(SettlementAddress {
                 asset_id: "USDT:tron".into(),
-                address: "edgerun-fee-address".into(),
+                address: "edgerun-commission-address".into(),
             }),
             app_recipient: Some(SettlementAddress {
                 asset_id: "USDT:tron".into(),
-                address: "app-fee-address".into(),
+                address: "app-commission-address".into(),
+            }),
+            affiliate_recipient: Some(SettlementAddress {
+                asset_id: "USDT:tron".into(),
+                address: "affiliate-commission-address".into(),
             }),
         }
     }
@@ -656,7 +692,7 @@ mod tests {
             price_amount: "25.00".into(),
             seller_settlement_asset: "USDT:tron".into(),
             seller_settlement_address: "seller-address".into(),
-            fee_policy: fee_policy(),
+            commission_policy: commission_policy(),
             status: ListingStatus::Active as i32,
             expires_at_ms: 0,
         }
@@ -673,7 +709,7 @@ mod tests {
             order_id: "order-1".into(),
             receipt_id: String::new(),
             status: CheckoutStatus::Created as i32,
-            fee_policy: fee_policy(),
+            commission_policy: commission_policy(),
         }
     }
 
@@ -694,53 +730,63 @@ mod tests {
     }
 
     #[test]
-    fn fee_policy_requires_recipients_for_nonzero_fees() {
-        let mut policy = fee_policy();
+    fn commission_policy_requires_recipients_for_nonzero_commissions() {
+        let mut policy = commission_policy();
         policy.edgerun_recipient = None;
 
         assert_eq!(
-            validate_fee_policy(&policy),
-            Err(MarketplaceError::MissingField("edgerun fee recipient"))
-        );
-    }
-
-    #[test]
-    fn listing_validation_rejects_fee_policy_over_limit() {
-        let mut listing = listing();
-        listing.fee_policy.app_bps = 300;
-
-        assert_eq!(
-            validate_listing(&listing),
-            Err(MarketplaceError::InvalidFeePolicy(
-                "fee split exceeds maximum total basis points"
+            validate_commission_policy(&policy),
+            Err(MarketplaceError::MissingField(
+                "edgerun commission recipient"
             ))
         );
     }
 
     #[test]
-    fn payout_split_calculates_non_custodial_fee_outputs() {
+    fn listing_validation_rejects_commission_policy_over_limit() {
+        let mut listing = listing();
+        listing.commission_policy.app_bps = 300;
+
+        assert_eq!(
+            validate_listing(&listing),
+            Err(MarketplaceError::InvalidCommissionPolicy(
+                "commission split exceeds maximum total basis points"
+            ))
+        );
+    }
+
+    #[test]
+    fn payout_split_calculates_non_custodial_commission_outputs() {
         let split = calculate_payout_split_minor_units(&listing(), 2_500_000)
             .expect("valid listing should calculate split");
 
         assert_eq!(split.asset_id, "USDT:tron");
         assert_eq!(split.gross_minor_units, 2_500_000);
-        assert_eq!(split.edgerun_fee_minor_units, 75_000);
-        assert_eq!(split.app_fee_minor_units, 25_000);
-        assert_eq!(split.seller_minor_units, 2_400_000);
+        assert_eq!(split.edgerun_commission_minor_units, 75_000);
+        assert_eq!(split.app_commission_minor_units, 25_000);
+        assert_eq!(split.affiliate_commission_minor_units, 12_500);
+        assert_eq!(split.seller_minor_units, 2_387_500);
         assert_eq!(split.seller_recipient.address, "seller-address");
         assert_eq!(
             split
                 .edgerun_recipient
                 .as_ref()
                 .map(|value| value.address.as_str()),
-            Some("edgerun-fee-address")
+            Some("edgerun-commission-address")
         );
         assert_eq!(
             split
                 .app_recipient
                 .as_ref()
                 .map(|value| value.address.as_str()),
-            Some("app-fee-address")
+            Some("app-commission-address")
+        );
+        assert_eq!(
+            split
+                .affiliate_recipient
+                .as_ref()
+                .map(|value| value.address.as_str()),
+            Some("affiliate-commission-address")
         );
     }
 

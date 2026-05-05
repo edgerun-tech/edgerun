@@ -3,7 +3,7 @@
 EdgeRun Marketplace is the app and store distribution layer on top of EdgeRun
 nodes. The first release should sell and install wasm apps, templates, and user
 store packages while Exchange handles non-custodial crypto settlement. EdgeRun
-earns from app/store sales, settlement routing, and marketplace fees without
+earns from app/store sales, settlement routing, and marketplace commissions without
 custodying buyer, seller, or app funds.
 
 ## Release Shape
@@ -17,12 +17,12 @@ machinery is proven.
 Release 1 scope:
 
 - browse signed app/store packages
-- inspect publisher identity, version, required capabilities, price, and fee
-  split
+- inspect publisher identity, version, required capabilities, price, and
+  commission split
 - buy with crypto through Exchange without EdgeRun custody
 - install wasm packages onto a node after payment receipt verification
 - let sellers publish packages and configure settlement addresses
-- let EdgeRun collect marketplace fee through the same non-custodial settlement
+- let EdgeRun collect marketplace commission through the same non-custodial settlement
   route
 
 Out of scope for Release 1:
@@ -40,11 +40,11 @@ Out of scope for Release 1:
 - Buyer: chooses an app/package, approves payment, and installs it on a node.
 - Publisher: signs app packages and receives seller settlement payouts.
 - EdgeRun Marketplace: indexes packages, applies listing policy, presents
-  checkout, and receives marketplace fee.
+  checkout, and receives marketplace commission.
 - Exchange: quotes and routes non-custodial settlement.
 - Node: validates app intent, capability grants, install commands, and signed
   stream events.
-- Provider: receives buyer crypto and pays the seller and fee recipients.
+- Provider: receives buyer crypto and pays the seller and commission recipients.
 
 ## Money Flow
 
@@ -52,18 +52,19 @@ The marketplace sale amount is split at settlement time:
 
 ```text
 buyer wallet -> provider deposit address -> publisher settlement address
-                                      \-> EdgeRun marketplace fee address
-                                      \-> app/referral fee address, optional
+                                      \-> EdgeRun marketplace commission address
+                                      \-> app/affiliate commission address, optional
 ```
 
 EdgeRun never receives customer funds before seller payout. The buyer approves a
 settlement intent that includes the package, price, settlement asset, expiry,
-seller address, marketplace fee, optional app/referral fee, and provider route.
+seller address, marketplace commission, optional app/affiliate commission, and
+provider route.
 The node records committed settlement events and the marketplace marks the sale
 paid from receipt/projection facts only.
 
 If a provider cannot produce split payouts, Release 1 should either use a
-provider affiliate/partner fee path or reject that route for marketplace
+provider affiliate/partner commission path or reject that route for marketplace
 checkout. Do not settle through an EdgeRun wallet as a workaround.
 
 ## Trust Model
@@ -111,7 +112,7 @@ MarketplaceListing
   price_amount
   seller_settlement_asset
   seller_settlement_address
-  fee_policy
+  commission_policy
   status
   expires_at_ms
 
@@ -134,19 +135,19 @@ MarketplaceInstallReceipt
   installed_event
 ```
 
-## Fee Policy
+## Commission Policy
 
-Fee policy must be displayed before payment and signed into checkout intent:
+Commission policy must be displayed before payment and signed into checkout intent:
 
 - seller gross amount
 - EdgeRun marketplace basis points
-- optional app/referral basis points
+- optional app/affiliate basis points
 - provider/network fees
 - buyer total
 - seller net amount
 - payout recipients
 
-The node should reject checkout if the fee policy in the app intent differs
+The node should reject checkout if the commission policy in the app intent differs
 from the listing policy or exceeds local/user-approved limits.
 
 ## Capability Policy
@@ -168,13 +169,13 @@ capabilities.
 ## User Flow
 
 1. Buyer opens marketplace and browses listings.
-2. Buyer selects package and sees publisher, version, price, fee split, and
+2. Buyer selects package and sees publisher, version, price, commission split, and
    required capabilities.
 3. Buyer chooses pay asset/network.
 4. Marketplace creates a checkout and protocol-native payment request.
-5. Exchange returns quote, provider deposit address, expiry, and fee disclosure.
+5. Exchange returns quote, provider deposit address, expiry, and commission disclosure.
 6. Buyer sends crypto to provider deposit address.
-7. Provider pays publisher and marketplace fee recipients.
+7. Provider pays publisher and marketplace commission recipients.
 8. Node records provider/chain observations and receipt events.
 9. Marketplace verifies receipt projection.
 10. Buyer installs package on selected node.
@@ -199,7 +200,7 @@ Add a narrow `edgerun-marketplace` crate before building UI:
 - marketplace domain types
 - listing validation
 - package/listing/checkouts projections
-- fee policy validation
+- commission policy validation
 - receipt-to-install eligibility checks
 - rkyv archive helpers for marketplace objects
 
@@ -226,7 +227,7 @@ through `edgerun-wire`.
 
 ## Release Plan
 
-1. `edgerun-marketplace` domain crate with listing, package, checkout, fee
+1. `edgerun-marketplace` domain crate with listing, package, checkout, commission
    policy, and projection tests.
 2. Connect checkout to `edgerun-exchange` settlement intents and receipt
    verification.
@@ -242,7 +243,7 @@ through `edgerun-wire`.
 Do not release until these are true:
 
 - every paid install can be proven from committed stream facts
-- every checkout discloses and signs the fee split
+- every checkout discloses and signs the commission split
 - no route requires EdgeRun custody
 - package install fails closed on signature or capability mismatch
 - marketplace indexes can rebuild from stream events

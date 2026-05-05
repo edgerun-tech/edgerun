@@ -6,7 +6,7 @@ license.workspace = true
 publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "EdgeRun marketplace domain types, fee policy, and projections"
+description = "EdgeRun marketplace domain types, commission policy, and projections"
 
 [dependencies]
 edgerun-core = { workspace = true }
