@@ -1,19 +1,21 @@
 //! Command validation and decision-event recording.
 
-use crate::command_dispatch_event::append_command_result_event;
 use crate::config::NodeConfig;
 use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::{
-    command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
+    CommandExecutionContext, CommandValidationContext, command_hash, validate_command,
 };
 use edgerun_core::protocol::{
-    command_envelope, enum_from_i32, CommandDecision, CommandEnvelope, CommandType, EventType,
-    ObjectKind, ObjectRef,
+    CommandDecision, CommandEnvelope, CommandType, EventType, ObjectKind, ObjectRef,
+    command_envelope, enum_from_i32,
 };
 use edgerun_core::result::Verdict;
 use edgerun_core::util::now_unix_millis_i64;
 use edgerun_hardware_signing::MeshSigner;
+use edgerun_sign::ProtocolSigner;
 use edgerun_storage::NodeStore;
+
+use crate::protocol_signer::BorrowedMeshProtocolSigner;
 
 #[derive(Clone, Debug, Default)]
 pub struct ControllerSet {
@@ -61,20 +63,48 @@ pub fn dispatch_command(
     local_assurance_class: i32,
     exec_ctx: &CommandExecutionContext,
 ) -> CommandDispatchResult {
+    let local_node_id = signer.node_id().0;
+    dispatch_command_with_protocol_signer(
+        command,
+        store,
+        stream_id,
+        &local_node_id,
+        &BorrowedMeshProtocolSigner::new(signer),
+        controllers,
+        replay_cache,
+        revoked_delegations,
+        trusted_root_ids,
+        local_assurance_class,
+        exec_ctx,
+    )
+}
+
+pub fn dispatch_command_with_protocol_signer(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    local_node_id: &[u8; 64],
+    signer: &(impl ProtocolSigner + ?Sized),
+    controllers: &mut ControllerSet,
+    replay_cache: &mut HashMap<Vec<u8>, (Vec<u8>, i64)>,
+    revoked_delegations: &HashSet<Vec<u8>>,
+    trusted_root_ids: &[Vec<u8>],
+    local_assurance_class: i32,
+    exec_ctx: &CommandExecutionContext,
+) -> CommandDispatchResult {
     if command_is_duplicate(command, store, replay_cache) {
         return respond(command, store, stream_id, signer, true, "duplicate_command");
     }
 
     let empty_counts: HashMap<Vec<u8>, u64> = HashMap::new();
     let empty_rate_events: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
-    let local_node_id = signer.node_id().0;
     let location_classes: Vec<&str> = exec_ctx
         .location_classes
         .iter()
         .map(String::as_str)
         .collect();
     let ctx = CommandValidationContext {
-        local_node_id: &local_node_id,
+        local_node_id,
         replay_cache,
         revoked_delegation_ids: revoked_delegations,
         delegation_use_counts: &empty_counts,
@@ -104,7 +134,7 @@ pub fn dispatch_command(
         Verdict::Reject => return respond(command, store, stream_id, signer, false, "rejected"),
         Verdict::Defer => return respond(command, store, stream_id, signer, false, "deferred"),
         Verdict::Duplicate => {
-            return respond(command, store, stream_id, signer, true, "duplicate_command")
+            return respond(command, store, stream_id, signer, true, "duplicate_command");
         }
         Verdict::Accept => {}
     }
@@ -244,11 +274,11 @@ fn respond(
     command: &CommandEnvelope,
     store: &mut NodeStore,
     stream_id: &[u8],
-    signer: &dyn MeshSigner,
+    signer: &(impl ProtocolSigner + ?Sized),
     committed: bool,
     reason_code: &str,
 ) -> CommandDispatchResult {
-    match append_command_result_event(
+    match crate::command_dispatch_event::append_command_result_event_with_protocol_signer(
         command,
         store,
         stream_id,
@@ -332,7 +362,21 @@ pub fn record_command_sent_event(
     signer: &dyn MeshSigner,
     command: &CommandEnvelope,
 ) {
-    let _ = crate::stream_append::append_signed_stream_event_blocking(
+    record_command_sent_event_with_protocol_signer(
+        store,
+        stream_id,
+        &BorrowedMeshProtocolSigner::new(signer),
+        command,
+    );
+}
+
+pub fn record_command_sent_event_with_protocol_signer(
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &(impl ProtocolSigner + ?Sized),
+    command: &CommandEnvelope,
+) {
+    let _ = crate::stream_append::append_signed_stream_event_blocking_with_protocol_signer(
         store,
         stream_id,
         signer,
