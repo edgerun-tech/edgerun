@@ -59,8 +59,6 @@ This model is already serving real workloads in this deployment.
 
 Start with:
 
-1. [Edgerun onboarding](/surface/blog/posts/edgerun-onboarding.html)
-2. [Build your first Edgerun app](/surface/blog/posts/build-your-own-edgerun-app.html)
 3. [Latest posts and release notes](/surface/blog)
 
 ## Philosophy

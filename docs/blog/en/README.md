@@ -25,8 +25,6 @@ service, not a separate “marketing deployment.”
 ## Start here
 
 1. [About Edgerun](./about.md)
-2. [Edgerun onboarding guide](./edgerun-onboarding.md)
-3. [Build your first Edgerun app](./build-your-own-edgerun-app.md)
 
 ## Current platform achievements
 
