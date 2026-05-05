@@ -55,7 +55,7 @@ The access model implements receiver-driven retrieval, bounded queries, federate
 
 **Status:** ✅ Functional (5 tests)
 
-Deterministic binary replay engine. See [RFC-0014](RFC-0014-analysis-tools.md#edgerun-replay).
+Deterministic binary replay engine.
 
 ---
 
