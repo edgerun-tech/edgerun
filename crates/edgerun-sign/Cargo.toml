@@ -1,0 +1,20 @@
+[package]
+name = "edgerun-sign"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "no_std protocol signing traits and helpers for EdgeRun v0 canonical records"
+
+[dependencies]
+edgerun-core = { workspace = true, default-features = false }
+edgerun-verify = { workspace = true, default-features = false }
+
+[features]
+default = []
+std = ["edgerun-core/std"]
+
+[lints]
+workspace = true
