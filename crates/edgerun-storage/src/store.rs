@@ -4,11 +4,11 @@
 //! It coordinates:
 //! - `FileIndex` — fast lookups for stream heads, seq→offset mapping, replay cache
 //! - `BlobStore` — AES-GCM encrypted payload objects on the filesystem
-//! - Append-only event log — protobuf records on the filesystem
+//! - Append-only event log — already-signed stream events on the filesystem
 
 use crate::prelude::v1::*;
 
-use edgerun_core::protocol::{canonical_bytes, Digest, EventEnvelope, ProtocolRecord};
+use edgerun_core::protocol::EventEnvelope;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -21,16 +21,16 @@ use crate::core::{ContentStore, EventLocation, ScannedEvent};
 use crate::credentials::CredentialStore;
 use crate::error::StorageError;
 use crate::event_loop::{
-    materialize_event_to_index, EventLoopBuilder, EventWriter, FetchHandler, OpEventType,
-    PeerDiscoveryHandler,
+    DurableEventAppender, EventLoopBuilder, FetchHandler, PeerDiscoveryHandler,
 };
 use crate::file_index::FileIndex;
 use crate::fs::{read_event_at, scan_event_logs, FsContentStore};
+use crate::materializer::{materialize_event_to_index, OpEventType};
 use std::collections::HashSet;
 
 enum EventBackend {
     Fs {
-        writer: EventWriter,
+        appender: DurableEventAppender,
         writer_thread: std::thread::JoinHandle<()>,
     },
     Block {
@@ -91,10 +91,10 @@ pub struct NodeStoreConfig {
     pub node_identity: Vec<u8>,
 }
 
-/// THE EVENT LOG IS THE STATE.
+/// Durable node storage.
 ///
-/// All mutations go through the EventWriter. The event log is the authoritative
-/// record; FileIndex is a materialized view rebuilt from events.
+/// Stream events are produced by `edgerun-stream`. Storage appends those
+/// already-signed events and maintains rebuildable projections.
 pub struct NodeStore {
     config: NodeStoreConfig,
     index: Arc<FileIndex>,
@@ -142,14 +142,10 @@ impl NodeStore {
         fs::create_dir_all(&blobs_dir)?;
 
         let components = Self::open_common_components(config, blobs_dir)?;
-        let mut builder = EventLoopBuilder::new(
-            events_dir,
-            Arc::clone(&components.index),
-            Arc::clone(&components.blobs),
-        );
+        let mut builder = EventLoopBuilder::new(events_dir, Arc::clone(&components.index));
         builder.register_handler(Box::new(FetchHandler));
         builder.register_handler(Box::new(PeerDiscoveryHandler));
-        let (writer, writer_thread) = builder.build()?;
+        let (appender, writer_thread) = builder.build()?;
 
         Ok(Self {
             config: config.clone(),
@@ -158,7 +154,7 @@ impl NodeStore {
             content: components.content,
             credentials: components.credentials,
             backend: EventBackend::Fs {
-                writer,
+                appender,
                 writer_thread,
             },
         })
@@ -232,46 +228,17 @@ impl NodeStore {
     // Event log — append-only, atomic with head update
     // -----------------------------------------------------------------------
 
-    /// Appends an event to the stream's event log.
-    /// Routes through the EventWriter — the log is the source of truth.
+    /// Appends an already-signed stream event to durable storage.
     pub async fn append_event(&self, event: EventEnvelope) -> Result<u64, StorageError> {
         if let Err(available) = self.check_disk_space() {
             edgerun_log::warn!("low disk space: {available} bytes available");
         }
         match &self.backend {
-            EventBackend::Fs { writer, .. } => writer.write_event(event).await,
+            EventBackend::Fs { appender, .. } => appender.append_event(event).await,
             EventBackend::Block { store } => {
                 self.append_event_blocking_to_block_store(event, store, true)
             }
         }
-    }
-
-    /// Signs an event envelope with the node signer.
-    pub fn sign_event_envelope(
-        &self,
-        event: &mut EventEnvelope,
-        signer: &dyn MeshSigner,
-    ) -> Result<(), StorageError> {
-        let record = ProtocolRecord::EventEnvelope(event.clone());
-        let canonical = canonical_bytes(&record, true);
-        let signature = signer
-            .sign_record(edgerun_core::crypto::SIG_DOMAIN_EVENT_ENVELOPE, &canonical)
-            .map_err(|e| StorageError::Encode(format!("event signing failed: {e}")))?;
-        event.signature = Some(edgerun_core::protocol::Signature {
-            algorithm: 1,
-            value: signature.to_vec(),
-        });
-        Ok(())
-    }
-
-    /// Signs and appends an event as one storage operation.
-    pub async fn append_signed_event(
-        &self,
-        mut event: EventEnvelope,
-        signer: &dyn MeshSigner,
-    ) -> Result<u64, StorageError> {
-        self.sign_event_envelope(&mut event, signer)?;
-        self.append_event(event).await
     }
 
     /// Synchronous version of `append_event` — for use from blocking threads.
@@ -281,26 +248,16 @@ impl NodeStore {
             edgerun_log::warn!("low disk space: {available} bytes available");
         }
         match &self.backend {
-            EventBackend::Fs { writer, .. } => writer.write_event_blocking(event),
+            EventBackend::Fs { appender, .. } => appender.append_event_blocking(event),
             EventBackend::Block { store } => {
                 self.append_event_blocking_to_block_store(event, store, true)
             }
         }
     }
 
-    /// Synchronous version of `append_signed_event` for blocking store-task paths.
-    pub fn append_signed_event_blocking(
-        &self,
-        mut event: EventEnvelope,
-        signer: &dyn MeshSigner,
-    ) -> Result<u64, StorageError> {
-        self.sign_event_envelope(&mut event, signer)?;
-        self.append_event_blocking(event)
-    }
-
     /// Retrieves an event from the event log by stream ID and sequence number.
     ///
-    /// Uses the file index to find the file offset, then reads the protobuf bytes.
+    /// Uses the file index to find the file offset, then reads the rkyv bytes.
     pub fn get_event(
         &self,
         stream_id: &[u8],
@@ -503,8 +460,6 @@ impl NodeStore {
         stream_id: &[u8],
         writer: Option<&edgerun_hardware_signing::NodeID>,
     ) -> Result<u64, StorageError> {
-        use edgerun_core::protocol::EventEnvelope;
-
         let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
         let head = self.index.get_head(&stream_id_hex)?;
         let (head_seq, _) = head.ok_or_else(|| {
@@ -521,7 +476,7 @@ impl NodeStore {
             )));
         }
 
-        let mut prev_hash: Option<Vec<u8>> = None;
+        let mut events = Vec::new();
         for seq in 0..=head_seq as u64 {
             let record = self.index.get_event(&stream_id_hex, seq as i64)?;
             let record = record.ok_or_else(|| {
@@ -531,69 +486,12 @@ impl NodeStore {
                 ))
             })?;
 
-            // Read the actual event envelope from the event log file
-            let event: EventEnvelope = match self.get_event(stream_id, seq) {
-                Ok(Some(e)) => e,
-                Ok(None) => {
-                    return Err(StorageError::Io(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        format!("event envelope missing at seq {}", seq),
-                    )));
-                }
-                Err(e) => return Err(e),
-            };
-
-            if event.stream_id != stream_id {
-                return Err(StorageError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!(
-                        "stream_id mismatch at seq {}: expected {}, got {}",
-                        seq,
-                        stream_id_hex,
-                        edgerun_core::util::bytes_to_hex(&event.stream_id)
-                    ),
-                )));
-            }
-
-            if event.seq != seq {
-                return Err(StorageError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!(
-                        "event seq mismatch at seq {}: envelope contains {}",
-                        seq, event.seq
-                    ),
-                )));
-            }
-
-            // Check genesis: seq 0 must have no prev_hash
-            if seq == 0 {
-                if event.prev_event_hash.is_some() {
-                    return Err(StorageError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "genesis event must not have prev_event_hash",
-                    )));
-                }
-            } else {
-                // Non-genesis: prev_hash must match the previous event's hash
-                let expected = prev_hash.as_ref().ok_or_else(|| {
-                    StorageError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("no prev_hash available for seq {} (missing genesis?)", seq),
-                    ))
-                })?;
-                let actual = event.prev_event_hash.as_ref().map(|d| &d.value);
-                if actual != Some(expected) {
-                    return Err(StorageError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!(
-                            "prev_hash mismatch at seq {}: expected {}, got {:?}",
-                            seq,
-                            edgerun_core::util::bytes_to_hex(expected),
-                            actual.map(|v| edgerun_core::util::bytes_to_hex(v))
-                        ),
-                    )));
-                }
-            }
+            let event = self.get_event(stream_id, seq)?.ok_or_else(|| {
+                StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("event envelope missing at seq {}", seq),
+                ))
+            })?;
 
             let event_hash = crate::core::canonical_event_hash(&event).value;
             if record.event_hash != event_hash {
@@ -608,23 +506,14 @@ impl NodeStore {
                 )));
             }
 
-            // Check signature is present
-            if event.signature.is_none() {
-                return Err(StorageError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("event at seq {} missing signature", seq),
-                )));
-            }
-
-            if let Some(writer) = writer {
-                edgerun_stream::verify_event(&event, writer)?;
-            }
-
-            // Record this event's hash for next iteration
-            prev_hash = Some(event_hash);
+            events.push(event);
         }
 
-        Ok(head_seq as u64 + 1)
+        if let Some(writer) = writer {
+            edgerun_stream::validate_stream(&events, writer)?;
+        }
+
+        Ok(events.len() as u64)
     }
 
     /// Returns events in the given stream and sequence range.
@@ -1338,7 +1227,7 @@ impl NodeStore {
                 .then(left.location.seq.cmp(&right.location.seq))
         });
 
-        validate_scanned_event_chains(&scanned)?;
+        validate_scanned_event_locations(&scanned)?;
 
         self.index.clear()?;
 
@@ -1535,11 +1424,7 @@ impl NodeStore {
     }
 }
 
-fn validate_scanned_event_chains(scanned: &[ScannedEvent]) -> Result<(), StorageError> {
-    let mut current_stream: Option<&[u8]> = None;
-    let mut expected_seq = 0u64;
-    let mut prev_hash: Option<Vec<u8>> = None;
-
+fn validate_scanned_event_locations(scanned: &[ScannedEvent]) -> Result<(), StorageError> {
     for scanned_event in scanned {
         let event = &scanned_event.event;
         let location = &scanned_event.location;
@@ -1569,49 +1454,6 @@ fn validate_scanned_event_chains(scanned: &[ScannedEvent]) -> Result<(), Storage
                 edgerun_core::util::bytes_to_hex(&event_hash)
             )));
         }
-
-        if current_stream != Some(location.stream_id.as_slice()) {
-            current_stream = Some(&location.stream_id);
-            expected_seq = 0;
-            prev_hash = None;
-        }
-
-        if location.seq != expected_seq {
-            return Err(StorageError::Decode(format!(
-                "stream {} has non-contiguous seq: expected {}, got {}",
-                edgerun_core::util::bytes_to_hex(&location.stream_id),
-                expected_seq,
-                location.seq
-            )));
-        }
-
-        if location.seq == 0 {
-            if event.prev_event_hash.is_some() {
-                return Err(StorageError::Decode(format!(
-                    "stream {} genesis event has prev_event_hash",
-                    edgerun_core::util::bytes_to_hex(&location.stream_id)
-                )));
-            }
-        } else {
-            let expected_prev = prev_hash.as_ref().ok_or_else(|| {
-                StorageError::Decode(format!(
-                    "stream {} missing previous hash for seq {}",
-                    edgerun_core::util::bytes_to_hex(&location.stream_id),
-                    location.seq
-                ))
-            })?;
-            let actual_prev = event.prev_event_hash.as_ref().map(|d| &d.value);
-            if actual_prev != Some(expected_prev) {
-                return Err(StorageError::Decode(format!(
-                    "stream {} prev_hash mismatch at seq {}",
-                    edgerun_core::util::bytes_to_hex(&location.stream_id),
-                    location.seq
-                )));
-            }
-        }
-
-        prev_hash = Some(event_hash.to_vec());
-        expected_seq = expected_seq.saturating_add(1);
     }
 
     Ok(())
@@ -1673,9 +1515,7 @@ mod tests {
         let mut store = make_store(tmp_data_root());
         let signer = TestSigner::new();
         let mut genesis = event(b"stream-1", 0, None);
-        store
-            .sign_event_envelope(&mut genesis, &signer)
-            .expect("sign genesis");
+        edgerun_stream::sign_event(&mut genesis, &signer).expect("sign genesis");
         store
             .append_event_blocking(genesis)
             .expect("append genesis");
@@ -1700,9 +1540,7 @@ mod tests {
         let mut store = make_store(tmp_data_root());
         let signer = TestSigner::new();
         let mut genesis = event(b"stream-1", 0, None);
-        store
-            .sign_event_envelope(&mut genesis, &signer)
-            .expect("sign genesis");
+        edgerun_stream::sign_event(&mut genesis, &signer).expect("sign genesis");
         store
             .append_event_blocking(genesis)
             .expect("append genesis");
@@ -1840,14 +1678,15 @@ mod tests {
     }
 
     #[test]
-    fn append_signed_event_signs_persists_and_updates_head() {
+    fn append_event_persists_stream_signed_event_and_updates_projection_head() {
         let data_root = tmp_data_root();
         let (store, _device) = make_block_store(data_root.clone());
         let signer = TestSigner::new();
         let stream_id = b"signed-stream";
 
-        let event = event(stream_id, 0, None);
-        let _offset = store.append_signed_event_blocking(event, &signer).unwrap();
+        let mut event = event(stream_id, 0, None);
+        edgerun_stream::sign_event(&mut event, &signer).unwrap();
+        let _offset = store.append_event_blocking(event).unwrap();
 
         let stored = store.get_event(stream_id, 0).unwrap().unwrap();
         assert!(stored.signature.is_some());
@@ -1864,13 +1703,15 @@ mod tests {
         let signer = TestSigner::new();
         let stream_id = b"signed-validated-stream";
 
-        let first = event(stream_id, 0, None);
-        store.append_signed_event_blocking(first, &signer).unwrap();
+        let mut first = event(stream_id, 0, None);
+        edgerun_stream::sign_event(&mut first, &signer).unwrap();
+        store.append_event_blocking(first).unwrap();
         let first = store.get_event(stream_id, 0).unwrap().unwrap();
         let first_hash = crate::core::canonical_event_hash(&first).value;
 
-        let second = event(stream_id, 1, Some(first_hash));
-        store.append_signed_event_blocking(second, &signer).unwrap();
+        let mut second = event(stream_id, 1, Some(first_hash));
+        edgerun_stream::sign_event(&mut second, &signer).unwrap();
+        store.append_event_blocking(second).unwrap();
 
         assert_eq!(store.validate_stream_chain(stream_id).unwrap(), 2);
         assert_eq!(
@@ -1891,9 +1732,9 @@ mod tests {
         let wrong_signer = TestSigner::new();
         let stream_id = b"wrong-writer-stream";
 
-        store
-            .append_signed_event_blocking(event(stream_id, 0, None), &signer)
-            .unwrap();
+        let mut event = event(stream_id, 0, None);
+        edgerun_stream::sign_event(&mut event, &signer).unwrap();
+        store.append_event_blocking(event).unwrap();
 
         let err = store
             .validate_stream_chain_with_writer(stream_id, &wrong_signer.node_id())

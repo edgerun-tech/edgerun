@@ -436,7 +436,8 @@ mod tests {
             event_version: 1,
             ..EventEnvelope::default()
         };
-        let canonical = protocol::canonical_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true);
+        let canonical =
+            protocol::canonical_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true);
         let sig = sign_canonical_record(&signing, crypto::SIG_DOMAIN_EVENT_ENVELOPE, &canonical)
             .expect("signing works");
         event.signature = Some(Signature {
@@ -444,7 +445,8 @@ mod tests {
             value: sig,
         });
 
-        let verified = verify_event_envelope(&event, ProtocolSignerRef::P256Raw64(&writer)).unwrap();
+        let verified =
+            verify_event_envelope(&event, ProtocolSignerRef::P256Raw64(&writer)).unwrap();
         assert_eq!(verified.family, ProtocolFamily::EventEnvelope);
         assert_eq!(verified.record_hash.len(), 32);
     }
@@ -460,7 +462,8 @@ mod tests {
             event_version: 1,
             ..EventEnvelope::default()
         };
-        let canonical = protocol::canonical_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true);
+        let canonical =
+            protocol::canonical_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true);
         let sig = sign_canonical_record(&signing, crypto::SIG_DOMAIN_COMMAND_ENVELOPE, &canonical)
             .expect("signing works");
         event.signature = Some(Signature {

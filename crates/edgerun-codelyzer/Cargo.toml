@@ -32,3 +32,4 @@ edgerun-edit = { path = "../edgerun-edit", features = ["std"] }
 edgerun-glob.workspace = true
 edgerun-regex.workspace = true
 edgerun-vfs = { path = "../edgerun-vfs", optional = true }
+rkyv = { version = "0.8.16", default-features = true }

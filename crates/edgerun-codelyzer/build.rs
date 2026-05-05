@@ -1,4 +1,4 @@
-// Custom binary protocol - no protobuf compilation needed
+// rkyv-normalized wire protocol only
 fn main() {
-    // Protocol types are now hand-coded in src/generated/codeanalyzer.rs
+    // Protocol types are hand-coded and derive rkyv Archive/Serialize/Deserialize in src/generated/codeanalyzer.rs
 }

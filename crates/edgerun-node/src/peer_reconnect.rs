@@ -4,8 +4,8 @@ use std::sync::Arc;
 use edgerun_encoding::byteorder::read_u64_be;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_rt::{AsyncReadExt, AsyncWriteExt, CancellationToken};
-use prost::Message;
 
+use crate::command_query_wire_codec;
 use crate::session::{self, SessionState};
 use crate::tcp_server::{encode_tcp_frame, SessionContext, TCP_MAX_FRAME_SIZE};
 use crate::types::StoreRequest;
@@ -238,7 +238,8 @@ where
     }
 
     let payload: Vec<u8> = resp_buf.drain(..total_needed).skip(8).collect();
-    let accept = session::decode_accept(&payload)?;
+    let accept = session::decode_accept(&payload)
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
     let peer_node_id = session::verify_session_accept(&accept, nonce)?;
 
     let protocol_version = accept.selected_protocol_version;
@@ -328,9 +329,9 @@ async fn handle_peer_messages<R, W>(
         }
 
         // Try CommandEnvelope
-        if let Ok(command) = edgerun_core::protocol::CommandEnvelope::decode(&payload[..]) {
-            let raw = payload.clone();
-
+        if let Some((command, raw)) =
+            command_query_wire_codec::decode_command_transport(&payload[..])
+        {
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
             if store_tx
                 .send(StoreRequest::Command {
@@ -361,8 +362,7 @@ async fn handle_peer_messages<R, W>(
         }
 
         // Try QueryRequest
-        if let Ok(query) = edgerun_core::protocol::QueryRequest::decode(&payload[..]) {
-            let raw = payload.clone();
+        if let Some((query, raw)) = command_query_wire_codec::decode_query_transport(&payload[..]) {
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
             if store_tx
                 .send(StoreRequest::Query {

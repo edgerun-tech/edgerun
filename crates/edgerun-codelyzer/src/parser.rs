@@ -1,5 +1,6 @@
-use std::{borrow::Cow, collections::HashMap, fs, io::{Read, Write}};
+use std::{borrow::Cow, collections::HashMap, fs};
 
+use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 use tree_sitter::{Language, Node, Parser};
 
 // Language grammars - feature gated
@@ -37,38 +38,13 @@ pub struct RawFunction<'a> {
 }
 
 /// Owned version of RawFunction for caching.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
 pub struct RawFunctionOwned {
     pub name: String,
     pub start_byte: usize,
     pub end_byte: usize,
     pub is_static: bool,
     pub is_macro_def: bool,
-}
-
-impl RawFunctionOwned {
-    /// Encode to binary format for cache file.
-    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
-        use crate::generated::codeanalyzer::binary::*;
-        encode_string(w, &self.name)?;
-        encode_u64(w, self.start_byte as u64)?;
-        encode_u64(w, self.end_byte as u64)?;
-        encode_bool(w, self.is_static)?;
-        encode_bool(w, self.is_macro_def)?;
-        Ok(())
-    }
-
-    /// Decode from binary format.
-    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
-        use crate::generated::codeanalyzer::binary::*;
-        Ok(Self {
-            name: decode_string(r)?,
-            start_byte: decode_u64(r)? as usize,
-            end_byte: decode_u64(r)? as usize,
-            is_static: decode_bool(r)?,
-            is_macro_def: decode_bool(r)?,
-        })
-    }
 }
 
 /// A raw call found in source code.
@@ -81,46 +57,12 @@ pub struct RawCall<'a> {
 }
 
 /// Owned version of RawCall for caching.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
 pub struct RawCallOwned {
     pub callee_name: String,
     pub start_byte: usize,
     pub end_byte: usize,
     pub kind: CallKind,
-}
-
-impl RawCallOwned {
-    /// Encode to binary format for cache file.
-    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
-        use crate::generated::codeanalyzer::binary::*;
-        encode_string(w, &self.callee_name)?;
-        encode_u64(w, self.start_byte as u64)?;
-        encode_u64(w, self.end_byte as u64)?;
-        let kind_tag: u8 = match self.kind {
-            CallKind::Call => 0,
-            CallKind::Macro => 1,
-            CallKind::Indirect => 2,
-        };
-        w.write_all(&[kind_tag])?;
-        Ok(())
-    }
-
-    /// Decode from binary format.
-    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
-        use crate::generated::codeanalyzer::binary::*;
-        let callee_name = decode_string(r)?;
-        let start_byte = decode_u64(r)? as usize;
-        let end_byte = decode_u64(r)? as usize;
-        let mut kind_tag = [0u8];
-        r.read_exact(&mut kind_tag)?;
-        let kind = match kind_tag[0] {
-            0 => CallKind::Call,
-            1 => CallKind::Macro,
-            2 => CallKind::Indirect,
-            _ => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid CallKind")),
-        };
-        Ok(Self { callee_name, start_byte, end_byte, kind })
-    }
 }
 
 impl<'a> From<&RawFunction<'a>> for RawFunctionOwned {
@@ -147,28 +89,10 @@ impl<'a> From<&RawCall<'a>> for RawCallOwned {
 }
 
 /// Cached parse result that can be serialized.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
 pub struct CachedParseResult {
     pub functions: Vec<RawFunctionOwned>,
     pub calls: Vec<RawCallOwned>,
-}
-
-impl CachedParseResult {
-    /// Encode to binary format for cache file.
-    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
-        use crate::generated::codeanalyzer::binary::*;
-        encode_repeated(w, &self.functions)?;
-        encode_repeated(w, &self.calls)?;
-        Ok(())
-    }
-
-    /// Decode from binary format.
-    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
-        use crate::generated::codeanalyzer::binary::*;
-        let functions = decode_repeated(r)?;
-        let calls = decode_repeated(r)?;
-        Ok(Self { functions, calls })
-    }
 }
 
 impl<'a> ParseResult<'a> {

@@ -1,6 +1,6 @@
 //! Block-device-backed event log implementation.
 //!
-//! This backend stores the same varint-framed protobuf event records used by the
+//! This backend stores the same varint-framed rkyv event records used by the
 //! filesystem backend, but on a raw sector-addressable block storage device.
 
 use crate::prelude::v1::*;
@@ -373,6 +373,10 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
         }
 
         Ok(scanned)
+    }
+
+    fn sync(&mut self) -> Result<(), StorageError> {
+        self.write_header()
     }
 }
 

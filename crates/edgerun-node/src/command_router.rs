@@ -5,7 +5,7 @@
 
 pub use crate::command_dispatch::{
     create_node_genesis_payload, project_config, project_config_from_base, project_controller_set,
-    sign_event_envelope, CommandDispatchResult, ControllerSet,
+    CommandDispatchResult, ControllerSet,
 };
 
 use crate::command_authority::{command_authority_gate, CommandGateDecision};

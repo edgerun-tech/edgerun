@@ -122,6 +122,10 @@ impl EventLog for MemEventLog {
 
         Ok(scanned)
     }
+
+    fn sync(&mut self) -> Result<(), StorageError> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -188,6 +192,20 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![r1.file_offset, r2.file_offset, r3.file_offset]
         );
+    }
+
+    #[test]
+    fn append_does_not_author_stream_state() {
+        let mut log = MemEventLog::new();
+        let event = event(b"stream", 42);
+
+        let receipt = log.append_event(&event).unwrap();
+        let scanned = log.scan().unwrap();
+
+        assert_eq!(receipt.seq, 42);
+        assert_eq!(scanned[0].event.seq, 42);
+        assert!(scanned[0].event.prev_event_hash.is_none());
+        assert!(scanned[0].event.signature.is_none());
     }
 
     #[test]

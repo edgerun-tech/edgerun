@@ -761,7 +761,7 @@ pub mod ui {
 }
 
 /// Serialize a UiNode tree to bytes and wrap in a Response.
-/// Content type is "application/x-edgerun-ui-v0+protobuf".
+/// Content type is "application/x-edgerun-ui-v0+rkyv".
 pub fn render(root: UiNode) -> Response {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(b"edgerun-ui-native-v0");
@@ -769,7 +769,7 @@ pub fn render(root: UiNode) -> Response {
     Response {
         status: 200,
         body: bytes,
-        content_type: Some(String::from("application/x-edgerun-ui-v0+protobuf")),
+        content_type: Some(String::from("application/x-edgerun-ui-v0+rkyv")),
     }
 }
 
@@ -793,7 +793,7 @@ pub fn render_with_status(status: u16, root: UiNode) -> Response {
     Response {
         status,
         body: bytes,
-        content_type: Some(String::from("application/x-edgerun-ui-v0+protobuf")),
+        content_type: Some(String::from("application/x-edgerun-ui-v0+rkyv")),
     }
 }
 

@@ -4,8 +4,9 @@
 # Run:  cargo deny check
 #
 # CRITICAL: serde_json is banned as a direct dependency in this workspace.
-# The edgerun protocol uses protobuf for all canonicalization.
-# If you need to serialize something for hashing or signing, use protobuf.
+# The edgerun internal wire protocol is rkyv. If you need to serialize
+# something for hashing, signing, storage, or transport, archive the concrete
+# protocol type through the rkyv boundary.
 
 [graph]
 targets = [
@@ -15,8 +16,7 @@ targets = [
 
 [advisories]
 ignore = [
-  # paste — unmaintained, but only used as dev-dependency via itertools → prost-derive.
-  # No safe upgrade available; prost ecosystem depends on it.
+  # paste — unmaintained, retained only through legacy dependency trees until removed.
   "RUSTSEC-2024-0436",
   # atomic-polyfill — unmaintained, used via heapless → aead → aes-gcm.
   # No safe upgrade available.
@@ -32,11 +32,8 @@ multiple-versions = "warn"
 wildcards = "allow"
 highlight = "all"
 
-# CRITICAL: serde_json is banned as a direct dependency in this workspace.
-# The edgerun protocol uses protobuf for all canonicalization.
-# If you need to serialize something for hashing or signing, use protobuf.
 # serde_json may only appear behind explicit host-only comparison tooling
-# or as the edgerun-json workspace crate.
+# or as the edgerun-json workspace crate. It is not an internal wire format.
 [[bans.deny]]
 name = "serde_json"
 wrappers = ["edgerun-json"]

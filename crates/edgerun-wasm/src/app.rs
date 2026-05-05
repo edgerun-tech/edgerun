@@ -232,7 +232,7 @@ fn scope_matches(cap: &CapabilityDescriptor, scope: &Option<ScopeDescriptor>) ->
 }
 
 pub fn compute_app_object_id(package_bytes: &[u8]) -> [u8; 32] {
-    let canonicalization_id = b"proto-v0:AppPackage:1";
+    let canonicalization_id = b"rkyv-v0:AppPackage:1";
 
     let mut hasher = Sha256::new();
     hasher.update(b"edgerun:v0:object");
@@ -387,11 +387,11 @@ mod tests {
     fn conformance_canonicalization_prefix() {
         let prefix = b"edgerun:v0:object";
         let separator = [0x00u8];
-        let canonicalization_id = b"proto-v0:AppPackage:1";
+        let canonicalization_id = b"rkyv-v0:AppPackage:1";
 
         assert_eq!(prefix, b"edgerun:v0:object");
         assert_eq!(separator, [0x00]);
-        assert_eq!(canonicalization_id, b"proto-v0:AppPackage:1");
+        assert_eq!(canonicalization_id, b"rkyv-v0:AppPackage:1");
     }
 
     #[test]

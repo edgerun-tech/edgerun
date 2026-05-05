@@ -8,14 +8,12 @@ mod app_package_wire_codec;
 mod assurance;
 mod capabilities;
 mod capacity;
-mod command_authority;
 mod command_dispatch;
 mod command_dispatch_event;
 mod command_dispatch_payload;
 mod command_dispatch_result;
-mod command_dispatch_server_resource;
+mod command_query_wire_codec;
 mod command_result_wire_codec;
-mod command_router;
 // mod metering;      // TODO: file missing — not needed for interface boundary
 // mod running_workloads; // TODO: file missing — not needed for interface boundary
 // mod workload_policy;  // TODO: file missing — not needed for interface boundary
@@ -26,6 +24,7 @@ mod server_resource_dispatch;
 mod server_resource_wire_codec;
 mod server_resources;
 mod session;
+mod stream_append;
 
 // Extracted modules
 mod cli;
@@ -44,7 +43,6 @@ mod tcp_server;
 mod provisioning_listener;
 
 mod types;
-use command_dispatch::sign_event_envelope;
 
 fn main() {
     cli::main()

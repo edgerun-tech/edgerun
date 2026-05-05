@@ -1,17 +1,11 @@
 # Edgerun Core
 
 Edgerun Core is an identity-based, append-only information fabric for edge
-nodes. The protocol is defined in
-[edgerun_core_protocol_v0_single_file.md](edgerun_core_protocol_v0_single_file.md):
-nodes are addressed by cryptographic identity, durable truth is a set of
-single-writer signed streams, data is carried as immutable objects, and access
-is mediated by commands, capabilities, delegations, queries, and local policy.
-
-The crate tree implements that model across protocol validation, event storage,
-mesh transport, node daemons, services, hardware capability providers, and
-bare-metal runtime support. Most library crates are `no_std` or `alloc`-first
-and use local runtime/serialization/logging primitives rather than Tokio,
-host JSON stacks, clap, or tracing.
+nodes. The internal wire protocol is consolidated on rkyv: hashing, signing,
+storage, transport payloads, caches, and local bridges must archive concrete
+protocol types through the rkyv boundary. Legacy schema/generated wire artifacts
+have been removed so old call sites fail instead of silently using a second
+protocol.
 
 ## Protocol Model
 
@@ -30,50 +24,28 @@ The v0 protocol has five central rules:
    assurance claims, query proofs, and route hints are validated under local
    policy rather than global consensus.
 
-Generated protobuf schemas live in `proto/edgerun/v0`. They cover the core
-families from the spec (`common`, `identity`, `trust`, `stream`, `object`,
-`access`, `network`) plus capability runtime messages and generated web-platform
-type catalogs used by codegen experiments.
-
 ## Implementation Map
 
 | Layer | Main crates | What the code actually does |
 |---|---|---|
-| Protocol core | `edgerun-core`, `edgerun-proto` | Re-exports generated protobuf types as canonical protocol records; canonicalizes with prost encoding; clears signatures for signable forms; defines domain-separated hashes/signature inputs; validates command, stream, delegation, snapshot, query, network, identity, proof, and trust cases. |
-| Streams | `edgerun-stream` | Creates signed genesis events, appends contiguous events, computes canonical event hashes, verifies ECDSA P-256 signatures, and rejects missing genesis, sequence gaps, bad `prev_hash`, and tampering. |
+| Protocol core | `edgerun-core`, `edgerun-wire` | Owns native protocol records, rkyv wire boundary exports, domain-separated hashes/signature inputs, command/stream/delegation/snapshot/query/network/identity/proof/trust validation, and explicit breakpoints for removed legacy byte paths. |
+| Streams | `edgerun-stream` | Creates signed genesis events, appends contiguous events, verifies stream-chain invariants, and rejects missing genesis, sequence gaps, bad `prev_hash`, and tampering. |
 | Storage | `edgerun-storage` | Persists event logs as authority, stores encrypted blobs, derives logical object and representation ids, tracks stream heads/replay/object/snapshot indexes, rebuilds indexes from logs, records command replay outcomes, and supports file, memory, and block-backed storage paths. |
-| Node runtime | `edgerun-node` | Loads node config, owns a stream, validates incoming `CommandEnvelope`s, records commit/reject events, runs a store task, handles TCP framed sessions, executes queries over `NodeStore`, tracks workloads, and bridges mesh/TCP traffic into the same command path. |
-| Mesh | `edgerun-mesh`, `edgerun-mesh-link`, `edgerun-mesh-session`, `edgerun-mesh-daemon`, `edgerun-mesh-capability` | Uses P-256 public keys as `NodeID`s, signs mesh frames, routes by identity, discovers peers over raw Ethernet/UDP/multicast/tunnel links, performs ECDH session handshakes with replay/rekey policy, and carries remote capability envelopes over mesh frames. |
-| Capabilities | `edgerun-capabilities`, `edgerun-capability-policy`, `edgerun-remote-capability` | Defines provider descriptors, selectors, requests, grants, invocations, results, revocations, policy decisions, session grant binding, signed capability messages, in-memory/TCP/Unix transports, and adapters for hardware capability traits. |
-| Hardware identity | `edgerun-hardware-signing`, `edgerun-tpm`, `edgerun-yubikey`, `edgerun-android-keystore` | Normalizes hardware-backed signing around ECDSA P-256 `NodeID`s; supports TPM raw commands, YubiKey PIV/APDU flows, Android Keystore adapters, assurance metadata, and provider-specific signature wrappers. |
-| Services | `edgerun-server`, `edgerun-http`, `edgerun-tls`, `edgerun-quic`, `edgerun-dns`, `edgerun-dhcp`, `edgerun-dhcpv6`, `edgerun-email`, `edgerun-proxy`, `edgerun-oci` | Implements protocol/service stacks on top of `edgerun-rt`: HTTP/1/2/3, TLS 1.3, QUIC, DNS/DHCP/TFTP/PXE pieces, SMTP/IMAP/LMTP, CONNECT proxying, and OCI parsing/runtime/registry paths. |
-| Bare metal | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-ipxe`, `edgerun-tftp`, `edgerun-virtio`, `edgerun-rtl8125` | Provides a no_std async runtime, timers, channels, sync primitives, async I/O traits, TCP/UDP/IP primitives, platform primitives, VirtIO/RTL8125 drivers, TFTP boot support, and a freestanding unikernel binary. Dedicated crates own service protocols such as HTTP, DNS, TLS, QUIC, DHCP, and TFTP. |
-| Hardware adapters | `edgerun-linux-*`, `edgerun-alsa-*`, `edgerun-evdev-input`, `edgerun-v4l2-camera`, `edgerun-goodix-fingerprint`, `edgerun-mgmt-bluetooth`, `edgerun-amd-xdna`, `edgerun-quectel-ec200a` | Exposes Linux/sysfs/ioctl backed capability providers for network interfaces, WiFi, PCI, USB, GPU, CEC, power, ALSA capture/playback, evdev, V4L2, Goodix fingerprint, Bluetooth mgmt, AMD XDNA, and cellular modem control. |
-| Local support crates | `edgerun-json`, `edgerun-encoding`, `edgerun-hpack`, `edgerun-qpack`, `edgerun-crypto`, `edgerun-clap`, `edgerun-log`, `edgerun-vfs`, `edgerun-virtual-disk` | Provides no_std JSON/YAML/TOML paths, encoding utilities, HPACK/QPACK, the workspace crypto boundary, CLI parsing, logging, RAM-backed VFS/write-back tooling, virtual disks, NBD, and block protocols. |
+| Node runtime | `edgerun-node` | Owns node orchestration. Remaining legacy node byte paths are explicit breakpoints until migrated to rkyv archive payloads. |
+| Mesh | `edgerun-mesh`, `edgerun-mesh-link`, `edgerun-mesh-session`, `edgerun-mesh-daemon`, `edgerun-mesh-capability` | Uses P-256 public keys as `NodeID`s, signs mesh frames, routes by identity, discovers peers, performs ECDH session handshakes, and carries rkyv capability envelopes. |
+| Capabilities | `edgerun-capabilities`, `edgerun-capability-policy`, `edgerun-remote-capability` | Defines provider descriptors, selectors, requests, grants, invocations, results, revocations, policy decisions, session grant binding, and rkyv capability message boundaries. |
+| Hardware identity | `edgerun-hardware-signing`, `edgerun-tpm`, `edgerun-yubikey`, `edgerun-android-keystore` | Normalizes hardware-backed signing around ECDSA P-256 `NodeID`s. |
+| Services | `edgerun-server`, `edgerun-http`, `edgerun-tls`, `edgerun-quic`, `edgerun-dns`, `edgerun-dhcp`, `edgerun-dhcpv6`, `edgerun-email`, `edgerun-proxy`, `edgerun-oci` | Implements service stacks on top of `edgerun-rt`. |
+| Bare metal | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-ipxe`, `edgerun-tftp`, `edgerun-virtio`, `edgerun-rtl8125` | Provides runtime, platform primitives, drivers, boot support, and a freestanding unikernel binary. |
+| Local support crates | `edgerun-json`, `edgerun-encoding`, `edgerun-hpack`, `edgerun-qpack`, `edgerun-crypto`, `edgerun-clap`, `edgerun-log`, `edgerun-vfs`, `edgerun-virtual-disk` | Provides local utilities. These crates are not alternate protocol wire formats. |
 
-## Current Workspace State
+## Wire Protocol Rule
 
-The tree currently contains 110 first-level directories under `crates/`, all of
-which have `Cargo.toml` manifests. `cargo metadata --no-deps` succeeds in this
-checkout and reports 110 workspace packages/members. The textual `members` list
-in the root `Cargo.toml` has 110 unique entries.
+There is one internal wire protocol: `rkyv`.
 
-For a code-grounded readiness assessment, see
-[docs/project-state.md](docs/project-state.md).
-
-## License and Release Status
-
-Edgerun Core is licensed under `MIT OR Apache-2.0`. See [LICENSE](LICENSE),
-[LICENSE-MIT](LICENSE-MIT), and [LICENSE-APACHE](LICENSE-APACHE). Contributions
-are accepted under the same dual-license terms unless explicitly stated
-otherwise.
-
-The project is currently an alpha protocol/runtime implementation. GitHub tag
-releases are source-first and may include an `edgerund` Linux amd64 binary and
-checksums. Crates.io publication is disabled by default for the workspace until
-individual crates have explicit package-readiness review, versioned internal
-dependencies, and clean package contents. See [RELEASE.md](RELEASE.md) and
-[SECURITY.md](SECURITY.md).
+Removed legacy paths must not be reintroduced as compatibility shims. If a
+caller breaks, migrate the caller to archive and access the concrete rkyv type at
+that boundary.
 
 ## Build
 
@@ -100,39 +72,7 @@ cargo +nightly build --release -p edgerun-unikernel \
   -Zbuild-std=core,alloc
 ```
 
-QEMU boot wrappers:
+## License and Release Status
 
-```bash
-scripts/qemu-unikernel.sh
-scripts/qemu-unikernel-net-pump.sh
-scripts/qemu-unikernel-swtpm.sh
-```
-
-## Protocol-Critical Crates
-
-- `edgerun-core`: canonical protocol records, domain-separated hashing/signing,
-  command validation, delegation validation, trust/revocation handling, route
-  and query proof validation, conformance vector loader.
-- `edgerun-stream`: event signing and stream-chain validation.
-- `edgerun-storage`: authoritative event log, encrypted object/blob store,
-  indexes, snapshots, command replay cache, rebuild and integrity checks.
-- `edgerun-node`: validates and dispatches commands, records outcomes, serves
-  queries, bridges TCP/mesh peers, and keeps all authoritative mutation behind
-  stored events.
-- `edgerun-hardware-signing`: converts hardware-backed keys into mesh identities
-  and signs domain-separated record hashes without exposing private keys.
-
-## Important Caveats
-
-- Route advertisements, query proofs, snapshots, and cached views are evidence
-  or acceleration structures; they do not replace stream authority.
-- The protocol-critical crates are substantially implemented and tested, but
-  the project is still alpha. Federation, some node projections, service
-  conformance, and bare-target hardware paths are partial.
-- Many hardware crates have host-Linux implementations and bare-target stubs so
-  the type surface can compile in no_std contexts.
-- Browser/web-platform files under `proto/` and `docs/` are generated type
-  catalogs and design/reference material. The current crate tree is not a full
-  browser engine implementation.
-- The docs in this repo are a mix of current implementation notes and older
-  design snapshots. Prefer source code and crate-local READMEs for exact status.
+Edgerun Core is licensed under `MIT OR Apache-2.0`. See [LICENSE](LICENSE),
+[LICENSE-MIT](LICENSE-MIT), and [LICENSE-APACHE](LICENSE-APACHE).

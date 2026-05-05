@@ -1,7 +1,7 @@
 /**
  * DOM renderer for EdgeRun UINode trees.
  *
- * Renders a deterministic UINode protobuf tree into DOM elements.
+ * Renders a decoded rkyv UINode tree into DOM elements.
  * WASM produces the tree; this adapter only projects it.
  */
 
@@ -16,7 +16,7 @@ export class DOMRenderer {
 
   /**
    * Render a UINode object tree into the container.
-   * @param {object} node - parsed UINode proto
+   * @param {object} node - decoded UINode
    */
   render(node) {
     if (!node) return;

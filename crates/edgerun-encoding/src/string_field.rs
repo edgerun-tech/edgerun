@@ -1,4 +1,4 @@
-//! Binary string field helpers for protobuf-like manual serialization.
+//! Binary string field helpers for length-prefixed string serialization.
 //!
 //! Consolidated from identical implementations in:
 //! - `edgerun-remote-capability/src/adapters/wifi.rs`

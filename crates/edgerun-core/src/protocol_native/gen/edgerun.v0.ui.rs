@@ -3,7 +3,7 @@
 // It is produced by WASM and rendered by native (egui) or browser (DOM) adapters.
 //
 // Canonical encoding = edgerun-wire.
-// Object ID = SHA256("edgerun:v0:object" || 0x00 || "proto-v0:UINode:1" || 0x00 || protobuf_encode(UINode))
+// Object ID = SHA256("edgerun:v0:object" || 0x00 || "rkyv-v0:UINode:1" || 0x00 || rkyv_archive(UINode))
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UiNode {

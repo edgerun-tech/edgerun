@@ -291,8 +291,6 @@ pub mod fs {
         }
     }
 
-
-
     impl io::Seek for File {
         fn seek(&mut self, _pos: io::SeekFrom) -> io::Result<u64> {
             Err(io::Error::new(

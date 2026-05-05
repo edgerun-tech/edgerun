@@ -30,10 +30,10 @@ export function loadGraph(data) {
   window.__nodesMap = map;
 }
 
-export function updateNodesFromProto(protoNodes) {
+export function updateNodesFromWire(wireNodes) {
   setNodesMap((prev) => {
     const next = new Map(prev);
-    for (const n of protoNodes) {
+    for (const n of wireNodes) {
       next.set(n.id, n);
     }
     window.__nodesMap = next;
@@ -41,7 +41,7 @@ export function updateNodesFromProto(protoNodes) {
   });
 }
 
-export function removeNodesFromProto(nodeIds) {
+export function removeNodesFromWire(nodeIds) {
   setNodesMap((prev) => {
     const next = new Map(prev);
     for (const id of nodeIds) {

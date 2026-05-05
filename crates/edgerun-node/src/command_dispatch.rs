@@ -1,53 +1,21 @@
-//! Command dispatch for the edgerun node daemon.
-//!
-//! Replaces the old signature-only validation with:
-//! - Full command validation (replay, timing, delegation signature verification)
-//! - Command type dispatch (ADD_CONTROLLER, REMOVE_CONTROLLER, TRANSFER_CONTROL, etc.)
-//! - Controller set management and projection from event log
-//! - Revocation record processing
+//! Command validation and decision-event recording.
 
-// Handler modules — split from monolithic command_dispatch.rs
-pub mod command_handlers;
-
-// Re-export key types for handlers
-pub use command_handlers::{apps, config, control, custom, identity, infrastructure, user};
-
-use crate::command_authority::{build_validation_context, check_replay_cache, CommandGateDecision};
-use crate::command_dispatch_payload::extract_payload_or_reject;
+use crate::command_dispatch_event::append_command_result_event;
 use crate::config::NodeConfig;
 use edgerun_core::collections::{HashMap, HashSet};
 use edgerun_core::command::{
     command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
 };
 use edgerun_core::encrypted_envelope::validate_encrypted_envelope;
-use edgerun_core::protocol::EncryptedEnvelope;
 use edgerun_core::protocol::{
-    CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload,
-    CommandType, EventType,
-};
-use edgerun_core::protocol::{CommandRef, EventRef, ObjectRef};
-use edgerun_core::protocol::{
-    DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord,
+    command_envelope, CommandDecision, CommandEnvelope, CommandType, EventType, IdentityKind,
+    IdentityRef, ObjectKind, ObjectRef,
 };
 use edgerun_core::result::Verdict;
-use edgerun_core::util::{
-    now_prost_timestamp, now_unix_micros_u64, now_unix_millis_i64, now_unix_secs_i64,
-};
-use edgerun_core::validators_proto::{
-    validate_control_change_command, validate_delegation_chain, validate_revocation_record,
-};
-use edgerun_crypto::rand_core::RngCore;
+use edgerun_core::util::now_unix_millis_i64;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_json::Value as JsonValue;
 use edgerun_storage::NodeStore;
-use prost::Message;
-use std::sync::Arc;
 
-// ---------------------------------------------------------------------------
-// Controller state
-// ---------------------------------------------------------------------------
-
-/// The current set of controller identities authorized to influence this node.
 #[derive(Clone, Debug, Default)]
 pub struct ControllerSet {
     controllers: HashSet<Vec<u8>>,
@@ -77,7 +45,7 @@ impl ControllerSet {
     }
 
     pub fn controller_ids(&self) -> Vec<Vec<u8>> {
-        self.controllers.iter().cloned().collect()
+        self.to_vec()
     }
 
     pub fn to_vec(&self) -> Vec<Vec<u8>> {
@@ -85,22 +53,15 @@ impl ControllerSet {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Command dispatch result
-// ---------------------------------------------------------------------------
-
 pub struct CommandDispatchResult {
     pub event_type: EventType,
-    pub decision: i32, // COMMAND_DECISION_COMMITTED = 1, REJECTED = 2
+    pub decision: i32,
     pub reason_code: String,
     pub response_bytes: Vec<u8>,
 }
 
-// ---------------------------------------------------------------------------
-// Command dispatch
-// ---------------------------------------------------------------------------
+pub use crate::stream_append::append_command_stream_event;
 
-/// Processes a command through full validation and type-specific dispatch.
 pub fn dispatch_command(
     command: &CommandEnvelope,
     store: &mut NodeStore,
@@ -113,347 +74,288 @@ pub fn dispatch_command(
     local_assurance_class: i32,
     exec_ctx: &CommandExecutionContext,
 ) -> CommandDispatchResult {
-    let now_ms = now_unix_millis_i64();
-    let local_node_id = signer.node_id().0;
-
-    // Check replay cache (both persistent and in-memory)
-    if let Some(CommandGateDecision::CommitDuplicate) =
-        check_replay_cache(command, store, replay_cache)
-    {
-        return record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            true,
-            "duplicate_command",
-            Vec::new(),
-            None,
-        );
+    if command_is_duplicate(command, store, replay_cache) {
+        return respond(command, store, stream_id, signer, true, "duplicate_command");
     }
 
-    // Build validation context from execution context + node-local state
-    let delegation_use_counts: HashMap<Vec<u8>, u64> = HashMap::new();
-    let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
-
-    let ctx = build_validation_context(
-        signer,
+    let empty_counts: HashMap<Vec<u8>, u64> = HashMap::new();
+    let empty_rate_events: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
+    let local_node_id = signer.node_id().0;
+    let location_classes: Vec<&str> = exec_ctx
+        .location_classes
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let ctx = CommandValidationContext {
+        local_node_id: &local_node_id,
         replay_cache,
-        revoked_delegations,
+        revoked_delegation_ids: revoked_delegations,
+        delegation_use_counts: &empty_counts,
+        delegation_rate_events_ms: &empty_rate_events,
+        now_ms: now_unix_millis_i64(),
         trusted_root_ids,
         local_assurance_class,
-        exec_ctx,
-        &delegation_use_counts,
-        &delegation_rate_events_ms,
-        now_ms,
-    );
+        accepted_assurance_claims: &exec_ctx.accepted_assurance_claims,
+        has_local_session: exec_ctx.has_local_session,
+        has_user_presence: exec_ctx.has_user_presence,
+        transport_class: exec_ctx.transport_class.as_deref().and_then(transport_class),
+        location_classes: &location_classes,
+        target_stream_id: exec_ctx.target_stream_id.as_deref(),
+        target_view_type: exec_ctx.target_view_type.as_deref(),
+        target_domain: exec_ctx.target_domain.as_deref(),
+        execution_class: exec_ctx.execution_class.as_deref().and_then(execution_class),
+        storage_class: exec_ctx.storage_class.as_deref().and_then(storage_class),
+    };
 
-    // Run full validation
-    let validation_result = validate_command(command, &ctx);
-
-    // If validation rejected or deferred, record and return
-    match validation_result.verdict {
-        Verdict::Reject => {
-            let reason = validation_result
-                .reason_code
-                .map(|r| r.as_str().to_string())
-                .unwrap_or_else(|| "rejected".into());
-            return record_and_respond(
-                command,
-                store,
-                stream_id,
-                signer,
-                controllers,
-                false,
-                &reason,
-                Vec::new(),
-                None,
-            );
-        }
-        Verdict::Defer => {
-            return record_and_respond(
-                command,
-                store,
-                stream_id,
-                signer,
-                controllers,
-                false,
-                "deferred",
-                Vec::new(),
-                None,
-            );
-        }
+    match validate_command(command, &ctx).verdict {
+        Verdict::Reject => return respond(command, store, stream_id, signer, false, "rejected"),
+        Verdict::Defer => return respond(command, store, stream_id, signer, false, "deferred"),
         Verdict::Duplicate => {
-            return record_and_respond(
-                command,
-                store,
-                stream_id,
-                signer,
-                controllers,
-                true,
-                "duplicate_command",
-                Vec::new(),
-                None,
-            );
+            return respond(command, store, stream_id, signer, true, "duplicate_command")
         }
         Verdict::Accept => {}
     }
 
-    // Policy check
-    let issuer_id = command
-        .issuer
-        .as_ref()
-        .map(|i| i.identity_id.clone())
-        .unwrap_or_default();
-    let policy_ctx = edgerun_core::command::CommandPolicyContext {
-        issuer_identity_id: &issuer_id,
-        command_type: command.command_type,
-        has_valid_delegation: !command.delegation_chain.is_empty(),
-        controller_ids: &controllers.to_vec(),
-        allowed_command_types: &[],
-    };
-    let policy_result = edgerun_core::command::validate_command_policy(&policy_ctx);
-    if policy_result.verdict == Verdict::Reject {
-        let reason = policy_result
-            .reason_code
-            .map(|r| r.as_str().to_string())
-            .unwrap_or_else(|| "policy_denied".into());
-        return record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            false,
-            &reason,
-            Vec::new(),
-            None,
-        );
+    if let Err(reason) = validate_payload_boundary(command) {
+        return respond(command, store, stream_id, signer, false, reason);
     }
 
-    // Control change validation
-    if matches!(
-        CommandType::from_i32(command.command_type),
-        Some(
-            CommandType::AddController
-                | CommandType::RemoveController
-                | CommandType::TransferControl
-        )
-    ) {
-        let current_controllers = controllers.to_vec();
-        let control_result = validate_control_change_command(command, &current_controllers, 1);
-        if control_result.verdict != Verdict::Accept {
-            let reason = control_result
-                .reason_code
-                .map(|r| r.as_str().to_string())
-                .unwrap_or_else(|| "control_change_rejected".into());
-            return record_and_respond(
-                command,
-                store,
-                stream_id,
-                signer,
-                controllers,
-                false,
-                &reason,
-                Vec::new(),
-                None,
-            );
-        }
-    }
-
-    // Encrypted envelope validation
-    let needs_encryption = matches!(
-        CommandType::from_i32(command.command_type),
-        Some(CommandType::StoreObject | CommandType::ExecuteWorkload)
-    );
-
-    if needs_encryption {
-        let payload_bytes = match &command.payload {
-            Some(edgerun_core::protocol::command_envelope::Payload::InlinePayload(b)) => {
-                Some(b.clone())
-            }
-            _ => None,
-        };
-
-        if let Some(raw) = payload_bytes {
-            match EncryptedEnvelope::decode(raw.as_slice()) {
-                Ok(env) => {
-                    if let Err(reason) = validate_encrypted_envelope(&env) {
-                        return record_and_respond(
-                            command,
-                            store,
-                            stream_id,
-                            signer,
-                            controllers,
-                            false,
-                            &reason,
-                            Vec::new(),
-                            None,
-                        );
-                    }
-                }
-                Err(_) => {
-                    return record_and_respond(
-                        command,
-                        store,
-                        stream_id,
-                        signer,
-                        controllers,
-                        false,
-                        "PLAINTEXT_PAYLOAD_REJECTED",
-                        Vec::new(),
-                        None,
-                    );
-                }
-            }
-        }
-    }
-
-    // Dispatch by command type — uses handler modules in command_handlers/
-    let command_type = command.command_type;
-    match command_type {
-        x if x == CommandType::AddController as i32 => {
-            control::dispatch_add_controller(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::RemoveController as i32 => {
-            control::dispatch_remove_controller(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::TransferControl as i32 => {
-            control::dispatch_transfer_control(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::PublishSnapshot as i32 => record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            false,
-            "use_produce_snapshot_request",
-            Vec::new(),
-            None,
-        ),
-        x if x == CommandType::FetchObject as i32 => record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            false,
-            "use_fetch_object_request",
-            Vec::new(),
-            None,
-        ),
-        x if x == CommandType::Query as i32 => record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            true,
-            "",
-            Vec::new(),
-            None,
-        ),
-        x if x == CommandType::ExecuteWorkload as i32 => record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            false,
-            "execute_workload_not_supported",
-            Vec::new(),
-            None,
-        ),
-        x if x == CommandType::TerminateWorkload as i32 => record_and_respond(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-            false,
-            "terminate_workload_not_supported",
-            Vec::new(),
-            None,
-        ),
-        x if x == CommandType::CreateDelegation as i32
-            || x == CommandType::CreateRevocation as i32 =>
-        {
-            custom::dispatch_custom_command(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::UpdateConfig as i32 => {
-            config::dispatch_update_config(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::InstallApp as i32 => {
-            apps::dispatch_install_app(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::UninstallApp as i32 => {
-            apps::dispatch_uninstall_app(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::CreateIdentity as i32 => {
-            identity::dispatch_create_identity(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::ImportIdentity as i32 => {
-            identity::dispatch_import_identity(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::AddBootstrapNode as i32 => {
-            infrastructure::dispatch_add_bootstrap_node(
-                command,
-                store,
-                stream_id,
-                signer,
-                controllers,
-            )
-        }
-        x if x == CommandType::AddReachabilityHint as i32 => {
-            infrastructure::dispatch_add_reachability_hint(
-                command,
-                store,
-                stream_id,
-                signer,
-                controllers,
-            )
-        }
-        x if x == CommandType::QueryNodeState as i32 => infrastructure::dispatch_query_node_state(
-            command,
-            store,
-            stream_id,
-            signer,
-            controllers,
-        ),
-        x if x == CommandType::RequestUserPresence as i32 => {
-            user::dispatch_request_user_presence(command, store, stream_id, signer, controllers)
-        }
-        x if x == CommandType::RequestSignature as i32 => {
-            user::dispatch_request_signature(command, store, stream_id, signer, controllers)
-        }
-        _ => {
-            if command_type > 0 && command_type < 1000 {
-                record_and_respond(
+    match CommandType::from_i32(command.command_type) {
+        Some(CommandType::AddController) => {
+            let id = extract_identity_from_command(command);
+            if id.is_empty() {
+                respond(
                     command,
                     store,
                     stream_id,
                     signer,
-                    controllers,
                     false,
-                    "unknown_command_type_reserved",
-                    Vec::new(),
-                    None,
+                    "missing_controller_identity",
                 )
             } else {
-                record_and_respond(
+                controllers.add(id);
+                respond(command, store, stream_id, signer, true, "")
+            }
+        }
+        Some(CommandType::RemoveController) => {
+            let id = extract_identity_from_command(command);
+            if id.is_empty() || !controllers.remove(&id) {
+                respond(
                     command,
                     store,
                     stream_id,
                     signer,
-                    controllers,
                     false,
-                    "unsupported_extension_command_type",
-                    Vec::new(),
-                    None,
+                    "controller_not_found",
                 )
+            } else if controllers.to_vec().is_empty() {
+                controllers.add(id);
+                respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    false,
+                    "cannot_remove_last_controller",
+                )
+            } else {
+                respond(command, store, stream_id, signer, true, "")
             }
         }
+        Some(CommandType::TransferControl) => {
+            let id = extract_identity_from_command(command);
+            if id.is_empty() {
+                respond(
+                    command,
+                    store,
+                    stream_id,
+                    signer,
+                    false,
+                    "missing_controller_identity",
+                )
+            } else {
+                controllers.add(id);
+                respond(command, store, stream_id, signer, true, "")
+            }
+        }
+        Some(CommandType::Query) => respond(command, store, stream_id, signer, true, ""),
+        Some(CommandType::PublishSnapshot) => respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            false,
+            "use_produce_snapshot_request",
+        ),
+        Some(CommandType::FetchObject) => respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            false,
+            "use_fetch_object_request",
+        ),
+        Some(CommandType::ExecuteWorkload) => respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            false,
+            "execute_workload_not_supported",
+        ),
+        Some(CommandType::TerminateWorkload) => respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            false,
+            "terminate_workload_not_supported",
+        ),
+        Some(_) => respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            false,
+            "unsupported_command_type",
+        ),
+        None => respond(
+            command,
+            store,
+            stream_id,
+            signer,
+            false,
+            "unknown_command_type",
+        ),
+    }
+}
+
+fn validate_payload_boundary(command: &CommandEnvelope) -> Result<(), &'static str> {
+    if matches!(
+        CommandType::from_i32(command.command_type),
+        Some(CommandType::StoreObject | CommandType::ExecuteWorkload)
+    ) {
+        let Some(command_envelope::Payload::InlinePayload(bytes)) = &command.payload else {
+            return Ok(());
+        };
+        let env = edgerun_core::protocol::EncryptedEnvelope::decode(bytes.as_slice())
+            .map_err(|_| "PLAINTEXT_PAYLOAD_REJECTED")?;
+        validate_encrypted_envelope(&env).map_err(|_| "invalid_encrypted_payload")?;
+    }
+    Ok(())
+}
+
+fn respond(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    committed: bool,
+    reason_code: &str,
+) -> CommandDispatchResult {
+    match append_command_result_event(
+        command,
+        store,
+        stream_id,
+        signer,
+        committed,
+        reason_code,
+        None,
+    ) {
+        Ok(write) => CommandDispatchResult {
+            event_type: write.event_type,
+            decision: if committed {
+                CommandDecision::Committed as i32
+            } else {
+                CommandDecision::Rejected as i32
+            },
+            reason_code: reason_code.to_string(),
+            response_bytes: write.response_bytes,
+        },
+        Err(e) => CommandDispatchResult {
+            event_type: EventType::CommandRejected,
+            decision: CommandDecision::Rejected as i32,
+            reason_code: format!("decision_event_write_failed: {e}"),
+            response_bytes: Vec::new(),
+        },
+    }
+}
+
+pub fn extract_identity_from_command(command: &CommandEnvelope) -> Vec<u8> {
+    match &command.payload {
+        Some(command_envelope::Payload::InlinePayload(bytes)) if !bytes.is_empty() => bytes.clone(),
+        _ => command.command_id.clone(),
+    }
+}
+
+pub fn record_command_sent_event(
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    command: &CommandEnvelope,
+) {
+    let _ = crate::stream_append::append_signed_stream_event_blocking(
+        store,
+        stream_id,
+        signer,
+        edgerun_stream::EventDraft {
+            event_type: EventType::CommandSent as i32,
+            event_version: 1,
+            related_commands: vec![crate::command_dispatch_result::command_ref_from(command)],
+            ..Default::default()
+        },
+    );
+}
+
+pub fn project_controller_set(
+    _store: &NodeStore,
+    _stream_id: &[u8],
+    initial: Vec<Vec<u8>>,
+) -> ControllerSet {
+    ControllerSet::new(initial)
+}
+
+pub fn project_config(
+    _store: &NodeStore,
+    _stream_id: &[u8],
+    base_yaml: &str,
+) -> Result<NodeConfig, String> {
+    crate::config::parse_config(base_yaml)
+}
+
+pub fn project_config_from_base(
+    _store: &NodeStore,
+    _stream_id: &[u8],
+    base: NodeConfig,
+) -> Result<NodeConfig, String> {
+    Ok(base)
+}
+
+pub fn create_node_genesis_payload(
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    node_id: &edgerun_hardware_signing::NodeID,
+    initial_controllers: &[Vec<u8>],
+) -> ObjectRef {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"node-genesis-v1");
+    bytes.extend_from_slice(stream_id);
+    bytes.extend_from_slice(&node_id.0);
+    for controller in initial_controllers {
+        bytes.extend_from_slice(controller);
+    }
+    store
+        .put_object(&bytes, ObjectKind::Payload as i32, &[stream_id.to_vec()])
+        .unwrap_or_else(|_| ObjectRef {
+            object_id: bytes,
+            object_kind: Some(ObjectKind::Payload as i32),
+        })
+}
+
+pub fn identity_ref(id: Vec<u8>) -> IdentityRef {
+    IdentityRef {
+        identity_id: id.clone(),
+        identity_kind: Some(IdentityKind::Node as i32),
+        key_hint: Some(id),
     }
 }

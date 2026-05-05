@@ -1,4 +1,4 @@
-//! Varint encoding/decoding (protobuf-style LEB128).
+//! Varint encoding/decoding (LEB128).
 //!
 //! Supports encoding `u64` values as variable-length integers where each byte
 //! uses 7 bits for data and the MSB as a continuation flag.

@@ -1,3 +1,5 @@
+//! MCP JSON-RPC helper payloads only; not an internal codelyzer wire format.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

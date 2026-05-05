@@ -12,7 +12,6 @@ use crate::core::{
 };
 use crate::error::StorageError;
 
-
 fn varint_is_unexpected_eof(err: &std::io::Error) -> bool {
     err.kind() == std::io::ErrorKind::UnexpectedEof
 }
@@ -20,8 +19,6 @@ fn varint_is_unexpected_eof(err: &std::io::Error) -> bool {
 fn varint_io_to_storage_io(err: std::io::Error) -> StorageError {
     StorageError::Io(err)
 }
-
-
 
 /// Hosted filesystem event log using `{events_dir}/{stream_id_hex}.log`.
 #[derive(Clone, Debug)]
@@ -72,6 +69,10 @@ impl EventLog for FsEventLog {
     fn scan(&self) -> Result<Vec<ScannedEvent>, StorageError> {
         scan_event_logs(&self.events_dir)
     }
+
+    fn sync(&mut self) -> Result<(), StorageError> {
+        fs::create_dir_all(&self.events_dir).map_err(StorageError::Io)
+    }
 }
 
 pub fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> Result<File, StorageError> {
@@ -110,9 +111,7 @@ pub fn read_event_at(
     let mut file = File::open(&log_path)?;
     file.seek(SeekFrom::Start(file_offset))?;
 
-    let Some(len) = decode_varint_from_read(&mut file)
-        .map_err(varint_io_to_storage_io)?
-    else {
+    let Some(len) = decode_varint_from_read(&mut file).map_err(varint_io_to_storage_io)? else {
         return Ok(None);
     };
 
@@ -214,7 +213,6 @@ fn varint_is_unexpected_eof(err: &edgerun_core::io::Error) -> bool {
 }
 
 #[cfg(not(target_os = "none"))]
-
 #[cfg(target_os = "none")]
 fn varint_io_to_storage_io(err: edgerun_core::io::Error) -> StorageError {
     let kind = match err.kind() {
@@ -227,7 +225,6 @@ fn varint_io_to_storage_io(err: edgerun_core::io::Error) -> StorageError {
 }
 
 #[cfg(not(target_os = "none"))]
-
 
 fn decode_varint_from_read<R: Read>(r: &mut R) -> std::io::Result<Option<u64>> {
     let mut buf = [0u8; 1];
@@ -265,8 +262,6 @@ fn decode_varint_from_read<R: Read>(r: &mut R) -> std::io::Result<Option<u64>> {
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

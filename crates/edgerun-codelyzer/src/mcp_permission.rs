@@ -2,7 +2,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::json;
+use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
+
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+struct PermissionRequest {
+    kind: String,
+    token: String,
+    repo_root: String,
+    operation: String,
+    target_path: String,
+    requested_at_ms: u128,
+    approval_file: String,
+    note: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct PermissionGrant {
@@ -21,31 +33,34 @@ pub fn require_text_edit_permission(
         return Ok(PermissionGrant {
             approved: true,
             token: "env-allow".to_string(),
-            request_path: request_dir().join("env-allow.json"),
+            request_path: request_dir().join("env-allow.rkyv"),
         });
     }
 
     let token = stable_token(repo_root, operation, target_path);
     let dir = request_dir();
     fs::create_dir_all(&dir).map_err(|err| format!("failed to create permission dir: {err}"))?;
-    let request_path = dir.join(format!("{token}.json"));
+    let request_path = dir.join(format!("{token}.rkyv"));
     let grant_path = dir.join(format!("{token}.approved"));
 
     if approval_token == Some(token.as_str()) && grant_path.exists() {
         return Ok(PermissionGrant { approved: true, token, request_path });
     }
 
-    let body = json!({
-        "kind": "edgerun.mcp.text_edit_permission_request",
-        "token": token,
-        "repo_root": repo_root,
-        "operation": operation,
-        "target_path": target_path,
-        "requested_at_ms": now_ms(),
-        "approval_file": grant_path,
-        "note": "Text edits require explicit user approval. Prefer rust_ast for Rust files."
-    });
-    fs::write(&request_path, serde_json::to_vec_pretty(&body).map_err(|err| err.to_string())?)
+    let body = PermissionRequest {
+        kind: "edgerun.mcp.text_edit_permission_request".to_string(),
+        token: token.clone(),
+        repo_root: repo_root.display().to_string(),
+        operation: operation.to_string(),
+        target_path: target_path.to_string(),
+        requested_at_ms: now_ms(),
+        approval_file: grant_path.display().to_string(),
+        note: "Text edits require explicit user approval. Prefer rust_ast for Rust files.".to_string(),
+    };
+    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&body)
+        .map(|bytes| bytes.to_vec())
+        .map_err(|err| err.to_string())?;
+    fs::write(&request_path, bytes)
         .map_err(|err| format!("failed to write permission request: {err}"))?;
 
     Err(format!(

@@ -11,8 +11,8 @@
 
 use edgerun_hardware_signing::NodeID;
 use edgerun_mesh_daemon::OutboundQueue;
-use prost::Message;
 
+use crate::command_query_wire_codec;
 use crate::types::{StoreRequest, StoreResponse};
 
 // ===========================================================================
@@ -36,7 +36,9 @@ pub fn make_mesh_command_handler(
 
         edgerun_rt::spawn(async move {
             let raw = decrypted.clone();
-            if let Ok(command) = edgerun_core::protocol::CommandEnvelope::decode(&decrypted[..]) {
+            if let Some((command, raw)) =
+                command_query_wire_codec::decode_command_transport(&decrypted[..])
+            {
                 // Fire-and-forget — no reply channel needed.
                 let _ = tx
                     .send(StoreRequest::Command {
@@ -50,7 +52,9 @@ pub fn make_mesh_command_handler(
             }
 
             let raw = decrypted.clone();
-            if let Ok(query) = edgerun_core::protocol::QueryRequest::decode(&decrypted[..]) {
+            if let Some((query, raw)) =
+                command_query_wire_codec::decode_query_transport(&decrypted[..])
+            {
                 // Fire-and-forget — no reply channel needed.
                 let _ = tx
                     .send(StoreRequest::Query {
@@ -70,7 +74,7 @@ pub fn make_mesh_command_handler(
 // ===========================================================================
 
 /// Bridge for sending outbound commands to mesh peers.
-/// Pushes serialized protobuf onto the MeshDaemon's encrypted outbound queue.
+/// Pushes serialized rkyv onto the MeshDaemon's encrypted outbound queue.
 pub struct MeshCommandBridge {
     outbound: OutboundQueue,
 }
@@ -80,7 +84,7 @@ impl MeshCommandBridge {
         Self { outbound }
     }
 
-    /// Sends a serialized protobuf to a mesh peer.
+    /// Sends a serialized rkyv to a mesh peer.
     pub fn send(&self, peer_id: NodeID, payload: Vec<u8>) -> Result<(), String> {
         self.outbound.lock().unwrap().push_back((peer_id, payload));
         Ok(())

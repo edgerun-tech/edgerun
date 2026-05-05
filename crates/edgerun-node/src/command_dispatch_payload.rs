@@ -1,7 +1,7 @@
 //! Shared command payload helpers.
 //!
 //! Command payload decoding is intentionally not generic anymore. Each command
-//! family owns one explicit edgerun-wire codec instead of using prost::Message.
+//! family owns one explicit rkyv archive boundary.
 
 use edgerun_core::protocol::{command_envelope, CommandEnvelope};
 

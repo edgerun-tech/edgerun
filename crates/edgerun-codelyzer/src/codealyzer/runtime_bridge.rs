@@ -1,22 +1,14 @@
 //! Runtime call trace ingestion and merge utilities for codealyzer reports.
 //!
-//! The trace format is intentionally permissive:
-//! - JSON array of objects
-//! - or JSONL (one JSON object per line)
-//!
-//! Accepted object schema:
-//! - caller_id / callee_id (legacy full ids like `src/lib.rs::foo`)
-//! - or caller_file + caller_name, callee_file + callee_name
-//! - count (default: 1)
-//! - optional file + line (for fallback reporting)
+//! Runtime events are loaded from a single rkyv-archived `Vec<RuntimeCallEvent>` payload.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::codealyzer::crate_model::{CallGraphEdge, Confidence};
-use serde::Deserialize;
+use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
 pub struct RuntimeCallEvent {
     pub caller_id: String,
     pub callee_id: String,
@@ -25,18 +17,6 @@ pub struct RuntimeCallEvent {
     pub line: Option<usize>,
 }
 
-#[derive(Debug, Clone)]
-struct RawRuntimeEvent {
-    caller_id: Option<String>,
-    callee_id: Option<String>,
-    caller_file: Option<String>,
-    caller_name: Option<String>,
-    callee_file: Option<String>,
-    callee_name: Option<String>,
-    count: Option<u64>,
-    file: Option<String>,
-    line: Option<usize>,
-}
 
 #[derive(Debug)]
 struct RuntimeCallAggregate {
@@ -64,40 +44,6 @@ impl Default for RuntimeCallAggregate {
             file: None,
             line: None,
         }
-    }
-}
-
-fn normalize_id(
-    explicit: Option<String>,
-    file: Option<String>,
-    name: Option<String>,
-) -> Option<String> {
-    if let Some(value) = explicit {
-        let value = value.trim();
-        if !value.is_empty() {
-            return Some(value.replace('\\', "/"));
-        }
-    }
-
-    match (file, name) {
-        (Some(file), Some(name)) => {
-            let file = file.replace('\\', "/").trim().to_string();
-            let name = name.trim().to_string();
-            if file.is_empty() || name.is_empty() {
-                None
-            } else {
-                Some(format!("{file}::{name}"))
-            }
-        }
-        (None, Some(name)) => {
-            let name = name.trim().to_string();
-            if name.is_empty() {
-                None
-            } else {
-                Some(name)
-            }
-        }
-        _ => None,
     }
 }
 
@@ -132,44 +78,16 @@ fn function_matches_crate_path(function_id: &str, crate_dir: &Path) -> bool {
     }
 }
 
-/// Parse a runtime event payload from either JSON array or JSONL (line-based JSON).
+/// Load runtime event observations from a rkyv payload.
 pub fn load_runtime_events(path: &Path) -> Result<Vec<RuntimeCallEvent>, String> {
-    let content = std::fs::read_to_string(path).map_err(|err| err.to_string())?;
-    if content.trim().is_empty() {
+    let bytes = std::fs::read(path).map_err(|err| err.to_string())?;
+    if bytes.is_empty() {
         return Ok(Vec::new());
     }
-
-    let raw_events = match serde_json::from_str::<Vec<RawRuntimeEvent>>(&content) {
-        Ok(raw_events) => raw_events,
-        Err(_) => content
-            .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                if line.is_empty() {
-                    return None;
-                }
-                serde_json::from_str::<RawRuntimeEvent>(line).ok()
-            })
-            .collect::<Vec<_>>(),
-    };
-
-    let events = raw_events
-        .into_iter()
-        .filter_map(|raw| {
-            let caller_id = normalize_id(raw.caller_id, raw.caller_file, raw.caller_name)?;
-            let callee_id = normalize_id(raw.callee_id, raw.callee_file, raw.callee_name)?;
-            let count = raw.count.unwrap_or(1).max(1);
-            Some(RuntimeCallEvent {
-                caller_id,
-                callee_id,
-                count,
-                file: raw.file,
-                line: raw.line,
-            })
-        })
-        .collect::<Vec<_>>();
-
-    Ok(events)
+    let archived = rkyv::access::<rkyv::Archived<Vec<RuntimeCallEvent>>, rkyv::rancor::Error>(&bytes)
+        .map_err(|err| err.to_string())?;
+    rkyv::deserialize::<Vec<RuntimeCallEvent>, rkyv::rancor::Error>(archived)
+        .map_err(|err| err.to_string())
 }
 
 /// Merge runtime observations into existing call edges and append synthetic runtime edges

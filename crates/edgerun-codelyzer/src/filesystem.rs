@@ -4,9 +4,9 @@
 ///
 /// Scans directories for tracked source files, computes a fast content hash,
 /// and diffs snapshots to detect new / modified / deleted files.
+use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 use std::{
     collections::HashMap,
-    io::{Read, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -150,7 +150,7 @@ fn compute_hash(path: &Path) -> u64 {
 // ─── Parse Cache ──────────────────────────────────────────────
 
 /// A cache entry for a single parsed file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
 pub struct CacheEntry {
     pub file_hash: u64,
     pub mtime: u64,
@@ -158,40 +158,9 @@ pub struct CacheEntry {
     pub calls: Vec<crate::parser::RawCallOwned>,
 }
 
-impl CacheEntry {
-    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
-        use crate::generated::codeanalyzer::binary::*;
-        encode_u64(w, self.file_hash)?;
-        encode_u64(w, self.mtime)?;
-        // encode repeated RawFunctionOwned
-        encode_u64(w, self.functions.len() as u64)?;
-        for f in &self.functions {
-            f.encode(w)?;
-        }
-        // encode repeated RawCallOwned
-        encode_u64(w, self.calls.len() as u64)?;
-        for c in &self.calls {
-            c.encode(w)?;
-        }
-        Ok(())
-    }
-
-    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
-        use crate::generated::codeanalyzer::binary::*;
-        let file_hash = decode_u64(r)?;
-        let mtime = decode_u64(r)?;
-        let fn_count = decode_u64(r)? as usize;
-        let mut functions = Vec::with_capacity(fn_count);
-        for _ in 0..fn_count {
-            functions.push(crate::parser::RawFunctionOwned::decode(r)?);
-        }
-        let call_count = decode_u64(r)? as usize;
-        let mut calls = Vec::with_capacity(call_count);
-        for _ in 0..call_count {
-            calls.push(crate::parser::RawCallOwned::decode(r)?);
-        }
-        Ok(Self { file_hash, mtime, functions, calls })
-    }
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+struct ParseCacheEntries {
+    entries: HashMap<String, CacheEntry>,
 }
 
 /// Persistent parse cache that stores parsed results on disk.
@@ -212,25 +181,14 @@ impl ParseCache {
         let cache_file = cache_file_path(&cache_dir, root_dir);
 
         let entries = if cache_file.exists() {
-            if let Ok(bytes) = std::fs::read(&cache_file) {
-                let mut cursor = std::io::Cursor::new(bytes);
-                let count = crate::generated::codeanalyzer::binary::decode_u64(&mut cursor).ok();
-                if let Some(count) = count {
-                    let mut map = HashMap::new();
-                    for _ in 0..count {
-                        let key = crate::generated::codeanalyzer::binary::decode_string(&mut cursor).ok();
-                        let val = CacheEntry::decode(&mut cursor).ok();
-                        if let (Some(k), Some(v)) = (key, val) {
-                            map.insert(k, v);
-                        }
-                    }
-                    map
-                } else {
-                    HashMap::new()
-                }
-            } else {
-                HashMap::new()
-            }
+            std::fs::read(&cache_file)
+                .ok()
+                .and_then(|bytes| {
+                    let archived = rkyv::access::<ArchivedParseCacheEntries, rkyv::rancor::Error>(&bytes).ok()?;
+                    rkyv::deserialize::<ParseCacheEntries, rkyv::rancor::Error>(archived).ok()
+                })
+                .map(|cache| cache.entries)
+                .unwrap_or_default()
         } else {
             HashMap::new()
         };
@@ -253,13 +211,17 @@ impl ParseCache {
             return;
         }
         let cache_file = cache_file_path(&cache_dir, &self.root_dir);
-        let mut buf: Vec<u8> = Vec::new();
-        crate::generated::codeanalyzer::binary::encode_u64(&mut buf, self.entries.len() as u64).ok();
-        for (key, val) in &self.entries {
-            crate::generated::codeanalyzer::binary::encode_string(&mut buf, key).ok();
-            val.encode(&mut buf).ok();
-        }
-        if let Err(e) = std::fs::write(&cache_file, buf) {
+        let cache = ParseCacheEntries {
+            entries: self.entries.clone(),
+        };
+        let bytes = match rkyv::to_bytes::<rkyv::rancor::Error>(&cache) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                eprintln!("warn: failed to encode rkyv cache: {e}");
+                return;
+            }
+        };
+        if let Err(e) = std::fs::write(&cache_file, bytes) {
             eprintln!("warn: failed to write cache: {e}");
         }
         self.dirty = false;
@@ -311,7 +273,8 @@ fn cache_dir() -> PathBuf {
 
 /// Compute the cache file path for a given root directory.
 fn cache_file_path(cache_dir: &Path, root_dir: &str) -> PathBuf {
-    use std::{
+    use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
+use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
     };

@@ -54,6 +54,8 @@ pub trait EventLog {
     ) -> Result<Option<EventEnvelope>, StorageError>;
 
     fn scan(&self) -> Result<Vec<ScannedEvent>, StorageError>;
+
+    fn sync(&mut self) -> Result<(), StorageError>;
 }
 
 /// Computes the deterministic edgerun-wire event hash used for stream linkage and heads.

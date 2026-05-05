@@ -4,7 +4,7 @@
 //! indicate the length (1, 2, 4, or 8 bytes), and the remaining bits
 //! contain the integer value in big-endian order.
 //!
-//! This is distinct from protobuf varint (LEB128) encoding.
+//! This is a QUIC varint helper, separate from the Edgerun rkyv wire boundary.
 
 use alloc::vec::Vec;
 

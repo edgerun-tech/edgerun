@@ -27,7 +27,9 @@ pub fn timestamp_now() -> String {
         .unwrap_or_default()
 }
 
-// Custom binary protocol - no protobuf, no external dependencies
+// rkyv-normalized wire protocol only.
+pub const WIRE_PROTOCOL: &str = "rkyv";
+
 pub mod generated {
     #[allow(dead_code)]
     pub mod codeanalyzer;

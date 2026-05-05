@@ -10,8 +10,9 @@ use super::{BlockEventLog, BlockStorage};
 
 /// Rebuildable stream index over a block-device-backed append log.
 ///
-/// The block log is the durable truth; this struct keeps in-memory indexes for
-/// fast lookup of latest heads and seq→offset locations after recovery.
+/// The block log stores already-signed events; this struct keeps in-memory
+/// indexes for fast lookup of latest heads and seq→offset locations after
+/// recovery. It does not assign sequence numbers or validate hash chains.
 pub struct BlockStreamStore<S: BlockStorage> {
     event_log: BlockEventLog<S>,
     heads: BTreeMap<Vec<u8>, (u64, Vec<u8>)>,
@@ -43,55 +44,6 @@ impl<S: BlockStorage> BlockStreamStore<S> {
     }
 
     pub fn append_event(&mut self, event: EventEnvelope) -> Result<EventLocation, StorageError> {
-        if let Some((head_seq, head_hash)) = self.heads.get(&event.stream_id).cloned() {
-            if event.seq != head_seq.saturating_add(1) {
-                return Err(StorageError::Decode(format!(
-                    "stream seq mismatch for {}: expected {}, got {}",
-                    edgerun_core::util::bytes_to_hex(&event.stream_id),
-                    head_seq.saturating_add(1),
-                    event.seq
-                )));
-            }
-
-            match &event.prev_event_hash {
-                Some(prev) => {
-                    if prev.algorithm != 1 {
-                        return Err(StorageError::Decode(format!(
-                            "invalid prev hash algorithm for {}: expected 1, got {}",
-                            edgerun_core::util::bytes_to_hex(&event.stream_id),
-                            prev.algorithm
-                        )));
-                    }
-                    if prev.value != head_hash {
-                        return Err(StorageError::Decode(format!(
-                            "prev hash mismatch for {}: expected {}, got {}",
-                            edgerun_core::util::bytes_to_hex(&event.stream_id),
-                            edgerun_core::util::bytes_to_hex(&head_hash),
-                            edgerun_core::util::bytes_to_hex(&prev.value)
-                        )));
-                    }
-                }
-                None => {
-                    return Err(StorageError::Decode(format!(
-                        "missing prev hash for stream {} at seq {}",
-                        edgerun_core::util::bytes_to_hex(&event.stream_id),
-                        event.seq
-                    )));
-                }
-            }
-        } else if event.seq != 0 {
-            return Err(StorageError::Decode(format!(
-                "genesis seq must be 0 for stream {}, got {}",
-                edgerun_core::util::bytes_to_hex(&event.stream_id),
-                event.seq
-            )));
-        } else if event.prev_event_hash.is_some() {
-            return Err(StorageError::Decode(format!(
-                "genesis event for stream {} must not contain prev_event_hash",
-                edgerun_core::util::bytes_to_hex(&event.stream_id),
-            )));
-        }
-
         let event_hash = crate::core::canonical_event_hash(&event).value.to_vec();
         let receipt = self.event_log.append_event(&event)?;
         let location = EventLocation {
@@ -194,13 +146,14 @@ mod tests {
     }
 
     #[test]
-    fn block_stream_store_enforces_contiguous_seq() {
+    fn block_stream_store_stores_non_contiguous_seq_without_authoring_state() {
         let device = InMemoryBlockDevice::new(32, 64);
         let mut store = BlockStreamStore::open(device).unwrap();
         let e0 = event(b"stream", 0, None);
         let e2 = event(b"stream", 2, None);
         store.append_event(e0).unwrap();
-        assert!(store.append_event(e2).is_err());
+        store.append_event(e2).unwrap();
+        assert_eq!(store.get_head(b"stream").unwrap().0, 2);
     }
 
     #[test]
@@ -220,13 +173,14 @@ mod tests {
     }
 
     #[test]
-    fn block_stream_store_rejects_bad_prev_hash() {
+    fn block_stream_store_does_not_validate_prev_hash() {
         let device = InMemoryBlockDevice::new(32, 64);
         let mut store = BlockStreamStore::open(device).unwrap();
 
         let e0 = event(b"stream", 0, None);
         let e1 = event(b"stream", 1, Some(vec![0xAA; 32]));
         store.append_event(e0).unwrap();
-        assert!(store.append_event(e1).is_err());
+        store.append_event(e1).unwrap();
+        assert_eq!(store.get_head(b"stream").unwrap().0, 1);
     }
 }

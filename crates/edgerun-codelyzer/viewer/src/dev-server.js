@@ -157,6 +157,7 @@ if (await buildRust()) {
 
 // ─── Static file server ──────────────────────────────────────────────
 
+// Static-file MIME types only; not codelyzer wire protocol framing.
 const MIME_MAP = {
   html: "text/html",
   css: "text/css",

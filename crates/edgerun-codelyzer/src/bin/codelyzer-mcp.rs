@@ -1,5 +1,8 @@
 //! MCP stdio server for edgerun-codelyzer.
 //!
+//! MCP is an external JSON-RPC protocol. Internal codelyzer wire, cache, and
+//! bridge payloads remain rkyv-only.
+//!
 //! Usage:
 //!   cargo run -p edgerun-codelyzer --bin codelyzer-mcp -- /home/ken/edgerun
 //!
@@ -20,11 +23,33 @@ use edgerun_codelyzer::{
     mcp_permission,
     mcp_rust_ast,
     uir::Program,
+    WIRE_PROTOCOL,
 };
+use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+enum ViewportCommandType {
+    FocusNode,
+    SetCamera,
+    Filter,
+}
+
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+struct ViewportCommand {
+    command_type: ViewportCommandType,
+    ts: u128,
+    id: Option<String>,
+    zoom: Option<f64>,
+    yaw: Option<f64>,
+    pitch: Option<f64>,
+    pan_x: Option<f64>,
+    pan_y: Option<f64>,
+    hide: Vec<String>,
+    show: Vec<String>,
+}
+
 struct ServerState {
     root: PathBuf,
     graph: Option<CachedGraph>,
@@ -164,7 +189,7 @@ fn call_tool_response(state: &mut ServerState, id: Value, name: &str, args: Valu
     };
 
     match result {
-        Ok(value) => json!({ "jsonrpc": "2.0", "id": id, "result": { "content": [{ "type": "text", "text": pretty_json(&value) }], "structuredContent": value } }),
+        Ok(value) => json!({ "jsonrpc": "2.0", "id": id, "result": { "content": [{ "type": "text", "text": pretty_mcp_json(&value) }], "structuredContent": value } }),
         Err(err) => json!({ "jsonrpc": "2.0", "id": id, "result": { "isError": true, "content": [{ "type": "text", "text": err }] } }),
     }
 }
@@ -370,15 +395,41 @@ fn tool_delete_file(state: &mut ServerState, args: Value) -> Result<Value, Strin
     Ok(json!({ "path": path, "deleted": true }))
 }
 
-fn tool_xray_command(mut args: Value, command_type: &str) -> Result<Value, String> {
-    let command = args.as_object_mut().ok_or("arguments must be object")?;
-    command.insert("type".to_string(), Value::String(command_type.to_string()));
-    command.insert("ts".to_string(), json!(now_ms()));
+fn tool_xray_command(args: Value, command_type: &str) -> Result<Value, String> {
+    let command_type = match command_type {
+        "focus_node" => ViewportCommandType::FocusNode,
+        "set_camera" => ViewportCommandType::SetCamera,
+        "filter" => ViewportCommandType::Filter,
+        _ => return Err(format!("unknown viewport command type: {command_type}")),
+    };
+    let command = args.as_object().ok_or("arguments must be object")?;
+    let string_list = |key: &str| -> Vec<String> {
+        command
+            .get(key)
+            .and_then(Value::as_array)
+            .map(|values| values.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .unwrap_or_default()
+    };
+    let command = ViewportCommand {
+        command_type,
+        ts: now_ms(),
+        id: command.get("id").and_then(Value::as_str).map(str::to_string),
+        zoom: command.get("zoom").and_then(Value::as_f64),
+        yaw: command.get("yaw").and_then(Value::as_f64),
+        pitch: command.get("pitch").and_then(Value::as_f64),
+        pan_x: command.get("panX").and_then(Value::as_f64),
+        pan_y: command.get("panY").and_then(Value::as_f64),
+        hide: string_list("hide"),
+        show: string_list("show"),
+    };
     let dir = dirs::cache_dir().unwrap_or_else(|| PathBuf::from("/tmp")).join("edgerun-codelyzer");
     fs::create_dir_all(&dir).map_err(|err| format!("mkdir failed: {err}"))?;
-    let path = dir.join("viewport-command.json");
-    fs::write(&path, serde_json::to_vec_pretty(&args).map_err(|err| err.to_string())?).map_err(|err| format!("write failed: {err}"))?;
-    Ok(json!({ "queued": true, "command": args, "path": path }))
+    let path = dir.join("viewport-command.rkyv");
+    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&command)
+        .map(|bytes| bytes.to_vec())
+        .map_err(|err| err.to_string())?;
+    fs::write(&path, bytes).map_err(|err| format!("write failed: {err}"))?;
+    Ok(json!({ "queued": true, "protocol": WIRE_PROTOCOL, "path": path }))
 }
 
 fn read_resource_response(state: &mut ServerState, id: Value, uri: &str) -> Value {
@@ -389,7 +440,7 @@ fn read_resource_response(state: &mut ServerState, id: Value, uri: &str) -> Valu
         _ => Err(format!("unknown resource: {uri}")),
     };
     match result {
-        Ok(value) => json!({ "jsonrpc": "2.0", "id": id, "result": { "contents": [{ "uri": uri, "mimeType": "application/json", "text": pretty_json(&value) }] } }),
+        Ok(value) => json!({ "jsonrpc": "2.0", "id": id, "result": { "contents": [{ "uri": uri, "mimeType": "application/json", "text": pretty_mcp_json(&value) }] } }),
         Err(err) => error_response(id, -32603, &err),
     }
 }
@@ -432,5 +483,5 @@ fn limit_arg(args: &Value, default: usize, max: usize) -> usize { limit_arg_name
 fn limit_arg_named(args: &Value, name: &str, default: usize, max: usize) -> usize {
     args.get(name).and_then(Value::as_u64).map(|n| n as usize).unwrap_or(default).clamp(1, max)
 }
-fn pretty_json(value: &Value) -> String { serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string()) }
+fn pretty_mcp_json(value: &Value) -> String { serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string()) }
 fn error_response(id: Value, code: i64, message: &str) -> Value { json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }) }

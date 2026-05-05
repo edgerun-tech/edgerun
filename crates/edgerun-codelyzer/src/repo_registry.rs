@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     env,
     fs,
-    io::{Read, Write},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -16,7 +15,7 @@ use std::{
 ///
 /// Scans configured directories for git repositories, indexes them on demand,
 /// and provides fast switching between indexed repos in the viewer.
-use crate::generated::codeanalyzer::binary;
+use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 
 /// Default directories to scan for repositories.
 const DEFAULT_SCAN_ROOTS: &[&str] = &["/home", "/Users", "/opt", "/var/src", "/srv"];
@@ -72,7 +71,7 @@ const MAX_DISCOVERY_DEPTH: usize = 8;
 const MIN_REPO_FILES: usize = 1;
 
 /// State of a repository's index.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Archive, RkyvSerialize, RkyvDeserialize)]
 pub enum IndexState {
     NotIndexed,
     Indexing {
@@ -95,68 +94,8 @@ pub enum IndexState {
     },
 }
 
-impl IndexState {
-    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
-        match self {
-            IndexState::NotIndexed => {
-                w.write_all(&[0])?;
-            }
-            IndexState::Indexing { progress, files_scanned, total_files } => {
-                w.write_all(&[1])?;
-                binary::encode_f32(w, *progress)?;
-                binary::encode_u64(w, *files_scanned as u64)?;
-                binary::encode_u64(w, *total_files as u64)?;
-            }
-            IndexState::Indexed { functions, edges, index_time_ms } => {
-                w.write_all(&[2])?;
-                binary::encode_u64(w, *functions as u64)?;
-                binary::encode_u64(w, *edges as u64)?;
-                binary::encode_u64(w, *index_time_ms)?;
-            }
-            IndexState::Stale { functions, edges, last_indexed } => {
-                w.write_all(&[3])?;
-                binary::encode_u64(w, *functions as u64)?;
-                binary::encode_u64(w, *edges as u64)?;
-                binary::encode_u64(w, *last_indexed)?;
-            }
-            IndexState::Error { message } => {
-                w.write_all(&[4])?;
-                binary::encode_string(w, message)?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
-        let mut tag = [0u8];
-        r.read_exact(&mut tag)?;
-        match tag[0] {
-            0 => Ok(IndexState::NotIndexed),
-            1 => Ok(IndexState::Indexing {
-                progress: binary::decode_f32(r)?,
-                files_scanned: binary::decode_u64(r)? as usize,
-                total_files: binary::decode_u64(r)? as usize,
-            }),
-            2 => Ok(IndexState::Indexed {
-                functions: binary::decode_u64(r)? as usize,
-                edges: binary::decode_u64(r)? as usize,
-                index_time_ms: binary::decode_u64(r)?,
-            }),
-            3 => Ok(IndexState::Stale {
-                functions: binary::decode_u64(r)? as usize,
-                edges: binary::decode_u64(r)? as usize,
-                last_indexed: binary::decode_u64(r)?,
-            }),
-            4 => Ok(IndexState::Error {
-                message: binary::decode_string(r)?,
-            }),
-            _ => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid IndexState tag")),
-        }
-    }
-}
-
 /// Metadata about a discovered repository.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
 pub struct RepoInfo {
     pub path: String,
     pub name: String,
@@ -170,39 +109,8 @@ pub struct RepoInfo {
     pub added_at: u64, // epoch seconds when added to registry
 }
 
-impl RepoInfo {
-    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
-        binary::encode_string(w, &self.path)?;
-        binary::encode_string(w, &self.name)?;
-        binary::encode_bool(w, self.is_git_repo)?;
-        binary::encode_optional_string(w, &self.git_remote)?;
-        binary::encode_u64(w, self.file_count as u64)?;
-        binary::encode_u64(w, self.total_size_bytes)?;
-        binary::encode_u64(w, self.last_modified)?;
-        self.index_state.encode(w)?;
-        binary::encode_repeated_string(w, &self.languages)?;
-        binary::encode_u64(w, self.added_at)?;
-        Ok(())
-    }
-
-    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
-        Ok(Self {
-            path: binary::decode_string(r)?,
-            name: binary::decode_string(r)?,
-            is_git_repo: binary::decode_bool(r)?,
-            git_remote: binary::decode_optional_string(r)?,
-            file_count: binary::decode_u64(r)? as usize,
-            total_size_bytes: binary::decode_u64(r)?,
-            last_modified: binary::decode_u64(r)?,
-            index_state: IndexState::decode(r)?,
-            languages: binary::decode_repeated_string(r)?,
-            added_at: binary::decode_u64(r)?,
-        })
-    }
-}
-
 /// Configuration for the repository registry.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
 pub struct RegistryConfig {
     /// Directories to scan for repositories.
     pub scan_roots: Vec<String>,
@@ -212,25 +120,6 @@ pub struct RegistryConfig {
     pub max_concurrent_index: usize,
     /// Auto-discover repos on startup.
     pub auto_discover: bool,
-}
-
-impl RegistryConfig {
-    pub fn encode<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
-        binary::encode_repeated_string(w, &self.scan_roots)?;
-        binary::encode_repeated_string(w, &self.excluded_paths)?;
-        binary::encode_u64(w, self.max_concurrent_index as u64)?;
-        binary::encode_bool(w, self.auto_discover)?;
-        Ok(())
-    }
-
-    pub fn decode<R: Read>(r: &mut R) -> std::io::Result<Self> {
-        Ok(Self {
-            scan_roots: binary::decode_repeated_string(r)?,
-            excluded_paths: binary::decode_repeated_string(r)?,
-            max_concurrent_index: binary::decode_u64(r)? as usize,
-            auto_discover: binary::decode_bool(r)?,
-        })
-    }
 }
 
 impl Default for RegistryConfig {
@@ -689,6 +578,16 @@ fn lang_from_ext(ext: &str) -> &'static str {
     }
 }
 
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+struct RepoIndex {
+    repos: HashMap<String, RepoInfo>,
+}
+
+#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+struct ActiveRepo {
+    path: String,
+}
+
 // ─── Persistence ──────────────────────────────────────────────────────
 
 fn registry_dir() -> PathBuf {
@@ -698,22 +597,23 @@ fn registry_dir() -> PathBuf {
 }
 
 fn config_path() -> PathBuf {
-    registry_dir().join("config.json")
+    registry_dir().join("config.rkyv")
 }
 
 fn index_path() -> PathBuf {
-    registry_dir().join("repos.json")
+    registry_dir().join("repos.rkyv")
 }
 
 fn active_path() -> PathBuf {
-    registry_dir().join("active.txt")
+    registry_dir().join("active.rkyv")
 }
 
 fn load_config() -> Option<RegistryConfig> {
     let path = config_path();
     if path.exists() {
-        let content = fs::read_to_string(&path).ok()?;
-        serde_json::from_str(&content).ok()
+        let bytes = fs::read(&path).ok()?;
+        let archived = rkyv::access::<ArchivedRegistryConfig, rkyv::rancor::Error>(&bytes).ok()?;
+        rkyv::deserialize::<RegistryConfig, rkyv::rancor::Error>(archived).ok()
     } else {
         None
     }
@@ -722,16 +622,17 @@ fn load_config() -> Option<RegistryConfig> {
 fn save_config(config: &RegistryConfig) {
     let dir = registry_dir();
     let _ = fs::create_dir_all(&dir);
-    if let Ok(json) = serde_json::to_string_pretty(config) {
-        let _ = fs::write(config_path(), json);
+    if let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(config) {
+        let _ = fs::write(config_path(), bytes);
     }
 }
 
 fn load_repo_index() -> Option<HashMap<String, RepoInfo>> {
     let path = index_path();
     if path.exists() {
-        let content = fs::read_to_string(&path).ok()?;
-        serde_json::from_str(&content).ok()
+        let bytes = fs::read(&path).ok()?;
+        let archived = rkyv::access::<ArchivedRepoIndex, rkyv::rancor::Error>(&bytes).ok()?;
+        rkyv::deserialize::<RepoIndex, rkyv::rancor::Error>(archived).ok().map(|index| index.repos)
     } else {
         None
     }
@@ -740,15 +641,18 @@ fn load_repo_index() -> Option<HashMap<String, RepoInfo>> {
 fn save_repo_index(repos: &HashMap<String, RepoInfo>) {
     let dir = registry_dir();
     let _ = fs::create_dir_all(&dir);
-    if let Ok(json) = serde_json::to_string_pretty(repos) {
-        let _ = fs::write(index_path(), json);
+    let index = RepoIndex { repos: repos.clone() };
+    if let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(&index) {
+        let _ = fs::write(index_path(), bytes);
     }
 }
 
 fn load_active_repo() -> Option<String> {
     let path = active_path();
     if path.exists() {
-        fs::read_to_string(&path).ok().map(|s| s.trim().to_string())
+        let bytes = fs::read(&path).ok()?;
+        let archived = rkyv::access::<ArchivedActiveRepo, rkyv::rancor::Error>(&bytes).ok()?;
+        rkyv::deserialize::<ActiveRepo, rkyv::rancor::Error>(archived).ok().map(|active| active.path)
     } else {
         None
     }
@@ -757,5 +661,8 @@ fn load_active_repo() -> Option<String> {
 fn save_active_repo(path: &str) {
     let dir = registry_dir();
     let _ = fs::create_dir_all(&dir);
-    let _ = fs::write(active_path(), path);
+    let active = ActiveRepo { path: path.to_string() };
+    if let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(&active) {
+        let _ = fs::write(active_path(), bytes);
+    }
 }

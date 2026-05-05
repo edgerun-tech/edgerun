@@ -7,7 +7,7 @@
 
 use std::{collections::HashSet, path::Path, process::Command, time::SystemTime};
 
-// Use binary protocol types directly — no JSON, no serde.
+// Use rkyv-normalized protocol types directly; no JSON or serde on this boundary.
 pub use crate::generated::codeanalyzer::{
     Diagnostic, DiagnosticsReport, FormatIssue, GraphData, GraphEdge, GraphNode,
     MissingRef, TestResult, CoverageInfo,

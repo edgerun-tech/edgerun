@@ -430,7 +430,8 @@ fn compute_event_hash_is_deterministic() {
 #[test]
 fn compute_event_hash_differs_for_different_events() {
     let event1 = genesis_event(b"s", 1000);
-    let event2 = genesis_event(b"s", 2000);
+    let mut event2 = genesis_event(b"s", 1000);
+    event2.event_type = 100;
     assert_ne!(compute_event_hash(&event1), compute_event_hash(&event2));
 }
 
@@ -779,7 +780,7 @@ fn validate_stream_detects_tampered_stream_id() {
 }
 
 #[test]
-fn validate_stream_detects_tampered_recorded_at() {
+fn validate_stream_detects_tampered_event_version() {
     let signer = TestSigner::new();
     let mut events = Vec::new();
     let mut genesis = genesis_event(b"s", 0);
@@ -805,7 +806,32 @@ fn validate_stream_detects_tampered_recorded_at() {
     };
     sign_event(&mut ev, &signer).unwrap();
     events.push(ev);
-    events[1].recorded_at = Some(ms_to_timestamp(9999));
+    events[1].event_version = 2;
     let err = validate_stream(&events, &signer.node_id()).unwrap_err();
     assert!(matches!(err, StreamError::SignatureVerification(_)));
+}
+
+#[test]
+fn build_signed_event_assigns_seq_prev_hash_and_signature() {
+    let signer = TestSigner::new();
+    let mut genesis = genesis_event(b"s", 0);
+    sign_event(&mut genesis, &signer).unwrap();
+
+    let event = build_signed_event(
+        b"s",
+        Some(&genesis),
+        EventDraft {
+            event_type: 100,
+            event_version: 1,
+            recorded_at: Some(ms_to_timestamp(1)),
+            ..Default::default()
+        },
+        &signer,
+    )
+    .unwrap();
+
+    assert_eq!(event.seq, 1);
+    assert_eq!(event.prev_event_hash, Some(compute_event_hash(&genesis)));
+    assert!(event.signature.is_some());
+    validate_stream(&[genesis, event], &signer.node_id()).unwrap();
 }

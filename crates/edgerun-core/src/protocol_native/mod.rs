@@ -1,6 +1,6 @@
 //! Native Edgerun protocol types.
 //!
-//! This module is generated from the old protobuf-shaped Rust files, but it is
+//! This module is generated from the old Rust-shaped Rust files, but it is
 //! plain Rust inside edgerun-core. There is no edgerun-proto crate and no prost
 //! derive in this module.
 
@@ -115,72 +115,6 @@ pub enum ProtocolRecord {
     Signature(Signature),
 }
 
-pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::Vec<u8> {
-    match record {
-        ProtocolRecord::CommandEnvelope(command) => {
-            if signable {
-                crate::wire_command::command_signable_bytes(command)
-            } else {
-                crate::wire_command::command_full_bytes(command)
-            }
-        }
-        ProtocolRecord::EventEnvelope(event) => {
-            if signable {
-                crate::wire_stream::event_signable_wire_bytes(event)
-            } else {
-                crate::wire_stream::event_full_wire_bytes(event)
-            }
-        }
-        ProtocolRecord::DelegationRecord(delegation) => {
-            if signable {
-                crate::wire_trust::delegation_record_signable_bytes(delegation)
-            } else {
-                crate::wire_trust::delegation_record_full_bytes(delegation)
-            }
-        }
-        ProtocolRecord::RevocationRecord(revocation) => {
-            if signable {
-                crate::wire_trust::revocation_record_signable_bytes(revocation)
-            } else {
-                crate::wire_trust::revocation_record_full_bytes(revocation)
-            }
-        }
-        ProtocolRecord::IdentityRecord(identity) => {
-            if signable {
-                crate::wire_trust::identity_record_signable_bytes(identity)
-            } else {
-                crate::wire_trust::identity_record_full_bytes(identity)
-            }
-        }
-        ProtocolRecord::AssuranceClaim(claim) => {
-            if signable {
-                crate::wire_trust::assurance_claim_signable_bytes(claim)
-            } else {
-                crate::wire_trust::assurance_claim_full_bytes(claim)
-            }
-        }
-        ProtocolRecord::RouteAdvertisement(route) => {
-            if signable {
-                crate::wire_network::route_advertisement_signable_bytes(route)
-            } else {
-                crate::wire_network::route_advertisement_full_bytes(route)
-            }
-        }
-        ProtocolRecord::CommandResultPayload(payload) => {
-            crate::wire_command::command_result_bytes(payload)
-        }
-        other => edgerun_wire::canonical_bytes(&edgerun_wire::struct_value(alloc::vec![
-            edgerun_wire::field(
-                1,
-                edgerun_wire::text(match other {
-                    ProtocolRecord::SnapshotDescriptor(_) => "SnapshotDescriptor",
-                    ProtocolRecord::ObjectRef(_) => "ObjectRef",
-                    ProtocolRecord::Digest(_) => "Digest",
-                    ProtocolRecord::Signature(_) => "Signature",
-                    _ => "ProtocolRecord",
-                })
-            ),
-            edgerun_wire::field(2, edgerun_wire::boolv(signable)),
-        ])),
-    }
+pub fn removed_protocol_record_bytes(_record: &ProtocolRecord, _signable: bool) -> alloc::vec::Vec<u8> {
+    panic!("protocol record byte canonicalization was removed; use the rkyv wire boundary")
 }

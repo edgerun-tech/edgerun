@@ -63,7 +63,7 @@ fn print_usage(program: &str) {
     println!("  --dependency-metrics");
     println!("               collect non-edgerun transitive dependency size/LOC metrics");
     println!("  --runtime-events <path>");
-    println!("               merge runtime call traces (JSON array or JSONL) into call graph");
+    println!("               merge rkyv runtime call traces into call graph");
     println!("  --clean-targets");
     println!("               remove all target directories under workspace root and exit");
 }

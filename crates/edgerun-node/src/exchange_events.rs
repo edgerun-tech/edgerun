@@ -5,14 +5,13 @@
 //! produces `ExchangeEvent` values; this module stores their payload objects and
 //! appends signed envelopes to the node's single stream.
 
-use edgerun_core::protocol::Digest;
+use edgerun_core::protocol::ObjectKind;
 use edgerun_core::util::now_prost_timestamp;
 use edgerun_exchange::{
-    build_exchange_event_envelope, decode_exchange_event, encode_exchange_event, project_order,
+    decode_exchange_event, encode_exchange_event, exchange_event_type, project_order,
     ExchangeEvent, ExchangeOrderProjection,
 };
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_core::protocol::ObjectKind;
 use edgerun_storage::NodeStore;
 
 fn node_stream_id(signer: &dyn MeshSigner) -> Vec<u8> {
@@ -57,30 +56,21 @@ pub fn append_exchange_event_to_node_stream_with_recipients(
         )
         .map_err(|e| format!("exchange_payload_object_store_failed: {e}"))?;
 
-    let (seq, prev_event_hash) = match store.get_head(&stream_id) {
-        Ok(Some((head_seq, head_hash))) => (
-            (head_seq + 1) as u64,
-            Some(Digest {
-                algorithm: 1,
-                value: head_hash,
-            }),
-        ),
-        Ok(None) => (0, None),
-        Err(e) => return Err(format!("exchange_stream_head_failed: {e}")),
-    };
-
-    let mut envelope = build_exchange_event_envelope(
-        event,
-        stream_id,
-        seq,
-        prev_event_hash,
-        payload_object,
-    );
-    envelope.recorded_at = Some(now_prost_timestamp());
-
-    store
-        .append_signed_event_blocking(envelope, signer)
-        .map_err(|e| format!("exchange_stream_append_failed: {e}"))
+    crate::stream_append::append_signed_stream_event_blocking(
+        store,
+        &stream_id,
+        signer,
+        edgerun_stream::EventDraft {
+            event_type: exchange_event_type(event),
+            event_version: 1,
+            recorded_at: Some(now_prost_timestamp()),
+            payload_object: Some(payload_object.clone()),
+            related_objects: vec![payload_object],
+            ..Default::default()
+        },
+    )
+    .map(|event| event.seq)
+    .map_err(|e| format!("exchange_stream_append_failed: {e}"))
 }
 
 /// Append multiple exchange events to the node's single event stream.
@@ -113,9 +103,10 @@ pub fn project_exchange_order_from_node_stream(
 
     let mut events = Vec::new();
     for seq in 0..=head_seq.max(0) as u64 {
-        let Some((envelope, Some(payload_bytes))) = store
-            .get_event_with_payload(&stream_id, seq)
-            .map_err(|e| format!("exchange_stream_event_load_failed: {e}"))?
+        let Some((envelope, Some(payload_bytes))) =
+            store
+                .get_event_with_payload(&stream_id, seq)
+                .map_err(|e| format!("exchange_stream_event_load_failed: {e}"))?
         else {
             continue;
         };

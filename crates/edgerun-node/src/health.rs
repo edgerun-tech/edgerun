@@ -70,7 +70,12 @@ pub async fn run_health_server(port: u16, state: HealthState) {
     }
 }
 
-fn route_local_http(method: &str, path: &str, body: &str, state: &HealthState) -> (&'static str, String) {
+fn route_local_http(
+    method: &str,
+    path: &str,
+    body: &str,
+    state: &HealthState,
+) -> (&'static str, String) {
     if method == "OPTIONS" {
         return ("200 OK", "{}".to_string());
     }
@@ -126,7 +131,10 @@ fn capabilities_json() -> String {
 fn invoke_protocol_tool(body: &str) -> (&'static str, String) {
     let tool_id = extract_json_string(body, "toolId").unwrap_or_default();
     if tool_id.is_empty() {
-        return ("400 Bad Request", r#"{"status":"failed","error":"missing toolId"}"#.to_string());
+        return (
+            "400 Bad Request",
+            r#"{"status":"failed","error":"missing toolId"}"#.to_string(),
+        );
     }
 
     match tool_id.as_str() {
@@ -153,11 +161,18 @@ fn proxy_tool_result(tool_id: &str, path: &str) -> (&'static str, String) {
             "200 OK",
             format!(
                 r#"{{"status":"executed","result":{},"evidenceRefs":["tool:{}"]}}"#,
-                if body.trim().is_empty() { "{}" } else { body.trim() },
+                if body.trim().is_empty() {
+                    "{}"
+                } else {
+                    body.trim()
+                },
                 escape_json(tool_id),
             ),
         ),
-        Err(err) => ("200 OK", format!(r#"{{"status":"failed","error":"{}"}}"#, escape_json(&err))),
+        Err(err) => (
+            "200 OK",
+            format!(r#"{{"status":"failed","error":"{}"}}"#, escape_json(&err)),
+        ),
     }
 }
 
@@ -168,12 +183,25 @@ fn pending_tool_approval(tool_id: &str, body: &str) -> (&'static str, String) {
     let approval_id = stable_token(tool_id, &target);
     let dir = approval_dir();
     if let Err(err) = fs::create_dir_all(&dir) {
-        return ("500 Internal Server Error", format!(r#"{{"status":"failed","error":"{}"}}"#, escape_json(&err.to_string())));
+        return (
+            "500 Internal Server Error",
+            format!(
+                r#"{{"status":"failed","error":"{}"}}"#,
+                escape_json(&err.to_string())
+            ),
+        );
     }
 
     let approved_path = dir.join(format!("{approval_id}.approved"));
     if approved_path.exists() {
-        return ("200 OK", format!(r#"{{"status":"executed","result":{{"approved":true,"toolId":"{}","note":"approval recorded; backend execution handoff comes next"}},"evidenceRefs":["approval:{}"]}}"#, escape_json(tool_id), escape_json(&approval_id)));
+        return (
+            "200 OK",
+            format!(
+                r#"{{"status":"executed","result":{{"approved":true,"toolId":"{}","note":"approval recorded; backend execution handoff comes next"}},"evidenceRefs":["approval:{}"]}}"#,
+                escape_json(tool_id),
+                escape_json(&approval_id)
+            ),
+        );
     }
 
     let request_path = dir.join(format!("{approval_id}.json"));
@@ -182,33 +210,68 @@ fn pending_tool_approval(tool_id: &str, body: &str) -> (&'static str, String) {
         escape_json(&approval_id),
         escape_json(tool_id),
         escape_json(&target),
-        if body.trim().is_empty() { "{}" } else { body.trim() },
+        if body.trim().is_empty() {
+            "{}"
+        } else {
+            body.trim()
+        },
     );
     if let Err(err) = fs::write(&request_path, request) {
-        return ("500 Internal Server Error", format!(r#"{{"status":"failed","error":"{}"}}"#, escape_json(&err.to_string())));
+        return (
+            "500 Internal Server Error",
+            format!(
+                r#"{{"status":"failed","error":"{}"}}"#,
+                escape_json(&err.to_string())
+            ),
+        );
     }
 
     (
         "200 OK",
-        format!(r#"{{"status":"pending_approval","approvalId":"{}"}}"#, escape_json(&approval_id)),
+        format!(
+            r#"{{"status":"pending_approval","approvalId":"{}"}}"#,
+            escape_json(&approval_id)
+        ),
     )
 }
 
 fn write_viewport_command(command_type: &str, body: &str) -> (&'static str, String) {
     let dir = codelyzer_cache_dir();
     if let Err(err) = fs::create_dir_all(&dir) {
-        return ("500 Internal Server Error", format!(r#"{{"status":"failed","error":"{}"}}"#, escape_json(&err.to_string())));
+        return (
+            "500 Internal Server Error",
+            format!(
+                r#"{{"status":"failed","error":"{}"}}"#,
+                escape_json(&err.to_string())
+            ),
+        );
     }
     let path = dir.join("viewport-command.json");
     let payload = format!(
         r#"{{"type":"{}","request":{},"ts":"{}"}}"#,
         escape_json(command_type),
-        if body.trim().is_empty() { "{}" } else { body.trim() },
+        if body.trim().is_empty() {
+            "{}"
+        } else {
+            body.trim()
+        },
         now_iso_stub(),
     );
     match fs::write(&path, payload) {
-        Ok(_) => ("200 OK", format!(r#"{{"status":"executed","result":{{"queued":true,"command":"{}"}}}}"#, escape_json(command_type))),
-        Err(err) => ("500 Internal Server Error", format!(r#"{{"status":"failed","error":"{}"}}"#, escape_json(&err.to_string()))),
+        Ok(_) => (
+            "200 OK",
+            format!(
+                r#"{{"status":"executed","result":{{"queued":true,"command":"{}"}}}}"#,
+                escape_json(command_type)
+            ),
+        ),
+        Err(err) => (
+            "500 Internal Server Error",
+            format!(
+                r#"{{"status":"failed","error":"{}"}}"#,
+                escape_json(&err.to_string())
+            ),
+        ),
     }
 }
 
@@ -221,17 +284,34 @@ fn approvals_json() -> String {
             if path.extension().and_then(|e| e.to_str()) != Some("json") {
                 continue;
             }
-            let Ok(raw) = fs::read_to_string(&path) else { continue };
-            let token = extract_json_string(&raw, "token").unwrap_or_else(|| path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown").to_string());
+            let Ok(raw) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let token = extract_json_string(&raw, "token").unwrap_or_else(|| {
+                path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown")
+                    .to_string()
+            });
             let approved = dir.join(format!("{token}.approved")).exists();
             let rejected = dir.join(format!("{token}.rejected")).exists();
             if approved || rejected {
                 continue;
             }
-            let operation = extract_json_string(&raw, "operation").unwrap_or_else(|| "repo_text_edit".to_string());
-            let target = extract_json_string(&raw, "target_path").unwrap_or_else(|| "unknown".to_string());
-            let scope = if operation.contains("rust_ast") { "repo_rust_ast_edit" } else { "repo_text_edit" };
-            let risk = if operation.contains("text") { "critical" } else { "high" };
+            let operation = extract_json_string(&raw, "operation")
+                .unwrap_or_else(|| "repo_text_edit".to_string());
+            let target =
+                extract_json_string(&raw, "target_path").unwrap_or_else(|| "unknown".to_string());
+            let scope = if operation.contains("rust_ast") {
+                "repo_rust_ast_edit"
+            } else {
+                "repo_text_edit"
+            };
+            let risk = if operation.contains("text") {
+                "critical"
+            } else {
+                "high"
+            };
             approvals.push(format!(
                 r#"{{"approvalId":"{}","operation":"{}","scope":"{}","description":"{} {}","requestedAt":"local","riskLevel":"{}","source":"node-tool"}}"#,
                 escape_json(&token),
@@ -267,16 +347,32 @@ fn parse_approval_decision_path(path: &str) -> Option<(&str, &str)> {
 
 fn decide_approval(approval_id: &str, decision: &str) -> (&'static str, String) {
     if approval_id.contains('/') || approval_id.contains("..") {
-        return ("400 Bad Request", r#"{"error":"invalid_approval_id"}"#.to_string());
+        return (
+            "400 Bad Request",
+            r#"{"error":"invalid_approval_id"}"#.to_string(),
+        );
     }
     let dir = approval_dir();
     if let Err(err) = fs::create_dir_all(&dir) {
-        return ("500 Internal Server Error", format!(r#"{{"error":"{}"}}"#, escape_json(&err.to_string())));
+        return (
+            "500 Internal Server Error",
+            format!(r#"{{"error":"{}"}}"#, escape_json(&err.to_string())),
+        );
     }
     let marker = dir.join(format!("{approval_id}.{decision}"));
     match fs::write(&marker, b"ok") {
-        Ok(_) => ("200 OK", format!(r#"{{"approvalId":"{}","decision":"{}"}}"#, escape_json(approval_id), decision)),
-        Err(err) => ("500 Internal Server Error", format!(r#"{{"error":"{}"}}"#, escape_json(&err.to_string()))),
+        Ok(_) => (
+            "200 OK",
+            format!(
+                r#"{{"approvalId":"{}","decision":"{}"}}"#,
+                escape_json(approval_id),
+                decision
+            ),
+        ),
+        Err(err) => (
+            "500 Internal Server Error",
+            format!(r#"{{"error":"{}"}}"#, escape_json(&err.to_string())),
+        ),
     }
 }
 
@@ -299,17 +395,27 @@ fn proxy_codelyzer(path: &str) -> (&'static str, String) {
         Ok(body) => ("200 OK", body),
         Err(err) => (
             "503 Service Unavailable",
-            format!(r#"{{"error":"codelyzer_unavailable","detail":"{}"}}"#, escape_json(&err)),
+            format!(
+                r#"{{"error":"codelyzer_unavailable","detail":"{}"}}"#,
+                escape_json(&err)
+            ),
         ),
     }
 }
 
 fn http_get_local(addr: &str, path: &str) -> Result<String, String> {
     let mut stream = TcpStream::connect(addr).map_err(|err| err.to_string())?;
-    let request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", path, addr);
-    stream.write_all(request.as_bytes()).map_err(|err| err.to_string())?;
+    let request = format!(
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        path, addr
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|err| err.to_string())?;
     let mut response = String::new();
-    stream.read_to_string(&mut response).map_err(|err| err.to_string())?;
+    stream
+        .read_to_string(&mut response)
+        .map_err(|err| err.to_string())?;
     Ok(response.split("\r\n\r\n").nth(1).unwrap_or("").to_string())
 }
 
@@ -347,4 +453,6 @@ fn escape_json(value: &str) -> String {
         .replace('\r', "\\r")
 }
 
-fn now_iso_stub() -> &'static str { "local" }
+fn now_iso_stub() -> &'static str {
+    "local"
+}

@@ -1,4 +1,4 @@
-//! Codebase indexer — writes a compact custom binary cache for source analysis.
+//! Codebase indexer — writes rkyv-normalized cache data for source analysis.
 //! Supports direct file-backed indexing and simple query mode.
 //!
 //! Usage:

@@ -1,33 +1,34 @@
-//! Command-specific canonical wire helpers.
+//! Rkyv-only command wire boundary.
 //!
-//! This module is the migration seam away from protobuf canonicalization for
-//! command identity, replay keys, command signatures, and command-result bytes.
+//! Command byte materialization now has a single valid direction: archive the
+//! concrete protocol object at the rkyv boundary. Transitional byte helpers are
+//! explicit breakpoints until their callers are moved.
 
 use alloc::vec::Vec;
 
 use crate::protocol::{CommandEnvelope, CommandResultPayload, Digest};
 
-#[must_use]
-pub fn command_signable_bytes(command: &CommandEnvelope) -> Vec<u8> {
-    crate::wire_stream::command_signable_wire_bytes(command)
+#[cold]
+fn removed_command_wire_path() -> ! {
+    panic!("command wire helpers were removed; use the rkyv wire boundary")
 }
 
 #[must_use]
-pub fn command_full_bytes(command: &CommandEnvelope) -> Vec<u8> {
-    crate::wire_stream::command_full_wire_bytes(command)
+pub fn command_signable_bytes(_command: &CommandEnvelope) -> Vec<u8> {
+    removed_command_wire_path()
 }
 
 #[must_use]
-pub fn command_result_bytes(result: &CommandResultPayload) -> Vec<u8> {
-    crate::wire_stream::command_result_wire_bytes(result)
+pub fn command_full_bytes(_command: &CommandEnvelope) -> Vec<u8> {
+    removed_command_wire_path()
 }
 
 #[must_use]
-pub fn command_hash(command: &CommandEnvelope) -> Digest {
-    let canonical = command_signable_bytes(command);
-    let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_COMMAND_ENVELOPE, &canonical);
-    Digest {
-        algorithm: 1,
-        value: hash.to_vec(),
-    }
+pub fn command_result_bytes(_result: &CommandResultPayload) -> Vec<u8> {
+    removed_command_wire_path()
+}
+
+#[must_use]
+pub fn command_hash(_command: &CommandEnvelope) -> Digest {
+    removed_command_wire_path()
 }

@@ -9,7 +9,7 @@ This crate now includes a simple socket-framed demo pair:
 - `capability-demo-server`
 - `capability-demo-client`
 
-They speak length-prefixed `CapabilityRemoteEnvelope` frames encoded with protobuf.
+They speak length-prefixed `CapabilityRemoteEnvelope` frames encoded with rkyv.
 
 ## TCP demo
 
@@ -59,7 +59,7 @@ cargo run -q -p edgerun-remote-capability --bin capability-demo-client -- unix /
 Frame format:
 
 - 4-byte big-endian payload length
-- protobuf-encoded `CapabilityRemoteEnvelope`
+- rkyv-encoded `CapabilityRemoteEnvelope`
 
 ## Current demo flow
 

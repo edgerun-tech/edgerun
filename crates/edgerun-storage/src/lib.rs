@@ -1,10 +1,8 @@
-//! THE EVENT LOG IS THE STATE.
-//!
 //! edgerun storage layer — durable event log, encrypted blobs, and rebuildable indexes.
 //!
 //! Implements the reference storage profile from the protocol spec (§6.1–§6.3, §19.9):
 //!
-//! - **Event log**: append-only protobuf records on the filesystem (authoritative truth)
+//! - **Event log**: durable append/read/scan for already-signed stream events
 //! - **File indexes**: binary append-only logs with in-memory HashMaps (rebuildable from event log)
 //! - **Blob store**: AES-GCM encrypted ciphertext on filesystem, content-addressed
 //!
@@ -37,6 +35,7 @@ pub mod error;
 pub mod event_loop;
 pub mod file_index;
 pub mod fs;
+pub mod materializer;
 pub mod mem;
 pub mod store;
 #[cfg(test)]
@@ -56,9 +55,10 @@ pub use core::{
 pub use credentials::CredentialStore;
 pub use error::StorageError;
 pub use event_loop::{
-    CredentialDeleteHandler, CredentialHandler, DispatchContext, EventHandler, EventLoopBuilder,
-    EventWriter, FetchHandler, OpEventType, PeerDiscoveryHandler, PeerStatusHandler,
+    CredentialDeleteHandler, CredentialHandler, DispatchContext, DurableEventAppender,
+    EventHandler, EventLoopBuilder, FetchHandler, PeerDiscoveryHandler, PeerStatusHandler,
 };
 pub use file_index::{EventIndexEntry, FetchEntry, FileIndex, ReplayEntry};
+pub use materializer::OpEventType;
 pub use mem::{MemContentStore, MemEventLog};
 pub use store::{CommandReplayResult, ControllerSet, NodeStore, NodeStoreConfig, ObjectResult};

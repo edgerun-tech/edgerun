@@ -35,6 +35,7 @@ impl<L: EventLog> DurableStreamWriter<L> {
             StorageError::Stream("stream writer did not produce a genesis event".into())
         })?;
         let last_receipt = event_log.append_event(genesis)?;
+        event_log.sync()?;
 
         Ok(Self {
             writer,
@@ -54,6 +55,7 @@ impl<L: EventLog> DurableStreamWriter<L> {
             .writer
             .append(event_type, event_version, recorded_at_ms)?;
         let receipt = self.event_log.append_event(&event)?;
+        self.event_log.sync()?;
         self.last_receipt = receipt.clone();
         Ok(receipt)
     }

@@ -1,6 +1,5 @@
 import { EventQueue, encodeNetworkEvent, encodeDiskEvent, encodeTimerEvent, EventType, NetworkSubtype, DiskSubtype } from './event_queue.js';
 import { DOMRenderer } from './dom_renderer.js';
-import { decodeUINode } from './protobuf_ui.js';
 
 export class BrowserAdapter {
   constructor(options = {}) {
@@ -324,14 +323,8 @@ export class BrowserAdapter {
             const bodyStart = bodyOffset + 4;
             const uiBytes = data.slice(bodyStart, bodyStart + bodyLen);
 
-            try {
-              const node = decodeUINode(uiBytes);
-              this.currentUI = node;
-              this.uiRenderer.render(node);
-            } catch (e) {
-              if (this.verbose) {
-                console.error('Failed to decode UINode:', e);
-              }
+            if (this.verbose) {
+              console.error(`Cannot decode ${uiBytes.length} UI bytes: browser rkyv decoding is not implemented`);
             }
           }
         }

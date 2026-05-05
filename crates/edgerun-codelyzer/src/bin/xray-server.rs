@@ -1,7 +1,6 @@
-//! Minimal codelyzer → Xray bridge.
+//! Minimal codelyzer -> Xray bridge.
 //!
-//! Serves repository analysis and local network observations as JSON that the
-//! frontend Xray desktop can consume.
+//! Serves repository analysis and local network observations as rkyv bytes.
 //!
 //! Usage:
 //!   cargo run -p edgerun-codelyzer --bin xray-server -- /path/to/repo
@@ -23,8 +22,8 @@ use std::{
     time::Instant,
 };
 
-use edgerun_codelyzer::{analyzer::analyze_full, filesystem};
-use serde::Serialize;
+use edgerun_codelyzer::{analyzer::analyze_full, filesystem, WIRE_PROTOCOL};
+use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SnapshotFingerprint {
@@ -41,10 +40,10 @@ struct GraphCache {
 
 struct CachedGraph {
     fingerprint: SnapshotFingerprint,
-    body: String,
+    body: Vec<u8>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
 struct XrayGraphNode {
     id: String,
     name: String,
@@ -57,7 +56,7 @@ struct XrayGraphNode {
     commit: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
 struct XrayGraphEdge {
     source: String,
     target: String,
@@ -65,7 +64,7 @@ struct XrayGraphEdge {
     tags: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
 struct RepoFileEntry {
     path: String,
     language: String,
@@ -73,7 +72,7 @@ struct RepoFileEntry {
     modified_ts: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
 struct XrayGraphData {
     nodes: Vec<XrayGraphNode>,
     edges: Vec<XrayGraphEdge>,
@@ -87,15 +86,31 @@ struct XrayGraphData {
     cache_status: String,
 }
 
-#[derive(Debug, Serialize)]
-struct GraphUpdateEnvelope<'a> {
-    r#type: &'a str,
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
+enum XrayEnvelopeKind {
+    GraphUpdate,
+}
+
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
+struct GraphUpdateEnvelope {
+    kind: XrayEnvelopeKind,
     data: XrayGraphData,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
+struct XrayHealth {
+    ok: bool,
+}
+
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
+struct XrayError {
+    error: String,
+    path: Option<String>,
+}
+
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
 struct LocalConnection {
-    protocol: String,
+    network_transport: String,
     local_address: String,
     local_port: u16,
     remote_address: String,
@@ -103,7 +118,7 @@ struct LocalConnection {
     state: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Archive, RkyvSerialize, RkyvDeserialize)]
 struct ConnectionsEnvelope {
     connections: Vec<LocalConnection>,
     connection_count: u32,
@@ -171,7 +186,7 @@ fn handle_client(mut stream: TcpStream, default_root: &str, graph_cache: &mut Gr
     let path = first_line.split_whitespace().nth(1).unwrap_or("/");
 
     if path == "/health" {
-        respond_json(&mut stream, 200, r#"{"ok":true}"#);
+        respond_rkyv_bytes(&mut stream, 200, encode_health());
         return;
     }
 
@@ -181,40 +196,29 @@ fn handle_client(mut stream: TcpStream, default_root: &str, graph_cache: &mut Gr
             connection_count: connections.len() as u32,
             connections,
         };
-        match serde_json::to_string(&data) {
-            Ok(body) => respond_json(&mut stream, 200, &body),
-            Err(err) => respond_json(&mut stream, 500, &serde_json::json!({ "error": err.to_string() }).to_string()),
-        }
+        respond_rkyv_bytes(&mut stream, 200, encode_connections(&data));
         return;
     }
 
     if !path.starts_with("/graph") {
-        respond_json(&mut stream, 404, r#"{"error":"not found"}"#);
+        respond_rkyv_bytes(&mut stream, 404, encode_error("not found", None));
         return;
     }
 
     let root = query_param(path, "path").unwrap_or_else(|| default_root.to_string());
     let force_rescan = query_param(path, "rescan").is_some();
     if !Path::new(&root).is_dir() {
-        respond_json(
-            &mut stream,
-            400,
-            &serde_json::json!({ "error": "path is not a directory", "path": root }).to_string(),
-        );
+        respond_rkyv_bytes(&mut stream, 400, encode_error("path is not a directory", Some(root)));
         return;
     }
 
     match graph_response_for_root(&root, graph_cache, force_rescan) {
-        Ok(body) => respond_json(&mut stream, 200, &body),
-        Err(err) => respond_json(
-            &mut stream,
-            500,
-            &serde_json::json!({ "error": err }).to_string(),
-        ),
+        Ok(body) => respond_rkyv_bytes(&mut stream, 200, Ok(body)),
+        Err(err) => respond_rkyv_bytes(&mut stream, 500, encode_error(&err, None)),
     }
 }
 
-fn graph_response_for_root(root: &str, cache: &mut GraphCache, force_rescan: bool) -> Result<String, String> {
+fn graph_response_for_root(root: &str, cache: &mut GraphCache, force_rescan: bool) -> Result<Vec<u8>, String> {
     let snapshot = filesystem::scan_dir(root);
     let fingerprint = fingerprint_snapshot(&snapshot);
 
@@ -228,8 +232,10 @@ fn graph_response_for_root(root: &str, cache: &mut GraphCache, force_rescan: boo
 
     let mut data = analyze_repo_for_xray(root, snapshot)?;
     data.cache_status = if force_rescan { "forced_rescan" } else { "miss" }.to_string();
-    let envelope = GraphUpdateEnvelope { r#type: "graph_update", data };
-    let body = serde_json::to_string(&envelope).map_err(|err| err.to_string())?;
+    let envelope = GraphUpdateEnvelope { kind: XrayEnvelopeKind::GraphUpdate, data };
+    let body = rkyv::to_bytes::<rkyv::rancor::Error>(&envelope)
+        .map(|bytes| bytes.to_vec())
+        .map_err(|err| err.to_string())?;
 
     cache.entries.insert(root.to_string(), CachedGraph { fingerprint, body: body.clone() });
     Ok(body)
@@ -360,7 +366,7 @@ fn read_local_connections() -> Vec<LocalConnection> {
 
     let mut seen = HashSet::new();
     connections.retain(|conn| {
-        let key = format!("{}:{}:{}:{}:{}", conn.protocol, conn.local_address, conn.local_port, conn.remote_address, conn.remote_port);
+        let key = format!("{}:{}:{}:{}:{}", conn.network_transport, conn.local_address, conn.local_port, conn.remote_address, conn.remote_port);
         seen.insert(key)
     });
     connections.sort_by(|a, b| a.remote_address.cmp(&b.remote_address).then(a.remote_port.cmp(&b.remote_port)));
@@ -389,7 +395,7 @@ fn parse_proc_net_line(line: &str, protocol: &str, ipv6: bool) -> Option<LocalCo
     let (remote_address, remote_port) = parse_socket_addr(remote, ipv6)?;
 
     Some(LocalConnection {
-        protocol: protocol.to_string(),
+        network_transport: protocol.to_string(),
         local_address,
         local_port,
         remote_address,
@@ -443,7 +449,15 @@ fn tcp_state(hex: &str) -> &'static str {
     }
 }
 
-fn respond_json(stream: &mut TcpStream, status: u16, body: &str) {
+fn respond_rkyv_bytes(stream: &mut TcpStream, status: u16, body: Result<Vec<u8>, rkyv::rancor::Error>) {
+    let body = body.unwrap_or_else(|err| {
+        rkyv::to_bytes::<rkyv::rancor::Error>(&XrayError {
+            error: format!("rkyv encode error: {err}"),
+            path: None,
+        })
+        .map(|bytes| bytes.to_vec())
+        .unwrap_or_default()
+    });
     let status_text = match status {
         200 => "OK",
         400 => "Bad Request",
@@ -452,11 +466,27 @@ fn respond_json(stream: &mut TcpStream, status: u16, body: &str) {
     };
 
     let response = format!(
-        "HTTP/1.1 {status} {status_text}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: content-type\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        body.len(),
-        body
+        "HTTP/1.1 {status} {status_text}\r\nContent-Type: application/octet-stream\r\nX-Edgerun-Wire-Protocol: {WIRE_PROTOCOL}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: content-type,x-edgerun-wire-protocol\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
     );
     let _ = stream.write_all(response.as_bytes());
+    let _ = stream.write_all(&body);
+}
+
+fn encode_health() -> Result<Vec<u8>, rkyv::rancor::Error> {
+    rkyv::to_bytes::<rkyv::rancor::Error>(&XrayHealth { ok: true }).map(|bytes| bytes.to_vec())
+}
+
+fn encode_connections(data: &ConnectionsEnvelope) -> Result<Vec<u8>, rkyv::rancor::Error> {
+    rkyv::to_bytes::<rkyv::rancor::Error>(data).map(|bytes| bytes.to_vec())
+}
+
+fn encode_error(message: &str, path: Option<String>) -> Result<Vec<u8>, rkyv::rancor::Error> {
+    rkyv::to_bytes::<rkyv::rancor::Error>(&XrayError {
+        error: message.to_string(),
+        path,
+    })
+    .map(|bytes| bytes.to_vec())
 }
 
 fn query_param(path: &str, key: &str) -> Option<String> {

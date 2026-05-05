@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use edgerun_encoding::byteorder::read_u64_be;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
-use prost::Message;
 
+use crate::command_query_wire_codec;
 use crate::ingress;
 use crate::session;
 use crate::types::{StoreRequest, StoreResponse};
@@ -387,10 +387,8 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             return;
         }
 
-        // Try SessionHello (in case peer sends another hello). Prost decoding is
-        // permissive, so only treat the frame as a hello if required hello
-        // fields are actually present.
-        if let Ok(hello) = edgerun_core::protocol::SessionHello::decode(&payload[..]) {
+        // Try SessionHello (in case peer sends another hello).
+        if let Ok(hello) = session::decode_hello(&payload) {
             if hello.initiator.is_some()
                 && !hello.session_nonce.is_empty()
                 && !hello.supported_protocol_versions.is_empty()
@@ -401,8 +399,10 @@ async fn handle_tcp_stream_common_with_session<R, W>(
         }
 
         // Try CommandEnvelope
-        if let Ok(command) = edgerun_core::protocol::CommandEnvelope::decode(&payload[..]) {
-            let raw = payload.clone();
+        if let Some((command, raw)) =
+            command_query_wire_codec::decode_command_transport(&payload[..])
+        {
+            let proto_command = command.clone();
 
             // Check if this is a snapshot publish command
             use edgerun_core::protocol::CommandType;
@@ -438,38 +438,16 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             // Check if this is a fetch object command
             if command.command_type == CommandType::FetchObject as i32 {
                 // Decode the raw payload as proto CommandEnvelope to get payload_object
-                let proto_command = match edgerun_core::protocol::CommandEnvelope::decode(&raw[..])
+                // Extract the ObjectRef from the proto command's payload_object
+                let object_ref = match command_query_wire_codec::payload_object_ref(&proto_command)
                 {
-                    Ok(cmd) => cmd,
-                    Err(e) => {
-                        edgerun_log::warn!("FETCH_OBJECT: failed to decode proto command: {}", e);
-                        let err = "FETCH_OBJECT: decode failed".to_string();
-                        let resp_frame = encode_tcp_frame(err.as_bytes());
+                    Some(object_ref) => object_ref,
+                    None => {
+                        edgerun_log::warn!("FETCH_OBJECT: no object reference provided");
+                        let err_resp = "FETCH_OBJECT: no object reference provided".to_string();
+                        let resp_frame = encode_tcp_frame(err_resp.as_bytes());
                         let _ = writer.write_all(&resp_frame).await;
                         continue;
-                    }
-                };
-
-                // Extract the ObjectRef from the proto command's payload_object
-                let object_ref = if let Some(ref obj) = proto_command.payload {
-                    use edgerun_core::protocol::command_envelope::Payload;
-                    match obj {
-                        Payload::PayloadObject(obj) => obj.clone(),
-                        Payload::InlinePayload(bytes) => {
-                            if let Ok(obj) = edgerun_core::protocol::ObjectRef::decode(&bytes[..]) {
-                                obj
-                            } else {
-                                edgerun_core::protocol::ObjectRef {
-                                    object_id: vec![],
-                                    object_kind: None,
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    edgerun_core::protocol::ObjectRef {
-                        object_id: vec![],
-                        object_kind: None,
                     }
                 };
 
@@ -547,8 +525,7 @@ async fn handle_tcp_stream_common_with_session<R, W>(
         }
 
         // Try QueryRequest
-        if let Ok(query) = edgerun_core::protocol::QueryRequest::decode(&payload[..]) {
-            let raw = payload.clone();
+        if let Some((query, raw)) = command_query_wire_codec::decode_query_transport(&payload[..]) {
             let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
             if store_tx
                 .send(StoreRequest::Query {

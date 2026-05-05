@@ -1,4 +1,4 @@
-//! Varint encoding/decoding utilities (protobuf-style LEB128).
+//! Varint encoding/decoding utilities (varint LEB128).
 //!
 //! Delegates to `edgerun_encoding::varint`.
 

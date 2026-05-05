@@ -141,8 +141,8 @@ pub struct CollectionDeletedPayload {
 // AND required capabilities. Apps are immutable, content-addressed, and
 // capability-constrained.
 //
-// Canonicalization ID: "proto-v0:AppPackage:1"
-// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || protobuf_encode(AppPackage))
+// Canonicalization ID: "rkyv-v0:AppPackage:1"
+// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || rkyv_archive(AppPackage))
 // ===========================================================================
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -286,8 +286,8 @@ pub struct NodeStateSnapshot {
 // Apps are first-class principals that sign their own intents but MUST NOT
 // write streams. Only the node identity can commit state.
 //
-// Canonicalization ID: "proto-v0:AppPrincipal:1"
-// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || protobuf_encode(AppPrincipal))
+// Canonicalization ID: "rkyv-v0:AppPrincipal:1"
+// object_id = SHA256("edgerun:v0:object" || 0x00 || canonicalization_id || 0x00 || rkyv_archive(AppPrincipal))
 // ===========================================================================
 
 /// AppPrincipal: a protocol-level identity for an installed app.
@@ -304,7 +304,7 @@ pub struct AppPrincipal {
 }
 /// AppIntent: a signed action declaration from an app principal.
 /// The intent proves the app authorized the specific payload.
-/// Signature MUST be over canonical protobuf encoding of (app_id || payload).
+/// Signature MUST be over rkyv encoding of (app_id || payload).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AppIntent {
     /// AppPrincipal app_id

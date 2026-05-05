@@ -1,7 +1,7 @@
 //! edgerun Stream — the append-only, single-writer event log.
 //!
-//! Events are signed over deterministic edgerun-wire bytes with the signature
-//! field omitted. Generated protobuf structs remain boundary types only.
+//! Events are signed over rkyv archived bytes with the signature
+//! field omitted. 
 
 #![no_std]
 
@@ -12,7 +12,10 @@ extern crate std;
 use alloc::sync::Arc;
 use edgerun_core::prelude::v1::*;
 use edgerun_core::protocol::Timestamp;
-use edgerun_core::protocol::{Digest, EventEnvelope, EventType, Signature};
+use edgerun_core::protocol::{
+    CommandRef, DelegationRef, Digest, EventEnvelope, EventRef, EventType, ObjectRef,
+    RevocationRef, Signature,
+};
 use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
 
 /// A stream writer maintains the current stream head and produces signed events.
@@ -93,6 +96,64 @@ impl StreamWriter {
     pub fn writer(&self) -> NodeID {
         self.signer.node_id()
     }
+}
+
+/// Caller-supplied event content before stream sequencing and signing.
+#[derive(Clone, Debug, Default)]
+pub struct EventDraft {
+    pub event_type: i32,
+    pub event_version: u32,
+    pub recorded_at: Option<Timestamp>,
+    pub effective_at: Option<Timestamp>,
+    pub payload_object: Option<ObjectRef>,
+    pub related_events: Vec<EventRef>,
+    pub related_commands: Vec<CommandRef>,
+    pub related_objects: Vec<ObjectRef>,
+    pub related_delegations: Vec<DelegationRef>,
+    pub related_revocations: Vec<RevocationRef>,
+    pub event_metadata: Option<ObjectRef>,
+}
+
+/// Builds and signs the next event for `stream_id`.
+///
+/// The stream layer owns sequence assignment, prev-event hash linkage, and
+/// signing. Storage callers should append the returned event unchanged.
+pub fn build_signed_event(
+    stream_id: &[u8],
+    previous: Option<&EventEnvelope>,
+    draft: EventDraft,
+    signer: &dyn MeshSigner,
+) -> Result<EventEnvelope, StreamError> {
+    let (seq, prev_event_hash) = match previous {
+        Some(prev) => {
+            if prev.stream_id != stream_id {
+                return Err(StreamError::StreamMismatch);
+            }
+            (prev.seq + 1, Some(compute_event_hash(prev)))
+        }
+        None => (0, None),
+    };
+
+    let mut event = EventEnvelope {
+        envelope_version: 1,
+        stream_id: stream_id.to_vec(),
+        seq,
+        prev_event_hash,
+        event_type: draft.event_type,
+        event_version: draft.event_version,
+        recorded_at: draft.recorded_at,
+        effective_at: draft.effective_at,
+        payload_object: draft.payload_object,
+        related_events: draft.related_events,
+        related_commands: draft.related_commands,
+        related_objects: draft.related_objects,
+        related_delegations: draft.related_delegations,
+        related_revocations: draft.related_revocations,
+        event_metadata: draft.event_metadata,
+        signature: None,
+    };
+    sign_event(&mut event, signer)?;
+    Ok(event)
 }
 
 fn genesis_event(stream_id: &[u8], recorded_at_ms: i64) -> EventEnvelope {
@@ -260,6 +321,7 @@ pub enum StreamError {
     InvalidPublicKey(String),
     SignatureVerification(String),
     HardwareSigning(String),
+    StreamMismatch,
 }
 
 impl From<HardwareSigningError> for StreamError {
@@ -289,6 +351,7 @@ impl core::fmt::Display for StreamError {
             Self::InvalidPublicKey(e) => write!(f, "invalid public key: {e}"),
             Self::SignatureVerification(e) => write!(f, "signature verification failed: {e}"),
             Self::HardwareSigning(e) => write!(f, "hardware signing failed: {e}"),
+            Self::StreamMismatch => write!(f, "previous event belongs to a different stream"),
         }
     }
 }

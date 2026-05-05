@@ -261,10 +261,7 @@ impl VirtualFileSystem {
     /// Load the full repo into a VFS, excluding build/output dirs.
     /// Uses VFS (load_excluding) when the `vfs` feature is enabled,
     /// falling back to scan_dir otherwise.
-    pub fn load_excluding<P: AsRef<Path>>(
-        root: P,
-        exclude_dirs: &[&str],
-    ) -> Result<Self, String> {
+    pub fn load_excluding<P: AsRef<Path>>(root: P, exclude_dirs: &[&str]) -> Result<Self, String> {
         #[cfg(target_os = "none")]
         {
             let _ = (root, exclude_dirs);
@@ -286,31 +283,32 @@ impl VirtualFileSystem {
             );
 
             let start = std::time::Instant::now();
-            let file_count = Self::walk_directory_excluding(&root, exclude_dirs, &mut |path, content| {
-                let rel_path = path
-                    .strip_prefix(&root)
-                    .map(|p| p.to_path_buf())
-                    .unwrap_or_else(|_| path.to_path_buf());
+            let file_count =
+                Self::walk_directory_excluding(&root, exclude_dirs, &mut |path, content| {
+                    let rel_path = path
+                        .strip_prefix(&root)
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_else(|_| path.to_path_buf());
 
-                let hash = Self::compute_hash(&content);
-                let size = content.len();
-                let modified = Self::get_mtime(path);
+                    let hash = Self::compute_hash(&content);
+                    let size = content.len();
+                    let modified = Self::get_mtime(path);
 
-                memory_usage += size;
+                    memory_usage += size;
 
-                files.insert(rel_path.clone(), FileContent::new(content));
-                metadata.insert(
-                    rel_path.clone(),
-                    FileMeta {
-                        path: rel_path.clone(),
-                        size,
-                        hash: hash.clone(),
-                        modified,
-                        is_dirty: false,
-                    },
-                );
-                original_hashes.insert(rel_path, hash);
-            })?;
+                    files.insert(rel_path.clone(), FileContent::new(content));
+                    metadata.insert(
+                        rel_path.clone(),
+                        FileMeta {
+                            path: rel_path.clone(),
+                            size,
+                            hash: hash.clone(),
+                            modified,
+                            is_dirty: false,
+                        },
+                    );
+                    original_hashes.insert(rel_path, hash);
+                })?;
 
             let elapsed = start.elapsed();
             let memory_mb = memory_usage as f64 / (1024.0 * 1024.0);
@@ -692,12 +690,17 @@ mod tests {
         let mut vfs = VirtualFileSystem::load(tmp.path()).unwrap();
         assert_eq!(vfs.read_str(Path::new("test.txt")), Some("initial"));
 
-        vfs.write(Path::new("test.txt"), "modified".to_string()).unwrap();
+        vfs.write(Path::new("test.txt"), "modified".to_string())
+            .unwrap();
         assert_eq!(vfs.read_str(Path::new("test.txt")), Some("modified"));
 
-        vfs.write_bytes(Path::new("test.txt"), vec![0u8, 159, 146, 150]).unwrap();
+        vfs.write_bytes(Path::new("test.txt"), vec![0u8, 159, 146, 150])
+            .unwrap();
         assert!(vfs.read_str(Path::new("test.txt")).is_none());
-        assert_eq!(&*vfs.read(Path::new("test.txt")).unwrap(), &[0u8, 159, 146, 150]);
+        assert_eq!(
+            &*vfs.read(Path::new("test.txt")).unwrap(),
+            &[0u8, 159, 146, 150]
+        );
     }
 
     #[test]
@@ -709,9 +712,13 @@ mod tests {
         vfs.edit(Path::new("test.txt"), |content| {
             content.push_str("line3\n");
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
 
-        assert_eq!(vfs.read_str(Path::new("test.txt")), Some("line1\nline2\nline3\n"));
+        assert_eq!(
+            vfs.read_str(Path::new("test.txt")),
+            Some("line1\nline2\nline3\n")
+        );
     }
 
     #[test]
@@ -758,7 +765,8 @@ mod tests {
         let mut vfs = VirtualFileSystem::load(tmp.path()).unwrap();
         assert!(!vfs.metadata.values().any(|m| m.is_dirty));
 
-        vfs.write(Path::new("test.txt"), "modified".to_string()).unwrap();
+        vfs.write(Path::new("test.txt"), "modified".to_string())
+            .unwrap();
         assert!(vfs.metadata.get(Path::new("test.txt")).unwrap().is_dirty);
     }
 
@@ -768,7 +776,8 @@ mod tests {
         std::fs::write(tmp.path().join("test.txt"), "initial").unwrap();
 
         let mut vfs = VirtualFileSystem::load(tmp.path()).unwrap();
-        vfs.write(Path::new("test.txt"), "modified".to_string()).unwrap();
+        vfs.write(Path::new("test.txt"), "modified".to_string())
+            .unwrap();
 
         let result = vfs.persist(tmp.path()).unwrap();
         assert_eq!(result.persisted, 1);
@@ -832,7 +841,13 @@ mod tests {
         let mut vfs = VirtualFileSystem::load(tmp.path()).unwrap();
         assert!(!vfs.metadata.values().any(|m| m.is_dirty));
 
-        vfs.write(Path::new("test.txt"), "modified".to_string()).unwrap();
-        assert!(vfs.metadata.get(&PathBuf::from("test.txt")).unwrap().is_dirty);
+        vfs.write(Path::new("test.txt"), "modified".to_string())
+            .unwrap();
+        assert!(
+            vfs.metadata
+                .get(&PathBuf::from("test.txt"))
+                .unwrap()
+                .is_dirty
+        );
     }
 }

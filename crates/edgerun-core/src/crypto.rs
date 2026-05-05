@@ -11,7 +11,7 @@
 use crate::prelude::v1::*;
 
 // ---------------------------------------------------------------------------
-// Protocol algorithm constants (matching protobuf enum wire values)
+// Protocol algorithm constants (matching rkyv enum wire values)
 // ---------------------------------------------------------------------------
 
 /// Signature algorithm: ECDSA P-256 with SHA-256.
@@ -202,7 +202,7 @@ pub fn domain_hash(domain_tag: &str, payload: &[u8]) -> Vec<u8> {
 /// Hash a canonical signable record with the family-specific hash domain.
 ///
 /// Spec v0 derives record hashes as:
-/// `SHA-256(hash_domain_tag || 0x00 || protobuf_encode(signable_form))`.
+/// `SHA-256(hash_domain_tag || 0x00 || rkyv_archive(signable_form))`.
 pub fn record_hash(hash_domain_tag: &str, canonical_signable_bytes: &[u8]) -> Vec<u8> {
     domain_hash(hash_domain_tag, canonical_signable_bytes)
 }

@@ -40,7 +40,7 @@ pub extern "C" fn edgerun_app_start() {
         capability_bytes.as_slice(),
     );
     let capability_message = format!(
-        "{{\"kind\":\"capability_request\",\"protocol\":\"edgerun.v0\",\"record_family\":\"CapabilityDescriptor\",\"encoding\":\"protobuf-canonical-hex\",\"hash\":\"{}\",\"bytes\":\"{}\"}}",
+        "{{\"kind\":\"capability_request\",\"protocol\":\"edgerun.v0\",\"record_family\":\"CapabilityDescriptor\",\"encoding\":\"rkyv-hex\",\"hash\":\"{}\",\"bytes\":\"{}\"}}",
         bytes_to_hex(&capability_hash),
         bytes_to_hex(&capability_bytes)
     );
@@ -50,7 +50,7 @@ pub extern "C" fn edgerun_app_start() {
     let query_bytes = canonical_bytes(&ProtocolRecord::QueryRequest(query_request), true);
     let query_hash = record_hash(HASH_DOMAIN_QUERY_REQUEST, query_bytes.as_slice());
     let query_message = format!(
-        "{{\"kind\":\"query\",\"protocol\":\"edgerun.v0\",\"record_family\":\"QueryRequest\",\"encoding\":\"protobuf-canonical-hex\",\"hash\":\"{}\",\"bytes\":\"{}\"}}",
+        "{{\"kind\":\"query\",\"protocol\":\"edgerun.v0\",\"record_family\":\"QueryRequest\",\"encoding\":\"rkyv-hex\",\"hash\":\"{}\",\"bytes\":\"{}\"}}",
         bytes_to_hex(&query_hash),
         bytes_to_hex(&query_bytes)
     );
