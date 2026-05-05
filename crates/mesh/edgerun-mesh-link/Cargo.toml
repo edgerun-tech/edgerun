@@ -10,7 +10,7 @@ description = "Mesh link discovery and transport helpers for Edgerun"
 
 [dependencies]
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
-edgerun-hardware-signing = { version = "0.1", path = "../../edgerun-hardware-signing" }
+edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 edgerun-network-interface = { version = "0.1", path = "../../edgerun-network-interface" }

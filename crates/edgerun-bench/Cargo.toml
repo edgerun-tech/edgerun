@@ -12,9 +12,9 @@ description = "Benchmark harnesses for Edgerun signing and mesh paths"
 edgerun-core.workspace = true
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 edgerun-mesh = { version = "0.1", path = "../mesh/edgerun-mesh" }
-edgerun-tpm = { version = "0.1", path = "../edgerun-tpm" }
-edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", features = ["tpm"] }
-edgerun-yubikey = { version = "0.1", path = "../edgerun-yubikey" }
+edgerun-tpm = { version = "0.1", path = "../identity/edgerun-tpm" }
+edgerun-hardware-signing = { version = "0.1", path = "../identity/edgerun-hardware-signing", features = ["tpm"] }
+edgerun-yubikey = { version = "0.1", path = "../identity/edgerun-yubikey" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 
 [[bin]]

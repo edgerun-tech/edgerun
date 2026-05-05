@@ -27,7 +27,7 @@ edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-dhcp = { version = "0.1", path = "../edgerun-dhcp" }
 edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["client"] }
 edgerun-tftp = { version = "0.1", path = "../edgerun-tftp" }
-edgerun-tpm = { version = "0.1", path = "../edgerun-tpm", default-features = false }
+edgerun-tpm = { version = "0.1", path = "../identity/edgerun-tpm", default-features = false }
 edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false }
 edgerun-oci = { version = "0.1", path = "../edgerun-oci", default-features = false, features = ["registry-client", "edgefs"] }
 edgerun-edgefs = { version = "0.1", path = "../authority/edgerun-edgefs" }

@@ -76,15 +76,15 @@ edgerun-exchange = { version = "0.1", path = "../edgerun-exchange" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256", "pbkdf2"] }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
-edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", default-features = false }
+edgerun-hardware-signing = { version = "0.1", path = "../identity/edgerun-hardware-signing", default-features = false }
 edgerun-json = { version = "0.1", path = "../utility/edgerun-json" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
 edgerun-network-interface = { version = "0.1", path = "../edgerun-network-interface" }
-edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"] }
-edgerun-tpm = { version = "0.1", path = "../edgerun-tpm" }
-edgerun-yubikey = { version = "0.1", path = "../edgerun-yubikey" }
+edgerun-hardware-signing = { version = "0.1", path = "../identity/edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"] }
+edgerun-tpm = { version = "0.1", path = "../identity/edgerun-tpm" }
+edgerun-yubikey = { version = "0.1", path = "../identity/edgerun-yubikey" }
 edgerun-evdev-input = { version = "0.1", path = "../edgerun-evdev-input", optional = true }
 edgerun-alsa-speaker = { version = "0.1", path = "../edgerun-alsa-speaker", optional = true }
 edgerun-alsa-microphone = { version = "0.1", path = "../edgerun-alsa-microphone", optional = true }
@@ -120,10 +120,10 @@ edgerun-amd-xdna = { version = "0.1", path = "../edgerun-amd-xdna", optional = t
 edgerun-virtual-disk = { version = "0.1", path = "../authority/edgerun-virtual-disk", optional = true }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", optional = true }
 edgerun-oci = { version = "0.1", path = "../edgerun-oci", optional = true }
-edgerun-android-keystore = { version = "0.1", path = "../edgerun-android-keystore", optional = true }
+edgerun-android-keystore = { version = "0.1", path = "../identity/edgerun-android-keystore", optional = true }
 
 [dev-dependencies]
-edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
+edgerun-hardware-signing = { version = "0.1", path = "../identity/edgerun-hardware-signing" }
 edgerun-alsa-microphone = { version = "0.1", path = "../edgerun-alsa-microphone" }
 
 [lints]

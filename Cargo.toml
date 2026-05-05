@@ -16,7 +16,7 @@ members = [
   "crates/edgerun-alsa-speaker",
   "crates/edgerun-acme",
   "crates/edgerun-amd-xdna",
-  "crates/edgerun-android-keystore",
+  "crates/identity/edgerun-android-keystore",
   "crates/edgerun-analytics",
   "crates/edgerun-audio-calibration",
   "crates/edgerun-audio-liveliness",
@@ -53,7 +53,7 @@ members = [
   "crates/edgerun-fingerprint",
   "crates/edgerun-goodix-fingerprint",
   "crates/edgerun-gpu",
-  "crates/edgerun-hardware-signing",
+  "crates/identity/edgerun-hardware-signing",
   "crates/edgerun-http",
   "crates/utility/edgerun-hpack",
   "crates/edgerun-input",
@@ -100,12 +100,12 @@ members = [
   "crates/edgerun-virtio",
   "crates/edgerun-tls",
   "crates/edgerun-tuya",
-  "crates/edgerun-tpm",
+  "crates/identity/edgerun-tpm",
   "crates/edgerun-usb",
   "crates/edgerun-v4l2-camera",
   "crates/authority/edgerun-virtual-disk",
   "crates/edgerun-wifi",
-  "crates/edgerun-yubikey",
+  "crates/identity/edgerun-yubikey",
   "crates/authority/edgerun-vfs",
   "crates/utility/edgerun-clap",
   "crates/utility/edgerun-clap-derive",
@@ -160,7 +160,7 @@ edgerun-storage = { version = "0.1", path = "crates/authority/edgerun-storage" }
 edgerun-stream = { version = "0.1", path = "crates/authority/edgerun-stream" }
 edgerun-http = { version = "0.1", path = "crates/edgerun-http", default-features = false }
 edgerun-node = { version = "0.1", path = "crates/edgerun-node" }
-edgerun-hardware-signing = { version = "0.1", path = "crates/edgerun-hardware-signing" }
+edgerun-hardware-signing = { version = "0.1", path = "crates/identity/edgerun-hardware-signing" }
 edgerun-capabilities = { version = "0.1", path = "crates/capability/edgerun-capabilities" }
 edgerun-mesh = { version = "0.1", path = "crates/mesh/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "crates/mesh/edgerun-mesh-link" }
