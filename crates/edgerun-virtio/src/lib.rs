@@ -130,8 +130,16 @@ pub struct VirtioInterruptStatus {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VirtioError {
+    DeviceNotFound,
+    WrongDeviceType,
+    DeviceAlreadyClaimed,
+    MissingTransport,
     NotInitialized,
     MissingDeviceConfig,
+    FeatureNegotiationFailed,
+    QueueTooSmall,
+    QueueSetupFailed,
+    UnsupportedBlockSize,
     InvalidFrameLength,
     InvalidBufferLength,
     OutOfRange,
@@ -158,75 +166,111 @@ impl VirtioInterruptStatus {
 
 impl VirtioDeviceInfo {
     pub fn open_net(self) -> Option<VirtNet> {
+        self.try_open_net().ok()
+    }
+
+    pub fn try_open_net(self) -> VirtioResult<VirtNet> {
         if self.device_type != VIRTIO_DEVICE_TYPE_NET {
-            return None;
+            return Err(VirtioError::WrongDeviceType);
         }
 
         match self.transport {
             VirtioTransportKind::ModernPci => {
-                let device = read_modern_virtio_device(self.bus, self.slot, self.func)?;
-                VirtNet::from_modern_device(device)
+                let device = read_modern_virtio_device(self.bus, self.slot, self.func)
+                    .ok_or(VirtioError::DeviceNotFound)?;
+                VirtNet::try_from_modern_device(device)
             }
-            VirtioTransportKind::Mmio => VirtNet::from_mmio_base(self.mmio_base),
+            VirtioTransportKind::Mmio => VirtNet::try_from_mmio_base(self.mmio_base),
         }
     }
 
     pub fn open_initialized_net(self) -> Option<VirtNet> {
-        initialized_device(self.open_net()?, VirtNet::init)
+        self.try_open_initialized_net().ok()
+    }
+
+    pub fn try_open_initialized_net(self) -> VirtioResult<VirtNet> {
+        try_initialized_device(self.try_open_net()?, VirtNet::try_init)
     }
 
     pub fn open_blk(self) -> Option<VirtBlk> {
+        self.try_open_blk().ok()
+    }
+
+    pub fn try_open_blk(self) -> VirtioResult<VirtBlk> {
         if self.device_type != VIRTIO_DEVICE_TYPE_BLK {
-            return None;
+            return Err(VirtioError::WrongDeviceType);
         }
 
         match self.transport {
             VirtioTransportKind::ModernPci => {
-                let device = read_modern_virtio_device(self.bus, self.slot, self.func)?;
-                VirtBlk::from_modern_device(device)
+                let device = read_modern_virtio_device(self.bus, self.slot, self.func)
+                    .ok_or(VirtioError::DeviceNotFound)?;
+                VirtBlk::try_from_modern_device(device)
             }
-            VirtioTransportKind::Mmio => VirtBlk::from_mmio_base(self.mmio_base),
+            VirtioTransportKind::Mmio => VirtBlk::try_from_mmio_base(self.mmio_base),
         }
     }
 
     pub fn open_initialized_blk(self) -> Option<VirtBlk> {
-        initialized_device(self.open_blk()?, VirtBlk::init)
+        self.try_open_initialized_blk().ok()
+    }
+
+    pub fn try_open_initialized_blk(self) -> VirtioResult<VirtBlk> {
+        try_initialized_device(self.try_open_blk()?, VirtBlk::try_init)
     }
 
     pub fn open_rng(self) -> Option<VirtRng> {
+        self.try_open_rng().ok()
+    }
+
+    pub fn try_open_rng(self) -> VirtioResult<VirtRng> {
         if self.device_type != VIRTIO_DEVICE_TYPE_RNG {
-            return None;
+            return Err(VirtioError::WrongDeviceType);
         }
 
         match self.transport {
             VirtioTransportKind::ModernPci => {
-                let device = read_modern_virtio_device(self.bus, self.slot, self.func)?;
-                VirtRng::from_modern_device(device)
+                let device = read_modern_virtio_device(self.bus, self.slot, self.func)
+                    .ok_or(VirtioError::DeviceNotFound)?;
+                VirtRng::try_from_modern_device(device)
             }
-            VirtioTransportKind::Mmio => VirtRng::from_mmio_base(self.mmio_base),
+            VirtioTransportKind::Mmio => VirtRng::try_from_mmio_base(self.mmio_base),
         }
     }
 
     pub fn open_initialized_rng(self) -> Option<VirtRng> {
-        initialized_device(self.open_rng()?, VirtRng::init)
+        self.try_open_initialized_rng().ok()
+    }
+
+    pub fn try_open_initialized_rng(self) -> VirtioResult<VirtRng> {
+        try_initialized_device(self.try_open_rng()?, VirtRng::try_init)
     }
 
     pub fn open_console(self) -> Option<VirtConsole> {
+        self.try_open_console().ok()
+    }
+
+    pub fn try_open_console(self) -> VirtioResult<VirtConsole> {
         if self.device_type != VIRTIO_DEVICE_TYPE_CONSOLE {
-            return None;
+            return Err(VirtioError::WrongDeviceType);
         }
 
         match self.transport {
             VirtioTransportKind::ModernPci => {
-                let device = read_modern_virtio_device(self.bus, self.slot, self.func)?;
-                VirtConsole::from_modern_device(device)
+                let device = read_modern_virtio_device(self.bus, self.slot, self.func)
+                    .ok_or(VirtioError::DeviceNotFound)?;
+                VirtConsole::try_from_modern_device(device)
             }
-            VirtioTransportKind::Mmio => VirtConsole::from_mmio_base(self.mmio_base),
+            VirtioTransportKind::Mmio => VirtConsole::try_from_mmio_base(self.mmio_base),
         }
     }
 
     pub fn open_initialized_console(self) -> Option<VirtConsole> {
-        initialized_device(self.open_console()?, VirtConsole::init)
+        self.try_open_initialized_console().ok()
+    }
+
+    pub fn try_open_initialized_console(self) -> VirtioResult<VirtConsole> {
+        try_initialized_device(self.try_open_console()?, VirtConsole::try_init)
     }
 }
 
@@ -870,18 +914,6 @@ fn mmio_transport_for_device(base: *mut u8, device_type: u32) -> Option<VirtioTr
     }
 }
 
-macro_rules! init_fail {
-    ($self:expr) => {{
-        $self.release_claim();
-        return false;
-    }};
-    ($self:expr, $transport:expr) => {{
-        $transport.fail();
-        $self.release_claim();
-        return false;
-    }};
-}
-
 macro_rules! impl_driver_common {
     ($claim:ident) => {
         pub fn is_initialized(&self) -> bool {
@@ -969,17 +1001,24 @@ impl VirtNet {
     }
 
     pub fn init(&mut self) -> bool {
+        self.try_init().is_ok()
+    }
+
+    pub fn try_init(&mut self) -> VirtioResult<()> {
         let Some(transport) = self.transport() else {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::MissingTransport);
         };
         if transport.device_cfg().is_null() {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::MissingDeviceConfig);
         }
 
         let Some(features) = transport
             .negotiate_features(VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS)
         else {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::FeatureNegotiationFailed);
         };
         self.host_features = features.host;
         self.features = features.driver;
@@ -1003,12 +1042,16 @@ impl VirtNet {
         self.rx_notify_off = transport.read_queue_notify_off();
 
         if self.queue_size < QUEUE_SIZE as u16 {
-            init_fail!(self, transport);
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::QueueTooSmall);
         }
 
         transport.select_queue(TX_QUEUE);
         if transport.read_queue_size() < QUEUE_SIZE as u16 {
-            init_fail!(self, transport);
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::QueueTooSmall);
         }
         self.tx_notify_off = transport.read_queue_notify_off();
 
@@ -1027,7 +1070,9 @@ impl VirtNet {
             rx_avail,
             rx_used,
         ) else {
-            init_fail!(self, transport);
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::QueueSetupFailed);
         };
         self.queue_size = rx_queue_size;
 
@@ -1049,7 +1094,9 @@ impl VirtNet {
             )
             .is_none()
         {
-            init_fail!(self, transport);
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::QueueSetupFailed);
         }
 
         unsafe {
@@ -1060,7 +1107,7 @@ impl VirtNet {
         transport.write_status(transport.status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
         self.notify_queue(RX_QUEUE);
 
-        true
+        Ok(())
     }
 
     pub fn get_mac(&self) -> [u8; 6] {
@@ -1203,27 +1250,36 @@ impl VirtNet {
     }
 
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
-        let mapped = MappedModernVirtioDevice::map(device)?;
+        Self::try_from_modern_device(device).ok()
+    }
+
+    fn try_from_modern_device(device: ModernVirtioDevice) -> VirtioResult<Self> {
+        let mapped = MappedModernVirtioDevice::map(device).ok_or(VirtioError::DeviceNotFound)?;
         if !claim_driver(&NET_CLAIMED) {
-            return None;
+            return Err(VirtioError::DeviceAlreadyClaimed);
         }
         let mut net = Self::new();
         net.claimed = true;
         net.transport = DriverTransport::from_modern(mapped, mapped.device_cfg);
-        Some(net)
+        Ok(net)
     }
 
     pub fn from_mmio_base(base: usize) -> Option<Self> {
+        Self::try_from_mmio_base(base).ok()
+    }
+
+    pub fn try_from_mmio_base(base: usize) -> VirtioResult<Self> {
         let base = base as *mut u8;
-        let transport = mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_NET)?;
+        let transport = mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_NET)
+            .ok_or(VirtioError::WrongDeviceType)?;
         if !claim_driver(&NET_CLAIMED) {
-            return None;
+            return Err(VirtioError::DeviceAlreadyClaimed);
         }
 
         let mut net = Self::new();
         net.claimed = true;
         net.transport = DriverTransport::from_mmio(base, transport.device_cfg());
-        Some(net)
+        Ok(net)
     }
 
     unsafe fn init_rx_queue(&mut self) {
@@ -1499,17 +1555,24 @@ impl VirtBlk {
     }
 
     pub fn init(&mut self) -> bool {
+        self.try_init().is_ok()
+    }
+
+    pub fn try_init(&mut self) -> VirtioResult<()> {
         let Some(transport) = self.transport() else {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::MissingTransport);
         };
         if transport.device_cfg().is_null() {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::MissingDeviceConfig);
         }
 
         let Some(features) = transport.negotiate_features(
             VIRTIO_F_VERSION_1 | VIRTIO_BLK_F_RO | VIRTIO_BLK_F_BLK_SIZE | VIRTIO_BLK_F_FLUSH,
         ) else {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::FeatureNegotiationFailed);
         };
         self.host_features = features.host;
         self.features = features.driver;
@@ -1519,8 +1582,15 @@ impl VirtBlk {
         if self.features & VIRTIO_BLK_F_BLK_SIZE != 0 {
             self.block_size = read_u32(unsafe { self.transport.device_cfg.add(20) });
         }
-        if self.sectors == 0 || self.block_size != SECTOR_SIZE as u32 {
-            init_fail!(self, transport);
+        if self.sectors == 0 {
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::OutOfRange);
+        }
+        if self.block_size != SECTOR_SIZE as u32 {
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::UnsupportedBlockSize);
         }
 
         transport.select_queue(0);
@@ -1536,7 +1606,9 @@ impl VirtBlk {
         let Some(queue_size) =
             transport.configure_split_queue(0, QUEUE_SIZE as u16, 3, desc, avail, used)
         else {
-            init_fail!(self, transport);
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::QueueSetupFailed);
         };
         self.queue_size = queue_size;
 
@@ -1545,7 +1617,7 @@ impl VirtBlk {
         }
 
         transport.write_status(transport.status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
-        true
+        Ok(())
     }
 
     pub fn is_read_only(&self) -> bool {
@@ -1681,27 +1753,36 @@ impl VirtBlk {
     }
 
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
-        let mapped = MappedModernVirtioDevice::map(device)?;
+        Self::try_from_modern_device(device).ok()
+    }
+
+    fn try_from_modern_device(device: ModernVirtioDevice) -> VirtioResult<Self> {
+        let mapped = MappedModernVirtioDevice::map(device).ok_or(VirtioError::DeviceNotFound)?;
         if !claim_driver(&BLK_CLAIMED) {
-            return None;
+            return Err(VirtioError::DeviceAlreadyClaimed);
         }
         let mut blk = Self::new();
         blk.claimed = true;
         blk.transport = DriverTransport::from_modern(mapped, mapped.device_cfg);
-        Some(blk)
+        Ok(blk)
     }
 
     pub fn from_mmio_base(base: usize) -> Option<Self> {
+        Self::try_from_mmio_base(base).ok()
+    }
+
+    pub fn try_from_mmio_base(base: usize) -> VirtioResult<Self> {
         let base = base as *mut u8;
-        let transport = mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_BLK)?;
+        let transport = mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_BLK)
+            .ok_or(VirtioError::WrongDeviceType)?;
         if !claim_driver(&BLK_CLAIMED) {
-            return None;
+            return Err(VirtioError::DeviceAlreadyClaimed);
         }
 
         let mut blk = Self::new();
         blk.claimed = true;
         blk.transport = DriverTransport::from_mmio(base, transport.device_cfg());
-        Some(blk)
+        Ok(blk)
     }
 
     fn sector_range_in_bounds(&self, start_sector: u64, sector_count: u64) -> bool {
@@ -1913,12 +1994,18 @@ impl VirtRng {
     }
 
     pub fn init(&mut self) -> bool {
+        self.try_init().is_ok()
+    }
+
+    pub fn try_init(&mut self) -> VirtioResult<()> {
         let Some(transport) = self.transport() else {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::MissingTransport);
         };
 
         let Some(features) = transport.negotiate_features(VIRTIO_F_VERSION_1) else {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::FeatureNegotiationFailed);
         };
         self.host_features = features.host;
         self.features = features.driver;
@@ -1936,7 +2023,9 @@ impl VirtRng {
         let Some(queue_size) =
             transport.configure_split_queue(0, QUEUE_SIZE as u16, 1, desc, avail, used)
         else {
-            init_fail!(self, transport);
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::QueueSetupFailed);
         };
         self.queue_size = queue_size;
 
@@ -1945,7 +2034,7 @@ impl VirtRng {
         }
 
         transport.write_status(transport.status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
-        true
+        Ok(())
     }
 
     pub fn fill_bytes(&mut self, out: &mut [u8]) -> bool {
@@ -1967,27 +2056,36 @@ impl VirtRng {
     }
 
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
-        let mapped = MappedModernVirtioDevice::map(device)?;
+        Self::try_from_modern_device(device).ok()
+    }
+
+    fn try_from_modern_device(device: ModernVirtioDevice) -> VirtioResult<Self> {
+        let mapped = MappedModernVirtioDevice::map(device).ok_or(VirtioError::DeviceNotFound)?;
         if !claim_driver(&RNG_CLAIMED) {
-            return None;
+            return Err(VirtioError::DeviceAlreadyClaimed);
         }
         let mut rng = Self::new();
         rng.claimed = true;
         rng.transport = DriverTransport::from_modern(mapped, core::ptr::null_mut());
-        Some(rng)
+        Ok(rng)
     }
 
     pub fn from_mmio_base(base: usize) -> Option<Self> {
+        Self::try_from_mmio_base(base).ok()
+    }
+
+    pub fn try_from_mmio_base(base: usize) -> VirtioResult<Self> {
         let base = base as *mut u8;
-        mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_RNG)?;
+        mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_RNG)
+            .ok_or(VirtioError::WrongDeviceType)?;
         if !claim_driver(&RNG_CLAIMED) {
-            return None;
+            return Err(VirtioError::DeviceAlreadyClaimed);
         }
 
         let mut rng = Self::new();
         rng.claimed = true;
         rng.transport = DriverTransport::from_mmio(base, core::ptr::null_mut());
-        Some(rng)
+        Ok(rng)
     }
 
     unsafe fn init_queue(&mut self) {
@@ -2104,12 +2202,18 @@ impl VirtConsole {
     }
 
     pub fn init(&mut self) -> bool {
+        self.try_init().is_ok()
+    }
+
+    pub fn try_init(&mut self) -> VirtioResult<()> {
         let Some(transport) = self.transport() else {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::MissingTransport);
         };
 
         let Some(features) = transport.negotiate_features(VIRTIO_F_VERSION_1) else {
-            init_fail!(self);
+            self.release_claim();
+            return Err(VirtioError::FeatureNegotiationFailed);
         };
         self.host_features = features.host;
         self.features = features.driver;
@@ -2132,7 +2236,9 @@ impl VirtConsole {
             rx_avail,
             rx_used,
         ) else {
-            init_fail!(self, transport);
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::QueueSetupFailed);
         };
         self.rx_queue_size = rx_queue_size;
 
@@ -2154,7 +2260,9 @@ impl VirtConsole {
             avail,
             used,
         ) else {
-            init_fail!(self, transport);
+            transport.fail();
+            self.release_claim();
+            return Err(VirtioError::QueueSetupFailed);
         };
         self.tx_queue_size = tx_queue_size;
 
@@ -2164,7 +2272,7 @@ impl VirtConsole {
         }
 
         transport.write_status(transport.status() | VIRTIO_CONFIG_STATUS_DRIVER_OK);
-        true
+        Ok(())
     }
 
     pub fn recv(&mut self, buf: &mut [u8]) -> Option<usize> {
@@ -2225,27 +2333,36 @@ impl VirtConsole {
     }
 
     fn from_modern_device(device: ModernVirtioDevice) -> Option<Self> {
-        let mapped = MappedModernVirtioDevice::map(device)?;
+        Self::try_from_modern_device(device).ok()
+    }
+
+    fn try_from_modern_device(device: ModernVirtioDevice) -> VirtioResult<Self> {
+        let mapped = MappedModernVirtioDevice::map(device).ok_or(VirtioError::DeviceNotFound)?;
         if !claim_driver(&CONSOLE_CLAIMED) {
-            return None;
+            return Err(VirtioError::DeviceAlreadyClaimed);
         }
         let mut console = Self::new();
         console.claimed = true;
         console.transport = DriverTransport::from_modern(mapped, core::ptr::null_mut());
-        Some(console)
+        Ok(console)
     }
 
     pub fn from_mmio_base(base: usize) -> Option<Self> {
+        Self::try_from_mmio_base(base).ok()
+    }
+
+    pub fn try_from_mmio_base(base: usize) -> VirtioResult<Self> {
         let base = base as *mut u8;
-        mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_CONSOLE)?;
+        mmio_transport_for_device(base, VIRTIO_DEVICE_TYPE_CONSOLE)
+            .ok_or(VirtioError::WrongDeviceType)?;
         if !claim_driver(&CONSOLE_CLAIMED) {
-            return None;
+            return Err(VirtioError::DeviceAlreadyClaimed);
         }
 
         let mut console = Self::new();
         console.claimed = true;
         console.transport = DriverTransport::from_mmio(base, core::ptr::null_mut());
-        Some(console)
+        Ok(console)
     }
 
     unsafe fn init_tx_queue(&mut self) {
@@ -2389,96 +2506,172 @@ fn initialized_device<T>(mut device: T, init: fn(&mut T) -> bool) -> Option<T> {
     }
 }
 
+fn try_initialized_device<T>(
+    mut device: T,
+    init: fn(&mut T) -> VirtioResult<()>,
+) -> VirtioResult<T> {
+    init(&mut device)?;
+    Ok(device)
+}
+
 pub fn find_virtio_net() -> Option<VirtNet> {
+    try_find_virtio_net().ok()
+}
+
+pub fn try_find_virtio_net() -> VirtioResult<VirtNet> {
     #[cfg(target_arch = "x86_64")]
     {
-        let device = find_modern_virtio_device(VIRTIO_MODERN_DEVICE_ID_NET)?;
-        return VirtNet::from_modern_device(device);
+        let device = find_modern_virtio_device(VIRTIO_MODERN_DEVICE_ID_NET)
+            .ok_or(VirtioError::DeviceNotFound)?;
+        return VirtNet::try_from_modern_device(device);
     }
 
     #[allow(unreachable_code)]
-    None
+    Err(VirtioError::DeviceNotFound)
 }
 
 pub fn find_initialized_virtio_net() -> Option<VirtNet> {
-    initialized_device(find_virtio_net()?, VirtNet::init)
+    try_find_initialized_virtio_net().ok()
+}
+
+pub fn try_find_initialized_virtio_net() -> VirtioResult<VirtNet> {
+    try_initialized_device(try_find_virtio_net()?, VirtNet::try_init)
 }
 
 pub fn find_virtio_blk() -> Option<VirtBlk> {
+    try_find_virtio_blk().ok()
+}
+
+pub fn try_find_virtio_blk() -> VirtioResult<VirtBlk> {
     #[cfg(target_arch = "x86_64")]
     {
-        let device = find_modern_virtio_device(VIRTIO_MODERN_DEVICE_ID_BLK)?;
-        return VirtBlk::from_modern_device(device);
+        let device = find_modern_virtio_device(VIRTIO_MODERN_DEVICE_ID_BLK)
+            .ok_or(VirtioError::DeviceNotFound)?;
+        return VirtBlk::try_from_modern_device(device);
     }
 
     #[allow(unreachable_code)]
-    None
+    Err(VirtioError::DeviceNotFound)
 }
 
 pub fn find_initialized_virtio_blk() -> Option<VirtBlk> {
-    initialized_device(find_virtio_blk()?, VirtBlk::init)
+    try_find_initialized_virtio_blk().ok()
+}
+
+pub fn try_find_initialized_virtio_blk() -> VirtioResult<VirtBlk> {
+    try_initialized_device(try_find_virtio_blk()?, VirtBlk::try_init)
 }
 
 pub fn find_virtio_rng() -> Option<VirtRng> {
+    try_find_virtio_rng().ok()
+}
+
+pub fn try_find_virtio_rng() -> VirtioResult<VirtRng> {
     #[cfg(target_arch = "x86_64")]
     {
-        let device = find_modern_virtio_device(VIRTIO_MODERN_DEVICE_ID_RNG)?;
-        return VirtRng::from_modern_device(device);
+        let device = find_modern_virtio_device(VIRTIO_MODERN_DEVICE_ID_RNG)
+            .ok_or(VirtioError::DeviceNotFound)?;
+        return VirtRng::try_from_modern_device(device);
     }
 
     #[allow(unreachable_code)]
-    None
+    Err(VirtioError::DeviceNotFound)
 }
 
 pub fn find_initialized_virtio_rng() -> Option<VirtRng> {
-    initialized_device(find_virtio_rng()?, VirtRng::init)
+    try_find_initialized_virtio_rng().ok()
+}
+
+pub fn try_find_initialized_virtio_rng() -> VirtioResult<VirtRng> {
+    try_initialized_device(try_find_virtio_rng()?, VirtRng::try_init)
 }
 
 pub fn find_virtio_console() -> Option<VirtConsole> {
+    try_find_virtio_console().ok()
+}
+
+pub fn try_find_virtio_console() -> VirtioResult<VirtConsole> {
     #[cfg(target_arch = "x86_64")]
     {
-        let device = find_modern_virtio_device(VIRTIO_MODERN_DEVICE_ID_CONSOLE)?;
-        return VirtConsole::from_modern_device(device);
+        let device = find_modern_virtio_device(VIRTIO_MODERN_DEVICE_ID_CONSOLE)
+            .ok_or(VirtioError::DeviceNotFound)?;
+        return VirtConsole::try_from_modern_device(device);
     }
 
     #[allow(unreachable_code)]
-    None
+    Err(VirtioError::DeviceNotFound)
 }
 
 pub fn find_initialized_virtio_console() -> Option<VirtConsole> {
-    initialized_device(find_virtio_console()?, VirtConsole::init)
+    try_find_initialized_virtio_console().ok()
+}
+
+pub fn try_find_initialized_virtio_console() -> VirtioResult<VirtConsole> {
+    try_initialized_device(try_find_virtio_console()?, VirtConsole::try_init)
 }
 
 pub fn find_virtio_net_mmio(base: usize) -> Option<VirtNet> {
-    VirtNet::from_mmio_base(base)
+    try_find_virtio_net_mmio(base).ok()
+}
+
+pub fn try_find_virtio_net_mmio(base: usize) -> VirtioResult<VirtNet> {
+    VirtNet::try_from_mmio_base(base)
 }
 
 pub fn find_initialized_virtio_net_mmio(base: usize) -> Option<VirtNet> {
-    initialized_device(find_virtio_net_mmio(base)?, VirtNet::init)
+    try_find_initialized_virtio_net_mmio(base).ok()
+}
+
+pub fn try_find_initialized_virtio_net_mmio(base: usize) -> VirtioResult<VirtNet> {
+    try_initialized_device(try_find_virtio_net_mmio(base)?, VirtNet::try_init)
 }
 
 pub fn find_virtio_blk_mmio(base: usize) -> Option<VirtBlk> {
-    VirtBlk::from_mmio_base(base)
+    try_find_virtio_blk_mmio(base).ok()
+}
+
+pub fn try_find_virtio_blk_mmio(base: usize) -> VirtioResult<VirtBlk> {
+    VirtBlk::try_from_mmio_base(base)
 }
 
 pub fn find_initialized_virtio_blk_mmio(base: usize) -> Option<VirtBlk> {
-    initialized_device(find_virtio_blk_mmio(base)?, VirtBlk::init)
+    try_find_initialized_virtio_blk_mmio(base).ok()
+}
+
+pub fn try_find_initialized_virtio_blk_mmio(base: usize) -> VirtioResult<VirtBlk> {
+    try_initialized_device(try_find_virtio_blk_mmio(base)?, VirtBlk::try_init)
 }
 
 pub fn find_virtio_rng_mmio(base: usize) -> Option<VirtRng> {
-    VirtRng::from_mmio_base(base)
+    try_find_virtio_rng_mmio(base).ok()
+}
+
+pub fn try_find_virtio_rng_mmio(base: usize) -> VirtioResult<VirtRng> {
+    VirtRng::try_from_mmio_base(base)
 }
 
 pub fn find_initialized_virtio_rng_mmio(base: usize) -> Option<VirtRng> {
-    initialized_device(find_virtio_rng_mmio(base)?, VirtRng::init)
+    try_find_initialized_virtio_rng_mmio(base).ok()
+}
+
+pub fn try_find_initialized_virtio_rng_mmio(base: usize) -> VirtioResult<VirtRng> {
+    try_initialized_device(try_find_virtio_rng_mmio(base)?, VirtRng::try_init)
 }
 
 pub fn find_virtio_console_mmio(base: usize) -> Option<VirtConsole> {
-    VirtConsole::from_mmio_base(base)
+    try_find_virtio_console_mmio(base).ok()
+}
+
+pub fn try_find_virtio_console_mmio(base: usize) -> VirtioResult<VirtConsole> {
+    VirtConsole::try_from_mmio_base(base)
 }
 
 pub fn find_initialized_virtio_console_mmio(base: usize) -> Option<VirtConsole> {
-    initialized_device(find_virtio_console_mmio(base)?, VirtConsole::init)
+    try_find_initialized_virtio_console_mmio(base).ok()
+}
+
+pub fn try_find_initialized_virtio_console_mmio(base: usize) -> VirtioResult<VirtConsole> {
+    try_initialized_device(try_find_virtio_console_mmio(base)?, VirtConsole::try_init)
 }
 
 pub fn virtio_mmio_device_info(base: usize) -> Option<VirtioDeviceInfo> {
@@ -3127,8 +3320,17 @@ mod tests {
         assert!(VirtRng::from_mmio_base(base).is_some());
         assert!(VirtBlk::from_mmio_base(base).is_none());
         assert!(info.open_rng().is_some());
+        assert!(info.try_open_rng().is_ok());
         assert!(info.open_net().is_none());
+        assert!(matches!(
+            info.try_open_net(),
+            Err(VirtioError::WrongDeviceType)
+        ));
         assert!(VirtNet::from_mmio_base(0).is_none());
+        assert!(matches!(
+            VirtNet::try_from_mmio_base(0),
+            Err(VirtioError::WrongDeviceType)
+        ));
     }
 
     #[test]
@@ -3163,6 +3365,10 @@ mod tests {
 
         let first = VirtNet::from_mmio_base(base).unwrap();
         assert!(VirtNet::from_mmio_base(base).is_none());
+        assert!(matches!(
+            VirtNet::try_from_mmio_base(base),
+            Err(VirtioError::DeviceAlreadyClaimed)
+        ));
         drop(first);
         assert!(VirtNet::from_mmio_base(base).is_some());
     }
@@ -3175,9 +3381,40 @@ mod tests {
         let base = base_ptr as usize;
 
         let mut first = VirtNet::from_mmio_base(base).unwrap();
-        assert!(!first.init());
+        assert_eq!(first.try_init(), Err(VirtioError::FeatureNegotiationFailed));
         assert_eq!(read_u32(unsafe { base_ptr.add(VIRTIO_MMIO_STATUS) }), 0);
         assert!(VirtNet::from_mmio_base(base).is_some());
+    }
+
+    #[test]
+    fn typed_init_reports_queue_setup_failure() {
+        let _guard = driver_claim_test_lock();
+        let mut rng_mmio = TestMmio([0; 0x200]);
+        let base_ptr = init_test_mmio(&mut rng_mmio, VIRTIO_DEVICE_TYPE_RNG);
+        let base = base_ptr as usize;
+
+        set_mmio_modern_features(base_ptr, VIRTIO_F_VERSION_1);
+        write_u32(unsafe { base_ptr.add(VIRTIO_MMIO_QUEUE_NUM_MAX) }, 0);
+
+        let mut rng = VirtRng::from_mmio_base(base).unwrap();
+        assert_eq!(rng.try_init(), Err(VirtioError::QueueSetupFailed));
+        assert_eq!(read_u32(unsafe { base_ptr.add(VIRTIO_MMIO_STATUS) }), 0);
+    }
+
+    #[test]
+    fn typed_init_rejects_zero_capacity_block() {
+        let _guard = driver_claim_test_lock();
+        let mut blk_mmio = TestMmio([0; 0x200]);
+        let base_ptr = init_test_mmio(&mut blk_mmio, VIRTIO_DEVICE_TYPE_BLK);
+        let base = base_ptr as usize;
+
+        set_mmio_modern_features(base_ptr, VIRTIO_F_VERSION_1);
+        write_u64(unsafe { base_ptr.add(VIRTIO_MMIO_CONFIG) }, 0);
+        write_u32(unsafe { base_ptr.add(VIRTIO_MMIO_QUEUE_NUM_MAX) }, 3);
+
+        let mut blk = VirtBlk::from_mmio_base(base).unwrap();
+        assert_eq!(blk.try_init(), Err(VirtioError::OutOfRange));
+        assert_eq!(read_u32(unsafe { base_ptr.add(VIRTIO_MMIO_STATUS) }), 0);
     }
 
     #[test]
@@ -3509,6 +3746,29 @@ mod tests {
             assert_eq!(status.len, 1);
             assert_eq!(status.flags, VIRTQ_DESC_F_WRITE);
             assert_eq!(status.next, 0);
+        }
+    }
+
+    #[test]
+    fn virtblk_write_descriptor_chain_exposes_data_to_device() {
+        let _guard = driver_claim_test_lock();
+        let mut blk = VirtBlk::new();
+
+        unsafe {
+            assert!(blk.prepare_request_descriptors(VIRTIO_BLK_T_OUT, 9, SECTOR_SIZE, false));
+
+            let desc = core::ptr::addr_of!(BLK_DESC.0) as *const VirtqDesc;
+            let header = core::ptr::read(desc);
+            let data = core::ptr::read(desc.add(1));
+            let status = core::ptr::read(desc.add(2));
+
+            assert_eq!(header.flags, VIRTQ_DESC_F_NEXT);
+            assert_eq!(header.next, 1);
+            assert_eq!(data.len, SECTOR_SIZE as u32);
+            assert_eq!(data.flags, VIRTQ_DESC_F_NEXT);
+            assert_eq!(data.next, 2);
+            assert_eq!(status.len, 1);
+            assert_eq!(status.flags, VIRTQ_DESC_F_WRITE);
         }
     }
 
