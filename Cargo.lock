@@ -541,32 +541,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-e2e-capability"
-version = "0.1.1"
-dependencies = [
- "edgerun-alsa-microphone",
- "edgerun-alsa-speaker",
- "edgerun-camera-biometrics",
- "edgerun-capabilities",
- "edgerun-capability-policy",
- "edgerun-core",
- "edgerun-drm-display",
- "edgerun-evdev-input",
- "edgerun-fingerprint",
- "edgerun-goodix-fingerprint",
- "edgerun-input",
- "edgerun-linux-npu",
- "edgerun-linux-wifi",
- "edgerun-mgmt-bluetooth",
- "edgerun-microphone",
- "edgerun-npu",
- "edgerun-remote-capability",
- "edgerun-speaker",
- "edgerun-tpm",
- "edgerun-v4l2-camera",
-]
-
-[[package]]
 name = "edgerun-edgefs"
 version = "0.1.1"
 dependencies = [
@@ -666,16 +640,6 @@ dependencies = [
  "edgerun-log",
  "edgerun-rt",
  "edgerun-url",
- "edgerun-wallet",
-]
-
-[[package]]
-name = "edgerun-exchange-worker"
-version = "0.1.1"
-dependencies = [
- "edgerun-exchange",
- "edgerun-log",
- "edgerun-rt",
  "edgerun-wallet",
 ]
 

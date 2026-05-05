@@ -2,7 +2,7 @@
 
 **Status:** Working Draft
 **Date:** 2026-04-12
-**Based on:** Protocol spec §7, §14.5-14.10 + `edgerun-capabilities`, `edgerun-capability-policy`, `edgerun-remote-capability`, `edgerun-e2e-capability`
+**Based on:** Protocol spec §7, §14.5-14.10 + `edgerun-capabilities`, `edgerun-capability-policy`, `edgerun-remote-capability`
 
 ---
 
@@ -35,14 +35,6 @@ See [RFC-0001](RFC-0001-protocol-core.md#edgerun-capabilities--capability-model-
 **Tests:** Part of workspace
 
 **Purpose:** Remote capability negotiation. Implements `RemoteCapabilityProvider` trait with session open/invoke/close lifecycle — the methods missing from `edgerun-capabilities`' `CapabilityProvider`.
-
-### edgerun-e2e-capability
-
-**Status:** ✅ Functional
-
-**Purpose:** End-to-end capability tests. Integration tests exercising the full capability flow from local provider to remote invocation.
-
----
 
 ## Spec Mapping
 

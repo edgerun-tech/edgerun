@@ -44,7 +44,6 @@ members = [
   "crates/edgerun-dns",
   "crates/edgerun-drm-display",
   "crates/edgerun-display",
-  "crates/edgerun-e2e-capability",
   "crates/edgerun-edit",
   "crates/edgerun-edgefs",
   "crates/edgerun-encoding",
@@ -114,7 +113,6 @@ members = [
   "crates/edgerun-wallet",
   "crates/edgerun-exchange",
   "crates/edgerun-exchange-api",
-  "crates/edgerun-exchange-worker",
   "crates/zen-client",
 ]
 
@@ -209,7 +207,6 @@ edgerun-event = { version = "0.1", path = "crates/edgerun-event" }
 edgerun-wallet = { version = "0.1", path = "crates/edgerun-wallet" }
 edgerun-exchange = { version = "0.1", path = "crates/edgerun-exchange" }
 edgerun-exchange-api = { version = "0.1", path = "crates/edgerun-exchange-api" }
-edgerun-exchange-worker = { version = "0.1", path = "crates/edgerun-exchange-worker" }
 
 sha2 = { version = "0.10", default-features = false }
 
