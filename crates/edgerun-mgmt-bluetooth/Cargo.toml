@@ -11,7 +11,7 @@ description = "Bluetooth management adapter for Edgerun"
 [dependencies]
 edgerun-bluetooth = { version = "0.1", path = "../edgerun-bluetooth" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 
 [features]
 std = []

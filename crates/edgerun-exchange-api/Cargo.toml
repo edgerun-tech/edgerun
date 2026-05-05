@@ -13,10 +13,10 @@ edgerun-core = { version = "0.1", path = "../edgerun-core" }
 edgerun-exchange = { version = "0.1", path = "../edgerun-exchange" }
 edgerun-wallet = { version = "0.1", path = "../edgerun-wallet" }
 edgerun-http = { version = "0.1", path = "../edgerun-http", features = ["server", "runtime"] }
-edgerun-json = { version = "0.1", path = "../edgerun-json" }
-edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-json = { version = "0.1", path = "../utility/edgerun-json" }
+edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
-edgerun-url = { version = "0.1", path = "../edgerun-url" }
+edgerun-url = { version = "0.1", path = "../utility/edgerun-url" }
 
 [lints]
 workspace = true

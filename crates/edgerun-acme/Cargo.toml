@@ -14,7 +14,7 @@ edgerun-crypto = { workspace = true, default-features = false, features = ["p256
 edgerun-http = { workspace = true, default-features = false, features = ["client", "tls"] }
 edgerun-dns.workspace = true
 edgerun-encoding.workspace = true
-edgerun-url = { version = "0.1", path = "../edgerun-url" }
+edgerun-url = { version = "0.1", path = "../utility/edgerun-url" }
 edgerun-secret-service.workspace = true
 edgerun-json.workspace = true
 edgerun-error.workspace = true

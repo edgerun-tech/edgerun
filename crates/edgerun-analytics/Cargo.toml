@@ -10,7 +10,7 @@ description = "Privacy-conscious first-party HTTP analytics for Edgerun services
 
 [dependencies]
 edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["server"] }
-edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 
 [lints]
 workspace = true

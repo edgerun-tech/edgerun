@@ -54,7 +54,7 @@ func reportAPIParity(cmd *cobra.Command, args []string) error {
         return err
     }
 
-    srcDir := filepath.Join(root, "crates/edgerun-json/src")
+    srcDir := filepath.Join(root, "crates/utility/edgerun-json/src")
     fmt.Println("edgerun-json API Compatibility Report")
     fmt.Println("======================================")
     fmt.Println()

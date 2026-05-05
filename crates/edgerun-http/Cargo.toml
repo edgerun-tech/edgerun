@@ -24,13 +24,13 @@ tls = ["dep:edgerun-tls"]
 
 [dependencies]
 edgerun-tls = { version = "0.1", path = "../edgerun-tls", optional = true }
-edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, optional = true }
+edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false, optional = true }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
-edgerun-log = { version = "0.1", path = "../edgerun-log", optional = true }
+edgerun-log = { version = "0.1", path = "../utility/edgerun-log", optional = true }
 edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false, optional = true }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false, optional = true }
-edgerun-hpack = { version = "0.1", path = "../edgerun-hpack", optional = true }
-edgerun-qpack = { version = "0.1", path = "../edgerun-qpack", optional = true }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false, optional = true }
+edgerun-hpack = { version = "0.1", path = "../utility/edgerun-hpack", optional = true }
+edgerun-qpack = { version = "0.1", path = "../utility/edgerun-qpack", optional = true }
 edgerun-quic = { version = "0.1", path = "../edgerun-quic", optional = true }
 miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"], optional = true }
 brotli = { version = "8", default-features = false, optional = true }

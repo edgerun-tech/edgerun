@@ -10,7 +10,7 @@ description = "HTTP proxy server with CONNECT support for HTTPS tunneling"
 
 [dependencies]
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
-edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 
 [features]
 default = []

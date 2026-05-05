@@ -12,7 +12,7 @@ description = "TCL air conditioner integration support for Edgerun"
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-bluetooth-gatt = { version = "0.1", path = "../edgerun-bluetooth-gatt" }
 edgerun-matter = { version = "0.1", path = "../edgerun-matter" }
-edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, features = ["hmac"] }
+edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false, features = ["hmac"] }
 aes = "0.8"
 
 [lints]

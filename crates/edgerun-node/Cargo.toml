@@ -62,7 +62,7 @@ all-hardware = [
 [dependencies]
 edgerun-core = { version = "0.1", path = "../edgerun-core" }
 edgerun-wire = { workspace = true }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 edgerun-capability-policy = { version = "0.1", path = "../edgerun-capability-policy" }
 edgerun-stream = { version = "0.1", path = "../edgerun-stream" }
@@ -75,9 +75,9 @@ edgerun-mesh-session = { version = "0.1", path = "../edgerun-mesh-session" }
 edgerun-exchange = { version = "0.1", path = "../edgerun-exchange" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256", "pbkdf2"] }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
-edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", default-features = false }
-edgerun-json = { version = "0.1", path = "../edgerun-json" }
+edgerun-json = { version = "0.1", path = "../utility/edgerun-json" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }

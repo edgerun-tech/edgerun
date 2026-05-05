@@ -12,7 +12,7 @@ description = "AMD XDNA Linux NPU adapter for Edgerun"
 edgerun-linux-npu = { version = "0.1", path = "../edgerun-linux-npu" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 edgerun-npu = { version = "0.1", path = "../edgerun-npu" }
-edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 
 [[bin]]
 name = "amd_xdna_tool"

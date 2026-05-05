@@ -24,7 +24,7 @@ edgerun-npu = { version = "0.1", path = "../edgerun-npu" }
 edgerun-fingerprint = { version = "0.1", path = "../edgerun-fingerprint" }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 
 edgerun-core = { version = "0.1", path = "../edgerun-core" }
 

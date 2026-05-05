@@ -9,8 +9,8 @@ homepage.workspace = true
 description = "OCI container runtime and registry client — pull, push, login, create, start, exec containers"
 
 [dependencies]
-edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
-edgerun-clap = { version = "0.1", path = "../edgerun-clap", default-features = false }
+edgerun-json = { version = "0.1", path = "../utility/edgerun-json", default-features = false }
+edgerun-clap = { version = "0.1", path = "../utility/edgerun-clap", default-features = false }
 edgerun-crypto = { workspace = true, default-features = false }
 edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["client", "tls"], optional = true }
 edgerun-edgefs = { workspace = true, optional = true }
@@ -18,7 +18,7 @@ edgerun-storage = { workspace = true, optional = true }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
 edgerun-secret-service = { version = "0.1", path = "../edgerun-secret-service", optional = true }
 edgerun-core = { version = "0.1", path = "../edgerun-core", optional = true }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"] }
 ruzstd = { version = "0.8.2", default-features = false, optional = true }
 

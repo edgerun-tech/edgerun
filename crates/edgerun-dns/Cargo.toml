@@ -27,11 +27,11 @@ required-features = ["dnssec"]
 
 [dependencies]
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
-edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 edgerun-dhcp = { version = "0.1", path = "../edgerun-dhcp", optional = true }
 edgerun-tftp = { version = "0.1", path = "../edgerun-tftp" }
-edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, optional = true }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
+edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false, optional = true }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false }
 
 [[test]]
 name = "dnssec_integration"

@@ -10,7 +10,7 @@ description = "ALSA speaker adapter for Edgerun audio output capabilities"
 
 [dependencies]
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 edgerun-speaker = { version = "0.1", path = "../edgerun-speaker" }
 
 [dev-dependencies]

@@ -10,7 +10,7 @@ description = "Matter protocol support for Edgerun device integrations"
 
 [dependencies]
 edgerun-bluetooth-gatt = { version = "0.1", path = "../edgerun-bluetooth-gatt" }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 
 [lints]
 workspace = true

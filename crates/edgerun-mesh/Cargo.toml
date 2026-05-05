@@ -12,7 +12,7 @@ description = "Identity-routed mesh primitives for Edgerun"
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-core = { version = "0.1", path = "../edgerun-core" }
-edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
+edgerun-json = { version = "0.1", path = "../utility/edgerun-json", default-features = false }
 
 [lints]
 workspace = true

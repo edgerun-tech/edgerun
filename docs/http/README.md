@@ -154,7 +154,7 @@ crates/edgerun-http/src/http1/
 ├── buf_reader.rs       # Buffered reader for HTTP parsing
 └── mod.rs              # Module exports
 
-crates/edgerun-qpack/     # Vendored qpack 0.1.0 (crates.io), all modules public
+crates/utility/edgerun-qpack/     # Vendored qpack 0.1.0 (crates.io), all modules public
 ```
 
 ## Usage

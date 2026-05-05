@@ -26,7 +26,7 @@ logging_matches="$(
   --glob '!**/build.rs' \
   --glob '!**/vendor/**' \
   --glob '!crates/edgerun-bench/**' \
-  --glob '!crates/edgerun-clap/**' \
+  --glob '!crates/utility/edgerun-clap/**' \
   --glob '!crates/edgerun-e2e/**' \
   --glob '!crates/edgerun-marketplace-cli/**' \
   --glob '!crates/edgerun-oci/src/cli/**' \

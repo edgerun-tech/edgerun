@@ -16,8 +16,8 @@ edgerun-stream = { version = "0.1", path = "../edgerun-stream" }
 edgerun-verify = { workspace = true, default-features = false }
 edgerun-hardware-signing = { version = "0.1", path = "../edgerun-hardware-signing", default-features = false }
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256", "pbkdf2"] }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
-edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false }
+edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 
 [features]
 bare-rt = []

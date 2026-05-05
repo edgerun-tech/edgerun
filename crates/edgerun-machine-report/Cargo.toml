@@ -9,8 +9,8 @@ homepage.workspace = true
 description = "Machine inventory reporting across Edgerun hardware adapters"
 
 [dependencies]
-edgerun-json = { version = "0.1", path = "../edgerun-json" }
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
+edgerun-json = { version = "0.1", path = "../utility/edgerun-json" }
+edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
 edgerun-linux-pci = { version = "0.1", path = "../edgerun-linux-pci" }
 edgerun-linux-usb = { version = "0.1", path = "../edgerun-linux-usb" }

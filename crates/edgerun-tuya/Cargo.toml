@@ -10,9 +10,9 @@ description = "Tuya device discovery and control support for Edgerun"
 
 [dependencies]
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
-edgerun-crypto = { version = "0.1", path = "../edgerun-crypto", default-features = false, features = ["aead", "hmac"] }
+edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false, features = ["aead", "hmac"] }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
-edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
+edgerun-json = { version = "0.1", path = "../utility/edgerun-json", default-features = false }
 
 [[bin]]
 name = "tuya-discover"
