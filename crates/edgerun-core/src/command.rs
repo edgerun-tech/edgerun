@@ -2913,22 +2913,18 @@ mod tests {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0,
         ];
-        static EMPTY_CACHE: std::sync::LazyLock<HashMap<Vec<u8>, (Vec<u8>, i64)>> =
-            std::sync::LazyLock::new(HashMap::new);
-        static EMPTY_REVOKED: std::sync::LazyLock<HashSet<Vec<u8>>> =
-            std::sync::LazyLock::new(HashSet::new);
-        static EMPTY_DELEGATION_USES: std::sync::LazyLock<HashMap<Vec<u8>, u64>> =
-            std::sync::LazyLock::new(HashMap::new);
-        static EMPTY_DELEGATION_RATE_EVENTS: std::sync::LazyLock<HashMap<Vec<u8>, Vec<i64>>> =
-            std::sync::LazyLock::new(HashMap::new);
+        static EMPTY_CACHE: HashMap<Vec<u8>, (Vec<u8>, i64)> = HashMap::new();
+        static EMPTY_REVOKED: HashSet<Vec<u8>> = HashSet::new();
+        static EMPTY_DELEGATION_USES: HashMap<Vec<u8>, u64> = HashMap::new();
+        static EMPTY_DELEGATION_RATE_EVENTS: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
         static EMPTY_ROOTS: [Vec<u8>; 0] = [];
         static EMPTY_LOCATION_CLASSES: [&str; 0] = [];
         CommandValidationContext {
             local_node_id: &LOCAL_NODE_ID,
-            replay_cache: &*EMPTY_CACHE,
-            revoked_delegation_ids: &*EMPTY_REVOKED,
-            delegation_use_counts: &*EMPTY_DELEGATION_USES,
-            delegation_rate_events_ms: &*EMPTY_DELEGATION_RATE_EVENTS,
+            replay_cache: &EMPTY_CACHE,
+            revoked_delegation_ids: &EMPTY_REVOKED,
+            delegation_use_counts: &EMPTY_DELEGATION_USES,
+            delegation_rate_events_ms: &EMPTY_DELEGATION_RATE_EVENTS,
             now_ms: 1_700_000_000_000,
             trusted_root_ids: &EMPTY_ROOTS,
             local_assurance_class: 2, // HARDWARE_BACKED for tests

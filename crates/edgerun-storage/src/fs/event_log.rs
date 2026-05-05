@@ -99,7 +99,7 @@ pub fn read_event_at(
     let mut file = File::open(&log_path)?;
     file.seek(SeekFrom::Start(file_offset))?;
 
-    let Some(len) = edgerun_core::varint::decode_varint_from_read(&mut file)
+    let Some(len) = decode_varint_from_read(&mut file)
         .map_err(varint_io_to_storage_io)?
     else {
         return Ok(None);
@@ -152,7 +152,7 @@ pub fn scan_event_logs(events_dir: &Path) -> Result<Vec<ScannedEvent>, StorageEr
         let mut file = File::open(&path)?;
         loop {
             let record_start = file.stream_position()?;
-            let len = match edgerun_core::varint::decode_varint_from_read(&mut file) {
+            let len = match decode_varint_from_read(&mut file) {
                 Ok(Some(v)) => v,
                 Ok(None) => break,
                 Err(e) if varint_is_unexpected_eof(&e) => break,
@@ -219,6 +219,52 @@ fn varint_io_to_storage_io(err: edgerun_core::io::Error) -> StorageError {
 }
 
 #[cfg(not(target_os = "none"))]
+fn varint_io_to_storage_io(err: std::io::Error) -> StorageError {
+    StorageError::Io(err)
+}
+
+
+fn decode_varint_from_read<R: Read>(r: &mut R) -> std::io::Result<Option<u64>> {
+    let mut buf = [0u8; 1];
+    let mut result: u64 = 0;
+    let mut shift: u32 = 0;
+
+    loop {
+        match r.read_exact(&mut buf) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                if shift == 0 {
+                    return Ok(None);
+                }
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "truncated varint",
+                ));
+            }
+            Err(e) => return Err(e),
+        }
+
+        let byte = buf[0];
+        result |= ((byte & 0x7f) as u64) << shift;
+
+        if byte & 0x80 == 0 {
+            return Ok(Some(result));
+        }
+
+        shift += 7;
+        if shift >= 64 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "varint too long",
+            ));
+        }
+    }
+}
+
+fn varint_is_unexpected_eof(err: &std::io::Error) -> bool {
+    err.kind() == std::io::ErrorKind::UnexpectedEof
+}
+
 fn varint_io_to_storage_io(err: std::io::Error) -> StorageError {
     StorageError::Io(err)
 }
