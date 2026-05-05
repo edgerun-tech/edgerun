@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use edgerun_core::protocol::{
@@ -9,7 +10,7 @@ use edgerun_core::protocol::{
     ProtocolRecord, RevocationRecord, RouteAdvertisement, Signature, SnapshotDescriptor,
 };
 use edgerun_verify::{
-    protocol_record_hash, protocol_signable_wire_bytes, ProtocolFamily, ProtocolVerifyError,
+    ProtocolFamily, ProtocolVerifyError, protocol_record_hash, protocol_signable_wire_bytes,
 };
 
 pub use edgerun_verify::ProtocolFamily as SignableProtocolFamily;
@@ -86,7 +87,21 @@ pub fn protocol_signing_input(
     })
 }
 
-pub fn sign_event_envelope<S: ProtocolSigner>(
+impl<T: ProtocolSigner + ?Sized> ProtocolSigner for Arc<T> {
+    fn signature_algorithm(&self) -> i32 {
+        self.as_ref().signature_algorithm()
+    }
+
+    fn sign_signature_input(
+        &self,
+        family: ProtocolFamily,
+        signature_input: &[u8],
+    ) -> Result<Vec<u8>, ProtocolSignError> {
+        self.as_ref().sign_signature_input(family, signature_input)
+    }
+}
+
+pub fn sign_event_envelope<S: ProtocolSigner + ?Sized>(
     signer: &S,
     event: &EventEnvelope,
 ) -> Result<ProtocolSigningOutput, ProtocolSignError> {
@@ -96,7 +111,7 @@ pub fn sign_event_envelope<S: ProtocolSigner>(
     )
 }
 
-pub fn sign_command_envelope<S: ProtocolSigner>(
+pub fn sign_command_envelope<S: ProtocolSigner + ?Sized>(
     signer: &S,
     command: &CommandEnvelope,
 ) -> Result<ProtocolSigningOutput, ProtocolSignError> {
@@ -106,7 +121,7 @@ pub fn sign_command_envelope<S: ProtocolSigner>(
     )
 }
 
-pub fn sign_delegation_record<S: ProtocolSigner>(
+pub fn sign_delegation_record<S: ProtocolSigner + ?Sized>(
     signer: &S,
     delegation: &DelegationRecord,
 ) -> Result<ProtocolSigningOutput, ProtocolSignError> {
@@ -116,7 +131,7 @@ pub fn sign_delegation_record<S: ProtocolSigner>(
     )
 }
 
-pub fn sign_revocation_record<S: ProtocolSigner>(
+pub fn sign_revocation_record<S: ProtocolSigner + ?Sized>(
     signer: &S,
     revocation: &RevocationRecord,
 ) -> Result<ProtocolSigningOutput, ProtocolSignError> {
@@ -126,7 +141,7 @@ pub fn sign_revocation_record<S: ProtocolSigner>(
     )
 }
 
-pub fn sign_identity_record<S: ProtocolSigner>(
+pub fn sign_identity_record<S: ProtocolSigner + ?Sized>(
     signer: &S,
     identity: &IdentityRecord,
 ) -> Result<ProtocolSigningOutput, ProtocolSignError> {
@@ -136,7 +151,7 @@ pub fn sign_identity_record<S: ProtocolSigner>(
     )
 }
 
-pub fn sign_assurance_claim<S: ProtocolSigner>(
+pub fn sign_assurance_claim<S: ProtocolSigner + ?Sized>(
     signer: &S,
     claim: &AssuranceClaim,
 ) -> Result<ProtocolSigningOutput, ProtocolSignError> {
@@ -156,7 +171,7 @@ pub fn sign_snapshot_descriptor<S: ProtocolSigner + ?Sized>(
     )
 }
 
-pub fn sign_route_advertisement<S: ProtocolSigner>(
+pub fn sign_route_advertisement<S: ProtocolSigner + ?Sized>(
     signer: &S,
     route: &RouteAdvertisement,
 ) -> Result<ProtocolSigningOutput, ProtocolSignError> {

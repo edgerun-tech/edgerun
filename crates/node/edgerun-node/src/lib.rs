@@ -17,6 +17,8 @@ extern crate std;
 
 pub mod mesh_node;
 
+mod protocol_signer;
+
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -26,14 +28,16 @@ use core::fmt;
 
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_capability_policy::SimplePolicyEngine;
-use edgerun_core::command::{validate_command, CommandValidationContext};
+use edgerun_core::command::{CommandValidationContext, validate_command};
 use edgerun_core::protocol::{CommandEnvelope, EventEnvelope, EventType};
 use edgerun_core::result::Verdict;
 use edgerun_core::util::now_unix_millis_i64 as now_ms;
 use edgerun_core::value::Value;
 use edgerun_hardware_signing::NodeID;
+use edgerun_sign::ProtocolSigner;
 use edgerun_storage::core::EventLog;
 use edgerun_storage::{DurableStreamWriter, MemEventLog, StorageError};
+use protocol_signer::MeshProtocolSigner;
 // Simple YAML config parser (no serde dependency)
 
 type HashMap<K, V> = BTreeMap<K, V>;
@@ -167,13 +171,13 @@ impl NodeConfig {
 /// The node owns its stream, manages capability grants, and processes
 /// incoming commands through the full validation → authorization →
 /// event recording pipeline.
-pub struct Node<L = MemEventLog> {
+pub struct Node<L = MemEventLog, S = MeshProtocolSigner> {
     /// The node's identity (public key).
     identity: NodeID,
     /// The node's configuration.
     config: NodeConfig,
     /// The node's signed durable event stream writer.
-    stream_writer: DurableStreamWriter<L>,
+    stream_writer: DurableStreamWriter<L, S>,
     /// Capability grant store.
     policy: SimplePolicyEngine,
     /// Replay cache: command_hash -> (command_id, decision_event_seq) for already-processed commands.
@@ -183,7 +187,7 @@ pub struct Node<L = MemEventLog> {
     revoked_delegation_ids: HashSet<Vec<u8>>,
 }
 
-impl Node<MemEventLog> {
+impl Node<MemEventLog, MeshProtocolSigner> {
     /// Creates a new node from a YAML configuration.
     ///
     /// This creates a genesis event containing the configuration,
@@ -196,7 +200,7 @@ impl Node<MemEventLog> {
     }
 }
 
-impl<L: EventLog> Node<L> {
+impl<L: EventLog> Node<L, MeshProtocolSigner> {
     /// Creates a new node backed by a caller-provided durable event log.
     pub fn from_config_with_event_log(
         config: NodeConfig,
@@ -204,9 +208,20 @@ impl<L: EventLog> Node<L> {
         event_log: L,
     ) -> Result<Self, NodeError> {
         let identity = signer.node_id();
-        let stream_id = config.stream_id.clone();
-        let stream_writer =
-            DurableStreamWriter::new(identity.0, signer, now_ms(), event_log)?;
+        let signer = MeshProtocolSigner::new(signer);
+        Self::from_config_with_protocol_signer(config, identity, signer, event_log)
+    }
+}
+
+impl<L: EventLog, S: ProtocolSigner> Node<L, S> {
+    /// Creates a new node backed by a caller-provided protocol signer.
+    pub fn from_config_with_protocol_signer(
+        config: NodeConfig,
+        identity: NodeID,
+        signer: S,
+        event_log: L,
+    ) -> Result<Self, NodeError> {
+        let stream_writer = DurableStreamWriter::new(identity.0, signer, now_ms(), event_log)?;
 
         // Record the config as the genesis event metadata
         // The genesis event is already created by StreamWriter::new

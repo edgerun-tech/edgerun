@@ -67,6 +67,7 @@ edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capab
 edgerun-capability-policy = { version = "0.1", path = "../../capability/edgerun-capability-policy" }
 edgerun-stream = { version = "0.1", path = "../../authority/edgerun-stream" }
 edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage" }
+edgerun-sign = { version = "0.1", path = "../../protocol/edgerun-sign" }
 edgerun-remote-capability = { version = "0.1", path = "../../capability/edgerun-remote-capability" }
 edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link" }

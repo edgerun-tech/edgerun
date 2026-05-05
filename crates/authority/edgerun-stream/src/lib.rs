@@ -17,7 +17,7 @@ use edgerun_core::protocol::{
     ProtocolRecord, RevocationRef,
 };
 use edgerun_sign::{ProtocolSignError, ProtocolSigner};
-use edgerun_verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
+use edgerun_verify::{ProtocolFamily, ProtocolSignerRef, verify_event_envelope};
 
 pub type StreamId = [u8; 64];
 
@@ -102,7 +102,7 @@ pub struct EventDraft {
 ///
 /// The stream layer owns sequence assignment and prev-event hash linkage.
 /// The protocol signer owns only signing.
-pub fn build_signed_event<S: ProtocolSigner>(
+pub fn build_signed_event<S: ProtocolSigner + ?Sized>(
     stream_id: &StreamId,
     previous: Option<&EventEnvelope>,
     draft: EventDraft,
@@ -187,7 +187,7 @@ pub fn event_signable_bytes(event: &EventEnvelope) -> Vec<u8> {
 }
 
 /// Signs an event envelope using the shared protocol signer path.
-pub fn sign_event<S: ProtocolSigner>(
+pub fn sign_event<S: ProtocolSigner + ?Sized>(
     event: &mut EventEnvelope,
     signer: &S,
 ) -> Result<(), StreamError> {
