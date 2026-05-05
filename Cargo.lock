@@ -1217,7 +1217,9 @@ dependencies = [
  "edgerun-hardware-signing",
  "edgerun-log",
  "edgerun-rt",
+ "edgerun-sign",
  "edgerun-stream",
+ "edgerun-verify",
 ]
 
 [[package]]

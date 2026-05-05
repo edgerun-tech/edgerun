@@ -206,7 +206,7 @@ impl<L: EventLog> Node<L> {
         let identity = signer.node_id();
         let stream_id = config.stream_id.clone();
         let stream_writer =
-            DurableStreamWriter::new(stream_id.clone(), signer, now_ms(), event_log)?;
+            DurableStreamWriter::new(identity.0, signer, now_ms(), event_log)?;
 
         // Record the config as the genesis event metadata
         // The genesis event is already created by StreamWriter::new

@@ -542,7 +542,7 @@ impl NodeStore {
         }
 
         if let Some(writer) = writer {
-            edgerun_stream::validate_stream(&events, writer)?;
+            edgerun_stream::validate_stream(&events, &writer.0)?;
         }
 
         Ok(events.len() as u64)
