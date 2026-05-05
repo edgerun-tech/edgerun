@@ -15,7 +15,9 @@ edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-feat
 edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
 
 [features]
-conformance = ["edgerun-json/yaml"]
+default = []
+std = []
+conformance = ["std", "edgerun-json/yaml"]
 
 [lints]
 workspace = true
