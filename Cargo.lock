@@ -1235,6 +1235,7 @@ dependencies = [
  "edgerun-sign",
  "edgerun-stream",
  "edgerun-verify",
+ "edgerun-virtual-disk",
 ]
 
 [[package]]

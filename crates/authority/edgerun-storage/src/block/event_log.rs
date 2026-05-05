@@ -27,7 +27,7 @@ const MAX_VARINT_BYTES: u32 = 10;
 ///
 /// Implementations can be backed by bare-metal disk drivers in the unikernel, or
 /// by small in-memory or file-based test adapters in hosted builds.
-pub trait BlockStorage: Send {
+pub trait BlockStorage {
     fn sector_size(&self) -> usize;
     fn sectors(&self) -> u64;
     fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), StorageError>;

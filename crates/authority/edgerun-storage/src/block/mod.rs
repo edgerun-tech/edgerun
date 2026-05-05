@@ -7,6 +7,7 @@ pub mod fat;
 pub mod filesystem;
 pub mod partition;
 pub mod store;
+pub mod virtual_disk;
 
 pub use event_log::{BlockEventLog, BlockStorage, InMemoryBlockDevice};
 pub use fat::{FatDirectoryEntry, FatError, FatReadOnly};
@@ -19,3 +20,4 @@ pub use partition::{
     PartitionTable, PartitionTableKind,
 };
 pub use store::BlockStreamStore;
+pub use virtual_disk::VirtualDiskBlockStorage;
