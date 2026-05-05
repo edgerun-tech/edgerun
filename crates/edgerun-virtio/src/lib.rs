@@ -431,6 +431,10 @@ impl VirtioTransport {
         self.write_status(self.status() | VIRTIO_CONFIG_STATUS_FAILED);
     }
 
+    fn reset(self) {
+        self.write_status(0);
+    }
+
     fn negotiate_features(self, supported_features: u64) -> Option<NegotiatedFeatures> {
         self.enable();
         self.write_status(0);
@@ -700,7 +704,7 @@ struct ConsoleDescTable([VirtqDesc; QUEUE_SIZE]);
 
 #[repr(align(16))]
 #[derive(Clone, Copy)]
-struct ConsoleData([u8; 256]);
+struct ConsoleData([u8; CONSOLE_BUFFER_SIZE]);
 
 static mut CONSOLE_RX_DESC: ConsoleDescTable = ConsoleDescTable([EMPTY_DESC; QUEUE_SIZE]);
 static mut CONSOLE_RX_AVAIL: VirtqAvail = VirtqAvail {
@@ -715,7 +719,8 @@ static mut CONSOLE_RX_USED: VirtqUsed = VirtqUsed {
     ring: [EMPTY_USED_ELEM; QUEUE_SIZE],
     avail_event: 0,
 };
-static mut CONSOLE_RX_DATA: [ConsoleData; QUEUE_SIZE] = [ConsoleData([0; 256]); QUEUE_SIZE];
+static mut CONSOLE_RX_DATA: [ConsoleData; QUEUE_SIZE] =
+    [ConsoleData([0; CONSOLE_BUFFER_SIZE]); QUEUE_SIZE];
 
 static mut CONSOLE_DESC: ConsoleDescTable = ConsoleDescTable([EMPTY_DESC; QUEUE_SIZE]);
 static mut CONSOLE_AVAIL: VirtqAvail = VirtqAvail {
@@ -730,7 +735,7 @@ static mut CONSOLE_USED: VirtqUsed = VirtqUsed {
     ring: [EMPTY_USED_ELEM; QUEUE_SIZE],
     avail_event: 0,
 };
-static mut CONSOLE_DATA: ConsoleData = ConsoleData([0; 256]);
+static mut CONSOLE_DATA: ConsoleData = ConsoleData([0; CONSOLE_BUFFER_SIZE]);
 
 static NET_CLAIMED: AtomicBool = AtomicBool::new(false);
 static BLK_CLAIMED: AtomicBool = AtomicBool::new(false);
@@ -745,6 +750,18 @@ fn claim_driver(claimed: &AtomicBool) -> bool {
 
 fn release_driver(claimed: &AtomicBool) {
     claimed.store(false, Ordering::Release);
+}
+
+macro_rules! init_fail {
+    ($self:expr) => {{
+        $self.release_claim();
+        return false;
+    }};
+    ($self:expr, $transport:expr) => {{
+        $transport.fail();
+        $self.release_claim();
+        return false;
+    }};
 }
 
 pub struct VirtNet {
@@ -821,16 +838,16 @@ impl VirtNet {
 
     pub fn init(&mut self) -> bool {
         let Some(transport) = self.transport() else {
-            return false;
+            init_fail!(self);
         };
         if transport.device_cfg().is_null() {
-            return false;
+            init_fail!(self);
         }
 
         let Some(features) = transport
             .negotiate_features(VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS)
         else {
-            return false;
+            init_fail!(self);
         };
         self.host_features = features.host;
         self.features = features.driver;
@@ -854,14 +871,12 @@ impl VirtNet {
         self.rx_notify_off = transport.read_queue_notify_off();
 
         if self.queue_size < QUEUE_SIZE as u16 {
-            transport.fail();
-            return false;
+            init_fail!(self, transport);
         }
 
         transport.select_queue(TX_QUEUE);
         if transport.read_queue_size() < QUEUE_SIZE as u16 {
-            transport.fail();
-            return false;
+            init_fail!(self, transport);
         }
         self.tx_notify_off = transport.read_queue_notify_off();
 
@@ -880,8 +895,7 @@ impl VirtNet {
             rx_avail,
             rx_used,
         ) else {
-            transport.fail();
-            return false;
+            init_fail!(self, transport);
         };
         self.queue_size = rx_queue_size;
 
@@ -903,8 +917,7 @@ impl VirtNet {
             )
             .is_none()
         {
-            transport.fail();
-            return false;
+            init_fail!(self, transport);
         }
 
         unsafe {
@@ -1166,6 +1179,16 @@ impl VirtNet {
         }
     }
 
+    fn release_claim(&mut self) {
+        if self.claimed {
+            if let Some(transport) = self.transport() {
+                transport.reset();
+            }
+            release_driver(&NET_CLAIMED);
+            self.claimed = false;
+        }
+    }
+
     fn notify_queue(&self, queue: u16) {
         let notify_off = match queue {
             RX_QUEUE => self.rx_notify_off,
@@ -1180,9 +1203,7 @@ impl VirtNet {
 
 impl Drop for VirtNet {
     fn drop(&mut self) {
-        if self.claimed {
-            release_driver(&NET_CLAIMED);
-        }
+        self.release_claim();
     }
 }
 
@@ -1280,6 +1301,27 @@ unsafe fn split_queue_used_elem(
     read_volatile_used_elem((*used).ring.as_ptr().add(ring_idx))
 }
 
+unsafe fn take_single_used_completion(
+    used: *const VirtqUsed,
+    queue_size: u16,
+    last_used_idx: &mut u16,
+) -> Option<VirtqUsedElem> {
+    let used_idx = split_queue_used_idx(used);
+    if used_idx == *last_used_idx {
+        return None;
+    }
+
+    let elem = split_queue_used_elem(used, queue_size, *last_used_idx);
+    let next_used_idx = last_used_idx.wrapping_add(1);
+    if used_idx != next_used_idx {
+        *last_used_idx = used_idx;
+        return None;
+    }
+
+    *last_used_idx = next_used_idx;
+    Some(elem)
+}
+
 pub struct VirtBlk {
     features: u64,
     host_features: u64,
@@ -1329,16 +1371,16 @@ impl VirtBlk {
 
     pub fn init(&mut self) -> bool {
         let Some(transport) = self.transport() else {
-            return false;
+            init_fail!(self);
         };
         if transport.device_cfg().is_null() {
-            return false;
+            init_fail!(self);
         }
 
         let Some(features) = transport.negotiate_features(
             VIRTIO_F_VERSION_1 | VIRTIO_BLK_F_RO | VIRTIO_BLK_F_BLK_SIZE | VIRTIO_BLK_F_FLUSH,
         ) else {
-            return false;
+            init_fail!(self);
         };
         self.host_features = features.host;
         self.features = features.driver;
@@ -1349,8 +1391,7 @@ impl VirtBlk {
             self.block_size = read_u32(unsafe { self.device_cfg.add(20) });
         }
         if self.sectors == 0 || self.block_size != SECTOR_SIZE as u32 {
-            transport.fail();
-            return false;
+            init_fail!(self, transport);
         }
 
         transport.select_queue(0);
@@ -1366,8 +1407,7 @@ impl VirtBlk {
         let Some(queue_size) =
             transport.configure_split_queue(0, QUEUE_SIZE as u16, 3, desc, avail, used)
         else {
-            transport.fail();
-            return false;
+            init_fail!(self, transport);
         };
         self.queue_size = queue_size;
 
@@ -1397,7 +1437,7 @@ impl VirtBlk {
         }
 
         unsafe {
-            if !self.submit_request(VIRTIO_BLK_T_IN, sector, true) {
+            if !self.submit_request(VIRTIO_BLK_T_IN, sector, SECTOR_SIZE, true) {
                 return false;
             }
             core::ptr::copy_nonoverlapping(
@@ -1419,11 +1459,15 @@ impl VirtBlk {
             return false;
         }
 
-        for (offset, sector) in (start_sector..start_sector + sector_count).enumerate() {
-            let start = offset * SECTOR_SIZE;
-            if !self.read_sector(sector, &mut out[start..start + SECTOR_SIZE]) {
+        let mut offset = 0;
+        let mut sector = start_sector;
+        while offset < out.len() {
+            let chunk_len = core::cmp::min(SECTOR_SIZE, out.len() - offset);
+            if !self.read_sectors_chunk(sector, &mut out[offset..offset + chunk_len]) {
                 return false;
             }
+            offset += chunk_len;
+            sector += (chunk_len / SECTOR_SIZE) as u64;
         }
         true
     }
@@ -1439,7 +1483,7 @@ impl VirtBlk {
                 core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
                 SECTOR_SIZE,
             );
-            self.submit_request(VIRTIO_BLK_T_OUT, sector, false)
+            self.submit_request(VIRTIO_BLK_T_OUT, sector, SECTOR_SIZE, false)
         }
     }
 
@@ -1459,11 +1503,15 @@ impl VirtBlk {
             return false;
         }
 
-        for (offset, sector) in (start_sector..start_sector + sector_count).enumerate() {
-            let start = offset * SECTOR_SIZE;
-            if !self.write_sector(sector, &data[start..start + SECTOR_SIZE]) {
+        let mut offset = 0;
+        let mut sector = start_sector;
+        while offset < data.len() {
+            let chunk_len = core::cmp::min(SECTOR_SIZE, data.len() - offset);
+            if !self.write_sectors_chunk(sector, &data[offset..offset + chunk_len]) {
                 return false;
             }
+            offset += chunk_len;
+            sector += (chunk_len / SECTOR_SIZE) as u64;
         }
         true
     }
@@ -1472,7 +1520,7 @@ impl VirtBlk {
         if self.features & VIRTIO_BLK_F_FLUSH == 0 {
             return true;
         }
-        unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, false) }
+        unsafe { self.submit_request(VIRTIO_BLK_T_FLUSH, 0, SECTOR_SIZE, false) }
     }
 
     pub fn take_interrupt_status(&self) -> VirtioInterruptStatus {
@@ -1542,6 +1590,53 @@ impl VirtBlk {
             .is_some_and(|end_sector| end_sector <= self.sectors)
     }
 
+    fn chunk_sector_count(len: usize) -> Option<u32> {
+        if len == 0 || len % SECTOR_SIZE != 0 || len > SECTOR_SIZE {
+            return None;
+        }
+
+        Some((len / SECTOR_SIZE) as u32)
+    }
+
+    fn read_sectors_chunk(&mut self, sector: u64, out: &mut [u8]) -> bool {
+        let Some(sector_count) = Self::chunk_sector_count(out.len()) else {
+            return false;
+        };
+        if !self.sector_range_in_bounds(sector, sector_count as u64) {
+            return false;
+        }
+
+        unsafe {
+            if !self.submit_request(VIRTIO_BLK_T_IN, sector, out.len(), true) {
+                return false;
+            }
+            core::ptr::copy_nonoverlapping(
+                core::ptr::addr_of!(BLK_DATA.0) as *const u8,
+                out.as_mut_ptr(),
+                out.len(),
+            );
+        }
+        true
+    }
+
+    fn write_sectors_chunk(&mut self, sector: u64, data: &[u8]) -> bool {
+        let Some(sector_count) = Self::chunk_sector_count(data.len()) else {
+            return false;
+        };
+        if self.read_only || !self.sector_range_in_bounds(sector, sector_count as u64) {
+            return false;
+        }
+
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
+                data.len(),
+            );
+            self.submit_request(VIRTIO_BLK_T_OUT, sector, data.len(), false)
+        }
+    }
+
     unsafe fn init_queue(&mut self) {
         self.last_used_idx = 0;
         write_volatile_u16(core::ptr::addr_of_mut!(BLK_AVAIL.idx), 0);
@@ -1554,7 +1649,17 @@ impl VirtBlk {
         BLK_STATUS = 0xff;
     }
 
-    unsafe fn submit_request(&mut self, request_type: u32, sector: u64, read: bool) -> bool {
+    unsafe fn submit_request(
+        &mut self,
+        request_type: u32,
+        sector: u64,
+        data_len: usize,
+        read: bool,
+    ) -> bool {
+        if data_len > SECTOR_SIZE {
+            return false;
+        }
+
         BLK_HEADER = VirtioBlkReqHeader {
             request_type,
             reserved: 0,
@@ -1576,7 +1681,7 @@ impl VirtBlk {
             desc.add(1),
             VirtqDesc {
                 addr: core::ptr::addr_of_mut!(BLK_DATA.0) as u64,
-                len: SECTOR_SIZE as u32,
+                len: data_len as u32,
                 flags: if read {
                     VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT
                 } else {
@@ -1607,12 +1712,13 @@ impl VirtBlk {
             core::hint::spin_loop();
         }
 
-        let elem = split_queue_used_elem(
+        let Some(elem) = take_single_used_completion(
             core::ptr::addr_of!(BLK_USED),
             self.queue_size,
-            self.last_used_idx,
-        );
-        self.last_used_idx = self.last_used_idx.wrapping_add(1);
+            &mut self.last_used_idx,
+        ) else {
+            return false;
+        };
         elem.id == 0 && read_u8(core::ptr::addr_of!(BLK_STATUS)) == VIRTIO_BLK_S_OK
     }
 
@@ -1621,13 +1727,21 @@ impl VirtBlk {
             transport.notify_split_queue(self.queue_notify_off, 0);
         }
     }
+
+    fn release_claim(&mut self) {
+        if self.claimed {
+            if let Some(transport) = self.transport() {
+                transport.reset();
+            }
+            release_driver(&BLK_CLAIMED);
+            self.claimed = false;
+        }
+    }
 }
 
 impl Drop for VirtBlk {
     fn drop(&mut self) {
-        if self.claimed {
-            release_driver(&BLK_CLAIMED);
-        }
+        self.release_claim();
     }
 }
 
@@ -1678,11 +1792,11 @@ impl VirtRng {
 
     pub fn init(&mut self) -> bool {
         let Some(transport) = self.transport() else {
-            return false;
+            init_fail!(self);
         };
 
         let Some(features) = transport.negotiate_features(VIRTIO_F_VERSION_1) else {
-            return false;
+            init_fail!(self);
         };
         self.host_features = features.host;
         self.features = features.driver;
@@ -1700,8 +1814,7 @@ impl VirtRng {
         let Some(queue_size) =
             transport.configure_split_queue(0, QUEUE_SIZE as u16, 1, desc, avail, used)
         else {
-            transport.fail();
-            return false;
+            init_fail!(self, transport);
         };
         self.queue_size = queue_size;
 
@@ -1820,12 +1933,13 @@ impl VirtRng {
             core::hint::spin_loop();
         }
 
-        let elem = split_queue_used_elem(
+        let Some(elem) = take_single_used_completion(
             core::ptr::addr_of!(RNG_USED),
             self.queue_size,
-            self.last_used_idx,
-        );
-        self.last_used_idx = self.last_used_idx.wrapping_add(1);
+            &mut self.last_used_idx,
+        ) else {
+            return 0;
+        };
         if elem.id != 0 {
             return 0;
         }
@@ -1844,13 +1958,21 @@ impl VirtRng {
             transport.notify_split_queue(self.queue_notify_off, 0);
         }
     }
+
+    fn release_claim(&mut self) {
+        if self.claimed {
+            if let Some(transport) = self.transport() {
+                transport.reset();
+            }
+            release_driver(&RNG_CLAIMED);
+            self.claimed = false;
+        }
+    }
 }
 
 impl Drop for VirtRng {
     fn drop(&mut self) {
-        if self.claimed {
-            release_driver(&RNG_CLAIMED);
-        }
+        self.release_claim();
     }
 }
 
@@ -1907,11 +2029,11 @@ impl VirtConsole {
 
     pub fn init(&mut self) -> bool {
         let Some(transport) = self.transport() else {
-            return false;
+            init_fail!(self);
         };
 
         let Some(features) = transport.negotiate_features(VIRTIO_F_VERSION_1) else {
-            return false;
+            init_fail!(self);
         };
         self.host_features = features.host;
         self.features = features.driver;
@@ -1934,8 +2056,7 @@ impl VirtConsole {
             rx_avail,
             rx_used,
         ) else {
-            transport.fail();
-            return false;
+            init_fail!(self, transport);
         };
         self.rx_queue_size = rx_queue_size;
 
@@ -1957,8 +2078,7 @@ impl VirtConsole {
             avail,
             used,
         ) else {
-            transport.fail();
-            return false;
+            init_fail!(self, transport);
         };
         self.tx_queue_size = tx_queue_size;
 
@@ -1987,7 +2107,12 @@ impl VirtConsole {
                 return None;
             }
 
-            let len = core::cmp::min(elem.len as usize, buf.len());
+            let Some(rx_len) = console_rx_len(elem.len) else {
+                self.post_rx_descriptor(desc_id as u16);
+                self.notify_rx_queue();
+                return None;
+            };
+            let len = core::cmp::min(rx_len, buf.len());
             if len != 0 {
                 let src = (core::ptr::addr_of!(CONSOLE_RX_DATA) as *const ConsoleData).add(desc_id)
                     as *const u8;
@@ -2075,7 +2200,11 @@ impl VirtConsole {
         self.tx_last_used_idx = 0;
         write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_AVAIL.idx), 0);
         write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_USED.idx), 0);
-        core::ptr::write_bytes(core::ptr::addr_of_mut!(CONSOLE_DATA.0) as *mut u8, 0, 256);
+        core::ptr::write_bytes(
+            core::ptr::addr_of_mut!(CONSOLE_DATA.0) as *mut u8,
+            0,
+            CONSOLE_BUFFER_SIZE,
+        );
     }
 
     unsafe fn init_rx_queue(&mut self) {
@@ -2085,7 +2214,7 @@ impl VirtConsole {
         core::ptr::write_bytes(
             core::ptr::addr_of_mut!(CONSOLE_RX_DATA) as *mut u8,
             0,
-            QUEUE_SIZE * 256,
+            QUEUE_SIZE * CONSOLE_BUFFER_SIZE,
         );
 
         for i in 0..self.rx_queue_size as usize {
@@ -2094,7 +2223,7 @@ impl VirtConsole {
                 (core::ptr::addr_of_mut!(CONSOLE_RX_DESC.0) as *mut VirtqDesc).add(i),
                 VirtqDesc {
                     addr: buffer as u64,
-                    len: 256,
+                    len: CONSOLE_BUFFER_SIZE as u32,
                     flags: VIRTQ_DESC_F_WRITE,
                     next: 0,
                 },
@@ -2104,7 +2233,7 @@ impl VirtConsole {
     }
 
     unsafe fn write_chunk(&mut self, bytes: &[u8]) -> usize {
-        let len = core::cmp::min(bytes.len(), 256);
+        let len = core::cmp::min(bytes.len(), CONSOLE_BUFFER_SIZE);
         if len == 0 {
             return 0;
         }
@@ -2142,12 +2271,13 @@ impl VirtConsole {
             core::hint::spin_loop();
         }
 
-        let elem = split_queue_used_elem(
+        let Some(elem) = take_single_used_completion(
             core::ptr::addr_of!(CONSOLE_USED),
             self.tx_queue_size,
-            self.tx_last_used_idx,
-        );
-        self.tx_last_used_idx = self.tx_last_used_idx.wrapping_add(1);
+            &mut self.tx_last_used_idx,
+        ) else {
+            return 0;
+        };
         if elem.id == 0 {
             len
         } else {
@@ -2174,14 +2304,31 @@ impl VirtConsole {
             transport.notify_split_queue(self.rx_notify_off, CONSOLE_RX_QUEUE);
         }
     }
+
+    fn release_claim(&mut self) {
+        if self.claimed {
+            if let Some(transport) = self.transport() {
+                transport.reset();
+            }
+            release_driver(&CONSOLE_CLAIMED);
+            self.claimed = false;
+        }
+    }
 }
 
 impl Drop for VirtConsole {
     fn drop(&mut self) {
-        if self.claimed {
-            release_driver(&CONSOLE_CLAIMED);
-        }
+        self.release_claim();
     }
+}
+
+fn console_rx_len(len: u32) -> Option<usize> {
+    let len = len as usize;
+    if len > CONSOLE_BUFFER_SIZE {
+        return None;
+    }
+
+    Some(len)
 }
 
 impl Default for VirtConsole {
@@ -2607,6 +2754,16 @@ fn port_outl(_port: u16, _value: u32) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    static DRIVER_CLAIM_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn driver_claim_test_lock() -> MutexGuard<'static, ()> {
+        match DRIVER_CLAIM_TEST_LOCK.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
 
     #[repr(C, align(8))]
     struct TestCommonConfig([u8; 64]);
@@ -2647,6 +2804,44 @@ mod tests {
     }
 
     #[test]
+    fn single_used_completion_accepts_exactly_one_entry() {
+        let used = VirtqUsed {
+            flags: 0,
+            idx: 1,
+            ring: [VirtqUsedElem { id: 7, len: 11 }; QUEUE_SIZE],
+            avail_event: 0,
+        };
+        let mut last = 0;
+
+        let elem =
+            unsafe { take_single_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.unwrap();
+
+        assert_eq!(elem.id, 7);
+        assert_eq!(elem.len, 11);
+        assert_eq!(last, 1);
+        assert!(
+            unsafe { take_single_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.is_none()
+        );
+        assert_eq!(last, 1);
+    }
+
+    #[test]
+    fn single_used_completion_rejects_unexpected_jump_and_resyncs() {
+        let used = VirtqUsed {
+            flags: 0,
+            idx: 3,
+            ring: [VirtqUsedElem { id: 7, len: 11 }; QUEUE_SIZE],
+            avail_event: 0,
+        };
+        let mut last = 0;
+
+        assert!(
+            unsafe { take_single_used_completion(&used, QUEUE_SIZE as u16, &mut last) }.is_none()
+        );
+        assert_eq!(last, 3);
+    }
+
+    #[test]
     fn pci_address_masks_register_offset() {
         assert_eq!(pci_address(1, 2, 3, 0x10), 0x8001_1310);
         assert_eq!(pci_address(1, 2, 3, 0x13), 0x8001_1310);
@@ -2669,6 +2864,16 @@ mod tests {
             Some(BUFFER_SIZE - NET_HDR_LEN)
         );
         assert_eq!(net_rx_payload_len((BUFFER_SIZE + 1) as u32), None);
+    }
+
+    #[test]
+    fn console_rx_lengths_reject_buffer_overflow() {
+        assert_eq!(console_rx_len(0), Some(0));
+        assert_eq!(
+            console_rx_len(CONSOLE_BUFFER_SIZE as u32),
+            Some(CONSOLE_BUFFER_SIZE)
+        );
+        assert_eq!(console_rx_len((CONSOLE_BUFFER_SIZE + 1) as u32), None);
     }
 
     #[test]
@@ -2779,6 +2984,7 @@ mod tests {
 
     #[test]
     fn mmio_device_info_and_constructors_validate_device_type() {
+        let _guard = driver_claim_test_lock();
         let mut mmio = TestMmio([0; 0x200]);
         let base = init_test_mmio(&mut mmio, VIRTIO_DEVICE_TYPE_RNG) as usize;
 
@@ -2821,12 +3027,26 @@ mod tests {
 
     #[test]
     fn mmio_constructors_reject_second_handle_until_drop() {
+        let _guard = driver_claim_test_lock();
         let mut net_mmio = TestMmio([0; 0x200]);
         let base = init_test_mmio(&mut net_mmio, VIRTIO_DEVICE_TYPE_NET) as usize;
 
         let first = VirtNet::from_mmio_base(base).unwrap();
         assert!(VirtNet::from_mmio_base(base).is_none());
         drop(first);
+        assert!(VirtNet::from_mmio_base(base).is_some());
+    }
+
+    #[test]
+    fn init_failure_releases_driver_claim() {
+        let _guard = driver_claim_test_lock();
+        let mut net_mmio = TestMmio([0; 0x200]);
+        let base_ptr = init_test_mmio(&mut net_mmio, VIRTIO_DEVICE_TYPE_NET);
+        let base = base_ptr as usize;
+
+        let mut first = VirtNet::from_mmio_base(base).unwrap();
+        assert!(!first.init());
+        assert_eq!(read_u32(unsafe { base_ptr.add(VIRTIO_MMIO_STATUS) }), 0);
         assert!(VirtNet::from_mmio_base(base).is_some());
     }
 
@@ -2915,6 +3135,23 @@ mod tests {
             read_u32(unsafe { base.add(VIRTIO_MMIO_INTERRUPT_ACK) }),
             (VIRTIO_INTERRUPT_USED_RING | VIRTIO_INTERRUPT_CONFIG_CHANGE) as u32
         );
+    }
+
+    #[test]
+    fn release_resets_mmio_device_status() {
+        let _guard = driver_claim_test_lock();
+        let mut rng_mmio = TestMmio([0; 0x200]);
+        let base_ptr = init_test_mmio(&mut rng_mmio, VIRTIO_DEVICE_TYPE_RNG);
+        let base = base_ptr as usize;
+
+        write_u32(
+            unsafe { base_ptr.add(VIRTIO_MMIO_STATUS) },
+            VIRTIO_CONFIG_STATUS_DRIVER_OK as u32,
+        );
+        let rng = VirtRng::from_mmio_base(base).unwrap();
+        drop(rng);
+
+        assert_eq!(read_u32(unsafe { base_ptr.add(VIRTIO_MMIO_STATUS) }), 0);
     }
 
     #[test]
@@ -3035,6 +3272,10 @@ mod tests {
         let mut two_sectors = [0u8; SECTOR_SIZE * 2];
 
         blk.sectors = 4;
+        assert_eq!(VirtBlk::chunk_sector_count(0), None);
+        assert_eq!(VirtBlk::chunk_sector_count(SECTOR_SIZE), Some(1));
+        assert_eq!(VirtBlk::chunk_sector_count(SECTOR_SIZE - 1), None);
+        assert_eq!(VirtBlk::chunk_sector_count(SECTOR_SIZE * 2), None);
         assert!(!blk.sector_range_in_bounds(3, 2));
         assert!(!blk.sector_range_in_bounds(u64::MAX, 1));
         assert!(!blk.read_sectors(3, &mut two_sectors));
