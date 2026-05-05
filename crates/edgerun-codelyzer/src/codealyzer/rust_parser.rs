@@ -101,6 +101,7 @@ fn analyze_file(file: &Path, content: &str) -> (Vec<ApiItem>, Vec<CallGraphEdge>
                     file: file.to_path_buf(),
                     line: line_num,
                     confidence: Confidence::Likely,
+                    runtime_count: 0,
                 });
             }
         }

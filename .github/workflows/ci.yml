@@ -70,7 +70,7 @@ jobs:
       - name: Release binary check
         run: cargo check -p edgerun-node
 
-  crate-analyzer:
+  codelyzer:
     runs-on: ubuntu-latest
     needs: check
     steps:
@@ -80,11 +80,11 @@ jobs:
 
       - name: Run crate analyzer
         run: |
-          mkdir -p target/crate-analyzer
-          cargo run -p edgerun-crate-analyzer --bin analyze-workspace -- --json --out target/crate-analyzer > target/crate-analyzer/workspace-summary.json
+          mkdir -p target/codelyzer
+          cargo run -p edgerun-codelyzer --bin codealyzer -- --json --out target/codelyzer > target/codelyzer/workspace-summary.json
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: edgerun-crate-analyzer-report
-          path: target/crate-analyzer
+          name: edgerun-codelyzer-report
+          path: target/codelyzer

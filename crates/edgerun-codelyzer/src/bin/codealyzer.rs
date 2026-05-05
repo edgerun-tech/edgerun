@@ -4,10 +4,12 @@ use std::process;
 
 use edgerun_codelyzer::codealyzer::{
     collect_dependency_footprints,
+    write_dependency_footprints,
+    load_runtime_events,
     generate_report,
     save_report,
-    write_dependency_footprints,
 };
+use edgerun_codelyzer::codealyzer::dependency_footprint::DependencyFootprintReport;
 use edgerun_codelyzer::codealyzer::crate_model::{CrateReport, CrateType};
 
 #[derive(Default)]
@@ -22,6 +24,8 @@ struct Totals {
     total_dependency_weight: usize,
     total_public_api: usize,
     total_call_edges: usize,
+    total_runtime_call_observations: u64,
+    total_runtime_call_edges: usize,
     total_security_findings: usize,
     total_test_files: usize,
     total_unit_tests: usize,
@@ -48,7 +52,7 @@ struct TargetDirectoryReport {
 
 fn print_usage(program: &str) {
     println!(
-        "Usage: {program} [--workspace-root <path>] [--out <path>] [--inventory] [--dependency-metrics] [--clean-targets] [--json]"
+        "Usage: {program} [--workspace-root <path>] [--out <path>] [--runtime-events <path>] [--inventory] [--dependency-metrics] [--clean-targets]"
     );
     println!();
     println!("Run the crate analyzer across crates/ and aggregate totals.");
@@ -58,16 +62,17 @@ fn print_usage(program: &str) {
     println!("  --inventory  print a per-crate contents summary");
     println!("  --dependency-metrics");
     println!("               collect non-edgerun transitive dependency size/LOC metrics");
+    println!("  --runtime-events <path>");
+    println!("               merge runtime call traces (JSON array or JSONL) into call graph");
     println!("  --clean-targets");
     println!("               remove all target directories under workspace root and exit");
-    println!("  --json       emit machine-readable JSON summary");
 }
 
-fn parse_args() -> (PathBuf, PathBuf, bool, bool, bool, bool) {
+fn parse_args() -> (PathBuf, PathBuf, bool, bool, bool, Option<PathBuf>) {
     let mut workspace_root: Option<PathBuf> = None;
     let mut output_dir: Option<PathBuf> = None;
+    let mut runtime_events_path: Option<PathBuf> = None;
     let mut show_inventory = false;
-    let mut emit_json = false;
     let mut collect_metrics = false;
     let mut clean_targets = false;
     let mut show_help = false;
@@ -82,9 +87,6 @@ fn parse_args() -> (PathBuf, PathBuf, bool, bool, bool, bool) {
             "--inventory" => {
                 show_inventory = true;
             }
-            "--json" => {
-                emit_json = true;
-            }
             "--dependency-metrics" => {
                 collect_metrics = true;
             }
@@ -98,6 +100,10 @@ fn parse_args() -> (PathBuf, PathBuf, bool, bool, bool, bool) {
             "--out" => {
                 let path = iter.next().unwrap_or_default();
                 output_dir = Some(PathBuf::from(path));
+            }
+            "--runtime-events" => {
+                let path = iter.next().unwrap_or_default();
+                runtime_events_path = Some(PathBuf::from(path));
             }
             unknown => {
                 if !unknown.starts_with('-') {
@@ -116,9 +122,9 @@ fn parse_args() -> (PathBuf, PathBuf, bool, bool, bool, bool) {
         workspace_root.unwrap_or_else(edgerun_codelyzer::codealyzer::workspace::get_workspace_root),
         output_dir.unwrap_or_else(|| PathBuf::from("target/codealyzer")),
         show_inventory,
-        emit_json,
         collect_metrics,
         clean_targets,
+        runtime_events_path,
     )
 }
 
@@ -287,53 +293,6 @@ fn print_target_cleanup_summary(reports: &[TargetDirectoryReport]) {
     }
 }
 
-fn print_target_cleanup_json(reports: &[TargetDirectoryReport]) -> String {
-    let removed = reports.iter().filter(|r| r.removed).count();
-    let failed = reports.len().saturating_sub(removed);
-    let total_size_bytes: u64 = reports.iter().map(|r| r.size_bytes).sum();
-    let removed_size_bytes: u64 = reports
-        .iter()
-        .filter(|r| r.removed)
-        .map(|r| r.size_bytes)
-        .sum();
-
-    let mut out = String::new();
-    out.push_str("{\"target_cleanup\":{");
-    out.push_str(&format!("\"found\":{},", reports.len()));
-    out.push_str(&format!("\"removed\":{},", removed));
-    out.push_str(&format!("\"failed\":{},", failed));
-    out.push_str(&format!("\"total_size_bytes\":{},", total_size_bytes));
-    out.push_str(&format!("\"removed_size_bytes\":{},", removed_size_bytes));
-    out.push_str("\"entries\":[");
-
-    for (idx, report) in reports.iter().enumerate() {
-        if idx > 0 {
-            out.push(',');
-        }
-
-        let status = if report.removed { "removed" } else { "failed" };
-        let size = report.size_bytes;
-        let error = report.error.as_deref().unwrap_or("null");
-
-        out.push('{');
-        out.push_str(&format!(
-            "\"path\":\"{}\",",
-            escape_json(&report.path.display().to_string())
-        ));
-        out.push_str(&format!("\"size_bytes\":{},", size));
-        out.push_str(&format!("\"status\":\"{status}\","));
-        if report.error.is_some() {
-            out.push_str(&format!("\"error\":\"{}\"", escape_json(error)));
-        } else {
-            out.push_str("\"error\":null");
-        }
-        out.push('}');
-    }
-
-    out.push_str("]}}");
-    out
-}
-
 fn list_crate_dirs(workspace_root: &Path) -> Vec<PathBuf> {
     let crates_root = workspace_root.join("crates");
     if !crates_root.exists() {
@@ -369,6 +328,14 @@ fn update_totals(totals: &mut Totals, report: &CrateReport) {
     totals.total_dependency_weight += report.dependencies.iter().map(|dep| dep.weight).sum::<usize>();
     totals.total_public_api += report.public_api.len();
     totals.total_call_edges += report.call_graph.len();
+    totals.total_runtime_call_observations = totals
+        .total_runtime_call_observations
+        .saturating_add(report.runtime_call_observations);
+    totals.total_runtime_call_edges += report
+        .call_graph
+        .iter()
+        .filter(|edge| edge.runtime_count > 0)
+        .count();
     totals.total_security_findings += report.security_findings.len();
     totals.total_test_files += report.test_info.total;
     totals.total_unit_tests += report.test_info.unit_tests;
@@ -456,152 +423,6 @@ fn gather_crate_inventory(crate_dir: &Path, visible_files: &[PathBuf], hidden_fi
     }
 }
 
-fn escape_json(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 16);
-    for c in s.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
-        }
-    }
-    out
-}
-
-fn normalize_toml_string(s: &str) -> &str {
-    if s.len() >= 2 {
-        let bytes = s.as_bytes();
-        if (bytes[0] == b'"' && bytes[s.len() - 1] == b'"')
-            || (bytes[0] == b'\'' && bytes[s.len() - 1] == b'\'')
-        {
-            return &s[1..s.len() - 1];
-        }
-    }
-    s
-}
-
-fn json_string_vec(values: &[String]) -> String {
-    let mut out = String::new();
-    out.push('[');
-    for (idx, item) in values.iter().enumerate() {
-        if idx > 0 {
-            out.push(',');
-        }
-        out.push('"');
-        out.push_str(&escape_json(item));
-        out.push('"');
-    }
-    out.push(']');
-    out
-}
-
-fn json_exts(exts: &[(String, usize)]) -> String {
-    let mut out = String::new();
-    out.push('[');
-    for (idx, (ext, count)) in exts.iter().enumerate() {
-        if idx > 0 {
-            out.push(',');
-        }
-        out.push_str(&format!(
-            "{{\"ext\":\"{}\",\"count\":{}}}",
-            escape_json(ext),
-            count
-        ));
-    }
-    out.push(']');
-    out
-}
-
-fn dependencies_json_list(deps: &[edgerun_codelyzer::codealyzer::crate_model::Dependency]) -> String {
-    let mut out = String::new();
-    out.push('[');
-    for (idx, dep) in deps.iter().enumerate() {
-        if idx > 0 {
-            out.push(',');
-        }
-
-        out.push('{');
-        out.push_str(&format!("\"name\":\"{}\"", escape_json(&dep.name)));
-        out.push(',');
-        out.push_str(&format!("\"source\":\"{}\"", dep.source.as_str()));
-        out.push(',');
-        out.push_str(&format!("\"kind\":\"{:?}\"", dep.kind));
-        out.push(',');
-        out.push_str(&format!("\"is_workspace\":{}", dep.is_workspace));
-        out.push(',');
-        out.push_str(&format!("\"weight\":{}", dep.weight));
-        out.push(',');
-        if let Some(reference) = dep.version_req.as_deref() {
-            out.push_str(&format!("\"version_req\":\"{}\"", escape_json(reference)));
-        } else {
-            out.push_str("\"version_req\":null");
-        }
-        out.push(',');
-        out.push_str(&format!("\"optional\":{}", dep.optional));
-        out.push('}');
-    }
-    out.push(']');
-    out
-}
-
-fn crate_json(record: &CrateInventory, report: &CrateReport) -> String {
-    let deps_internal = report.dependencies.iter().filter(|dep| dep.is_workspace).count();
-    let deps_external = report.dependencies.iter().filter(|dep| !dep.is_workspace).count();
-    let visible_total = report.identity.visible_files.len();
-    let compile_status = report
-        .test_info
-        .compile_status
-        .as_deref()
-        .unwrap_or("unknown");
-    let compile_exit = report
-        .test_info
-        .compile_exit_code
-        .map(|code| code.to_string())
-        .unwrap_or_else(|| "null".to_string());
-    let compile_warnings = report.test_info.compile_warnings;
-
-    format!(
-        "{{\"crate\":\"{}\",\"path\":\"{}\",\"version\":\"{}\",\"edition\":\"{}\",\"crate_type\":\"{}\",\"dependencies\":{{\"total\":{},\"internal\":{},\"external\":{},\"weight\":{} }},\"build\":{{\"status\":\"{}\",\"exit_code\":{},\"warnings\":{} }},\"files\":{{\"visible\":{},\"hidden\":{},\"visible_rs\":{},\"ext\":{}}},\"contents\":{{\"top_dirs\":{},\"top_files\":{},\"has_src_dir\":{},\"has_examples_dir\":{},\"has_tests_dir\":{},\"has_benches_dir\":{},\"has_build_rs\":{}}},\"analysis\":{{\"public_api\":{},\"call_edges\":{},\"security_findings\":{},\"test_files\":{},\"unit_tests\":{},\"integration_tests\":{},\"doc_tests\":{},\"coverage\":{{\"covered\":{},\"total\":{},\"percent\":{}}}}},\"dependency_list\":{}}}",
-        escape_json(normalize_toml_string(&report.identity.name)),
-        escape_json(&report.identity.path.to_string_lossy()),
-        escape_json(normalize_toml_string(&report.identity.version)),
-        escape_json(normalize_toml_string(&report.identity.edition)),
-        report.identity.crate_type.as_str(),
-        report.dependencies.len(),
-        deps_internal,
-        deps_external,
-        report.dependencies.iter().map(|dep| dep.weight).sum::<usize>(),
-        compile_status,
-        compile_exit,
-        compile_warnings,
-        visible_total,
-        record.hidden_files,
-        record.visible_rs_files,
-        json_exts(&record.extension_counts),
-        json_string_vec(&record.top_dirs),
-        json_string_vec(&record.top_files),
-        record.has_src_dir,
-        record.has_examples_dir,
-        record.has_tests_dir,
-        record.has_benches_dir,
-        record.has_build_rs,
-        report.public_api.len(),
-        report.call_graph.len(),
-        report.security_findings.len(),
-        report.test_info.total,
-        report.test_info.unit_tests,
-        report.test_info.integration_tests,
-        report.test_info.doc_tests,
-        report.test_info.functionality_coverage.covered_items,
-        report.test_info.functionality_coverage.public_items,
-        report.test_info.functionality_coverage.coverage_percent,
-        dependencies_json_list(&report.dependencies)
-    )
-}
-
 fn print_crate_inventory(record: &CrateInventory, report: &CrateReport) {
     let deps_internal = report.dependencies.iter().filter(|dep| dep.is_workspace).count();
     let deps_external = report.dependencies.iter().filter(|dep| !dep.is_workspace).count();
@@ -661,9 +482,10 @@ fn print_crate_inventory(record: &CrateInventory, report: &CrateReport) {
         report.dependencies.iter().map(|dep| dep.weight).sum::<usize>()
     );
     println!(
-        "  analysis: api={}, edges={}, findings={}, warnings={}, tests={} ({}), compiled={}",
+        "  analysis: api={}, edges={}, runtime_calls={}, findings={}, warnings={}, tests={} ({}), compiled={}",
         report.public_api.len(),
         report.call_graph.len(),
+        report.runtime_call_observations,
         report.security_findings.len(),
         report.test_info.compile_warnings,
         report.test_info.total,
@@ -674,6 +496,25 @@ fn print_crate_inventory(record: &CrateInventory, report: &CrateReport) {
             .as_deref()
             .is_some_and(|status| status == "compiled")
     );
+}
+
+fn print_dependency_summary(report: &DependencyFootprintReport) {
+    println!("\nDependency metrics");
+    println!("  workspace crates: {}", report.summary.workspace_root_crate_count);
+    println!(
+        "  crates with non-edgerun external dependencies: {}",
+        report.summary.crates_with_external_dependencies
+    );
+    println!(
+        "  distinct non-edgerun dependencies: {}",
+        report.summary.distinct_external_dependency_count
+    );
+    println!(
+        "  dependency disk footprint: {} bytes ({:.2} MB)",
+        report.summary.distinct_external_dependency_size_bytes,
+        report.summary.distinct_external_dependency_size_mb
+    );
+    println!("  dependency LOC: {}", report.summary.distinct_external_dependency_loc);
 }
 
 fn percentage_covered(covered: usize, total: usize) -> usize {
@@ -705,6 +546,11 @@ fn print_totals_text(totals: &Totals, out_dir: &Path) {
     );
     println!("  public_api_items:      {}", totals.total_public_api);
     println!("  call_graph_edges:      {}", totals.total_call_edges);
+    println!(
+        "  runtime_call_observations: {}",
+        totals.total_runtime_call_observations
+    );
+    println!("  runtime_call_edges:    {}", totals.total_runtime_call_edges);
     println!("  security_findings:     {}", totals.total_security_findings);
     println!("  compile_warnings:      {}", totals.total_compile_warnings);
     println!(
@@ -723,75 +569,60 @@ fn print_totals_text(totals: &Totals, out_dir: &Path) {
     println!("  output:                {}", out_dir.display());
 }
 
-fn print_totals_json(totals: &Totals, crates_json: &[String]) -> String {
-    format!(
-        "{{\"totals\":{{\"crates_attempted\":{},\"crates_ok\":{},\"crates_failed\":{},\"crates_compiled\":{},\"crates_compile_failed\":{},\"library_crates\":{},\"binary_crates\":{},\"library_binary_crates\":{},\"unknown_crates\":{},\"visible_files\":{},\"hidden_files\":{},\"dependencies\":{},\"external_dependencies\":{},\"dependency_weight\":{},\"public_api_items\":{},\"call_graph_edges\":{},\"security_findings\":{},\"compile_warnings\":{},\"functionality_coverage_covered\":{},\"functionality_coverage_total\":{},\"functionality_coverage_percent\":{},\"tests\":{},\"unit_tests\":{},\"integration_tests\":{},\"doc_tests\":{} }},\"crates\":[{}]}}",
-        totals.crates_attempted,
-        totals.crates_success,
-        totals.crates_failed,
-        totals.crates_compiled,
-        totals.crates_compile_failed,
-        totals.library_crates,
-        totals.binary_crates,
-        totals.library_binary_crates,
-        totals.unknown_crates,
-        totals.total_visible_files,
-        totals.total_hidden_files,
-        totals.total_dependencies,
-        totals.total_external_dependencies,
-        totals.total_dependency_weight,
-        totals.total_public_api,
-        totals.total_call_edges,
-        totals.total_security_findings,
-        totals.total_compile_warnings,
-        totals.total_covered_public_items,
-        totals.total_public_items,
-        percentage_covered(totals.total_covered_public_items, totals.total_public_items),
-        totals.total_test_files,
-        totals.total_unit_tests,
-        totals.total_integration_tests,
-        totals.total_doc_tests,
-        crates_json.join(",")
-    )
-}
-
-fn print_dependency_summary(report: &edgerun_json::JsonValue) {
-    let summary = report.get("summary").and_then(edgerun_json::JsonValue::as_object);
-    println!("\nDependency metrics");
-    if let Some(summary) = summary {
-        let crate_count = summary
-            .get("workspace_root_crate_count")
-            .and_then(edgerun_json::JsonValue::as_u64)
-            .unwrap_or(0);
-        let with_external = summary
-            .get("crates_with_external_dependencies")
-            .and_then(edgerun_json::JsonValue::as_u64)
-            .unwrap_or(0);
-        let dependency_count = summary
-            .get("distinct_external_dependency_count")
-            .and_then(edgerun_json::JsonValue::as_u64)
-            .unwrap_or(0);
-        let dep_size_bytes = summary
-            .get("distinct_external_dependency_size_bytes")
-            .and_then(edgerun_json::JsonValue::as_u64)
-            .unwrap_or(0);
-        let dep_size_mb = dep_size_bytes as f64 / 1024.0 / 1024.0;
-
-        println!("  workspace crates: {crate_count}");
-        println!("  crates with non-edgerun external dependencies: {with_external}");
-        println!("  distinct non-edgerun dependencies: {dependency_count}");
-        println!("  dependency disk footprint: {dep_size_bytes} bytes ({dep_size_mb:.2} MB)");
-    }
-}
-
 fn write_workspace_summary(
     out_dir: &Path,
     totals: &Totals,
-    crate_records: &[String],
 ) -> Result<(), String> {
     std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
-    let summary = print_totals_json(totals, crate_records);
-    let summary_path = out_dir.join("workspace-summary.json");
+    let summary_path = out_dir.join("workspace-summary.txt");
+    let mut summary = String::new();
+    summary.push_str("Totals\n");
+    summary.push_str(&format!("crates_attempted {}\n", totals.crates_attempted));
+    summary.push_str(&format!("crates_ok {}\n", totals.crates_success));
+    summary.push_str(&format!("crates_failed {}\n", totals.crates_failed));
+    summary.push_str(&format!("crates_compiled {}\n", totals.crates_compiled));
+    summary.push_str(&format!(
+        "crates_compile_failed {}\n",
+        totals.crates_compile_failed
+    ));
+    summary.push_str(&format!("library_crates {}\n", totals.library_crates));
+    summary.push_str(&format!("binary_crates {}\n", totals.binary_crates));
+    summary.push_str(&format!(
+        "library_binary_crates {}\n",
+        totals.library_binary_crates
+    ));
+    summary.push_str(&format!("unknown_type {}\n", totals.unknown_crates));
+    summary.push_str(&format!("visible_files {}\n", totals.total_visible_files));
+    summary.push_str(&format!("hidden_files {}\n", totals.total_hidden_files));
+    summary.push_str(&format!(
+        "dependencies {} {} {}\n",
+        totals.total_dependencies,
+        totals.total_external_dependencies,
+        totals.total_dependency_weight
+    ));
+    summary.push_str(&format!("public_api_items {}\n", totals.total_public_api));
+    summary.push_str(&format!("call_graph_edges {}\n", totals.total_call_edges));
+    summary.push_str(&format!(
+        "runtime_call_observations {}\n",
+        totals.total_runtime_call_observations
+    ));
+    summary.push_str(&format!(
+        "runtime_call_edges {}\n",
+        totals.total_runtime_call_edges
+    ));
+    summary.push_str(&format!("security_findings {}\n", totals.total_security_findings));
+    summary.push_str(&format!("compile_warnings {}\n", totals.total_compile_warnings));
+    summary.push_str(&format!(
+        "functionality_coverage {}/{} {}%\n",
+        totals.total_covered_public_items,
+        totals.total_public_items,
+        percentage_covered(totals.total_covered_public_items, totals.total_public_items)
+    ));
+    summary.push_str(&format!("tests {}\n", totals.total_test_files));
+    summary.push_str(&format!("unit_tests {}\n", totals.total_unit_tests));
+    summary.push_str(&format!("integration_tests {}\n", totals.total_integration_tests));
+    summary.push_str(&format!("doc_tests {}\n", totals.total_doc_tests));
+    summary.push_str(&format!("output {}\n", out_dir.display()));
     std::fs::write(&summary_path, summary).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -801,9 +632,9 @@ fn main() {
         workspace_root,
         output_dir,
         show_inventory,
-        emit_json,
         collect_metrics,
         clean_targets,
+        runtime_events_path,
     ) = parse_args();
     if !workspace_root.join("Cargo.toml").exists() {
         eprintln!("Workspace root not found: {workspace_root:?}");
@@ -812,11 +643,7 @@ fn main() {
 
     if clean_targets {
         let targets = clean_target_dirs(&workspace_root);
-        if emit_json {
-            println!("{}", print_target_cleanup_json(&targets));
-        } else {
-            print_target_cleanup_summary(&targets);
-        }
+        print_target_cleanup_summary(&targets);
         process::exit(0);
     }
 
@@ -826,23 +653,38 @@ fn main() {
         process::exit(1);
     }
 
-    if !emit_json {
-        println!(
-            "Analyzing {} crate directories in {}",
-            crates.len(),
-            workspace_root.display()
-        );
-    }
+    println!(
+        "Analyzing {} crate directories in {}",
+        crates.len(),
+        workspace_root.display()
+    );
 
     let mut totals = Totals::default();
     let mut failures: Vec<(String, String)> = Vec::new();
-    let mut crate_json_records: Vec<String> = Vec::new();
-    let mut dependency_report: Option<edgerun_json::JsonValue> = None;
+    let mut dependency_report: Option<DependencyFootprintReport> = None;
+    let runtime_events = if let Some(runtime_events_path) = runtime_events_path {
+        let runtime_events = match load_runtime_events(&runtime_events_path) {
+            Ok(runtime_events) => runtime_events,
+            Err(err) => {
+                eprintln!(
+                    "Failed to load runtime events from {}: {err}",
+                    runtime_events_path.display()
+                );
+                process::exit(1);
+            }
+        };
+        println!(
+            "Loaded {} runtime observations from {}",
+            runtime_events.len(),
+            runtime_events_path.display()
+        );
+        Some(runtime_events)
+    } else {
+        None
+    };
 
     if collect_metrics {
-        if !emit_json {
-            println!("Collecting dependency footprint metrics...");
-        }
+        println!("Collecting dependency footprint metrics...");
         match collect_dependency_footprints(&workspace_root) {
             Ok(report) => {
                 if let Err(err) = write_dependency_footprints(&report, &output_dir) {
@@ -866,7 +708,12 @@ fn main() {
             .to_string();
 
         totals.crates_attempted += 1;
-        match generate_report(&crate_name, &crate_dir, &workspace_root) {
+        match generate_report(
+            &crate_name,
+            &crate_dir,
+            &workspace_root,
+            runtime_events.as_deref(),
+        ) {
             Ok(report) => {
                 if let Err(err) = save_report(&report, &output_dir) {
                     totals.crates_failed += 1;
@@ -876,25 +723,22 @@ fn main() {
                     let inventory =
                         gather_crate_inventory(&crate_dir, &report.identity.visible_files, report.identity.hidden_files_count);
 
-                    crate_json_records.push(crate_json(&inventory, &report));
+                    println!(
+                        "  ok  {name}: deps={deps}, api={api}, edges={edges}, runtime_calls={runtime_calls}, findings={findings}, warnings={warnings}, coverage={covered}/{total} ({pct}%)",
+                        name = report.identity.name,
+                        deps = report.dependencies.len(),
+                        api = report.public_api.len(),
+                        edges = report.call_graph.len(),
+                        runtime_calls = report.runtime_call_observations,
+                        findings = report.security_findings.len(),
+                        warnings = report.test_info.compile_warnings,
+                        covered = report.test_info.functionality_coverage.covered_items,
+                        total = report.test_info.functionality_coverage.public_items,
+                        pct = report.test_info.functionality_coverage.coverage_percent
+                    );
 
-                    if !emit_json {
-                        println!(
-                            "  ok  {name}: deps={deps}, api={api}, edges={edges}, findings={findings}, warnings={warnings}, coverage={covered}/{total} ({pct}%)",
-                            name = report.identity.name,
-                            deps = report.dependencies.len(),
-                            api = report.public_api.len(),
-                            edges = report.call_graph.len(),
-                            findings = report.security_findings.len(),
-                            warnings = report.test_info.compile_warnings,
-                            covered = report.test_info.functionality_coverage.covered_items,
-                            total = report.test_info.functionality_coverage.public_items,
-                            pct = report.test_info.functionality_coverage.coverage_percent
-                        );
-
-                        if show_inventory {
-                            print_crate_inventory(&inventory, &report);
-                        }
+                    if show_inventory {
+                        print_crate_inventory(&inventory, &report);
                     }
                 }
             }
@@ -905,29 +749,18 @@ fn main() {
         }
     }
 
-    if let Err(err) = write_workspace_summary(&output_dir, &totals, &crate_json_records) {
+    if let Err(err) = write_workspace_summary(&output_dir, &totals) {
         eprintln!("Failed to write workspace summary: {err}");
         process::exit(1);
     }
 
-    if emit_json {
-        println!("{}", print_totals_json(&totals, &crate_json_records));
-        if let Some(report) = dependency_report {
-            println!(
-                "{{\"dependency_metrics_path\":\"{}\",\"dependency_metrics_report\":{}}}",
-                output_dir.join("dependency-metrics.json").display(),
-                edgerun_json::to_json_string(&report).unwrap_or_else(|_| "null".to_string())
-            );
-        }
-    } else {
-        print_totals_text(&totals, &output_dir);
-        if let Some(report) = dependency_report.as_ref() {
-            print_dependency_summary(report);
-            println!("  dependency report: {}", output_dir.join("dependency-metrics.json").display());
-        }
-        if show_inventory {
-            println!("  per-crate output included above");
-        }
+    print_totals_text(&totals, &output_dir);
+    if let Some(report) = dependency_report.as_ref() {
+        print_dependency_summary(report);
+        println!("  dependency report: {}", output_dir.join("dependency-metrics.txt").display());
+    }
+    if show_inventory {
+        println!("  per-crate output included above");
     }
 
     if !failures.is_empty() {

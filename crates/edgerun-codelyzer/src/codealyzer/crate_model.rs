@@ -212,6 +212,7 @@ pub struct CallGraphEdge {
     pub file: PathBuf,
     pub line: usize,
     pub confidence: Confidence,
+    pub runtime_count: u64,
 }
 
 impl ToJson for CallGraphEdge {
@@ -222,6 +223,7 @@ impl ToJson for CallGraphEdge {
         map.insert("file".into(), self.file.to_string_lossy().into_owned().to_json());
         map.insert("line".into(), self.line.to_json());
         map.insert("confidence".into(), self.confidence.to_json());
+        map.insert("runtime_count".into(), self.runtime_count.to_json());
         JsonValue::Object(map)
     }
 }
@@ -498,6 +500,7 @@ pub struct CrateReport {
     pub dependencies: Vec<Dependency>,
     pub public_api: Vec<ApiItem>,
     pub call_graph: Vec<CallGraphEdge>,
+    pub runtime_call_observations: u64,
     pub security_findings: Vec<SecurityFinding>,
     pub test_info: TestInfo,
     pub footprint: FootprintInfo,
@@ -515,6 +518,7 @@ impl ToJson for CrateReport {
         map.insert("dependencies".into(), self.dependencies.to_json());
         map.insert("public_api".into(), self.public_api.to_json());
         map.insert("call_graph".into(), self.call_graph.to_json());
+        map.insert("runtime_call_observations".into(), self.runtime_call_observations.to_json());
         map.insert("security_findings".into(), self.security_findings.to_json());
         map.insert("test_info".into(), self.test_info.to_json());
         map.insert("footprint".into(), self.footprint.to_json());

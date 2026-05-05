@@ -6,7 +6,126 @@ use std::process::Command;
 use chrono::offset::Local;
 
 use crate::codealyzer::errors::AnalyzerError;
-use edgerun_json::{to_json_string, JsonValue, Map, ToJson};
+use edgerun_json::impl_json_struct;
+
+#[derive(Clone)]
+struct CargoMetadata {
+    packages: Vec<CargoPackage>,
+    workspace_members: Vec<String>,
+    resolve: Option<CargoResolve>,
+}
+
+#[derive(Clone)]
+struct CargoPackage {
+    id: String,
+    name: String,
+    version: String,
+    manifest_path: String,
+    source: Option<String>,
+    path: Option<String>,
+    dependencies: Option<Vec<CargoDependency>>,
+    targets: Option<Vec<CargoPackageTarget>>,
+}
+
+#[derive(Clone)]
+struct CargoDependency {
+    name: String,
+}
+
+#[derive(Clone)]
+struct CargoPackageTarget {
+    kind: Vec<String>,
+}
+
+#[derive(Clone)]
+struct CargoResolve {
+    nodes: Vec<CargoResolveNode>,
+}
+
+#[derive(Clone)]
+struct CargoResolveNode {
+    id: String,
+    dependencies: Option<Vec<String>>,
+    deps: Option<Vec<CargoResolveDep>>,
+}
+
+#[derive(Clone)]
+struct CargoResolveDep {
+    pkg: String,
+}
+
+impl_json_struct! {
+    CargoMetadata {
+        required {
+            packages: "packages" => Vec<CargoPackage>,
+            workspace_members: "workspace_members" => Vec<String>,
+        }
+        optional {
+            resolve: "resolve" => CargoResolve,
+        }
+    }
+}
+
+impl_json_struct! {
+    CargoPackage {
+        required {
+            id: "id" => String,
+            name: "name" => String,
+            version: "version" => String,
+            manifest_path: "manifest_path" => String,
+        }
+        optional {
+            source: "source" => String,
+            path: "path" => String,
+            dependencies: "dependencies" => Vec<CargoDependency>,
+            targets: "targets" => Vec<CargoPackageTarget>,
+        }
+    }
+}
+
+impl_json_struct! {
+    CargoDependency {
+        required {
+            name: "name" => String,
+        }
+    }
+}
+
+impl_json_struct! {
+    CargoPackageTarget {
+        required {
+            kind: "kind" => Vec<String>,
+        }
+    }
+}
+
+impl_json_struct! {
+    CargoResolve {
+        required {
+            nodes: "nodes" => Vec<CargoResolveNode>,
+        }
+    }
+}
+
+impl_json_struct! {
+    CargoResolveNode {
+        required {
+            id: "id" => String,
+        }
+        optional {
+            dependencies: "dependencies" => Vec<String>,
+            deps: "deps" => Vec<CargoResolveDep>,
+        }
+    }
+}
+
+impl_json_struct! {
+    CargoResolveDep {
+        required {
+            pkg: "pkg" => String,
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 struct Footprint {
@@ -79,33 +198,81 @@ struct ExternalDependencyUsage {
     direct_dependent_crates: BTreeSet<String>,
 }
 
-pub fn collect_dependency_footprints(workspace_root: &Path) -> Result<JsonValue, AnalyzerError> {
+#[derive(Debug, Clone)]
+pub struct DependencyFootprintReport {
+    pub workspace_root: String,
+    pub generated_at: String,
+    pub summary: DependencyFootprintSummary,
+    pub crates: Vec<CrateDependencyProfileSummary>,
+    pub distinct_external_dependencies: Vec<DependencySummary>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DependencyFootprintSummary {
+    pub workspace_root_crate_count: usize,
+    pub crates_with_external_dependencies: usize,
+    pub distinct_external_dependency_count: usize,
+    pub distinct_external_dependency_size_bytes: u64,
+    pub distinct_external_dependency_size_mb: f64,
+    pub distinct_external_dependency_loc: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CrateDependencyProfileSummary {
+    pub name: String,
+    pub path: String,
+    pub crate_type: String,
+    pub self_size_bytes: u64,
+    pub self_size_mb: f64,
+    pub self_loc: u64,
+    pub external_dependency_count: usize,
+    pub external_dependency_size_bytes: u64,
+    pub external_dependency_size_mb: f64,
+    pub external_dependency_loc: u64,
+    pub external_dependency_size_ratio_to_self_percent: f64,
+    pub external_dependency_loc_ratio_to_self_percent: f64,
+    pub direct_non_edgerun_count: usize,
+    pub direct_non_edgerun_size_bytes: u64,
+    pub direct_non_edgerun_size_mb: f64,
+    pub direct_non_edgerun_loc: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct DependencySummary {
+    pub name: String,
+    pub dependency_id: String,
+    pub version: String,
+    pub source: String,
+    pub source_ref: Option<String>,
+    pub manifest_path: String,
+    pub size_bytes: u64,
+    pub size_mb: f64,
+    pub loc: u64,
+    pub dependent_crate_count: usize,
+    pub direct_dependent_crate_count: usize,
+    pub dependent_crates: Vec<String>,
+    pub direct_dependent_crates: Vec<String>,
+}
+
+pub fn collect_dependency_footprints(
+    workspace_root: &Path,
+) -> Result<DependencyFootprintReport, AnalyzerError> {
     let workspace_root = workspace_root
         .canonicalize()
         .unwrap_or_else(|_| workspace_root.to_path_buf());
 
     let metadata = load_cargo_metadata(&workspace_root)?;
-    let packages_root = metadata.get("packages").and_then(JsonValue::as_array);
-    let Some(packages_root) = packages_root else {
+    let packages_root = &metadata.packages;
+    if packages_root.is_empty() {
         return Ok(empty_report(&workspace_root));
-    };
+    }
 
     let packages_by_id = collect_packages(packages_root, &workspace_root);
     if packages_by_id.is_empty() {
         return Ok(empty_report(&workspace_root));
     }
 
-    let members = metadata
-        .get("workspace_members")
-        .and_then(JsonValue::as_array)
-        .map(|values| {
-            values
-                .iter()
-                .filter_map(JsonValue::as_str)
-                .map(|value| value.to_string())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+    let members = metadata.workspace_members.clone();
 
     let dependency_edges = parse_resolve_edges(&metadata);
     let mut name_to_ids: HashMap<String, Vec<String>> = HashMap::new();
@@ -237,7 +404,7 @@ pub fn collect_dependency_footprints(workspace_root: &Path) -> Result<JsonValue,
 
     let mut crate_entries = Vec::new();
     for profile in crate_profiles {
-        crate_entries.push(format_crate_profile_to_json(profile));
+        crate_entries.push(format_crate_profile(profile));
     }
 
     let mut distinct_dependencies = Vec::new();
@@ -252,196 +419,125 @@ pub fn collect_dependency_footprints(workspace_root: &Path) -> Result<JsonValue,
             .iter()
             .cloned()
             .collect::<Vec<_>>();
-        let mut usage_obj = Map::new();
-        usage_obj.insert("dependency_id".into(), usage.id.to_json());
-        usage_obj.insert("name".into(), usage.name.to_json());
-        usage_obj.insert("version".into(), usage.version.to_json());
-        usage_obj.insert("source".into(), usage.source.to_json());
-        usage_obj.insert("source_ref".into(), usage.source_ref.to_json());
-        usage_obj.insert("manifest_path".into(), usage.manifest_path.to_json());
-        usage_obj.insert("size_bytes".into(), usage.size_bytes.to_json());
-        usage_obj.insert("size_mb".into(), usage.size_mb.to_json());
-        usage_obj.insert("loc".into(), usage.loc.to_json());
-        usage_obj.insert("dependent_crate_count".into(), dependent_crates.len().to_json());
-        usage_obj.insert("direct_dependent_crate_count".into(), direct_dependent_crates.len().to_json());
-        usage_obj.insert("dependent_crates".into(), dependent_crates.to_json());
-        usage_obj.insert(
-            "direct_dependent_crates".into(),
-            direct_dependent_crates.to_json(),
-        );
-        distinct_dependencies.push(JsonValue::Object(usage_obj));
+        distinct_dependencies.push(DependencySummary {
+            dependency_id: usage.id.to_string(),
+            name: usage.name.to_string(),
+            version: usage.version.to_string(),
+            source: usage.source.to_string(),
+            source_ref: usage.source_ref.clone(),
+            manifest_path: usage.manifest_path.to_string(),
+            size_bytes: usage.size_bytes,
+            size_mb: usage.size_mb,
+            loc: usage.loc,
+            dependent_crate_count: dependent_crates.len(),
+            direct_dependent_crate_count: direct_dependent_crates.len(),
+            dependent_crates,
+            direct_dependent_crates,
+        });
     }
 
     let distinct_dependency_count = distinct_dependencies.len();
     distinct_dependencies
-        .sort_by(|lhs, rhs| lhs.get("size_bytes").and_then(JsonValue::as_u64).cmp(&rhs.get("size_bytes").and_then(JsonValue::as_u64)).reverse());
+        .sort_by(|lhs, rhs| rhs.size_bytes.cmp(&lhs.size_bytes));
 
-    let mut summary = Map::new();
     let mut global_size_bytes = 0u64;
     let mut global_loc = 0u64;
     for usage in &distinct_dependencies {
-        if let Some(size) = usage.get("size_bytes").and_then(JsonValue::as_u64) {
-            global_size_bytes = global_size_bytes.saturating_add(size);
-        }
-        if let Some(loc) = usage.get("loc").and_then(JsonValue::as_u64) {
-            global_loc = global_loc.saturating_add(loc);
-        }
+        global_size_bytes = global_size_bytes.saturating_add(usage.size_bytes);
+        global_loc = global_loc.saturating_add(usage.loc);
     }
 
-    summary.insert("workspace_root_crate_count".into(), crate_entries.len().to_json());
-    summary.insert(
-        "crates_with_external_dependencies".into(),
-        crate_entries
+    let summary = DependencyFootprintSummary {
+        workspace_root_crate_count: crate_entries.len(),
+        crates_with_external_dependencies: crate_entries
             .iter()
-            .filter(|raw| {
-                raw.get("external_dependency_count")
-                    .and_then(JsonValue::as_u64)
-                    .unwrap_or_default()
-                    > 0
-            })
-            .count()
-            .to_json(),
-    );
-    summary.insert(
-        "distinct_external_dependency_count".into(),
-        distinct_dependency_count.to_json(),
-    );
-    summary.insert(
-        "distinct_external_dependency_size_bytes".into(),
-        global_size_bytes.to_json(),
-    );
-    summary.insert(
-        "distinct_external_dependency_size_mb".into(),
-        bytes_to_megabytes(global_size_bytes).to_json(),
-    );
-    summary.insert("distinct_external_dependency_loc".into(), global_loc.to_json());
-    summary.insert(
-        "scope".into(),
-        "non-edgerun workspace dependencies".to_json(),
-    );
+            .filter(|entry| entry.external_dependency_count > 0)
+            .count(),
+        distinct_external_dependency_count: distinct_dependency_count,
+        distinct_external_dependency_size_bytes: global_size_bytes,
+        distinct_external_dependency_size_mb: bytes_to_megabytes(global_size_bytes),
+        distinct_external_dependency_loc: global_loc,
+    };
 
-    let mut top = Map::new();
-    top.insert(
-        "workspace_root".into(),
-        workspace_root.display().to_string().to_json(),
-    );
-    top.insert("generated_at".into(), Local::now().to_rfc3339().to_json());
-    top.insert("summary".into(), JsonValue::Object(summary));
-    top.insert(
-        "crates".into(),
-        JsonValue::array(crate_entries),
-    );
-    top.insert(
-        "distinct_external_dependencies".into(),
-        JsonValue::array(distinct_dependencies),
-    );
-
-    Ok(JsonValue::Object(top))
+    Ok(DependencyFootprintReport {
+        workspace_root: workspace_root.display().to_string(),
+        generated_at: Local::now().to_rfc3339(),
+        summary,
+        crates: crate_entries,
+        distinct_external_dependencies: distinct_dependencies,
+    })
 }
 
 pub fn write_dependency_footprints(
-    report: &JsonValue,
+    report: &DependencyFootprintReport,
     output_dir: &Path,
 ) -> Result<(), AnalyzerError> {
     std::fs::create_dir_all(output_dir)
         .map_err(|error| AnalyzerError::IoError(error.to_string()))?;
 
-    let output_path = output_dir.join("dependency-metrics.json");
-    let body = to_json_string(report).map_err(|error| AnalyzerError::IoError(error.to_string()))?;
+    let output_path = output_dir.join("dependency-metrics.txt");
+    let mut body = String::new();
+    body.push_str("# dependency-metrics\n");
+    body.push_str(&format!("workspace_root={}\n", report.workspace_root));
+    body.push_str(&format!("generated_at={}\n", report.generated_at));
+    body.push_str(&format!(
+        "workspace_root_crate_count={}\n",
+        report.summary.workspace_root_crate_count
+    ));
+    body.push_str(&format!(
+        "crates_with_non_edgerun_external_dependencies={}\n",
+        report.summary.crates_with_external_dependencies
+    ));
+    body.push_str(&format!(
+        "distinct_external_dependency_count={}\n",
+        report.summary.distinct_external_dependency_count
+    ));
+    body.push_str(&format!(
+        "distinct_external_dependency_size_bytes={}\n",
+        report.summary.distinct_external_dependency_size_bytes
+    ));
+    body.push_str(&format!(
+        "distinct_external_dependency_size_mb={:.3}\n",
+        report.summary.distinct_external_dependency_size_mb
+    ));
+    body.push_str(&format!(
+        "distinct_external_dependency_loc={}\n",
+        report.summary.distinct_external_dependency_loc
+    ));
+    body.push_str(&format!("crates_analyzed={}\n", report.crates.len()));
+    body.push_str(&format!(
+        "distinct_external_dependencies_in_report={}\n",
+        report.distinct_external_dependencies.len()
+    ));
+
     std::fs::write(output_path, body).map_err(|error| AnalyzerError::IoError(error.to_string()))
 }
 
-fn format_crate_profile_to_json(profile: CrateDependencyProfile) -> JsonValue {
-    let all_dependencies = profile
-        .all_dependencies
-        .into_iter()
-        .map(format_dependency_record_to_json)
-        .collect::<Vec<_>>();
-    let direct_dependencies = profile
-        .direct_dependencies
-        .into_iter()
-        .map(format_dependency_record_to_json)
-        .collect::<Vec<_>>();
-
+fn format_crate_profile(profile: CrateDependencyProfile) -> CrateDependencyProfileSummary {
     let all_total_size_percent = ratio_percent(profile.all_totals.size_bytes, profile.self_size_bytes);
     let all_total_loc_percent = ratio_percent(profile.all_totals.loc, profile.self_loc);
 
-    let mut item = Map::new();
-    item.insert("name".into(), profile.name.to_json());
-    item.insert("path".into(), profile.path.to_json());
-    item.insert("crate_type".into(), profile.crate_type.to_json());
-    item.insert("self_size_bytes".into(), profile.self_size_bytes.to_json());
-    item.insert("self_size_mb".into(), profile.self_size_mb.to_json());
-    item.insert("self_loc".into(), profile.self_loc.to_json());
-    item.insert(
-        "external_dependency_count".into(),
-        profile.all_totals.count.to_json(),
-    );
-    item.insert(
-        "external_dependency_size_bytes".into(),
-        profile.all_totals.size_bytes.to_json(),
-    );
-    item.insert(
-        "external_dependency_size_mb".into(),
-        bytes_to_megabytes(profile.all_totals.size_bytes).to_json(),
-    );
-    item.insert("external_dependency_loc".into(), profile.all_totals.loc.to_json());
-    item.insert(
-        "external_dependency_size_ratio_to_self_percent".into(),
-        all_total_size_percent.to_json(),
-    );
-    item.insert(
-        "external_dependency_loc_ratio_to_self_percent".into(),
-        all_total_loc_percent.to_json(),
-    );
-    item.insert(
-        "direct_non_edgerun_count".into(),
-        profile.direct_totals.count.to_json(),
-    );
-    item.insert(
-        "direct_non_edgerun_size_bytes".into(),
-        profile.direct_totals.size_bytes.to_json(),
-    );
-    item.insert(
-        "direct_non_edgerun_size_mb".into(),
-        bytes_to_megabytes(profile.direct_totals.size_bytes).to_json(),
-    );
-    item.insert(
-        "direct_non_edgerun_loc".into(),
-        profile.direct_totals.loc.to_json(),
-    );
-    item.insert("dependencies".into(), JsonValue::array(all_dependencies));
-    item.insert(
-        "direct_dependencies".into(),
-        JsonValue::array(direct_dependencies),
-    );
-    JsonValue::Object(item)
+    CrateDependencyProfileSummary {
+        name: profile.name,
+        path: profile.path,
+        crate_type: profile.crate_type,
+        self_size_bytes: profile.self_size_bytes,
+        self_size_mb: profile.self_size_mb,
+        self_loc: profile.self_loc,
+        external_dependency_count: profile.all_totals.count,
+        external_dependency_size_bytes: profile.all_totals.size_bytes,
+        external_dependency_size_mb: bytes_to_megabytes(profile.all_totals.size_bytes),
+        external_dependency_loc: profile.all_totals.loc,
+        external_dependency_size_ratio_to_self_percent: all_total_size_percent,
+        external_dependency_loc_ratio_to_self_percent: all_total_loc_percent,
+        direct_non_edgerun_count: profile.direct_totals.count,
+        direct_non_edgerun_size_bytes: profile.direct_totals.size_bytes,
+        direct_non_edgerun_size_mb: bytes_to_megabytes(profile.direct_totals.size_bytes),
+        direct_non_edgerun_loc: profile.direct_totals.loc,
+    }
 }
 
-fn format_dependency_record_to_json(entry: DependencyRecord) -> JsonValue {
-    let mut item = Map::new();
-    item.insert("name".into(), entry.name.to_json());
-    item.insert("dependency_id".into(), entry.id.to_json());
-    item.insert("version".into(), entry.version.to_json());
-    item.insert("source".into(), entry.source.to_json());
-    item.insert("source_ref".into(), entry.source_ref.to_json());
-    item.insert("manifest_path".into(), entry.manifest_path.to_json());
-    item.insert("size_bytes".into(), entry.size_bytes.to_json());
-    item.insert("size_mb".into(), entry.size_mb.to_json());
-    item.insert("loc".into(), entry.loc.to_json());
-    item.insert("is_direct".into(), entry.is_direct.to_json());
-    item.insert(
-        "size_ratio_to_self_percent".into(),
-        entry.size_ratio_to_self_percent.to_json(),
-    );
-    item.insert(
-        "loc_ratio_to_self_percent".into(),
-        entry.loc_ratio_to_self_percent.to_json(),
-    );
-    JsonValue::Object(item)
-}
-
-fn load_cargo_metadata(workspace_root: &Path) -> Result<JsonValue, AnalyzerError> {
+fn load_cargo_metadata(workspace_root: &Path) -> Result<CargoMetadata, AnalyzerError> {
     let workspace_manifest = workspace_root.join("Cargo.toml");
     let output = Command::new("cargo")
         .args([
@@ -467,56 +563,35 @@ fn load_cargo_metadata(workspace_root: &Path) -> Result<JsonValue, AnalyzerError
         message: error.to_string(),
     })?;
 
-    edgerun_json::from_json_str::<JsonValue>(&output).map_err(|error| AnalyzerError::ParseError {
+    edgerun_json::from_json_str::<CargoMetadata>(&output).map_err(|error| AnalyzerError::ParseError {
         file: workspace_manifest.clone(),
         message: error.to_string(),
     })
 }
 
-fn collect_packages(packages: &[JsonValue], workspace_root: &Path) -> HashMap<String, PackageInfo> {
+fn collect_packages(packages: &[CargoPackage], workspace_root: &Path) -> HashMap<String, PackageInfo> {
     let mut package_by_id = HashMap::new();
 
     for package in packages {
-        let Some(package) = package.as_object() else {
-            continue;
-        };
-
-        let Some(id) = package.get("id").and_then(JsonValue::as_str) else {
-            continue;
-        };
-        let name = package
-            .get("name")
-            .and_then(JsonValue::as_str)
-            .unwrap_or_default()
-            .to_string();
+        let id = package.id.clone();
+        let name = package.name.clone();
         if name.is_empty() {
             continue;
         }
-
-        let version = package
-            .get("version")
-            .and_then(JsonValue::as_str)
-            .unwrap_or_default()
-            .to_string();
-        let manifest_path = package
-            .get("manifest_path")
-            .and_then(JsonValue::as_str)
-            .unwrap_or_default()
-            .to_string();
-
-        let source = package.get("source").and_then(JsonValue::as_str).map(str::to_string);
-        let path_override = package.get("path").and_then(JsonValue::as_str).map(str::to_string);
+        let version = package.version.clone();
+        let manifest_path = package.manifest_path.clone();
+        let source = package.source.clone();
+        let path_override = package.path.clone();
         let crate_type = infer_crate_type(package);
         let is_workspace = package_is_workspace(&manifest_path, workspace_root);
 
         let direct_dependencies = package
-            .get("dependencies")
-            .and_then(JsonValue::as_array)
+            .dependencies
+            .as_ref()
+            .and_then(|deps| (!deps.is_empty()).then_some(deps))
             .map(|deps| {
                 deps.iter()
-                    .filter_map(JsonValue::as_object)
-                    .filter_map(|item| item.get("name").and_then(JsonValue::as_str))
-                    .map(str::to_string)
+                    .map(|item| item.name.clone())
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
@@ -557,35 +632,26 @@ fn package_is_workspace(manifest_path: &str, workspace_root: &Path) -> bool {
     }
 }
 
-fn parse_resolve_edges(metadata: &JsonValue) -> HashMap<String, Vec<String>> {
-    let Some(resolve) = metadata.get("resolve").and_then(JsonValue::as_object) else {
+fn parse_resolve_edges(metadata: &CargoMetadata) -> HashMap<String, Vec<String>> {
+    let Some(resolve) = metadata.resolve.as_ref() else {
         return HashMap::new();
     };
-    let Some(nodes) = resolve.get("nodes").and_then(JsonValue::as_array) else {
+    if resolve.nodes.is_empty() {
         return HashMap::new();
-    };
+    }
 
     let mut edges = HashMap::new();
-    for node in nodes {
-        let Some(node) = node.as_object() else {
-            continue;
-        };
-        let Some(node_id) = node.get("id").and_then(JsonValue::as_str) else {
-            continue;
-        };
+    for node in &resolve.nodes {
+        let node_id = &node.id;
         let mut deps = Vec::new();
 
-        if let Some(values) = node.get("dependencies").and_then(JsonValue::as_array) {
-            deps.extend(values.iter().filter_map(JsonValue::as_str).map(str::to_string));
-        } else if let Some(values) = node.get("deps").and_then(JsonValue::as_array) {
-            for value in values {
-                if let Some(value) = value.as_object().and_then(|obj| obj.get("pkg").and_then(JsonValue::as_str)) {
-                    deps.push(value.to_string());
-                }
-            }
+        if let Some(values) = &node.dependencies {
+            deps.extend(values.iter().cloned());
+        } else if let Some(values) = &node.deps {
+            deps.extend(values.iter().map(|value| value.pkg.clone()));
         }
 
-        edges.insert(node_id.to_string(), deps);
+        edges.insert(node_id.clone(), deps);
     }
 
     edges
@@ -724,25 +790,17 @@ fn classify_dependency_source(package: &PackageInfo, workspace_root: &Path) -> S
     "path".to_string()
 }
 
-fn infer_crate_type(package: &edgerun_json::Map) -> String {
+fn infer_crate_type(package: &CargoPackage) -> String {
     let mut has_lib = false;
     let mut has_bin = false;
 
-    if let Some(targets) = package.get("targets").and_then(JsonValue::as_array) {
+    if let Some(targets) = package.targets.as_ref() {
         for target in targets {
-            let Some(target) = target.as_object() else {
-                continue;
-            };
-            let Some(kinds) = target.get("kind").and_then(JsonValue::as_array) else {
-                continue;
-            };
-            for kind in kinds {
-                if let Some(kind) = kind.as_str() {
-                    match kind {
-                        "lib" => has_lib = true,
-                        "bin" => has_bin = true,
-                        _ => {}
-                    }
+            for kind in &target.kind {
+                match kind.as_str() {
+                    "lib" => has_lib = true,
+                    "bin" => has_bin = true,
+                    _ => {}
                 }
             }
         }
@@ -784,12 +842,19 @@ fn ratio_percent(part: u64, total: u64) -> f64 {
     }
 }
 
-fn empty_report(workspace_root: &Path) -> JsonValue {
-    let mut top = Map::new();
-    top.insert("workspace_root".into(), workspace_root.display().to_string().to_json());
-    top.insert("generated_at".into(), Local::now().to_rfc3339().to_json());
-    top.insert("summary".into(), JsonValue::Object(Map::new()));
-    top.insert("crates".into(), JsonValue::empty_array());
-    top.insert("distinct_external_dependencies".into(), JsonValue::empty_array());
-    JsonValue::Object(top)
+fn empty_report(workspace_root: &Path) -> DependencyFootprintReport {
+    DependencyFootprintReport {
+        workspace_root: workspace_root.display().to_string(),
+        generated_at: Local::now().to_rfc3339(),
+        summary: DependencyFootprintSummary {
+            workspace_root_crate_count: 0,
+            crates_with_external_dependencies: 0,
+            distinct_external_dependency_count: 0,
+            distinct_external_dependency_size_bytes: 0,
+            distinct_external_dependency_size_mb: 0.0,
+            distinct_external_dependency_loc: 0,
+        },
+        crates: Vec::new(),
+        distinct_external_dependencies: Vec::new(),
+    }
 }

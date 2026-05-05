@@ -5,6 +5,7 @@ use crate::codealyzer::source_index;
 use crate::codealyzer::dependency_analyzer;
 use crate::codealyzer::api_analyzer;
 use crate::codealyzer::call_graph;
+use crate::codealyzer::runtime_bridge;
 use crate::codealyzer::unsafe_analyzer;
 use crate::codealyzer::security_analyzer;
 use crate::codealyzer::tests;
@@ -17,6 +18,7 @@ pub fn generate_report(
     crate_name: &str,
     crate_path: &Path,
     workspace_root: &Path,
+    runtime_events: Option<&[runtime_bridge::RuntimeCallEvent]>,
 ) -> Result<CrateReport, crate::codealyzer::errors::AnalyzerError> {
     let cargo_toml_path = crate_path.join("Cargo.toml");
     if !cargo_toml_path.exists() {
@@ -38,7 +40,10 @@ pub fn generate_report(
 
     let (public_api, _api_count) = api_analyzer::analyze_public_api(&visible_files);
 
-    let call_graph_edges = call_graph::build_call_graph(&visible_files);
+    let mut call_graph_edges = call_graph::build_call_graph(&visible_files);
+    let runtime_call_observations = runtime_events.map_or(0, |events| {
+        runtime_bridge::merge_runtime_calls_into_edges(&mut call_graph_edges, crate_path, events)
+    });
 
     let mut unsafe_findings = unsafe_analyzer::find_unsafe_blocks(&visible_files);
     let mut security_findings = security_analyzer::static_security_analysis(&visible_files);
@@ -67,6 +72,7 @@ pub fn generate_report(
         dependencies,
         public_api,
         call_graph: call_graph_edges,
+        runtime_call_observations,
         security_findings: all_findings,
         test_info,
         footprint,
@@ -85,10 +91,6 @@ pub fn save_report(report: &CrateReport, output_dir: &Path) -> Result<(), crate:
 
     let html = render::render_html_report(report);
     std::fs::write(crate_dir.join("report.html"), html)
-        .map_err(|e| crate::codealyzer::errors::AnalyzerError::IoError(e.to_string()))?;
-
-    let json = render::render_json_report(report);
-    std::fs::write(crate_dir.join("report.json"), json)
         .map_err(|e| crate::codealyzer::errors::AnalyzerError::IoError(e.to_string()))?;
 
     Ok(())

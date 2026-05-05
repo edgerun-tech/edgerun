@@ -1,5 +1,4 @@
 use crate::codealyzer::crate_model::*;
-use edgerun_json::ToJson;
 
 pub fn render_html_report(report: &CrateReport) -> String {
     let mut html = String::new();
@@ -14,6 +13,7 @@ pub fn render_html_report(report: &CrateReport) -> String {
     html.push_str(&render_dependencies(report));
     html.push_str(&render_public_api(report));
     html.push_str(&render_call_graph(report));
+    html.push_str(&render_runtime_call_summary(report));
     html.push_str(&render_security(report));
     html.push_str(&render_tests(report));
     html.push_str(&render_footprint(report));
@@ -79,6 +79,10 @@ fn render_summary(report: &CrateReport) -> String {
     s.push_str(&format!("<p>Security findings: {}</p>\n", report.security_findings.len()));
     s.push_str(&format!("<p>Generated: {}</p>\n", report.generated_at));
     s.push_str(&format!("<p>Parser confidence: {}</p>\n", report.parser_confidence));
+    s.push_str(&format!(
+        "<p>Runtime call observations: {}</p>\n",
+        report.runtime_call_observations
+    ));
     s
 }
 
@@ -111,19 +115,33 @@ fn render_public_api(report: &CrateReport) -> String {
 }
 
 fn render_call_graph(report: &CrateReport) -> String {
-    let mut s = String::from("<h2>Call Graph</h2>\n<table border=\"1\"><tr><th>Caller</th><th>Callee</th><th>File</th><th>Line</th><th>Confidence</th></tr>\n");
+    let mut s = String::from("<h2>Call Graph</h2>\n<table border=\"1\"><tr><th>Caller</th><th>Callee</th><th>File</th><th>Line</th><th>Confidence</th><th>Runtime Count</th></tr>\n");
     for edge in &report.call_graph {
         s.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:?}</td></tr>\n",
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:?}</td><td>{}</td></tr>\n",
             edge.caller,
             edge.callee,
             edge.file.display(),
             edge.line,
-            edge.confidence
+            edge.confidence,
+            edge.runtime_count
         ));
     }
     s.push_str("</table>\n");
     s
+}
+
+fn render_runtime_call_summary(report: &CrateReport) -> String {
+    let observed_edges = report
+        .call_graph
+        .iter()
+        .filter(|edge| edge.runtime_count > 0)
+        .count();
+    format!(
+        "<h2>Runtime Call Summary</h2>\n<p>Observed calls: {} | observed edges: {}</p>\n",
+        report.runtime_call_observations,
+        observed_edges
+    )
 }
 
 fn render_security(report: &CrateReport) -> String {
@@ -205,8 +223,4 @@ fn render_issue_buttons(report: &CrateReport) -> String {
             &report.identity.name, "", None, None, None, None, None, false,
             "https://github.com/Sylchi/edgerun_reference_core")));
     s
-}
-
-pub fn render_json_report(report: &CrateReport) -> String {
-    edgerun_json::to_string_pretty(&report.to_json()).unwrap_or_default()
 }
