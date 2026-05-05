@@ -2,8 +2,8 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use edgerun_sign_verify_e2e::{
-    canonicalize_event_only, hash_event_only, sign_event_only, sign_verify_event_roundtrip,
-    signed_events, verify_event_only, verify_prebuilt_events,
+    bootstrap_only, bootstrap_roundtrip, canonicalize_event_only, hash_event_only, sign_event_only,
+    sign_verify_event_roundtrip, signed_events, verify_event_only, verify_prebuilt_events,
 };
 
 fn bench_once(name: &str, iterations: usize, mut f: impl FnMut(usize)) {
@@ -36,11 +36,27 @@ fn main() {
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(1_000);
 
+    let bootstrap = bootstrap_roundtrip().expect("bootstrap roundtrip should pass");
+    println!(
+        "bootstrap: node_id_len={} stored_key_len={} genesis_signature_len={} genesis_stream_id_len={} genesis_seq={} store_len={}",
+        bootstrap.node_id_len,
+        bootstrap.stored_key_len,
+        bootstrap.genesis_signature_len,
+        bootstrap.genesis_stream_id_len,
+        bootstrap.genesis_seq,
+        bootstrap.store_len,
+    );
+
     let report = sign_verify_event_roundtrip().expect("roundtrip should pass");
     println!(
         "roundtrip: signature_len={} record_hash_len={} public_key_len={} stream_id_len={}",
         report.signature_len, report.record_hash_len, report.public_key_len, report.stream_id_len
     );
+
+    bench_once("bootstrap", iterations, |n| {
+        let ok = bootstrap_only(n).expect("bootstrap benchmark should pass");
+        black_box(ok);
+    });
 
     bench_once("sign_event", iterations, |n| {
         let signatures = sign_event_only(n).expect("sign benchmark should pass");
