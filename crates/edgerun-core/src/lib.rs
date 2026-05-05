@@ -51,3 +51,4 @@ pub mod wire_boundary;
 pub mod wire_boundary_free;
 pub mod wire_command;
 pub mod wire_stream;
+pub mod wire_trust;
