@@ -3436,6 +3436,26 @@ mod tests {
     }
 
     #[test]
+    fn virtblk_flush_descriptor_chain_has_no_data_buffer() {
+        let _guard = driver_claim_test_lock();
+        let mut blk = VirtBlk::new();
+
+        unsafe {
+            assert!(blk.prepare_request_descriptors(VIRTIO_BLK_T_FLUSH, 0, 0, false));
+
+            let desc = core::ptr::addr_of!(BLK_DESC.0) as *const VirtqDesc;
+            let header = core::ptr::read(desc);
+            let status = core::ptr::read(desc.add(2));
+
+            assert_eq!(header.flags, VIRTQ_DESC_F_NEXT);
+            assert_eq!(header.next, 2);
+            assert_eq!(status.len, 1);
+            assert_eq!(status.flags, VIRTQ_DESC_F_WRITE);
+            assert_eq!(status.next, 0);
+        }
+    }
+
+    #[test]
     fn uninitialized_rng_and_console_reject_io() {
         let mut rng = VirtRng::new();
         let mut console = VirtConsole::new();
