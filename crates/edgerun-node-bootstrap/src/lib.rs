@@ -39,7 +39,7 @@ pub struct BootstrapConfig {
     pub node_label: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BootstrapResult<Stored> {
     /// Node identity. This is the node public key as raw P-256 x || y.
     pub node_id: NodeId,
