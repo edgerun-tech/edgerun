@@ -1,2 +1,0 @@
-mod process_capabilities_fail_test;
-pub use process_capabilities_fail_test::get_process_capabilities_fail_test;
