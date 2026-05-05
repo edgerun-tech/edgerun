@@ -1227,6 +1227,8 @@ dependencies = [
  "edgerun-core",
  "edgerun-crypto",
  "edgerun-hardware-signing",
+ "edgerun-sign",
+ "edgerun-verify",
 ]
 
 [[package]]
