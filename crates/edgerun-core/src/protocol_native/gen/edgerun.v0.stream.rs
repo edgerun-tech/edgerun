@@ -156,7 +156,7 @@ pub struct AppPackage {
     /// Route patterns mapped to this app (e.g. "/api/*" -> entry handler)
     pub routes: ::alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
     /// Additional asset objects (styles, templates, static files)
-    pub assets: ::std::collections::HashMap<alloc::string::String, super::common::ObjectRef>,
+    pub assets: ::alloc::collections::BTreeMap<alloc::string::String, super::common::ObjectRef>,
     /// REQUIRED: capability requirements — the app declares ALL capabilities
     /// it needs to function. The runtime MUST NOT grant capabilities implicitly.
     pub required_capabilities: alloc::vec::Vec<super::trust::CapabilityDescriptor>,

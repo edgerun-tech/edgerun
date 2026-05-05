@@ -15,7 +15,6 @@ use crate::crypto::{
 use crate::protocol::{canonical_bytes, ProtocolRecord};
 use crate::result::{reject, ReasonCode, ValidationResult};
 use crate::value::Value;
-use std::collections::BTreeMap;
 
 /// Validates the structural integrity of an IdentityRecord.
 ///

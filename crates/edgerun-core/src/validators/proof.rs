@@ -272,7 +272,7 @@ pub fn validate_result_fragment_proof(proof: &ResultFragmentProof) -> ProofStruc
 /// §8.1: AggregateSummaryProof with overlapping included and excluded
 /// responders is structurally invalid.
 pub fn validate_aggregate_summary_proof(proof: &AggregateSummaryProof) -> ProofStructuralResult {
-    use std::collections::HashSet;
+    use crate::collections::HashSet;
     if let Some(result) = validate_source_query_id(
         &proof.source_query_id,
         "AggregateSummaryProof missing source_query_id",
@@ -363,7 +363,7 @@ pub fn validate_trust_policy_proof(proof: &TrustPolicyProof) -> ProofStructuralR
 pub fn validate_proof_bundle(
     bundle: &ProofBundle,
     expected_query_id: Option<&[u8]>,
-    available_object_ids: Option<&std::collections::HashSet<Vec<u8>>>,
+    available_object_ids: Option<&crate::collections::HashSet<Vec<u8>>>,
     allowed_payload_types: &[i32],
 ) -> ValidationResult {
     if bundle.bundle_version != 1 {
@@ -1273,7 +1273,7 @@ mod tests {
     #[test]
     fn proof_bundle_unavailable_payload_defers() {
         let bundle = valid_proof_bundle();
-        let available = std::collections::HashSet::new();
+        let available = crate::collections::HashSet::new();
 
         let result = validate_proof_bundle(&bundle, Some(&[1, 2, 3]), Some(&available), &[]);
 

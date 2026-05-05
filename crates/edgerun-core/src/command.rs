@@ -181,7 +181,7 @@ pub fn validate_command_policy(ctx: &CommandPolicyContext<'_>) -> ValidationResu
     if !ctx.allowed_command_types.is_empty()
         && !ctx.allowed_command_types.contains(&ctx.command_type)
     {
-        let mut derived = std::collections::BTreeMap::new();
+        let mut derived = BTreeMap::new();
         derived.insert("command_type".into(), Value::Int(ctx.command_type as i64));
         return reject(
             ReasonCode::PolicyDenied,
@@ -894,7 +894,7 @@ fn local_assurance_satisfies_requirement(
         return Err(result);
     }
 
-    let mut derived = std::collections::BTreeMap::new();
+    let mut derived = BTreeMap::new();
     derived.insert(
         "required_class".into(),
         Value::Int(requirement.required_class as i64),
@@ -1409,7 +1409,7 @@ pub fn validate_command(
 
     let issued_at_ms = timestamp_millis(command.issued_at.as_ref().unwrap());
     if ctx.now_ms < issued_at_ms {
-        let mut derived = std::collections::BTreeMap::new();
+        let mut derived = BTreeMap::new();
         derived.insert("issued_at_ms".into(), Value::Int(issued_at_ms));
         derived.insert("now_ms".into(), Value::Int(ctx.now_ms));
         return defer(ReasonCode::TimeInvalid, Value::Map(derived));
@@ -1490,7 +1490,7 @@ pub fn validate_command(
     if let Some(ref not_before) = command.not_before {
         let not_before_ms = timestamp_millis(not_before);
         if ctx.now_ms < not_before_ms {
-            let mut derived = std::collections::BTreeMap::new();
+            let mut derived = BTreeMap::new();
             derived.insert("not_before_ms".into(), Value::Int(not_before_ms));
             derived.insert("now_ms".into(), Value::Int(ctx.now_ms));
             return defer(ReasonCode::TimeInvalid, Value::Map(derived));
@@ -1514,7 +1514,7 @@ pub fn validate_command(
     // hint and MUST NOT be used as the replay key (§5.1).
     let computed_hash = command_hash(command).value.clone();
     if ctx.replay_cache.contains_key(&computed_hash) {
-        let mut derived = std::collections::BTreeMap::new();
+        let mut derived = BTreeMap::new();
         derived.insert(
             "command_hash".into(),
             Value::String(crate::util::bytes_to_hex(&computed_hash)),
@@ -1580,7 +1580,7 @@ pub fn validate_command(
     }
 
     // --- Accept ---
-    let mut derived = std::collections::BTreeMap::new();
+    let mut derived = BTreeMap::new();
     derived.insert(
         "command_id".into(),
         Value::String(crate::util::bytes_to_hex(&command.command_id)),
@@ -1919,7 +1919,7 @@ fn validate_delegation_chain(
         }
 
         // 1. Actions: child must not add new actions
-        let parent_actions: std::collections::HashSet<&String> =
+        let parent_actions: crate::collections::HashSet<&String> =
             parent_cap.actions.iter().collect();
         for action in &child_cap.actions {
             if !parent_actions.contains(action) {
@@ -2038,7 +2038,7 @@ fn attenuate_scope(
     }
 
     // target_nodes: child set must be subset of parent set
-    let parent_nodes: std::collections::HashSet<&[u8]> = parent_scope
+    let parent_nodes: crate::collections::HashSet<&[u8]> = parent_scope
         .target_nodes
         .iter()
         .map(|n| n.node_id.as_slice())
@@ -2068,7 +2068,7 @@ fn attenuate_scope(
     }
 
     // target_streams: child set must be subset of parent set
-    let parent_streams: std::collections::HashSet<(&[u8],)> = parent_scope
+    let parent_streams: crate::collections::HashSet<(&[u8],)> = parent_scope
         .target_streams
         .iter()
         .map(|s| (s.stream_id.as_slice(),))
@@ -2098,7 +2098,7 @@ fn attenuate_scope(
     }
 
     // target_object_kinds: child set must be subset of parent set
-    let parent_kinds: std::collections::HashSet<i32> =
+    let parent_kinds: crate::collections::HashSet<i32> =
         parent_scope.target_object_kinds.iter().cloned().collect();
     if !parent_kinds.is_empty() && child_scope.target_object_kinds.is_empty() {
         return Err(reject(
@@ -2125,7 +2125,7 @@ fn attenuate_scope(
     }
 
     // target_view_types: child set must be subset of parent set
-    let parent_views: std::collections::HashSet<&String> =
+    let parent_views: crate::collections::HashSet<&String> =
         parent_scope.target_view_types.iter().collect();
     if !parent_views.is_empty() && child_scope.target_view_types.is_empty() {
         return Err(reject(
@@ -2152,7 +2152,7 @@ fn attenuate_scope(
     }
 
     // target_domains: child set must be subset of parent set
-    let parent_domains: std::collections::HashSet<&String> =
+    let parent_domains: crate::collections::HashSet<&String> =
         parent_scope.target_domains.iter().collect();
     if !parent_domains.is_empty() && child_scope.target_domains.is_empty() {
         return Err(reject(
@@ -2391,7 +2391,7 @@ fn attenuate_constraints(
             empty_map(),
         ));
     }
-    let parent_transport: std::collections::HashSet<i32> = parent_constraints
+    let parent_transport: crate::collections::HashSet<i32> = parent_constraints
         .requires_transport_classes
         .iter()
         .cloned()
@@ -2421,7 +2421,7 @@ fn attenuate_constraints(
             empty_map(),
         ));
     }
-    let parent_locations: std::collections::HashSet<&String> = parent_constraints
+    let parent_locations: crate::collections::HashSet<&String> = parent_constraints
         .requires_location_classes
         .iter()
         .collect();
@@ -2480,7 +2480,7 @@ fn attenuate_constraints(
     }
 
     // execution_class_limits: child set must be subset of parent set
-    let parent_exec: std::collections::HashSet<i32> = parent_constraints
+    let parent_exec: crate::collections::HashSet<i32> = parent_constraints
         .execution_class_limits
         .iter()
         .cloned()
@@ -2510,7 +2510,7 @@ fn attenuate_constraints(
     }
 
     // storage_class_limits: child set must be subset of parent set
-    let parent_storage: std::collections::HashSet<i32> = parent_constraints
+    let parent_storage: crate::collections::HashSet<i32> = parent_constraints
         .storage_class_limits
         .iter()
         .cloned()
@@ -2584,7 +2584,7 @@ fn attenuate_assurance(
                 empty_map(),
             ));
         }
-        let parent_attesters: std::collections::HashSet<&[u8]> = parent_assurance
+        let parent_attesters: crate::collections::HashSet<&[u8]> = parent_assurance
             .acceptable_attesters
             .iter()
             .map(|a| a.identity_id.as_slice())
@@ -2731,7 +2731,7 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
         );
     }
 
-    let mut derived = std::collections::BTreeMap::new();
+    let mut derived = BTreeMap::new();
     derived.insert(
         "command_id".into(),
         Value::String(crate::util::bytes_to_hex(&command.command_id)),
