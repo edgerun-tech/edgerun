@@ -6,7 +6,6 @@
 //! ## Usage
 //! ```text
 //! edgerund init --config node.yaml --software          # Dev-only: in-memory key
-//! edgerund run --config node.yaml                        # Start daemon
 //! edgerund status --config node.yaml                   # Show node identity
 //! ```
 //!
@@ -16,10 +15,8 @@
 //! No `.key` file is ever written.
 
 use std::env;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use crate::daemon::cmd_run;
 use crate::init_cmd::{
     cmd_init, cmd_init_encrypted, cmd_init_provisioned, cmd_provision, cmd_unlock,
 };
@@ -54,14 +51,6 @@ pub enum Command {
         password: Option<String>,
         target_addr: Option<String>,
     },
-    Run {
-        config: PathBuf,
-        listen: Option<SocketAddr>,
-        health_port: Option<u16>,
-        log_level: String,
-        /// Run in init mode (PID 1 signal handling) even if not PID 1.
-        init_mode: bool,
-    },
     Status {
         config: PathBuf,
     },
@@ -70,7 +59,7 @@ pub enum Command {
 pub fn parse_args() -> Result<Command, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        return Err("Usage: edgerund <command> [options]\n\nCommands:\n  init    Generate node identity\n  run     Start the daemon\n  status  Show node identity\n  help    Show this help".to_string());
+        return Err("Usage: edgerund <command> [options]\n\nCommands:\n  init    Generate node identity\n  status  Show node identity\n  help    Show this help".to_string());
     }
     let cmd = args[0].as_str();
     match cmd {
@@ -176,29 +165,6 @@ pub fn parse_args() -> Result<Command, String> {
             }
             Ok(Command::Unlock { config, password, target_addr })
         }
-        "run" => {
-            let mut config = PathBuf::from("node.yaml");
-            let mut listen = None;
-            let mut health_port = None;
-            let mut log_level = "info".to_string();
-            let mut init_mode = false;
-            let mut i = 1;
-            while i < args.len() {
-                match args[i].as_str() {
-                    "--config" => { i += 1; config = PathBuf::from(&args[i]); }
-                    "--listen" => { i += 1; listen = Some(args[i].parse().map_err(|e| format!("invalid listen address: {}", e))?); }
-                    "--health-port" => { i += 1; health_port = Some(args[i].parse().map_err(|e| format!("invalid port: {}", e))?); }
-                    "--log-level" => { i += 1; log_level = args[i].clone(); }
-                    "--init" => { init_mode = true; }
-                    "--help" | "-h" => {
-                        return Err("Usage: edgerund run [--config path] [--listen addr] [--health-port port] [--log-level level] [--init]".into());
-                    }
-                    other => return Err(format!("unknown option: {}", other)),
-                }
-                i += 1;
-            }
-            Ok(Command::Run { config, listen, health_port, log_level, init_mode })
-        }
         "status" => {
             let mut config = PathBuf::from("node.yaml");
             let mut i = 1;
@@ -215,7 +181,7 @@ pub fn parse_args() -> Result<Command, String> {
             Ok(Command::Status { config })
         }
         "help" | "--help" | "-h" => {
-            Err("edgerun Node Daemon\n\nCommands:\n  init    Generate node identity\n  run     Start the daemon\n  status  Show node identity".into())
+            Err("edgerun Node Daemon\n\nCommands:\n  init    Generate node identity\n  status  Show node identity".into())
         }
         other => Err(format!("unknown command: {}", other)),
     }
@@ -266,42 +232,6 @@ pub fn main() {
             target_addr,
         } => {
             cmd_unlock(&config, password, target_addr);
-        }
-        Command::Run {
-            config,
-            listen,
-            health_port,
-            log_level,
-            init_mode,
-        } => {
-            // Initialize structured logging
-            env::set_var("RUST_LOG", &log_level);
-            edgerun_log::init_from_env();
-
-            // Determine if running in init mode (PID 1 signal handling).
-            // Signal handling is done asynchronously in daemon.rs via signalfd,
-            // so we don't install raw libc signal handlers.
-            let is_init = init_mode || crate::init::is_pid_one();
-            if is_init {
-                if init_mode {
-                    eprintln!("edgerund running in init mode (--init)");
-                } else {
-                    eprintln!("edgerund running as PID 1 (init mode)");
-                }
-                // PID 1 setup: mounts, hostname, etc. (signal handling is async in daemon.rs)
-                crate::init::init_setup();
-            }
-
-            let rt = edgerun_rt::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .unwrap_or_else(|e| {
-                    edgerun_log::error!("failed to create runtime: {}", e);
-                    std::process::exit(1);
-                });
-            rt.block_on(async move {
-                cmd_run(&config, listen, health_port, is_init).await;
-            });
         }
         Command::Status { config } => {
             cmd_status(&config);

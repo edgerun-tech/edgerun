@@ -14,6 +14,11 @@ pub const VIRTIO_MODERN_DEVICE_ID_BLK: u16 = 0x1042;
 pub const VIRTIO_MODERN_DEVICE_ID_CONSOLE: u16 = 0x1043;
 pub const VIRTIO_MODERN_DEVICE_ID_RNG: u16 = 0x1044;
 
+pub const VIRTIO_DEVICE_TYPE_NET: u32 = 1;
+pub const VIRTIO_DEVICE_TYPE_BLK: u32 = 2;
+pub const VIRTIO_DEVICE_TYPE_CONSOLE: u32 = 3;
+pub const VIRTIO_DEVICE_TYPE_RNG: u32 = 4;
+
 pub const VIRTIO_NET_F_CSUM: u64 = 1 << 0;
 pub const VIRTIO_NET_F_GUEST_CSUM: u64 = 1 << 1;
 pub const VIRTIO_NET_F_MAC: u64 = 1 << 5;
@@ -67,6 +72,23 @@ const PCI_CAPABILITY_LIST: u8 = 0x34;
 const PCI_COMMAND_MEMORY: u16 = 0x0002;
 const PCI_COMMAND_BUS_MASTER: u16 = 0x0004;
 const PCI_STATUS_CAPABILITIES: u16 = 0x0010;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VirtioTransportKind {
+    ModernPci,
+    Mmio,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VirtioDeviceInfo {
+    pub transport: VirtioTransportKind,
+    pub device_type: u32,
+    pub vendor_id: u16,
+    pub device_id: u16,
+    pub bus: u8,
+    pub slot: u8,
+    pub func: u8,
+}
 
 #[derive(Clone, Copy)]
 struct VirtioPciCap {
@@ -502,6 +524,22 @@ impl VirtNet {
         self.link_up
     }
 
+    pub fn refresh_status(&mut self) -> bool {
+        if self.device_cfg.is_null() {
+            return false;
+        }
+
+        if self.features & VIRTIO_NET_F_STATUS != 0 {
+            self.status = read_u16(unsafe { self.device_cfg.add(6) });
+            self.link_up = (self.status & VIRTIO_NET_S_LINK_UP) != 0;
+        } else {
+            self.status = VIRTIO_NET_S_LINK_UP;
+            self.link_up = true;
+        }
+
+        true
+    }
+
     pub fn mtu(&self) -> u16 {
         self.mtu
     }
@@ -521,9 +559,9 @@ impl VirtNet {
     }
 
     pub fn send(&mut self, data: &[u8]) -> bool {
-        if data.is_empty() || data.len() + NET_HDR_LEN > BUFFER_SIZE {
+        let Some(frame_len) = net_tx_frame_len(data.len()) else {
             return false;
-        }
+        };
 
         unsafe {
             self.reap_tx_used();
@@ -542,7 +580,7 @@ impl VirtNet {
                 desc.add(desc_id as usize),
                 VirtqDesc {
                     addr: buffer as u64,
-                    len: (data.len() + NET_HDR_LEN) as u32,
+                    len: frame_len,
                     flags: 0,
                     next: 0,
                 },
@@ -572,12 +610,17 @@ impl VirtNet {
             self.rx_last_used_idx = self.rx_last_used_idx.wrapping_add(1);
 
             let desc_id = elem.id as usize;
-            if desc_id >= QUEUE_SIZE {
+            if desc_id >= self.queue_size as usize {
                 self.rx_invalid = self.rx_invalid.wrapping_add(1);
                 return None;
             }
 
-            let payload_len = (elem.len as usize).saturating_sub(NET_HDR_LEN);
+            let Some(payload_len) = net_rx_payload_len(elem.len) else {
+                self.rx_invalid = self.rx_invalid.wrapping_add(1);
+                self.post_rx_descriptor(desc_id as u16);
+                self.notify_queue(RX_QUEUE);
+                return None;
+            };
             let len = core::cmp::min(payload_len, buf.len());
             if len == 0 {
                 self.rx_empty = self.rx_empty.wrapping_add(1);
@@ -693,6 +736,28 @@ impl Default for VirtNet {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn net_tx_frame_len(payload_len: usize) -> Option<u32> {
+    if payload_len == 0 {
+        return None;
+    }
+
+    let frame_len = payload_len.checked_add(NET_HDR_LEN)?;
+    if frame_len > BUFFER_SIZE {
+        return None;
+    }
+
+    Some(frame_len as u32)
+}
+
+fn net_rx_payload_len(frame_len: u32) -> Option<usize> {
+    let frame_len = frame_len as usize;
+    if !(NET_HDR_LEN..=BUFFER_SIZE).contains(&frame_len) {
+        return None;
+    }
+
+    Some(frame_len - NET_HDR_LEN)
 }
 
 struct NegotiatedFeatures {
@@ -976,6 +1041,25 @@ impl VirtBlk {
         true
     }
 
+    pub fn read_sectors(&mut self, start_sector: u64, out: &mut [u8]) -> bool {
+        if out.len() % SECTOR_SIZE != 0 {
+            return false;
+        }
+
+        let sector_count = (out.len() / SECTOR_SIZE) as u64;
+        if !self.sector_range_in_bounds(start_sector, sector_count) {
+            return false;
+        }
+
+        for (offset, sector) in (start_sector..start_sector + sector_count).enumerate() {
+            let start = offset * SECTOR_SIZE;
+            if !self.read_sector(sector, &mut out[start..start + SECTOR_SIZE]) {
+                return false;
+            }
+        }
+        true
+    }
+
     pub fn write_sector(&mut self, sector: u64, data: &[u8]) -> bool {
         if self.read_only || data.len() != SECTOR_SIZE || sector >= self.sectors {
             return false;
@@ -989,6 +1073,31 @@ impl VirtBlk {
             );
             self.submit_request(VIRTIO_BLK_T_OUT, sector, false)
         }
+    }
+
+    pub fn write_sectors(&mut self, start_sector: u64, data: &[u8]) -> bool {
+        if data.len() % SECTOR_SIZE != 0 {
+            return false;
+        }
+
+        let sector_count = (data.len() / SECTOR_SIZE) as u64;
+        if !self.sector_range_in_bounds(start_sector, sector_count) {
+            return false;
+        }
+        if sector_count == 0 {
+            return true;
+        }
+        if self.read_only {
+            return false;
+        }
+
+        for (offset, sector) in (start_sector..start_sector + sector_count).enumerate() {
+            let start = offset * SECTOR_SIZE;
+            if !self.write_sector(sector, &data[start..start + SECTOR_SIZE]) {
+                return false;
+            }
+        }
+        true
     }
 
     pub fn flush(&mut self) -> bool {
@@ -1010,6 +1119,12 @@ impl VirtBlk {
         blk.isr_cfg = mapped.isr_cfg;
         blk.notify_off_multiplier = mapped.notify_off_multiplier;
         Some(blk)
+    }
+
+    fn sector_range_in_bounds(&self, start_sector: u64, sector_count: u64) -> bool {
+        start_sector
+            .checked_add(sector_count)
+            .is_some_and(|end_sector| end_sector <= self.sectors)
     }
 
     unsafe fn init_queue(&mut self) {
@@ -1077,8 +1192,13 @@ impl VirtBlk {
             core::hint::spin_loop();
         }
 
+        let elem = split_queue_used_elem(
+            core::ptr::addr_of!(BLK_USED),
+            self.queue_size,
+            self.last_used_idx,
+        );
         self.last_used_idx = self.last_used_idx.wrapping_add(1);
-        read_u8(core::ptr::addr_of!(BLK_STATUS)) == VIRTIO_BLK_S_OK
+        elem.id == 0 && read_u8(core::ptr::addr_of!(BLK_STATUS)) == VIRTIO_BLK_S_OK
     }
 
     fn notify_queue(&self) {
@@ -1607,6 +1727,78 @@ pub fn find_virtio_console() -> Option<VirtConsole> {
     None
 }
 
+pub fn scan_virtio_devices(out: &mut [VirtioDeviceInfo]) -> usize {
+    #[cfg(target_arch = "x86_64")]
+    {
+        return scan_modern_virtio_pci_devices(out);
+    }
+
+    #[allow(unreachable_code)]
+    {
+        let _ = out;
+        0
+    }
+}
+
+fn modern_pci_device_type(device_id: u16) -> Option<u32> {
+    match device_id {
+        VIRTIO_MODERN_DEVICE_ID_NET => Some(VIRTIO_DEVICE_TYPE_NET),
+        VIRTIO_MODERN_DEVICE_ID_BLK => Some(VIRTIO_DEVICE_TYPE_BLK),
+        VIRTIO_MODERN_DEVICE_ID_CONSOLE => Some(VIRTIO_DEVICE_TYPE_CONSOLE),
+        VIRTIO_MODERN_DEVICE_ID_RNG => Some(VIRTIO_DEVICE_TYPE_RNG),
+        _ => None,
+    }
+}
+
+fn scan_modern_virtio_pci_devices(out: &mut [VirtioDeviceInfo]) -> usize {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut found = 0;
+        for bus in 0..=0 {
+            for slot in 0..32 {
+                for func in 0..8 {
+                    let vendor = pci_read_u16(bus, slot, func, 0x00);
+                    if vendor == 0xffff {
+                        if func == 0 {
+                            break;
+                        }
+                        continue;
+                    }
+
+                    let device_id = pci_read_u16(bus, slot, func, 0x02);
+                    if vendor == VIRTIO_VENDOR_ID {
+                        if let Some(device_type) = modern_pci_device_type(device_id) {
+                            if found < out.len() {
+                                out[found] = VirtioDeviceInfo {
+                                    transport: VirtioTransportKind::ModernPci,
+                                    device_type,
+                                    vendor_id: vendor,
+                                    device_id,
+                                    bus,
+                                    slot,
+                                    func,
+                                };
+                            }
+                            found += 1;
+                        }
+                    }
+
+                    if func == 0 && !is_multifunction(bus, slot) {
+                        break;
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    #[allow(unreachable_code)]
+    {
+        let _ = out;
+        0
+    }
+}
+
 fn find_modern_virtio_device(device_id: u16) -> Option<ModernVirtioDevice> {
     #[cfg(target_arch = "x86_64")]
     {
@@ -1883,6 +2075,46 @@ mod tests {
     }
 
     #[test]
+    fn net_frame_lengths_reject_invalid_bounds() {
+        assert_eq!(net_tx_frame_len(0), None);
+        assert_eq!(net_tx_frame_len(1), Some((NET_HDR_LEN + 1) as u32));
+        assert_eq!(
+            net_tx_frame_len(BUFFER_SIZE - NET_HDR_LEN),
+            Some(BUFFER_SIZE as u32)
+        );
+        assert_eq!(net_tx_frame_len(BUFFER_SIZE - NET_HDR_LEN + 1), None);
+
+        assert_eq!(net_rx_payload_len((NET_HDR_LEN - 1) as u32), None);
+        assert_eq!(net_rx_payload_len(NET_HDR_LEN as u32), Some(0));
+        assert_eq!(
+            net_rx_payload_len(BUFFER_SIZE as u32),
+            Some(BUFFER_SIZE - NET_HDR_LEN)
+        );
+        assert_eq!(net_rx_payload_len((BUFFER_SIZE + 1) as u32), None);
+    }
+
+    #[test]
+    fn modern_pci_device_types_map_known_devices() {
+        assert_eq!(
+            modern_pci_device_type(VIRTIO_MODERN_DEVICE_ID_NET),
+            Some(VIRTIO_DEVICE_TYPE_NET)
+        );
+        assert_eq!(
+            modern_pci_device_type(VIRTIO_MODERN_DEVICE_ID_BLK),
+            Some(VIRTIO_DEVICE_TYPE_BLK)
+        );
+        assert_eq!(
+            modern_pci_device_type(VIRTIO_MODERN_DEVICE_ID_CONSOLE),
+            Some(VIRTIO_DEVICE_TYPE_CONSOLE)
+        );
+        assert_eq!(
+            modern_pci_device_type(VIRTIO_MODERN_DEVICE_ID_RNG),
+            Some(VIRTIO_DEVICE_TYPE_RNG)
+        );
+        assert_eq!(modern_pci_device_type(0x1045), None);
+    }
+
+    #[test]
     fn split_queue_setup_clamps_to_host_queue_size() {
         let mut common = TestCommonConfig([0; 64]);
         let common_cfg = common.0.as_mut_ptr();
@@ -1921,6 +2153,7 @@ mod tests {
         assert_eq!(net.get_mac(), [0; 6]);
         assert_eq!(net.mtu(), 1500);
         assert!(!net.is_link_up());
+        assert!(!net.refresh_status());
         assert_eq!(net.tx_free_mask, TX_FREE_ALL_MASK);
         assert!(!net.send(&[]));
     }
@@ -1930,12 +2163,33 @@ mod tests {
         let mut blk = VirtBlk::new();
         let sector = [0u8; SECTOR_SIZE];
         let mut out = [0u8; SECTOR_SIZE];
+        let mut empty = [];
 
         assert!(!blk.is_read_only());
         assert_eq!(blk.block_size(), SECTOR_SIZE as u32);
         assert_eq!(blk.sectors(), 0);
         assert!(!blk.read_sector(0, &mut out));
         assert!(!blk.write_sector(0, &sector));
+        assert!(blk.read_sectors(0, &mut empty));
+        assert!(blk.write_sectors(0, &empty));
+        assert!(!blk.read_sectors(1, &mut empty));
+        assert!(!blk.read_sectors(0, &mut out[..SECTOR_SIZE - 1]));
+        assert!(!blk.write_sectors(0, &sector[..SECTOR_SIZE - 1]));
+    }
+
+    #[test]
+    fn virtblk_multi_sector_helpers_validate_ranges() {
+        let mut blk = VirtBlk::new();
+        let mut two_sectors = [0u8; SECTOR_SIZE * 2];
+
+        blk.sectors = 4;
+        assert!(!blk.sector_range_in_bounds(3, 2));
+        assert!(!blk.sector_range_in_bounds(u64::MAX, 1));
+        assert!(!blk.read_sectors(3, &mut two_sectors));
+        assert!(!blk.write_sectors(3, &two_sectors));
+
+        blk.read_only = true;
+        assert!(!blk.write_sectors(0, &two_sectors));
     }
 
     #[test]

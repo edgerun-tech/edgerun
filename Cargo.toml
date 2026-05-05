@@ -44,7 +44,6 @@ members = [
   "crates/edgerun-dns",
   "crates/edgerun-drm-display",
   "crates/edgerun-display",
-  "crates/edgerun-e2e",
   "crates/edgerun-e2e-capability",
   "crates/edgerun-edit",
   "crates/edgerun-edgefs",

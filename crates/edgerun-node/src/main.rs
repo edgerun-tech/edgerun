@@ -3,9 +3,6 @@
 //! Runs a single-writer stream node with mesh networking, command processing,
 //! and capability discovery.
 
-// Existing modules
-mod assurance;
-mod capabilities;
 mod capacity;
 mod command_dispatch;
 mod command_dispatch_event;
@@ -21,10 +18,8 @@ mod stream_append;
 // Extracted modules
 mod cli;
 mod config;
-mod daemon;
 mod health;
 mod init_cmd;
-mod query_engine;
 mod signer;
 mod status_cmd;
 

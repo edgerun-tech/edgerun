@@ -541,22 +541,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-e2e"
-version = "0.1.1"
-dependencies = [
- "edgerun-capabilities",
- "edgerun-core",
- "edgerun-crypto",
- "edgerun-hardware-signing",
- "edgerun-mesh",
- "edgerun-mesh-link",
- "edgerun-mesh-session",
- "edgerun-oci",
- "edgerun-remote-capability",
- "edgerun-storage",
-]
-
-[[package]]
 name = "edgerun-e2e-capability"
 version = "0.1.1"
 dependencies = [
@@ -788,6 +772,14 @@ version = "0.1.0"
 [[package]]
 name = "edgerun-json"
 version = "0.1.1"
+
+[[package]]
+name = "edgerun-keygen"
+version = "0.1.1"
+dependencies = [
+ "edgerun-core",
+ "edgerun-sign-p256",
+]
 
 [[package]]
 name = "edgerun-linux-cec"
