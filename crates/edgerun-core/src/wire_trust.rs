@@ -7,6 +7,7 @@
 use alloc::vec::Vec;
 
 use crate::protocol::*;
+use crate::protocol::trust::revocation_record::Target as RevocationTarget;
 use edgerun_wire::{bytes, boolv, canonical_bytes, field, i64v, struct_value, text, u64v, WireValue};
 
 #[must_use]
@@ -321,16 +322,16 @@ fn revocation_record_value(value: &RevocationRecord, signable: bool) -> WireValu
     }
     if let Some(target) = &value.target {
         match target {
-            revocation_record::Target::TargetDelegation(v) => {
+            RevocationTarget::TargetDelegation(v) => {
                 fields.push(field(7, delegation_ref_value(v)));
             }
-            revocation_record::Target::TargetIdentity(v) => {
+            RevocationTarget::TargetIdentity(v) => {
                 fields.push(field(8, identity_ref_value(v)));
             }
-            revocation_record::Target::TargetNode(v) => {
+            RevocationTarget::TargetNode(v) => {
                 fields.push(field(9, node_ref_value(v)));
             }
-            revocation_record::Target::TargetObject(v) => {
+            RevocationTarget::TargetObject(v) => {
                 fields.push(field(10, object_ref_value(v)));
             }
         }
@@ -396,7 +397,7 @@ mod tests {
             ..RevocationRecord::default()
         };
         let a = revocation_record_signable_bytes(&record);
-        record.target = Some(revocation_record::Target::TargetNode(NodeRef {
+        record.target = Some(RevocationTarget::TargetNode(NodeRef {
             node_id: b"node".to_vec(),
         }));
         let b = revocation_record_signable_bytes(&record);
