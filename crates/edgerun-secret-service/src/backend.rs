@@ -110,20 +110,54 @@ pub struct Backend {
 }
 
 // Static node_id — initialized once at startup.
+#[cfg(not(target_os = "none"))]
 static NODE_ID: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+#[cfg(target_os = "none")]
+static NODE_ID: edgerun_rt::Mutex<Option<Vec<u8>>> = edgerun_rt::Mutex::new(None);
 
 /// Initialize the static node_id. Must be called exactly once before using Backend.
 /// The node_id is public information derived from the node's identity key.
+#[cfg(not(target_os = "none"))]
 pub fn init_node_id(id: Vec<u8>) -> Result<(), Vec<u8>> {
     NODE_ID.set(id)
 }
 
+/// Initialize the static node_id. Must be called exactly once before using Backend.
+/// The node_id is public information derived from the node's identity key.
+#[cfg(target_os = "none")]
+pub fn init_node_id(id: Vec<u8>) -> Result<(), Vec<u8>> {
+    let mut guard = NODE_ID.lock();
+    if guard.is_some() {
+        Err(id)
+    } else {
+        *guard = Some(id);
+        Ok(())
+    }
+}
+
 /// Get the static node_id. Panics if not initialized.
+#[cfg(not(target_os = "none"))]
 fn get_node_id() -> &'static [u8] {
     NODE_ID
         .get()
         .expect("node_id not initialized — call init_node_id first")
         .as_slice()
+}
+
+/// Copy the static node_id for runtimes where we cannot return a static slice
+/// from the lock-protected storage.
+#[cfg(target_os = "none")]
+fn get_node_id_vec() -> Vec<u8> {
+    NODE_ID
+        .lock()
+        .as_ref()
+        .expect("node_id not initialized — call init_node_id first")
+        .clone()
+}
+
+#[cfg(not(target_os = "none"))]
+fn get_node_id_vec() -> Vec<u8> {
+    get_node_id().to_vec()
 }
 
 impl Backend {
@@ -208,7 +242,7 @@ impl Backend {
         // Store encrypted blob
         let blob_id = self
             .blobs
-            .store(secret, &[get_node_id().to_vec()])
+            .store(secret, &[get_node_id_vec()])
             .map_err(|e| io::Error::other(e.to_string()))?;
 
         // Index with metadata in description

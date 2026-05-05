@@ -1175,6 +1175,7 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-rt",
  "edgerun-storage",
 ]
 

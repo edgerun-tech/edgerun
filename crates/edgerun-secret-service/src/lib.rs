@@ -79,6 +79,7 @@ pub mod dbus_bus;
 pub mod dbus_server;
 pub mod dbus_types;
 pub mod dbus_wire;
+pub mod service_core;
 pub mod session;
 
 pub use backend::{
@@ -88,4 +89,7 @@ pub use backend::{
 pub use dbus_bus::BusConnection;
 pub use session::{
     BiometricVerifier, NoBiometricVerifier, Session, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
+};
+pub use service_core::{
+    MemorySecretStore, SecretEntry, SecretRequest, SecretResponse, SecretServiceCore, SecretStore,
 };
