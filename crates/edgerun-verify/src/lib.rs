@@ -5,8 +5,8 @@ extern crate alloc;
 use alloc::vec::Vec;
 use edgerun_core::crypto;
 use edgerun_core::protocol::{
-    self, CommandEnvelope, DelegationRecord, EventEnvelope, IdentityRecord, ProtocolRecord,
-    RevocationRecord, Signature,
+    self, AssuranceClaim, CommandEnvelope, DelegationRecord, EventEnvelope, IdentityRecord,
+    ProtocolRecord, RevocationRecord, Signature,
 };
 
 pub use edgerun_core::protocol::Signature as ProtocolSignature;
@@ -75,6 +75,7 @@ impl ProtocolFamily {
                 | Self::DelegationRecord
                 | Self::RevocationRecord
                 | Self::IdentityRecord
+                | Self::AssuranceClaim
         )
     }
 }
@@ -153,7 +154,8 @@ pub fn protocol_signable_bytes(
         | (ProtocolFamily::CommandEnvelope, ProtocolRecord::CommandEnvelope(_))
         | (ProtocolFamily::DelegationRecord, ProtocolRecord::DelegationRecord(_))
         | (ProtocolFamily::RevocationRecord, ProtocolRecord::RevocationRecord(_))
-        | (ProtocolFamily::IdentityRecord, ProtocolRecord::IdentityRecord(_)) => {
+        | (ProtocolFamily::IdentityRecord, ProtocolRecord::IdentityRecord(_))
+        | (ProtocolFamily::AssuranceClaim, ProtocolRecord::AssuranceClaim(_)) => {
             Ok(protocol::canonical_bytes(record, true))
         }
         _ => Err(ProtocolVerifyError::UnsupportedFamily),
@@ -290,6 +292,20 @@ impl VerifiableProtocolRecord for RevocationRecord {
     }
 }
 
+impl VerifiableProtocolRecord for AssuranceClaim {
+    fn protocol_family(&self) -> ProtocolFamily {
+        ProtocolFamily::AssuranceClaim
+    }
+
+    fn protocol_record(&self) -> ProtocolRecord {
+        ProtocolRecord::AssuranceClaim(self.clone())
+    }
+
+    fn protocol_signature(&self) -> Option<&Signature> {
+        self.signature.as_ref()
+    }
+}
+
 pub fn verify_signed_record<R: VerifiableProtocolRecord>(
     record: &R,
     signer: ProtocolSignerRef<'_>,
@@ -350,6 +366,14 @@ pub fn verify_revocation_record(
     issuer: ProtocolSignerRef<'_>,
 ) -> Result<ProtocolVerification, ProtocolVerifyError> {
     verify_signed_record(revocation, issuer)
+}
+
+/// Verify an assurance claim when the caller already resolved the attester key.
+pub fn verify_assurance_claim(
+    claim: &AssuranceClaim,
+    attester: ProtocolSignerRef<'_>,
+) -> Result<ProtocolVerification, ProtocolVerifyError> {
+    verify_signed_record(claim, attester)
 }
 
 /// Verify an identity record when the caller already resolved the signer key.
@@ -429,6 +453,7 @@ mod tests {
         assert!(ProtocolFamily::DelegationRecord.canonicalization_is_implemented());
         assert!(ProtocolFamily::RevocationRecord.canonicalization_is_implemented());
         assert!(ProtocolFamily::IdentityRecord.canonicalization_is_implemented());
+        assert!(ProtocolFamily::AssuranceClaim.canonicalization_is_implemented());
         let record = ProtocolRecord::DelegationRecord(DelegationRecord::default());
         let hash = protocol_record_hash(&record, ProtocolFamily::DelegationRecord).unwrap();
         assert_eq!(hash.len(), 32);
