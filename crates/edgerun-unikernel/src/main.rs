@@ -5486,29 +5486,29 @@ pub unsafe extern "C" fn kernel_main() -> ! {
             if block.read_sector(2048, &mut partition_sector) {
                 rt::log::log(1, "VirtIO block partition sector read ok");
             } else {
-                    rt::log::log(1, "VirtIO block partition sector read failed");
-                }
-                if block.read_sector(2112, &mut partition_sector) {
-                    rt::log::log(1, "VirtIO block probe sector read ok");
-                } else {
-                    rt::log::log(1, "VirtIO block probe sector read failed");
-                }
-                if block.read_sector(2308, &mut partition_sector) {
-                    rt::log::log(1, "VirtIO block FAT root sector read ok");
-                } else {
-                    rt::log::log(1, "VirtIO block FAT root sector read failed");
-                }
+                rt::log::log(1, "VirtIO block partition sector read failed");
             }
-            rt::log::log(1, "VirtIO block scanning partitions");
-            let mut storage = disk_boot::RtBlockDeviceStorage::new(block);
-            match edgerun_storage::BlockStorage::read_sector(&mut storage, 0, &mut first_sector) {
-                Ok(()) => rt::log::log(1, "VirtIO storage adapter read ok"),
-                Err(_) => rt::log::log(1, "VirtIO storage adapter read failed"),
-            }
-            if first_sector[510] != 0x55 || first_sector[511] != 0xaa {
-                rt::log::log(1, "VirtIO block has no partitions");
+            if block.read_sector(2112, &mut partition_sector) {
+                rt::log::log(1, "VirtIO block probe sector read ok");
             } else {
-                match edgerun_storage::detect_partitions(&mut storage) {
+                rt::log::log(1, "VirtIO block probe sector read failed");
+            }
+            if block.read_sector(2308, &mut partition_sector) {
+                rt::log::log(1, "VirtIO block FAT root sector read ok");
+            } else {
+                rt::log::log(1, "VirtIO block FAT root sector read failed");
+            }
+        }
+        rt::log::log(1, "VirtIO block scanning partitions");
+        let mut storage = disk_boot::RtBlockDeviceStorage::new(block);
+        match edgerun_storage::BlockStorage::read_sector(&mut storage, 0, &mut first_sector) {
+            Ok(()) => rt::log::log(1, "VirtIO storage adapter read ok"),
+            Err(_) => rt::log::log(1, "VirtIO storage adapter read failed"),
+        }
+        if first_sector[510] != 0x55 || first_sector[511] != 0xaa {
+            rt::log::log(1, "VirtIO block has no partitions");
+        } else {
+            match edgerun_storage::detect_partitions(&mut storage) {
                     Ok(table) if !table.partitions.is_empty() => {
                         rt::log::log(1, "VirtIO block partition table detected");
                         let mut handled_boot_config = false;
@@ -5621,10 +5621,7 @@ pub unsafe extern "C" fn kernel_main() -> ! {
                     Err(_) => {
                         rt::log::log(1, "VirtIO block partition scan failed");
                     }
-                }
             }
-        } else {
-            rt::log::log(1, "VirtIO block init failed");
         }
     } else {
         rt::log::log(1, "No VirtIO block device found");
