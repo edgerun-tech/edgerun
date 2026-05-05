@@ -7,9 +7,6 @@ mod capacity;
 mod command_dispatch;
 mod command_dispatch_event;
 mod command_dispatch_result;
-// mod metering;      // TODO: file missing — not needed for interface boundary
-// mod running_workloads; // TODO: file missing — not needed for interface boundary
-// mod workload_policy;  // TODO: file missing — not needed for interface boundary
 mod hardware;
 mod ingress;
 mod init;

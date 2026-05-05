@@ -121,6 +121,135 @@ struct MappedModernVirtioDevice {
     notify_off_multiplier: u32,
 }
 
+#[derive(Clone, Copy)]
+struct PciLocation {
+    bus: u8,
+    slot: u8,
+    func: u8,
+}
+
+#[derive(Clone, Copy)]
+enum VirtioTransport {
+    ModernPci {
+        location: PciLocation,
+        common_cfg: *mut u8,
+        notify_cfg: *mut u8,
+        device_cfg: *mut u8,
+        isr_cfg: *mut u8,
+        notify_off_multiplier: u32,
+    },
+}
+
+impl VirtioTransport {
+    fn modern_pci(
+        bus: u8,
+        slot: u8,
+        func: u8,
+        common_cfg: *mut u8,
+        notify_cfg: *mut u8,
+        device_cfg: *mut u8,
+        isr_cfg: *mut u8,
+        notify_off_multiplier: u32,
+    ) -> Option<Self> {
+        if common_cfg.is_null() || notify_cfg.is_null() {
+            return None;
+        }
+
+        Some(Self::ModernPci {
+            location: PciLocation { bus, slot, func },
+            common_cfg,
+            notify_cfg,
+            device_cfg,
+            isr_cfg,
+            notify_off_multiplier,
+        })
+    }
+
+    fn common_cfg(self) -> *mut u8 {
+        match self {
+            Self::ModernPci { common_cfg, .. } => common_cfg,
+        }
+    }
+
+    fn device_cfg(self) -> *mut u8 {
+        match self {
+            Self::ModernPci { device_cfg, .. } => device_cfg,
+        }
+    }
+
+    fn notify_split_queue(self, queue_off: u16, queue: u16) {
+        match self {
+            Self::ModernPci {
+                notify_cfg,
+                notify_off_multiplier,
+                ..
+            } => notify_split_queue(notify_cfg, notify_off_multiplier, queue_off, queue),
+        }
+    }
+
+    fn enable(self) {
+        match self {
+            Self::ModernPci { location, .. } => {
+                enable_pci_memory_and_bus_master(location.bus, location.slot, location.func)
+            }
+        }
+    }
+
+    fn fail(self) {
+        fail_device(self.common_cfg());
+    }
+
+    fn negotiate_features(self, supported_features: u64) -> Option<NegotiatedFeatures> {
+        self.enable();
+        let common_cfg = self.common_cfg();
+        write_common_status(common_cfg, 0);
+        write_common_status(common_cfg, VIRTIO_CONFIG_STATUS_ACKNOWLEDGE);
+        write_common_status(
+            common_cfg,
+            VIRTIO_CONFIG_STATUS_ACKNOWLEDGE | VIRTIO_CONFIG_STATUS_DRIVER,
+        );
+
+        let host = read_device_features(common_cfg);
+        let driver = host & supported_features;
+        if driver & VIRTIO_F_VERSION_1 == 0 {
+            self.fail();
+            return None;
+        }
+
+        write_driver_features(common_cfg, driver);
+        write_common_status(
+            common_cfg,
+            common_status(common_cfg) | VIRTIO_CONFIG_STATUS_FEATURES_OK,
+        );
+        if common_status(common_cfg) & VIRTIO_CONFIG_STATUS_FEATURES_OK == 0 {
+            self.fail();
+            return None;
+        }
+
+        Some(NegotiatedFeatures { host, driver })
+    }
+
+    fn configure_split_queue(
+        self,
+        queue: u16,
+        max_queue_size: u16,
+        min_queue_size: u16,
+        desc: u64,
+        driver: u64,
+        device: u64,
+    ) -> Option<u16> {
+        configure_split_queue(
+            self.common_cfg(),
+            queue,
+            max_queue_size,
+            min_queue_size,
+            desc,
+            driver,
+            device,
+        )
+    }
+}
+
 impl MappedModernVirtioDevice {
     fn map(device: ModernVirtioDevice) -> Option<Self> {
         let common_cfg = map_pci_cap(device.bus, device.slot, device.func, device.common)?;
@@ -412,17 +541,25 @@ impl VirtNet {
     }
 
     pub fn init(&mut self) -> bool {
-        if self.common_cfg.is_null() || self.device_cfg.is_null() || self.notify_cfg.is_null() {
-            return false;
-        }
-
-        let Some(features) = negotiate_modern_features(
-            self.common_cfg,
+        let Some(transport) = VirtioTransport::modern_pci(
             self.bus,
             self.slot,
             self.func,
-            VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS,
+            self.common_cfg,
+            self.notify_cfg,
+            self.device_cfg,
+            self.isr_cfg,
+            self.notify_off_multiplier,
         ) else {
+            return false;
+        };
+        if transport.device_cfg().is_null() {
+            return false;
+        }
+
+        let Some(features) = transport
+            .negotiate_features(VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS)
+        else {
             return false;
         };
         self.host_features = features.host;
@@ -447,13 +584,13 @@ impl VirtNet {
         self.rx_notify_off = read_queue_notify_off(self.common_cfg);
 
         if self.queue_size < QUEUE_SIZE as u16 {
-            fail_device(self.common_cfg);
+            transport.fail();
             return false;
         }
 
         select_queue(self.common_cfg, TX_QUEUE);
         if read_queue_size(self.common_cfg) < QUEUE_SIZE as u16 {
-            fail_device(self.common_cfg);
+            transport.fail();
             return false;
         }
         self.tx_notify_off = read_queue_notify_off(self.common_cfg);
@@ -465,18 +602,18 @@ impl VirtNet {
                 core::ptr::addr_of_mut!(RX_USED) as u64,
             )
         };
-        if configure_split_queue(
-            self.common_cfg,
-            RX_QUEUE,
-            QUEUE_SIZE as u16,
-            QUEUE_SIZE as u16,
-            rx_desc,
-            rx_avail,
-            rx_used,
-        )
-        .is_none()
+        if transport
+            .configure_split_queue(
+                RX_QUEUE,
+                QUEUE_SIZE as u16,
+                QUEUE_SIZE as u16,
+                rx_desc,
+                rx_avail,
+                rx_used,
+            )
+            .is_none()
         {
-            fail_device(self.common_cfg);
+            transport.fail();
             return false;
         }
 
@@ -487,18 +624,18 @@ impl VirtNet {
                 core::ptr::addr_of_mut!(TX_USED) as u64,
             )
         };
-        if configure_split_queue(
-            self.common_cfg,
-            TX_QUEUE,
-            QUEUE_SIZE as u16,
-            QUEUE_SIZE as u16,
-            tx_desc,
-            tx_avail,
-            tx_used,
-        )
-        .is_none()
+        if transport
+            .configure_split_queue(
+                TX_QUEUE,
+                QUEUE_SIZE as u16,
+                QUEUE_SIZE as u16,
+                tx_desc,
+                tx_avail,
+                tx_used,
+            )
+            .is_none()
         {
-            fail_device(self.common_cfg);
+            transport.fail();
             return false;
         }
 
@@ -956,15 +1093,23 @@ impl VirtBlk {
     }
 
     pub fn init(&mut self) -> bool {
-        if self.common_cfg.is_null() || self.device_cfg.is_null() || self.notify_cfg.is_null() {
-            return false;
-        }
-
-        let Some(features) = negotiate_modern_features(
-            self.common_cfg,
+        let Some(transport) = VirtioTransport::modern_pci(
             self.bus,
             self.slot,
             self.func,
+            self.common_cfg,
+            self.notify_cfg,
+            self.device_cfg,
+            self.isr_cfg,
+            self.notify_off_multiplier,
+        ) else {
+            return false;
+        };
+        if transport.device_cfg().is_null() {
+            return false;
+        }
+
+        let Some(features) = transport.negotiate_features(
             VIRTIO_F_VERSION_1 | VIRTIO_BLK_F_RO | VIRTIO_BLK_F_BLK_SIZE | VIRTIO_BLK_F_FLUSH,
         ) else {
             return false;
@@ -978,7 +1123,7 @@ impl VirtBlk {
             self.block_size = read_u32(unsafe { self.device_cfg.add(20) });
         }
         if self.sectors == 0 || self.block_size != SECTOR_SIZE as u32 {
-            fail_device(self.common_cfg);
+            transport.fail();
             return false;
         }
 
@@ -993,9 +1138,9 @@ impl VirtBlk {
             )
         };
         let Some(queue_size) =
-            configure_split_queue(self.common_cfg, 0, QUEUE_SIZE as u16, 3, desc, avail, used)
+            transport.configure_split_queue(0, QUEUE_SIZE as u16, 3, desc, avail, used)
         else {
-            fail_device(self.common_cfg);
+            transport.fail();
             return false;
         };
         self.queue_size = queue_size;
@@ -1253,17 +1398,20 @@ impl VirtRng {
     }
 
     pub fn init(&mut self) -> bool {
-        if self.common_cfg.is_null() || self.notify_cfg.is_null() {
-            return false;
-        }
-
-        let Some(features) = negotiate_modern_features(
-            self.common_cfg,
+        let Some(transport) = VirtioTransport::modern_pci(
             self.bus,
             self.slot,
             self.func,
-            VIRTIO_F_VERSION_1,
+            self.common_cfg,
+            self.notify_cfg,
+            core::ptr::null_mut(),
+            self.isr_cfg,
+            self.notify_off_multiplier,
         ) else {
+            return false;
+        };
+
+        let Some(features) = transport.negotiate_features(VIRTIO_F_VERSION_1) else {
             return false;
         };
         self.host_features = features.host;
@@ -1280,9 +1428,9 @@ impl VirtRng {
             )
         };
         let Some(queue_size) =
-            configure_split_queue(self.common_cfg, 0, QUEUE_SIZE as u16, 1, desc, avail, used)
+            transport.configure_split_queue(0, QUEUE_SIZE as u16, 1, desc, avail, used)
         else {
-            fail_device(self.common_cfg);
+            transport.fail();
             return false;
         };
         self.queue_size = queue_size;
@@ -1436,17 +1584,20 @@ impl VirtConsole {
     }
 
     pub fn init(&mut self) -> bool {
-        if self.common_cfg.is_null() || self.notify_cfg.is_null() {
-            return false;
-        }
-
-        let Some(features) = negotiate_modern_features(
-            self.common_cfg,
+        let Some(transport) = VirtioTransport::modern_pci(
             self.bus,
             self.slot,
             self.func,
-            VIRTIO_F_VERSION_1,
+            self.common_cfg,
+            self.notify_cfg,
+            core::ptr::null_mut(),
+            self.isr_cfg,
+            self.notify_off_multiplier,
         ) else {
+            return false;
+        };
+
+        let Some(features) = transport.negotiate_features(VIRTIO_F_VERSION_1) else {
             return false;
         };
         self.host_features = features.host;
@@ -1462,8 +1613,7 @@ impl VirtConsole {
                 core::ptr::addr_of_mut!(CONSOLE_RX_USED) as u64,
             )
         };
-        let Some(rx_queue_size) = configure_split_queue(
-            self.common_cfg,
+        let Some(rx_queue_size) = transport.configure_split_queue(
             CONSOLE_RX_QUEUE,
             QUEUE_SIZE as u16,
             1,
@@ -1471,7 +1621,7 @@ impl VirtConsole {
             rx_avail,
             rx_used,
         ) else {
-            fail_device(self.common_cfg);
+            transport.fail();
             return false;
         };
         self.rx_queue_size = rx_queue_size;
@@ -1486,8 +1636,7 @@ impl VirtConsole {
                 core::ptr::addr_of_mut!(CONSOLE_USED) as u64,
             )
         };
-        let Some(tx_queue_size) = configure_split_queue(
-            self.common_cfg,
+        let Some(tx_queue_size) = transport.configure_split_queue(
             CONSOLE_TX_QUEUE,
             QUEUE_SIZE as u16,
             1,
@@ -1495,7 +1644,7 @@ impl VirtConsole {
             avail,
             used,
         ) else {
-            fail_device(self.common_cfg);
+            transport.fail();
             return false;
         };
         self.tx_queue_size = tx_queue_size;
@@ -2112,6 +2261,48 @@ mod tests {
             Some(VIRTIO_DEVICE_TYPE_RNG)
         );
         assert_eq!(modern_pci_device_type(0x1045), None);
+    }
+
+    #[test]
+    fn modern_pci_transport_requires_common_and_notify_config() {
+        let mut common = TestCommonConfig([0; 64]);
+        let mut notify = [0u8; 8];
+        let common_cfg = common.0.as_mut_ptr();
+        let notify_cfg = notify.as_mut_ptr();
+
+        assert!(VirtioTransport::modern_pci(
+            0,
+            1,
+            0,
+            common_cfg,
+            notify_cfg,
+            core::ptr::null_mut(),
+            core::ptr::null_mut(),
+            4,
+        )
+        .is_some());
+        assert!(VirtioTransport::modern_pci(
+            0,
+            1,
+            0,
+            core::ptr::null_mut(),
+            notify_cfg,
+            core::ptr::null_mut(),
+            core::ptr::null_mut(),
+            4,
+        )
+        .is_none());
+        assert!(VirtioTransport::modern_pci(
+            0,
+            1,
+            0,
+            common_cfg,
+            core::ptr::null_mut(),
+            core::ptr::null_mut(),
+            core::ptr::null_mut(),
+            4,
+        )
+        .is_none());
     }
 
     #[test]

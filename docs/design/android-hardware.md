@@ -94,7 +94,7 @@ cargo ndk --target aarch64-linux-android --platform 34 -- \
 # Run on the emulator
 ./scripts/setup-android-emulator.sh shell
 /data/local/tmp/edgerund init --config /data/local/tmp/node.yaml --software
-/data/local/tmp/edgerund run --config /data/local/tmp/node.yaml
+/data/local/tmp/edgerund status --config /data/local/tmp/node.yaml
 ```
 
 ## Testing

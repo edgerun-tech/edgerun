@@ -12,9 +12,10 @@ but those are not Edgerun internal wire protocols.
 
 - `edgerun-wire`: rkyv-only internal wire boundary.
 - `edgerun-core`: native protocol records, domain-separated hashes/signatures,
-  validators, and explicit breakpoints for removed legacy byte paths.
+  and validators.
 - `edgerun-stream`: single-writer signed event streams.
 - `edgerun-storage`: event log, encrypted blobs, file/block/memory stores,
   indexes, snapshots, replay cache, rebuild/integrity logic.
-- `edgerun-node`: node-level command/query/store task orchestration, with old
-  byte paths removed until migrated to rkyv.
+- `edgerun-node`: node initialization, provisioning, status inspection,
+  command validation/dispatch components, hardware discovery, and stream append
+  integration.
