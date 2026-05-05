@@ -1,12 +1,13 @@
 use std::{
     collections::HashMap,
+    env,
     fs,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::Instant,
+    time::{SystemTime, UNIX_EPOCH, Instant},
 };
 
 /// Repository Registry: discovers, indexes, and manages multiple code
@@ -14,7 +15,7 @@ use std::{
 ///
 /// Scans configured directories for git repositories, indexes them on demand,
 /// and provides fast switching between indexed repos in the viewer.
-use serde::{Deserialize, Serialize};
+use edgerun_json::{self, ToJson, FromJson, JsonValue, Map};
 
 /// Default directories to scan for repositories.
 const DEFAULT_SCAN_ROOTS: &[&str] = &["/home", "/Users", "/opt", "/var/src", "/srv"];
@@ -70,7 +71,7 @@ const MAX_DISCOVERY_DEPTH: usize = 8;
 const MIN_REPO_FILES: usize = 1;
 
 /// State of a repository's index.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IndexState {
     NotIndexed,
     Indexing {
@@ -93,8 +94,71 @@ pub enum IndexState {
     },
 }
 
+impl ToJson for IndexState {
+    fn to_json(&self) -> JsonValue {
+        let mut m = Map::new();
+        match self {
+            IndexState::NotIndexed => {
+                m.push_field("type", "NotIndexed");
+            }
+            IndexState::Indexing { progress, files_scanned, total_files } => {
+                m.push_field("type", "Indexing");
+                m.push_field("progress", progress);
+                m.push_field("files_scanned", &(*files_scanned as u64));
+                m.push_field("total_files", &(*total_files as u64));
+            }
+            IndexState::Indexed { functions, edges, index_time_ms } => {
+                m.push_field("type", "Indexed");
+                m.push_field("functions", &(*functions as u64));
+                m.push_field("edges", &(*edges as u64));
+                m.push_field("index_time_ms", index_time_ms);
+            }
+            IndexState::Stale { functions, edges, last_indexed } => {
+                m.push_field("type", "Stale");
+                m.push_field("functions", &(*functions as u64));
+                m.push_field("edges", &(*edges as u64));
+                m.push_field("last_indexed", last_indexed);
+            }
+            IndexState::Error { message } => {
+                m.push_field("type", "Error");
+                m.push_field("message", message);
+            }
+        }
+        JsonValue::Object(m)
+    }
+}
+
+impl FromJson for IndexState {
+    fn from_json(value: &JsonValue) -> Option<Self> {
+        let obj = value.as_object()?;
+        let type_str = obj.get_str("type")?;
+        match type_str {
+            "NotIndexed" => Some(IndexState::NotIndexed),
+            "Indexing" => Some(IndexState::Indexing {
+                progress: obj.get_f64("progress")? as f32,
+                files_scanned: obj.get_u64("files_scanned")? as usize,
+                total_files: obj.get_u64("total_files")? as usize,
+            }),
+            "Indexed" => Some(IndexState::Indexed {
+                functions: obj.get_u64("functions")? as usize,
+                edges: obj.get_u64("edges")? as usize,
+                index_time_ms: obj.get_u64("index_time_ms")?,
+            }),
+            "Stale" => Some(IndexState::Stale {
+                functions: obj.get_u64("functions")? as usize,
+                edges: obj.get_u64("edges")? as usize,
+                last_indexed: obj.get_u64("last_indexed")?,
+            }),
+            "Error" => Some(IndexState::Error {
+                message: obj.get_str("message")?.to_string(),
+            }),
+            _ => None,
+        }
+    }
+}
+
 /// Metadata about a discovered repository.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RepoInfo {
     pub path: String,
     pub name: String,
@@ -108,8 +172,43 @@ pub struct RepoInfo {
     pub added_at: u64, // epoch seconds when added to registry
 }
 
+impl ToJson for RepoInfo {
+    fn to_json(&self) -> JsonValue {
+        let mut m = Map::new();
+        m.push_field("path", &self.path);
+        m.push_field("name", &self.name);
+        m.push_field("is_git_repo", &self.is_git_repo);
+        m.push_field("git_remote", &self.git_remote);
+        m.push_field("file_count", &(self.file_count as u64));
+        m.push_field("total_size_bytes", &self.total_size_bytes);
+        m.push_field("last_modified", &self.last_modified);
+        m.push_field("index_state", &self.index_state);
+        m.push_field("languages", &self.languages);
+        m.push_field("added_at", &self.added_at);
+        JsonValue::Object(m)
+    }
+}
+
+impl FromJson for RepoInfo {
+    fn from_json(value: &JsonValue) -> Option<Self> {
+        let obj = value.as_object()?;
+        Some(Self {
+            path: obj.get_str("path")?.to_string(),
+            name: obj.get_str("name")?.to_string(),
+            is_git_repo: obj.get_bool("is_git_repo")?,
+            git_remote: obj.get_str("git_remote").map(|s| s.to_string()),
+            file_count: obj.get_u64("file_count")? as usize,
+            total_size_bytes: obj.get_u64("total_size_bytes")?,
+            last_modified: obj.get_u64("last_modified")?,
+            index_state: FromJson::from_json(obj.get("index_state")?)?,
+            languages: obj.get_obj_vec("languages").unwrap_or_default(),
+            added_at: obj.get_u64("added_at")?,
+        })
+    }
+}
+
 /// Configuration for the repository registry.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RegistryConfig {
     /// Directories to scan for repositories.
     pub scan_roots: Vec<String>,
@@ -119,6 +218,31 @@ pub struct RegistryConfig {
     pub max_concurrent_index: usize,
     /// Auto-discover repos on startup.
     pub auto_discover: bool,
+}
+
+impl ToJson for RegistryConfig {
+    fn to_json(&self) -> JsonValue {
+        let mut m = Map::new();
+        m.push_field("scan_roots", &self.scan_roots);
+        m.push_field("excluded_paths", &self.excluded_paths);
+        m.push_field("max_concurrent_index", &(self.max_concurrent_index as u64));
+        m.push_field("auto_discover", &self.auto_discover);
+        JsonValue::Object(m)
+    }
+}
+
+impl FromJson for RegistryConfig {
+    fn from_json(value: &JsonValue) -> Option<Self> {
+        let obj = value.as_object()?;
+        Some(Self {
+            scan_roots: obj.get_obj_vec("scan_roots").unwrap_or_else(|| {
+                DEFAULT_SCAN_ROOTS.iter().map(|s| s.to_string()).collect()
+            }),
+            excluded_paths: obj.get_obj_vec("excluded_paths").unwrap_or_default(),
+            max_concurrent_index: obj.get_u64("max_concurrent_index").unwrap_or(2) as usize,
+            auto_discover: obj.get_bool("auto_discover").unwrap_or(true),
+        })
+    }
 }
 
 impl Default for RegistryConfig {

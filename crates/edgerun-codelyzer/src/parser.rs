@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap, fs};
 
-use serde::{Deserialize, Serialize};
+use edgerun_json::{self, ToJson, FromJson, JsonValue, Map};
 use tree_sitter::{Language, Node, Parser};
 
 // Language grammars - feature gated
@@ -38,13 +38,38 @@ pub struct RawFunction<'a> {
 }
 
 /// Owned version of RawFunction for caching.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RawFunctionOwned {
     pub name: String,
     pub start_byte: usize,
     pub end_byte: usize,
     pub is_static: bool,
     pub is_macro_def: bool,
+}
+
+impl ToJson for RawFunctionOwned {
+    fn to_json(&self) -> JsonValue {
+        let mut m = Map::new();
+        m.push_field("name", &self.name);
+        m.push_field("start_byte", &self.start_byte);
+        m.push_field("end_byte", &self.end_byte);
+        m.push_field("is_static", &self.is_static);
+        m.push_field("is_macro_def", &self.is_macro_def);
+        JsonValue::Object(m)
+    }
+}
+
+impl FromJson for RawFunctionOwned {
+    fn from_json(value: &JsonValue) -> Option<Self> {
+        let obj = value.as_object()?;
+        Some(Self {
+            name: obj.get_str("name")?.to_string(),
+            start_byte: obj.get_u64("start_byte")? as usize,
+            end_byte: obj.get_u64("end_byte")? as usize,
+            is_static: obj.get_bool("is_static")?,
+            is_macro_def: obj.get_bool("is_macro_def")?,
+        })
+    }
 }
 
 /// A raw call found in source code.
@@ -57,12 +82,46 @@ pub struct RawCall<'a> {
 }
 
 /// Owned version of RawCall for caching.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RawCallOwned {
     pub callee_name: String,
     pub start_byte: usize,
     pub end_byte: usize,
     pub kind: CallKind,
+}
+
+impl ToJson for RawCallOwned {
+    fn to_json(&self) -> JsonValue {
+        let mut m = Map::new();
+        m.push_field("callee_name", &self.callee_name);
+        m.push_field("start_byte", &self.start_byte);
+        m.push_field("end_byte", &self.end_byte);
+        m.push_field("kind", &self.kind);
+        JsonValue::Object(m)
+    }
+}
+
+impl FromJson for RawCallOwned {
+    fn from_json(value: &JsonValue) -> Option<Self> {
+        let obj = value.as_object()?;
+        Some(Self {
+            callee_name: obj.get_str("callee_name")?.to_string(),
+            start_byte: obj.get_u64("start_byte")? as usize,
+            end_byte: obj.get_u64("end_byte")? as usize,
+            kind: obj.get("kind").and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    match s {
+                        "Call" => Some(CallKind::Call),
+                        "Macro" => Some(CallKind::Macro),
+                        "Indirect" => Some(CallKind::Indirect),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            })?,
+        })
+    }
 }
 
 impl<'a> From<&RawFunction<'a>> for RawFunctionOwned {
@@ -89,10 +148,29 @@ impl<'a> From<&RawCall<'a>> for RawCallOwned {
 }
 
 /// Cached parse result that can be serialized.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CachedParseResult {
     pub functions: Vec<RawFunctionOwned>,
     pub calls: Vec<RawCallOwned>,
+}
+
+impl ToJson for CachedParseResult {
+    fn to_json(&self) -> JsonValue {
+        let mut m = Map::new();
+        m.push_field("functions", &self.functions);
+        m.push_field("calls", &self.calls);
+        JsonValue::Object(m)
+    }
+}
+
+impl FromJson for CachedParseResult {
+    fn from_json(value: &JsonValue) -> Option<Self> {
+        let obj = value.as_object()?;
+        Some(Self {
+            functions: obj.get_obj_vec("functions")?,
+            calls: obj.get_obj_vec("calls")?,
+        })
+    }
 }
 
 impl<'a> ParseResult<'a> {
