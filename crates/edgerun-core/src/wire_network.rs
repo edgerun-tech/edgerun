@@ -146,15 +146,42 @@ fn route_advertisement_value(value: &RouteAdvertisement, signable: bool) -> Wire
 mod tests {
     use super::*;
 
-    #[test]
-    fn route_advertisement_signable_bytes_drop_signature() {
-        let mut route = RouteAdvertisement {
+    fn test_route_advertisement() -> RouteAdvertisement {
+        RouteAdvertisement {
             advertisement_version: 1,
             target_node: Some(NodeRef {
                 node_id: b"target".to_vec(),
             }),
-            ..RouteAdvertisement::default()
-        };
+            advertiser: None,
+            next_hop_node: None,
+            reachability: Vec::new(),
+            metric_hint: None,
+            advertised_at: None,
+            expires_at: None,
+            route_metadata: None,
+            signature: None,
+        }
+    }
+
+    fn test_reachability_hint() -> ReachabilityHint {
+        ReachabilityHint {
+            hint_version: 1,
+            subject_node: None,
+            transport_class: 0,
+            locator_payload: b"lan://example".to_vec(),
+            directness: 0,
+            valid_after: None,
+            valid_until: None,
+            cost_hint: None,
+            quality_hint: None,
+            issuer: None,
+            signature: None,
+        }
+    }
+
+    #[test]
+    fn route_advertisement_signable_bytes_drop_signature() {
+        let mut route = test_route_advertisement();
         let without = route_advertisement_signable_bytes(&route);
         route.signature = Some(Signature {
             algorithm: 1,
@@ -168,11 +195,7 @@ mod tests {
 
     #[test]
     fn reachability_signature_changes_full_not_signable() {
-        let mut hint = ReachabilityHint {
-            hint_version: 1,
-            locator_payload: b"lan://example".to_vec(),
-            ..ReachabilityHint::default()
-        };
+        let mut hint = test_reachability_hint();
         let signable = reachability_hint_signable_bytes(&hint);
         hint.signature = Some(Signature {
             algorithm: 1,
