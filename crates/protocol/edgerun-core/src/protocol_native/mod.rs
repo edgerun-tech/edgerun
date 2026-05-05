@@ -54,9 +54,6 @@ pub mod stream;
 #[path = "gen/edgerun.v0.trust.rs"]
 pub mod trust;
 
-#[path = "gen/edgerun.v0.ui.rs"]
-pub mod ui;
-
 #[path = "gen/edgerun.wallet.v0.rs"]
 pub mod edgerun_wallet_v0;
 
@@ -71,7 +68,6 @@ pub use network::*;
 pub use object::*;
 pub use server_resources::*;
 pub use stream::*;
-pub use ui::*;
 
 // Explicit reexports prevent name collisions between capability::* and trust::*.
 pub use capability::{
