@@ -1,0 +1,26 @@
+[package]
+name = "edgerun-node-bootstrap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Minimal EdgeRun node bootstrap: generate node identity, store key, sign genesis event"
+
+[dependencies]
+edgerun-core = { workspace = true, default-features = false }
+edgerun-keygen = { workspace = true, default-features = false }
+edgerun-sign-p256 = { workspace = true, default-features = false }
+edgerun-verify = { workspace = true, default-features = false }
+
+[features]
+default = []
+std = [
+  "edgerun-core/std",
+  "edgerun-keygen/std",
+  "edgerun-sign-p256/std",
+]
+
+[lints]
+workspace = true
