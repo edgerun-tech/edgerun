@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use edgerun_core::crypto;
 use edgerun_core::protocol::{
     self, AssuranceClaim, CommandEnvelope, DelegationRecord, EventEnvelope, IdentityRecord,
-    ProtocolRecord, RevocationRecord, Signature,
+    ProtocolRecord, RevocationRecord, RouteAdvertisement, Signature,
 };
 
 pub use edgerun_core::protocol::Signature as ProtocolSignature;
@@ -73,6 +73,7 @@ impl ProtocolFamily {
                 | Self::RevocationRecord
                 | Self::IdentityRecord
                 | Self::AssuranceClaim
+                | Self::RouteAdvertisement
         )
     }
 }
@@ -152,7 +153,8 @@ pub fn protocol_signable_bytes(
         | (ProtocolFamily::DelegationRecord, ProtocolRecord::DelegationRecord(_))
         | (ProtocolFamily::RevocationRecord, ProtocolRecord::RevocationRecord(_))
         | (ProtocolFamily::IdentityRecord, ProtocolRecord::IdentityRecord(_))
-        | (ProtocolFamily::AssuranceClaim, ProtocolRecord::AssuranceClaim(_)) => {
+        | (ProtocolFamily::AssuranceClaim, ProtocolRecord::AssuranceClaim(_))
+        | (ProtocolFamily::RouteAdvertisement, ProtocolRecord::RouteAdvertisement(_)) => {
             Ok(protocol::canonical_bytes(record, true))
         }
         _ => Err(ProtocolVerifyError::UnsupportedFamily),
@@ -303,6 +305,20 @@ impl VerifiableProtocolRecord for AssuranceClaim {
     }
 }
 
+impl VerifiableProtocolRecord for RouteAdvertisement {
+    fn protocol_family(&self) -> ProtocolFamily {
+        ProtocolFamily::RouteAdvertisement
+    }
+
+    fn protocol_record(&self) -> ProtocolRecord {
+        ProtocolRecord::RouteAdvertisement(self.clone())
+    }
+
+    fn protocol_signature(&self) -> Option<&Signature> {
+        self.signature.as_ref()
+    }
+}
+
 pub fn verify_signed_record<R: VerifiableProtocolRecord>(
     record: &R,
     signer: ProtocolSignerRef<'_>,
@@ -371,6 +387,17 @@ pub fn verify_assurance_claim(
     attester: ProtocolSignerRef<'_>,
 ) -> Result<ProtocolVerification, ProtocolVerifyError> {
     verify_signed_record(claim, attester)
+}
+
+/// Verify a route advertisement when the caller already resolved the advertiser key.
+///
+/// A valid route advertisement remains advisory; policy must still decide whether
+/// to use, cache, or ignore it.
+pub fn verify_route_advertisement(
+    route: &RouteAdvertisement,
+    advertiser: ProtocolSignerRef<'_>,
+) -> Result<ProtocolVerification, ProtocolVerifyError> {
+    verify_signed_record(route, advertiser)
 }
 
 /// Verify an identity record when the caller already resolved the signer key.
@@ -451,6 +478,7 @@ mod tests {
         assert!(ProtocolFamily::RevocationRecord.canonicalization_is_implemented());
         assert!(ProtocolFamily::IdentityRecord.canonicalization_is_implemented());
         assert!(ProtocolFamily::AssuranceClaim.canonicalization_is_implemented());
+        assert!(ProtocolFamily::RouteAdvertisement.canonicalization_is_implemented());
         let record = ProtocolRecord::DelegationRecord(DelegationRecord::default());
         let hash = protocol_record_hash(&record, ProtocolFamily::DelegationRecord).unwrap();
         assert_eq!(hash.len(), 32);
