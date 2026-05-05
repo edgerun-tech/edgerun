@@ -1193,6 +1193,8 @@ name = "edgerun-sign-verify-e2e"
 version = "0.1.1"
 dependencies = [
  "edgerun-core",
+ "edgerun-keygen",
+ "edgerun-node-bootstrap",
  "edgerun-sign",
  "edgerun-sign-p256",
  "edgerun-verify",
