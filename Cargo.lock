@@ -863,6 +863,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-marketplace"
+version = "0.1.1"
+dependencies = [
+ "edgerun-core",
+ "edgerun-wire",
+]
+
+[[package]]
 name = "edgerun-matter"
 version = "0.1.1"
 dependencies = [

@@ -1,0 +1,16 @@
+[package]
+name = "edgerun-marketplace"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun marketplace domain types, fee policy, and projections"
+
+[dependencies]
+edgerun-core = { workspace = true }
+edgerun-wire = { workspace = true }
+
+[lints]
+workspace = true

@@ -115,6 +115,7 @@ members = [
   "crates/edgerun-wallet",
   "crates/edgerun-exchange",
   "crates/edgerun-exchange-api",
+  "crates/edgerun-marketplace",
   "crates/zen-client",
 ]
 
@@ -210,6 +211,7 @@ edgerun-event = { version = "0.1", path = "crates/edgerun-event" }
 edgerun-wallet = { version = "0.1", path = "crates/edgerun-wallet" }
 edgerun-exchange = { version = "0.1", path = "crates/edgerun-exchange" }
 edgerun-exchange-api = { version = "0.1", path = "crates/edgerun-exchange-api" }
+edgerun-marketplace = { version = "0.1", path = "crates/edgerun-marketplace" }
 
 sha2 = { version = "0.10", default-features = false }
 
