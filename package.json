@@ -1,5 +1,0 @@
-{
-  "dependencies": {
-    "@astrojs/db": "^0.21.1"
-  }
-}
