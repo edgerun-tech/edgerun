@@ -53,6 +53,29 @@ pub async fn handle_query_without_forwarding(
     handle_query_with_forwarding(wire, state, false).await
 }
 
+/// Convert a query result into the UDP response bytes that should be sent.
+///
+/// If the protocol response is too large for UDP, this builds the RFC 1035
+/// truncated response from the original query. Socket adapters should not need
+/// to parse DNS messages just to handle UDP truncation.
+pub fn udp_response_wire(query_wire: &[u8], response_wire: Vec<u8>, needs_tcp: bool) -> Vec<u8> {
+    if !needs_tcp {
+        return response_wire;
+    }
+
+    match parse_dns_message_bounded(query_wire) {
+        Ok(query) => {
+            let mut response =
+                DnsMessage::response(query.header.id, DnsResponseCode::NoError, Vec::new());
+            response.header.truncated = true;
+            response.questions = query.questions;
+            response.header.question_count = response.questions.len() as u16;
+            response.to_wire()
+        }
+        Err(_) => response_wire,
+    }
+}
+
 async fn handle_query_with_forwarding(
     wire: &[u8],
     state: &ServerState,
@@ -465,6 +488,25 @@ mod tests {
             assert!(!needs_tcp);
             assert_eq!(response.header.response_code, DnsResponseCode::Refused);
         });
+    }
+
+    #[test]
+    fn udp_response_wire_synthesizes_truncated_response() {
+        let query = DnsMessage::query(0x1234, "example.com".to_string(), DnsRecordType::A);
+        let fallback = vec![1, 2, 3];
+        let wire = udp_response_wire(&query.to_wire(), fallback, true);
+        let response = DnsMessage::from_wire(&wire).unwrap();
+
+        assert_eq!(response.header.id, 0x1234);
+        assert!(response.header.truncated);
+        assert_eq!(response.questions.len(), 1);
+        assert_eq!(response.questions[0].name, "example.com");
+    }
+
+    #[test]
+    fn udp_response_wire_keeps_non_truncated_response() {
+        let response = vec![1, 2, 3];
+        assert_eq!(udp_response_wire(&[], response.clone(), false), response);
     }
 
     #[test]

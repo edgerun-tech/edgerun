@@ -21,7 +21,7 @@ pub mod query;
 pub(crate) mod tcp;
 pub(crate) mod udp;
 
-pub use query::{MAX_UDP_RESPONSE, ServerState, handle_query};
+pub use query::{MAX_UDP_RESPONSE, ServerState, handle_query, udp_response_wire};
 pub use tcp::handle_tcp_connection_raw;
 
 /// DNS server configuration.
