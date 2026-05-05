@@ -321,8 +321,13 @@ impl ParseCache {
 
 /// Return the cache directory, creating it if needed.
 fn cache_dir() -> PathBuf {
-    dirs::cache_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
+    std::env::var("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| PathBuf::from(h).join(".cache"))
+                .unwrap_or_else(|_| PathBuf::from("/tmp"))
+        })
         .join("codeanalyzer")
 }
 
@@ -335,5 +340,5 @@ fn cache_file_path(cache_dir: &Path, root_dir: &str) -> PathBuf {
     let mut hasher = DefaultHasher::new();
     root_dir.hash(&mut hasher);
     let hash = hasher.finish();
-    cache_dir.join(format!("{hash:x}.json"))
+    cache_dir.join(format!("{hash:x}.bin"))
 }
