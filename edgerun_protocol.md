@@ -3,7 +3,7 @@
 Single-file specification
 
 Status: working draft
-Scope: semantics, abstract schema, canonicalization, validation, conformance, and reference implementation layout
+Scope: semantics, abstract record families, rkyv wire bytes, validation, conformance, and reference implementation layout
 
 ---
 
@@ -23,10 +23,10 @@ Scope: semantics, abstract schema, canonicalization, validation, conformance, an
 11. Versioning
 12. Security model
 13. Non-goals
-14. Abstract schema families
+14. Abstract record families
 15. Cross-family validation rules
-16. Encoding readiness
-17. Canonicalization and cryptographic inputs
+16. Internal wire readiness
+17. Rkyv archive bytes and cryptographic inputs
 18. Validation state machines
 19. Conformance suite and reference skeleton
 Appendix A. Global invariants
@@ -815,9 +815,9 @@ It does not define the economic layer in v0.
 
 ---
 
-## 14. Abstract schema families
+## 14. Abstract record families
 
-### 14.1 Schema conventions
+### 14.1 Record conventions
 
 Field classes:
 - **required**
@@ -825,7 +825,7 @@ Field classes:
 - **repeated**
 - **oneof**
 
-These schemas define:
+These abstract record families define:
 - field names
 - field meaning
 - required/optional status
@@ -833,7 +833,7 @@ These schemas define:
 
 They do **not** define:
 - byte encoding
-- native field order in prose
+- rkyv archive layout
 - exact integer sizes
 - exact hash byte lengths
 - exact enum numeric values
@@ -948,7 +948,7 @@ All structured records in this section follow these rules unless the family says
 - Core records MUST NOT use arbitrary key-value maps for authority-bearing semantics.
 - Unknown required fields invalidate the record.
 - Unknown optional fields may be ignored only if doing so cannot weaken identity, integrity, or authority semantics.
-- Legacy schema bridges, alternate canonical encoders, and compatibility adapters are not part of the protocol.
+- Legacy wire-schema bridges, alternate canonical encoders, and compatibility adapters are not part of the protocol.
 
 ### 14.4 IdentityRecord
 
@@ -1496,7 +1496,7 @@ To preserve determinism:
 
 ### 17.7 Rkyv-normalized record
 
-For any protocol message `M`, its internal byte form is:
+For any protocol record `M`, its internal byte form is:
 
 ```text
 wire_bytes = rkyv_archive(normalize(M))
@@ -1682,7 +1682,7 @@ Signable families:
 - `SessionAccept`
 - `RelayEnvelope` when signed
 
-Non-signable but canonicalizable structured object families:
+Non-signable but rkyv-identifiable structured object families:
 - `LogicalObjectDescriptor`
 - `StoredRepresentationHeader`
 - `ChunkManifest`
@@ -1974,7 +1974,7 @@ a conforming implementation **SHOULD** reach the same validation result.
 ### 18.11 Deterministic vs policy vs advisory outcomes
 
 To reduce ambiguity, implementations MUST classify each decision they make as one of:
-- **deterministic core outcome** — canonicalization, signature verification, sequence validation, replay classification, exact target matching, required field presence, required proof-family matching
+- **deterministic core outcome** — rkyv byte validation, signature verification, sequence validation, replay classification, exact target matching, required field presence, required proof-family matching
 - **bounded local policy outcome** — trusted roots, acceptable attesters, assurance thresholds, proof payload allow-lists, resource ceilings, revocation authority allow-lists
 - **implementation-defined advisory outcome** — route ranking, cache eviction, preferred transport selection, ranking of multiple equally valid advisory answers
 
@@ -1992,7 +1992,7 @@ Implementation-defined advisory logic MUST NOT silently alter:
 ### 19.1 Purpose
 
 The conformance suite proves that independent implementations produce the same:
-- canonical bytes
+- rkyv signable and full bytes
 - hashes
 - signatures
 - validation outcomes
@@ -2010,20 +2010,16 @@ The reference skeleton separates:
 edgerun/
   spec/
     core-protocol-v0.md
-    canonicalization-v0.md
+    rkyv-wire-v0.md
     validation-machines-v0.md
 
-  proto/
-    edgerun/v0/common.proto
-    edgerun/v0/identity.proto
-    edgerun/v0/trust.proto
-    edgerun/v0/stream.proto
-    edgerun/v0/object.proto
-    edgerun/v0/access.proto
-    edgerun/v0/network.proto
+  crates/protocol/
+    edgerun-wire/
+    edgerun-core/src/protocol_native/
+    edgerun-core/src/wire_stream.rs
 
   vectors/
-    canonical/
+    rkyv-wire/
     stream/
     command/
     delegation/
@@ -2034,7 +2030,7 @@ edgerun/
     network/
 
   core/
-    canonical/
+    rkyv-wire/
     crypto/
     ids/
     stream/
@@ -2066,8 +2062,8 @@ One directory per case:
 vectors/stream/genesis-basic/
   manifest.json
   semantic_input.json
-  canonical_signable.hex
-  canonical_full.hex
+  signable_wire.hex
+  full_wire.hex
   record_hash.hex
   signature_input.hex
   public_key.hex
@@ -2079,7 +2075,7 @@ vectors/stream/genesis-basic/
 
 Mandatory categories:
 
-1. Canonicalization
+1. Rkyv wire bytes
 2. Crypto
 3. Stream
 4. Delegation
@@ -2094,7 +2090,7 @@ Mandatory categories:
 ### 19.4.1 Minimum interoperable profile
 
 A minimal conforming v0 implementation MUST support:
-- rkyv-based canonicalization
+- rkyv-only internal wire bytes
 - v0 hash and signature derivation rules
 - stream append validation
 - delegation chain validation
@@ -2151,8 +2147,8 @@ And a structured reason such as:
 Reference pure functions:
 
 ```text
-canonicalize_signable(record) -> bytes
-canonicalize_full(record) -> bytes
+signable_wire_bytes(record) -> bytes
+full_wire_bytes(record) -> bytes
 
 hash_identity_record(record) -> Digest
 hash_event_envelope(event) -> Digest
@@ -2290,7 +2286,7 @@ Rules:
 
 The first milestone should include:
 - one node stream
-- canonicalization engine
+- rkyv wire-byte engine
 - hash/signature engine
 - event append validator
 - delegation validator
@@ -2302,7 +2298,7 @@ The first milestone should include:
 ### 19.12 Definition of done for v0 core
 
 The protocol core can be considered stable when:
-- two independent implementations produce identical canonical bytes for the same vectors
+- two independent implementations produce identical rkyv signable bytes for the same vectors
 - they derive identical hashes and signatures
 - all mandatory conformance cases pass
 - validators produce identical outcomes for the same local state and inputs
@@ -2407,7 +2403,7 @@ Use `replication` for durability movement, `access` for obtaining useful informa
 
 ## Appendix E. Native rkyv record layout
 
-The internal protocol records live as native Rust types in `crates/protocol/edgerun-core/src/protocol_native/`. Generated files under `protocol_native/gen/` are generated by the rkyv-native pipeline and are part of the native protocol shape, not a legacy schema bridge.
+The internal protocol records live as native Rust types in `crates/protocol/edgerun-core/src/protocol_native/`. Generated files under `protocol_native/gen/` are generated by the rkyv-native pipeline and are part of the native protocol shape, not a legacy wire-schema bridge.
 
 Current native families include:
 
@@ -2436,20 +2432,16 @@ The wire boundary is exported by `edgerun-wire`; its `WIRE_PROTOCOL` value is `r
 edgerun/
   spec/
     core-protocol-v0.md
-    canonicalization-v0.md
+    rkyv-wire-v0.md
     validation-machines-v0.md
 
-  proto/
-    edgerun/v0/common.proto
-    edgerun/v0/identity.proto
-    edgerun/v0/trust.proto
-    edgerun/v0/stream.proto
-    edgerun/v0/object.proto
-    edgerun/v0/access.proto
-    edgerun/v0/network.proto
+  crates/protocol/
+    edgerun-wire/
+    edgerun-core/src/protocol_native/
+    edgerun-core/src/wire_stream.rs
 
   vectors/
-    canonical/
+    rkyv-wire/
     stream/
     command/
     delegation/
@@ -2460,7 +2452,7 @@ edgerun/
     network/
 
   core/
-    canonical/
+    rkyv-wire/
     crypto/
     ids/
     stream/
@@ -2487,8 +2479,8 @@ edgerun/
 Recommended minimal core interfaces:
 
 ```text
-canonicalize_signable(record) -> bytes
-canonicalize_full(record) -> bytes
+signable_wire_bytes(record) -> bytes
+full_wire_bytes(record) -> bytes
 
 hash_identity_record(record) -> Digest
 hash_event_envelope(event) -> Digest
@@ -2512,7 +2504,7 @@ validate_object_retrieval(ctx, target, representation) -> ObjectValidationResult
 ```
 
 Definition of done for core v0:
-- two independent implementations produce identical canonical bytes for the same vectors
+- two independent implementations produce identical rkyv signable bytes for the same vectors
 - they derive identical hashes and signatures
 - mandatory conformance cases pass
 - validators produce identical outcomes for the same local state and inputs

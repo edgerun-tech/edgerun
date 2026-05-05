@@ -313,18 +313,18 @@ fn enrich_with_canonical_artifacts(
     mut semantic: BTreeMap<String, Value>,
     dir: &Path,
 ) -> BTreeMap<String, Value> {
-    if manifest.get("suite").and_then(Value::as_str) != Some("canonical") {
+    if manifest.get("suite").and_then(Value::as_str) != Some("rkyv-wire") {
         return semantic;
     }
 
     let mut artifacts = BTreeMap::new();
     for name in [
-        "canonical_signable",
-        "canonical_full",
+        "signable_wire",
+        "full_wire",
         "record_hash",
         "signature_input",
         "signature",
-        "canonical_bytes",
+        "wire_bytes",
     ] {
         let path = dir.join(format!("{name}.hex"));
         if let Ok(text) = std::fs::read_to_string(path) {

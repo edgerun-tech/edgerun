@@ -5,14 +5,14 @@
 //! derive in this module.
 
 extern crate alloc;
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct Timestamp {
     pub seconds: i64,
     pub nanos: i32,
 }
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct Duration {
     pub seconds: i64,
     pub nanos: i32,
@@ -94,8 +94,8 @@ where
 pub trait NativeEnum: Sized {
     fn from_i32(value: i32) -> Option<Self>;
 }
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub enum ProtocolRecord {
     CommandEnvelope(CommandEnvelope),
     EventEnvelope(EventEnvelope),
@@ -111,13 +111,15 @@ pub enum ProtocolRecord {
     Signature(Signature),
 }
 
-pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::Vec<u8> {
+pub fn protocol_wire_bytes(record: &ProtocolRecord, signable: bool) -> alloc::vec::Vec<u8> {
     let normalized = if signable {
         signable_record(record)
     } else {
         record.clone()
     };
-    alloc::format!("edgerun-rkyv-v0|signable={signable}|{normalized:?}").into_bytes()
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&normalized)
+        .expect("protocol records must serialize through the rkyv wire boundary")
+        .into_vec()
 }
 
 fn signable_record(record: &ProtocolRecord) -> ProtocolRecord {

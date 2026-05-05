@@ -131,7 +131,7 @@ pub fn protocol_record_hash(
     record: &ProtocolRecord,
     family: ProtocolFamily,
 ) -> Result<Vec<u8>, ProtocolVerifyError> {
-    let canonical = protocol_signable_bytes(record, family)?;
+    let canonical = protocol_signable_wire_bytes(record, family)?;
     Ok(crypto::record_hash(family.hash_domain(), &canonical))
 }
 
@@ -143,7 +143,7 @@ pub fn protocol_signature_input(
     Ok(crypto::signature_input(family.sig_domain(), &hash))
 }
 
-pub fn protocol_signable_bytes(
+pub fn protocol_signable_wire_bytes(
     record: &ProtocolRecord,
     family: ProtocolFamily,
 ) -> Result<Vec<u8>, ProtocolVerifyError> {
@@ -155,7 +155,7 @@ pub fn protocol_signable_bytes(
         | (ProtocolFamily::IdentityRecord, ProtocolRecord::IdentityRecord(_))
         | (ProtocolFamily::AssuranceClaim, ProtocolRecord::AssuranceClaim(_))
         | (ProtocolFamily::RouteAdvertisement, ProtocolRecord::RouteAdvertisement(_)) => {
-            Ok(protocol::canonical_bytes(record, true))
+            Ok(protocol::protocol_wire_bytes(record, true))
         }
         _ => Err(ProtocolVerifyError::UnsupportedFamily),
     }
@@ -174,7 +174,7 @@ pub fn verify_protocol_record(
         return Err(ProtocolVerifyError::InvalidSignatureLength);
     }
 
-    let canonical = protocol_signable_bytes(record, family)?;
+    let canonical = protocol_signable_wire_bytes(record, family)?;
     let record_hash = crypto::record_hash(family.hash_domain(), &canonical);
     let verifying_key = signer.to_p256_verifying_key()?;
 
@@ -208,7 +208,7 @@ pub fn verify_protocol_record_hw(
         return Err(ProtocolVerifyError::InvalidSignatureLength);
     }
 
-    let canonical = protocol_signable_bytes(record, family)?;
+    let canonical = protocol_signable_wire_bytes(record, family)?;
     let record_hash = crypto::record_hash(family.hash_domain(), &canonical);
     let verifying_key = signer.to_p256_verifying_key()?;
 
@@ -437,7 +437,7 @@ mod tests {
             ..EventEnvelope::default()
         };
         let canonical =
-            protocol::canonical_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true);
+            protocol::protocol_wire_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true);
         let sig = sign_canonical_record(&signing, crypto::SIG_DOMAIN_EVENT_ENVELOPE, &canonical)
             .expect("signing works");
         event.signature = Some(Signature {
@@ -463,7 +463,7 @@ mod tests {
             ..EventEnvelope::default()
         };
         let canonical =
-            protocol::canonical_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true);
+            protocol::protocol_wire_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true);
         let sig = sign_canonical_record(&signing, crypto::SIG_DOMAIN_COMMAND_ENVELOPE, &canonical)
             .expect("signing works");
         event.signature = Some(Signature {

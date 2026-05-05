@@ -506,7 +506,7 @@ use crate::crypto::{
     verify_canonical_record, verify_canonical_record_hw, ECDSA_P256_PUBLIC_KEY_LEN,
     ECDSA_P256_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ECDSA_P256, SIG_DOMAIN_ROUTE_ADVERTISEMENT,
 };
-use crate::protocol::{canonical_bytes, IdentityRef, ObjectRef, ProtocolRecord};
+use crate::protocol::{protocol_wire_bytes, IdentityRef, ObjectRef, ProtocolRecord};
 use crate::protocol::{Directness, IdentityKind, ObjectKind, TransportClass};
 
 fn validate_identity_ref(
@@ -788,7 +788,7 @@ pub fn validate_route_advertisement(adv: &crate::protocol::RouteAdvertisement) -
             }
         };
 
-        let canonical = canonical_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
+        let canonical = protocol_wire_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
         if !verify_canonical_record(&vk, SIG_DOMAIN_ROUTE_ADVERTISEMENT, &canonical, &sig.value)
             && !verify_canonical_record_hw(
                 &vk,
@@ -845,7 +845,7 @@ mod proto_tests {
         adv: &RouteAdvertisement,
     ) -> RouteAdvertisement {
         use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-        let canonical = canonical_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
+        let canonical = protocol_wire_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
         let record_hash =
             crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_ROUTE_ADVERTISEMENT, &canonical);
         let sig_input =
@@ -865,7 +865,7 @@ mod proto_tests {
         adv: &RouteAdvertisement,
     ) -> RouteAdvertisement {
         use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-        let canonical = canonical_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
+        let canonical = protocol_wire_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
         let record_hash =
             crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_ROUTE_ADVERTISEMENT, &canonical);
         let sig_input =

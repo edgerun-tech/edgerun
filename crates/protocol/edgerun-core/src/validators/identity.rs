@@ -12,7 +12,7 @@ use crate::crypto::{
     verify_canonical_record, ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,
     SIG_DOMAIN_IDENTITY_RECORD,
 };
-use crate::protocol::{canonical_bytes, ProtocolRecord};
+use crate::protocol::{protocol_wire_bytes, ProtocolRecord};
 use crate::result::{reject, ReasonCode, ValidationResult};
 use crate::value::Value;
 
@@ -182,7 +182,7 @@ pub fn validate_identity_record(record: &crate::protocol::IdentityRecord) -> Val
     };
 
     // Verify using domain-separated canonical path (spec §17)
-    let canonical = canonical_bytes(&ProtocolRecord::IdentityRecord(record.clone()), true);
+    let canonical = protocol_wire_bytes(&ProtocolRecord::IdentityRecord(record.clone()), true);
 
     if !verify_canonical_record(&vk, SIG_DOMAIN_IDENTITY_RECORD, &canonical, &sig.value) {
         return reject(
@@ -230,7 +230,7 @@ mod tests {
         record: &IdentityRecord,
     ) -> IdentityRecord {
         use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-        let canonical = canonical_bytes(&ProtocolRecord::IdentityRecord(record.clone()), true);
+        let canonical = protocol_wire_bytes(&ProtocolRecord::IdentityRecord(record.clone()), true);
         let record_hash =
             crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_IDENTITY_RECORD, &canonical);
         let sig_input = crate::crypto::signature_input(SIG_DOMAIN_IDENTITY_RECORD, &record_hash);

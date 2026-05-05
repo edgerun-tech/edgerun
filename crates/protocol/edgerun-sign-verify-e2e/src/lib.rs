@@ -433,7 +433,7 @@ pub fn verify_prebuilt_events(
     Ok(ok)
 }
 
-pub fn canonicalize_event_only(iterations: usize) -> usize {
+pub fn wire_event_only(iterations: usize) -> usize {
     let signing_key = deterministic_signing_key(15);
     let signer = P256ProtocolSigner::new(signing_key);
     let public_key = crypto::verifying_key_to_node_id(&signer.verifying_key());
@@ -441,11 +441,11 @@ pub fn canonicalize_event_only(iterations: usize) -> usize {
 
     for seq in 0..iterations as u64 {
         let event = sample_event(&public_key, seq);
-        let bytes = edgerun_verify::protocol_signable_bytes(
+        let bytes = edgerun_verify::protocol_signable_wire_bytes(
             &ProtocolRecord::EventEnvelope(event),
             ProtocolFamily::EventEnvelope,
         )
-        .expect("event canonicalization should be implemented");
+        .expect("event wire bytes should be implemented");
         total += bytes.len();
     }
 

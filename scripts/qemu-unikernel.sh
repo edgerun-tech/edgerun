@@ -2,6 +2,14 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+qemu_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/edgerun-qemu.XXXXXX")"
+qemu_run_id="${QEMU_RUN_ID:-$$}"
+
+cleanup() {
+    rm -rf "$qemu_tmpdir"
+}
+trap cleanup EXIT INT TERM
+
 target="${TARGET:-x86_64-unknown-none}"
 profile="${PROFILE:-release}"
 cargo_target_dir="$(
@@ -12,12 +20,12 @@ cargo_target_dir="$(
 cargo_target_dir="${cargo_target_dir:-$repo_root/target}"
 build_dir="$cargo_target_dir/$target/$profile"
 kernel_elf="$build_dir/edgerun-unikernel"
-kernel_bin="${KERNEL_BIN:-/tmp/edgerun.bin}"
-boot_obj="${BOOT_OBJ:-/tmp/edgerun-qemu-boot.o}"
-boot_bin="${BOOT_BIN:-/tmp/edgerun-qemu-boot.bin}"
-boot_sector="${BOOT_SECTOR:-/tmp/edgerun-qemu-boot-512.bin}"
+kernel_bin="${KERNEL_BIN:-$qemu_tmpdir/edgerun.bin}"
+boot_obj="${BOOT_OBJ:-$qemu_tmpdir/edgerun-qemu-boot.o}"
+boot_bin="${BOOT_BIN:-$qemu_tmpdir/edgerun-qemu-boot.bin}"
+boot_sector="${BOOT_SECTOR:-$qemu_tmpdir/edgerun-qemu-boot-512.bin}"
 timeout_seconds="${QEMU_TIMEOUT:-8}"
-qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu.log}"
+qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu-${qemu_run_id}.log}"
 expected_marker="${QEMU_EXPECT:-VirtIO net init ok}"
 qemu_net_dump="${QEMU_NET_DUMP:-}"
 qemu_netdev="${QEMU_NETDEV:-user,id=n0}"
@@ -26,8 +34,8 @@ qemu_tpm_device="${QEMU_TPM_DEVICE:-tpm-crb}"
 qemu_virtio_rng="${QEMU_VIRTIO_RNG:-1}"
 qemu_virtio_console="${QEMU_VIRTIO_CONSOLE:-1}"
 qemu_virtio_blk="${QEMU_VIRTIO_BLK:-1}"
-qemu_console_log="${QEMU_CONSOLE_LOG:-/tmp/edgerun-qemu-virtio-console.log}"
-qemu_disk_img="${QEMU_DISK_IMG:-/tmp/edgerun-qemu-virtio-blk.img}"
+qemu_console_log="${QEMU_CONSOLE_LOG:-/tmp/edgerun-qemu-virtio-console-${qemu_run_id}.log}"
+qemu_disk_img="${QEMU_DISK_IMG:-$qemu_tmpdir/edgerun-qemu-virtio-blk.img}"
 qemu_disk_size="${QEMU_DISK_SIZE:-64M}"
 qemu_disk_layout="${QEMU_DISK_LAYOUT:-empty}"
 qemu_http_smoke="${QEMU_HTTP_SMOKE:-0}"

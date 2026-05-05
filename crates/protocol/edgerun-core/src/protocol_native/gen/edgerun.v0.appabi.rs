@@ -2,8 +2,8 @@
 // ===========================================================================
 // Envelope (request/response wrapper)
 // ===========================================================================
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct AbiEnvelope {
     pub envelope_version: u32,
     pub op: i32,
@@ -12,7 +12,8 @@ pub struct AbiEnvelope {
     pub app_id: alloc::vec::Vec<u8>,
     pub payload: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct AbiResponse {
     pub response_version: u32,
     pub request_id: alloc::vec::Vec<u8>,
@@ -24,12 +25,13 @@ pub struct AbiResponse {
 // ===========================================================================
 // App Context
 // ===========================================================================
-
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct AppContextRequest {
     pub request_version: u32,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct AppContext {
     pub context_version: u32,
     pub abi_version: i32,
@@ -51,17 +53,19 @@ pub struct AppContext {
 // ===========================================================================
 // Capabilities
 // ===========================================================================
-
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct GetGrantedCapabilitiesRequest {
     pub request_version: u32,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct GetGrantedCapabilitiesResponse {
     pub response_version: u32,
     pub capabilities: alloc::vec::Vec<super::trust::CapabilityDescriptor>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct RequestCapability {
     pub request_version: u32,
     pub selector: ::core::option::Option<super::capability::CapabilitySelector>,
@@ -72,7 +76,8 @@ pub struct RequestCapability {
     /// Optional presence token if requested capability requires user presence.
     pub presence_token: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct CapabilityHandle {
     pub handle_version: u32,
     pub handle_id: alloc::vec::Vec<u8>,
@@ -80,7 +85,8 @@ pub struct CapabilityHandle {
     pub opened_at: ::core::option::Option<crate::protocol::Timestamp>,
     pub expires_at: ::core::option::Option<crate::protocol::Timestamp>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct InvokeCapability {
     pub request_version: u32,
     pub handle_id: alloc::vec::Vec<u8>,
@@ -90,14 +96,16 @@ pub struct InvokeCapability {
     pub parameter_object: ::core::option::Option<super::common::ObjectRef>,
     pub correlation_id: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct CapabilityInvocationResult {
     pub response_version: u32,
     pub result: ::core::option::Option<super::capability::CapabilityResult>,
     /// Runtime may also expose a direct small result for cheap calls.
     pub inline_result: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct ReleaseCapability {
     pub request_version: u32,
     pub handle_id: alloc::vec::Vec<u8>,
@@ -105,8 +113,8 @@ pub struct ReleaseCapability {
 // ===========================================================================
 // User Presence & Signing
 // ===========================================================================
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct RequestUserPresence {
     pub request_version: u32,
     pub reason: alloc::string::String,
@@ -114,7 +122,8 @@ pub struct RequestUserPresence {
     /// Optional object containing UI details, risk explanation, markdown, etc.
     pub prompt_object: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct UserPresenceToken {
     pub token_version: u32,
     pub presence_token: alloc::vec::Vec<u8>,
@@ -124,7 +133,8 @@ pub struct UserPresenceToken {
     pub expires_at: ::core::option::Option<crate::protocol::Timestamp>,
     pub approval_event: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct RequestSignature {
     pub request_version: u32,
     pub action: alloc::string::String,
@@ -141,7 +151,8 @@ pub struct RequestSignature {
     /// "edgerun:v0:command", "edgerun:v0:delegation", "edgerun:v0:object".
     pub signing_domain: alloc::string::String,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct SignatureResult {
     pub result_version: u32,
     pub payload: alloc::vec::Vec<u8>,
@@ -153,8 +164,8 @@ pub struct SignatureResult {
 // ===========================================================================
 // Objects & Queries
 // ===========================================================================
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct PutObject {
     pub request_version: u32,
     pub object_kind: i32,
@@ -164,12 +175,14 @@ pub struct PutObject {
     pub require_encrypted_storage: bool,
     pub metadata_object: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct PutObjectResult {
     pub response_version: u32,
     pub object: ::core::option::Option<super::common::ObjectRef>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct GetObject {
     pub request_version: u32,
     pub object: ::core::option::Option<super::common::ObjectRef>,
@@ -178,14 +191,16 @@ pub struct GetObject {
     pub offset: u64,
     pub max_bytes: u64,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct GetObjectResult {
     pub response_version: u32,
     pub content: alloc::vec::Vec<u8>,
     pub truncated: bool,
     pub next_offset: u64,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct Query {
     pub request_version: u32,
     /// Use existing access/query proto object by reference where possible.
@@ -194,7 +209,8 @@ pub struct Query {
     pub max_fragments: u32,
     pub max_cost_units: u64,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct QueryResult {
     pub response_version: u32,
     pub result_objects: alloc::vec::Vec<super::common::ObjectRef>,
@@ -205,8 +221,8 @@ pub struct QueryResult {
 // ===========================================================================
 // Commands
 // ===========================================================================
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct BuildCommand {
     pub request_version: u32,
     pub target_node: ::core::option::Option<super::common::NodeRef>,
@@ -221,13 +237,15 @@ pub struct BuildCommand {
 }
 /// Nested message and enum types in `BuildCommand`.
 pub mod build_command {
-    #[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
     pub enum Payload {
         PayloadObject(super::super::common::ObjectRef),
         InlinePayload(alloc::vec::Vec<u8>),
     }
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct BuiltCommand {
     pub response_version: u32,
     /// Unsigned or partially prepared command envelope.
@@ -235,14 +253,16 @@ pub struct BuiltCommand {
     /// Canonical bytes that must be signed if the app/user approves.
     pub signable_payload: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct SubmitCommand {
     pub request_version: u32,
     pub command: ::core::option::Option<super::stream::CommandEnvelope>,
     /// Optional app-level authorization proof.
     pub app_intent: ::core::option::Option<super::stream::AppIntent>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct SubmitCommandResult {
     pub response_version: u32,
     pub command: ::core::option::Option<super::common::CommandRef>,
@@ -254,18 +274,20 @@ pub struct SubmitCommandResult {
 // ===========================================================================
 // App Intent & Observations
 // ===========================================================================
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct EmitAppIntent {
     pub request_version: u32,
     pub payload: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct AppIntentResult {
     pub response_version: u32,
     pub intent: ::core::option::Option<super::stream::AppIntent>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct LogObservation {
     pub request_version: u32,
     pub observation_kind: alloc::string::String,
@@ -277,13 +299,15 @@ pub struct LogObservation {
 /// Nested message and enum types in `LogObservation`.
 pub mod log_observation {
     /// Small observation can be inline. Large one should be object.
-    #[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
     pub enum Payload {
         InlinePayload(alloc::vec::Vec<u8>),
         PayloadObject(super::super::common::ObjectRef),
     }
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct LogObservationResult {
     pub response_version: u32,
     /// This is not authoritative app state. It is a node-stream observation.
@@ -292,22 +316,25 @@ pub struct LogObservationResult {
 // ===========================================================================
 // Determinism-safe Helpers
 // ===========================================================================
-
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct RandomRequest {
     pub request_version: u32,
     pub length: u32,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct RandomResult {
     pub response_version: u32,
     pub random: alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct TimeRequest {
     pub request_version: u32,
 }
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, edgerun_wire::Archive, edgerun_wire::Serialize, edgerun_wire::Deserialize)]
+#[rkyv(crate = edgerun_wire)]
 pub struct TimeResult {
     pub response_version: u32,
     pub now: ::core::option::Option<crate::protocol::Timestamp>,
@@ -315,7 +342,6 @@ pub struct TimeResult {
 // ===========================================================================
 // ABI Version
 // ===========================================================================
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum AbiVersion {
@@ -355,7 +381,6 @@ impl AbiVersion {
 // ===========================================================================
 // Host Operations
 // ===========================================================================
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum HostOp {
@@ -455,7 +480,6 @@ impl HostOp {
 // ===========================================================================
 // ABI Status Codes
 // ===========================================================================
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum AbiStatus {
@@ -535,7 +559,6 @@ impl AbiStatus {
 // ===========================================================================
 // Execution Mode
 // ===========================================================================
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ExecutionMode {

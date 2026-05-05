@@ -2,8 +2,9 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu-net-pump.log}"
-qemu_net_dump="${QEMU_NET_DUMP:-/tmp/edgerun-qemu-net-pump.pcap}"
+qemu_run_id="${QEMU_RUN_ID:-$$}"
+qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu-net-pump-${qemu_run_id}.log}"
+qemu_net_dump="${QEMU_NET_DUMP:-/tmp/edgerun-qemu-net-pump-${qemu_run_id}.pcap}"
 mcast_addr="${QEMU_SOCKET_MCAST_ADDR:-230.0.0.1}"
 mcast_port="${QEMU_SOCKET_MCAST_PORT:-$((20000 + $$ % 20000))}"
 start_wait_seconds="${QEMU_NET_PUMP_START_WAIT:-60}"
@@ -26,6 +27,12 @@ trap cleanup EXIT
 for _ in $(seq 1 $((start_wait_seconds * 10))); do
     if grep -q "Net pump started" "$qemu_log" 2>/dev/null; then
         break
+    fi
+    if ! kill -0 "$qemu_pid" 2>/dev/null; then
+        wait "$qemu_pid" 2>/dev/null || true
+        echo "QEMU exited before net pump start" >&2
+        echo "Serial log: $qemu_log" >&2
+        exit 1
     fi
     sleep 0.1
 done

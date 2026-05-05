@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use edgerun_sign_verify_e2e::{
     agent_node_only, agent_node_roundtrip, bootstrap_only, bootstrap_roundtrip,
-    canonicalize_event_only, hash_event_only, sign_event_only, sign_verify_event_roundtrip,
+    wire_event_only, hash_event_only, sign_event_only, sign_verify_event_roundtrip,
     signed_events, stream_only, stream_roundtrip, verify_event_only, verify_prebuilt_events,
 };
 
@@ -111,8 +111,8 @@ fn main() {
         black_box(ok);
     });
 
-    bench_once("canonicalize_event", iterations, |n| {
-        let bytes = canonicalize_event_only(n);
+    bench_once("wire_event", iterations, |n| {
+        let bytes = wire_event_only(n);
         black_box(bytes);
     });
 

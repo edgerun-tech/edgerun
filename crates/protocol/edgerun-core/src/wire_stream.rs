@@ -5,7 +5,7 @@ use core::convert::TryInto;
 
 use crate::protocol::ProtocolRecord;
 use crate::protocol::{
-    canonical_bytes, CommandEnvelope, CommandRef, CommandResultPayload, DelegationRef, Digest,
+    protocol_wire_bytes, CommandEnvelope, CommandRef, CommandResultPayload, DelegationRef, Digest,
     EventEnvelope, EventRef, ObjectRef, RevocationRef, Signature, Timestamp,
 };
 
@@ -13,7 +13,7 @@ const EVENT_FULL_MAGIC: &[u8; 4] = b"EREV";
 const EVENT_FULL_VERSION: u8 = 1;
 
 pub fn event_signable_wire_bytes(event: &EventEnvelope) -> Vec<u8> {
-    canonical_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true)
+    protocol_wire_bytes(&ProtocolRecord::EventEnvelope(event.clone()), true)
 }
 
 pub fn event_full_wire_bytes(event: &EventEnvelope) -> Vec<u8> {
@@ -25,15 +25,15 @@ pub fn decode_event_full_wire_bytes(bytes: &[u8]) -> Result<EventEnvelope, &'sta
 }
 
 pub fn command_signable_wire_bytes(command: &CommandEnvelope) -> Vec<u8> {
-    canonical_bytes(&ProtocolRecord::CommandEnvelope(command.clone()), true)
+    protocol_wire_bytes(&ProtocolRecord::CommandEnvelope(command.clone()), true)
 }
 
 pub fn command_full_wire_bytes(command: &CommandEnvelope) -> Vec<u8> {
-    canonical_bytes(&ProtocolRecord::CommandEnvelope(command.clone()), false)
+    protocol_wire_bytes(&ProtocolRecord::CommandEnvelope(command.clone()), false)
 }
 
 pub fn command_result_wire_bytes(result: &CommandResultPayload) -> Vec<u8> {
-    canonical_bytes(&ProtocolRecord::CommandResultPayload(result.clone()), false)
+    protocol_wire_bytes(&ProtocolRecord::CommandResultPayload(result.clone()), false)
 }
 
 fn put_u8(out: &mut Vec<u8>, value: u8) {

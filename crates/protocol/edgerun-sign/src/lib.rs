@@ -9,7 +9,7 @@ use edgerun_core::protocol::{
     ProtocolRecord, RevocationRecord, RouteAdvertisement, Signature,
 };
 use edgerun_verify::{
-    protocol_record_hash, protocol_signable_bytes, ProtocolFamily, ProtocolVerifyError,
+    protocol_record_hash, protocol_signable_wire_bytes, ProtocolFamily, ProtocolVerifyError,
 };
 
 pub use edgerun_verify::ProtocolFamily as SignableProtocolFamily;
@@ -32,7 +32,7 @@ impl From<ProtocolVerifyError> for ProtocolSignError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProtocolSigningInput {
     pub family: ProtocolFamily,
-    pub canonical_bytes: Vec<u8>,
+    pub wire_bytes: Vec<u8>,
     pub record_hash: Vec<u8>,
     pub signature_input: Vec<u8>,
 }
@@ -75,12 +75,12 @@ pub fn protocol_signing_input(
     record: &ProtocolRecord,
     family: ProtocolFamily,
 ) -> Result<ProtocolSigningInput, ProtocolSignError> {
-    let canonical_bytes = protocol_signable_bytes(record, family)?;
+    let wire_bytes = protocol_signable_wire_bytes(record, family)?;
     let record_hash = protocol_record_hash(record, family)?;
     let signature_input = edgerun_core::crypto::signature_input(family.sig_domain(), &record_hash);
     Ok(ProtocolSigningInput {
         family,
-        canonical_bytes,
+        wire_bytes,
         record_hash,
         signature_input,
     })

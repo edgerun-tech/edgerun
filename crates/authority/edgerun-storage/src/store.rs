@@ -1050,7 +1050,7 @@ impl NodeStore {
         };
 
         // Sign the descriptor with domain separation
-        let canonical = edgerun_core::protocol::canonical_bytes(
+        let canonical = edgerun_core::protocol::protocol_wire_bytes(
             &edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone()),
             true,
         );
@@ -1127,7 +1127,7 @@ impl NodeStore {
             .ok_or_else(|| {
                 StorageError::Decode("snapshot producer key is not a valid P-256 key".into())
             })?;
-        let canonical = edgerun_core::protocol::canonical_bytes(
+        let canonical = edgerun_core::protocol::protocol_wire_bytes(
             &edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone()),
             true,
         );

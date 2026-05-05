@@ -2,8 +2,9 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu-virtio-smoke.log}"
-console_log="${QEMU_CONSOLE_LOG:-/tmp/edgerun-qemu-virtio-smoke-console.log}"
+qemu_run_id="${QEMU_RUN_ID:-$$}"
+qemu_log="${QEMU_LOG:-/tmp/edgerun-qemu-virtio-smoke-${qemu_run_id}.log}"
+console_log="${QEMU_CONSOLE_LOG:-/tmp/edgerun-qemu-virtio-smoke-console-${qemu_run_id}.log}"
 
 rm -f "$qemu_log" "$console_log"
 

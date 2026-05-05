@@ -37,7 +37,7 @@ fn validate_assurance_claim_satisfies_requirement(
 use crate::prelude::v1::*;
 
 use crate::protocol::{
-    canonical_bytes, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor, CommandEnvelope,
+    protocol_wire_bytes, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor, CommandEnvelope,
     CommandType, DelegationRecord, Digest, IdentityRef, ObjectRef, ProtocolRecord,
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
@@ -215,7 +215,7 @@ pub fn validate_command_policy(ctx: &CommandPolicyContext<'_>) -> ValidationResu
 /// Computes the canonical hash of a command envelope (signable form).
 pub fn command_hash(command: &CommandEnvelope) -> Digest {
     let record = ProtocolRecord::CommandEnvelope(command.clone());
-    let canonical = canonical_bytes(&record, true);
+    let canonical = protocol_wire_bytes(&record, true);
     let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_COMMAND_ENVELOPE, &canonical);
     Digest {
         algorithm: 1, // SHA256
@@ -225,7 +225,7 @@ pub fn command_hash(command: &CommandEnvelope) -> Digest {
 
 fn delegation_hash(delegation: &DelegationRecord) -> Digest {
     let record = ProtocolRecord::DelegationRecord(delegation.clone());
-    let canonical = canonical_bytes(&record, true);
+    let canonical = protocol_wire_bytes(&record, true);
     let hash = crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_DELEGATION_RECORD, &canonical);
     Digest {
         algorithm: crate::protocol::digest::Algorithm::DigestAlgorithmSha256 as i32,
@@ -1470,7 +1470,7 @@ pub fn validate_command(
         );
     };
     let record = ProtocolRecord::CommandEnvelope(command.clone());
-    let canonical = canonical_bytes(&record, true);
+    let canonical = protocol_wire_bytes(&record, true);
 
     if !crate::crypto::verify_canonical_record(
         &vk,
@@ -1859,7 +1859,7 @@ fn validate_delegation_chain(
         // Build signable form (signature absent) and canonical encode
         let mut signable = delegation.clone();
         signable.signature = None;
-        let canonical = canonical_bytes(&ProtocolRecord::DelegationRecord(signable.clone()), true);
+        let canonical = protocol_wire_bytes(&ProtocolRecord::DelegationRecord(signable.clone()), true);
 
         if !crate::crypto::verify_canonical_record(
             &verifying_key,
@@ -2716,7 +2716,7 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
         );
     };
     let record = ProtocolRecord::CommandEnvelope(command.clone());
-    let canonical = canonical_bytes(&record, true);
+    let canonical = protocol_wire_bytes(&record, true);
 
     if !crate::crypto::verify_canonical_record(
         &vk,
@@ -2808,7 +2808,7 @@ mod tests {
 
     fn sign_command(key: &SigningKey, cmd: &mut CommandEnvelope) {
         let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let canonical = canonical_bytes(&record, true);
+        let canonical = protocol_wire_bytes(&record, true);
         let sig = crate::crypto::sign_canonical_record(
             key,
             crate::crypto::SIG_DOMAIN_COMMAND_ENVELOPE,
@@ -2827,7 +2827,7 @@ mod tests {
             attester.key_hint = Some(key_hint_for(key));
         }
         let record = ProtocolRecord::AssuranceClaim(claim.clone());
-        let canonical = canonical_bytes(&record, true);
+        let canonical = protocol_wire_bytes(&record, true);
         let sig = crate::crypto::sign_canonical_record(
             key,
             crate::crypto::SIG_DOMAIN_ASSURANCE_CLAIM,
@@ -2988,7 +2988,7 @@ mod tests {
         delegation.issuer.as_mut().unwrap().key_hint = Some(issuer_key_hint.to_vec());
         delegation.signature = None;
         let canonical =
-            canonical_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
+            protocol_wire_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
         let sig = crate::crypto::sign_canonical_record(
             key,
             crate::crypto::SIG_DOMAIN_DELEGATION_RECORD,
@@ -3448,8 +3448,8 @@ mod tests {
     fn canonical_command_deterministic() {
         let cmd = make_unsigned_command();
         let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let a = canonical_bytes(&record, true);
-        let b = canonical_bytes(&record, true);
+        let a = protocol_wire_bytes(&record, true);
+        let b = protocol_wire_bytes(&record, true);
         assert_eq!(a, b);
     }
 
@@ -3461,8 +3461,8 @@ mod tests {
             value: vec![1; 64],
         });
         let record = ProtocolRecord::CommandEnvelope(cmd.clone());
-        let signable = canonical_bytes(&record, true);
-        let full = canonical_bytes(&record, false);
+        let signable = protocol_wire_bytes(&record, true);
+        let full = protocol_wire_bytes(&record, false);
         assert_ne!(signable, full);
         assert!(signable.len() < full.len());
     }
@@ -3486,7 +3486,7 @@ mod tests {
         fn sign_delegation(key: &SigningKey, deleg: &mut DelegationRecord, issuer_key_hint: &[u8]) {
             deleg.issuer.as_mut().unwrap().key_hint = Some(issuer_key_hint.to_vec());
             deleg.signature = None;
-            let canonical = canonical_bytes(&ProtocolRecord::DelegationRecord(deleg.clone()), true);
+            let canonical = protocol_wire_bytes(&ProtocolRecord::DelegationRecord(deleg.clone()), true);
             // Use sign_canonical_record for domain-separated signing (matches verify_canonical_record)
             let sig = crate::crypto::sign_canonical_record(
                 key,
@@ -7244,7 +7244,7 @@ mod tests {
         // Sign the delegation with domain separation (matches verify_canonical_record)
         delegation.signature = None;
         let deleg_canonical =
-            canonical_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
+            protocol_wire_bytes(&ProtocolRecord::DelegationRecord(delegation.clone()), true);
         let deleg_sig = crate::crypto::sign_canonical_record(
             &key,
             crate::crypto::SIG_DOMAIN_DELEGATION_RECORD,

@@ -1,4 +1,4 @@
-use edgerun_virtio::{VirtBlk, VirtNet, VirtRng};
+use edgerun_virtio::{VirtBlk, VirtNet, VirtRng, VirtioError};
 
 use crate::queue::EventQueue;
 use crate::types::Event;
@@ -13,6 +13,8 @@ pub struct VirtioEventLoop<'a, const EQ: usize = 32> {
     pub rx_buf: [u8; 2048],
     pub pending_rx: bool,
     pub rx_sock_id: u32,
+    net_error_count: u32,
+    last_net_error: Option<VirtioError>,
 }
 
 impl<'a, const EQ: usize> VirtioEventLoop<'a, EQ> {
@@ -27,33 +29,28 @@ impl<'a, const EQ: usize> VirtioEventLoop<'a, EQ> {
             rx_buf: [0u8; 2048],
             pending_rx: false,
             rx_sock_id: 0,
+            net_error_count: 0,
+            last_net_error: None,
         }
     }
 
     pub fn poll_once(&mut self) -> bool {
         let mut had_event = false;
 
-        if let Some(net) = self.net.as_deref_mut() {
-            if let Some(len) = net.recv(&mut self.rx_buf) {
-                if len == 0 {
-                    if self.pending_rx {
-                        had_event |=
-                            crate::types::push_network_disconnected(self.queue, self.rx_sock_id);
-                        self.pending_rx = false;
-                    }
-                } else {
-                    if !self.pending_rx {
-                        self.sock_id_counter = self.sock_id_counter.wrapping_add(1);
-                        self.rx_sock_id = self.sock_id_counter;
-                        self.pending_rx = true;
-                        had_event |=
-                            crate::types::push_network_connected(self.queue, self.rx_sock_id);
-                    }
-                    had_event |= crate::types::push_network_received(
-                        self.queue,
-                        self.rx_sock_id,
-                        &self.rx_buf[..len],
-                    );
+        let net_recv = if let Some(net) = self.net.as_deref_mut() {
+            Some(net.try_recv(&mut self.rx_buf))
+        } else {
+            None
+        };
+
+        if let Some(result) = net_recv {
+            match result {
+                Ok(Some(len)) => {
+                    had_event |= self.handle_net_rx(len);
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    had_event |= self.record_net_error(error);
                 }
             }
         }
@@ -65,6 +62,34 @@ impl<'a, const EQ: usize> VirtioEventLoop<'a, EQ> {
         }
 
         had_event
+    }
+
+    fn handle_net_rx(&mut self, len: usize) -> bool {
+        if len == 0 {
+            if self.pending_rx {
+                let pushed = crate::types::push_network_disconnected(self.queue, self.rx_sock_id);
+                self.pending_rx = false;
+                return pushed;
+            }
+            return false;
+        }
+
+        let mut had_event = false;
+        if !self.pending_rx {
+            self.sock_id_counter = self.sock_id_counter.wrapping_add(1);
+            self.rx_sock_id = self.sock_id_counter;
+            self.pending_rx = true;
+            had_event |= crate::types::push_network_connected(self.queue, self.rx_sock_id);
+        }
+        had_event |=
+            crate::types::push_network_received(self.queue, self.rx_sock_id, &self.rx_buf[..len]);
+        had_event
+    }
+
+    fn record_net_error(&mut self, error: VirtioError) -> bool {
+        self.net_error_count = self.net_error_count.wrapping_add(1);
+        self.last_net_error = Some(error);
+        crate::types::push_network_error(self.queue, self.rx_sock_id)
     }
 
     pub fn poll_many(&mut self, max_events: usize) -> usize {
@@ -88,5 +113,58 @@ impl<'a, const EQ: usize> VirtioEventLoop<'a, EQ> {
 
     pub fn queue_is_empty(&self) -> bool {
         self.queue.is_empty()
+    }
+
+    pub fn net_error_count(&self) -> u32 {
+        self.net_error_count
+    }
+
+    pub fn last_net_error(&self) -> Option<VirtioError> {
+        self.last_net_error
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use edgerun_virtio::VirtioError;
+
+    use crate::queue::EventQueue;
+    use crate::types::NetworkSubtype;
+
+    use super::VirtioEventLoop;
+
+    #[test]
+    fn net_errors_are_reported_as_events() {
+        let mut queue = EventQueue::<4>::new();
+        let mut event_loop = VirtioEventLoop::new(&mut queue);
+
+        assert!(event_loop.record_net_error(VirtioError::DeviceTimeout));
+
+        assert_eq!(event_loop.net_error_count(), 1);
+        assert_eq!(
+            event_loop.last_net_error(),
+            Some(VirtioError::DeviceTimeout)
+        );
+
+        let event = event_loop.pop_event().unwrap();
+        assert_eq!(event.sock_id(), Some(0));
+        assert_eq!(event.network_subtype(), Some(NetworkSubtype::Error));
+    }
+
+    #[test]
+    fn net_receive_opens_session_before_payload() {
+        let mut queue = EventQueue::<4>::new();
+        let mut event_loop = VirtioEventLoop::new(&mut queue);
+        event_loop.rx_buf[..3].copy_from_slice(b"abc");
+
+        assert!(event_loop.handle_net_rx(3));
+
+        let connected = event_loop.pop_event().unwrap();
+        assert_eq!(connected.sock_id(), Some(1));
+        assert_eq!(connected.network_subtype(), Some(NetworkSubtype::Connected));
+        let received = event_loop.pop_event().unwrap();
+        assert_eq!(received.sock_id(), Some(1));
+        assert_eq!(received.network_subtype(), Some(NetworkSubtype::Received));
+        assert_eq!(received.network_payload(), Some(&b"abc"[..]));
     }
 }
