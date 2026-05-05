@@ -8,11 +8,14 @@
 use edgerun_core::protocol::ObjectKind;
 use edgerun_core::util::now_protocol_timestamp;
 use edgerun_exchange::{
-    decode_exchange_event, encode_exchange_event, exchange_event_type, project_order,
-    ExchangeEvent, ExchangeOrderProjection,
+    ExchangeEvent, ExchangeOrderProjection, decode_exchange_event, encode_exchange_event,
+    exchange_event_type, project_order,
 };
 use edgerun_hardware_signing::MeshSigner;
+use edgerun_sign::ProtocolSigner;
 use edgerun_storage::NodeStore;
+
+use crate::protocol_signer::BorrowedMeshProtocolSigner;
 
 fn node_stream_id(signer: &dyn MeshSigner) -> Vec<u8> {
     signer.node_id().0.to_vec()
@@ -24,8 +27,29 @@ pub fn append_exchange_event_to_node_stream(
     signer: &dyn MeshSigner,
     event: &ExchangeEvent,
 ) -> Result<u64, String> {
-    let recipients = [signer.node_id().0.to_vec()];
-    append_exchange_event_to_node_stream_with_recipients(store, signer, event, &recipients)
+    let node_id = signer.node_id().0;
+    append_exchange_event_to_node_stream_with_protocol_signer(
+        store,
+        &node_id,
+        &BorrowedMeshProtocolSigner::new(signer),
+        event,
+    )
+}
+
+pub fn append_exchange_event_to_node_stream_with_protocol_signer(
+    store: &NodeStore,
+    node_id: &[u8; 64],
+    signer: &(impl ProtocolSigner + ?Sized),
+    event: &ExchangeEvent,
+) -> Result<u64, String> {
+    let recipients = [node_id.to_vec()];
+    append_exchange_event_to_node_stream_with_recipients_and_protocol_signer(
+        store,
+        node_id,
+        signer,
+        event,
+        &recipients,
+    )
 }
 
 /// Append one exchange event to the node's single event stream with explicit
@@ -40,9 +64,26 @@ pub fn append_exchange_event_to_node_stream_with_recipients(
     event: &ExchangeEvent,
     recipients: &[Vec<u8>],
 ) -> Result<u64, String> {
-    let stream_id = node_stream_id(signer);
+    let node_id = signer.node_id().0;
+    append_exchange_event_to_node_stream_with_recipients_and_protocol_signer(
+        store,
+        &node_id,
+        &BorrowedMeshProtocolSigner::new(signer),
+        event,
+        recipients,
+    )
+}
+
+pub fn append_exchange_event_to_node_stream_with_recipients_and_protocol_signer(
+    store: &NodeStore,
+    node_id: &[u8; 64],
+    signer: &(impl ProtocolSigner + ?Sized),
+    event: &ExchangeEvent,
+    recipients: &[Vec<u8>],
+) -> Result<u64, String> {
+    let stream_id = node_id.to_vec();
     let recipients = if recipients.is_empty() {
-        vec![signer.node_id().0.to_vec()]
+        vec![node_id.to_vec()]
     } else {
         recipients.to_vec()
     };
@@ -56,7 +97,7 @@ pub fn append_exchange_event_to_node_stream_with_recipients(
         )
         .map_err(|e| format!("exchange_payload_object_store_failed: {e}"))?;
 
-    crate::stream_append::append_signed_stream_event_blocking(
+    crate::stream_append::append_signed_stream_event_blocking_with_protocol_signer(
         store,
         &stream_id,
         signer,
@@ -94,6 +135,14 @@ pub fn project_exchange_order_from_node_stream(
     order_id: &str,
 ) -> Result<Option<ExchangeOrderProjection>, String> {
     let stream_id = node_stream_id(signer);
+    project_exchange_order_from_node_stream_id(store, &stream_id, order_id)
+}
+
+pub fn project_exchange_order_from_node_stream_id(
+    store: &NodeStore,
+    stream_id: &[u8],
+    order_id: &str,
+) -> Result<Option<ExchangeOrderProjection>, String> {
     let Some((head_seq, _head_hash)) = store
         .get_head(&stream_id)
         .map_err(|e| format!("exchange_stream_head_failed: {e}"))?

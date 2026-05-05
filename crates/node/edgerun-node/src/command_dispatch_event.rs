@@ -8,7 +8,10 @@ use edgerun_core::command::command_hash;
 use edgerun_core::protocol::{CommandEnvelope, EventType, ObjectRef};
 use edgerun_core::util::{bytes_to_hex, now_protocol_timestamp};
 use edgerun_hardware_signing::MeshSigner;
+use edgerun_sign::ProtocolSigner;
 use edgerun_storage::NodeStore;
+
+use crate::protocol_signer::BorrowedMeshProtocolSigner;
 
 #[derive(Clone, Debug)]
 pub struct CommandResultEventWrite {
@@ -27,13 +30,33 @@ pub fn append_command_result_event(
     _reason_code: &str,
     result_object: Option<ObjectRef>,
 ) -> Result<CommandResultEventWrite, String> {
+    append_command_result_event_with_protocol_signer(
+        command,
+        store,
+        stream_id,
+        &BorrowedMeshProtocolSigner::new(signer),
+        committed,
+        _reason_code,
+        result_object,
+    )
+}
+
+pub fn append_command_result_event_with_protocol_signer(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &(impl ProtocolSigner + ?Sized),
+    committed: bool,
+    _reason_code: &str,
+    result_object: Option<ObjectRef>,
+) -> Result<CommandResultEventWrite, String> {
     let event_type = if committed {
         EventType::CommandCommitted
     } else {
         EventType::CommandRejected
     };
 
-    let event = crate::stream_append::append_signed_stream_event_blocking(
+    let event = crate::stream_append::append_signed_stream_event_blocking_with_protocol_signer(
         store,
         stream_id,
         signer,
