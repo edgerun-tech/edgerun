@@ -18,13 +18,15 @@ use crate::rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
-use crate::lmtp::session_core::LmtpCommand;
+use crate::lmtp::session_core::{
+    LmtpCommand, LmtpSessionAction, LmtpSessionConfig, LmtpSessionCore, LmtpSessionPolicy,
+};
 use crate::server::ConnectionInterceptor;
 use crate::server::read_line;
 use crate::smtp::server::{MailHandler, MemoryMailStore};
 use crate::smtp::types::{
-    DsnNotify, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse,
-    SmtpResponseCode, SmtpState,
+    EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode,
+    SmtpState,
 };
 #[cfg(feature = "dkim")]
 use edgerun_email_auth::EmailAuthEvaluator;
@@ -165,9 +167,14 @@ impl LmtpServer {
 // Connection Handler
 // ===========================================================================
 
-enum ControlFlow {
-    Continue,
-    Quit,
+struct LmtpHandlerPolicy<'a> {
+    handler: &'a Arc<dyn MailHandler>,
+}
+
+impl LmtpSessionPolicy for LmtpHandlerPolicy<'_> {
+    fn validate_recipient(&self, address: &str) -> bool {
+        self.handler.validate_recipient(address).is_ok()
+    }
 }
 
 /// Evaluate SPF/DKIM/DMARC and notify the handler.
@@ -238,17 +245,16 @@ async fn handle_connection(
         }
     };
 
-    // LMTP greeting
-    let greeting = format!("220 {} LMTP ready\r\n", config.domain);
-    stream.write_all(greeting.as_bytes()).await?;
-    stream.flush().await?;
+    let mut core = LmtpSessionCore::new(LmtpSessionConfig {
+        domain: config.domain.clone(),
+        limits: config.limits.clone(),
+    });
+    send_response(&mut stream, &core.greeting()).await?;
 
-    let mut state = SmtpState::Connected;
-    let mut envelope = MailEnvelope::new(String::new());
-    let mut lhlo_domain: Option<String> = None;
     let mut command_count: usize = 0;
     let mut last_activity = std::time::Instant::now();
     let mut in_data_phase = false;
+    let policy = LmtpHandlerPolicy { handler: &handler };
 
     loop {
         // Idle timeout
@@ -283,16 +289,20 @@ async fn handle_connection(
                 }
             };
 
-            if line == "." {
-                // End of data — deliver per-recipient (RFC 2033 §3.3)
+            let step = core.handle_line(&line, &policy);
+            for response in &step.responses {
+                send_response(&mut stream, response).await?;
+            }
+
+            if step.action == LmtpSessionAction::Deliver {
                 command_count += 1;
                 in_data_phase = false;
                 let peer_ip_str = peer.ip().to_string();
                 let domain = config.domain.clone();
 
-                for recipient in &envelope.recipients {
+                for recipient in &core.envelope.recipients {
                     // Create a single-recipient envelope for delivery
-                    let mut single_envelope = envelope.clone();
+                    let mut single_envelope = core.envelope.clone();
                     single_envelope.recipients = vec![recipient.clone()];
 
                     match handler.validate_recipient(recipient) {
@@ -308,9 +318,9 @@ async fn handle_connection(
                                     edgerun_log::info!("edgerun-lmtp: delivered to {}", recipient,);
                                     // Evaluate SPF/DKIM/DMARC in background (first recipient only)
                                     #[cfg(feature = "dkim")]
-                                    if recipient == &envelope.recipients[0] {
+                                    if recipient == &core.envelope.recipients[0] {
                                         let handler_clone = Arc::clone(&handler);
-                                        let envelope_clone = envelope.clone();
+                                        let envelope_clone = core.envelope.clone();
                                         let domain_clone = domain.clone();
                                         let peer_ip_clone = peer_ip_str.clone();
                                         crate::rt::spawn(async move {
@@ -348,25 +358,9 @@ async fn handle_connection(
                     }
                 }
 
-                state = SmtpState::Ready;
-                envelope.reset();
-            } else {
-                let data_line = if line.starts_with("..") {
-                    line[1..].to_string()
-                } else {
-                    line.clone()
-                };
-                envelope.data.extend_from_slice(data_line.as_bytes());
-                envelope.data.extend_from_slice(b"\r\n");
-
-                if config.limits.max_message_size > 0
-                    && envelope.data.len() > config.limits.max_message_size
-                {
-                    send_response(&mut stream, &SmtpResponse::message_too_large()).await?;
-                    state = SmtpState::Ready;
-                    in_data_phase = false;
-                    envelope.reset();
-                }
+                core.reset_transaction();
+            } else if !matches!(step.action, LmtpSessionAction::Continue) {
+                in_data_phase = false;
             }
             continue;
         }
@@ -387,13 +381,16 @@ async fn handle_connection(
         last_activity = std::time::Instant::now();
         command_count += 1;
 
-        let cmd = match LmtpCommand::parse(&line) {
-            Ok(LmtpCommand::Lhlo(domain)) => SmtpCommand::Ehlo(domain),
-            Ok(LmtpCommand::Smtp(command)) => command,
+        let lmtp_cmd = match LmtpCommand::parse(&line) {
+            Ok(command) => command,
             Err(e) => {
                 send_response(&mut stream, &SmtpResponse::syntax_error(&e)).await?;
                 continue;
             }
+        };
+        let middleware_cmd = match &lmtp_cmd {
+            LmtpCommand::Lhlo(domain) => SmtpCommand::Ehlo(domain.clone()),
+            LmtpCommand::Smtp(command) => command.clone(),
         };
 
         // ── Middleware pre-filter (if configured) ──────────────────
@@ -403,7 +400,7 @@ async fn handle_connection(
             let mut blocked = false;
             for mw in &command_middleware {
                 let mw = Arc::clone(mw);
-                let cmd_for_mw = cmd.clone();
+                let cmd_for_mw = middleware_cmd.clone();
                 let session_for_mw = session.clone();
                 let next = NextCommand::new(|_cmd, _session| {
                     Box::pin(async move { Ok(MwControlFlow::Continue) })
@@ -429,173 +426,23 @@ async fn handle_connection(
             }
         }
 
-        match handle_command(
-            cmd,
-            &mut state,
-            &mut envelope,
-            &mut lhlo_domain,
-            &handler,
-            &config,
-            &mut stream,
-        )
-        .await
-        {
-            Ok(ControlFlow::Quit) => break,
-            Ok(ControlFlow::Continue) => {}
-            Err(e) => {
-                send_response(&mut stream, &SmtpResponse::syntax_error(&e.to_string())).await?;
-            }
+        let step = core.handle_command(lmtp_cmd, &policy);
+        for response in &step.responses {
+            send_response(&mut stream, response).await?;
         }
 
-        if state == SmtpState::Data {
-            in_data_phase = true;
+        match step.action {
+            LmtpSessionAction::Quit => break,
+            LmtpSessionAction::Deliver => {
+                in_data_phase = false;
+            }
+            LmtpSessionAction::Continue => {
+                in_data_phase = core.state == SmtpState::Data;
+            }
         }
     }
 
     Ok(())
-}
-
-// ===========================================================================
-// Command Dispatcher
-// ===========================================================================
-
-async fn handle_command(
-    cmd: SmtpCommand,
-    state: &mut SmtpState,
-    envelope: &mut MailEnvelope,
-    lhlo_domain: &mut Option<String>,
-    handler: &Arc<dyn MailHandler>,
-    config: &LmtpServerConfig,
-    stream: &mut (impl AsyncReadExt + AsyncWriteExt),
-) -> io::Result<ControlFlow> {
-    match cmd {
-        SmtpCommand::Ehlo(domain) | SmtpCommand::Helo(domain) => {
-            // LMTP uses LHLO but accepts EHLO/HELO for compatibility
-            *lhlo_domain = Some(domain.clone());
-            *state = SmtpState::Ready;
-
-            let lines = vec![
-                format!("Hello {}", domain),
-                format!("SIZE {}", config.limits.max_message_size),
-                "8BITMIME".to_string(),
-                "ENHANCEDSTATUSCODES".to_string(),
-                "SMTPUTF8".to_string(),
-            ];
-
-            send_multiline_response(stream, SmtpResponseCode::OK, lines).await?;
-        }
-
-        SmtpCommand::MailFrom {
-            address,
-            parameters,
-        } => {
-            if *state != SmtpState::Ready && *state != SmtpState::MailSet {
-                send_response(
-                    stream,
-                    &SmtpResponse::bad_sequence("MAIL FROM not allowed in current state"),
-                )
-                .await?;
-                return Ok(ControlFlow::Continue);
-            }
-
-            // Check SIZE parameter
-            if config.limits.max_message_size > 0 {
-                for (key, value) in &parameters {
-                    if key == "SIZE" {
-                        if let Some(s) = value {
-                            if let Ok(size) = s.parse::<usize>() {
-                                if size > config.limits.max_message_size {
-                                    send_response(stream, &SmtpResponse::message_too_large())
-                                        .await?;
-                                    return Ok(ControlFlow::Continue);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            *envelope = MailEnvelope::new(address.clone());
-            envelope.from_parameters = parameters;
-            *state = SmtpState::MailSet;
-            send_response(
-                stream,
-                &SmtpResponse::ok("Sender OK").with_enhanced(EnhancedStatusCode::MAIL_FROM_OK),
-            )
-            .await?;
-        }
-
-        SmtpCommand::RcptTo {
-            address,
-            parameters,
-        } => {
-            if *state != SmtpState::MailSet && *state != SmtpState::RcptSet {
-                send_response(
-                    stream,
-                    &SmtpResponse::bad_sequence("RCPT TO not allowed in current state"),
-                )
-                .await?;
-                return Ok(ControlFlow::Continue);
-            }
-
-            if envelope.recipient_count() >= config.limits.max_recipients {
-                send_response(
-                    stream,
-                    &SmtpResponse::too_many_recipients(envelope.recipient_count() + 1),
-                )
-                .await?;
-                return Ok(ControlFlow::Continue);
-            }
-
-            if let Err(_e) = handler.validate_recipient(&address) {
-                send_response(stream, &SmtpResponse::mailbox_not_found(&address)).await?;
-                return Ok(ControlFlow::Continue);
-            }
-
-            envelope.add_recipient(address, parameters, DsnNotify::default(), None);
-            *state = SmtpState::RcptSet;
-            send_response(
-                stream,
-                &SmtpResponse::ok("Recipient OK").with_enhanced(EnhancedStatusCode::RCPT_TO_OK),
-            )
-            .await?;
-        }
-
-        SmtpCommand::Data => {
-            if *state != SmtpState::RcptSet {
-                send_response(stream, &SmtpResponse::bad_sequence("No valid recipients")).await?;
-                return Ok(ControlFlow::Continue);
-            }
-            *state = SmtpState::Data;
-            send_response(stream, &SmtpResponse::start_mail_input()).await?;
-        }
-
-        SmtpCommand::Noop => {
-            send_response(stream, &SmtpResponse::ok("OK")).await?;
-        }
-
-        SmtpCommand::Quit => {
-            *state = SmtpState::Quit;
-            send_response(stream, &SmtpResponse::closing()).await?;
-            return Ok(ControlFlow::Quit);
-        }
-
-        // LMTP does not support these — reject with 502
-        SmtpCommand::Starttls
-        | SmtpCommand::Auth { .. }
-        | SmtpCommand::AuthResponse(_)
-        | SmtpCommand::Vrfy(_)
-        | SmtpCommand::Expn(_)
-        | SmtpCommand::Help(_)
-        | SmtpCommand::Rset
-        | SmtpCommand::Turn
-        | SmtpCommand::Etrn(_)
-        | SmtpCommand::Bdat { .. } => {
-            send_response(stream, &SmtpResponse::command_not_implemented("LMTP")).await?;
-        }
-    }
-
-    Ok(ControlFlow::Continue)
 }
 
 // ===========================================================================
@@ -610,15 +457,6 @@ async fn send_response(
     stream.write_all(formatted.as_bytes()).await?;
     stream.flush().await?;
     Ok(())
-}
-
-async fn send_multiline_response(
-    stream: &mut (impl AsyncWriteExt),
-    code: SmtpResponseCode,
-    lines: Vec<String>,
-) -> io::Result<()> {
-    let response = SmtpResponse::multiline(code, lines);
-    send_response(stream, &response).await
 }
 
 #[cfg(test)]
