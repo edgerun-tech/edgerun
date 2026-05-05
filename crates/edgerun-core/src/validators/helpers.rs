@@ -6,7 +6,6 @@ pub use crate::result::{
 };
 pub use crate::util::{bytes_to_hex, must_hex_to_bytes, parse_rfc3339};
 pub use crate::value::{mapping, seq, ystr, Value};
-pub use std::collections::{BTreeMap, BTreeSet};
 
 pub trait FixtureVerifier {
     fn verify_signed_fixture(
