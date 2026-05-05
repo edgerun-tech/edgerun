@@ -37,6 +37,7 @@ members = [
   "crates/edgerun-verify",
   "crates/edgerun-sign",
   "crates/edgerun-sign-p256",
+  "crates/edgerun-sign-verify-e2e",
   "crates/edgerun-dhcp",
   "crates/edgerun-dhcpv6",
   "crates/edgerun-dns",
@@ -197,6 +198,7 @@ edgerun-crypto = { version = "0.1", path = "crates/edgerun-crypto", default-feat
 edgerun-verify = { version = "0.1", path = "crates/edgerun-verify", default-features = false }
 edgerun-sign = { version = "0.1", path = "crates/edgerun-sign", default-features = false }
 edgerun-sign-p256 = { version = "0.1", path = "crates/edgerun-sign-p256", default-features = false }
+edgerun-sign-verify-e2e = { version = "0.1", path = "crates/edgerun-sign-verify-e2e", default-features = false }
 edgerun-json = { version = "0.1", path = "crates/edgerun-json", default-features = false }
 edgerun-error = { version = "0.1", path = "crates/edgerun-error" }
 edgerun-edit = { version = "0.1", path = "crates/edgerun-edit" }
