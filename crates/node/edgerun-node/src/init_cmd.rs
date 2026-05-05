@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
 use edgerun_keygen::{generate_node_signing_key, node_id_from_signing_key};
-use edgerun_seal::seal_node_signing_key;
+use edgerun_seal::{generate_seal_key, seal_node_signing_key};
 use edgerun_yubikey::YubiKeySigningKey;
 
 use crate::config::{parse_config, NodeConfig};
@@ -221,29 +221,18 @@ pub fn detect_yubikey_device() -> Result<edgerun_yubikey::LinuxUsbYubiKeyInfo, S
         .ok_or_else(|| "no YubiKey devices found on USB bus".into())
 }
 
-pub fn cmd_init_encrypted(
-    path: &PathBuf,
-    key_path: &PathBuf,
-    name: Option<String>,
-    passphrase: Option<String>,
-) {
-    let passphrase = passphrase.unwrap_or_else(|| {
-        eprintln!("error: --passphrase is required for encrypted key generation");
-        eprintln!("Usage: edgerund init-encrypted --config <path> --key-file <path> --passphrase <passphrase>");
-        std::process::exit(1);
-    });
-
-    if passphrase.len() < 8 {
-        eprintln!("error: passphrase must be at least 8 characters");
-        std::process::exit(1);
-    }
-
+pub fn cmd_init_encrypted(path: &PathBuf, key_path: &PathBuf, name: Option<String>) {
     eprintln!("Generating ECDSA P-256 signing key...");
     let (signing_key, identity) = generate_node_signing_key();
     let node_id = NodeID(identity.node_id);
+    let seal_key = generate_seal_key().unwrap_or_else(|e| {
+        eprintln!("error: failed to generate seal key: {:?}", e);
+        std::process::exit(1);
+    });
+    let seal_key_hex = edgerun_core::util::bytes_to_hex(seal_key.expose_secret());
 
-    eprintln!("Encrypting key with AES-256-GCM (PBKDF2 100k iterations)...");
-    let encrypted_data = seal_node_signing_key(&signing_key, &passphrase).unwrap_or_else(|e| {
+    eprintln!("Sealing key with AES-256-GCM...");
+    let encrypted_data = seal_node_signing_key(&signing_key, &seal_key).unwrap_or_else(|e| {
         eprintln!("error: failed to seal signing key: {:?}", e);
         std::process::exit(1);
     });
@@ -259,7 +248,7 @@ pub fn cmd_init_encrypted(
   type: "encrypted"
   public_key_hex: "{node_id_hex}"
   encrypted_key_path: "{key_path_str}"
-  passphrase_env: "EDGERUN_KEY_PASSPHRASE"
+  seal_key_env: "EDGERUN_SEAL_KEY_HEX"
 "#,
         node_id_hex = node_id.to_hex(),
         key_path_str = key_path.display(),
@@ -291,17 +280,15 @@ initial_grants: []
     println!("  Short ID:   {}", node_id.short());
     println!("  Stream ID:  {}", stream_id);
     println!("  Name:       {}", node_name);
-    println!("  Signer:     encrypted (AES-256-GCM + PBKDF2)");
+    println!("  Signer:     encrypted (AES-256-GCM with generated seal key)");
     println!("  Key file:   {}", key_path.display());
     println!("  Config:     {}", path.display());
     println!();
-    println!("To inspect the node, set the passphrase and run:");
-    println!("  export EDGERUN_KEY_PASSPHRASE='{}'", passphrase);
+    println!("To inspect the node, set the generated seal key and run:");
+    println!("  export EDGERUN_SEAL_KEY_HEX='{}'", seal_key_hex);
     println!("  edgerund status --config {}", path.display());
     println!();
-    println!(
-        "IMPORTANT: Keep the key file safe. Without the passphrase, the key cannot be recovered."
-    );
+    println!("IMPORTANT: Keep the seal key safe. Without it, the node key cannot be recovered.");
 }
 
 const PIN_CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -394,7 +381,7 @@ metadata:
     eprintln!();
     eprintln!("The node is now advertising in provisioning mode.");
     eprintln!("Control is bound to the generated node private key in this config.");
-    eprintln!("Protect and back up this config; there is no provisioning password recovery path.");
+    eprintln!("Protect and back up this config; there is no account recovery path.");
 }
 
 pub fn cmd_provision(config_path: &PathBuf, pin: &str, target_addr: Option<String>) {

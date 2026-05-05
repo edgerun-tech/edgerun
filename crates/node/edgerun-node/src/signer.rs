@@ -5,7 +5,7 @@ use edgerun_hardware_signing::{
     HardwareMeshSigner, MeshSigner, NodeID, TpmHardwareKeyAdapter, YubiKeyHardwareKeyAdapter,
 };
 use edgerun_keygen::{node_id_from_signing_key, node_signing_key_from_bytes, NodeSigningKey};
-use edgerun_seal::unseal_node_signing_key;
+use edgerun_seal::{unseal_node_signing_key, SealKey};
 use edgerun_sign::{ProtocolSigner, SignableProtocolFamily};
 use edgerun_sign_p256::P256ProtocolSigner;
 use edgerun_tpm::{LinuxTpmSigningKey, TpmHandle};
@@ -157,19 +157,7 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                 .encrypted_key_path
                 .as_ref()
                 .expect("encrypted signer requires encrypted_key_path");
-            let passphrase_env = signer_config
-                .passphrase_env
-                .as_deref()
-                .unwrap_or("EDGERUN_KEY_PASSPHRASE");
-
-            let passphrase = std::env::var(passphrase_env).unwrap_or_else(|_| {
-                eprintln!(
-                    "error: encrypted signer requires the passphrase env var '{}' to be set.",
-                    passphrase_env
-                );
-                eprintln!("Set it with: export {}='your-passphrase'", passphrase_env);
-                std::process::exit(1);
-            });
+            let seal_key = load_seal_key(signer_config);
 
             let encrypted_data = std::fs::read(key_path).unwrap_or_else(|e| {
                 eprintln!(
@@ -180,11 +168,8 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
             });
 
             let signing_key =
-                unseal_node_signing_key(&encrypted_data, &passphrase).unwrap_or_else(|e| {
-                    eprintln!(
-                    "error: failed to decrypt key with passphrase from '{}' (wrong passphrase?)",
-                    passphrase_env
-                );
+                unseal_node_signing_key(&encrypted_data, &seal_key).unwrap_or_else(|e| {
+                    eprintln!("error: failed to unseal node signing key: {:?}", e);
                     std::process::exit(1);
                 });
 
@@ -203,6 +188,37 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
             std::process::exit(1);
         }
     }
+}
+
+fn load_seal_key(signer_config: &SignerConfig) -> SealKey {
+    if let Some(key_hex) = &signer_config.seal_key_hex {
+        return parse_seal_key_hex(key_hex);
+    }
+
+    let key_env = signer_config
+        .seal_key_env
+        .as_deref()
+        .unwrap_or("EDGERUN_SEAL_KEY_HEX");
+    let key_hex = std::env::var(key_env).unwrap_or_else(|_| {
+        eprintln!(
+            "error: encrypted signer requires seal key env var '{}' to be set.",
+            key_env
+        );
+        std::process::exit(1);
+    });
+    parse_seal_key_hex(&key_hex)
+}
+
+fn parse_seal_key_hex(key_hex: &str) -> SealKey {
+    let bytes = edgerun_core::util::hex_to_bytes(key_hex.trim()).unwrap_or_else(|e| {
+        eprintln!("error: invalid seal key hex: {}", e);
+        std::process::exit(1);
+    });
+    let bytes: [u8; 32] = bytes.try_into().unwrap_or_else(|_| {
+        eprintln!("error: seal key must be 32 bytes (64 hex chars)");
+        std::process::exit(1);
+    });
+    SealKey::from_bytes(bytes)
 }
 
 pub fn parse_signing_key_hex(key_hex: &str) -> NodeSigningKey {

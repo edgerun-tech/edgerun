@@ -31,7 +31,6 @@ pub enum Command {
         config: PathBuf,
         key_file: PathBuf,
         name: Option<String>,
-        passphrase: Option<String>,
     },
     InitProvisioned {
         config: PathBuf,
@@ -78,22 +77,20 @@ pub fn parse_args() -> Result<Command, String> {
             let mut config = PathBuf::from("node.yaml");
             let mut key_file = PathBuf::from("node.key.enc");
             let mut name = None;
-            let mut passphrase = None;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
                     "--config" => { i += 1; config = PathBuf::from(&args[i]); }
                     "--key-file" => { i += 1; key_file = PathBuf::from(&args[i]); }
                     "--name" => { i += 1; name = Some(args[i].clone()); }
-                    "--passphrase" => { i += 1; passphrase = Some(args[i].clone()); }
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund init-encrypted [--config path] [--key-file path] [--name name] [--passphrase phrase]".into());
+                        return Err("Usage: edgerund init-encrypted [--config path] [--key-file path] [--name name]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }
                 i += 1;
             }
-            Ok(Command::InitEncrypted { config, key_file, name, passphrase })
+            Ok(Command::InitEncrypted { config, key_file, name })
         }
         "init-provisioned" => {
             let mut config = PathBuf::from("node.yaml");
@@ -123,7 +120,6 @@ pub fn parse_args() -> Result<Command, String> {
                 match args[i].as_str() {
                     "--config" => { i += 1; config = PathBuf::from(&args[i]); }
                     "--pin" => { i += 1; pin = args[i].clone(); }
-                    "--password" => { return Err("error: provisioning passwords are not supported; node control uses the generated private key".into()); }
                     "--target" => { i += 1; target_addr = Some(args[i].clone()); }
                     "--help" | "-h" => {
                         return Err("Usage: edgerund provision --config path --pin PIN [--target addr]".into());
@@ -179,9 +175,8 @@ pub fn main() {
             config,
             key_file,
             name,
-            passphrase,
         } => {
-            cmd_init_encrypted(&config, &key_file, name, passphrase);
+            cmd_init_encrypted(&config, &key_file, name);
         }
         Command::InitProvisioned {
             config,

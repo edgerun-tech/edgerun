@@ -24,7 +24,8 @@ pub struct SignerConfig {
     pub handle: Option<String>,
     pub slot: Option<String>,
     pub encrypted_key_path: Option<String>,
-    pub passphrase_env: Option<String>,
+    pub seal_key_hex: Option<String>,
+    pub seal_key_env: Option<String>,
     pub state: Option<SignerState>,
     pub pairing_pin: Option<String>,
 }
@@ -47,7 +48,8 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
     let mut handle = Option::<String>::None;
     let mut slot = Option::<String>::None;
     let mut encrypted_key_path = Option::<String>::None;
-    let mut passphrase_env = Option::<String>::None;
+    let mut seal_key_hex = Option::<String>::None;
+    let mut seal_key_env = Option::<String>::None;
     let mut signer_state = Option::<SignerState>::None;
     let mut pairing_pin = Option::<String>::None;
 
@@ -76,7 +78,8 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
                     "handle" => handle = Some(unquote(&val.1)),
                     "slot" => slot = Some(unquote(&val.1)),
                     "encrypted_key_path" => encrypted_key_path = Some(unquote(&val.1)),
-                    "passphrase_env" => passphrase_env = Some(unquote(&val.1)),
+                    "seal_key_hex" => seal_key_hex = Some(unquote(&val.1)),
+                    "seal_key_env" => seal_key_env = Some(unquote(&val.1)),
                     "state" => {
                         signer_state = match val.1.as_str() {
                             "provisioning" => Some(SignerState::Provisioning),
@@ -116,7 +119,8 @@ pub fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
             handle,
             slot,
             encrypted_key_path,
-            passphrase_env,
+            seal_key_hex,
+            seal_key_env,
             state: signer_state,
             pairing_pin,
         });

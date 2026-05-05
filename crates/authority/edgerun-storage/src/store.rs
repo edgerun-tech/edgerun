@@ -232,9 +232,6 @@ impl NodeStore {
                 unseal_fn: unseal_fn.clone(),
                 seal_fn: seal_fn.clone(),
             },
-            BlobKeySource::Password { passphrase } => BlobKeySource::Password {
-                passphrase: passphrase.clone(),
-            },
         };
         let blobs = Arc::new(BlobStore::open(&blob_config, key_source)?);
         let content = FsContentStore::new(Arc::clone(&blobs), Arc::clone(&index));

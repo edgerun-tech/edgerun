@@ -62,9 +62,6 @@ pub enum BlobKeySource {
             dyn Fn(&[u8; 32]) -> Result<Vec<u8>, crate::error::StorageError> + Send + Sync,
         >,
     },
-    /// Password-derived: derive the key from a passphrase via PBKDF2.
-    /// Used for provisioned nodes where the key is derived from the user's password.
-    Password { passphrase: String },
 }
 
 impl std::fmt::Debug for BlobKeySource {
@@ -78,7 +75,6 @@ impl std::fmt::Debug for BlobKeySource {
                 )
                 .finish(),
             Self::HardwareSealed { .. } => f.debug_struct("HardwareSealed").finish(),
-            Self::Password { .. } => f.debug_struct("Password").finish(),
         }
     }
 }
@@ -110,7 +106,6 @@ impl BlobStore {
             BlobKeySource::HardwareSealed { unseal_fn, seal_fn } => {
                 load_or_create_sealed_key(&config.blob_dir, &*unseal_fn, &*seal_fn)?
             }
-            BlobKeySource::Password { passphrase } => derive_blob_key_from_passphrase(&passphrase),
         };
 
         let node_identity = key.to_vec();
@@ -383,18 +378,6 @@ fn derive_blob_key_from_private_key(private_key_bytes: &[u8]) -> [u8; 32] {
     let mut key = [0u8; 32];
     key.copy_from_slice(&expanded[..32]);
     key
-}
-
-const BLOB_KEY_PBKDF2_ITERATIONS: u32 = 100_000;
-
-fn derive_blob_key_from_passphrase(passphrase: &str) -> [u8; 32] {
-    use edgerun_crypto::pbkdf2::pbkdf2_hmac_array;
-    use edgerun_crypto::sha2::Sha256;
-
-    let salt = b"edgerun:v0:blob-key-password";
-    let derived: [u8; 32] =
-        pbkdf2_hmac_array::<Sha256, 32>(passphrase.as_bytes(), salt, BLOB_KEY_PBKDF2_ITERATIONS);
-    derived
 }
 
 // ---------------------------------------------------------------------------

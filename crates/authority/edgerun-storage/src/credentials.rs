@@ -3,7 +3,7 @@
 //! Named credential store — stores and retrieves secrets by namespace/name.
 //!
 //! Builds on top of the encrypted `BlobStore` to provide a high-level API
-//! for managing credentials (API keys, passwords, tokens, private keys, etc.).
+//! for managing credentials (API keys, tokens, private keys, etc.).
 //!
 //! ## Architecture
 //!
@@ -18,17 +18,17 @@
 //! let store = CredentialStore::new(blobs, index);
 //!
 //! // Store a credential
-//! store.put("wifi", "home-network", b"my-wifi-password", Some("WPA2 passphrase"))?;
+//! store.put("api", "controller", b"edgerun-token", Some("controller token"))?;
 //!
 //! // Retrieve it
-//! let secret = store.get("wifi", "home-network")?;
-//! assert_eq!(secret, Some(b"my-wifi-password".to_vec()));
+//! let secret = store.get("api", "controller")?;
+//! assert_eq!(secret, Some(b"edgerun-token".to_vec()));
 //!
 //! // List credentials in a namespace
-//! let names = store.list("wifi")?;
+//! let names = store.list("api")?;
 //!
 //! // Delete
-//! store.delete("wifi", "home-network")?;
+//! store.delete("api", "controller")?;
 //! ```
 
 use crate::prelude::v1::*;
@@ -226,12 +226,12 @@ mod tests {
         let root = tmp_data_root();
         let store = make_store(root);
 
-        store.put("db", "postgres", b"password123", None).unwrap();
-        assert!(store.exists("db", "postgres").unwrap());
+        store.put("api", "controller", b"token123", None).unwrap();
+        assert!(store.exists("api", "controller").unwrap());
 
-        let deleted = store.delete("db", "postgres").unwrap();
+        let deleted = store.delete("api", "controller").unwrap();
         assert!(deleted);
-        assert!(!store.exists("db", "postgres").unwrap());
+        assert!(!store.exists("api", "controller").unwrap());
     }
 
     #[test]
