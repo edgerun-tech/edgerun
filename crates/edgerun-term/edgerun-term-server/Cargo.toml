@@ -1,0 +1,11 @@
+[package]
+name = "edgerun-term-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.7", features = ["ws"] }
+portable-pty = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+tower-http = { version = "0.5", features = ["fs"] }

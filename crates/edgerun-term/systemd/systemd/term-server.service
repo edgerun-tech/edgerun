@@ -1,0 +1,13 @@
+[Unit]
+Description=edgerun-term-server (WebGPU terminal)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ken/edgerun/crates/edgerun-term
+ExecStart=/home/ken/edgerun/crates/edgerun-term/target/release/edgerun-term-server
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

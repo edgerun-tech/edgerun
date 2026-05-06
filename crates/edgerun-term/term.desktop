@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=edgerun-term
+Comment=Terminal emulator for edgerun-compositor
+Exec=/home/ken/.local/bin/edgerun-term
+Icon=edgerun-term
+Type=Application
+Categories=System;TerminalEmulator;
+Terminal=false
+StartupNotify=true

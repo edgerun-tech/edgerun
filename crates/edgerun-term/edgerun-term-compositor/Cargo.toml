@@ -1,0 +1,17 @@
+[package]
+name = "edgerun-term-compositor"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "edgerun-term-compositor"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+edgerun-compositor = { path = "/home/ken/edgerun/crates/edgerun-compositor" }
+edgerun-term-core = { path = "../edgerun-term-core", default-features = false }
+libc = "0.2"
+log = "0.4"
+portable-pty = "0.9"
+vte = "0.13"
