@@ -38,9 +38,9 @@ The first compiled program is intentionally small:
 ```text
 udp-rfc768-length-0001
 tftp-rfc1350-opcode-0001
+tftp-rfc1350-ack-length-0001
 ```
 
 This proves the compiler and assembly loop. The next step is to replace
 hand-coded lowering cases with a typed expression compiler and make definition
 modules perform real field extraction.
-

@@ -127,6 +127,12 @@ The runner emits JSON containing:
 - `trace_sha256`: hash of the observed input and parsed handoff trace.
 - `findings`: requirement-addressed pass/reject results.
 
+The current corpus covers:
+
+- valid UDP payload carrying a TFTP ACK,
+- invalid UDP length,
+- invalid TFTP ACK length with otherwise valid UDP framing.
+
 Try the rejection path:
 
 ```bash

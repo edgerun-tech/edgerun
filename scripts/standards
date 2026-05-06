@@ -775,8 +775,13 @@ def execute_program(program_id: str, data: bytes, *, use_wasm: bool) -> tuple[di
         tftp, tftp_findings = parse_tftp_message(udp["payload"])
         if use_wasm and tftp:
             try:
-                verdict = wasmtime_invoke(
+                opcode_verdict = wasmtime_invoke(
                     compiled_clause_path(program_id, "tftp-rfc1350-opcode-0001"),
+                    "check",
+                    [len(udp["payload"]), tftp["opcode"]],
+                )
+                ack_length_verdict = wasmtime_invoke(
+                    compiled_clause_path(program_id, "tftp-rfc1350-ack-length-0001"),
                     "check",
                     [len(udp["payload"]), tftp["opcode"]],
                 )
@@ -785,11 +790,18 @@ def execute_program(program_id: str, data: bytes, *, use_wasm: bool) -> tuple[di
             tftp_findings = [
                 {
                     "requirement": "tftp-rfc1350-opcode-0001",
-                    "severity": "pass" if verdict else "reject",
+                    "severity": "pass" if opcode_verdict else "reject",
                     "message": "WASM clause accepted TFTP opcode."
-                    if verdict
+                    if opcode_verdict
                     else f"WASM clause rejected TFTP opcode {tftp['opcode']}.",
-                }
+                },
+                {
+                    "requirement": "tftp-rfc1350-ack-length-0001",
+                    "severity": "pass" if ack_length_verdict else "reject",
+                    "message": "WASM clause accepted TFTP ACK length."
+                    if ack_length_verdict
+                    else f"WASM clause rejected TFTP ACK length {len(udp['payload'])}.",
+                },
             ]
         findings.extend(tftp_findings)
         if tftp:
