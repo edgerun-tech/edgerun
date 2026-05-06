@@ -1,0 +1,24 @@
+id = "profile-id"
+name = "Profile Name"
+description = ""
+
+[selection]
+include_keywords = ["MUST", "MUST NOT"]
+include_kinds = ["definition", "constraint", "state-machine", "registry"]
+exclude_keywords = ["SHOULD", "MAY"]
+
+standards = []
+clauses = []
+registries = []
+
+[composition]
+inputs = []
+outputs = []
+depends_on_programs = []
+
+[identity]
+compiler = ""
+compiler_sha256 = ""
+profile_sha256 = ""
+program_sha256 = ""
+

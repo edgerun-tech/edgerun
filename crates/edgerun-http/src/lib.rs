@@ -10,6 +10,8 @@
 //!
 //! # HTTP/1.1 Example
 //! ```no_run
+//! # #[cfg(feature = "server")]
+//! # {
 //! use edgerun_http::{HttpServer, Handler, Request, Response, StatusCode};
 //!
 //! struct HelloHandler;
@@ -34,10 +36,13 @@
 //!     .await
 //!     .unwrap();
 //! # });
+//! # }
 //! ```
 //!
 //! # Client Example
 //! ```no_run
+//! # #[cfg(feature = "client")]
+//! # {
 //! use edgerun_http::HttpClient;
 //!
 //! # edgerun_rt::Runtime::new_multi_thread().enable_all().build().unwrap().block_on(async {
@@ -45,6 +50,7 @@
 //! let response = client.get("http://example.com/").await.unwrap();
 //! println!("Status: {}", response.status().as_u16());
 //! # });
+//! # }
 //! ```
 //!
 //! # Protocol Modules

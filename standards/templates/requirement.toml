@@ -1,0 +1,16 @@
+[[requirement]]
+id = "protocol-0001"
+standard = "RFC0000"
+section = ""
+keyword = "MUST"
+text = ""
+applies_to = []
+kind = "validator"
+profile = ""
+component = ""
+status = "unknown"
+implementation = []
+tests = []
+fuzz_targets = []
+interop = []
+notes = ""

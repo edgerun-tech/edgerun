@@ -1,0 +1,39 @@
+id = "edgerun-dhcp"
+crate = "crates/edgerun-dhcp"
+status = "good-second-proof-target"
+
+profiles = [
+  "dhcpv4-rfc2131-message-codec",
+  "dhcpv4-rfc2132-options",
+  "dhcpv4-server-core"
+]
+
+[[surface]]
+id = "dhcpv4-message-codec"
+protocol = "dhcpv4"
+standards = ["RFC2131"]
+kind = "parser"
+implementation = ["crates/edgerun-dhcp/src/message.rs"]
+entrypoints = [
+  "DhcpMessage::from_wire",
+  "DhcpMessage::to_wire",
+]
+proof_status = "ready-for-requirement-ids"
+
+[[surface]]
+id = "dhcpv4-options"
+protocol = "dhcpv4"
+standards = ["RFC2132"]
+kind = "validator"
+implementation = ["crates/edgerun-dhcp/src/message.rs"]
+entrypoints = [
+  "DhcpOptions::parse",
+  "DhcpOptions::serialize",
+]
+proof_status = "ready-for-requirement-ids"
+
+[[command]]
+kind = "current-check"
+command = "cargo test -p edgerun-dhcp --lib --no-default-features"
+status = "passes"
+

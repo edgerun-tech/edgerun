@@ -1,0 +1,14 @@
+id = "udp-rfc768-length-0001"
+name = "udp-rfc768-length-0001"
+kind = "clause"
+version = "0.1.0"
+wat = "standards/build/wasm/udp-tftp-must-program/udp-rfc768-length-0001.wat"
+wasm = "standards/build/wasm/udp-tftp-must-program/udp-rfc768-length-0001.wasm"
+sha256 = "697fdb471ac476cae08993c279627bc5f728949220c796bfe185a05ff96e946f"
+entrypoint = "check"
+deterministic = true
+standards = ["RFC768"]
+requirements = ["udp-rfc768-length-0001"]
+inputs = ["length", "payload_len"]
+outputs = ["i32"]
+depends_on = []

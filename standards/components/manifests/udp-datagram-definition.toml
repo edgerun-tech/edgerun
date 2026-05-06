@@ -1,0 +1,14 @@
+id = "udp-datagram-definition"
+name = "udp-datagram-definition"
+kind = "definition"
+version = "0.1.0"
+wat = "standards/build/wasm/udp-tftp-must-program/udp-datagram-definition.wat"
+wasm = "standards/build/wasm/udp-tftp-must-program/udp-datagram-definition.wasm"
+sha256 = "402b8069d364e08a3fcd1a066cd8a7c68e52ac5c4e1aa79639a51cb03750f734"
+entrypoint = "minimum_length"
+deterministic = true
+standards = ["RFC768"]
+requirements = []
+inputs = []
+outputs = ["i32"]
+depends_on = []

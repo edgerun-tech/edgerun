@@ -1,0 +1,14 @@
+id = "tftp-message-definition"
+name = "tftp-message-definition"
+kind = "definition"
+version = "0.1.0"
+wat = "standards/build/wasm/udp-tftp-must-program/tftp-message-definition.wat"
+wasm = "standards/build/wasm/udp-tftp-must-program/tftp-message-definition.wasm"
+sha256 = "6221be8510550815668508dd4ec757f70b3102a431da149c1ea6df367c78c521"
+entrypoint = "minimum_length"
+deterministic = true
+standards = ["RFC1350"]
+requirements = []
+inputs = []
+outputs = ["i32"]
+depends_on = []

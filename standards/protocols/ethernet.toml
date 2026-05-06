@@ -1,0 +1,55 @@
+id = "ethernet"
+name = "Ethernet"
+summary = "Link-layer frame format and media access protocol family used as a base for IP networks."
+layer = "link"
+runs_over = []
+depends_on = []
+implementation_crates = [
+  "crates/device-types/edgerun-network-interface",
+  "crates/edgerun-rtl8125",
+]
+profiles = ["ethernet-ii-frame-parser", "bare-metal-candidate"]
+standards_bodies = ["IEEE"]
+
+[environment]
+requires_clock = false
+requires_entropy = false
+requires_network_io = true
+requires_packet_io = true
+requires_stream_io = false
+requires_filesystem = false
+requires_threads = false
+requires_allocator = false
+requires_crypto = false
+no_std_viability = "plausible"
+bare_metal_viability = "plausible-with-nic-driver"
+
+[[standard]]
+id = "IEEE 802.3"
+title = "IEEE Standard for Ethernet"
+url = "https://standards.ieee.org/standard/802_3-2022.html"
+status = "external"
+published = "2022"
+role = "base"
+
+[[registry]]
+name = "IEEE Registration Authority EtherType"
+url = "https://standards.ieee.org/products-programs/regauth/ethertype/"
+owner = "IEEE"
+
+[[behavior]]
+id = "ethernet-ii-frame"
+kind = "frame-format"
+standards = ["IEEE 802.3"]
+implementation = [
+  "crates/device-types/edgerun-network-interface",
+  "crates/edgerun-rtl8125",
+]
+status = "unknown"
+
+[composition]
+accepts = ["nic-rx-bytes"]
+emits = ["ethernet-frame"]
+lower = []
+upper = ["arp", "ipv4", "ipv6"]
+

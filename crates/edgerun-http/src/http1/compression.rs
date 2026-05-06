@@ -9,8 +9,9 @@
 //! - The encoding is supported (gzip, deflate, identity)
 
 use crate::HeaderMap;
+use alloc::vec::Vec;
 #[cfg(feature = "http-compression")]
-use alloc::{string::String, vec::Vec};
+use alloc::string::String;
 use core::fmt;
 #[cfg(feature = "http-compression")]
 use edgerun_encoding::crc32::crc32;

@@ -1,0 +1,53 @@
+id = "dhcpv4"
+name = "Dynamic Host Configuration Protocol for IPv4"
+summary = "IPv4 host configuration protocol built on BOOTP message format and UDP broadcast/unicast exchange."
+layer = "application"
+runs_over = ["UDP", "IPv4"]
+depends_on = []
+implementation_crates = ["crates/edgerun-dhcp"]
+profiles = ["client", "server", "bare-metal-candidate"]
+standards_bodies = ["IETF"]
+
+[environment]
+requires_clock = true
+requires_entropy = false
+requires_network_io = true
+requires_packet_io = true
+requires_stream_io = false
+requires_filesystem = false
+requires_threads = false
+requires_allocator = false
+requires_crypto = false
+no_std_viability = "plausible"
+bare_metal_viability = "plausible-with-clock-udp"
+
+[[standard]]
+id = "RFC2131"
+title = "Dynamic Host Configuration Protocol"
+url = "https://www.rfc-editor.org/rfc/rfc2131.html"
+xml = "https://www.rfc-editor.org/rfc/rfc2131.xml"
+status = "Draft Standard"
+published = "1997-03"
+role = "base"
+
+[[standard]]
+id = "RFC2132"
+title = "DHCP Options and BOOTP Vendor Extensions"
+url = "https://www.rfc-editor.org/rfc/rfc2132.html"
+xml = "https://www.rfc-editor.org/rfc/rfc2132.xml"
+status = "Draft Standard"
+published = "1997-03"
+role = "options"
+
+[[registry]]
+name = "BOOTP Vendor Extensions and DHCP Options"
+url = "https://www.iana.org/assignments/bootp-dhcp-parameters/bootp-dhcp-parameters.xhtml"
+owner = "IANA"
+
+[[behavior]]
+id = "dhcpv4-option-codec"
+kind = "packet-format"
+standards = ["RFC2131", "RFC2132"]
+implementation = ["crates/edgerun-dhcp"]
+status = "unknown"
+

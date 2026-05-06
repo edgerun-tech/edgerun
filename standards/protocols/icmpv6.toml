@@ -1,0 +1,66 @@
+id = "icmpv6"
+name = "Internet Control Message Protocol for IPv6"
+summary = "Control, error, and neighbor discovery message basis for IPv6."
+layer = "network"
+runs_over = ["IPv6"]
+depends_on = ["IPv6"]
+implementation_crates = []
+profiles = ["icmpv6-minimal-host", "bare-metal-candidate"]
+standards_bodies = ["IETF"]
+
+[environment]
+requires_clock = true
+requires_entropy = false
+requires_network_io = true
+requires_packet_io = true
+requires_stream_io = false
+requires_filesystem = false
+requires_threads = false
+requires_allocator = false
+requires_crypto = false
+no_std_viability = "plausible"
+bare_metal_viability = "plausible-with-ipv6"
+
+[[standard]]
+id = "RFC4443"
+title = "Internet Control Message Protocol (ICMPv6) for the Internet Protocol Version 6 (IPv6) Specification"
+url = "https://www.rfc-editor.org/rfc/rfc4443.html"
+xml = "https://www.rfc-editor.org/rfc/rfc4443.xml"
+status = "Internet Standard"
+published = "2006-03"
+role = "base"
+
+[[standard]]
+id = "RFC4861"
+title = "Neighbor Discovery for IP version 6 (IPv6)"
+url = "https://www.rfc-editor.org/rfc/rfc4861.html"
+xml = "https://www.rfc-editor.org/rfc/rfc4861.xml"
+status = "Draft Standard"
+published = "2007-09"
+role = "neighbor-discovery"
+
+[[registry]]
+name = "Internet Control Message Protocol version 6 (ICMPv6) Parameters"
+url = "https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml"
+owner = "IANA"
+
+[[behavior]]
+id = "icmpv6-message-parse"
+kind = "packet-format"
+standards = ["RFC4443"]
+implementation = []
+status = "unknown"
+
+[[behavior]]
+id = "icmpv6-neighbor-discovery"
+kind = "state-machine"
+standards = ["RFC4861"]
+implementation = []
+status = "unknown"
+
+[composition]
+accepts = ["ipv6-packet"]
+emits = ["icmpv6-message"]
+lower = ["ipv6"]
+upper = []
+

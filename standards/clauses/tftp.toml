@@ -1,0 +1,63 @@
+[[clause]]
+id = "tftp-rfc1350-opcode-0001"
+standard = "RFC1350"
+section = "5"
+paragraph = ""
+keyword = "MUST"
+kind = "constraint"
+subject = "tftp-message"
+text = "A TFTP message starts with a two-octet opcode identifying the operation."
+
+[clause.input]
+type = "tftp-message"
+bindings = { byte_len = "len(input.bytes)", opcode = "field.opcode" }
+
+[clause.predicate]
+language = "edgerun-clause-expr"
+expr = "byte_len >= 2 && opcode in [1, 2, 3, 4, 5, 6]"
+
+[clause.on_violation]
+severity = "reject"
+code = "TFTP_OPCODE_INVALID"
+message = "TFTP opcode is missing or unknown."
+
+[clause.wasm]
+manifest = "standards/components/manifests/tftp-rfc1350-opcode-0001.toml"
+sha256 = ""
+
+[clause.review]
+status = "draft"
+reviewer = ""
+notes = "Includes OACK opcode 6 from RFC 2347 profile when enabled."
+
+[[clause]]
+id = "tftp-rfc1350-ack-length-0001"
+standard = "RFC1350"
+section = "5"
+paragraph = ""
+keyword = "MUST"
+kind = "constraint"
+subject = "tftp-message"
+text = "An ACK packet consists of opcode 4 followed by a two-octet block number."
+
+[clause.input]
+type = "tftp-message"
+bindings = { byte_len = "len(input.bytes)", opcode = "field.opcode" }
+
+[clause.predicate]
+language = "edgerun-clause-expr"
+expr = "opcode != 4 || byte_len == 4"
+
+[clause.on_violation]
+severity = "reject"
+code = "TFTP_ACK_LENGTH_INVALID"
+message = "TFTP ACK packets must be exactly four octets."
+
+[clause.wasm]
+manifest = "standards/components/manifests/tftp-rfc1350-ack-length-0001.toml"
+sha256 = ""
+
+[clause.review]
+status = "draft"
+reviewer = ""
+notes = "Applies only when opcode is ACK."

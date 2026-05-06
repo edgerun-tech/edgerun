@@ -1,0 +1,989 @@
+#!/usr/bin/env python3
+"""Query the local standards catalog."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import hashlib
+import shutil
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+STANDARDS = ROOT / "standards"
+PROTOCOLS = STANDARDS / "protocols"
+PROGRAMS = STANDARDS / "programs"
+DEFINITIONS = STANDARDS / "definitions"
+CLAUSES = STANDARDS / "clauses"
+POLICY = STANDARDS / "policy"
+BUILD = STANDARDS / "build"
+MANIFESTS = STANDARDS / "components" / "manifests"
+
+
+def load_protocol(path: Path) -> dict:
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+    data["_path"] = path
+    return data
+
+
+def protocols() -> list[dict]:
+    return [load_protocol(path) for path in sorted(PROTOCOLS.glob("*.toml"))]
+
+
+def programs() -> list[dict]:
+    return [
+        load_protocol(path)
+        for path in sorted(PROGRAMS.glob("*.toml"))
+        if not path.name.endswith(".schema.toml")
+    ]
+
+
+def definitions() -> list[dict]:
+    return [
+        load_protocol(path)
+        for path in sorted(DEFINITIONS.glob("*.toml"))
+        if not path.name.endswith(".schema.toml")
+    ]
+
+
+def clauses() -> list[dict]:
+    rows = []
+    for path in sorted(CLAUSES.glob("*.toml")):
+        if path.name.endswith(".schema.toml"):
+            continue
+        data = load_protocol(path)
+        if "clause" in data:
+            for clause in data["clause"]:
+                clause["_path"] = path
+                rows.append(clause)
+        elif "id" in data:
+            rows.append(data)
+    return rows
+
+
+def policies() -> list[dict]:
+    return [
+        load_protocol(path)
+        for path in sorted(POLICY.glob("*.toml"))
+        if not path.name.endswith(".schema.toml")
+    ]
+
+
+def by_id(rows: list[dict]) -> dict[str, dict]:
+    return {row["id"]: row for row in rows}
+
+
+def stable(value):
+    if isinstance(value, dict):
+        return {k: stable(v) for k, v in sorted(value.items()) if k != "_path"}
+    if isinstance(value, list):
+        return [stable(v) for v in value]
+    if isinstance(value, Path):
+        return str(value)
+    return value
+
+
+def sha256_json(value) -> str:
+    encoded = json.dumps(stable(value), sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def command_output(argv: list[str]) -> str:
+    try:
+        return subprocess.run(
+            argv,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        ).stdout.strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return ""
+
+
+def compiler_identity() -> dict:
+    script = Path(__file__).resolve()
+    return {
+        "script": str(script.relative_to(ROOT)),
+        "script_sha256": sha256_file(script),
+        "wat2wasm": command_output(["wat2wasm", "--version"]),
+        "wasm_tools": command_output(["wasm-tools", "--version"]),
+        "wasmtime": command_output(["wasmtime", "--version"]),
+    }
+
+
+def as_bool(value: str) -> bool:
+    if value.lower() in {"1", "true", "yes", "y"}:
+        return True
+    if value.lower() in {"0", "false", "no", "n"}:
+        return False
+    raise argparse.ArgumentTypeError(f"expected boolean, got {value!r}")
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    rows = []
+    for item in protocols():
+        env = item.get("environment", {})
+        if args.runs_over and args.runs_over not in item.get("runs_over", []):
+            continue
+        if args.crate and args.crate not in " ".join(item.get("implementation_crates", [])):
+            continue
+        if args.requires_entropy is not None and env.get("requires_entropy") != args.requires_entropy:
+            continue
+        if args.requires_filesystem is not None and env.get("requires_filesystem") != args.requires_filesystem:
+            continue
+        if args.no_std and args.no_std not in env.get("no_std_viability", ""):
+            continue
+        rows.append(item)
+
+    for item in rows:
+        env = item.get("environment", {})
+        print(
+            f"{item['id']:8} {item['layer']:12} "
+            f"over={','.join(item.get('runs_over', [])) or '-':18} "
+            f"no_std={env.get('no_std_viability', 'unknown')}"
+        )
+    return 0
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    matches = [item for item in protocols() if item["id"] == args.protocol]
+    if not matches:
+        print(f"unknown protocol: {args.protocol}", file=sys.stderr)
+        return 1
+
+    item = matches[0]
+    env = item.get("environment", {})
+    print(f"{item['name']} ({item['id']})")
+    print(f"  summary: {item.get('summary', '')}")
+    print(f"  layer: {item.get('layer', '')}")
+    print(f"  runs over: {', '.join(item.get('runs_over', [])) or '-'}")
+    print(f"  crates: {', '.join(item.get('implementation_crates', [])) or '-'}")
+    print(f"  no_std: {env.get('no_std_viability', 'unknown')}")
+    print(f"  bare metal: {env.get('bare_metal_viability', 'unknown')}")
+
+    composition = item.get("composition", {})
+    if composition:
+        print(f"  accepts: {', '.join(composition.get('accepts', [])) or '-'}")
+        print(f"  emits: {', '.join(composition.get('emits', [])) or '-'}")
+        print(f"  lower: {', '.join(composition.get('lower', [])) or '-'}")
+        print(f"  upper: {', '.join(composition.get('upper', [])) or '-'}")
+
+    standards = item.get("standard", [])
+    if standards:
+        print("  standards:")
+        for standard in standards:
+            print(f"    {standard['id']}: {standard['title']}")
+
+    registries = item.get("registry", [])
+    if registries:
+        print("  registries:")
+        for registry in registries:
+            print(f"    {registry['name']}: {registry['url']}")
+    return 0
+
+
+def cmd_matrix(_: argparse.Namespace) -> int:
+    print("Protocol | Layer | Transport | Entropy | FS | Alloc | no_std | Crates")
+    print("--- | --- | --- | --- | --- | --- | --- | ---")
+    for item in protocols():
+        env = item.get("environment", {})
+        print(
+            f"{item['id']} | {item.get('layer', '')} | "
+            f"{', '.join(item.get('runs_over', [])) or '-'} | "
+            f"{env.get('requires_entropy')} | "
+            f"{env.get('requires_filesystem')} | "
+            f"{env.get('requires_allocator')} | "
+            f"{env.get('no_std_viability', 'unknown')} | "
+            f"{', '.join(item.get('implementation_crates', [])) or '-'}"
+        )
+    return 0
+
+
+def cmd_graph(_: argparse.Namespace) -> int:
+    edges = set()
+    for item in protocols():
+        composition = item.get("composition", {})
+        lower = composition.get("lower", [])
+        upper = composition.get("upper", [])
+        if not lower and not upper:
+            continue
+        if lower:
+            for dep in lower:
+                edges.add((dep, item["id"]))
+        if upper:
+            for dep in upper:
+                edges.add((item["id"], dep))
+    for left, right in sorted(edges):
+        print(f"{left} -> {right}")
+    return 0
+
+
+def cmd_program(args: argparse.Namespace) -> int:
+    matches = [item for item in programs() if item["id"] == args.program]
+    if not matches:
+        print(f"unknown program: {args.program}", file=sys.stderr)
+        return 1
+
+    item = matches[0]
+    print(f"{item['name']} ({item['id']})")
+    print(f"  profile: {item.get('profile', '')}")
+    print(f"  definitions: {', '.join(item.get('definitions', [])) or '-'}")
+    print(f"  clauses: {', '.join(item.get('clauses', [])) or '-'}")
+    print(f"  components: {', '.join(item.get('components', [])) or '-'}")
+    edges = item.get("edge", [])
+    if edges:
+        print("  edges:")
+        for edge in edges:
+            print(
+                f"    {edge.get('from', '')} -> {edge.get('to', '')} "
+                f"[{edge.get('type', '')}] when {edge.get('predicate', '')}"
+            )
+    return 0
+
+
+def cmd_components(args: argparse.Namespace) -> int:
+    try:
+        assembly = compiled_assembly(args.program)
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        print(f"compiled assembly unavailable: {exc}", file=sys.stderr)
+        return 1
+
+    for component in assembly.get("components", []):
+        print(
+            f"{component['id']:32} {component['kind']:10} "
+            f"{component['sha256']} {component['wasm']}"
+        )
+    return 0
+
+
+def resolve_program(program_id: str) -> tuple[dict, list[dict], list[dict], dict]:
+    program_map = by_id(programs())
+    definition_map = by_id(definitions())
+    clause_map = by_id(clauses())
+    policy_map = by_id(policies())
+
+    if program_id not in program_map:
+        raise KeyError(f"unknown program: {program_id}")
+
+    program = program_map[program_id]
+    missing = []
+    selected_definitions = []
+    selected_clauses = []
+
+    for definition_id in program.get("definitions", []):
+        if definition_id not in definition_map:
+            missing.append(f"definition:{definition_id}")
+        else:
+            selected_definitions.append(definition_map[definition_id])
+
+    for clause_id in program.get("clauses", []):
+        if clause_id not in clause_map:
+            missing.append(f"clause:{clause_id}")
+        else:
+            selected_clauses.append(clause_map[clause_id])
+
+    profile = program.get("profile")
+    if profile and profile not in policy_map:
+        missing.append(f"profile:{profile}")
+
+    if missing:
+        raise KeyError("missing references: " + ", ".join(missing))
+
+    return program, selected_definitions, selected_clauses, policy_map.get(profile, {})
+
+
+def cmd_validate(_: argparse.Namespace) -> int:
+    errors = []
+    for path in sorted(STANDARDS.rglob("*.toml")):
+        try:
+            with path.open("rb") as f:
+                tomllib.load(f)
+        except tomllib.TOMLDecodeError as exc:
+            errors.append(f"{path}: {exc}")
+
+    definition_map = by_id(definitions())
+    clause_map = by_id(clauses())
+    policy_map = by_id(policies())
+    for program in programs():
+        for definition_id in program.get("definitions", []):
+            if definition_id not in definition_map:
+                errors.append(f"{program['_path']}: missing definition {definition_id}")
+        for clause_id in program.get("clauses", []):
+            if clause_id not in clause_map:
+                errors.append(f"{program['_path']}: missing clause {clause_id}")
+        profile = program.get("profile")
+        if profile and profile not in policy_map:
+            errors.append(f"{program['_path']}: missing profile {profile}")
+        for edge in program.get("edge", []):
+            if edge.get("from") not in definition_map:
+                errors.append(f"{program['_path']}: edge from unknown definition {edge.get('from')}")
+            if edge.get("to") not in definition_map:
+                errors.append(f"{program['_path']}: edge to unknown definition {edge.get('to')}")
+
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+
+    if not getattr(_, "quiet", False):
+        print("standards catalog valid")
+        print(f"  protocols: {len(protocols())}")
+        print(f"  definitions: {len(definition_map)}")
+        print(f"  clauses: {len(clause_map)}")
+        print(f"  programs: {len(programs())}")
+    return 0
+
+
+def cmd_hash(args: argparse.Namespace) -> int:
+    try:
+        program, selected_definitions, selected_clauses, policy = resolve_program(args.program)
+    except KeyError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    identity = {
+        "program": program,
+        "definitions": selected_definitions,
+        "clauses": selected_clauses,
+        "policy": policy,
+    }
+    print(sha256_json(identity))
+    return 0
+
+
+def wat_for_clause(clause: dict) -> tuple[str, list[str]]:
+    clause_id = clause["id"]
+    expr = clause.get("predicate", {}).get("expr", "")
+
+    if expr == "length >= 8 && length == payload_len + 8":
+        return (
+            f""";; generated from {clause_id}
+(module
+  (func (export "check") (param $length i32) (param $payload_len i32) (result i32)
+    (i32.and
+      (i32.ge_u (local.get $length) (i32.const 8))
+      (i32.eq
+        (local.get $length)
+        (i32.add (local.get $payload_len) (i32.const 8)))))
+)
+""",
+            ["length", "payload_len"],
+        )
+
+    if expr == "byte_len >= 2 && opcode in [1, 2, 3, 4, 5, 6]":
+        return (
+            f""";; generated from {clause_id}
+(module
+  (func (export "check") (param $byte_len i32) (param $opcode i32) (result i32)
+    (i32.and
+      (i32.ge_u (local.get $byte_len) (i32.const 2))
+      (i32.and
+        (i32.ge_u (local.get $opcode) (i32.const 1))
+        (i32.le_u (local.get $opcode) (i32.const 6)))))
+)
+""",
+            ["byte_len", "opcode"],
+        )
+
+    if expr == "opcode != 4 || byte_len == 4":
+        return (
+            f""";; generated from {clause_id}
+(module
+  (func (export "check") (param $byte_len i32) (param $opcode i32) (result i32)
+    (i32.or
+      (i32.ne (local.get $opcode) (i32.const 4))
+      (i32.eq (local.get $byte_len) (i32.const 4))))
+)
+""",
+            ["byte_len", "opcode"],
+        )
+
+    raise ValueError(f"unsupported clause expression for {clause_id}: {expr}")
+
+
+def wat_for_definition(definition: dict) -> tuple[str, list[str]]:
+    definition_id = definition["id"]
+    if definition_id == "udp-datagram":
+        return (
+            f""";; generated from {definition_id}
+(module
+  (func (export "minimum_length") (result i32)
+    (i32.const 8))
+)
+""",
+            [],
+        )
+    if definition_id == "tftp-message":
+        return (
+            f""";; generated from {definition_id}
+(module
+  (func (export "minimum_length") (result i32)
+    (i32.const 2))
+)
+""",
+            [],
+        )
+    raise ValueError(f"unsupported definition for WASM generation: {definition_id}")
+
+
+def compile_wat(wat_path: Path, wasm_path: Path) -> None:
+    tool = shutil.which("wat2wasm")
+    if not tool:
+        raise RuntimeError("wat2wasm is not installed")
+    wasm_path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([tool, str(wat_path), "-o", str(wasm_path)], check=True)
+
+
+def validate_wasm(wasm_path: Path) -> None:
+    tool = shutil.which("wasm-tools")
+    if tool:
+        subprocess.run([tool, "validate", str(wasm_path)], check=True)
+
+
+def write_component_manifest(
+    *,
+    component_id: str,
+    kind: str,
+    wat_path: Path,
+    wasm_path: Path,
+    sha256: str,
+    inputs: list[str],
+    standards: list[str],
+    requirements: list[str],
+) -> Path:
+    manifest_path = MANIFESTS / f"{component_id}.toml"
+    write_text(
+        manifest_path,
+        "\n".join(
+            [
+                f'id = "{component_id}"',
+                f'name = "{component_id}"',
+                f'kind = "{kind}"',
+                'version = "0.1.0"',
+                f'wat = "{wat_path.relative_to(ROOT)}"',
+                f'wasm = "{wasm_path.relative_to(ROOT)}"',
+                f'sha256 = "{sha256}"',
+                'entrypoint = "check"' if kind == "clause" else 'entrypoint = "minimum_length"',
+                "deterministic = true",
+                f"standards = {json.dumps(standards)}",
+                f"requirements = {json.dumps(requirements)}",
+                f"inputs = {json.dumps(inputs)}",
+                'outputs = ["i32"]',
+                "depends_on = []",
+                "",
+            ]
+        ),
+    )
+    return manifest_path
+
+
+def cmd_compile(args: argparse.Namespace) -> int:
+    try:
+        program, selected_definitions, selected_clauses, policy = resolve_program(args.program)
+    except KeyError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    out_dir = BUILD / "wasm" / args.program
+    compiled = []
+
+    try:
+        for definition in selected_definitions:
+            wat, inputs = wat_for_definition(definition)
+            component_id = f"{definition['id']}-definition"
+            wat_path = out_dir / f"{component_id}.wat"
+            wasm_path = out_dir / f"{component_id}.wasm"
+            write_text(wat_path, wat)
+            compile_wat(wat_path, wasm_path)
+            validate_wasm(wasm_path)
+            digest = sha256_file(wasm_path)
+            manifest_path = write_component_manifest(
+                component_id=component_id,
+                kind="definition",
+                wat_path=wat_path,
+                wasm_path=wasm_path,
+                sha256=digest,
+                inputs=inputs,
+                standards=[definition.get("standard", "")],
+                requirements=[],
+            )
+            compiled.append(
+                {
+                    "id": component_id,
+                    "kind": "definition",
+                    "manifest": str(manifest_path.relative_to(ROOT)),
+                    "wasm": str(wasm_path.relative_to(ROOT)),
+                    "sha256": digest,
+                }
+            )
+
+        for clause in selected_clauses:
+            wat, inputs = wat_for_clause(clause)
+            component_id = clause["id"]
+            wat_path = out_dir / f"{component_id}.wat"
+            wasm_path = out_dir / f"{component_id}.wasm"
+            write_text(wat_path, wat)
+            compile_wat(wat_path, wasm_path)
+            validate_wasm(wasm_path)
+            digest = sha256_file(wasm_path)
+            manifest_path = write_component_manifest(
+                component_id=component_id,
+                kind="clause",
+                wat_path=wat_path,
+                wasm_path=wasm_path,
+                sha256=digest,
+                inputs=inputs,
+                standards=[clause.get("standard", "")],
+                requirements=[clause["id"]],
+            )
+            compiled.append(
+                {
+                    "id": component_id,
+                    "kind": "clause",
+                    "manifest": str(manifest_path.relative_to(ROOT)),
+                    "wasm": str(wasm_path.relative_to(ROOT)),
+                    "sha256": digest,
+                }
+            )
+    except (RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
+        print(f"compile failed: {exc}", file=sys.stderr)
+        return 1
+
+    assembly = {
+        "program": stable(program),
+        "policy": stable(policy),
+        "compiler": compiler_identity(),
+        "components": compiled,
+    }
+    assembly["component_graph_sha256"] = sha256_json(compiled)
+    assembly["program_sha256"] = sha256_json(
+        {
+            "program": program,
+            "policy": policy,
+            "compiler": compiler_identity(),
+            "components": compiled,
+        }
+    )
+    assembly_path = out_dir / "program.json"
+    write_text(assembly_path, json.dumps(assembly, indent=2) + "\n")
+
+    if not getattr(args, "quiet", False):
+        print(json.dumps({"assembly": str(assembly_path.relative_to(ROOT)), **assembly}, indent=2))
+    return 0
+
+
+def wasmtime_invoke(wasm_path: Path, function: str, args: list[int]) -> int:
+    tool = shutil.which("wasmtime")
+    if not tool:
+        raise RuntimeError("wasmtime is not installed")
+    result = subprocess.run(
+        [tool, "run", "--invoke", function, str(wasm_path), *[str(arg) for arg in args]],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    output = result.stdout.strip()
+    if not output:
+        return 0
+    return int(output.splitlines()[-1])
+
+
+def parse_udp_datagram(data: bytes) -> tuple[dict, list[dict]]:
+    findings = []
+    if len(data) < 8:
+        return {}, [
+            {
+                "requirement": "udp-rfc768-length-0001",
+                "severity": "reject",
+                "message": "UDP datagram is shorter than the 8-octet header.",
+            }
+        ]
+
+    source_port = int.from_bytes(data[0:2], "big")
+    destination_port = int.from_bytes(data[2:4], "big")
+    length = int.from_bytes(data[4:6], "big")
+    checksum = int.from_bytes(data[6:8], "big")
+    payload = data[8:]
+
+    udp = {
+        "source_port": source_port,
+        "destination_port": destination_port,
+        "length": length,
+        "checksum": checksum,
+        "payload": payload,
+    }
+
+    if length >= 8 and length == len(payload) + 8:
+        findings.append(
+            {
+                "requirement": "udp-rfc768-length-0001",
+                "severity": "pass",
+                "message": "UDP length matches header plus payload length.",
+            }
+        )
+    else:
+        findings.append(
+            {
+                "requirement": "udp-rfc768-length-0001",
+                "severity": "reject",
+                "message": f"UDP length {length} does not match actual length {len(payload) + 8}.",
+            }
+        )
+    return udp, findings
+
+
+def parse_tftp_message(payload: bytes) -> tuple[dict, list[dict]]:
+    if len(payload) < 2:
+        return {}, [
+            {
+                "requirement": "tftp-rfc1350-opcode-0001",
+                "severity": "reject",
+                "message": "TFTP payload is shorter than the 2-octet opcode.",
+            }
+        ]
+
+    opcode = int.from_bytes(payload[0:2], "big")
+    message = {"opcode": opcode, "byte_len": len(payload), "payload": payload[2:]}
+    findings = []
+    if opcode in {1, 2, 3, 4, 5, 6}:
+        findings.append(
+            {
+                "requirement": "tftp-rfc1350-opcode-0001",
+                "severity": "pass",
+                "message": f"TFTP opcode {opcode} is known for the selected profile.",
+            }
+        )
+    else:
+        findings.append(
+            {
+                "requirement": "tftp-rfc1350-opcode-0001",
+                "severity": "reject",
+                "message": f"TFTP opcode {opcode} is not known for the selected profile.",
+            }
+        )
+
+    if opcode == 4 and len(payload) != 4:
+        findings.append(
+            {
+                "requirement": "tftp-rfc1350-ack-length-0001",
+                "severity": "reject",
+                "message": f"TFTP ACK length {len(payload)} is not 4 octets.",
+            }
+        )
+    else:
+        findings.append(
+            {
+                "requirement": "tftp-rfc1350-ack-length-0001",
+                "severity": "pass",
+                "message": "TFTP ACK length requirement is satisfied or not applicable.",
+            }
+        )
+
+    return message, findings
+
+
+def compiled_clause_path(program: str, clause_id: str) -> Path:
+    path = BUILD / "wasm" / program / f"{clause_id}.wasm"
+    if not path.exists():
+        raise FileNotFoundError(f"compiled clause not found: {path.relative_to(ROOT)}")
+    return path
+
+
+def compiled_assembly(program: str) -> dict:
+    path = BUILD / "wasm" / program / "program.json"
+    if not path.exists():
+        raise FileNotFoundError(f"compiled program not found: {path.relative_to(ROOT)}")
+    return json.loads(path.read_text())
+
+
+def execute_program(program_id: str, data: bytes, *, use_wasm: bool) -> tuple[dict, int]:
+    try:
+        program, selected_definitions, selected_clauses, policy = resolve_program(program_id)
+    except KeyError as exc:
+        return {"error": str(exc)}, 1
+
+    findings = []
+    trace = [
+        {
+            "seq": 0,
+            "kind": "input",
+            "protocol": program_id,
+            "bytes_hex": data.hex(),
+        }
+    ]
+
+    if program_id != "udp-tftp-must-program":
+        return {"error": "run currently supports udp-tftp-must-program only"}, 1
+
+    udp, udp_findings = parse_udp_datagram(data)
+    if use_wasm and udp:
+        try:
+            verdict = wasmtime_invoke(
+                compiled_clause_path(program_id, "udp-rfc768-length-0001"),
+                "check",
+                [udp["length"], len(udp["payload"])],
+            )
+        except (RuntimeError, FileNotFoundError, subprocess.CalledProcessError, ValueError) as exc:
+            return {"error": f"wasm execution failed: {exc}"}, 1
+        udp_findings = [
+            {
+                "requirement": "udp-rfc768-length-0001",
+                "severity": "pass" if verdict else "reject",
+                "message": "WASM clause accepted UDP length."
+                if verdict
+                else f"WASM clause rejected UDP length {udp['length']} for payload length {len(udp['payload'])}.",
+            }
+        ]
+    findings.extend(udp_findings)
+    if udp:
+        trace.append(
+            {
+                "seq": 1,
+                "kind": "parse",
+                "protocol": "udp",
+                "source_port": udp["source_port"],
+                "destination_port": udp["destination_port"],
+                "length": udp["length"],
+                "checksum": udp["checksum"],
+                "payload_hex": udp["payload"].hex(),
+            }
+        )
+
+    if udp and any(f["severity"] == "reject" for f in udp_findings):
+        pass
+    elif udp and (udp["source_port"] == 69 or udp["destination_port"] == 69):
+        tftp, tftp_findings = parse_tftp_message(udp["payload"])
+        if use_wasm and tftp:
+            try:
+                verdict = wasmtime_invoke(
+                    compiled_clause_path(program_id, "tftp-rfc1350-opcode-0001"),
+                    "check",
+                    [len(udp["payload"]), tftp["opcode"]],
+                )
+            except (RuntimeError, FileNotFoundError, subprocess.CalledProcessError, ValueError) as exc:
+                return {"error": f"wasm execution failed: {exc}"}, 1
+            tftp_findings = [
+                {
+                    "requirement": "tftp-rfc1350-opcode-0001",
+                    "severity": "pass" if verdict else "reject",
+                    "message": "WASM clause accepted TFTP opcode."
+                    if verdict
+                    else f"WASM clause rejected TFTP opcode {tftp['opcode']}.",
+                }
+            ]
+        findings.extend(tftp_findings)
+        if tftp:
+            trace.append(
+                {
+                    "seq": 2,
+                    "kind": "parse",
+                    "protocol": "tftp",
+                    "opcode": tftp["opcode"],
+                    "payload_hex": tftp["payload"].hex(),
+                }
+            )
+    elif udp:
+        findings.append(
+            {
+                "requirement": "udp-tftp-edge-0001",
+                "severity": "skip",
+                "message": "UDP datagram does not match the TFTP port edge.",
+            }
+        )
+
+    identity = {
+        "program": program,
+        "definitions": selected_definitions,
+        "clauses": selected_clauses,
+        "policy": policy,
+    }
+    compiled = {}
+    if use_wasm:
+        try:
+            compiled = compiled_assembly(program_id)
+        except (FileNotFoundError, json.JSONDecodeError) as exc:
+            return {"error": f"compiled assembly unavailable: {exc}"}, 1
+
+    report = {
+        "program": program_id,
+        "engine": "wasm" if use_wasm else "interpreter",
+        "program_sha256": compiled.get("program_sha256", sha256_json(identity)),
+        "ir_program_sha256": sha256_json(identity),
+        "component_graph_sha256": compiled.get("component_graph_sha256", ""),
+        "trace_sha256": sha256_json(trace),
+        "trace": trace,
+        "findings": findings,
+    }
+    return report, 0 if not any(f["severity"] == "reject" for f in findings) else 2
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    try:
+        data = bytes.fromhex(args.hex)
+    except ValueError as exc:
+        print(f"invalid hex input: {exc}", file=sys.stderr)
+        return 1
+
+    report, code = execute_program(args.program, data, use_wasm=args.wasm)
+    print(json.dumps(report, indent=2))
+    return code
+
+
+def validate_compiled_wasm(program_id: str) -> list[str]:
+    errors = []
+    for wasm_path in sorted((BUILD / "wasm" / program_id).glob("*.wasm")):
+        try:
+            validate_wasm(wasm_path)
+        except subprocess.CalledProcessError as exc:
+            errors.append(f"{wasm_path.relative_to(ROOT)}: {exc}")
+    return errors
+
+
+def finding_signature(report: dict) -> list[tuple[str, str]]:
+    return [
+        (finding.get("requirement", ""), finding.get("severity", ""))
+        for finding in report.get("findings", [])
+    ]
+
+
+def corpus_cases(program_id: str) -> list[Path]:
+    corpus_dir = STANDARDS / "corpus" / program_id.removesuffix("-must-program")
+    if not corpus_dir.exists():
+        corpus_dir = STANDARDS / "corpus" / "udp-tftp"
+    return sorted(corpus_dir.glob("*.hex"))
+
+
+def expected_exit_for_case(path: Path) -> int:
+    if path.name.startswith("valid"):
+        return 0
+    if path.name.startswith("invalid"):
+        return 2
+    return -1
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    validate_code = cmd_validate(argparse.Namespace(quiet=True))
+    if validate_code != 0:
+        return validate_code
+
+    compile_code = cmd_compile(argparse.Namespace(program=args.program, quiet=True))
+    if compile_code != 0:
+        return compile_code
+
+    wasm_errors = validate_compiled_wasm(args.program)
+    if wasm_errors:
+        for error in wasm_errors:
+            print(error, file=sys.stderr)
+        return 1
+
+    results = []
+    failed = False
+    for case in corpus_cases(args.program):
+        data = bytes.fromhex(case.read_text().strip())
+        interpreted, interpreted_code = execute_program(args.program, data, use_wasm=False)
+        wasm, wasm_code = execute_program(args.program, data, use_wasm=True)
+        expected = expected_exit_for_case(case)
+        signatures_match = finding_signature(interpreted) == finding_signature(wasm)
+        expected_ok = expected == -1 or (interpreted_code == expected and wasm_code == expected)
+        ok = signatures_match and expected_ok
+        failed = failed or not ok
+        results.append(
+            {
+                "case": str(case.relative_to(ROOT)),
+                "expected_exit": expected,
+                "interpreter_exit": interpreted_code,
+                "wasm_exit": wasm_code,
+                "signatures_match": signatures_match,
+                "ok": ok,
+                "interpreter_findings": finding_signature(interpreted),
+                "wasm_findings": finding_signature(wasm),
+            }
+        )
+
+    summary = {
+        "program": args.program,
+        "ok": not failed,
+        "cases": results,
+        "assembly": str((BUILD / "wasm" / args.program / "program.json").relative_to(ROOT)),
+    }
+    print(json.dumps(summary, indent=2))
+    return 1 if failed else 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    list_parser = sub.add_parser("list", help="list protocols")
+    list_parser.add_argument("--runs-over", help="filter by transport/dependency")
+    list_parser.add_argument("--crate", help="filter by implementation crate substring")
+    list_parser.add_argument("--requires-entropy", type=as_bool)
+    list_parser.add_argument("--requires-filesystem", type=as_bool)
+    list_parser.add_argument("--no-std", help="filter by no_std viability text")
+    list_parser.set_defaults(func=cmd_list)
+
+    show_parser = sub.add_parser("show", help="show one protocol")
+    show_parser.add_argument("protocol")
+    show_parser.set_defaults(func=cmd_show)
+
+    matrix_parser = sub.add_parser("matrix", help="print a Markdown protocol matrix")
+    matrix_parser.set_defaults(func=cmd_matrix)
+
+    graph_parser = sub.add_parser("graph", help="print composition edges")
+    graph_parser.set_defaults(func=cmd_graph)
+
+    program_parser = sub.add_parser("program", help="show a composed RFC program")
+    program_parser.add_argument("program")
+    program_parser.set_defaults(func=cmd_program)
+
+    components_parser = sub.add_parser("components", help="list compiled program components")
+    components_parser.add_argument("program")
+    components_parser.set_defaults(func=cmd_components)
+
+    validate_parser = sub.add_parser("validate", help="validate standards references")
+    validate_parser.set_defaults(func=cmd_validate)
+
+    hash_parser = sub.add_parser("hash", help="hash a composed RFC program")
+    hash_parser.add_argument("program")
+    hash_parser.set_defaults(func=cmd_hash)
+
+    compile_parser = sub.add_parser("compile", help="compile program statements into WASM")
+    compile_parser.add_argument("program")
+    compile_parser.set_defaults(func=cmd_compile)
+
+    run_parser = sub.add_parser("run", help="run a composed RFC program against hex bytes")
+    run_parser.add_argument("program")
+    run_parser.add_argument("--hex", required=True, help="input bytes as hex")
+    run_parser.add_argument("--wasm", action="store_true", help="use compiled WASM clauses")
+    run_parser.set_defaults(func=cmd_run)
+
+    check_parser = sub.add_parser("check", help="compile and check a program against its corpus")
+    check_parser.add_argument("program")
+    check_parser.set_defaults(func=cmd_check)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

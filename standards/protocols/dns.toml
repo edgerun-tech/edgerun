@@ -1,0 +1,78 @@
+id = "dns"
+name = "Domain Name System"
+summary = "Distributed naming protocol and wire format for DNS messages and resource records."
+layer = "application"
+runs_over = ["UDP", "TCP", "TLS", "HTTPS", "QUIC"]
+depends_on = []
+implementation_crates = ["crates/edgerun-dns"]
+profiles = ["client", "resolver", "authoritative", "no_std-candidate"]
+standards_bodies = ["IETF"]
+
+[environment]
+requires_clock = true
+requires_entropy = false
+requires_network_io = true
+requires_packet_io = true
+requires_stream_io = true
+requires_filesystem = false
+requires_threads = false
+requires_allocator = true
+requires_crypto = false
+no_std_viability = "plausible-with-alloc"
+bare_metal_viability = "plausible-with-clock-io"
+
+[[standard]]
+id = "RFC1034"
+title = "Domain Names - Concepts and Facilities"
+url = "https://www.rfc-editor.org/rfc/rfc1034.html"
+xml = "https://www.rfc-editor.org/rfc/rfc1034.xml"
+status = "Internet Standard"
+published = "1987-11"
+role = "concepts"
+
+[[standard]]
+id = "RFC1035"
+title = "Domain Names - Implementation and Specification"
+url = "https://www.rfc-editor.org/rfc/rfc1035.html"
+xml = "https://www.rfc-editor.org/rfc/rfc1035.xml"
+status = "Internet Standard"
+published = "1987-11"
+role = "base"
+
+[[standard]]
+id = "RFC8484"
+title = "DNS Queries over HTTPS (DoH)"
+url = "https://www.rfc-editor.org/rfc/rfc8484.html"
+xml = "https://www.rfc-editor.org/rfc/rfc8484.xml"
+status = "Proposed Standard"
+published = "2018-10"
+role = "doh"
+
+[[standard]]
+id = "RFC9250"
+title = "DNS over Dedicated QUIC Connections"
+url = "https://www.rfc-editor.org/rfc/rfc9250.html"
+xml = "https://www.rfc-editor.org/rfc/rfc9250.xml"
+status = "Proposed Standard"
+published = "2022-05"
+role = "doq"
+
+[[registry]]
+name = "Domain Name System (DNS) Parameters"
+url = "https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml"
+owner = "IANA"
+
+[[behavior]]
+id = "dns-message-parsing"
+kind = "packet-format"
+standards = ["RFC1035"]
+implementation = ["crates/edgerun-dns"]
+status = "unknown"
+
+[[behavior]]
+id = "dns-name-compression"
+kind = "codec"
+standards = ["RFC1035"]
+implementation = ["crates/edgerun-dns"]
+status = "unknown"
+

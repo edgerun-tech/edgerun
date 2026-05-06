@@ -1,0 +1,44 @@
+id = "dhcpv6"
+name = "Dynamic Host Configuration Protocol for IPv6"
+summary = "IPv6 host configuration protocol over UDP with option-based message exchange."
+layer = "application"
+runs_over = ["UDP", "IPv6"]
+depends_on = []
+implementation_crates = ["crates/edgerun-dhcpv6"]
+profiles = ["client", "server", "bare-metal-candidate"]
+standards_bodies = ["IETF"]
+
+[environment]
+requires_clock = true
+requires_entropy = false
+requires_network_io = true
+requires_packet_io = true
+requires_stream_io = false
+requires_filesystem = false
+requires_threads = false
+requires_allocator = false
+requires_crypto = false
+no_std_viability = "plausible"
+bare_metal_viability = "plausible-with-clock-udp"
+
+[[standard]]
+id = "RFC8415"
+title = "Dynamic Host Configuration Protocol for IPv6 (DHCPv6)"
+url = "https://www.rfc-editor.org/rfc/rfc8415.html"
+xml = "https://www.rfc-editor.org/rfc/rfc8415.xml"
+status = "Proposed Standard"
+published = "2018-11"
+role = "base"
+
+[[registry]]
+name = "Dynamic Host Configuration Protocol for IPv6 (DHCPv6)"
+url = "https://www.iana.org/assignments/dhcpv6-parameters/dhcpv6-parameters.xhtml"
+owner = "IANA"
+
+[[behavior]]
+id = "dhcpv6-option-codec"
+kind = "packet-format"
+standards = ["RFC8415"]
+implementation = ["crates/edgerun-dhcpv6"]
+status = "unknown"
+

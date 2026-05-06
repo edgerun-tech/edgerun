@@ -1,0 +1,47 @@
+# Informal TOML schema for implementation evidence traces.
+
+[trace]
+id = "trace-id"
+implementation = "crates/example"
+profile = "profile-id"
+artifact_sha256 = ""
+source_revision = ""
+started_at = ""
+
+[[component]]
+id = "component-id"
+kind = "parser"
+manifest = "standards/components/manifests/example.toml"
+wasm_sha256 = ""
+
+[[event]]
+seq = 0
+time_ns = 0
+kind = "input"
+protocol = "udp"
+bytes_hex = ""
+metadata = {}
+
+[[event]]
+seq = 1
+time_ns = 1
+kind = "output"
+protocol = "udp"
+bytes_hex = ""
+metadata = {}
+
+[[event]]
+seq = 2
+time_ns = 2
+kind = "state"
+protocol = "tcp"
+name = "connection_state"
+value = "syn_received"
+metadata = {}
+
+[[finding]]
+requirement = "udp-0001"
+component = "udp-datagram-validator"
+severity = "pass"
+message = ""
+

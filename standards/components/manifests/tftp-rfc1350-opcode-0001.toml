@@ -1,0 +1,14 @@
+id = "tftp-rfc1350-opcode-0001"
+name = "tftp-rfc1350-opcode-0001"
+kind = "clause"
+version = "0.1.0"
+wat = "standards/build/wasm/udp-tftp-must-program/tftp-rfc1350-opcode-0001.wat"
+wasm = "standards/build/wasm/udp-tftp-must-program/tftp-rfc1350-opcode-0001.wasm"
+sha256 = "a4e5be9c6d671be8a1e060872f670667ed0dfec706f45822f09ac68dc4a2fb1c"
+entrypoint = "check"
+deterministic = true
+standards = ["RFC1350"]
+requirements = ["tftp-rfc1350-opcode-0001"]
+inputs = ["byte_len", "opcode"]
+outputs = ["i32"]
+depends_on = []
