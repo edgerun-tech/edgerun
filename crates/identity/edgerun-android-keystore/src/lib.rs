@@ -213,10 +213,10 @@ mod real {
     use jni::strings::JNIString;
     use jni::InitJavaVM;
     use ndk_context::android_context;
-    use once_cell::sync::OnceCell;
+    use std::sync::OnceLock;
 
     /// Global Java VM reference, initialized once on Android startup.
-    static JAVA_VM: OnceCell<jni::JavaVM> = OnceCell::new();
+    static JAVA_VM: OnceLock<jni::JavaVM> = OnceLock::new();
 
     /// Initialize the JVM context from Android's native activity.
     /// Must be called once before using any keystore operations.

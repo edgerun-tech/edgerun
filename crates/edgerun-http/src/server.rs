@@ -23,7 +23,7 @@ use crate::runtime::time::Duration;
 use crate::runtime::CancellationToken;
 use crate::runtime::{
     bind_tcp_listener, sleep, spawn, timeout, AsyncRead, AsyncReadExt, AsyncTcpListener,
-    AsyncWrite, AsyncWriteExt, BufReader,
+    AsyncTcpStream, AsyncWrite, AsyncWriteExt, BufReader,
 };
 use crate::uri::Uri;
 use crate::{Request, Response, StatusCode};
@@ -32,6 +32,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// TLS certificate for the server.
 #[cfg(feature = "tls")]
@@ -160,6 +162,106 @@ impl BoundHttpServer {
         &self,
         shutdown: CancellationToken,
     ) -> crate::runtime::io::Result<()> {
+        #[cfg(feature = "std")]
+        {
+            return self.serve_with_shutdown_host(shutdown).await;
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            #[cfg(feature = "tls")]
+            let tls = self.tls_cert.is_some();
+            #[cfg(not(feature = "tls"))]
+            let tls = false;
+            #[cfg(feature = "http3")]
+            let h3 = self.http3_server.is_some();
+            #[cfg(not(feature = "http3"))]
+            let h3 = false;
+            edgerun_log::info!(
+                "HTTP server listening on {} (HTTP/1.1 + HTTP/2{}{})",
+                self.local_addr,
+                if tls { " + TLS" } else { "" },
+                if h3 { " + HTTP/3" } else { "" }
+            );
+
+            let handler = Arc::clone(&self.handler);
+            let keep_alive = self.keep_alive;
+            let max_size = self.max_request_size;
+            #[cfg(feature = "tls")]
+            let tls_cert = self.tls_cert.clone();
+            let http2_idle_timeout = self.http2_idle_timeout;
+            let tcp_shutdown = shutdown.clone();
+
+            // Spawn HTTP/3 accept loop if enabled
+            #[cfg(feature = "http3")]
+            let h3_handle = if let Some(ref h3_server) = self.http3_server {
+                let h3_handler = Arc::clone(&self.handler);
+                let h3_shutdown = shutdown.clone();
+                let h3_server = Arc::clone(h3_server);
+                Some(spawn(async move {
+                    h3_server
+                        .serve(h3_handler, h3_shutdown)
+                        .await
+                        .map_err(crate::runtime::io::Error::other)
+                }))
+            } else {
+                None
+            };
+            // Run TCP accept loop on this task (not spawned — borrows self)
+            loop {
+                if tcp_shutdown.is_cancelled() {
+                    break;
+                }
+                match timeout(Duration::from_millis(100), self.listener.accept()).await {
+                    Ok(Ok((stream, peer_addr))) => {
+                        let h = Arc::clone(&handler);
+                        let ka = keep_alive;
+                        let ms = max_size;
+                        #[cfg(feature = "tls")]
+                        let tc = tls_cert.clone();
+                        let h2 = http2_idle_timeout;
+                        spawn(async move {
+                            if let Err(e) = handle_connection(
+                                stream,
+                                h,
+                                ka,
+                                ms,
+                                #[cfg(feature = "tls")]
+                                tc,
+                                h2,
+                            )
+                            .await
+                            {
+                                edgerun_log::warn!("Connection error from {}: {}", peer_addr, e);
+                            }
+                        });
+                    }
+                    Ok(Err(e)) => {
+                        edgerun_log::error!("Accept error: {}", e);
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                    Err(_) => {
+                        continue;
+                    }
+                }
+            }
+
+            // Cancel HTTP/3 server if it's running
+            shutdown.cancel();
+            #[cfg(feature = "http3")]
+            if let Some(h) = h3_handle {
+                let _ = h.await;
+            }
+
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "std")]
+    async fn serve_with_shutdown_host(
+        &self,
+        shutdown: CancellationToken,
+    ) -> crate::runtime::io::Result<()> {
         #[cfg(feature = "tls")]
         let tls = self.tls_cert.is_some();
         #[cfg(not(feature = "tls"))]
@@ -174,76 +276,73 @@ impl BoundHttpServer {
             if tls { " + TLS" } else { "" },
             if h3 { " + HTTP/3" } else { "" }
         );
+        edgerun_log::info!("edgerun-http hosted accept setup: begin");
 
+        let listener = self.listener.shared_std();
+        edgerun_log::info!("edgerun-http hosted accept setup: listener shared");
         let handler = Arc::clone(&self.handler);
+        edgerun_log::info!("edgerun-http hosted accept setup: handler shared");
         let keep_alive = self.keep_alive;
         let max_size = self.max_request_size;
         #[cfg(feature = "tls")]
         let tls_cert = self.tls_cert.clone();
         let http2_idle_timeout = self.http2_idle_timeout;
-        let tcp_shutdown = shutdown.clone();
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_accept = Arc::clone(&stop);
 
-        // Spawn HTTP/3 accept loop if enabled
-        #[cfg(feature = "http3")]
-        let h3_handle = if let Some(ref h3_server) = self.http3_server {
-            let h3_handler = Arc::clone(&self.handler);
-            let h3_shutdown = shutdown.clone();
-            let h3_server = Arc::clone(h3_server);
-            Some(spawn(async move {
-                h3_server
-                    .serve(h3_handler, h3_shutdown)
-                    .await
-                    .map_err(crate::runtime::io::Error::other)
-            }))
-        } else {
-            None
-        };
-        // Run TCP accept loop on this task (not spawned — borrows self)
-        loop {
-            if tcp_shutdown.is_cancelled() {
-                break;
-            }
-            match timeout(Duration::from_millis(100), self.listener.accept()).await {
-                Ok(Ok((stream, peer_addr))) => {
-                    let h = Arc::clone(&handler);
-                    let ka = keep_alive;
-                    let ms = max_size;
-                    #[cfg(feature = "tls")]
-                    let tc = tls_cert.clone();
-                    let h2 = http2_idle_timeout;
-                    spawn(async move {
-                        if let Err(e) = handle_connection(
-                            stream,
-                            h,
-                            ka,
-                            ms,
+        edgerun_log::info!("HTTP host accept thread spawning");
+        std::thread::Builder::new()
+            .name("edgerun-http-accept".to_string())
+            .spawn(move || {
+                edgerun_log::info!("HTTP host accept thread started");
+                while !stop_accept.load(Ordering::Acquire) {
+                    match listener.accept() {
+                        Ok((stream, peer_addr)) => {
+                            let h = Arc::clone(&handler);
                             #[cfg(feature = "tls")]
-                            tc,
-                            h2,
-                        )
-                        .await
-                        {
-                            edgerun_log::warn!("Connection error from {}: {}", peer_addr, e);
+                            let tc = tls_cert.clone();
+                            std::thread::spawn(move || match AsyncTcpStream::from_std(stream) {
+                                Ok(stream) => {
+                                    let result = edgerun_rt::block_on(handle_connection(
+                                        stream,
+                                        h,
+                                        keep_alive,
+                                        max_size,
+                                        #[cfg(feature = "tls")]
+                                        tc,
+                                        http2_idle_timeout,
+                                    ));
+                                    if let Err(e) = result {
+                                        edgerun_log::warn!(
+                                            "Connection error from {}: {}",
+                                            peer_addr,
+                                            e
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    edgerun_log::warn!("Connection error from {}: {}", peer_addr, e)
+                                }
+                            });
                         }
-                    });
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                        }
+                        Err(e) => {
+                            edgerun_log::error!("Accept error: {}", e);
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                        }
+                    }
                 }
-                Ok(Err(e)) => {
-                    edgerun_log::error!("Accept error: {}", e);
-                    sleep(Duration::from_millis(100)).await;
-                }
-                Err(_) => {
-                    continue;
-                }
-            }
-        }
+                edgerun_log::info!("HTTP host accept thread stopped");
+            })
+            .map_err(|e| crate::runtime::io::Error::other(e.to_string()))?;
+        edgerun_log::info!("HTTP host accept thread spawned");
 
-        // Cancel HTTP/3 server if it's running
-        shutdown.cancel();
-        #[cfg(feature = "http3")]
-        if let Some(h) = h3_handle {
-            let _ = h.await;
+        while !shutdown.is_cancelled() {
+            sleep(Duration::from_millis(100)).await;
         }
-
+        stop.store(true, Ordering::Release);
         Ok(())
     }
 
@@ -450,7 +549,7 @@ where
                 Some(s) => s,
                 None => break,
             };
-            if hline.is_empty() {
+            if hline.trim_end_matches(['\r', '\n']).is_empty() {
                 break;
             }
             if let Some(colon) = hline.find(':') {

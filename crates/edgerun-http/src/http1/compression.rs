@@ -1,20 +1,16 @@
 //! HTTP Content-Encoding compression support
 //!
 //! Handles automatic decompression of response bodies based on the
-//! `Content-Encoding` header. Supports gzip, deflate, and brotli.
+//! `Content-Encoding` header. Supports gzip and deflate.
 //!
 //! # Client-side decompression
 //! The client automatically decompresses responses when:
 //! - The `Content-Encoding` header is present
-//! - The encoding is supported (gzip, deflate, br, identity)
+//! - The encoding is supported (gzip, deflate, identity)
 
 use crate::HeaderMap;
 #[cfg(feature = "http-compression")]
-use alloc::boxed::Box;
-use alloc::string::String;
-#[cfg(feature = "http-compression")]
-use alloc::vec;
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec};
 use core::fmt;
 #[cfg(feature = "http-compression")]
 use edgerun_encoding::crc32::crc32;
@@ -28,7 +24,7 @@ pub enum ContentEncoding {
     Gzip,
     /// zlib/deflate (RFC 1950)
     Deflate,
-    /// brotli (RFC 7932)
+    /// brotli (RFC 7932), parsed but unsupported by this crate.
     Brotli,
     /// Unknown/unsupported encoding
     Unknown,
@@ -66,7 +62,7 @@ impl ContentEncoding {
 pub fn accept_encoding_value() -> &'static str {
     #[cfg(feature = "http-compression")]
     {
-        "br, gzip, deflate"
+        "gzip, deflate"
     }
     #[cfg(not(feature = "http-compression"))]
     {
@@ -78,10 +74,9 @@ pub fn accept_encoding_value() -> &'static str {
 #[cfg(feature = "http-compression")]
 pub fn compress_body(body: &[u8], encoding: ContentEncoding) -> Option<Vec<u8>> {
     match encoding {
-        ContentEncoding::Brotli => Some(compress_brotli(body)),
         ContentEncoding::Gzip => Some(compress_gzip(body)),
         ContentEncoding::Deflate => Some(compress_deflate(body)),
-        ContentEncoding::Identity | ContentEncoding::Unknown => None,
+        ContentEncoding::Identity | ContentEncoding::Brotli | ContentEncoding::Unknown => None,
     }
 }
 
@@ -95,9 +90,7 @@ pub fn compress_body(_body: &[u8], _encoding: ContentEncoding) -> Option<Vec<u8>
 pub fn preferred_response_encoding(accept_encoding: &str) -> ContentEncoding {
     #[cfg(feature = "http-compression")]
     {
-        if accepts_encoding(accept_encoding, "br") {
-            ContentEncoding::Brotli
-        } else if accepts_encoding(accept_encoding, "gzip") {
+        if accepts_encoding(accept_encoding, "gzip") {
             ContentEncoding::Gzip
         } else if accepts_encoding(accept_encoding, "deflate") {
             ContentEncoding::Deflate
@@ -142,9 +135,6 @@ pub fn decompress_body(body: &[u8], headers: &HeaderMap) -> Option<Vec<u8>> {
         ContentEncoding::Deflate => decompress_deflate(body),
         #[cfg(not(feature = "http-compression"))]
         ContentEncoding::Deflate => None,
-        #[cfg(feature = "http-compression")]
-        ContentEncoding::Brotli => decompress_brotli(body),
-        #[cfg(not(feature = "http-compression"))]
         ContentEncoding::Brotli => None,
         ContentEncoding::Identity => Some(body.to_vec()),
         ContentEncoding::Unknown => Some(body.to_vec()),
@@ -229,68 +219,6 @@ fn decompress_deflate(data: &[u8]) -> Option<Vec<u8>> {
     miniz_oxide::inflate::decompress_to_vec_zlib(data).ok()
 }
 
-// ---------------------------------------------------------------------------
-// brotli compression/decompression (RFC 7932)
-// ---------------------------------------------------------------------------
-
-/// Compress to brotli format
-#[cfg(feature = "http-compression")]
-fn compress_brotli(data: &[u8]) -> Vec<u8> {
-    use brotli::enc::backward_references::BrotliEncoderMode;
-    use brotli::enc::BrotliEncoderParams;
-
-    let mut out = Vec::with_capacity(data.len());
-    let mut params = BrotliEncoderParams::default();
-    params.mode = BrotliEncoderMode::BROTLI_MODE_GENERIC;
-    params.quality = 4; // Moderate compression
-
-    let mut reader = SliceReader::new(data);
-    let mut writer = VecWriter::new(&mut out);
-    let mut input = [0u8; 4096];
-    let mut output = [0u8; 4096];
-    let mut callback =
-        |_: &mut brotli::interface::PredictionModeContextMap<brotli::InputReferenceMut>,
-         _: &mut [brotli::interface::StaticCommand],
-         _: brotli::InputPair,
-         _: &mut HeapAllocator| {};
-
-    brotli::BrotliCompressCustomIo(
-        &mut reader,
-        &mut writer,
-        &mut input,
-        &mut output,
-        &params,
-        HeapAllocator,
-        &mut callback,
-        (),
-    )
-    .ok();
-    out
-}
-
-/// Decompress brotli data
-#[cfg(feature = "http-compression")]
-fn decompress_brotli(data: &[u8]) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity(data.len() * 2);
-    let mut reader = SliceReader::new(data);
-    let mut writer = VecWriter::new(&mut out);
-    let mut input = [0u8; 4096];
-    let mut output = [0u8; 4096];
-
-    brotli::BrotliDecompressCustomIo(
-        &mut reader,
-        &mut writer,
-        &mut input,
-        &mut output,
-        HeapAllocator,
-        HeapAllocator,
-        HeapAllocator,
-        (),
-    )
-    .ok()?;
-    Some(out)
-}
-
 #[cfg(feature = "http-compression")]
 fn skip_zero_terminated(data: &[u8], mut pos: usize) -> Option<usize> {
     while pos < data.len() {
@@ -302,94 +230,6 @@ fn skip_zero_terminated(data: &[u8], mut pos: usize) -> Option<usize> {
     }
     None
 }
-
-#[cfg(feature = "http-compression")]
-struct SliceReader<'a> {
-    data: &'a [u8],
-    pos: usize,
-}
-
-#[cfg(feature = "http-compression")]
-impl<'a> SliceReader<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        Self { data, pos: 0 }
-    }
-}
-
-#[cfg(feature = "http-compression")]
-impl brotli::CustomRead<()> for SliceReader<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, ()> {
-        let remaining = &self.data[self.pos..];
-        let len = remaining.len().min(buf.len());
-        buf[..len].copy_from_slice(&remaining[..len]);
-        self.pos += len;
-        Ok(len)
-    }
-}
-
-#[cfg(feature = "http-compression")]
-struct VecWriter<'a> {
-    out: &'a mut Vec<u8>,
-}
-
-#[cfg(feature = "http-compression")]
-impl<'a> VecWriter<'a> {
-    fn new(out: &'a mut Vec<u8>) -> Self {
-        Self { out }
-    }
-}
-
-#[cfg(feature = "http-compression")]
-impl brotli::CustomWrite<()> for VecWriter<'_> {
-    fn write(&mut self, data: &[u8]) -> Result<usize, ()> {
-        self.out.extend_from_slice(data);
-        Ok(data.len())
-    }
-
-    fn flush(&mut self) -> Result<(), ()> {
-        Ok(())
-    }
-}
-
-#[derive(Default)]
-#[cfg(feature = "http-compression")]
-struct Rebox<T> {
-    b: Box<[T]>,
-}
-
-#[cfg(feature = "http-compression")]
-impl<T> brotli::SliceWrapper<T> for Rebox<T> {
-    fn slice(&self) -> &[T] {
-        &self.b
-    }
-}
-
-#[cfg(feature = "http-compression")]
-impl<T> brotli::SliceWrapperMut<T> for Rebox<T> {
-    fn slice_mut(&mut self) -> &mut [T] {
-        &mut self.b
-    }
-}
-
-#[derive(Clone, Copy, Default)]
-#[cfg(feature = "http-compression")]
-struct HeapAllocator;
-
-#[cfg(feature = "http-compression")]
-impl<T: Clone + Default> brotli::Allocator<T> for HeapAllocator {
-    type AllocatedMemory = Rebox<T>;
-
-    fn alloc_cell(&mut self, len: usize) -> Self::AllocatedMemory {
-        Rebox {
-            b: vec![T::default(); len].into_boxed_slice(),
-        }
-    }
-
-    fn free_cell(&mut self, _data: Self::AllocatedMemory) {}
-}
-
-#[cfg(feature = "http-compression")]
-impl brotli::enc::BrotliAlloc for HeapAllocator {}
 
 // ---------------------------------------------------------------------------
 // Display
@@ -426,17 +266,6 @@ mod tests {
         assert!(compressed.len() > 2);
 
         let decompressed = decompress_deflate(&compressed).expect("deflate decompress failed");
-        assert_eq!(decompressed, original);
-    }
-
-    #[cfg(feature = "http-compression")]
-    #[test]
-    fn test_brotli_roundtrip() {
-        let original = b"Hello, World! This is a test of brotli compression.";
-        let compressed = compress_brotli(original);
-        assert!(!compressed.is_empty());
-
-        let decompressed = decompress_brotli(&compressed).expect("brotli decompress failed");
         assert_eq!(decompressed, original);
     }
 

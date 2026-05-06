@@ -14,7 +14,7 @@ edgerun-core = { version = "0.1", path = "../../protocol/edgerun-core" }
 [features]
 default = []
 # Real JNI-backed implementation — requires Android NDK toolchain.
-android-real = ["dep:jni", "dep:ndk-context", "dep:once_cell"]
+android-real = ["dep:jni", "dep:ndk-context"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 # Real Android Keystore implementation via JNI (optional)
@@ -22,7 +22,6 @@ android-real = ["dep:jni", "dep:ndk-context", "dep:once_cell"]
 # On non-Android targets these deps are feature-inert.
 jni = { version = "0.22", optional = true }
 ndk-context = { version = "0.1", optional = true }
-once_cell = { version = "1", optional = true }
 
 [lints]
 workspace = true

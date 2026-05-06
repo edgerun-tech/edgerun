@@ -61,7 +61,6 @@ oci = [
     "edgerun-oci/std",
     "edgerun-oci/edgefs",
     "edgerun-oci/gzip",
-    "edgerun-oci/zstd",
 ]
 compositor = ["dep:edgerun-compositor"]
 hardware = [

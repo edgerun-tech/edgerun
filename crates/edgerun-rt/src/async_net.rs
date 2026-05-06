@@ -259,14 +259,16 @@ impl Future for ConnectFuture {
 }
 
 pub struct AsyncTcpListener {
-    inner: StdTcpListener,
+    inner: Arc<StdTcpListener>,
 }
 
 impl AsyncTcpListener {
     pub fn bind<A: ToSocketAddrs>(addr: A) -> std::io::Result<Self> {
         let listener = StdTcpListener::bind(addr)?;
         listener.set_nonblocking(true)?;
-        Ok(Self { inner: listener })
+        Ok(Self {
+            inner: Arc::new(listener),
+        })
     }
 
     pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
@@ -278,6 +280,11 @@ impl AsyncTcpListener {
             listener: self,
             waker: None,
         }
+    }
+
+    #[cfg(not(target_os = "none"))]
+    pub fn shared_std(&self) -> Arc<StdTcpListener> {
+        Arc::clone(&self.inner)
     }
 }
 

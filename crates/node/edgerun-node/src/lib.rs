@@ -459,14 +459,66 @@ fn parse_list(val: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use alloc::vec;
+    use edgerun_core::protocol::{
+        CommandType, IdentityRef, NodeRef, ProtocolRecord, Signature, Timestamp,
+    };
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
+    use edgerun_keygen::generate_ephemeral_node_identity;
+    use edgerun_sign::{ProtocolSigner, SignableProtocolFamily};
     use std::sync::Arc;
 
     use crate::test_support::TestSigner;
 
     fn test_signer() -> TestSigner {
         TestSigner::generate()
+    }
+
+    fn signed_query_command_for_node(node_id: NodeID) -> edgerun_core::protocol::CommandEnvelope {
+        let issuer = generate_ephemeral_node_identity();
+        let now_secs = edgerun_core::util::now_unix_secs_i64();
+        let mut command = edgerun_core::protocol::CommandEnvelope {
+            envelope_version: 1,
+            command_id: vec![0x10, 0x20, 0x30, 0x40],
+            target_node: Some(NodeRef {
+                node_id: node_id.0.to_vec(),
+            }),
+            issuer: Some(IdentityRef {
+                identity_id: issuer.node_id.to_vec(),
+                identity_kind: Some(edgerun_core::crypto::IDENTITY_KIND_NODE),
+                key_hint: Some(issuer.node_id.to_vec()),
+            }),
+            command_type: CommandType::Query as i32,
+            command_version: 1,
+            issued_at: Some(Timestamp {
+                seconds: now_secs.saturating_sub(1),
+                nanos: 0,
+            }),
+            not_before: None,
+            expires_at: Some(Timestamp {
+                seconds: now_secs.saturating_add(60),
+                nanos: 0,
+            }),
+            idempotency_key: Vec::new(),
+            payload: None,
+            delegation_chain: Vec::new(),
+            requested_assurance: None,
+            command_metadata: None,
+            signatures: Vec::new(),
+            app_intent: Vec::new(),
+        };
+        let signed = issuer
+            .signer
+            .sign_protocol_record(
+                &ProtocolRecord::CommandEnvelope(command.clone()),
+                SignableProtocolFamily::CommandEnvelope,
+            )
+            .expect("sign command");
+        command.signatures.push(Signature {
+            algorithm: signed.signature.algorithm,
+            value: signed.signature.value,
+        });
+        command
     }
 
     const TEST_CONFIG: &str = r#"
@@ -846,6 +898,70 @@ trust_nodes: []
 
         // Should have recorded a rejection event
         assert!(node.events().len() > initial_events);
+    }
+
+    #[test]
+    fn node_commits_valid_signed_command_to_hash_linked_stream() {
+        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let signer = Arc::new(test_signer());
+        let mut node = Node::from_config(config, signer).unwrap();
+        let command = signed_query_command_for_node(node.identity());
+
+        node.process_command(&command).unwrap();
+
+        let events = node.events();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[1].seq, 1);
+        assert_eq!(
+            events[1].event_type,
+            edgerun_core::protocol::EventType::CommandCommitted as i32
+        );
+        assert!(events[1].signature.is_some());
+        let genesis_hash = edgerun_storage::canonical_event_hash(&events[0]).value;
+        assert_eq!(
+            events[1]
+                .prev_event_hash
+                .as_ref()
+                .map(|h| h.value.as_slice()),
+            Some(genesis_hash.as_slice())
+        );
+        edgerun_stream::validate_stream(events, &node.identity().0).unwrap();
+    }
+
+    #[test]
+    fn node_persists_committed_command_to_backing_event_log() {
+        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let signer = Arc::new(test_signer());
+        let mut node =
+            Node::from_config_with_event_log(config, signer, MemEventLog::new()).unwrap();
+        let command = signed_query_command_for_node(node.identity());
+
+        node.process_command(&command).unwrap();
+
+        let scanned = node.event_log().scan().unwrap();
+        assert_eq!(scanned.len(), 2);
+        assert_eq!(scanned[1].event.seq, 1);
+        assert_eq!(
+            scanned[1].event.event_type,
+            edgerun_core::protocol::EventType::CommandCommitted as i32
+        );
+        assert_eq!(scanned[1].event, node.events()[1]);
+    }
+
+    #[test]
+    fn node_treats_replayed_command_hash_as_duplicate_without_appending() {
+        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let signer = Arc::new(test_signer());
+        let mut node = Node::from_config(config, signer).unwrap();
+        let command = signed_query_command_for_node(node.identity());
+
+        node.process_command(&command).unwrap();
+        let event_count_after_first_delivery = node.events().len();
+
+        node.process_command(&command).unwrap();
+
+        assert_eq!(node.events().len(), event_count_after_first_delivery);
+        assert_eq!(node.head().unwrap().seq, 1);
     }
 
     #[test]

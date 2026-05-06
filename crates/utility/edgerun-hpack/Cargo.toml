@@ -13,9 +13,3 @@ workspace = true
 
 [dependencies]
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
-
-[features]
-interop_tests = ["rustc-serialize"]
-
-[target.'cfg(not(target_os = "none"))'.dependencies]
-rustc-serialize = { version = "^0.3", optional = true }

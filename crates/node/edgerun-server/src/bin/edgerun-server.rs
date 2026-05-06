@@ -35,7 +35,7 @@ use edgerun_http::{into_handler_async, Handler, Request, Response, StatusCode};
 use edgerun_rt::{sleep, CancellationToken, Runtime};
 use edgerun_server::{ImapConfig, Server, SmtpConfig};
 use edgerun_tls::certificate::Certificate;
-use edgerun_tls::CertificateAndKey;
+use edgerun_tls::{generate_csr, signing_key_to_pem, CertificateAndKey};
 
 #[cfg(feature = "sqlite")]
 mod host_sqlite {
@@ -206,7 +206,7 @@ fn local_mail_domains(deployment: &CompiledDeployment) -> Vec<String> {
 // DNS zone builder
 // ===========================================================================
 
-fn build_dns_zone(deployment: &CompiledDeployment) -> DnsZone {
+fn build_dns_zone(deployment: &CompiledDeployment, dkim_txt: Option<&str>) -> DnsZone {
     let mut zone = DnsZone::new(deployment.origin);
     zone.set_default_ttl(3600);
 
@@ -280,14 +280,16 @@ fn build_dns_zone(deployment: &CompiledDeployment) -> DnsZone {
                 &format!("v=TLSRPTv1; rua=mailto:tls-reports@{}", deployment.origin),
                 3600,
             );
-            zone.add_txt(
-                &zone_name(
-                    deployment.origin,
-                    &format!("{}._domainkey.{}", deployment.dkim_selector, domain.domain),
-                ),
-                FALLBACK_DKIM_TXT,
-                86400,
-            );
+            if let Some(dkim_txt) = dkim_txt {
+                zone.add_txt(
+                    &zone_name(
+                        deployment.origin,
+                        &format!("{}._domainkey.{}", deployment.dkim_selector, domain.domain),
+                    ),
+                    dkim_txt,
+                    86400,
+                );
+            }
         }
 
         if let Some(site) = domain.website {
@@ -322,13 +324,42 @@ fn load_dkim_signer(deployment: &CompiledDeployment) -> Option<DkimSigner> {
                 None
             }
         },
-        Err(_) => {
-            edgerun_log::warn!(
-                "DKIM key not found at {}, DKIM signing disabled",
-                deployment.dkim_key_path
-            );
-            None
-        }
+        Err(_) => match DkimSigner::generate(deployment.dkim_domain, deployment.dkim_selector) {
+            Ok(signer) => {
+                if let Some(parent) = Path::new(deployment.dkim_key_path).parent() {
+                    if let Err(e) = fs::create_dir_all(parent) {
+                        edgerun_log::warn!("Failed to create DKIM key directory: {}", e);
+                        return Some(signer);
+                    }
+                }
+                match signer.private_key_pem() {
+                    Ok(pem) => {
+                        if let Err(e) = fs::write(deployment.dkim_key_path, pem) {
+                            edgerun_log::warn!("Failed to save generated DKIM key: {}", e);
+                        } else {
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::PermissionsExt;
+                                let _ = fs::set_permissions(
+                                    deployment.dkim_key_path,
+                                    fs::Permissions::from_mode(0o600),
+                                );
+                            }
+                            edgerun_log::info!(
+                                "Generated DKIM key at {}; publishing matching DNS record",
+                                deployment.dkim_key_path
+                            );
+                        }
+                    }
+                    Err(e) => edgerun_log::warn!("Failed to encode generated DKIM key: {}", e),
+                }
+                Some(signer)
+            }
+            Err(e) => {
+                edgerun_log::warn!("Failed to generate DKIM key: {}", e);
+                None
+            }
+        },
     }
 }
 
@@ -591,8 +622,53 @@ async fn provision_certs(
     }
 
     let order_url = order.inner.id.clone();
-    let order = client.get_order(&order_url).await?;
+    let mut order = client.get_order(&order_url).await?;
     edgerun_log::info!("ACME: order status = {:?}", order.status());
+
+    if order.is_ready() || order.is_pending() {
+        let Some(finalize_url) = order.finalize_url().cloned() else {
+            return Err(edgerun_acme::AcmeError::OrderInvalid(
+                "order missing finalize URL".into(),
+            ));
+        };
+
+        let domain_refs: Vec<&str> = domains.iter().map(String::as_str).collect();
+        let (csr_der, signing_key) = generate_csr(&domain_refs)
+            .map_err(|e| edgerun_acme::AcmeError::Storage(e.to_string()))?;
+        let key_pem = signing_key_to_pem(&signing_key)
+            .map_err(|e| edgerun_acme::AcmeError::Storage(e.to_string()))?;
+
+        edgerun_log::info!("ACME: finalizing order with CSR");
+        order = client.finalize_order(&finalize_url, &csr_der).await?;
+
+        let mut attempts = 0;
+        while order.is_processing() || order.is_ready() {
+            sleep(Duration::from_secs(2)).await;
+            order = client.get_order(&order_url).await?;
+            edgerun_log::info!("ACME: finalized order status = {:?}", order.status());
+            attempts += 1;
+            if attempts >= 30 {
+                return Err(edgerun_acme::AcmeError::OrderInvalid(
+                    "order did not finish processing".into(),
+                ));
+            }
+        }
+
+        if order.is_valid() {
+            if let Some(parent) = Path::new(DEPLOYMENT.tls_key_path).parent() {
+                fs::create_dir_all(parent).ok();
+            }
+            fs::write(DEPLOYMENT.tls_key_path, key_pem)
+                .map_err(|e| edgerun_acme::AcmeError::Storage(e.to_string()))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ =
+                    fs::set_permissions(DEPLOYMENT.tls_key_path, fs::Permissions::from_mode(0o600));
+            }
+            edgerun_log::info!("ACME: private key saved to {}", DEPLOYMENT.tls_key_path);
+        }
+    }
 
     if order.is_valid() {
         if let Some(cert_url) = order.certificate_url() {
@@ -906,7 +982,8 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let dkim_signer = load_dkim_signer(&DEPLOYMENT);
     let tls_cert = load_tls_cert(&DEPLOYMENT);
 
-    let base_zone = build_dns_zone(&DEPLOYMENT);
+    let dkim_txt = dkim_signer.as_ref().map(|signer| signer.public_key_txt());
+    let base_zone = build_dns_zone(&DEPLOYMENT, dkim_txt.as_deref());
     edgerun_log::info!("DNS zone built for {}", DEPLOYMENT.origin);
 
     #[cfg(feature = "sqlite")]
@@ -975,8 +1052,18 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         })?;
 
     let http_task = edgerun_rt::spawn(async move {
-        let _ = http_server.serve().await;
+        edgerun_log::info!("HTTP serve task starting");
+        match http_server.serve().await {
+            Ok(()) => edgerun_log::info!("HTTP serve task stopped"),
+            Err(e) => edgerun_log::error!("HTTP serve task failed: {}", e),
+        }
     });
+    edgerun_log::info!(
+        "HTTP serve task queued (finished: {}, pending: {}, runs: {})",
+        http_task.is_finished(),
+        edgerun_rt::pending(),
+        edgerun_rt::runs()
+    );
 
     let mut server = Server::new().with_smtp(smtp_config).with_imap(imap_config);
     let mut bound = server.build().await?;

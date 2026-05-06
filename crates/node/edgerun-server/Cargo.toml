@@ -34,7 +34,7 @@ rusqlite = { version = "0.32", default-features = false, features = ["bundled"],
 
 [features]
 default = ["smtp", "imap", "lmtp", "dns", "dhcp", "tftp", "tls"]
-std = []
+std = ["edgerun-http/std"]
 smtp = ["dep:edgerun-email", "edgerun-email/tls", "edgerun-email/dkim"]
 imap = ["dep:edgerun-email", "edgerun-email/tls"]
 lmtp = ["dep:edgerun-email"]
