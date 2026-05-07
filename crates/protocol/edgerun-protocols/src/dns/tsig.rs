@@ -8,7 +8,7 @@
 //!
 //! # Usage
 //! ```text
-//! use edgerun_dns::tsig::{TsigKey, TsigSigner, TsigVerifier};
+//! use edgerun_protocols::dns::tsig::{TsigKey, TsigSigner, TsigVerifier};
 //!
 //! // Generate a shared secret key
 //! let key = TsigKey::generate();
@@ -26,11 +26,11 @@
 use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "tsig")]
-use alloc::{format, string::ToString, vec};
-#[cfg(feature = "tsig")]
 use crate::dns::message::{DnsMessage, DnsRecord};
 #[cfg(feature = "tsig")]
 use crate::dns::record::{DnsRecordData, DnsRecordType};
+#[cfg(feature = "tsig")]
+use alloc::{format, string::ToString, vec};
 
 /// Parsed TSIG RDATA.
 #[derive(Debug, Clone, PartialEq, Eq)]

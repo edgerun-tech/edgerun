@@ -2,9 +2,11 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::CapabilityError;
-use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_core::protocol::capability_runtime::{
-    capability_remote_envelope, CapabilityRemoteEnvelope, CapabilityResultFrame,
+use edgerun_protocols::core_protocol::protocol::capability::{
+    CapabilityInvocation, CapabilityResult,
+};
+use edgerun_protocols::core_protocol::protocol::capability_runtime::{
+    CapabilityRemoteEnvelope, CapabilityResultFrame, capability_remote_envelope,
 };
 
 use super::{RemoteCapabilityProvider, RemoteCapabilityTransport, RemoteInvocationResult};

@@ -2,7 +2,7 @@
 //!
 //! Supports:
 //! - HTTP-01 challenge (via edgerun-http Handler)
-//! - DNS-01 challenge (via edgerun-dns zone injection)
+//! - DNS-01 challenge (via node-owned DNS zone injection)
 //! - TLS-ALPN-01 challenge (via edgerun-tls ALPN extension)
 //! - Automatic certificate provisioning and renewal
 //! - Encrypted storage of private keys via edgerun-secret-service

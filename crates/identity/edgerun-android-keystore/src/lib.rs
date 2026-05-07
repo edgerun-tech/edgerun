@@ -19,7 +19,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Write;
 use core::result::Result::{self, Err};
-use edgerun_core::crypto::signature_input;
+use edgerun_protocols::core_protocol::crypto::signature_input;
 
 // ===========================================================================
 // Public types (always available)

@@ -3,8 +3,8 @@
 //! Consolidated from:
 //! - `edgerun-oauth/src/base64url.rs` (Base64-URL, RFC 4648)
 //! - `edgerun-oci/src/registry/base64.rs` (Standard Base64)
-//! - `edgerun-dns/src/tsig.rs` (Standard Base64)
-//! - `edgerun-dns/src/doh.rs` (Base64-URL decode)
+//! - `edgerun-protocols/src/dns/tsig.rs` (Standard Base64)
+//! - `edgerun-protocols/src/dns/doh.rs` (Base64-URL decode)
 //! - `edgerun-email/src/smtp/server/session.rs` (Standard Base64, SASL)
 //! - `edgerun-email/src/imap/server.rs` (Standard Base64, SASL)
 //! - `edgerun-email/src/smtp/client/builder.rs` (Standard Base64 with line wrapping)
@@ -381,7 +381,7 @@ pub fn base64url_decode(input: &str) -> Result<Vec<u8>, &'static str> {
 
 /// Convert Base64-URL to standard Base64, then decode.
 ///
-/// This is the pattern used in `edgerun-dns/src/doh.rs`.
+/// This is the pattern used in `edgerun-protocols/src/dns/doh.rs`.
 ///
 /// # Examples
 /// ```

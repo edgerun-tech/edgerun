@@ -5,13 +5,13 @@ use crate::time::{Duration, SystemTime, UNIX_EPOCH};
 use super::helpers::*;
 use super::types::*;
 use edgerun_capabilities::{
-    validate_descriptor, validate_grant, CapabilityAccessClass, CapabilityConstraint,
-    CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityGrant,
-    CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
-    CapabilityRevocation, CapabilityRole, CapabilitySelector,
+    CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor,
+    CapabilityError, CapabilityGrant, CapabilityInvocation, CapabilityModality,
+    CapabilityOperation, CapabilityRequest, CapabilityRevocation, CapabilityRole,
+    CapabilitySelector, validate_descriptor, validate_grant,
 };
-use edgerun_core::protocol::{Duration as ProtocolDuration, Timestamp};
-use edgerun_core::protocol::{IdentityRef, NodeRef};
+use edgerun_protocols::core_protocol::protocol::{Duration as ProtocolDuration, Timestamp};
+use edgerun_protocols::core_protocol::protocol::{IdentityRef, NodeRef};
 
 #[derive(Debug, Clone)]
 pub struct SimplePolicyEngine {
@@ -61,7 +61,7 @@ impl SimplePolicyEngine {
     ) -> Vec<u8> {
         self.nonce = self.nonce.wrapping_add(1);
         let now = now.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let seed = edgerun_wire::CapabilityGrantIdSeed {
+        let seed = edgerun_protocols::wire::CapabilityGrantIdSeed {
             request_id: request.request_id.clone(),
             provider_name: descriptor.provider_name.as_bytes().to_vec(),
             provider_instance_id: descriptor.provider_instance_id.as_bytes().to_vec(),
@@ -69,7 +69,7 @@ impl SimplePolicyEngine {
             unix_secs: now.as_secs(),
             unix_nanos: now.subsec_nanos(),
         };
-        let bytes = edgerun_wire::to_bytes::<edgerun_wire::WireError>(&seed)
+        let bytes = edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&seed)
             .expect("grant id seed must serialize through rkyv");
         edgerun_crypto::sha256(&bytes).to_vec()
     }
@@ -101,7 +101,7 @@ impl SimplePolicyEngine {
             .selector
             .as_ref()
             .and_then(|selector| {
-                edgerun_core::protocol::enum_from_i32::<CapabilityAccessClass>(
+                edgerun_protocols::core_protocol::protocol::enum_from_i32::<CapabilityAccessClass>(
                     selector.access_class,
                 )
             })

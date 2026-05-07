@@ -15,8 +15,7 @@ std = []
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["aes", "hmac", "x25519"] }
 edgerun-encoding = { workspace = true }
-edgerun-sign = { workspace = true, default-features = false, features = ["ed25519"] }
-edgerun-verify = { workspace = true, default-features = false, features = ["ed25519"] }
+edgerun-protocols = { workspace = true, default-features = false, features = ["sign", "verify", "ed25519"] }
 
 [lints]
 workspace = true

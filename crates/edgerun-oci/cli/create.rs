@@ -62,7 +62,7 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
 
     // Validate platform compatibility
     if let Some(ref platform) = spec.platform {
-        if !platform.matches_host() {
+        if !crate::spec::platform_matches_host(platform) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(

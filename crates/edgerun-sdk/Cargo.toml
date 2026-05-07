@@ -15,15 +15,14 @@ required-features = ["std"]
 
 [features]
 default = ["std"]
-std = ["dep:edgerun-crypto", "dep:edgerun-deploy", "dep:edgerun-machine-report", "dep:edgerun-seal", "dep:edgerun-ssh", "dep:edgerun-wire"]
+std = ["dep:edgerun-crypto", "dep:edgerun-deploy", "dep:edgerun-machine-report", "dep:edgerun-protocols", "dep:edgerun-ssh"]
 
 [dependencies]
 edgerun-crypto = { workspace = true, features = ["ed25519"], optional = true }
 edgerun-deploy = { workspace = true, features = ["std"], optional = true }
 edgerun-machine-report = { version = "0.1", path = "../node/edgerun-machine-report", optional = true }
-edgerun-seal = { version = "0.1", path = "../protocol/edgerun-seal", default-features = false, optional = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["seal", "wire"], optional = true }
 edgerun-ssh = { workspace = true, features = ["std"], optional = true }
-edgerun-wire = { version = "0.1", path = "../protocol/edgerun-wire", default-features = false, optional = true }
 
 [lints]
 workspace = true

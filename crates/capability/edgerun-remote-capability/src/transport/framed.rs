@@ -7,7 +7,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 
 use edgerun_capabilities::CapabilityError;
-use edgerun_core::protocol::capability_runtime::CapabilityRemoteEnvelope;
+use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilityRemoteEnvelope;
 
 use crate::protocol::RemoteCapabilityTransport;
 
@@ -101,13 +101,16 @@ pub fn accept_tcp(
 }
 
 fn encode_capability_remote_envelope(envelope: &CapabilityRemoteEnvelope) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(envelope)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(envelope)
         .expect("remote capability envelope must serialize through rkyv")
         .into_vec()
 }
 
 fn decode_capability_remote_envelope(bytes: &[u8]) -> Result<CapabilityRemoteEnvelope, String> {
     let owned = bytes.to_vec();
-    edgerun_wire::from_bytes::<CapabilityRemoteEnvelope, edgerun_wire::WireError>(&owned)
-        .map_err(|_| "invalid rkyv remote capability envelope".to_owned())
+    edgerun_protocols::wire::from_bytes::<
+        CapabilityRemoteEnvelope,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| "invalid rkyv remote capability envelope".to_owned())
 }

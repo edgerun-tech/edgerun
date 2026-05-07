@@ -1,19 +1,18 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::net::Ipv4Addr;
 use core::time::Duration;
 
-#[cfg(not(target_os = "none"))]
-use std::net::{Ipv4Addr as HostIpv4Addr, SocketAddrV4, UdpSocket as HostUdpSocket};
-
-use crate::rt::{CancellationToken, Mutex, SocketAddr, UdpSocket, sleep};
-use edgerun_protocols::dhcp::{DHCP_SERVER_PORT, DhcpServerConfig, DhcpServerCore, message::io};
+use crate::rt::{sleep, AsyncUdpSocket, CancellationToken, Mutex, SocketAddr, UdpSocket};
+use crate::transport::{BareFrameTransport, HostSocketTransport, TransportAddress};
+use edgerun_protocols::dhcp::{message::io, DhcpServerConfig, DhcpServerCore, DHCP_SERVER_PORT};
 
 pub struct DhcpServer {
     socket: Arc<UdpSocket>,
     #[cfg(not(target_os = "none"))]
-    host_socket: Arc<HostUdpSocket>,
+    host_socket: Arc<AsyncUdpSocket>,
     core: Mutex<DhcpServerCore>,
     interface: Option<String>,
 }
@@ -38,22 +37,28 @@ impl DhcpServer {
         pool_end: Ipv4Addr,
         bind_addr: SocketAddr,
     ) -> Result<Self, io::Error> {
-        let mut socket = UdpSocket::new();
-        socket.bind(bind_addr).map_err(map_udp_error)?;
+        let socket = BareFrameTransport
+            .bind_datagram_now(&TransportAddress::bare_datagram(rt_addr_endpoint(
+                bind_addr,
+            )))
+            .map_err(|_| map_udp_error(crate::rt::UdpError))?;
         socket.set_nonblocking(true);
 
         #[cfg(not(target_os = "none"))]
         let host_socket = {
             let ip = bind_addr.ip_bytes();
-            let addr = SocketAddrV4::new(
-                HostIpv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
-                bind_addr.port(),
+            let endpoint = format!(
+                "{}.{}.{}.{}:{}",
+                ip[0],
+                ip[1],
+                ip[2],
+                ip[3],
+                bind_addr.port()
             );
-            let socket = HostUdpSocket::bind(addr)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-            socket
-                .set_nonblocking(true)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            let socket = HostSocketTransport
+                .bind_datagram_now(&TransportAddress::host_datagram(endpoint.into_bytes()))
+                .map_err(map_transport_error)?;
+            socket.set_broadcast(true).map_err(map_rt_io_error)?;
             Arc::new(socket)
         };
 
@@ -88,7 +93,8 @@ impl DhcpServer {
             let (n, _src) = self
                 .host_socket
                 .recv_from(&mut buf)
-                .map_err(map_host_error)?;
+                .await
+                .map_err(map_rt_io_error)?;
             let datagram = match self.core.lock().handle_wire(&buf[..n]) {
                 Ok(Some(datagram)) => datagram,
                 Ok(None) | Err(_) => return Ok(()),
@@ -97,19 +103,12 @@ impl DhcpServer {
                 return Ok(());
             }
 
-            let dest = SocketAddrV4::new(
-                HostIpv4Addr::new(
-                    datagram.dest.octets()[0],
-                    datagram.dest.octets()[1],
-                    datagram.dest.octets()[2],
-                    datagram.dest.octets()[3],
-                ),
-                datagram.port,
-            );
+            let dest = core::net::SocketAddr::from((datagram.dest.octets(), datagram.port));
             self.host_socket
                 .send_to(&datagram.wire, dest)
+                .await
                 .map(|_| ())
-                .map_err(map_host_error)
+                .map_err(map_rt_io_error)
         }
 
         #[cfg(target_os = "none")]
@@ -147,20 +146,26 @@ fn map_udp_error(_: crate::rt::UdpError) -> io::Error {
     io::Error::new(io::ErrorKind::WouldBlock, "UDP operation not ready")
 }
 
+fn rt_addr_endpoint(addr: SocketAddr) -> Vec<u8> {
+    let ip = addr.ip_bytes();
+    format!("{}.{}.{}.{}:{}", ip[0], ip[1], ip[2], ip[3], addr.port()).into_bytes()
+}
+
+fn map_transport_error(error: crate::transport::TransportError) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, error.to_string())
+}
+
+fn map_rt_io_error(error: crate::rt::IoError) -> io::Error {
+    let kind = match error {
+        crate::rt::IoError::UnexpectedEof | crate::rt::IoError::WriteZero => io::ErrorKind::Other,
+        crate::rt::IoError::Other(_) => io::ErrorKind::Other,
+    };
+    io::Error::new(kind, error.to_string())
+}
+
 fn is_not_ready(error: &io::Error) -> bool {
     matches!(
         error.kind(),
         io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
     )
-}
-
-#[cfg(not(target_os = "none"))]
-fn map_host_error(error: std::io::Error) -> io::Error {
-    let kind = match error.kind() {
-        std::io::ErrorKind::WouldBlock => io::ErrorKind::WouldBlock,
-        std::io::ErrorKind::TimedOut => io::ErrorKind::TimedOut,
-        std::io::ErrorKind::ConnectionRefused => io::ErrorKind::ConnectionRefused,
-        _ => io::ErrorKind::Other,
-    };
-    io::Error::new(kind, error.to_string())
 }

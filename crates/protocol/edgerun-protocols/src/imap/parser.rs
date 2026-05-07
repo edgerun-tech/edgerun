@@ -5,11 +5,14 @@
 //! Responses: `* ...` (untagged) or `TAG OK/NO/BAD ...`
 //! Literals: `{N}\r\n` followed by N bytes of data.
 
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use edgerun_encoding::io;
+
+use super::types::Mailbox;
 
 // ===========================================================================
 // IMAP Token Types
@@ -127,6 +130,72 @@ pub fn parse_paren_list(s: &str) -> io::Result<Vec<String>> {
 /// Parse a sequence set (e.g., "1:5", "1,3,5", "*", "1:*").
 pub fn parse_sequence_set(s: &str) -> Vec<String> {
     s.split(',').map(|s| s.trim().to_string()).collect()
+}
+
+/// Parse an untagged IMAP LIST response line.
+pub fn parse_list_response(line: &str) -> Option<Mailbox> {
+    if !line.starts_with("* LIST ") {
+        return None;
+    }
+    let rest = &line[7..];
+    let open_paren = rest.find('(')?;
+    let close_paren = rest.find(')')?;
+    let flags_str = &rest[open_paren + 1..close_paren];
+    let flags: Vec<String> = flags_str
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+    let after_paren = rest[close_paren + 1..].trim_start();
+    let parts: Vec<&str> = after_paren.splitn(2, ' ').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let delimiter = parts[0].trim_matches('"');
+    let delimiter = if delimiter == "NIL" {
+        None
+    } else {
+        Some(delimiter.to_string())
+    };
+    let name = parts[1].trim_matches('"');
+    Some(Mailbox {
+        name: name.to_string(),
+        attributes: flags,
+        delimiter,
+        status: None,
+    })
+}
+
+/// Parse an untagged IMAP FETCH response line into `(sequence, attributes)`.
+pub fn parse_fetch_response(line: &str) -> Option<(u32, BTreeMap<String, String>)> {
+    if !line.starts_with("* ") || !line.contains(" FETCH ") {
+        return None;
+    }
+    let seq = line[2..].split_whitespace().next()?.parse::<u32>().ok()?;
+    let fetch_pos = line.find(" FETCH ")?;
+    let after_fetch = &line[fetch_pos + 7..];
+    if !after_fetch.starts_with('(') || !after_fetch.ends_with(')') {
+        return None;
+    }
+    let inner = &after_fetch[1..after_fetch.len() - 1];
+    let mut attrs = BTreeMap::new();
+    let mut parts = inner.split_whitespace().peekable();
+    while let Some(key) = parts.next() {
+        if let Some(value) = parts.next() {
+            if value.starts_with('(') {
+                let mut val_parts = vec![value];
+                for v in parts.by_ref() {
+                    val_parts.push(v);
+                    if v.ends_with(')') {
+                        break;
+                    }
+                }
+                attrs.insert(key.to_string(), val_parts.join(" "));
+            } else {
+                attrs.insert(key.to_string(), value.to_string());
+            }
+        }
+    }
+    Some((seq, attrs))
 }
 
 // ===========================================================================
@@ -253,6 +322,22 @@ mod tests {
     fn test_parse_paren_list_flags() {
         let tokens = parse_paren_list("(\\Seen \\Answered)").unwrap();
         assert_eq!(tokens, vec!["\\Seen", "\\Answered"]);
+    }
+
+    #[test]
+    fn test_parse_list_response() {
+        let mailbox = parse_list_response(r#"* LIST (\HasNoChildren) "/" "INBOX""#).unwrap();
+        assert_eq!(mailbox.name, "INBOX");
+        assert_eq!(mailbox.delimiter, Some("/".to_string()));
+        assert_eq!(mailbox.attributes, vec!["\\HasNoChildren"]);
+    }
+
+    #[test]
+    fn test_parse_fetch_response() {
+        let (seq, attrs) = parse_fetch_response("* 7 FETCH (UID 42 FLAGS (\\Seen))").unwrap();
+        assert_eq!(seq, 7);
+        assert_eq!(attrs.get("UID"), Some(&"42".to_string()));
+        assert_eq!(attrs.get("FLAGS"), Some(&"(\\Seen)".to_string()));
     }
 
     #[test]

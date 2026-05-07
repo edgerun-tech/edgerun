@@ -20,8 +20,10 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
+pub mod error;
 #[cfg(feature = "exchange-events")]
 pub mod exchange_events;
+pub mod logging;
 pub mod mesh_node;
 pub mod resource;
 pub mod router;
@@ -40,6 +42,7 @@ pub mod runtime;
 pub mod services;
 #[cfg(feature = "exchange-events")]
 mod stream_append;
+pub mod transport;
 
 mod protocol_signer;
 
@@ -49,9 +52,11 @@ pub(crate) mod test_support {
     use std::sync::Mutex;
 
     use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
-    use edgerun_keygen::{NodeSigningKey, generate_node_signing_key, node_id_from_signing_key};
-    use edgerun_sign::{ProtocolSigner, SignableProtocolFamily};
-    use edgerun_sign_p256::P256ProtocolSigner;
+    use edgerun_protocols::keygen::{
+        generate_node_signing_key, node_id_from_signing_key, NodeSigningKey,
+    };
+    use edgerun_protocols::sign::{ProtocolSigner, SignableProtocolFamily};
+    use edgerun_protocols::sign_p256::P256ProtocolSigner;
 
     pub(crate) struct TestSigner {
         node_id: NodeID,
@@ -106,65 +111,24 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::fmt;
 
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_capability_policy::SimplePolicyEngine;
-use edgerun_core::command::{CommandValidationContext, validate_command};
-use edgerun_core::protocol::{CommandEnvelope, EventEnvelope, EventType};
-use edgerun_core::result::Verdict;
-use edgerun_core::util::now_unix_millis_i64 as now_ms;
-use edgerun_core::value::Value;
 use edgerun_hardware_signing::NodeID;
-use edgerun_sign::ProtocolSigner;
+use edgerun_protocols::core_protocol::command::{validate_command, CommandValidationContext};
+use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, EventEnvelope, EventType};
+use edgerun_protocols::core_protocol::result::Verdict;
+use edgerun_protocols::core_protocol::util::now_unix_millis_i64 as now_ms;
+use edgerun_protocols::core_protocol::value::Value;
+use edgerun_protocols::sign::ProtocolSigner;
 use edgerun_storage::core::EventLog;
-use edgerun_storage::{DurableStreamWriter, MemEventLog, StorageError};
+use edgerun_storage::{DurableStreamWriter, MemEventLog};
+pub use error::{NodeError, NodeResult};
 use protocol_signer::MeshProtocolSigner;
 // Simple YAML config parser (no serde dependency)
 
 type HashMap<K, V> = BTreeMap<K, V>;
 type HashSet<T> = BTreeSet<T>;
-
-/// Node error types.
-#[derive(Debug)]
-pub enum NodeError {
-    /// Missing required configuration field.
-    MissingField(String),
-    /// Command was rejected.
-    CommandRejected(String),
-    /// Command was deferred.
-    CommandDeferred(String),
-    /// Stream error.
-    Stream(edgerun_stream::StreamError),
-    /// Storage error.
-    Storage(String),
-}
-
-impl fmt::Display for NodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            NodeError::MissingField(field) => write!(f, "missing required field: {field}"),
-            NodeError::CommandRejected(reason) => write!(f, "command rejected: {reason}"),
-            NodeError::CommandDeferred(reason) => write!(f, "command deferred: {reason}"),
-            NodeError::Stream(e) => write!(f, "stream error: {e}"),
-            NodeError::Storage(e) => write!(f, "storage error: {e}"),
-        }
-    }
-}
-
-impl core::error::Error for NodeError {}
-
-impl From<edgerun_stream::StreamError> for NodeError {
-    fn from(e: edgerun_stream::StreamError) -> Self {
-        NodeError::Stream(e)
-    }
-}
-
-impl From<StorageError> for NodeError {
-    fn from(e: StorageError) -> Self {
-        NodeError::Storage(e.to_string())
-    }
-}
 
 /// Node configuration — loaded from YAML and embedded in the genesis event.
 #[derive(Clone, Debug, Default)]
@@ -338,7 +302,7 @@ impl<L: EventLog, S: ProtocolSigner> Node<L, S> {
             .config
             .controllers
             .iter()
-            .filter_map(|s| edgerun_core::util::hex_to_bytes(s).ok())
+            .filter_map(|s| edgerun_protocols::core_protocol::util::hex_to_bytes(s).ok())
             .collect();
         let delegation_use_counts: HashMap<Vec<u8>, u64> = HashMap::new();
         let delegation_rate_events_ms: HashMap<Vec<u8>, Vec<i64>> = HashMap::new();
@@ -376,9 +340,11 @@ impl<L: EventLog, S: ProtocolSigner> Node<L, S> {
                         result.derived.as_map().and_then(|m| m.get("command_hash"))
                     {
                         self.processed_commands.insert(
-                            edgerun_core::util::hex_to_bytes(cmd_hash).unwrap_or_default(),
+                            edgerun_protocols::core_protocol::util::hex_to_bytes(cmd_hash)
+                                .unwrap_or_default(),
                             (
-                                edgerun_core::util::hex_to_bytes(cmd_id).unwrap_or_default(),
+                                edgerun_protocols::core_protocol::util::hex_to_bytes(cmd_id)
+                                    .unwrap_or_default(),
                                 0i64,
                             ),
                         );
@@ -483,13 +449,13 @@ fn parse_list(val: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use alloc::vec;
-    use edgerun_core::protocol::{
-        CommandType, IdentityRef, NodeRef, ProtocolRecord, Signature, Timestamp,
-    };
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
-    use edgerun_keygen::generate_ephemeral_node_identity;
-    use edgerun_sign::{ProtocolSigner, SignableProtocolFamily};
+    use edgerun_protocols::core_protocol::protocol::{
+        CommandType, IdentityRef, NodeRef, ProtocolRecord, Signature, Timestamp,
+    };
+    use edgerun_protocols::keygen::generate_ephemeral_node_identity;
+    use edgerun_protocols::sign::{ProtocolSigner, SignableProtocolFamily};
     use std::sync::Arc;
 
     use crate::test_support::TestSigner;
@@ -498,10 +464,12 @@ mod tests {
         TestSigner::generate()
     }
 
-    fn signed_query_command_for_node(node_id: NodeID) -> edgerun_core::protocol::CommandEnvelope {
+    fn signed_query_command_for_node(
+        node_id: NodeID,
+    ) -> edgerun_protocols::core_protocol::protocol::CommandEnvelope {
         let issuer = generate_ephemeral_node_identity();
-        let now_secs = edgerun_core::util::now_unix_secs_i64();
-        let mut command = edgerun_core::protocol::CommandEnvelope {
+        let now_secs = edgerun_protocols::core_protocol::util::now_unix_secs_i64();
+        let mut command = edgerun_protocols::core_protocol::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![0x10, 0x20, 0x30, 0x40],
             target_node: Some(NodeRef {
@@ -509,7 +477,7 @@ mod tests {
             }),
             issuer: Some(IdentityRef {
                 identity_id: issuer.node_id.to_vec(),
-                identity_kind: Some(edgerun_core::crypto::IDENTITY_KIND_NODE),
+                identity_kind: Some(edgerun_protocols::core_protocol::crypto::IDENTITY_KIND_NODE),
                 key_hint: Some(issuer.node_id.to_vec()),
             }),
             command_type: CommandType::Query as i32,
@@ -785,13 +753,13 @@ trust_nodes: []
         let mut node = Node::from_config(config, signer).unwrap();
 
         // Build a minimal command with empty command_id
-        let command = edgerun_core::protocol::CommandEnvelope {
+        let command = edgerun_protocols::core_protocol::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![], // empty -> structural reject
-            target_node: Some(edgerun_core::protocol::NodeRef {
+            target_node: Some(edgerun_protocols::core_protocol::protocol::NodeRef {
                 node_id: node.identity().0.to_vec(),
             }),
-            issuer: Some(edgerun_core::protocol::IdentityRef {
+            issuer: Some(edgerun_protocols::core_protocol::protocol::IdentityRef {
                 identity_id: vec![1, 2, 3],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -823,13 +791,13 @@ trust_nodes: []
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
-        let command = edgerun_core::protocol::CommandEnvelope {
+        let command = edgerun_protocols::core_protocol::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
-            target_node: Some(edgerun_core::protocol::NodeRef {
+            target_node: Some(edgerun_protocols::core_protocol::protocol::NodeRef {
                 node_id: vec![0u8; 64], // wrong target
             }),
-            issuer: Some(edgerun_core::protocol::IdentityRef {
+            issuer: Some(edgerun_protocols::core_protocol::protocol::IdentityRef {
                 identity_id: vec![1, 2, 3],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -858,11 +826,11 @@ trust_nodes: []
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
-        let command = edgerun_core::protocol::CommandEnvelope {
+        let command = edgerun_protocols::core_protocol::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: None, // no target
-            issuer: Some(edgerun_core::protocol::IdentityRef {
+            issuer: Some(edgerun_protocols::core_protocol::protocol::IdentityRef {
                 identity_id: vec![1, 2, 3],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -893,13 +861,13 @@ trust_nodes: []
 
         let initial_events = node.events().len();
 
-        let command = edgerun_core::protocol::CommandEnvelope {
+        let command = edgerun_protocols::core_protocol::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1],
-            target_node: Some(edgerun_core::protocol::NodeRef {
+            target_node: Some(edgerun_protocols::core_protocol::protocol::NodeRef {
                 node_id: node.identity().0.to_vec(),
             }),
-            issuer: Some(edgerun_core::protocol::IdentityRef {
+            issuer: Some(edgerun_protocols::core_protocol::protocol::IdentityRef {
                 identity_id: vec![7, 8, 9],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -938,7 +906,7 @@ trust_nodes: []
         assert_eq!(events[1].seq, 1);
         assert_eq!(
             events[1].event_type,
-            edgerun_core::protocol::EventType::CommandCommitted as i32
+            edgerun_protocols::core_protocol::protocol::EventType::CommandCommitted as i32
         );
         assert!(events[1].signature.is_some());
         let genesis_hash = edgerun_storage::canonical_event_hash(&events[0]).value;
@@ -967,7 +935,7 @@ trust_nodes: []
         assert_eq!(scanned[1].event.seq, 1);
         assert_eq!(
             scanned[1].event.event_type,
-            edgerun_core::protocol::EventType::CommandCommitted as i32
+            edgerun_protocols::core_protocol::protocol::EventType::CommandCommitted as i32
         );
         assert_eq!(scanned[1].event, node.events()[1]);
     }
@@ -998,12 +966,12 @@ trust_nodes: []
         let grant = edgerun_capabilities::CapabilityGrant {
             grant_version: 1,
             grant_id: vec![1, 2, 3],
-            issuer: Some(edgerun_core::protocol::IdentityRef {
+            issuer: Some(edgerun_protocols::core_protocol::protocol::IdentityRef {
                 identity_id: vec![4, 5, 6],
                 identity_kind: Some(2),
                 key_hint: None,
             }),
-            grantee: Some(edgerun_core::protocol::IdentityRef {
+            grantee: Some(edgerun_protocols::core_protocol::protocol::IdentityRef {
                 identity_id: vec![1, 2, 3],
                 identity_kind: Some(0),
                 key_hint: None,
@@ -1035,13 +1003,13 @@ trust_nodes: []
 
         // Create a command that will pass structural validation but fail signature
         // We use a command_id that's non-empty and target that matches
-        let command = edgerun_core::protocol::CommandEnvelope {
+        let command = edgerun_protocols::core_protocol::protocol::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![10, 20, 30],
-            target_node: Some(edgerun_core::protocol::NodeRef {
+            target_node: Some(edgerun_protocols::core_protocol::protocol::NodeRef {
                 node_id: node.identity().0.to_vec(),
             }),
-            issuer: Some(edgerun_core::protocol::IdentityRef {
+            issuer: Some(edgerun_protocols::core_protocol::protocol::IdentityRef {
                 identity_id: node
                     .config()
                     .controllers
@@ -1054,8 +1022,8 @@ trust_nodes: []
             }),
             command_type: 7,
             command_version: 1,
-            issued_at: Some(edgerun_core::protocol::Timestamp {
-                seconds: edgerun_core::util::now_unix_secs_i64(),
+            issued_at: Some(edgerun_protocols::core_protocol::protocol::Timestamp {
+                seconds: edgerun_protocols::core_protocol::util::now_unix_secs_i64(),
                 nanos: 0,
             }),
             not_before: None,
@@ -1065,7 +1033,7 @@ trust_nodes: []
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
-            signatures: vec![edgerun_core::protocol::Signature {
+            signatures: vec![edgerun_protocols::core_protocol::protocol::Signature {
                 algorithm: 1,
                 value: vec![0u8; 64], // bad signature
             }],

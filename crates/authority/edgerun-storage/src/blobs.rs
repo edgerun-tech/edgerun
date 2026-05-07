@@ -129,7 +129,7 @@ impl BlobStore {
     /// Returns the blob ID.
     pub fn store_envelope(
         &self,
-        envelope: &edgerun_core::protocol::EncryptedEnvelope,
+        envelope: &edgerun_protocols::core_protocol::protocol::EncryptedEnvelope,
     ) -> Result<String, StorageError> {
         let _ = envelope;
 
@@ -139,8 +139,9 @@ impl BlobStore {
             .map(|rk| rk.identity.clone())
             .collect();
 
-        let blob_id =
-            edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(&envelope.ciphertext));
+        let blob_id = edgerun_protocols::core_protocol::util::bytes_to_hex(
+            &edgerun_protocols::core_protocol::crypto::sha256(&envelope.ciphertext),
+        );
 
         let blob_path = blob_file_path(&self.config.blob_dir, &blob_id);
 
@@ -168,7 +169,7 @@ impl BlobStore {
             let meta_path = blob_meta_path(&self.config.blob_dir, &blob_id);
             let meta_content = recipient_ids
                 .iter()
-                .map(|r| edgerun_core::util::bytes_to_hex(r))
+                .map(|r| edgerun_protocols::core_protocol::util::bytes_to_hex(r))
                 .collect::<Vec<_>>()
                 .join("\n");
             fs::write(&meta_path, meta_content)?;
@@ -195,7 +196,9 @@ impl BlobStore {
         let recipients = recipients.to_vec();
 
         // Derive blob ID from plaintext hash (content-addressed)
-        let blob_id = edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(plaintext));
+        let blob_id = edgerun_protocols::core_protocol::util::bytes_to_hex(
+            &edgerun_protocols::core_protocol::crypto::sha256(plaintext),
+        );
 
         let blob_path = blob_file_path(&self.config.blob_dir, &blob_id);
 
@@ -233,7 +236,7 @@ impl BlobStore {
             let meta_path = blob_meta_path(&self.config.blob_dir, &blob_id);
             let meta_content = recipients
                 .iter()
-                .map(|r| edgerun_core::util::bytes_to_hex(r))
+                .map(|r| edgerun_protocols::core_protocol::util::bytes_to_hex(r))
                 .collect::<Vec<_>>()
                 .join("\n");
             fs::write(&meta_path, meta_content)?;
@@ -320,7 +323,7 @@ fn load_blob_recipients(blob_dir: &Path, blob_id: &str) -> Vec<Vec<u8>> {
     match fs::read_to_string(&meta_path) {
         Ok(content) => content
             .lines()
-            .filter_map(|line| edgerun_core::util::hex_to_bytes(line).ok())
+            .filter_map(|line| edgerun_protocols::core_protocol::util::hex_to_bytes(line).ok())
             .collect(),
         Err(_) => Vec::new(),
     }
@@ -348,7 +351,7 @@ fn merge_recipients(
     let meta_path = blob_meta_path(blob_dir, blob_id);
     let content = existing
         .into_iter()
-        .map(|recipient| edgerun_core::util::bytes_to_hex(&recipient))
+        .map(|recipient| edgerun_protocols::core_protocol::util::bytes_to_hex(&recipient))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -373,7 +376,7 @@ fn merge_recipients(
 ///
 /// Same private key always produces the same blob key, so blobs survive restarts.
 fn derive_blob_key_from_private_key(private_key_bytes: &[u8]) -> [u8; 32] {
-    let hk = edgerun_core::crypto::HkdfSha256::new(None, private_key_bytes);
+    let hk = edgerun_protocols::core_protocol::crypto::HkdfSha256::new(None, private_key_bytes);
     let expanded = hk.expand(b"edgerun:v0:blob-key", 32);
     let mut key = [0u8; 32];
     key.copy_from_slice(&expanded[..32]);

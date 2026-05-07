@@ -8,7 +8,6 @@ members = [
   "crates/utility/edgerun-glob",
   "crates/utility/edgerun-regex",
   "crates/edgerun-rt",
-  "crates/edgerun-ipxe",
   "crates/edgerun-standards",
   "crates/edgerun-unit",
   "crates/edgerun-sdk",
@@ -41,16 +40,9 @@ members = [
   "crates/protocol/edgerun-core",
   "crates/edgerun-compositor",
   "crates/utility/edgerun-crypto",
-  "crates/protocol/edgerun-verify",
-  "crates/protocol/edgerun-sign",
-  "crates/protocol/edgerun-sign-p256",
-  "crates/protocol/edgerun-keygen",
-  "crates/protocol/edgerun-seal",
-  "crates/protocol/edgerun-node-bootstrap",
   "crates/protocol/edgerun-protocols",
   "crates/protocol/edgerun-protocol-bundle",
   "crates/protocol/edgerun-sign-verify-e2e",
-  "crates/edgerun-dns",
   "crates/linux-adapters/edgerun-drm-display",
   "crates/device-types/edgerun-display",
   "crates/edgerun-edit",
@@ -105,7 +97,6 @@ members = [
   "crates/capability/edgerun-remote-capability",
   "crates/edgerun-secret-service",
   "crates/edgerun-email",
-  "crates/edgerun-email-auth",
   "crates/device-types/edgerun-speaker",
   "crates/authority/edgerun-derived-db",
   "crates/authority/edgerun-storage",
@@ -197,7 +188,6 @@ edgerun-oci = { version = "0.1", path = "crates/edgerun-oci" }
 edgerun-edgefs = { version = "0.1", path = "crates/authority/edgerun-edgefs" }
 edgerun-encoding = { version = "0.1", path = "crates/utility/edgerun-encoding" }
 edgerun-acme = { version = "0.1", path = "crates/edgerun-acme" }
-edgerun-dns = { version = "0.1", path = "crates/edgerun-dns" }
 edgerun-tls = { version = "0.1", path = "crates/edgerun-tls" }
 edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
 edgerun-glob = { version = "0.1", path = "crates/utility/edgerun-glob" }
@@ -209,12 +199,6 @@ edgerun-deploy = { version = "0.1", path = "crates/edgerun-deploy", default-feat
 edgerun-ssh = { version = "0.1", path = "crates/edgerun-ssh", default-features = false }
 edgerun-wire = { version = "0.1", path = "crates/protocol/edgerun-wire", default-features = false }
 edgerun-crypto = { version = "0.1", path = "crates/utility/edgerun-crypto", default-features = false }
-edgerun-verify = { version = "0.1", path = "crates/protocol/edgerun-verify", default-features = false }
-edgerun-sign = { version = "0.1", path = "crates/protocol/edgerun-sign", default-features = false }
-edgerun-sign-p256 = { version = "0.1", path = "crates/protocol/edgerun-sign-p256", default-features = false }
-edgerun-keygen = { version = "0.1", path = "crates/protocol/edgerun-keygen", default-features = false }
-edgerun-seal = { version = "0.1", path = "crates/protocol/edgerun-seal", default-features = false }
-edgerun-node-bootstrap = { version = "0.1", path = "crates/protocol/edgerun-node-bootstrap", default-features = false }
 edgerun-sign-verify-e2e = { version = "0.1", path = "crates/protocol/edgerun-sign-verify-e2e", default-features = false }
 edgerun-json = { version = "0.1", path = "crates/utility/edgerun-json", default-features = false }
 edgerun-error = { version = "0.1", path = "crates/utility/edgerun-error" }

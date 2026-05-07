@@ -9,10 +9,12 @@ use crate::provider::*;
 use crate::provider_mapping::map_provider_status;
 use alloc::string::String;
 use core::result::Result;
-use edgerun_core::protocol::edgerun_wallet_v0::{AssetRef, Quote, QuoteRequest};
 use edgerun_http::client_middleware::Chain;
 use edgerun_http::{HttpClient, Method};
 use edgerun_json::{from_str, to_string, JsonValue, Map, ToJson};
+use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
+    AssetRef, Quote, QuoteRequest,
+};
 use edgerun_rt::block_on;
 use edgerun_wallet::{DecimalAmount, WalletError};
 

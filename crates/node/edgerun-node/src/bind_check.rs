@@ -15,7 +15,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
     feature = "quic",
     feature = "acme",
 ))]
-use edgerun_http::{Response, StatusCode, into_handler};
+use edgerun_http::{into_handler, Response, StatusCode};
 #[cfg(all(
     feature = "http",
     feature = "https",

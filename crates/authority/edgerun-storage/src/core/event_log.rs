@@ -1,7 +1,7 @@
 //! Shared event-log framing and hashing.
 
 use crate::prelude::v1::*;
-use edgerun_core::protocol::{Digest, EventEnvelope};
+use edgerun_protocols::core_protocol::protocol::{Digest, EventEnvelope};
 
 use crate::error::StorageError;
 
@@ -61,9 +61,9 @@ pub trait EventLog {
 /// Computes the deterministic edgerun-wire event hash used for stream linkage and heads.
 #[must_use]
 pub fn canonical_event_hash(event: &EventEnvelope) -> Digest {
-    let canonical = edgerun_core::wire_stream::event_signable_wire_bytes(event);
-    let hash = edgerun_core::crypto::record_hash(
-        edgerun_core::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
+    let canonical = edgerun_protocols::core_protocol::wire_stream::event_signable_wire_bytes(event);
+    let hash = edgerun_protocols::core_protocol::crypto::record_hash(
+        edgerun_protocols::core_protocol::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
         &canonical,
     );
     Digest {
@@ -81,8 +81,8 @@ pub fn validate_event_location(
         return Err(StorageError::Decode(format!(
             "event location stream mismatch at offset {}: location has {}, event has {}",
             location.file_offset,
-            edgerun_core::util::bytes_to_hex(&location.stream_id),
-            edgerun_core::util::bytes_to_hex(&event.stream_id),
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&location.stream_id),
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
         )));
     }
     if location.seq != event.seq {
@@ -96,8 +96,8 @@ pub fn validate_event_location(
         return Err(StorageError::Decode(format!(
             "event hash mismatch at offset {}: location has {}, event has {}",
             location.file_offset,
-            edgerun_core::util::bytes_to_hex(&location.event_hash),
-            edgerun_core::util::bytes_to_hex(&event_hash),
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&location.event_hash),
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&event_hash),
         )));
     }
 
@@ -110,9 +110,10 @@ pub fn validate_event_location(
 /// The record body is edgerun-wire. Integrity/index hashes are computed through
 /// `canonical_event_hash`.
 pub fn encode_event_frame(event: &EventEnvelope) -> Result<(Vec<u8>, Vec<u8>), StorageError> {
-    let event_bytes = edgerun_core::wire_stream::event_full_wire_bytes(event);
+    let event_bytes = edgerun_protocols::core_protocol::wire_stream::event_full_wire_bytes(event);
 
-    let len_prefix = edgerun_core::varint::encode_varint(event_bytes.len() as u64);
+    let len_prefix =
+        edgerun_protocols::core_protocol::varint::encode_varint(event_bytes.len() as u64);
     Ok((len_prefix, event_bytes))
 }
 

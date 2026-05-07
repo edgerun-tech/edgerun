@@ -59,7 +59,7 @@ pub fn generate_oci_spec_model(image_config: &ImageConfig, rootfs: &str) -> OciS
 }
 
 pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &str) -> String {
-    generate_oci_spec_model(image_config, rootfs).to_json_string_pretty()
+    crate::spec::spec_to_json_string_pretty(&generate_oci_spec_model(image_config, rootfs))
 }
 
 fn parse_user(user_str: Option<&String>) -> (u32, u32) {

@@ -4,7 +4,9 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use edgerun_hardware_signing::{MeshSigner, NodeID};
-use edgerun_sign::{ProtocolSignError, ProtocolSigner, SignableProtocolFamily as ProtocolFamily};
+use edgerun_protocols::sign::{
+    ProtocolSignError, ProtocolSigner, SignableProtocolFamily as ProtocolFamily,
+};
 
 /// Adapter kept at the node edge while mesh transport still owns `MeshSigner`.
 #[derive(Clone)]
@@ -28,7 +30,7 @@ impl MeshProtocolSigner {
 
 impl ProtocolSigner for MeshProtocolSigner {
     fn signature_algorithm(&self) -> i32 {
-        edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
+        edgerun_protocols::core_protocol::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
     }
 
     fn sign_signature_input(
@@ -55,7 +57,7 @@ impl<'a> BorrowedMeshProtocolSigner<'a> {
 
 impl ProtocolSigner for BorrowedMeshProtocolSigner<'_> {
     fn signature_algorithm(&self) -> i32 {
-        edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
+        edgerun_protocols::core_protocol::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
     }
 
     fn sign_signature_input(

@@ -13,7 +13,7 @@ default = []
 std = []
 
 [dependencies]
-edgerun-wire = { workspace = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["wire"] }
 
 [lints]
 workspace = true

@@ -5,8 +5,8 @@
 use alloc::{vec, vec::Vec};
 
 use edgerun_android_keystore::{
-    sign_record_with_keystore_checked, AndroidKeystoreAssuranceLevel,
-    AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey,
+    AndroidKeystoreAssuranceLevel, AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey,
+    sign_record_with_keystore_checked,
 };
 
 use crate::{
@@ -136,7 +136,7 @@ fn map_hardware_to_keystore_algorithm(
         HardwareSignatureAlgorithm::EcSchnorr => {
             return Err(HardwareSigningError::Provider(
                 "Android Keystore adapter does not expose EcSchnorr".into(),
-            ))
+            ));
         }
         HardwareSignatureAlgorithm::Opaque(v) => {
             AndroidKeystoreSignatureAlgorithm::Opaque(v.clone())

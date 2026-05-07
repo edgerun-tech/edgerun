@@ -50,8 +50,8 @@ use crypto::{CryptoPhase, ProtectionKeys as ProtKeys};
 use crate::runtime::net::{IpAddr, SocketAddr, ToSocketAddrs, UdpSocket};
 use crate::runtime::sync::Arc;
 use crate::runtime::AsyncUdpSocket;
-use edgerun_protocols::tls::prf::Hasher as TlsHasher;
 use edgerun_crypto::CipherSuite;
+use edgerun_protocols::tls::prf::Hasher as TlsHasher;
 
 /// Client-side QUIC connection options.
 #[derive(Debug, Clone, Default)]

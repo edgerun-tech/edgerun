@@ -3,26 +3,27 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use edgerun_wire::{
+use edgerun_protocols::wire::{
+    sdk_wire_bytes, CapabilityRequest, CapabilityResponse, CapabilityResponseProofRecord,
+    RuntimeAppInstall, RuntimeAppMessage, RuntimeCapabilityDeclaration, RuntimeDeploymentConfig,
+    RuntimeDomainConfig, RuntimeEvent, RuntimeHttpDispatch, RuntimeHttpRequest, RuntimeHttpRoute,
+    RuntimeIdentityRoute, RuntimeProtocolBinding, RuntimeRoutedAppMessage, SdkWireRecord,
+    SigningCapabilityInputRecord, SigningResponsePayloadRecord, StorageWriteReceiptRecord,
     APP_MESSAGE_STATUS_ACCEPTED, APP_MESSAGE_STATUS_DENIED, APP_MESSAGE_STATUS_FORWARDED,
     CAPABILITY_KIND_SIGNING, CAPABILITY_KIND_STORAGE, CAPABILITY_OPERATION_READ,
     CAPABILITY_OPERATION_SIGN, CAPABILITY_OPERATION_WRITE, CAPABILITY_STATUS_INVALID_REQUEST,
-    CAPABILITY_STATUS_OK, CAPABILITY_STATUS_POLICY_DENIED, CapabilityRequest, CapabilityResponse,
-    CapabilityResponseProofRecord, ROUTE_SCHEME_HTTPS, RUNTIME_EVENT_APP_INSTALLED,
-    RUNTIME_EVENT_APP_MESSAGE_DISPATCHED, RUNTIME_EVENT_APP_MESSAGE_FORWARDED,
-    RUNTIME_EVENT_CAPABILITY_DENIED, RUNTIME_EVENT_CAPABILITY_EXECUTED,
-    RUNTIME_EVENT_HTTP_DISPATCHED, RUNTIME_EVENT_IDENTITY_ROUTE_GRANTED,
-    RUNTIME_EVENT_ROUTE_GRANTED, RUNTIME_PROTOCOL_ACME, RUNTIME_PROTOCOL_DNS_TCP,
-    RUNTIME_PROTOCOL_DNS_UDP, RUNTIME_PROTOCOL_HTTP, RUNTIME_PROTOCOL_HTTPS, RUNTIME_PROTOCOL_IMAP,
-    RUNTIME_PROTOCOL_IMAPS, RUNTIME_PROTOCOL_LMTP, RUNTIME_PROTOCOL_PROXY, RUNTIME_PROTOCOL_SMTP,
-    RUNTIME_PROTOCOL_SUBMISSION, RUNTIME_PROTOCOL_TFTP, RuntimeAppInstall, RuntimeAppMessage,
-    RuntimeDeploymentConfig, RuntimeDomainConfig, RuntimeEvent, RuntimeHttpDispatch,
-    RuntimeHttpRequest, RuntimeHttpRoute, RuntimeIdentityRoute, RuntimeProtocolBinding,
-    RuntimeRoutedAppMessage, SDK_WIRE_ABI_VERSION, SdkWireRecord, SigningCapabilityInputRecord,
-    SigningResponsePayloadRecord, StorageWriteReceiptRecord, sdk_wire_bytes,
+    CAPABILITY_STATUS_OK, CAPABILITY_STATUS_POLICY_DENIED, ROUTE_SCHEME_HTTPS,
+    RUNTIME_EVENT_APP_INSTALLED, RUNTIME_EVENT_APP_MESSAGE_DISPATCHED,
+    RUNTIME_EVENT_APP_MESSAGE_FORWARDED, RUNTIME_EVENT_CAPABILITY_DENIED,
+    RUNTIME_EVENT_CAPABILITY_EXECUTED, RUNTIME_EVENT_HTTP_DISPATCHED,
+    RUNTIME_EVENT_IDENTITY_ROUTE_GRANTED, RUNTIME_EVENT_ROUTE_GRANTED, RUNTIME_PROTOCOL_ACME,
+    RUNTIME_PROTOCOL_DNS_TCP, RUNTIME_PROTOCOL_DNS_UDP, RUNTIME_PROTOCOL_HTTP,
+    RUNTIME_PROTOCOL_HTTPS, RUNTIME_PROTOCOL_IMAP, RUNTIME_PROTOCOL_IMAPS, RUNTIME_PROTOCOL_LMTP,
+    RUNTIME_PROTOCOL_PROXY, RUNTIME_PROTOCOL_SMTP, RUNTIME_PROTOCOL_SUBMISSION,
+    RUNTIME_PROTOCOL_TFTP, SDK_WIRE_ABI_VERSION,
 };
 
-use crate::resource::{NodeTransportSurface, ServiceBindingIntent, binding_intents};
+use crate::resource::{binding_intents, NodeTransportSurface, ServiceBindingIntent};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeError {
@@ -140,6 +141,7 @@ pub struct RuntimeServicePlan {
     /// routing/resource intent and chooses the host-specific realization.
     pub listeners: Vec<RuntimeProtocolBinding>,
     pub domains: Vec<RuntimeDomainConfig>,
+    pub apps: Vec<RuntimeAppInstall>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -281,7 +283,7 @@ impl RuntimeDeploymentSpec {
             }
             let mut mailboxes = Vec::new();
             for mailbox in domain.mailboxes {
-                mailboxes.push(edgerun_wire::RuntimeMailbox {
+                mailboxes.push(edgerun_protocols::wire::RuntimeMailbox {
                     abi_version: SDK_WIRE_ABI_VERSION,
                     flags: 1,
                     address: mailbox.address.as_bytes().to_vec(),
@@ -332,6 +334,7 @@ impl RuntimeServicePlan {
             origin: config.origin.clone(),
             listeners,
             domains: config.domains.clone(),
+            apps: config.apps.clone(),
         }
     }
 
@@ -364,6 +367,22 @@ impl RuntimeServicePlan {
 
     pub fn requested_bindings(&self, surface: NodeTransportSurface) -> Vec<ServiceBindingIntent> {
         binding_intents(&self.listeners, surface)
+    }
+
+    pub fn provided_capabilities(&self) -> Vec<RuntimeCapabilityDeclaration> {
+        let mut capabilities = Vec::new();
+        for app in &self.apps {
+            capabilities.extend(app.provided_capabilities.iter().cloned());
+        }
+        capabilities
+    }
+
+    pub fn required_capabilities(&self) -> Vec<RuntimeCapabilityDeclaration> {
+        let mut capabilities = Vec::new();
+        for app in &self.apps {
+            capabilities.extend(app.required_capabilities.iter().cloned());
+        }
+        capabilities
     }
 }
 
@@ -880,8 +899,10 @@ where
 
 fn decode_capability_request_wire(request_bytes: &[u8]) -> Result<CapabilityRequest, RuntimeError> {
     let owned = request_bytes.to_vec();
-    match edgerun_wire::from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&owned)
-        .map_err(|_| RuntimeError::InvalidWireRecord)?
+    match edgerun_protocols::wire::from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(
+        &owned,
+    )
+    .map_err(|_| RuntimeError::InvalidWireRecord)?
     {
         SdkWireRecord::CapabilityRequest(request) => Ok(request),
         _ => Err(RuntimeError::InvalidWireRecord),
@@ -928,6 +949,54 @@ pub fn runtime_app_install(
         manifest_sha256,
         declared_routes,
         storage_namespaces,
+        provided_capabilities: Vec::new(),
+        required_capabilities: Vec::new(),
+    }
+}
+
+pub fn runtime_app_install_with_capabilities(
+    app_id: [u8; 32],
+    release_id: [u8; 32],
+    code_sha256: [u8; 32],
+    developer_id: [u8; 32],
+    manifest_sha256: [u8; 32],
+    declared_routes: Vec<RuntimeHttpRoute>,
+    storage_namespaces: Vec<Vec<u8>>,
+    provided_capabilities: Vec<RuntimeCapabilityDeclaration>,
+    required_capabilities: Vec<RuntimeCapabilityDeclaration>,
+) -> RuntimeAppInstall {
+    RuntimeAppInstall {
+        abi_version: SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        app_id,
+        release_id,
+        code_sha256,
+        developer_id,
+        manifest_sha256,
+        declared_routes,
+        storage_namespaces,
+        provided_capabilities,
+        required_capabilities,
+    }
+}
+
+pub fn runtime_capability_declaration(
+    capability_kind: u16,
+    operation: u16,
+    min_assurance: u16,
+    scope_sha256: [u8; 32],
+    label: impl Into<Vec<u8>>,
+    context: impl Into<Vec<u8>>,
+) -> RuntimeCapabilityDeclaration {
+    RuntimeCapabilityDeclaration {
+        abi_version: SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        capability_kind,
+        operation,
+        min_assurance,
+        scope_sha256,
+        label: label.into(),
+        context: context.into(),
     }
 }
 
@@ -1078,10 +1147,12 @@ pub fn sha256(bytes: &[u8]) -> [u8; 32] {
 }
 
 pub fn storage_write_receipt_payload(payload: &[u8]) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&StorageWriteReceiptRecord {
-        payload_sha256: sha256(payload),
-        payload_len: payload.len() as u64,
-    })
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(
+        &StorageWriteReceiptRecord {
+            payload_sha256: sha256(payload),
+            payload_len: payload.len() as u64,
+        },
+    )
     .expect("storage write receipt must serialize through rkyv")
     .into_vec()
 }
@@ -1100,29 +1171,33 @@ pub fn storage_response_proof(
         payload_sha256: sha256(payload),
     };
     sha256(
-        &edgerun_wire::to_bytes::<edgerun_wire::WireError>(&record)
+        &edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&record)
             .expect("storage response proof must serialize through rkyv"),
     )
 }
 
 pub fn signing_capability_input(request: &CapabilityRequest) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&SigningCapabilityInputRecord {
-        domain: b"edgerun-runtime.app-signing.v1".to_vec(),
-        app_id: request.app_id,
-        release_id: request.release_id,
-        subject_sha256: request.subject_sha256,
-        payload_sha256: request.payload_sha256,
-        payload: request.payload.clone(),
-    })
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(
+        &SigningCapabilityInputRecord {
+            domain: b"edgerun-runtime.app-signing.v1".to_vec(),
+            app_id: request.app_id,
+            release_id: request.release_id,
+            subject_sha256: request.subject_sha256,
+            payload_sha256: request.payload_sha256,
+            payload: request.payload.clone(),
+        },
+    )
     .expect("signing capability input must serialize through rkyv")
     .into_vec()
 }
 
 pub fn signing_response_payload(public_key: &[u8], signature: &[u8]) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&SigningResponsePayloadRecord {
-        public_key: public_key.to_vec(),
-        signature: signature.to_vec(),
-    })
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(
+        &SigningResponsePayloadRecord {
+            public_key: public_key.to_vec(),
+            signature: signature.to_vec(),
+        },
+    )
     .expect("signing response payload must serialize through rkyv")
     .into_vec()
 }
@@ -1144,7 +1219,7 @@ pub fn signing_response_proof(
         payload_sha256: sha256(&payload),
     };
     sha256(
-        &edgerun_wire::to_bytes::<edgerun_wire::WireError>(&record)
+        &edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&record)
             .expect("signing response proof must serialize through rkyv"),
     )
 }
@@ -1163,7 +1238,7 @@ pub fn capability_denial_proof(
         payload_sha256: sha256(reason),
     };
     sha256(
-        &edgerun_wire::to_bytes::<edgerun_wire::WireError>(&record)
+        &edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&record)
             .expect("capability denial proof must serialize through rkyv"),
     )
 }
@@ -1171,8 +1246,8 @@ pub fn capability_denial_proof(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_wire::{
-        HTTP_METHOD_GET, ROUTE_SCHEME_HTTPS, RuntimeDomainConfig, RuntimeMailbox, from_bytes,
+    use edgerun_protocols::wire::{
+        from_bytes, RuntimeDomainConfig, RuntimeMailbox, HTTP_METHOD_GET, ROUTE_SCHEME_HTTPS,
     };
 
     #[derive(Default)]
@@ -1262,7 +1337,7 @@ mod tests {
             .invoke_storage_wire(&write_request_bytes, b"runtime-storage", 4)
             .expect("write");
         let write_response =
-            from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&write_response_bytes)
+            from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(&write_response_bytes)
                 .expect("wire response");
         let write_response = match write_response {
             SdkWireRecord::CapabilityResponse(response) => response,
@@ -1287,7 +1362,7 @@ mod tests {
             .invoke_storage_wire(&read_request_bytes, b"runtime-storage", 5)
             .expect("read");
         let read_response =
-            from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&read_response_bytes)
+            from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(&read_response_bytes)
                 .expect("wire response");
         let read_response = match read_response {
             SdkWireRecord::CapabilityResponse(response) => response,
@@ -1510,8 +1585,9 @@ mod tests {
         let response_bytes = runtime
             .invoke_storage_wire(&request_bytes, b"runtime-storage", 2)
             .expect("denial response");
-        let response = from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&response_bytes)
-            .expect("wire response");
+        let response =
+            from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(&response_bytes)
+                .expect("wire response");
         let response = match response {
             SdkWireRecord::CapabilityResponse(response) => response,
             _ => panic!("unexpected response"),
@@ -1562,8 +1638,9 @@ mod tests {
         let response_bytes = runtime
             .invoke_signing_wire(&request_bytes, b"runtime-app-signer", 2)
             .expect("sign");
-        let response = from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&response_bytes)
-            .expect("wire response");
+        let response =
+            from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(&response_bytes)
+                .expect("wire response");
         let response = match response {
             SdkWireRecord::CapabilityResponse(response) => response,
             _ => panic!("unexpected response"),
@@ -1623,8 +1700,9 @@ mod tests {
         let response_bytes = runtime
             .invoke_signing_wire(&request_bytes, b"runtime-app-signer", 2)
             .expect("denied response");
-        let response = from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&response_bytes)
-            .expect("wire response");
+        let response =
+            from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(&response_bytes)
+                .expect("wire response");
         let response = match response {
             SdkWireRecord::CapabilityResponse(response) => response,
             _ => panic!("unexpected response"),
@@ -1684,16 +1762,60 @@ mod tests {
         let plan = RuntimeServicePlan::from_deployment(&config);
         assert!(plan.requires_dns());
         assert!(plan.requires_acme());
-        assert!(
-            plan.listeners
-                .iter()
-                .any(|binding| binding.protocol == RUNTIME_PROTOCOL_HTTPS && binding.port == 443)
-        );
-        assert!(
-            plan.listeners
-                .iter()
-                .any(|binding| binding.protocol == RUNTIME_PROTOCOL_SMTP && binding.port == 25)
-        );
+        assert!(plan
+            .listeners
+            .iter()
+            .any(|binding| binding.protocol == RUNTIME_PROTOCOL_HTTPS && binding.port == 443));
+        assert!(plan
+            .listeners
+            .iter()
+            .any(|binding| binding.protocol == RUNTIME_PROTOCOL_SMTP && binding.port == 25));
         assert_eq!(plan.mail_domains(), vec![b"example.com".to_vec()]);
+    }
+
+    #[test]
+    fn service_plan_derives_app_capability_declarations() {
+        let app_id = sha256(b"email-app");
+        let release_id = sha256(b"email-release");
+        let provided = runtime_capability_declaration(
+            CAPABILITY_KIND_STORAGE,
+            CAPABILITY_OPERATION_WRITE,
+            2,
+            sha256(b"mailbox-delivery-scope"),
+            b"mailbox.delivery".to_vec(),
+            b"node-authorized-email-app".to_vec(),
+        );
+        let required = runtime_capability_declaration(
+            edgerun_protocols::wire::CAPABILITY_KIND_NETWORK,
+            edgerun_protocols::wire::CAPABILITY_OPERATION_RECEIVE,
+            2,
+            sha256(b"smtp-ingress-scope"),
+            b"smtp.ingress".to_vec(),
+            b"node-owned-listener".to_vec(),
+        );
+        let install = runtime_app_install_with_capabilities(
+            app_id,
+            release_id,
+            sha256(b"code"),
+            sha256(b"developer"),
+            sha256(b"manifest"),
+            Vec::new(),
+            vec![b"mailbox-state".to_vec()],
+            vec![provided.clone()],
+            vec![required.clone()],
+        );
+        let config = runtime_deployment_config(
+            sha256(b"runtime"),
+            [203, 0, 113, 10],
+            b"runtime.example.com".to_vec(),
+            b"example.com".to_vec(),
+            b"admin@example.com".to_vec(),
+            Vec::new(),
+            Vec::new(),
+            vec![install],
+        );
+        let plan = RuntimeServicePlan::from_deployment(&config);
+        assert_eq!(plan.provided_capabilities(), vec![provided]);
+        assert_eq!(plan.required_capabilities(), vec![required]);
     }
 }

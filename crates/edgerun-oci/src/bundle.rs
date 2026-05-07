@@ -59,7 +59,7 @@ pub fn create_bundle(
 /// Serialize an OCI spec to config.json in a bundle directory.
 pub fn write_bundle(bundle_path: &Path, spec: &OciSpec) -> io::Result<()> {
     fs::create_dir_all(bundle_path)?;
-    let json = spec.to_json_string();
+    let json = crate::spec::spec_to_json_string(spec);
     fs::write(bundle_path.join("config.json"), json)?;
     Ok(())
 }

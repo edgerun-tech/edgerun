@@ -148,7 +148,7 @@ pub fn fork_container_child_with_terminal_socket(
     // Per OCI spec: the runtime MUST reject bundles whose platform does not
     // match the host platform (unless no platform is specified).
     if let Some(ref platform) = spec.platform {
-        if !platform.matches_host() {
+        if !crate::spec::platform_matches_host(platform) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(

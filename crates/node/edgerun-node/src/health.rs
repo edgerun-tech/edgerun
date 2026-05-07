@@ -25,16 +25,19 @@ pub struct HealthState {
 /// - POST /protocol/tools/invoke
 pub async fn run_health_server(port: u16, state: HealthState) {
     use edgerun_node::rt::{AsyncReadExt, AsyncWriteExt};
+    use edgerun_node::transport::{HostSocketTransport, TransportAddress};
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = match edgerun_node::rt::AsyncTcpListener::bind(addr) {
+    let listener = match HostSocketTransport.bind_stream_now(&TransportAddress::host_stream(
+        addr.to_string().into_bytes(),
+    )) {
         Ok(l) => l,
         Err(e) => {
-            edgerun_log::error!("failed to bind local HTTP endpoint on {}: {}", addr, e);
+            crate::node_error!("failed to bind local HTTP endpoint on {}: {}", addr, e);
             return;
         }
     };
-    edgerun_log::info!("local HTTP endpoint listening");
+    crate::node_info!("local HTTP endpoint listening");
 
     loop {
         match listener.accept().await {
@@ -61,7 +64,7 @@ pub async fn run_health_server(port: u16, state: HealthState) {
                     let _ = stream.flush().await;
                 });
             }
-            Err(e) => edgerun_log::warn!("local HTTP endpoint accept error: {}", e),
+            Err(e) => crate::node_warn!("local HTTP endpoint accept error: {}", e),
         }
     }
 }

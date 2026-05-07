@@ -10,10 +10,10 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use edgerun_core::protocol::edgerun_wallet_v0::PaymentRequest;
 use edgerun_exchange::projection::{is_terminal_status, terminal_event_for_status};
 use edgerun_exchange::provider::{ProviderQuote, ProviderStatus};
 use edgerun_exchange::{project_order_events, ExchangeEvent, ExchangeOrderProjection};
+use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::PaymentRequest;
 use edgerun_wallet::{can_transition, canonical_asset_id, CanonicalOrderStatus};
 
 fn is_valid_generated_id(value: &str, prefix: &str) -> bool {
@@ -458,8 +458,8 @@ fn canonical_order_status_from_i32(value: i32) -> Option<CanonicalOrderStatus> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_core::protocol::edgerun_wallet_v0::AssetRef;
     use edgerun_exchange::provider::{ProviderCode, ProviderQuote, ProviderStatus};
+    use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::AssetRef;
     use edgerun_wallet::DecimalAmount;
 
     fn provider_quote() -> ProviderQuote {

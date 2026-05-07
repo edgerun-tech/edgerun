@@ -8,9 +8,9 @@ use edgerun_camera_biometrics::{
     PairedCameraFrame,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
-use edgerun_core::protocol::capability::CapabilityInvocation;
-use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
-use edgerun_wire::{
+use edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation;
+use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilitySessionEvent;
+use edgerun_protocols::wire::{
     RemoteBiometricState as BiometricStateWire, RemoteCameraCapture as CameraCaptureWire,
     RemoteCameraFrame as CameraFrameWire, RemoteFaceBounds as FaceBoundsWire,
     RemotePairedCameraFrame as PairedCameraFrameWire,
@@ -154,15 +154,18 @@ pub fn encode_camera_capture(capture: &CameraCapture) -> Vec<u8> {
             user_present: capture.state.user_present,
         },
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("camera capture must serialize through rkyv")
         .into_vec()
 }
 
 pub fn decode_camera_capture(bytes: &[u8]) -> Result<CameraCapture, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<CameraCaptureWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| CapabilityError::InvalidRequest("remote camera capture is not rkyv"))?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        CameraCaptureWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote camera capture is not rkyv"))?;
     Ok(CameraCapture {
         frame: camera_frame_from_wire(wire.frame)?,
         quality: camera_capture_quality_from_u8(wire.quality)?,
@@ -182,17 +185,18 @@ pub fn encode_paired_camera_frame(frame: &PairedCameraFrame) -> Vec<u8> {
         infrared: frame.infrared.as_ref().map(camera_frame_to_wire),
         depth: frame.depth.as_ref().map(camera_frame_to_wire),
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("paired camera frame must serialize through rkyv")
         .into_vec()
 }
 
 pub fn decode_paired_camera_frame(bytes: &[u8]) -> Result<PairedCameraFrame, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<PairedCameraFrameWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| {
-        CapabilityError::InvalidRequest("remote paired camera frame is not rkyv")
-    })?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        PairedCameraFrameWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote paired camera frame is not rkyv"))?;
     Ok(PairedCameraFrame {
         rgb: wire.rgb.map(camera_frame_from_wire).transpose()?,
         infrared: wire.infrared.map(camera_frame_from_wire).transpose()?,

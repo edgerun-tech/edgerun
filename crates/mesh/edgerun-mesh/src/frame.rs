@@ -1,7 +1,7 @@
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
 use edgerun_crypto::p256::ecdsa::Signature;
 use edgerun_crypto::p256::ecdsa::VerifyingKey;
-use edgerun_hardware_signing::{NodeID, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
+use edgerun_hardware_signing::{MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID};
 
 use super::*;
 
@@ -184,12 +184,12 @@ impl MeshFrame {
 
         // Verify with domain separation: SHA-256("edgerun:v0:sig:mesh-frame" || 0x00 || SHA-256(preimage))
         let preimage = self.signed_preimage();
-        let record_hash = edgerun_core::crypto::sha256(&preimage);
+        let record_hash = edgerun_protocols::core_protocol::crypto::sha256(&preimage);
         let mut sig_input = Vec::with_capacity(22 + 1 + 32); // domain tag + null + hash
         sig_input.extend_from_slice(b"edgerun:v0:sig:mesh-frame");
         sig_input.push(0);
         sig_input.extend_from_slice(&record_hash);
-        let full_digest = edgerun_core::crypto::sha256(&sig_input);
+        let full_digest = edgerun_protocols::core_protocol::crypto::sha256(&sig_input);
 
         vk.verify_prehash(&full_digest, &sig).is_ok()
     }

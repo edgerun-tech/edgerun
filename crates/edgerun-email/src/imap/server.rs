@@ -1738,6 +1738,13 @@ impl ImapServer {
     pub fn new(config: ImapServerConfig) -> io::Result<Self> {
         let listener =
             Arc::new(AsyncTcpListener::bind(&config.bind_addr).map_err(crate::rt::bare_io)?);
+        Self::with_listener(config, listener)
+    }
+
+    pub fn with_listener(
+        config: ImapServerConfig,
+        listener: Arc<AsyncTcpListener>,
+    ) -> io::Result<Self> {
         let store = Arc::new(MemoryStore::new());
         Ok(Self {
             listener,
@@ -1779,6 +1786,14 @@ impl ImapServer {
     pub fn with_store(config: ImapServerConfig, store: Arc<dyn MailStore>) -> io::Result<Self> {
         let listener =
             Arc::new(AsyncTcpListener::bind(&config.bind_addr).map_err(crate::rt::bare_io)?);
+        Self::with_store_and_listener(config, store, listener)
+    }
+
+    pub fn with_store_and_listener(
+        config: ImapServerConfig,
+        store: Arc<dyn MailStore>,
+        listener: Arc<AsyncTcpListener>,
+    ) -> io::Result<Self> {
         Ok(Self {
             listener,
             store,

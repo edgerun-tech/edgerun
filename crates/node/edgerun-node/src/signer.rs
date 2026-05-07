@@ -4,10 +4,12 @@ use std::sync::Arc;
 use edgerun_hardware_signing::{
     HardwareMeshSigner, MeshSigner, NodeID, TpmHardwareKeyAdapter, YubiKeyHardwareKeyAdapter,
 };
-use edgerun_keygen::{node_id_from_signing_key, node_signing_key_from_bytes, NodeSigningKey};
-use edgerun_seal::{unseal_node_signing_key, SealKey};
-use edgerun_sign::{ProtocolSigner, SignableProtocolFamily};
-use edgerun_sign_p256::P256ProtocolSigner;
+use edgerun_protocols::keygen::{
+    node_id_from_signing_key, node_signing_key_from_bytes, NodeSigningKey,
+};
+use edgerun_protocols::seal::{unseal_node_signing_key, SealKey};
+use edgerun_protocols::sign::{ProtocolSigner, SignableProtocolFamily};
+use edgerun_protocols::sign_p256::P256ProtocolSigner;
 use edgerun_tpm::{LinuxTpmSigningKey, TpmHandle};
 use edgerun_yubikey::{LinuxPcscYubiKey, YubiKeyPivSlot};
 
@@ -103,7 +105,7 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                         std::process::exit(1);
                     });
 
-            edgerun_log::info!("using TPM signer: handle=0x{:08X}", handle);
+            crate::node_info!("using TPM signer: handle=0x{:08X}", handle);
 
             let tpm_key = LinuxTpmSigningKey::new("/dev/tpmrm0", TpmHandle(handle));
 
@@ -136,7 +138,7 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                 std::process::exit(1);
             });
 
-            edgerun_log::info!(
+            crate::node_info!(
                 "using YubiKey signer: bus={:03}, device={:03}, slot={}",
                 device.bus,
                 device.device,
@@ -210,10 +212,11 @@ fn load_seal_key(signer_config: &SignerConfig) -> SealKey {
 }
 
 fn parse_seal_key_hex(key_hex: &str) -> SealKey {
-    let bytes = edgerun_core::util::hex_to_bytes(key_hex.trim()).unwrap_or_else(|e| {
-        eprintln!("error: invalid seal key hex: {}", e);
-        std::process::exit(1);
-    });
+    let bytes = edgerun_protocols::core_protocol::util::hex_to_bytes(key_hex.trim())
+        .unwrap_or_else(|e| {
+            eprintln!("error: invalid seal key hex: {}", e);
+            std::process::exit(1);
+        });
     let bytes: [u8; 32] = bytes.try_into().unwrap_or_else(|_| {
         eprintln!("error: seal key must be 32 bytes (64 hex chars)");
         std::process::exit(1);
@@ -223,7 +226,7 @@ fn parse_seal_key_hex(key_hex: &str) -> SealKey {
 
 pub fn parse_signing_key_hex(key_hex: &str) -> NodeSigningKey {
     let hex_str = key_hex.trim();
-    let bytes = edgerun_core::util::hex_to_bytes(hex_str).unwrap_or_else(|e| {
+    let bytes = edgerun_protocols::core_protocol::util::hex_to_bytes(hex_str).unwrap_or_else(|e| {
         eprintln!("error: invalid key hex: {}", e);
         std::process::exit(1);
     });

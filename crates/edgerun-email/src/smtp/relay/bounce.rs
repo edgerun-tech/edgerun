@@ -7,12 +7,11 @@ use crate::prelude::*;
 use std::io;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use edgerun_dns::client::DnsClient;
-use edgerun_dns::record::{DnsRecordData, DnsRecordType};
-
+use crate::dns_query::MailDnsResolver;
 use crate::smtp::client::SmtpClient;
 use crate::smtp::server::dsn_generator::{DeliveryStatus, DsnAction, DsnBounce};
 use crate::smtp::types::response::EnhancedStatusCode;
+use alloc::sync::Arc;
 
 use super::now_secs;
 
@@ -22,7 +21,9 @@ pub struct BounceConfig {
     /// The domain we announce as (used in From: and EHLO).
     pub domain: String,
     /// DNS server for MX lookups.
-    pub dns_server: String,
+    pub dns_server: Option<String>,
+    /// Node-owned DNS resolver capability.
+    pub dns_resolver: Option<Arc<dyn MailDnsResolver>>,
     /// Connection timeout for remote SMTP.
     pub connect_timeout: Duration,
 }
@@ -31,7 +32,8 @@ impl Default for BounceConfig {
     fn default() -> Self {
         Self {
             domain: "edgerun.mail".to_string(),
-            dns_server: "8.8.8.8:53".to_string(),
+            dns_server: None,
+            dns_resolver: None,
             connect_timeout: Duration::from_secs(30),
         }
     }
@@ -150,8 +152,11 @@ pub async fn send_bounce(
         )
     })?;
 
-    // Resolve sender's MX
-    let mx_host = resolve_mx(&sender_domain, &config.dns_server).await?;
+    let resolver = config
+        .dns_resolver
+        .as_ref()
+        .ok_or_else(|| "bounce DNS resolver capability is not configured".to_string())?;
+    let mx_host = resolve_mx(&sender_domain, Arc::clone(resolver)).await?;
 
     // Connect and deliver
     deliver_bounce(&mx_host, &config.domain, &bounce_message, envelope_sender).await
@@ -170,21 +175,11 @@ fn extract_domain(email: &str) -> Option<String> {
 }
 
 /// Resolve MX for a domain, fall back to A.
-async fn resolve_mx(domain: &str, dns_server: &str) -> Result<String, String> {
-    let mut dns =
-        DnsClient::new(dns_server).map_err(|e| format!("failed to create DNS client: {}", e))?;
-
-    let response = dns
-        .query(domain, DnsRecordType::MX)
+async fn resolve_mx(domain: &str, resolver: Arc<dyn MailDnsResolver>) -> Result<String, String> {
+    let mut mx_records = resolver
+        .query_mx(domain)
         .await
         .map_err(|e| format!("DNS MX query failed: {}", e))?;
-
-    let mut mx_records = Vec::new();
-    for answer in &response.answers {
-        if let DnsRecordData::MX { priority, exchange } = &answer.data {
-            mx_records.push((*priority, exchange.clone()));
-        }
-    }
     mx_records.sort_by_key(|(p, _)| *p);
 
     if let Some((_, host)) = mx_records.first() {
@@ -293,7 +288,7 @@ mod tests {
     fn test_bounce_config_default() {
         let config = BounceConfig::default();
         assert_eq!(config.domain, "edgerun.mail");
-        assert_eq!(config.dns_server, "8.8.8.8:53");
+        assert_eq!(config.dns_server, None);
     }
 
     #[test]

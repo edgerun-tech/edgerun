@@ -16,7 +16,6 @@ edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-har
 edgerun-network-interface = { version = "0.1", path = "../../device-types/edgerun-network-interface" }
 
 [dev-dependencies]
-edgerun-core = { version = "0.1", path = "../../protocol/edgerun-core" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-mesh = { version = "0.1", path = "../edgerun-mesh" }
 

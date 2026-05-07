@@ -13,9 +13,9 @@ extern crate alloc;
 extern crate std;
 
 use edgerun_biometrics::{BiometricAssuranceStrength, BiometricState};
-use edgerun_core::crypto::signature_input;
-use edgerun_core::prelude::v1::*;
-use edgerun_sign::{ProtocolSignError, ProtocolSigner, SignableProtocolFamily};
+use edgerun_protocols::core_protocol::crypto::signature_input;
+use edgerun_protocols::core_protocol::prelude::v1::*;
+use edgerun_protocols::sign::{ProtocolSignError, ProtocolSigner, SignableProtocolFamily};
 
 // ---------------------------------------------------------------------------
 // Conditional backend modules
@@ -31,15 +31,15 @@ pub mod android_keystore;
 pub mod yubikey;
 
 #[cfg(feature = "tpm")]
-pub use tpm::{sign_record_with_tpm_provider, TpmHardwareKeyAdapter};
+pub use tpm::{TpmHardwareKeyAdapter, sign_record_with_tpm_provider};
 
 #[cfg(feature = "android-keystore")]
 pub use android_keystore::{
-    sign_record_with_android_keystore_provider, AndroidKeystoreHardwareKeyAdapter,
+    AndroidKeystoreHardwareKeyAdapter, sign_record_with_android_keystore_provider,
 };
 
 #[cfg(all(feature = "yubikey", target_os = "linux"))]
-pub use yubikey::{sign_record_with_yubikey_provider, YubiKeyHardwareKeyAdapter};
+pub use yubikey::{YubiKeyHardwareKeyAdapter, sign_record_with_yubikey_provider};
 
 // ---------------------------------------------------------------------------
 // Mesh identity constants — ECDSA P256 is the universal algorithm
@@ -62,12 +62,12 @@ pub struct NodeID(pub [u8; MESH_PUBLIC_KEY_LENGTH]);
 impl NodeID {
     /// Short hex display for logging/UI (first 8 hex chars).
     pub fn short(&self) -> String {
-        edgerun_core::util::bytes_to_hex_prefixed(&self.0[..4])
+        edgerun_protocols::core_protocol::util::bytes_to_hex_prefixed(&self.0[..4])
     }
 
     /// Full hex representation.
     pub fn to_hex(&self) -> String {
-        edgerun_core::util::bytes_to_hex_prefixed(&self.0)
+        edgerun_protocols::core_protocol::util::bytes_to_hex_prefixed(&self.0)
     }
 }
 
@@ -318,10 +318,15 @@ pub trait MeshSigner {
         sig_domain_tag: &str,
         canonical_bytes: &[u8],
     ) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
-        let hash_domain = edgerun_core::crypto::hash_domain_for_signature_domain(sig_domain_tag)
+        let hash_domain =
+            edgerun_protocols::core_protocol::crypto::hash_domain_for_signature_domain(
+                sig_domain_tag,
+            )
             .unwrap_or(sig_domain_tag);
-        let record_hash = edgerun_core::crypto::record_hash(hash_domain, canonical_bytes);
-        let sig_input = edgerun_core::crypto::signature_input(sig_domain_tag, &record_hash);
+        let record_hash =
+            edgerun_protocols::core_protocol::crypto::record_hash(hash_domain, canonical_bytes);
+        let sig_input =
+            edgerun_protocols::core_protocol::crypto::signature_input(sig_domain_tag, &record_hash);
         self.sign_message_var(&sig_input)
     }
 
@@ -341,7 +346,7 @@ pub trait MeshSigner {
         message: &[u8],
     ) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
         let mut digest = [0u8; 32];
-        digest.copy_from_slice(&edgerun_core::crypto::sha256(message));
+        digest.copy_from_slice(&edgerun_protocols::core_protocol::crypto::sha256(message));
         self.sign_digest(&digest)
     }
 
@@ -416,7 +421,7 @@ impl<K: HardwareSigningKey> MeshSigner for HardwareMeshSigner<K> {
 
 impl<K: HardwareSigningKey> ProtocolSigner for HardwareMeshSigner<K> {
     fn signature_algorithm(&self) -> i32 {
-        edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
+        edgerun_protocols::core_protocol::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
     }
 
     fn sign_signature_input(
@@ -729,27 +734,31 @@ mod tests {
             signed_message: std::sync::Mutex::new(Vec::new()),
         };
         let signer = HardwareMeshSigner::new(key).unwrap();
-        let event = edgerun_core::protocol::EventEnvelope {
+        let event = edgerun_protocols::core_protocol::protocol::EventEnvelope {
             envelope_version: 1,
             stream_id: signer.node_id().0.to_vec(),
             seq: 7,
             event_version: 1,
-            ..edgerun_core::protocol::EventEnvelope::default()
+            ..edgerun_protocols::core_protocol::protocol::EventEnvelope::default()
         };
-        let record = edgerun_core::protocol::ProtocolRecord::EventEnvelope(event);
-        let input = edgerun_sign::protocol_signing_input(
+        let record =
+            edgerun_protocols::core_protocol::protocol::ProtocolRecord::EventEnvelope(event);
+        let input = edgerun_protocols::sign::protocol_signing_input(
             &record,
-            edgerun_sign::SignableProtocolFamily::EventEnvelope,
+            edgerun_protocols::sign::SignableProtocolFamily::EventEnvelope,
         )
         .unwrap();
 
         let signed = signer
-            .sign_protocol_record(&record, edgerun_sign::SignableProtocolFamily::EventEnvelope)
+            .sign_protocol_record(
+                &record,
+                edgerun_protocols::sign::SignableProtocolFamily::EventEnvelope,
+            )
             .unwrap();
 
         assert_eq!(
             signed.signature.algorithm,
-            edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
+            edgerun_protocols::core_protocol::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
         );
         assert_eq!(signed.signature.value, vec![0x5A; 64]);
         assert_eq!(

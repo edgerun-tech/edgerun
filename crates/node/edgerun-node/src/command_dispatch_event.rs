@@ -4,11 +4,11 @@
 //! duplicated inside command handlers.
 
 use crate::command_dispatch_result::command_ref_from;
-use edgerun_core::command::command_hash;
-use edgerun_core::protocol::{CommandEnvelope, EventType, ObjectRef};
-use edgerun_core::util::{bytes_to_hex, now_protocol_timestamp};
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_sign::ProtocolSigner;
+use edgerun_protocols::core_protocol::command::command_hash;
+use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, EventType, ObjectRef};
+use edgerun_protocols::core_protocol::util::{bytes_to_hex, now_protocol_timestamp};
+use edgerun_protocols::sign::ProtocolSigner;
 use edgerun_storage::NodeStore;
 
 use crate::protocol_signer::BorrowedMeshProtocolSigner;

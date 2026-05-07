@@ -15,14 +15,14 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use edgerun_core::protocol::edgerun_wallet_v0::{
+use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
     wallet_exchange_event_payload, WalletDepositObservedPayload, WalletExchangeEventPayload,
     WalletManualReviewRequiredPayload, WalletOrderCompletedPayload, WalletOrderCreatedPayload,
     WalletOrderFailedPayload, WalletOrderStatusChangedPayload, WalletProviderStatusObservedPayload,
     WalletQuoteCreatedPayload,
 };
-use edgerun_core::protocol::{Digest, ObjectKind, ObjectRef};
-use edgerun_core::protocol::{EventEnvelope, EventType};
+use edgerun_protocols::core_protocol::protocol::{Digest, ObjectKind, ObjectRef};
+use edgerun_protocols::core_protocol::protocol::{EventEnvelope, EventType};
 
 use crate::events::ExchangeEvent;
 
@@ -35,14 +35,17 @@ pub struct ExchangeStreamPayload {
 }
 
 fn encode_exchange_payload(payload: &WalletExchangeEventPayload) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(payload)
         .expect("wallet exchange event payload must serialize through the rkyv wire boundary")
         .into_vec()
 }
 
 fn decode_exchange_payload(payload_bytes: &[u8]) -> Option<WalletExchangeEventPayload> {
-    edgerun_wire::from_bytes::<WalletExchangeEventPayload, edgerun_wire::WireError>(payload_bytes)
-        .ok()
+    edgerun_protocols::wire::from_bytes::<
+        WalletExchangeEventPayload,
+        edgerun_protocols::wire::WireError,
+    >(payload_bytes)
+    .ok()
 }
 
 pub fn exchange_payload_object_kind() -> i32 {
@@ -238,7 +241,8 @@ pub fn encode_exchange_event(event: &ExchangeEvent) -> ExchangeStreamPayload {
 }
 
 pub fn decode_exchange_event(event_type: i32, payload_bytes: &[u8]) -> Option<ExchangeEvent> {
-    let event_type = edgerun_core::protocol::enum_from_i32::<EventType>(event_type)?;
+    let event_type =
+        edgerun_protocols::core_protocol::protocol::enum_from_i32::<EventType>(event_type)?;
     if !matches!(
         event_type,
         EventType::WalletQuoteCreated

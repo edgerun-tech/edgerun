@@ -30,7 +30,6 @@ pub mod oci_path;
 pub mod rootfs_access;
 pub mod runtime_config;
 pub mod spec;
-mod spec_json;
 mod tar_compression;
 pub mod tar_layer;
 mod tar_whiteout;
@@ -250,7 +249,7 @@ pub use validate::{host_arch, host_os, validate_spec, OciValidationError};
     feature = "registry-client",
     all(feature = "std", not(target_os = "none"))
 ))]
-pub use edgerun_http::auth::parse_bearer_auth;
+pub use edgerun_protocols::http::parse_bearer_auth;
 pub use registry::auth::RegistryAuth;
 #[cfg(any(
     feature = "registry-client",

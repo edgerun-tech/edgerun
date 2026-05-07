@@ -318,7 +318,7 @@ dependencies = [
 name = "edgerun-android-keystore"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
+ "edgerun-protocols",
  "jni",
  "ndk-context",
 ]
@@ -348,11 +348,11 @@ dependencies = [
 name = "edgerun-bench"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-hardware-signing",
  "edgerun-mesh",
+ "edgerun-protocols",
  "edgerun-tpm",
  "edgerun-yubikey",
 ]
@@ -392,7 +392,7 @@ dependencies = [
 name = "edgerun-capabilities"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -400,9 +400,8 @@ name = "edgerun-capability-policy"
 version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
- "edgerun-core",
  "edgerun-crypto",
- "edgerun-wire",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -480,7 +479,7 @@ dependencies = [
 name = "edgerun-derived-db"
 version = "0.1.1"
 dependencies = [
- "edgerun-wire",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -488,17 +487,6 @@ name = "edgerun-display"
 version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
-]
-
-[[package]]
-name = "edgerun-dns"
-version = "0.1.1"
-dependencies = [
- "edgerun-crypto",
- "edgerun-encoding",
- "edgerun-log",
- "edgerun-protocols",
- "edgerun-rt",
 ]
 
 [[package]]
@@ -515,8 +503,8 @@ name = "edgerun-edgefs"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-protocols",
  "edgerun-storage",
- "edgerun-wire",
 ]
 
 [[package]]
@@ -537,21 +525,11 @@ dependencies = [
 name = "edgerun-email"
 version = "0.1.1"
 dependencies = [
- "edgerun-dns",
- "edgerun-email-auth",
  "edgerun-encoding",
  "edgerun-log",
  "edgerun-protocols",
  "edgerun-rt",
  "edgerun-tls",
-]
-
-[[package]]
-name = "edgerun-email-auth"
-version = "0.1.1"
-dependencies = [
- "edgerun-log",
- "edgerun-protocols",
 ]
 
 [[package]]
@@ -590,25 +568,24 @@ dependencies = [
 name = "edgerun-exchange"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-protocols",
  "edgerun-rt",
  "edgerun-wallet",
- "edgerun-wire",
 ]
 
 [[package]]
 name = "edgerun-exchange-api"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-exchange",
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-protocols",
  "edgerun-rt",
  "edgerun-url",
  "edgerun-wallet",
@@ -656,8 +633,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-android-keystore",
  "edgerun-biometrics",
- "edgerun-core",
- "edgerun-sign",
+ "edgerun-protocols",
  "edgerun-tpm",
  "edgerun-yubikey",
 ]
@@ -698,21 +674,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-ipxe"
-version = "0.1.0"
-
-[[package]]
 name = "edgerun-json"
 version = "0.1.1"
-
-[[package]]
-name = "edgerun-keygen"
-version = "0.1.1"
-dependencies = [
- "edgerun-core",
- "edgerun-sign-p256",
- "edgerun-verify",
-]
 
 [[package]]
 name = "edgerun-linux-cec"
@@ -831,9 +794,8 @@ dependencies = [
 name = "edgerun-marketplace"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-exchange",
- "edgerun-wire",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -848,25 +810,24 @@ dependencies = [
 name = "edgerun-mesh"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-hardware-signing",
  "edgerun-json",
+ "edgerun-protocols",
 ]
 
 [[package]]
 name = "edgerun-mesh-capability"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-hardware-signing",
+ "edgerun-protocols",
 ]
 
 [[package]]
 name = "edgerun-mesh-link"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-hardware-signing",
  "edgerun-mesh",
@@ -877,10 +838,10 @@ dependencies = [
 name = "edgerun-mesh-session"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-hardware-signing",
  "edgerun-mesh",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -932,12 +893,10 @@ dependencies = [
  "edgerun-capability-policy",
  "edgerun-cec",
  "edgerun-compositor",
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-derived-db",
  "edgerun-drm-display",
  "edgerun-email",
- "edgerun-email-auth",
  "edgerun-encoding",
  "edgerun-evdev-input",
  "edgerun-exchange",
@@ -947,7 +906,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-input",
  "edgerun-json",
- "edgerun-keygen",
  "edgerun-linux-cec",
  "edgerun-linux-gpu",
  "edgerun-linux-netif",
@@ -974,9 +932,6 @@ dependencies = [
  "edgerun-protocols",
  "edgerun-remote-capability",
  "edgerun-rt",
- "edgerun-seal",
- "edgerun-sign",
- "edgerun-sign-p256",
  "edgerun-speaker",
  "edgerun-storage",
  "edgerun-stream",
@@ -987,18 +942,7 @@ dependencies = [
  "edgerun-v4l2-camera",
  "edgerun-virtual-disk",
  "edgerun-wifi",
- "edgerun-wire",
  "edgerun-yubikey",
-]
-
-[[package]]
-name = "edgerun-node-bootstrap"
-version = "0.1.1"
-dependencies = [
- "edgerun-core",
- "edgerun-keygen",
- "edgerun-sign-p256",
- "edgerun-verify",
 ]
 
 [[package]]
@@ -1026,12 +970,12 @@ name = "edgerun-oci"
 version = "0.1.1"
 dependencies = [
  "edgerun-clap",
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-edgefs",
  "edgerun-encoding",
  "edgerun-http",
  "edgerun-json",
+ "edgerun-protocols",
  "edgerun-rt",
  "edgerun-secret-service",
  "edgerun-storage",
@@ -1072,8 +1016,6 @@ dependencies = [
 name = "edgerun-protocol-bundle"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
- "edgerun-email",
  "edgerun-mesh",
  "edgerun-mesh-link",
  "edgerun-mesh-session",
@@ -1084,17 +1026,18 @@ dependencies = [
  "edgerun-sign-verify-e2e",
  "edgerun-storage",
  "edgerun-stream",
- "edgerun-verify",
- "edgerun-wire",
 ]
 
 [[package]]
 name = "edgerun-protocols"
 version = "0.1.1"
 dependencies = [
+ "edgerun-core",
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-hpack",
+ "edgerun-json",
+ "edgerun-wire",
  "miniz_oxide",
 ]
 
@@ -1126,7 +1069,6 @@ dependencies = [
  "edgerun-camera-biometrics",
  "edgerun-capabilities",
  "edgerun-capability-policy",
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-display",
  "edgerun-encoding",
@@ -1135,9 +1077,9 @@ dependencies = [
  "edgerun-input",
  "edgerun-microphone",
  "edgerun-npu",
+ "edgerun-protocols",
  "edgerun-speaker",
  "edgerun-wifi",
- "edgerun-wire",
 ]
 
 [[package]]
@@ -1160,17 +1102,8 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-deploy",
  "edgerun-machine-report",
- "edgerun-seal",
+ "edgerun-protocols",
  "edgerun-ssh",
- "edgerun-wire",
-]
-
-[[package]]
-name = "edgerun-seal"
-version = "0.1.1"
-dependencies = [
- "edgerun-crypto",
- "edgerun-keygen",
 ]
 
 [[package]]
@@ -1178,44 +1111,20 @@ name = "edgerun-secret-service"
 version = "0.1.1"
 dependencies = [
  "edgerun-biometrics",
- "edgerun-core",
  "edgerun-encoding",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-protocols",
  "edgerun-rt",
  "edgerun-storage",
- "edgerun-wire",
-]
-
-[[package]]
-name = "edgerun-sign"
-version = "0.1.1"
-dependencies = [
- "edgerun-core",
- "edgerun-crypto",
- "edgerun-verify",
-]
-
-[[package]]
-name = "edgerun-sign-p256"
-version = "0.1.1"
-dependencies = [
- "edgerun-core",
- "edgerun-sign",
- "edgerun-verify",
 ]
 
 [[package]]
 name = "edgerun-sign-verify-e2e"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
- "edgerun-keygen",
- "edgerun-node-bootstrap",
- "edgerun-sign",
- "edgerun-sign-p256",
+ "edgerun-protocols",
  "edgerun-stream",
- "edgerun-verify",
 ]
 
 [[package]]
@@ -1235,8 +1144,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
- "edgerun-sign",
- "edgerun-verify",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -1247,16 +1155,12 @@ version = "0.1.1"
 name = "edgerun-storage"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-encoding",
- "edgerun-keygen",
  "edgerun-log",
+ "edgerun-protocols",
  "edgerun-rt",
- "edgerun-sign",
- "edgerun-sign-p256",
  "edgerun-stream",
- "edgerun-verify",
  "edgerun-virtual-disk",
 ]
 
@@ -1264,11 +1168,7 @@ dependencies = [
 name = "edgerun-stream"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
- "edgerun-keygen",
- "edgerun-sign",
- "edgerun-sign-p256",
- "edgerun-verify",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -1389,17 +1289,9 @@ dependencies = [
  "edgerun-biometrics",
  "edgerun-camera-biometrics",
  "edgerun-capabilities",
- "edgerun-core",
  "edgerun-encoding",
  "edgerun-linux-sysfs",
-]
-
-[[package]]
-name = "edgerun-verify"
-version = "0.1.1"
-dependencies = [
- "edgerun-core",
- "edgerun-crypto",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -1427,18 +1319,18 @@ version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
+ "edgerun-protocols",
  "edgerun-rt",
- "edgerun-wire",
 ]
 
 [[package]]
 name = "edgerun-wallet"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-crypto",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -1459,9 +1351,9 @@ dependencies = [
 name = "edgerun-yubikey"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
  "edgerun-encoding",
  "edgerun-linux-sysfs",
+ "edgerun-protocols",
 ]
 
 [[package]]

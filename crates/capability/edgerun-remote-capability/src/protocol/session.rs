@@ -2,15 +2,17 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
-use edgerun_core::protocol::capability::CapabilityGrant;
-use edgerun_core::protocol::capability_runtime::{CapabilitySessionAccept, CapabilitySessionOpen};
+use edgerun_protocols::core_protocol::protocol::capability::CapabilityGrant;
+use edgerun_protocols::core_protocol::protocol::capability_runtime::{
+    CapabilitySessionAccept, CapabilitySessionOpen,
+};
 
 /// Build a capability request from a session open.
 pub fn session_open_as_request(
     open: &CapabilitySessionOpen,
     descriptor: &CapabilityDescriptor,
-    requester: Option<edgerun_core::protocol::IdentityRef>,
-    requester_node: Option<edgerun_core::protocol::NodeRef>,
+    requester: Option<edgerun_protocols::core_protocol::protocol::IdentityRef>,
+    requester_node: Option<edgerun_protocols::core_protocol::protocol::NodeRef>,
 ) -> edgerun_capabilities::CapabilityRequest {
     edgerun_capabilities::CapabilityRequest {
         request_version: open.version,
@@ -78,15 +80,16 @@ pub fn accept_session_open_unchecked(open: &CapabilitySessionOpen) -> Capability
 }
 
 /// Default requester identity for remote capability sessions.
-pub fn default_remote_requester() -> edgerun_core::protocol::IdentityRef {
-    edgerun_core::protocol::IdentityRef {
+pub fn default_remote_requester() -> edgerun_protocols::core_protocol::protocol::IdentityRef {
+    edgerun_protocols::core_protocol::protocol::IdentityRef {
         identity_id: b"remote-capability-client".to_vec(),
         identity_kind: None,
         key_hint: None,
     }
 }
 
-pub fn default_remote_requester_opt() -> Option<edgerun_core::protocol::IdentityRef> {
+pub fn default_remote_requester_opt()
+-> Option<edgerun_protocols::core_protocol::protocol::IdentityRef> {
     Some(default_remote_requester())
 }
 

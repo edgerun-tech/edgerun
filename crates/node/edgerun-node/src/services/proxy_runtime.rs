@@ -1,5 +1,5 @@
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -8,13 +8,14 @@ use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use core::time::Duration;
 
 use crate::rt::{
-    AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt, CancellationToken,
-    ConnectFuture, copy_bidirectional, spawn, timeout,
+    copy_bidirectional, spawn, timeout, AsyncReadExt, AsyncTcpListener, AsyncTcpStream,
+    AsyncWriteExt, CancellationToken,
 };
+use crate::transport::{HostSocketTransport, RuntimeTransport, TransportAddress};
 use edgerun_protocols::proxy::{
-    HttpProxyRequest, SOCKS5_REP_ADDR_NOT_SUPPORTED, SOCKS5_REP_GENERAL_FAILURE,
-    SOCKS5_REP_SUCCESS, Socks5Request, parse_http_proxy_request, parse_socks5_request,
-    socks5_reply, socks5_select_no_auth, split_host_port,
+    parse_http_proxy_request, parse_socks5_request, socks5_reply, socks5_select_no_auth,
+    split_host_port, HttpProxyRequest, Socks5Request, SOCKS5_REP_ADDR_NOT_SUPPORTED,
+    SOCKS5_REP_GENERAL_FAILURE, SOCKS5_REP_SUCCESS,
 };
 
 #[derive(Clone)]
@@ -45,9 +46,10 @@ impl ProxyRuntime {
     }
 
     pub async fn run(&self, shutdown: CancellationToken) -> crate::rt::io::Result<()> {
-        let http_listener = AsyncTcpListener::bind(&self.config.bind_addr)?;
+        let transport = HostSocketTransport;
+        let http_listener = bind_proxy_listener(&transport, &self.config.bind_addr).await?;
         let socks5_listener = if let Some(ref addr) = self.config.socks5_bind_addr {
-            Some(AsyncTcpListener::bind(addr)?)
+            Some(bind_proxy_listener(&transport, addr).await?)
         } else {
             None
         };
@@ -208,9 +210,35 @@ async fn connect_numeric(
     let addr: SocketAddr = format!("{host}:{port}")
         .parse()
         .map_err(|_| crate::rt::io::IoError::Other("proxy target must be numeric socket addr"))?;
-    match timeout(timeout_after, ConnectFuture::new(addr)).await {
-        Ok(result) => result,
+    let transport = HostSocketTransport;
+    let target = TransportAddress::host_stream(addr.to_string().into_bytes());
+    match timeout(timeout_after, transport.connect_stream(&target)).await {
+        Ok(result) => result.map_err(transport_io_error),
         Err(_) => Err(crate::rt::io::IoError::Other("proxy connect timeout")),
+    }
+}
+
+async fn bind_proxy_listener(
+    transport: &HostSocketTransport,
+    addr: &str,
+) -> crate::rt::io::Result<AsyncTcpListener> {
+    transport
+        .bind_stream(&TransportAddress::host_stream(addr.as_bytes().to_vec()))
+        .await
+        .map_err(transport_io_error)
+}
+
+fn transport_io_error(error: crate::transport::TransportError) -> crate::rt::io::IoError {
+    match error {
+        crate::transport::TransportError::UnsupportedCarrier => {
+            crate::rt::io::IoError::Other("proxy transport carrier unsupported")
+        }
+        crate::transport::TransportError::AddressUnavailable => {
+            crate::rt::io::IoError::Other("proxy transport address unavailable")
+        }
+        crate::transport::TransportError::Io(_) => {
+            crate::rt::io::IoError::Other("proxy transport I/O failed")
+        }
     }
 }
 

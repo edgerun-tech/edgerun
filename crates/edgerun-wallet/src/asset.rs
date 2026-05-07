@@ -6,8 +6,8 @@
 
 use alloc::string::{String, ToString};
 
-pub use edgerun_core::protocol::edgerun_wallet_v0::Asset;
-pub use edgerun_core::protocol::edgerun_wallet_v0::AssetRef;
+pub use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::Asset;
+pub use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::AssetRef;
 
 /// Build canonical asset ID.
 /// Format: SYMBOL:network[:contract]

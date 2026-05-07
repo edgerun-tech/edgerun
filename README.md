@@ -38,8 +38,8 @@ For a fuller architecture and consolidation map, see `docs/architecture.md`.
 | Mesh | `edgerun-mesh`, `edgerun-mesh-link`, `edgerun-mesh-session`, `edgerun-mesh-capability` | Uses P-256 public keys as `NodeID`s, signs mesh frames, routes by identity, discovers peers, performs ECDH session handshakes, and carries rkyv capability envelopes. |
 | Capabilities | `edgerun-capabilities`, `edgerun-capability-policy`, `edgerun-remote-capability` | Defines provider descriptors, selectors, requests, grants, invocations, results, revocations, policy decisions, session grant binding, and rkyv capability message boundaries. |
 | Hardware identity | `edgerun-hardware-signing`, `edgerun-tpm`, `edgerun-yubikey`, `edgerun-android-keystore` | Normalizes hardware-backed signing around ECDSA P-256 `NodeID`s. |
-| Services | `edgerun-node`, `edgerun-http`, `edgerun-tls`, `edgerun-quic`, `edgerun-dns`, `edgerun-email`, `edgerun-oci` | Implements service stacks on top of `edgerun-rt`; transport-independent protocol pieces live in `edgerun-protocols`. |
-| Bare metal | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-ipxe`, `edgerun-virtio`, `edgerun-rtl8125` | Provides runtime, platform primitives, drivers, boot support, and a freestanding unikernel binary; TFTP protocol code lives in `edgerun-protocols`. |
+| Services | `edgerun-node`, `edgerun-http`, `edgerun-tls`, `edgerun-quic`, `edgerun-email`, `edgerun-oci` | Implements service stacks on top of `edgerun-rt`; transport-independent protocol pieces live in `edgerun-protocols`. |
+| Bare metal | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-virtio`, `edgerun-rtl8125` | Provides runtime, platform primitives, drivers, boot support, and a freestanding unikernel binary; TFTP and PXE/iPXE ABI code lives in `edgerun-protocols`. |
 | Local support crates | `edgerun-json`, `edgerun-encoding`, `edgerun-hpack`, `edgerun-qpack`, `edgerun-crypto`, `edgerun-clap`, `edgerun-log`, `edgerun-vfs`, `edgerun-virtual-disk` | Provides local utilities. These crates are not alternate protocol wire formats. |
 
 ## Wire Protocol Rule

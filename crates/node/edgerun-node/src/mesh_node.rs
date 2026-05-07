@@ -40,12 +40,14 @@ use core::module_path;
 
 use crate::{Node, NodeConfig};
 use edgerun_capabilities::CapabilityGrant;
-use edgerun_core::protocol::{CommandEnvelope, EventEnvelope};
-use edgerun_core::wire_stream::{command_full_wire_bytes, decode_command_full_wire_bytes};
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::MeshRouter;
 use edgerun_mesh::{LocalNode, MeshFrame};
 use edgerun_mesh_link::MeshLink;
+use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, EventEnvelope};
+use edgerun_protocols::core_protocol::wire_stream::{
+    command_full_wire_bytes, decode_command_full_wire_bytes,
+};
 
 /// A mesh-connected edgerun node.
 ///
@@ -137,12 +139,15 @@ impl MeshNode {
 
     /// Signs a mesh frame using the node's hardware signer.
     fn sign_frame(&mut self, frame: &mut MeshFrame) {
-        use edgerun_core::crypto::SIG_DOMAIN_MESH_FRAME;
+        use edgerun_protocols::core_protocol::crypto::SIG_DOMAIN_MESH_FRAME;
         frame.header.src = self.node.identity();
         let preimage = frame.signed_preimage();
-        let record_hash = edgerun_core::crypto::sha256(&preimage);
-        let sig_input = edgerun_core::crypto::signature_input(SIG_DOMAIN_MESH_FRAME, &record_hash);
-        let digest = edgerun_core::crypto::sha256(&sig_input);
+        let record_hash = edgerun_protocols::core_protocol::crypto::sha256(&preimage);
+        let sig_input = edgerun_protocols::core_protocol::crypto::signature_input(
+            SIG_DOMAIN_MESH_FRAME,
+            &record_hash,
+        );
+        let digest = edgerun_protocols::core_protocol::crypto::sha256(&sig_input);
         let mut digest_bytes = [0u8; 32];
         digest_bytes.copy_from_slice(&digest);
         match self.signer.sign_digest(&digest_bytes) {
@@ -150,7 +155,7 @@ impl MeshNode {
                 frame.signature = sig;
             }
             Err(e) => {
-                edgerun_log::warn!("failed to sign mesh frame: {}", e);
+                crate::node_warn!("failed to sign mesh frame: {}", e);
                 // Frame goes out unsigned — receiver will reject, but we don't block
             }
         }
@@ -218,10 +223,10 @@ impl MeshNode {
 mod tests {
     use super::*;
     use alloc::vec;
-    use edgerun_core::protocol::EventType;
-    use edgerun_core::protocol::common as proto_common;
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
+    use edgerun_protocols::core_protocol::protocol::common as proto_common;
+    use edgerun_protocols::core_protocol::protocol::EventType;
 
     use crate::test_support::TestSigner;
 
@@ -278,7 +283,7 @@ metadata:
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         // Build a command using the proto type directly
-        let command = edgerun_core::protocol::stream::CommandEnvelope {
+        let command = edgerun_protocols::core_protocol::protocol::stream::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: Some(proto_common::NodeRef {
@@ -328,7 +333,7 @@ metadata:
         let mut bob = MeshNode::from_config(config_b, signer_b).unwrap();
 
         // Build a command using the proto type directly
-        let command = edgerun_core::protocol::stream::CommandEnvelope {
+        let command = edgerun_protocols::core_protocol::protocol::stream::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: Some(proto_common::NodeRef {
@@ -395,7 +400,7 @@ metadata:
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
         let dest = NodeID([0xAAu8; 64]);
-        let command = edgerun_core::protocol::stream::CommandEnvelope {
+        let command = edgerun_protocols::core_protocol::protocol::stream::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: Some(proto_common::NodeRef {
@@ -517,7 +522,7 @@ metadata:
         let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, signer).unwrap();
 
-        let command = edgerun_core::protocol::stream::CommandEnvelope {
+        let command = edgerun_protocols::core_protocol::protocol::stream::CommandEnvelope {
             envelope_version: 1,
             command_id: vec![1, 2, 3],
             target_node: Some(proto_common::NodeRef {

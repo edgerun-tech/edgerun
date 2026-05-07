@@ -1,10 +1,10 @@
 use edgerun_capabilities::{CapabilityAccessClass, CapabilityOperation};
-use edgerun_core::protocol::capability::CapabilityInvocation;
-use edgerun_core::protocol::capability_runtime::{
+use edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation;
+use edgerun_protocols::core_protocol::protocol::capability_runtime::{
     CapabilityRemoteEnvelope, CapabilitySessionMode, CapabilitySessionOpen,
 };
 use edgerun_remote_capability::{
-    capability_remote_envelope, FramedRemoteTransport, RemoteCapabilityTransport,
+    FramedRemoteTransport, RemoteCapabilityTransport, capability_remote_envelope,
 };
 use std::env;
 

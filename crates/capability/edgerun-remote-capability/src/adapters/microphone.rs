@@ -2,12 +2,12 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
-use edgerun_core::protocol::capability::CapabilityInvocation;
-use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_microphone::{
     AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
 };
-use edgerun_wire::RemoteAudioCapture as AudioCaptureWire;
+use edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation;
+use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilitySessionEvent;
+use edgerun_protocols::wire::RemoteAudioCapture as AudioCaptureWire;
 
 use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
@@ -42,7 +42,7 @@ pub fn encode_microphone_capture(capture: &AudioCapture) -> Vec<u8> {
         started_at_unix_ms: capture.started_at_unix_ms,
         bytes: capture.bytes.clone(),
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("microphone capture payload must serialize through rkyv")
         .into_vec()
 }
@@ -50,8 +50,11 @@ pub fn encode_microphone_capture(capture: &AudioCapture) -> Vec<u8> {
 /// Rkyv-decode microphone capture from remote transport.
 pub fn decode_microphone_capture(bytes: &[u8]) -> Result<AudioCapture, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<AudioCaptureWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| CapabilityError::InvalidRequest("remote microphone payload is not rkyv"))?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        AudioCaptureWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote microphone payload is not rkyv"))?;
     Ok(AudioCapture {
         sample_rate_hz: wire.sample_rate_hz,
         channels: wire.channels,

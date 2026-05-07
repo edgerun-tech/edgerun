@@ -2,10 +2,10 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
-use edgerun_core::protocol::capability::CapabilityInvocation;
-use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_input::{InputDevice, InputEventKind, InputEventRecord};
-use edgerun_wire::{
+use edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation;
+use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilitySessionEvent;
+use edgerun_protocols::wire::{
     RemoteInputEventRecord as InputEventRecordWire, RemoteInputEvents as InputEventsWire,
 };
 
@@ -51,7 +51,7 @@ pub fn encode_input_events(events: &[InputEventRecord]) -> Vec<u8> {
             })
             .collect(),
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("input event payload must serialize through rkyv")
         .into_vec()
 }
@@ -59,8 +59,11 @@ pub fn encode_input_events(events: &[InputEventRecord]) -> Vec<u8> {
 /// Rkyv-decode input events from remote transport.
 pub fn decode_input_events(bytes: &[u8]) -> Result<Vec<InputEventRecord>, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<InputEventsWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| CapabilityError::InvalidRequest("remote input payload is not rkyv"))?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        InputEventsWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote input payload is not rkyv"))?;
     Ok(wire
         .events
         .into_iter()

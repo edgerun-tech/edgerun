@@ -15,7 +15,8 @@ use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
 #[cfg(feature = "dkim")]
-use crate::dns_query::DnsClientQuery;
+use crate::dns_query::MailDnsQuery;
+use crate::dns_query::MailDnsResolver;
 use crate::server::ConnectionInterceptor;
 use crate::smtp::relay::bounce::BounceConfig;
 #[cfg(feature = "dkim")]
@@ -32,7 +33,7 @@ use crate::smtp::types::{
     MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
 };
 #[cfg(feature = "dkim")]
-use edgerun_email_auth::EmailAuthEvaluator;
+use edgerun_protocols::email_auth::EmailAuthEvaluator;
 
 #[cfg(feature = "tls")]
 use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
@@ -64,10 +65,12 @@ pub struct SmtpServerConfig {
     /// Path for the outbound mail queue. If None, no outbound relay.
     pub queue_data_root: Option<std::path::PathBuf>,
     /// DNS server for MX lookups in outbound relay.
-    pub relay_dns_server: String,
+    pub relay_dns_server: Option<String>,
+    /// Node-owned DNS resolver capability.
+    pub dns_resolver: Option<Arc<dyn MailDnsResolver>>,
     /// DKIM signer for signing outbound mail.
     #[cfg(feature = "dkim")]
-    pub dkim_signer: Option<edgerun_email_auth::sign::DkimSigner>,
+    pub dkim_signer: Option<edgerun_protocols::email_auth::sign::DkimSigner>,
 }
 
 impl Default for SmtpServerConfig {
@@ -85,7 +88,8 @@ impl Default for SmtpServerConfig {
             rate_limiter: None,
             local_domains: vec!["edgerun.mail".to_string()],
             queue_data_root: None,
-            relay_dns_server: "8.8.8.8:53".to_string(),
+            relay_dns_server: None,
+            dns_resolver: None,
             #[cfg(feature = "dkim")]
             dkim_signer: None,
         }
@@ -346,6 +350,14 @@ impl SmtpServer {
         let listener = Arc::new(
             crate::rt::AsyncTcpListener::bind(&config.bind_addr).map_err(crate::rt::bare_io)?,
         );
+        Self::with_listener(config, handler, listener)
+    }
+
+    pub fn with_listener(
+        config: SmtpServerConfig,
+        handler: Arc<dyn MailHandler>,
+        listener: Arc<crate::rt::AsyncTcpListener>,
+    ) -> io::Result<Self> {
         edgerun_log::info!("edgerun-smtp: listening on {}", config.bind_addr);
         Ok(Self {
             listener,
@@ -418,6 +430,7 @@ impl SmtpServer {
         let relay = queue.as_ref().map(|_| {
             let mut r = OutboundRelay::new(&self.config.domain);
             r.dns_server = self.config.relay_dns_server.clone();
+            r.dns_resolver = self.config.dns_resolver.clone();
             #[cfg(feature = "dkim")]
             if let Some(ref signer) = self.config.dkim_signer {
                 r.dkim_signer = Some(signer.clone());
@@ -431,6 +444,7 @@ impl SmtpServer {
             worker_config.bounce_config = BounceConfig {
                 domain: self.config.domain.clone(),
                 dns_server: self.config.relay_dns_server.clone(),
+                dns_resolver: self.config.dns_resolver.clone(),
                 ..Default::default()
             };
             let worker = DeliveryWorker::new(worker_config, relay, Arc::clone(q));
@@ -1060,14 +1074,8 @@ async fn handle_auth_response(
                 .ok()
                 .map(|b| String::from_utf8_lossy(&b).to_string())
                 .unwrap_or_default();
-            let cred_bytes: Vec<u8> = [
-                b"\0".as_slice(),
-                username.as_bytes(),
-                b"\0",
-                token.as_bytes(),
-            ]
-            .concat();
-            let creds = AuthCredentials::from_plain(&cred_bytes)?;
+            let creds = edgerun_protocols::smtp::credentials_from_login(&username, &token)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
             match handler.authenticate("PLAIN", &creds) {
                 AuthResult::Authenticated(identity) => {
                     *authenticated = true;
@@ -1098,14 +1106,13 @@ async fn handle_auth_response(
 }
 
 fn base64_decode(encoded: &str) -> io::Result<AuthCredentials> {
-    let decoded = edgerun_encoding::base64::standard_decode(encoded)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    AuthCredentials::from_plain(&decoded)
+    edgerun_protocols::smtp::decode_plain_response(encoded)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
 }
 
 fn base64_decode_raw(encoded: &str) -> io::Result<Vec<u8>> {
-    edgerun_encoding::base64::standard_decode(encoded)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    edgerun_protocols::smtp::decode_base64_raw(encoded)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
 }
 
 #[cfg(feature = "tls")]
@@ -1637,16 +1644,14 @@ async fn evaluate_and_notify_auth(
     let header_from =
         crate::smtp::types::headers::get_from_address(headers_str).unwrap_or_default();
 
-    // Get a DNS client for evaluation
-    let mut dns_client = match edgerun_dns::client::DnsClient::new("8.8.8.8:53") {
-        Ok(c) => c,
-        Err(e) => {
-            edgerun_log::warn!("edgerun-email-auth: failed to create DNS client: {}", e);
-            return;
-        }
+    let Some(dns_resolver) = config.dns_resolver.clone() else {
+        edgerun_log::debug!(
+            "email-auth: DNS resolver capability is not configured; skipping evaluation"
+        );
+        return;
     };
 
-    let mut dns_query = DnsClientQuery(&mut dns_client);
+    let mut dns_query = MailDnsQuery::new(dns_resolver);
     let mut evaluator = EmailAuthEvaluator::new(&mut dns_query);
     match evaluator
         .evaluate(
@@ -1665,7 +1670,7 @@ async fn evaluate_and_notify_auth(
             handler.on_mail_received(envelope, &auth_results);
         }
         Err(e) => {
-            edgerun_log::warn!("edgerun-email-auth: evaluation failed: {}", e);
+            edgerun_log::warn!("email-auth: evaluation failed: {}", e);
         }
     }
 }

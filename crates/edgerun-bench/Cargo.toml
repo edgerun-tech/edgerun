@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Benchmark harnesses for Edgerun signing and mesh paths"
 
 [dependencies]
-edgerun-core.workspace = true
+edgerun-protocols = { workspace = true, default-features = false, features = ["core"] }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
 edgerun-mesh = { version = "0.1", path = "../mesh/edgerun-mesh" }
 edgerun-tpm = { version = "0.1", path = "../identity/edgerun-tpm" }

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use edgerun_storage::{BlobKeySource, BlobStore, BlobStoreConfig, FileIndex};
 
-use edgerun_core::protocol::{
+use edgerun_protocols::core_protocol::protocol::{
     CollectionCreatedPayload, CollectionDeletedPayload, SecretDeletePayload, SecretPutPayload,
 };
 
@@ -218,7 +218,9 @@ impl Backend {
         obj.insert("a".into(), edgerun_json::JsonValue::Array(arr));
         let json =
             edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default();
-        edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(json.as_bytes()))
+        edgerun_protocols::core_protocol::util::bytes_to_hex(
+            &edgerun_protocols::core_protocol::crypto::sha256(json.as_bytes()),
+        )
     }
 
     // -- CRUD --
@@ -534,7 +536,7 @@ fn derive_key_from_path(path: &Path) -> [u8; 32] {
     };
     #[cfg(not(target_os = "none"))]
     let bytes = path.as_os_str().as_encoded_bytes();
-    let hash = edgerun_core::crypto::sha256(bytes);
+    let hash = edgerun_protocols::core_protocol::crypto::sha256(bytes);
     let mut key = [0u8; 32];
     key.copy_from_slice(&hash);
     key
@@ -1100,42 +1102,49 @@ mod tests {
 }
 
 fn encode_secret_put_payload(payload: &SecretPutPayload) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(payload)
         .expect("secret put payload must serialize through rkyv")
         .into_vec()
 }
 
 fn encode_secret_delete_payload(payload: &SecretDeletePayload) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(payload)
         .expect("secret delete payload must serialize through rkyv")
         .into_vec()
 }
 
 fn encode_collection_created_payload(payload: &CollectionCreatedPayload) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(payload)
         .expect("collection created payload must serialize through rkyv")
         .into_vec()
 }
 
 fn encode_collection_deleted_payload(payload: &CollectionDeletedPayload) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(payload)
         .expect("collection deleted payload must serialize through rkyv")
         .into_vec()
 }
 
 fn decode_secret_put_payload(bytes: &[u8]) -> Result<SecretPutPayload, &'static str> {
-    edgerun_wire::from_bytes::<SecretPutPayload, edgerun_wire::WireError>(bytes)
-        .map_err(|_| "invalid rkyv secret put payload")
+    edgerun_protocols::wire::from_bytes::<SecretPutPayload, edgerun_protocols::wire::WireError>(
+        bytes,
+    )
+    .map_err(|_| "invalid rkyv secret put payload")
 }
 
 fn decode_secret_delete_payload(bytes: &[u8]) -> Result<SecretDeletePayload, &'static str> {
-    edgerun_wire::from_bytes::<SecretDeletePayload, edgerun_wire::WireError>(bytes)
-        .map_err(|_| "invalid rkyv secret delete payload")
+    edgerun_protocols::wire::from_bytes::<SecretDeletePayload, edgerun_protocols::wire::WireError>(
+        bytes,
+    )
+    .map_err(|_| "invalid rkyv secret delete payload")
 }
 
 fn decode_collection_deleted_payload(
     bytes: &[u8],
 ) -> Result<CollectionDeletedPayload, &'static str> {
-    edgerun_wire::from_bytes::<CollectionDeletedPayload, edgerun_wire::WireError>(bytes)
-        .map_err(|_| "invalid rkyv collection deleted payload")
+    edgerun_protocols::wire::from_bytes::<
+        CollectionDeletedPayload,
+        edgerun_protocols::wire::WireError,
+    >(bytes)
+    .map_err(|_| "invalid rkyv collection deleted payload")
 }

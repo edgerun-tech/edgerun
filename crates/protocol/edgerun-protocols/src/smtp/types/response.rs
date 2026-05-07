@@ -44,6 +44,82 @@ impl fmt::Display for SmtpResponseCode {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SmtpResponseParseError {
+    Malformed,
+    InvalidCode,
+    MixedCodes,
+    Empty,
+}
+
+impl fmt::Display for SmtpResponseParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Malformed => write!(f, "malformed SMTP response"),
+            Self::InvalidCode => write!(f, "invalid SMTP response code"),
+            Self::MixedCodes => write!(f, "multiline SMTP response changed code"),
+            Self::Empty => write!(f, "empty SMTP response"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SmtpResponseLine {
+    pub code: SmtpResponseCode,
+    pub continued: bool,
+    pub message: String,
+}
+
+pub fn parse_response_line(line: &str) -> Result<SmtpResponseLine, SmtpResponseParseError> {
+    if line.len() < 4 {
+        return Err(SmtpResponseParseError::Malformed);
+    }
+
+    let code_bytes = &line.as_bytes()[..3];
+    if !code_bytes.iter().all(|b| b.is_ascii_digit()) {
+        return Err(SmtpResponseParseError::InvalidCode);
+    }
+
+    let separator = line.as_bytes()[3];
+    if separator != b' ' && separator != b'-' {
+        return Err(SmtpResponseParseError::Malformed);
+    }
+
+    Ok(SmtpResponseLine {
+        code: SmtpResponseCode::new(
+            code_bytes[0] - b'0',
+            code_bytes[1] - b'0',
+            code_bytes[2] - b'0',
+        ),
+        continued: separator == b'-',
+        message: line[4..].to_string(),
+    })
+}
+
+pub fn parse_response_lines(lines: &[String]) -> Result<SmtpResponse, SmtpResponseParseError> {
+    let first = lines.first().ok_or(SmtpResponseParseError::Empty)?;
+    let first = parse_response_line(first)?;
+    if !first.continued {
+        return Ok(SmtpResponse::new(first.code, first.message));
+    }
+
+    let mut messages = Vec::with_capacity(lines.len());
+    messages.push(first.message);
+
+    for line in lines.iter().skip(1) {
+        let parsed = parse_response_line(line)?;
+        if parsed.code != first.code {
+            return Err(SmtpResponseParseError::MixedCodes);
+        }
+        messages.push(parsed.message);
+        if !parsed.continued {
+            return Ok(SmtpResponse::multiline(first.code, messages));
+        }
+    }
+
+    Err(SmtpResponseParseError::Malformed)
+}
+
 impl SmtpResponseCode {
     pub const SERVICE_READY: Self = Self::new(2, 2, 0);
     pub const CLOSING: Self = Self::new(2, 2, 1);
@@ -299,7 +375,9 @@ impl SmtpResponse {
         let text = format!(
             "Supported commands: EHLO HELO MAIL RCPT DATA RSET NOOP QUIT VRFY EXPN HELP STARTTLS AUTH\n\
              {}\n\
-             For more info see https://tools.ietf.org/html/rfc5321", domain);
+             For more info see https://tools.ietf.org/html/rfc5321",
+            domain
+        );
         Self::new(SmtpResponseCode::HELP, text).with_enhanced(EnhancedStatusCode::HELP_TEXT)
     }
 }
@@ -338,6 +416,41 @@ mod tests {
         assert_eq!(
             resp.format(),
             "250-Hello mail.example.com\r\n250 PIPELINING\r\n"
+        );
+    }
+
+    #[test]
+    fn test_parse_response_line() {
+        let line = parse_response_line("250 OK").unwrap();
+        assert_eq!(line.code, SmtpResponseCode::OK);
+        assert!(!line.continued);
+        assert_eq!(line.message, "OK");
+
+        let line = parse_response_line("250-PIPELINING").unwrap();
+        assert_eq!(line.code, SmtpResponseCode::OK);
+        assert!(line.continued);
+        assert_eq!(line.message, "PIPELINING");
+    }
+
+    #[test]
+    fn test_parse_multiline_response() {
+        let lines = vec![
+            "250-mail.example.com".to_string(),
+            "250-PIPELINING".to_string(),
+            "250 SIZE 35882577".to_string(),
+        ];
+        let resp = parse_response_lines(&lines).unwrap();
+        assert_eq!(resp.code, SmtpResponseCode::OK);
+        assert!(resp.is_multiline);
+        assert_eq!(resp.message, "mail.example.com\nPIPELINING\nSIZE 35882577");
+    }
+
+    #[test]
+    fn test_parse_multiline_rejects_mixed_codes() {
+        let lines = vec!["250-mail.example.com".to_string(), "550 nope".to_string()];
+        assert_eq!(
+            parse_response_lines(&lines).unwrap_err(),
+            SmtpResponseParseError::MixedCodes
         );
     }
 

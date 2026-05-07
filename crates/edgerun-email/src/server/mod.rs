@@ -309,6 +309,14 @@ impl<P: MailProtocol> ProtocolServer<P> {
         let listener = Arc::new(
             crate::rt::AsyncTcpListener::bind(&config.bind_addr).map_err(crate::rt::bare_io)?,
         );
+        Self::with_listener(config, protocol, listener)
+    }
+
+    pub fn with_listener(
+        config: ServerConfig,
+        protocol: P,
+        listener: Arc<crate::rt::AsyncTcpListener>,
+    ) -> io::Result<Self> {
         edgerun_log::info!(
             "edgerun-mail: {} listening on {}",
             std::any::type_name::<P>(),

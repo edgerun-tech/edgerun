@@ -1,7 +1,7 @@
 use crate::prelude::v1::*;
 use std::collections::BTreeMap;
 
-use edgerun_core::protocol::EventEnvelope;
+use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 
 use crate::core::{EventLocation, EventLog, ScannedEvent};
 use crate::error::StorageError;
@@ -95,7 +95,7 @@ impl<S: BlockStorage> BlockStreamStore<S> {
 mod tests {
     use super::*;
     use crate::block::InMemoryBlockDevice;
-    use edgerun_core::protocol::Digest;
+    use edgerun_protocols::core_protocol::protocol::Digest;
 
     fn event(stream_id: &[u8], seq: u64, prev_hash: Option<Vec<u8>>) -> EventEnvelope {
         EventEnvelope {

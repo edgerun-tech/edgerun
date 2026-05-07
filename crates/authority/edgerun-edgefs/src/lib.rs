@@ -18,8 +18,9 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use edgerun_crypto::{Aead, AesGcmCipher, KeyInit, Nonce};
+use edgerun_protocols::wire as edgerun_wire;
+use edgerun_protocols::wire::{EdgeFsDeviceId, EdgeFsFileMeta, EdgeFsRecordPayload};
 use edgerun_storage::BlockStorage;
-use edgerun_wire::{EdgeFsDeviceId, EdgeFsFileMeta, EdgeFsRecordPayload};
 
 const SUPER_MAGIC: &[u8; 8] = b"EDGEFS01";
 const RECORD_MAGIC: &[u8; 8] = b"EFRCD001";

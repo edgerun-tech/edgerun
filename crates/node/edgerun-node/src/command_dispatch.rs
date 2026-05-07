@@ -1,18 +1,18 @@
 //! Command validation and decision-event recording.
 
 use crate::config::NodeConfig;
-use edgerun_core::collections::{HashMap, HashSet};
-use edgerun_core::command::{
+use edgerun_hardware_signing::MeshSigner;
+use edgerun_protocols::core_protocol::collections::{HashMap, HashSet};
+use edgerun_protocols::core_protocol::command::{
     command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
 };
-use edgerun_core::protocol::{
+use edgerun_protocols::core_protocol::protocol::{
     command_envelope, enum_from_i32, CommandDecision, CommandEnvelope, CommandType, EventType,
     ObjectKind, ObjectRef,
 };
-use edgerun_core::result::Verdict;
-use edgerun_core::util::now_unix_millis_i64;
-use edgerun_hardware_signing::MeshSigner;
-use edgerun_sign::ProtocolSigner;
+use edgerun_protocols::core_protocol::result::Verdict;
+use edgerun_protocols::core_protocol::util::now_unix_millis_i64;
+use edgerun_protocols::sign::ProtocolSigner;
 use edgerun_storage::NodeStore;
 
 use crate::protocol_signer::BorrowedMeshProtocolSigner;
@@ -313,8 +313,8 @@ fn command_is_duplicate(
 ) -> bool {
     let computed_hash = command_hash(command);
     if let Some(target) = command.target_node.as_ref() {
-        let target_hex = edgerun_core::util::bytes_to_hex(&target.node_id);
-        let hash_hex = edgerun_core::util::bytes_to_hex(&computed_hash.value);
+        let target_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&target.node_id);
+        let hash_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&computed_hash.value);
         if matches!(store.get_replay_entry(&target_hex, &hash_hex), Ok(Some(_))) {
             return true;
         }

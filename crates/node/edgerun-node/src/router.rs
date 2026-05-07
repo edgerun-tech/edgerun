@@ -7,7 +7,7 @@
 
 use alloc::vec::Vec;
 
-use edgerun_wire::{
+use edgerun_protocols::wire::{
     CapabilityRequest, CapabilityResponse, RuntimeAppMessage, RuntimeHttpDispatch,
     RuntimeHttpRequest, RuntimeProtocolBinding, RuntimeRoutedAppMessage,
 };
@@ -95,8 +95,8 @@ pub fn capability_request_from_input(input: &NodeRouteInput) -> Option<(&[u8], &
 
 pub fn capability_request_record(input: CapabilityRequest) -> NodeRouteInput {
     NodeRouteInput::Capability {
-        request_bytes: edgerun_wire::sdk_wire_bytes(
-            &edgerun_wire::SdkWireRecord::CapabilityRequest(input),
+        request_bytes: edgerun_protocols::wire::sdk_wire_bytes(
+            &edgerun_protocols::wire::SdkWireRecord::CapabilityRequest(input),
         ),
         provider: Vec::new(),
     }

@@ -10,14 +10,14 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use edgerun_core::protocol::ObjectKind;
-use edgerun_core::util::now_protocol_timestamp;
 use edgerun_exchange::{
-    ExchangeEvent, ExchangeOrderProjection, decode_exchange_event, encode_exchange_event,
-    exchange_event_type, project_order,
+    decode_exchange_event, encode_exchange_event, exchange_event_type, project_order,
+    ExchangeEvent, ExchangeOrderProjection,
 };
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_sign::ProtocolSigner;
+use edgerun_protocols::core_protocol::protocol::ObjectKind;
+use edgerun_protocols::core_protocol::util::now_protocol_timestamp;
+use edgerun_protocols::sign::ProtocolSigner;
 use edgerun_storage::NodeStore;
 
 use crate::protocol_signer::BorrowedMeshProtocolSigner;

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
-use edgerun_keygen::{generate_node_signing_key, node_id_from_signing_key};
-use edgerun_seal::{generate_seal_key, seal_node_signing_key};
+use edgerun_protocols::keygen::{generate_node_signing_key, node_id_from_signing_key};
+use edgerun_protocols::seal::{generate_seal_key, seal_node_signing_key};
 use edgerun_yubikey::YubiKeySigningKey;
 
 use crate::config::{parse_config, NodeConfig};
@@ -37,7 +37,7 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!();
         let (signing_key, identity) = generate_node_signing_key();
         let node_id = NodeID(identity.node_id);
-        let key_hex = edgerun_core::util::bytes_to_hex(&signing_key.to_bytes());
+        let key_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&signing_key.to_bytes());
         let signer_block = format!(
             r#"signer:
   type: "software"
@@ -191,7 +191,7 @@ initial_grants: []
     // Run benchmarks and cache performance certificate
     // TODO: benchmark module not yet implemented in edgerun-core
     // println!("Running performance benchmarks...");
-    // let cert = edgerun_core::benchmark::run_full_benchmark(node_id.0);
+    // let cert = edgerun_protocols::core_protocol::benchmark::run_full_benchmark(node_id.0);
     // ...
 }
 
@@ -229,7 +229,8 @@ pub fn cmd_init_encrypted(path: &PathBuf, key_path: &PathBuf, name: Option<Strin
         eprintln!("error: failed to generate seal key: {:?}", e);
         std::process::exit(1);
     });
-    let seal_key_hex = edgerun_core::util::bytes_to_hex(seal_key.expose_secret());
+    let seal_key_hex =
+        edgerun_protocols::core_protocol::util::bytes_to_hex(seal_key.expose_secret());
 
     eprintln!("Sealing key with AES-256-GCM...");
     let encrypted_data = seal_node_signing_key(&signing_key, &seal_key).unwrap_or_else(|e| {
@@ -307,7 +308,7 @@ pub fn generate_pairing_pin() -> String {
 pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Option<String>) {
     let (signing_key, _) = generate_node_signing_key();
     let node_id = NodeID(node_id_from_signing_key(&signing_key));
-    let key_hex = edgerun_core::util::bytes_to_hex(&signing_key.to_bytes());
+    let key_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&signing_key.to_bytes());
 
     let pairing_pin = generate_pairing_pin();
     let stream_id = format!("stream-{}", node_id.short());

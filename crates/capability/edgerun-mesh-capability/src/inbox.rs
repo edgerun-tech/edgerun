@@ -1,8 +1,10 @@
 use crate::collections::{HashMap, VecDeque};
 use crate::sync::{Arc, Mutex};
-use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_core::protocol::capability_runtime::CapabilityRemoteEnvelope;
 use edgerun_hardware_signing::NodeID;
+use edgerun_protocols::core_protocol::protocol::capability::{
+    CapabilityInvocation, CapabilityResult,
+};
+use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilityRemoteEnvelope;
 
 use super::*;
 

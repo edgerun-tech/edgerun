@@ -1,8 +1,8 @@
 use crate::prelude::v1::Vec;
-use edgerun_keygen::generate_ephemeral_node_identity;
-use edgerun_sign::{ProtocolSignError, ProtocolSigner};
-use edgerun_sign_p256::P256ProtocolSigner;
-use edgerun_verify::ProtocolFamily;
+use edgerun_protocols::keygen::generate_ephemeral_node_identity;
+use edgerun_protocols::sign::{ProtocolSignError, ProtocolSigner};
+use edgerun_protocols::sign_p256::P256ProtocolSigner;
+use edgerun_protocols::verify::ProtocolFamily;
 
 #[derive(Clone)]
 pub(crate) struct TestSigner {

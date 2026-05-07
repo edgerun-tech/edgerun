@@ -145,7 +145,7 @@ pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
 pub fn save_runtime_spec(spec: &crate::spec::OciSpec, id: &str) -> io::Result<()> {
     let dir = container_state_dir(id);
     fs::create_dir_all(&dir)?;
-    let json = spec.to_json_string_pretty();
+    let json = crate::spec::spec_to_json_string_pretty(spec);
     fs::write(runtime_spec_path(id), json)?;
     Ok(())
 }

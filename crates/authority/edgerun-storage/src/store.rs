@@ -8,7 +8,7 @@
 
 use crate::prelude::v1::*;
 
-use edgerun_core::protocol::EventEnvelope;
+use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -56,8 +56,8 @@ use crate::event_loop::{
     DurableEventAppender, EventLoopBuilder, FetchHandler, PeerDiscoveryHandler,
 };
 use crate::file_index::FileIndex;
-use crate::fs::{read_event_at, scan_event_logs, FsContentStore};
-use crate::materializer::{materialize_event_to_index, OpEventType};
+use crate::fs::{FsContentStore, read_event_at, scan_event_logs};
+use crate::materializer::{OpEventType, materialize_event_to_index};
 use std::collections::HashSet;
 
 enum EventBackend {
@@ -103,8 +103,8 @@ impl ControllerSet {
         self.controllers.iter().cloned().collect()
     }
 }
-use edgerun_sign::ProtocolSigner;
-use edgerun_verify::{verify_protocol_record, ProtocolFamily, ProtocolSignerRef};
+use edgerun_protocols::sign::ProtocolSigner;
+use edgerun_protocols::verify::{ProtocolFamily, ProtocolSignerRef, verify_protocol_record};
 
 /// Configuration for the unified node storage.
 #[derive(Clone, Debug)]
@@ -293,7 +293,7 @@ impl NodeStore {
         stream_id: &[u8],
         seq: u64,
     ) -> Result<Option<EventEnvelope>, StorageError> {
-        let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+        let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
 
         // Look up offset in file index
         let Some(entry) = self.index.get_event(&stream_id_hex, seq as i64)? else {
@@ -339,8 +339,8 @@ impl NodeStore {
             return Some(format!(
                 "indexed event stream mismatch at seq {}: expected {}, got {}",
                 seq,
-                edgerun_core::util::bytes_to_hex(stream_id),
-                edgerun_core::util::bytes_to_hex(&event.stream_id)
+                edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id),
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id)
             ));
         }
         if event.seq != seq {
@@ -355,8 +355,8 @@ impl NodeStore {
             return Some(format!(
                 "indexed event hash mismatch at seq {}: index has {}, log has {}",
                 seq,
-                edgerun_core::util::bytes_to_hex(expected_hash),
-                edgerun_core::util::bytes_to_hex(&event_hash)
+                edgerun_protocols::core_protocol::util::bytes_to_hex(expected_hash),
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&event_hash)
             ));
         }
 
@@ -365,7 +365,7 @@ impl NodeStore {
 
     /// Returns the current head (latest seq + hash) for a stream.
     pub fn get_head(&self, stream_id: &[u8]) -> Result<Option<(i64, Vec<u8>)>, StorageError> {
-        let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+        let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
         if let Some(head) = self.index.get_head(&stream_id_hex)? {
             return Ok(Some(head));
         }
@@ -413,7 +413,8 @@ impl NodeStore {
     ) -> Result<(), StorageError> {
         if event.event_type == OpEventType::FetchRequested.as_i32() {
             if let Some(payload) = &event.payload_object {
-                let target_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                let target_id =
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&payload.object_id);
                 self.index.enqueue_fetch("object", &target_id, 0)?;
             }
         }
@@ -490,7 +491,7 @@ impl NodeStore {
         stream_id: &[u8],
         writer: Option<&[u8]>,
     ) -> Result<u64, StorageError> {
-        let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+        let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
         let head = self.index.get_head(&stream_id_hex)?;
         let (head_seq, _) = head.ok_or_else(|| {
             StorageError::Io(std::io::Error::new(
@@ -530,8 +531,8 @@ impl NodeStore {
                     format!(
                         "event hash mismatch at seq {}: index has {}, log has {}",
                         seq,
-                        edgerun_core::util::bytes_to_hex(&record.event_hash),
-                        edgerun_core::util::bytes_to_hex(&event_hash)
+                        edgerun_protocols::core_protocol::util::bytes_to_hex(&record.event_hash),
+                        edgerun_protocols::core_protocol::util::bytes_to_hex(&event_hash)
                     ),
                 )));
             }
@@ -540,9 +541,10 @@ impl NodeStore {
         }
 
         if let Some(writer) = writer {
-            let writer: &[u8; edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN] = writer
-                .try_into()
-                .map_err(|_| StorageError::Stream("stream writer key must be 64 bytes".into()))?;
+            let writer: &[u8; edgerun_protocols::core_protocol::crypto::ECDSA_P256_PUBLIC_KEY_LEN] =
+                writer.try_into().map_err(|_| {
+                    StorageError::Stream("stream writer key must be 64 bytes".into())
+                })?;
             edgerun_stream::validate_stream(&events, writer)?;
         }
 
@@ -602,7 +604,7 @@ impl NodeStore {
     /// Returns the blob's content-derived identifier.
     pub fn put_encrypted_blob(
         &self,
-        envelope: &edgerun_core::protocol::EncryptedEnvelope,
+        envelope: &edgerun_protocols::core_protocol::protocol::EncryptedEnvelope,
     ) -> Result<String, StorageError> {
         self.blobs.store_envelope(envelope)
     }
@@ -636,7 +638,7 @@ impl NodeStore {
         content: &[u8],
         object_kind: i32,
         recipients: &[Vec<u8>],
-    ) -> Result<edgerun_core::protocol::ObjectRef, StorageError> {
+    ) -> Result<edgerun_protocols::core_protocol::protocol::ObjectRef, StorageError> {
         // Best-effort disk space check.
         if let Err(available) = self.check_disk_space() {
             edgerun_log::warn!("low disk space: {} bytes available", available);
@@ -657,7 +659,7 @@ impl NodeStore {
     /// Returns None if the object is not present locally.
     pub fn get_object(
         &self,
-        object_ref: &edgerun_core::protocol::ObjectRef,
+        object_ref: &edgerun_protocols::core_protocol::protocol::ObjectRef,
     ) -> Result<Option<ObjectResult>, StorageError> {
         Ok(self
             .content
@@ -677,7 +679,7 @@ impl NodeStore {
     /// Returns None if the event has no payload_object or the object is missing.
     pub fn resolve_payload(
         &self,
-        payload_object_ref: &Option<edgerun_core::protocol::ObjectRef>,
+        payload_object_ref: &Option<edgerun_protocols::core_protocol::protocol::ObjectRef>,
     ) -> Result<Option<Vec<u8>>, StorageError> {
         let Some(ref obj_ref) = payload_object_ref else {
             return Ok(None);
@@ -749,9 +751,11 @@ impl NodeStore {
         while let Some(entry) = self.index.dequeue_fetch()? {
             let success = match entry.target_type.as_str() {
                 "object" => {
-                    let obj_ref = edgerun_core::protocol::ObjectRef {
-                        object_id: edgerun_core::util::hex_to_bytes(&entry.target_id)
-                            .unwrap_or_default(),
+                    let obj_ref = edgerun_protocols::core_protocol::protocol::ObjectRef {
+                        object_id: edgerun_protocols::core_protocol::util::hex_to_bytes(
+                            &entry.target_id,
+                        )
+                        .unwrap_or_default(),
                         object_kind: None,
                     };
                     self.get_object(&obj_ref)?.is_some()
@@ -877,7 +881,8 @@ impl NodeStore {
         let mut set = ControllerSet::new(initial);
         for (controller_hex, change_type) in self.index.list_controller_changes(up_to_seq)? {
             let controller_id =
-                edgerun_core::util::hex_to_bytes(&controller_hex).unwrap_or_default();
+                edgerun_protocols::core_protocol::util::hex_to_bytes(&controller_hex)
+                    .unwrap_or_default();
             match change_type.as_str() {
                 "added" => set.add(controller_id),
                 "removed" => {
@@ -964,17 +969,17 @@ impl NodeStore {
         producer_node_id: &[u8],
         view_type: &str,
         completeness: i32,
-    ) -> Result<edgerun_core::protocol::SnapshotDescriptor, StorageError> {
-        use edgerun_core::protocol::SnapshotDescriptor;
-        use edgerun_core::protocol::{Digest, HeadRef, IdentityRef, StreamRef};
-        use edgerun_core::protocol::{ScopeDescriptor, ScopeKind};
+    ) -> Result<edgerun_protocols::core_protocol::protocol::SnapshotDescriptor, StorageError> {
+        use edgerun_protocols::core_protocol::protocol::SnapshotDescriptor;
+        use edgerun_protocols::core_protocol::protocol::{Digest, HeadRef, IdentityRef, StreamRef};
+        use edgerun_protocols::core_protocol::protocol::{ScopeDescriptor, ScopeKind};
 
         // Collect current stream heads
         let heads = self.list_stream_heads()?;
         let base_heads: Vec<HeadRef> = heads
             .iter()
             .map(|(sid, seq, hash)| HeadRef {
-                stream_id: edgerun_core::util::hex_to_bytes(sid)
+                stream_id: edgerun_protocols::core_protocol::util::hex_to_bytes(sid)
                     .unwrap_or_else(|_| sid.clone().into_bytes()),
                 seq: *seq as u64,
                 event_hash: Some(Digest {
@@ -998,11 +1003,17 @@ impl NodeStore {
         let now_seconds = i64::try_from(now_secs).unwrap_or(i64::MAX);
         let now_secs = now_seconds as u64;
         let snapshot_id = {
-            let digest =
-                edgerun_core::crypto::sha256(format!("{}-{}", view_type, now_secs).as_bytes());
-            format!("snap-{}", edgerun_core::util::bytes_to_hex(&digest[..8]))
+            let digest = edgerun_protocols::core_protocol::crypto::sha256(
+                format!("{}-{}", view_type, now_secs).as_bytes(),
+            );
+            format!(
+                "snap-{}",
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&digest[..8])
+            )
         };
-        if producer_node_id.len() != edgerun_core::crypto::ECDSA_P256_PUBLIC_KEY_LEN {
+        if producer_node_id.len()
+            != edgerun_protocols::core_protocol::crypto::ECDSA_P256_PUBLIC_KEY_LEN
+        {
             return Err(StorageError::Encode(
                 "snapshot producer node id must be 64 bytes".into(),
             ));
@@ -1012,7 +1023,12 @@ impl NodeStore {
         let base_heads_text: String = heads
             .iter()
             .map(|(sid, seq, hash)| {
-                format!("{}:{}:{}", sid, seq, edgerun_core::util::bytes_to_hex(hash))
+                format!(
+                    "{}:{}:{}",
+                    sid,
+                    seq,
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(hash)
+                )
             })
             .collect::<Vec<_>>()
             .join(";");
@@ -1032,7 +1048,7 @@ impl NodeStore {
                 identity_kind: Some(2), // NODE
                 key_hint: Some(node_id.clone()),
             }),
-            produced_at: Some(edgerun_core::protocol::Timestamp {
+            produced_at: Some(edgerun_protocols::core_protocol::protocol::Timestamp {
                 seconds: now_seconds,
                 nanos: 0,
             }),
@@ -1056,15 +1072,15 @@ impl NodeStore {
             signature: None,
         };
 
-        let signed = edgerun_sign::sign_snapshot_descriptor(signer, &descriptor)
+        let signed = edgerun_protocols::sign::sign_snapshot_descriptor(signer, &descriptor)
             .map_err(|e| StorageError::Encode(format!("snapshot signing failed: {e:?}")))?;
         descriptor.signature = Some(signed.signature);
 
-        let producer_hex = edgerun_core::util::bytes_to_hex(&node_id);
+        let producer_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&node_id);
 
         self.index.put_snapshot(
             &snapshot_id,
-            &edgerun_core::util::bytes_to_hex(&payload_object_ref.object_id),
+            &edgerun_protocols::core_protocol::util::bytes_to_hex(&payload_object_ref.object_id),
             view_type,
             &producer_hex,
             now_seconds,
@@ -1083,14 +1099,14 @@ impl NodeStore {
     /// Returns the acceptance class: "accepted_trusted", "accepted_stale", or error.
     pub fn consume_snapshot(
         &self,
-        descriptor: &edgerun_core::protocol::SnapshotDescriptor,
+        descriptor: &edgerun_protocols::core_protocol::protocol::SnapshotDescriptor,
         trusted_producers: &[Vec<u8>],
     ) -> Result<String, StorageError> {
-        let validation = edgerun_core::result::accept(
-            edgerun_core::value::Value::Null,
-            edgerun_core::result::empty_map(),
+        let validation = edgerun_protocols::core_protocol::result::accept(
+            edgerun_protocols::core_protocol::value::Value::Null,
+            edgerun_protocols::core_protocol::result::empty_map(),
         );
-        if validation.verdict != edgerun_core::result::Verdict::Accept {
+        if validation.verdict != edgerun_protocols::core_protocol::result::Verdict::Accept {
             let reason = validation
                 .reason_code
                 .map(|code| code.as_str().to_string())
@@ -1119,18 +1135,21 @@ impl NodeStore {
                 StorageError::Decode("snapshot producer key must be 64 bytes".into())
             })?;
         verify_protocol_record(
-            &edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone()),
+            &edgerun_protocols::core_protocol::protocol::ProtocolRecord::SnapshotDescriptor(
+                descriptor.clone(),
+            ),
             ProtocolFamily::SnapshotDescriptor,
             signature,
             ProtocolSignerRef::P256Raw64(&producer_key),
         )
         .map_err(|_| StorageError::Decode("snapshot signature verification failed".into()))?;
-        let producer_hex = edgerun_core::util::bytes_to_hex(&producer.identity_id);
+        let producer_hex =
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&producer.identity_id);
 
         // Store as object (if payload_object is present)
         if let Some(ref payload_ref) = descriptor.payload_object {
             self.index.mark_object_present(
-                &edgerun_core::util::bytes_to_hex(&payload_ref.object_id),
+                &edgerun_protocols::core_protocol::util::bytes_to_hex(&payload_ref.object_id),
                 "snapshot-payload",
                 "snapshot-payload",
             )?;
@@ -1139,7 +1158,7 @@ impl NodeStore {
         // Store in snapshots table
         let snapshot_id = String::from_utf8_lossy(&descriptor.snapshot_id).to_string();
         let object_id_hex = if let Some(ref p) = descriptor.payload_object {
-            edgerun_core::util::bytes_to_hex(&p.object_id)
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&p.object_id)
         } else {
             String::new()
         };
@@ -1149,11 +1168,11 @@ impl NodeStore {
             .iter()
             .map(|h| {
                 (
-                    edgerun_core::util::bytes_to_hex(&h.stream_id),
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&h.stream_id),
                     h.seq,
                     h.event_hash
                         .as_ref()
-                        .map(|d| edgerun_core::util::bytes_to_hex(&d.value))
+                        .map(|d| edgerun_protocols::core_protocol::util::bytes_to_hex(&d.value))
                         .unwrap_or_default(),
                 )
             })
@@ -1183,7 +1202,8 @@ impl NodeStore {
         let local_heads = self.list_stream_heads()?;
         let mut is_stale = false;
         for base_head in &descriptor.base_heads {
-            let stream_id_hex = edgerun_core::util::bytes_to_hex(&base_head.stream_id);
+            let stream_id_hex =
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&base_head.stream_id);
             if let Some((_sid, local_seq, _hash)) =
                 local_heads.iter().find(|(s, _, _)| s == &stream_id_hex)
             {
@@ -1222,8 +1242,8 @@ impl NodeStore {
         command_hash: &[u8],
         decision_event_seq: i64,
     ) -> Result<CommandReplayResult, StorageError> {
-        let target_hex = edgerun_core::util::bytes_to_hex(target_node);
-        let cmd_hash_hex = edgerun_core::util::bytes_to_hex(command_hash);
+        let target_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(target_node);
+        let cmd_hash_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(command_hash);
 
         if let Some(existing) = self.index.get_replay_entry(&target_hex, &cmd_hash_hex)? {
             return Ok(CommandReplayResult::Duplicate {
@@ -1231,7 +1251,7 @@ impl NodeStore {
             });
         }
 
-        let cmd_id_hex = edgerun_core::util::bytes_to_hex(command_id);
+        let cmd_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(command_id);
         self.index
             .put_replay_entry(&target_hex, &cmd_hash_hex, &cmd_id_hex, decision_event_seq)?;
 
@@ -1288,7 +1308,7 @@ impl NodeStore {
                 file_offset,
                 ..
             } = &scanned_event.location;
-            let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+            let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
 
             materialize_event_to_index(&self.index, &scanned_event.event, *file_offset)?;
             self.index.set_head(
@@ -1482,8 +1502,8 @@ fn validate_scanned_event_locations(scanned: &[ScannedEvent]) -> Result<(), Stor
             return Err(StorageError::Decode(format!(
                 "scanned event stream mismatch at offset {}: location has {}, envelope has {}",
                 location.file_offset,
-                edgerun_core::util::bytes_to_hex(&location.stream_id),
-                edgerun_core::util::bytes_to_hex(&event.stream_id)
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&location.stream_id),
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id)
             )));
         }
 
@@ -1499,8 +1519,8 @@ fn validate_scanned_event_locations(scanned: &[ScannedEvent]) -> Result<(), Stor
             return Err(StorageError::Decode(format!(
                 "scanned event hash mismatch at offset {}: location has {}, envelope has {}",
                 location.file_offset,
-                edgerun_core::util::bytes_to_hex(&location.event_hash),
-                edgerun_core::util::bytes_to_hex(&event_hash)
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&location.event_hash),
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&event_hash)
             )));
         }
     }
@@ -1524,7 +1544,7 @@ fn validate_scanned_stream_chains(scanned: &[ScannedEvent]) -> Result<(), Storag
         if event.seq != expected_seq {
             return Err(StorageError::Decode(format!(
                 "scanned stream {} has seq {}, expected {}",
-                edgerun_core::util::bytes_to_hex(&event.stream_id),
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
                 event.seq,
                 expected_seq
             )));
@@ -1534,7 +1554,7 @@ fn validate_scanned_stream_chains(scanned: &[ScannedEvent]) -> Result<(), Storag
             (0, Some(_), _) => {
                 return Err(StorageError::Decode(format!(
                     "scanned stream {} genesis has prev hash",
-                    edgerun_core::util::bytes_to_hex(&event.stream_id)
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id)
                 )));
             }
             (0, None, _) => {}
@@ -1542,23 +1562,23 @@ fn validate_scanned_stream_chains(scanned: &[ScannedEvent]) -> Result<(), Storag
             (_, Some(prev), Some(expected)) => {
                 return Err(StorageError::Decode(format!(
                     "scanned stream {} seq {} prev hash mismatch: envelope has {}, expected {}",
-                    edgerun_core::util::bytes_to_hex(&event.stream_id),
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
                     event.seq,
-                    edgerun_core::util::bytes_to_hex(&prev.value),
-                    edgerun_core::util::bytes_to_hex(expected)
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&prev.value),
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(expected)
                 )));
             }
             (_, None, _) => {
                 return Err(StorageError::Decode(format!(
                     "scanned stream {} seq {} is missing prev hash",
-                    edgerun_core::util::bytes_to_hex(&event.stream_id),
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
                     event.seq
                 )));
             }
             (_, Some(_), None) => {
                 return Err(StorageError::Decode(format!(
                     "scanned stream {} seq {} has no previous event",
-                    edgerun_core::util::bytes_to_hex(&event.stream_id),
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
                     event.seq
                 )));
             }
@@ -1584,7 +1604,7 @@ mod tests {
     use super::*;
     use crate::block::InMemoryBlockDevice;
     use crate::test_support::TestSigner;
-    use edgerun_core::protocol::Digest;
+    use edgerun_protocols::core_protocol::protocol::Digest;
     use std::path::PathBuf;
 
     fn tmp_data_root() -> PathBuf {
@@ -1640,11 +1660,14 @@ mod tests {
         assert_eq!(producer.identity_id, signer.node_id().to_vec());
         assert_eq!(producer.key_hint, Some(signer.node_id().to_vec()));
 
-        let result = edgerun_core::result::accept(
-            edgerun_core::value::Value::Null,
-            edgerun_core::result::empty_map(),
+        let result = edgerun_protocols::core_protocol::result::accept(
+            edgerun_protocols::core_protocol::value::Value::Null,
+            edgerun_protocols::core_protocol::result::empty_map(),
         );
-        assert_eq!(result.verdict, edgerun_core::result::Verdict::Accept);
+        assert_eq!(
+            result.verdict,
+            edgerun_protocols::core_protocol::result::Verdict::Accept
+        );
     }
 
     #[test]
@@ -1717,7 +1740,8 @@ mod tests {
         let object_ref = store
             .put_object(b"hello object", 1, &[vec![0x99; 32]])
             .unwrap();
-        let object_id_hex = edgerun_core::util::bytes_to_hex(&object_ref.object_id);
+        let object_id_hex =
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&object_ref.object_id);
         let indexed = store.index.lookup_objects(&[object_id_hex]).unwrap();
 
         assert_eq!(indexed.len(), 1);
@@ -1777,7 +1801,7 @@ mod tests {
         let offset = store.append_event_blocking(event).unwrap();
 
         store.index.clear().unwrap();
-        let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+        let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
         store
             .index
             .put_event(&stream_id_hex, 0, &[0xff; 32], offset, 1)

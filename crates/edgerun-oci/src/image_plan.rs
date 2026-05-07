@@ -127,17 +127,15 @@ impl BareImagePlan {
 }
 
 pub fn parse_single_manifest_bytes(data: &[u8]) -> Result<SingleManifest, String> {
-    match parse_manifest(data)? {
-        ImageManifest::Single(manifest) => Ok(manifest),
-        ImageManifest::Index(_) => Err("manifest is an index, not a single manifest".into()),
-    }
+    parse_manifest(data).and_then(|manifest| {
+        edgerun_protocols::oci::single_manifest(&manifest)
+            .cloned()
+            .ok_or_else(|| "manifest is an index, not a single manifest".into())
+    })
 }
 
 pub fn single_manifest(manifest: &ImageManifest) -> Option<&SingleManifest> {
-    match manifest {
-        ImageManifest::Single(manifest) => Some(manifest),
-        ImageManifest::Index(_) => None,
-    }
+    edgerun_protocols::oci::single_manifest(manifest)
 }
 
 pub fn select_manifest_for_target<'a>(
@@ -145,13 +143,7 @@ pub fn select_manifest_for_target<'a>(
     os: &str,
     arch: &str,
 ) -> Option<&'a ManifestDescriptor> {
-    index.manifests.iter().find(|manifest| {
-        manifest
-            .platform
-            .as_ref()
-            .map(|platform| platform_matches(platform, os, arch))
-            .unwrap_or(false)
-    })
+    edgerun_protocols::oci::select_manifest_for_target(index, os, arch)
 }
 
 pub fn select_manifest_for_current_target(index: &ImageIndex) -> Option<&ManifestDescriptor> {
@@ -163,14 +155,18 @@ pub fn selected_manifest_digest_from_index_bytes(
     os: &str,
     arch: &str,
 ) -> Result<String, ImagePlanError> {
-    match parse_manifest(index_json).map_err(ImagePlanError::ParseManifest)? {
-        ImageManifest::Index(index) => select_manifest_for_target(&index, os, arch)
-            .map(|manifest| manifest.digest.clone())
-            .ok_or_else(|| ImagePlanError::PlatformNotFound {
+    match edgerun_protocols::oci::selected_manifest_digest_from_index_bytes(index_json, os, arch) {
+        Ok(digest) => Ok(digest),
+        Err(error) if error == "manifest is an index, not a single manifest" => {
+            Err(ImagePlanError::ManifestIndex)
+        }
+        Err(error) if error.starts_with("no manifest found for platform ") => {
+            Err(ImagePlanError::PlatformNotFound {
                 os: os.into(),
                 arch: arch.into(),
-            }),
-        ImageManifest::Single(_) => Err(ImagePlanError::ManifestIndex),
+            })
+        }
+        Err(error) => Err(ImagePlanError::ParseManifest(error)),
     }
 }
 
@@ -181,30 +177,11 @@ pub fn selected_manifest_digest_for_current_target(
 }
 
 pub fn platform_matches(platform: &PlatformDescriptor, os: &str, arch: &str) -> bool {
-    let os_matches = platform
-        .os
-        .as_deref()
-        .map(|value| value == os)
-        .unwrap_or(true);
-    let arch_matches = platform
-        .architecture
-        .as_deref()
-        .map(|value| value == arch)
-        .unwrap_or(true);
-    os_matches && arch_matches
+    edgerun_protocols::oci::platform_matches(platform, os, arch)
 }
 
 pub fn validate_digest_reference(digest: &str) -> bool {
-    let Some((algorithm, hex)) = digest.split_once(':') else {
-        return false;
-    };
-
-    !algorithm.is_empty()
-        && algorithm.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-'
-        })
-        && matches!(hex.len(), 64 | 128)
-        && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+    edgerun_protocols::oci::validate_digest_reference(digest)
 }
 
 fn validate_digest_field(field: impl Into<String>, digest: &str) -> Result<(), ImagePlanError> {

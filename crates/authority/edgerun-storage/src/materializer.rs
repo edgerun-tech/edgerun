@@ -6,7 +6,7 @@
 
 use crate::prelude::v1::*;
 
-use edgerun_core::protocol::EventEnvelope;
+use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 use std::sync::Arc;
 
 use crate::core::canonical_event_hash;
@@ -78,7 +78,7 @@ pub(crate) fn materialize_event_to_index(
     event: &EventEnvelope,
     offset: u64,
 ) -> Result<(), StorageError> {
-    let stream_id_hex = edgerun_core::util::bytes_to_hex(&event.stream_id);
+    let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id);
     let event_hash = canonical_event_hash(event).value;
 
     index.put_event(
@@ -95,15 +95,19 @@ pub(crate) fn materialize_event_to_index(
         match op {
             OpEventType::CredentialStored => {
                 if let Some(payload) = &event.payload_object {
-                    let namespace = edgerun_core::util::bytes_to_hex(&payload.object_id);
-                    let name = edgerun_core::util::bytes_to_hex(&event.stream_id);
-                    let blob_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                    let namespace =
+                        edgerun_protocols::core_protocol::util::bytes_to_hex(&payload.object_id);
+                    let name =
+                        edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id);
+                    let blob_id =
+                        edgerun_protocols::core_protocol::util::bytes_to_hex(&payload.object_id);
                     let _ = index.put_credential(&namespace, &name, &blob_id, None);
                 }
             }
             OpEventType::PeerDiscovered | OpEventType::PeerStatusChanged => {
                 if let Some(payload) = &event.payload_object {
-                    let node_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                    let node_id =
+                        edgerun_protocols::core_protocol::util::bytes_to_hex(&payload.object_id);
                     let status = match op {
                         OpEventType::PeerDiscovered => "discovered",
                         _ => "status_changed",

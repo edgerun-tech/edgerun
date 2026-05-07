@@ -7,12 +7,12 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::hint::black_box;
 
-use edgerun_core::protocol::{
-    capability_runtime::CapabilityRemoteEnvelope, Digest, EventType, ProtocolRecord, Signature,
-};
 use edgerun_mesh::{LocalNode, MeshFrame, MeshRoute, MeshRouter, MeshRoutingTable, NodeID};
+use edgerun_protocols::core_protocol::protocol::{
+    Digest, EventType, ProtocolRecord, Signature, capability_runtime::CapabilityRemoteEnvelope,
+};
 use edgerun_protocols::http::http1::{
-    determine_connection, extract_boundary, parse_multipart, parse_range_header, Http1Version,
+    Http1Version, determine_connection, extract_boundary, parse_multipart, parse_range_header,
 };
 use edgerun_protocols::http::{HeaderMap, HttpRequest, HttpResponse, Method, StatusCode, Uri};
 use edgerun_protocols::imap::session_core::{
@@ -26,8 +26,8 @@ use edgerun_protocols::smtp::session_core::{
 };
 use edgerun_protocols::tftp::message::TftpMessage;
 use edgerun_remote_capability::MemoryRemoteTransport;
-use edgerun_storage::core::EventLog;
 use edgerun_storage::MemEventLog;
+use edgerun_storage::core::EventLog;
 
 fn len_u32(len: usize) -> u32 {
     len.min(u32::MAX as usize) as u32
@@ -38,7 +38,7 @@ fn protocol_core_probe() -> u32 {
         algorithm: 1,
         value: vec![0x42; 32],
     });
-    len_u32(edgerun_core::protocol::protocol_wire_bytes(&record, false).len())
+    len_u32(edgerun_protocols::core_protocol::protocol::protocol_wire_bytes(&record, false).len())
 }
 
 fn baby_probe() -> u32 {

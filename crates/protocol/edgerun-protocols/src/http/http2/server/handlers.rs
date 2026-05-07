@@ -39,9 +39,7 @@ impl Http2Server {
                 }
                 Err(e) => {
                     let error_code = match &e {
-                        ProtocolHttp2Error::FlowControl(_) => {
-                            ErrorCode::FlowControlError.to_u32()
-                        }
+                        ProtocolHttp2Error::FlowControl(_) => ErrorCode::FlowControlError.to_u32(),
                         _ => ErrorCode::ProtocolError.to_u32(),
                     };
                     return response::send_goaway(

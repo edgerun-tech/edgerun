@@ -6,7 +6,8 @@ use std::io;
 use crate::smtp::server::dsn_generator::DsnBounce;
 use crate::smtp::types::MailEnvelope;
 #[cfg(feature = "dkim")]
-use edgerun_email_auth::AuthenticationResults;
+use edgerun_protocols::email_auth::AuthenticationResults;
+pub use edgerun_protocols::smtp::AuthCredentials;
 
 // ===========================================================================
 // Auth Result
@@ -93,43 +94,6 @@ pub trait MailHandler: Send + Sync + 'static {
     /// Default implementation does nothing.
     #[cfg(feature = "dkim")]
     fn on_mail_received(&self, _envelope: &MailEnvelope, _auth_results: &AuthenticationResults) {}
-}
-
-// ===========================================================================
-// Auth Credentials
-// ===========================================================================
-
-/// Decoded SASL credentials.
-pub struct AuthCredentials {
-    /// Authorization identity (who the client wants to act as).
-    pub authz_id: String,
-    /// Authentication identity (who the client claims to be).
-    pub authc_id: String,
-    /// Token / secret.
-    pub token: String,
-}
-
-impl AuthCredentials {
-    /// Decode SASL PLAIN mechanism payload.
-    /// Format: `authz_id\0authc_id\0token`
-    pub fn from_plain(payload: &[u8]) -> io::Result<Self> {
-        let text = std::str::from_utf8(payload)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-        let parts: Vec<&str> = text.split('\0').collect();
-        if parts.len() < 3 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "SASL PLAIN requires authz_id\\0authc_id\\0token",
-            ));
-        }
-
-        Ok(Self {
-            authz_id: parts[0].to_string(),
-            authc_id: parts[1].to_string(),
-            token: parts[2].to_string(),
-        })
-    }
 }
 
 // ===========================================================================

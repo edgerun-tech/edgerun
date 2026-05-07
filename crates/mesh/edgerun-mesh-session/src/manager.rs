@@ -1,7 +1,7 @@
 use crate::prelude::v1::*;
+use edgerun_crypto::p256::PublicKey;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-use edgerun_crypto::p256::PublicKey;
 use edgerun_hardware_signing::NodeID;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -170,8 +170,8 @@ impl SessionManager {
 /// Derives a 32-byte AES-256 session key from an ECDH shared secret
 /// using HKDF-SHA256.
 pub(crate) fn derive_session_key(shared_secret: &[u8]) -> [u8; 32] {
-    let key_bytes =
-        edgerun_core::crypto::HkdfSha256::new(None, shared_secret).expand(HKDF_INFO, 32);
+    let key_bytes = edgerun_protocols::core_protocol::crypto::HkdfSha256::new(None, shared_secret)
+        .expand(HKDF_INFO, 32);
     key_bytes.try_into().expect("HKDF expand failed")
 }
 

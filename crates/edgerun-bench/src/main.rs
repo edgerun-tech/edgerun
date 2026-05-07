@@ -29,7 +29,7 @@ fn main() {
     println!("Running core benchmarks (CPU, memory, storage)...");
     println!();
 
-    let _cert = edgerun_core::benchmark::run_full_benchmark(node_id);
+    let _cert = edgerun_protocols::core_protocol::benchmark::run_full_benchmark(node_id);
 
     // Run network benchmarks
     println!("Running network benchmarks...");
@@ -38,13 +38,13 @@ fn main() {
     let router = edgerun_mesh::router_benchmark::benchmark_router_lookup();
 
     // Build full certificate
-    let full_cert = edgerun_core::benchmark::run_full_benchmark_with_network(
+    let full_cert = edgerun_protocols::core_protocol::benchmark::run_full_benchmark_with_network(
         node_id, enc_dec, sign_vrfy, udp, router,
     );
 
     // Print results
     println!();
-    edgerun_core::benchmark::print_benchmark_results(&full_cert);
+    edgerun_protocols::core_protocol::benchmark::print_benchmark_results(&full_cert);
 
     // Print reference scores and multipliers
     println!();
@@ -61,55 +61,55 @@ fn main() {
     println!("=== Reference Baselines ===");
     println!(
         "  CPU Int:          {} ops/s",
-        edgerun_core::accounting::REFERENCE_CPU_INT_SCORE
+        edgerun_protocols::core_protocol::accounting::REFERENCE_CPU_INT_SCORE
     );
     println!(
         "  CPU Crypto:       {} hashes/s",
-        edgerun_core::accounting::REFERENCE_CPU_CRYPTO_SCORE
+        edgerun_protocols::core_protocol::accounting::REFERENCE_CPU_CRYPTO_SCORE
     );
     println!(
         "  Memory BW:        {} MB/s",
-        edgerun_core::accounting::REFERENCE_MEM_BW_MBPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_MEM_BW_MBPS
     );
     println!(
         "  Memory Lat:       {} ns",
-        edgerun_core::accounting::REFERENCE_MEM_LATENCY_NS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_MEM_LATENCY_NS
     );
     println!(
         "  Storage IOPS:     {} ops/s",
-        edgerun_core::accounting::REFERENCE_STORAGE_IOPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_STORAGE_IOPS
     );
     println!(
         "  Storage Seq:      {} MB/s",
-        edgerun_core::accounting::REFERENCE_STORAGE_SEQ_MBPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_STORAGE_SEQ_MBPS
     );
     println!(
         "  Storage Events:   {} ops/s",
-        edgerun_core::accounting::REFERENCE_STORAGE_EVENT_IOPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_STORAGE_EVENT_IOPS
     );
     println!(
         "  Storage Blob:     {} ops/s",
-        edgerun_core::accounting::REFERENCE_STORAGE_BLOB_OPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_STORAGE_BLOB_OPS
     );
     println!(
         "  Storage Object:   {} ops/s",
-        edgerun_core::accounting::REFERENCE_STORAGE_OBJECT_OPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_STORAGE_OBJECT_OPS
     );
     println!(
         "  Net Enc/Dec:      {} ops/s",
-        edgerun_core::accounting::REFERENCE_NET_FRAME_ENCODE_DECODE_OPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_NET_FRAME_ENCODE_DECODE_OPS
     );
     println!(
         "  Net Sign/Vrfy:    {} ops/s",
-        edgerun_core::accounting::REFERENCE_NET_FRAME_SIGN_VERIFY_OPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_NET_FRAME_SIGN_VERIFY_OPS
     );
     println!(
         "  Net UDP:          {} ops/s",
-        edgerun_core::accounting::REFERENCE_NET_UDP_THROUGHPUT_OPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_NET_UDP_THROUGHPUT_OPS
     );
     println!(
         "  Net Router:       {} ops/s",
-        edgerun_core::accounting::REFERENCE_NET_ROUTER_LOOKUP_OPS
+        edgerun_protocols::core_protocol::accounting::REFERENCE_NET_ROUTER_LOOKUP_OPS
     );
 
     // Summary
@@ -125,7 +125,7 @@ fn main() {
 }
 
 /// Convert FixedPoint16 to f64 for display.
-fn to_f64(fp: edgerun_core::fixed_point::FixedPoint16) -> f64 {
+fn to_f64(fp: edgerun_protocols::core_protocol::fixed_point::FixedPoint16) -> f64 {
     fp.to_raw() as f64 / 65536.0
 }
 

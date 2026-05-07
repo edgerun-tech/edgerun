@@ -11,7 +11,7 @@ description = "Encrypted no_std block filesystem for Edgerun runtimes"
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "hmac"] }
 edgerun-storage = { workspace = true }
-edgerun-wire = { workspace = true, default-features = false }
+edgerun-protocols = { workspace = true, default-features = false, features = ["wire"] }
 
 [lints]
 workspace = true

@@ -4,15 +4,14 @@ use crate::prelude::*;
 use std::io;
 use std::time::Duration;
 
-use edgerun_dns::client::DnsClient;
-use edgerun_dns::record::DnsRecordData;
-
+use crate::dns_query::MailDnsResolver;
 use crate::server::read_line;
 use crate::smtp::client::SmtpClient;
 use crate::smtp::types::MailEnvelope;
+use alloc::sync::Arc;
 
 #[cfg(feature = "dkim")]
-use edgerun_email_auth::sign::DkimSigner;
+use edgerun_protocols::email_auth::sign::DkimSigner;
 
 // ===========================================================================
 // OutboundRelay
@@ -23,7 +22,9 @@ pub struct OutboundRelay {
     /// The hostname we announce as in EHLO.
     pub ehlo_domain: String,
     /// DNS server address for MX lookups.
-    pub dns_server: String,
+    pub dns_server: Option<String>,
+    /// Node-owned DNS resolver capability.
+    pub dns_resolver: Option<Arc<dyn MailDnsResolver>>,
     /// Maximum message size we'll attempt to relay.
     pub max_message_size: usize,
     /// Connection timeout for remote SMTP.
@@ -36,7 +37,8 @@ impl OutboundRelay {
     pub fn new(ehlo_domain: &str) -> Self {
         Self {
             ehlo_domain: ehlo_domain.to_string(),
-            dns_server: "8.8.8.8:53".to_string(),
+            dns_server: None,
+            dns_resolver: None,
             max_message_size: 35_882_577, // 34 MB
             connect_timeout: Duration::from_secs(30),
             #[cfg(feature = "dkim")]
@@ -93,20 +95,13 @@ impl OutboundRelay {
 
     /// Resolve MX records for a domain.
     async fn resolve_mx(&self, domain: &str) -> Result<Vec<(u16, String)>, String> {
-        let mut dns = DnsClient::new(&self.dns_server)
-            .map_err(|e| format!("failed to create DNS client: {}", e))?;
-
-        let response = dns
-            .query(domain, edgerun_dns::record::DnsRecordType::MX)
+        let resolver = self.dns_resolver.as_ref().ok_or_else(|| {
+            "outbound relay DNS resolver capability is not configured".to_string()
+        })?;
+        let mut mx_records = resolver
+            .query_mx(domain)
             .await
             .map_err(|e| format!("DNS query failed: {}", e))?;
-
-        let mut mx_records = Vec::new();
-        for answer in &response.answers {
-            if let edgerun_dns::record::DnsRecordData::MX { priority, exchange } = &answer.data {
-                mx_records.push((*priority, exchange.clone()));
-            }
-        }
 
         // Sort by preference (lower = higher priority)
         mx_records.sort_by_key(|(p, _)| *p);
@@ -270,7 +265,7 @@ mod tests {
     fn test_relay_config() {
         let relay = OutboundRelay::new("mail.example.com");
         assert_eq!(relay.ehlo_domain, "mail.example.com");
-        assert_eq!(relay.dns_server, "8.8.8.8:53");
+        assert_eq!(relay.dns_server, None);
         assert_eq!(relay.max_message_size, 35_882_577);
     }
 

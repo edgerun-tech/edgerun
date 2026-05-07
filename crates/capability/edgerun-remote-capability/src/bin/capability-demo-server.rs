@@ -1,14 +1,16 @@
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityAccessClass, CapabilityDescriptor, CapabilityError,
-    CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityRole,
+    CapabilityAccessClass, CapabilityDescriptor, CapabilityError, CapabilityEventKind,
+    CapabilityModality, CapabilityOperation, CapabilityRole, capability_descriptor,
 };
-use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_core::protocol::capability_runtime::{
+use edgerun_protocols::core_protocol::protocol::capability::{
+    CapabilityInvocation, CapabilityResult,
+};
+use edgerun_protocols::core_protocol::protocol::capability_runtime::{
     CapabilitySessionClose, CapabilitySessionEvent, CapabilitySessionOpen,
 };
 use edgerun_remote_capability::{
-    accept_session_open_unchecked, accept_tcp, accept_unix, serve_one, PolicyWrappedProvider,
-    RemoteCapabilityProvider, RemoteInvocationResult,
+    PolicyWrappedProvider, RemoteCapabilityProvider, RemoteInvocationResult,
+    accept_session_open_unchecked, accept_tcp, accept_unix, serve_one,
 };
 use std::env;
 use std::net::TcpListener;

@@ -7,16 +7,17 @@ use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
 use edgerun_capability_policy::{
     PolicyContext, PolicyDecision, PolicyEngine, RevocationReason, SimplePolicyEngine,
 };
-use edgerun_core::protocol::capability::{
+use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityGrant, CapabilityRequest, CapabilityRevocation,
 };
-use edgerun_core::protocol::capability_runtime::{
+use edgerun_protocols::core_protocol::protocol::capability_runtime::{
     CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionOpen,
 };
 
 use crate::protocol::{
-    accept_session_open_unchecked, default_remote_requester_opt, session_accept_from_grant,
-    session_open_as_request, session_reject, RemoteCapabilityProvider, RemoteInvocationResult,
+    RemoteCapabilityProvider, RemoteInvocationResult, accept_session_open_unchecked,
+    default_remote_requester_opt, session_accept_from_grant, session_open_as_request,
+    session_reject,
 };
 
 /// Session-to-grant association record.
@@ -184,7 +185,7 @@ where
     fn invoke(
         &mut self,
         session_id: &[u8],
-        invocation: &edgerun_core::protocol::capability::CapabilityInvocation,
+        invocation: &edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation,
         inline_parameters: Option<&[u8]>,
     ) -> Result<RemoteInvocationResult, CapabilityError> {
         let binding = self
@@ -204,7 +205,9 @@ where
         &mut self,
         session_id: &[u8],
     ) -> Result<
-        Option<edgerun_core::protocol::capability_runtime::CapabilitySessionEvent>,
+        Option<
+            edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilitySessionEvent,
+        >,
         CapabilityError,
     > {
         self.inner.next_event(session_id)

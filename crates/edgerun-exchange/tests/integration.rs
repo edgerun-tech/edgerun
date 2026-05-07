@@ -8,10 +8,10 @@ extern crate alloc;
 
 mod mocks {
     use super::*;
-    use edgerun_core::protocol::edgerun_wallet_v0::QuoteRequest;
     use edgerun_exchange::changenow::ChangeNOWAdapter;
     use edgerun_exchange::provider::{ExchangeProvider, ProviderCode};
     use edgerun_exchange::sideshift::SideShiftAdapter;
+    use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::QuoteRequest;
 
     fn make_quote_request(settlement_asset_id: &str, pay_asset_id: &str) -> QuoteRequest {
         QuoteRequest {
@@ -194,9 +194,9 @@ mod error_handling {
 
 mod quote_validation {
     use super::*;
-    use edgerun_core::protocol::edgerun_wallet_v0::QuoteRequest;
     use edgerun_exchange::provider::ExchangeProvider;
     use edgerun_exchange::sideshift::SideShiftAdapter;
+    use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::QuoteRequest;
 
     fn make_req(settlement_asset_id: &str, pay_asset_id: &str) -> QuoteRequest {
         QuoteRequest {
@@ -276,7 +276,7 @@ mod provider_code_tests {
 }
 
 mod asset_ref_canonical {
-    use edgerun_core::protocol::edgerun_wallet_v0::AssetRef;
+    use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::AssetRef;
 
     #[test]
     fn test_asset_ref_equality() {
@@ -378,7 +378,6 @@ mod routing_tests {
     use alloc::boxed::Box;
     use alloc::rc::Rc;
     use core::cell::RefCell;
-    use edgerun_core::protocol::edgerun_wallet_v0::{AssetRef, Quote, QuoteRequest};
     use edgerun_exchange::policy::RoutingPolicy;
     use edgerun_exchange::provider::{
         ExchangeProvider, ProviderCode, ProviderContext, ProviderFeatures, ProviderOrder,
@@ -387,6 +386,9 @@ mod routing_tests {
     use edgerun_exchange::router::{route_quote, QuoteRoutingResult};
     use edgerun_http::client_middleware::Chain;
     use edgerun_http::HttpClient;
+    use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
+        AssetRef, Quote, QuoteRequest,
+    };
     use edgerun_wallet::{DecimalAmount, WalletError};
 
     #[derive(Clone)]

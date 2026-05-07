@@ -9,9 +9,10 @@ use crate::rt::{
     AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWriteExt,
     CancellationToken, RwLock,
 };
+use crate::transport::{HostSocketTransport, TransportAddress, TransportError};
 use edgerun_protocols::dns::{
-    DnsMessage, DnsRecord, DnsRecordType, DnsResponseCode, DnsZone, dns_tcp_frame_len,
-    encode_dns_tcp_frame, parse_dns_message_bounded, validate_name,
+    dns_tcp_frame_len, encode_dns_tcp_frame, handle_query_without_forwarding, resolve,
+    udp_response_wire, DnsMessage, DnsRecordData, DnsRecordType, DnsResponseCode, DnsZone,
 };
 
 #[cfg(not(target_os = "none"))]
@@ -23,8 +24,6 @@ use std::net::{IpAddr, SocketAddr};
 use crate::rt::io;
 #[cfg(target_os = "none")]
 type IpAddr = core::net::IpAddr;
-
-const MAX_UDP_RESPONSE: usize = 512;
 
 #[derive(Debug, Clone)]
 pub struct DnsRuntimeConfig {
@@ -103,6 +102,30 @@ impl DnsRuntime {
 
     pub async fn zone_names(&self) -> Vec<String> {
         self.state.zones.read().keys().cloned().collect()
+    }
+
+    pub async fn query_txt(&self, name: &str) -> Vec<String> {
+        let zones = self.state.zones.read();
+        resolve(name, DnsRecordType::TXT, &zones)
+            .into_iter()
+            .filter_map(|record| match record.data {
+                DnsRecordData::TXT(value) => Some(value),
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub async fn query_mx(&self, name: &str) -> Vec<(u16, String)> {
+        let zones = self.state.zones.read();
+        let mut records: Vec<(u16, String)> = resolve(name, DnsRecordType::MX, &zones)
+            .into_iter()
+            .filter_map(|record| match record.data {
+                DnsRecordData::MX { priority, exchange } => Some((priority, exchange)),
+                _ => None,
+            })
+            .collect();
+        records.sort_by_key(|(priority, _)| *priority);
+        records
     }
 
     pub async fn shutdown(&self) {}
@@ -250,90 +273,8 @@ async fn handle_tcp_connection(
 }
 
 async fn handle_query(wire: &[u8], state: &DnsState) -> Result<(Vec<u8>, bool), ()> {
-    let query = parse_dns_message_bounded(wire).map_err(|_| ())?;
-    if query.header.is_response {
-        return Ok((
-            DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new()).to_wire(),
-            false,
-        ));
-    }
-
-    let question = match query.questions.first() {
-        Some(question) => question,
-        None => {
-            return Ok((
-                DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new())
-                    .to_wire(),
-                false,
-            ));
-        }
-    };
-
-    if question.qtype == DnsRecordType::AXFR {
-        return Ok((
-            DnsMessage::response(query.header.id, DnsResponseCode::Refused, Vec::new()).to_wire(),
-            false,
-        ));
-    }
-
-    let qname = question.name.to_lowercase();
-    if validate_name(&qname).is_err() {
-        return Ok((
-            DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new()).to_wire(),
-            false,
-        ));
-    }
-
     let zones = state.zones.read();
-    let answers = resolve(&qname, question.qtype, &zones);
-    let mut response = if answers.is_empty() {
-        DnsMessage::response(query.header.id, DnsResponseCode::NXDomain, Vec::new())
-    } else {
-        DnsMessage::response(query.header.id, DnsResponseCode::NoError, answers)
-    };
-    response.questions = query.questions.clone();
-    response.header.question_count = response.questions.len() as u16;
-    response.header.answer_count = response.answers.len() as u16;
-
-    let wire = response.to_wire();
-    let needs_tcp = wire.len() > MAX_UDP_RESPONSE;
-    Ok((wire, needs_tcp))
-}
-
-fn resolve(qname: &str, qtype: DnsRecordType, zones: &BTreeMap<String, DnsZone>) -> Vec<DnsRecord> {
-    best_matching_zone(qname, zones)
-        .and_then(|zone| zone.resolve(qname, qtype))
-        .unwrap_or_default()
-}
-
-fn best_matching_zone<'a>(
-    qname: &str,
-    zones: &'a BTreeMap<String, DnsZone>,
-) -> Option<&'a DnsZone> {
-    let qname = qname.trim_end_matches('.').to_ascii_lowercase();
-    zones
-        .iter()
-        .filter(|(origin, _)| qname == **origin || qname.ends_with(&format!(".{origin}")))
-        .max_by_key(|(origin, _)| origin.len())
-        .map(|(_, zone)| zone)
-}
-
-fn udp_response_wire(query_wire: &[u8], response_wire: Vec<u8>, needs_tcp: bool) -> Vec<u8> {
-    if !needs_tcp {
-        return response_wire;
-    }
-
-    match parse_dns_message_bounded(query_wire) {
-        Ok(query) => {
-            let mut response =
-                DnsMessage::response(query.header.id, DnsResponseCode::NoError, Vec::new());
-            response.header.truncated = true;
-            response.questions = query.questions;
-            response.header.question_count = response.questions.len() as u16;
-            response.to_wire()
-        }
-        Err(_) => response_wire,
-    }
+    handle_query_without_forwarding(wire, &zones).map_err(|_| ())
 }
 
 #[derive(Clone)]
@@ -369,14 +310,18 @@ impl RateLimiter {
 }
 
 fn bind_udp(addr: &str) -> io::Result<AsyncUdpSocket> {
-    AsyncUdpSocket::bind(addr).map_err(runtime_io_error)
+    HostSocketTransport
+        .bind_datagram_now(&TransportAddress::host_datagram(addr.as_bytes().to_vec()))
+        .map_err(transport_io_error)
 }
 
 fn bind_tcp(addr: &str) -> io::Result<AsyncTcpListener> {
-    AsyncTcpListener::bind(addr).map_err(runtime_io_error)
+    HostSocketTransport
+        .bind_stream_now(&TransportAddress::host_stream(addr.as_bytes().to_vec()))
+        .map_err(transport_io_error)
 }
 
-fn runtime_io_error(error: crate::rt::IoError) -> io::Error {
+fn transport_io_error(error: TransportError) -> io::Error {
     io::Error::new(io::ErrorKind::Other, format!("{error}"))
 }
 

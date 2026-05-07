@@ -4,15 +4,17 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
-use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_speaker::{
-    AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerOutputLevel,
-    SpeakerSampleFormat,
+use edgerun_protocols::core_protocol::protocol::capability::{
+    CapabilityInvocation, CapabilityResult,
 };
-use edgerun_wire::{
+use edgerun_protocols::wire::{
     RemoteAudioPlaybackRequest as AudioPlaybackRequestWire,
     RemoteAudioPlaybackResult as AudioPlaybackResultWire,
     RemoteSpeakerOutputLevel as SpeakerOutputLevelWire,
+};
+use edgerun_speaker::{
+    AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerOutputLevel,
+    SpeakerSampleFormat,
 };
 
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
@@ -47,7 +49,7 @@ pub fn encode_speaker_playback_request(request: &AudioPlaybackRequest) -> Vec<u8
         software_gain_percent: request.software_gain_percent,
         target_output_level_percent: request.target_output_level_percent,
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("speaker playback request must serialize through rkyv")
         .into_vec()
 }
@@ -57,11 +59,11 @@ pub fn decode_speaker_playback_request(
     bytes: &[u8],
 ) -> Result<AudioPlaybackRequest, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire =
-        edgerun_wire::from_bytes::<AudioPlaybackRequestWire, edgerun_wire::WireError>(&owned)
-            .map_err(|_| {
-                CapabilityError::InvalidRequest("remote speaker playback request is not rkyv")
-            })?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        AudioPlaybackRequestWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote speaker playback request is not rkyv"))?;
     Ok(AudioPlaybackRequest {
         duration_ms: wire.duration_ms,
         sample_rate_hz: wire.sample_rate_hz,
@@ -81,7 +83,7 @@ pub fn encode_speaker_output_level(level: &SpeakerOutputLevel) -> Vec<u8> {
         max_raw_value: level.max_raw_value,
         muted: level.muted,
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("speaker output level must serialize through rkyv")
         .into_vec()
 }
@@ -89,8 +91,11 @@ pub fn encode_speaker_output_level(level: &SpeakerOutputLevel) -> Vec<u8> {
 /// Rkyv-decode speaker output level.
 pub fn decode_speaker_output_level(bytes: &[u8]) -> Result<SpeakerOutputLevel, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<SpeakerOutputLevelWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| CapabilityError::InvalidRequest("remote speaker output level is not rkyv"))?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        SpeakerOutputLevelWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote speaker output level is not rkyv"))?;
     Ok(SpeakerOutputLevel {
         current_percent: wire.current_percent,
         min_raw_value: wire.min_raw_value,
@@ -107,7 +112,7 @@ pub fn encode_speaker_playback_result(result: &AudioPlaybackResult) -> Vec<u8> {
         channels: result.channels,
         finished: result.finished,
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("speaker playback result must serialize through rkyv")
         .into_vec()
 }
@@ -117,10 +122,11 @@ pub fn decode_speaker_playback_result(
     bytes: &[u8],
 ) -> Result<AudioPlaybackResult, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<AudioPlaybackResultWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| {
-            CapabilityError::InvalidRequest("remote speaker playback result is not rkyv")
-        })?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        AudioPlaybackResultWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote speaker playback result is not rkyv"))?;
     Ok(AudioPlaybackResult {
         bytes_written: wire.bytes_written as usize,
         sample_rate_hz: wire.sample_rate_hz,

@@ -515,7 +515,10 @@ fn test_trailers_path_reachable() {
 
     // Stream should now be Closed
     let stream = server.stream_manager.get_stream(1).unwrap();
-    assert_eq!(stream.state, crate::http::http2::stream::StreamState::Closed);
+    assert_eq!(
+        stream.state,
+        crate::http::http2::stream::StreamState::Closed
+    );
     assert!(server.is_closed_stream(1));
 }
 

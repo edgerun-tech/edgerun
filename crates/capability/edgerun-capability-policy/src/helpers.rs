@@ -4,14 +4,14 @@ use crate::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::types::*;
 use edgerun_capabilities::{
-    validate_descriptor, validate_grant, CapabilityAccessClass, CapabilityConstraint,
-    CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityGrant,
-    CapabilityInvocation, CapabilityModality, CapabilityOperation, CapabilityRequest,
-    CapabilityRevocation, CapabilityRole, CapabilitySelector,
+    CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor,
+    CapabilityError, CapabilityGrant, CapabilityInvocation, CapabilityModality,
+    CapabilityOperation, CapabilityRequest, CapabilityRevocation, CapabilityRole,
+    CapabilitySelector, validate_descriptor, validate_grant,
 };
-use edgerun_core::protocol::{Duration as ProtocolDuration, Timestamp};
-use edgerun_core::protocol::{IdentityRef, NodeRef};
 use edgerun_crypto::sha::Digest;
+use edgerun_protocols::core_protocol::protocol::{Duration as ProtocolDuration, Timestamp};
+use edgerun_protocols::core_protocol::protocol::{IdentityRef, NodeRef};
 
 pub(crate) fn dedupe_i32(values: Vec<i32>) -> Vec<i32> {
     let mut out = Vec::new();
@@ -71,8 +71,9 @@ pub(crate) fn has_constraint_kind(
     kind: CapabilityConstraintKind,
 ) -> bool {
     constraints.iter().any(|constraint| {
-        edgerun_core::protocol::enum_from_i32::<CapabilityConstraintKind>(constraint.kind)
-            == Some(kind)
+        edgerun_protocols::core_protocol::protocol::enum_from_i32::<CapabilityConstraintKind>(
+            constraint.kind,
+        ) == Some(kind)
     })
 }
 
@@ -85,13 +86,17 @@ pub(crate) fn requires_user_presence(
         return true;
     }
 
-    let role = edgerun_core::protocol::enum_from_i32::<CapabilityRole>(descriptor.role)
-        .unwrap_or(CapabilityRole::Unspecified);
+    let role = edgerun_protocols::core_protocol::protocol::enum_from_i32::<CapabilityRole>(
+        descriptor.role,
+    )
+    .unwrap_or(CapabilityRole::Unspecified);
 
     let sensitive_modality = descriptor
         .modalities
         .iter()
-        .filter_map(|value| edgerun_core::protocol::enum_from_i32::<CapabilityModality>(*value))
+        .filter_map(|value| {
+            edgerun_protocols::core_protocol::protocol::enum_from_i32::<CapabilityModality>(*value)
+        })
         .any(|modality| {
             matches!(
                 modality,
@@ -103,7 +108,9 @@ pub(crate) fn requires_user_presence(
         });
     let sensitive_operation = operations
         .iter()
-        .filter_map(|value| edgerun_core::protocol::enum_from_i32::<CapabilityOperation>(*value))
+        .filter_map(|value| {
+            edgerun_protocols::core_protocol::protocol::enum_from_i32::<CapabilityOperation>(*value)
+        })
         .any(|operation| {
             matches!(
                 operation,

@@ -16,12 +16,20 @@ use core::fmt;
 
 pub mod connection;
 pub(crate) mod crypto_frame;
-pub mod frame;
+pub mod frame {
+    pub use edgerun_protocols::http::http3::frame::*;
+}
 pub mod quic;
 pub mod server;
-pub mod settings;
-pub mod stream;
-pub mod varint;
+pub mod settings {
+    pub use edgerun_protocols::http::http3::settings::*;
+}
+pub mod stream {
+    pub use edgerun_protocols::http::http3::stream::*;
+}
+pub mod varint {
+    pub use edgerun_protocols::http::http3::varint::*;
+}
 
 pub use connection::Http3Connection;
 pub use edgerun_qpack::{QpackDecoder, QpackEncoder};

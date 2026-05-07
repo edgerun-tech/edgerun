@@ -28,7 +28,7 @@ but those are not Edgerun internal wire protocols.
   machines. Protocols do not own ports, sockets, filesystems, trust roots, or
   host policy.
 
-The remaining protocol-named crates such as `edgerun-http`, `edgerun-dns`,
-`edgerun-email`, and `edgerun-tls` are transitional runtime adapters around
+The remaining protocol-named crates such as `edgerun-http`, `edgerun-email`,
+and `edgerun-tls` are transitional runtime adapters around
 `edgerun-protocols` and node-owned resources. New protocol logic should go into
 `edgerun-protocols`; new resource realization should go into `edgerun-node`.

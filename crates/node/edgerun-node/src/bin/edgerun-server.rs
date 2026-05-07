@@ -27,19 +27,19 @@ use std::time::Duration;
 use compiled_deployment::{CompiledDeployment, DEPLOYMENT};
 use edgerun_acme::DnsChallenge;
 use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig};
-use edgerun_email_auth::sign::DkimSigner;
 use edgerun_http::server::HttpServer;
-use edgerun_http::{Handler, Request, Response, StatusCode, into_handler_async};
-use edgerun_node::rt::{CancellationToken, Runtime, sleep};
+use edgerun_http::{into_handler_async, Handler, Request, Response, StatusCode};
+use edgerun_node::rt::{sleep, CancellationToken, Runtime};
 use edgerun_node::runtime::RuntimeServicePlan;
 use edgerun_node::services::dns_runtime::{
     DnsRuntime as DnsServer, DnsRuntimeConfig as DnsServerConfig,
 };
 use edgerun_node::services::{ImapConfig, NodeRuntime, SmtpConfig};
 use edgerun_protocols::dns::DnsZone;
-use edgerun_sign_p256::P256ProtocolSigner;
+use edgerun_protocols::email_auth::sign::DkimSigner;
+use edgerun_protocols::sign_p256::P256ProtocolSigner;
 use edgerun_tls::certificate::Certificate;
-use edgerun_tls::{CertificateAndKey, generate_csr, signing_key_to_pem};
+use edgerun_tls::{generate_csr, signing_key_to_pem, CertificateAndKey};
 
 #[cfg(feature = "derived-db")]
 mod host_derived_db {
@@ -260,11 +260,11 @@ fn load_dkim_signer(deployment: &CompiledDeployment) -> Option<DkimSigner> {
             &pem,
         ) {
             Ok(signer) => {
-                edgerun_log::info!("DKIM signer loaded from {}", deployment.dkim_key_path);
+                edgerun_node::node_info!("DKIM signer loaded from {}", deployment.dkim_key_path);
                 Some(signer)
             }
             Err(e) => {
-                edgerun_log::warn!("Failed to parse DKIM key: {}", e);
+                edgerun_node::node_warn!("Failed to parse DKIM key: {}", e);
                 None
             }
         },
@@ -272,14 +272,14 @@ fn load_dkim_signer(deployment: &CompiledDeployment) -> Option<DkimSigner> {
             Ok(signer) => {
                 if let Some(parent) = Path::new(deployment.dkim_key_path).parent() {
                     if let Err(e) = fs::create_dir_all(parent) {
-                        edgerun_log::warn!("Failed to create DKIM key directory: {}", e);
+                        edgerun_node::node_warn!("Failed to create DKIM key directory: {}", e);
                         return Some(signer);
                     }
                 }
                 match signer.private_key_pem() {
                     Ok(pem) => {
                         if let Err(e) = fs::write(deployment.dkim_key_path, pem) {
-                            edgerun_log::warn!("Failed to save generated DKIM key: {}", e);
+                            edgerun_node::node_warn!("Failed to save generated DKIM key: {}", e);
                         } else {
                             #[cfg(unix)]
                             {
@@ -289,18 +289,20 @@ fn load_dkim_signer(deployment: &CompiledDeployment) -> Option<DkimSigner> {
                                     fs::Permissions::from_mode(0o600),
                                 );
                             }
-                            edgerun_log::info!(
+                            edgerun_node::node_info!(
                                 "Generated DKIM key at {}; publishing matching DNS record",
                                 deployment.dkim_key_path
                             );
                         }
                     }
-                    Err(e) => edgerun_log::warn!("Failed to encode generated DKIM key: {}", e),
+                    Err(e) => {
+                        edgerun_node::node_warn!("Failed to encode generated DKIM key: {}", e)
+                    }
                 }
                 Some(signer)
             }
             Err(e) => {
-                edgerun_log::warn!("Failed to generate DKIM key: {}", e);
+                edgerun_node::node_warn!("Failed to generate DKIM key: {}", e);
                 None
             }
         },
@@ -314,7 +316,7 @@ fn load_dkim_signer(deployment: &CompiledDeployment) -> Option<DkimSigner> {
 fn load_tls_cert(deployment: &CompiledDeployment) -> Option<CertificateAndKey> {
     if !Path::new(deployment.tls_cert_path).exists() || !Path::new(deployment.tls_key_path).exists()
     {
-        edgerun_log::info!(
+        edgerun_node::node_info!(
             "TLS certs not found at {} / {}, running without TLS",
             deployment.tls_cert_path,
             deployment.tls_key_path
@@ -325,14 +327,14 @@ fn load_tls_cert(deployment: &CompiledDeployment) -> Option<CertificateAndKey> {
     let cert_pem = match fs::read_to_string(deployment.tls_cert_path) {
         Ok(p) => p,
         Err(e) => {
-            edgerun_log::warn!("Failed to read TLS cert: {}", e);
+            edgerun_node::node_warn!("Failed to read TLS cert: {}", e);
             return None;
         }
     };
     let key_pem = match fs::read_to_string(deployment.tls_key_path) {
         Ok(p) => p,
         Err(e) => {
-            edgerun_log::warn!("Failed to read TLS key: {}", e);
+            edgerun_node::node_warn!("Failed to read TLS key: {}", e);
             return None;
         }
     };
@@ -340,11 +342,11 @@ fn load_tls_cert(deployment: &CompiledDeployment) -> Option<CertificateAndKey> {
     let combined = format!("{}\n{}", cert_pem, key_pem);
     match CertificateAndKey::from_pem(&combined) {
         Ok(cert) => {
-            edgerun_log::info!("TLS certificate loaded from {}", deployment.tls_cert_path);
+            edgerun_node::node_info!("TLS certificate loaded from {}", deployment.tls_cert_path);
             Some(cert)
         }
         Err(e) => {
-            edgerun_log::warn!("Failed to parse TLS cert: {}", e);
+            edgerun_node::node_warn!("Failed to parse TLS cert: {}", e);
             None
         }
     }
@@ -510,7 +512,7 @@ fn ensure_runtime_bootstrap(
         edgerun_crypto::p256_signing_key_from_pem(&pem)
             .ok_or("failed to parse runtime node private key")?
     } else {
-        let (key, identity) = edgerun_keygen::generate_node_signing_key();
+        let (key, identity) = edgerun_protocols::keygen::generate_node_signing_key();
         let pem = edgerun_crypto::p256_signing_key_to_pem(&key);
         write_private_file(&private_key_path, pem.as_bytes())?;
         fs::write(&public_key_path, hex_bytes(&identity.node_id))?;
@@ -530,7 +532,8 @@ fn ensure_runtime_bootstrap(
         let mut event = edgerun_stream::genesis_event(&node_id, unix_now_ms());
         edgerun_stream::sign_event(&mut event, &signer)
             .map_err(|err| format!("failed to sign runtime genesis event: {err}"))?;
-        let event_bytes = edgerun_core::wire_stream::event_full_wire_bytes(&event);
+        let event_bytes =
+            edgerun_protocols::core_protocol::wire_stream::event_full_wire_bytes(&event);
         let tmp = node_stream_dir.join("00000000000000000000.event.rkyv.tmp");
         fs::write(&tmp, &event_bytes)?;
         fs::rename(&tmp, &genesis_path)?;
@@ -585,14 +588,14 @@ async fn provision_certs(
     base_zone: &mut DnsZone,
     domains: &[String],
 ) -> Result<(), edgerun_acme::AcmeError> {
-    edgerun_log::info!("ACME: creating order for {:?}", domains);
+    edgerun_node::node_info!("ACME: creating order for {:?}", domains);
     let order = client.create_order(domains).await?;
 
     let mut active_challenges: Vec<(String, DnsChallenge)> = Vec::new();
 
     for authz_url in order.authorization_urls() {
         let authz = client.get_authorization(authz_url).await?;
-        edgerun_log::info!("ACME: authorization status = {:?}", authz.status);
+        edgerun_node::node_info!("ACME: authorization status = {:?}", authz.status);
 
         let challenges = authz
             .challenges
@@ -603,21 +606,21 @@ async fn provision_certs(
             .iter()
             .find(|c| matches!(c.challenge_type, edgerun_acme::types::ChallengeType::Dns01));
         let Some(challenge) = dns_challenge else {
-            edgerun_log::warn!("ACME: no dns-01 challenge found");
+            edgerun_node::node_warn!("ACME: no dns-01 challenge found");
             continue;
         };
 
         let token = challenge.token.as_deref().unwrap_or("");
         let domain = authz.identifier.value.clone();
         let dns_ch = DnsChallenge::new(&domain, token, account_key);
-        edgerun_log::info!("ACME: adding TXT record {}", dns_ch.record_name());
+        edgerun_node::node_info!("ACME: adding TXT record {}", dns_ch.record_name());
 
         dns_ch.add_to_zone(base_zone);
         dns_server.add_zone(base_zone.clone()).await;
         active_challenges.push((domain.clone(), dns_ch));
 
         let validated = client.validate_challenge(&challenge.url).await?;
-        edgerun_log::info!(
+        edgerun_node::node_info!(
             "ACME: challenge validated, status = {:?}",
             validated.status()
         );
@@ -626,12 +629,12 @@ async fn provision_certs(
         while attempts < 30 {
             sleep(Duration::from_secs(2)).await;
             let status = client.get_challenge(&challenge.url).await?;
-            edgerun_log::info!("ACME: challenge status = {:?}", status.status());
+            edgerun_node::node_info!("ACME: challenge status = {:?}", status.status());
             if status.is_valid() {
                 break;
             }
             if status.status() == edgerun_acme::ChallengeStatus::Invalid {
-                edgerun_log::error!("ACME: DNS-01 challenge failed for {}", domain);
+                edgerun_node::node_error!("ACME: DNS-01 challenge failed for {}", domain);
                 return Err(edgerun_acme::AcmeError::ChallengeFailed(format!(
                     "DNS-01 challenge failed for {}",
                     domain
@@ -646,12 +649,12 @@ async fn provision_certs(
     }
     if !active_challenges.is_empty() {
         dns_server.add_zone(base_zone.clone()).await;
-        edgerun_log::info!("ACME: cleaned up DNS-01 TXT records");
+        edgerun_node::node_info!("ACME: cleaned up DNS-01 TXT records");
     }
 
     let order_url = order.inner.id.clone();
     let mut order = client.get_order(&order_url).await?;
-    edgerun_log::info!("ACME: order status = {:?}", order.status());
+    edgerun_node::node_info!("ACME: order status = {:?}", order.status());
 
     if order.is_ready() || order.is_pending() {
         let Some(finalize_url) = order.finalize_url().cloned() else {
@@ -666,14 +669,14 @@ async fn provision_certs(
         let key_pem = signing_key_to_pem(&signing_key)
             .map_err(|e| edgerun_acme::AcmeError::Storage(e.to_string()))?;
 
-        edgerun_log::info!("ACME: finalizing order with CSR");
+        edgerun_node::node_info!("ACME: finalizing order with CSR");
         order = client.finalize_order(&finalize_url, &csr_der).await?;
 
         let mut attempts = 0;
         while order.is_processing() || order.is_ready() {
             sleep(Duration::from_secs(2)).await;
             order = client.get_order(&order_url).await?;
-            edgerun_log::info!("ACME: finalized order status = {:?}", order.status());
+            edgerun_node::node_info!("ACME: finalized order status = {:?}", order.status());
             attempts += 1;
             if attempts >= 30 {
                 return Err(edgerun_acme::AcmeError::OrderInvalid(
@@ -694,13 +697,13 @@ async fn provision_certs(
                 let _ =
                     fs::set_permissions(DEPLOYMENT.tls_key_path, fs::Permissions::from_mode(0o600));
             }
-            edgerun_log::info!("ACME: private key saved to {}", DEPLOYMENT.tls_key_path);
+            edgerun_node::node_info!("ACME: private key saved to {}", DEPLOYMENT.tls_key_path);
         }
     }
 
     if order.is_valid() {
         if let Some(cert_url) = order.certificate_url() {
-            edgerun_log::info!("ACME: downloading certificate");
+            edgerun_node::node_info!("ACME: downloading certificate");
             let cert_pem = client.download_certificate(cert_url).await?;
 
             if let Some(parent) = Path::new(DEPLOYMENT.tls_cert_path).parent() {
@@ -709,7 +712,7 @@ async fn provision_certs(
             fs::write(DEPLOYMENT.tls_cert_path, &cert_pem)
                 .map_err(|e| edgerun_acme::AcmeError::Storage(e.to_string()))?;
 
-            edgerun_log::info!("ACME: certificate saved to {}", DEPLOYMENT.tls_cert_path);
+            edgerun_node::node_info!("ACME: certificate saved to {}", DEPLOYMENT.tls_cert_path);
             return Ok(());
         }
     }
@@ -727,7 +730,7 @@ async fn acme_loop(
     domains: Vec<String>,
     shutdown: CancellationToken,
 ) {
-    edgerun_log::info!("ACME: starting DNS-01 provisioning loop for {:?}", domains);
+    edgerun_node::node_info!("ACME: starting DNS-01 provisioning loop for {:?}", domains);
 
     loop {
         if shutdown.is_cancelled() {
@@ -741,7 +744,7 @@ async fn acme_loop(
                 .as_secs();
             let days_left = cert_info.expires_at.saturating_sub(now) / 86400;
             if days_left > 30 {
-                edgerun_log::info!(
+                edgerun_node::node_info!(
                     "ACME: certs valid for {} more days, sleeping 12h",
                     days_left
                 );
@@ -753,12 +756,12 @@ async fn acme_loop(
                 }
                 continue;
             }
-            edgerun_log::info!("ACME: certs expire in {} days, renewing", days_left);
+            edgerun_node::node_info!("ACME: certs expire in {} days, renewing", days_left);
         }
 
         match provision_certs(&client, &account_key, &dns_server, &mut base_zone, &domains).await {
-            Ok(()) => edgerun_log::info!("ACME: certificates provisioned successfully"),
-            Err(e) => edgerun_log::error!("ACME: provisioning failed: {}", e),
+            Ok(()) => edgerun_node::node_info!("ACME: certificates provisioned successfully"),
+            Err(e) => edgerun_node::node_error!("ACME: provisioning failed: {}", e),
         }
 
         for _ in 0..72 {
@@ -769,7 +772,7 @@ async fn acme_loop(
         }
     }
 
-    edgerun_log::info!("ACME: loop shut down");
+    edgerun_node::node_info!("ACME: loop shut down");
 }
 
 struct ExistingCertInfo {
@@ -966,19 +969,7 @@ fn print_compiled_plan() -> ExitCode {
 // ===========================================================================
 
 fn main() -> ExitCode {
-    #[cfg(not(target_os = "none"))]
-    {
-        use std::io::Write;
-        edgerun_log::set_format_logger(|level, module, args| {
-            let mut stderr = std::io::stderr().lock();
-            let _ = writeln!(stderr, "[{}] {}: {}", level.as_str(), module, args);
-            let _ = stderr.flush();
-        });
-    }
-    #[cfg(target_os = "none")]
-    {
-        edgerun_node::rt::log::init_serial_logger();
-    }
+    edgerun_node::logging::install_stderr_logger();
 
     let (mode, _config_path) = parse_args();
 
@@ -989,7 +980,7 @@ fn main() -> ExitCode {
         Mode::Run => {}
     }
 
-    edgerun_log::info!(
+    edgerun_node::node_info!(
         "edgerun-server starting on {} with controller {}",
         DEPLOYMENT.hostname,
         hex_bytes(&DEPLOYMENT.policy.controller_id)
@@ -1002,7 +993,7 @@ fn main() -> ExitCode {
 
     rt.block_on(async {
         if let Err(e) = run_server().await {
-            edgerun_log::error!("server error: {}", e);
+            edgerun_node::node_error!("server error: {}", e);
             return ExitCode::FAILURE;
         }
         ExitCode::SUCCESS
@@ -1012,13 +1003,13 @@ fn main() -> ExitCode {
 async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let shutdown = CancellationToken::new();
     let bootstrap_identity = ensure_runtime_bootstrap(&DEPLOYMENT)?;
-    edgerun_log::info!(
+    edgerun_node::node_info!(
         "runtime bootstrap identity ready: node_id={}",
         hex_bytes(&bootstrap_identity.node_id)
     );
     let runtime_config = DEPLOYMENT.to_wire_config();
     let service_plan = RuntimeServicePlan::from_deployment(&runtime_config);
-    edgerun_log::info!(
+    edgerun_node::node_info!(
         "runtime service plan: listeners={} dns={} acme={} mail_domains={}",
         service_plan.listeners.len(),
         service_plan.requires_dns(),
@@ -1031,12 +1022,12 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let dkim_txt = dkim_signer.as_ref().map(|signer| signer.public_key_txt());
     let base_zone = build_dns_zone(&DEPLOYMENT, dkim_txt.as_deref());
-    edgerun_log::info!("DNS zone built for {}", DEPLOYMENT.origin);
+    edgerun_node::node_info!("DNS zone built for {}", DEPLOYMENT.origin);
 
     #[cfg(feature = "derived-db")]
     {
         host_derived_db::initialize(&DEPLOYMENT)?;
-        edgerun_log::info!("derived database ready at {}", DEPLOYMENT.derived_db_path);
+        edgerun_node::node_info!("derived database ready at {}", DEPLOYMENT.derived_db_path);
     }
 
     let dns_config = DnsServerConfig {
@@ -1062,7 +1053,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         starttls: tls_cert.is_some(),
         local_domains: DEPLOYMENT.local_mail_domains(),
         queue_data_root: Some(std::path::PathBuf::from(DEPLOYMENT.queue_data_root)),
-        relay_dns_server: "1.1.1.1:53".to_string(),
+        relay_dns_server: None,
         maildir_root: Some(std::path::PathBuf::from(DEPLOYMENT.maildir_root)),
         dkim_domain: dkim_signer
             .as_ref()
@@ -1100,13 +1091,13 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         })?;
 
     let http_task = edgerun_node::rt::spawn(async move {
-        edgerun_log::info!("HTTP serve task starting");
+        edgerun_node::node_info!("HTTP serve task starting");
         match http_server.serve().await {
-            Ok(()) => edgerun_log::info!("HTTP serve task stopped"),
-            Err(e) => edgerun_log::error!("HTTP serve task failed: {}", e),
+            Ok(()) => edgerun_node::node_info!("HTTP serve task stopped"),
+            Err(e) => edgerun_node::node_error!("HTTP serve task failed: {}", e),
         }
     });
-    edgerun_log::info!(
+    edgerun_node::node_info!(
         "HTTP serve task queued (finished: {}, pending: {}, runs: {})",
         http_task.is_finished(),
         edgerun_node::rt::pending(),
@@ -1124,7 +1115,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     let acme_account = load_or_create_acme_account(&DEPLOYMENT);
-    edgerun_log::info!("ACME account loaded: {}", acme_account.is_some());
+    edgerun_node::node_info!("ACME account loaded: {}", acme_account.is_some());
     if let Some(account_key) = acme_account {
         let acme_config = AcmeConfig {
             directory_url: edgerun_acme::DirectoryUrl::LetsEncrypt,
@@ -1137,11 +1128,14 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let shutdown_for_acme = shutdown.clone();
         let domains = DEPLOYMENT.certificate_domains();
         edgerun_node::rt::spawn(async move {
-            edgerun_log::info!("ACME: starting background init");
+            edgerun_node::node_info!("ACME: starting background init");
             let init_start = std::time::Instant::now();
             match acme_client.init().await {
                 Ok(()) => {
-                    edgerun_log::info!("ACME: directory fetched in {:?}", init_start.elapsed());
+                    edgerun_node::node_info!(
+                        "ACME: directory fetched in {:?}",
+                        init_start.elapsed()
+                    );
                     acme_loop(
                         acme_client,
                         account_key,
@@ -1153,7 +1147,11 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     .await;
                 }
                 Err(e) => {
-                    edgerun_log::warn!("ACME init failed after {:?}: {}", init_start.elapsed(), e)
+                    edgerun_node::node_warn!(
+                        "ACME init failed after {:?}: {}",
+                        init_start.elapsed(),
+                        e
+                    )
                 }
             }
         });
@@ -1165,7 +1163,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         shutdown_clone.cancel();
     });
 
-    edgerun_log::info!("All services started. Press Ctrl-C to stop.");
+    edgerun_node::node_info!("All services started. Press Ctrl-C to stop.");
 
     let _ = signal_task.await;
 
@@ -1175,7 +1173,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _ = http_task.await;
     let _ = dns_task.await;
 
-    edgerun_log::info!("edgerun-server stopped");
+    edgerun_node::node_info!("edgerun-server stopped");
     Ok(())
 }
 
@@ -1184,15 +1182,15 @@ fn load_or_create_acme_account(deployment: &CompiledDeployment) -> Option<Accoun
         match fs::read_to_string(deployment.acme_account_key_path) {
             Ok(pem) => match AccountKey::from_pem(&pem) {
                 Ok(key) => {
-                    edgerun_log::info!(
+                    edgerun_node::node_info!(
                         "ACME account key loaded from {}",
                         deployment.acme_account_key_path
                     );
                     return Some(key);
                 }
-                Err(e) => edgerun_log::warn!("Failed to parse ACME account key: {}", e),
+                Err(e) => edgerun_node::node_warn!("Failed to parse ACME account key: {}", e),
             },
-            Err(e) => edgerun_log::warn!("Failed to read ACME account key: {}", e),
+            Err(e) => edgerun_node::node_warn!("Failed to read ACME account key: {}", e),
         }
     }
 
@@ -1201,9 +1199,9 @@ fn load_or_create_acme_account(deployment: &CompiledDeployment) -> Option<Accoun
         fs::create_dir_all(parent).ok();
     }
     if let Err(e) = fs::write(deployment.acme_account_key_path, key.pem()) {
-        edgerun_log::warn!("Failed to save ACME account key: {}", e);
+        edgerun_node::node_warn!("Failed to save ACME account key: {}", e);
     } else {
-        edgerun_log::info!(
+        edgerun_node::node_info!(
             "ACME account key generated and saved to {}",
             deployment.acme_account_key_path
         );
@@ -1215,7 +1213,7 @@ fn load_or_create_acme_account(deployment: &CompiledDeployment) -> Option<Accoun
 async fn wait_for_signal() {
     let ctrl_c = edgerun_node::rt::ctrl_c();
     ctrl_c.await;
-    edgerun_log::info!("Received Ctrl-C, shutting down...");
+    edgerun_node::node_info!("Received Ctrl-C, shutting down...");
 }
 
 #[cfg(target_os = "none")]

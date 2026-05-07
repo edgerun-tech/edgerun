@@ -1,14 +1,14 @@
 //! Filesystem event-log backend.
 
 use crate::prelude::v1::*;
-use edgerun_core::protocol::EventEnvelope;
+use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use crate::core::{
-    canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
-    EventLocation, EventLog, ScannedEvent,
+    AppendReceipt, EventLocation, EventLog, ScannedEvent, canonical_event_hash, encode_event_frame,
+    validate_event_location,
 };
 use crate::error::StorageError;
 
@@ -76,7 +76,7 @@ impl EventLog for FsEventLog {
 }
 
 pub fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> Result<File, StorageError> {
-    let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+    let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
     let log_path = events_dir.join(format!("{stream_id_hex}.log"));
     if let Some(parent) = log_path.parent() {
         fs::create_dir_all(parent).map_err(StorageError::Io)?;
@@ -106,7 +106,7 @@ pub fn read_event_at(
     expected_seq: u64,
     file_offset: u64,
 ) -> Result<Option<EventEnvelope>, StorageError> {
-    let stream_id_hex = edgerun_core::util::bytes_to_hex(stream_id);
+    let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
     let log_path = events_dir.join(format!("{stream_id_hex}.log"));
     let mut file = File::open(&log_path)?;
     file.seek(SeekFrom::Start(file_offset))?;
@@ -123,7 +123,7 @@ pub fn read_event_at(
         return Err(StorageError::Decode(format!(
             "event stream mismatch at offset {file_offset}: expected {}, got {}",
             stream_id_hex,
-            edgerun_core::util::bytes_to_hex(&event.stream_id),
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
         )));
     }
     if event.seq != expected_seq {
@@ -154,7 +154,7 @@ pub fn scan_event_logs(events_dir: &Path) -> Result<Vec<ScannedEvent>, StorageEr
             .file_stem()
             .and_then(path_part_to_string)
             .unwrap_or_else(String::new);
-        let stream_id = match edgerun_core::util::hex_to_bytes(&stream_id_hex) {
+        let stream_id = match edgerun_protocols::core_protocol::util::hex_to_bytes(&stream_id_hex) {
             Ok(id) => id,
             Err(_) => continue,
         };
@@ -177,7 +177,7 @@ pub fn scan_event_logs(events_dir: &Path) -> Result<Vec<ScannedEvent>, StorageEr
                 return Err(StorageError::Decode(format!(
                     "event stream mismatch at offset {record_start}: expected {}, got {}",
                     stream_id_hex,
-                    edgerun_core::util::bytes_to_hex(&event.stream_id),
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
                 )));
             }
             let event_hash = canonical_event_hash(&event).value;
@@ -331,7 +331,7 @@ mod tests {
 
 fn decode_event_envelope_wire(
     bytes: &[u8],
-) -> Result<edgerun_core::protocol::EventEnvelope, StorageError> {
-    edgerun_core::wire_stream::decode_event_full_wire_bytes(bytes)
+) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, StorageError> {
+    edgerun_protocols::core_protocol::wire_stream::decode_event_full_wire_bytes(bytes)
         .map_err(|e| StorageError::Decode(e.to_string()))
 }

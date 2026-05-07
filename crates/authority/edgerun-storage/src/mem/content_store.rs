@@ -4,9 +4,9 @@ use crate::prelude::v1::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use edgerun_core::protocol::ObjectRef;
+use edgerun_protocols::core_protocol::protocol::ObjectRef;
 
-use crate::core::{cas::raw_object_ids, ContentStore, ObjectBytes};
+use crate::core::{ContentStore, ObjectBytes, cas::raw_object_ids};
 use crate::error::StorageError;
 
 #[derive(Clone, Debug)]
@@ -55,7 +55,8 @@ impl ContentStore for MemContentStore {
     }
 
     fn get_object(&self, object_ref: &ObjectRef) -> Result<Option<ObjectBytes>, StorageError> {
-        let object_id_hex = edgerun_core::util::bytes_to_hex(&object_ref.object_id);
+        let object_id_hex =
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&object_ref.object_id);
         let objects = self
             .objects
             .lock()
@@ -112,7 +113,7 @@ mod tests {
         let store = MemContentStore::new();
         let mut object_ref = store.put_object(b"mem payload", 7, &[]).unwrap();
         object_ref.object_id[0] ^= 0xff;
-        let bad_hex = edgerun_core::util::bytes_to_hex(&object_ref.object_id);
+        let bad_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&object_ref.object_id);
         store.objects.lock().unwrap().insert(
             bad_hex,
             MemObject {

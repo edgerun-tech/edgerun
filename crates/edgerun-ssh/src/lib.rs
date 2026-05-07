@@ -421,7 +421,7 @@ pub mod host {
     };
     use edgerun_crypto::{fill_random, sha256};
     use edgerun_encoding::base64::standard_decode;
-    use edgerun_sign::{Ed25519MessageSigner, MessageSigner};
+    use edgerun_protocols::sign::{Ed25519MessageSigner, MessageSigner};
     use std::io::{Read, Write};
     use std::net::{TcpStream, ToSocketAddrs};
     use std::path::Path;
@@ -909,7 +909,7 @@ pub mod host {
         if algorithm != b"ssh-ed25519" || signature.len() != 64 || cursor != signature_blob.len() {
             return Err(SshError::BadSignature);
         }
-        edgerun_verify::verify_ed25519_message(public_key, message, signature)
+        edgerun_protocols::verify::verify_ed25519_message(public_key, message, signature)
             .map_err(|_| SshError::BadSignature)
     }
 

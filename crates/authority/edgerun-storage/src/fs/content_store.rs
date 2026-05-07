@@ -1,11 +1,11 @@
 //! Filesystem content-addressed object backend.
 
 use crate::prelude::v1::*;
-use edgerun_core::protocol::ObjectRef;
+use edgerun_protocols::core_protocol::protocol::ObjectRef;
 use std::sync::Arc;
 
 use crate::blobs::BlobStore;
-use crate::core::{cas::raw_object_ids, ContentStore, ObjectBytes};
+use crate::core::{ContentStore, ObjectBytes, cas::raw_object_ids};
 use crate::error::StorageError;
 use crate::file_index::FileIndex;
 
@@ -34,15 +34,17 @@ impl ContentStore for FsContentStore {
         // Create the descriptor now to keep this backend responsible for the
         // logical object model. Persistence of descriptors can be added without
         // changing `NodeStore` callers.
-        let _descriptor = edgerun_core::protocol::LogicalObjectDescriptor {
+        let _descriptor = edgerun_protocols::core_protocol::protocol::LogicalObjectDescriptor {
             descriptor_version: 1,
             object_id: ids.object_id.clone(),
             object_kind,
             object_schema_version: 1,
             canonicalization_id: "raw-bytes-v0".into(),
-            canonical_digest: Some(edgerun_core::protocol::Digest {
+            canonical_digest: Some(edgerun_protocols::core_protocol::protocol::Digest {
                 algorithm: 1,
-                value: edgerun_core::crypto::sha256(content).to_vec().into(),
+                value: edgerun_protocols::core_protocol::crypto::sha256(content)
+                    .to_vec()
+                    .into(),
             }),
             canonical_size: content.len() as u64,
             created_at: Some(now_timestamp()),
@@ -62,7 +64,8 @@ impl ContentStore for FsContentStore {
     }
 
     fn get_object(&self, object_ref: &ObjectRef) -> Result<Option<ObjectBytes>, StorageError> {
-        let object_id_hex = edgerun_core::util::bytes_to_hex(&object_ref.object_id);
+        let object_id_hex =
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&object_ref.object_id);
 
         if !self.index.is_object_present(&object_id_hex)? {
             return Ok(None);
@@ -100,11 +103,11 @@ impl ContentStore for FsContentStore {
     }
 }
 
-fn now_timestamp() -> edgerun_core::protocol::Timestamp {
+fn now_timestamp() -> edgerun_protocols::core_protocol::protocol::Timestamp {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
-    edgerun_core::protocol::Timestamp {
+    edgerun_protocols::core_protocol::protocol::Timestamp {
         seconds: now.as_secs() as i64,
         nanos: now.subsec_nanos() as i32,
     }
@@ -170,13 +173,15 @@ mod tests {
         let object_ref = store
             .put_object(b"content-store payload", 1, &[vec![0x99; 32]])
             .unwrap();
-        let original_hex = edgerun_core::util::bytes_to_hex(&object_ref.object_id);
+        let original_hex =
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&object_ref.object_id);
         let indexed = store.index.lookup_objects(&[original_hex]).unwrap();
         let (_, representation_id, blob_id, _) = indexed.into_iter().next().unwrap();
 
         let mut bad_object_ref = object_ref;
         bad_object_ref.object_id[0] ^= 0xff;
-        let bad_hex = edgerun_core::util::bytes_to_hex(&bad_object_ref.object_id);
+        let bad_hex =
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&bad_object_ref.object_id);
         store
             .index
             .mark_object_present(

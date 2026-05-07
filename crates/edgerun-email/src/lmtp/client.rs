@@ -22,7 +22,7 @@ use std::io;
 
 use crate::rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, ConnectFuture};
 
-use crate::smtp::types::{SmtpResponse, SmtpResponseCode};
+use crate::smtp::types::{parse_response_line, parse_response_lines, SmtpResponse};
 
 /// Async LMTP client.
 pub struct LmtpClient {
@@ -193,29 +193,11 @@ impl LmtpClient {
             }
         };
 
-        if line.len() < 4 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "malformed response",
-            ));
-        }
+        let first = parse_response_line(&line)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
 
-        let code_str = &line[..3];
-        let code = code_str
-            .parse::<u16>()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-        let is_multiline = line.as_bytes().get(3) == Some(&b'-');
-        let message = line[4..].to_string();
-
-        let digit1 = (code / 100) as u8;
-        let digit2 = ((code / 10) % 10) as u8;
-        let digit3 = (code % 10) as u8;
-
-        let response_code = SmtpResponseCode::new(digit1, digit2, digit3);
-
-        if is_multiline {
-            let mut all_lines = vec![message.clone()];
+        if first.continued {
+            let mut all_lines = vec![line];
             loop {
                 let next_line = self.read_line().await?;
                 let next_line = match next_line {
@@ -227,16 +209,20 @@ impl LmtpClient {
                         ));
                     }
                 };
-                let is_final = next_line.as_bytes().get(3) != Some(&b'-');
-                all_lines.push(next_line[4..].to_string());
+                let parsed = parse_response_line(&next_line)
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+                let is_final = !parsed.continued;
+                all_lines.push(next_line);
                 if is_final {
                     break;
                 }
             }
-            return Ok(SmtpResponse::multiline(response_code, all_lines));
+            return parse_response_lines(&all_lines)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()));
         }
 
-        Ok(SmtpResponse::new(response_code, message))
+        parse_response_lines(&[line])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
     }
 
     async fn send_command(&mut self, command: &str) -> io::Result<SmtpResponse> {

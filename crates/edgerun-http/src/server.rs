@@ -14,8 +14,8 @@ use crate::header::HeaderMap;
 use crate::http2::frame::{flags, Frame, FrameType};
 use crate::http2::headers::{validate_header_name_case, validate_request_headers};
 use crate::http2::hpack::{Decoder, Encoder};
-use crate::http2::{FrameAction, Http2Server};
 use crate::http2::ErrorCode;
+use crate::http2::{FrameAction, Http2Server};
 use crate::method::Method;
 use crate::runtime::net::SocketAddr;
 use crate::runtime::sync::Arc;
@@ -98,6 +98,13 @@ impl HttpServer {
         addr: impl crate::runtime::net::ToSocketAddrs,
     ) -> crate::runtime::io::Result<BoundHttpServer> {
         let listener = bind_tcp_listener(addr)?;
+        self.bind_listener(listener).await
+    }
+
+    pub async fn bind_listener(
+        self,
+        listener: AsyncTcpListener,
+    ) -> crate::runtime::io::Result<BoundHttpServer> {
         let local_addr = listener
             .local_addr()
             .map_err(crate::runtime::io::Error::other)?;

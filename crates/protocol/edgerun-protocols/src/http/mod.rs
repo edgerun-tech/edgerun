@@ -4,6 +4,7 @@
 //! and transfer-coding helpers. It does not own sockets, TLS, request routing,
 //! pools, servers, or clients.
 
+pub mod auth;
 pub mod chunked;
 pub mod header;
 pub mod http1;
@@ -15,6 +16,7 @@ pub mod method;
 pub mod status;
 pub mod uri;
 
+pub use auth::parse_bearer_auth;
 pub use chunked::{
     has_chunked_transfer_coding, parse_body, parse_body_with_trailers, ChunkedError,
 };

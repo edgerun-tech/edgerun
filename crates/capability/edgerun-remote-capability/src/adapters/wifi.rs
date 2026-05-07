@@ -4,16 +4,18 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
-use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
-use edgerun_wifi::{
-    WifiController, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState,
-    WifiScanResult, WifiScanner,
+use edgerun_protocols::core_protocol::protocol::capability::{
+    CapabilityInvocation, CapabilityResult,
 };
-use edgerun_wire::{
+use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilitySessionEvent;
+use edgerun_protocols::wire::{
     RemoteWifiInterfaceInfo as WifiInterfaceInfoWire,
     RemoteWifiNetworkObservation as WifiNetworkObservationWire,
     RemoteWifiScanResult as WifiScanResultWire,
+};
+use edgerun_wifi::{
+    WifiController, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState,
+    WifiScanResult, WifiScanner,
 };
 
 use crate::adapters::common::stream_oriented_error;
@@ -87,15 +89,18 @@ pub fn encode_wifi_scan_result(scan: &WifiScanResult) -> Vec<u8> {
             })
             .collect(),
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("wifi scan result must serialize through rkyv")
         .into_vec()
 }
 
 pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<WifiScanResultWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| CapabilityError::InvalidRequest("remote wifi scan payload is not rkyv"))?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        WifiScanResultWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote wifi scan payload is not rkyv"))?;
     Ok(WifiScanResult {
         observations: wire
             .observations
@@ -123,15 +128,18 @@ pub fn encode_wifi_interface_info(info: &WifiInterfaceInfo) -> Vec<u8> {
         power_state: wifi_power_state_to_u8(info.power_state),
         mode: wifi_interface_mode_to_u8(info.mode),
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("wifi interface info must serialize through rkyv")
         .into_vec()
 }
 
 pub fn decode_wifi_interface_info(bytes: &[u8]) -> Result<WifiInterfaceInfo, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<WifiInterfaceInfoWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| {
+    let wire = edgerun_protocols::wire::from_bytes::<
+        WifiInterfaceInfoWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| {
         CapabilityError::InvalidRequest("remote wifi interface info payload is not rkyv")
     })?;
     Ok(WifiInterfaceInfo {

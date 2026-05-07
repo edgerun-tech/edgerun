@@ -162,9 +162,7 @@ pub fn parse_bootstrap_peers(entries: &[String]) -> Vec<BootstrapPeer> {
                     node_id_hex: parts[1].to_string(),
                 })
             } else {
-                edgerun_log::warn!(
-                    "invalid bootstrap peer format (expected host:port@node_id_hex)"
-                );
+                crate::node_warn!("invalid bootstrap peer format (expected host:port@node_id_hex)");
                 None
             }
         })
@@ -175,10 +173,11 @@ pub fn extract_private_key_bytes(config: &NodeConfig) -> Vec<u8> {
     if let Some(ref signer) = config.signer {
         if signer.signer_type == "software" {
             if let Some(ref hex_str) = signer.private_key_hex {
-                return edgerun_core::util::hex_to_bytes(hex_str.trim()).unwrap_or_else(|_| {
-                    eprintln!("error: invalid private key hex");
-                    std::process::exit(1);
-                });
+                return edgerun_protocols::core_protocol::util::hex_to_bytes(hex_str.trim())
+                    .unwrap_or_else(|_| {
+                        eprintln!("error: invalid private key hex");
+                        std::process::exit(1);
+                    });
             }
         } else if signer.signer_type == "tpm" || signer.signer_type == "yubikey" {
             return Vec::new();

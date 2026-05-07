@@ -35,31 +35,64 @@ use alloc::vec::Vec;
 use core::fmt;
 pub use edgerun_rt as rt;
 
-pub mod alert;
+pub mod alert {
+    pub use edgerun_protocols::tls::alert::*;
+}
 pub mod async_tls;
-pub mod certificate;
-pub mod certificate_gen;
-pub mod cipher;
+pub mod certificate {
+    pub use edgerun_protocols::tls::certificate::*;
+}
+pub mod certificate_gen {
+    pub use edgerun_protocols::tls::certificate_gen::*;
+}
+pub mod cipher {
+    pub use edgerun_protocols::tls::cipher::*;
+}
 pub mod compat;
-pub mod handshake;
-pub mod key_exchange;
-pub mod name_match;
-pub mod prf;
-pub mod record;
-pub mod server;
+pub mod handshake {
+    pub use edgerun_protocols::tls::handshake::*;
+}
+pub mod key_exchange {
+    pub use edgerun_protocols::tls::key_exchange::*;
+}
+pub mod name_match {
+    pub use edgerun_protocols::tls::name_match::*;
+}
+pub mod prf {
+    pub use edgerun_protocols::tls::prf::*;
+}
+pub mod record {
+    pub use edgerun_protocols::tls::record::*;
+}
+pub mod server {
+    pub mod client_hello {
+        pub use edgerun_protocols::tls::server::client_hello::*;
+    }
+    pub mod message_builder {
+        pub use edgerun_protocols::tls::server::message_builder::*;
+    }
+
+    pub use client_hello::ClientHello;
+    pub use message_builder::{
+        build_certificate_message, build_certificate_verify, build_encrypted_extensions,
+        build_finished_message, build_server_hello,
+    };
+}
 pub mod session_cache;
 pub mod std;
-pub mod tls_alpn;
+pub mod tls_alpn {
+    pub use edgerun_protocols::tls::tls_alpn::*;
+}
 
 pub use async_tls::{AsyncTlsServerStream, AsyncTlsStream};
 pub use compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub use name_match::{normalize_tls_dns_name, tls_dns_name_matches};
-pub use session_cache::{parse_new_session_ticket, SessionCache, SessionTicket};
+pub use session_cache::{SessionCache, SessionTicket, parse_new_session_ticket};
 
 pub use alert::{Alert, AlertLevel};
 pub use certificate_gen::{
-    cert_from_pem, generate_csr, generate_self_signed, generate_self_signed_pem,
-    signing_key_from_pem, signing_key_to_pem, CertificateAndKey,
+    CertificateAndKey, cert_from_pem, generate_csr, generate_self_signed, generate_self_signed_pem,
+    signing_key_from_pem, signing_key_to_pem,
 };
 pub use tls_alpn::ACME_TLS_ALPN_PROTOCOL;
 
@@ -111,13 +144,17 @@ impl From<edgerun_protocols::tls::TlsError> for TlsError {
             edgerun_protocols::tls::TlsError::HandshakeFailure(message) => {
                 TlsError::HandshakeFailure(message)
             }
-            edgerun_protocols::tls::TlsError::Certificate(message) => TlsError::Certificate(message),
+            edgerun_protocols::tls::TlsError::Certificate(message) => {
+                TlsError::Certificate(message)
+            }
             edgerun_protocols::tls::TlsError::Cipher(message) => TlsError::Cipher(message),
             edgerun_protocols::tls::TlsError::Alert(level, alert) => TlsError::Alert(level, alert),
             edgerun_protocols::tls::TlsError::HelloRetryRequest(group, cookie) => {
                 TlsError::HelloRetryRequest(group, cookie)
             }
-            edgerun_protocols::tls::TlsError::Io(message) => TlsError::Io(std::io::Error::other(message)),
+            edgerun_protocols::tls::TlsError::Io(message) => {
+                TlsError::Io(std::io::Error::other(message))
+            }
         }
     }
 }

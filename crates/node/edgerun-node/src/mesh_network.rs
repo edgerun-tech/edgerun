@@ -78,7 +78,7 @@ impl MeshNetwork {
         &mut self,
         from: &NodeID,
         to: &NodeID,
-        command: &edgerun_core::protocol::CommandEnvelope,
+        command: &edgerun_protocols::core_protocol::protocol::CommandEnvelope,
     ) -> Result<(), String> {
         let node = self.get_node_mut(from).ok_or("source node not found")?;
         node.send_command(*to, command);
@@ -96,11 +96,11 @@ impl MeshNetwork {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_core::protocol::{CommandEnvelope, IdentityRef, NodeRef};
     use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
-    use edgerun_keygen::generate_node_signing_key;
     use edgerun_mesh::EventType;
+    use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, IdentityRef, NodeRef};
+    use edgerun_protocols::keygen::generate_node_signing_key;
 
     use crate::signer::SyncSoftwareSigner as TestSigner;
 

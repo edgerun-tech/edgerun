@@ -4,12 +4,14 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
-use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_display::{
-    validate_display_update_request, DisplayContentKind, DisplayDevice, DisplayInfo, DisplayMode,
-    DisplayUpdateRequest,
+    DisplayContentKind, DisplayDevice, DisplayInfo, DisplayMode, DisplayUpdateRequest,
+    validate_display_update_request,
 };
-use edgerun_wire::{
+use edgerun_protocols::core_protocol::protocol::capability::{
+    CapabilityInvocation, CapabilityResult,
+};
+use edgerun_protocols::wire::{
     RemoteDisplayInfo as DisplayInfoWire, RemoteDisplayMode as DisplayModeWire,
     RemoteDisplayUpdateRequest as DisplayUpdateRequestWire,
 };
@@ -71,7 +73,7 @@ pub fn encode_display_info(info: &DisplayInfo) -> Vec<u8> {
         hdr_capable: info.hdr_capable,
         touch_capable: info.touch_capable,
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("display info must serialize through rkyv")
         .into_vec()
 }
@@ -79,8 +81,11 @@ pub fn encode_display_info(info: &DisplayInfo) -> Vec<u8> {
 /// Rkyv-decode display information from remote transport.
 pub fn decode_display_info(bytes: &[u8]) -> Result<DisplayInfo, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<DisplayInfoWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| CapabilityError::InvalidRequest("remote display info is not rkyv"))?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        DisplayInfoWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote display info is not rkyv"))?;
     Ok(DisplayInfo {
         provider: wire.provider,
         display_name: wire.display_name,
@@ -102,7 +107,7 @@ pub fn encode_display_update_request(request: &DisplayUpdateRequest) -> Vec<u8> 
         height: request.height,
         refresh_millihz: request.refresh_millihz,
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("display update request must serialize through rkyv")
         .into_vec()
 }
@@ -112,9 +117,11 @@ pub fn decode_display_update_request(
     bytes: &[u8],
 ) -> Result<DisplayUpdateRequest, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire =
-        edgerun_wire::from_bytes::<DisplayUpdateRequestWire, edgerun_wire::WireError>(&owned)
-            .map_err(|_| CapabilityError::InvalidRequest("remote display update is not rkyv"))?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        DisplayUpdateRequestWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote display update is not rkyv"))?;
     let request = DisplayUpdateRequest {
         content_kind: content_kind_from_u32(wire.content_kind),
         width: wire.width,

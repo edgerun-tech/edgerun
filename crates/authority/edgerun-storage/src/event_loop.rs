@@ -10,17 +10,17 @@
 
 use crate::prelude::v1::*;
 
-use edgerun_core::protocol::EventEnvelope;
+use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::thread::JoinHandle;
 
 use crate::error::StorageError;
 use crate::file_index::FileIndex;
 use crate::fs::{open_stream_file, write_event_to_file};
-use crate::materializer::{materialize_event_to_index, OpEventType};
+use crate::materializer::{OpEventType, materialize_event_to_index};
 
 // ---------------------------------------------------------------------------
 // Event submission
@@ -257,7 +257,8 @@ impl EventHandler for FetchHandler {
     fn handle(&self, event: &EventEnvelope, ctx: &DispatchContext) -> Result<(), StorageError> {
         if event.event_type == OpEventType::FetchRequested.as_i32() {
             if let Some(payload) = &event.payload_object {
-                let target_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                let target_id =
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&payload.object_id);
                 let _ = ctx.index.enqueue_fetch("object", &target_id, 0);
             }
         }
@@ -270,7 +271,8 @@ impl EventHandler for PeerDiscoveryHandler {
     fn handle(&self, event: &EventEnvelope, ctx: &DispatchContext) -> Result<(), StorageError> {
         if event.event_type == OpEventType::PeerDiscovered.as_i32() {
             if let Some(payload) = &event.payload_object {
-                let node_id = edgerun_core::util::bytes_to_hex(&payload.object_id);
+                let node_id =
+                    edgerun_protocols::core_protocol::util::bytes_to_hex(&payload.object_id);
                 ctx.index.upsert_peer(&node_id, None, "discovered", false)?;
             }
         }

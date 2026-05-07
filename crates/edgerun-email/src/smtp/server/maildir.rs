@@ -443,7 +443,7 @@ impl MailHandler for MaildirStore {
     fn on_mail_received(
         &self,
         _envelope: &MailEnvelope,
-        _auth_results: &edgerun_email_auth::AuthenticationResults,
+        _auth_results: &edgerun_protocols::email_auth::AuthenticationResults,
     ) {
         // Logged by the SMTP server; no additional action needed
     }

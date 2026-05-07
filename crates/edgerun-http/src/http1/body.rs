@@ -374,7 +374,7 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                             match pinned.poll_read(cx, &mut byte) {
                                 Poll::Ready(Ok(n)) => n,
                                 Poll::Ready(Err(e)) => {
-                                    return Poll::Ready(Err(crate::runtime::bare_io(e)))
+                                    return Poll::Ready(Err(crate::runtime::bare_io(e)));
                                 }
                                 Poll::Pending => return Poll::Pending,
                             }
@@ -429,7 +429,7 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                         match pinned.poll_read(cx, &mut self.buf[..to_read]) {
                             Poll::Ready(Ok(n)) => n,
                             Poll::Ready(Err(e)) => {
-                                return Poll::Ready(Err(crate::runtime::bare_io(e)))
+                                return Poll::Ready(Err(crate::runtime::bare_io(e)));
                             }
                             Poll::Pending => return Poll::Pending,
                         }
@@ -454,7 +454,7 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                         match pinned.poll_read(cx, &mut crlf_buf) {
                             Poll::Ready(Ok(n)) => n,
                             Poll::Ready(Err(e)) => {
-                                return Poll::Ready(Err(crate::runtime::bare_io(e)))
+                                return Poll::Ready(Err(crate::runtime::bare_io(e)));
                             }
                             Poll::Pending => return Poll::Pending,
                         }
@@ -479,7 +479,7 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                             match pinned.poll_read(cx, &mut byte) {
                                 Poll::Ready(Ok(n)) => n,
                                 Poll::Ready(Err(e)) => {
-                                    return Poll::Ready(Err(crate::runtime::bare_io(e)))
+                                    return Poll::Ready(Err(crate::runtime::bare_io(e)));
                                 }
                                 Poll::Pending => return Poll::Pending,
                             }

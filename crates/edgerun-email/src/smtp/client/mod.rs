@@ -2,7 +2,7 @@
 
 pub mod builder;
 
-pub use builder::{EmailBuilder, MimePart};
+pub use edgerun_protocols::smtp::{EmailBuilder, MimePart};
 
 use crate::prelude::*;
 use std::collections::HashMap;
@@ -17,7 +17,8 @@ use crate::rt::{
 };
 
 use crate::server::read_line;
-use crate::smtp::types::{SmtpResponse, SmtpResponseCode};
+use crate::smtp::types::{parse_response_line, parse_response_lines, SmtpResponse};
+use edgerun_protocols::smtp::dot_stuffed_data;
 
 #[cfg(feature = "tls")]
 use edgerun_tls::AsyncTlsStream;
@@ -284,29 +285,11 @@ impl SmtpClient {
             }
         };
 
-        if line.len() < 4 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "malformed response",
-            ));
-        }
+        let first = parse_response_line(&line)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
 
-        let code_str = &line[..3];
-        let code = code_str
-            .parse::<u16>()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-        let is_multiline = line.as_bytes().get(3) == Some(&b'-');
-        let message = line[4..].to_string();
-
-        let digit1 = (code / 100) as u8;
-        let digit2 = ((code / 10) % 10) as u8;
-        let digit3 = (code % 10) as u8;
-
-        let response_code = SmtpResponseCode::new(digit1, digit2, digit3);
-
-        if is_multiline {
-            let mut all_lines = vec![message.clone()];
+        if first.continued {
+            let mut all_lines = vec![line];
             loop {
                 let next_line = read_line(&mut self.transport).await?;
                 let next_line = match next_line {
@@ -318,16 +301,20 @@ impl SmtpClient {
                         ));
                     }
                 };
-                let is_final = next_line.as_bytes().get(3) != Some(&b'-');
-                all_lines.push(next_line[4..].to_string());
+                let parsed = parse_response_line(&next_line)
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+                let is_final = !parsed.continued;
+                all_lines.push(next_line);
                 if is_final {
                     break;
                 }
             }
-            return Ok(SmtpResponse::multiline(response_code, all_lines));
+            return parse_response_lines(&all_lines)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()));
         }
 
-        Ok(SmtpResponse::new(response_code, message))
+        parse_response_lines(&[line])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
     }
 
     /// Send a command and read the response.
@@ -591,20 +578,4 @@ impl SmtpClient {
             .and_then(|s| s.as_ref())
             .and_then(|s| s.parse().ok())
     }
-}
-
-fn dot_stuffed_data(message: &[u8]) -> Vec<u8> {
-    let text = String::from_utf8_lossy(message)
-        .replace("\r\n", "\n")
-        .replace('\r', "\n");
-    let mut out = Vec::with_capacity(message.len() + 8);
-    for line in text.split('\n') {
-        if line.starts_with('.') {
-            out.push(b'.');
-        }
-        out.extend_from_slice(line.as_bytes());
-        out.extend_from_slice(b"\r\n");
-    }
-    out.extend_from_slice(b".\r\n");
-    out
 }

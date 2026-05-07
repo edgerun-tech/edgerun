@@ -4,11 +4,11 @@ use crate::prelude::v1::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
-use edgerun_core::protocol::EventEnvelope;
+use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 
 use crate::core::{
-    canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
-    EventLocation, EventLog, ScannedEvent,
+    AppendReceipt, EventLocation, EventLog, ScannedEvent, canonical_event_hash, encode_event_frame,
+    validate_event_location,
 };
 use crate::error::StorageError;
 

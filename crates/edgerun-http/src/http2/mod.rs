@@ -8,14 +8,26 @@ use core::fmt;
 
 pub mod client;
 pub mod connection;
-pub mod flow_control;
-pub mod frame;
-pub mod headers;
-pub mod hpack;
+pub mod flow_control {
+    pub use edgerun_protocols::http::http2::flow_control::*;
+}
+pub mod frame {
+    pub use edgerun_protocols::http::http2::frame::*;
+}
+pub mod headers {
+    pub use edgerun_protocols::http::http2::headers::*;
+}
+pub mod hpack {
+    pub use edgerun_protocols::http::http2::hpack::*;
+}
 #[cfg(feature = "tls")]
 pub mod pool;
-pub mod settings;
-pub mod stream;
+pub mod settings {
+    pub use edgerun_protocols::http::http2::settings::*;
+}
+pub mod stream {
+    pub use edgerun_protocols::http::http2::stream::*;
+}
 
 // #[cfg(test)]
 // mod connection_conformance;
@@ -24,13 +36,13 @@ pub mod stream;
 
 pub use client::{AsyncClient, HttpResponse, PendingRequest};
 pub use connection::Connection;
+pub use edgerun_protocols::http::http2::server::{FrameAction, Http2Server};
 pub use flow_control::FlowController;
 pub use frame::{Frame, FrameType};
 pub use headers::{validate_header_name_case, validate_request_headers};
 pub use hpack::{Decoder, Encoder};
 pub use settings::Settings;
 pub use stream::Stream;
-pub use edgerun_protocols::http::http2::server::{FrameAction, Http2Server};
 
 /// HTTP/2 error types
 #[derive(Debug)]

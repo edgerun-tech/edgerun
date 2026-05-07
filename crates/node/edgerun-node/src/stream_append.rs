@@ -8,7 +8,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_sign::ProtocolSigner;
+use edgerun_protocols::sign::ProtocolSigner;
 use edgerun_storage::NodeStore;
 
 use crate::protocol_signer::BorrowedMeshProtocolSigner;
@@ -17,12 +17,12 @@ pub fn append_command_stream_event(
     store: &NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
-    event_type: edgerun_core::protocol::EventType,
+    event_type: edgerun_protocols::core_protocol::protocol::EventType,
     event_version: u32,
-    payload_object: Option<edgerun_core::protocol::ObjectRef>,
-    related_commands: Vec<edgerun_core::protocol::CommandRef>,
-    related_delegations: Vec<edgerun_core::protocol::DelegationRef>,
-    related_revocations: Vec<edgerun_core::protocol::RevocationRef>,
+    payload_object: Option<edgerun_protocols::core_protocol::protocol::ObjectRef>,
+    related_commands: Vec<edgerun_protocols::core_protocol::protocol::CommandRef>,
+    related_delegations: Vec<edgerun_protocols::core_protocol::protocol::DelegationRef>,
+    related_revocations: Vec<edgerun_protocols::core_protocol::protocol::RevocationRef>,
 ) -> Option<u64> {
     let event = append_signed_stream_event_blocking(
         store,
@@ -31,7 +31,7 @@ pub fn append_command_stream_event(
         edgerun_stream::EventDraft {
             event_type: event_type as i32,
             event_version,
-            recorded_at: Some(edgerun_core::util::now_protocol_timestamp()),
+            recorded_at: Some(edgerun_protocols::core_protocol::util::now_protocol_timestamp()),
             payload_object,
             related_commands,
             related_delegations,
@@ -40,7 +40,7 @@ pub fn append_command_stream_event(
         },
     )
     .map_err(|e| {
-        edgerun_log::warn!("failed to append command stream event: {e}");
+        crate::node_warn!("failed to append command stream event: {e}");
         e
     })
     .ok()?;
@@ -52,7 +52,7 @@ pub fn append_signed_stream_event_blocking(
     stream_id: &[u8],
     signer: &dyn MeshSigner,
     draft: edgerun_stream::EventDraft,
-) -> Result<edgerun_core::protocol::EventEnvelope, String> {
+) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, String> {
     append_signed_stream_event_blocking_with_protocol_signer(
         store,
         stream_id,
@@ -66,7 +66,7 @@ pub fn append_signed_stream_event_blocking_with_protocol_signer(
     stream_id: &[u8],
     signer: &(impl ProtocolSigner + ?Sized),
     draft: edgerun_stream::EventDraft,
-) -> Result<edgerun_core::protocol::EventEnvelope, String> {
+) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, String> {
     let previous = load_stream_head_event(store, stream_id)?;
     let stream_id = stream_id_array(stream_id)?;
     let event = edgerun_stream::build_signed_event(&stream_id, previous.as_ref(), draft, signer)
@@ -82,7 +82,7 @@ pub async fn append_signed_stream_event(
     stream_id: &[u8],
     signer: &dyn MeshSigner,
     draft: edgerun_stream::EventDraft,
-) -> Result<edgerun_core::protocol::EventEnvelope, String> {
+) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, String> {
     append_signed_stream_event_with_protocol_signer(
         store,
         stream_id,
@@ -97,7 +97,7 @@ pub async fn append_signed_stream_event_with_protocol_signer(
     stream_id: &[u8],
     signer: &(impl ProtocolSigner + ?Sized),
     draft: edgerun_stream::EventDraft,
-) -> Result<edgerun_core::protocol::EventEnvelope, String> {
+) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, String> {
     let previous = load_stream_head_event(store, stream_id)?;
     let stream_id = stream_id_array(stream_id)?;
     let event = edgerun_stream::build_signed_event(&stream_id, previous.as_ref(), draft, signer)
@@ -112,7 +112,7 @@ pub async fn append_signed_stream_event_with_protocol_signer(
 fn load_stream_head_event(
     store: &NodeStore,
     stream_id: &[u8],
-) -> Result<Option<edgerun_core::protocol::EventEnvelope>, String> {
+) -> Result<Option<edgerun_protocols::core_protocol::protocol::EventEnvelope>, String> {
     let Some((head_seq, _head_hash)) = store
         .get_head(stream_id)
         .map_err(|e| format!("stream_head_load_failed: {e}"))?

@@ -8,7 +8,7 @@ extern crate alloc;
 use crate::policy::RoutingPolicy;
 use crate::provider::{ExchangeProvider, ProviderContext, ProviderQuote};
 use alloc::vec::Vec;
-use edgerun_core::protocol::edgerun_wallet_v0::{FeeBreakdown, QuoteRequest};
+use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{FeeBreakdown, QuoteRequest};
 use edgerun_wallet::WalletError;
 
 /// Result of routing a quote request.

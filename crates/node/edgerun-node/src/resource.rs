@@ -5,7 +5,7 @@
 
 use alloc::vec::Vec;
 
-use edgerun_wire::RuntimeProtocolBinding;
+use edgerun_protocols::wire::RuntimeProtocolBinding;
 
 /// Transport surface available to this node runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

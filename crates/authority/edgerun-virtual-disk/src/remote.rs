@@ -9,11 +9,12 @@ use core::{debug_assert_eq, fmt, write};
 use edgerun_encoding::byteorder::read_u32_le;
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_encoding::io::{self, Read, Write};
-#[cfg(any(target_os = "none", target_arch = "wasm32"))]
-use edgerun_rt::Mutex;
-use edgerun_wire::{
+use edgerun_protocols::wire as edgerun_wire;
+use edgerun_protocols::wire::{
     RemoteBlockDeviceInfo, RemoteBlockError, RemoteBlockRequest, RemoteBlockResponse, WireError,
 };
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
+use edgerun_rt::Mutex;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::io::{self, Read, Write};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]

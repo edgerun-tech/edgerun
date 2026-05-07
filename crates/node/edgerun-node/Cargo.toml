@@ -31,8 +31,8 @@ default = [
 protocols = ["tls", "quic", "tftp", "acme"]
 exchange-events = ["dep:edgerun-exchange"]
 tls = ["dep:edgerun-tls"]
-quic = ["dep:edgerun-protocols", "edgerun-protocols/quic", "tls"]
-tftp = ["dep:edgerun-protocols", "edgerun-protocols/tftp"]
+quic = ["edgerun-protocols/quic", "tls"]
+tftp = ["edgerun-protocols/tftp"]
 acme = ["dep:edgerun-acme"]
 service-suite = [
     "http",
@@ -58,12 +58,12 @@ http = [
     "edgerun-http/connection-middleware",
 ]
 https = ["http", "tls", "edgerun-http/tls"]
-dns = ["dep:edgerun-protocols", "edgerun-protocols/dns"]
-dhcp = ["dep:edgerun-protocols", "edgerun-protocols/dhcp"]
+dns = ["edgerun-protocols/dns"]
+dhcp = ["edgerun-protocols/dhcp"]
 smtp = ["http", "dep:edgerun-email", "edgerun-email/tls", "edgerun-email/dkim"]
 imap = ["http", "dep:edgerun-email", "edgerun-email/tls"]
 lmtp = ["dep:edgerun-email"]
-proxy = ["dep:edgerun-protocols", "edgerun-protocols/proxy"]
+proxy = ["edgerun-protocols/proxy"]
 derived-db = ["http", "dep:edgerun-derived-db"]
 android-keystore = ["dep:edgerun-android-keystore"]
 oci = [
@@ -113,17 +113,11 @@ all-hardware = [
 ]
 
 [dependencies]
-edgerun-core = { version = "0.1", path = "../../protocol/edgerun-core" }
-edgerun-wire = { workspace = true }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 edgerun-capability-policy = { version = "0.1", path = "../../capability/edgerun-capability-policy" }
 edgerun-stream = { version = "0.1", path = "../../authority/edgerun-stream" }
 edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage" }
-edgerun-sign = { version = "0.1", path = "../../protocol/edgerun-sign" }
-edgerun-sign-p256 = { workspace = true }
-edgerun-keygen = { workspace = true }
-edgerun-seal = { workspace = true }
 edgerun-remote-capability = { version = "0.1", path = "../../capability/edgerun-remote-capability" }
 edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link" }
@@ -136,12 +130,11 @@ edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
 edgerun-email = { workspace = true, optional = true }
-edgerun-email-auth = { version = "0.1", path = "../../edgerun-email-auth" }
 edgerun-url = { workspace = true }
 edgerun-tls = { workspace = true, optional = true }
 edgerun-acme = { workspace = true, features = ["dns_challenge"], optional = true }
 edgerun-http = { workspace = true, optional = true }
-edgerun-protocols = { workspace = true, optional = true }
+edgerun-protocols = { workspace = true, features = ["sign-p256", "keygen", "seal", "core", "wire"] }
 edgerun-derived-db = { workspace = true, features = ["std"], optional = true }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", features = ["std"], optional = true }
 

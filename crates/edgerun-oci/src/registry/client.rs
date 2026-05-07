@@ -18,7 +18,7 @@ use super::trust::ImageTrustPolicy;
 use edgerun_encoding::percent::{
     percent_encode, percent_encode_colon_pair, percent_encode_path_segments,
 };
-use edgerun_http::auth::parse_bearer_auth;
+use edgerun_protocols::http::parse_bearer_auth;
 
 #[derive(Debug, Clone)]
 struct RegistryTokenResponse {

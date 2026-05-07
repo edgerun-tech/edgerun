@@ -7,9 +7,11 @@ use edgerun_bluetooth::{
     BluetoothScanner, BluetoothTransportKind,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
-use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
-use edgerun_wire::{
+use edgerun_protocols::core_protocol::protocol::capability::{
+    CapabilityInvocation, CapabilityResult,
+};
+use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilitySessionEvent;
+use edgerun_protocols::wire::{
     RemoteBluetoothBeaconObservation as BluetoothBeaconObservationWire,
     RemoteBluetoothConnectionInfo as BluetoothConnectionInfoWire,
     RemoteBluetoothConnections as BluetoothConnectionsWire,
@@ -156,17 +158,18 @@ pub fn encode_bluetooth_scan_result(scan: &BluetoothScanResult) -> Vec<u8> {
             })
             .collect(),
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("bluetooth scan result must serialize through rkyv")
         .into_vec()
 }
 
 pub fn decode_bluetooth_scan_result(bytes: &[u8]) -> Result<BluetoothScanResult, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire = edgerun_wire::from_bytes::<BluetoothScanResultWire, edgerun_wire::WireError>(&owned)
-        .map_err(|_| {
-            CapabilityError::InvalidRequest("remote bluetooth scan payload is not rkyv")
-        })?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        BluetoothScanResultWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| CapabilityError::InvalidRequest("remote bluetooth scan payload is not rkyv"))?;
     let mut observations = Vec::with_capacity(wire.observations.len());
     for observation in wire.observations {
         observations.push(BluetoothBeaconObservation {
@@ -214,7 +217,7 @@ pub fn encode_bluetooth_connections(connections: &[BluetoothConnectionInfo]) -> 
             })
             .collect(),
     };
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&wire)
         .expect("bluetooth connections must serialize through rkyv")
         .into_vec()
 }
@@ -223,11 +226,13 @@ pub fn decode_bluetooth_connections(
     bytes: &[u8],
 ) -> Result<Vec<BluetoothConnectionInfo>, CapabilityError> {
     let owned = bytes.to_vec();
-    let wire =
-        edgerun_wire::from_bytes::<BluetoothConnectionsWire, edgerun_wire::WireError>(&owned)
-            .map_err(|_| {
-                CapabilityError::InvalidRequest("remote bluetooth connections payload is not rkyv")
-            })?;
+    let wire = edgerun_protocols::wire::from_bytes::<
+        BluetoothConnectionsWire,
+        edgerun_protocols::wire::WireError,
+    >(&owned)
+    .map_err(|_| {
+        CapabilityError::InvalidRequest("remote bluetooth connections payload is not rkyv")
+    })?;
     let mut out = Vec::with_capacity(wire.connections.len());
     for connection in wire.connections {
         out.push(BluetoothConnectionInfo {

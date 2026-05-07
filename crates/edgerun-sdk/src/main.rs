@@ -2,16 +2,17 @@
 
 use edgerun_crypto::ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use edgerun_crypto::{Ed25519SigningKey as SigningKey, Signer};
+use edgerun_protocols::seal::{seal_with_key, unseal_with_key, SealKey};
+use edgerun_protocols::wire as edgerun_wire;
+use edgerun_protocols::wire::{
+    sdk_wire_bytes, CapabilityResponseProofRecord, SdkWireRecord, SigningAlgorithmRecord,
+    StorageWriteReceiptRecord, UserProfileIdSeedRecord,
+};
 use edgerun_sdk::{
     sha256, sha256_hex, str_eq, ApiFunction, ChainManifest, CompositionComponent,
     CompositionManifest, Determinism, SegmentManifest, UnitManifest, SDK_ABI_NAME,
 };
-use edgerun_seal::{seal_with_key, unseal_with_key, SealKey};
 use edgerun_ssh::SshTarget;
-use edgerun_wire::{
-    sdk_wire_bytes, CapabilityResponseProofRecord, SdkWireRecord, SigningAlgorithmRecord,
-    StorageWriteReceiptRecord, UserProfileIdSeedRecord,
-};
 use formats::{
     bytes_to_hex, parse_api, parse_chain, parse_composition, parse_report, parse_segment,
     parse_segment_report,
@@ -1142,7 +1143,9 @@ fn parse_scope_hash(value: &str) -> Option<[u8; 32]> {
 
 fn cmd_issue_product(args: Vec<String>) -> i32 {
     if args.len() < 11 {
-        eprintln!("issue-product requires app dir, out path, developer seed, store seed, product id, kind, currency, price, split bps, and validity");
+        eprintln!(
+            "issue-product requires app dir, out path, developer seed, store seed, product id, kind, currency, price, split bps, and validity"
+        );
         return 1;
     }
     let app_dir = PathBuf::from(&args[0]);
@@ -1295,7 +1298,9 @@ fn cmd_verify_product(args: Vec<String>) -> i32 {
 
 fn cmd_issue_entitlement(args: Vec<String>) -> i32 {
     if args.len() < 11 {
-        eprintln!("issue-entitlement requires app dir, out path, store seed, subject, product, purchase, kind, validity, and split bps");
+        eprintln!(
+            "issue-entitlement requires app dir, out path, store seed, subject, product, purchase, kind, validity, and split bps"
+        );
         return 1;
     }
     let app_dir = PathBuf::from(&args[0]);
@@ -1701,7 +1706,9 @@ fn read_verified_product(
 
 fn cmd_issue_settlement(args: Vec<String>) -> i32 {
     if args.len() < 11 {
-        eprintln!("issue-settlement requires output, store seed, developer key, period, currency, amounts, and entitlements");
+        eprintln!(
+            "issue-settlement requires output, store seed, developer key, period, currency, amounts, and entitlements"
+        );
         return 1;
     }
     let out = PathBuf::from(&args[0]);
@@ -2076,7 +2083,9 @@ fn verify_settlement_entitlements(
 
 fn cmd_issue_payment_intent(args: Vec<String>) -> i32 {
     if args.len() < 8 {
-        eprintln!("issue-payment-intent requires app dir, output, payer seed, payee id, purpose, amount, currency, and created-at");
+        eprintln!(
+            "issue-payment-intent requires app dir, output, payer seed, payee id, purpose, amount, currency, and created-at"
+        );
         return 1;
     }
     let app_dir = PathBuf::from(&args[0]);
@@ -2158,7 +2167,9 @@ fn cmd_issue_payment_intent(args: Vec<String>) -> i32 {
 
 fn cmd_settle_payment(args: Vec<String>) -> i32 {
     if args.len() < 6 {
-        eprintln!("settle-payment requires intent, output, store seed, rail kind, rail ref hash, and settled-at");
+        eprintln!(
+            "settle-payment requires intent, output, store seed, rail kind, rail ref hash, and settled-at"
+        );
         return 1;
     }
     let intent_path = PathBuf::from(&args[0]);
@@ -3212,7 +3223,9 @@ fn cmd_verify_revocation(args: Vec<String>) -> i32 {
 
 fn cmd_write_sign_request(args: Vec<String>) -> i32 {
     if args.len() < 9 {
-        eprintln!("write-sign-request requires out.rkyv, domain, app id, release id, subject hash, payload hash, algorithm, assurance, and nonce hex");
+        eprintln!(
+            "write-sign-request requires out.rkyv, domain, app id, release id, subject hash, payload hash, algorithm, assurance, and nonce hex"
+        );
         return 1;
     }
     let out = PathBuf::from(&args[0]);
@@ -3294,7 +3307,9 @@ fn cmd_sign_request(args: Vec<String>) -> i32 {
 
 fn cmd_sign_request_authorized(args: Vec<String>) -> i32 {
     if args.len() < 7 {
-        eprintln!("sign-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, signer seed, at, and optional assurance");
+        eprintln!(
+            "sign-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, signer seed, at, and optional assurance"
+        );
         return 1;
     }
     let mut execution_args = vec![
@@ -3517,7 +3532,9 @@ fn verify_revocation_signature(revocation: &edgerun_wire::Revocation) -> bool {
 
 fn cmd_write_capability_request(args: Vec<String>) -> i32 {
     if args.len() < 11 {
-        eprintln!("write-capability-request requires out.rkyv, kind, operation, assurance, app id, release id, subject hash, payload hash, context hex, payload hex, and nonce hex");
+        eprintln!(
+            "write-capability-request requires out.rkyv, kind, operation, assurance, app id, release id, subject hash, payload hash, context hex, payload hex, and nonce hex"
+        );
         return 1;
     }
     let out = PathBuf::from(&args[0]);
@@ -3661,7 +3678,9 @@ fn cmd_verify_capability_response(args: Vec<String>) -> i32 {
 
 fn cmd_write_seal_request(args: Vec<String>) -> i32 {
     if args.len() < 8 {
-        eprintln!("write-seal-request requires out.rkyv, app id, release id, subject hash, plaintext hex, policy/context hex, assurance, and nonce hex");
+        eprintln!(
+            "write-seal-request requires out.rkyv, app id, release id, subject hash, plaintext hex, policy/context hex, assurance, and nonce hex"
+        );
         return 1;
     }
     write_sealing_request(
@@ -3674,7 +3693,9 @@ fn cmd_write_seal_request(args: Vec<String>) -> i32 {
 
 fn cmd_write_unseal_request(args: Vec<String>) -> i32 {
     if args.len() < 8 {
-        eprintln!("write-unseal-request requires out.rkyv, app id, release id, subject hash, sealed envelope hex, policy/context hex, assurance, and nonce hex");
+        eprintln!(
+            "write-unseal-request requires out.rkyv, app id, release id, subject hash, sealed envelope hex, policy/context hex, assurance, and nonce hex"
+        );
         return 1;
     }
     write_sealing_request(
@@ -3766,7 +3787,9 @@ fn write_sealing_request(
 
 fn cmd_seal_request(args: Vec<String>) -> i32 {
     if args.len() < 4 {
-        eprintln!("seal-request requires request.rkyv, out.rkyv, provider, seal key hex, and optional assurance");
+        eprintln!(
+            "seal-request requires request.rkyv, out.rkyv, provider, seal key hex, and optional assurance"
+        );
         return 1;
     }
     execute_sealing_request(&args, CAPABILITY_OPERATION_SEAL, None)
@@ -3774,7 +3797,9 @@ fn cmd_seal_request(args: Vec<String>) -> i32 {
 
 fn cmd_seal_request_authorized(args: Vec<String>) -> i32 {
     if args.len() < 7 {
-        eprintln!("seal-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, seal key hex, at, and optional assurance");
+        eprintln!(
+            "seal-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, seal key hex, at, and optional assurance"
+        );
         return 1;
     }
     let execution_args = vec![
@@ -3803,7 +3828,9 @@ fn cmd_seal_request_authorized(args: Vec<String>) -> i32 {
 
 fn cmd_unseal_request(args: Vec<String>) -> i32 {
     if args.len() < 4 {
-        eprintln!("unseal-request requires request.rkyv, out.rkyv, provider, seal key hex, and optional assurance");
+        eprintln!(
+            "unseal-request requires request.rkyv, out.rkyv, provider, seal key hex, and optional assurance"
+        );
         return 1;
     }
     execute_sealing_request(&args, CAPABILITY_OPERATION_UNSEAL, None)
@@ -3811,7 +3838,9 @@ fn cmd_unseal_request(args: Vec<String>) -> i32 {
 
 fn cmd_unseal_request_authorized(args: Vec<String>) -> i32 {
     if args.len() < 7 {
-        eprintln!("unseal-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, seal key hex, at, and optional assurance");
+        eprintln!(
+            "unseal-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, seal key hex, at, and optional assurance"
+        );
         return 1;
     }
     let mut execution_args = vec![
@@ -4032,7 +4061,9 @@ fn cmd_verify_seal_response(args: Vec<String>) -> i32 {
 
 fn cmd_write_storage_read_request(args: Vec<String>) -> i32 {
     if args.len() < 8 {
-        eprintln!("write-storage-read-request requires out.rkyv, app id, release id, subject hash, key/context hex, expected sha256|any, assurance, and nonce hex");
+        eprintln!(
+            "write-storage-read-request requires out.rkyv, app id, release id, subject hash, key/context hex, expected sha256|any, assurance, and nonce hex"
+        );
         return 1;
     }
     write_storage_request(&args, CAPABILITY_OPERATION_READ)
@@ -4040,7 +4071,9 @@ fn cmd_write_storage_read_request(args: Vec<String>) -> i32 {
 
 fn cmd_write_storage_write_request(args: Vec<String>) -> i32 {
     if args.len() < 8 {
-        eprintln!("write-storage-write-request requires out.rkyv, app id, release id, subject hash, key/context hex, payload hex, assurance, and nonce hex");
+        eprintln!(
+            "write-storage-write-request requires out.rkyv, app id, release id, subject hash, key/context hex, payload hex, assurance, and nonce hex"
+        );
         return 1;
     }
     write_storage_request(&args, CAPABILITY_OPERATION_WRITE)
@@ -4138,7 +4171,9 @@ fn write_storage_request(args: &[String], operation: u16) -> i32 {
 
 fn cmd_storage_read_request(args: Vec<String>) -> i32 {
     if args.len() < 4 {
-        eprintln!("storage-read-request requires request.rkyv, out.rkyv, provider, root dir, and optional assurance");
+        eprintln!(
+            "storage-read-request requires request.rkyv, out.rkyv, provider, root dir, and optional assurance"
+        );
         return 1;
     }
     execute_storage_request(&args, CAPABILITY_OPERATION_READ, None)
@@ -4146,7 +4181,9 @@ fn cmd_storage_read_request(args: Vec<String>) -> i32 {
 
 fn cmd_storage_read_request_authorized(args: Vec<String>) -> i32 {
     if args.len() < 7 {
-        eprintln!("storage-read-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, root dir, at, and optional assurance");
+        eprintln!(
+            "storage-read-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, root dir, at, and optional assurance"
+        );
         return 1;
     }
     execute_storage_authorized(&args, CAPABILITY_OPERATION_READ)
@@ -4154,7 +4191,9 @@ fn cmd_storage_read_request_authorized(args: Vec<String>) -> i32 {
 
 fn cmd_storage_write_request(args: Vec<String>) -> i32 {
     if args.len() < 4 {
-        eprintln!("storage-write-request requires request.rkyv, out.rkyv, provider, root dir, and optional assurance");
+        eprintln!(
+            "storage-write-request requires request.rkyv, out.rkyv, provider, root dir, and optional assurance"
+        );
         return 1;
     }
     execute_storage_request(&args, CAPABILITY_OPERATION_WRITE, None)
@@ -4162,7 +4201,9 @@ fn cmd_storage_write_request(args: Vec<String>) -> i32 {
 
 fn cmd_storage_write_request_authorized(args: Vec<String>) -> i32 {
     if args.len() < 7 {
-        eprintln!("storage-write-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, root dir, at, and optional assurance");
+        eprintln!(
+            "storage-write-request-authorized requires profile.eusr, profile key hex, request.rkyv, out.rkyv, provider, root dir, at, and optional assurance"
+        );
         return 1;
     }
     execute_storage_authorized(&args, CAPABILITY_OPERATION_WRITE)
@@ -4357,7 +4398,9 @@ fn cmd_verify_storage_response(args: Vec<String>) -> i32 {
 
 fn cmd_create_user_profile(args: Vec<String>) -> i32 {
     if args.len() < 5 {
-        eprintln!("create-user-profile requires out.eusr, owner seed hex, seal key hex, epoch, and monotonic-version");
+        eprintln!(
+            "create-user-profile requires out.eusr, owner seed hex, seal key hex, epoch, and monotonic-version"
+        );
         return 1;
     }
     let out = PathBuf::from(&args[0]);
@@ -4409,7 +4452,9 @@ fn cmd_create_user_profile(args: Vec<String>) -> i32 {
 
 fn cmd_grant_profile_capability(args: Vec<String>) -> i32 {
     if args.len() < 13 {
-        eprintln!("grant-profile-capability requires in.eusr, out.eusr, seal key hex, owner seed hex, app id, release id|any, kind, operation, scope hash|any|context:<hex>, min assurance, valid-from, valid-until, and monotonic-version");
+        eprintln!(
+            "grant-profile-capability requires in.eusr, out.eusr, seal key hex, owner seed hex, app id, release id|any, kind, operation, scope hash|any|context:<hex>, min assurance, valid-from, valid-until, and monotonic-version"
+        );
         return 1;
     }
     let Ok(profile_bytes) = fs::read(&args[0]) else {

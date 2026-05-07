@@ -9,9 +9,8 @@ homepage.workspace = true
 description = "EdgeRun marketplace domain types, commission policy, and projections"
 
 [dependencies]
-edgerun-core = { workspace = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["core", "wire"] }
 edgerun-exchange = { workspace = true }
-edgerun-wire = { workspace = true }
 
 [lints]
 workspace = true

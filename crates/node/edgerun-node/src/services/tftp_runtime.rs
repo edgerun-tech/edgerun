@@ -7,6 +7,7 @@ use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use core::time::Duration;
 
 use crate::rt::UdpSocket;
+use crate::transport::{BareFrameTransport, TransportAddress};
 use edgerun_protocols::tftp::{TftpPeerId, TftpReadCore, TftpReadProvider};
 
 /// Trait for a TFTP file backend.
@@ -68,9 +69,9 @@ impl TftpServer {
         provider: impl FileProvider + 'static,
     ) -> crate::rt::io::Result<Self> {
         let addr = parse_socket_addr(&config.bind_addr)?;
-        let mut socket = UdpSocket::new();
-        socket
-            .bind(to_rt_addr(addr))
+        let rt_addr = to_rt_addr(addr);
+        let socket = BareFrameTransport
+            .bind_datagram_now(&TransportAddress::bare_datagram(rt_addr_endpoint(rt_addr)))
             .map_err(|_| crate::rt::io::IoError::Other("TFTP bind failed"))?;
         Ok(Self {
             socket: Arc::new(socket),
@@ -159,6 +160,11 @@ fn to_rt_addr(addr: SocketAddr) -> crate::rt::SocketAddr {
         SocketAddr::V4(addr) => crate::rt::SocketAddr::from_bytes4(addr.ip().octets(), addr.port()),
         SocketAddr::V6(addr) => crate::rt::SocketAddr::new(0, addr.port()),
     }
+}
+
+fn rt_addr_endpoint(addr: crate::rt::SocketAddr) -> Vec<u8> {
+    let ip = addr.ip_bytes();
+    format!("{}.{}.{}.{}:{}", ip[0], ip[1], ip[2], ip[3], addr.port()).into_bytes()
 }
 
 fn format_ip(bytes: [u8; 4]) -> String {

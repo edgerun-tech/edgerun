@@ -8,10 +8,10 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use edgerun_core::protocol::edgerun_wallet_v0::{
+use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
     Order, PaymentRequest, Quote, QuoteRequest, Receipt,
 };
-use edgerun_core::protocol::{
+use edgerun_protocols::core_protocol::protocol::{
     command_envelope, AppIntent, CommandEnvelope, IdentityRef, NodeRef, Timestamp,
 };
 
@@ -29,31 +29,31 @@ pub struct SettlementCommandDraft {
 }
 
 pub fn archive_payment_request_intent(request: &PaymentRequest) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(request)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(request)
         .expect("payment request must serialize through the rkyv wire boundary")
         .into_vec()
 }
 
 pub fn archive_quote_request_intent(request: &QuoteRequest) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(request)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(request)
         .expect("quote request must serialize through the rkyv wire boundary")
         .into_vec()
 }
 
 pub fn archive_quote_intent(quote: &Quote) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(quote)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(quote)
         .expect("quote must serialize through the rkyv wire boundary")
         .into_vec()
 }
 
 pub fn archive_order_intent(order: &Order) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(order)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(order)
         .expect("order must serialize through the rkyv wire boundary")
         .into_vec()
 }
 
 pub fn archive_receipt_intent(receipt: &Receipt) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(receipt)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(receipt)
         .expect("receipt must serialize through the rkyv wire boundary")
         .into_vec()
 }
@@ -67,7 +67,7 @@ pub fn build_app_intent(app_id: Vec<u8>, payload: Vec<u8>, signature: Vec<u8>) -
 }
 
 pub fn encode_app_intent(intent: &AppIntent) -> Vec<u8> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(intent)
+    edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(intent)
         .expect("app intent must serialize through the rkyv wire boundary")
         .into_vec()
 }
@@ -98,7 +98,7 @@ pub fn build_identity_routed_settlement_command(draft: SettlementCommandDraft) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_core::protocol::CommandType;
+    use edgerun_protocols::core_protocol::protocol::CommandType;
 
     fn sample_payment_request() -> PaymentRequest {
         PaymentRequest {
@@ -118,8 +118,11 @@ mod tests {
         let request = sample_payment_request();
         let payload = archive_payment_request_intent(&request);
 
-        let decoded = edgerun_wire::from_bytes::<PaymentRequest, edgerun_wire::WireError>(&payload)
-            .expect("payment request archive should decode");
+        let decoded = edgerun_protocols::wire::from_bytes::<
+            PaymentRequest,
+            edgerun_protocols::wire::WireError,
+        >(&payload)
+        .expect("payment request archive should decode");
 
         assert_eq!(decoded, request);
     }
@@ -167,17 +170,21 @@ mod tests {
             b"buyer-identity".to_vec()
         );
 
-        let decoded_intent =
-            edgerun_wire::from_bytes::<AppIntent, edgerun_wire::WireError>(&command.app_intent)
-                .expect("app intent archive should decode");
+        let decoded_intent = edgerun_protocols::wire::from_bytes::<
+            AppIntent,
+            edgerun_protocols::wire::WireError,
+        >(&command.app_intent)
+        .expect("app intent archive should decode");
         assert_eq!(decoded_intent.app_id, b"marketplace-app".to_vec());
         assert_eq!(decoded_intent.payload, payload);
 
         match command.payload {
             Some(command_envelope::Payload::InlinePayload(bytes)) => {
-                let decoded =
-                    edgerun_wire::from_bytes::<PaymentRequest, edgerun_wire::WireError>(&bytes)
-                        .expect("inline wallet payload should decode");
+                let decoded = edgerun_protocols::wire::from_bytes::<
+                    PaymentRequest,
+                    edgerun_protocols::wire::WireError,
+                >(&bytes)
+                .expect("inline wallet payload should decode");
                 assert_eq!(decoded, request);
             }
             _ => panic!("settlement command should carry inline rkyv wallet payload"),

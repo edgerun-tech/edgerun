@@ -9,17 +9,11 @@ homepage.workspace = true
 description = "Single-writer stream sequencing, hash-linking, signing, and verification for EdgeRun"
 
 [dependencies]
-edgerun-core = { workspace = true, default-features = false }
-edgerun-sign = { workspace = true, default-features = false }
-edgerun-verify = { workspace = true, default-features = false }
-
-[dev-dependencies]
-edgerun-keygen = { workspace = true, default-features = false }
-edgerun-sign-p256 = { workspace = true, default-features = false }
+edgerun-protocols = { workspace = true, default-features = false, features = ["sign-p256", "keygen", "core"] }
 
 [features]
 default = []
-std = ["edgerun-core/std", "edgerun-sign/std"]
+std = []
 
 [lints]
 workspace = true

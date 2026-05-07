@@ -14,5 +14,8 @@ pub use dsn::{DsnNotify, DsnRet};
 pub use envelope::MailEnvelope;
 pub use headers::{get_date, get_from_address, get_header, get_subject, parse_headers};
 pub use limits::ServerLimits;
-pub use response::{EnhancedStatusCode, SmtpResponse, SmtpResponseCode};
+pub use response::{
+    parse_response_line, parse_response_lines, EnhancedStatusCode, SmtpResponse, SmtpResponseCode,
+    SmtpResponseLine, SmtpResponseParseError,
+};
 pub use state::SmtpState;

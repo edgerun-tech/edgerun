@@ -1,16 +1,22 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 use alloc::vec::Vec;
 
-use edgerun_core::crypto::{ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN};
-use edgerun_core::protocol::{EventEnvelope, EventType, ProtocolRecord, Signature};
-use edgerun_keygen::{node_signing_key_from_bytes, MemoryKeyStore, NodeSigningKey};
-use edgerun_node_bootstrap::{bootstrap_new_node, BootstrapConfig};
-use edgerun_sign_p256::P256ProtocolSigner;
-use edgerun_stream::{build_signed_event, validate_stream, EventDraft};
-use edgerun_verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
+use edgerun_protocols::core_protocol::crypto::{
+    ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,
+};
+use edgerun_protocols::core_protocol::protocol::{
+    EventEnvelope, EventType, ProtocolRecord, Signature,
+};
+use edgerun_protocols::keygen::{MemoryKeyStore, NodeSigningKey, node_signing_key_from_bytes};
+use edgerun_protocols::node_bootstrap::{BootstrapConfig, bootstrap_new_node};
+use edgerun_protocols::sign_p256::P256ProtocolSigner;
+use edgerun_protocols::verify::{ProtocolFamily, ProtocolSignerRef, verify_event_envelope};
+use edgerun_stream::{EventDraft, build_signed_event, validate_stream};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum E2eError {
@@ -440,7 +446,7 @@ pub fn wire_event_only(iterations: usize) -> usize {
 
     for seq in 0..iterations as u64 {
         let event = sample_event(&public_key, seq);
-        let bytes = edgerun_verify::protocol_signable_wire_bytes(
+        let bytes = edgerun_protocols::verify::protocol_signable_wire_bytes(
             &ProtocolRecord::EventEnvelope(event),
             ProtocolFamily::EventEnvelope,
         )
@@ -459,7 +465,7 @@ pub fn hash_event_only(iterations: usize) -> usize {
 
     for seq in 0..iterations as u64 {
         let event = sample_event(&public_key, seq);
-        let hash = edgerun_verify::protocol_record_hash(
+        let hash = edgerun_protocols::verify::protocol_record_hash(
             &ProtocolRecord::EventEnvelope(event),
             ProtocolFamily::EventEnvelope,
         )

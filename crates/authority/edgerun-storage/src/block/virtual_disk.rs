@@ -131,7 +131,7 @@ mod tests {
     use super::*;
     use crate::block::BlockEventLog;
     use crate::core::EventLog;
-    use edgerun_core::protocol::EventEnvelope;
+    use edgerun_protocols::core_protocol::protocol::EventEnvelope;
     use edgerun_virtual_disk::{BlockDeviceInfo, MemoryBlockBackend};
 
     fn info() -> BlockDeviceInfo {

@@ -74,8 +74,8 @@ mod inbox;
 use crate::collections::VecDeque;
 use crate::sync::{Arc, Mutex};
 use alloc::vec::Vec;
-use edgerun_core::protocol::capability_runtime::CapabilityRemoteEnvelope;
 use edgerun_hardware_signing::NodeID;
+use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilityRemoteEnvelope;
 
 pub use inbox::EnvelopeInbox;
 

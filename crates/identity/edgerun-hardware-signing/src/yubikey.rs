@@ -5,8 +5,8 @@
 use alloc::{vec, vec::Vec};
 
 use edgerun_yubikey::{
-    sign_record_with_yubikey_checked, YubiKeyAssuranceLevel, YubiKeySignatureAlgorithm,
-    YubiKeySigningKey,
+    YubiKeyAssuranceLevel, YubiKeySignatureAlgorithm, YubiKeySigningKey,
+    sign_record_with_yubikey_checked,
 };
 
 use crate::{
@@ -126,7 +126,7 @@ fn map_hardware_to_yubikey_algorithm(
         HardwareSignatureAlgorithm::EcSchnorr => {
             return Err(HardwareSigningError::Provider(
                 "YubiKey adapter does not expose EcSchnorr".into(),
-            ))
+            ));
         }
         HardwareSignatureAlgorithm::Opaque(v) => YubiKeySignatureAlgorithm::Opaque(v.clone()),
     })

@@ -12,20 +12,15 @@ description = "WASM size probe linking the baby node path with split protocol cr
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-edgerun-core = { workspace = true, default-features = false }
-edgerun-sign-verify-e2e = { version = "0.1", path = "../edgerun-sign-verify-e2e", default-features = false }
+edgerun-sign-verify-e2e = { version = "0.1", path = "../edgerun-sign-verify-e2e", default-features = false, features = ["std"] }
 edgerun-stream = { version = "0.1", path = "../../authority/edgerun-stream", default-features = false }
 edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage", default-features = false }
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false }
-edgerun-protocols = { workspace = true, default-features = false, features = ["dhcp", "dhcpv6", "dns", "http", "imap", "lmtp", "smtp", "tftp"] }
-edgerun-email = { version = "0.1", path = "../../edgerun-email", default-features = false }
+edgerun-protocols = { workspace = true, default-features = false, features = ["core", "dhcp", "dhcpv6", "dns", "http", "imap", "lmtp", "smtp", "tftp"] }
 edgerun-secret-service = { version = "0.1", path = "../../edgerun-secret-service", default-features = false }
 edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh", default-features = false }
 edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link", default-features = false }
 edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session", default-features = false }
 edgerun-remote-capability = { version = "0.1", path = "../../capability/edgerun-remote-capability", default-features = false }
-edgerun-verify = { workspace = true, default-features = false }
-edgerun-wire = { workspace = true, default-features = false }
-
 [lints]
 workspace = true

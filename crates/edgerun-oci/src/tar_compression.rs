@@ -4,33 +4,7 @@ use crate::prelude::*;
 use crate::tar_layer::TarLayerApplyError;
 use edgerun_encoding::crc32::crc32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OciLayerCompression {
-    Uncompressed,
-    Gzip,
-    Zstd,
-    Unknown,
-}
-
-pub fn layer_compression(media_type: Option<&str>) -> OciLayerCompression {
-    match media_type {
-        Some(
-            "application/vnd.oci.image.layer.v1.tar"
-            | "application/vnd.oci.image.layer.nondistributable.v1.tar"
-            | "application/vnd.docker.image.rootfs.diff.tar",
-        ) => OciLayerCompression::Uncompressed,
-        Some(
-            "application/vnd.oci.image.layer.v1.tar+gzip"
-            | "application/vnd.oci.image.layer.nondistributable.v1.tar+gzip"
-            | "application/vnd.docker.image.rootfs.diff.tar.gzip",
-        ) => OciLayerCompression::Gzip,
-        Some(
-            "application/vnd.oci.image.layer.v1.tar+zstd"
-            | "application/vnd.oci.image.layer.nondistributable.v1.tar+zstd",
-        ) => OciLayerCompression::Zstd,
-        _ => OciLayerCompression::Unknown,
-    }
-}
+pub use edgerun_protocols::oci::layer::{layer_compression, OciLayerCompression};
 
 #[cfg(feature = "gzip")]
 pub fn decompress_gzip_layer(data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError> {

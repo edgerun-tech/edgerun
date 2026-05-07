@@ -17,6 +17,7 @@ use crate::rt::{
 use edgerun_tls::AsyncTlsStream;
 
 use crate::imap::message::{ImapCommand, ImapResponse, ImapResult};
+use crate::imap::parser::{parse_fetch_response, parse_list_response};
 use crate::imap::types::{Envelope, FetchAttr, Flags, Mailbox, MailboxStatus, SearchKey};
 use crate::server::read_line;
 
@@ -540,7 +541,7 @@ impl ImapClient {
                 let mut results = Vec::new();
                 for line in &self.untagged {
                     if let Some((seq, attrs)) = parse_fetch_response(line) {
-                        results.push((seq, attrs));
+                        results.push((seq, attrs.into_iter().collect()));
                     }
                 }
                 Ok(results)
@@ -851,68 +852,4 @@ impl ImapTransport {
     fn placeholder() -> Self {
         ImapTransport::Placeholder
     }
-}
-
-fn parse_list_response(line: &str) -> Option<Mailbox> {
-    if !line.starts_with("* LIST ") {
-        return None;
-    }
-    let rest = &line[7..];
-    let open_paren = rest.find('(')?;
-    let close_paren = rest.find(')')?;
-    let flags_str = &rest[open_paren + 1..close_paren];
-    let flags: Vec<String> = flags_str
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect();
-    let after_paren = rest[close_paren + 1..].trim_start();
-    let parts: Vec<&str> = after_paren.splitn(2, ' ').collect();
-    if parts.len() != 2 {
-        return None;
-    }
-    let delimiter = parts[0].trim_matches('"');
-    let delimiter = if delimiter == "NIL" {
-        None
-    } else {
-        Some(delimiter.to_string())
-    };
-    let name = parts[1].trim_matches('"');
-    Some(Mailbox {
-        name: name.to_string(),
-        attributes: flags,
-        delimiter,
-        status: None,
-    })
-}
-
-fn parse_fetch_response(line: &str) -> Option<(u32, HashMap<String, String>)> {
-    if !line.starts_with("* ") || !line.contains(" FETCH ") {
-        return None;
-    }
-    let seq = line[2..].split_whitespace().next()?.parse::<u32>().ok()?;
-    let fetch_pos = line.find(" FETCH ")?;
-    let after_fetch = &line[fetch_pos + 7..];
-    if !after_fetch.starts_with('(') || !after_fetch.ends_with(')') {
-        return None;
-    }
-    let inner = &after_fetch[1..after_fetch.len() - 1];
-    let mut attrs = HashMap::new();
-    let mut parts = inner.split_whitespace().peekable();
-    while let Some(key) = parts.next() {
-        if let Some(&value) = parts.peek() {
-            if value.starts_with('(') {
-                let mut val_parts = vec![value];
-                for v in parts.by_ref() {
-                    val_parts.push(v);
-                    if v.ends_with(')') {
-                        break;
-                    }
-                }
-                attrs.insert(key.to_string(), val_parts.join(" "));
-            } else {
-                attrs.insert(key.to_string(), value.to_string());
-            }
-        }
-    }
-    Some((seq, attrs))
 }

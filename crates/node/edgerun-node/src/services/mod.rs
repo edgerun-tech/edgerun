@@ -58,6 +58,9 @@ use edgerun_http::server::TlsCertificate;
 #[cfg(feature = "http")]
 use edgerun_http::server::{BoundHttpServer, HttpServer};
 
+#[cfg(any(feature = "http", feature = "imap", feature = "smtp", feature = "lmtp"))]
+use crate::transport::{HostSocketTransport, TransportAddress};
+
 #[cfg(all(
     feature = "http",
     any(feature = "imap", feature = "smtp", feature = "lmtp"),
@@ -81,13 +84,32 @@ pub mod tftp_runtime;
 ))]
 use self::connection_interceptor_adapter::ConnectionInterceptorAdapter;
 pub use crate::resource::{
-    NodeTransportSurface, ServiceBindingDecision, ServiceBindingIntent, binding_intents,
-    decide_binding, decide_bindings,
+    binding_intents, decide_binding, decide_bindings, NodeTransportSurface, ServiceBindingDecision,
+    ServiceBindingIntent,
 };
+#[cfg(all(
+    feature = "dns",
+    feature = "smtp",
+    all(not(target_os = "none"), not(target_arch = "wasm32"))
+))]
+use edgerun_email::dns_query::{DnsResult as MailDnsResult, MailDnsResolver};
 
-#[cfg(any(feature = "dns", feature = "dhcp", feature = "tftp", feature = "proxy"))]
+#[cfg(any(
+    feature = "http",
+    feature = "dns",
+    feature = "dhcp",
+    feature = "tftp",
+    feature = "proxy"
+))]
 fn other_io_error(error: impl fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::Other, format!("{error}"))
+}
+
+#[cfg(any(feature = "http", feature = "imap", feature = "smtp", feature = "lmtp"))]
+fn bind_node_tcp_listener(addr: &str) -> io::Result<crate::rt::AsyncTcpListener> {
+    HostSocketTransport
+        .bind_stream_now(&TransportAddress::host_stream(addr.as_bytes().to_vec()))
+        .map_err(other_io_error)
 }
 
 #[cfg(all(feature = "http", not(target_os = "none")))]
@@ -98,6 +120,39 @@ fn http_io_error(error: edgerun_http::io::Error) -> io::Error {
 #[cfg(all(feature = "http", target_os = "none"))]
 fn http_io_error(error: edgerun_http::io::Error) -> io::Error {
     error
+}
+
+#[cfg(all(
+    feature = "dns",
+    feature = "smtp",
+    all(not(target_os = "none"), not(target_arch = "wasm32"))
+))]
+impl MailDnsResolver for dns_runtime::DnsRuntime {
+    fn query_txt<'a>(
+        &'a self,
+        name: &'a str,
+    ) -> core::pin::Pin<
+        alloc::boxed::Box<
+            dyn core::future::Future<Output = MailDnsResult<Vec<String>>> + Send + 'a,
+        >,
+    > {
+        alloc::boxed::Box::pin(
+            async move { Ok(dns_runtime::DnsRuntime::query_txt(self, name).await) },
+        )
+    }
+
+    fn query_mx<'a>(
+        &'a self,
+        name: &'a str,
+    ) -> core::pin::Pin<
+        alloc::boxed::Box<
+            dyn core::future::Future<Output = MailDnsResult<Vec<(u16, String)>>> + Send + 'a,
+        >,
+    > {
+        alloc::boxed::Box::pin(
+            async move { Ok(dns_runtime::DnsRuntime::query_mx(self, name).await) },
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +308,7 @@ mod smtp_config {
         /// If set, enables outbound relay with persistent queue at this path.
         pub queue_data_root: Option<PathBuf>,
         /// DNS server for MX lookups in outbound relay.
-        pub relay_dns_server: String,
+        pub relay_dns_server: Option<String>,
         /// If set, uses MaildirStore for persistent local mailbox storage.
         pub maildir_root: Option<PathBuf>,
         /// DKIM signing domain.
@@ -277,7 +332,7 @@ mod smtp_config {
                 starttls: true,
                 local_domains: vec!["edgerun.mail".to_string()],
                 queue_data_root: None,
-                relay_dns_server: "8.8.8.8:53".to_string(),
+                relay_dns_server: None,
                 maildir_root: None,
                 dkim_domain: None,
                 dkim_selector: None,
@@ -532,9 +587,10 @@ impl NodeRuntime {
             if h.http3 {
                 server = server.with_http3();
             }
+            let listener = bind_node_tcp_listener(&h.bind_addr)?;
             Some(
                 server
-                    .bind(h.bind_addr.as_str())
+                    .bind_listener(listener)
                     .await
                     .map_err(http_io_error)?,
             )
@@ -636,6 +692,7 @@ impl NodeRuntime {
             all(not(target_os = "none"), not(target_arch = "wasm32"))
         ))]
         let imap_server = if let Some(config) = self.imap {
+            let listener = Arc::new(bind_node_tcp_listener(&config.bind_addr)?);
             let imap_config = edgerun_email::imap::server::ImapServerConfig {
                 bind_addr: config.bind_addr,
                 domain_name: config.domain_name,
@@ -646,9 +703,13 @@ impl NodeRuntime {
             };
             let mut srv = if let Some(ref maildir_root) = config.maildir_root {
                 let store = edgerun_email::imap::MaildirImapStore::new(maildir_root)?;
-                edgerun_email::imap::ImapServer::with_store(imap_config, Arc::new(store))?
+                edgerun_email::imap::ImapServer::with_store_and_listener(
+                    imap_config,
+                    Arc::new(store),
+                    listener,
+                )?
             } else {
-                edgerun_email::imap::ImapServer::new(imap_config)?
+                edgerun_email::imap::ImapServer::with_listener(imap_config, listener)?
             };
             #[cfg(feature = "http")]
             {
@@ -664,6 +725,7 @@ impl NodeRuntime {
             all(not(target_os = "none"), not(target_arch = "wasm32"))
         ))]
         let smtp_server = if let Some(config) = self.smtp {
+            let listener = Arc::new(bind_node_tcp_listener(&config.bind_addr)?);
             let smtp_config = edgerun_email::smtp::server::SmtpServerConfig {
                 bind_addr: config.bind_addr,
                 domain: config.domain_name,
@@ -676,6 +738,12 @@ impl NodeRuntime {
                 local_domains: config.local_domains,
                 queue_data_root: config.queue_data_root,
                 relay_dns_server: config.relay_dns_server,
+                #[cfg(feature = "dns")]
+                dns_resolver: dns_server
+                    .as_ref()
+                    .map(|dns| Arc::new(dns.clone()) as Arc<dyn MailDnsResolver>),
+                #[cfg(not(feature = "dns"))]
+                dns_resolver: None,
                 #[cfg(feature = "tls")]
                 tls_cert: config.tls_cert,
                 ..Default::default()
@@ -684,9 +752,18 @@ impl NodeRuntime {
             let mut srv = if let Some(ref maildir_root) = config.maildir_root {
                 let store = edgerun_email::smtp::server::MaildirStore::new(maildir_root)?;
                 let handler = Arc::new(store);
-                edgerun_email::smtp::server::SmtpServer::new(smtp_config, handler)?
+                edgerun_email::smtp::server::SmtpServer::with_listener(
+                    smtp_config,
+                    handler,
+                    listener,
+                )?
             } else {
-                edgerun_email::smtp::SmtpServer::with_memory_store(smtp_config)?
+                let handler = Arc::new(edgerun_email::smtp::server::MemoryMailStore::new());
+                edgerun_email::smtp::server::SmtpServer::with_listener(
+                    smtp_config,
+                    handler,
+                    listener,
+                )?
             };
             #[cfg(feature = "http")]
             {
@@ -702,6 +779,7 @@ impl NodeRuntime {
             all(not(target_os = "none"), not(target_arch = "wasm32"))
         ))]
         let lmtp_server = if let Some(config) = self.lmtp {
+            let listener = Arc::new(bind_node_tcp_listener(&config.bind_addr)?);
             let lmtp_config = edgerun_email::lmtp::server::LmtpServerConfig {
                 bind_addr: config.bind_addr,
                 domain: config.domain_name,
@@ -710,7 +788,9 @@ impl NodeRuntime {
                     ..Default::default()
                 },
             };
-            let mut srv = edgerun_email::lmtp::LmtpServer::with_memory_store(lmtp_config)?;
+            let handler = Arc::new(edgerun_email::smtp::server::MemoryMailStore::new());
+            let mut srv =
+                edgerun_email::lmtp::LmtpServer::with_listener(lmtp_config, handler, listener)?;
             #[cfg(feature = "http")]
             {
                 srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
@@ -899,7 +979,7 @@ impl BoundNodeRuntime {
             }
         }
 
-        edgerun_log::info!("all node runtime services shut down");
+        crate::node_info!("all node runtime services shut down");
         Ok(())
     }
 }

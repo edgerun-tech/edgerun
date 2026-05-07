@@ -1,9 +1,9 @@
 use alloc::format;
 use alloc::vec;
 use alloc::vec::Vec;
+use edgerun_crypto::p256::PublicKey;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-use edgerun_crypto::p256::PublicKey;
 use edgerun_hardware_signing::NodeID;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -295,7 +295,7 @@ fn bidirectional_encrypt_decrypt() {
 
 #[test]
 fn hardware_mesh_signer_extracts_node_id_and_signs_digest() {
-    use edgerun_hardware_signing::{HardwareMeshSigner, MeshSigner, MESH_SIGNATURE_LENGTH};
+    use edgerun_hardware_signing::{HardwareMeshSigner, MESH_SIGNATURE_LENGTH, MeshSigner};
 
     struct FakeMeshKey;
     impl HardwareSigningKey for FakeMeshKey {
@@ -481,7 +481,8 @@ fn derive_session_key_produces_32_byte_key() {
     // Verify that derive_session_key always returns exactly 32 bytes.
     // Use a fixed input to avoid RNG dependency.
     let shared = [0x42u8; 32];
-    let key = edgerun_core::crypto::HkdfSha256::new(None, &shared).expand(HKDF_INFO, 32);
+    let key = edgerun_protocols::core_protocol::crypto::HkdfSha256::new(None, &shared)
+        .expand(HKDF_INFO, 32);
     assert_eq!(key.len(), 32);
 }
 
@@ -489,8 +490,10 @@ fn derive_session_key_produces_32_byte_key() {
 fn derive_session_key_same_input_same_output() {
     // HKDF is deterministic: same input always produces the same key.
     let shared = [0x77u8; 32];
-    let key1 = edgerun_core::crypto::HkdfSha256::new(None, &shared).expand(HKDF_INFO, 32);
-    let key2 = edgerun_core::crypto::HkdfSha256::new(None, &shared).expand(HKDF_INFO, 32);
+    let key1 = edgerun_protocols::core_protocol::crypto::HkdfSha256::new(None, &shared)
+        .expand(HKDF_INFO, 32);
+    let key2 = edgerun_protocols::core_protocol::crypto::HkdfSha256::new(None, &shared)
+        .expand(HKDF_INFO, 32);
     assert_eq!(key1, key2);
 }
 

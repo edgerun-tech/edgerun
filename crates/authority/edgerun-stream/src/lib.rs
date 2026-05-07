@@ -10,14 +10,14 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
-use edgerun_core::prelude::v1::*;
-use edgerun_core::protocol::Timestamp;
-use edgerun_core::protocol::{
+use edgerun_protocols::core_protocol::prelude::v1::*;
+use edgerun_protocols::core_protocol::protocol::Timestamp;
+use edgerun_protocols::core_protocol::protocol::{
     CommandRef, DelegationRef, Digest, EventEnvelope, EventRef, EventType, ObjectRef,
     ProtocolRecord, RevocationRef,
 };
-use edgerun_sign::{ProtocolSignError, ProtocolSigner};
-use edgerun_verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
+use edgerun_protocols::sign::{ProtocolSignError, ProtocolSigner};
+use edgerun_protocols::verify::{ProtocolFamily, ProtocolSignerRef, verify_event_envelope};
 
 pub type StreamId = [u8; 64];
 
@@ -183,7 +183,7 @@ fn ms_to_timestamp(ms: i64) -> Timestamp {
 /// Returns deterministic signable edgerun-wire bytes for an event.
 #[must_use]
 pub fn event_signable_bytes(event: &EventEnvelope) -> Vec<u8> {
-    edgerun_core::wire_stream::event_signable_wire_bytes(event)
+    edgerun_protocols::core_protocol::wire_stream::event_signable_wire_bytes(event)
 }
 
 /// Signs an event envelope using the shared protocol signer path.
@@ -203,8 +203,8 @@ pub fn sign_event<S: ProtocolSigner + ?Sized>(
 #[must_use]
 pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
     let canonical = event_signable_bytes(event);
-    let hash = edgerun_core::crypto::record_hash(
-        edgerun_core::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
+    let hash = edgerun_protocols::core_protocol::crypto::record_hash(
+        edgerun_protocols::core_protocol::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
         &canonical,
     );
     Digest {
@@ -311,22 +311,34 @@ impl From<ProtocolSignError> for StreamError {
     }
 }
 
-impl From<edgerun_verify::ProtocolVerifyError> for StreamError {
-    fn from(value: edgerun_verify::ProtocolVerifyError) -> Self {
+impl From<edgerun_protocols::verify::ProtocolVerifyError> for StreamError {
+    fn from(value: edgerun_protocols::verify::ProtocolVerifyError) -> Self {
         match value {
-            edgerun_verify::ProtocolVerifyError::MissingSignature => Self::MissingSignature,
-            edgerun_verify::ProtocolVerifyError::UnsupportedSignatureAlgorithm => {
+            edgerun_protocols::verify::ProtocolVerifyError::MissingSignature => {
+                Self::MissingSignature
+            }
+            edgerun_protocols::verify::ProtocolVerifyError::UnsupportedSignatureAlgorithm => {
                 Self::UnsupportedAlgorithm
             }
-            edgerun_verify::ProtocolVerifyError::InvalidPublicKey => Self::InvalidPublicKey,
-            edgerun_verify::ProtocolVerifyError::InvalidSignatureLength => Self::InvalidSignature {
-                expected: 64,
-                actual: 0,
-            },
-            edgerun_verify::ProtocolVerifyError::InvalidSignature => Self::SignatureVerification,
-            edgerun_verify::ProtocolVerifyError::UnsupportedFamily => Self::UnsupportedFamily,
-            edgerun_verify::ProtocolVerifyError::MissingWriterIdentity
-            | edgerun_verify::ProtocolVerifyError::MissingIssuerIdentity => Self::InvalidPublicKey,
+            edgerun_protocols::verify::ProtocolVerifyError::InvalidPublicKey => {
+                Self::InvalidPublicKey
+            }
+            edgerun_protocols::verify::ProtocolVerifyError::InvalidSignatureLength => {
+                Self::InvalidSignature {
+                    expected: 64,
+                    actual: 0,
+                }
+            }
+            edgerun_protocols::verify::ProtocolVerifyError::InvalidSignature => {
+                Self::SignatureVerification
+            }
+            edgerun_protocols::verify::ProtocolVerifyError::UnsupportedFamily => {
+                Self::UnsupportedFamily
+            }
+            edgerun_protocols::verify::ProtocolVerifyError::MissingWriterIdentity
+            | edgerun_protocols::verify::ProtocolVerifyError::MissingIssuerIdentity => {
+                Self::InvalidPublicKey
+            }
         }
     }
 }

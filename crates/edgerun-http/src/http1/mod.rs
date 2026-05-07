@@ -5,15 +5,27 @@
 
 pub mod body;
 pub mod chunked;
-pub mod compression;
-pub mod connection;
+pub mod compression {
+    pub use edgerun_protocols::http::http1::compression::*;
+}
+pub mod connection {
+    pub use edgerun_protocols::http::http1::connection::*;
+}
 pub mod handler;
-pub mod multipart;
+pub mod multipart {
+    pub use edgerun_protocols::http::http1::multipart::*;
+}
 #[cfg(feature = "client")]
 pub mod pool;
-pub mod range;
+pub mod range {
+    pub use edgerun_protocols::http::http1::range::*;
+}
 pub mod upgrade;
-pub mod version;
+pub mod version {
+    pub use edgerun_protocols::http::http1::version::{
+        ConnectionDefault, Http1Version as HttpVersion, HttpVersionError,
+    };
+}
 
 pub use crate::{Request, Response};
 

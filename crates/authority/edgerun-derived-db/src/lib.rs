@@ -17,7 +17,8 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt;
 
-use edgerun_wire::{
+use edgerun_protocols::wire as edgerun_wire;
+use edgerun_protocols::wire::{
     DerivedDbAdminAuditRecord as AdminAuditRecordWire, DerivedDbKeyRecord as KeyRecordWire,
     DerivedDbMetaRecord as MetaRecordWire, DerivedDbObjectIndexRecord as ObjectIndexRecordWire,
 };

@@ -128,7 +128,7 @@ use core::fmt::Write as _;
 use core::iter::{IntoIterator, Iterator};
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
-use edgerun_core::crypto::signature_input;
+use edgerun_protocols::core_protocol::crypto::{sha256, sha384, signature_input};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
@@ -979,10 +979,8 @@ fn digest_for_yubikey_algorithm(
     match algorithm {
         YubiKeySignatureAlgorithm::EcdsaP256Sha256
         | YubiKeySignatureAlgorithm::RsaPkcs1v15Sha256
-        | YubiKeySignatureAlgorithm::RsaPssSha256 => {
-            Ok(edgerun_core::crypto::sha256(message).to_vec())
-        }
-        YubiKeySignatureAlgorithm::EcdsaP384Sha384 => Ok(edgerun_core::crypto::sha384(message)),
+        | YubiKeySignatureAlgorithm::RsaPssSha256 => Ok(sha256(message).to_vec()),
+        YubiKeySignatureAlgorithm::EcdsaP384Sha384 => Ok(sha384(message)),
         other => Err(YubiKeyError::UnsupportedAlgorithm(other.clone())),
     }
 }

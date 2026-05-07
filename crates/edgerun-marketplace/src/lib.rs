@@ -14,14 +14,15 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use edgerun_core::protocol::edgerun_wallet_v0::{PaymentRequest, Receipt};
-use edgerun_core::protocol::{
-    CapabilityDescriptor, CommandEnvelope, Digest, IdentityRef, NodeRef, ObjectRef, Timestamp,
-};
 use edgerun_exchange::{
     archive_payment_request_intent, build_app_intent, build_identity_routed_settlement_command,
     SettlementCommandDraft,
 };
+use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{PaymentRequest, Receipt};
+use edgerun_protocols::core_protocol::protocol::{
+    CapabilityDescriptor, CommandEnvelope, Digest, IdentityRef, NodeRef, ObjectRef, Timestamp,
+};
+use edgerun_protocols::wire as edgerun_wire;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MarketplaceError {
@@ -641,8 +642,8 @@ fn bps_amount(gross_minor_units: u128, bps: u32) -> Result<u128, MarketplaceErro
 mod tests {
     use super::*;
     use alloc::vec;
-    use edgerun_core::protocol::command_envelope;
-    use edgerun_core::protocol::{AppIntent, CommandType};
+    use edgerun_protocols::core_protocol::protocol::command_envelope;
+    use edgerun_protocols::core_protocol::protocol::{AppIntent, CommandType};
 
     fn commission_policy() -> MarketplaceCommissionPolicy {
         MarketplaceCommissionPolicy {

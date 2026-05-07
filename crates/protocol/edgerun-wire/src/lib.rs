@@ -335,6 +335,21 @@ pub struct RuntimeAppInstall {
     pub manifest_sha256: [u8; 32],
     pub declared_routes: Vec<RuntimeHttpRoute>,
     pub storage_namespaces: Vec<Vec<u8>>,
+    pub provided_capabilities: Vec<RuntimeCapabilityDeclaration>,
+    pub required_capabilities: Vec<RuntimeCapabilityDeclaration>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RuntimeCapabilityDeclaration {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub capability_kind: u16,
+    pub operation: u16,
+    pub min_assurance: u16,
+    pub scope_sha256: [u8; 32],
+    pub label: Vec<u8>,
+    pub context: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -1153,6 +1168,7 @@ pub enum SdkWireRecord {
     UserCapabilityGrant(UserCapabilityGrant),
     RuntimeEvent(RuntimeEvent),
     RuntimeAppInstall(RuntimeAppInstall),
+    RuntimeCapabilityDeclaration(RuntimeCapabilityDeclaration),
     RuntimeHttpRoute(RuntimeHttpRoute),
     RuntimeHttpRequest(RuntimeHttpRequest),
     RuntimeHttpDispatch(RuntimeHttpDispatch),
@@ -1280,6 +1296,26 @@ mod tests {
             manifest_sha256: [5; 32],
             declared_routes: vec![route.clone()],
             storage_namespaces: vec![b"private".to_vec()],
+            provided_capabilities: vec![RuntimeCapabilityDeclaration {
+                abi_version: SDK_WIRE_ABI_VERSION,
+                flags: 1,
+                capability_kind: CAPABILITY_KIND_STORAGE,
+                operation: CAPABILITY_OPERATION_WRITE,
+                min_assurance: 1,
+                scope_sha256: [9; 32],
+                label: b"mailbox.delivery".to_vec(),
+                context: b"runtime-owned-provider".to_vec(),
+            }],
+            required_capabilities: vec![RuntimeCapabilityDeclaration {
+                abi_version: SDK_WIRE_ABI_VERSION,
+                flags: 1,
+                capability_kind: CAPABILITY_KIND_NETWORK,
+                operation: CAPABILITY_OPERATION_RECEIVE,
+                min_assurance: 1,
+                scope_sha256: [10; 32],
+                label: b"smtp.ingress".to_vec(),
+                context: b"node-routed".to_vec(),
+            }],
         };
         let request = RuntimeHttpRequest {
             abi_version: SDK_WIRE_ABI_VERSION,
@@ -1303,6 +1339,21 @@ mod tests {
             request_sha256: [8; 32],
         };
         assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeAppInstall(install)).is_empty());
+        assert!(
+            !sdk_wire_bytes(&SdkWireRecord::RuntimeCapabilityDeclaration(
+                RuntimeCapabilityDeclaration {
+                    abi_version: SDK_WIRE_ABI_VERSION,
+                    flags: 1,
+                    capability_kind: CAPABILITY_KIND_STORAGE,
+                    operation: CAPABILITY_OPERATION_READ,
+                    min_assurance: 1,
+                    scope_sha256: [11; 32],
+                    label: b"mailbox.read".to_vec(),
+                    context: b"node-authorized".to_vec(),
+                }
+            ))
+            .is_empty()
+        );
         assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeHttpRoute(route)).is_empty());
         assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeHttpRequest(request)).is_empty());
         assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeHttpDispatch(dispatch)).is_empty());

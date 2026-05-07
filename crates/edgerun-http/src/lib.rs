@@ -100,14 +100,23 @@ pub use std_compat::{collections, fs, io, net, path, sync, time};
 // ---------------------------------------------------------------------------
 // Shared HTTP types
 // ---------------------------------------------------------------------------
-pub mod auth;
-mod chunked;
+mod chunked {
+    pub use edgerun_protocols::http::chunked::*;
+}
 pub mod error;
-pub mod header;
+pub mod header {
+    pub use edgerun_protocols::http::header::*;
+}
 mod lock;
-pub mod method;
-pub mod status;
-pub mod uri;
+pub mod method {
+    pub use edgerun_protocols::http::method::*;
+}
+pub mod status {
+    pub use edgerun_protocols::http::status::*;
+}
+pub mod uri {
+    pub use edgerun_protocols::http::uri::*;
+}
 
 pub use edgerun_protocols::http::{
     is_tchar, HeaderMap, HeaderName, HeaderValue, Method, Scheme, StatusCode, Uri,

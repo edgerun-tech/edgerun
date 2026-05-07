@@ -100,7 +100,7 @@ fn provision_tpm_key() -> Option<u32> {
 // ===========================================================================
 
 fn benchmark_sha256_only(ops_target: u64) -> (u64, Duration) {
-    use edgerun_core::crypto::sha256;
+    use edgerun_protocols::core_protocol::crypto::sha256;
 
     let message = [0xDEu8; 256];
     let start = Instant::now();

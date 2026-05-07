@@ -10,13 +10,19 @@ description = "Transport-independent protocol parsers, encoders, and state machi
 
 [dependencies]
 edgerun-crypto = { version = "0.1", path = "../../utility/edgerun-crypto", default-features = false, features = ["aead", "ed25519", "hmac", "p256", "rsa", "x25519"], optional = true }
+edgerun-core = { version = "0.1", path = "../edgerun-core", default-features = false, optional = true }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false, optional = true }
 edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
+edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false, optional = true }
+edgerun-wire = { version = "0.1", path = "../edgerun-wire", default-features = false, optional = true }
 miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"], optional = true }
 
 [features]
 default = []
+core = ["dep:edgerun-core"]
+ed25519 = ["dep:edgerun-crypto", "edgerun-crypto/ed25519"]
 proxy = []
+pxe = []
 dhcp = ["dep:edgerun-encoding"]
 dhcpv6 = ["dep:edgerun-encoding"]
 dns = ["dep:edgerun-encoding"]
@@ -27,12 +33,20 @@ http2-server = ["http", "dep:edgerun-hpack"]
 http-compression = ["http", "dep:edgerun-encoding", "dep:miniz_oxide"]
 http3 = ["http", "dep:edgerun-encoding"]
 imap = ["dep:edgerun-encoding"]
+keygen = ["sign-p256"]
 lmtp = ["smtp"]
+node-bootstrap = ["keygen", "sign-p256", "verify"]
+oci = ["dep:edgerun-json"]
 quic = ["tls"]
+seal = ["keygen", "dep:edgerun-crypto", "edgerun-crypto/aead"]
+sign = ["verify"]
+sign-p256 = ["sign"]
 smtp = ["dep:edgerun-encoding"]
 tls = ["dep:edgerun-crypto", "dep:edgerun-encoding"]
 tsig = ["dns", "dep:edgerun-crypto", "dep:edgerun-encoding", "edgerun-crypto/hmac"]
 tftp = ["dep:edgerun-encoding"]
+verify = ["core"]
+wire = ["dep:edgerun-wire"]
 
 [lints]
 workspace = true

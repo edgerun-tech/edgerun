@@ -3,9 +3,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use edgerun_hardware_signing::NodeID;
-use edgerun_json::{Value as JsonValue, escape_json_string};
+use edgerun_json::{escape_json_string, Value as JsonValue};
 use edgerun_node::rt::CancellationToken;
 use edgerun_node::rt::{AsyncReadExt, AsyncWriteExt};
+use edgerun_node::transport::{HostSocketTransport, TransportAddress};
 
 const PROVISION_PORT: u16 = 35630;
 
@@ -20,33 +21,35 @@ pub(crate) async fn run_provisioning_listener(
     let listen_addr: std::net::SocketAddr = match addr.parse() {
         Ok(a) => a,
         Err(e) => {
-            edgerun_log::error!("failed to parse provisioning address: {e}");
+            crate::node_error!("failed to parse provisioning address: {e}");
             return;
         }
     };
 
-    let listener = match edgerun_node::rt::AsyncTcpListener::bind(listen_addr) {
+    let listener = match HostSocketTransport.bind_stream_now(&TransportAddress::host_stream(
+        listen_addr.to_string().into_bytes(),
+    )) {
         Ok(l) => l,
         Err(e) => {
-            edgerun_log::error!("failed to bind provisioning on {listen_addr}: {e}");
+            crate::node_error!("failed to bind provisioning on {listen_addr}: {e}");
             return;
         }
     };
 
-    edgerun_log::info!("Provisioning listener ready on :{PROVISION_PORT}");
+    crate::node_info!("Provisioning listener ready on :{PROVISION_PORT}");
     if let Some(path) = &config_path {
-        edgerun_log::info!("Provisioning persistence enabled via {}", path.display());
+        crate::node_info!("Provisioning persistence enabled via {}", path.display());
     }
 
     loop {
         if cancel.is_cancelled() {
-            edgerun_log::info!("Provisioning listener shutting down");
+            crate::node_info!("Provisioning listener shutting down");
             return;
         }
 
         match listener.accept().await {
             Ok((stream, peer_addr)) => {
-                edgerun_log::info!("Provisioning connection from {peer_addr}");
+                crate::node_info!("Provisioning connection from {peer_addr}");
                 let pin = pairing_pin.clone();
                 let pubkey = public_key_hex.clone();
                 let target_config_path = config_path.clone();
@@ -61,12 +64,12 @@ pub(crate) async fn run_provisioning_listener(
                     )
                     .await
                     {
-                        edgerun_log::error!("Provisioning error: {e}");
+                        crate::node_error!("Provisioning error: {e}");
                     }
                 });
             }
             Err(e) => {
-                edgerun_log::warn!("Provisioning accept error: {e}");
+                crate::node_warn!("Provisioning accept error: {e}");
             }
         }
     }
@@ -108,7 +111,7 @@ pub(crate) async fn handle_provisioning_connection(
     }
 
     let request = String::from_utf8_lossy(&buf[..n]).to_string();
-    edgerun_log::debug!("Provisioning request: {request}");
+    crate::node_debug!("Provisioning request: {request}");
 
     let payload: JsonValue = match edgerun_json::from_json_slice(request.as_bytes()) {
         Ok(payload) => payload,
@@ -251,7 +254,7 @@ fn persist_provisioned_signer_state(
     }
 
     fs::write(config_path, output).map_err(|error| error.to_string())?;
-    edgerun_log::info!(
+    crate::node_info!(
         "provisioning state persisted for node {}",
         &public_key_hex[..16]
     );

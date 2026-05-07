@@ -386,7 +386,7 @@ impl ConnectionMiddleware for ConnectionLogger {
         stream: Arc<AsyncTcpStream>,
         next: NextConnection,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
-        edgerun_log::info!("{}: connection from {}", self.prefix, peer);
+        crate::node_info!("{}: connection from {}", self.prefix, peer);
         next.run(peer, stream)
     }
 }

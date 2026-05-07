@@ -1,7 +1,7 @@
 //! Shared content-addressed storage identifiers.
 
 use crate::prelude::v1::*;
-use edgerun_core::protocol::ObjectRef;
+use edgerun_protocols::core_protocol::protocol::ObjectRef;
 
 use crate::error::StorageError;
 
@@ -44,7 +44,7 @@ pub trait ContentStore {
 /// Derives the protocol logical object identity.
 #[must_use]
 pub fn derive_logical_object_id(canonicalization_id: &[u8], canonical_bytes: &[u8]) -> Vec<u8> {
-    edgerun_core::crypto::derive_object_id(canonicalization_id, canonical_bytes)
+    edgerun_protocols::core_protocol::crypto::derive_object_id(canonicalization_id, canonical_bytes)
 }
 
 /// Derives a stable stored-representation identity for the simple v0 profile.
@@ -74,7 +74,7 @@ pub fn derive_representation_id(
     input.extend_from_slice(representation_kind);
     input.push(0);
     input.extend_from_slice(bytes);
-    edgerun_core::crypto::sha256(&input).to_vec()
+    edgerun_protocols::core_protocol::crypto::sha256(&input).to_vec()
 }
 
 /// Derives both logical and representation IDs for raw-byte objects.
@@ -83,8 +83,10 @@ pub fn raw_object_ids(bytes: &[u8]) -> ObjectIds {
     let object_id = derive_logical_object_id(b"raw-bytes-v0", bytes);
     let representation_id = derive_representation_id(&object_id, b"encrypted-blob-v0", bytes);
     ObjectIds {
-        object_id_hex: edgerun_core::util::bytes_to_hex(&object_id),
-        representation_id_hex: edgerun_core::util::bytes_to_hex(&representation_id),
+        object_id_hex: edgerun_protocols::core_protocol::util::bytes_to_hex(&object_id),
+        representation_id_hex: edgerun_protocols::core_protocol::util::bytes_to_hex(
+            &representation_id,
+        ),
         object_id,
         representation_id,
     }

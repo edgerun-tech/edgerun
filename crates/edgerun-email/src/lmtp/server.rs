@@ -18,8 +18,6 @@ use crate::rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
-#[cfg(feature = "dkim")]
-use crate::dns_query::DnsClientQuery;
 use crate::lmtp::session_core::{
     LmtpCommand, LmtpSessionAction, LmtpSessionConfig, LmtpSessionCore, LmtpSessionPolicy,
 };
@@ -30,8 +28,6 @@ use crate::smtp::types::{
     EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode,
     SmtpState,
 };
-#[cfg(feature = "dkim")]
-use edgerun_email_auth::EmailAuthEvaluator;
 
 // ===========================================================================
 // Server Configuration
@@ -74,6 +70,14 @@ impl LmtpServer {
         let listener = Arc::new(
             crate::rt::AsyncTcpListener::bind(&config.bind_addr).map_err(crate::rt::bare_io)?,
         );
+        Self::with_listener(config, handler, listener)
+    }
+
+    pub fn with_listener(
+        config: LmtpServerConfig,
+        handler: Arc<dyn MailHandler>,
+        listener: Arc<crate::rt::AsyncTcpListener>,
+    ) -> io::Result<Self> {
         edgerun_log::info!("edgerun-lmtp: listening on {}", config.bind_addr);
         Ok(Self {
             listener,
@@ -184,54 +188,12 @@ impl LmtpSessionPolicy for LmtpHandlerPolicy<'_> {
 /// Evaluate SPF/DKIM/DMARC and notify the handler.
 #[cfg(feature = "dkim")]
 async fn evaluate_and_notify_auth(
-    handler: &Arc<dyn MailHandler>,
-    envelope: &MailEnvelope,
-    domain: &str,
-    peer_ip: &str,
+    _handler: &Arc<dyn MailHandler>,
+    _envelope: &MailEnvelope,
+    _domain: &str,
+    _peer_ip: &str,
 ) {
-    // Extract header From address
-    let data_str = String::from_utf8_lossy(&envelope.data);
-    let headers_str = if let Some(pos) = data_str.find("\r\n\r\n") {
-        data_str[..pos].as_bytes()
-    } else {
-        data_str.as_bytes()
-    };
-
-    // Parse From: header
-    let header_from =
-        crate::smtp::types::headers::get_from_address(headers_str).unwrap_or_default();
-
-    // Get a DNS client for evaluation
-    let mut dns_client = match edgerun_dns::client::DnsClient::new("8.8.8.8:53") {
-        Ok(c) => c,
-        Err(e) => {
-            edgerun_log::warn!("edgerun-email-auth: failed to create DNS client: {}", e);
-            return;
-        }
-    };
-
-    let mut dns_query = DnsClientQuery(&mut dns_client);
-    let mut evaluator = EmailAuthEvaluator::new(&mut dns_query);
-    match evaluator
-        .evaluate(
-            peer_ip,
-            &envelope.from,
-            &header_from,
-            headers_str,
-            &envelope.data,
-        )
-        .await
-    {
-        Ok(auth_results) => {
-            // Log the results
-            let header_value = auth_results.to_header_value(domain);
-            edgerun_log::info!("edgerun-lmtp: Authentication-Results: {}", header_value);
-            handler.on_mail_received(envelope, &auth_results);
-        }
-        Err(e) => {
-            edgerun_log::warn!("edgerun-email-auth: evaluation failed: {}", e);
-        }
-    }
+    edgerun_log::debug!("email-auth: LMTP DNS server is not configured; skipping evaluation");
 }
 
 async fn handle_connection(

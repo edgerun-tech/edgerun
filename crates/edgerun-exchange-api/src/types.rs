@@ -6,8 +6,8 @@ extern crate alloc;
 
 use edgerun_json::{JsonValue, Map, ToJson};
 
-pub use edgerun_core::protocol::edgerun_wallet_v0::AssetRef;
-pub use edgerun_core::protocol::edgerun_wallet_v0::TxRef;
+pub use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::AssetRef;
+pub use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::TxRef;
 
 /// Quote request from client.
 #[derive(Debug)]

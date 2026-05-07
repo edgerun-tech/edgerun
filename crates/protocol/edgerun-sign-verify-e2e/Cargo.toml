@@ -12,22 +12,12 @@ description = "Focused EdgeRun protocol keygen/bootstrap/stream/signer/verifier 
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-edgerun-core = { workspace = true, default-features = false }
-edgerun-verify = { workspace = true, default-features = false }
-edgerun-sign = { workspace = true, default-features = false }
-edgerun-sign-p256 = { workspace = true, default-features = false }
-edgerun-keygen = { workspace = true, default-features = false }
-edgerun-node-bootstrap = { workspace = true, default-features = false }
+edgerun-protocols = { workspace = true, default-features = false, features = ["node-bootstrap", "sign-p256", "keygen", "verify", "core"] }
 edgerun-stream = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
-  "edgerun-core/std",
-  "edgerun-sign/std",
-  "edgerun-sign-p256/std",
-  "edgerun-keygen/std",
-  "edgerun-node-bootstrap/std",
   "edgerun-stream/std",
 ]
 

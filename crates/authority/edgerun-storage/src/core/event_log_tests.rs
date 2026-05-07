@@ -1,5 +1,5 @@
 use super::*;
-use edgerun_core::protocol::{EventType, Signature};
+use edgerun_protocols::core_protocol::protocol::{EventType, Signature};
 
 fn event_with_signature(marker: u8) -> EventEnvelope {
     EventEnvelope {

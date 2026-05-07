@@ -1,8 +1,8 @@
 //! Direct signed-stream persistence helpers.
 
 use crate::prelude::v1::*;
-use edgerun_core::protocol::EventEnvelope;
-use edgerun_sign::ProtocolSigner;
+use edgerun_protocols::core_protocol::protocol::EventEnvelope;
+use edgerun_protocols::sign::ProtocolSigner;
 use edgerun_stream::{StreamId, StreamWriter};
 
 use crate::core::{AppendReceipt, EventLog};

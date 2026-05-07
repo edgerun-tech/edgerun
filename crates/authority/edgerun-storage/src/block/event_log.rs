@@ -8,12 +8,12 @@ use std::cell::RefCell;
 use std::cmp::min;
 use std::sync::{Arc, Mutex};
 
-use edgerun_core::protocol::EventEnvelope;
-use edgerun_core::protocol::EventEnvelope as ProtoEventEnvelope;
+use edgerun_protocols::core_protocol::protocol::EventEnvelope;
+use edgerun_protocols::core_protocol::protocol::EventEnvelope as ProtoEventEnvelope;
 
 use crate::core::{
-    canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
-    EventLocation, EventLog, ScannedEvent,
+    AppendReceipt, EventLocation, EventLog, ScannedEvent, canonical_event_hash, encode_event_frame,
+    validate_event_location,
 };
 use crate::error::StorageError;
 
@@ -333,8 +333,8 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
             return Err(StorageError::Decode(format!(
                 "event stream mismatch at offset {}: expected {}, got {}",
                 location.file_offset,
-                edgerun_core::util::bytes_to_hex(stream_id),
-                edgerun_core::util::bytes_to_hex(&event.stream_id),
+                edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id),
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
             )));
         }
         if event.seq != seq {
@@ -455,7 +455,7 @@ impl BlockStorage for InMemoryBlockDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_core::protocol::EventEnvelope;
+    use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 
     fn envelope(stream_id: &[u8], seq: u64, event_type: i32) -> EventEnvelope {
         EventEnvelope {
@@ -582,7 +582,7 @@ mod tests {
 
 fn decode_event_envelope_wire(
     bytes: &[u8],
-) -> Result<edgerun_core::protocol::EventEnvelope, StorageError> {
-    edgerun_core::wire_stream::decode_event_full_wire_bytes(bytes)
+) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, StorageError> {
+    edgerun_protocols::core_protocol::wire_stream::decode_event_full_wire_bytes(bytes)
         .map_err(|e| StorageError::Decode(e.to_string()))
 }
