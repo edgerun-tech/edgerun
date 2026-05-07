@@ -13,6 +13,7 @@ pub mod drm;
 pub mod font;
 pub mod gpu;
 pub mod input;
+pub mod libc;
 pub mod logind;
 pub mod r#loop;
 pub mod protocol;

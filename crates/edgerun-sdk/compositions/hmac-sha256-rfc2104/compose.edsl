@@ -1,0 +1,22 @@
+composition hmac-sha256-rfc2104-composed
+output hmac-sha256-rfc2104
+input key
+input data
+component pad rfc2104-pad
+component sha sha256-fips180
+
+branch gt len:key const:64 1 6
+copy-input key sha const:1024 len:key
+call sha.sha256_digest const:1024 len:key const:2048 const:0 const:0
+copy sha const:2048 pad const:1024 const:32
+call pad.rfc2104_key_pad const:1024 const:32 const:64 const:2048 const:2112
+jump 8
+copy-input key pad const:1024 len:key
+call pad.rfc2104_key_pad const:1024 len:key const:64 const:2048 const:2112
+copy pad const:2048 sha const:1024 const:64
+copy-input data sha const:1088 len:data
+call sha.sha256_digest const:1024 add:64+len:data const:2048 const:0 const:0
+copy pad const:2112 sha const:1024 const:64
+copy sha const:2048 sha const:1088 const:32
+call sha.sha256_digest const:1024 const:96 const:2048 const:0 const:0
+publish sha const:2048 const:32

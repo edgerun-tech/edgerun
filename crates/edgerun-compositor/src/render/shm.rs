@@ -1,8 +1,10 @@
 //! SHM buffer management — memory-map client SHM pools.
 
+use crate::libc;
 use std::collections::HashMap;
+use std::ffi::CString;
 use std::io;
-use std::os::fd::RawFd;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 
 /// Read data from an SHM pool fd, using the ShmManager's cached mapping
 /// or falling back to a temporary mmap if the pool isn't tracked.
@@ -83,6 +85,83 @@ pub fn read_shm_buffer_with_fallback(
         mapping,
         size: pool_size,
     })
+}
+
+/// Writable shared-memory frame backed by a memfd.
+pub struct SharedMemFrame {
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32,
+    pub len: usize,
+    ptr: *mut u8,
+    fd: OwnedFd,
+}
+
+unsafe impl Send for SharedMemFrame {}
+
+impl SharedMemFrame {
+    pub fn new(name: &str, width: u32, height: u32) -> io::Result<Self> {
+        let stride = width.checked_mul(4).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "shared-memory stride overflow")
+        })?;
+        let len = stride.checked_mul(height).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "shared-memory frame length overflow",
+            )
+        })? as usize;
+        let name = CString::new(name).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "shared-memory frame name contains nul byte",
+            )
+        })?;
+        let fd = unsafe { libc::syscall(libc::SYS_memfd_create, name.as_ptr(), libc::MFD_CLOEXEC) };
+        if fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let fd = unsafe { OwnedFd::from_raw_fd(fd as RawFd) };
+        if unsafe { libc::ftruncate(fd.as_raw_fd(), len as libc::off_t) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                len,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED,
+                fd.as_raw_fd(),
+                0,
+            )
+        };
+        if ptr == libc::MAP_FAILED {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Self {
+            width,
+            height,
+            stride,
+            len,
+            ptr: ptr.cast(),
+            fd,
+        })
+    }
+
+    pub fn fd(&self) -> RawFd {
+        self.fd.as_raw_fd()
+    }
+
+    pub fn as_mut_bytes(&mut self) -> &mut [u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    }
+}
+
+impl Drop for SharedMemFrame {
+    fn drop(&mut self) {
+        unsafe {
+            libc::munmap(self.ptr.cast(), self.len);
+        }
+    }
 }
 
 /// A SHM pool backed by a memory-mapped file descriptor.

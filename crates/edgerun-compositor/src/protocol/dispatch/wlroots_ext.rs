@@ -1,6 +1,7 @@
 //! wlroots extension handlers: screencopy, primary_selection, data_control.
 
 use super::DispatchContext;
+use crate::libc;
 use crate::protocol::data_control;
 use crate::protocol::primary_selection;
 use crate::protocol::screencopy;

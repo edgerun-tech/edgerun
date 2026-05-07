@@ -27,6 +27,7 @@ edgerun-crypto = { workspace = true, default-features = false, features = ["p256
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 
 edgerun-core = { version = "0.1", path = "../../protocol/edgerun-core" }
+edgerun-wire = { version = "0.1", path = "../../protocol/edgerun-wire" }
 
 [lints]
 workspace = true

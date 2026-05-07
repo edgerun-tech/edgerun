@@ -228,13 +228,45 @@ fn draw_row_glyphs(
         let base_y = origin_y as i32 + row as i32 * cell_h as i32;
 
         if !cell.is_blank() {
-            for ch in cell.text.chars() {
-                let (metrics, bitmap, is_color) = glyphs.rasterize(ch);
+            let mut rest = cell.text.as_str();
+            while !rest.is_empty() {
+                let emoji = glyphs.emoji_prefix(rest).and_then(|sequence| {
+                    glyphs
+                        .rasterize_emoji_sequence(sequence)
+                        .map(|bitmap| (sequence, bitmap))
+                });
+                let (advance_len, metrics, bitmap, is_color, advance_width) =
+                    if let Some((sequence, bitmap)) = emoji {
+                        (
+                            sequence.len(),
+                            bitmap.metrics.clone(),
+                            bitmap.data,
+                            true,
+                            bitmap.metrics.advance_width.ceil() as i32,
+                        )
+                    } else {
+                        let Some(ch) = rest.chars().next() else {
+                            break;
+                        };
+                        let (metrics, bitmap, is_color) = glyphs.rasterize(ch);
+                        (
+                            ch.len_utf8(),
+                            metrics,
+                            bitmap.to_vec(),
+                            is_color,
+                            glyphs.advance_width(ch),
+                        )
+                    };
                 if metrics.width == 0 || metrics.height == 0 {
+                    if advance_width == 0 {
+                        rest = &rest[advance_len..];
+                        continue;
+                    }
                     draw_missing_glyph_bar(
                         frame, width, height, base_x, base_y, cell_h, cell_w, base_fg,
                     );
-                    base_x += glyphs.advance_width(ch);
+                    base_x += advance_width;
+                    rest = &rest[advance_len..];
                     continue;
                 }
 
@@ -324,7 +356,8 @@ fn draw_row_glyphs(
                     );
                 }
 
-                base_x += glyphs.advance_width(ch);
+                base_x += advance_width;
+                rest = &rest[advance_len..];
             }
         }
 
@@ -529,13 +562,45 @@ fn draw_cell_glyphs(
     let base_y = cell_y;
 
     if !cell.is_blank() {
-        for ch in cell.text.chars() {
-            let (metrics, bitmap, is_color) = glyphs.rasterize(ch);
+        let mut rest = cell.text.as_str();
+        while !rest.is_empty() {
+            let emoji = glyphs.emoji_prefix(rest).and_then(|sequence| {
+                glyphs
+                    .rasterize_emoji_sequence(sequence)
+                    .map(|bitmap| (sequence, bitmap))
+            });
+            let (advance_len, metrics, bitmap, is_color, advance_width) =
+                if let Some((sequence, bitmap)) = emoji {
+                    (
+                        sequence.len(),
+                        bitmap.metrics.clone(),
+                        bitmap.data,
+                        true,
+                        bitmap.metrics.advance_width.ceil() as i32,
+                    )
+                } else {
+                    let Some(ch) = rest.chars().next() else {
+                        break;
+                    };
+                    let (metrics, bitmap, is_color) = glyphs.rasterize(ch);
+                    (
+                        ch.len_utf8(),
+                        metrics,
+                        bitmap.to_vec(),
+                        is_color,
+                        glyphs.advance_width(ch),
+                    )
+                };
             if metrics.width == 0 || metrics.height == 0 {
+                if advance_width == 0 {
+                    rest = &rest[advance_len..];
+                    continue;
+                }
                 draw_missing_glyph_bar(
                     frame, width, height, base_x, base_y, cell_h, cell_w, base_fg,
                 );
-                base_x += glyphs.advance_width(ch);
+                base_x += advance_width;
+                rest = &rest[advance_len..];
                 continue;
             }
 
@@ -629,7 +694,8 @@ fn draw_cell_glyphs(
                 );
             }
 
-            base_x += glyphs.advance_width(ch);
+            base_x += advance_width;
+            rest = &rest[advance_len..];
         }
     }
 

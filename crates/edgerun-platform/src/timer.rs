@@ -2,6 +2,10 @@
 
 #![allow(unsafe_op_in_unsafe_fn)]
 
+use core::sync::atomic::{AtomicU64, Ordering};
+
+static FALLBACK_TICKS: AtomicU64 = AtomicU64::new(0);
+
 pub struct MonoTime(u64);
 
 impl MonoTime {
@@ -22,51 +26,11 @@ pub trait Timer {
     fn wait_for_irq();
 }
 
-#[cfg(not(target_os = "none"))]
 pub fn timer_freq() -> u64 {
     1_000_000
 }
 
-#[cfg(target_os = "none")]
-pub fn timer_freq() -> u64 {
-    #[cfg(target_arch = "x86_64")]
-    {
-        10_000_000
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    {
-        10_000_000
-    }
-
-    #[cfg(target_arch = "riscv64")]
-    {
-        10_000_000
-    }
-
-    #[cfg(target_arch = "xtensa")]
-    {
-        10_000_000
-    }
-}
-
 #[inline]
-#[cfg(not(target_os = "none"))]
-pub fn timer_ticks() -> u64 {
-    use std::sync::OnceLock;
-    use std::time::Instant;
-
-    static START: OnceLock<Instant> = OnceLock::new();
-    START
-        .get_or_init(Instant::now)
-        .elapsed()
-        .as_micros()
-        .try_into()
-        .unwrap_or(u64::MAX)
-}
-
-#[inline]
-#[cfg(target_os = "none")]
 pub fn timer_ticks() -> u64 {
     #[cfg(target_arch = "x86_64")]
     {
@@ -99,6 +63,16 @@ pub fn timer_ticks() -> u64 {
     #[cfg(target_arch = "xtensa")]
     {
         crate::arch::xtensa::ccount() as u64
+    }
+
+    #[cfg(not(any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "xtensa"
+    )))]
+    {
+        FALLBACK_TICKS.fetch_add(1, Ordering::AcqRel)
     }
 }
 

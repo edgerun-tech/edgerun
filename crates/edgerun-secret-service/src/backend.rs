@@ -1099,171 +1099,43 @@ mod tests {
     }
 }
 
-const SECRET_PAYLOAD_MAGIC: &[u8; 4] = b"ERSS";
-
-fn put_u8(out: &mut Vec<u8>, value: u8) {
-    out.push(value);
-}
-
-fn put_u32(out: &mut Vec<u8>, value: u32) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn put_string(out: &mut Vec<u8>, value: &str) {
-    put_u32(out, value.len() as u32);
-    out.extend_from_slice(value.as_bytes());
-}
-
-fn start_secret_payload(tag: u8, payload_version: u32) -> Vec<u8> {
-    let mut out = Vec::new();
-    out.extend_from_slice(SECRET_PAYLOAD_MAGIC);
-    put_u8(&mut out, tag);
-    put_u32(&mut out, payload_version);
-    out
-}
-
 fn encode_secret_put_payload(payload: &SecretPutPayload) -> Vec<u8> {
-    let mut out = start_secret_payload(1, payload.payload_version);
-    put_string(&mut out, &payload.namespace);
-    put_string(&mut out, &payload.key);
-    put_string(&mut out, &payload.label);
-    put_u32(&mut out, payload.attributes.len() as u32);
-    for (key, value) in &payload.attributes {
-        put_string(&mut out, key);
-        put_string(&mut out, value);
-    }
-    put_string(&mut out, &payload.secret_blob_id);
-    out
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+        .expect("secret put payload must serialize through rkyv")
+        .into_vec()
 }
 
 fn encode_secret_delete_payload(payload: &SecretDeletePayload) -> Vec<u8> {
-    let mut out = start_secret_payload(2, payload.payload_version);
-    put_string(&mut out, &payload.namespace);
-    put_string(&mut out, &payload.key);
-    put_string(&mut out, &payload.label);
-    put_string(&mut out, &payload.reason);
-    out
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+        .expect("secret delete payload must serialize through rkyv")
+        .into_vec()
 }
 
 fn encode_collection_created_payload(payload: &CollectionCreatedPayload) -> Vec<u8> {
-    let mut out = start_secret_payload(3, payload.payload_version);
-    put_string(&mut out, &payload.collection_name);
-    put_string(&mut out, &payload.label);
-    out
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+        .expect("collection created payload must serialize through rkyv")
+        .into_vec()
 }
 
 fn encode_collection_deleted_payload(payload: &CollectionDeletedPayload) -> Vec<u8> {
-    let mut out = start_secret_payload(4, payload.payload_version);
-    put_string(&mut out, &payload.collection_name);
-    put_u32(&mut out, payload.items_removed);
-    out
-}
-
-struct SecretPayloadReader<'a> {
-    bytes: &'a [u8],
-    pos: usize,
-}
-
-impl<'a> SecretPayloadReader<'a> {
-    fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, pos: 0 }
-    }
-
-    fn take(&mut self, len: usize) -> Result<&'a [u8], &'static str> {
-        let end = self.pos.checked_add(len).ok_or("payload offset overflow")?;
-        let chunk = self.bytes.get(self.pos..end).ok_or("truncated payload")?;
-        self.pos = end;
-        Ok(chunk)
-    }
-
-    fn header(&mut self, expected_tag: u8) -> Result<u32, &'static str> {
-        if self.take(SECRET_PAYLOAD_MAGIC.len())? != SECRET_PAYLOAD_MAGIC {
-            return Err("invalid secret payload magic");
-        }
-        let tag = self.u8()?;
-        if tag != expected_tag {
-            return Err("unexpected secret payload tag");
-        }
-        self.u32()
-    }
-
-    fn u8(&mut self) -> Result<u8, &'static str> {
-        Ok(*self.take(1)?.first().ok_or("truncated payload")?)
-    }
-
-    fn u32(&mut self) -> Result<u32, &'static str> {
-        Ok(u32::from_le_bytes(
-            self.take(4)?
-                .try_into()
-                .map_err(|_| "invalid u32 payload field")?,
-        ))
-    }
-
-    fn string(&mut self) -> Result<String, &'static str> {
-        let len = self.u32()? as usize;
-        String::from_utf8(self.take(len)?.to_vec()).map_err(|_| "invalid utf8 payload string")
-    }
-
-    fn done(&self) -> Result<(), &'static str> {
-        if self.pos == self.bytes.len() {
-            Ok(())
-        } else {
-            Err("trailing secret payload bytes")
-        }
-    }
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
+        .expect("collection deleted payload must serialize through rkyv")
+        .into_vec()
 }
 
 fn decode_secret_put_payload(bytes: &[u8]) -> Result<SecretPutPayload, &'static str> {
-    let mut reader = SecretPayloadReader::new(bytes);
-    let payload_version = reader.header(1)?;
-    let namespace = reader.string()?;
-    let key = reader.string()?;
-    let label = reader.string()?;
-    let attr_count = reader.u32()?;
-    let mut attributes = HashMap::new();
-    for _ in 0..attr_count {
-        attributes.insert(reader.string()?, reader.string()?);
-    }
-    let secret_blob_id = reader.string()?;
-    reader.done()?;
-    Ok(SecretPutPayload {
-        payload_version,
-        namespace,
-        key,
-        label,
-        attributes,
-        secret_blob_id,
-    })
+    edgerun_wire::from_bytes::<SecretPutPayload, edgerun_wire::WireError>(bytes)
+        .map_err(|_| "invalid rkyv secret put payload")
 }
 
 fn decode_secret_delete_payload(bytes: &[u8]) -> Result<SecretDeletePayload, &'static str> {
-    let mut reader = SecretPayloadReader::new(bytes);
-    let payload_version = reader.header(2)?;
-    let namespace = reader.string()?;
-    let key = reader.string()?;
-    let label = reader.string()?;
-    let reason = reader.string()?;
-    reader.done()?;
-    Ok(SecretDeletePayload {
-        payload_version,
-        namespace,
-        key,
-        label,
-        reason,
-    })
+    edgerun_wire::from_bytes::<SecretDeletePayload, edgerun_wire::WireError>(bytes)
+        .map_err(|_| "invalid rkyv secret delete payload")
 }
 
 fn decode_collection_deleted_payload(
     bytes: &[u8],
 ) -> Result<CollectionDeletedPayload, &'static str> {
-    let mut reader = SecretPayloadReader::new(bytes);
-    let payload_version = reader.header(4)?;
-    let collection_name = reader.string()?;
-    let items_removed = reader.u32()?;
-    reader.done()?;
-    Ok(CollectionDeletedPayload {
-        payload_version,
-        collection_name,
-        items_removed,
-    })
+    edgerun_wire::from_bytes::<CollectionDeletedPayload, edgerun_wire::WireError>(bytes)
+        .map_err(|_| "invalid rkyv collection deleted payload")
 }

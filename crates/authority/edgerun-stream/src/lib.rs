@@ -305,6 +305,7 @@ impl From<ProtocolSignError> for StreamError {
     fn from(value: ProtocolSignError) -> Self {
         match value {
             ProtocolSignError::UnsupportedFamily => Self::UnsupportedFamily,
+            ProtocolSignError::InvalidKey => Self::InvalidPublicKey,
             ProtocolSignError::SignerFailed => Self::SignerFailed,
         }
     }

@@ -870,7 +870,9 @@ fn input_remote_adapter_streams_events() {
     assert!(adapter.open_session(&open).unwrap().accepted);
 
     let event = adapter.next_event(b"s").unwrap().unwrap();
-    assert_eq!(event.inline_payload.len(), 4 + 24); // count + 1 event
+    let decoded = decode_input_events(&event.inline_payload).unwrap();
+    assert_eq!(decoded.len(), 1);
+    assert_eq!(decoded[0].code, 30);
     assert_eq!(adapter.next_event(b"s").unwrap(), None);
 }
 
@@ -1502,13 +1504,13 @@ fn decode_input_events_length_mismatch() {
         value: 1,
     }];
     let mut encoded = encode_input_events(&events);
-    encoded[0..4].copy_from_slice(&2u32.to_le_bytes()); // claim 2 events
+    encoded.truncate(encoded.len().saturating_sub(1));
     let result = decode_input_events(&encoded);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
         .to_string()
-        .contains("length does not match"));
+        .contains("remote input payload is not rkyv"));
 }
 
 #[test]

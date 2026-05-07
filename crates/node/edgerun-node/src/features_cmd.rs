@@ -301,7 +301,7 @@ fn tftp_loopback_self_test() -> Result<String, String> {
 
         let payload = b"edgerund tftp self-test ok";
         let mut data = Vec::new();
-        data.extend_from_slice(&edgerun_tftp::OP_DATA.to_be_bytes());
+        data.extend_from_slice(&edgerun_protocols::tftp::OP_DATA.to_be_bytes());
         data.extend_from_slice(&1u16.to_be_bytes());
         data.extend_from_slice(payload);
         server
@@ -335,8 +335,8 @@ fn tftp_loopback_self_test() -> Result<String, String> {
         ));
     }
     let ack = [
-        (edgerun_tftp::OP_ACK >> 8) as u8,
-        edgerun_tftp::OP_ACK as u8,
+        (edgerun_protocols::tftp::OP_ACK >> 8) as u8,
+        edgerun_protocols::tftp::OP_ACK as u8,
         0,
         1,
     ];
@@ -461,7 +461,7 @@ fn quic_self_test() -> Result<String, String> {
 #[cfg(feature = "tftp")]
 fn build_tftp_rrq(filename: &str, mode: &str) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(&edgerun_tftp::OP_RRQ.to_be_bytes());
+    out.extend_from_slice(&edgerun_protocols::tftp::OP_RRQ.to_be_bytes());
     out.extend_from_slice(filename.as_bytes());
     out.push(0);
     out.extend_from_slice(mode.as_bytes());
@@ -475,7 +475,7 @@ fn validate_tftp_rrq(packet: &[u8], expected_filename: &str) -> Result<(), Strin
         return Err("TFTP RRQ too short".into());
     }
     let opcode = u16::from_be_bytes([packet[0], packet[1]]);
-    if opcode != edgerun_tftp::OP_RRQ {
+    if opcode != edgerun_protocols::tftp::OP_RRQ {
         return Err(format!("unexpected TFTP opcode: {opcode}"));
     }
     let rest = &packet[2..];
@@ -497,7 +497,7 @@ fn validate_tftp_ack(packet: &[u8], expected_block: u16) -> Result<(), String> {
     }
     let opcode = u16::from_be_bytes([packet[0], packet[1]]);
     let block = u16::from_be_bytes([packet[2], packet[3]]);
-    if opcode != edgerun_tftp::OP_ACK || block != expected_block {
+    if opcode != edgerun_protocols::tftp::OP_ACK || block != expected_block {
         return Err(format!("unexpected TFTP ACK opcode={opcode} block={block}"));
     }
     Ok(())
@@ -510,7 +510,7 @@ fn parse_tftp_data(packet: &[u8], expected_block: u16) -> Result<&[u8], String> 
     }
     let opcode = u16::from_be_bytes([packet[0], packet[1]]);
     let block = u16::from_be_bytes([packet[2], packet[3]]);
-    if opcode != edgerun_tftp::OP_DATA || block != expected_block {
+    if opcode != edgerun_protocols::tftp::OP_DATA || block != expected_block {
         return Err(format!(
             "unexpected TFTP DATA opcode={opcode} block={block}"
         ));
@@ -797,7 +797,7 @@ fn feature_report_json() -> String {
             "\"smtp\":{},",
             "\"imap\":{},",
             "\"proxy\":{},",
-            "\"sqlite\":{},",
+            "\"derived_db\":{},",
             "\"android_keystore\":{},",
             "\"compositor\":{},",
             "\"display\":{},",
@@ -827,7 +827,7 @@ fn feature_report_json() -> String {
         cfg!(feature = "smtp"),
         cfg!(feature = "imap"),
         cfg!(feature = "proxy"),
-        cfg!(feature = "sqlite"),
+        cfg!(feature = "derived-db"),
         cfg!(feature = "android-keystore"),
         cfg!(feature = "compositor"),
         display_compiled(),
@@ -915,8 +915,8 @@ fn compiled_components_json() -> String {
     if cfg!(feature = "proxy") {
         parts.push("\"proxy\"");
     }
-    if cfg!(feature = "sqlite") {
-        parts.push("\"sqlite\"");
+    if cfg!(feature = "derived-db") {
+        parts.push("\"derived-db\"");
     }
     if cfg!(feature = "android-keystore") {
         parts.push("\"android-keystore\"");

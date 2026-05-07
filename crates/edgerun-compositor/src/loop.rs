@@ -1,5 +1,6 @@
 //! Epoll-based event loop for the compositor.
 
+use crate::libc;
 use std::collections::HashMap;
 use std::io;
 use std::os::fd::RawFd;

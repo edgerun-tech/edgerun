@@ -7,14 +7,13 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use std::io;
 
-use edgerun_crypto::rsa::sha2::Digest;
+use edgerun_crypto::rsa::sha2::{Digest, Sha256};
 use edgerun_crypto::rsa::{
     pkcs1::EncodeRsaPublicKey,
     pkcs8::{DecodePrivateKey, EncodePrivateKey, LineEnding},
     signature::SignatureEncoding,
     RsaPrivateKey,
 };
-use edgerun_crypto::sha2::Sha256;
 use edgerun_crypto::OsRng;
 use edgerun_encoding::base64;
 

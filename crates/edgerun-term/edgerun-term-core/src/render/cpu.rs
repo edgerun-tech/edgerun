@@ -5,8 +5,20 @@ use crate::text::{GlyphCache, MSDF_SPREAD};
 
 pub fn text_width(glyphs: &mut GlyphCache, text: &str) -> i32 {
     let mut w = 0;
-    for ch in text.chars() {
+    let mut rest = text;
+    while !rest.is_empty() {
+        if let Some(sequence) = glyphs.emoji_prefix(rest) {
+            if let Some(bitmap) = glyphs.rasterize_emoji_sequence(sequence) {
+                w += bitmap.metrics.advance_width.round().max(0.0) as i32;
+                rest = &rest[sequence.len()..];
+                continue;
+            }
+        }
+        let Some(ch) = rest.chars().next() else {
+            break;
+        };
         w += glyphs.advance_width(ch);
+        rest = &rest[ch.len_utf8()..];
     }
     w
 }

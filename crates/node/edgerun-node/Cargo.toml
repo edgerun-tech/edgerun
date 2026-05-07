@@ -13,6 +13,11 @@ name = "edgerund"
 path = "src/main.rs"
 required-features = ["std"]
 
+[[bin]]
+name = "edgerun-server"
+path = "src/bin/edgerun-server.rs"
+required-features = ["std", "smtp", "imap", "dns", "tls", "acme"]
+
 [features]
 std = ["edgerun-tpm/std"]
 default = [
@@ -25,8 +30,8 @@ default = [
 ]
 protocols = ["tls", "quic", "tftp", "acme"]
 tls = ["dep:edgerun-tls"]
-quic = ["dep:edgerun-quic", "tls", "edgerun-server?/http3"]
-tftp = ["dep:edgerun-tftp"]
+quic = ["dep:edgerun-quic", "tls"]
+tftp = ["dep:edgerun-protocols", "edgerun-protocols/tftp"]
 acme = ["dep:edgerun-acme"]
 service-suite = [
     "http",
@@ -36,7 +41,6 @@ service-suite = [
     "smtp",
     "imap",
     "proxy",
-    "sqlite",
 ]
 full = [
     "std",
@@ -47,14 +51,19 @@ full = [
     "service-suite",
 ]
 display = ["dep:edgerun-drm-display"]
-http = ["dep:edgerun-http", "dep:edgerun-server", "edgerun-http/server", "edgerun-server/std"]
-https = ["http", "tls", "edgerun-http/tls", "edgerun-server/tls"]
-dns = ["http", "edgerun-server/dns"]
-dhcp = ["http", "dep:edgerun-dhcp", "edgerun-server/dhcp"]
-smtp = ["http", "edgerun-server/smtp"]
-imap = ["http", "edgerun-server/imap"]
-proxy = ["http", "dep:edgerun-proxy", "edgerun-server/proxy"]
-sqlite = ["http", "dep:rusqlite", "edgerun-server/sqlite"]
+http = [
+    "dep:edgerun-http",
+    "edgerun-http/server",
+    "edgerun-http/connection-middleware",
+]
+https = ["http", "tls", "edgerun-http/tls"]
+dns = ["http", "dep:edgerun-dns", "edgerun-dns/dnssec"]
+dhcp = ["http", "dep:edgerun-protocols", "edgerun-protocols/dhcp"]
+smtp = ["http", "dep:edgerun-email", "edgerun-email/tls", "edgerun-email/dkim"]
+imap = ["http", "dep:edgerun-email", "edgerun-email/tls"]
+lmtp = ["dep:edgerun-email"]
+proxy = ["http", "dep:edgerun-protocols", "edgerun-protocols/proxy"]
+derived-db = ["http", "dep:edgerun-derived-db"]
 android-keystore = ["dep:edgerun-android-keystore"]
 oci = [
     "dep:edgerun-oci",
@@ -125,15 +134,18 @@ edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
+edgerun-analytics = { version = "0.1", path = "../../edgerun-analytics" }
+edgerun-email = { workspace = true, optional = true }
+edgerun-email-auth = { version = "0.1", path = "../../edgerun-email-auth" }
+edgerun-dns = { version = "0.1", path = "../../edgerun-dns", default-features = false, optional = true }
+edgerun-url = { workspace = true }
 edgerun-tls = { workspace = true, optional = true }
 edgerun-quic = { workspace = true, features = ["std"], optional = true }
-edgerun-tftp = { workspace = true, features = ["server"], optional = true }
 edgerun-acme = { workspace = true, features = ["dns_challenge"], optional = true }
 edgerun-http = { workspace = true, optional = true }
-edgerun-server = { version = "0.1", path = "../edgerun-server", default-features = false, optional = true }
-edgerun-dhcp = { version = "0.1", path = "../../edgerun-dhcp", optional = true }
-edgerun-proxy = { workspace = true, optional = true }
-rusqlite = { version = "0.32", default-features = false, features = ["bundled"], optional = true }
+edgerun-protocols = { workspace = true, optional = true }
+edgerun-derived-db = { workspace = true, features = ["std"], optional = true }
+edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", features = ["std"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 edgerun-linux-netif = { version = "0.1", path = "../../linux-adapters/edgerun-linux-netif" }
@@ -174,7 +186,6 @@ edgerun-cec = { version = "0.1", path = "../../device-types/edgerun-cec", option
 edgerun-linux-cec = { version = "0.1", path = "../../linux-adapters/edgerun-linux-cec", optional = true }
 edgerun-amd-xdna = { version = "0.1", path = "../../linux-adapters/edgerun-amd-xdna", optional = true }
 edgerun-virtual-disk = { version = "0.1", path = "../../authority/edgerun-virtual-disk", optional = true }
-edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", optional = true }
 edgerun-oci = { version = "0.1", path = "../../edgerun-oci", optional = true }
 edgerun-android-keystore = { version = "0.1", path = "../../identity/edgerun-android-keystore", optional = true }
 edgerun-compositor = { version = "0.1", path = "../../edgerun-compositor", optional = true }

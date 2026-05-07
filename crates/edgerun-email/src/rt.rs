@@ -10,7 +10,7 @@ pub use edgerun_rt::{
     ConnectFuture, Duration, Instant, JoinError, JoinHandle,
 };
 
-fn bare_io(error: edgerun_rt::IoError) -> io::Error {
+pub(crate) fn bare_io(error: edgerun_rt::IoError) -> io::Error {
     match error {
         edgerun_rt::IoError::UnexpectedEof => io::Error::new(io::ErrorKind::UnexpectedEof, error),
         edgerun_rt::IoError::WriteZero => io::Error::new(io::ErrorKind::WriteZero, error),

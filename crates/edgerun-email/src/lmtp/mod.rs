@@ -9,8 +9,8 @@ pub mod types;
 pub use client::LmtpClient;
 #[cfg(not(target_os = "none"))]
 pub use server::{LmtpServer, LmtpServerConfig};
-pub use session_core::{
+pub use edgerun_protocols::lmtp::session_core::{
     AllowAllLmtpPolicy, LmtpCommand, LmtpSessionAction, LmtpSessionConfig, LmtpSessionCore,
     LmtpSessionPolicy, LmtpSessionStep,
 };
-pub use types::{LmtpResponse, LmtpResponseCode};
+pub use edgerun_protocols::lmtp::types::{LmtpResponse, LmtpResponseCode};

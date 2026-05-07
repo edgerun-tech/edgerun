@@ -1,5 +1,6 @@
 //! Send and receive file descriptors over Unix domain sockets using SCM_RIGHTS.
 
+use crate::libc;
 use std::io;
 use std::os::fd::RawFd;
 
@@ -9,7 +10,7 @@ const MAX_FDS: usize = 28;
 ///
 /// Returns (bytes_read, fds_received).
 pub fn recv_with_fds(fd: RawFd, buf: &mut [u8]) -> io::Result<(usize, Vec<RawFd>)> {
-    use libc::{
+    use crate::libc::{
         iovec, msghdr, recvmsg, CMSG_DATA, CMSG_FIRSTHDR, CMSG_LEN, CMSG_NXTHDR, SCM_RIGHTS,
     };
 
@@ -63,7 +64,7 @@ pub fn recv_with_fds(fd: RawFd, buf: &mut [u8]) -> io::Result<(usize, Vec<RawFd>
 ///
 /// Returns bytes written.
 pub fn send_with_fds(fd: RawFd, data: &[u8], fds: &[RawFd]) -> io::Result<usize> {
-    use libc::{iovec, msghdr, sendmsg, CMSG_DATA, CMSG_LEN};
+    use crate::libc::{iovec, msghdr, sendmsg, CMSG_DATA, CMSG_LEN};
 
     let mut iov = iovec {
         iov_base: data.as_ptr() as *const libc::c_void as *mut libc::c_void,

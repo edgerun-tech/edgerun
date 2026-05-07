@@ -4,7 +4,7 @@ summary = "Distributed naming protocol and wire format for DNS messages and reso
 layer = "application"
 runs_over = ["UDP", "TCP", "TLS", "HTTPS", "QUIC"]
 depends_on = []
-implementation_crates = ["crates/edgerun-dns"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
 profiles = ["client", "resolver", "authoritative", "no_std-candidate"]
 standards_bodies = ["IETF"]
 
@@ -66,13 +66,12 @@ owner = "IANA"
 id = "dns-message-parsing"
 kind = "packet-format"
 standards = ["RFC1035"]
-implementation = ["crates/edgerun-dns"]
+implementation = ["crates/protocol/edgerun-protocols"]
 status = "unknown"
 
 [[behavior]]
 id = "dns-name-compression"
 kind = "codec"
 standards = ["RFC1035"]
-implementation = ["crates/edgerun-dns"]
+implementation = ["crates/protocol/edgerun-protocols"]
 status = "unknown"
-

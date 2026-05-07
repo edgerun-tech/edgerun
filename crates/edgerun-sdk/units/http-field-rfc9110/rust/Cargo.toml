@@ -1,0 +1,25 @@
+[package]
+name = "edgerun-sdk-unit-http-field-rfc9110"
+version = "0.1.1"
+edition = "2021"
+publish = false
+
+[package.metadata.edgerun.unit]
+id = "http-field-rfc9110"
+standard = "RFC9110"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+edgerun-http = { path = "../../../../edgerun-http", default-features = false }
+edgerun-unit = { path = "../../../../edgerun-unit" }
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+codegen-units = 1
+lto = true
+strip = true

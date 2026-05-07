@@ -3,6 +3,7 @@
 
 use super::DispatchContext;
 use crate::compositor::surface::ShmBufferInfo;
+use crate::libc;
 use crate::protocol::fractional_scale;
 use crate::protocol::single_pixel_buffer;
 use crate::protocol::tearing_control;

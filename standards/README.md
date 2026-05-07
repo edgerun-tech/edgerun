@@ -50,8 +50,8 @@ standards/
     udp-tftp.toml
   implementations/
     edgerun-http.toml
-    edgerun-tftp.toml
-    edgerun-dhcp.toml
+    edgerun-protocols-tftp.toml
+    edgerun-protocols-dhcp.toml
   components/
     README.md
     interfaces/
@@ -104,27 +104,41 @@ clauses into hash-addressed programs.
 
 ## Runnable Seed
 
-The current executable seed is `udp-tftp-must-program`. It is still an
-interpreter, not a WASM compiler, but it proves the shape:
+The current executable seed is `udp-tftp-must-program`. The entrypoint is
+`scripts/standards`, a thin launcher for the Rust `edgerun-standards` crate.
+The crate has a dependency-free `no_std` core and a `std` CLI that compiles
+definition and clause IR into WASM modules, assembles them into `program.json`,
+and runs input bytes through the same Rust core semantics.
 
 ```bash
 ./scripts/standards validate
 ./scripts/standards hash udp-tftp-must-program
 ./scripts/standards compile udp-tftp-must-program
 ./scripts/standards components udp-tftp-must-program
+./scripts/standards definitions udp-tftp-must-program
+./scripts/standards clauses udp-tftp-must-program
+./scripts/standards units udp-tftp-must-program
+./scripts/standards graph udp-tftp-must-program
 ./scripts/standards check udp-tftp-must-program
 ./scripts/standards run udp-tftp-must-program \
   --wasm \
   --hex "$(cat standards/corpus/udp-tftp/valid-ack.hex)"
 ```
 
+`--wasm` is accepted for workflow compatibility, but there is no JavaScript or
+Python runtime in the standards path now. The Rust core owns the UDP/TFTP
+definition extraction and clause evaluation; the CLI also emits the
+hash-addressed WASM statement modules for the component graph.
+
+`compile` also writes content-addressed contract units to
+`standards/build/units/<sha256>.json` and the composed graph to
+`standards/build/units/<sha256>.graph.json`. A program can refer to these hashes
+instead of carrying the full standards catalog or generated artifacts inline.
+
 The runner emits JSON containing:
 
-- `program_sha256`: hash of the selected program, policy, definitions, and
-  compiled statement components when `--wasm` is used.
-- `ir_program_sha256`: hash of the selected pre-compile IR.
+- `program_sha256`: hash of the composed contract graph.
 - `component_graph_sha256`: hash of the assembled statement modules.
-- `trace_sha256`: hash of the observed input and parsed handoff trace.
 - `findings`: requirement-addressed pass/reject results.
 
 The current corpus covers:
@@ -132,6 +146,10 @@ The current corpus covers:
 - valid UDP payload carrying a TFTP ACK,
 - invalid UDP length,
 - invalid TFTP ACK length with otherwise valid UDP framing.
+- invalid TFTP DATA length with otherwise valid UDP framing.
+- invalid TFTP opcode with otherwise valid UDP framing.
+
+Corpus expectations are explicit in `standards/corpus/udp-tftp/cases.toml`.
 
 Try the rejection path:
 
@@ -142,8 +160,8 @@ Try the rejection path:
 ```
 
 `check` is the preferred smoke test: it compiles the program, validates the WASM
-modules, runs the corpus with both the interpreter and WASM engine, and verifies
-that their requirement/severity signatures match.
+modules, runs the corpus with the Rust core, and verifies that the explicit
+requirement/severity signatures match.
 
 ## Requirement Status
 

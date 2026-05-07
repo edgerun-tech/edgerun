@@ -1,0 +1,52 @@
+[[case]]
+id = "valid-ack"
+file = "valid-ack.hex"
+description = "Valid TFTP ACK for block 1."
+expect_exit = 0
+expect = [
+  ["tftp-rfc1350-opcode-0001", "pass"],
+  ["tftp-rfc1350-ack-length-0001", "pass"],
+  ["tftp-rfc1350-data-length-0001", "pass"],
+]
+
+[[case]]
+id = "invalid-short"
+file = "invalid-short.hex"
+description = "TFTP message is shorter than the two-octet opcode."
+expect_exit = 2
+expect = [
+  ["tftp-message-definition", "reject"],
+]
+
+[[case]]
+id = "invalid-ack-length"
+file = "invalid-ack-length.hex"
+description = "TFTP ACK opcode with an extra trailing octet."
+expect_exit = 2
+expect = [
+  ["tftp-rfc1350-opcode-0001", "pass"],
+  ["tftp-rfc1350-ack-length-0001", "reject"],
+  ["tftp-rfc1350-data-length-0001", "pass"],
+]
+
+[[case]]
+id = "invalid-data-length"
+file = "invalid-data-length.hex"
+description = "TFTP DATA opcode without a two-octet block number."
+expect_exit = 2
+expect = [
+  ["tftp-rfc1350-opcode-0001", "pass"],
+  ["tftp-rfc1350-ack-length-0001", "pass"],
+  ["tftp-rfc1350-data-length-0001", "reject"],
+]
+
+[[case]]
+id = "invalid-opcode"
+file = "invalid-opcode.hex"
+description = "TFTP message with an unknown opcode."
+expect_exit = 2
+expect = [
+  ["tftp-rfc1350-opcode-0001", "reject"],
+  ["tftp-rfc1350-ack-length-0001", "pass"],
+  ["tftp-rfc1350-data-length-0001", "pass"],
+]

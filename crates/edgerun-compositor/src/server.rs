@@ -1,5 +1,6 @@
 //! Wayland server — Unix socket listener and message dispatcher.
 
+use crate::libc;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::io;

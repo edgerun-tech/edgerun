@@ -1555,3 +1555,68 @@ fn signed_preimage_does_not_include_signature() {
     let preimage = frame.signed_preimage();
     assert_eq!(preimage.len(), MeshFrameHeader::SIZE + 4);
 }
+
+#[test]
+fn inspect_mesh_frame_wire_rejects_before_payload_allocation() {
+    let too_short = [0u8; MeshFrameHeader::SIZE + MESH_SIGNATURE_LENGTH - 1];
+    assert_eq!(
+        inspect_mesh_frame_wire(&too_short),
+        Err(MeshFrameReject::TooShort)
+    );
+
+    let header = MeshFrameHeader {
+        dest: test_node_id(1),
+        src: test_node_id(2),
+        ttl: 0,
+        frame_type: FrameType::Data,
+    };
+    let frame = MeshFrame {
+        header,
+        payload: Vec::new(),
+        signature: [0u8; MESH_SIGNATURE_LENGTH],
+    };
+    assert_eq!(
+        inspect_mesh_frame_wire(&frame.to_wire()),
+        Err(MeshFrameReject::ExpiredTtl)
+    );
+
+    let oversized = MeshFrame {
+        header: MeshFrameHeader {
+            dest: test_node_id(1),
+            src: test_node_id(2),
+            ttl: 1,
+            frame_type: FrameType::Data,
+        },
+        payload: vec![0u8; MESH_MAX_PAYLOAD_LEN + 1],
+        signature: [0u8; MESH_SIGNATURE_LENGTH],
+    }
+    .to_wire();
+    assert_eq!(
+        inspect_mesh_frame_wire(&oversized),
+        Err(MeshFrameReject::PayloadTooLarge)
+    );
+}
+
+#[test]
+fn inspect_mesh_frame_wire_for_enforces_destination_policy() {
+    let local = test_node_id(1);
+    let remote = test_node_id(2);
+    let frame = MeshFrame {
+        header: MeshFrameHeader {
+            dest: remote,
+            src: test_node_id(3),
+            ttl: 1,
+            frame_type: FrameType::Data,
+        },
+        payload: b"payload".to_vec(),
+        signature: [0u8; MESH_SIGNATURE_LENGTH],
+    };
+    let wire = frame.to_wire();
+    assert_eq!(
+        inspect_mesh_frame_wire_for(&wire, MeshFrameAdmissionPolicy::local_only(local)),
+        Err(MeshFrameReject::NotForThisNode)
+    );
+    assert!(
+        inspect_mesh_frame_wire_for(&wire, MeshFrameAdmissionPolicy::public_mesh(local)).is_ok()
+    );
+}

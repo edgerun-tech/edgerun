@@ -122,16 +122,16 @@ pub type UdpAddr = SocketAddr;
 pub mod tcp;
 pub use tcp::{TcpError, TcpListener, TcpSocket, TcpState};
 
-#[cfg(not(target_os = "none"))]
-pub mod async_net;
-#[cfg(not(target_os = "none"))]
-pub use async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture};
-#[cfg(target_os = "none")]
 pub mod bare_async_net;
+pub use bare_async_net::{install_bare_net_driver, BareNetDriver};
 #[cfg(target_os = "none")]
-pub use bare_async_net::{
-    install_bare_net_driver, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, BareNetDriver,
-    ConnectFuture,
+pub use bare_async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture};
+#[cfg(not(target_os = "none"))]
+pub mod host_async_net;
+#[cfg(not(target_os = "none"))]
+pub use host_async_net::{
+    AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture, IpProtocol, SocketCapability,
+    TcpBindSpec, UdpBindSpec,
 };
 
 pub mod ipv4;

@@ -1,6 +1,7 @@
 //! Minimal EGL bindings via dynamic loading.
 //! Only the subset needed for DMA-BUF import and context management.
 
+use crate::libc;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;

@@ -17,10 +17,7 @@ edgerun-sign-verify-e2e = { version = "0.1", path = "../edgerun-sign-verify-e2e"
 edgerun-stream = { version = "0.1", path = "../../authority/edgerun-stream", default-features = false }
 edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage", default-features = false }
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false }
-edgerun-dns = { version = "0.1", path = "../../edgerun-dns", default-features = false }
-edgerun-dhcp = { version = "0.1", path = "../../edgerun-dhcp", default-features = false }
-edgerun-dhcpv6 = { version = "0.1", path = "../../edgerun-dhcpv6", default-features = false }
-edgerun-tftp = { version = "0.1", path = "../../edgerun-tftp", default-features = false }
+edgerun-protocols = { workspace = true, default-features = false, features = ["dhcp", "dhcpv6", "dns", "http", "imap", "lmtp", "smtp", "tftp"] }
 edgerun-email = { version = "0.1", path = "../../edgerun-email", default-features = false }
 edgerun-secret-service = { version = "0.1", path = "../../edgerun-secret-service", default-features = false }
 edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh", default-features = false }

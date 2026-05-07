@@ -61,3 +61,35 @@ sha256 = ""
 status = "draft"
 reviewer = ""
 notes = "Applies only when opcode is ACK."
+
+[[clause]]
+id = "tftp-rfc1350-data-length-0001"
+standard = "RFC1350"
+section = "5"
+paragraph = ""
+keyword = "MUST"
+kind = "constraint"
+subject = "tftp-message"
+text = "A DATA packet consists of opcode 3, a two-octet block number, and zero or more data octets."
+
+[clause.input]
+type = "tftp-message"
+bindings = { byte_len = "len(input.bytes)", opcode = "field.opcode" }
+
+[clause.predicate]
+language = "edgerun-clause-expr"
+expr = "opcode != 3 || byte_len >= 4"
+
+[clause.on_violation]
+severity = "reject"
+code = "TFTP_DATA_LENGTH_INVALID"
+message = "TFTP DATA packets must include a two-octet block number."
+
+[clause.wasm]
+manifest = "standards/components/manifests/tftp-rfc1350-data-length-0001.toml"
+sha256 = ""
+
+[clause.review]
+status = "draft"
+reviewer = ""
+notes = "Applies only when opcode is DATA."

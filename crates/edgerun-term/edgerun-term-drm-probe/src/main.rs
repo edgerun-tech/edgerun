@@ -1,37 +1,13 @@
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
-use std::os::fd::{AsFd, BorrowedFd};
+use std::io::{self, Read, Write};
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
-use drm::Device;
-use drm::buffer::DrmFourcc;
-use drm::control::{Device as ControlDevice, connector, crtc};
-use portable_pty::{CommandBuilder, PtySize};
+use edgerun_compositor::drm::device::{DrmConnector, DrmDevice};
+use edgerun_compositor::drm::dumb::DumbBuffer;
+use edgerun_compositor::drm::kms;
+use edgerun_pty::{CommandBuilder, PtySize};
 
-struct Card(File);
-
-impl AsFd for Card {
-    fn as_fd(&self) -> BorrowedFd<'_> {
-        self.0.as_fd()
-    }
-}
-
-impl Device for Card {}
-impl ControlDevice for Card {}
-
-impl Card {
-    fn open(path: &str) -> Result<Self> {
-        Ok(Self(
-            OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(path)
-                .with_context(|| format!("open {path}"))?,
-        ))
-    }
-}
+type ProbeResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Default)]
 struct ParserSink {
@@ -39,7 +15,7 @@ struct ParserSink {
     controls: usize,
 }
 
-impl vte::Perform for ParserSink {
+impl edgerun_terminal_parser::Perform for ParserSink {
     fn print(&mut self, _c: char) {
         self.printable += 1;
     }
@@ -49,80 +25,72 @@ impl vte::Perform for ParserSink {
     }
 }
 
-fn main() -> Result<()> {
-    let card = Card::open(
-        std::env::var("TERM_DRM_CARD")
-            .as_deref()
-            .unwrap_or("/dev/dri/card0"),
-    )?;
-    let resources = card.resource_handles().context("drm resources")?;
-    let connectors: Vec<connector::Info> = resources
-        .connectors()
+fn main() -> ProbeResult<()> {
+    let card_path = std::env::var("TERM_DRM_CARD").unwrap_or_else(|_| "/dev/dri/card0".into());
+    let card = DrmDevice::open(&card_path)
+        .map_err(|err| io::Error::other(format!("open {card_path}: {err}")))?;
+    let resources = card
+        .get_resources()
+        .map_err(|err| io::Error::other(format!("drm resources: {err}")))?;
+    let connectors: Vec<DrmConnector> = resources
+        .connectors
         .iter()
-        .filter_map(|connector| card.get_connector(*connector, true).ok())
-        .collect();
-    let crtcs: Vec<crtc::Info> = resources
-        .crtcs()
-        .iter()
-        .filter_map(|crtc| card.get_crtc(*crtc).ok())
+        .filter_map(|connector| card.get_connector(*connector).ok())
         .collect();
     let connector = connectors
         .iter()
-        .find(|info| info.state() == connector::State::Connected)
-        .context("no connected connector")?;
-    let mode = *connector
-        .modes()
+        .find(|info| info.is_connected())
+        .ok_or_else(|| io::Error::other("no connected connector"))?;
+    let mode = connector
+        .modes
         .first()
-        .context("connected connector has no mode")?;
-    let crtc = crtcs.first().context("no crtc")?;
-    let (width, height) = mode.size();
+        .ok_or_else(|| io::Error::other("connected connector has no mode"))?;
+    let crtc = resources
+        .crtcs
+        .first()
+        .copied()
+        .ok_or_else(|| io::Error::other("no crtc"))?;
+    let width = u32::from(mode.hdisplay);
+    let height = u32::from(mode.vdisplay);
+    let fd = card.as_raw_fd();
 
-    let mut buffer = card
-        .create_dumb_buffer(
-            (u32::from(width), u32::from(height)),
-            DrmFourcc::Xrgb8888,
-            32,
-        )
-        .context("create dumb buffer")?;
+    let mut buffer = DumbBuffer::create(fd, width, height, 32)
+        .map_err(|err| io::Error::other(format!("create dumb buffer: {err}")))?;
     {
-        let mut map = card
-            .map_dumb_buffer(&mut buffer)
-            .context("map dumb buffer")?;
-        paint_probe_frame(map.as_mut(), u32::from(width), u32::from(height));
+        let pitch = buffer.pitch;
+        let map = buffer
+            .map()
+            .map_err(|err| io::Error::other(format!("map dumb buffer: {err}")))?;
+        paint_probe_frame(map, width, height, pitch);
     }
-    let framebuffer = card
-        .add_framebuffer(&buffer, 24, 32)
-        .context("add framebuffer")?;
+    let framebuffer = buffer
+        .add_fb()
+        .map_err(|err| io::Error::other(format!("add framebuffer: {err}")))?;
 
     let _pty_worker = thread::spawn(|| {
         let _ = pty_probe();
     });
 
-    card.set_crtc(
-        crtc.handle(),
-        Some(framebuffer),
-        (0, 0),
-        &[connector.handle()],
-        Some(mode),
-    )
-    .context("set crtc")?;
+    kms::set_crtc(fd, crtc, framebuffer, connector.connector_id, mode)
+        .map_err(|err| io::Error::other(format!("set crtc: {err}")))?;
     thread::sleep(Duration::from_millis(
         std::env::var("TERM_DRM_PROBE_MS")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(250),
     ));
-    card.destroy_framebuffer(framebuffer).ok();
-    card.destroy_dumb_buffer(buffer).ok();
+    kms::rmfb(fd, framebuffer).ok();
+    buffer.destroy().ok();
     Ok(())
 }
 
-fn paint_probe_frame(frame: &mut [u8], width: u32, height: u32) {
+fn paint_probe_frame(frame: &mut [u8], width: u32, height: u32, pitch: u32) {
     let width = width as usize;
     let height = height as usize;
+    let pitch = pitch as usize;
     for y in 0..height {
         for x in 0..width {
-            let i = (y * width + x) * 4;
+            let i = y * pitch + x * 4;
             frame[i] = (x & 0xff) as u8;
             frame[i + 1] = (y & 0xff) as u8;
             frame[i + 2] = 0x20;
@@ -131,8 +99,8 @@ fn paint_probe_frame(frame: &mut [u8], width: u32, height: u32) {
     }
 }
 
-fn pty_probe() -> Result<()> {
-    let system = portable_pty::native_pty_system();
+fn pty_probe() -> ProbeResult<()> {
+    let system = edgerun_pty::native_pty_system();
     let pair = system.openpty(PtySize {
         rows: 24,
         cols: 80,
@@ -144,7 +112,7 @@ fn pty_probe() -> Result<()> {
     let mut reader = pair.master.try_clone_reader()?;
     let mut writer = pair.master.take_writer()?;
     writer.write_all(b"printf drm-probe\\nexit\\n")?;
-    let mut parser = vte::Parser::new();
+    let mut parser = edgerun_terminal_parser::Parser::new();
     let mut sink = ParserSink::default();
     let mut buf = [0; 4096];
     while let Ok(n) = reader.read(&mut buf) {

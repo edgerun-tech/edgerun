@@ -30,9 +30,9 @@ artifact changes, the report hash changes.
 
 Good proof targets already exist:
 
-- `edgerun-tftp`: small RFC 1350/RFC 2347 surface, passing no-default-feature
+- `edgerun-protocols::tftp`: small RFC 1350/RFC 2347 surface, passing no-default-feature
   tests, clear `TftpMessage::from_wire` and `to_wire` boundary.
-- `edgerun-dhcp`: RFC 2131 message codec and option parser, passing
+- `edgerun-protocols::dhcp`: RFC 2131 message codec and option parser, passing
   no-default-feature tests.
 - `edgerun-http`: broader and more valuable, with existing conformance modules,
   but it needs requirement IDs, profile splits, and no_std test cleanup.
@@ -124,7 +124,7 @@ Immediate issues to resolve before claiming HTTP conformance:
 The first milestone should be:
 
 ```text
-edgerun-tftp RFC1350 packet-codec profile
+edgerun-protocols::tftp RFC1350 packet-codec profile
 ```
 
 Deliverables:
@@ -137,4 +137,3 @@ Deliverables:
 - a WASM checker that validates those traces using the shared WIT ABI.
 
 Once that works, the same pattern can be applied to DHCP and HTTP.
-

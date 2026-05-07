@@ -1,0 +1,24 @@
+[package]
+name = "edgerun-sdk-unit-udp-rfc768"
+version = "0.1.1"
+edition = "2021"
+publish = false
+
+[package.metadata.edgerun.unit]
+id = "udp-rfc768"
+standard = "RFC768"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+edgerun-unit = { path = "../../../../edgerun-unit" }
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+codegen-units = 1
+lto = true
+strip = true

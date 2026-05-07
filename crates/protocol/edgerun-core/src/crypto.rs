@@ -46,8 +46,8 @@ pub use edgerun_crypto::p256;
 pub use edgerun_crypto::p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 pub use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 pub use edgerun_crypto::rand_core;
-pub use edgerun_crypto::sha2::Digest as Sha2Digest;
-pub use edgerun_crypto::sha2::{Sha256, Sha384, Sha512};
+pub use edgerun_crypto::sha::Digest as ShaDigest;
+pub use edgerun_crypto::sha::{Sha256, Sha384, Sha512};
 pub use edgerun_crypto::{hkdf_sha256, hmac_sha256, hmac_sha384, random_p256_signing_key};
 
 // ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ pub use edgerun_crypto::{hkdf_sha256, hmac_sha256, hmac_sha384, random_p256_sign
 
 /// Compute SHA-256. Returns 32-byte digest.
 pub fn sha256(data: &[u8]) -> Vec<u8> {
-    use edgerun_crypto::sha2::Digest;
+    use edgerun_crypto::sha::Digest;
     let mut hasher = Sha256::new();
     hasher.update(data);
     hasher.finalize().to_vec()
@@ -64,7 +64,7 @@ pub fn sha256(data: &[u8]) -> Vec<u8> {
 
 /// Compute SHA-384. Returns 48-byte digest.
 pub fn sha384(data: &[u8]) -> Vec<u8> {
-    use edgerun_crypto::sha2::Digest;
+    use edgerun_crypto::sha::Digest;
     let mut hasher = Sha384::new();
     hasher.update(data);
     hasher.finalize().to_vec()
@@ -72,7 +72,7 @@ pub fn sha384(data: &[u8]) -> Vec<u8> {
 
 /// Compute SHA-512. Returns 64-byte digest.
 pub fn sha512(data: &[u8]) -> Vec<u8> {
-    use edgerun_crypto::sha2::Digest;
+    use edgerun_crypto::sha::Digest;
     let mut hasher = Sha512::new();
     hasher.update(data);
     hasher.finalize().to_vec()

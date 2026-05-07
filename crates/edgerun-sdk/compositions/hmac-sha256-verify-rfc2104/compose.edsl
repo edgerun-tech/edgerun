@@ -1,0 +1,15 @@
+composition hmac-sha256-verify-rfc2104
+output hmac-sha256-verify-rfc2104
+input key
+input message
+input tag
+component hmac hmac-sha256-rfc2104
+component eq constant-time-eq-v1
+
+copy-input key hmac const:0 len:key
+copy-input message hmac const:256 len:message
+call hmac.hmac_sha256 const:0 len:key const:256 len:message const:1024
+copy-input tag eq const:2048 len:tag
+copy hmac const:1024 eq const:1024 const:32
+call eq.constant_time_eq const:1024 const:32 const:2048 len:tag const:4096
+publish eq const:4096 const:1

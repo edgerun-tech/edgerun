@@ -1784,7 +1784,7 @@ fn verify_rsa_pkcs1_signature(
     match algorithm {
         CmsSignatureAlgorithm::RsaPkcs1Sha256 => {
             let verifying_key = edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<
-                edgerun_crypto::sha2::Sha256,
+                edgerun_crypto::rsa::sha2::Sha256,
             >::new(public_key);
             verifying_key
                 .verify(message, &signature)
@@ -1792,7 +1792,7 @@ fn verify_rsa_pkcs1_signature(
         }
         CmsSignatureAlgorithm::RsaPkcs1Sha384 => {
             let verifying_key = edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<
-                edgerun_crypto::sha2::Sha384,
+                edgerun_crypto::rsa::sha2::Sha384,
             >::new(public_key);
             verifying_key
                 .verify(message, &signature)
@@ -1800,7 +1800,7 @@ fn verify_rsa_pkcs1_signature(
         }
         CmsSignatureAlgorithm::RsaPkcs1Sha512 => {
             let verifying_key = edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<
-                edgerun_crypto::sha2::Sha512,
+                edgerun_crypto::rsa::sha2::Sha512,
             >::new(public_key);
             verifying_key
                 .verify(message, &signature)
@@ -1832,7 +1832,7 @@ fn verify_rsa_pss_signature(
     match algorithm {
         CmsSignatureAlgorithm::RsaPssSha256 => {
             let verifying_key = edgerun_crypto::rsa::pss::VerifyingKey::<
-                edgerun_crypto::sha2::Sha256,
+                edgerun_crypto::rsa::sha2::Sha256,
             >::new(public_key);
             verifying_key
                 .verify(message, &signature)
@@ -2393,7 +2393,7 @@ mod tests {
         ]);
         let signed_input = encode_tlv(0x31, &signed_attributes).unwrap();
         let signing_key =
-            edgerun_crypto::rsa::pkcs1v15::SigningKey::<edgerun_crypto::sha2::Sha256>::new(
+            edgerun_crypto::rsa::pkcs1v15::SigningKey::<edgerun_crypto::rsa::sha2::Sha256>::new(
                 private_key,
             );
         let signature = signing_key.sign(&signed_input).to_vec();
@@ -2448,7 +2448,7 @@ mod tests {
         ]);
         let signed_input = encode_tlv(0x31, &signed_attributes).unwrap();
         let signing_key =
-            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::sha2::Sha256>::new(private_key);
+            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::rsa::sha2::Sha256>::new(private_key);
         let signature = signing_key.sign_with_rng(&mut rng, &signed_input).to_vec();
         let cms = CmsSignedDataInfo {
             lds_security_object: LdsSecurityObject::default(),
@@ -2555,7 +2555,7 @@ mod tests {
             der_sequence(&[]),
         ]);
         let signing_key =
-            edgerun_crypto::rsa::pkcs1v15::SigningKey::<edgerun_crypto::sha2::Sha256>::new(
+            edgerun_crypto::rsa::pkcs1v15::SigningKey::<edgerun_crypto::rsa::sha2::Sha256>::new(
                 anchor_private_key,
             );
         let signature = signing_key.sign(&tbs).to_vec();

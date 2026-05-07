@@ -1,6 +1,7 @@
 //! Minimal GL bindings via dynamic loading.
 //! Only the subset needed for compositing (textured quads).
 
+use crate::libc;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_float, c_int, c_void};
 

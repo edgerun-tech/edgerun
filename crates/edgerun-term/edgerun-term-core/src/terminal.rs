@@ -1,30 +1,38 @@
-use thiserror::Error;
+use edgerun_error::Error;
 
 #[derive(Debug, Error)]
 pub enum TermCoreError {
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(std::io::Error),
     #[error("Base64 error: {0}")]
-    Base64(#[from] base64::DecodeError),
+    Base64(&'static str),
     #[error("Sixel decode error: {0}")]
-    Sixel(#[from] icy_sixel::SixelError),
-    #[cfg(all(not(target_arch = "wasm32"), feature = "clipboard"))]
-    #[error("Clipboard error: {0}")]
-    Arboard(#[from] arboard::Error),
+    Sixel(edgerun_sixel::SixelError),
     #[error("Other error: {0}")]
     Other(String),
 }
+
+impl From<std::io::Error> for TermCoreError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<edgerun_sixel::SixelError> for TermCoreError {
+    fn from(error: edgerun_sixel::SixelError) -> Self {
+        Self::Sixel(error)
+    }
+}
+
 use std::io::Write;
 use std::sync::{Arc, Mutex, OnceLock};
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "clipboard"))]
-use arboard::Clipboard;
-use base64::Engine;
-use base64::engine::general_purpose;
-use icy_sixel::decoder::{DcsSettings, sixel_decode_from_dcs};
-use once_cell::sync::Lazy;
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
-use vte::{Params, Perform};
+use edgerun_encoding::base64::standard_decode;
+#[cfg(test)]
+use edgerun_encoding::base64::standard_encode;
+use edgerun_sixel::{DcsSettings, sixel_decode_from_dcs};
+use edgerun_terminal_parser::{Params, Perform};
+use edgerun_unicode::{terminal_width_char, terminal_width_str};
 
 pub const TAB_WIDTH: usize = 4;
 pub const FG: [u8; 4] = [221, 221, 221, 255];
@@ -208,9 +216,10 @@ pub struct Terminal {
 }
 
 #[allow(dead_code)]
-static CLIPBOARD_HOOK: Lazy<Mutex<Option<Arc<dyn Fn(&str) + Send + Sync>>>> =
-    Lazy::new(|| Mutex::new(None));
-static DEFAULT_PALETTE: Lazy<[Rgba; 256]> = Lazy::new(default_palette);
+static CLIPBOARD_HOOK: std::sync::LazyLock<Mutex<Option<Arc<dyn Fn(&str) + Send + Sync>>>> =
+    std::sync::LazyLock::new(|| Mutex::new(None));
+static DEFAULT_PALETTE: std::sync::LazyLock<[Rgba; 256]> =
+    std::sync::LazyLock::new(default_palette);
 
 pub struct AltState {
     pub cells: Vec<Cell>,
@@ -460,7 +469,7 @@ pub fn write_bytes(writer: &Arc<Mutex<Box<dyn Write + Send>>>, bytes: &[u8]) {
             .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
             .unwrap_or(false)
         {
-            log::info!(
+            edgerun_log::info!(
                 "debug pty write: {}",
                 bytes
                     .iter()
@@ -499,11 +508,30 @@ fn dcs_bytes_from_payload(data: &[u8]) -> Option<&[u8]> {
     Some(data)
 }
 
+fn sixel_grid_size_from_payload(data: &[u8]) -> Option<u16> {
+    let mut rest = data.strip_prefix(b"\"")?;
+    let mut values = [0u16; 4];
+    for (idx, value) in values.iter_mut().enumerate() {
+        let end = rest
+            .iter()
+            .position(|byte| !byte.is_ascii_digit())
+            .unwrap_or(rest.len());
+        if end == 0 {
+            return None;
+        }
+        *value = std::str::from_utf8(&rest[..end]).ok()?.parse().ok()?;
+        rest = &rest[end..];
+        if idx < 3 {
+            rest = rest.strip_prefix(b";")?;
+        }
+    }
+    (values[2] > 0).then_some(values[2])
+}
+
 pub fn copy_text_to_clipboard(text: &str) -> Result<(), TermCoreError> {
     write_clipboard_text(text)
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "clipboard"))]
 fn write_clipboard_text(text: &str) -> Result<(), TermCoreError> {
     let cb = CLIPBOARD_HOOK
         .lock()
@@ -513,19 +541,9 @@ fn write_clipboard_text(text: &str) -> Result<(), TermCoreError> {
         cb(text);
         return Ok(());
     }
-    let mut clipboard = Clipboard::new().map_err(TermCoreError::Arboard)?;
-    clipboard
-        .set_text(text.to_string())
-        .map_err(TermCoreError::Arboard)
-}
-
-#[cfg(any(target_arch = "wasm32", not(feature = "clipboard")))]
-fn write_clipboard_text(_text: &str) -> Result<(), TermCoreError> {
-    // Clipboard support is provided by the embedding frontend/backend when enabled.
     Ok(())
 }
 
-#[cfg(test)]
 pub fn set_clipboard_hook<F>(hook: F)
 where
     F: Fn(&str) + Send + Sync + 'static,
@@ -1054,7 +1072,7 @@ impl Terminal {
     pub fn set_bg(&mut self, color: Rgba) {
         let mut color = color;
         if debug_bg_enabled() && color.a != 255 {
-            log::debug!(
+            edgerun_log::debug!(
                 "bg alpha clamped: pen bg rgba({}, {}, {}, {})",
                 color.r,
                 color.g,
@@ -1135,7 +1153,7 @@ impl Terminal {
     pub fn set_default_bg(&mut self, bg: Rgba) {
         let mut bg = bg;
         if debug_bg_enabled() && bg.a != 255 {
-            log::debug!(
+            edgerun_log::debug!(
                 "bg alpha clamped: default bg rgba({}, {}, {}, {})",
                 bg.r,
                 bg.g,
@@ -1388,7 +1406,7 @@ impl Terminal {
 
         // Treat zero-width codepoints, emoji modifiers, and ZWJ sequences as part of the
         // previous grapheme so they render as a single cell.
-        let width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        let width = terminal_width_char(ch);
         if width == 0 {
             return true;
         }
@@ -1404,7 +1422,7 @@ impl Terminal {
             return;
         }
         let mut cell = self.cells[idx].clone();
-        let width = UnicodeWidthStr::width(cell.text.as_str()).clamp(1, 2);
+        let width = terminal_width_str(cell.text.as_str()).clamp(1, 2);
         cell.wide = width > 1;
         cell.wide_continuation = false;
 
@@ -1465,7 +1483,7 @@ impl Terminal {
             if let Some(idx) = prev_idx {
                 if debug_width_enabled() {
                     let ch_dbg = ch.escape_default().to_string();
-                    log::debug!(
+                    edgerun_log::debug!(
                         "width combine: ch='{}' cursor=({}, {})",
                         ch_dbg,
                         self.cursor_col,
@@ -1479,7 +1497,7 @@ impl Terminal {
             return;
         }
 
-        let width = UnicodeWidthChar::width(ch).unwrap_or(1).max(1).min(2);
+        let width = terminal_width_char(ch).clamp(1, 2);
 
         let line_limit = self
             .right_margin
@@ -1488,7 +1506,7 @@ impl Terminal {
         if width > 1 && self.cursor_col + width > line_limit {
             if debug_width_enabled() {
                 let ch_dbg = ch.escape_default().to_string();
-                log::debug!(
+                edgerun_log::debug!(
                     "width wrap: ch='{}' width={} cursor_col={} line_limit={}",
                     ch_dbg,
                     width,
@@ -1504,7 +1522,7 @@ impl Terminal {
         if idx < self.cells.len() {
             if debug_width_enabled() {
                 let ch_dbg = ch.escape_default().to_string();
-                log::debug!(
+                edgerun_log::debug!(
                     "width put: ch='{}' width={} cursor=({}, {}) cols={}",
                     ch_dbg,
                     width,
@@ -2125,7 +2143,10 @@ impl Perform for GridPerformer<'_> {
         if payload.is_empty() {
             return;
         }
-        let settings = DcsSettings::new(state.aspect_ratio, state.zero_color, state.grid_size);
+        let grid_size = state
+            .grid_size
+            .or_else(|| sixel_grid_size_from_payload(payload));
+        let settings = DcsSettings::new(state.aspect_ratio, state.zero_color, grid_size);
         if let Ok(image) = sixel_decode_from_dcs(payload, settings) {
             let (width, height) = image.corrected_dimensions();
             self.grid.sixels.push(SixelSprite {
@@ -2486,10 +2507,12 @@ impl Perform for GridPerformer<'_> {
                 }
             } else if tag == b"52" {
                 if let Some(encoded) = merged.get(2).or_else(|| merged.get(1)).copied() {
-                    if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
+                    if let Ok(encoded) = std::str::from_utf8(encoded)
+                        && let Ok(decoded) = standard_decode(encoded)
+                    {
                         if let Ok(text) = String::from_utf8(decoded) {
                             if let Err(e) = write_clipboard_text(&text) {
-                                log::error!("Failed to write clipboard text: {e}");
+                                edgerun_log::error!("Failed to write clipboard text: {}", e);
                             }
                         }
                     }
@@ -2655,12 +2678,14 @@ impl Perform for GridPerformer<'_> {
                 if let Some(encoded) = encoded {
                     if encoded.is_empty() {
                         if let Err(e) = write_clipboard_text("") {
-                            log::error!("Failed to write clipboard text: {e}");
+                            edgerun_log::error!("Failed to write clipboard text: {}", e);
                         }
-                    } else if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
+                    } else if let Ok(encoded) = std::str::from_utf8(encoded)
+                        && let Ok(decoded) = standard_decode(encoded)
+                    {
                         if let Ok(text) = String::from_utf8(decoded) {
                             if let Err(e) = write_clipboard_text(&text) {
-                                log::error!("Failed to write clipboard text: {e}");
+                                edgerun_log::error!("Failed to write clipboard text: {}", e);
                             }
                         }
                     }
@@ -2706,12 +2731,9 @@ pub fn selection_text(term: &Terminal, a: (usize, usize), b: (usize, usize)) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::Engine;
-    use base64::engine::general_purpose;
-    use once_cell::sync::Lazy;
     use std::io::Write;
-    use std::sync::Mutex as StdMutex;
     use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{LazyLock, Mutex as StdMutex};
 
     #[derive(Clone, Default)]
     struct LockedBuf(Arc<Mutex<Vec<u8>>>);
@@ -2733,7 +2755,7 @@ mod tests {
         (buf, Arc::new(Mutex::new(writer)))
     }
 
-    static CLIPBOARD_TEST_LOCK: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
+    static CLIPBOARD_TEST_LOCK: LazyLock<StdMutex<()>> = LazyLock::new(|| StdMutex::new(()));
 
     #[test]
     fn insert_spaces_shifts_content() {
@@ -2923,7 +2945,7 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         let line_count = 12;
         for i in 0..line_count {
@@ -2982,8 +3004,8 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
-        // Simple two-column sixel image from icy_sixel tests.
+        let mut parser = edgerun_terminal_parser::Parser::new();
+        // Simple two-column sixel image.
         let sixel = b"\x1bPq\"1;1;2;2#0;2;0;0;0#0~~\x1b\\";
         for b in sixel {
             parser.advance(&mut performer, *b);
@@ -3016,7 +3038,7 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         let sixel = b"\x1bPq#0!5~\x1b\\";
         for b in sixel {
             parser.advance(&mut performer, *b);
@@ -3124,7 +3146,7 @@ mod tests {
     #[test]
     fn bash_reverse_search_output_does_not_scroll() {
         let mut term = Terminal::new(80, 4);
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         let mut app_cursor_keys = false;
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
             Arc::new(Mutex::new(Box::new(std::io::sink())));
@@ -3159,7 +3181,7 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         for byte in b"\x1b[?1004h" {
             parser.advance(&mut performer, *byte);
@@ -3195,7 +3217,7 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         for b in b"\x1b]2;hello world\x07" {
             parser.advance(&mut performer, *b);
@@ -3216,7 +3238,7 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         for b in b"\x1b]1;iconic\x07" {
             parser.advance(&mut performer, *b);
@@ -3238,7 +3260,7 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         for b in b"\x1b]0;combo\x07" {
             parser.advance(&mut performer, *b);
@@ -3261,7 +3283,7 @@ mod tests {
                 app_cursor_keys: &mut app_cursor_keys,
                 dcs_state: None,
             };
-            let mut parser = vte::Parser::new();
+            let mut parser = edgerun_terminal_parser::Parser::new();
             for b in b"\x1b[?25l" {
                 parser.advance(&mut performer, *b);
             }
@@ -3275,7 +3297,7 @@ mod tests {
                 app_cursor_keys: &mut app_cursor_keys,
                 dcs_state: None,
             };
-            let mut parser = vte::Parser::new();
+            let mut parser = edgerun_terminal_parser::Parser::new();
             for b in b"\x1b[?25h" {
                 parser.advance(&mut performer, *b);
             }
@@ -3296,7 +3318,7 @@ mod tests {
                 app_cursor_keys: &mut app_cursor_keys,
                 dcs_state: None,
             };
-            let mut parser = vte::Parser::new();
+            let mut parser = edgerun_terminal_parser::Parser::new();
             for b in b"\x1b[0 q" {
                 parser.advance(&mut performer, *b);
             }
@@ -3310,7 +3332,7 @@ mod tests {
                 app_cursor_keys: &mut app_cursor_keys,
                 dcs_state: None,
             };
-            let mut parser = vte::Parser::new();
+            let mut parser = edgerun_terminal_parser::Parser::new();
             for b in b"\x1b[4 q" {
                 parser.advance(&mut performer, *b);
             }
@@ -3324,7 +3346,7 @@ mod tests {
                 app_cursor_keys: &mut app_cursor_keys,
                 dcs_state: None,
             };
-            let mut parser = vte::Parser::new();
+            let mut parser = edgerun_terminal_parser::Parser::new();
             for b in b"\x1b[6 q" {
                 parser.advance(&mut performer, *b);
             }
@@ -3353,9 +3375,9 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
-        let payload = general_purpose::STANDARD.encode("hello");
+        let payload = standard_encode("hello".as_bytes());
         let seq = format!("\x1b]52;c;{}\x07", payload);
         for b in seq.as_bytes() {
             parser.advance(&mut performer, *b);
@@ -3377,7 +3399,7 @@ mod tests {
                 app_cursor_keys: &mut app_cursor_keys,
                 dcs_state: None,
             };
-            let mut parser = vte::Parser::new();
+            let mut parser = edgerun_terminal_parser::Parser::new();
             for b in b"\x1b[2;9;53mX" {
                 parser.advance(&mut performer, *b);
             }
@@ -3394,7 +3416,7 @@ mod tests {
                 app_cursor_keys: &mut app_cursor_keys,
                 dcs_state: None,
             };
-            let mut parser = vte::Parser::new();
+            let mut parser = edgerun_terminal_parser::Parser::new();
             for b in b"\x1b[22;29;55mY" {
                 parser.advance(&mut performer, *b);
             }
@@ -3426,7 +3448,7 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         let seq = "\x1b]52;c;@@@\x07";
         for b in seq.as_bytes() {
@@ -3447,7 +3469,7 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         // Set scroll region to rows 1..3, enable origin mode, then home.
         for b in b"\x1b[2;4r\x1b[?6h\x1b[H" {
@@ -3564,7 +3586,7 @@ mod tests {
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
             Arc::new(Mutex::new(Box::new(std::io::sink())));
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         {
             let mut performer = GridPerformer {
@@ -3744,7 +3766,7 @@ mod tests {
             app_cursor_keys: &mut app_cursor_keys,
             dcs_state: None,
         };
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         let seq = b"\x1b]7;file:///home/test\x07";
         for b in seq {
@@ -3759,7 +3781,7 @@ mod tests {
         let mut term = Terminal::new(2, 1);
         let (_, writer) = capture_writer();
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
 
         {
             let mut performer = GridPerformer {
@@ -3799,7 +3821,7 @@ mod tests {
         let osc = b"\x1b]11;#112233\x07";
         let (_, writer) = capture_writer();
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         {
             let mut performer = GridPerformer {
                 grid: &mut term,
@@ -3835,7 +3857,7 @@ mod tests {
         let mut term = Terminal::new(2, 1);
         let (buf, writer) = capture_writer();
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         let mut performer = GridPerformer {
             grid: &mut term,
             writer,
@@ -3864,7 +3886,7 @@ mod tests {
         let mut term = Terminal::new(2, 1);
         let (_, writer) = capture_writer();
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         let mut performer = GridPerformer {
             grid: &mut term,
             writer,
@@ -3896,7 +3918,7 @@ mod tests {
         let mut term = Terminal::new(2, 1);
         let (_, writer) = capture_writer();
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         let mut performer = GridPerformer {
             grid: &mut term,
             writer,
@@ -3928,7 +3950,7 @@ mod tests {
         let mut term = Terminal::new(2, 1);
         let (_, writer) = capture_writer();
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         let mut performer = GridPerformer {
             grid: &mut term,
             writer,
@@ -3984,7 +4006,7 @@ mod tests {
             dcs_state: None,
         };
 
-        let payload = general_purpose::STANDARD.encode("copy me");
+        let payload = standard_encode("copy me".as_bytes());
         // Prefix a different payload first to ensure later data wins.
         performer.osc_dispatch(&[b"52", b"c", b"aGVsbG8="], false);
         performer.osc_dispatch(&[b"52", b"c", payload.as_bytes()], false);
@@ -3999,7 +4021,7 @@ mod tests {
         let mut term = Terminal::new(2, 1);
         let (_, writer) = capture_writer();
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         let mut performer = GridPerformer {
             grid: &mut term,
             writer,
@@ -4029,7 +4051,7 @@ mod tests {
         let mut term = Terminal::new(2, 1);
         let (_, writer) = capture_writer();
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         let mut performer = GridPerformer {
             grid: &mut term,
             writer,
@@ -4054,7 +4076,7 @@ mod tests {
         let mut term = Terminal::new(2, 1);
         let (buf, writer) = capture_writer();
         let mut app_cursor_keys = false;
-        let mut parser = vte::Parser::new();
+        let mut parser = edgerun_terminal_parser::Parser::new();
         let mut performer = GridPerformer {
             grid: &mut term,
             writer,

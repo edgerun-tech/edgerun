@@ -1,5 +1,6 @@
 //! KMS — Kernel Mode Setting: CRTC control, page flipping.
 
+use crate::libc;
 use std::io;
 use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicU32, Ordering};

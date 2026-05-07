@@ -46,6 +46,10 @@ impl IpTunnel {
         Ok(Self { fd, peer_addr })
     }
 
+    pub fn open_public_mesh(peer_ip: [u8; 4]) -> Result<Self, io::Error> {
+        Self::open(peer_ip, EDGERUN_PUBLIC_MESH_PORT)
+    }
+
     pub fn send(&self, data: &[u8]) -> Result<(), io::Error> {
         let n = unsafe {
             sendto(

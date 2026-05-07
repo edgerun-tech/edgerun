@@ -2,6 +2,7 @@
 
 use super::DispatchContext;
 use crate::input::keymap;
+use crate::libc;
 use crate::protocol::wl_seat;
 use crate::wire::decode::ArgCursor;
 

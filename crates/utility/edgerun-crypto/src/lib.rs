@@ -2,7 +2,7 @@
 #![allow(clippy::all)]
 
 extern crate alloc;
-#[cfg(not(target_os = "none"))]
+#[cfg(feature = "std")]
 extern crate std;
 
 #[cfg(feature = "aead")]
@@ -48,7 +48,9 @@ pub use ed25519_dalek::SigningKey as Ed25519SigningKey;
 pub use p256::ecdsa::SigningKey;
 pub use rng::{fill_random, mix_entropy, random_bytes, random_u32, random_u64};
 #[cfg(feature = "ed25519")]
-pub use signature::Signer;
+pub use ed25519_dalek::Signer as Ed25519Signer;
+#[cfg(feature = "ed25519")]
+pub use ed25519_dalek::Signer;
 
 pub use crate::rng::OsRng;
 pub use rand_core::{CryptoRng, RngCore};
@@ -58,34 +60,67 @@ pub mod rand_core {
 }
 
 pub mod digest {
-    pub use sha2::Digest;
+    pub use crate::sha::Digest;
 }
 
 pub use sha::{sha256, sha384, sha512, Sha256, Sha384, Sha512};
 
-pub mod sha2 {
-    pub use crate::sha::{Sha256, Sha384, Sha512};
-    pub use sha2::Digest;
-}
-
 #[cfg(feature = "hmac")]
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
-    use hmac_crate::{Hmac, Mac};
-
-    let mut mac =
-        <Hmac<crate::sha::Sha256> as Mac>::new_from_slice(key).expect("HMAC accepts any key");
-    mac.update(data);
-    mac.finalize().into_bytes().to_vec()
+    hmac_sha256_array(key, data).to_vec()
 }
 
 #[cfg(feature = "hmac")]
 pub fn hmac_sha384(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
-    use hmac_crate::{Hmac, Mac};
+    hmac_sha384_array(key, data).to_vec()
+}
 
-    let mut mac =
-        <Hmac<crate::sha::Sha384> as Mac>::new_from_slice(key).expect("HMAC accepts any key");
-    mac.update(data);
-    mac.finalize().into_bytes().to_vec()
+#[cfg(feature = "hmac")]
+fn hmac_sha256_array(key: &[u8], data: &[u8]) -> [u8; 32] {
+    let mut normalized = [0u8; 64];
+    if key.len() > 64 {
+        normalized[..32].copy_from_slice(&sha256(key));
+    } else {
+        normalized[..key.len()].copy_from_slice(key);
+    }
+    let mut ipad = [0x36u8; 64];
+    let mut opad = [0x5cu8; 64];
+    for index in 0..64 {
+        ipad[index] ^= normalized[index];
+        opad[index] ^= normalized[index];
+    }
+    let mut inner = alloc::vec::Vec::with_capacity(64 + data.len());
+    inner.extend_from_slice(&ipad);
+    inner.extend_from_slice(data);
+    let inner_digest = sha256(&inner);
+    let mut outer = alloc::vec::Vec::with_capacity(64 + inner_digest.len());
+    outer.extend_from_slice(&opad);
+    outer.extend_from_slice(&inner_digest);
+    sha256(&outer)
+}
+
+#[cfg(feature = "hmac")]
+fn hmac_sha384_array(key: &[u8], data: &[u8]) -> [u8; 48] {
+    let mut normalized = [0u8; 128];
+    if key.len() > 128 {
+        normalized[..48].copy_from_slice(&sha384(key));
+    } else {
+        normalized[..key.len()].copy_from_slice(key);
+    }
+    let mut ipad = [0x36u8; 128];
+    let mut opad = [0x5cu8; 128];
+    for index in 0..128 {
+        ipad[index] ^= normalized[index];
+        opad[index] ^= normalized[index];
+    }
+    let mut inner = alloc::vec::Vec::with_capacity(128 + data.len());
+    inner.extend_from_slice(&ipad);
+    inner.extend_from_slice(data);
+    let inner_digest = sha384(&inner);
+    let mut outer = alloc::vec::Vec::with_capacity(128 + inner_digest.len());
+    outer.extend_from_slice(&opad);
+    outer.extend_from_slice(&inner_digest);
+    sha384(&outer)
 }
 
 #[cfg(feature = "hmac")]
@@ -257,7 +292,6 @@ pub mod hkdf {
 #[cfg(feature = "hmac")]
 pub mod hmac {
     pub use crate::hmac_sha256 as HMAC;
-    pub use hmac_crate::{Hmac, Mac};
 }
 
 #[cfg(feature = "sha1")]
@@ -525,14 +559,14 @@ fn random_serial() -> [u8; 16] {
 
 #[cfg(feature = "p256")]
 fn current_unix_secs() -> u64 {
-    #[cfg(not(target_os = "none"))]
+    #[cfg(feature = "std")]
     {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_secs())
             .unwrap_or(1_704_067_200)
     }
-    #[cfg(target_os = "none")]
+    #[cfg(not(feature = "std"))]
     {
         1_704_067_200
     }

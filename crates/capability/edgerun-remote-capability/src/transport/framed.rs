@@ -101,40 +101,13 @@ pub fn accept_tcp(
 }
 
 fn encode_capability_remote_envelope(envelope: &CapabilityRemoteEnvelope) -> Vec<u8> {
-    use edgerun_core::protocol::capability_runtime::capability_remote_envelope::Message;
-
-    let tag: u8 = match envelope.message.as_ref() {
-        None => 0,
-        Some(Message::SessionOpen(_)) => 1,
-        Some(Message::SessionAccept(_)) => 2,
-        Some(Message::Invocation(_)) => 3,
-        Some(Message::Result(_)) => 4,
-        Some(Message::SessionEvent(_)) => 5,
-        Some(Message::SessionClose(_)) => 6,
-        Some(Message::Request(_)) => 7,
-        Some(Message::Grant(_)) => 8,
-        Some(Message::Revocation(_)) => 9,
-        Some(Message::InvocationFrame(_)) => 10,
-        Some(Message::ResultFrame(_)) => 11,
-    };
-
-    // Transitional frame: magic + message tag only. Replace with full edgerun-wire
-    // encoding for each variant once the transport callsites are stable.
-    let mut out = Vec::new();
-    out.extend_from_slice(b"ERCR");
-    out.push(tag);
-    out
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(envelope)
+        .expect("remote capability envelope must serialize through rkyv")
+        .into_vec()
 }
 
 fn decode_capability_remote_envelope(bytes: &[u8]) -> Result<CapabilityRemoteEnvelope, String> {
-    if bytes.len() < 5 {
-        return Err("remote capability frame too short".to_string());
-    }
-    if &bytes[0..4] != b"ERCR" {
-        return Err("invalid remote capability frame magic".to_string());
-    }
-
-    // Transitional: we cannot reconstruct payload-bearing variants yet without
-    // the full typed edgerun-wire decoder, so return an empty envelope.
-    Ok(CapabilityRemoteEnvelope { message: None })
+    let owned = bytes.to_vec();
+    edgerun_wire::from_bytes::<CapabilityRemoteEnvelope, edgerun_wire::WireError>(&owned)
+        .map_err(|_| "invalid rkyv remote capability envelope".to_owned())
 }

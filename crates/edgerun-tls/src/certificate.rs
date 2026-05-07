@@ -190,20 +190,20 @@ fn verify_ecdsa_certificate_signature(
 ) -> Result<(), String> {
     let (hash, hasher_name) = match cert.signature_algorithm.as_slice() {
         OID_ECDSA_SHA256 => {
-            use edgerun_crypto::sha2::Digest;
-            let mut hasher = edgerun_crypto::sha2::Sha256::new();
+            use edgerun_crypto::sha::Digest;
+            let mut hasher = edgerun_crypto::sha::Sha256::new();
             hasher.update(&cert.tbs_certificate_der);
             (hasher.finalize().to_vec(), "SHA-256")
         }
         OID_ECDSA_SHA384 => {
-            use edgerun_crypto::sha2::Digest;
-            let mut hasher = edgerun_crypto::sha2::Sha384::new();
+            use edgerun_crypto::sha::Digest;
+            let mut hasher = edgerun_crypto::sha::Sha384::new();
             hasher.update(&cert.tbs_certificate_der);
             (hasher.finalize().to_vec(), "SHA-384")
         }
         OID_ECDSA_SHA512 => {
-            use edgerun_crypto::sha2::Digest;
-            let mut hasher = edgerun_crypto::sha2::Sha512::new();
+            use edgerun_crypto::sha::Digest;
+            let mut hasher = edgerun_crypto::sha::Sha512::new();
             hasher.update(&cert.tbs_certificate_der);
             (hasher.finalize().to_vec(), "SHA-512")
         }
@@ -265,7 +265,7 @@ fn verify_rsa_pkcs1_sha256(
     signature: &[u8],
 ) -> Result<(), String> {
     let verifying_key =
-        edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<edgerun_crypto::sha2::Sha256>::new(
+        edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<edgerun_crypto::rsa::sha2::Sha256>::new(
             public_key.clone(),
         );
     let signature = edgerun_crypto::rsa::pkcs1v15::Signature::try_from(signature)
@@ -282,7 +282,7 @@ fn verify_rsa_pkcs1_sha384(
     signature: &[u8],
 ) -> Result<(), String> {
     let verifying_key =
-        edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<edgerun_crypto::sha2::Sha384>::new(
+        edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<edgerun_crypto::rsa::sha2::Sha384>::new(
             public_key.clone(),
         );
     let signature = edgerun_crypto::rsa::pkcs1v15::Signature::try_from(signature)
@@ -299,7 +299,7 @@ fn verify_rsa_pkcs1_sha512(
     signature: &[u8],
 ) -> Result<(), String> {
     let verifying_key =
-        edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<edgerun_crypto::sha2::Sha512>::new(
+        edgerun_crypto::rsa::pkcs1v15::VerifyingKey::<edgerun_crypto::rsa::sha2::Sha512>::new(
             public_key.clone(),
         );
     let signature = edgerun_crypto::rsa::pkcs1v15::Signature::try_from(signature)
@@ -315,9 +315,10 @@ fn verify_rsa_pss_sha256(
     message: &[u8],
     signature: &[u8],
 ) -> Result<(), String> {
-    let verifying_key = edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha256>::new(
-        public_key.clone(),
-    );
+    let verifying_key =
+        edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::rsa::sha2::Sha256>::new(
+            public_key.clone(),
+        );
     let signature = edgerun_crypto::rsa::pss::Signature::try_from(signature)
         .map_err(|e| format!("Failed to parse RSA-PSS signature: {e}"))?;
     use edgerun_crypto::rsa::signature::Verifier;

@@ -12,6 +12,7 @@ clauses = [
   "udp-rfc768-length-0001",
   "tftp-rfc1350-opcode-0001",
   "tftp-rfc1350-ack-length-0001",
+  "tftp-rfc1350-data-length-0001",
 ]
 
 components = []

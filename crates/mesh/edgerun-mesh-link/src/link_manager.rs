@@ -16,7 +16,10 @@ use super::*;
 use crate::multicast::SockaddrIn;
 use crate::prelude::v1::*;
 use edgerun_hardware_signing::NodeID;
-use edgerun_mesh::{discovery::DiscoveryPacket, router::MeshRouter, FrameType, MeshFrame};
+use edgerun_mesh::{
+    discovery::DiscoveryPacket, inspect_mesh_frame_wire_for, router::MeshRouter, FrameType,
+    MeshFrame, MeshFrameAdmissionPolicy,
+};
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::os::raw::{c_int, c_void};
@@ -239,7 +242,10 @@ impl MeshLink {
         let mut eth_frames: Vec<(c_int, MeshFrame)> = Vec::new();
         for (&ifindex, socket) in &self.raw_sockets {
             while let Some((data, _src_mac)) = socket.recv()? {
-                if let Some(frame) = MeshFrame::from_wire(&data) {
+                if admitted_mesh_frame(&data, router).is_some() {
+                    let Some(frame) = MeshFrame::from_wire(&data) else {
+                        continue;
+                    };
                     eth_frames.push((ifindex, frame));
                 }
             }
@@ -262,7 +268,10 @@ impl MeshLink {
         let mut tunnel_frames: Vec<(NodeID, MeshFrame)> = Vec::new();
         for (peer_id, tunnel) in &self.tunnels {
             while let Some(data) = tunnel.recv()? {
-                if let Some(frame) = MeshFrame::from_wire(&data) {
+                if admitted_mesh_frame(&data, router).is_some() {
+                    let Some(frame) = MeshFrame::from_wire(&data) else {
+                        continue;
+                    };
                     tunnel_frames.push((*peer_id, frame));
                 }
             }
@@ -276,7 +285,10 @@ impl MeshLink {
         let mut udp_frames: Vec<MeshFrame> = Vec::new();
         if let Some(udp) = &mut self.udp_broadcast {
             while let Some((data, sender_addr)) = udp.recv()? {
-                if let Some(frame) = MeshFrame::from_wire(&data) {
+                if admitted_mesh_frame(&data, router).is_some() {
+                    let Some(frame) = MeshFrame::from_wire(&data) else {
+                        continue;
+                    };
                     // Learn the sender's NodeID → IP mapping for unicast replies
                     udp.learn_peer(frame.header.src, sender_addr);
                     udp_frames.push(frame);
@@ -397,4 +409,20 @@ pub(crate) fn current_unix_secs() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64
+}
+
+fn admitted_mesh_frame<'a>(
+    bytes: &'a [u8],
+    router: &MeshRouter,
+) -> Option<edgerun_mesh::MeshFrameAdmission> {
+    let policy = MeshFrameAdmissionPolicy::public_mesh(router.node_id());
+    let admission = inspect_mesh_frame_wire_for(bytes, policy).ok()?;
+    if admission.header.dest == router.node_id() || admission.header.dest.0 == [0u8; 64] {
+        return Some(admission);
+    }
+    if router.has_route_to(&admission.header.dest) {
+        Some(admission)
+    } else {
+        None
+    }
 }

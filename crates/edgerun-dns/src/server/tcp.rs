@@ -83,7 +83,7 @@ pub async fn handle_tcp_connection_raw(
             }
             Err(e) => return Err(e),
         }
-        let msg_len = dns_tcp_frame_len(len_buf)?;
+        let msg_len = dns_tcp_frame_len(len_buf).map_err(dns_tcp_frame_io_error)?;
 
         let mut query_buf = vec![0u8; msg_len];
         tcp_read_exact(&stream_mutex, &mut query_buf).await?;
@@ -144,7 +144,7 @@ async fn tcp_write_length_prefixed(
     stream_mutex: &Arc<crate::std::sync::Mutex<Arc<AsyncTcpStream>>>,
     data: &[u8],
 ) -> io::Result<()> {
-    let frame = encode_dns_tcp_frame(data)?;
+    let frame = encode_dns_tcp_frame(data).map_err(dns_tcp_frame_io_error)?;
 
     poll_fn(|cx| {
         let guard = stream_mutex.lock().unwrap();
@@ -171,4 +171,8 @@ async fn tcp_write_length_prefixed(
     }
 
     Ok(())
+}
+
+fn dns_tcp_frame_io_error(err: crate::tcp_frame::DnsTcpFrameError) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, alloc::format!("{err:?}"))
 }

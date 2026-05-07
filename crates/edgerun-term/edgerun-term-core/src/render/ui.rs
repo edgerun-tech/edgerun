@@ -4,11 +4,6 @@ use crate::render::cpu::text_width;
 use crate::render::{GlyphCache, draw_text_line_clipped, fill_rect};
 use crate::terminal::{FG, Rgba};
 
-#[cfg(feature = "gpu")]
-use crate::gpu::{GlyphAtlas, GlyphVertex, RectVertex};
-#[cfg(feature = "gpu")]
-use pixels::wgpu;
-
 pub const OVERLAY_DIM: Rgba = Rgba {
     r: 10,
     g: 12,
@@ -140,100 +135,10 @@ pub fn draw_tab_bar_cpu(
     }
 }
 
-/// GPU path tab bar building.
-#[cfg(feature = "gpu")]
-#[allow(clippy::too_many_arguments)]
-pub fn build_tab_bar_gpu(
-    rects: &mut Vec<RectVertex>,
-    glyphs_out: &mut Vec<GlyphVertex>,
-    atlas: &mut GlyphAtlas,
-    queue: &wgpu::Queue,
-    tabs: &[TabVisual<'_>],
-    active: usize,
-    glyphs: &mut GlyphCache,
-    frame_width: u32,
-    tab_bar_height: u32,
-    border_thickness: u32,
-    _start_time: Instant,
-) {
-    let bar_top = border_thickness as f32;
-    let bar_bottom = bar_top + tab_bar_height as f32;
-    // background
-    crate::gpu::GpuRenderer::push_rect(
-        rects,
-        0.0,
-        bar_top,
-        frame_width as f32,
-        bar_bottom,
-        Rgba {
-            r: 24,
-            g: 24,
-            b: 24,
-            a: 200,
-        },
-    );
-
-    let mut x = border_thickness as f32 + 8.0;
-    let text_y = tab_text_y_f32(bar_top, tab_bar_height, glyphs);
-    for (idx, tab) in tabs.iter().enumerate() {
-        if x >= frame_width as f32 {
-            break;
-        }
-        let label = format!(" {} ", tab.title);
-        let label_width = crate::render::cpu::text_width(glyphs, &label) as f32;
-        let rect_w = (label_width + 14.0).max(48.0);
-        let rect_x1 = (x + rect_w).min(frame_width as f32);
-        let bg = if idx == active {
-            Rgba {
-                r: 72,
-                g: 92,
-                b: 110,
-                a: 200,
-            }
-        } else {
-            Rgba {
-                r: 32,
-                g: 32,
-                b: 32,
-                a: 180,
-            }
-        };
-        crate::gpu::GpuRenderer::push_rect(rects, x, bar_top + 2.0, rect_x1, bar_bottom - 2.0, bg);
-        let text_color = if idx == active {
-            Rgba {
-                r: 230,
-                g: 235,
-                b: 240,
-                a: 255,
-            }
-        } else {
-            Rgba {
-                r: FG[0],
-                g: FG[1],
-                b: FG[2],
-                a: FG[3],
-            }
-        };
-        let text_x = x + ((rect_w - label_width) / 2.0).max(0.0);
-        crate::gpu::GpuRenderer::push_text_line(
-            glyphs, atlas, glyphs_out, &label, text_x, text_y, text_color, queue,
-        );
-        x += rect_w + 8.0;
-    }
-}
-
 fn tab_text_y(bar_top: i32, tab_bar_height: u32, glyphs: &GlyphCache) -> i32 {
     let cell_h = glyphs.cell_height() as i32;
     let baseline = glyphs.baseline();
     let top = bar_top + ((tab_bar_height as i32 - cell_h) / 2).max(0);
-    top + (cell_h - baseline)
-}
-
-#[cfg(feature = "gpu")]
-fn tab_text_y_f32(bar_top: f32, tab_bar_height: u32, glyphs: &GlyphCache) -> f32 {
-    let cell_h = glyphs.cell_height() as f32;
-    let baseline = glyphs.baseline() as f32;
-    let top = bar_top + ((tab_bar_height as f32 - cell_h) / 2.0).max(0.0);
     top + (cell_h - baseline)
 }
 
@@ -329,83 +234,6 @@ pub fn draw_help_bar_cpu(
             &status_text,
             rgba_bytes(OVERLAY_TEXT_MUTED),
             (width as i32 - 8).max(sx + 4),
-        );
-    }
-}
-
-#[cfg(feature = "gpu")]
-pub fn build_help_bar_gpu(
-    rects: &mut Vec<RectVertex>,
-    glyphs_out: &mut Vec<GlyphVertex>,
-    atlas: &mut GlyphAtlas,
-    queue: &wgpu::Queue,
-    glyphs: &mut GlyphCache,
-    width: u32,
-    height: u32,
-    cell_h: u32,
-    bottom_margin: u32,
-    help_text: &str,
-    link_label: Option<&str>,
-    status_label: Option<String>,
-) {
-    if width == 0 || height == 0 {
-        return;
-    }
-    let needs_status = status_label.is_some();
-    let (bar_top, bar_bottom) = help_bar_metrics(height, cell_h, bottom_margin, needs_status);
-    let bar_h = bar_bottom.saturating_sub(bar_top) as f32;
-    let bar_top = bar_top as f32;
-    crate::gpu::GpuRenderer::push_rect(
-        rects,
-        0.0,
-        bar_top,
-        width as f32,
-        bar_bottom as f32,
-        OVERLAY_BAR,
-    );
-
-    let x = 12.0;
-    let y = bar_top + ((bar_h - glyphs.cell_height() as f32) / 2.0).max(0.0);
-    crate::gpu::GpuRenderer::push_text_line(
-        glyphs,
-        atlas,
-        glyphs_out,
-        help_text,
-        x,
-        y,
-        OVERLAY_TEXT,
-        queue,
-    );
-
-    if let Some(link) = link_label {
-        let link_text = crate::render::primitives::truncate_label(link, 96);
-        let link_w = text_width(glyphs, &link_text) as f32;
-        let lx = (width as f32 - link_w - 12.0).max(x + 8.0);
-        crate::gpu::GpuRenderer::push_text_line(
-            glyphs,
-            atlas,
-            glyphs_out,
-            &link_text,
-            lx,
-            y,
-            OVERLAY_ACCENT,
-            queue,
-        );
-    }
-
-    if let Some(status) = status_label {
-        let status_text = crate::render::primitives::truncate_label(&status, 64);
-        let status_w = text_width(glyphs, &status_text) as f32;
-        let sx = (width as f32 - status_w - 12.0).max(x + 8.0);
-        crate::gpu::GpuRenderer::push_text_line(
-            glyphs,
-            atlas,
-            glyphs_out,
-            &status_text,
-            sx,
-            y + glyphs.cell_height() as f32 + 2.0,
-            OVERLAY_TEXT_MUTED,
-            queue,
         );
     }
 }

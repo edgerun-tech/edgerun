@@ -4,80 +4,103 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_core::protocol::capability::CapabilityInvocation;
 use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
-use edgerun_encoding::byteorder::{read_i32_le, read_i64_le, read_u16_le};
 use edgerun_input::{InputDevice, InputEventKind, InputEventRecord};
 
-use crate::adapters::common::{decode_count_u32, encode_count_u32, stream_oriented_error};
+use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
-/// Binary-encode input events for remote transport.
-pub fn encode_input_events(events: &[InputEventRecord]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(4 + events.len() * 24);
-    encode_count_u32(events.len(), &mut out);
-    for event in events {
-        out.extend_from_slice(&event.timestamp_sec.to_le_bytes());
-        out.extend_from_slice(&event.timestamp_usec.to_le_bytes());
-        let kind = match event.kind {
-            InputEventKind::Key => 1u16,
-            InputEventKind::RelativeMotion => 2,
-            InputEventKind::AbsoluteMotion => 3,
-            InputEventKind::Switch => 4,
-            InputEventKind::Misc => 5,
-            InputEventKind::Synchronization => 6,
-            InputEventKind::Other(v) => v | 0x8000,
-        };
-        out.extend_from_slice(&kind.to_le_bytes());
-        out.extend_from_slice(&event.code.to_le_bytes());
-        out.extend_from_slice(&event.value.to_le_bytes());
-    }
-    out
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct InputEventsWire {
+    events: Vec<InputEventRecordWire>,
 }
 
-/// Binary-decode input events from remote transport.
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct InputEventRecordWire {
+    timestamp_sec: i64,
+    timestamp_usec: i64,
+    kind: u16,
+    code: u16,
+    value: i32,
+}
+
+fn input_event_kind_to_wire(kind: InputEventKind) -> u16 {
+    match kind {
+        InputEventKind::Key => 1,
+        InputEventKind::RelativeMotion => 2,
+        InputEventKind::AbsoluteMotion => 3,
+        InputEventKind::Switch => 4,
+        InputEventKind::Misc => 5,
+        InputEventKind::Synchronization => 6,
+        InputEventKind::Other(value) => value | 0x8000,
+    }
+}
+
+fn input_event_kind_from_wire(kind: u16) -> InputEventKind {
+    match kind {
+        1 => InputEventKind::Key,
+        2 => InputEventKind::RelativeMotion,
+        3 => InputEventKind::AbsoluteMotion,
+        4 => InputEventKind::Switch,
+        5 => InputEventKind::Misc,
+        6 => InputEventKind::Synchronization,
+        other if other & 0x8000 != 0 => InputEventKind::Other(other & 0x7fff),
+        other => InputEventKind::Other(other),
+    }
+}
+
+/// Rkyv-encode input events for remote transport.
+pub fn encode_input_events(events: &[InputEventRecord]) -> Vec<u8> {
+    let wire = InputEventsWire {
+        events: events
+            .iter()
+            .map(|event| InputEventRecordWire {
+                timestamp_sec: event.timestamp_sec,
+                timestamp_usec: event.timestamp_usec,
+                kind: input_event_kind_to_wire(event.kind),
+                code: event.code,
+                value: event.value,
+            })
+            .collect(),
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("input event payload must serialize through rkyv")
+        .into_vec()
+}
+
+/// Rkyv-decode input events from remote transport.
 pub fn decode_input_events(bytes: &[u8]) -> Result<Vec<InputEventRecord>, CapabilityError> {
-    let mut offset = 0usize;
-    let count = decode_count_u32(
-        bytes,
-        &mut offset,
-        "remote input payload too short for event count",
-    )?;
-    let expected = 4 + count * 24;
-    if bytes.len() != expected {
-        return Err(CapabilityError::InvalidRequest(
-            "remote input payload length does not match encoded event count",
-        ));
-    }
-    let mut out = Vec::with_capacity(count);
-    for _ in 0..count {
-        let timestamp_sec = read_i64_le(bytes, offset);
-        offset += 8;
-        let timestamp_usec = read_i64_le(bytes, offset);
-        offset += 8;
-        let raw_kind = read_u16_le(bytes, offset);
-        offset += 2;
-        let code = read_u16_le(bytes, offset);
-        offset += 2;
-        let value = read_i32_le(bytes, offset);
-        offset += 4;
-        let kind = match raw_kind {
-            1 => InputEventKind::Key,
-            2 => InputEventKind::RelativeMotion,
-            3 => InputEventKind::AbsoluteMotion,
-            4 => InputEventKind::Switch,
-            5 => InputEventKind::Misc,
-            6 => InputEventKind::Synchronization,
-            other if other & 0x8000 != 0 => InputEventKind::Other(other & 0x7fff),
-            other => InputEventKind::Other(other),
-        };
-        out.push(InputEventRecord {
-            timestamp_sec,
-            timestamp_usec,
-            kind,
-            code,
-            value,
-        });
-    }
-    Ok(out)
+    let owned = bytes.to_vec();
+    let wire = edgerun_wire::from_bytes::<InputEventsWire, edgerun_wire::WireError>(&owned)
+        .map_err(|_| CapabilityError::InvalidRequest("remote input payload is not rkyv"))?;
+    Ok(wire
+        .events
+        .into_iter()
+        .map(|event| InputEventRecord {
+            timestamp_sec: event.timestamp_sec,
+            timestamp_usec: event.timestamp_usec,
+            kind: input_event_kind_from_wire(event.kind),
+            code: event.code,
+            value: event.value,
+        })
+        .collect())
 }
 
 #[derive(Debug)]

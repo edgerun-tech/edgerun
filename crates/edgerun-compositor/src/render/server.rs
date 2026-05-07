@@ -6,6 +6,7 @@ use crate::drm;
 use crate::drm::device::DrmDevice;
 use crate::drm::dumb::DumbBuffer;
 use crate::drm::kms;
+use crate::libc;
 use crate::render::cursor::Cursor;
 use crate::render::shm::{read_shm_buffer_with_fallback, ShmManager};
 use std::io;

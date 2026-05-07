@@ -5,6 +5,7 @@
 //! tell the compositor when a buffer is ready to scan out and when the
 //! compositor is done with it.
 
+use crate::libc;
 use std::ffi::c_int;
 use std::io;
 use std::os::fd::RawFd;

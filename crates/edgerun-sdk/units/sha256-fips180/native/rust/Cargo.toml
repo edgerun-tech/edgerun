@@ -1,0 +1,13 @@
+[workspace]
+
+[package]
+name = "edgerun-sdk-native-sha256-fips180"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+edgerun-crypto = { path = "../../../../../utility/edgerun-crypto", default-features = false }

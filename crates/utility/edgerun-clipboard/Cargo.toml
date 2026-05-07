@@ -1,0 +1,12 @@
+[package]
+name = "edgerun-clipboard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Clipboard adapter facade for Edgerun"
+
+[lints]
+workspace = true

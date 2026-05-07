@@ -228,7 +228,7 @@ impl SmtpClient {
             let fut = ConnectFuture::new(sock_addr);
             match crate::rt::timeout(std::time::Duration::from_secs(10), fut).await {
                 Ok(Ok(stream)) => return Ok(Arc::try_unwrap(stream).ok().unwrap()),
-                Ok(Err(e)) => return Err(e),
+                Ok(Err(e)) => return Err(crate::rt::bare_io(e)),
                 Err(_) => return Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
             }
         }
@@ -240,7 +240,7 @@ impl SmtpClient {
         let fut = ConnectFuture::new(resolved);
         match crate::rt::timeout(std::time::Duration::from_secs(10), fut).await {
             Ok(Ok(stream)) => Ok(Arc::try_unwrap(stream).ok().unwrap()),
-            Ok(Err(e)) => Err(e),
+            Ok(Err(e)) => Err(crate::rt::bare_io(e)),
             Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
         }
     }

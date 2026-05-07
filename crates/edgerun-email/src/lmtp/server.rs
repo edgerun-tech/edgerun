@@ -69,7 +69,9 @@ pub struct LmtpServer {
 
 impl LmtpServer {
     pub fn new(config: LmtpServerConfig, handler: Arc<dyn MailHandler>) -> io::Result<Self> {
-        let listener = Arc::new(crate::rt::AsyncTcpListener::bind(&config.bind_addr)?);
+        let listener = Arc::new(
+            crate::rt::AsyncTcpListener::bind(&config.bind_addr).map_err(crate::rt::bare_io)?,
+        );
         edgerun_log::info!("edgerun-lmtp: listening on {}", config.bind_addr);
         Ok(Self {
             listener,

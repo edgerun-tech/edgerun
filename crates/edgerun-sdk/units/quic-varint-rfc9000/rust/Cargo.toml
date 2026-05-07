@@ -1,0 +1,24 @@
+[package]
+name = "edgerun-sdk-unit-quic-varint-rfc9000"
+version = "0.1.1"
+edition = "2021"
+publish = false
+
+[package.metadata.edgerun.unit]
+id = "quic-varint-rfc9000"
+standard = "RFC9000"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+edgerun-unit = { path = "../../../../edgerun-unit" }
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+codegen-units = 1
+lto = true
+strip = true

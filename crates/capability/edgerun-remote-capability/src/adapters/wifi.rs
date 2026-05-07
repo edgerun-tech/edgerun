@@ -6,16 +6,12 @@ use edgerun_capabilities::{
 };
 use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
-use edgerun_encoding::byteorder::{read_i16_le, read_i64_le, read_u32_le};
 use edgerun_wifi::{
     WifiController, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState,
     WifiScanResult, WifiScanner,
 };
 
-use crate::adapters::common::{
-    decode_count_u32, decode_optional_string_field, decode_string_field, encode_count_u32,
-    encode_optional_string_field, encode_string_field, stream_oriented_error,
-};
+use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 // --- Enum converters ---
@@ -70,147 +66,131 @@ fn wifi_interface_mode_from_u8(v: u8) -> Result<WifiInterfaceMode, CapabilityErr
 
 // --- Encode/decode ---
 
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct WifiScanResultWire {
+    observations: Vec<WifiNetworkObservationWire>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct WifiNetworkObservationWire {
+    interface_name: String,
+    ssid: Option<String>,
+    bssid: Option<String>,
+    signal_dbm: Option<i16>,
+    frequency_mhz: Option<u32>,
+    secure: Option<bool>,
+    observed_at_unix_ms: i64,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct WifiInterfaceInfoWire {
+    provider: String,
+    interface_name: String,
+    mac_address: Option<String>,
+    phy_name: Option<String>,
+    operstate: Option<String>,
+    power_state: u8,
+    mode: u8,
+}
+
 pub fn encode_wifi_scan_result(scan: &WifiScanResult) -> Vec<u8> {
-    let mut out = Vec::new();
-    encode_count_u32(scan.observations.len(), &mut out);
-    for observation in &scan.observations {
-        encode_string_field(&observation.interface_name, &mut out);
-        encode_optional_string_field(&observation.ssid, &mut out);
-        encode_optional_string_field(&observation.bssid, &mut out);
-        out.push(observation.signal_dbm.is_some() as u8);
-        if let Some(v) = observation.signal_dbm {
-            out.extend_from_slice(&v.to_le_bytes());
-        }
-        out.push(observation.frequency_mhz.is_some() as u8);
-        if let Some(v) = observation.frequency_mhz {
-            out.extend_from_slice(&v.to_le_bytes());
-        }
-        out.push(match observation.secure {
-            None => 0,
-            Some(true) => 1,
-            Some(false) => 2,
-        });
-        out.extend_from_slice(&observation.observed_at_unix_ms.to_le_bytes());
-    }
-    out
+    let wire = WifiScanResultWire {
+        observations: scan
+            .observations
+            .iter()
+            .map(|observation| WifiNetworkObservationWire {
+                interface_name: observation.interface_name.clone(),
+                ssid: observation.ssid.clone(),
+                bssid: observation.bssid.clone(),
+                signal_dbm: observation.signal_dbm,
+                frequency_mhz: observation.frequency_mhz,
+                secure: observation.secure,
+                observed_at_unix_ms: observation.observed_at_unix_ms,
+            })
+            .collect(),
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("wifi scan result must serialize through rkyv")
+        .into_vec()
 }
 
 pub fn decode_wifi_scan_result(bytes: &[u8]) -> Result<WifiScanResult, CapabilityError> {
-    let mut cursor = 0usize;
-    let count = decode_count_u32(bytes, &mut cursor, "remote wifi scan payload too short")?;
-    let mut observations = Vec::with_capacity(count);
-    for _ in 0..count {
-        let interface_name = decode_string_field(bytes, &mut cursor)?;
-        let ssid = decode_optional_string_field(bytes, &mut cursor)?;
-        let bssid = decode_optional_string_field(bytes, &mut cursor)?;
-        if bytes.len() < cursor + 1 {
-            return Err(CapabilityError::InvalidRequest(
-                "remote wifi signal presence byte missing",
-            ));
-        }
-        let signal_dbm = if bytes[cursor] != 0 {
-            cursor += 1;
-            if bytes.len() < cursor + 2 {
-                return Err(CapabilityError::InvalidRequest(
-                    "remote wifi signal payload too short",
-                ));
-            }
-            let v = read_i16_le(bytes, cursor);
-            cursor += 2;
-            Some(v)
-        } else {
-            cursor += 1;
-            None
-        };
-        if bytes.len() < cursor + 1 {
-            return Err(CapabilityError::InvalidRequest(
-                "remote wifi frequency presence byte missing",
-            ));
-        }
-        let frequency_mhz = if bytes[cursor] != 0 {
-            cursor += 1;
-            if bytes.len() < cursor + 4 {
-                return Err(CapabilityError::InvalidRequest(
-                    "remote wifi frequency payload too short",
-                ));
-            }
-            let v = read_u32_le(bytes, cursor);
-            cursor += 4;
-            Some(v)
-        } else {
-            cursor += 1;
-            None
-        };
-        if bytes.len() < cursor + 1 + 8 {
-            return Err(CapabilityError::InvalidRequest(
-                "remote wifi observation trailer too short",
-            ));
-        }
-        let secure = match bytes[cursor] {
-            0 => None,
-            1 => Some(true),
-            2 => Some(false),
-            _ => {
-                return Err(CapabilityError::InvalidRequest(
-                    "remote wifi secure flag is invalid",
-                ));
-            }
-        };
-        cursor += 1;
-        let observed_at_unix_ms = read_i64_le(bytes, cursor);
-        cursor += 8;
-        observations.push(WifiNetworkObservation {
-            interface_name,
-            ssid,
-            bssid,
-            signal_dbm,
-            frequency_mhz,
-            secure,
-            observed_at_unix_ms,
-        });
-    }
-    if cursor != bytes.len() {
-        return Err(CapabilityError::InvalidRequest(
-            "remote wifi scan payload trailing bytes are invalid",
-        ));
-    }
-    Ok(WifiScanResult { observations })
+    let owned = bytes.to_vec();
+    let wire = edgerun_wire::from_bytes::<WifiScanResultWire, edgerun_wire::WireError>(&owned)
+        .map_err(|_| CapabilityError::InvalidRequest("remote wifi scan payload is not rkyv"))?;
+    Ok(WifiScanResult {
+        observations: wire
+            .observations
+            .into_iter()
+            .map(|observation| WifiNetworkObservation {
+                interface_name: observation.interface_name,
+                ssid: observation.ssid,
+                bssid: observation.bssid,
+                signal_dbm: observation.signal_dbm,
+                frequency_mhz: observation.frequency_mhz,
+                secure: observation.secure,
+                observed_at_unix_ms: observation.observed_at_unix_ms,
+            })
+            .collect(),
+    })
 }
 
 pub fn encode_wifi_interface_info(info: &WifiInterfaceInfo) -> Vec<u8> {
-    let mut out = Vec::new();
-    encode_string_field(&info.provider, &mut out);
-    encode_string_field(&info.interface_name, &mut out);
-    encode_optional_string_field(&info.mac_address, &mut out);
-    encode_optional_string_field(&info.phy_name, &mut out);
-    encode_optional_string_field(&info.operstate, &mut out);
-    out.push(wifi_power_state_to_u8(info.power_state));
-    out.push(wifi_interface_mode_to_u8(info.mode));
-    out
+    let wire = WifiInterfaceInfoWire {
+        provider: info.provider.clone(),
+        interface_name: info.interface_name.clone(),
+        mac_address: info.mac_address.clone(),
+        phy_name: info.phy_name.clone(),
+        operstate: info.operstate.clone(),
+        power_state: wifi_power_state_to_u8(info.power_state),
+        mode: wifi_interface_mode_to_u8(info.mode),
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("wifi interface info must serialize through rkyv")
+        .into_vec()
 }
 
 pub fn decode_wifi_interface_info(bytes: &[u8]) -> Result<WifiInterfaceInfo, CapabilityError> {
-    let mut cursor = 0usize;
-    let provider = decode_string_field(bytes, &mut cursor)?;
-    let interface_name = decode_string_field(bytes, &mut cursor)?;
-    let mac_address = decode_optional_string_field(bytes, &mut cursor)?;
-    let phy_name = decode_optional_string_field(bytes, &mut cursor)?;
-    let operstate = decode_optional_string_field(bytes, &mut cursor)?;
-    if bytes.len() != cursor + 2 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote wifi interface info payload length is invalid",
-        ));
-    }
-    let power_state = wifi_power_state_from_u8(bytes[cursor])?;
-    let mode = wifi_interface_mode_from_u8(bytes[cursor + 1])?;
+    let owned = bytes.to_vec();
+    let wire = edgerun_wire::from_bytes::<WifiInterfaceInfoWire, edgerun_wire::WireError>(&owned)
+        .map_err(|_| {
+        CapabilityError::InvalidRequest("remote wifi interface info payload is not rkyv")
+    })?;
     Ok(WifiInterfaceInfo {
-        provider,
-        interface_name,
-        mac_address,
-        phy_name,
-        operstate,
-        power_state,
-        mode,
+        provider: wire.provider,
+        interface_name: wire.interface_name,
+        mac_address: wire.mac_address,
+        phy_name: wire.phy_name,
+        operstate: wire.operstate,
+        power_state: wifi_power_state_from_u8(wire.power_state)?,
+        mode: wifi_interface_mode_from_u8(wire.mode)?,
     })
 }
 

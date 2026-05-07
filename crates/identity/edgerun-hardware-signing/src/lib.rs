@@ -15,6 +15,7 @@ extern crate std;
 use edgerun_biometrics::{BiometricAssuranceStrength, BiometricState};
 use edgerun_core::crypto::signature_input;
 use edgerun_core::prelude::v1::*;
+use edgerun_sign::{ProtocolSignError, ProtocolSigner, SignableProtocolFamily};
 
 // ---------------------------------------------------------------------------
 // Conditional backend modules
@@ -413,6 +414,22 @@ impl<K: HardwareSigningKey> MeshSigner for HardwareMeshSigner<K> {
     }
 }
 
+impl<K: HardwareSigningKey> ProtocolSigner for HardwareMeshSigner<K> {
+    fn signature_algorithm(&self) -> i32 {
+        edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
+    }
+
+    fn sign_signature_input(
+        &self,
+        _family: SignableProtocolFamily,
+        signature_input: &[u8],
+    ) -> Result<Vec<u8>, ProtocolSignError> {
+        self.sign_message_var(signature_input)
+            .map(|signature| signature.to_vec())
+            .map_err(|_| ProtocolSignError::SignerFailed)
+    }
+}
+
 pub fn signature_input_for_record(sig_domain_tag: &str, record_hash: &[u8]) -> Vec<u8> {
     signature_input(sig_domain_tag, record_hash)
 }
@@ -529,6 +546,31 @@ mod tests {
                 algorithm: HardwareSignatureAlgorithm::EcdsaP256Sha256,
                 assurance: HardwareAssuranceLevel::IsolatedHardware,
             }
+        }
+    }
+
+    struct CapturingHardwareKey {
+        public_key: [u8; 64],
+        signature: [u8; 64],
+        signed_message: std::sync::Mutex<Vec<u8>>,
+    }
+
+    impl HardwareSigningKey for CapturingHardwareKey {
+        fn key_info(&self) -> Result<HardwareKeyInfo, HardwareSigningError> {
+            Ok(HardwareKeyInfo {
+                provider: HardwareProviderKind::Other("test".into()),
+                key_name: "capturing-key".into(),
+                algorithm: HardwareSignatureAlgorithm::EcdsaP256Sha256,
+                public_key: self.public_key.to_vec(),
+                attestation: vec![],
+                assurance_level: HardwareAssuranceLevel::IsolatedHardware,
+                biometric_state: BiometricState::default(),
+            })
+        }
+
+        fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, HardwareSigningError> {
+            *self.signed_message.lock().unwrap() = message.to_vec();
+            Ok(self.signature.to_vec())
         }
     }
 
@@ -677,6 +719,43 @@ mod tests {
         let bytes = [0xFFu8; 64];
         let id = NodeID(bytes);
         assert_eq!(id.short(), "0xffffffff");
+    }
+
+    #[test]
+    fn hardware_mesh_signer_implements_protocol_signer() {
+        let key = CapturingHardwareKey {
+            public_key: [0xA5; 64],
+            signature: [0x5A; 64],
+            signed_message: std::sync::Mutex::new(Vec::new()),
+        };
+        let signer = HardwareMeshSigner::new(key).unwrap();
+        let event = edgerun_core::protocol::EventEnvelope {
+            envelope_version: 1,
+            stream_id: signer.node_id().0.to_vec(),
+            seq: 7,
+            event_version: 1,
+            ..edgerun_core::protocol::EventEnvelope::default()
+        };
+        let record = edgerun_core::protocol::ProtocolRecord::EventEnvelope(event);
+        let input = edgerun_sign::protocol_signing_input(
+            &record,
+            edgerun_sign::SignableProtocolFamily::EventEnvelope,
+        )
+        .unwrap();
+
+        let signed = signer
+            .sign_protocol_record(&record, edgerun_sign::SignableProtocolFamily::EventEnvelope)
+            .unwrap();
+
+        assert_eq!(
+            signed.signature.algorithm,
+            edgerun_core::crypto::SIGNATURE_ALGORITHM_ECDSA_P256 as i32
+        );
+        assert_eq!(signed.signature.value, vec![0x5A; 64]);
+        assert_eq!(
+            *signer.key().signed_message.lock().unwrap(),
+            input.signature_input
+        );
     }
 
     // HardwareSignatureAlgorithm tests

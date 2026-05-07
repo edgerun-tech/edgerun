@@ -8,6 +8,7 @@
 //! 5. Render textured quads back-to-front
 //! 6. glReadPixels back to DRM dumb buffer for scanout
 
+use crate::libc;
 use std::os::raw::{c_int, c_void};
 
 use crate::compositor::shell::Shell;

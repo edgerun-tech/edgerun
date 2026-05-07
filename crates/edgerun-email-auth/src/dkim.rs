@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::io;
 
 use crate::DnsQuery;
-use edgerun_crypto::sha2::{Digest, Sha256};
+use edgerun_crypto::rsa::sha2::{Digest, Sha256};
 use edgerun_encoding::base64;
 
 /// Result of a DKIM verification.

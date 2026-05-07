@@ -9,9 +9,8 @@ use core::num::NonZeroU32;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use rand_core::{CryptoRng, Error as RandError, RngCore};
-use sha2::Digest;
-
 use crate::error::{CryptoError, Result};
+use crate::sha::Digest;
 
 pub type RandomSource = fn(&mut [u8]) -> Result<()>;
 
@@ -68,10 +67,10 @@ pub fn mix_entropy(entropy: &[u8]) {
         return;
     }
     let mut hasher = crate::sha::Sha256::new();
-    sha2::Digest::update(&mut hasher, b"edgerun-crypto rng mix v1");
-    sha2::Digest::update(&mut hasher, state_bytes().as_slice());
-    sha2::Digest::update(&mut hasher, entropy);
-    sha2::Digest::update(
+    Digest::update(&mut hasher, b"edgerun-crypto rng mix v1");
+    Digest::update(&mut hasher, state_bytes().as_slice());
+    Digest::update(&mut hasher, entropy);
+    Digest::update(
         &mut hasher,
         &DRBG_COUNTER.fetch_add(1, Ordering::AcqRel).to_le_bytes(),
     );
@@ -145,11 +144,11 @@ fn ensure_drbg_initialized() {
         let counter = DRBG_COUNTER.fetch_add(1, Ordering::AcqRel);
         let stack_addr = (&seed as *const [u8; 32] as usize as u64).to_le_bytes();
         let mut hasher = crate::sha::Sha256::new();
-        sha2::Digest::update(&mut hasher, b"edgerun-crypto software rng bootstrap v1");
-        sha2::Digest::update(&mut hasher, &counter.to_le_bytes());
-        sha2::Digest::update(&mut hasher, &stack_addr);
+        Digest::update(&mut hasher, b"edgerun-crypto software rng bootstrap v1");
+        Digest::update(&mut hasher, &counter.to_le_bytes());
+        Digest::update(&mut hasher, &stack_addr);
         #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-        sha2::Digest::update(&mut hasher, &cpu_random::timestamp_counter().to_le_bytes());
+        Digest::update(&mut hasher, &cpu_random::timestamp_counter().to_le_bytes());
         seed.copy_from_slice(hasher.finalize().as_slice());
     }
     store_state(&seed);
@@ -159,16 +158,16 @@ fn ensure_drbg_initialized() {
 fn next_drbg_block() -> [u8; 32] {
     let counter = DRBG_COUNTER.fetch_add(1, Ordering::AcqRel);
     let mut hasher = crate::sha::Sha256::new();
-    sha2::Digest::update(&mut hasher, b"edgerun-crypto software rng generate v1");
-    sha2::Digest::update(&mut hasher, state_bytes().as_slice());
-    sha2::Digest::update(&mut hasher, &counter.to_le_bytes());
+    Digest::update(&mut hasher, b"edgerun-crypto software rng generate v1");
+    Digest::update(&mut hasher, state_bytes().as_slice());
+    Digest::update(&mut hasher, &counter.to_le_bytes());
     let block: [u8; 32] = hasher.finalize().into();
 
     let mut update = crate::sha::Sha256::new();
-    sha2::Digest::update(&mut update, b"edgerun-crypto software rng update v1");
-    sha2::Digest::update(&mut update, state_bytes().as_slice());
-    sha2::Digest::update(&mut update, &block);
-    sha2::Digest::update(&mut update, &counter.to_le_bytes());
+    Digest::update(&mut update, b"edgerun-crypto software rng update v1");
+    Digest::update(&mut update, state_bytes().as_slice());
+    Digest::update(&mut update, &block);
+    Digest::update(&mut update, &counter.to_le_bytes());
     store_state(update.finalize().as_slice());
     block
 }

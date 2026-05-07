@@ -6,14 +6,13 @@
 #![cfg_attr(not(target_os = "none"), allow(dead_code, unused_imports))]
 
 extern crate alloc;
-extern crate edgerun_dhcp;
 extern crate edgerun_http;
 extern crate edgerun_oci;
 extern crate edgerun_platform;
+extern crate edgerun_protocols;
 extern crate edgerun_rt as rt;
 #[cfg(target_arch = "x86_64")]
 extern crate edgerun_rtl8125;
-extern crate edgerun_tftp;
 extern crate edgerun_tpm;
 #[cfg(target_arch = "x86_64")]
 extern crate edgerun_virtio;
@@ -3610,11 +3609,11 @@ static esp_app_desc: EspAppDesc = EspAppDesc {
 };
 
 #[cfg(target_arch = "x86_64")]
-use edgerun_dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
+use edgerun_protocols::dhcp::message::{DHCP_CLIENT_PORT, DHCP_SERVER_PORT};
 #[cfg(target_arch = "x86_64")]
-use edgerun_dhcp::{DhcpMessage, DhcpMessageType};
+use edgerun_protocols::dhcp::{DhcpMessage, DhcpMessageType};
 #[cfg(target_arch = "x86_64")]
-use edgerun_tftp::message::{TftpMessage, TFTP_PORT};
+use edgerun_protocols::tftp::message::{TftpMessage, TFTP_PORT};
 #[cfg(target_arch = "x86_64")]
 use rt::ip::{ParsedPacket, ARP_OP_REQUEST, ICMP_ECHO_REQUEST};
 #[cfg(target_arch = "x86_64")]
@@ -5113,7 +5112,7 @@ fn poll_network(
 }
 
 #[cfg(target_arch = "x86_64")]
-fn dhcp_ipv4_to_rt(ip: edgerun_dhcp::Ipv4Addr) -> IpAddr {
+fn dhcp_ipv4_to_rt(ip: edgerun_protocols::dhcp::Ipv4Addr) -> IpAddr {
     let octets = ip.octets();
     IpAddr::new(octets[0], octets[1], octets[2], octets[3])
 }

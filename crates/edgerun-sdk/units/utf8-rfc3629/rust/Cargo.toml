@@ -1,0 +1,24 @@
+[package]
+name = "edgerun-sdk-unit-utf8-rfc3629"
+version = "0.1.1"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[package.metadata.edgerun.unit]
+id = "utf8-rfc3629"
+standard = "RFC3629"
+
+[dependencies]
+edgerun-unit = { path = "../../../../edgerun-unit" }
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+codegen-units = 1
+lto = true
+strip = true

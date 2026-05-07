@@ -56,11 +56,11 @@ pub use relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};
 pub use server::handler::{AuthCredentials, AuthResult};
 #[cfg(not(target_os = "none"))]
 pub use server::{MailHandler, MemoryMailStore, SmtpServer, SmtpServerConfig};
-pub use session_core::{
+pub use edgerun_protocols::smtp::session_core::{
     extract_domain_from_address, AllowAllSmtpPolicy, SmtpPeerContext, SmtpSessionAction,
     SmtpSessionAuth, SmtpSessionConfig, SmtpSessionCore, SmtpSessionPolicy, SmtpSessionStep,
 };
-pub use types::{
+pub use edgerun_protocols::smtp::types::{
     get_date, get_from_address, get_subject, parse_headers, DsnNotify, DsnRet, EnhancedStatusCode,
     MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
 };

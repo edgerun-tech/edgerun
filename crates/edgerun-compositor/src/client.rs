@@ -1,5 +1,6 @@
 //! Per-client Wayland connection state.
 
+use crate::libc;
 use std::io;
 use std::os::fd::RawFd;
 

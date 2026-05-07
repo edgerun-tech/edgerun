@@ -13,7 +13,7 @@ default = []
 std = ["edgerun-quic?/std"]
 client = ["http1", "http2", "runtime", "dep:edgerun-dns", "dep:edgerun-log"]
 connection-middleware = []
-http-compression = ["dep:edgerun-encoding", "dep:miniz_oxide"]
+http-compression = ["edgerun-protocols/http-compression"]
 http1 = ["runtime", "dep:edgerun-encoding"]
 http2 = ["runtime", "dep:edgerun-dns", "dep:edgerun-hpack", "dep:edgerun-log"]
 http3 = ["client", "server", "tls", "dep:edgerun-crypto", "dep:edgerun-quic", "dep:edgerun-qpack", "dep:edgerun-encoding", "dep:edgerun-log"]
@@ -28,11 +28,11 @@ edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-
 edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log", optional = true }
 edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false, optional = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["http"] }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false, optional = true }
 edgerun-hpack = { version = "0.1", path = "../utility/edgerun-hpack", optional = true }
 edgerun-qpack = { version = "0.1", path = "../utility/edgerun-qpack", optional = true }
 edgerun-quic = { version = "0.1", path = "../edgerun-quic", optional = true }
-miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"], optional = true }
 
 [[test]]
 name = "http3_integration"

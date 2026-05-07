@@ -19,6 +19,7 @@ pub use edgerun_verify::ProtocolFamily as SignableProtocolFamily;
 pub enum ProtocolSignError {
     UnsupportedFamily,
     SignerFailed,
+    InvalidKey,
 }
 
 impl From<ProtocolVerifyError> for ProtocolSignError {
@@ -69,6 +70,58 @@ pub trait ProtocolSigner {
             },
             record_hash: input.record_hash,
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageSignAlgorithm {
+    Ed25519,
+}
+
+pub trait MessageSigner {
+    fn message_sign_algorithm(&self) -> MessageSignAlgorithm;
+    fn public_key_bytes(&self) -> Vec<u8>;
+    fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, ProtocolSignError>;
+}
+
+#[cfg(feature = "ed25519")]
+#[derive(Clone)]
+pub struct Ed25519MessageSigner {
+    signing_key: edgerun_crypto::ed25519_dalek::SigningKey,
+}
+
+#[cfg(feature = "ed25519")]
+impl Ed25519MessageSigner {
+    pub const fn new(signing_key: edgerun_crypto::ed25519_dalek::SigningKey) -> Self {
+        Self { signing_key }
+    }
+
+    pub fn signing_key(&self) -> &edgerun_crypto::ed25519_dalek::SigningKey {
+        &self.signing_key
+    }
+
+    pub fn from_seed(seed: [u8; 32]) -> Self {
+        Self::new(edgerun_crypto::ed25519_dalek::SigningKey::from_bytes(&seed))
+    }
+
+    pub fn verifying_key(&self) -> edgerun_crypto::ed25519_dalek::VerifyingKey {
+        self.signing_key.verifying_key()
+    }
+}
+
+#[cfg(feature = "ed25519")]
+impl MessageSigner for Ed25519MessageSigner {
+    fn message_sign_algorithm(&self) -> MessageSignAlgorithm {
+        MessageSignAlgorithm::Ed25519
+    }
+
+    fn public_key_bytes(&self) -> Vec<u8> {
+        self.verifying_key().to_bytes().to_vec()
+    }
+
+    fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, ProtocolSignError> {
+        use edgerun_crypto::Ed25519Signer as _;
+        Ok(self.signing_key.sign(message).to_bytes().to_vec())
     }
 }
 

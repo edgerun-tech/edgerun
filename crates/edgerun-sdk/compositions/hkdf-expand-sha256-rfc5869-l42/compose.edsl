@@ -1,0 +1,17 @@
+composition hkdf-expand-sha256-rfc5869-l42
+output hkdf-expand-sha256-rfc5869-l42
+input prk
+input info
+component hmac hmac-sha256-rfc2104
+
+copy-input prk hmac const:1024 len:prk
+copy-input info hmac const:4096 len:info
+write-byte hmac add:4096+len:info 1
+call hmac.hmac_sha256 const:1024 len:prk const:4096 add:1+len:info const:2048
+copy hmac const:2048 hmac const:30000 const:32
+copy hmac const:2048 hmac const:4096 const:32
+copy-input info hmac const:4128 len:info
+write-byte hmac add:4128+len:info 2
+call hmac.hmac_sha256 const:1024 len:prk const:4096 add:33+len:info const:2048
+copy hmac const:2048 hmac const:30032 const:10
+publish hmac const:30000 const:42

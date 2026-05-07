@@ -77,7 +77,7 @@ name = "Domain Name System"
 file = "protocols/dns.toml"
 layer = "application"
 runs_over = ["UDP", "TCP", "TLS", "HTTPS", "QUIC"]
-implementation_crates = ["crates/edgerun-dns"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
 
 [[protocol]]
 id = "dhcpv4"
@@ -85,7 +85,7 @@ name = "Dynamic Host Configuration Protocol for IPv4"
 file = "protocols/dhcpv4.toml"
 layer = "application"
 runs_over = ["UDP", "IPv4"]
-implementation_crates = ["crates/edgerun-dhcp"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
 
 [[protocol]]
 id = "dhcpv6"
@@ -93,7 +93,7 @@ name = "Dynamic Host Configuration Protocol for IPv6"
 file = "protocols/dhcpv6.toml"
 layer = "application"
 runs_over = ["UDP", "IPv6"]
-implementation_crates = ["crates/edgerun-dhcpv6"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
 
 [[protocol]]
 id = "hpack"
@@ -145,7 +145,7 @@ name = "Trivial File Transfer Protocol"
 file = "protocols/tftp.toml"
 layer = "application"
 runs_over = ["UDP"]
-implementation_crates = ["crates/edgerun-tftp"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
 
 [[protocol]]
 id = "tls"

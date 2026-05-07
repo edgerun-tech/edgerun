@@ -1,5 +1,6 @@
 //! Dumb buffer allocation — kernel-side simple buffer objects.
 
+use crate::libc;
 use std::io;
 use std::os::fd::RawFd;
 use std::ptr;

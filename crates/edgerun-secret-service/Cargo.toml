@@ -21,6 +21,7 @@ required-features = ["std"]
 edgerun-biometrics = { version = "0.1", path = "../device-types/edgerun-biometrics" }
 edgerun-storage = { version = "0.1", path = "../authority/edgerun-storage" }
 edgerun-core = { version = "0.1", path = "../protocol/edgerun-core" }
+edgerun-wire = { version = "0.1", path = "../protocol/edgerun-wire" }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false }
 edgerun-json = { version = "0.1", path = "../utility/edgerun-json", default-features = false }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }

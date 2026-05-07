@@ -36,6 +36,7 @@ workspace = true
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false }
+edgerun-protocols = { workspace = true, default-features = false, features = ["imap", "lmtp", "smtp"] }
 edgerun-email-auth = { version = "0.1", path = "../edgerun-email-auth", optional = true }
 edgerun-tls = { version = "0.1", path = "../edgerun-tls", optional = true }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }

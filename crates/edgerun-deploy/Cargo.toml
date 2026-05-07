@@ -1,0 +1,19 @@
+[package]
+name = "edgerun-deploy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Target inventory and deployment planning for Edgerun runtimes"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+edgerun-machine-report = { version = "0.1", path = "../node/edgerun-machine-report" }
+
+[lints]
+workspace = true

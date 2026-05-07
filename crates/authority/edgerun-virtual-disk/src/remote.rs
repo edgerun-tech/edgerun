@@ -993,7 +993,8 @@ fn encode_request(request: &BlockRequest) -> Result<Vec<u8>, BlockError> {
 }
 
 fn decode_request(payload: &[u8]) -> Result<BlockRequest, BlockError> {
-    edgerun_wire::from_bytes::<BlockRequest, WireError>(payload).map_err(map_wire_error)
+    let owned = payload.to_vec();
+    edgerun_wire::from_bytes::<BlockRequest, WireError>(&owned).map_err(map_wire_error)
 }
 
 fn encode_response(response: &BlockResponse) -> Result<Vec<u8>, BlockError> {
@@ -1003,7 +1004,8 @@ fn encode_response(response: &BlockResponse) -> Result<Vec<u8>, BlockError> {
 }
 
 fn decode_response(payload: &[u8]) -> Result<BlockResponse, BlockError> {
-    edgerun_wire::from_bytes::<BlockResponse, WireError>(payload).map_err(map_wire_error)
+    let owned = payload.to_vec();
+    edgerun_wire::from_bytes::<BlockResponse, WireError>(&owned).map_err(map_wire_error)
 }
 
 fn map_wire_error(error: WireError) -> BlockError {

@@ -10,18 +10,24 @@ use core::hint::black_box;
 use edgerun_core::protocol::{
     capability_runtime::CapabilityRemoteEnvelope, Digest, EventType, ProtocolRecord, Signature,
 };
-use edgerun_email::imap::session_core::{
+use edgerun_mesh::{LocalNode, MeshFrame, MeshRoute, MeshRouter, MeshRoutingTable, NodeID};
+use edgerun_protocols::http::http1::{
+    determine_connection, extract_boundary, parse_multipart, parse_range_header, Http1Version,
+};
+use edgerun_protocols::http::{HeaderMap, HttpRequest, HttpResponse, Method, StatusCode, Uri};
+use edgerun_protocols::imap::session_core::{
     ImapPeerContext, ImapSessionConfig, ImapSessionCore, RejectAllImapPolicy,
 };
-use edgerun_email::lmtp::session_core::{AllowAllLmtpPolicy, LmtpSessionConfig, LmtpSessionCore};
-use edgerun_email::smtp::session_core::{
+use edgerun_protocols::lmtp::session_core::{
+    AllowAllLmtpPolicy, LmtpSessionConfig, LmtpSessionCore,
+};
+use edgerun_protocols::smtp::session_core::{
     AllowAllSmtpPolicy, SmtpPeerContext, SmtpSessionConfig, SmtpSessionCore,
 };
-use edgerun_mesh::{LocalNode, MeshFrame, MeshRoute, MeshRouter, MeshRoutingTable, NodeID};
+use edgerun_protocols::tftp::message::TftpMessage;
 use edgerun_remote_capability::MemoryRemoteTransport;
 use edgerun_storage::core::EventLog;
 use edgerun_storage::MemEventLog;
-use edgerun_tftp::message::TftpMessage;
 
 fn len_u32(len: usize) -> u32 {
     len.min(u32::MAX as usize) as u32
@@ -71,29 +77,29 @@ fn node_probe() -> u32 {
 }
 
 fn dns_probe() -> u32 {
-    let query = edgerun_dns::DnsMessage::query(
+    let query = edgerun_protocols::dns::DnsMessage::query(
         0x1234,
         "example.com".to_string(),
-        edgerun_dns::DnsRecordType::A,
+        edgerun_protocols::dns::DnsRecordType::A,
     );
     let wire = query.to_wire();
-    let parsed = edgerun_dns::DnsMessage::from_wire(&wire).is_ok() as u32;
-    let framed = edgerun_dns::encode_dns_tcp_frame(&wire).unwrap_or_default();
+    let parsed = edgerun_protocols::dns::DnsMessage::from_wire(&wire).is_ok() as u32;
+    let framed = edgerun_protocols::dns::encode_dns_tcp_frame(&wire).unwrap_or_default();
     len_u32(wire.len()) + len_u32(framed.len()) + parsed
 }
 
 fn dhcp_probe() -> u32 {
     let mac = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01];
-    let discover = edgerun_dhcp::DhcpMessage::discover(0x1234_5678, mac);
+    let discover = edgerun_protocols::dhcp::DhcpMessage::discover(0x1234_5678, mac);
     let wire = discover.to_wire();
-    let parsed = edgerun_dhcp::DhcpMessage::from_wire(&wire).is_ok() as u32;
+    let parsed = edgerun_protocols::dhcp::DhcpMessage::from_wire(&wire).is_ok() as u32;
     len_u32(wire.len()) + parsed
 }
 
 fn dhcpv6_probe() -> u32 {
-    let solicit = edgerun_dhcpv6::message::Dhcpv6Message::solicit(7, b"client-duid", 0);
+    let solicit = edgerun_protocols::dhcpv6::message::Dhcpv6Message::solicit(7, b"client-duid", 0);
     let wire = solicit.to_wire();
-    let parsed = edgerun_dhcpv6::message::Dhcpv6Message::from_wire(&wire).is_ok() as u32;
+    let parsed = edgerun_protocols::dhcpv6::message::Dhcpv6Message::from_wire(&wire).is_ok() as u32;
     len_u32(wire.len()) + parsed
 }
 
@@ -102,6 +108,51 @@ fn tftp_probe() -> u32 {
     let wire = request.to_wire();
     let parsed = TftpMessage::from_wire(&wire).is_ok() as u32;
     len_u32(wire.len()) + parsed
+}
+
+fn http_probe() -> u32 {
+    let method = "GET".parse::<Method>().is_ok() as u32;
+    let status = StatusCode::new(200)
+        .map(|status| status.is_success() as u32)
+        .unwrap_or(0);
+    let uri = Uri::parse("https://example.com/path")
+        .map(|uri| len_u32(uri.request_target().len()))
+        .unwrap_or(0);
+    let mut headers = HeaderMap::new();
+    let headers_ok = headers.insert("Transfer-Encoding", "chunked").is_ok() as u32;
+    let request = HttpRequest::from_http("GET /path HTTP/1.1\r\nHost: example.com\r\n\r\n")
+        .map(|request| len_u32(request.to_http_bytes().len()))
+        .unwrap_or(0);
+    let response = HttpResponse::from_http("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+        .map(|response| len_u32(response.body().len()))
+        .unwrap_or(0);
+    let range = parse_range_header("bytes=0-7").map(|_| 1).unwrap_or(0);
+    let boundary = extract_boundary("multipart/form-data; boundary=edgerun")
+        .map(|boundary| len_u32(boundary.len()))
+        .unwrap_or(0);
+    let multipart = parse_multipart(
+        b"--edgerun\r\nContent-Disposition: form-data; name=\"x\"\r\n\r\n1\r\n--edgerun--\r\n",
+        "edgerun",
+    )
+    .map(|fields| len_u32(fields.len()))
+    .unwrap_or(0);
+    let version = Http1Version::from_str("HTTP/1.1")
+        .map(|version| len_u32(version.as_str().len()))
+        .unwrap_or(0);
+    let connection = Http1Version::from_str("HTTP/1.1")
+        .map(|version| determine_connection(&HeaderMap::new(), version).is_persistent() as u32)
+        .unwrap_or(0);
+    method
+        + status
+        + uri
+        + headers_ok
+        + request
+        + response
+        + range
+        + boundary
+        + multipart
+        + version
+        + connection
 }
 
 fn email_probe() -> u32 {
@@ -175,6 +226,7 @@ pub extern "C" fn edgerun_protocol_bundle_probe() -> u32 {
         ^ black_box(dhcp_probe())
         ^ black_box(dhcpv6_probe())
         ^ black_box(tftp_probe())
+        ^ black_box(http_probe())
         ^ black_box(email_probe())
         ^ black_box(secret_service_probe())
         ^ black_box(mesh_probe())

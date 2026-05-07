@@ -88,6 +88,98 @@ fn decode_urlsafe_quad(chars: &[u8; 4]) -> Option<[u8; 3]> {
     decode_quad(chars, &URLSAFE_REVERSE)
 }
 
+/// Encoded length for unpadded Base64-URL.
+pub const fn base64url_nopad_encoded_len(input_len: usize) -> usize {
+    (input_len / 3) * 4
+        + match input_len % 3 {
+            0 => 0,
+            1 => 2,
+            _ => 3,
+        }
+}
+
+/// Upper bound for decoded Base64-URL bytes.
+pub const fn base64url_decoded_bound(input_len: usize) -> usize {
+    ((input_len + 3) / 4) * 3
+}
+
+/// Encode bytes to unpadded Base64-URL into a caller-provided buffer.
+pub fn base64url_nopad_encode_into(input: &[u8], out: &mut [u8]) -> Result<usize, &'static str> {
+    let needed = base64url_nopad_encoded_len(input.len());
+    if out.len() < needed {
+        return Err("output too short");
+    }
+    let chunks = input.len() / 3;
+    let mut o = 0;
+    for i in 0..chunks {
+        let tri = [input[i * 3], input[i * 3 + 1], input[i * 3 + 2]];
+        let quad = encode_tripplet(&tri, URLSAFE_ALPHABET);
+        out[o..o + 4].copy_from_slice(&quad);
+        o += 4;
+    }
+    match input.len() % 3 {
+        0 => {}
+        1 => {
+            let tri = [input[chunks * 3], 0, 0];
+            let quad = encode_tripplet(&tri, URLSAFE_ALPHABET);
+            out[o..o + 2].copy_from_slice(&quad[..2]);
+            o += 2;
+        }
+        2 => {
+            let tri = [input[chunks * 3], input[chunks * 3 + 1], 0];
+            let quad = encode_tripplet(&tri, URLSAFE_ALPHABET);
+            out[o..o + 3].copy_from_slice(&quad[..3]);
+            o += 3;
+        }
+        _ => unreachable!(),
+    }
+    Ok(o)
+}
+
+/// Decode unpadded Base64-URL from bytes into a caller-provided buffer.
+pub fn base64url_decode_into(input: &[u8], out: &mut [u8]) -> Result<usize, &'static str> {
+    if input.len() % 4 == 1 {
+        return Err("invalid base64url length");
+    }
+    if out.len() < base64url_decoded_bound(input.len()) {
+        return Err("output too short");
+    }
+    let mut i = 0;
+    let mut o = 0;
+    while i + 4 <= input.len() {
+        let quad = [input[i], input[i + 1], input[i + 2], input[i + 3]];
+        let decoded = decode_urlsafe_quad(&quad).ok_or("invalid base64url character")?;
+        out[o..o + 3].copy_from_slice(&decoded);
+        i += 4;
+        o += 3;
+    }
+    match input.len() - i {
+        0 => {}
+        2 => {
+            let a = URLSAFE_REVERSE[input[i] as usize];
+            let b = URLSAFE_REVERSE[input[i + 1] as usize];
+            if a == 0xff || b == 0xff {
+                return Err("invalid base64url character");
+            }
+            out[o] = (a << 2) | (b >> 4);
+            o += 1;
+        }
+        3 => {
+            let a = URLSAFE_REVERSE[input[i] as usize];
+            let b = URLSAFE_REVERSE[input[i + 1] as usize];
+            let c = URLSAFE_REVERSE[input[i + 2] as usize];
+            if a == 0xff || b == 0xff || c == 0xff {
+                return Err("invalid base64url character");
+            }
+            out[o] = (a << 2) | (b >> 4);
+            out[o + 1] = ((b & 0x0f) << 4) | (c >> 2);
+            o += 2;
+        }
+        _ => return Err("invalid base64url length"),
+    }
+    Ok(o)
+}
+
 // ─── Standard Base64 ────────────────────────────────────────────────────────
 
 /// Encode bytes to standard Base64 (RFC 4648) with padding.

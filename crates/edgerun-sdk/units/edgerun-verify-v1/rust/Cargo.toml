@@ -1,0 +1,25 @@
+[package]
+name = "edgerun-sdk-unit-edgerun-verify-v1"
+version = "0.1.1"
+edition = "2021"
+publish = false
+
+[package.metadata.edgerun.unit]
+id = "edgerun-verify-v1"
+standard = "edgerun.v0.verify"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "arithmetic"] }
+edgerun-unit = { path = "../../../../edgerun-unit" }
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+codegen-units = 1
+lto = true
+strip = true

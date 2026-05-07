@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1"
-axum = { version = "0.7", features = ["ws"] }
-portable-pty = "0.8"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
-tower-http = { version = "0.5", features = ["fs"] }
+edgerun-crypto = { path = "../../utility/edgerun-crypto", default-features = false, features = ["sha1"] }
+edgerun-encoding = { path = "../../utility/edgerun-encoding", default-features = false }
+edgerun-pty = { path = "../../utility/edgerun-pty" }

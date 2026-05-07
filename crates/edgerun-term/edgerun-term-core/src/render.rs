@@ -10,15 +10,11 @@ pub mod grid;
 pub use grid::{draw_cursor_overlay, draw_grid};
 pub mod border;
 pub mod ui;
-#[cfg(feature = "gpu")]
-pub use border::build_border_gpu;
 pub use border::draw_border_cpu;
 pub use ui::{
     OVERLAY_ACCENT, OVERLAY_BADGE, OVERLAY_BAR, OVERLAY_DIM, OVERLAY_PANEL, OVERLAY_PANEL_INNER,
     OVERLAY_TEXT, OVERLAY_TEXT_MUTED, TabVisual, draw_help_bar_cpu, draw_tab_bar_cpu, rgba_bytes,
 };
-#[cfg(feature = "gpu")]
-pub use ui::{build_help_bar_gpu, build_tab_bar_gpu};
 
 /// Default font bytes and size used for fallback rendering.
 pub const FONT_DATA: &[u8] = include_bytes!("../assets/DejaVuSansMono.ttf");

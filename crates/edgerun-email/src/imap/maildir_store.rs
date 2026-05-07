@@ -335,7 +335,7 @@ impl MaildirImapStore {
             seq,
             uid,
             flags,
-            internal_date: SystemTime::now(),
+            internal_date: crate::imap::server::system_time_to_unix_secs(SystemTime::now()),
             size,
             envelope,
             rfc822: data,

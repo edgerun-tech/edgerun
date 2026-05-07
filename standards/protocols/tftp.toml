@@ -4,7 +4,7 @@ summary = "Small lock-step file transfer protocol over UDP, useful for boot and 
 layer = "application"
 runs_over = ["UDP"]
 depends_on = []
-implementation_crates = ["crates/edgerun-tftp"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
 profiles = ["client", "server", "boot"]
 standards_bodies = ["IETF"]
 
@@ -66,6 +66,5 @@ owner = "IANA"
 id = "tftp-lockstep-transfer"
 kind = "state-machine"
 standards = ["RFC1350"]
-implementation = ["crates/edgerun-tftp"]
+implementation = ["crates/protocol/edgerun-protocols"]
 status = "unknown"
-

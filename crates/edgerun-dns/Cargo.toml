@@ -10,7 +10,7 @@ description = "no_std DNS server and client using edgerun-rt"
 
 [features]
 default = []
-dhcp = ["dep:edgerun-dhcp"]
+dhcp = ["edgerun-protocols/dhcp"]
 dhcp-client = ["dhcp", "dep:edgerun-crypto"]
 dnssec = [
     "dep:edgerun-crypto",
@@ -18,7 +18,7 @@ dnssec = [
     "edgerun-crypto/p256",
     "edgerun-crypto/sha1",
 ]
-tsig = ["dep:edgerun-crypto", "edgerun-crypto/hmac"]
+tsig = ["dep:edgerun-crypto", "edgerun-crypto/hmac", "edgerun-protocols/tsig"]
 
 [[bin]]
 name = "edgerun-dns"
@@ -28,8 +28,7 @@ required-features = ["dnssec"]
 [dependencies]
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
-edgerun-dhcp = { version = "0.1", path = "../edgerun-dhcp", optional = true }
-edgerun-tftp = { version = "0.1", path = "../edgerun-tftp" }
+edgerun-protocols = { workspace = true, default-features = false, features = ["dns", "tftp"] }
 edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false, optional = true }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false }
 

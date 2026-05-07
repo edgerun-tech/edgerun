@@ -33,11 +33,15 @@ pub struct UdpBroadcastSocket {
 }
 
 impl UdpBroadcastSocket {
-    const DEFAULT_PORT: u16 = 47079;
+    const DEFAULT_PORT: u16 = EDGERUN_DEV_MESH_BROADCAST_PORT;
 
     /// Binds a UDP socket for broadcast mesh communication.
     pub fn bind() -> Result<Self, io::Error> {
         Self::bind_port(Self::DEFAULT_PORT)
+    }
+
+    pub fn bind_public_mesh() -> Result<Self, io::Error> {
+        Self::bind_port(EDGERUN_PUBLIC_MESH_PORT)
     }
 
     pub fn bind_port(port: u16) -> Result<Self, io::Error> {

@@ -323,9 +323,9 @@ impl IdToken {
                         "expected RS256 verifier but got HMAC".into(),
                     ));
                 };
-                use edgerun_crypto::digest::Digest;
+                use edgerun_crypto::rsa::sha2::Digest;
                 use edgerun_crypto::rsa::pkcs1v15::Pkcs1v15Sign;
-                use edgerun_crypto::sha2::Sha256;
+                use edgerun_crypto::rsa::sha2::Sha256;
 
                 let mut hasher = Sha256::new();
                 hasher.update(signing_input.as_bytes());

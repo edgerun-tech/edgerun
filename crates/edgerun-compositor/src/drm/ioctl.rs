@@ -2,7 +2,8 @@
 //!
 //! Ioctl numbers verified from kernel headers (`/usr/include/drm/drm_mode.h`).
 
-use libc::{c_int, c_uint, Ioctl};
+use crate::libc;
+use crate::libc::{c_int, c_uint, Ioctl};
 
 /// Type alias for ioctl request codes.
 /// libc 0.2.184 uses `Ioctl` (u64 on x86_64) as the request parameter type.
@@ -129,17 +130,17 @@ pub struct DrmModeCardRes {
     pub count_crtcs: c_int,
     pub count_connectors: c_int,
     pub count_encoders: c_int,
-    pub min_width: c_uint,
-    pub max_width: c_uint,
-    pub min_height: c_uint,
-    pub max_height: c_uint,
+    pub min_width: u32,
+    pub max_width: u32,
+    pub min_height: u32,
+    pub max_height: u32,
 }
 // sizeof = 64 ✓
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DrmModeModeInfo {
-    pub clock: c_uint,
+    pub clock: u32,
     pub hdisplay: u16,
     pub hsync_start: u16,
     pub hsync_end: u16,
@@ -150,9 +151,9 @@ pub struct DrmModeModeInfo {
     pub vsync_end: u16,
     pub vtotal: u16,
     pub vscan: u16,
-    pub vrefresh: c_uint,
-    pub flags: c_uint,
-    pub type_: c_uint,
+    pub vrefresh: u32,
+    pub flags: u32,
+    pub type_: u32,
     pub name: [u8; 32],
 }
 // sizeof = 68 ✓
@@ -170,15 +171,15 @@ pub struct DrmModeGetConnector {
     pub count_props: c_int,
     pub count_encoders: c_int,
     // IDs and properties
-    pub encoder_id: c_uint,
-    pub connector_id: c_uint,
-    pub connector_type: c_uint,
+    pub encoder_id: u32,
+    pub connector_id: u32,
+    pub connector_type: u32,
     pub connector_type_id: c_int,
     pub connection: c_int,
-    pub mm_width: c_uint,
-    pub mm_height: c_uint,
+    pub mm_width: u32,
+    pub mm_height: u32,
     pub subpixel: c_int,
-    pub pad: c_uint,
+    pub pad: u32,
 }
 // sizeof = 4*8 + 12*4 = 32 + 48 = 80 ✓
 
@@ -187,13 +188,13 @@ pub struct DrmModeGetConnector {
 pub struct DrmModeCrtc {
     // Same struct used for both GET and SET
     pub set_connectors_ptr: *mut c_uint,
-    pub count_connectors: c_uint,
-    pub crtc_id: c_uint,
-    pub fb_id: c_uint,
-    pub x: c_uint,
-    pub y: c_uint,
-    pub gamma_size: c_uint,
-    pub mode_valid: c_uint,
+    pub count_connectors: u32,
+    pub crtc_id: u32,
+    pub fb_id: u32,
+    pub x: u32,
+    pub y: u32,
+    pub gamma_size: u32,
+    pub mode_valid: u32,
     pub mode: DrmModeModeInfo,
 }
 // sizeof = 8 + 4*7 + 68 = 8 + 28 + 68 = 104 ✓
@@ -201,11 +202,11 @@ pub struct DrmModeCrtc {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DrmModeFbCmd2 {
-    pub fb_id: c_uint,
-    pub width: c_uint,
-    pub height: c_uint,
-    pub pixel_format: c_uint,
-    pub flags: c_uint,
+    pub fb_id: u32,
+    pub width: u32,
+    pub height: u32,
+    pub pixel_format: u32,
+    pub flags: u32,
     pub handles: [c_uint; 4],
     pub pitches: [c_uint; 4],
     pub offsets: [c_uint; 4],
@@ -218,12 +219,12 @@ pub struct DrmModeFbCmd2 {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DrmModeCreateDumb {
-    pub height: c_uint,
-    pub width: c_uint,
-    pub bpp: c_uint,
-    pub flags: c_uint,
-    pub handle: c_uint,
-    pub pitch: c_uint,
+    pub height: u32,
+    pub width: u32,
+    pub bpp: u32,
+    pub flags: u32,
+    pub handle: u32,
+    pub pitch: u32,
     pub size: u64,
 }
 // sizeof = 6*4 + 8 = 32 ✓
@@ -231,8 +232,8 @@ pub struct DrmModeCreateDumb {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DrmModeMapDumb {
-    pub handle: c_uint,
-    pub pad: c_uint,
+    pub handle: u32,
+    pub pad: u32,
     pub offset: u64,
 }
 // sizeof = 16 ✓
@@ -240,24 +241,24 @@ pub struct DrmModeMapDumb {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DrmModeDestroyDumb {
-    pub handle: c_uint,
+    pub handle: u32,
 }
 // sizeof = 4 ✓
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DrmModePageFlip {
-    pub crtc_id: c_uint,
-    pub fb_id: c_uint,
-    pub flags: c_uint,
-    pub reserved: c_uint,
+    pub crtc_id: u32,
+    pub fb_id: u32,
+    pub flags: u32,
+    pub reserved: u32,
     pub user_data: u64,
 }
 // sizeof = 24 ✓
 
 pub mod page_flip {
-    pub const PAGE_FLIP_EVENT: libc::c_uint = 0x01;
-    pub const PAGE_FLIP_ASYNC: libc::c_uint = 0x02;
+    pub const PAGE_FLIP_EVENT: u32 = 0x01;
+    pub const PAGE_FLIP_ASYNC: u32 = 0x02;
 }
 
 pub mod connector_status {
@@ -267,9 +268,9 @@ pub mod connector_status {
 }
 
 pub mod atomic {
-    pub const TEST_ONLY: libc::c_uint = 0x01;
-    pub const NONBLOCK: libc::c_uint = 0x02;
-    pub const ALLOW_MODESET: libc::c_uint = 0x04;
+    pub const TEST_ONLY: u32 = 0x01;
+    pub const NONBLOCK: u32 = 0x02;
+    pub const ALLOW_MODESET: u32 = 0x04;
 }
 
 pub mod client_cap {
@@ -289,16 +290,16 @@ pub struct DrmSetClientCap {
 #[derive(Debug, Clone, Copy)]
 pub struct DrmPrimeFdToHandle {
     pub fd: c_int,
-    pub handle: c_uint,
-    pub pad: c_uint,
+    pub handle: u32,
+    pub pad: u32,
 }
 // sizeof = 12 ✓
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DrmPrimeHandleToFd {
-    pub handle: c_uint,
-    pub flags: c_uint,
+    pub handle: u32,
+    pub flags: u32,
     pub fd: c_int,
 }
 // sizeof = 12 ✓
@@ -306,8 +307,8 @@ pub struct DrmPrimeHandleToFd {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DrmModeAtomic {
-    pub flags: c_uint,
-    pub count_objs: c_uint,
+    pub flags: u32,
+    pub count_objs: u32,
     pub objs_ptr: *mut c_uint,
     pub count_props_ptr: *mut c_uint,
     pub props_ptr: *mut c_uint,
@@ -332,7 +333,7 @@ pub mod syncobj {
 #[derive(Debug, Clone, Copy)]
 pub struct DrmModeGetPlaneRes {
     pub plane_id_ptr: *mut c_uint,
-    pub count_planes: c_uint,
-    pub pad: c_uint,
+    pub count_planes: u32,
+    pub pad: u32,
 }
 // sizeof = 16 ✓

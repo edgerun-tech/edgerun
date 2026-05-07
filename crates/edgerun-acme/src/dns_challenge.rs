@@ -1,8 +1,8 @@
 use crate::prelude::v1::*;
 use alloc::sync::Arc;
 
-use edgerun_dns::record::DnsRecordType;
-use edgerun_dns::zone::DnsZone;
+use edgerun_protocols::dns::record::DnsRecordType;
+use edgerun_protocols::dns::zone::DnsZone;
 use edgerun_rt::RwLock;
 
 use crate::account::AccountKey;

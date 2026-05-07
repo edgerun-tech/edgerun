@@ -70,7 +70,6 @@ pub mod libc {
 pub mod compat;
 pub mod std;
 
-pub mod axfr;
 pub mod cache;
 pub mod client;
 #[cfg(feature = "dhcp")]
@@ -79,19 +78,37 @@ pub mod dhcp;
 pub mod dnssec;
 pub mod doh;
 pub mod dot;
-pub mod limits;
-pub mod message;
-pub mod name;
-pub mod record;
 pub mod resolv_conf;
 pub mod resolver;
 pub mod server;
-pub mod tcp_frame;
 pub mod tftp;
 #[cfg(feature = "tsig")]
 pub mod tsig;
-pub mod zone;
-pub mod zone_file;
+
+pub mod axfr {
+    pub use edgerun_protocols::dns::axfr::*;
+}
+pub mod limits {
+    pub use edgerun_protocols::dns::limits::*;
+}
+pub mod message {
+    pub use edgerun_protocols::dns::message::*;
+}
+pub mod name {
+    pub use edgerun_protocols::dns::name::*;
+}
+pub mod record {
+    pub use edgerun_protocols::dns::record::*;
+}
+pub mod tcp_frame {
+    pub use edgerun_protocols::dns::tcp_frame::*;
+}
+pub mod zone {
+    pub use edgerun_protocols::dns::zone::*;
+}
+pub mod zone_file {
+    pub use edgerun_protocols::dns::zone_file::*;
+}
 
 pub use axfr::{handle_axfr, handle_notify, handle_update};
 pub use cache::DnsCache;
@@ -107,11 +124,9 @@ pub use server::RateLimiter;
 pub use tsig::{TsigAlgorithm, TsigError, TsigKey, TsigSigner, TsigVerifier};
 
 // DHCP re-exports
-#[cfg(feature = "dhcp-client")]
-pub use dhcp::DhcpClient;
 #[cfg(feature = "dhcp")]
 pub use dhcp::{
-    DhcpError, DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, DhcpServer, Lease, NetworkConfig,
+    DhcpError, DhcpMessage, DhcpMessageType, DhcpOp, DhcpOptions, Lease, NetworkConfig,
     PxeClientArch,
 };
 #[cfg(feature = "dhcp")]
@@ -120,8 +135,8 @@ pub use dhcp::{
     OPT_TFTP_SERVER_NAME, OPT_VENDOR_ENCAP,
 };
 
-// TFTP re-exports
-pub use tftp::{BlobTftpProvider, TftpError, TftpMessage, TftpOpcode, TftpOptions, TftpServer};
+// TFTP protocol re-exports
+pub use tftp::{TftpError, TftpMessage, TftpOpcode, TftpOptions};
 
 // resolv.conf re-exports
 pub use resolv_conf::{Nameserver, ResolvConf};

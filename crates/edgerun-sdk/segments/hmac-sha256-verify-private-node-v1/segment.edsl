@@ -1,0 +1,10 @@
+segment hmac-sha256-verify-private-node-v1
+composition hmac-sha256-verify-rfc2104
+node-role private-policy-node
+capability hmac-sha256-verify
+input key private
+input message linked
+input tag linked
+outputs 1
+components 0 2
+steps 0 7

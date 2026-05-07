@@ -4,15 +4,14 @@ use crate::prelude::v1::*;
 use edgerun_biometrics::BiometricModality;
 use edgerun_camera_biometrics::{
     CameraBiometricError, CameraBiometricPurpose, CameraBiometricReader, CameraCapture,
-    CameraCaptureQuality, CameraFrame, CameraPixelFormat, CameraStreamRole, FaceBounds,
-    PairedCameraBiometricReader, PairedCameraFrame,
+    CameraCaptureQuality, CameraFrame, CameraPixelFormat, FaceBounds, PairedCameraBiometricReader,
+    PairedCameraFrame,
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_core::protocol::capability::CapabilityInvocation;
 use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
-use edgerun_encoding::byteorder::read_u32_le;
 
-use crate::adapters::common::{decode_byte_field, encode_byte_field, stream_oriented_error};
+use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 fn map_camera_error(err: CameraBiometricError) -> CapabilityError {
@@ -51,40 +50,6 @@ fn camera_pixel_format_from_u32(raw: u32) -> Result<CameraPixelFormat, Capabilit
     })
 }
 
-fn encode_camera_frame(frame: &CameraFrame) -> Vec<u8> {
-    let mut out = Vec::with_capacity(20 + 4 + frame.bytes.len());
-    out.extend_from_slice(&frame.width.to_le_bytes());
-    out.extend_from_slice(&frame.height.to_le_bytes());
-    out.extend_from_slice(&frame.stride.to_le_bytes());
-    out.extend_from_slice(&camera_pixel_format_to_u32(frame.format).to_le_bytes());
-    encode_byte_field(&frame.bytes, &mut out);
-    out
-}
-
-fn decode_camera_frame(bytes: &[u8]) -> Result<(CameraFrame, usize), CapabilityError> {
-    if bytes.len() < 20 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote camera frame payload too short",
-        ));
-    }
-    let width = read_u32_le(bytes, 0);
-    let height = read_u32_le(bytes, 4);
-    let stride = read_u32_le(bytes, 8);
-    let format = camera_pixel_format_from_u32(read_u32_le(bytes, 12))?;
-    let mut cursor = 16;
-    let frame_bytes = decode_byte_field(bytes, &mut cursor)?;
-    Ok((
-        CameraFrame {
-            width,
-            height,
-            stride,
-            format,
-            bytes: frame_bytes,
-        },
-        cursor,
-    ))
-}
-
 fn camera_capture_quality_to_u8(q: CameraCaptureQuality) -> u8 {
     match q {
         CameraCaptureQuality::Poor => 1,
@@ -108,34 +73,133 @@ fn camera_capture_quality_from_u8(v: u8) -> Result<CameraCaptureQuality, Capabil
     })
 }
 
-fn camera_stream_role_to_u8(role: CameraStreamRole) -> u8 {
-    match role {
-        CameraStreamRole::Unknown => 0,
-        CameraStreamRole::Rgb => 1,
-        CameraStreamRole::Infrared => 2,
-        CameraStreamRole::Depth => 3,
-        CameraStreamRole::Monochrome => 4,
+// --- Public encode/decode ---
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct CameraFrameWire {
+    width: u32,
+    height: u32,
+    stride: u32,
+    format: u32,
+    bytes: Vec<u8>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct FaceBoundsWire {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct BiometricStateWire {
+    modality: u8,
+    verified: bool,
+    hardware_protected: bool,
+    user_present: bool,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct CameraCaptureWire {
+    frame: CameraFrameWire,
+    quality: u8,
+    face_bounds: Option<FaceBoundsWire>,
+    state: BiometricStateWire,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct PairedCameraFrameWire {
+    rgb: Option<CameraFrameWire>,
+    infrared: Option<CameraFrameWire>,
+    depth: Option<CameraFrameWire>,
+}
+
+fn camera_frame_to_wire(frame: &CameraFrame) -> CameraFrameWire {
+    CameraFrameWire {
+        width: frame.width,
+        height: frame.height,
+        stride: frame.stride,
+        format: camera_pixel_format_to_u32(frame.format),
+        bytes: frame.bytes.clone(),
     }
 }
 
-// --- Public encode/decode ---
+fn camera_frame_from_wire(frame: CameraFrameWire) -> Result<CameraFrame, CapabilityError> {
+    Ok(CameraFrame {
+        width: frame.width,
+        height: frame.height,
+        stride: frame.stride,
+        format: camera_pixel_format_from_u32(frame.format)?,
+        bytes: frame.bytes,
+    })
+}
 
-pub fn encode_camera_capture(capture: &CameraCapture) -> Vec<u8> {
-    let frame = encode_camera_frame(&capture.frame);
-    let mut out = Vec::with_capacity(frame.len() + 8 + 20);
-    out.extend_from_slice(&frame);
-    out.push(camera_capture_quality_to_u8(capture.quality));
-    out.push(capture.face_bounds.is_some() as u8);
-    if let Some(bounds) = &capture.face_bounds {
-        out.extend_from_slice(&bounds.x.to_le_bytes());
-        out.extend_from_slice(&bounds.y.to_le_bytes());
-        out.extend_from_slice(&bounds.width.to_le_bytes());
-        out.extend_from_slice(&bounds.height.to_le_bytes());
+fn face_bounds_to_wire(bounds: &FaceBounds) -> FaceBoundsWire {
+    FaceBoundsWire {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
     }
-    out.push(capture.state.verified as u8);
-    out.push(capture.state.hardware_protected as u8);
-    out.push(capture.state.user_present as u8);
-    out.push(match capture.state.modality {
+}
+
+fn face_bounds_from_wire(bounds: FaceBoundsWire) -> FaceBounds {
+    FaceBounds {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+    }
+}
+
+fn biometric_modality_to_wire(modality: Option<BiometricModality>) -> u8 {
+    match modality {
         Some(BiometricModality::Fingerprint) => 1,
         Some(BiometricModality::Face) => 2,
         Some(BiometricModality::Voice) => 3,
@@ -143,49 +207,11 @@ pub fn encode_camera_capture(capture: &CameraCapture) -> Vec<u8> {
         Some(BiometricModality::Palm) => 5,
         Some(BiometricModality::Other(_)) => 255,
         None => 0,
-    });
-    out
+    }
 }
 
-pub fn decode_camera_capture(bytes: &[u8]) -> Result<CameraCapture, CapabilityError> {
-    let (frame, offset) = decode_camera_frame(bytes)?;
-    if bytes.len() < offset + 5 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote camera capture payload too short",
-        ));
-    }
-    let quality = camera_capture_quality_from_u8(bytes[offset])?;
-    let has_bounds = bytes[offset + 1] != 0;
-    let mut cursor = offset + 2;
-    let face_bounds = if has_bounds {
-        if bytes.len() < cursor + 16 + 4 {
-            return Err(CapabilityError::InvalidRequest(
-                "remote camera face bounds payload too short",
-            ));
-        }
-        let x = read_u32_le(bytes, cursor);
-        cursor += 4;
-        let y = read_u32_le(bytes, cursor);
-        cursor += 4;
-        let width = read_u32_le(bytes, cursor);
-        cursor += 4;
-        let height = read_u32_le(bytes, cursor);
-        cursor += 4;
-        Some(FaceBounds {
-            x,
-            y,
-            width,
-            height,
-        })
-    } else {
-        None
-    };
-    if bytes.len() != cursor + 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote camera capture payload length is invalid",
-        ));
-    }
-    let modality = match bytes[cursor + 3] {
+fn biometric_modality_from_wire(modality: u8) -> Option<BiometricModality> {
+    match modality {
         0 => None,
         1 => Some(BiometricModality::Fingerprint),
         2 => Some(BiometricModality::Face),
@@ -193,77 +219,64 @@ pub fn decode_camera_capture(bytes: &[u8]) -> Result<CameraCapture, CapabilityEr
         4 => Some(BiometricModality::Iris),
         5 => Some(BiometricModality::Palm),
         _ => None,
+    }
+}
+
+pub fn encode_camera_capture(capture: &CameraCapture) -> Vec<u8> {
+    let wire = CameraCaptureWire {
+        frame: camera_frame_to_wire(&capture.frame),
+        quality: camera_capture_quality_to_u8(capture.quality),
+        face_bounds: capture.face_bounds.as_ref().map(face_bounds_to_wire),
+        state: BiometricStateWire {
+            modality: biometric_modality_to_wire(capture.state.modality.clone()),
+            verified: capture.state.verified,
+            hardware_protected: capture.state.hardware_protected,
+            user_present: capture.state.user_present,
+        },
     };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("camera capture must serialize through rkyv")
+        .into_vec()
+}
+
+pub fn decode_camera_capture(bytes: &[u8]) -> Result<CameraCapture, CapabilityError> {
+    let owned = bytes.to_vec();
+    let wire = edgerun_wire::from_bytes::<CameraCaptureWire, edgerun_wire::WireError>(&owned)
+        .map_err(|_| CapabilityError::InvalidRequest("remote camera capture is not rkyv"))?;
     Ok(CameraCapture {
-        frame,
-        quality,
-        face_bounds,
+        frame: camera_frame_from_wire(wire.frame)?,
+        quality: camera_capture_quality_from_u8(wire.quality)?,
+        face_bounds: wire.face_bounds.map(face_bounds_from_wire),
         state: edgerun_biometrics::BiometricState {
-            modality,
-            verified: bytes[cursor] != 0,
-            hardware_protected: bytes[cursor + 1] != 0,
-            user_present: bytes[cursor + 2] != 0,
+            modality: biometric_modality_from_wire(wire.state.modality),
+            verified: wire.state.verified,
+            hardware_protected: wire.state.hardware_protected,
+            user_present: wire.state.user_present,
         },
     })
 }
 
 pub fn encode_paired_camera_frame(frame: &PairedCameraFrame) -> Vec<u8> {
-    let mut out = Vec::new();
-    for (role, maybe_frame) in [
-        (CameraStreamRole::Rgb, frame.rgb.as_ref()),
-        (CameraStreamRole::Infrared, frame.infrared.as_ref()),
-        (CameraStreamRole::Depth, frame.depth.as_ref()),
-    ] {
-        out.push(maybe_frame.is_some() as u8);
-        if let Some(inner) = maybe_frame {
-            out.push(camera_stream_role_to_u8(role));
-            out.extend_from_slice(&encode_camera_frame(inner));
-        }
-    }
-    out
+    let wire = PairedCameraFrameWire {
+        rgb: frame.rgb.as_ref().map(camera_frame_to_wire),
+        infrared: frame.infrared.as_ref().map(camera_frame_to_wire),
+        depth: frame.depth.as_ref().map(camera_frame_to_wire),
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("paired camera frame must serialize through rkyv")
+        .into_vec()
 }
 
 pub fn decode_paired_camera_frame(bytes: &[u8]) -> Result<PairedCameraFrame, CapabilityError> {
-    let mut cursor = 0usize;
-    let mut rgb = None;
-    let mut infrared = None;
-    let mut depth = None;
-    for slot in 0..3 {
-        if bytes.len() < cursor + 1 {
-            return Err(CapabilityError::InvalidRequest(
-                "remote paired camera payload too short",
-            ));
-        }
-        let present = bytes[cursor] != 0;
-        cursor += 1;
-        if present {
-            if bytes.len() < cursor + 1 {
-                return Err(CapabilityError::InvalidRequest(
-                    "remote paired camera role missing",
-                ));
-            }
-            let role = bytes[cursor];
-            cursor += 1;
-            let (frame, used) = decode_camera_frame(&bytes[cursor..])?;
-            cursor += used;
-            match role {
-                1 => rgb = Some(frame),
-                2 => infrared = Some(frame),
-                3 => depth = Some(frame),
-                4 if slot == 1 => infrared = Some(frame),
-                _ => {}
-            }
-        }
-    }
-    if cursor != bytes.len() {
-        return Err(CapabilityError::InvalidRequest(
-            "remote paired camera payload trailing bytes are invalid",
-        ));
-    }
+    let owned = bytes.to_vec();
+    let wire = edgerun_wire::from_bytes::<PairedCameraFrameWire, edgerun_wire::WireError>(&owned)
+        .map_err(|_| {
+        CapabilityError::InvalidRequest("remote paired camera frame is not rkyv")
+    })?;
     Ok(PairedCameraFrame {
-        rgb,
-        infrared,
-        depth,
+        rgb: wire.rgb.map(camera_frame_from_wire).transpose()?,
+        infrared: wire.infrared.map(camera_frame_from_wire).transpose()?,
+        depth: wire.depth.map(camera_frame_from_wire).transpose()?,
     })
 }
 

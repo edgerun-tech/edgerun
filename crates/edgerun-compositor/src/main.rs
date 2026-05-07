@@ -4,6 +4,7 @@
 //!
 //! Default socket path: `/tmp/edgerun-wayland-0`
 
+use edgerun_compositor::libc;
 use std::collections::HashMap;
 use std::io;
 use std::time::Instant;

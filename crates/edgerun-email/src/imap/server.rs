@@ -989,7 +989,7 @@ impl MailStore for MemoryStore {
             *next_uid += 1;
 
             let seq = msgs.len() as u32 + 1;
-            let msg_date = date.unwrap_or_else(SystemTime::now);
+            let msg_date = system_time_to_unix_secs(date.unwrap_or_else(SystemTime::now));
             let mut msg = Message::new(uid, seq, data.to_vec(), msg_date);
             msg.flags = flags;
             // Parse envelope from message headers
@@ -1205,17 +1205,20 @@ pub fn format_envelope_imap(env: &Envelope) -> String {
     env.format_imap()
 }
 
-pub fn format_internal_date(t: SystemTime) -> String {
+pub fn system_time_to_unix_secs(t: SystemTime) -> u64 {
     use std::time::UNIX_EPOCH;
-    let dur = t.duration_since(UNIX_EPOCH).unwrap_or_default();
-    let secs = dur.as_secs() as i64;
-    let time_secs = secs % 86400;
+    t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+}
+
+pub fn format_internal_date(t: u64) -> String {
+    let total_secs = t as i64;
+    let time_secs = total_secs % 86400;
     let hours = time_secs / 3600;
     let mins = (time_secs % 3600) / 60;
     let secs = time_secs % 60;
 
     // Approximate date calculation
-    let days = secs / 86400;
+    let days = total_secs / 86400;
     let year = 1970 + days / 365;
     let day_of_year = days % 365;
     let month = (day_of_year / 30) + 1;
@@ -1245,7 +1248,7 @@ fn format_body_structure(msg: &Message) -> String {
     )
 }
 
-fn parse_imap_date(s: &str) -> Result<SystemTime, ()> {
+fn parse_imap_date(s: &str) -> Result<u64, ()> {
     let months = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
@@ -1265,7 +1268,6 @@ fn parse_imap_date(s: &str) -> Result<SystemTime, ()> {
             .ok_or(())? as u32
             + 1;
 
-        use std::time::{Duration, UNIX_EPOCH};
         let days_from_year = (year - 1970) as u64 * 365 + (year - 1969) as u64 / 4;
         let days_in_months: u64 = match month {
             1 => 0,
@@ -1283,8 +1285,7 @@ fn parse_imap_date(s: &str) -> Result<SystemTime, ()> {
             _ => 0,
         };
         let total_days = days_from_year + days_in_months + (day as u64 - 1);
-        let timestamp = total_days * 86400;
-        Ok(UNIX_EPOCH + Duration::from_secs(timestamp))
+        Ok(total_days * 86400)
     } else {
         Err(())
     }
@@ -1657,7 +1658,7 @@ fn matches_keys(msg: &Message, keys: &[SearchKey], all_msgs: &[Message]) -> bool
             }
             SearchKey::On(date_str) | SearchKey::SentOn(date_str) => {
                 if let Ok(target) = parse_imap_date(date_str) {
-                    let next_day = target + std::time::Duration::from_secs(86400);
+                    let next_day = target.saturating_add(86400);
                     msg.internal_date >= target && msg.internal_date < next_day
                 } else {
                     true
@@ -1735,7 +1736,8 @@ pub struct ImapServer {
 impl ImapServer {
     /// Create a new IMAP server with the given config and mail store.
     pub fn new(config: ImapServerConfig) -> io::Result<Self> {
-        let listener = Arc::new(AsyncTcpListener::bind(&config.bind_addr)?);
+        let listener =
+            Arc::new(AsyncTcpListener::bind(&config.bind_addr).map_err(crate::rt::bare_io)?);
         let store = Arc::new(MemoryStore::new());
         Ok(Self {
             listener,
@@ -1775,7 +1777,8 @@ impl ImapServer {
 
     /// Create a server with a custom mail store.
     pub fn with_store(config: ImapServerConfig, store: Arc<dyn MailStore>) -> io::Result<Self> {
-        let listener = Arc::new(AsyncTcpListener::bind(&config.bind_addr)?);
+        let listener =
+            Arc::new(AsyncTcpListener::bind(&config.bind_addr).map_err(crate::rt::bare_io)?);
         Ok(Self {
             listener,
             store,
@@ -1790,14 +1793,14 @@ impl ImapServer {
 
     /// Get the local address the server is bound to.
     pub fn local_addr(&self) -> io::Result<std::net::SocketAddr> {
-        self.listener.local_addr()
+        self.listener.local_addr().map_err(crate::rt::bare_io)
     }
 
     /// Run the server until shutdown is cancelled.
     pub async fn run(&self, shutdown: CancellationToken) -> io::Result<()> {
         edgerun_log::info!(
             "edgerun-imap: server listening on {} (IMAPS: {})",
-            self.listener.local_addr()?,
+            self.listener.local_addr().map_err(crate::rt::bare_io)?,
             self.imaps
         );
 

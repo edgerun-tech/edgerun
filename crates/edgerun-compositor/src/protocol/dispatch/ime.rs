@@ -2,6 +2,7 @@
 
 use super::DispatchContext;
 use crate::input::keymap;
+use crate::libc;
 use crate::protocol::input_method_v2;
 use crate::protocol::input_method_v2::IMEState;
 use crate::protocol::text_input_v3;

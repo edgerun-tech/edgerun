@@ -109,11 +109,10 @@ pub mod method;
 pub mod status;
 pub mod uri;
 
+pub use edgerun_protocols::http::{
+    is_tchar, HeaderMap, HeaderName, HeaderValue, Method, Scheme, StatusCode, Uri,
+};
 pub use error::{Error, HttpError, Result};
-pub use header::{is_tchar, HeaderMap, HeaderName, HeaderValue};
-pub use method::Method;
-pub use status::StatusCode;
-pub use uri::{Scheme, Uri};
 
 // ---------------------------------------------------------------------------
 // Unified API — cross-protocol server, client, handler, request, response

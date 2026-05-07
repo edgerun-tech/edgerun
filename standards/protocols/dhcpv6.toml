@@ -4,7 +4,7 @@ summary = "IPv6 host configuration protocol over UDP with option-based message e
 layer = "application"
 runs_over = ["UDP", "IPv6"]
 depends_on = []
-implementation_crates = ["crates/edgerun-dhcpv6"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
 profiles = ["client", "server", "bare-metal-candidate"]
 standards_bodies = ["IETF"]
 
@@ -39,6 +39,5 @@ owner = "IANA"
 id = "dhcpv6-option-codec"
 kind = "packet-format"
 standards = ["RFC8415"]
-implementation = ["crates/edgerun-dhcpv6"]
+implementation = ["crates/protocol/edgerun-protocols"]
 status = "unknown"
-

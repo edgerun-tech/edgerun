@@ -11,7 +11,7 @@ use edgerun_capabilities::{
 };
 use edgerun_core::protocol::{Duration as ProtocolDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, NodeRef};
-use edgerun_crypto::sha2::Digest;
+use edgerun_crypto::sha::Digest;
 
 pub(crate) fn dedupe_i32(values: Vec<i32>) -> Vec<i32> {
     let mut out = Vec::new();
@@ -141,7 +141,7 @@ pub(crate) fn duration_from_protocol(value: &ProtocolDuration) -> Option<Duratio
 }
 
 pub(crate) fn revocation_id_for(grant_id: &[u8], reason: &RevocationReason) -> Vec<u8> {
-    let mut h = edgerun_crypto::sha2::Sha256::new();
+    let mut h = edgerun_crypto::sha::Sha256::new();
     h.update(grant_id);
     h.update(reason.as_str().as_bytes());
     h.finalize().to_vec()

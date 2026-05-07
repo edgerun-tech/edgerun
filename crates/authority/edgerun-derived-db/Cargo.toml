@@ -1,0 +1,19 @@
+[package]
+name = "edgerun-derived-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Zero-dependency typed derived database for Edgerun indexes"
+
+[features]
+default = []
+std = []
+
+[dependencies]
+edgerun-wire = { workspace = true }
+
+[lints]
+workspace = true

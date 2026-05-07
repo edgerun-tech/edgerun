@@ -16,24 +16,85 @@ use alloc::string::String;
 ///
 /// This is the encoding used for DNSSEC NSEC3 hashed owner names.
 pub fn encode_base32hex(data: &[u8]) -> String {
+    let mut result = String::with_capacity(base32hex_encoded_len(data.len()));
+    let start = result.len();
+    for _ in 0..base32hex_encoded_len(data.len()) {
+        result.push('\0');
+    }
+    let bytes = unsafe { result.as_bytes_mut() };
+    let written = encode_base32hex_into(data, &mut bytes[start..]).unwrap();
+    result.truncate(start + written);
+    result
+}
+
+/// Encoded length for unpadded base32hex.
+pub const fn base32hex_encoded_len(input_len: usize) -> usize {
+    (input_len * 8 + 4) / 5
+}
+
+/// Upper bound for decoded unpadded base32hex bytes.
+pub const fn base32hex_decoded_bound(input_len: usize) -> usize {
+    (input_len * 5) / 8
+}
+
+/// Encode bytes as base32hex into a caller-provided buffer.
+pub fn encode_base32hex_into(data: &[u8], out: &mut [u8]) -> Result<usize, &'static str> {
     const ALPHABET: &[u8] = b"0123456789abcdefghijklmnopqrstuv";
-    let mut result = String::with_capacity(data.len() * 8 / 5 + 1);
+    let needed = base32hex_encoded_len(data.len());
+    if out.len() < needed {
+        return Err("output too short");
+    }
     let mut bits = 0u64;
     let mut bit_len = 0;
+    let mut written = 0;
     for &b in data {
         bits = (bits << 8) | (b as u64);
         bit_len += 8;
         while bit_len >= 5 {
             bit_len -= 5;
             let idx = (bits >> bit_len) & 0x1F;
-            result.push(ALPHABET[idx as usize] as char);
+            out[written] = ALPHABET[idx as usize];
+            written += 1;
         }
     }
     if bit_len > 0 {
         let idx = (bits << (5 - bit_len)) & 0x1F;
-        result.push(ALPHABET[idx as usize] as char);
+        out[written] = ALPHABET[idx as usize];
+        written += 1;
     }
-    result
+    Ok(written)
+}
+
+/// Decode unpadded base32hex from bytes into a caller-provided buffer.
+pub fn decode_base32hex_into(input: &[u8], out: &mut [u8]) -> Result<usize, &'static str> {
+    match input.len() % 8 {
+        0 | 2 | 4 | 5 | 7 => {}
+        _ => return Err("invalid base32hex length"),
+    }
+    let needed = base32hex_decoded_bound(input.len());
+    if out.len() < needed {
+        return Err("output too short");
+    }
+
+    let mut bits = 0u64;
+    let mut bit_len = 0;
+    let mut written = 0;
+    for &byte in input {
+        let value = match byte {
+            b'0'..=b'9' => byte - b'0',
+            b'a'..=b'v' => byte - b'a' + 10,
+            b'A'..=b'V' => byte - b'A' + 10,
+            _ => return Err("invalid base32hex character"),
+        };
+        bits = (bits << 5) | value as u64;
+        bit_len += 5;
+        while bit_len >= 8 {
+            bit_len -= 8;
+            out[written] = (bits >> bit_len) as u8;
+            written += 1;
+        }
+    }
+    Ok(written)
 }
 
 #[cfg(test)]
@@ -69,5 +130,24 @@ mod tests {
         let encoded = encode_base32hex(&hash);
         assert_eq!(encoded.len(), 52); // 32 * 8/5 = 51.2 → 52
         assert!(encoded.chars().all(|c| matches!(c, '0'..='9' | 'a'..='v')));
+    }
+
+    #[test]
+    fn decode_rfc4648_vectors() {
+        let mut out = [0u8; 8];
+        let len = decode_base32hex_into(b"cpnmu", &mut out).unwrap();
+        assert_eq!(&out[..len], b"foo");
+
+        let len = decode_base32hex_into(b"CPNMUOG", &mut out).unwrap();
+        assert_eq!(&out[..len], b"foob");
+
+        assert_eq!(
+            decode_base32hex_into(b"c", &mut out),
+            Err("invalid base32hex length")
+        );
+        assert_eq!(
+            decode_base32hex_into(b"cpnm!", &mut out),
+            Err("invalid base32hex character")
+        );
     }
 }

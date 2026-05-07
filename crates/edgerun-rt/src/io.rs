@@ -22,17 +22,6 @@ crate::error::impl_error!(IoError, |this, f| {
     }
 });
 
-#[cfg(not(target_os = "none"))]
-impl From<IoError> for std::io::Error {
-    fn from(error: IoError) -> Self {
-        match error {
-            IoError::UnexpectedEof => std::io::ErrorKind::UnexpectedEof.into(),
-            IoError::WriteZero => std::io::ErrorKind::WriteZero.into(),
-            IoError::Other(message) => std::io::Error::other(message),
-        }
-    }
-}
-
 pub type Result<T> = core::result::Result<T, IoError>;
 
 pub trait AsyncRead {

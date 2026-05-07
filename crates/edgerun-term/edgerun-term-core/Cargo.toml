@@ -4,45 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["gpu", "clipboard"]
-gpu = ["dep:pixels", "dep:winit"]
-clipboard = ["dep:arboard"]
+default = []
+embedded-emoji = ["dep:edgerun-emoji"]
 
 [dependencies]
-log = "0.4"
-base64 = "0.21"
-bytemuck = { version = "1.14", features = ["derive"] }
-fdsm = "0.8"
-fdsm-ttf-parser = "0.2"
-icy_sixel = "0.4.3"
-image = { version = "0.25", default-features = false }
-nalgebra = "0.34.1"
-once_cell = "1.19"
-pixels = { version = "0.13", optional = true }
-serde = { version = "1.0", features = ["derive"] }
-rustybuzz = "0.20"
-swash = "0.1"
-ttf-parser = "0.25.1"
-unicode-width = "0.1"
-vte = "0.13"
-
-thiserror = "1.0"
-serde_json = "1.0.149"
-dirs = "6.0.0"
-portable-pty = "0.9.0"
-env_logger = "0.11"
-winit = { version = "0.29", default-features = false, optional = true, features = [
-    "rwh_05",
-    "x11",
-    "wayland",
-    "wayland-dlopen",
-    "wayland-csd-adwaita",
-] }
-anyhow = "1.0"
-libc = "0.2"
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-arboard = { version = "3.3", default-features = false, optional = true }
-
-[dev-dependencies]
-tempfile = "3"
+edgerun-encoding = { path = "../../utility/edgerun-encoding", features = ["std"] }
+edgerun-emoji = { path = "../../utility/edgerun-emoji", optional = true }
+edgerun-error = { path = "../../utility/edgerun-error" }
+edgerun-log = { path = "../../utility/edgerun-log" }
+edgerun-sixel = { path = "../../utility/edgerun-sixel" }
+edgerun-terminal-parser = { path = "../../utility/edgerun-terminal-parser" }
+edgerun-unicode = { path = "../../utility/edgerun-unicode" }

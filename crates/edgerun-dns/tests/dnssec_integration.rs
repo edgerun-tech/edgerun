@@ -251,7 +251,7 @@ fn test_ecdsap256_wrong_signature_rejected() {
 fn test_chain_of_trust_valid_sha256() {
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-    use edgerun_crypto::sha2::{Digest, Sha256};
+    use edgerun_crypto::sha::{Digest, Sha256};
 
     let signing_key = SigningKey::random(&mut edgerun_crypto::OsRng);
     let verifying_key = signing_key.verifying_key();
@@ -345,7 +345,7 @@ fn test_chain_of_trust_sha1_digest() {
 
 #[test]
 fn test_chain_of_trust_sha384_digest() {
-    use edgerun_crypto::sha2::{Digest, Sha384};
+    use edgerun_crypto::sha::{Digest, Sha384};
 
     let dnskey = DnsRecord::dnskey("example.com".to_string(), 257, 3, 14, vec![0x04; 97], 3600);
 

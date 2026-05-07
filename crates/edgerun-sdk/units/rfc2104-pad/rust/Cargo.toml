@@ -1,0 +1,25 @@
+[package]
+name = "edgerun-sdk-unit-rfc2104-pad"
+version = "0.1.1"
+edition = "2021"
+publish = false
+
+[package.metadata.edgerun.unit]
+id = "rfc2104-pad"
+standard = "RFC2104"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+edgerun-crypto = { path = "../../../../utility/edgerun-crypto", default-features = false }
+edgerun-unit = { path = "../../../../edgerun-unit" }
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+codegen-units = 1
+lto = true
+strip = true

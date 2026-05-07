@@ -9,9 +9,7 @@ use edgerun_display::{
     validate_display_update_request, DisplayContentKind, DisplayDevice, DisplayInfo, DisplayMode,
     DisplayUpdateRequest,
 };
-use edgerun_encoding::byteorder::read_u32_le;
 
-use crate::adapters::common::{decode_count_u32, decode_string_field, encode_string_field};
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
 fn content_kind_to_u32(kind: DisplayContentKind) -> u32 {
@@ -35,175 +33,148 @@ fn content_kind_from_u32(raw: u32) -> DisplayContentKind {
     }
 }
 
-fn encode_display_mode(mode: DisplayMode, out: &mut Vec<u8>) {
-    out.extend_from_slice(&mode.width.to_le_bytes());
-    out.extend_from_slice(&mode.height.to_le_bytes());
-    out.extend_from_slice(&mode.refresh_millihz.to_le_bytes());
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct DisplayModeWire {
+    width: u32,
+    height: u32,
+    refresh_millihz: u32,
 }
 
-fn decode_display_mode(bytes: &[u8], cursor: &mut usize) -> Result<DisplayMode, CapabilityError> {
-    if bytes.len().saturating_sub(*cursor) < 12 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote display mode payload too short",
-        ));
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct DisplayInfoWire {
+    provider: String,
+    display_name: String,
+    instance_id: String,
+    built_in: bool,
+    primary: bool,
+    current_mode: DisplayModeWire,
+    modes: Vec<DisplayModeWire>,
+    hdr_capable: bool,
+    touch_capable: bool,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct DisplayUpdateRequestWire {
+    content_kind: u32,
+    width: Option<u32>,
+    height: Option<u32>,
+    refresh_millihz: Option<u32>,
+}
+
+fn display_mode_to_wire(mode: DisplayMode) -> DisplayModeWire {
+    DisplayModeWire {
+        width: mode.width,
+        height: mode.height,
+        refresh_millihz: mode.refresh_millihz,
     }
-    let mode = DisplayMode {
-        width: read_u32_le(bytes, *cursor),
-        height: read_u32_le(bytes, *cursor + 4),
-        refresh_millihz: read_u32_le(bytes, *cursor + 8),
-    };
-    *cursor += 12;
-    Ok(mode)
 }
 
-/// Binary-encode display information for remote transport.
+fn display_mode_from_wire(mode: DisplayModeWire) -> DisplayMode {
+    DisplayMode {
+        width: mode.width,
+        height: mode.height,
+        refresh_millihz: mode.refresh_millihz,
+    }
+}
+
+/// Rkyv-encode display information for remote transport.
 pub fn encode_display_info(info: &DisplayInfo) -> Vec<u8> {
-    let mut out = Vec::new();
-    encode_string_field(&info.provider, &mut out);
-    encode_string_field(&info.display_name, &mut out);
-    encode_string_field(&info.instance_id, &mut out);
-    out.push(info.built_in as u8);
-    out.push(info.primary as u8);
-    out.push(info.hdr_capable as u8);
-    out.push(info.touch_capable as u8);
-    encode_display_mode(info.current_mode, &mut out);
-    out.extend_from_slice(&(info.modes.len() as u32).to_le_bytes());
-    for mode in &info.modes {
-        encode_display_mode(*mode, &mut out);
-    }
-    out
+    let wire = DisplayInfoWire {
+        provider: info.provider.clone(),
+        display_name: info.display_name.clone(),
+        instance_id: info.instance_id.clone(),
+        built_in: info.built_in,
+        primary: info.primary,
+        current_mode: display_mode_to_wire(info.current_mode),
+        modes: info
+            .modes
+            .iter()
+            .copied()
+            .map(display_mode_to_wire)
+            .collect(),
+        hdr_capable: info.hdr_capable,
+        touch_capable: info.touch_capable,
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("display info must serialize through rkyv")
+        .into_vec()
 }
 
-/// Binary-decode display information from remote transport.
+/// Rkyv-decode display information from remote transport.
 pub fn decode_display_info(bytes: &[u8]) -> Result<DisplayInfo, CapabilityError> {
-    let mut cursor = 0usize;
-    let provider = decode_string_field(bytes, &mut cursor)?;
-    let display_name = decode_string_field(bytes, &mut cursor)?;
-    let instance_id = decode_string_field(bytes, &mut cursor)?;
-    if bytes.len().saturating_sub(cursor) < 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote display info flags payload too short",
-        ));
-    }
-    let built_in = read_bool(
-        bytes,
-        &mut cursor,
-        "remote display built-in flag is invalid",
-    )?;
-    let primary = read_bool(bytes, &mut cursor, "remote display primary flag is invalid")?;
-    let hdr_capable = read_bool(bytes, &mut cursor, "remote display HDR flag is invalid")?;
-    let touch_capable = read_bool(bytes, &mut cursor, "remote display touch flag is invalid")?;
-    let current_mode = decode_display_mode(bytes, &mut cursor)?;
-    let mode_count = decode_count_u32(bytes, &mut cursor, "remote display mode count missing")?;
-    let mut modes = Vec::with_capacity(mode_count);
-    for _ in 0..mode_count {
-        modes.push(decode_display_mode(bytes, &mut cursor)?);
-    }
-    if cursor != bytes.len() {
-        return Err(CapabilityError::InvalidRequest(
-            "remote display info payload has trailing bytes",
-        ));
-    }
+    let owned = bytes.to_vec();
+    let wire = edgerun_wire::from_bytes::<DisplayInfoWire, edgerun_wire::WireError>(&owned)
+        .map_err(|_| CapabilityError::InvalidRequest("remote display info is not rkyv"))?;
     Ok(DisplayInfo {
-        provider,
-        display_name,
-        instance_id,
-        built_in,
-        primary,
-        current_mode,
-        modes,
-        hdr_capable,
-        touch_capable,
+        provider: wire.provider,
+        display_name: wire.display_name,
+        instance_id: wire.instance_id,
+        built_in: wire.built_in,
+        primary: wire.primary,
+        current_mode: display_mode_from_wire(wire.current_mode),
+        modes: wire.modes.into_iter().map(display_mode_from_wire).collect(),
+        hdr_capable: wire.hdr_capable,
+        touch_capable: wire.touch_capable,
     })
 }
 
-/// Binary-encode a display update request.
+/// Rkyv-encode a display update request.
 pub fn encode_display_update_request(request: &DisplayUpdateRequest) -> Vec<u8> {
-    let mut out = Vec::with_capacity(4 + 1 + 12);
-    out.extend_from_slice(&content_kind_to_u32(request.content_kind).to_le_bytes());
-    let mut flags = 0u8;
-    if request.width.is_some() {
-        flags |= 1;
-    }
-    if request.height.is_some() {
-        flags |= 2;
-    }
-    if request.refresh_millihz.is_some() {
-        flags |= 4;
-    }
-    out.push(flags);
-    if let Some(width) = request.width {
-        out.extend_from_slice(&width.to_le_bytes());
-    }
-    if let Some(height) = request.height {
-        out.extend_from_slice(&height.to_le_bytes());
-    }
-    if let Some(refresh) = request.refresh_millihz {
-        out.extend_from_slice(&refresh.to_le_bytes());
-    }
-    out
+    let wire = DisplayUpdateRequestWire {
+        content_kind: content_kind_to_u32(request.content_kind),
+        width: request.width,
+        height: request.height,
+        refresh_millihz: request.refresh_millihz,
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("display update request must serialize through rkyv")
+        .into_vec()
 }
 
-/// Binary-decode a display update request.
+/// Rkyv-decode a display update request.
 pub fn decode_display_update_request(
     bytes: &[u8],
 ) -> Result<DisplayUpdateRequest, CapabilityError> {
-    if bytes.len() < 5 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote display update payload too short",
-        ));
-    }
-    let content_kind = content_kind_from_u32(read_u32_le(bytes, 0));
-    let flags = bytes[4];
-    let mut cursor = 5usize;
-    let width = decode_optional_u32(bytes, &mut cursor, flags & 1 != 0)?;
-    let height = decode_optional_u32(bytes, &mut cursor, flags & 2 != 0)?;
-    let refresh_millihz = decode_optional_u32(bytes, &mut cursor, flags & 4 != 0)?;
-    if flags & !7 != 0 || cursor != bytes.len() {
-        return Err(CapabilityError::InvalidRequest(
-            "remote display update payload is invalid",
-        ));
-    }
+    let owned = bytes.to_vec();
+    let wire =
+        edgerun_wire::from_bytes::<DisplayUpdateRequestWire, edgerun_wire::WireError>(&owned)
+            .map_err(|_| CapabilityError::InvalidRequest("remote display update is not rkyv"))?;
     let request = DisplayUpdateRequest {
-        content_kind,
-        width,
-        height,
-        refresh_millihz,
+        content_kind: content_kind_from_u32(wire.content_kind),
+        width: wire.width,
+        height: wire.height,
+        refresh_millihz: wire.refresh_millihz,
     };
     validate_display_update_request(&request)?;
     Ok(request)
-}
-
-fn decode_optional_u32(
-    bytes: &[u8],
-    cursor: &mut usize,
-    present: bool,
-) -> Result<Option<u32>, CapabilityError> {
-    if !present {
-        return Ok(None);
-    }
-    if bytes.len().saturating_sub(*cursor) < 4 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote display update optional value is truncated",
-        ));
-    }
-    let value = read_u32_le(bytes, *cursor);
-    *cursor += 4;
-    Ok(Some(value))
-}
-
-fn read_bool(
-    bytes: &[u8],
-    cursor: &mut usize,
-    invalid: &'static str,
-) -> Result<bool, CapabilityError> {
-    let value = bytes[*cursor];
-    *cursor += 1;
-    match value {
-        0 => Ok(false),
-        1 => Ok(true),
-        _ => Err(CapabilityError::InvalidRequest(invalid)),
-    }
 }
 
 #[derive(Debug)]

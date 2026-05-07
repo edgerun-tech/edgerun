@@ -9,6 +9,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
+use edgerun_protocols::http::{HttpMessageError, HttpRequest};
 
 /// An HTTP request, protocol-agnostic.
 ///
@@ -41,96 +42,12 @@ impl Request {
 
     /// Parse a request from raw HTTP/1.x bytes.
     pub fn from_http(raw: &str) -> Result<Self> {
-        let line_end = raw
-            .find("\r\n")
-            .ok_or_else(|| crate::Error::InvalidRequest("No request line".to_string()))?;
-
-        let request_line = &raw[..line_end];
-        let mut parts = request_line.splitn(3, ' ');
-        let method_str = parts
-            .next()
-            .ok_or_else(|| crate::Error::InvalidRequest("Empty request line".to_string()))?;
-        let target = parts
-            .next()
-            .ok_or_else(|| crate::Error::InvalidRequest("No request target".to_string()))?;
-        let version = parts
-            .next()
-            .ok_or_else(|| crate::Error::InvalidRequest("No HTTP version".to_string()))?;
-        if !version.starts_with("HTTP/") {
-            return Err(crate::Error::InvalidRequest(
-                "Invalid HTTP version".to_string(),
-            ));
-        }
-
-        let method = method_str
-            .parse()
-            .map_err(|e: String| crate::Error::InvalidRequest(e))?;
-
-        let header_start = line_end + 2;
-        let terminator = raw
-            .find("\r\n\r\n")
-            .ok_or_else(|| crate::Error::InvalidRequest("Missing header terminator".to_string()))?;
-        let header_end = terminator.max(header_start);
-
-        let header_block = &raw[header_start..header_end];
-        let mut headers = HeaderMap::new();
-        for line in header_block.lines() {
-            if let Some(colon) = line.find(':') {
-                let name = line[..colon].trim();
-                let value = line[colon + 1..].trim();
-                if !name.is_empty() {
-                    let _ = headers.insert(name, value);
-                }
-            }
-        }
-
-        let uri = if target.starts_with("http://") || target.starts_with("https://") {
-            Uri::parse(target).map_err(crate::Error::InvalidUri)?
-        } else if target == "*" {
-            let host = headers
-                .get("Host")
-                .map(|v| v.as_str())
-                .unwrap_or("localhost");
-            Uri::parse(&format!("http://{host}/")).map_err(crate::Error::InvalidUri)?
-        } else {
-            let host = headers
-                .get("Host")
-                .map(|v| v.as_str())
-                .unwrap_or("localhost");
-            let uri_str = if target.starts_with('/') {
-                format!("http://{}{}", host, target)
-            } else {
-                format!("http://{}/{}", host, target)
-            };
-            Uri::parse(&uri_str).map_err(crate::Error::InvalidUri)?
-        };
-
-        let body_start = terminator + 4;
-        let body = if body_start < raw.len() {
-            let body_str = &raw[body_start..];
-            if crate::chunked::has_chunked_transfer_coding(&headers) {
-                Some(
-                    crate::chunked::parse_body(body_str.as_bytes())
-                        .map_err(|err| crate::Error::InvalidRequest(err.to_string()))?,
-                )
-            } else if let Some(cl) = headers.get("content-length") {
-                if let Ok(len) = cl.as_str().parse::<usize>() {
-                    Some(body_str[..len.min(body_str.len())].as_bytes().to_vec())
-                } else {
-                    Some(body_str.as_bytes().to_vec())
-                }
-            } else {
-                Some(body_str.as_bytes().to_vec())
-            }
-        } else {
-            None
-        };
-
+        let request = HttpRequest::from_http(raw).map_err(map_http_message_error)?;
         Ok(Self {
-            method,
-            uri,
-            headers,
-            body,
+            method: request.method().clone(),
+            uri: request.uri().clone(),
+            headers: request.headers().clone(),
+            body: request.into_body(),
             extensions: Extensions::new(),
         })
     }
@@ -171,37 +88,22 @@ impl Request {
 
     /// Serialize the request as raw HTTP/1.1 bytes.
     pub fn to_http_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        buf.extend_from_slice(self.method.as_str().as_bytes());
-        buf.push(b' ');
-        buf.extend_from_slice(self.uri.request_target().as_bytes());
-        buf.extend_from_slice(b" HTTP/1.1\r\n");
+        HttpRequest::new(
+            self.method.clone(),
+            self.uri.clone(),
+            self.headers.clone(),
+            self.body.clone(),
+        )
+        .to_http_bytes()
+    }
+}
 
-        let mut has_content_length = false;
-        for (name, value) in self.headers.iter() {
-            if name.as_str().eq_ignore_ascii_case("content-length") {
-                has_content_length = true;
-            }
-            buf.extend_from_slice(name.as_str().as_bytes());
-            buf.extend_from_slice(b": ");
-            buf.extend_from_slice(value.as_str().as_bytes());
-            buf.extend_from_slice(b"\r\n");
-        }
-
-        if !has_content_length {
-            if let Some(ref body) = self.body {
-                let cl = body.len().to_string();
-                buf.extend_from_slice(b"Content-Length: ");
-                buf.extend_from_slice(cl.as_bytes());
-                buf.extend_from_slice(b"\r\n");
-            }
-        }
-
-        buf.extend_from_slice(b"\r\n");
-        if let Some(ref body) = self.body {
-            buf.extend_from_slice(body);
-        }
-        buf
+fn map_http_message_error(err: HttpMessageError) -> crate::Error {
+    match err {
+        HttpMessageError::InvalidRequest(value) => crate::Error::InvalidRequest(value),
+        HttpMessageError::InvalidResponse(value) => crate::Error::InvalidResponse(value),
+        HttpMessageError::InvalidUri(value) => crate::Error::InvalidUri(value),
+        HttpMessageError::InvalidStatusCode(value) => crate::Error::InvalidStatusCode(value),
     }
 }
 

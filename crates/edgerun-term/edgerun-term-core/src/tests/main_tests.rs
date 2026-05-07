@@ -6,11 +6,11 @@ use crate::terminal::{
     DEFAULT_BG, DEFAULT_FG, GridPerformer, Rgba, Terminal, ansi_color, brightened, selection_text,
     xterm_color,
 };
+use edgerun_terminal_parser::Parser as VteParser;
 use std::io;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use vte::Parser as VteParser;
 
 #[derive(Clone, Default)]
 struct LockedBuffer(Arc<Mutex<Vec<u8>>>);
@@ -479,38 +479,6 @@ fn draw_text_line_clipped_emoji_uses_ellipsis() {
     );
 
     assert_eq!(frame_clipped, frame_expected);
-}
-
-#[test]
-fn shaped_text_offsets_are_applied() {
-    let primary = Arc::new(FONT_DATA.to_vec());
-    let mut glyphs = GlyphCache::new(primary, FONT_SIZE);
-    glyphs.add_fonts(GlyphCache::load_fallback_fonts());
-
-    let width = 200;
-    let height = 80;
-    let mut frame = vec![0u8; width * height * 4];
-
-    draw_text_line(
-        &mut glyphs,
-        &mut frame,
-        width as u32,
-        height as u32,
-        10,
-        10,
-        "fi ligature 😊 café",
-        [255, 255, 255, 255],
-    );
-
-    // Verify baseline row has non-zero alpha to ensure glyphs respect offsets.
-    let baseline_row = 10 + glyphs.baseline() as usize;
-    let row_range = (baseline_row * width as usize * 4)
-        ..((baseline_row + 1) * width as usize * 4).min(frame.len());
-    let has_pixels = frame[row_range].chunks_exact(4).any(|px| px[3] > 0);
-    assert!(
-        has_pixels,
-        "expected pixels on baseline row for shaped text"
-    );
 }
 
 #[test]

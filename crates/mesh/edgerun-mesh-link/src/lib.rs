@@ -147,9 +147,16 @@ use std::os::raw::{c_int, c_void};
 /// EtherType for edgerun mesh frames (unassigned, in the experiment range).
 pub const MESH_ETHERTYPE: u16 = 0x88B5;
 
+/// Default UDP port for public Edgerun mesh traffic.
+pub const EDGERUN_PUBLIC_MESH_PORT: u16 = 47080;
+
+/// Development UDP broadcast port. Public deployments should use
+/// `EDGERUN_PUBLIC_MESH_PORT`.
+pub const EDGERUN_DEV_MESH_BROADCAST_PORT: u16 = 47079;
+
 /// Multicast group for mesh discovery (239.255.0.1).
 const MESH_MCAST_ADDR: [u8; 4] = [239, 255, 0, 1];
-const MESH_MCAST_PORT: u16 = 47080;
+const MESH_MCAST_PORT: u16 = EDGERUN_PUBLIC_MESH_PORT;
 
 /// Raw Ethernet protocol number for our EtherType (host byte order).
 const ETH_P_MESH: u16 = MESH_ETHERTYPE.to_be();

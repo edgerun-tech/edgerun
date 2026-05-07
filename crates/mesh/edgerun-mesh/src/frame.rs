@@ -5,6 +5,8 @@ use edgerun_hardware_signing::{NodeID, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LE
 
 use super::*;
 
+pub const MESH_MAX_PAYLOAD_LEN: usize = 64 * 1024;
+
 // Mesh frame header (130 bytes, fixed)
 // ---------------------------------------------------------------------------
 
@@ -63,6 +65,11 @@ impl MeshFrameHeader {
             frame_type: FrameType::from_u8(buf[129]),
         }
     }
+
+    pub fn decode_prefix(bytes: &[u8]) -> Option<Self> {
+        let header_bytes: [u8; Self::SIZE] = bytes.get(..Self::SIZE)?.try_into().ok()?;
+        Some(Self::decode(&header_bytes))
+    }
 }
 
 impl core::fmt::Debug for MeshFrameHeader {
@@ -112,7 +119,11 @@ impl MeshFrame {
 
     /// Parse from wire format. Returns `None` if the buffer is too short.
     pub fn from_wire(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < MeshFrameHeader::SIZE + MESH_SIGNATURE_LENGTH {
+        let min_len = MeshFrameHeader::SIZE + MESH_SIGNATURE_LENGTH;
+        if bytes.len() < min_len {
+            return None;
+        }
+        if bytes.len() - min_len > MESH_MAX_PAYLOAD_LEN {
             return None;
         }
         let sig_start = bytes.len() - MESH_SIGNATURE_LENGTH;
@@ -185,4 +196,101 @@ impl MeshFrame {
 }
 
 // ---------------------------------------------------------------------------
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MeshFrameReject {
+    TooShort,
+    PayloadTooLarge,
+    InvalidFrameType,
+    ExpiredTtl,
+    NotForThisNode,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MeshFrameAdmission {
+    pub header: MeshFrameHeader,
+    pub payload_len: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MeshFrameAdmissionPolicy {
+    pub local_node: NodeID,
+    pub allow_broadcast: bool,
+    pub allow_forward: bool,
+    pub max_payload_len: usize,
+}
+
+impl MeshFrameAdmissionPolicy {
+    pub const fn public_mesh(local_node: NodeID) -> Self {
+        Self {
+            local_node,
+            allow_broadcast: true,
+            allow_forward: true,
+            max_payload_len: MESH_MAX_PAYLOAD_LEN,
+        }
+    }
+
+    pub const fn local_only(local_node: NodeID) -> Self {
+        Self {
+            local_node,
+            allow_broadcast: true,
+            allow_forward: false,
+            max_payload_len: MESH_MAX_PAYLOAD_LEN,
+        }
+    }
+}
+
+pub fn inspect_mesh_frame_wire(bytes: &[u8]) -> Result<MeshFrameAdmission, MeshFrameReject> {
+    let min_len = MeshFrameHeader::SIZE + MESH_SIGNATURE_LENGTH;
+    if bytes.len() < min_len {
+        return Err(MeshFrameReject::TooShort);
+    }
+    let payload_len = bytes.len() - min_len;
+    if payload_len > MESH_MAX_PAYLOAD_LEN {
+        return Err(MeshFrameReject::PayloadTooLarge);
+    }
+    let header = MeshFrameHeader::decode_prefix(bytes).ok_or(MeshFrameReject::TooShort)?;
+    if !frame_type_is_admissible(header.frame_type) {
+        return Err(MeshFrameReject::InvalidFrameType);
+    }
+    if header.ttl == 0 {
+        return Err(MeshFrameReject::ExpiredTtl);
+    }
+    Ok(MeshFrameAdmission {
+        header,
+        payload_len,
+    })
+}
+
+pub fn inspect_mesh_frame_wire_for(
+    bytes: &[u8],
+    policy: MeshFrameAdmissionPolicy,
+) -> Result<MeshFrameAdmission, MeshFrameReject> {
+    let admission = inspect_mesh_frame_wire(bytes)?;
+    let is_broadcast = admission.header.dest.0 == [0u8; MESH_PUBLIC_KEY_LENGTH];
+    let is_local = admission.header.dest == policy.local_node;
+    if is_local || (is_broadcast && policy.allow_broadcast) || policy.allow_forward {
+        if admission.payload_len <= policy.max_payload_len {
+            Ok(admission)
+        } else {
+            Err(MeshFrameReject::PayloadTooLarge)
+        }
+    } else {
+        Err(MeshFrameReject::NotForThisNode)
+    }
+}
+
+const fn frame_type_is_admissible(frame_type: FrameType) -> bool {
+    matches!(
+        frame_type,
+        FrameType::Data
+            | FrameType::Discovery
+            | FrameType::RouteAdv
+            | FrameType::HandshakeInit
+            | FrameType::HandshakeAccept
+            | FrameType::MetricsReport
+            | FrameType::MigrationOrder
+            | FrameType::MigrationComplete
+    )
+}
+
 use crate::prelude::v1::*;

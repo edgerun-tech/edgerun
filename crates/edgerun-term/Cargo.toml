@@ -1,12 +1,8 @@
 [workspace]
 members = [
     "edgerun-term-core",
-    "edgerun-term-ui",
-    "edgerun-term-native",
     "edgerun-term-compositor",
-    "edgerun-term-web",
     "edgerun-term-server",
     "edgerun-term-drm-probe",
-    "edgerun-term-soft",
 ]
 resolver = "2"

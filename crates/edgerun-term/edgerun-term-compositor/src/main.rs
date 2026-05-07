@@ -1,17 +1,18 @@
-use std::ffi::CString;
-use std::io::{Read, Write};
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::io::{self, Read, Write};
+use std::ops::{Deref, DerefMut};
+use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, anyhow};
 use edgerun_compositor::input::keymap::{Keymap, Keysym, Modifiers, SpecialKey, process_key_event};
 use edgerun_compositor::protocol::{wl_compositor, wl_core, wl_seat, wl_shm, xdg_shell};
+use edgerun_compositor::render::shm::SharedMemFrame;
 use edgerun_compositor::wire;
 use edgerun_compositor::wire::decode::{ArgCursor, DecodeError, parse_message};
 use edgerun_compositor::wire::encode::{encode, encode_string, message_empty, message_uint};
 use edgerun_compositor::wire::fd::{recv_with_fds, send_with_fds};
+use edgerun_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use edgerun_term_core::render::layout::{LayoutMetrics, compute_layout};
 use edgerun_term_core::render::{
     FONT_DATA, FONT_SIZE, GlyphCache, TabVisual, draw_background, draw_border_cpu,
@@ -19,8 +20,7 @@ use edgerun_term_core::render::{
     fill_rect,
 };
 use edgerun_term_core::terminal::{GridPerformer, Terminal, write_bytes};
-use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
-use vte::Parser as VteParser;
+use edgerun_terminal_parser::Parser as VteParser;
 
 const DEFAULT_SOCKET: &str = "/tmp/edgerun-wayland-0";
 const WIDTH: u32 = 960;
@@ -44,6 +44,12 @@ const SHM_POOL_ID: u32 = 30;
 const BUFFER_ID: u32 = 31;
 const KEYBOARD_ID: u32 = 40;
 
+type AppResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+fn app_error(message: impl Into<String>) -> Box<dyn std::error::Error + Send + Sync> {
+    Box::new(io::Error::other(message.into()))
+}
+
 #[derive(Debug)]
 enum AppEvent {
     Pty(Vec<u8>),
@@ -54,7 +60,7 @@ struct Tab {
     parser: VteParser,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     _master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
-    _child: Box<dyn portable_pty::Child + Send + Sync>,
+    _child: Box<dyn edgerun_pty::Child + Send + Sync>,
     app_cursor_keys: bool,
     title: String,
 }
@@ -125,63 +131,35 @@ impl ChatInput {
     }
 }
 
-struct ShmFrame {
-    width: u32,
-    height: u32,
-    stride: u32,
-    len: usize,
-    ptr: *mut u8,
-    fd: OwnedFd,
-}
+struct ShmFrame(SharedMemFrame);
 
 impl ShmFrame {
-    fn new(width: u32, height: u32) -> Result<Self> {
-        let stride = width.checked_mul(4).context("stride overflow")?;
-        let len = stride
-            .checked_mul(height)
-            .context("buffer length overflow")? as usize;
-        let name = CString::new("edgerun-term-frame").unwrap();
-        let fd = unsafe { libc::syscall(libc::SYS_memfd_create, name.as_ptr(), libc::MFD_CLOEXEC) };
-        if fd < 0 {
-            return Err(std::io::Error::last_os_error()).context("memfd_create");
-        }
-        let fd = unsafe { OwnedFd::from_raw_fd(fd as RawFd) };
-        if unsafe { libc::ftruncate(fd.as_raw_fd(), len as libc::off_t) } != 0 {
-            return Err(std::io::Error::last_os_error()).context("ftruncate shm frame");
-        }
-        let ptr = unsafe {
-            libc::mmap(
-                std::ptr::null_mut(),
-                len,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
-                fd.as_raw_fd(),
-                0,
-            )
-        };
-        if ptr == libc::MAP_FAILED {
-            return Err(std::io::Error::last_os_error()).context("mmap shm frame");
-        }
-        Ok(Self {
-            width,
-            height,
-            stride,
-            len,
-            ptr: ptr.cast(),
-            fd,
-        })
+    fn new(width: u32, height: u32) -> AppResult<Self> {
+        SharedMemFrame::new("edgerun-term-frame", width, height)
+            .map(Self)
+            .map_err(|err| app_error(format!("create shm frame: {err}")))
+    }
+
+    fn fd(&self) -> RawFd {
+        self.0.fd()
     }
 
     fn as_mut_bytes(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+        self.0.as_mut_bytes()
     }
 }
 
-impl Drop for ShmFrame {
-    fn drop(&mut self) {
-        unsafe {
-            libc::munmap(self.ptr.cast(), self.len);
-        }
+impl Deref for ShmFrame {
+    type Target = SharedMemFrame;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ShmFrame {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -192,9 +170,9 @@ struct WaylandClient {
 }
 
 impl WaylandClient {
-    fn connect(path: &str) -> Result<Self> {
+    fn connect(path: &str) -> AppResult<Self> {
         let stream = UnixStream::connect(path)
-            .with_context(|| format!("connect edgerun compositor socket {path}"))?;
+            .map_err(|err| app_error(format!("connect edgerun compositor socket {path}: {err}")))?;
         stream.set_nonblocking(true)?;
         Ok(Self {
             stream,
@@ -207,21 +185,21 @@ impl WaylandClient {
         self.stream.as_raw_fd()
     }
 
-    fn send(&mut self, msg: wire::Message) -> Result<()> {
+    fn send(&mut self, msg: wire::Message) -> AppResult<()> {
         let data = encode(&msg);
         let fds: Vec<RawFd> = msg.fds.iter().copied().collect();
         let sent = send_with_fds(self.fd(), &data, &fds)?;
         if sent != data.len() {
-            return Err(anyhow!("short send to compositor"));
+            return Err(app_error("short send to compositor"));
         }
         Ok(())
     }
 
-    fn recv_available(&mut self) -> Result<Vec<wire::Message>> {
+    fn recv_available(&mut self) -> AppResult<Vec<wire::Message>> {
         loop {
             let mut buf = [0u8; 8192];
             match recv_with_fds(self.fd(), &mut buf) {
-                Ok((0, _)) => return Err(anyhow!("compositor disconnected")),
+                Ok((0, _)) => return Err(app_error("compositor disconnected")),
                 Ok((n, fds)) => {
                     self.recv_buf.extend_from_slice(&buf[..n]);
                     self.pending_fds.extend(fds);
@@ -230,7 +208,7 @@ impl WaylandClient {
                     }
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
-                Err(err) => return Err(err).context("receive compositor events"),
+                Err(err) => return Err(app_error(format!("receive compositor events: {err}"))),
             }
         }
 
@@ -243,15 +221,15 @@ impl WaylandClient {
                     out.push(msg);
                 }
                 Ok(None) => break,
-                Err(err) => return Err(anyhow!("parse compositor message: {err:?}")),
+                Err(err) => return Err(app_error(format!("parse compositor message: {err:?}"))),
             }
         }
         Ok(out)
     }
 }
 
-fn decode_arg<T>(value: std::result::Result<T, DecodeError>) -> Result<T> {
-    value.map_err(|err| anyhow!("decode compositor message: {err:?}"))
+fn decode_arg<T>(value: std::result::Result<T, DecodeError>) -> AppResult<T> {
+    value.map_err(|err| app_error(format!("decode compositor message: {err:?}")))
 }
 
 #[derive(Default)]
@@ -262,7 +240,7 @@ struct Globals {
     seat: Option<u32>,
 }
 
-fn main() -> Result<()> {
+fn main() -> AppResult<()> {
     let socket = std::env::var("EDGERUN_COMPOSITOR_SOCKET")
         .or_else(|_| std::env::var("WAYLAND_DISPLAY").map(|name| format!("/tmp/{name}")))
         .unwrap_or_else(|_| DEFAULT_SOCKET.to_string());
@@ -331,7 +309,7 @@ fn main() -> Result<()> {
     }
 }
 
-fn init_registry(wl: &mut WaylandClient) -> Result<Globals> {
+fn init_registry(wl: &mut WaylandClient) -> AppResult<Globals> {
     wl.send(message_uint(
         1,
         wl_core::display_request::GET_REGISTRY,
@@ -361,27 +339,31 @@ fn init_registry(wl: &mut WaylandClient) -> Result<Globals> {
         }
         std::thread::sleep(Duration::from_millis(2));
     }
-    Err(anyhow!("timed out waiting for compositor registry"))
+    Err(app_error("timed out waiting for compositor registry"))
 }
 
-fn bind_globals(wl: &mut WaylandClient, globals: &Globals) -> Result<()> {
+fn bind_globals(wl: &mut WaylandClient, globals: &Globals) -> AppResult<()> {
     bind(
         wl,
-        globals.compositor.context("missing wl_compositor")?,
+        globals
+            .compositor
+            .ok_or_else(|| app_error("missing wl_compositor"))?,
         wl_compositor::WL_COMPOSITOR,
         4,
         COMPOSITOR_ID,
     )?;
     bind(
         wl,
-        globals.shm.context("missing wl_shm")?,
+        globals.shm.ok_or_else(|| app_error("missing wl_shm"))?,
         wl_shm::WL_SHM,
         1,
         SHM_ID,
     )?;
     bind(
         wl,
-        globals.wm_base.context("missing xdg_wm_base")?,
+        globals
+            .wm_base
+            .ok_or_else(|| app_error("missing xdg_wm_base"))?,
         xdg_shell::XDG_WM_BASE,
         6,
         WM_BASE_ID,
@@ -397,7 +379,13 @@ fn bind_globals(wl: &mut WaylandClient, globals: &Globals) -> Result<()> {
     Ok(())
 }
 
-fn bind(wl: &mut WaylandClient, name: u32, interface: &str, version: u32, id: u32) -> Result<()> {
+fn bind(
+    wl: &mut WaylandClient,
+    name: u32,
+    interface: &str,
+    version: u32,
+    id: u32,
+) -> AppResult<()> {
     let mut args = Vec::new();
     args.extend_from_slice(&name.to_le_bytes());
     encode_string(&mut args, interface);
@@ -412,7 +400,7 @@ fn bind(wl: &mut WaylandClient, name: u32, interface: &str, version: u32, id: u3
     })
 }
 
-fn create_surface(wl: &mut WaylandClient) -> Result<()> {
+fn create_surface(wl: &mut WaylandClient) -> AppResult<()> {
     wl.send(message_uint(
         COMPOSITOR_ID,
         wl_compositor::compositor_request::CREATE_SURFACE,
@@ -451,7 +439,7 @@ fn create_surface(wl: &mut WaylandClient) -> Result<()> {
     ))
 }
 
-fn create_shm_buffer(wl: &mut WaylandClient, frame: &ShmFrame) -> Result<()> {
+fn create_shm_buffer(wl: &mut WaylandClient, frame: &ShmFrame) -> AppResult<()> {
     let mut args = Vec::new();
     args.extend_from_slice(&SHM_POOL_ID.to_le_bytes());
     args.extend_from_slice(&[0, 0, 0, 0]);
@@ -461,7 +449,7 @@ fn create_shm_buffer(wl: &mut WaylandClient, frame: &ShmFrame) -> Result<()> {
         opcode: wl_shm::shm_request::CREATE_POOL,
         size: (8 + args.len()) as u16,
         args,
-        fds: vec![frame.fd.as_raw_fd()],
+        fds: vec![frame.fd()],
     })?;
 
     let mut args = Vec::new();
@@ -480,7 +468,7 @@ fn create_shm_buffer(wl: &mut WaylandClient, frame: &ShmFrame) -> Result<()> {
     })
 }
 
-fn send_string(wl: &mut WaylandClient, sender_id: u32, opcode: u16, value: &str) -> Result<()> {
+fn send_string(wl: &mut WaylandClient, sender_id: u32, opcode: u16, value: &str) -> AppResult<()> {
     let mut args = Vec::new();
     encode_string(&mut args, value);
     wl.send(wire::Message {
@@ -504,7 +492,7 @@ fn handle_event(
     writer: &Arc<Mutex<Box<dyn Write + Send>>>,
     app_cursor_keys: bool,
     kitty_keyboard: bool,
-) -> Result<()> {
+) -> AppResult<()> {
     if msg.sender_id == WM_BASE_ID && msg.opcode == xdg_shell::xdg_wm_base_event::PING {
         let mut c = ArgCursor::from_message(&msg);
         wl.send(message_uint(
@@ -566,7 +554,7 @@ fn draw_and_present(
     show_help: bool,
     chat: &ChatInput,
     focused: bool,
-) -> Result<()> {
+) -> AppResult<()> {
     rgba.resize(frame.len, 0);
     let (cell_w, cell_h) = glyphs.cell_size();
     let chat_h = cell_h.saturating_add(12);
@@ -661,7 +649,7 @@ fn draw_and_present(
     attach_damage_commit(wl, frame.width, frame.height)
 }
 
-fn attach_damage_commit(wl: &mut WaylandClient, width: u32, height: u32) -> Result<()> {
+fn attach_damage_commit(wl: &mut WaylandClient, width: u32, height: u32) -> AppResult<()> {
     let mut args = Vec::new();
     args.extend_from_slice(&BUFFER_ID.to_le_bytes());
     args.extend_from_slice(&0i32.to_le_bytes());
@@ -764,7 +752,7 @@ fn layout_for(width: u32, height: u32, cell_w: u32, cell_h: u32) -> LayoutMetric
     )
 }
 
-fn spawn_tab(tx: mpsc::Sender<AppEvent>, width: u32, height: u32) -> Result<Tab> {
+fn spawn_tab(tx: mpsc::Sender<AppEvent>, width: u32, height: u32) -> AppResult<Tab> {
     let cols = 100u16;
     let rows = 32u16;
     let pty_system = NativePtySystem::default();

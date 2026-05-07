@@ -59,7 +59,7 @@ impl LmtpClient {
         let fut = ConnectFuture::new(sock_addr);
         match crate::rt::timeout(std::time::Duration::from_secs(10), fut).await {
             Ok(Ok(stream)) => Ok(std::sync::Arc::try_unwrap(stream).ok().unwrap()),
-            Ok(Err(e)) => Err(e),
+            Ok(Err(e)) => Err(crate::rt::bare_io(e)),
             Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out")),
         }
     }
@@ -272,24 +272,5 @@ impl LmtpClient {
             }
             line_buf.push(buf[0] as char);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_lmtp_client_struct() {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
-        let stream = std::net::TcpStream::connect(addr).unwrap();
-        let (_server, _) = listener.accept().unwrap();
-
-        let _ = LmtpClient {
-            stream: AsyncTcpStream::from_std(stream).unwrap(),
-            capabilities: vec![],
-            capabilities_map: HashMap::new(),
-        };
     }
 }

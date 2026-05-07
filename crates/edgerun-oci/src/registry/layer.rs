@@ -18,7 +18,7 @@ use crate::tar_layer::{
     apply_uncompressed_tar_layer, decompress_gzip_layer, decompress_zstd_layer, layer_compression,
     OciLayerCompression, TarEntry, TarEntryKind, TarLayerSink,
 };
-use edgerun_crypto::sha2::Digest;
+use edgerun_crypto::sha::Digest;
 
 // ===========================================================================
 // Path validation helpers
@@ -247,7 +247,7 @@ impl TarLayerSink for FsLayerSink {
 /// Streams the file through a SHA-256 hasher — never loads the entire file into memory.
 pub fn verify_blob_digest(blob_path: &Path, expected_digest: &str) -> Result<(), RegistryError> {
     let mut file = File::open(blob_path).map_err(RegistryError::IoError)?;
-    let mut hasher = edgerun_crypto::sha2::Sha256::new();
+    let mut hasher = edgerun_crypto::sha::Sha256::new();
     let mut buf = [0u8; 65536]; // 64KB buffer
     loop {
         let n = file.read(&mut buf).map_err(RegistryError::IoError)?;

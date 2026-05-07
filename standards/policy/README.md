@@ -87,6 +87,5 @@ Run it with:
 The compiler emits one WASM module per definition or clause under
 `standards/build/wasm/<program>/`, writes component manifests under
 `standards/components/manifests/`, and assembles the program in `program.json`.
-The interpreter remains useful as a compiler oracle: when a clause is compiled
-to WASM, the WASM output must match the interpreter result for the same IR and
-input.
+The Rust `no_std` core is the current compiler oracle: compiled artifacts must
+match the reviewed Rust semantics for the same IR and input.

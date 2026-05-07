@@ -2,6 +2,7 @@
 
 use super::DispatchContext;
 use crate::compositor::surface::ShmBufferInfo;
+use crate::libc;
 use crate::protocol::wl_shm;
 use crate::wire::decode::ArgCursor;
 

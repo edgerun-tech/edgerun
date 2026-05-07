@@ -12,6 +12,7 @@ pub enum ErrorKind {
     UnexpectedEof,
     WriteZero,
     InvalidData,
+    PermissionDenied,
     Other,
 }
 

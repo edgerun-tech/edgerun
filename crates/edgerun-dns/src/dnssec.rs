@@ -14,7 +14,8 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
+use edgerun_crypto::sha::{Digest, Sha256, Sha384};
+use edgerun_crypto::sha1::Digest as Sha1Digest;
 use edgerun_encoding::byteorder::read_u16_be;
 
 use super::message::DnsRecord;

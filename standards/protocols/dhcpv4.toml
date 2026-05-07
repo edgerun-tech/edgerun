@@ -4,7 +4,7 @@ summary = "IPv4 host configuration protocol built on BOOTP message format and UD
 layer = "application"
 runs_over = ["UDP", "IPv4"]
 depends_on = []
-implementation_crates = ["crates/edgerun-dhcp"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
 profiles = ["client", "server", "bare-metal-candidate"]
 standards_bodies = ["IETF"]
 
@@ -48,6 +48,5 @@ owner = "IANA"
 id = "dhcpv4-option-codec"
 kind = "packet-format"
 standards = ["RFC2131", "RFC2132"]
-implementation = ["crates/edgerun-dhcp"]
+implementation = ["crates/protocol/edgerun-protocols"]
 status = "unknown"
-

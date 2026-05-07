@@ -1,0 +1,30 @@
+[package]
+name = "edgerun-protocols"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Transport-independent protocol parsers, encoders, and state machines"
+
+[dependencies]
+edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false, optional = true }
+miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"], optional = true }
+
+[features]
+default = []
+proxy = []
+dhcp = ["dep:edgerun-encoding"]
+dhcpv6 = ["dep:edgerun-encoding"]
+dns = ["dep:edgerun-encoding"]
+http = []
+http-compression = ["http", "dep:edgerun-encoding", "dep:miniz_oxide"]
+imap = ["dep:edgerun-encoding"]
+lmtp = ["smtp"]
+smtp = ["dep:edgerun-encoding"]
+tsig = ["dns"]
+tftp = ["dep:edgerun-encoding"]
+
+[lints]
+workspace = true

@@ -91,6 +91,36 @@ pub enum ProtocolVerifyError {
     MissingIssuerIdentity,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageVerifyAlgorithm {
+    Ed25519,
+}
+
+#[cfg(feature = "ed25519")]
+pub fn verify_ed25519_message(
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), ProtocolVerifyError> {
+    if public_key.len() != 32 {
+        return Err(ProtocolVerifyError::InvalidPublicKey);
+    }
+    if signature.len() != 64 {
+        return Err(ProtocolVerifyError::InvalidSignatureLength);
+    }
+    let public_key: &[u8; 32] = public_key
+        .try_into()
+        .map_err(|_| ProtocolVerifyError::InvalidPublicKey)?;
+    let verifying_key = edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(public_key)
+        .map_err(|_| ProtocolVerifyError::InvalidPublicKey)?;
+    let signature = edgerun_crypto::ed25519_dalek::Signature::from_slice(signature)
+        .map_err(|_| ProtocolVerifyError::InvalidSignatureLength)?;
+    use edgerun_crypto::ed25519_dalek::Verifier;
+    verifying_key
+        .verify(message, &signature)
+        .map_err(|_| ProtocolVerifyError::InvalidSignature)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProtocolVerification {
     pub family: ProtocolFamily,

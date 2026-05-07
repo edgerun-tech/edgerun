@@ -2,6 +2,7 @@
 //!
 //! No external crates — raw ioctl calls to the Linux VT subsystem.
 
+use crate::libc;
 use std::io;
 use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -4,7 +4,7 @@
 //! Asset is the full asset record.
 //! Canonical asset ID: SYMBOL:network[:contract]
 
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 
 pub use edgerun_core::protocol::edgerun_wallet_v0::Asset;
 pub use edgerun_core::protocol::edgerun_wallet_v0::AssetRef;

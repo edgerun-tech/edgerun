@@ -1,5 +1,6 @@
 //! DRM/KMS backend — direct Linux kernel via ioctls.
 
+use crate::libc;
 use std::io;
 use std::os::fd::RawFd;
 

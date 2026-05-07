@@ -1,0 +1,12 @@
+[package]
+name = "edgerun-bytes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Byte-casting facade for Edgerun"
+
+[lints]
+workspace = true

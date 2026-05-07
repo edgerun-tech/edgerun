@@ -2,7 +2,7 @@ use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 
 use edgerun_term_core::terminal::{GridPerformer, Terminal};
-use vte::Parser;
+use edgerun_terminal_parser::Parser;
 
 #[derive(Clone, Default)]
 struct LockedBuf(Arc<Mutex<Vec<u8>>>);

@@ -4,7 +4,6 @@ extern crate alloc;
 
 use core::sync::atomic::{AtomicU16, Ordering};
 
-#[cfg(target_os = "none")]
 use crate::bare_async_net::{bare_udp_recv_from, bare_udp_send_to};
 
 static NEXT_UDP_PORT: AtomicU16 = AtomicU16::new(49152);
@@ -87,42 +86,24 @@ impl UdpSocket {
     }
 
     pub fn send_to(&self, buf: &[u8], addr: SocketAddr) -> Result<usize, UdpError> {
-        #[cfg(target_os = "none")]
-        {
-            let local = self
-                .local_addr()
-                .unwrap_or_else(|| SocketAddr::new(0, allocate_udp_port()));
-            return bare_udp_send_to(
-                local.ip_bytes(),
-                local.port(),
-                addr.ip_bytes(),
-                addr.port(),
-                buf,
-            )
-            .map_err(|_| UdpError);
-        }
-
-        #[cfg(not(target_os = "none"))]
-        {
-            let _ = (buf, addr);
-            Ok(buf.len())
-        }
+        let local = self
+            .local_addr()
+            .unwrap_or_else(|| SocketAddr::new(0, allocate_udp_port()));
+        bare_udp_send_to(
+            local.ip_bytes(),
+            local.port(),
+            addr.ip_bytes(),
+            addr.port(),
+            buf,
+        )
+        .map_err(|_| UdpError)
     }
 
     pub fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr), UdpError> {
-        #[cfg(target_os = "none")]
-        {
-            let local = self.local_addr().ok_or(UdpError)?;
-            let (len, src_ip, src_port) =
-                bare_udp_recv_from(local.ip_bytes(), local.port(), buf).map_err(|_| UdpError)?;
-            return Ok((len, SocketAddr::from_array(src_ip, src_port)));
-        }
-
-        #[cfg(not(target_os = "none"))]
-        {
-            let _ = buf;
-            Err(UdpError)
-        }
+        let local = self.local_addr().ok_or(UdpError)?;
+        let (len, src_ip, src_port) =
+            bare_udp_recv_from(local.ip_bytes(), local.port(), buf).map_err(|_| UdpError)?;
+        Ok((len, SocketAddr::from_array(src_ip, src_port)))
     }
 
     pub fn local_addr(&self) -> Option<SocketAddr> {

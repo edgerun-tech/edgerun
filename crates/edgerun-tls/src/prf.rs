@@ -3,7 +3,7 @@
 //! Uses the workspace `hkdf` and `hmac` crates backed by SHA-256/384.
 
 use alloc::{format, vec, vec::Vec};
-use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
+use edgerun_crypto::sha::{Digest, Sha256, Sha384};
 
 /// Hash abstraction for TLS 1.3 key derivation.
 #[derive(Clone)]

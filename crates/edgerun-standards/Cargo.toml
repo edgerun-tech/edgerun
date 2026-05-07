@@ -1,0 +1,23 @@
+[package]
+name = "edgerun-standards"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "no_std standards policy and conformance seed compiler"
+
+[[bin]]
+name = "edgerun-standards"
+path = "src/main.rs"
+required-features = ["std"]
+
+[features]
+default = []
+std = []
+
+[dependencies]
+
+[lints]
+workspace = true

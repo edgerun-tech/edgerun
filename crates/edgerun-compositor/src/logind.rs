@@ -5,6 +5,7 @@
 //!
 //! No external crates — all D-Bus marshalling done by hand.
 
+use crate::libc;
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 

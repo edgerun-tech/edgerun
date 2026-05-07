@@ -4,6 +4,8 @@
 //! Implements DecimalAmount (no floats, no external decimal crates),
 //! asset model, status machine, and exchange types.
 
+#![no_std]
+
 extern crate alloc;
 
 pub mod amount;

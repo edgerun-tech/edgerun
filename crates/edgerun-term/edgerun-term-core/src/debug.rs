@@ -1,6 +1,6 @@
 use std::fmt;
 
-use log::debug;
+use edgerun_log::debug;
 
 use crate::terminal::{DEFAULT_BG, DEFAULT_FG, Terminal};
 

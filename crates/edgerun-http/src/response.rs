@@ -2,200 +2,114 @@
 
 use crate::header::HeaderMap;
 use crate::status::StatusCode;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt;
+use edgerun_protocols::http::{HttpMessageError, HttpResponse};
 
 /// An HTTP response, protocol-agnostic.
 ///
 /// Returned by [`crate::Handler`] implementations across HTTP/1.1, HTTP/2,
 /// and HTTP/3 servers. Also used by all three client implementations.
 #[derive(Debug, Clone)]
-pub struct Response {
-    status: StatusCode,
-    headers: HeaderMap,
-    body: Vec<u8>,
-    trailers: HeaderMap,
-    streaming: bool,
-}
+pub struct Response(HttpResponse);
 
 impl Response {
     pub fn new(status: StatusCode) -> Self {
-        Self {
-            status,
-            headers: HeaderMap::new(),
-            body: Vec::new(),
-            trailers: HeaderMap::new(),
-            streaming: false,
-        }
+        Self(HttpResponse::new(status))
     }
 
     pub fn from_parts(status: StatusCode, headers: HeaderMap, body: Vec<u8>) -> Self {
-        Self {
-            status,
-            headers,
-            body,
-            trailers: HeaderMap::new(),
-            streaming: false,
-        }
+        Self(HttpResponse::from_parts(status, headers, body))
     }
 
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
-        let body = body.into();
-        if !self.streaming && !self.headers.contains_key("Content-Length") {
-            let _ = self
-                .headers
-                .insert("Content-Length", &body.len().to_string());
-        }
-        self.body = body;
+        self.0 = self.0.with_body(body);
         self
     }
 
     pub fn status(&self) -> StatusCode {
-        self.status
+        self.0.status()
     }
+
     pub fn headers(&self) -> &HeaderMap {
-        &self.headers
+        self.0.headers()
     }
+
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
-        &mut self.headers
+        self.0.headers_mut()
     }
+
     pub fn body(&self) -> &[u8] {
-        &self.body
+        self.0.body()
     }
+
     pub fn body_as_string(&self) -> Option<String> {
-        String::from_utf8(self.body.clone()).ok()
+        self.0.body_as_string()
     }
+
     pub fn is_success(&self) -> bool {
-        self.status.is_success()
+        self.0.is_success()
     }
+
     pub fn trailers(&self) -> &HeaderMap {
-        &self.trailers
+        self.0.trailers()
     }
+
     pub fn is_streaming(&self) -> bool {
-        self.streaming
+        self.0.is_streaming()
     }
 
     /// Create a streaming response with chunked transfer encoding.
     pub fn streaming(status: StatusCode) -> Self {
-        Self {
-            status,
-            headers: HeaderMap::new(),
-            body: Vec::new(),
-            trailers: HeaderMap::new(),
-            streaming: true,
-        }
+        Self(HttpResponse::streaming(status))
     }
 
     /// Add a chunk to a streaming response body.
     pub fn add_chunk(&mut self, chunk: impl Into<Vec<u8>>) {
-        let chunk = chunk.into();
-        if self.streaming && !chunk.is_empty() {
-            self.body.extend_from_slice(&chunk);
-        }
+        self.0.add_chunk(chunk);
     }
 
     pub fn text(status: StatusCode, body: &str) -> Self {
-        Self::new(status)
-            .with_header("Content-Type", "text/plain; charset=utf-8")
-            .with_body(body)
+        Self(HttpResponse::text(status, body))
     }
 
     pub fn json(status: StatusCode, body: &str) -> Self {
-        Self::new(status)
-            .with_header("Content-Type", "application/json")
-            .with_body(body)
+        Self(HttpResponse::json(status, body))
     }
 
     pub fn html(status: StatusCode, body: &str) -> Self {
-        Self::new(status)
-            .with_header("Content-Type", "text/html; charset=utf-8")
-            .with_body(body)
+        Self(HttpResponse::html(status, body))
     }
 
     pub fn not_found() -> Self {
-        Self::text(StatusCode::new(404).unwrap(), "404 Not Found")
+        Self(HttpResponse::not_found())
     }
 
     pub fn internal_error() -> Self {
-        Self::text(StatusCode::new(500).unwrap(), "500 Internal Server Error")
+        Self(HttpResponse::internal_error())
     }
 
     pub fn internal_error_msg(msg: &str) -> Self {
-        Self::text(StatusCode::new(500).unwrap(), msg)
+        Self(HttpResponse::internal_error_msg(msg))
     }
 
     pub fn with_header(mut self, name: &str, value: &str) -> Self {
-        let _ = self.headers.insert(name, value);
+        self.0 = self.0.with_header(name, value);
         self
     }
 
     pub fn from_http(raw: &str) -> crate::Result<Self> {
-        let line_end = raw
-            .find("\r\n")
-            .ok_or_else(|| crate::Error::InvalidResponse("No status line".to_string()))?;
-        let status_line = &raw[..line_end];
-        let mut parts = status_line.splitn(3, ' ');
-        let version = parts.next().unwrap_or_default();
-        if !version.starts_with("HTTP/") {
-            return Err(crate::Error::InvalidResponse(
-                "Invalid status line".to_string(),
-            ));
-        }
-        let status = parts
-            .next()
-            .ok_or_else(|| crate::Error::InvalidResponse("Missing status code".to_string()))?
-            .parse::<u16>()
-            .map_err(|_| crate::Error::InvalidResponse("Invalid status code".to_string()))?;
-        let status =
-            StatusCode::new(status).map_err(|_| crate::Error::InvalidStatusCode(status))?;
+        HttpResponse::from_http(raw)
+            .map(Self)
+            .map_err(map_http_message_error)
+    }
+}
 
-        let header_start = line_end + 2;
-        let terminator = raw.find("\r\n\r\n").ok_or_else(|| {
-            crate::Error::InvalidResponse("Missing header terminator".to_string())
-        })?;
-        let header_end = terminator.max(header_start);
-        let mut headers = HeaderMap::new();
-        for line in raw[header_start..header_end].lines() {
-            if let Some(colon) = line.find(':') {
-                let name = line[..colon].trim();
-                let value = line[colon + 1..].trim();
-                if !name.is_empty() {
-                    let _ = headers.insert(name, value);
-                }
-            }
-        }
-
-        let body_start = terminator + 4;
-        let raw_body = raw.get(body_start..).unwrap_or_default();
-        let mut trailers = HeaderMap::new();
-        let body = if (100..200).contains(&status.as_u16())
-            || status.as_u16() == 204
-            || status.as_u16() == 304
-        {
-            Vec::new()
-        } else if crate::chunked::has_chunked_transfer_coding(&headers) {
-            let (body, parsed_trailers) =
-                crate::chunked::parse_body_with_trailers(raw_body.as_bytes())
-                    .map_err(|err| crate::Error::InvalidResponse(err.to_string()))?;
-            trailers = parsed_trailers;
-            body
-        } else if let Some(cl) = headers.get("content-length") {
-            let len = cl
-                .as_str()
-                .parse::<usize>()
-                .map_err(|_| crate::Error::InvalidResponse("Invalid Content-Length".to_string()))?;
-            raw_body.as_bytes()[..len.min(raw_body.len())].to_vec()
-        } else {
-            raw_body.as_bytes().to_vec()
-        };
-
-        Ok(Self {
-            status,
-            headers,
-            body,
-            trailers,
-            streaming: false,
-        })
+fn map_http_message_error(err: HttpMessageError) -> crate::Error {
+    match err {
+        HttpMessageError::InvalidRequest(value) => crate::Error::InvalidRequest(value),
+        HttpMessageError::InvalidResponse(value) => crate::Error::InvalidResponse(value),
+        HttpMessageError::InvalidUri(value) => crate::Error::InvalidUri(value),
+        HttpMessageError::InvalidStatusCode(value) => crate::Error::InvalidStatusCode(value),
     }
 }

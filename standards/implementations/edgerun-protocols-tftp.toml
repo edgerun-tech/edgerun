@@ -1,0 +1,40 @@
+id = "edgerun-protocols-tftp"
+crate = "crates/protocol/edgerun-protocols"
+status = "best-first-proof-target"
+
+profiles = [
+  "tftp-rfc1350-packet-codec",
+  "tftp-rfc2347-options",
+  "tftp-read-core"
+]
+
+[[surface]]
+id = "tftp-message-codec"
+protocol = "tftp"
+standards = ["RFC1350"]
+sections = ["5"]
+kind = "parser"
+implementation = ["crates/protocol/edgerun-protocols/src/tftp/message.rs"]
+entrypoints = [
+  "TftpMessage::from_wire",
+  "TftpMessage::to_wire",
+]
+proof_status = "ready-for-requirement-ids"
+notes = "Small byte protocol with passing no-default-feature tests."
+
+[[surface]]
+id = "tftp-options"
+protocol = "tftp"
+standards = ["RFC2347", "RFC2348", "RFC2349"]
+kind = "validator"
+implementation = ["crates/protocol/edgerun-protocols/src/tftp/message.rs"]
+entrypoints = [
+  "TftpOptions::parse_from_request",
+  "TftpOptions::to_wire",
+]
+proof_status = "ready-for-requirement-ids"
+
+[[command]]
+kind = "current-check"
+command = "cargo test -p edgerun-protocols --lib --no-default-features --features tftp"
+status = "passes"

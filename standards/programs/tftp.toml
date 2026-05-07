@@ -1,0 +1,29 @@
+id = "tftp-must-program"
+name = "TFTP MUST-only program"
+profile = "must-only"
+description = "Seed composed RFC program for TFTP message contracts independent of any transport binding."
+
+definitions = [
+  "tftp-message",
+]
+
+clauses = [
+  "tftp-rfc1350-opcode-0001",
+  "tftp-rfc1350-ack-length-0001",
+  "tftp-rfc1350-data-length-0001",
+]
+
+components = []
+depends_on = []
+
+[[edge]]
+from = "input.bytes"
+to = "tftp-message"
+type = "message-bytes"
+predicate = "always"
+
+[identity]
+profile_sha256 = ""
+clause_set_sha256 = ""
+component_graph_sha256 = ""
+program_sha256 = ""

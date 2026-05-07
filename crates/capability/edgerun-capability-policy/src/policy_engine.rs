@@ -14,7 +14,7 @@ use edgerun_capabilities::{
 };
 use edgerun_core::protocol::{Duration as ProstDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, NodeRef};
-use edgerun_crypto::sha2::Digest;
+use edgerun_crypto::sha::Digest;
 
 impl PolicyEngine for SimplePolicyEngine {
     fn evaluate_request(

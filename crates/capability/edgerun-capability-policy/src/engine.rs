@@ -12,7 +12,25 @@ use edgerun_capabilities::{
 };
 use edgerun_core::protocol::{Duration as ProtocolDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, NodeRef};
-use edgerun_crypto::sha2::Digest;
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct GrantIdSeedWire {
+    request_id: Vec<u8>,
+    provider_name: Vec<u8>,
+    provider_instance_id: Vec<u8>,
+    nonce: u64,
+    unix_secs: u64,
+    unix_nanos: u32,
+}
 
 #[derive(Debug, Clone)]
 pub struct SimplePolicyEngine {
@@ -62,14 +80,17 @@ impl SimplePolicyEngine {
     ) -> Vec<u8> {
         self.nonce = self.nonce.wrapping_add(1);
         let now = now.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let mut h = edgerun_crypto::sha2::Sha256::new();
-        h.update(&request.request_id);
-        h.update(descriptor.provider_name.as_bytes());
-        h.update(descriptor.provider_instance_id.as_bytes());
-        h.update(self.nonce.to_le_bytes());
-        h.update(now.as_secs().to_le_bytes());
-        h.update(now.subsec_nanos().to_le_bytes());
-        h.finalize().to_vec()
+        let seed = GrantIdSeedWire {
+            request_id: request.request_id.clone(),
+            provider_name: descriptor.provider_name.as_bytes().to_vec(),
+            provider_instance_id: descriptor.provider_instance_id.as_bytes().to_vec(),
+            nonce: self.nonce,
+            unix_secs: now.as_secs(),
+            unix_nanos: now.subsec_nanos(),
+        };
+        let bytes = edgerun_wire::to_bytes::<edgerun_wire::WireError>(&seed)
+            .expect("grant id seed must serialize through rkyv");
+        edgerun_crypto::sha256(&bytes).to_vec()
     }
 
     pub(crate) fn effective_requested_operations(

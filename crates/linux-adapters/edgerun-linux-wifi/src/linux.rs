@@ -2507,9 +2507,6 @@ pub fn derive_ptk(
     snonce: &[u8; 32],
     key_length: usize,
 ) -> Vec<u8> {
-    use edgerun_crypto::hmac::{Hmac, Mac};
-    use edgerun_crypto::sha1::Sha1;
-
     // Construct the input for PRF
     let mut input = Vec::with_capacity(102);
     // Min(AA, SA) || Max(AA, SA)
@@ -2535,12 +2532,12 @@ pub fn derive_ptk(
     let mut counter = 0u8;
 
     while ptk.len() < key_length {
-        let mut hmac = Hmac::<Sha1>::new_from_slice(pmk).expect("HMAC can take key of any size");
-        hmac.update(label);
-        hmac.update(&[0]); // Zero byte separator
-        hmac.update(&[counter]);
-        hmac.update(&input);
-        let result = hmac.finalize().into_bytes();
+        let mut block = Vec::with_capacity(label.len() + 2 + input.len());
+        block.extend_from_slice(label);
+        block.push(0);
+        block.push(counter);
+        block.extend_from_slice(&input);
+        let result = hmac_sha1(pmk, &block);
         ptk.extend_from_slice(&result);
         counter += 1;
     }
@@ -2553,9 +2550,6 @@ pub fn derive_ptk(
 ///
 /// The MIC is computed over the entire EAPOL frame with the MIC field zeroed.
 pub fn calculate_eapol_mic(ptk: &[u8], eapol_frame: &[u8]) -> [u8; 16] {
-    use edgerun_crypto::hmac::{Hmac, Mac};
-    use edgerun_crypto::sha1::Sha1;
-
     // MIC is computed using the first 16 bytes of PTK (MIC Key)
     let mic_key = &ptk[..16];
 
@@ -2567,14 +2561,42 @@ pub fn calculate_eapol_mic(ptk: &[u8], eapol_frame: &[u8]) -> [u8; 16] {
         *byte = 0;
     }
 
-    // Compute HMAC-SHA1
-    let mut hmac = Hmac::<Sha1>::new_from_slice(mic_key).expect("HMAC can take key of any size");
-    hmac.update(&frame);
-    let result = hmac.finalize().into_bytes();
+    let result = hmac_sha1(mic_key, &frame);
 
     let mut mic = [0u8; 16];
     mic.copy_from_slice(&result[..16]);
     mic
+}
+
+fn hmac_sha1(key: &[u8], data: &[u8]) -> [u8; 20] {
+    use edgerun_crypto::sha1::{Digest, Sha1};
+
+    let mut normalized = [0u8; 64];
+    if key.len() > 64 {
+        let mut hasher = Sha1::new();
+        hasher.update(key);
+        let digest = hasher.finalize();
+        normalized[..20].copy_from_slice(&digest);
+    } else {
+        normalized[..key.len()].copy_from_slice(key);
+    }
+    let mut ipad = [0x36u8; 64];
+    let mut opad = [0x5cu8; 64];
+    for index in 0..64 {
+        ipad[index] ^= normalized[index];
+        opad[index] ^= normalized[index];
+    }
+    let mut inner = Sha1::new();
+    inner.update(ipad);
+    inner.update(data);
+    let inner_digest = inner.finalize();
+    let mut outer = Sha1::new();
+    outer.update(opad);
+    outer.update(inner_digest);
+    let digest = outer.finalize();
+    let mut out = [0u8; 20];
+    out.copy_from_slice(&digest);
+    out
 }
 
 /// Verify the MIC in a received EAPOL-Key frame.

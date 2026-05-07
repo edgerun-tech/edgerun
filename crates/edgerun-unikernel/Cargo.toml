@@ -24,9 +24,8 @@ esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wif
 [dependencies]
 edgerun-platform = { version = "0.1", path = "../edgerun-platform" }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
-edgerun-dhcp = { version = "0.1", path = "../edgerun-dhcp" }
 edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["client"] }
-edgerun-tftp = { version = "0.1", path = "../edgerun-tftp" }
+edgerun-protocols = { workspace = true, default-features = false, features = ["dhcp", "tftp"] }
 edgerun-tpm = { version = "0.1", path = "../identity/edgerun-tpm", default-features = false }
 edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false }
 edgerun-oci = { version = "0.1", path = "../edgerun-oci", default-features = false, features = ["registry-client", "edgefs"] }

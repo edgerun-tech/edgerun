@@ -1,0 +1,25 @@
+[package]
+name = "edgerun-sdk-unit-tftp-rfc1350"
+version = "0.1.1"
+edition = "2021"
+publish = false
+
+[package.metadata.edgerun.unit]
+id = "tftp-rfc1350"
+standard = "RFC1350"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+edgerun-protocols = { path = "../../../../protocol/edgerun-protocols", default-features = false, features = ["tftp"] }
+edgerun-unit = { path = "../../../../edgerun-unit" }
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+codegen-units = 1
+lto = true
+strip = true

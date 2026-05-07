@@ -39,18 +39,6 @@ impl<T> LazyStatic<T> {
                 Ordering::Relaxed,
             ) {
                 Ok(_) => {
-                    #[cfg(not(target_os = "none"))]
-                    let value = {
-                        use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
-                        match catch_unwind(AssertUnwindSafe(init)) {
-                            Ok(value) => value,
-                            Err(err) => {
-                                self.state.store(UNINITIALIZED, Ordering::Release);
-                                resume_unwind(err);
-                            }
-                        }
-                    };
-                    #[cfg(target_os = "none")]
                     let value = init();
 
                     unsafe { (*self.data.get()).write(value) };
@@ -170,18 +158,6 @@ impl<T> OnceCell<T> {
                 )
                 .is_ok()
             {
-                #[cfg(not(target_os = "none"))]
-                let value = {
-                    use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
-                    match catch_unwind(AssertUnwindSafe(init)) {
-                        Ok(value) => value,
-                        Err(err) => {
-                            self.state.store(UNINITIALIZED, Ordering::Release);
-                            resume_unwind(err);
-                        }
-                    }
-                };
-                #[cfg(target_os = "none")]
                 let value = init();
                 unsafe {
                     self.data.get().write(MaybeUninit::new(value));

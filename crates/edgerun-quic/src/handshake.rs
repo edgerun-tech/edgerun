@@ -327,7 +327,7 @@ impl CertificateValidator {
         match signature_algorithm {
             0x0804 | 0x0809 => {
                 let key =
-                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha256>::new(
+                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::rsa::sha2::Sha256>::new(
                         public_key,
                     );
                 use edgerun_crypto::rsa::signature::Verifier;
@@ -335,7 +335,7 @@ impl CertificateValidator {
             }
             0x0805 | 0x080a => {
                 let key =
-                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha384>::new(
+                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::rsa::sha2::Sha384>::new(
                         public_key,
                     );
                 use edgerun_crypto::rsa::signature::Verifier;
@@ -343,7 +343,7 @@ impl CertificateValidator {
             }
             0x0806 | 0x080b => {
                 let key =
-                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::sha2::Sha512>::new(
+                    edgerun_crypto::rsa::pss::VerifyingKey::<edgerun_crypto::rsa::sha2::Sha512>::new(
                         public_key,
                     );
                 use edgerun_crypto::rsa::signature::Verifier;
@@ -1450,7 +1450,7 @@ mod tests {
         let transcript = b"prior tls handshake messages";
         let signed_input = certificate_verify_signed_input(transcript, &Hasher::Sha256);
         let signing_key =
-            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::sha2::Sha256>::new(private_key);
+            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::rsa::sha2::Sha256>::new(private_key);
         let signature = signing_key.sign_with_rng(&mut rng, &signed_input);
         let validator = CertificateValidator::new(Some("example.com"));
 

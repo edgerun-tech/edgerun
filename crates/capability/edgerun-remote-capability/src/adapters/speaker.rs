@@ -5,143 +5,176 @@ use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
 use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
-use edgerun_encoding::byteorder::{read_i64_le, read_u16_le, read_u32_le};
 use edgerun_speaker::{
     AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerOutputLevel,
     SpeakerSampleFormat,
 };
 
-use crate::adapters::common::{decode_byte_field, encode_byte_field};
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
-/// Binary-encode speaker playback request.
-pub fn encode_speaker_playback_request(request: &AudioPlaybackRequest) -> Vec<u8> {
-    let mut out = Vec::with_capacity(4 + 4 + 2 + 4 + 2 + 1 + request.audio_bytes.len());
-    out.extend_from_slice(&request.duration_ms.to_le_bytes());
-    out.extend_from_slice(&request.sample_rate_hz.to_le_bytes());
-    out.extend_from_slice(&request.channels.to_le_bytes());
-    let format = match request.format {
-        SpeakerSampleFormat::PcmS16Le => 1u32,
-        SpeakerSampleFormat::PcmS24Le => 2,
-        SpeakerSampleFormat::PcmFloat32Le => 3,
-    };
-    out.extend_from_slice(&format.to_le_bytes());
-    out.extend_from_slice(&request.software_gain_percent.unwrap_or(0).to_le_bytes());
-    out.push(request.target_output_level_percent.unwrap_or(255));
-    encode_byte_field(&request.audio_bytes, &mut out);
-    out
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct AudioPlaybackRequestWire {
+    duration_ms: u32,
+    sample_rate_hz: u32,
+    channels: u16,
+    format: u32,
+    audio_bytes: Vec<u8>,
+    software_gain_percent: Option<u16>,
+    target_output_level_percent: Option<u8>,
 }
 
-/// Binary-decode speaker playback request.
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct SpeakerOutputLevelWire {
+    current_percent: u8,
+    min_raw_value: i64,
+    max_raw_value: i64,
+    muted: Option<bool>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    edgerun_wire::Archive,
+    edgerun_wire::Serialize,
+    edgerun_wire::Deserialize,
+)]
+#[rkyv(crate = edgerun_wire)]
+struct AudioPlaybackResultWire {
+    bytes_written: u64,
+    sample_rate_hz: u32,
+    channels: u16,
+    finished: bool,
+}
+
+fn speaker_format_to_wire(format: SpeakerSampleFormat) -> u32 {
+    match format {
+        SpeakerSampleFormat::PcmS16Le => 1,
+        SpeakerSampleFormat::PcmS24Le => 2,
+        SpeakerSampleFormat::PcmFloat32Le => 3,
+    }
+}
+
+fn speaker_format_from_wire(format: u32) -> Result<SpeakerSampleFormat, CapabilityError> {
+    match format {
+        1 => Ok(SpeakerSampleFormat::PcmS16Le),
+        2 => Ok(SpeakerSampleFormat::PcmS24Le),
+        3 => Ok(SpeakerSampleFormat::PcmFloat32Le),
+        _ => Err(CapabilityError::InvalidRequest(
+            "remote speaker playback request format is unknown",
+        )),
+    }
+}
+
+/// Rkyv-encode speaker playback request.
+pub fn encode_speaker_playback_request(request: &AudioPlaybackRequest) -> Vec<u8> {
+    let wire = AudioPlaybackRequestWire {
+        duration_ms: request.duration_ms,
+        sample_rate_hz: request.sample_rate_hz,
+        channels: request.channels,
+        format: speaker_format_to_wire(request.format),
+        audio_bytes: request.audio_bytes.clone(),
+        software_gain_percent: request.software_gain_percent,
+        target_output_level_percent: request.target_output_level_percent,
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("speaker playback request must serialize through rkyv")
+        .into_vec()
+}
+
+/// Rkyv-decode speaker playback request.
 pub fn decode_speaker_playback_request(
     bytes: &[u8],
 ) -> Result<AudioPlaybackRequest, CapabilityError> {
-    if bytes.len() < 17 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote speaker playback request payload too short",
-        ));
-    }
-    let duration_ms = read_u32_le(bytes, 0);
-    let sample_rate_hz = read_u32_le(bytes, 4);
-    let channels = read_u16_le(bytes, 8);
-    let raw_format = read_u32_le(bytes, 10);
-    let raw_gain = read_u16_le(bytes, 14);
-    let raw_level = bytes[16];
-    let mut cursor = 17;
-    let audio_bytes = decode_byte_field(bytes, &mut cursor)?;
-    if bytes.len() != cursor {
-        return Err(CapabilityError::InvalidRequest(
-            "remote speaker playback request length does not match encoded byte count",
-        ));
-    }
-    let format = match raw_format {
-        1 => SpeakerSampleFormat::PcmS16Le,
-        2 => SpeakerSampleFormat::PcmS24Le,
-        3 => SpeakerSampleFormat::PcmFloat32Le,
-        _ => {
-            return Err(CapabilityError::InvalidRequest(
-                "remote speaker playback request format is unknown",
-            ));
-        }
-    };
+    let owned = bytes.to_vec();
+    let wire =
+        edgerun_wire::from_bytes::<AudioPlaybackRequestWire, edgerun_wire::WireError>(&owned)
+            .map_err(|_| {
+                CapabilityError::InvalidRequest("remote speaker playback request is not rkyv")
+            })?;
     Ok(AudioPlaybackRequest {
-        duration_ms,
-        sample_rate_hz,
-        channels,
-        format,
-        audio_bytes,
-        software_gain_percent: if raw_gain == 0 { None } else { Some(raw_gain) },
-        target_output_level_percent: if raw_level == 255 {
-            None
-        } else {
-            Some(raw_level)
-        },
+        duration_ms: wire.duration_ms,
+        sample_rate_hz: wire.sample_rate_hz,
+        channels: wire.channels,
+        format: speaker_format_from_wire(wire.format)?,
+        audio_bytes: wire.audio_bytes,
+        software_gain_percent: wire.software_gain_percent,
+        target_output_level_percent: wire.target_output_level_percent,
     })
 }
 
-/// Binary-encode speaker output level.
+/// Rkyv-encode speaker output level.
 pub fn encode_speaker_output_level(level: &SpeakerOutputLevel) -> Vec<u8> {
-    let mut out = Vec::with_capacity(1 + 8 + 8 + 1);
-    out.push(level.current_percent);
-    out.extend_from_slice(&level.min_raw_value.to_le_bytes());
-    out.extend_from_slice(&level.max_raw_value.to_le_bytes());
-    out.push(match level.muted {
-        Some(true) => 1,
-        Some(false) => 2,
-        None => 0,
-    });
-    out
+    let wire = SpeakerOutputLevelWire {
+        current_percent: level.current_percent,
+        min_raw_value: level.min_raw_value,
+        max_raw_value: level.max_raw_value,
+        muted: level.muted,
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("speaker output level must serialize through rkyv")
+        .into_vec()
 }
 
-/// Binary-decode speaker output level.
+/// Rkyv-decode speaker output level.
 pub fn decode_speaker_output_level(bytes: &[u8]) -> Result<SpeakerOutputLevel, CapabilityError> {
-    if bytes.len() != 18 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote speaker output level payload length is invalid",
-        ));
-    }
-    let muted = match bytes[17] {
-        0 => None,
-        1 => Some(true),
-        2 => Some(false),
-        _ => {
-            return Err(CapabilityError::InvalidRequest(
-                "remote speaker output level mute flag is invalid",
-            ));
-        }
-    };
+    let owned = bytes.to_vec();
+    let wire = edgerun_wire::from_bytes::<SpeakerOutputLevelWire, edgerun_wire::WireError>(&owned)
+        .map_err(|_| CapabilityError::InvalidRequest("remote speaker output level is not rkyv"))?;
     Ok(SpeakerOutputLevel {
-        current_percent: bytes[0],
-        min_raw_value: read_i64_le(bytes, 1),
-        max_raw_value: read_i64_le(bytes, 9),
-        muted,
+        current_percent: wire.current_percent,
+        min_raw_value: wire.min_raw_value,
+        max_raw_value: wire.max_raw_value,
+        muted: wire.muted,
     })
 }
 
-/// Binary-encode speaker playback result.
+/// Rkyv-encode speaker playback result.
 pub fn encode_speaker_playback_result(result: &AudioPlaybackResult) -> Vec<u8> {
-    let mut out = Vec::with_capacity(4 + 4 + 2 + 1);
-    out.extend_from_slice(&(result.bytes_written as u32).to_le_bytes());
-    out.extend_from_slice(&result.sample_rate_hz.to_le_bytes());
-    out.extend_from_slice(&result.channels.to_le_bytes());
-    out.push(result.finished as u8);
-    out
+    let wire = AudioPlaybackResultWire {
+        bytes_written: result.bytes_written as u64,
+        sample_rate_hz: result.sample_rate_hz,
+        channels: result.channels,
+        finished: result.finished,
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .expect("speaker playback result must serialize through rkyv")
+        .into_vec()
 }
 
-/// Binary-decode speaker playback result.
+/// Rkyv-decode speaker playback result.
 pub fn decode_speaker_playback_result(
     bytes: &[u8],
 ) -> Result<AudioPlaybackResult, CapabilityError> {
-    if bytes.len() != 11 {
-        return Err(CapabilityError::InvalidRequest(
-            "remote speaker playback result payload length is invalid",
-        ));
-    }
+    let owned = bytes.to_vec();
+    let wire = edgerun_wire::from_bytes::<AudioPlaybackResultWire, edgerun_wire::WireError>(&owned)
+        .map_err(|_| {
+            CapabilityError::InvalidRequest("remote speaker playback result is not rkyv")
+        })?;
     Ok(AudioPlaybackResult {
-        bytes_written: read_u32_le(bytes, 0) as usize,
-        sample_rate_hz: read_u32_le(bytes, 4),
-        channels: read_u16_le(bytes, 8),
-        finished: bytes[10] != 0,
+        bytes_written: wire.bytes_written as usize,
+        sample_rate_hz: wire.sample_rate_hz,
+        channels: wire.channels,
+        finished: wire.finished,
     })
 }
 

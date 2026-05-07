@@ -1,5 +1,6 @@
 //! DRM device management — open, authenticate, get resources.
 
+use crate::libc;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
@@ -371,4 +372,4 @@ mod connector_status {
     pub const UNKNOWN_CONNECTION: i32 = 3;
 }
 
-use libc::c_uint;
+use crate::libc::c_uint;

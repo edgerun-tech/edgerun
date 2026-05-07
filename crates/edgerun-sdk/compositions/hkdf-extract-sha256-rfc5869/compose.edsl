@@ -1,0 +1,10 @@
+composition hkdf-extract-sha256-rfc5869
+output hkdf-extract-sha256-rfc5869
+input salt
+input ikm
+component hmac hmac-sha256-rfc2104
+
+copy-input salt hmac const:1024 len:salt
+copy-input ikm hmac const:4096 len:ikm
+call hmac.hmac_sha256 const:1024 len:salt const:4096 len:ikm const:2048
+publish hmac const:2048 const:32

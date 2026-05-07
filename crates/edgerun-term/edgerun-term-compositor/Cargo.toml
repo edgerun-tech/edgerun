@@ -8,10 +8,7 @@ name = "edgerun-term-compositor"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1"
 edgerun-compositor = { path = "/home/ken/edgerun/crates/edgerun-compositor" }
+edgerun-pty = { path = "../../utility/edgerun-pty" }
+edgerun-terminal-parser = { path = "../../utility/edgerun-terminal-parser" }
 edgerun-term-core = { path = "../edgerun-term-core", default-features = false }
-libc = "0.2"
-log = "0.4"
-portable-pty = "0.9"
-vte = "0.13"
