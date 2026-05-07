@@ -36,7 +36,7 @@ use edgerun_node::services::dns_runtime::{
 };
 use edgerun_node::services::{ImapConfig, NodeRuntime, SmtpConfig};
 use edgerun_protocols::dns::DnsZone;
-use edgerun_rt::{sleep, CancellationToken, Runtime};
+use edgerun_node::rt::{sleep, CancellationToken, Runtime};
 use edgerun_sign_p256::P256ProtocolSigner;
 use edgerun_tls::certificate::Certificate;
 use edgerun_tls::{generate_csr, signing_key_to_pem, CertificateAndKey};
@@ -977,7 +977,7 @@ fn main() -> ExitCode {
     }
     #[cfg(target_os = "none")]
     {
-        edgerun_rt::log::init_serial_logger();
+        edgerun_node::rt::log::init_serial_logger();
     }
 
     let (mode, _config_path) = parse_args();
@@ -1050,7 +1050,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let dns_server_for_run = dns_server.clone();
     let dns_shutdown = shutdown.clone();
-    let dns_task = edgerun_rt::spawn(async move {
+    let dns_task = edgerun_node::rt::spawn(async move {
         let _ = dns_server_for_run.run(dns_shutdown).await;
     });
 
@@ -1099,7 +1099,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
-    let http_task = edgerun_rt::spawn(async move {
+    let http_task = edgerun_node::rt::spawn(async move {
         edgerun_log::info!("HTTP serve task starting");
         match http_server.serve().await {
             Ok(()) => edgerun_log::info!("HTTP serve task stopped"),
@@ -1109,8 +1109,8 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     edgerun_log::info!(
         "HTTP serve task queued (finished: {}, pending: {}, runs: {})",
         http_task.is_finished(),
-        edgerun_rt::pending(),
-        edgerun_rt::runs()
+        edgerun_node::rt::pending(),
+        edgerun_node::rt::runs()
     );
 
     let mut server = NodeRuntime::new()
@@ -1119,7 +1119,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut bound = server.build().await?;
 
     let server_shutdown = shutdown.clone();
-    let server_task = edgerun_rt::spawn(async move {
+    let server_task = edgerun_node::rt::spawn(async move {
         let _ = bound.run(server_shutdown).await;
     });
 
@@ -1136,7 +1136,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let base_zone_for_acme = base_zone.clone();
         let shutdown_for_acme = shutdown.clone();
         let domains = DEPLOYMENT.certificate_domains();
-        edgerun_rt::spawn(async move {
+        edgerun_node::rt::spawn(async move {
             edgerun_log::info!("ACME: starting background init");
             let init_start = std::time::Instant::now();
             match acme_client.init().await {
@@ -1160,7 +1160,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     let shutdown_clone = shutdown.clone();
-    let signal_task = edgerun_rt::spawn(async move {
+    let signal_task = edgerun_node::rt::spawn(async move {
         wait_for_signal().await;
         shutdown_clone.cancel();
     });
@@ -1213,7 +1213,7 @@ fn load_or_create_acme_account(deployment: &CompiledDeployment) -> Option<Accoun
 
 #[cfg(not(target_os = "none"))]
 async fn wait_for_signal() {
-    let ctrl_c = edgerun_rt::ctrl_c();
+    let ctrl_c = edgerun_node::rt::ctrl_c();
     ctrl_c.await;
     edgerun_log::info!("Received Ctrl-C, shutting down...");
 }
@@ -1221,6 +1221,6 @@ async fn wait_for_signal() {
 #[cfg(target_os = "none")]
 async fn wait_for_signal() {
     loop {
-        edgerun_rt::sleep(Duration::from_secs(60)).await;
+        edgerun_node::rt::sleep(Duration::from_secs(60)).await;
     }
 }

@@ -24,10 +24,10 @@ pub struct HealthState {
 /// - GET  /protocol/approvals/<id>/reject
 /// - POST /protocol/tools/invoke
 pub async fn run_health_server(port: u16, state: HealthState) {
-    use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
+    use edgerun_node::rt::{AsyncReadExt, AsyncWriteExt};
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = match edgerun_rt::AsyncTcpListener::bind(addr) {
+    let listener = match edgerun_node::rt::AsyncTcpListener::bind(addr) {
         Ok(l) => l,
         Err(e) => {
             edgerun_log::error!("failed to bind local HTTP endpoint on {}: {}", addr, e);
@@ -40,7 +40,7 @@ pub async fn run_health_server(port: u16, state: HealthState) {
         match listener.accept().await {
             Ok((mut stream, _)) => {
                 let state = state.clone();
-                edgerun_rt::spawn(async move {
+                edgerun_node::rt::spawn(async move {
                     let mut buf = [0u8; 16384];
                     let n = stream.read(&mut buf).await.unwrap_or(0);
                     let request = String::from_utf8_lossy(&buf[..n]);

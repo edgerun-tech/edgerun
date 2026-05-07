@@ -28,7 +28,7 @@ use edgerun_http::{into_handler, Response, StatusCode};
     feature = "quic",
     feature = "acme",
 ))]
-use edgerun_rt::{CancellationToken, Runtime};
+use edgerun_node::rt::{CancellationToken, Runtime};
 
 pub fn cmd_bind_check(standard_ports: bool) {
     match run_bind_check(standard_ports) {
@@ -117,7 +117,7 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
         dhcp_config,
         Ipv4Addr::new(10, 77, 0, 10),
         Ipv4Addr::new(10, 77, 0, 20),
-        edgerun_rt::SocketAddr::from_array([127, 0, 0, 1], ports.dhcp_port),
+        edgerun_node::rt::SocketAddr::from_array([127, 0, 0, 1], ports.dhcp_port),
     )
     .map_err(|e| format!("dhcp bind: {e:?}"))?;
 
@@ -166,15 +166,15 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
 
     let shutdown = CancellationToken::new();
     let run_shutdown = shutdown.clone();
-    let server_task = edgerun_rt::spawn(async move { bound.run(run_shutdown).await });
+    let server_task = edgerun_node::rt::spawn(async move { bound.run(run_shutdown).await });
     let http_shutdown = shutdown.clone();
     let http_task =
-        edgerun_rt::spawn(async move { http_bound.serve_with_shutdown(http_shutdown).await });
+        edgerun_node::rt::spawn(async move { http_bound.serve_with_shutdown(http_shutdown).await });
     let https_shutdown = shutdown.clone();
     let https_task =
-        edgerun_rt::spawn(async move { https_bound.serve_with_shutdown(https_shutdown).await });
+        edgerun_node::rt::spawn(async move { https_bound.serve_with_shutdown(https_shutdown).await });
     let dhcp_shutdown = shutdown.clone();
-    let dhcp_task = edgerun_rt::spawn(async move {
+    let dhcp_task = edgerun_node::rt::spawn(async move {
         dhcp_server.run(dhcp_shutdown).await;
         Ok::<(), edgerun_protocols::dhcp::message::io::Error>(())
     });
