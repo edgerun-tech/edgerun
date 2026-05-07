@@ -20,7 +20,6 @@ members = [
   "crates/linux-adapters/edgerun-inotify",
   "crates/linux-adapters/edgerun-alsa-microphone",
   "crates/linux-adapters/edgerun-alsa-speaker",
-  "crates/edgerun-acme",
   "crates/linux-adapters/edgerun-amd-xdna",
   "crates/identity/edgerun-android-keystore",
   "crates/edgerun-analytics",
@@ -187,7 +186,6 @@ edgerun-evdev-input = { version = "0.1", path = "crates/linux-adapters/edgerun-e
 edgerun-oci = { version = "0.1", path = "crates/edgerun-oci" }
 edgerun-edgefs = { version = "0.1", path = "crates/authority/edgerun-edgefs" }
 edgerun-encoding = { version = "0.1", path = "crates/utility/edgerun-encoding" }
-edgerun-acme = { version = "0.1", path = "crates/edgerun-acme" }
 edgerun-tls = { version = "0.1", path = "crates/edgerun-tls" }
 edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
 edgerun-glob = { version = "0.1", path = "crates/utility/edgerun-glob" }

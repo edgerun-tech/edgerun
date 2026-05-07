@@ -4,14 +4,14 @@
 use super::DispatchContext;
 use crate::compositor::surface::ShmBufferInfo;
 use crate::libc;
-use crate::protocol::fractional_scale;
-use crate::protocol::single_pixel_buffer;
-use crate::protocol::tearing_control;
-use crate::protocol::wl_shm;
-use crate::protocol::wp_cursor_shape;
-use crate::protocol::wp_presentation_time;
-use crate::protocol::wp_viewporter;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::fractional_scale;
+use edgerun_protocols::wayland::single_pixel_buffer;
+use edgerun_protocols::wayland::tearing_control;
+use edgerun_protocols::wayland::wl_shm;
+use edgerun_protocols::wayland::wp_cursor_shape;
+use edgerun_protocols::wayland::wp_presentation_time;
+use edgerun_protocols::wayland::wp_viewporter;
 
 pub fn handle_viewporter(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

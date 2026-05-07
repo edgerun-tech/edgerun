@@ -99,6 +99,8 @@ pub mod tuya;
 pub mod usb;
 #[cfg(feature = "verify")]
 pub mod verify;
+#[cfg(feature = "wayland")]
+pub mod wayland;
 #[cfg(feature = "websocket")]
 pub mod websocket;
 #[cfg(feature = "wire")]

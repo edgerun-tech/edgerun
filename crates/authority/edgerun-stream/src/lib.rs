@@ -17,7 +17,7 @@ use edgerun_protocols::core_protocol::protocol::{
     ProtocolRecord, RevocationRef,
 };
 use edgerun_protocols::sign::{ProtocolSignError, ProtocolSigner};
-use edgerun_protocols::verify::{ProtocolFamily, ProtocolSignerRef, verify_event_envelope};
+use edgerun_protocols::verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
 
 pub type StreamId = [u8; 64];
 
@@ -32,7 +32,27 @@ pub struct StreamWriter<S> {
 impl<S: ProtocolSigner> StreamWriter<S> {
     /// Creates a new stream writer, producing the genesis event.
     pub fn new(stream_id: StreamId, signer: S, recorded_at_ms: i64) -> Result<Self, StreamError> {
-        let mut event = genesis_event(&stream_id, recorded_at_ms);
+        Self::new_with_genesis_metadata(stream_id, signer, recorded_at_ms, None)
+    }
+
+    /// Creates a new stream writer with a native payload object attached to
+    /// the genesis event.
+    pub fn new_with_genesis_payload(
+        stream_id: StreamId,
+        signer: S,
+        recorded_at_ms: i64,
+        payload_object: ObjectRef,
+    ) -> Result<Self, StreamError> {
+        Self::new_with_genesis_metadata(stream_id, signer, recorded_at_ms, Some(payload_object))
+    }
+
+    fn new_with_genesis_metadata(
+        stream_id: StreamId,
+        signer: S,
+        recorded_at_ms: i64,
+        payload_object: Option<ObjectRef>,
+    ) -> Result<Self, StreamError> {
+        let mut event = genesis_event_with_payload(&stream_id, recorded_at_ms, payload_object);
         sign_event(&mut event, &signer)?;
         Ok(Self {
             stream_id,
@@ -153,6 +173,14 @@ pub fn build_unsigned_event(
 }
 
 pub fn genesis_event(stream_id: &StreamId, recorded_at_ms: i64) -> EventEnvelope {
+    genesis_event_with_payload(stream_id, recorded_at_ms, None)
+}
+
+pub fn genesis_event_with_payload(
+    stream_id: &StreamId,
+    recorded_at_ms: i64,
+    payload_object: Option<ObjectRef>,
+) -> EventEnvelope {
     EventEnvelope {
         envelope_version: 1,
         stream_id: stream_id.to_vec(),
@@ -162,7 +190,7 @@ pub fn genesis_event(stream_id: &StreamId, recorded_at_ms: i64) -> EventEnvelope
         event_version: 1,
         recorded_at: Some(ms_to_timestamp(recorded_at_ms)),
         effective_at: None,
-        payload_object: None,
+        payload_object,
         related_events: Vec::new(),
         related_commands: Vec::new(),
         related_objects: Vec::new(),

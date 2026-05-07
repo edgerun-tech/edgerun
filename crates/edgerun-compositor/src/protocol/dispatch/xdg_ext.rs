@@ -1,12 +1,12 @@
 //! xdg decoration, activation, output handlers.
 
 use super::DispatchContext;
-use crate::protocol::wl_seat;
-use crate::protocol::xdg_activation;
-use crate::protocol::xdg_decoration;
-use crate::protocol::xdg_output;
-use crate::protocol::xdg_shell;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::wl_seat;
+use edgerun_protocols::wayland::xdg_activation;
+use edgerun_protocols::wayland::xdg_decoration;
+use edgerun_protocols::wayland::xdg_output;
+use edgerun_protocols::wayland::xdg_shell;
 
 pub fn handle_decoration_manager(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

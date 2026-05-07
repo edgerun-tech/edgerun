@@ -3,3 +3,4 @@
 pub mod cursor;
 pub mod server;
 pub mod shm;
+pub mod test_overlay;

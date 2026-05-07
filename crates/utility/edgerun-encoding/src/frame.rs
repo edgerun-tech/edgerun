@@ -7,6 +7,10 @@
 
 use alloc::vec::Vec;
 
+use crate::byteorder::{
+    push_u16_be, push_u64_be, push_u64_le, read_u16_be, read_u64_be, read_u64_le,
+};
+
 // ===========================================================================
 // 8-byte big-endian length prefix (u64 BE)
 // ===========================================================================
@@ -24,7 +28,7 @@ use alloc::vec::Vec;
 /// ```
 pub fn encode_frame(payload: &[u8]) -> Vec<u8> {
     let mut frame = Vec::with_capacity(8 + payload.len());
-    frame.extend_from_slice(&(payload.len() as u64).to_be_bytes());
+    push_u64_be(&mut frame, payload.len() as u64);
     frame.extend_from_slice(payload);
     frame
 }
@@ -37,7 +41,7 @@ pub fn encode_frame(payload: &[u8]) -> Vec<u8> {
 /// assert_eq!(decode_frame_len(&[0, 0, 0, 0, 0, 0, 0, 5]), 5);
 /// ```
 pub fn decode_frame_len(header: &[u8; 8]) -> usize {
-    u64::from_be_bytes(*header) as usize
+    read_u64_be(header, 0) as usize
 }
 
 // ===========================================================================
@@ -47,14 +51,14 @@ pub fn decode_frame_len(header: &[u8; 8]) -> usize {
 /// Encode a payload with an 8-byte little-endian length prefix.
 pub fn encode_frame_le(payload: &[u8]) -> Vec<u8> {
     let mut frame = Vec::with_capacity(8 + payload.len());
-    frame.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+    push_u64_le(&mut frame, payload.len() as u64);
     frame.extend_from_slice(payload);
     frame
 }
 
 /// Decode the frame length from the first 8 bytes (little-endian).
 pub fn decode_frame_len_le(header: &[u8; 8]) -> usize {
-    u64::from_le_bytes(*header) as usize
+    read_u64_le(header, 0) as usize
 }
 
 // ===========================================================================
@@ -74,14 +78,14 @@ pub fn encode_frame_u16_be(payload: &[u8]) -> Vec<u8> {
         "payload too large for u16 length prefix: {len}"
     );
     let mut frame = Vec::with_capacity(2 + len);
-    frame.extend_from_slice(&(len as u16).to_be_bytes());
+    push_u16_be(&mut frame, len as u16);
     frame.extend_from_slice(payload);
     frame
 }
 
 /// Decode the frame length from the first 2 bytes (big-endian).
 pub fn decode_frame_len_u16_be(header: &[u8; 2]) -> usize {
-    u16::from_be_bytes(*header) as usize
+    read_u16_be(header, 0) as usize
 }
 
 #[cfg(test)]

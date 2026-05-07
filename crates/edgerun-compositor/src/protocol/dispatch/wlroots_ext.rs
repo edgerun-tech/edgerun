@@ -2,12 +2,12 @@
 
 use super::DispatchContext;
 use crate::libc;
-use crate::protocol::data_control;
-use crate::protocol::primary_selection;
-use crate::protocol::screencopy;
-use crate::protocol::screencopy::ScreencopyFrame;
-use crate::protocol::wl_data_device;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::data_control;
+use edgerun_protocols::wayland::primary_selection;
+use edgerun_protocols::wayland::screencopy;
+use edgerun_protocols::wayland::screencopy::ScreencopyFrame;
+use edgerun_protocols::wayland::wl_data_device;
 
 pub fn handle_screencopy_manager(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::protocol::dispatch::linux_ext::SyncobjState;
+use edgerun_protocols::wayland::{layer_shell, xdg_shell};
 
 /// A toplevel window.
 #[derive(Debug)]
@@ -347,9 +348,7 @@ impl Shell {
                 window_y: 0,
                 window_width: 0,
                 window_height: 0,
-                states: protocol::xdg_shell::toplevel_state::ACTIVATED
-                    .to_le_bytes()
-                    .to_vec(),
+                states: xdg_shell::toplevel_state::ACTIVATED.to_le_bytes().to_vec(),
                 configured: false,
                 configure_serial: None,
                 wants_close: false,
@@ -572,24 +571,20 @@ impl Shell {
             // Build state array (each state is a u32)
             tl.states.clear();
             if tl.fullscreen {
-                tl.states.extend_from_slice(
-                    &protocol::xdg_shell::toplevel_state::FULLSCREEN.to_le_bytes(),
-                );
+                tl.states
+                    .extend_from_slice(&xdg_shell::toplevel_state::FULLSCREEN.to_le_bytes());
             }
             if tl.maximized {
-                tl.states.extend_from_slice(
-                    &protocol::xdg_shell::toplevel_state::MAXIMIZED.to_le_bytes(),
-                );
+                tl.states
+                    .extend_from_slice(&xdg_shell::toplevel_state::MAXIMIZED.to_le_bytes());
             }
             if tl.resizing {
-                tl.states.extend_from_slice(
-                    &protocol::xdg_shell::toplevel_state::RESIZING.to_le_bytes(),
-                );
+                tl.states
+                    .extend_from_slice(&xdg_shell::toplevel_state::RESIZING.to_le_bytes());
             }
             if !tl.fullscreen && !tl.maximized {
-                tl.states.extend_from_slice(
-                    &protocol::xdg_shell::toplevel_state::ACTIVATED.to_le_bytes(),
-                );
+                tl.states
+                    .extend_from_slice(&xdg_shell::toplevel_state::ACTIVATED.to_le_bytes());
             }
         }
 
@@ -619,8 +614,7 @@ impl Shell {
 
     /// Get the current state bytes for a toplevel.
     pub fn toplevel_state_bytes(&self, toplevel_id: u32) -> &[u8] {
-        static DEFAULT_STATE: [u8; 4] =
-            protocol::xdg_shell::toplevel_state::ACTIVATED.to_le_bytes();
+        static DEFAULT_STATE: [u8; 4] = xdg_shell::toplevel_state::ACTIVATED.to_le_bytes();
         self.toplevels
             .get(&toplevel_id)
             .map(|tl| tl.states.as_slice())
@@ -714,8 +708,8 @@ impl Shell {
         let margin_l = margin_left as i32;
         let w = if desired_width > 0 {
             desired_width
-        } else if anchor & crate::protocol::layer_shell::anchor::LEFT != 0
-            && anchor & crate::protocol::layer_shell::anchor::RIGHT != 0
+        } else if anchor & layer_shell::anchor::LEFT != 0
+            && anchor & layer_shell::anchor::RIGHT != 0
         {
             (output_w as i32 - margin_l - margin_r).max(0) as u32
         } else {
@@ -723,8 +717,8 @@ impl Shell {
         };
         let h = if desired_height > 0 {
             desired_height
-        } else if anchor & crate::protocol::layer_shell::anchor::TOP != 0
-            && anchor & crate::protocol::layer_shell::anchor::BOTTOM != 0
+        } else if anchor & layer_shell::anchor::TOP != 0
+            && anchor & layer_shell::anchor::BOTTOM != 0
         {
             (output_h as i32 - margin_t - margin_b).max(0) as u32
         } else {
@@ -732,16 +726,16 @@ impl Shell {
         };
         let h_center = (output_w as i32 - w as i32) / 2;
         let v_center = (output_h as i32 - h as i32) / 2;
-        let x = if anchor & crate::protocol::layer_shell::anchor::LEFT != 0 {
+        let x = if anchor & layer_shell::anchor::LEFT != 0 {
             margin_l
-        } else if anchor & crate::protocol::layer_shell::anchor::RIGHT != 0 {
+        } else if anchor & layer_shell::anchor::RIGHT != 0 {
             output_w as i32 - w as i32 - margin_r
         } else {
             h_center
         };
-        let y = if anchor & crate::protocol::layer_shell::anchor::TOP != 0 {
+        let y = if anchor & layer_shell::anchor::TOP != 0 {
             margin_t
-        } else if anchor & crate::protocol::layer_shell::anchor::BOTTOM != 0 {
+        } else if anchor & layer_shell::anchor::BOTTOM != 0 {
             output_h as i32 - h as i32 - margin_b
         } else {
             v_center
@@ -880,8 +874,6 @@ impl Shell {
     }
 }
 
-use crate::protocol;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -956,7 +948,7 @@ mod tests {
         // Should be ACTIVATED state (4 bytes)
         assert_eq!(state.len(), 4);
         let state_val = u32::from_le_bytes(state.try_into().unwrap());
-        assert_eq!(state_val, protocol::xdg_shell::toplevel_state::ACTIVATED);
+        assert_eq!(state_val, xdg_shell::toplevel_state::ACTIVATED);
     }
 
     #[test]

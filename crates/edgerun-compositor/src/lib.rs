@@ -32,21 +32,22 @@ pub struct CompositorCapabilityReport {
 
 pub fn capability_report() -> CompositorCapabilityReport {
     let (_, globals) = protocol::dispatch::assign_globals(1);
+    use edgerun_protocols::wayland::wl_compositor;
 
     let mut registry = resource::Registry::new();
     registry.register(
         2,
-        protocol::wl_compositor::WL_COMPOSITOR,
-        protocol::wl_compositor::WL_COMPOSITOR_VERSION,
+        wl_compositor::WL_COMPOSITOR,
+        wl_compositor::WL_COMPOSITOR_VERSION,
         1,
     );
-    let registry_probe_ok = registry.interface(2) == Some(protocol::wl_compositor::WL_COMPOSITOR);
+    let registry_probe_ok = registry.interface(2) == Some(wl_compositor::WL_COMPOSITOR);
 
-    let wire_probe = protocol::wl_compositor::surface_enter_event(3, 4);
+    let wire_probe = wl_compositor::surface_enter_event(3, 4);
 
     CompositorCapabilityReport {
         globals: globals.len(),
-        wl_compositor_version: protocol::wl_compositor::WL_COMPOSITOR_VERSION,
+        wl_compositor_version: wl_compositor::WL_COMPOSITOR_VERSION,
         registry_probe_ok,
         wire_probe_bytes: usize::from(wire_probe.size),
     }

@@ -28,7 +28,7 @@ exchange-events = ["dep:edgerun-exchange"]
 tls = ["edgerun-protocols/tls"]
 quic = ["edgerun-protocols/quic", "tls"]
 tftp = ["edgerun-protocols/tftp"]
-acme = ["edgerun-protocols/acme"]
+acme = ["edgerun-protocols/acme", "edgerun-protocols/tls"]
 service-suite = [
     "http",
     "https",

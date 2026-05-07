@@ -6,9 +6,9 @@ use std::os::fd::RawFd;
 use super::DispatchContext;
 use crate::compositor::surface::ShmBufferInfo;
 use crate::drm::syncobj as drm_syncobj;
-use crate::protocol::linux_dmabuf;
-use crate::protocol::linux_drm_syncobj;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::linux_dmabuf;
+use edgerun_protocols::wayland::linux_drm_syncobj;
 
 /// Send a protocol error to the client and mark them disconnected.
 fn client_error(ctx: &mut DispatchContext, code: u32, msg: &str) {

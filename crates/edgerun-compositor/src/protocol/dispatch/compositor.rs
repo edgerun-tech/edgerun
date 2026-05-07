@@ -2,9 +2,9 @@
 
 use super::DispatchContext;
 use crate::compositor::surface::{DamageRect, SurfaceBuffer};
-use crate::protocol::wl_compositor;
-use crate::protocol::wp_presentation_time;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::wl_compositor;
+use edgerun_protocols::wayland::wp_presentation_time;
 
 /// Per-client region state — maps region object id to its rectangles.
 /// Stored in main.rs and passed through DispatchContext.

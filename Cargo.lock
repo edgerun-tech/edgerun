@@ -263,22 +263,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-acme"
-version = "0.1.1"
-dependencies = [
- "edgerun-crypto",
- "edgerun-encoding",
- "edgerun-error",
- "edgerun-http",
- "edgerun-json",
- "edgerun-protocols",
- "edgerun-rt",
- "edgerun-secret-service",
- "edgerun-tls",
- "edgerun-url",
-]
-
-[[package]]
 name = "edgerun-alsa-microphone"
 version = "0.1.1"
 dependencies = [
@@ -441,6 +425,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-evdev-input",
  "edgerun-input",
+ "edgerun-protocols",
 ]
 
 [[package]]

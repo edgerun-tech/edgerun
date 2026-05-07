@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 edgerun-compositor = { path = "/home/ken/edgerun/crates/edgerun-compositor" }
+edgerun-protocols = { path = "../../protocol/edgerun-protocols", default-features = false, features = ["wayland"] }
 edgerun-pty = { path = "../../utility/edgerun-pty" }
 edgerun-terminal-parser = { path = "../../utility/edgerun-terminal-parser" }
 edgerun-term-core = { path = "../edgerun-term-core", default-features = false }

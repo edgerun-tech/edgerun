@@ -9,12 +9,12 @@ use crate::compositor::surface::SurfaceTree;
 use crate::input::evdev::EvdevManager;
 use crate::input::keymap::{self, Keymap, Modifiers};
 pub use crate::protocol::dispatch::{ConstraintType, PointerConstraint, TouchSlot, TouchState};
-use crate::protocol::wl_seat;
-use crate::protocol::zwp_pointer_constraints;
-use crate::protocol::zwp_pointer_gestures;
-use crate::protocol::zwp_relative_pointer;
 use crate::render::cursor::Cursor;
 use crate::server::WaylandServer;
+use edgerun_protocols::wayland::wl_seat;
+use edgerun_protocols::wayland::zwp_pointer_constraints;
+use edgerun_protocols::wayland::zwp_pointer_gestures;
+use edgerun_protocols::wayland::zwp_relative_pointer;
 
 /// Process input events for a single device (called from epoll event handler).
 pub fn process_input_for_device(
@@ -88,11 +88,11 @@ pub fn process_input_for_device(
                                     if let Some(client) = server.client_mut(cid) {
                                         let state = shell.toplevel_state_bytes(tl_id);
                                         client.send_message(
-                                            crate::protocol::xdg_shell::xdg_surface_configure_event(
+                                            edgerun_protocols::wayland::xdg_shell::xdg_surface_configure_event(
                                                 sid, cfg_serial,
                                             ),
                                         );
-                                        client.send_message(crate::protocol::xdg_shell::xdg_toplevel_configure_event(tl_id, output_w, output_h, &state));
+                                        client.send_message(edgerun_protocols::wayland::xdg_shell::xdg_toplevel_configure_event(tl_id, output_w, output_h, &state));
                                     }
                                 }
                             }

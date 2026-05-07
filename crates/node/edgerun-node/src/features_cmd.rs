@@ -264,20 +264,47 @@ fn acme_self_test() -> Result<String, String> {
         "edgerund-acme-token",
         "edgerund-acme-account-thumbprint",
     );
-    if challenge.record_name() != "_acme-challenge.selftest.edgerun.local" {
+    if challenge.record_name != "_acme-challenge.selftest.edgerun.local" {
         return Err(format!(
             "unexpected ACME DNS-01 record name: {}",
-            challenge.record_name()
+            challenge.record_name
         ));
     }
-    if challenge.record_value().is_empty() {
+    if challenge.record_value.is_empty() {
         return Err("ACME DNS-01 record value was empty".into());
+    }
+    let http = orchestrator.http01_plan(
+        "selftest.edgerun.local",
+        "edgerund-acme-token",
+        "edgerund-acme-account-thumbprint",
+    );
+    if http.route_path != "/.well-known/acme-challenge/edgerund-acme-token" {
+        return Err(format!(
+            "unexpected ACME HTTP-01 route path: {}",
+            http.route_path
+        ));
+    }
+    if http.response_body.is_empty() {
+        return Err("ACME HTTP-01 response body was empty".into());
+    }
+    let tls = orchestrator.tls_alpn01_plan(
+        "selftest.edgerun.local",
+        "edgerund-acme-token",
+        "edgerund-acme-account-thumbprint",
+    );
+    if tls.alpn_protocol.as_slice() != edgerun_protocols::tls::ACME_TLS_ALPN_PROTOCOL {
+        return Err("ACME TLS-ALPN-01 ALPN protocol was wrong".into());
+    }
+    if tls.challenge_value.is_empty() {
+        return Err("ACME TLS-ALPN-01 challenge value was empty".into());
     }
 
     Ok(format!(
-        "{{\"status\":\"ok\",\"challenge\":\"dns-01\",\"record_name\":\"{}\",\"record_value_bytes\":{}}}",
-        escape_json(challenge.record_name()),
-        challenge.record_value().len()
+        "{{\"status\":\"ok\",\"challenges\":[\"dns-01\",\"http-01\",\"tls-alpn-01\"],\"record_name\":\"{}\",\"record_value_bytes\":{},\"http_path\":\"{}\",\"tls_alpn\":\"{}\"}}",
+        escape_json(&challenge.record_name),
+        challenge.record_value.len(),
+        escape_json(&http.route_path),
+        escape_json(core::str::from_utf8(&tls.alpn_protocol).unwrap_or(""))
     ))
 }
 

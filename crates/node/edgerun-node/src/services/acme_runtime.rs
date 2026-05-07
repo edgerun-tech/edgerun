@@ -135,3 +135,30 @@ impl NodeAcmeOrchestrator {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_plans_all_acme_challenge_surfaces() {
+        let orchestrator = NodeAcmeOrchestrator::new(30);
+
+        let dns = orchestrator.dns01_plan("example.com", "token", "thumbprint");
+        assert_eq!(dns.domain, "example.com");
+        assert_eq!(dns.record_name, "_acme-challenge.example.com");
+        assert!(!dns.record_value.is_empty());
+        assert_eq!(dns.ttl_secs, 30);
+
+        let http = orchestrator.http01_plan("example.com", "token", "thumbprint");
+        assert_eq!(http.domain, "example.com");
+        assert_eq!(http.route_path, "/.well-known/acme-challenge/token");
+        assert_eq!(http.response_body, "token.thumbprint");
+        assert_eq!(http.content_type, "text/plain");
+
+        let tls = orchestrator.tls_alpn01_plan("example.com", "token", "thumbprint");
+        assert_eq!(tls.domain, "example.com");
+        assert_eq!(tls.alpn_protocol, b"acme-tls/1");
+        assert!(!tls.challenge_value.is_empty());
+    }
+}

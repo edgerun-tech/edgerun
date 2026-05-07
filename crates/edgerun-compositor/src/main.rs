@@ -11,6 +11,7 @@ use std::time::Instant;
 
 use edgerun_compositor::compositor::dmabuf::DmabufParams;
 use edgerun_compositor::compositor::output::Output;
+use edgerun_compositor::compositor::presentation::PresentationFeedbackTracker;
 use edgerun_compositor::compositor::seat::Seat;
 use edgerun_compositor::compositor::shell::Shell;
 use edgerun_compositor::compositor::surface::{BufferRegistry, DamageRect, SurfaceTree};
@@ -24,11 +25,6 @@ use edgerun_compositor::input::keymap::{Keymap, Modifiers};
 use edgerun_compositor::protocol::dispatch::{
     self, process_input_for_device, DataSource, RegionRegistry,
 };
-use edgerun_compositor::protocol::input_method_v2;
-use edgerun_compositor::protocol::text_input_v3;
-use edgerun_compositor::protocol::wl_core;
-use edgerun_compositor::protocol::wp_presentation_time;
-use edgerun_compositor::protocol::wp_presentation_time::PresentationFeedbackTracker;
 use edgerun_compositor::r#loop::{EventLoop, EventSource};
 use edgerun_compositor::render::cursor::Cursor;
 use edgerun_compositor::render::server::{render_and_flip, DamageAccumulator};
@@ -37,6 +33,7 @@ use edgerun_compositor::resource::Registry;
 use edgerun_compositor::server::WaylandServer;
 use edgerun_compositor::vt::{VtEvent, VtManager};
 use edgerun_compositor::wire;
+use edgerun_protocols::wayland::{input_method_v2, text_input_v3, wl_core, wp_presentation_time};
 // wire imports used in dispatch
 // (wire types accessed through dispatch module)
 

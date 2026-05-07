@@ -1,5 +1,6 @@
 //! Command validation and decision-event recording.
 
+use crate::bootstrap::{archive_node_genesis_payload, node_genesis_payload};
 use crate::config::NodeConfig;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_protocols::core_protocol::collections::{HashMap, HashSet};
@@ -419,13 +420,8 @@ pub fn create_node_genesis_payload(
     node_id: &edgerun_hardware_signing::NodeID,
     initial_controllers: &[Vec<u8>],
 ) -> ObjectRef {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"node-genesis-v1");
-    bytes.extend_from_slice(stream_id);
-    bytes.extend_from_slice(&node_id.0);
-    for controller in initial_controllers {
-        bytes.extend_from_slice(controller);
-    }
+    let payload = node_genesis_payload(node_id.0.to_vec(), initial_controllers.to_vec());
+    let bytes = archive_node_genesis_payload(&payload);
     store
         .put_object(&bytes, ObjectKind::Payload as i32, &[stream_id.to_vec()])
         .unwrap_or_else(|_| ObjectRef {

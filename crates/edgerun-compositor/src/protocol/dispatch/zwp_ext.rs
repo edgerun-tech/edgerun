@@ -2,12 +2,12 @@
 //! pointer_gestures, text_input_v1, idle_inhibit.
 
 use super::{ConstraintType, DispatchContext, PointerConstraint};
-use crate::protocol::zwp_pointer_constraints;
-use crate::protocol::zwp_pointer_gestures;
-use crate::protocol::zwp_relative_pointer;
-use crate::protocol::zwp_text_input;
-use crate::protocol::zxdg_idle_inhibit;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::zwp_pointer_constraints;
+use edgerun_protocols::wayland::zwp_pointer_gestures;
+use edgerun_protocols::wayland::zwp_relative_pointer;
+use edgerun_protocols::wayland::zwp_text_input;
+use edgerun_protocols::wayland::zxdg_idle_inhibit;
 
 pub fn handle_pointer_constraints(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

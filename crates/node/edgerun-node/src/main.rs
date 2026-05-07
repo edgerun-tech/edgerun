@@ -8,6 +8,7 @@ extern crate alloc;
 pub use edgerun_node::{node_debug, node_error, node_info, node_trace, node_warn};
 
 mod bind_check;
+mod bootstrap;
 mod capacity;
 mod command_dispatch;
 mod command_dispatch_event;

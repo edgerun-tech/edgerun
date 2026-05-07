@@ -1,7 +1,7 @@
 //! Direct signed-stream persistence helpers.
 
 use crate::prelude::v1::*;
-use edgerun_protocols::core_protocol::protocol::EventEnvelope;
+use edgerun_protocols::core_protocol::protocol::{EventEnvelope, ObjectRef};
 use edgerun_protocols::sign::ProtocolSigner;
 use edgerun_stream::{StreamId, StreamWriter};
 
@@ -26,9 +26,31 @@ impl<L: EventLog, S: ProtocolSigner> DurableStreamWriter<L, S> {
         stream_id: StreamId,
         signer: S,
         recorded_at_ms: i64,
-        mut event_log: L,
+        event_log: L,
     ) -> Result<Self, StorageError> {
         let writer = StreamWriter::new(stream_id, signer, recorded_at_ms)?;
+        Self::persist_new_writer(writer, event_log)
+    }
+
+    /// Create a stream, sign a genesis event that points at a payload object,
+    /// and persist it immediately.
+    pub fn new_with_genesis_payload(
+        stream_id: StreamId,
+        signer: S,
+        recorded_at_ms: i64,
+        event_log: L,
+        payload_object: ObjectRef,
+    ) -> Result<Self, StorageError> {
+        let writer = StreamWriter::new_with_genesis_payload(
+            stream_id,
+            signer,
+            recorded_at_ms,
+            payload_object,
+        )?;
+        Self::persist_new_writer(writer, event_log)
+    }
+
+    fn persist_new_writer(writer: StreamWriter<S>, mut event_log: L) -> Result<Self, StorageError> {
         let genesis = writer.head().ok_or_else(|| {
             StorageError::Stream("stream writer did not produce a genesis event".into())
         })?;
@@ -143,5 +165,29 @@ mod tests {
             receipt.event_hash,
             canonical_event_hash(&scanned[1].event).value
         );
+    }
+
+    #[test]
+    fn new_with_genesis_payload_persists_payload_ref() {
+        let signer = TestSigner::new();
+        let stream_id = signer.node_id();
+        let payload_object = ObjectRef {
+            object_id: vec![7; 32],
+            object_kind: Some(1),
+        };
+        let writer = DurableStreamWriter::new_with_genesis_payload(
+            stream_id,
+            signer,
+            1_000,
+            MemEventLog::new(),
+            payload_object.clone(),
+        )
+        .unwrap();
+
+        let scanned = writer.event_log().scan().unwrap();
+        assert_eq!(scanned.len(), 1);
+        assert_eq!(scanned[0].event.seq, 0);
+        assert_eq!(scanned[0].event.payload_object, Some(payload_object));
+        assert!(scanned[0].event.signature.is_some());
     }
 }

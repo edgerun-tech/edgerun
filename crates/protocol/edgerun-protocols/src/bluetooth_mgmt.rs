@@ -1,6 +1,8 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use edgerun_encoding::byteorder::{read_u16_le, read_u32_le};
+use edgerun_encoding::byteorder::{
+    push_u16_le, read_u16_le, read_u32_le, write_u16_le, write_u32_le,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MgmtVersionInfo {
@@ -58,9 +60,9 @@ pub type Result<T> = core::result::Result<T, BluetoothMgmtError>;
 
 pub fn build_mgmt_packet(opcode: u16, index: u16, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(6 + payload.len());
-    out.extend_from_slice(&opcode.to_le_bytes());
-    out.extend_from_slice(&index.to_le_bytes());
-    out.extend_from_slice(&(payload.len() as u16).to_le_bytes());
+    push_u16_le(&mut out, opcode);
+    push_u16_le(&mut out, index);
+    push_u16_le(&mut out, payload.len() as u16);
     out.extend_from_slice(payload);
     out
 }
@@ -213,9 +215,9 @@ mod tests {
         let mut payload = vec![0u8; 280];
         payload[0..6].copy_from_slice(&[1, 2, 3, 4, 5, 6]);
         payload[6] = 9;
-        payload[7..9].copy_from_slice(&0x1234u16.to_le_bytes());
-        payload[9..13].copy_from_slice(&0x201u32.to_le_bytes());
-        payload[13..17].copy_from_slice(&0x003u32.to_le_bytes());
+        write_u16_le(&mut payload, 7, 0x1234);
+        write_u32_le(&mut payload, 9, 0x201);
+        write_u32_le(&mut payload, 13, 0x003);
         payload[17..20].copy_from_slice(&[0x0c, 0x02, 0x5a]);
         payload[20..24].copy_from_slice(b"dev\0");
         payload[269..272].copy_from_slice(b"d\0\0");

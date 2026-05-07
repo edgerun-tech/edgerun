@@ -6,12 +6,12 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use edgerun_compositor::input::keymap::{Keymap, Keysym, Modifiers, SpecialKey, process_key_event};
-use edgerun_compositor::protocol::{wl_compositor, wl_core, wl_seat, wl_shm, xdg_shell};
 use edgerun_compositor::render::shm::SharedMemFrame;
 use edgerun_compositor::wire;
 use edgerun_compositor::wire::decode::{ArgCursor, DecodeError, parse_message};
 use edgerun_compositor::wire::encode::{encode, encode_string, message_empty, message_uint};
 use edgerun_compositor::wire::fd::{recv_with_fds, send_with_fds};
+use edgerun_protocols::wayland::{wl_compositor, wl_core, wl_seat, wl_shm, xdg_shell};
 use edgerun_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use edgerun_term_core::render::layout::{LayoutMetrics, compute_layout};
 use edgerun_term_core::render::{

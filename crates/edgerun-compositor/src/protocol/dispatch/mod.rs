@@ -13,9 +13,9 @@ use crate::compositor::surface::{BufferRegistry, SurfaceTree};
 pub use crate::compositor::seat::{ConstraintType, PointerConstraint};
 // Re-export region registry for use in main.rs
 use crate::compositor::dmabuf::DmabufParams;
+use crate::compositor::presentation::PresentationFeedbackTracker;
 use crate::input::keymap::{Keymap, Modifiers};
 pub use crate::protocol::dispatch::compositor::RegionRegistry;
-use crate::protocol::wp_presentation_time::PresentationFeedbackTracker;
 use crate::render::cursor::Cursor;
 use crate::render::shm::ShmManager;
 use crate::resource::Registry;
@@ -278,17 +278,17 @@ pub struct DispatchContext<'a> {
     pub client_tearing_control_ids: &'a mut HashMap<u32, u32>,
 }
 
-use crate::protocol::input_method_v2;
-use crate::protocol::input_method_v2::IMEState;
-use crate::protocol::screencopy;
-use crate::protocol::text_input_v3;
-use crate::protocol::text_input_v3::TextInputState;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::input_method_v2;
+use edgerun_protocols::wayland::input_method_v2::IMEState;
+use edgerun_protocols::wayland::screencopy;
+use edgerun_protocols::wayland::text_input_v3;
+use edgerun_protocols::wayland::text_input_v3::TextInputState;
 
 /// Helper: send delete_id to a client when destroying an object.
 fn send_delete_id(server: &mut WaylandServer, client_id: u32, obj_id: u32) {
     if let Some(client) = server.client_mut(client_id) {
-        client.send_message(crate::protocol::wl_core::display_delete_id_event(obj_id));
+        client.send_message(edgerun_protocols::wayland::wl_core::display_delete_id_event(obj_id));
     }
 }
 

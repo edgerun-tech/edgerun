@@ -1,13 +1,13 @@
 //! Core protocol handlers: wl_display, wl_registry.
 
 use super::{DispatchContext, GLOBALS};
-use crate::protocol::linux_dmabuf;
-use crate::protocol::wl_core;
-use crate::protocol::wl_seat;
-use crate::protocol::wl_shm;
 use crate::wire;
 use crate::wire::decode::ArgCursor;
 use crate::wire::encode::*;
+use edgerun_protocols::wayland::linux_dmabuf;
+use edgerun_protocols::wayland::wl_core;
+use edgerun_protocols::wayland::wl_seat;
+use edgerun_protocols::wayland::wl_shm;
 
 pub fn handle_display(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

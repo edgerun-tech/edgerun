@@ -1,8 +1,8 @@
 //! xdg foreign (export/import) handlers.
 
 use super::DispatchContext;
-use crate::protocol::xdg_foreign;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::xdg_foreign;
 
 pub fn handle_exporter(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

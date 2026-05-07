@@ -34,7 +34,7 @@ use alloc::{
 };
 use edgerun_crypto::fill_random;
 use edgerun_crypto::CipherSuite;
-use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
+use edgerun_encoding::byteorder::{push_u16_be, push_u24_be, read_u16_be, read_u24_be};
 
 use super::crypto::{CryptoPhase, PacketProtection, ProtectionKeys};
 use super::frame::QuicFrame;
@@ -929,7 +929,7 @@ impl QuicTlsHandshaker {
         // Finished message: type(1) + length(3) + verify_data
         let mut msg = Vec::with_capacity(4 + verify_data.len());
         msg.push(20); // Finished type
-        msg.extend_from_slice(&(verify_data.len() as u32).to_be_bytes()[1..]);
+        push_u24_be(&mut msg, verify_data.len() as u32);
         msg.extend_from_slice(&verify_data);
 
         Ok(msg)
@@ -1217,14 +1217,14 @@ mod tests {
         body.push(0); // certificate_request_context length
 
         let cert_list_len = cert_der.len() + 5;
-        body.extend_from_slice(&(cert_list_len as u32).to_be_bytes()[1..]);
-        body.extend_from_slice(&(cert_der.len() as u32).to_be_bytes()[1..]);
+        push_u24_be(&mut body, cert_list_len as u32);
+        push_u24_be(&mut body, cert_der.len() as u32);
         body.extend_from_slice(cert_der);
-        body.extend_from_slice(&0u16.to_be_bytes()); // certificate extensions length
+        push_u16_be(&mut body, 0); // certificate extensions length
 
         let mut msg = Vec::new();
         msg.push(11);
-        msg.extend_from_slice(&(body.len() as u32).to_be_bytes()[1..]);
+        push_u24_be(&mut msg, body.len() as u32);
         msg.extend_from_slice(&body);
         msg
     }

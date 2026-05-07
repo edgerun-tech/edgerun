@@ -1,8 +1,8 @@
 //! wl_subcompositor, wl_subsurface handlers.
 
 use super::DispatchContext;
-use crate::protocol::wl_subcompositor;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::wl_subcompositor;
 
 pub fn handle_subcompositor(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

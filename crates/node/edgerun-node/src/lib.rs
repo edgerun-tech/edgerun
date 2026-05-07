@@ -21,6 +21,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod app_model;
+pub mod bootstrap;
 pub mod error;
 #[cfg(feature = "exchange-events")]
 pub mod exchange_events;
@@ -41,6 +42,7 @@ pub mod runtime;
     feature = "smtp",
     feature = "imap",
     feature = "lmtp",
+    feature = "acme",
     feature = "virtual-disk",
 ))]
 pub mod services;

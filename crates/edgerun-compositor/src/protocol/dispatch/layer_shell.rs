@@ -4,8 +4,8 @@
 //! exclusive zones, margins, layer changes, and popup attachment.
 
 use super::DispatchContext;
-use crate::protocol::layer_shell;
 use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::layer_shell;
 
 /// Layer surface state for anchor/size/keyboard interactivity.
 /// Stored in the Shell alongside toplevels and popups.
