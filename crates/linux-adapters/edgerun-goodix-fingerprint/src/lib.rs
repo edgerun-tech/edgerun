@@ -285,11 +285,12 @@ pub mod vec {
 }
 
 use crate::prelude::v1::*;
+use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
 use edgerun_fingerprint::{
-    validate_enroll_request, FingerprintCapture, FingerprintCapturePurpose,
-    FingerprintEnrollProgress, FingerprintEnrollRequest, FingerprintEnrollmentSession,
-    FingerprintError, FingerprintReader, FingerprintReaderInfo, FingerprintTemplateRecord,
-    FingerprintVerification, FingerprintVerifyRequest,
+    default_fingerprint_descriptor, validate_enroll_request, FingerprintCapture,
+    FingerprintCapturePurpose, FingerprintEnrollProgress, FingerprintEnrollRequest,
+    FingerprintEnrollmentSession, FingerprintError, FingerprintReader, FingerprintReaderInfo,
+    FingerprintTemplateRecord, FingerprintVerification, FingerprintVerifyRequest,
 };
 #[cfg(unix)]
 use std::fs;
@@ -1871,6 +1872,21 @@ impl GoodixFingerprintReader {
     }
 }
 
+impl CapabilityProvider for GoodixFingerprintReader {
+    fn descriptor(&self) -> CapabilityDescriptor {
+        default_fingerprint_descriptor(
+            "goodix-usb",
+            &format!(
+                "usb-{:03}-{:03}-{:04x}-{:04x}",
+                self.device.bus_number,
+                self.device.device_number,
+                self.device.vendor_id,
+                self.device.product_id
+            ),
+        )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GoodixDeviceStrings {
     pub manufacturer: Option<String>,
@@ -2746,6 +2762,25 @@ mod tests {
         assert!(info.supports_match_on_sensor);
         assert!(info.hardware_protected_match);
         assert_eq!(info.max_templates, Some(20));
+    }
+
+    #[test]
+    fn reader_descriptor_reports_fingerprint_capability() {
+        let reader = GoodixFingerprintReader::new(GoodixUsbDevice {
+            bus_number: 1,
+            device_number: 2,
+            vendor_id: 0x27c6,
+            product_id: 0x609c,
+            devnode: PathBuf::from("/dev/bus/usb/001/002"),
+            sysfs_path: PathBuf::from("/sys/bus/usb/devices/1-3"),
+        })
+        .unwrap();
+        let descriptor = reader.descriptor();
+        assert_eq!(descriptor.provider_name, "goodix-usb");
+        assert_eq!(descriptor.provider_instance_id, "usb-001-002-27c6-609c");
+        assert!(descriptor
+            .operations
+            .contains(&(edgerun_capabilities::CapabilityOperation::Verify as i32)));
     }
 
     #[test]

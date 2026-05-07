@@ -17,6 +17,10 @@ mod prelude {
 }
 
 use edgerun_biometrics::{BiometricModality, BiometricState};
+use edgerun_capabilities::{
+    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
+    CapabilityOperation, CapabilityProvider, CapabilityRole,
+};
 use prelude::v1::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -216,7 +220,7 @@ impl core::fmt::Display for CameraBiometricError {
 
 impl core::error::Error for CameraBiometricError {}
 
-pub trait CameraBiometricReader {
+pub trait CameraBiometricReader: CapabilityProvider {
     fn reader_info(&self) -> Result<CameraReaderInfo, CameraBiometricError>;
     fn capture(
         &mut self,
@@ -257,6 +261,30 @@ pub trait PairedCameraBiometricReader: CameraBiometricReader {
         challenge: &CameraLivenessChallenge,
         capture: &PairedCameraFrame,
     ) -> Result<CameraLivenessResult, CameraBiometricError>;
+}
+
+pub fn default_camera_descriptor(
+    provider: &str,
+    instance_id: &str,
+    supports_biometric: bool,
+) -> CapabilityDescriptor {
+    let mut modalities = vec![CapabilityModality::Visual];
+    if supports_biometric {
+        modalities.push(CapabilityModality::Biometric);
+    }
+    let mut event_kinds = vec![CapabilityEventKind::Visual];
+    if supports_biometric {
+        event_kinds.push(CapabilityEventKind::Biometric);
+    }
+    capability_descriptor(
+        provider,
+        instance_id,
+        CapabilityRole::Input,
+        &modalities,
+        &event_kinds,
+        &[CapabilityOperation::Query, CapabilityOperation::Capture],
+        Vec::new(),
+    )
 }
 
 pub fn default_face_biometric_state(
@@ -346,6 +374,48 @@ mod tests {
         assert_eq!(challenge.kind, CameraLivenessChallengeKind::PassivePresence);
         assert!(challenge.require_rgb);
         assert!(!challenge.require_infrared);
+    }
+
+    #[test]
+    fn default_camera_descriptor_declares_visual_input() {
+        let descriptor = default_camera_descriptor("v4l2-camera", "/dev/video0", false);
+        assert_eq!(descriptor.provider_name, "v4l2-camera");
+        assert_eq!(descriptor.provider_instance_id, "/dev/video0");
+        assert_eq!(descriptor.role, CapabilityRole::Input as i32);
+        assert_eq!(
+            descriptor.modalities,
+            vec![CapabilityModality::Visual as i32]
+        );
+        assert_eq!(
+            descriptor.event_kinds,
+            vec![CapabilityEventKind::Visual as i32]
+        );
+        assert_eq!(
+            descriptor.operations,
+            vec![
+                CapabilityOperation::Query as i32,
+                CapabilityOperation::Capture as i32
+            ]
+        );
+    }
+
+    #[test]
+    fn default_camera_descriptor_can_declare_biometric_input() {
+        let descriptor = default_camera_descriptor("v4l2-camera", "rgb-ir", true);
+        assert_eq!(
+            descriptor.modalities,
+            vec![
+                CapabilityModality::Visual as i32,
+                CapabilityModality::Biometric as i32
+            ]
+        );
+        assert_eq!(
+            descriptor.event_kinds,
+            vec![
+                CapabilityEventKind::Visual as i32,
+                CapabilityEventKind::Biometric as i32
+            ]
+        );
     }
 
     #[test]

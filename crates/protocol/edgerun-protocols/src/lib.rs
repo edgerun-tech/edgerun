@@ -9,6 +9,11 @@
 
 extern crate alloc;
 
+#[cfg(feature = "acme")]
+pub mod acme;
+#[cfg(feature = "block")]
+pub mod block;
+
 pub mod prelude {
     pub use alloc::string::{String, ToString};
     pub use alloc::vec::Vec;
@@ -22,6 +27,8 @@ pub mod core_protocol {
     pub use edgerun_core::*;
 }
 
+#[cfg(feature = "dbus")]
+pub mod dbus;
 #[cfg(feature = "dhcp")]
 pub mod dhcp;
 #[cfg(feature = "dhcpv6")]
@@ -32,20 +39,32 @@ pub mod dns;
 pub mod email_auth;
 #[cfg(feature = "http")]
 pub mod http;
+#[cfg(feature = "wifi")]
+pub mod ieee80211;
 #[cfg(feature = "imap")]
 pub mod imap;
 #[cfg(feature = "keygen")]
 pub mod keygen;
 #[cfg(feature = "lmtp")]
 pub mod lmtp;
+#[cfg(feature = "matter")]
+pub mod matter;
+#[cfg(feature = "nbd")]
+pub mod nbd;
+#[cfg(feature = "ndef")]
+pub mod ndef;
 #[cfg(feature = "node-bootstrap")]
 pub mod node_bootstrap;
+#[cfg(feature = "oauth")]
+pub mod oauth;
 #[cfg(feature = "oci")]
 pub mod oci;
 #[cfg(feature = "proxy")]
 pub mod proxy;
 #[cfg(feature = "pxe")]
 pub mod pxe;
+#[cfg(feature = "quectel-ec200a")]
+pub mod quectel_ec200a;
 #[cfg(feature = "quic")]
 pub mod quic;
 #[cfg(feature = "seal")]
@@ -56,10 +75,16 @@ pub mod sign;
 pub mod sign_p256;
 #[cfg(feature = "smtp")]
 pub mod smtp;
+#[cfg(feature = "ssh")]
+pub mod ssh;
+#[cfg(feature = "tcl-ac")]
+pub mod tcl_ac;
 #[cfg(feature = "tftp")]
 pub mod tftp;
 #[cfg(feature = "tls")]
 pub mod tls;
+#[cfg(feature = "tuya")]
+pub mod tuya;
 #[cfg(feature = "verify")]
 pub mod verify;
 #[cfg(feature = "wire")]

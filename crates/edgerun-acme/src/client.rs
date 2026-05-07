@@ -1,6 +1,5 @@
 use crate::prelude::v1::*;
 use alloc::sync::Arc;
-
 use edgerun_encoding::base64url_nopad_encode;
 use edgerun_http::{HttpClient, HttpVersion, Method, Request};
 use edgerun_json::{FromJson, JsonValue};
@@ -9,14 +8,14 @@ use edgerun_url::Url;
 
 use crate::account::AccountKey;
 use crate::challenge::Challenge;
-use crate::dns_challenge::DnsChallengeManager;
-use crate::http_challenge::HttpChallengeHandler;
 use crate::order::Order;
 use crate::types::{
     AcmeErrorDetail, CSRRequest, Directory, DirectoryUrl, Identifier, JwsHeader,
     NewAccountRequestWithNonce, NewOrderRequest, RevokeCertRequest, SignedJws,
 };
 use crate::AcmeError;
+use edgerun_protocols::acme::dns01::Dns01Challenge;
+use edgerun_protocols::acme::http01::Http01Challenge;
 
 pub struct AcmeClient {
     config: AcmeConfig,
@@ -366,16 +365,12 @@ impl AcmeClient {
         Ok(())
     }
 
-    pub fn http_handler(&self, token: &str) -> HttpChallengeHandler {
-        let key_authorization = format!("{}.{}", token, self.account_key.thumbprint_b64());
-        HttpChallengeHandler {
-            token: token.to_string(),
-            key_authorization,
-        }
+    pub fn http_01_challenge(&self, token: &str) -> Http01Challenge {
+        Http01Challenge::from_thumbprint(token, &self.account_key.thumbprint_b64())
     }
 
-    pub fn dns_manager(&self) -> DnsChallengeManager {
-        DnsChallengeManager::new(Arc::clone(&self.account_key))
+    pub fn dns_01_challenge(&self, domain: &str, token: &str) -> Dns01Challenge {
+        Dns01Challenge::new(domain, token, &self.account_key.thumbprint_b64())
     }
 
     pub fn thumbprint(&self) -> String {

@@ -5,24 +5,15 @@
 //! decides whether those requests become native sockets, browser message
 //! routes, mesh routes, or no binding on the current host.
 //!
-//! For HTTP types ([`Handler`], [`Request`], [`Response`], etc.), import from
-//! [`edgerun_http`] directly.
+//! HTTP handlers live inside apps. The node owns the listener and routes HTTP
+//! requests to the target app over node IPC.
 //!
 //! # Example
 //! ```no_run
 //! use edgerun_node::services::NodeRuntime;
-//! use edgerun_http::{Response, StatusCode, into_handler};
-//! use edgerun_tls::certificate_gen::generate_self_signed;
-//!
 //! # async fn example() -> std::io::Result<()> {
-//! let handler = into_handler(|_req| {
-//!     Response::text(StatusCode::new(200).unwrap(), "Hello!")
-//! });
-//!
-//! let cert = generate_self_signed(&["localhost"]).unwrap();
 //! let mut runtime = NodeRuntime::new()
-//!     .with_http(handler, "127.0.0.1:8443")
-//!     .with_tls(cert)
+//!     .with_http_app("127.0.0.1:8080", [7; 32])
 //!     .build()
 //!     .await?;
 //!
@@ -31,8 +22,6 @@
 //! # }
 //! ```
 //!
-//! [`edgerun_http`]: https://docs.rs/edgerun-http
-
 use crate::rt::CancellationToken;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -42,58 +31,41 @@ use core::fmt;
 use core::module_path;
 use core::time::Duration;
 
-#[cfg(all(feature = "http", target_os = "none"))]
-use edgerun_http::io;
+#[cfg(target_os = "none")]
+use crate::rt::io;
 #[cfg(not(target_os = "none"))]
 use std::io;
 
 #[cfg(feature = "http")]
-use edgerun_http::connection_middleware::{
+use self::http_runtime::HttpNodeBinding;
+#[cfg(feature = "http")]
+use self::middleware::{
     ConnectionChain, ConnectionHandler, ConnectionMiddleware, MiddlewareAdapter, PassThroughHandler,
 };
-#[cfg(feature = "http")]
-use edgerun_http::handler::Handler;
 #[cfg(all(feature = "http", feature = "tls"))]
-use edgerun_http::server::TlsCertificate;
-#[cfg(feature = "http")]
-use edgerun_http::server::{BoundHttpServer, HttpServer};
+use edgerun_tls::CertificateAndKey as TlsCertificate;
 
 #[cfg(any(feature = "http", feature = "imap", feature = "smtp", feature = "lmtp"))]
 use crate::transport::{HostSocketTransport, TransportAddress};
 
-#[cfg(all(
-    feature = "http",
-    any(feature = "imap", feature = "smtp", feature = "lmtp"),
-    all(not(target_os = "none"), not(target_arch = "wasm32"))
-))]
-pub mod connection_interceptor_adapter;
 #[cfg(feature = "dhcp")]
 pub mod dhcp_runtime;
 #[cfg(feature = "dns")]
 pub mod dns_runtime;
+#[cfg(feature = "http")]
+pub mod http_runtime;
+#[cfg(any(feature = "imap", feature = "smtp", feature = "lmtp"))]
+pub mod mail_runtime;
 #[cfg(feature = "http")]
 pub mod middleware;
 #[cfg(feature = "proxy")]
 mod proxy_runtime;
 #[cfg(feature = "tftp")]
 pub mod tftp_runtime;
-#[cfg(all(
-    feature = "http",
-    any(feature = "imap", feature = "smtp", feature = "lmtp"),
-    all(not(target_os = "none"), not(target_arch = "wasm32"))
-))]
-use self::connection_interceptor_adapter::ConnectionInterceptorAdapter;
 pub use crate::resource::{
     binding_intents, decide_binding, decide_bindings, NodeTransportSurface, ServiceBindingDecision,
     ServiceBindingIntent,
 };
-#[cfg(all(
-    feature = "dns",
-    feature = "smtp",
-    all(not(target_os = "none"), not(target_arch = "wasm32"))
-))]
-use edgerun_email::dns_query::{DnsResult as MailDnsResult, MailDnsResolver};
-
 #[cfg(any(
     feature = "http",
     feature = "dns",
@@ -110,49 +82,6 @@ fn bind_node_tcp_listener(addr: &str) -> io::Result<crate::rt::AsyncTcpListener>
     HostSocketTransport
         .bind_stream_now(&TransportAddress::host_stream(addr.as_bytes().to_vec()))
         .map_err(other_io_error)
-}
-
-#[cfg(all(feature = "http", not(target_os = "none")))]
-fn http_io_error(error: edgerun_http::io::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, format!("{error}"))
-}
-
-#[cfg(all(feature = "http", target_os = "none"))]
-fn http_io_error(error: edgerun_http::io::Error) -> io::Error {
-    error
-}
-
-#[cfg(all(
-    feature = "dns",
-    feature = "smtp",
-    all(not(target_os = "none"), not(target_arch = "wasm32"))
-))]
-impl MailDnsResolver for dns_runtime::DnsRuntime {
-    fn query_txt<'a>(
-        &'a self,
-        name: &'a str,
-    ) -> core::pin::Pin<
-        alloc::boxed::Box<
-            dyn core::future::Future<Output = MailDnsResult<Vec<String>>> + Send + 'a,
-        >,
-    > {
-        alloc::boxed::Box::pin(
-            async move { Ok(dns_runtime::DnsRuntime::query_txt(self, name).await) },
-        )
-    }
-
-    fn query_mx<'a>(
-        &'a self,
-        name: &'a str,
-    ) -> core::pin::Pin<
-        alloc::boxed::Box<
-            dyn core::future::Future<Output = MailDnsResult<Vec<(u16, String)>>> + Send + 'a,
-        >,
-    > {
-        alloc::boxed::Box::pin(
-            async move { Ok(dns_runtime::DnsRuntime::query_mx(self, name).await) },
-        )
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +182,7 @@ pub use tftp_config::TftpConfig;
 mod imap_config {
     use alloc::string::{String, ToString};
     #[cfg(target_os = "none")]
-    use edgerun_http::path::PathBuf;
+    type PathBuf = String;
     #[cfg(not(target_os = "none"))]
     use std::path::PathBuf;
 
@@ -292,7 +221,7 @@ mod smtp_config {
     use alloc::vec;
     use alloc::vec::Vec;
     #[cfg(target_os = "none")]
-    use edgerun_http::path::PathBuf;
+    type PathBuf = String;
     #[cfg(not(target_os = "none"))]
     use std::path::PathBuf;
 
@@ -417,7 +346,7 @@ pub use proxy_config::ProxyConfig;
 /// plan as routing metadata without binding native ports.
 pub struct NodeRuntime {
     #[cfg(feature = "http")]
-    http: Option<HttpBuilder>,
+    http: Vec<HttpBuilder>,
     #[cfg(feature = "dns")]
     dns: Option<DnsConfig>,
     #[cfg(feature = "dhcp")]
@@ -438,21 +367,19 @@ pub struct NodeRuntime {
 
 #[cfg(feature = "http")]
 struct HttpBuilder {
-    handler: Arc<dyn Handler>,
     bind_addr: String,
+    target_app_id: [u8; 32],
     #[cfg(feature = "tls")]
     tls: Option<TlsCertificate>,
     #[cfg(feature = "http3")]
     http3: bool,
-    keep_alive: Option<Duration>,
-    max_request_size: usize,
 }
 
 impl NodeRuntime {
     pub fn new() -> Self {
         Self {
             #[cfg(feature = "http")]
-            http: None,
+            http: Vec::new(),
             #[cfg(feature = "dns")]
             dns: None,
             #[cfg(feature = "dhcp")]
@@ -483,21 +410,19 @@ impl NodeRuntime {
         self
     }
 
-    /// Request HTTP service for the given handler and address.
+    /// Request an HTTP listener routed to an installed app.
     ///
-    /// On native hosts this may become a socket bind. On non-native hosts the
-    /// address remains routing metadata owned by the node.
+    /// The node owns the listener. The target app owns HTTP handling behind
+    /// node IPC and never receives a port or socket directly.
     #[cfg(feature = "http")]
-    pub fn with_http<H: Handler>(mut self, handler: H, addr: impl fmt::Display) -> Self {
-        self.http = Some(HttpBuilder {
-            handler: Arc::new(handler),
+    pub fn with_http_app(mut self, addr: impl fmt::Display, target_app_id: [u8; 32]) -> Self {
+        self.http.push(HttpBuilder {
             bind_addr: addr.to_string(),
+            target_app_id,
             #[cfg(feature = "tls")]
             tls: None,
             #[cfg(feature = "http3")]
             http3: false,
-            keep_alive: Some(Duration::from_secs(5)),
-            max_request_size: 10 * 1024 * 1024,
         });
         self
     }
@@ -505,7 +430,7 @@ impl NodeRuntime {
     /// Enable TLS for HTTP (required for HTTP/3).
     #[cfg(all(feature = "http", feature = "tls"))]
     pub fn with_tls(mut self, cert: TlsCertificate) -> Self {
-        if let Some(ref mut h) = self.http {
+        if let Some(h) = self.http.last_mut() {
             h.tls = Some(cert);
         }
         self
@@ -514,7 +439,7 @@ impl NodeRuntime {
     /// Enable HTTP/3 on the same port as the TCP listener.
     #[cfg(all(feature = "http", feature = "http3"))]
     pub fn with_http3(mut self) -> Self {
-        if let Some(ref mut h) = self.http {
+        if let Some(h) = self.http.last_mut() {
             h.http3 = true;
         }
         self
@@ -571,32 +496,19 @@ impl NodeRuntime {
     /// Realize requested services for the current native host.
     pub async fn build(self) -> io::Result<BoundNodeRuntime> {
         #[cfg(feature = "http")]
-        let http_bound = if let Some(h) = self.http {
-            let mut server = HttpServer::new(h.handler);
-            if let Some(ka) = h.keep_alive {
-                server = server.keep_alive(Some(ka));
-            }
-            server = server.max_request_size(h.max_request_size);
-            #[cfg(feature = "tls")]
-            {
-                if let Some(cert) = h.tls {
-                    server = server.with_tls(cert);
+        let http_bound = self
+            .http
+            .into_iter()
+            .map(|h| {
+                #[cfg(feature = "tls")]
+                {
+                    let _ = h.tls;
                 }
-            }
-            #[cfg(feature = "http3")]
-            if h.http3 {
-                server = server.with_http3();
-            }
-            let listener = bind_node_tcp_listener(&h.bind_addr)?;
-            Some(
-                server
-                    .bind_listener(listener)
-                    .await
-                    .map_err(http_io_error)?,
-            )
-        } else {
-            None
-        };
+                #[cfg(feature = "http3")]
+                let _ = h.http3;
+                HttpNodeBinding::bind(&h.bind_addr, h.target_app_id)
+            })
+            .collect::<io::Result<Vec<_>>>()?;
 
         #[cfg(feature = "dns")]
         let dns_server = if let Some(config) = self.dns {
@@ -673,128 +585,55 @@ impl NodeRuntime {
                     .connection_middleware
                     .into_iter()
                     .fold(ConnectionChain::new(PassThroughHandler), |chain, mw| {
-                        chain.with(MiddlewareAdapter::new(mw))
+                        chain.with(MiddlewareAdapter(mw))
                     });
-                chain.build()
+                Arc::new(chain.build())
             };
-        #[cfg(all(
-            feature = "http",
-            any(feature = "imap", feature = "smtp", feature = "lmtp"),
-            all(not(target_os = "none"), not(target_arch = "wasm32"))
-        ))]
-        let connection_interceptor = Arc::new(ConnectionInterceptorAdapter::new(Arc::clone(
-            &connection_middleware,
-        )))
-            as Arc<dyn edgerun_email::server::ConnectionInterceptor>;
-
-        #[cfg(all(
-            feature = "imap",
-            all(not(target_os = "none"), not(target_arch = "wasm32"))
-        ))]
+        #[cfg(feature = "imap")]
         let imap_server = if let Some(config) = self.imap {
-            let listener = Arc::new(bind_node_tcp_listener(&config.bind_addr)?);
-            let imap_config = edgerun_email::imap::server::ImapServerConfig {
-                bind_addr: config.bind_addr,
+            let srv = mail_runtime::ImapNodeService::new(mail_runtime::ImapNodeConfig {
+                bind_addr: config.bind_addr.clone(),
                 domain_name: config.domain_name,
-                imaps: config.imaps,
-                #[cfg(feature = "tls")]
-                tls_cert: config.tls_cert,
-                ..Default::default()
-            };
-            let mut srv = if let Some(ref maildir_root) = config.maildir_root {
-                let store = edgerun_email::imap::MaildirImapStore::new(maildir_root)?;
-                edgerun_email::imap::ImapServer::with_store_and_listener(
-                    imap_config,
-                    Arc::new(store),
-                    listener,
-                )?
-            } else {
-                edgerun_email::imap::ImapServer::with_listener(imap_config, listener)?
-            };
-            #[cfg(feature = "http")]
-            {
-                srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
-            }
+                starttls: config.imaps || cfg!(feature = "tls"),
+            })?;
+            let _ = config.maildir_root;
+            #[cfg(feature = "tls")]
+            let _ = config.tls_cert;
             Some(srv)
         } else {
             None
         };
 
-        #[cfg(all(
-            feature = "smtp",
-            all(not(target_os = "none"), not(target_arch = "wasm32"))
-        ))]
+        #[cfg(feature = "smtp")]
         let smtp_server = if let Some(config) = self.smtp {
-            let listener = Arc::new(bind_node_tcp_listener(&config.bind_addr)?);
-            let smtp_config = edgerun_email::smtp::server::SmtpServerConfig {
-                bind_addr: config.bind_addr,
-                domain: config.domain_name,
-                limits: edgerun_email::smtp::ServerLimits {
-                    max_message_size: config.max_message_size,
-                    ..Default::default()
-                },
-                smtps: config.smtps,
+            let srv = mail_runtime::SmtpNodeService::new(mail_runtime::SmtpNodeConfig {
+                bind_addr: config.bind_addr.clone(),
+                domain_name: config.domain_name,
+                max_message_size: config.max_message_size,
                 starttls: config.starttls,
                 local_domains: config.local_domains,
-                queue_data_root: config.queue_data_root,
-                relay_dns_server: config.relay_dns_server,
-                #[cfg(feature = "dns")]
-                dns_resolver: dns_server
-                    .as_ref()
-                    .map(|dns| Arc::new(dns.clone()) as Arc<dyn MailDnsResolver>),
-                #[cfg(not(feature = "dns"))]
-                dns_resolver: None,
-                #[cfg(feature = "tls")]
-                tls_cert: config.tls_cert,
-                ..Default::default()
-            };
-
-            let mut srv = if let Some(ref maildir_root) = config.maildir_root {
-                let store = edgerun_email::smtp::server::MaildirStore::new(maildir_root)?;
-                let handler = Arc::new(store);
-                edgerun_email::smtp::server::SmtpServer::with_listener(
-                    smtp_config,
-                    handler,
-                    listener,
-                )?
-            } else {
-                let handler = Arc::new(edgerun_email::smtp::server::MemoryMailStore::new());
-                edgerun_email::smtp::server::SmtpServer::with_listener(
-                    smtp_config,
-                    handler,
-                    listener,
-                )?
-            };
-            #[cfg(feature = "http")]
-            {
-                srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
-            }
+                queue_available: config.queue_data_root.is_some(),
+            })?;
+            let _ = config.smtps;
+            let _ = config.relay_dns_server;
+            let _ = config.maildir_root;
+            let _ = config.dkim_domain;
+            let _ = config.dkim_selector;
+            let _ = config.dkim_key_path;
+            #[cfg(feature = "tls")]
+            let _ = config.tls_cert;
             Some(srv)
         } else {
             None
         };
 
-        #[cfg(all(
-            feature = "lmtp",
-            all(not(target_os = "none"), not(target_arch = "wasm32"))
-        ))]
+        #[cfg(feature = "lmtp")]
         let lmtp_server = if let Some(config) = self.lmtp {
-            let listener = Arc::new(bind_node_tcp_listener(&config.bind_addr)?);
-            let lmtp_config = edgerun_email::lmtp::server::LmtpServerConfig {
-                bind_addr: config.bind_addr,
-                domain: config.domain_name,
-                limits: edgerun_email::smtp::ServerLimits {
-                    max_message_size: config.max_message_size,
-                    ..Default::default()
-                },
-            };
-            let handler = Arc::new(edgerun_email::smtp::server::MemoryMailStore::new());
-            let mut srv =
-                edgerun_email::lmtp::LmtpServer::with_listener(lmtp_config, handler, listener)?;
-            #[cfg(feature = "http")]
-            {
-                srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
-            }
+            let srv = mail_runtime::LmtpNodeService::new(mail_runtime::LmtpNodeConfig {
+                bind_addr: config.bind_addr.clone(),
+                domain_name: config.domain_name,
+                max_message_size: config.max_message_size,
+            })?;
             Some(srv)
         } else {
             None
@@ -802,27 +641,18 @@ impl NodeRuntime {
 
         Ok(BoundNodeRuntime {
             #[cfg(feature = "http")]
-            http: http_bound.map(Arc::new),
+            http: http_bound,
             #[cfg(feature = "dns")]
             dns: dns_server.map(Arc::new),
             #[cfg(feature = "dhcp")]
             dhcp: dhcp_server,
             #[cfg(feature = "tftp")]
             tftp: tftp_server,
-            #[cfg(all(
-                feature = "imap",
-                all(not(target_os = "none"), not(target_arch = "wasm32"))
-            ))]
+            #[cfg(feature = "imap")]
             imap: imap_server,
-            #[cfg(all(
-                feature = "smtp",
-                all(not(target_os = "none"), not(target_arch = "wasm32"))
-            ))]
+            #[cfg(feature = "smtp")]
             smtp: smtp_server,
-            #[cfg(all(
-                feature = "lmtp",
-                all(not(target_os = "none"), not(target_arch = "wasm32"))
-            ))]
+            #[cfg(feature = "lmtp")]
             lmtp: lmtp_server,
             #[cfg(feature = "proxy")]
             proxy: proxy_server,
@@ -841,28 +671,19 @@ impl Default for NodeRuntime {
 /// A native realization of requested node services.
 pub struct BoundNodeRuntime {
     #[cfg(feature = "http")]
-    http: Option<Arc<BoundHttpServer>>,
+    http: Vec<HttpNodeBinding>,
     #[cfg(feature = "dns")]
     dns: Option<Arc<dns_runtime::DnsRuntime>>,
     #[cfg(feature = "dhcp")]
     dhcp: Option<dhcp_runtime::DhcpServer>,
     #[cfg(feature = "tftp")]
     tftp: Option<tftp_runtime::TftpServer>,
-    #[cfg(all(
-        feature = "imap",
-        all(not(target_os = "none"), not(target_arch = "wasm32"))
-    ))]
-    imap: Option<edgerun_email::imap::ImapServer>,
-    #[cfg(all(
-        feature = "smtp",
-        all(not(target_os = "none"), not(target_arch = "wasm32"))
-    ))]
-    smtp: Option<edgerun_email::smtp::SmtpServer>,
-    #[cfg(all(
-        feature = "lmtp",
-        all(not(target_os = "none"), not(target_arch = "wasm32"))
-    ))]
-    lmtp: Option<edgerun_email::lmtp::LmtpServer>,
+    #[cfg(feature = "imap")]
+    imap: Option<mail_runtime::ImapNodeService>,
+    #[cfg(feature = "smtp")]
+    smtp: Option<mail_runtime::SmtpNodeService>,
+    #[cfg(feature = "lmtp")]
+    lmtp: Option<mail_runtime::LmtpNodeService>,
     #[cfg(feature = "proxy")]
     proxy: Option<proxy_runtime::ProxyRuntime>,
     /// Compiled connection middleware chain.
@@ -879,12 +700,9 @@ impl BoundNodeRuntime {
 
         // HTTP (TCP + optional HTTP/3 UDP)
         #[cfg(feature = "http")]
-        if let Some(ref http) = self.http {
+        for http in self.http.drain(..) {
             let token = shutdown.clone();
-            let http = Arc::clone(http);
-            tasks.push(crate::rt::spawn(async move {
-                http.serve_with_shutdown(token).await.map_err(http_io_error)
-            }));
+            tasks.push(crate::rt::spawn(async move { http.run(token).await }));
         }
 
         // DNS
@@ -932,30 +750,21 @@ impl BoundNodeRuntime {
         }
 
         // IMAP
-        #[cfg(all(
-            feature = "imap",
-            all(not(target_os = "none"), not(target_arch = "wasm32"))
-        ))]
+        #[cfg(feature = "imap")]
         if let Some(imap) = self.imap.take() {
             let token = shutdown.clone();
             tasks.push(crate::rt::spawn(async move { imap.run(token).await }));
         }
 
         // SMTP
-        #[cfg(all(
-            feature = "smtp",
-            all(not(target_os = "none"), not(target_arch = "wasm32"))
-        ))]
+        #[cfg(feature = "smtp")]
         if let Some(smtp) = self.smtp.take() {
             let token = shutdown.clone();
             tasks.push(crate::rt::spawn(async move { smtp.run(token).await }));
         }
 
         // LMTP
-        #[cfg(all(
-            feature = "lmtp",
-            all(not(target_os = "none"), not(target_arch = "wasm32"))
-        ))]
+        #[cfg(feature = "lmtp")]
         if let Some(lmtp) = self.lmtp.take() {
             let token = shutdown.clone();
             tasks.push(crate::rt::spawn(async move { lmtp.run(token).await }));

@@ -1,7 +1,7 @@
 //! edgerun-acme — ACME protocol client (RFC 8555) for Let's Encrypt integration.
 //!
 //! Supports:
-//! - HTTP-01 challenge (via edgerun-http Handler)
+//! - HTTP-01 challenge material for runtime-owned HTTP routing
 //! - DNS-01 challenge (via node-owned DNS zone injection)
 //! - TLS-ALPN-01 challenge (via edgerun-tls ALPN extension)
 //! - Automatic certificate provisioning and renewal
@@ -74,20 +74,17 @@ mod cert_store;
 mod challenge;
 pub mod challenge_material;
 mod client;
-mod dns_challenge;
 mod error;
-mod http_challenge;
 mod order;
-mod tls_alpn_challenge;
 pub mod types;
 
 pub use account::AccountKey;
 pub use cert_store::{CertInfo, CertStore, StoredCert};
 pub use challenge::Challenge;
 pub use client::{AcmeClient, AcmeConfig};
-pub use dns_challenge::{DnsChallenge, DnsChallengeManager};
+pub use edgerun_protocols::acme::dns01::Dns01Challenge;
+pub use edgerun_protocols::acme::http01::Http01Challenge;
+pub use edgerun_protocols::acme::tls_alpn01::TlsAlpn01Challenge;
 pub use error::AcmeError;
-pub use http_challenge::{HttpChallengeHandler, HttpChallengeServer};
 pub use order::Order;
-pub use tls_alpn_challenge::{TlsAlpnChallenge, TlsAlpnManager};
 pub use types::{ChallengeStatus, ChallengeType, Directory, DirectoryUrl, OrderStatus};

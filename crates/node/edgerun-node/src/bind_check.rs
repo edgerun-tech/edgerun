@@ -15,19 +15,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
     feature = "quic",
     feature = "acme",
 ))]
-use edgerun_http::{into_handler, Response, StatusCode};
-#[cfg(all(
-    feature = "http",
-    feature = "https",
-    feature = "dns",
-    feature = "dhcp",
-    feature = "smtp",
-    feature = "imap",
-    feature = "proxy",
-    feature = "derived-db",
-    feature = "quic",
-    feature = "acme",
-))]
 use edgerun_node::rt::{CancellationToken, Runtime};
 
 pub fn cmd_bind_check(standard_ports: bool) {
@@ -142,6 +129,14 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
     proxy_config.bind_addr = ports.proxy.to_string();
 
     let mut bound = crate::services::NodeRuntime::new()
+        .with_http_app(
+            ports.http,
+            edgerun_node::runtime::sha256(b"bind-check-http"),
+        )
+        .with_http_app(
+            ports.https,
+            edgerun_node::runtime::sha256(b"bind-check-https"),
+        )
         .with_dns(dns_config)
         .with_smtp(smtp_config)
         .with_imap(imap_config)
@@ -149,32 +144,11 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
         .build()
         .await
         .map_err(|e| format!("server bind: {e}"))?;
-    let http_handler =
-        into_handler(|_| Response::text(StatusCode::new(200).unwrap(), "edgerund bind-check"));
-    let https_handler =
-        into_handler(|_| Response::text(StatusCode::new(200).unwrap(), "edgerund bind-check"));
-    let http_bound = edgerun_http::server::HttpServer::new(http_handler)
-        .bind(ports.http)
-        .await
-        .map_err(|e| format!("http bind: {e}"))?;
-    let https_bound = edgerun_http::server::HttpServer::new(https_handler)
-        .with_tls(tls_cert)
-        .with_http3()
-        .bind(ports.https)
-        .await
-        .map_err(|e| format!("https bind: {e}"))?;
+    let _ = tls_cert;
 
     let shutdown = CancellationToken::new();
     let run_shutdown = shutdown.clone();
     let server_task = edgerun_node::rt::spawn(async move { bound.run(run_shutdown).await });
-    let http_shutdown = shutdown.clone();
-    let http_task =
-        edgerun_node::rt::spawn(async move { http_bound.serve_with_shutdown(http_shutdown).await });
-    let https_shutdown = shutdown.clone();
-    let https_task =
-        edgerun_node::rt::spawn(
-            async move { https_bound.serve_with_shutdown(https_shutdown).await },
-        );
     let dhcp_shutdown = shutdown.clone();
     let dhcp_task = edgerun_node::rt::spawn(async move {
         dhcp_server.run(dhcp_shutdown).await;
@@ -216,8 +190,6 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
     std::thread::sleep(Duration::from_secs(15));
     shutdown.cancel();
     drop(server_task);
-    drop(http_task);
-    drop(https_task);
     drop(dhcp_task);
 
     std::process::exit(0);

@@ -13,8 +13,5 @@ pub mod prelude {
     }
 }
 
-pub mod ac;
-pub mod tlv;
-
-pub use ac::AcMatterClient;
-pub use tlv::{AnonymousTag, TlvReader, TlvWriter};
+pub use edgerun_protocols::matter::ac::*;
+pub use edgerun_protocols::matter::tlv::{AnonymousTag, TlvReader, TlvWriter};

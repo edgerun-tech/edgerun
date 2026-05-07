@@ -3,9 +3,15 @@
 extern crate alloc;
 
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 
 use edgerun_biometrics::{BiometricModality, BiometricState};
+use edgerun_capabilities::{
+    capability_descriptor, constraint, CapabilityConstraintKind, CapabilityDescriptor,
+    CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityProvider,
+    CapabilityRole,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FingerprintReaderInfo {
@@ -109,7 +115,7 @@ impl core::fmt::Display for FingerprintError {
 
 impl core::error::Error for FingerprintError {}
 
-pub trait FingerprintReader {
+pub trait FingerprintReader: CapabilityProvider {
     fn reader_info(&self) -> Result<FingerprintReaderInfo, FingerprintError>;
     fn list_templates(&self) -> Result<Vec<FingerprintTemplateRecord>, FingerprintError>;
     fn capture(
@@ -136,6 +142,25 @@ pub trait FingerprintReader {
         capture: &FingerprintCapture,
     ) -> Result<FingerprintVerification, FingerprintError>;
     fn delete_template(&mut self, template_id: &str) -> Result<(), FingerprintError>;
+}
+
+pub fn default_fingerprint_descriptor(provider: &str, instance_id: &str) -> CapabilityDescriptor {
+    capability_descriptor(
+        provider,
+        instance_id,
+        CapabilityRole::Input,
+        &[CapabilityModality::Biometric],
+        &[CapabilityEventKind::Biometric],
+        &[
+            CapabilityOperation::Query,
+            CapabilityOperation::Capture,
+            CapabilityOperation::Verify,
+        ],
+        vec![
+            constraint(CapabilityConstraintKind::RequireUserPresence),
+            constraint(CapabilityConstraintKind::RequireBiometric),
+        ],
+    )
 }
 
 pub fn default_fingerprint_biometric_state(
@@ -278,6 +303,34 @@ mod tests {
             FingerprintCapturePurpose::Enrollment,
             FingerprintCapturePurpose::Verification
         );
+    }
+
+    #[test]
+    fn default_fingerprint_descriptor_declares_biometric_input() {
+        let descriptor = default_fingerprint_descriptor("goodix-usb", "usb-001-002");
+        assert_eq!(descriptor.provider_name, "goodix-usb");
+        assert_eq!(descriptor.provider_instance_id, "usb-001-002");
+        assert_eq!(descriptor.role, CapabilityRole::Input as i32);
+        assert_eq!(
+            descriptor.modalities,
+            vec![CapabilityModality::Biometric as i32]
+        );
+        assert_eq!(
+            descriptor.event_kinds,
+            vec![CapabilityEventKind::Biometric as i32]
+        );
+        assert!(descriptor
+            .operations
+            .contains(&(CapabilityOperation::Capture as i32)));
+        assert!(descriptor
+            .operations
+            .contains(&(CapabilityOperation::Verify as i32)));
+        assert!(descriptor.default_constraints.iter().any(|constraint| {
+            constraint.kind == CapabilityConstraintKind::RequireUserPresence as i32
+        }));
+        assert!(descriptor.default_constraints.iter().any(|constraint| {
+            constraint.kind == CapabilityConstraintKind::RequireBiometric as i32
+        }));
     }
 
     #[test]

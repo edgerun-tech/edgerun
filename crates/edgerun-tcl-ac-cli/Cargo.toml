@@ -15,7 +15,6 @@ required-features = ["std"]
 
 [dependencies]
 edgerun-tcl-ac = { version = "0.1", path = "../edgerun-tcl-ac" }
-edgerun-matter = { version = "0.1", path = "../edgerun-matter" }
 edgerun-bluetooth-gatt = { version = "0.1", path = "../linux-adapters/edgerun-bluetooth-gatt" }
 edgerun-mgmt-bluetooth = { version = "0.1", path = "../linux-adapters/edgerun-mgmt-bluetooth" }
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }

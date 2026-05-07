@@ -14,7 +14,7 @@ use edgerun_crypto::sha256;
 use edgerun_encoding::base64::base64url_nopad_encode;
 use edgerun_http::HttpClient;
 use edgerun_rt::sleep;
-use std::time::{Duration, Instant};
+use edgerun_rt::{Duration, Instant};
 
 /// Callback trait for the device flow UI.
 pub trait DeviceFlowCallback: Send + Sync {
@@ -194,7 +194,7 @@ impl OAuthClient {
                 }
             }
 
-            return Ok(token_resp.into_credentials());
+            return Ok(token_resp.into_credentials_at(crate::runtime_now_secs()));
         }
     }
 
@@ -274,7 +274,7 @@ impl OAuthClient {
             });
         }
 
-        let creds = token_resp.into_credentials();
+        let creds = token_resp.into_credentials_at(crate::runtime_now_secs());
 
         if let Some(ref store) = self.token_store {
             let _ = store.save(&creds);
@@ -324,7 +324,7 @@ impl OAuthClient {
             });
         }
 
-        let creds = token_resp.into_credentials();
+        let creds = token_resp.into_credentials_at(crate::runtime_now_secs());
 
         if let Some(ref store) = self.token_store {
             let _ = store.save(&creds);
@@ -391,7 +391,7 @@ impl OAuthClient {
             ));
         }
 
-        if token.payload.is_expired(30) {
+        if token.payload.is_expired_at(crate::runtime_now_secs(), 30) {
             return Err(OAuthError::JwtError("ID token is expired".into()));
         }
 

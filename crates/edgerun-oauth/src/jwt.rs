@@ -203,13 +203,9 @@ impl JwtPayload {
         })
     }
 
-    /// Check if the token is expired (with grace period).
-    pub fn is_expired(&self, grace_secs: u64) -> bool {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        now + grace_secs >= self.exp
+    /// Check if the token is expired at runtime-provided `now_secs`.
+    pub fn is_expired_at(&self, now_secs: u64, grace_secs: u64) -> bool {
+        now_secs + grace_secs >= self.exp
     }
 
     /// Verify the `aud` claim contains the expected client ID.
@@ -323,8 +319,8 @@ impl IdToken {
                         "expected RS256 verifier but got HMAC".into(),
                     ));
                 };
-                use edgerun_crypto::rsa::sha2::Digest;
                 use edgerun_crypto::rsa::pkcs1v15::Pkcs1v15Sign;
+                use edgerun_crypto::rsa::sha2::Digest;
                 use edgerun_crypto::rsa::sha2::Sha256;
 
                 let mut hasher = Sha256::new();
@@ -671,7 +667,7 @@ mod tests {
         let payload = base64url_nopad_encode(br#"{"sub":"test","exp":1516239022}"#);
         let jwt = format!("{header}.{payload}.sig");
         let token = IdToken::parse_unverified(&jwt).unwrap();
-        assert!(token.payload.is_expired(0));
+        assert!(token.payload.is_expired_at(1_516_239_023, 0));
     }
 
     #[test]
@@ -680,7 +676,7 @@ mod tests {
         let payload = base64url_nopad_encode(br#"{"sub":"test","exp":9999999999}"#);
         let jwt = format!("{header}.{payload}.sig");
         let token = IdToken::parse_unverified(&jwt).unwrap();
-        assert!(!token.payload.is_expired(0));
+        assert!(!token.payload.is_expired_at(1_000, 0));
     }
 
     #[test]

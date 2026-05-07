@@ -5,6 +5,26 @@
 //! Each discovery block is gated behind `#[cfg(feature = "all-hardware")]`
 //! and wrapped in error handlers so missing hardware is silently skipped.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
+#[cfg(not(feature = "all-hardware"))]
+use edgerun_capabilities::CapabilityDescriptor;
+#[cfg(feature = "all-hardware")]
+use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
+use edgerun_protocols::wire::RuntimeAppInstall;
+use edgerun_protocols::wire::RuntimeDeploymentConfig;
+
+use crate::runtime::RuntimeServicePlan;
+
+const SYS_BUS_PCI_DEVICES: &str = "/sys/bus/pci/devices";
+const SYS_CLASS_DRM: &str = "/sys/class/drm";
+const SYS_BUS_USB_DEVICES: &str = "/sys/bus/usb/devices";
+const SYS_CLASS_POWER_SUPPLY: &str = "/sys/class/power_supply";
+const PROC_ACPI: &str = "/proc/acpi";
+
 // ===========================================================================
 // GPU & Display
 // ===========================================================================
@@ -419,29 +439,106 @@ pub struct HardwareInventory {
     pub biometric: Vec<String>,
     pub location: Vec<String>,
     pub keystore: Vec<String>,
+    pub capability_descriptors: Vec<CapabilityDescriptor>,
 }
 
 impl HardwareInventory {
     /// Discover all hardware on Linux machines (requires `all-hardware` feature).
     #[cfg(all(not(target_os = "android"), feature = "all-hardware"))]
     pub fn discover() -> Self {
-        // On Linux: use existing Linux drivers
+        let mut capability_descriptors = Vec::new();
         let gpus = discover_gpus();
-        let displays: Vec<String> = discover_displays()
-            .into_iter()
+        capability_descriptors.push(
+            edgerun_linux_gpu::LinuxGpuBackend {
+                pci_root: SYS_BUS_PCI_DEVICES.into(),
+                drm_root: SYS_CLASS_DRM.into(),
+            }
+            .descriptor(),
+        );
+        let displays_raw = discover_displays();
+        let displays: Vec<String> = displays_raw
+            .iter()
             .map(|c| {
+                capability_descriptors.push(
+                    edgerun_drm_display::DrmDisplayBackend {
+                        sysfs_root: SYS_CLASS_DRM.into(),
+                        connector: c.clone(),
+                    }
+                    .descriptor(),
+                );
                 format!(
                     "{} (connected={}, enabled={})",
                     c.connector_name, c.connected, c.enabled
                 )
             })
             .collect();
-        let fingerprint_readers = discover_fingerprint_readers();
-        let bluetooth_controllers = discover_bluetooth_controllers();
+
+        let fingerprint_devices = match edgerun_goodix_fingerprint::discover_supported_devices() {
+            Ok(devices) => devices,
+            Err(e) => {
+                crate::node_warn!(
+                    "edgerund: warning: Goodix fingerprint discovery failed: {}",
+                    e
+                );
+                Vec::new()
+            }
+        };
+        let fingerprint_readers: Vec<String> = fingerprint_devices
+            .into_iter()
+            .map(|device| {
+                let summary = format!(
+                    "Goodix USB: bus={}, dev={}, {:04x}:{:04x}",
+                    device.bus_number, device.device_number, device.vendor_id, device.product_id
+                );
+                if let Ok(reader) = edgerun_goodix_fingerprint::GoodixFingerprintReader::new(device)
+                {
+                    capability_descriptors.push(reader.descriptor());
+                }
+                summary
+            })
+            .collect();
+
+        let bluetooth_raw = match edgerun_mgmt_bluetooth::discover_controllers() {
+            Ok(ctrls) => ctrls,
+            Err(e) => {
+                crate::node_warn!("edgerund: warning: BT controller discovery failed: {}", e);
+                Vec::new()
+            }
+        };
+        let bluetooth_controllers: Vec<String> = bluetooth_raw
+            .into_iter()
+            .map(|ctrl| {
+                capability_descriptors.push(
+                    edgerun_mgmt_bluetooth::MgmtBluetoothBackend {
+                        controller: ctrl.clone(),
+                    }
+                    .descriptor(),
+                );
+                format!(
+                    "BT controller #{}: {} ({})",
+                    ctrl.index, ctrl.name, ctrl.address
+                )
+            })
+            .collect();
+
         let wifi_interfaces: Vec<String> = discover_wifi_interfaces()
             .into_iter()
-            .map(|i| format!("{} ({:?})", i.name, i.operstate))
+            .map(|i| {
+                capability_descriptors.push(
+                    edgerun_linux_wifi::LinuxWifiBackend {
+                        interface: i.clone(),
+                    }
+                    .descriptor(),
+                );
+                format!("{} ({:?})", i.name, i.operstate)
+            })
             .collect();
+        capability_descriptors.push(
+            edgerun_linux_usb::LinuxUsbBackend {
+                root_path: SYS_BUS_USB_DEVICES.into(),
+            }
+            .descriptor(),
+        );
         let usb_devices: Vec<String> = discover_usb_devices()
             .into_iter()
             .map(|d| {
@@ -461,6 +558,12 @@ impl HardwareInventory {
                 format!("{}:{}:{} {}", vid, pid, d.instance_id, name)
             })
             .collect();
+        capability_descriptors.push(
+            edgerun_linux_pci::LinuxPciBackend {
+                root_path: SYS_BUS_PCI_DEVICES.into(),
+            }
+            .descriptor(),
+        );
         let pci_devices: Vec<String> = discover_pci_devices()
             .into_iter()
             .map(|d| {
@@ -480,14 +583,200 @@ impl HardwareInventory {
                 )
             })
             .collect();
-        let nfc_adapters = discover_nfc_adapters();
-        let npu_devices = discover_npu_devices();
-        let power_supplies = discover_power_supplies();
-        let cec_adapters = discover_cec_adapters();
-        let input_devices = discover_input_devices();
-        let audio_input = discover_audio_input();
-        let audio_output = discover_audio_output();
-        let camera = discover_cameras();
+        let nfc_adapters: Vec<String> = match edgerun_linux_nfc::discover_nfc_adapters() {
+            Ok(found) => found
+                .into_iter()
+                .map(|adapter| {
+                    capability_descriptors.push(
+                        edgerun_linux_nfc::LinuxNfcBackend {
+                            adapter: adapter.clone(),
+                        }
+                        .descriptor(),
+                    );
+                    format!("NFC adapter: {}", adapter.name)
+                })
+                .collect(),
+            Err(e) => {
+                crate::node_warn!("edgerund: warning: NFC adapter discovery failed: {}", e);
+                Vec::new()
+            }
+        };
+
+        let mut npu_devices = Vec::new();
+        match edgerun_linux_npu::discover_linux_npus() {
+            Ok(npus) => {
+                for npu in npus {
+                    capability_descriptors.push(
+                        edgerun_linux_npu::LinuxNpuBackend { info: npu.clone() }.descriptor(),
+                    );
+                    npu_devices.push(format!("Linux NPU: {:?}", npu));
+                }
+            }
+            Err(e) => crate::node_warn!("edgerund: warning: Linux NPU discovery failed: {}", e),
+        }
+        match edgerun_amd_xdna::discover_amd_xdna_devices() {
+            Ok(xdnas) => {
+                for xdna in xdnas {
+                    capability_descriptors
+                        .push(edgerun_amd_xdna::AmdXdnaBackend { info: xdna.clone() }.descriptor());
+                    npu_devices.push(format!("AMD xDNA NPU: {:?}", xdna));
+                }
+            }
+            Err(e) => crate::node_warn!("edgerund: warning: AMD xDNA discovery failed: {}", e),
+        }
+
+        capability_descriptors.push(
+            edgerun_linux_power::LinuxPowerBackend {
+                power_supply_root: SYS_CLASS_POWER_SUPPLY.into(),
+                proc_acpi_root: PROC_ACPI.into(),
+            }
+            .descriptor(),
+        );
+        let mut power_supplies = Vec::new();
+        match edgerun_linux_power::discover_power_supplies() {
+            Ok(psus) => {
+                for psu in psus {
+                    power_supplies.push(format!(
+                        "Power supply: {} ({:?})",
+                        psu.instance_id, psu.kind
+                    ));
+                }
+            }
+            Err(e) => crate::node_warn!("edgerund: warning: power supply discovery failed: {}", e),
+        }
+        match edgerun_linux_power::discover_power_system() {
+            Ok(sys) => {
+                if let Some(pct) = sys.battery_percent {
+                    power_supplies.push(format!("Battery: {}%", pct));
+                }
+                if let Some(on_ac) = sys.on_ac_power {
+                    power_supplies.push(format!(
+                        "AC power: {}",
+                        if on_ac { "online" } else { "offline" }
+                    ));
+                }
+                power_supplies.push(format!("Lid: {:?}", sys.lid_state));
+                for source in &sys.sources {
+                    power_supplies.push(format!("Source: {}", source.instance_id));
+                }
+            }
+            Err(e) => crate::node_warn!("edgerund: warning: power system discovery failed: {}", e),
+        }
+
+        let cec_adapters: Vec<String> = match edgerun_linux_cec::discover_cec_adapters() {
+            Ok(found) => found
+                .into_iter()
+                .map(|adapter| {
+                    capability_descriptors.push(edgerun_cec::default_cec_descriptor(
+                        "linux-cec",
+                        &adapter.instance_id,
+                    ));
+                    format!("CEC adapter: {}", adapter.adapter_name)
+                })
+                .collect(),
+            Err(e) => {
+                crate::node_warn!("edgerund: warning: CEC adapter discovery failed: {}", e);
+                Vec::new()
+            }
+        };
+
+        let input_devices: Vec<String> = match edgerun_evdev_input::discover_evdev_devices() {
+            Ok(devices) => devices
+                .into_iter()
+                .map(|d| {
+                    capability_descriptors.push(edgerun_input::default_input_descriptor(
+                        "evdev-kernel",
+                        &d.event_node,
+                    ));
+                    let kind = format!("{:?}", d.kind);
+                    format!("{}: {} ({})", d.event_node, d.device_name, kind)
+                })
+                .collect(),
+            Err(e) => {
+                crate::node_warn!("edgerund: warning: evdev input discovery failed: {}", e);
+                Vec::new()
+            }
+        };
+
+        let audio_input: Vec<String> = match edgerun_alsa_microphone::discover_alsa_pcms() {
+            Ok(pcms) => pcms
+                .into_iter()
+                .filter(|p| p.capture)
+                .map(|p| {
+                    capability_descriptors.push(
+                        edgerun_alsa_microphone::AlsaMicrophoneBackend {
+                            device_path: format!(
+                                "/dev/snd/pcmC{}D{}c",
+                                p.card_index, p.device_index
+                            ),
+                            pcm: p.clone(),
+                        }
+                        .descriptor(),
+                    );
+                    format!("ALSA PCM {}:{} ({})", p.card_index, p.device_index, p.name)
+                })
+                .collect(),
+            Err(e) => {
+                crate::node_warn!("edgerund: warning: ALSA microphone discovery failed: {}", e);
+                Vec::new()
+            }
+        };
+        let audio_output: Vec<String> = match edgerun_alsa_speaker::discover_speakers() {
+            Ok(speakers) => speakers
+                .into_iter()
+                .map(|s| {
+                    capability_descriptors.push(s.descriptor());
+                    format!(
+                        "ALSA {} card={} device={} ({}ch, {}Hz)",
+                        s.card_id,
+                        s.card_index,
+                        s.device_index,
+                        s.channels,
+                        s.default_sample_rate_hz
+                    )
+                })
+                .collect(),
+            Err(e) => {
+                crate::node_warn!("edgerund: warning: ALSA speaker discovery failed: {}", e);
+                Vec::new()
+            }
+        };
+        let camera: Vec<String> = match edgerun_v4l2_camera::discover_camera_devices() {
+            Ok(cameras) => cameras
+                .into_iter()
+                .map(|c| {
+                    capability_descriptors.push(
+                        edgerun_v4l2_camera::V4l2CameraBiometricReader::new(c.clone()).descriptor(),
+                    );
+                    let caps = match c.query_info() {
+                        Ok(info) => {
+                            let mut parts = Vec::new();
+                            if info.supports_video_capture() {
+                                parts.push("capture");
+                            }
+                            if info.supports_streaming() {
+                                parts.push("streaming");
+                            }
+                            if parts.is_empty() {
+                                parts.push("unknown");
+                            }
+                            parts.join(", ")
+                        }
+                        Err(_) => "unknown".into(),
+                    };
+                    format!("{} ({})", c.devnode.display(), caps)
+                })
+                .collect(),
+            Err(e) => {
+                crate::node_warn!("edgerund: warning: V4L2 camera discovery failed: {}", e);
+                Vec::new()
+            }
+        };
+        capability_descriptors.sort_by(|a, b| {
+            a.provider_name
+                .cmp(&b.provider_name)
+                .then(a.provider_instance_id.cmp(&b.provider_instance_id))
+        });
 
         Self {
             platform: "linux",
@@ -528,7 +817,29 @@ impl HardwareInventory {
             } else {
                 vec![]
             },
+            capability_descriptors,
         }
+    }
+
+    pub fn capability_provider_apps(&self, developer_id: [u8; 32]) -> Vec<RuntimeAppInstall> {
+        self.capability_descriptors
+            .iter()
+            .cloned()
+            .map(|descriptor| {
+                crate::app_model::capability_provider_app_record(descriptor, developer_id)
+            })
+            .collect()
+    }
+
+    pub fn runtime_service_plan(
+        &self,
+        config: &RuntimeDeploymentConfig,
+        developer_id: [u8; 32],
+    ) -> RuntimeServicePlan {
+        RuntimeServicePlan::from_deployment_with_apps(
+            config,
+            self.capability_provider_apps(developer_id),
+        )
     }
 
     /// Print a summary of discovered hardware.
@@ -563,6 +874,10 @@ impl HardwareInventory {
         lines.push(format!("  Biometric:       {}", self.biometric.len()));
         lines.push(format!("  Location:        {}", self.location.len()));
         lines.push(format!("  Keystore:        {}", self.keystore.len()));
+        lines.push(format!(
+            "  Capabilities:    {}",
+            self.capability_descriptors.len()
+        ));
         lines.join("\n")
     }
 
@@ -595,6 +910,7 @@ impl HardwareInventory {
             } else {
                 vec![]
             },
+            capability_descriptors: vec![],
         }
     }
 }
@@ -607,9 +923,34 @@ mod tests {
     fn hardware_inventory_discover_does_not_panic() {
         let inventory = HardwareInventory::discover();
         assert!(!inventory.summary().is_empty());
+        let provider_apps = inventory.capability_provider_apps([1; 32]);
+        assert_eq!(provider_apps.len(), inventory.capability_descriptors.len());
+        assert!(provider_apps
+            .iter()
+            .all(|app| !app.app_id.iter().all(|b| *b == 0)));
+        assert!(provider_apps
+            .iter()
+            .all(|app| !app.provided_capabilities.is_empty()));
         #[cfg(not(target_os = "android"))]
         assert_eq!(inventory.platform, "linux");
         #[cfg(target_os = "android")]
         assert_eq!(inventory.platform, "android");
+    }
+
+    #[test]
+    fn hardware_inventory_merges_provider_apps_into_runtime_plan() {
+        let inventory = HardwareInventory::discover();
+        let config = crate::runtime::runtime_deployment_config(
+            crate::runtime::sha256(b"runtime"),
+            [127, 0, 0, 1],
+            b"runtime.local".to_vec(),
+            b"local".to_vec(),
+            b"admin@local".to_vec(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let plan = inventory.runtime_service_plan(&config, [2; 32]);
+        assert_eq!(plan.apps.len(), inventory.capability_descriptors.len());
     }
 }

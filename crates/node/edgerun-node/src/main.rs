@@ -12,7 +12,6 @@ mod capacity;
 mod command_dispatch;
 mod command_dispatch_event;
 mod command_dispatch_result;
-mod hardware;
 mod ingress;
 mod init;
 mod protocol_signer;

@@ -6,13 +6,8 @@ use alloc::vec::Vec;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
 use core::{debug_assert_eq, fmt, write};
-use edgerun_encoding::byteorder::read_u32_le;
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_encoding::io::{self, Read, Write};
-use edgerun_protocols::wire as edgerun_wire;
-use edgerun_protocols::wire::{
-    RemoteBlockDeviceInfo, RemoteBlockError, RemoteBlockRequest, RemoteBlockResponse, WireError,
-};
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_rt::Mutex;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
@@ -23,102 +18,13 @@ use std::sync::Mutex;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub use host::{FileBlockBackend, TcpBlockServer, UnixBlockServer};
 
-pub const BLOCK_PROTOCOL_VERSION: u16 = 1;
-const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BlockDeviceInfo {
-    pub block_size: u32,
-    pub block_count: u64,
-    pub readonly: bool,
-    pub supports_flush: bool,
-    pub supports_discard: bool,
-    pub supports_write_zeroes: bool,
-    pub model: String,
-    pub serial: String,
-}
-
-impl BlockDeviceInfo {
-    pub fn total_size_bytes(&self) -> u64 {
-        self.block_count * u64::from(self.block_size)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BlockError {
-    OutOfRange,
-    ReadOnly,
-    Misaligned,
-    Unsupported,
-    BackendFailure(String),
-    ProtocolError(String),
-    NotReady,
-    Timeout,
-}
-
-impl fmt::Display for BlockError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::OutOfRange => f.write_str("block request out of range"),
-            Self::ReadOnly => f.write_str("block device is read-only"),
-            Self::Misaligned => f.write_str("block request is misaligned"),
-            Self::Unsupported => f.write_str("operation unsupported"),
-            Self::BackendFailure(message) => write!(f, "backend failure: {message}"),
-            Self::ProtocolError(message) => write!(f, "protocol error: {message}"),
-            Self::NotReady => f.write_str("backend not ready"),
-            Self::Timeout => f.write_str("operation timed out"),
-        }
-    }
-}
-
-impl core::error::Error for BlockError {}
-
-impl From<io::Error> for BlockError {
-    fn from(value: io::Error) -> Self {
-        Self::BackendFailure(value.to_string())
-    }
-}
-
-impl<B: BlockBackend + ?Sized> BlockBackend for Arc<B> {
-    fn info(&self) -> BlockDeviceInfo {
-        self.as_ref().info()
-    }
-
-    fn read_blocks(&self, lba: u64, blocks: u32, out: &mut [u8]) -> Result<(), BlockError> {
-        self.as_ref().read_blocks(lba, blocks, out)
-    }
-
-    fn write_blocks(&self, lba: u64, blocks: u32, data: &[u8]) -> Result<(), BlockError> {
-        self.as_ref().write_blocks(lba, blocks, data)
-    }
-
-    fn flush(&self) -> Result<(), BlockError> {
-        self.as_ref().flush()
-    }
-
-    fn discard_blocks(&self, lba: u64, blocks: u32) -> Result<(), BlockError> {
-        self.as_ref().discard_blocks(lba, blocks)
-    }
-
-    fn write_zeroes(&self, lba: u64, blocks: u32) -> Result<(), BlockError> {
-        self.as_ref().write_zeroes(lba, blocks)
-    }
-}
-
-pub trait BlockBackend {
-    fn info(&self) -> BlockDeviceInfo;
-    fn read_blocks(&self, lba: u64, blocks: u32, out: &mut [u8]) -> Result<(), BlockError>;
-    fn write_blocks(&self, lba: u64, blocks: u32, data: &[u8]) -> Result<(), BlockError>;
-    fn flush(&self) -> Result<(), BlockError>;
-
-    fn discard_blocks(&self, _lba: u64, _blocks: u32) -> Result<(), BlockError> {
-        Err(BlockError::Unsupported)
-    }
-
-    fn write_zeroes(&self, _lba: u64, _blocks: u32) -> Result<(), BlockError> {
-        Err(BlockError::Unsupported)
-    }
-}
+pub use edgerun_protocols::block::{
+    byte_offset, byte_range, checked_len_bytes, decode_request_frame, decode_request_payload,
+    decode_response_frame, decode_response_payload, encode_request_frame, encode_request_payload,
+    encode_response_frame, encode_response_payload, frame_payload, handle_request, total_size_len,
+    validate_device_info, validate_range, validate_transfer, BlockBackend, BlockDeviceInfo,
+    BlockError, BlockRequest, BlockResponse, RequestId, BLOCK_PROTOCOL_VERSION,
+};
 
 pub struct MemoryBlockBackend {
     info: BlockDeviceInfo,
@@ -217,155 +123,6 @@ impl BlockBackend for MemoryBlockBackend {
 
     fn write_zeroes(&self, lba: u64, blocks: u32) -> Result<(), BlockError> {
         self.discard_blocks(lba, blocks)
-    }
-}
-
-pub type RequestId = u64;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BlockRequest {
-    Handshake {
-        protocol_version: u16,
-    },
-    GetInfo,
-    Read {
-        request_id: RequestId,
-        lba: u64,
-        blocks: u32,
-    },
-    Write {
-        request_id: RequestId,
-        lba: u64,
-        blocks: u32,
-        data: Vec<u8>,
-    },
-    Flush {
-        request_id: RequestId,
-    },
-    Discard {
-        request_id: RequestId,
-        lba: u64,
-        blocks: u32,
-    },
-    WriteZeroes {
-        request_id: RequestId,
-        lba: u64,
-        blocks: u32,
-    },
-    Ping,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BlockResponse {
-    HandshakeAck {
-        protocol_version: u16,
-    },
-    Info(BlockDeviceInfo),
-    ReadResult {
-        request_id: RequestId,
-        data: Vec<u8>,
-    },
-    WriteAck {
-        request_id: RequestId,
-    },
-    FlushAck {
-        request_id: RequestId,
-    },
-    DiscardAck {
-        request_id: RequestId,
-    },
-    WriteZeroesAck {
-        request_id: RequestId,
-    },
-    Pong,
-    Error {
-        request_id: Option<RequestId>,
-        error: BlockError,
-    },
-}
-
-pub fn handle_request<B: BlockBackend>(backend: &B, request: BlockRequest) -> BlockResponse {
-    match request {
-        BlockRequest::Handshake { protocol_version } => {
-            if protocol_version == BLOCK_PROTOCOL_VERSION {
-                BlockResponse::HandshakeAck {
-                    protocol_version: BLOCK_PROTOCOL_VERSION,
-                }
-            } else {
-                BlockResponse::Error {
-                    request_id: None,
-                    error: BlockError::ProtocolError(format!(
-                        "unsupported protocol version {protocol_version}"
-                    )),
-                }
-            }
-        }
-        BlockRequest::GetInfo => BlockResponse::Info(backend.info()),
-        BlockRequest::Read {
-            request_id,
-            lba,
-            blocks,
-        } => {
-            let info = backend.info();
-            match checked_len_bytes(&info, blocks) {
-                Ok(len) => {
-                    let mut data = vec![0_u8; len];
-                    match backend.read_blocks(lba, blocks, &mut data) {
-                        Ok(()) => BlockResponse::ReadResult { request_id, data },
-                        Err(error) => BlockResponse::Error {
-                            request_id: Some(request_id),
-                            error,
-                        },
-                    }
-                }
-                Err(error) => BlockResponse::Error {
-                    request_id: Some(request_id),
-                    error,
-                },
-            }
-        }
-        BlockRequest::Write {
-            request_id,
-            lba,
-            blocks,
-            data,
-        } => match backend.write_blocks(lba, blocks, &data) {
-            Ok(()) => BlockResponse::WriteAck { request_id },
-            Err(error) => BlockResponse::Error {
-                request_id: Some(request_id),
-                error,
-            },
-        },
-        BlockRequest::Flush { request_id } => match backend.flush() {
-            Ok(()) => BlockResponse::FlushAck { request_id },
-            Err(error) => BlockResponse::Error {
-                request_id: Some(request_id),
-                error,
-            },
-        },
-        BlockRequest::Discard {
-            request_id,
-            lba,
-            blocks,
-        } => match backend.discard_blocks(lba, blocks) {
-            Ok(()) => BlockResponse::DiscardAck { request_id },
-            Err(error) => BlockResponse::Error {
-                request_id: Some(request_id),
-                error,
-            },
-        },
-        BlockRequest::WriteZeroes {
-            request_id,
-            lba,
-            blocks,
-        } => match backend.write_zeroes(lba, blocks) {
-            Ok(()) => BlockResponse::WriteZeroesAck { request_id },
-            Err(error) => BlockResponse::Error {
-                request_id: Some(request_id),
-                error,
-            },
-        },
-        BlockRequest::Ping => BlockResponse::Pong,
     }
 }
 
@@ -627,7 +384,7 @@ pub mod host {
             if block_size == 0 {
                 return Err(BlockError::ProtocolError("block size must be > 0".into()));
             }
-            let metadata = fs::metadata(path).map_err(BlockError::from)?;
+            let metadata = fs::metadata(path).map_err(block_io_error)?;
             let len = metadata.len();
             let block_size_u64 = u64::from(block_size);
             if len % block_size_u64 != 0 {
@@ -637,7 +394,7 @@ pub mod host {
                 .read(true)
                 .write(!readonly)
                 .open(path)
-                .map_err(BlockError::from)?;
+                .map_err(block_io_error)?;
             let info = BlockDeviceInfo {
                 block_size,
                 block_count: len / block_size_u64,
@@ -668,9 +425,8 @@ pub mod host {
                 .file
                 .lock()
                 .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
-            file.seek(SeekFrom::Start(offset))
-                .map_err(BlockError::from)?;
-            file.read_exact(out).map_err(BlockError::from)?;
+            file.seek(SeekFrom::Start(offset)).map_err(block_io_error)?;
+            file.read_exact(out).map_err(block_io_error)?;
             Ok(())
         }
 
@@ -684,9 +440,8 @@ pub mod host {
                 .file
                 .lock()
                 .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
-            file.seek(SeekFrom::Start(offset))
-                .map_err(BlockError::from)?;
-            file.write_all(data).map_err(BlockError::from)?;
+            file.seek(SeekFrom::Start(offset)).map_err(block_io_error)?;
+            file.write_all(data).map_err(block_io_error)?;
             Ok(())
         }
 
@@ -695,7 +450,7 @@ pub mod host {
                 .file
                 .lock()
                 .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
-            file.sync_all().map_err(BlockError::from)
+            file.sync_all().map_err(block_io_error)
         }
 
         fn write_zeroes(&self, lba: u64, blocks: u32) -> Result<(), BlockError> {
@@ -708,15 +463,14 @@ pub mod host {
                 .file
                 .lock()
                 .map_err(|_| BlockError::BackendFailure("file backend lock poisoned".into()))?;
-            file.seek(SeekFrom::Start(offset))
-                .map_err(BlockError::from)?;
+            file.seek(SeekFrom::Start(offset)).map_err(block_io_error)?;
             const ZERO_CHUNK_LEN: usize = 1024 * 1024;
             let zero_chunk = [0_u8; ZERO_CHUNK_LEN];
             let mut remaining = len;
             while remaining > 0 {
                 let chunk_len = remaining.min(ZERO_CHUNK_LEN);
                 file.write_all(&zero_chunk[..chunk_len])
-                    .map_err(BlockError::from)?;
+                    .map_err(block_io_error)?;
                 remaining -= chunk_len;
             }
             Ok(())
@@ -725,14 +479,14 @@ pub mod host {
 
     impl BlockClient<UnixStream> {
         pub fn connect_unix(path: impl AsRef<Path>) -> Result<Self, BlockError> {
-            let stream = UnixStream::connect(path).map_err(BlockError::from)?;
+            let stream = UnixStream::connect(path).map_err(block_io_error)?;
             Ok(Self::new(stream))
         }
     }
 
     impl BlockClient<TcpStream> {
         pub fn connect_tcp(addr: impl ToSocketAddrs) -> Result<Self, BlockError> {
-            let stream = TcpStream::connect(addr).map_err(BlockError::from)?;
+            let stream = TcpStream::connect(addr).map_err(block_io_error)?;
             Ok(Self::new(stream))
         }
     }
@@ -750,18 +504,18 @@ pub mod host {
         pub fn bind_shared(path: impl AsRef<Path>, backend: Arc<B>) -> Result<Self, BlockError> {
             let path = path.as_ref();
             if path.exists() {
-                fs::remove_file(path).map_err(BlockError::from)?;
+                fs::remove_file(path).map_err(block_io_error)?;
             }
-            let listener = UnixListener::bind(path).map_err(BlockError::from)?;
+            let listener = UnixListener::bind(path).map_err(block_io_error)?;
             Ok(Self { listener, backend })
         }
 
         pub fn local_addr(&self) -> Result<std::os::unix::net::SocketAddr, BlockError> {
-            self.listener.local_addr().map_err(BlockError::from)
+            self.listener.local_addr().map_err(block_io_error)
         }
 
         pub fn accept_once(&self) -> Result<(), BlockError> {
-            let (stream, _) = self.listener.accept().map_err(BlockError::from)?;
+            let (stream, _) = self.listener.accept().map_err(block_io_error)?;
             let mut server = BlockServer::new(stream, Arc::clone(&self.backend));
             server.serve_until_eof()
         }
@@ -794,16 +548,16 @@ pub mod host {
         }
 
         pub fn bind_shared(addr: impl ToSocketAddrs, backend: Arc<B>) -> Result<Self, BlockError> {
-            let listener = TcpListener::bind(addr).map_err(BlockError::from)?;
+            let listener = TcpListener::bind(addr).map_err(block_io_error)?;
             Ok(Self { listener, backend })
         }
 
         pub fn local_addr(&self) -> Result<std::net::SocketAddr, BlockError> {
-            self.listener.local_addr().map_err(BlockError::from)
+            self.listener.local_addr().map_err(block_io_error)
         }
 
         pub fn accept_once(&self) -> Result<(), BlockError> {
-            let (stream, _) = self.listener.accept().map_err(BlockError::from)?;
+            let (stream, _) = self.listener.accept().map_err(block_io_error)?;
             let mut server = BlockServer::new(stream, Arc::clone(&self.backend));
             server.serve_until_eof()
         }
@@ -817,127 +571,29 @@ pub mod host {
 }
 
 pub fn send_request<W: Write>(writer: &mut W, request: &BlockRequest) -> Result<(), BlockError> {
-    let payload = encode_request(request)?;
+    let payload = encode_request_payload(request)?;
     write_frame(writer, &payload)
 }
 
 pub fn receive_request<R: Read>(reader: &mut R) -> Result<BlockRequest, BlockError> {
     let payload = read_frame(reader)?;
-    decode_request(&payload)
+    decode_request_payload(&payload)
 }
 
 pub fn send_response<W: Write>(writer: &mut W, response: &BlockResponse) -> Result<(), BlockError> {
-    let payload = encode_response(response)?;
+    let payload = encode_response_payload(response)?;
     write_frame(writer, &payload)
 }
 
 pub fn receive_response<R: Read>(reader: &mut R) -> Result<BlockResponse, BlockError> {
     let payload = read_frame(reader)?;
-    decode_response(&payload)
-}
-
-pub fn encode_request_frame(request: &BlockRequest) -> Result<Vec<u8>, BlockError> {
-    frame_payload(&encode_request(request)?)
-}
-
-pub fn decode_request_frame(frame: &[u8]) -> Result<BlockRequest, BlockError> {
-    decode_request(&decode_frame(frame)?)
-}
-
-pub fn encode_response_frame(response: &BlockResponse) -> Result<Vec<u8>, BlockError> {
-    frame_payload(&encode_response(response)?)
-}
-
-pub fn decode_response_frame(frame: &[u8]) -> Result<BlockResponse, BlockError> {
-    decode_response(&decode_frame(frame)?)
-}
-
-pub fn checked_len_bytes(info: &BlockDeviceInfo, blocks: u32) -> Result<usize, BlockError> {
-    (blocks as usize)
-        .checked_mul(info.block_size as usize)
-        .ok_or_else(|| BlockError::ProtocolError("byte length overflow".into()))
-}
-
-pub fn validate_range(info: &BlockDeviceInfo, lba: u64, blocks: u32) -> Result<(), BlockError> {
-    if blocks == 0 {
-        return Err(BlockError::ProtocolError("block count must be > 0".into()));
-    }
-    let end = lba
-        .checked_add(u64::from(blocks))
-        .ok_or(BlockError::OutOfRange)?;
-    if end > info.block_count {
-        return Err(BlockError::OutOfRange);
-    }
-    Ok(())
-}
-
-fn validate_transfer(
-    info: &BlockDeviceInfo,
-    lba: u64,
-    blocks: u32,
-    actual_len: usize,
-) -> Result<(), BlockError> {
-    validate_range(info, lba, blocks)?;
-    let expected_len = checked_len_bytes(info, blocks)?;
-    if actual_len != expected_len {
-        return Err(BlockError::Misaligned);
-    }
-    Ok(())
-}
-
-fn validate_device_info(info: &BlockDeviceInfo) -> Result<(), BlockError> {
-    if info.block_size == 0 {
-        return Err(BlockError::ProtocolError("block size must be > 0".into()));
-    }
-    if info.block_count == 0 {
-        return Err(BlockError::ProtocolError("block count must be > 0".into()));
-    }
-    let _ = total_size_len(info)?;
-    Ok(())
-}
-
-fn total_size_len(info: &BlockDeviceInfo) -> Result<usize, BlockError> {
-    let bytes = info
-        .block_count
-        .checked_mul(u64::from(info.block_size))
-        .ok_or_else(|| BlockError::ProtocolError("device size overflow".into()))?;
-    usize::try_from(bytes).map_err(|_| BlockError::ProtocolError("device size too large".into()))
-}
-
-fn byte_offset(info: &BlockDeviceInfo, lba: u64) -> Result<u64, BlockError> {
-    lba.checked_mul(u64::from(info.block_size))
-        .ok_or_else(|| BlockError::ProtocolError("byte offset overflow".into()))
-}
-
-fn byte_range(
-    info: &BlockDeviceInfo,
-    lba: u64,
-    blocks: u32,
-) -> Result<core::ops::Range<usize>, BlockError> {
-    validate_range(info, lba, blocks)?;
-    let start = byte_offset(info, lba)?;
-    let len = checked_len_bytes(info, blocks)?;
-    let start = usize::try_from(start)
-        .map_err(|_| BlockError::ProtocolError("byte offset too large".into()))?;
-    let end = start
-        .checked_add(len)
-        .ok_or_else(|| BlockError::ProtocolError("byte range overflow".into()))?;
-    Ok(start..end)
+    decode_response_payload(&payload)
 }
 
 fn write_frame<W: Write>(writer: &mut W, payload: &[u8]) -> Result<(), BlockError> {
     let frame = frame_payload(payload)?;
-    writer.write_all(&frame).map_err(BlockError::from)?;
-    writer.flush().map_err(BlockError::from)
-}
-
-fn frame_payload(payload: &[u8]) -> Result<Vec<u8>, BlockError> {
-    let len = u32::try_from(payload.len())
-        .map_err(|_| BlockError::ProtocolError("frame too large to encode".into()))?;
-    let mut frame = Vec::with_capacity(4 + payload.len());
-    frame.extend_from_slice(&len.to_le_bytes());
-    frame.extend_from_slice(payload);
-    Ok(frame)
+    writer.write_all(&frame).map_err(block_io_error)?;
+    writer.flush().map_err(block_io_error)
 }
 
 fn read_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, BlockError> {
@@ -947,10 +603,10 @@ fn read_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, BlockError> {
         Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
             return Err(BlockError::ProtocolError("unexpected EOF".into()));
         }
-        Err(err) => return Err(BlockError::from(err)),
+        Err(err) => return Err(block_io_error(err)),
     }
-    let len = read_u32_le(&len_bytes, 0) as usize;
-    if len > MAX_FRAME_SIZE {
+    let len = edgerun_encoding::byteorder::read_u32_le(&len_bytes, 0) as usize;
+    if len > edgerun_protocols::block::MAX_FRAME_SIZE {
         return Err(BlockError::ProtocolError(
             "frame exceeds maximum size".into(),
         ));
@@ -960,266 +616,14 @@ fn read_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, BlockError> {
         if err.kind() == io::ErrorKind::UnexpectedEof {
             BlockError::ProtocolError("unexpected EOF".into())
         } else {
-            BlockError::from(err)
+            block_io_error(err)
         }
     })?;
     Ok(payload)
 }
 
-fn decode_frame(frame: &[u8]) -> Result<Vec<u8>, BlockError> {
-    if frame.len() < 4 {
-        return Err(BlockError::ProtocolError("truncated frame header".into()));
-    }
-    let len = read_u32_le(frame, 0) as usize;
-    if len > MAX_FRAME_SIZE {
-        return Err(BlockError::ProtocolError(
-            "frame exceeds maximum size".into(),
-        ));
-    }
-    let end = 4_usize
-        .checked_add(len)
-        .ok_or_else(|| BlockError::ProtocolError("frame length overflow".into()))?;
-    if frame.len() != end {
-        return Err(BlockError::ProtocolError("frame length mismatch".into()));
-    }
-    Ok(frame[4..].to_vec())
-}
-
-fn encode_request(request: &BlockRequest) -> Result<Vec<u8>, BlockError> {
-    let wire = block_request_to_wire(request);
-    Ok(edgerun_wire::to_bytes::<WireError>(&wire)
-        .map_err(map_wire_error)?
-        .into_vec())
-}
-
-fn decode_request(payload: &[u8]) -> Result<BlockRequest, BlockError> {
-    let owned = payload.to_vec();
-    edgerun_wire::from_bytes::<RemoteBlockRequest, WireError>(&owned)
-        .map(block_request_from_wire)
-        .map_err(map_wire_error)
-}
-
-fn encode_response(response: &BlockResponse) -> Result<Vec<u8>, BlockError> {
-    let wire = block_response_to_wire(response);
-    Ok(edgerun_wire::to_bytes::<WireError>(&wire)
-        .map_err(map_wire_error)?
-        .into_vec())
-}
-
-fn decode_response(payload: &[u8]) -> Result<BlockResponse, BlockError> {
-    let owned = payload.to_vec();
-    edgerun_wire::from_bytes::<RemoteBlockResponse, WireError>(&owned)
-        .map(block_response_from_wire)
-        .map_err(map_wire_error)
-}
-
-fn map_wire_error(error: WireError) -> BlockError {
-    BlockError::ProtocolError(format!("rkyv wire error: {error}"))
-}
-
-fn block_device_info_to_wire(info: &BlockDeviceInfo) -> RemoteBlockDeviceInfo {
-    RemoteBlockDeviceInfo {
-        block_size: info.block_size,
-        block_count: info.block_count,
-        readonly: info.readonly,
-        supports_flush: info.supports_flush,
-        supports_discard: info.supports_discard,
-        supports_write_zeroes: info.supports_write_zeroes,
-        model: info.model.clone(),
-        serial: info.serial.clone(),
-    }
-}
-
-fn block_device_info_from_wire(info: RemoteBlockDeviceInfo) -> BlockDeviceInfo {
-    BlockDeviceInfo {
-        block_size: info.block_size,
-        block_count: info.block_count,
-        readonly: info.readonly,
-        supports_flush: info.supports_flush,
-        supports_discard: info.supports_discard,
-        supports_write_zeroes: info.supports_write_zeroes,
-        model: info.model,
-        serial: info.serial,
-    }
-}
-
-fn block_error_to_wire(error: &BlockError) -> RemoteBlockError {
-    match error {
-        BlockError::OutOfRange => RemoteBlockError::OutOfRange,
-        BlockError::ReadOnly => RemoteBlockError::ReadOnly,
-        BlockError::Misaligned => RemoteBlockError::Misaligned,
-        BlockError::Unsupported => RemoteBlockError::Unsupported,
-        BlockError::BackendFailure(message) => RemoteBlockError::BackendFailure(message.clone()),
-        BlockError::ProtocolError(message) => RemoteBlockError::ProtocolError(message.clone()),
-        BlockError::NotReady => RemoteBlockError::NotReady,
-        BlockError::Timeout => RemoteBlockError::Timeout,
-    }
-}
-
-fn block_error_from_wire(error: RemoteBlockError) -> BlockError {
-    match error {
-        RemoteBlockError::OutOfRange => BlockError::OutOfRange,
-        RemoteBlockError::ReadOnly => BlockError::ReadOnly,
-        RemoteBlockError::Misaligned => BlockError::Misaligned,
-        RemoteBlockError::Unsupported => BlockError::Unsupported,
-        RemoteBlockError::BackendFailure(message) => BlockError::BackendFailure(message),
-        RemoteBlockError::ProtocolError(message) => BlockError::ProtocolError(message),
-        RemoteBlockError::NotReady => BlockError::NotReady,
-        RemoteBlockError::Timeout => BlockError::Timeout,
-    }
-}
-
-fn block_request_to_wire(request: &BlockRequest) -> RemoteBlockRequest {
-    match request {
-        BlockRequest::Handshake { protocol_version } => RemoteBlockRequest::Handshake {
-            protocol_version: *protocol_version,
-        },
-        BlockRequest::GetInfo => RemoteBlockRequest::GetInfo,
-        BlockRequest::Read {
-            request_id,
-            lba,
-            blocks,
-        } => RemoteBlockRequest::Read {
-            request_id: *request_id,
-            lba: *lba,
-            blocks: *blocks,
-        },
-        BlockRequest::Write {
-            request_id,
-            lba,
-            blocks,
-            data,
-        } => RemoteBlockRequest::Write {
-            request_id: *request_id,
-            lba: *lba,
-            blocks: *blocks,
-            data: data.clone(),
-        },
-        BlockRequest::Flush { request_id } => RemoteBlockRequest::Flush {
-            request_id: *request_id,
-        },
-        BlockRequest::Discard {
-            request_id,
-            lba,
-            blocks,
-        } => RemoteBlockRequest::Discard {
-            request_id: *request_id,
-            lba: *lba,
-            blocks: *blocks,
-        },
-        BlockRequest::WriteZeroes {
-            request_id,
-            lba,
-            blocks,
-        } => RemoteBlockRequest::WriteZeroes {
-            request_id: *request_id,
-            lba: *lba,
-            blocks: *blocks,
-        },
-        BlockRequest::Ping => RemoteBlockRequest::Ping,
-    }
-}
-
-fn block_request_from_wire(request: RemoteBlockRequest) -> BlockRequest {
-    match request {
-        RemoteBlockRequest::Handshake { protocol_version } => {
-            BlockRequest::Handshake { protocol_version }
-        }
-        RemoteBlockRequest::GetInfo => BlockRequest::GetInfo,
-        RemoteBlockRequest::Read {
-            request_id,
-            lba,
-            blocks,
-        } => BlockRequest::Read {
-            request_id,
-            lba,
-            blocks,
-        },
-        RemoteBlockRequest::Write {
-            request_id,
-            lba,
-            blocks,
-            data,
-        } => BlockRequest::Write {
-            request_id,
-            lba,
-            blocks,
-            data,
-        },
-        RemoteBlockRequest::Flush { request_id } => BlockRequest::Flush { request_id },
-        RemoteBlockRequest::Discard {
-            request_id,
-            lba,
-            blocks,
-        } => BlockRequest::Discard {
-            request_id,
-            lba,
-            blocks,
-        },
-        RemoteBlockRequest::WriteZeroes {
-            request_id,
-            lba,
-            blocks,
-        } => BlockRequest::WriteZeroes {
-            request_id,
-            lba,
-            blocks,
-        },
-        RemoteBlockRequest::Ping => BlockRequest::Ping,
-    }
-}
-
-fn block_response_to_wire(response: &BlockResponse) -> RemoteBlockResponse {
-    match response {
-        BlockResponse::HandshakeAck { protocol_version } => RemoteBlockResponse::HandshakeAck {
-            protocol_version: *protocol_version,
-        },
-        BlockResponse::Info(info) => RemoteBlockResponse::Info(block_device_info_to_wire(info)),
-        BlockResponse::ReadResult { request_id, data } => RemoteBlockResponse::ReadResult {
-            request_id: *request_id,
-            data: data.clone(),
-        },
-        BlockResponse::WriteAck { request_id } => RemoteBlockResponse::WriteAck {
-            request_id: *request_id,
-        },
-        BlockResponse::FlushAck { request_id } => RemoteBlockResponse::FlushAck {
-            request_id: *request_id,
-        },
-        BlockResponse::DiscardAck { request_id } => RemoteBlockResponse::DiscardAck {
-            request_id: *request_id,
-        },
-        BlockResponse::WriteZeroesAck { request_id } => RemoteBlockResponse::WriteZeroesAck {
-            request_id: *request_id,
-        },
-        BlockResponse::Pong => RemoteBlockResponse::Pong,
-        BlockResponse::Error { request_id, error } => RemoteBlockResponse::Error {
-            request_id: *request_id,
-            error: block_error_to_wire(error),
-        },
-    }
-}
-
-fn block_response_from_wire(response: RemoteBlockResponse) -> BlockResponse {
-    match response {
-        RemoteBlockResponse::HandshakeAck { protocol_version } => {
-            BlockResponse::HandshakeAck { protocol_version }
-        }
-        RemoteBlockResponse::Info(info) => BlockResponse::Info(block_device_info_from_wire(info)),
-        RemoteBlockResponse::ReadResult { request_id, data } => {
-            BlockResponse::ReadResult { request_id, data }
-        }
-        RemoteBlockResponse::WriteAck { request_id } => BlockResponse::WriteAck { request_id },
-        RemoteBlockResponse::FlushAck { request_id } => BlockResponse::FlushAck { request_id },
-        RemoteBlockResponse::DiscardAck { request_id } => BlockResponse::DiscardAck { request_id },
-        RemoteBlockResponse::WriteZeroesAck { request_id } => {
-            BlockResponse::WriteZeroesAck { request_id }
-        }
-        RemoteBlockResponse::Pong => BlockResponse::Pong,
-        RemoteBlockResponse::Error { request_id, error } => BlockResponse::Error {
-            request_id,
-            error: block_error_from_wire(error),
-        },
-    }
+fn block_io_error(error: io::Error) -> BlockError {
+    BlockError::BackendFailure(error.to_string())
 }
 
 #[cfg(test)]
@@ -1270,16 +674,16 @@ mod tests {
             blocks: 2,
             data: vec![1, 2, 3, 4],
         };
-        let encoded = encode_request(&request).unwrap();
-        let decoded = decode_request(&encoded).unwrap();
+        let encoded = encode_request_payload(&request).unwrap();
+        let decoded = decode_request_payload(&encoded).unwrap();
         assert_eq!(decoded, request);
     }
 
     #[test]
     fn response_roundtrip() {
         let response = BlockResponse::Info(test_info());
-        let encoded = encode_response(&response).unwrap();
-        let decoded = decode_response(&encoded).unwrap();
+        let encoded = encode_response_payload(&response).unwrap();
+        let decoded = decode_response_payload(&encoded).unwrap();
         assert_eq!(decoded, response);
     }
 

@@ -316,6 +316,13 @@ impl RuntimeDeploymentSpec {
 
 impl RuntimeServicePlan {
     pub fn from_deployment(config: &RuntimeDeploymentConfig) -> Self {
+        Self::from_deployment_with_apps(config, Vec::new())
+    }
+
+    pub fn from_deployment_with_apps(
+        config: &RuntimeDeploymentConfig,
+        extra_apps: Vec<RuntimeAppInstall>,
+    ) -> Self {
         let mut listeners = config.protocol_bindings.clone();
         if listeners.is_empty() {
             listeners = default_protocol_bindings([0, 0, 0, 0]);
@@ -327,6 +334,12 @@ impl RuntimeServicePlan {
                 && a.bind_ipv4 == b.bind_ipv4
                 && a.host == b.host
         });
+        let mut apps = config.apps.clone();
+        for app in extra_apps {
+            if !apps.iter().any(|existing| existing.app_id == app.app_id) {
+                apps.push(app);
+            }
+        }
         Self {
             runtime_id: config.runtime_id,
             public_ipv4: config.public_ipv4,
@@ -334,7 +347,7 @@ impl RuntimeServicePlan {
             origin: config.origin.clone(),
             listeners,
             domains: config.domains.clone(),
-            apps: config.apps.clone(),
+            apps,
         }
     }
 
@@ -449,6 +462,22 @@ where
             payload,
         );
         Ok(())
+    }
+
+    pub fn install_service_plan_apps(
+        &mut self,
+        plan: &RuntimeServicePlan,
+        first_time: u64,
+    ) -> Result<usize, RuntimeError> {
+        let mut installed = 0usize;
+        for app in plan.apps.iter().cloned() {
+            if self.apps.contains_key(&app.app_id) {
+                continue;
+            }
+            self.install_app(app, first_time + installed as u64)?;
+            installed += 1;
+        }
+        Ok(installed)
     }
 
     pub fn grant_identity_route(
@@ -1817,5 +1846,107 @@ mod tests {
         let plan = RuntimeServicePlan::from_deployment(&config);
         assert_eq!(plan.provided_capabilities(), vec![provided]);
         assert_eq!(plan.required_capabilities(), vec![required]);
+    }
+
+    #[test]
+    fn service_plan_merges_node_provider_apps_after_deployment_apps() {
+        let deployment_app = runtime_app_install(
+            sha256(b"deployment-app"),
+            sha256(b"deployment-release"),
+            sha256(b"deployment-code"),
+            sha256(b"deployment-developer"),
+            sha256(b"deployment-manifest"),
+            Vec::new(),
+            Vec::new(),
+        );
+        let provider_app = runtime_app_install(
+            sha256(b"provider-app"),
+            sha256(b"provider-release"),
+            sha256(b"provider-code"),
+            sha256(b"provider-developer"),
+            sha256(b"provider-manifest"),
+            Vec::new(),
+            Vec::new(),
+        );
+        let duplicate_provider_app = runtime_app_install(
+            deployment_app.app_id,
+            sha256(b"duplicate-release"),
+            sha256(b"duplicate-code"),
+            sha256(b"duplicate-developer"),
+            sha256(b"duplicate-manifest"),
+            Vec::new(),
+            Vec::new(),
+        );
+        let config = runtime_deployment_config(
+            sha256(b"runtime"),
+            [203, 0, 113, 10],
+            b"runtime.example.com".to_vec(),
+            b"example.com".to_vec(),
+            b"admin@example.com".to_vec(),
+            Vec::new(),
+            Vec::new(),
+            vec![deployment_app.clone()],
+        );
+        let plan = RuntimeServicePlan::from_deployment_with_apps(
+            &config,
+            vec![provider_app.clone(), duplicate_provider_app],
+        );
+        assert_eq!(plan.apps.len(), 2);
+        assert_eq!(plan.apps[0], deployment_app);
+        assert_eq!(plan.apps[1], provider_app);
+    }
+
+    #[test]
+    fn runtime_installs_service_plan_apps_as_events() {
+        let first = runtime_app_install(
+            sha256(b"first-app"),
+            sha256(b"first-release"),
+            sha256(b"first-code"),
+            sha256(b"first-developer"),
+            sha256(b"first-manifest"),
+            Vec::new(),
+            Vec::new(),
+        );
+        let second = runtime_app_install(
+            sha256(b"second-app"),
+            sha256(b"second-release"),
+            sha256(b"second-code"),
+            sha256(b"second-developer"),
+            sha256(b"second-manifest"),
+            Vec::new(),
+            Vec::new(),
+        );
+        let config = runtime_deployment_config(
+            sha256(b"runtime"),
+            [203, 0, 113, 10],
+            b"runtime.example.com".to_vec(),
+            b"example.com".to_vec(),
+            b"admin@example.com".to_vec(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let plan = RuntimeServicePlan::from_deployment_with_apps(
+            &config,
+            vec![first.clone(), second.clone()],
+        );
+        let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+        let installed = runtime.install_service_plan_apps(&plan, 10).unwrap();
+        assert_eq!(installed, 2);
+        assert_eq!(runtime.events().len(), 2);
+        assert_eq!(runtime.events()[0].event.seq, 0);
+        assert_eq!(
+            runtime.events()[0].event.event_kind,
+            RUNTIME_EVENT_APP_INSTALLED
+        );
+        assert_eq!(runtime.events()[1].event.seq, 1);
+        assert_eq!(
+            runtime.events()[1].event.event_kind,
+            RUNTIME_EVENT_APP_INSTALLED
+        );
+
+        let installed_again = runtime.install_service_plan_apps(&plan, 20).unwrap();
+        assert_eq!(installed_again, 0);
+        assert_eq!(runtime.events().len(), 2);
     }
 }

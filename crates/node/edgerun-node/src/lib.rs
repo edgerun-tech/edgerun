@@ -20,9 +20,12 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
+pub mod app_model;
 pub mod error;
 #[cfg(feature = "exchange-events")]
 pub mod exchange_events;
+#[cfg(feature = "std")]
+pub mod hardware;
 pub mod logging;
 pub mod mesh_node;
 pub mod resource;

@@ -1,5 +1,3 @@
-use std::process::Command;
-
 fn usage() {
     eprintln!(
         "usage: ec200a-tool <command> [args...]
@@ -15,33 +13,9 @@ Commands:
 }
 
 fn run_at(cmd: &str) -> Result<String, String> {
-    let port = "/dev/ttyUSB1";
-    let sh = format!(
-        r#"python3 -c "
-import serial, time
-ser = serial.Serial('{}', 115200, timeout=0.5)
-ser.write(b'{}\r\n')
-time.sleep(0.3)
-lines = []
-while ser.in_waiting:
-    line = ser.readline().decode('utf-8', errors='replace').strip()
-    if line:
-        lines.append(line)
-        if 'OK' in line or 'ERROR' in line:
-            break
-ser.close()
-for l in lines:
-    print(l)
-" 2>&1"#,
-        port, cmd
-    );
-
-    let output = Command::new("sh")
-        .args(["-c", &sh])
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    Err(format!(
+        "AT execution is runtime-owned; command was not sent: {cmd}"
+    ))
 }
 
 fn test_dta_simulation() -> Result<(), String> {

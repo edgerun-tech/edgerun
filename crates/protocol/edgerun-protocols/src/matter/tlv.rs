@@ -1,5 +1,6 @@
-use crate::prelude::v1::*;
-use edgerun_encoding::byteorder::{read_i32_be, read_i64_be, read_u32_be, read_u64_be};
+//! Matter TLV codec.
+
+use crate::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AnonymousTag;
@@ -139,11 +140,11 @@ impl TlvReader {
         }
     }
 
-    fn read_bytes(&mut self, n: usize) -> Option<Vec<u8>> {
+    fn read_bytes(&mut self, n: usize) -> Option<&[u8]> {
         if self.pos + n <= self.buf.len() {
-            let bytes = self.buf[self.pos..self.pos + n].to_vec();
+            let start = self.pos;
             self.pos += n;
-            Some(bytes)
+            Some(&self.buf[start..start + n])
         } else {
             None
         }
@@ -168,7 +169,7 @@ impl TlvReader {
     pub fn read_i32(&mut self) -> i32 {
         if let (Some(TAG_ANONYMOUS), Some(0x06)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(4) {
-                return read_i32_be(&bytes, 0);
+                return i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             }
         }
         0
@@ -177,7 +178,7 @@ impl TlvReader {
     pub fn read_u32(&mut self) -> u32 {
         if let (Some(TAG_ANONYMOUS), Some(0x0A)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(4) {
-                return read_u32_be(&bytes, 0);
+                return u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             }
         }
         0
@@ -186,7 +187,9 @@ impl TlvReader {
     pub fn read_i64(&mut self) -> i64 {
         if let (Some(TAG_ANONYMOUS), Some(0x07)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(8) {
-                return read_i64_be(&bytes, 0);
+                return i64::from_be_bytes([
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                ]);
             }
         }
         0
@@ -195,7 +198,9 @@ impl TlvReader {
     pub fn read_u64(&mut self) -> u64 {
         if let (Some(TAG_ANONYMOUS), Some(0x0B)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(8) {
-                return read_u64_be(&bytes, 0);
+                return u64::from_be_bytes([
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                ]);
             }
         }
         0
@@ -234,5 +239,12 @@ mod tests {
     fn test_encode_bool() {
         let encoded = encode_bool(true);
         assert!(!encoded.is_empty());
+    }
+
+    #[test]
+    fn test_round_trip_i32() {
+        let encoded = encode_int(1600);
+        let mut reader = TlvReader::new(encoded);
+        assert_eq!(reader.read_i32(), 1600);
     }
 }

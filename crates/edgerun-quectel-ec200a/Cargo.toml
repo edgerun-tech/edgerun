@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Quectel EC200A modem support for Edgerun"
 
 [dependencies]
+edgerun-protocols = { workspace = true, default-features = false, features = ["quectel-ec200a"] }
 
 [[bin]]
 name = "ec200a-tool"

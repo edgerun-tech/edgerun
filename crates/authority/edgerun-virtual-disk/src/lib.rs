@@ -252,7 +252,7 @@ mod tests {
         let cloned = export.clone();
         assert_eq!(export.size_bytes, cloned.size_bytes);
         let debug_str = format!("{export:?}");
-        assert!(debug_str.contains("LinuxNbdNegotiatedExport"));
+        assert!(debug_str.contains("NbdNegotiatedExport"));
     }
 
     #[test]

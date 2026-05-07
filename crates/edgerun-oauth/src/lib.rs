@@ -1,6 +1,6 @@
 //! # edgerun-oauth
 //!
-//! OAuth 2.0 + OpenID Connect (OIDC) client and server library with device flow support.
+//! OAuth 2.0 + OpenID Connect (OIDC) client and middleware helpers.
 //! Zero external dependencies — uses only edgerun-* crates.
 //!
 //! ## Features
@@ -8,8 +8,6 @@
 //! - OAuth 2.0 Authorization Code Flow with PKCE (RFC 6749 + RFC 7636)
 //! - OpenID Connect (OIDC) ID Token parsing and verification
 //! - OIDC Discovery (RFC 8414)
-//! - JWKS endpoint for public key distribution
-//! - Token introspection (RFC 7662)
 //! - File-based token storage with atomic writes
 //! - Async-first API (edgerun-rt runtime)
 //!
@@ -38,26 +36,6 @@
 //! # });
 //! ```
 //!
-//! ## Server Quick Start
-//! ```no_run
-//! use edgerun_oauth::{OAuthServer, ServerConfig};
-//!
-//! # edgerun_rt::block_on(async {
-//! let config = ServerConfig::new("https://auth.example.com", "my-issuer");
-//! let server = OAuthServer::new(config).unwrap();
-//!
-//! // Register a new client
-//! server.register_client("my-app", vec!["openid".into(), "email".into()]);
-//!
-//! // The server exposes these endpoints:
-//! // GET  /.well-known/openid-configuration
-//! // GET  /.well-known/jwks.json
-//! // POST /oauth2/device/code
-//! // POST /oauth2/token
-//! // POST /oauth2/introspect
-//! # });
-//! ```
-
 #![no_std]
 
 extern crate alloc;
@@ -131,19 +109,21 @@ pub mod error {
 
 #[cfg(target_os = "none")]
 pub mod time {
-    pub use edgerun_http::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+    pub use edgerun_http::time::{Duration, Instant};
 }
 
 mod client;
-mod device_state;
 mod discovery;
 mod errors;
 mod jwt;
 mod oauth_client;
 mod pkce;
-mod server;
 mod token_store;
 mod types;
+
+pub fn runtime_now_secs() -> u64 {
+    edgerun_rt::timer::ticks_to_us(edgerun_rt::now()) / 1_000_000
+}
 
 pub use client::{DeviceFlowCallback, OAuthClient};
 pub use discovery::{Jwk, JwksDocument, OidcDiscoveryDocument};
@@ -152,7 +132,6 @@ pub use errors::{DeviceError, OAuthError};
 pub use jwt::{verifier_from_jwk, IdToken, JwtHeader, JwtPayload, JwtVerifier};
 pub use oauth_client::{AutoRefreshMiddleware, BearerTokenMiddleware, OAuthClientBuilder};
 pub use pkce::PkcePair;
-pub use server::{BearerAuthMiddleware, Claims, ClientRegistration, OAuthServer, ServerConfig};
 pub use token_store::{default_token_path, TokenStore};
 
 // Re-export edgerun-http middleware types for convenience

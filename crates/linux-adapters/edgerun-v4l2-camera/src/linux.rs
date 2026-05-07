@@ -283,12 +283,13 @@ pub use core::{ptr, slice};
 
 use crate::prelude::v1::*;
 use edgerun_camera_biometrics::{
-    default_face_biometric_state, validate_liveness_challenge, CameraBiometricError,
-    CameraBiometricPurpose, CameraBiometricReader, CameraCapture, CameraCaptureQuality,
-    CameraEnrollProgress, CameraEnrollmentSession, CameraFrame, CameraLivenessChallenge,
-    CameraLivenessEvidence, CameraLivenessFrameObservation, CameraLivenessResult,
-    CameraPixelFormat, CameraReaderInfo, CameraStreamRole, CameraTemplateRecord,
-    CameraVerification, CameraVerifyRequest, PairedCameraBiometricReader, PairedCameraFrame,
+    default_camera_descriptor, default_face_biometric_state, validate_liveness_challenge,
+    CameraBiometricError, CameraBiometricPurpose, CameraBiometricReader, CameraCapture,
+    CameraCaptureQuality, CameraEnrollProgress, CameraEnrollmentSession, CameraFrame,
+    CameraLivenessChallenge, CameraLivenessEvidence, CameraLivenessFrameObservation,
+    CameraLivenessResult, CameraPixelFormat, CameraReaderInfo, CameraStreamRole,
+    CameraTemplateRecord, CameraVerification, CameraVerifyRequest, PairedCameraBiometricReader,
+    PairedCameraFrame,
 };
 use std::collections::HashMap;
 #[cfg(unix)]
@@ -1787,61 +1788,21 @@ impl PairedCameraBiometricReader for V4l2PairedCameraBiometricReader {
 // ---------------------------------------------------------------------------
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
-use edgerun_protocols::core_protocol::protocol::capability::{
-    CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityRole,
-};
 
 impl CapabilityProvider for V4l2CameraBiometricReader {
     fn descriptor(&self) -> CapabilityDescriptor {
         let instance = self.device.devnode.to_string_lossy().to_string();
-        CapabilityDescriptor {
-            descriptor_version: 1,
-            capability_id: instance.as_bytes().to_vec(),
-            provider_identity: None,
-            provider_node: None,
-            role: CapabilityRole::Input as i32,
-            modalities: vec![CapabilityModality::Visual as i32],
-            event_kinds: vec![CapabilityEventKind::Visual as i32],
-            operations: vec![
-                CapabilityOperation::Query as i32,
-                CapabilityOperation::Capture as i32,
-            ],
-            default_constraints: Vec::new(),
-            provider_name: "v4l2-camera".into(),
-            provider_instance_id: instance,
-            signature: None,
-        }
+        default_camera_descriptor("v4l2-camera", &instance, false)
     }
 }
 
 impl CapabilityProvider for V4l2PairedCameraBiometricReader {
     fn descriptor(&self) -> CapabilityDescriptor {
-        CapabilityDescriptor {
-            descriptor_version: 1,
-            capability_id: self.selection.group_key.as_bytes().to_vec(),
-            provider_identity: None,
-            provider_node: None,
-            role: CapabilityRole::Input as i32,
-            modalities: {
-                let mut mods = vec![CapabilityModality::Visual as i32];
-                if self.selection.infrared.is_some() {
-                    mods.push(CapabilityModality::Biometric as i32);
-                }
-                mods
-            },
-            event_kinds: vec![
-                CapabilityEventKind::Visual as i32,
-                CapabilityEventKind::Biometric as i32,
-            ],
-            operations: vec![
-                CapabilityOperation::Query as i32,
-                CapabilityOperation::Capture as i32,
-            ],
-            default_constraints: Vec::new(),
-            provider_name: "v4l2-camera".into(),
-            provider_instance_id: self.selection.group_key.clone(),
-            signature: None,
-        }
+        default_camera_descriptor(
+            "v4l2-camera",
+            &self.selection.group_key,
+            self.selection.infrared.is_some(),
+        )
     }
 }
 

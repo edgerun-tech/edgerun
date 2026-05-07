@@ -25,17 +25,14 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use compiled_deployment::{CompiledDeployment, DEPLOYMENT};
-use edgerun_acme::DnsChallenge;
-use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig};
-use edgerun_http::server::HttpServer;
-use edgerun_http::{into_handler_async, Handler, Request, Response, StatusCode};
+use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig, Dns01Challenge};
 use edgerun_node::rt::{sleep, CancellationToken, Runtime};
-use edgerun_node::runtime::RuntimeServicePlan;
+use edgerun_node::runtime::{MemoryRuntimeStorage, RuntimeKernel, RuntimeServicePlan};
 use edgerun_node::services::dns_runtime::{
     DnsRuntime as DnsServer, DnsRuntimeConfig as DnsServerConfig,
 };
 use edgerun_node::services::{ImapConfig, NodeRuntime, SmtpConfig};
-use edgerun_protocols::dns::DnsZone;
+use edgerun_protocols::dns::{record::DnsRecordType, DnsZone};
 use edgerun_protocols::email_auth::sign::DkimSigner;
 use edgerun_protocols::sign_p256::P256ProtocolSigner;
 use edgerun_tls::certificate::Certificate;
@@ -352,136 +349,6 @@ fn load_tls_cert(deployment: &CompiledDeployment) -> Option<CertificateAndKey> {
     }
 }
 
-// ===========================================================================
-// HTTP handler for MTA-STS and compiled website routes
-// ===========================================================================
-
-struct CompiledHttpApp;
-
-impl Handler for CompiledHttpApp {
-    fn handle(
-        &self,
-        req: Request,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
-        let host = req
-            .uri()
-            .host()
-            .unwrap_or(DEPLOYMENT.origin)
-            .to_ascii_lowercase();
-        let host = host.trim_end_matches('.').to_string();
-        let path = req.uri().path().to_string();
-
-        Box::pin(async move {
-            if path == "/admin" || path == "/admin/" || path == "/admin/index.html" {
-                return Response::html(StatusCode::new(200).unwrap(), admin_index_html())
-                    .with_header("Cache-Control", "no-store");
-            }
-
-            if path == "/admin/app.css" {
-                return Response::new(StatusCode::new(200).unwrap())
-                    .with_header("Content-Type", "text/css; charset=utf-8")
-                    .with_header("Cache-Control", "no-store")
-                    .with_body(admin_css().as_bytes().to_vec());
-            }
-
-            for domain in DEPLOYMENT.domains {
-                let mta_sts_host = format!("mta-sts.{}", domain.domain);
-                if host == mta_sts_host && path == "/.well-known/mta-sts.txt" {
-                    let policy = format!(
-                        "version: STSv1\nmode: enforce\nmx: {}\nmax_age: 604800\n",
-                        DEPLOYMENT.mail_host_for_domain(domain.domain)
-                    );
-                    return Response::new(StatusCode::new(200).unwrap())
-                        .with_header("Content-Type", "text/plain; charset=utf-8")
-                        .with_body(policy.into_bytes());
-                }
-
-                if let Some(site) = domain.website {
-                    if host == site.domain && (path == "/" || path == "/index.html") {
-                        let body = format!(
-                            "edgerun online\n\ndomain={}\nrepo={}\nref={}\npath={}\ncontroller={}\nnode={}\n",
-                            site.domain,
-                            site.repo,
-                            site.commit,
-                            site.path,
-                            hex_bytes(&DEPLOYMENT.policy.controller_id),
-                            DEPLOYMENT.policy.node_label,
-                        );
-                        return Response::new(StatusCode::new(200).unwrap())
-                            .with_header("Content-Type", "text/plain; charset=utf-8")
-                            .with_body(body.into_bytes());
-                    }
-                }
-            }
-
-            Response::not_found()
-        })
-    }
-}
-
-fn admin_index_html() -> &'static str {
-    r#"<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Edgerun Admin</title>
-<link rel="stylesheet" href="/admin/app.css">
-</head>
-<body>
-<main>
-  <section class="top">
-    <div>
-      <p class="eyebrow">edgerun node</p>
-      <h1>Runtime</h1>
-    </div>
-    <span class="state">online</span>
-  </section>
-  <section class="grid">
-    <article>
-      <p>Node</p>
-      <strong>edgerun-tech-main-server</strong>
-    </article>
-    <article>
-      <p>Origin</p>
-      <strong>edgerun.tech</strong>
-    </article>
-    <article>
-      <p>HTTP</p>
-      <strong>0.0.0.0:80</strong>
-    </article>
-    <article>
-      <p>DNS</p>
-      <strong>0.0.0.0:53</strong>
-    </article>
-    <article>
-      <p>SMTP</p>
-      <strong>0.0.0.0:25</strong>
-    </article>
-    <article>
-      <p>IMAP</p>
-      <strong>0.0.0.0:143</strong>
-    </article>
-  </section>
-  <section class="panel">
-    <h2>Storage</h2>
-    <dl>
-      <div><dt>Runtime root</dt><dd>/var/lib/edgerun/.edgerun</dd></div>
-      <div><dt>Maildir</dt><dd>/var/lib/edgerun/mail/maildirs</dd></div>
-      <div><dt>Queue</dt><dd>/var/lib/edgerun/mail/queue</dd></div>
-      <div><dt>Derived DB</dt><dd>/var/lib/edgerun/.edgerun/runtime.edb</dd></div>
-    </dl>
-  </section>
-</main>
-</body>
-</html>
-"#
-}
-
-fn admin_css() -> &'static str {
-    r#"*{box-sizing:border-box}body{margin:0;background:#f7f7f4;color:#161616;font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1120px;margin:0 auto;padding:32px 20px 48px}.top{display:flex;align-items:end;justify-content:space-between;border-bottom:1px solid #d9d8d1;padding-bottom:18px}.eyebrow{margin:0 0 6px;color:#61615b;text-transform:uppercase;font-size:12px}h1{margin:0;font-size:34px;line-height:1.05;font-weight:720}h2{margin:0 0 16px;font-size:18px}.state{display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border:1px solid #1f7a45;background:#e7f6ec;color:#155b32;border-radius:4px;font-weight:650}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:22px 0}.grid article,.panel{background:#fff;border:1px solid #deddd6;border-radius:6px}.grid article{padding:16px;min-width:0}.grid p{margin:0 0 7px;color:#66665f}.grid strong{display:block;overflow-wrap:anywhere;font-size:17px}.panel{padding:18px}dl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0}dl div{border-top:1px solid #ecebe5;padding-top:12px;min-width:0}dt{color:#66665f;margin-bottom:4px}dd{margin:0;font-weight:620;overflow-wrap:anywhere}@media (max-width:760px){main{padding:22px 14px}.top{align-items:start}.grid,dl{grid-template-columns:1fr}h1{font-size:28px}}"#
-}
-
 fn hex_bytes(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
@@ -591,7 +458,7 @@ async fn provision_certs(
     edgerun_node::node_info!("ACME: creating order for {:?}", domains);
     let order = client.create_order(domains).await?;
 
-    let mut active_challenges: Vec<(String, DnsChallenge)> = Vec::new();
+    let mut active_challenges: Vec<(String, Dns01Challenge)> = Vec::new();
 
     for authz_url in order.authorization_urls() {
         let authz = client.get_authorization(authz_url).await?;
@@ -612,10 +479,10 @@ async fn provision_certs(
 
         let token = challenge.token.as_deref().unwrap_or("");
         let domain = authz.identifier.value.clone();
-        let dns_ch = DnsChallenge::new(&domain, token, account_key);
+        let dns_ch = Dns01Challenge::new(&domain, token, &account_key.thumbprint_b64());
         edgerun_node::node_info!("ACME: adding TXT record {}", dns_ch.record_name());
 
-        dns_ch.add_to_zone(base_zone);
+        base_zone.add_txt(dns_ch.record_name(), dns_ch.record_value(), 60);
         dns_server.add_zone(base_zone.clone()).await;
         active_challenges.push((domain.clone(), dns_ch));
 
@@ -645,7 +512,7 @@ async fn provision_certs(
     }
 
     for (_, ch) in &active_challenges {
-        ch.remove_from_zone(base_zone);
+        base_zone.remove_record(ch.record_name(), DnsRecordType::TXT);
     }
     if !active_challenges.is_empty() {
         dns_server.add_zone(base_zone.clone()).await;
@@ -1008,13 +875,27 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         hex_bytes(&bootstrap_identity.node_id)
     );
     let runtime_config = DEPLOYMENT.to_wire_config();
-    let service_plan = RuntimeServicePlan::from_deployment(&runtime_config);
+    let hardware_inventory = edgerun_node::hardware::HardwareInventory::discover();
+    let provider_developer_id = edgerun_node::runtime::sha256(&bootstrap_identity.node_id);
+    let service_plan =
+        hardware_inventory.runtime_service_plan(&runtime_config, provider_developer_id);
     edgerun_node::node_info!(
-        "runtime service plan: listeners={} dns={} acme={} mail_domains={}",
+        "runtime service plan: listeners={} dns={} acme={} mail_domains={} apps={} hardware_capabilities={}",
         service_plan.listeners.len(),
         service_plan.requires_dns(),
         service_plan.requires_acme(),
-        service_plan.mail_domains().len()
+        service_plan.mail_domains().len(),
+        service_plan.apps.len(),
+        hardware_inventory.capability_descriptors.len()
+    );
+    let mut runtime_kernel =
+        RuntimeKernel::new(MemoryRuntimeStorage::default(), service_plan.runtime_id);
+    let installed_apps =
+        runtime_kernel.install_service_plan_apps(&service_plan, unix_now_ms() as u64)?;
+    edgerun_node::node_info!(
+        "runtime app install events committed: apps={} events={}",
+        installed_apps,
+        runtime_kernel.events().len()
     );
 
     let dkim_signer = load_dkim_signer(&DEPLOYMENT);
@@ -1075,36 +956,9 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tls_cert: tls_cert.clone(),
     };
 
-    let http_handler = into_handler_async(|req| {
-        let app = CompiledHttpApp;
-        async move { app.handle(req).await }
-    });
-
-    let http_server = HttpServer::new(http_handler)
-        .bind("0.0.0.0:80")
-        .await
-        .map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e.to_string(),
-            )) as Box<dyn std::error::Error + Send + Sync>
-        })?;
-
-    let http_task = edgerun_node::rt::spawn(async move {
-        edgerun_node::node_info!("HTTP serve task starting");
-        match http_server.serve().await {
-            Ok(()) => edgerun_node::node_info!("HTTP serve task stopped"),
-            Err(e) => edgerun_node::node_error!("HTTP serve task failed: {}", e),
-        }
-    });
-    edgerun_node::node_info!(
-        "HTTP serve task queued (finished: {}, pending: {}, runs: {})",
-        http_task.is_finished(),
-        edgerun_node::rt::pending(),
-        edgerun_node::rt::runs()
-    );
-
+    let http_app_id = edgerun_node::runtime::sha256(b"compiled-http-app");
     let mut server = NodeRuntime::new()
+        .with_http_app("0.0.0.0:80", http_app_id)
         .with_smtp(smtp_config)
         .with_imap(imap_config);
     let mut bound = server.build().await?;
@@ -1170,7 +1024,6 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     shutdown.cancel();
     dns_server.shutdown().await;
     let _ = server_task.await;
-    let _ = http_task.await;
     let _ = dns_task.await;
 
     edgerun_node::node_info!("edgerun-server stopped");

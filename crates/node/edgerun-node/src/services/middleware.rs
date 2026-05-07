@@ -34,7 +34,7 @@
 //!
 //! let server = NodeRuntime::new()
 //!     .with_connection_middleware(IpFilter { allowed: vec!["10.0.0.0/8".parse().unwrap()] })
-//!     .with_http(handler, "0.0.0.0:8080")
+//!     .with_http_app("0.0.0.0:8080", [7; 32])
 //!     .build()
 //!     .await?;
 //! ```
@@ -468,34 +468,5 @@ impl ConnectionMiddleware for MiddlewareAdapter {
         next: NextConnection,
     ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
         self.0.on_connect(peer, stream, next)
-    }
-}
-
-// ===========================================================================
-// ConnectionInterceptor Adapter — wraps node middleware for email protocol
-// servers when those protocol features are enabled.
-// ===========================================================================
-
-#[cfg(any(feature = "imap", feature = "smtp", feature = "lmtp"))]
-pub struct ConnectionInterceptorAdapter {
-    handler: Arc<dyn ConnectionHandler>,
-}
-
-#[cfg(any(feature = "imap", feature = "smtp", feature = "lmtp"))]
-impl ConnectionInterceptorAdapter {
-    pub fn new(handler: Arc<dyn ConnectionHandler>) -> Self {
-        Self { handler }
-    }
-}
-
-#[cfg(any(feature = "imap", feature = "smtp", feature = "lmtp"))]
-impl edgerun_email::server::ConnectionInterceptor for ConnectionInterceptorAdapter {
-    fn intercept(
-        &self,
-        peer: SocketAddr,
-        stream: Arc<AsyncTcpStream>,
-    ) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + '_>> {
-        let handler = Arc::clone(&self.handler);
-        Box::pin(async move { handler.handle(peer, stream).await })
     }
 }

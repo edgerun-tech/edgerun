@@ -14,15 +14,20 @@ edgerun-core = { version = "0.1", path = "../edgerun-core", default-features = f
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false, optional = true }
 edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false, optional = true }
+edgerun-url = { version = "0.1", path = "../../utility/edgerun-url", default-features = false, optional = true }
 edgerun-wire = { version = "0.1", path = "../edgerun-wire", default-features = false, optional = true }
 miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"], optional = true }
 
 [features]
 default = []
+acme = ["dep:edgerun-crypto", "dep:edgerun-encoding", "dep:edgerun-json", "dep:edgerun-url"]
+block = ["dep:edgerun-encoding", "wire"]
 core = ["dep:edgerun-core"]
 ed25519 = ["dep:edgerun-crypto", "edgerun-crypto/ed25519"]
 proxy = []
 pxe = []
+quectel-ec200a = []
+dbus = ["dep:edgerun-encoding"]
 dhcp = ["dep:edgerun-encoding"]
 dhcpv6 = ["dep:edgerun-encoding"]
 dns = ["dep:edgerun-encoding"]
@@ -35,17 +40,25 @@ http3 = ["http", "dep:edgerun-encoding"]
 imap = ["dep:edgerun-encoding"]
 keygen = ["sign-p256"]
 lmtp = ["smtp"]
+matter = []
+nbd = ["block"]
+ndef = []
 node-bootstrap = ["keygen", "sign-p256", "verify"]
 oci = ["dep:edgerun-json"]
+oauth = ["dep:edgerun-crypto", "dep:edgerun-encoding"]
 quic = ["tls"]
 seal = ["keygen", "dep:edgerun-crypto", "edgerun-crypto/aead"]
 sign = ["verify"]
 sign-p256 = ["sign"]
 smtp = ["dep:edgerun-encoding"]
+ssh = []
 tls = ["dep:edgerun-crypto", "dep:edgerun-encoding"]
+tcl-ac = ["dep:edgerun-crypto"]
 tsig = ["dns", "dep:edgerun-crypto", "dep:edgerun-encoding", "edgerun-crypto/hmac"]
 tftp = ["dep:edgerun-encoding"]
+tuya = ["dep:edgerun-crypto", "dep:edgerun-encoding", "dep:edgerun-json", "edgerun-crypto/aead", "edgerun-crypto/hmac"]
 verify = ["core"]
+wifi = []
 wire = ["dep:edgerun-wire"]
 
 [lints]

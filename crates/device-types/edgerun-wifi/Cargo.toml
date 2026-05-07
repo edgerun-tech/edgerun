@@ -10,6 +10,7 @@ description = "Wi-Fi capability abstractions for Edgerun"
 
 [dependencies]
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
+edgerun-protocols = { workspace = true, default-features = false, features = ["wifi"] }
 
 [lints]
 workspace = true

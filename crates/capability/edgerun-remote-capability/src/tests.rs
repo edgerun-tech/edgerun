@@ -485,6 +485,20 @@ struct DummyPairedCameraDevice {
     captures: VecDeque<PairedCameraFrame>,
 }
 
+impl edgerun_capabilities::CapabilityProvider for DummyPairedCameraDevice {
+    fn descriptor(&self) -> CapabilityDescriptor {
+        capability_descriptor(
+            "dummy-camera",
+            "paired",
+            CapabilityRole::Input,
+            &[CapabilityModality::Visual, CapabilityModality::Biometric],
+            &[CapabilityEventKind::Visual, CapabilityEventKind::Biometric],
+            &[CapabilityOperation::Capture],
+            Vec::new(),
+        )
+    }
+}
+
 impl PairedCameraBiometricReader for DummyPairedCameraDevice {
     fn supported_stream_roles(&self) -> Result<Vec<CameraStreamRole>, CameraBiometricError> {
         Ok(vec![CameraStreamRole::Rgb, CameraStreamRole::Infrared])

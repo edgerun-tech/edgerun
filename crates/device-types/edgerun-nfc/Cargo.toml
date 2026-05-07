@@ -10,6 +10,7 @@ description = "NFC capability abstractions for Edgerun"
 
 [dependencies]
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
+edgerun-protocols = { workspace = true, default-features = false, features = ["ndef"] }
 
 [lints]
 workspace = true

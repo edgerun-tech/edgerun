@@ -3,71 +3,7 @@
 use crate::oauth_client::percent_encode;
 use crate::prelude::*;
 use edgerun_json::{from_str, to_string, JsonValue};
-
-// ---------------------------------------------------------------------------
-// Scope
-// ---------------------------------------------------------------------------
-
-/// An OAuth 2.0 / OIDC scope string.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Scope(pub String);
-
-impl Scope {
-    pub fn openid() -> Self {
-        Scope("openid".into())
-    }
-    pub fn email() -> Self {
-        Scope("email".into())
-    }
-    pub fn profile() -> Self {
-        Scope("profile".into())
-    }
-    pub fn offline_access() -> Self {
-        Scope("offline_access".into())
-    }
-
-    /// Parse a space-separated scope string into a list of scopes.
-    pub fn parse_list(s: &str) -> Vec<Self> {
-        s.split_whitespace().map(|s| Scope(s.to_string())).collect()
-    }
-
-    /// Format scopes as a space-separated string (for use in URL params).
-    pub fn format_list(scopes: &[Self]) -> String {
-        scopes
-            .iter()
-            .map(|s| s.0.as_str())
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Grant types
-// ---------------------------------------------------------------------------
-
-/// OAuth 2.0 grant type.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum GrantType {
-    /// Device Authorization Grant (RFC 8628)
-    DeviceCode,
-    /// Authorization Code Flow with PKCE
-    AuthorizationCode { code: String, redirect_uri: String },
-    /// Refresh Token
-    RefreshToken { refresh_token: String },
-    /// Client Credentials
-    ClientCredentials,
-}
-
-impl GrantType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            GrantType::DeviceCode => "urn:ietf:params:oauth:grant-type:device_code",
-            GrantType::AuthorizationCode { .. } => "authorization_code",
-            GrantType::RefreshToken { .. } => "refresh_token",
-            GrantType::ClientCredentials => "client_credentials",
-        }
-    }
-}
+pub use edgerun_protocols::oauth::types::{GrantType, Scope};
 
 // ---------------------------------------------------------------------------
 // Client configuration
@@ -157,21 +93,15 @@ pub struct Credentials {
 }
 
 impl Credentials {
-    /// Check if the access token is present and not expired.
-    pub fn is_valid(&self) -> bool {
-        self.access_token.is_some() && !self.is_expired(0)
+    /// Check if the access token is present and not expired at `now_secs`.
+    pub fn is_valid_at(&self, now_secs: u64) -> bool {
+        self.access_token.is_some() && !self.is_expired_at(now_secs, 0)
     }
 
-    /// Check if the access token is expired (with grace period in seconds).
-    pub fn is_expired(&self, grace_secs: u64) -> bool {
+    /// Check if the access token is expired at `now_secs` with grace period in seconds.
+    pub fn is_expired_at(&self, now_secs: u64, grace_secs: u64) -> bool {
         match self.expiry_date {
-            Some(expiry) => {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-                now + grace_secs >= expiry
-            }
+            Some(expiry) => now_secs + grace_secs >= expiry,
             None => true,
         }
     }
@@ -310,18 +240,14 @@ impl TokenResponse {
         to_string(&val).unwrap_or_else(|_| "{}".into())
     }
 
-    /// Convert to `Credentials`.
-    pub fn into_credentials(self) -> Credentials {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+    /// Convert to `Credentials` using runtime-provided `now_secs`.
+    pub fn into_credentials_at(self, now_secs: u64) -> Credentials {
         Credentials {
             access_token: self.access_token,
             refresh_token: self.refresh_token,
             id_token: self.id_token,
             token_type: self.token_type,
-            expiry_date: self.expires_in.map(|e| now + e),
+            expiry_date: self.expires_in.map(|e| now_secs + e),
             scope: self.scope,
         }
     }
@@ -483,10 +409,7 @@ mod tests {
 
     #[test]
     fn test_credentials_validity() {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        let now = 1_000;
 
         let valid = Credentials {
             access_token: Some("tok".into()),
@@ -496,23 +419,24 @@ mod tests {
             expiry_date: Some(now + 3600),
             scope: None,
         };
-        assert!(valid.is_valid());
-        assert!(!valid.is_expired(0));
+        assert!(valid.is_valid_at(now));
+        assert!(!valid.is_expired_at(now, 0));
         assert_eq!(valid.bearer_token(), Some("tok"));
     }
 
     #[test]
     fn test_credentials_expired() {
+        let now = 1_000;
         let expired = Credentials {
             access_token: Some("tok".into()),
             refresh_token: None,
             id_token: None,
             token_type: None,
-            expiry_date: Some(100),
+            expiry_date: Some(now - 1),
             scope: None,
         };
-        assert!(!expired.is_valid());
-        assert!(expired.is_expired(0));
+        assert!(!expired.is_valid_at(now));
+        assert!(expired.is_expired_at(now, 0));
     }
 
     #[test]
@@ -525,7 +449,7 @@ mod tests {
             expiry_date: Some(9999999999),
             scope: None,
         };
-        assert!(!no_token.is_valid());
+        assert!(!no_token.is_valid_at(0));
     }
 
     #[test]

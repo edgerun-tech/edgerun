@@ -10,7 +10,14 @@ use edgerun_bluetooth_gatt::sync::RwLock;
 use edgerun_bluetooth_gatt::{format_gatt_uuid, AttProtocol, GattError, L2capSocket};
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
 use edgerun_crypto::aes::{Aes128, AES_BLOCK_SIZE};
-use edgerun_crypto::{hmac_sha256, sha256, OsRng, RngCore};
+use edgerun_crypto::{hmac_sha256, OsRng, RngCore};
+use edgerun_protocols::tcl_ac::{
+    build_protocol_packet, calculate_crc8, expected_protocol_packet_len, full_control_payload,
+    parse_protocol_packet, parse_state_response, CMD_GET_DEVICE_INFO, CMD_GET_DEVICE_INFO_RESPONSE,
+    CMD_SEND_APP_RANDOM, CMD_SEND_DEVICE_RANDOM, CMD_SEND_WIFI_INFO, CMD_STATUS_REPORT_RESPONSE,
+    PROTOCOL_HEAD,
+};
+pub use edgerun_protocols::tcl_ac::{AcMode, AcState, FanSpeed, WindDirection};
 #[cfg(not(target_os = "none"))]
 use std::sync::RwLock;
 
@@ -23,16 +30,6 @@ pub const TCL_LEGACY_INDICATE_CHAR_UUID: &str = "0000f102-0000-1000-8000-00805f9
 
 const BASE_KEY: &[u8; 16] = b"p7#z9@L2!c5%v1&k";
 const PRESET_IV: &[u8; 16] = b"GjVEI7lQ382O7Ua0";
-const PROTOCOL_HEAD: u8 = 0xBB;
-const PROTOCOL_HEADER_LEN: usize = 37;
-
-const CMD_SEND_APP_RANDOM: u8 = 16;
-const CMD_SEND_DEVICE_RANDOM: u8 = 17;
-const CMD_SEND_WIFI_INFO: u8 = 18;
-const CMD_STATUS_REPORT_RESPONSE: u8 = 21;
-const CMD_GET_DEVICE_INFO: u8 = 22;
-const CMD_GET_DEVICE_INFO_RESPONSE: u8 = 23;
-
 #[cfg(not(target_os = "none"))]
 fn sleep_ms(ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(ms));
@@ -40,117 +37,6 @@ fn sleep_ms(ms: u64) {
 
 #[cfg(target_os = "none")]
 fn sleep_ms(_ms: u64) {}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AcMode {
-    Cool,
-    Heat,
-    Auto,
-    Dry,
-    Fan,
-    Eco,
-    Unknown,
-}
-
-impl AcMode {
-    pub fn from_u8(val: u8) -> Self {
-        match val {
-            0 => Self::Cool,
-            1 => Self::Heat,
-            2 => Self::Auto,
-            3 => Self::Dry,
-            4 => Self::Fan,
-            5 => Self::Eco,
-            _ => Self::Unknown,
-        }
-    }
-
-    pub fn to_u8(&self) -> u8 {
-        match self {
-            Self::Cool => 0,
-            Self::Heat => 1,
-            Self::Auto => 2,
-            Self::Dry => 3,
-            Self::Fan => 4,
-            Self::Eco => 5,
-            Self::Unknown => 0xff,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FanSpeed {
-    Auto,
-    Low,
-    Medium,
-    High,
-    Turbo,
-    Quiet,
-    Unknown,
-}
-
-impl FanSpeed {
-    pub fn from_u8(val: u8) -> Self {
-        match val {
-            0 => Self::Auto,
-            1 => Self::Low,
-            2 => Self::Medium,
-            3 => Self::High,
-            4 => Self::Turbo,
-            5 => Self::Quiet,
-            _ => Self::Unknown,
-        }
-    }
-
-    pub fn to_u8(&self) -> u8 {
-        match self {
-            Self::Auto => 0,
-            Self::Low => 1,
-            Self::Medium => 2,
-            Self::High => 3,
-            Self::Turbo => 4,
-            Self::Quiet => 5,
-            Self::Unknown => 0xff,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WindDirection {
-    Fixed,
-    Swing,
-    Auto,
-    Unknown,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AcState {
-    pub power: bool,
-    pub temperature: i8,
-    pub mode: AcMode,
-    pub fan_speed: FanSpeed,
-    pub wind_direction: WindDirection,
-    pub eco_mode: bool,
-    pub turbo_mode: bool,
-    pub quiet_mode: bool,
-    pub light_enabled: bool,
-}
-
-impl Default for AcState {
-    fn default() -> Self {
-        Self {
-            power: false,
-            temperature: 24,
-            mode: AcMode::Cool,
-            fan_speed: FanSpeed::Auto,
-            wind_direction: WindDirection::Fixed,
-            eco_mode: false,
-            turbo_mode: false,
-            quiet_mode: false,
-            light_enabled: true,
-        }
-    }
-}
 
 struct SessionKeys {
     session_key: [u8; 16],
@@ -364,26 +250,25 @@ impl TclAcClient {
         OsRng.fill_bytes(&mut local_random);
 
         let encrypted_random = self.encrypt_payload(&local_random);
-        let send_data = self.build_protocol_packet(CMD_SEND_APP_RANDOM, &encrypted_random);
+        let send_data = build_protocol_packet(CMD_SEND_APP_RANDOM, &encrypted_random);
 
         let mut proto = self.create_protocol()?;
         proto.write_cmd(write_handle, &send_data)?;
 
         let response = self.wait_for_protocol_packet(3000)?;
 
-        let parsed = self
-            .parse_protocol_packet(&response)
-            .ok_or_else(|| CapabilityError::Provider("invalid key exchange response".into()))?;
+        let parsed = parse_protocol_packet(&response)
+            .map_err(|_| CapabilityError::Provider("invalid key exchange response".into()))?;
 
-        if parsed.0 != CMD_SEND_DEVICE_RANDOM {
+        if parsed.command != CMD_SEND_DEVICE_RANDOM {
             return Err(CapabilityError::Provider(format!(
                 "unexpected response cmd: {}",
-                parsed.0
+                parsed.command
             )));
         }
 
         let decrypted = self
-            .decrypt_payload(&parsed.1)
+            .decrypt_payload(&parsed.payload)
             .ok_or_else(|| CapabilityError::Provider("failed to decrypt remote random".into()))?;
 
         if decrypted.len() != 32 {
@@ -414,54 +299,6 @@ impl TclAcClient {
         let key = session.as_ref().map(|s| &s.session_key).unwrap_or(BASE_KEY);
 
         aes128_cbc_decrypt_pkcs7(key, PRESET_IV, payload)
-    }
-
-    fn build_protocol_packet(&self, cmd: u8, payload: &[u8]) -> Vec<u8> {
-        let payload_len = payload.len();
-        let total_len = payload_len + PROTOCOL_HEADER_LEN;
-
-        let mut packet = vec![0u8; total_len];
-        packet[0] = PROTOCOL_HEAD;
-        packet[1] = cmd;
-        packet[2] = ((payload_len >> 8) & 0xFF) as u8;
-        packet[3] = (payload_len & 0xFF) as u8;
-        packet[4..4 + payload_len].copy_from_slice(payload);
-
-        let sha = sha256(payload);
-        packet[4 + payload_len..4 + payload_len + 32].copy_from_slice(&sha);
-
-        let crc = Self::calculate_crc8(&packet[..total_len - 1]);
-        packet[total_len - 1] = crc;
-
-        packet
-    }
-
-    fn parse_protocol_packet(&self, data: &[u8]) -> Option<(u8, Vec<u8>)> {
-        if data.len() < PROTOCOL_HEADER_LEN || data[0] != PROTOCOL_HEAD {
-            return None;
-        }
-
-        let cmd = data[1];
-        let payload_len = ((data[2] as usize) << 8) | (data[3] as usize);
-        let expected_total = payload_len + PROTOCOL_HEADER_LEN;
-
-        if data.len() != expected_total {
-            return None;
-        }
-
-        let mut payload = vec![0u8; payload_len];
-        payload.copy_from_slice(&data[4..4 + payload_len]);
-
-        let crc = Self::calculate_crc8(&data[..data.len() - 1]);
-        if crc != data[data.len() - 1] {
-            return None;
-        }
-        let sha = sha256(&payload);
-        if sha.as_slice() != &data[4 + payload_len..4 + payload_len + 32] {
-            return None;
-        }
-
-        Some((cmd, payload))
     }
 
     fn wait_for_protocol_packet(&self, timeout_ms: i32) -> Result<Vec<u8>, CapabilityError> {
@@ -510,28 +347,14 @@ impl TclAcClient {
             }
             payload.extend_from_slice(&value);
             if payload.len() >= 4 && payload[0] == PROTOCOL_HEAD {
-                let expected =
-                    (((payload[2] as usize) << 8) | payload[3] as usize) + PROTOCOL_HEADER_LEN;
+                let Some(expected) = expected_protocol_packet_len(&payload) else {
+                    continue;
+                };
                 if payload.len() == expected {
                     return Ok(payload);
                 }
             }
         }
-    }
-
-    fn calculate_crc8(data: &[u8]) -> u8 {
-        let mut crc: u8 = 0;
-        for &byte in data {
-            crc ^= byte;
-            for _ in 0..8 {
-                crc = if crc & 0x80 != 0 {
-                    (crc << 1) ^ 0x07
-                } else {
-                    crc << 1
-                };
-            }
-        }
-        crc
     }
 
     pub fn disconnect(&self) -> Result<(), CapabilityError> {
@@ -558,7 +381,7 @@ impl TclAcClient {
         };
 
         let encrypted = self.encrypt_payload(payload);
-        let packet = self.build_protocol_packet(cmd, &encrypted);
+        let packet = build_protocol_packet(cmd, &encrypted);
 
         let mut proto = self.create_protocol_gatt()?;
         proto.write_cmd(write_handle, &packet).map_err(Into::into)
@@ -649,19 +472,18 @@ impl TclAcClient {
 
         let response = self.wait_for_protocol_packet(3000)?;
 
-        let parsed = self
-            .parse_protocol_packet(&response)
-            .ok_or_else(|| CapabilityError::Provider("invalid device info response".into()))?;
+        let parsed = parse_protocol_packet(&response)
+            .map_err(|_| CapabilityError::Provider("invalid device info response".into()))?;
 
-        if parsed.0 != CMD_GET_DEVICE_INFO_RESPONSE {
+        if parsed.command != CMD_GET_DEVICE_INFO_RESPONSE {
             return Err(CapabilityError::Provider(format!(
                 "unexpected response cmd: {}",
-                parsed.0
+                parsed.command
             )));
         }
 
         let decrypted = self
-            .decrypt_payload(&parsed.1)
+            .decrypt_payload(&parsed.payload)
             .ok_or_else(|| CapabilityError::Provider("failed to decrypt device info".into()))?;
 
         String::from_utf8(decrypted)
@@ -856,52 +678,19 @@ impl TclAcClient {
         let mut proto = self.create_protocol()?;
         let data = proto.read_value(char_handle.unwrap())?;
 
-        let parsed = self.parse_protocol_packet(&data);
+        let parsed = parse_protocol_packet(&data).ok();
 
-        if let Some((cmd, encrypted_payload)) = parsed {
-            if cmd == CMD_STATUS_REPORT_RESPONSE || cmd == CMD_GET_DEVICE_INFO_RESPONSE {
-                if let Some(decrypted) = self.decrypt_payload(&encrypted_payload) {
-                    return Ok(self.parse_state_from_response(&decrypted));
+        if let Some(parsed) = parsed {
+            if parsed.command == CMD_STATUS_REPORT_RESPONSE
+                || parsed.command == CMD_GET_DEVICE_INFO_RESPONSE
+            {
+                if let Some(decrypted) = self.decrypt_payload(&parsed.payload) {
+                    return Ok(parse_state_response(&decrypted));
                 }
             }
         }
 
-        Ok(self.parse_state_from_response(&data))
-    }
-
-    fn parse_state_from_response(&self, data: &[u8]) -> AcState {
-        let mut state = AcState::default();
-
-        if data.is_empty() {
-            return state;
-        }
-
-        if !data.is_empty() {
-            state.power = data[0] == 0x01;
-        }
-        if data.len() >= 2 {
-            state.temperature = data[1] as i8;
-        }
-        if data.len() >= 3 {
-            state.mode = AcMode::from_u8(data[2]);
-        }
-        if data.len() >= 4 {
-            state.fan_speed = FanSpeed::from_u8(data[3]);
-        }
-        if data.len() >= 5 {
-            state.wind_direction = match data[4] {
-                0 => WindDirection::Fixed,
-                1 => WindDirection::Swing,
-                _ => WindDirection::Auto,
-            };
-        }
-        if data.len() >= 6 {
-            state.eco_mode = (data[5] & 0x01) != 0;
-            state.turbo_mode = (data[5] & 0x02) != 0;
-            state.quiet_mode = (data[5] & 0x04) != 0;
-        }
-
-        state
+        Ok(parse_state_response(&data))
     }
 
     pub fn set_power(&self, on: bool) -> Result<(), CapabilityError> {
@@ -946,33 +735,7 @@ impl TclAcClient {
     }
 
     pub fn full_control(&self, state: &AcState) -> Result<(), CapabilityError> {
-        let mut payload = vec![
-            0x10,
-            if state.power { 0x01 } else { 0x00 },
-            state.temperature as u8,
-            state.mode.to_u8(),
-            state.fan_speed.to_u8(),
-        ];
-
-        let mut flags = 0u8;
-        if state.eco_mode {
-            flags |= 0x01;
-        }
-        if state.turbo_mode {
-            flags |= 0x02;
-        }
-        if state.quiet_mode {
-            flags |= 0x04;
-        }
-
-        payload.push(flags);
-        payload.push(match state.wind_direction {
-            WindDirection::Swing => 0x01,
-            WindDirection::Fixed => 0x00,
-            WindDirection::Auto => 0x02,
-            WindDirection::Unknown => 0x00,
-        });
-
+        let payload = full_control_payload(state);
         self.send_encrypted_command(CMD_SEND_WIFI_INFO, &payload)
     }
 
@@ -1167,7 +930,7 @@ mod tests {
     #[test]
     fn crc8_calculation() {
         let data = [0xBB, 0x10, 0x00, 0x20];
-        let crc = TclAcClient::calculate_crc8(&data);
+        let crc = calculate_crc8(&data);
         assert_eq!(crc, 0x50);
     }
 

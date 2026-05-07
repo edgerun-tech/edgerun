@@ -56,6 +56,8 @@ pub fn cmd_status(path: &PathBuf) {
     // Hardware inventory
     println!();
     println!("Hardware Inventory:");
-    let hw = crate::hardware::HardwareInventory::discover();
+    let hw = edgerun_node::hardware::HardwareInventory::discover();
     println!("{}", hw.summary());
+    let provider_apps = hw.capability_provider_apps(edgerun_node::runtime::sha256(&node_id.0));
+    println!("  Provider apps:   {}", provider_apps.len());
 }

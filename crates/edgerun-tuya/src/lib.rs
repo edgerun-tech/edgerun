@@ -13,13 +13,21 @@ extern crate alloc;
 extern crate std;
 
 use alloc::format;
-use alloc::string::{String, ToString};
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::str;
 use core::time::Duration;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_json::{FromJson, JsonValue, JsonValueError, Map, ToJson};
 use edgerun_rt::{timeout, AsyncUdpSocket, Elapsed};
+
+pub use edgerun_protocols::tuya::{
+    control_request_bytes, decode_json_payload, decrypt_6699_payload, derive_v35_session_key,
+    discovery_request_bytes, pack_55aa, pack_6699_with_iv, parse_response_bytes, strip_retcode,
+    TuyaCommand, TuyaDevice, TuyaDeviceState, TuyaProtocolError, TuyaResponse, DP_QUERY_NEW,
+    PREFIX_55AA, PREFIX_6699, PROTOCOL_VERSION, SESS_KEY_NEG_FINISH, SESS_KEY_NEG_RESP,
+    SESS_KEY_NEG_START, SUFFIX_55AA, SUFFIX_6699, TUYA_BROADCAST_ADDR, TUYA_CONTROL_PORT,
+    TUYA_DISCOVERY_PORT,
+};
 
 #[cfg(target_os = "none")]
 use core::net::SocketAddr;
@@ -30,195 +38,6 @@ use edgerun_rt::io::IoError;
 type IoError = std::io::Error;
 #[cfg(not(target_os = "none"))]
 use std::net::SocketAddr;
-
-const TUYA_BROADCAST_ADDR: &str = "255.255.255.255";
-const TUYA_DISCOVERY_PORT: u16 = 6667;
-const TUYA_CONTROL_PORT: u16 = 6668;
-
-const PROTOCOL_VERSION: &str = "3.3";
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct TuyaDevice {
-    pub id: String,
-    pub key: Option<String>,
-    pub ip: String,
-    pub name: Option<String>,
-    pub product_type: Option<String>,
-    pub version: Option<String>,
-    pub state: TuyaDeviceState,
-}
-
-impl ToJson for TuyaDevice {
-    fn to_json(&self) -> JsonValue {
-        let mut object = Map::new();
-        object.push_field("id", &self.id);
-        object.push_field("ip", &self.ip);
-        object.push_opt_field("name", self.name.as_ref());
-        object.push_opt_field("product_type", self.product_type.as_ref());
-        object.push_opt_field("version", self.version.as_ref());
-        object.push_field("state", self.state.to_json());
-        object.into()
-    }
-}
-
-impl FromJson for TuyaDevice {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = match value {
-            JsonValue::Object(object) => object,
-            _ => {
-                return Err(JsonValueError::WrongType(format!(
-                    "expected tuya device object"
-                )))
-            }
-        };
-        Ok(Self {
-            id: FromJson::from_json(
-                object
-                    .remove("id")
-                    .ok_or_else(|| JsonValueError::WrongType(format!("missing field `id`")))?,
-            )?,
-            key: None,
-            ip: FromJson::from_json(
-                object
-                    .remove("ip")
-                    .ok_or_else(|| JsonValueError::WrongType(format!("missing field `ip`")))?,
-            )?,
-            name: object.remove("name").map(FromJson::from_json).transpose()?,
-            product_type: object
-                .remove("product_type")
-                .map(FromJson::from_json)
-                .transpose()?,
-            version: object
-                .remove("version")
-                .map(FromJson::from_json)
-                .transpose()?,
-            state: FromJson::from_json(
-                object
-                    .remove("state")
-                    .ok_or_else(|| JsonValueError::WrongType(format!("missing field `state`")))?,
-            )?,
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct TuyaDeviceState {
-    pub on: Option<bool>,
-    pub temperature: Option<i32>,
-    pub mode: Option<String>,
-    pub fan_speed: Option<String>,
-    pub swing: Option<String>,
-}
-
-edgerun_json::impl_json_struct! {
-    TuyaDeviceState {
-        required {}
-        optional {
-            on: "on" => bool,
-            temperature: "temperature" => i32,
-            mode: "mode" => String,
-            fan_speed: "fan_speed" => String,
-            swing: "swing" => String,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum TuyaCommand {
-    Discovery {
-        protocol_version: String,
-    },
-    Control {
-        devId: String,
-        dps: edgerun_json::Value,
-    },
-}
-
-impl ToJson for TuyaCommand {
-    fn to_json(&self) -> JsonValue {
-        let mut object = Map::new();
-        match self {
-            Self::Discovery { protocol_version } => {
-                object.push_field("action", "discovery");
-                object.push_field("protocol_version", protocol_version);
-            }
-            Self::Control { devId, dps } => {
-                object.push_field("action", "control");
-                object.push_field("devId", devId);
-                object.push_field("dps", dps.clone());
-            }
-        }
-        object.into()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum TuyaResponse {
-    Discovery {
-        msg_id: String,
-        devId: String,
-        product_type: String,
-        version: String,
-        ability: Option<edgerun_json::Value>,
-    },
-    Control {
-        devId: String,
-        dps: edgerun_json::Value,
-    },
-}
-
-impl FromJson for TuyaResponse {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        let mut object = match value {
-            JsonValue::Object(object) => object,
-            _ => {
-                return Err(JsonValueError::WrongType(format!(
-                    "expected tuya response object"
-                )))
-            }
-        };
-        let action = String::from_json(
-            object
-                .remove("action")
-                .ok_or_else(|| JsonValueError::WrongType(format!("missing field `action`")))?,
-        )?;
-        match action.as_str() {
-            "discovery" => {
-                Ok(Self::Discovery {
-                    msg_id: FromJson::from_json(object.remove("msg_id").ok_or_else(|| {
-                        JsonValueError::WrongType(format!("missing field `msg_id`"))
-                    })?)?,
-                    devId: FromJson::from_json(object.remove("devId").ok_or_else(|| {
-                        JsonValueError::WrongType(format!("missing field `devId`"))
-                    })?)?,
-                    product_type: FromJson::from_json(object.remove("product_type").ok_or_else(
-                        || JsonValueError::WrongType(format!("missing field `product_type`")),
-                    )?)?,
-                    version: FromJson::from_json(object.remove("version").ok_or_else(|| {
-                        JsonValueError::WrongType(format!("missing field `version`"))
-                    })?)?,
-                    ability: object
-                        .remove("ability")
-                        .map(FromJson::from_json)
-                        .transpose()?,
-                })
-            }
-            "control" => {
-                Ok(Self::Control {
-                    devId: FromJson::from_json(object.remove("devId").ok_or_else(|| {
-                        JsonValueError::WrongType(format!("missing field `devId`"))
-                    })?)?,
-                    dps: FromJson::from_json(object.remove("dps").ok_or_else(|| {
-                        JsonValueError::WrongType(format!("missing field `dps`"))
-                    })?)?,
-                })
-            }
-            other => Err(JsonValueError::WrongType(format!(
-                "unknown tuya response action `{other}`"
-            ))),
-        }
-    }
-}
 
 pub struct TuyaDiscovery;
 
@@ -241,17 +60,15 @@ impl TuyaDiscovery {
             .parse()
             .unwrap();
 
-        let socket = AsyncUdpSocket::bind(bind_addr)?;
-        socket.set_broadcast(true)?;
+        let socket = AsyncUdpSocket::bind(bind_addr).map_err(rt_error)?;
+        socket.set_broadcast(true).map_err(rt_error)?;
 
-        let request = TuyaCommand::Discovery {
-            protocol_version: PROTOCOL_VERSION.to_string(),
-        }
-        .to_json()
-        .to_json_string()
-        .map_err(json_error)?;
+        let request = discovery_request_bytes().map_err(json_error)?;
 
-        socket.send_to(request.as_bytes(), broadcast_addr).await?;
+        socket
+            .send_to(&request, broadcast_addr)
+            .await
+            .map_err(rt_error)?;
 
         let mut devices = Vec::new();
         let mut last_addr: Option<SocketAddr> = None;
@@ -265,30 +82,28 @@ impl TuyaDiscovery {
                     }
                     last_addr = Some(addr);
 
-                    if let Ok(response) = str::from_utf8(&buf[..size]) {
-                        if let Ok(TuyaResponse::Discovery {
-                            msg_id: _,
-                            devId,
-                            product_type,
-                            version,
-                            ..
-                        }) = edgerun_json::from_json_str(response)
-                        {
-                            let ip = addr.ip().to_string();
-                            devices.push(TuyaDevice {
-                                id: devId,
-                                key: None,
-                                ip,
-                                name: None,
-                                product_type: Some(product_type),
-                                version: Some(version),
-                                state: TuyaDeviceState::default(),
-                            });
-                        }
+                    if let Ok(TuyaResponse::Discovery {
+                        msg_id: _,
+                        devId,
+                        product_type,
+                        version,
+                        ..
+                    }) = parse_response_bytes(&buf[..size])
+                    {
+                        let ip = addr.ip().to_string();
+                        devices.push(TuyaDevice {
+                            id: devId,
+                            key: None,
+                            ip,
+                            name: None,
+                            product_type: Some(product_type),
+                            version: Some(version),
+                            state: TuyaDeviceState::default(),
+                        });
                     }
                 }
                 Ok(Err(e)) => {
-                    return Err(e);
+                    return Err(rt_error(e));
                 }
                 Err(Elapsed) => {
                     break;
@@ -328,21 +143,15 @@ impl TuyaController {
         let ip = format!("{}:{}", self.device.ip, TUYA_CONTROL_PORT);
         let addr: SocketAddr = ip.parse().unwrap();
 
-        let socket = AsyncUdpSocket::bind("0.0.0.0:0")?;
-        socket.set_broadcast(true)?;
+        let socket = AsyncUdpSocket::bind("0.0.0.0:0").map_err(rt_error)?;
+        socket.set_broadcast(true).map_err(rt_error)?;
 
-        let request = TuyaCommand::Control {
-            devId: self.device.id.clone(),
-            dps,
-        }
-        .to_json()
-        .to_json_string()
-        .map_err(json_error)?;
+        let request = control_request_bytes(&self.device.id, dps).map_err(json_error)?;
 
-        socket.send_to(request.as_bytes(), addr).await?;
+        socket.send_to(&request, addr).await.map_err(rt_error)?;
 
         let mut buf = [0u8; 4096];
-        let (size, _) = socket.recv_from(&mut buf).await?;
+        let (size, _) = socket.recv_from(&mut buf).await.map_err(rt_error)?;
 
         let response = str::from_utf8(&buf[..size]).unwrap();
         let parsed = edgerun_json::parse_json(response).unwrap();
@@ -384,9 +193,25 @@ fn json_error(error: edgerun_json::JsonError) -> IoError {
     std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())
 }
 
+#[cfg(not(target_os = "none"))]
+fn rt_error(error: edgerun_rt::IoError) -> IoError {
+    match error {
+        edgerun_rt::IoError::UnexpectedEof => {
+            std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
+        }
+        edgerun_rt::IoError::WriteZero => std::io::Error::new(std::io::ErrorKind::WriteZero, error),
+        edgerun_rt::IoError::Other(_) => std::io::Error::new(std::io::ErrorKind::Other, error),
+    }
+}
+
 #[cfg(target_os = "none")]
 fn json_error(_error: edgerun_json::JsonError) -> IoError {
     IoError::Other("invalid json")
+}
+
+#[cfg(target_os = "none")]
+fn rt_error(error: edgerun_rt::IoError) -> IoError {
+    error
 }
 
 #[cfg(test)]

@@ -76,7 +76,7 @@ impl TokenStore {
     /// Returns None if no valid tokens exist.
     pub fn get_valid(&self, grace_secs: u64) -> Option<Credentials> {
         let creds = self.load().ok()??;
-        if creds.is_expired(grace_secs) {
+        if creds.is_expired_at(crate::runtime_now_secs(), grace_secs) {
             return None;
         }
         Some(creds)
@@ -115,10 +115,6 @@ fn credentials_to_json(creds: &Credentials) -> String {
 
 fn credentials_from_json(s: &str) -> Result<Credentials, String> {
     let value: JsonValue = from_str(s).map_err(|e| format!("JSON parse: {e}"))?;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
 
     let access_token = value
         .get("access_token")
@@ -141,14 +137,7 @@ fn credentials_from_json(s: &str) -> Result<Credentials, String> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let expiry_date = if let Some(exp) = value.get("expiry_date").and_then(|v| v.as_u64()) {
-        Some(exp)
-    } else {
-        value
-            .get("expires_in")
-            .and_then(|v| v.as_u64())
-            .map(|ei| now + ei)
-    };
+    let expiry_date = value.get("expiry_date").and_then(|v| v.as_u64());
 
     Ok(Credentials {
         access_token,
@@ -169,10 +158,7 @@ mod tests {
     use super::*;
 
     fn test_creds() -> Credentials {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        let now = 1_000;
         Credentials {
             access_token: Some("tok".into()),
             refresh_token: Some("ref".into()),

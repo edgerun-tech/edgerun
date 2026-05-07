@@ -52,17 +52,13 @@ full = [
     "service-suite",
 ]
 display = ["dep:edgerun-drm-display"]
-http = [
-    "dep:edgerun-http",
-    "edgerun-http/server",
-    "edgerun-http/connection-middleware",
-]
-https = ["http", "tls", "edgerun-http/tls"]
+http = []
+https = ["http", "tls"]
 dns = ["edgerun-protocols/dns"]
 dhcp = ["edgerun-protocols/dhcp"]
-smtp = ["http", "dep:edgerun-email", "edgerun-email/tls", "edgerun-email/dkim"]
-imap = ["http", "dep:edgerun-email", "edgerun-email/tls"]
-lmtp = ["dep:edgerun-email"]
+smtp = ["edgerun-protocols/smtp", "edgerun-protocols/email-auth"]
+imap = ["edgerun-protocols/imap"]
+lmtp = ["edgerun-protocols/lmtp", "edgerun-protocols/smtp"]
 proxy = ["edgerun-protocols/proxy"]
 derived-db = ["http", "dep:edgerun-derived-db"]
 android-keystore = ["dep:edgerun-android-keystore"]
@@ -75,6 +71,7 @@ oci = [
 compositor = ["dep:edgerun-compositor"]
 hardware = [
     "dep:edgerun-evdev-input",
+    "dep:edgerun-input",
     "dep:edgerun-alsa-speaker",
     "dep:edgerun-alsa-microphone",
     "dep:edgerun-microphone",
@@ -125,15 +122,13 @@ edgerun-mesh-capability = { version = "0.1", path = "../../capability/edgerun-me
 edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session" }
 edgerun-exchange = { version = "0.1", path = "../../edgerun-exchange", optional = true }
 edgerun-crypto = { workspace = true, default-features = false }
-edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
+edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
-edgerun-email = { workspace = true, optional = true }
 edgerun-url = { workspace = true }
 edgerun-tls = { workspace = true, optional = true }
-edgerun-acme = { workspace = true, features = ["dns_challenge"], optional = true }
-edgerun-http = { workspace = true, optional = true }
+edgerun-acme = { workspace = true, optional = true }
 edgerun-protocols = { workspace = true, features = ["sign-p256", "keygen", "seal", "core", "wire"] }
 edgerun-derived-db = { workspace = true, features = ["std"], optional = true }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", features = ["std"], optional = true }

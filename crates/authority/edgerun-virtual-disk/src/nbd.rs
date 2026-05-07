@@ -4,13 +4,22 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::default::Default;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
-use core::write;
 use edgerun_encoding::byteorder::{read_u16_be, read_u32_be, read_u64_be};
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_encoding::io::{Read, Write};
+pub use edgerun_protocols::nbd::NbdExport;
+use edgerun_protocols::nbd::{
+    decode_export_info, decode_option_header, decode_option_reply_header, decode_option_request,
+    decode_reply_header, decode_request_header, decode_server_handshake, encode_client_flags,
+    encode_export_info, encode_option_reply, encode_option_request, encode_request_header,
+    encode_server_handshake, encode_simple_reply, map_nbd_error, NbdNegotiatedExport,
+    NbdOptionRequest, NBD_CMD_DISC, NBD_CMD_FLUSH, NBD_CMD_READ, NBD_CMD_TRIM, NBD_CMD_WRITE,
+    NBD_CMD_WRITE_ZEROES, NBD_EXPORT_INFO_PADDING_LEN, NBD_FLAG_FIXED_NEWSTYLE, NBD_FLAG_READ_ONLY,
+    NBD_OPTION_HEADER_LEN, NBD_OPTION_REPLY_HEADER_LEN, NBD_OPT_ABORT, NBD_OPT_EXPORT_NAME,
+    NBD_OPT_LIST, NBD_REPLY_HEADER_LEN, NBD_REP_ACK, NBD_REP_SERVER, NBD_REQUEST_HEADER_LEN,
+};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::fs::File;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
@@ -24,16 +33,9 @@ use std::path::Path;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::thread;
 
-const NBD_MAGIC: u64 = 0x4e42444d41474943;
-const NBD_OPTS_MAGIC: u64 = 0x49484156454f5054;
-const NBD_REQUEST_MAGIC: u32 = 0x2560_9513;
-const NBD_REPLY_MAGIC: u32 = 0x6744_6698;
-const NBD_FLAG_FIXED_NEWSTYLE: u16 = 1;
-const NBD_FLAG_HAS_FLAGS: u16 = 1;
-const NBD_FLAG_SEND_FLUSH: u16 = 1 << 2;
-const NBD_FLAG_SEND_TRIM: u16 = 1 << 5;
-const NBD_FLAG_SEND_WRITE_ZEROES: u16 = 1 << 6;
-const NBD_FLAG_READ_ONLY: u16 = 1 << 1;
+fn block_io_error(error: impl ToString) -> BlockError {
+    BlockError::BackendFailure(error.to_string())
+}
 
 const NBD_SET_SOCK: u64 = 0xab00;
 const NBD_SET_BLKSIZE: u64 = 0xab01;
@@ -43,35 +45,6 @@ const NBD_CLEAR_QUE: u64 = 0xab05;
 const NBD_SET_SIZE_BLOCKS: u64 = 0xab07;
 const NBD_DISCONNECT: u64 = 0xab08;
 const NBD_SET_FLAGS: u64 = 0xab0a;
-
-const NBD_OPT_EXPORT_NAME: u32 = 1;
-const NBD_OPT_ABORT: u32 = 2;
-const NBD_OPT_LIST: u32 = 3;
-const NBD_REP_ACK: u32 = 1;
-const NBD_REP_SERVER: u32 = 2;
-const NBD_REP_MAGIC: u64 = 0x0003_e889_0455_65a9;
-
-const NBD_CMD_READ: u16 = 0;
-const NBD_CMD_WRITE: u16 = 1;
-const NBD_CMD_DISC: u16 = 2;
-const NBD_CMD_FLUSH: u16 = 3;
-const NBD_CMD_TRIM: u16 = 4;
-const NBD_CMD_WRITE_ZEROES: u16 = 6;
-
-#[derive(Clone, Debug)]
-pub struct NbdExport {
-    pub name: String,
-    pub description: String,
-}
-
-impl Default for NbdExport {
-    fn default() -> Self {
-        Self {
-            name: "edgerun".into(),
-            description: "edgerun virtual disk export".into(),
-        }
-    }
-}
 
 #[derive(Clone)]
 pub struct NbdExportEntry {
@@ -97,11 +70,7 @@ pub struct LinuxNbdAttachSpec {
     pub read_only: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LinuxNbdNegotiatedExport {
-    pub size_bytes: u64,
-    pub transmission_flags: u16,
-}
+pub type LinuxNbdNegotiatedExport = NbdNegotiatedExport;
 
 pub fn serve_nbd_connection<T: Read + Write, B: BlockBackend>(
     stream: &mut T,
@@ -109,26 +78,15 @@ pub fn serve_nbd_connection<T: Read + Write, B: BlockBackend>(
     export: &NbdExport,
 ) -> Result<(), BlockError> {
     stream
-        .write_all(&NBD_MAGIC.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&NBD_OPTS_MAGIC.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&NBD_FLAG_FIXED_NEWSTYLE.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream.flush().map_err(BlockError::from)?;
+        .write_all(&encode_server_handshake())
+        .map_err(block_io_error)?;
+    stream.flush().map_err(block_io_error)?;
 
     let _client_flags = read_u32(stream)?;
-    let option_magic = read_u64(stream)?;
-    if option_magic != NBD_OPTS_MAGIC {
-        return Err(BlockError::ProtocolError("invalid NBD option magic".into()));
-    }
-    let option = read_u32(stream)?;
-    let length = read_u32(stream)? as usize;
-    let data = read_exact_vec(stream, length)?;
-    match option {
-        NBD_OPT_EXPORT_NAME => {
+    let option = decode_option_header(&read_exact_vec(stream, NBD_OPTION_HEADER_LEN)?)?;
+    let data = read_exact_vec(stream, option.length as usize)?;
+    match decode_option_request(option.option, data) {
+        NbdOptionRequest::ExportName(data) => {
             let name = String::from_utf8(data)
                 .map_err(|err| BlockError::ProtocolError(err.to_string()))?;
             if name != export.name {
@@ -137,29 +95,15 @@ pub fn serve_nbd_connection<T: Read + Write, B: BlockBackend>(
                 )));
             }
         }
-        NBD_OPT_ABORT => return Ok(()),
+        NbdOptionRequest::Abort => return Ok(()),
         _ => return Err(BlockError::Unsupported),
     }
 
     let info = backend.info();
-    let mut flags = NBD_FLAG_HAS_FLAGS;
-    if info.supports_flush {
-        flags |= NBD_FLAG_SEND_FLUSH;
-    }
-    if info.supports_discard {
-        flags |= NBD_FLAG_SEND_TRIM;
-    }
-    if info.supports_write_zeroes {
-        flags |= NBD_FLAG_SEND_WRITE_ZEROES;
-    }
     stream
-        .write_all(&info.total_size_bytes().to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&flags.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream.write_all(&[0_u8; 124]).map_err(BlockError::from)?;
-    stream.flush().map_err(BlockError::from)?;
+        .write_all(&encode_export_info(&info))
+        .map_err(block_io_error)?;
+    stream.flush().map_err(block_io_error)?;
 
     serve_selected_export(stream, backend, &info)
 }
@@ -175,29 +119,18 @@ pub fn serve_nbd_connection_multi<T: Read + Write>(
     }
 
     stream
-        .write_all(&NBD_MAGIC.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&NBD_OPTS_MAGIC.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&NBD_FLAG_FIXED_NEWSTYLE.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream.flush().map_err(BlockError::from)?;
+        .write_all(&encode_server_handshake())
+        .map_err(block_io_error)?;
+    stream.flush().map_err(block_io_error)?;
 
     let _client_flags = read_u32(stream)?;
 
     let selected = loop {
-        let option_magic = read_u64(stream)?;
-        if option_magic != NBD_OPTS_MAGIC {
-            return Err(BlockError::ProtocolError("invalid NBD option magic".into()));
-        }
-        let option = read_u32(stream)?;
-        let length = read_u32(stream)? as usize;
-        let data = read_exact_vec(stream, length)?;
+        let option = decode_option_header(&read_exact_vec(stream, NBD_OPTION_HEADER_LEN)?)?;
+        let data = read_exact_vec(stream, option.length as usize)?;
 
-        match option {
-            NBD_OPT_EXPORT_NAME => {
+        match decode_option_request(option.option, data) {
+            NbdOptionRequest::ExportName(data) => {
                 let name = String::from_utf8(data)
                     .map_err(|err| BlockError::ProtocolError(err.to_string()))?;
                 let selected = exports
@@ -206,7 +139,7 @@ pub fn serve_nbd_connection_multi<T: Read + Write>(
                     .ok_or_else(|| BlockError::ProtocolError(format!("unknown export `{name}`")))?;
                 break selected;
             }
-            NBD_OPT_LIST => {
+            NbdOptionRequest::List => {
                 for entry in exports {
                     write_option_reply(
                         stream,
@@ -217,30 +150,16 @@ pub fn serve_nbd_connection_multi<T: Read + Write>(
                 }
                 write_option_reply(stream, NBD_OPT_LIST, NBD_REP_ACK, &[])?;
             }
-            NBD_OPT_ABORT => return Ok(()),
+            NbdOptionRequest::Abort => return Ok(()),
             _ => return Err(BlockError::Unsupported),
         }
     };
 
     let info = selected.backend.info();
-    let mut flags = NBD_FLAG_HAS_FLAGS;
-    if info.supports_flush {
-        flags |= NBD_FLAG_SEND_FLUSH;
-    }
-    if info.supports_discard {
-        flags |= NBD_FLAG_SEND_TRIM;
-    }
-    if info.supports_write_zeroes {
-        flags |= NBD_FLAG_SEND_WRITE_ZEROES;
-    }
     stream
-        .write_all(&info.total_size_bytes().to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&flags.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream.write_all(&[0_u8; 124]).map_err(BlockError::from)?;
-    stream.flush().map_err(BlockError::from)?;
+        .write_all(&encode_export_info(&info))
+        .map_err(block_io_error)?;
+    stream.flush().map_err(block_io_error)?;
 
     serve_selected_export(stream, selected.backend.as_ref(), &info)
 }
@@ -251,27 +170,17 @@ fn serve_selected_export<T: Read + Write>(
     info: &BlockDeviceInfo,
 ) -> Result<(), BlockError> {
     loop {
-        let request_magic = read_u32(stream)?;
-        if request_magic != NBD_REQUEST_MAGIC {
-            return Err(BlockError::ProtocolError(
-                "invalid NBD request magic".into(),
-            ));
-        }
-        let _flags = read_u16(stream)?;
-        let command = read_u16(stream)?;
-        let handle = read_u64(stream)?;
-        let offset = read_u64(stream)?;
-        let length = read_u32(stream)?;
+        let request = decode_request_header(&read_exact_vec(stream, NBD_REQUEST_HEADER_LEN)?)?;
 
         let block_size = u64::from(info.block_size);
-        if offset % block_size != 0 || u64::from(length) % block_size != 0 {
-            write_nbd_reply(stream, handle, 22, None)?;
+        if request.offset % block_size != 0 || u64::from(request.length) % block_size != 0 {
+            write_nbd_reply(stream, request.handle, 22, None)?;
             continue;
         }
 
-        let lba = offset / block_size;
-        let blocks = length / info.block_size;
-        let result = match command {
+        let lba = request.offset / block_size;
+        let blocks = request.length / info.block_size;
+        let result = match request.command {
             NBD_CMD_READ => {
                 let mut data = vec![0_u8; checked_len_bytes(info, blocks)?];
                 backend
@@ -279,7 +188,7 @@ fn serve_selected_export<T: Read + Write>(
                     .map(|_| Some(data))
             }
             NBD_CMD_WRITE => {
-                let data = read_exact_vec(stream, length as usize)?;
+                let data = read_exact_vec(stream, request.length as usize)?;
                 backend.write_blocks(lba, blocks, &data).map(|_| None)
             }
             NBD_CMD_FLUSH => backend.flush().map(|_| None),
@@ -290,9 +199,9 @@ fn serve_selected_export<T: Read + Write>(
         };
 
         match result {
-            Ok(Some(data)) => write_nbd_reply(stream, handle, 0, Some(&data))?,
-            Ok(None) => write_nbd_reply(stream, handle, 0, None)?,
-            Err(error) => write_nbd_reply(stream, handle, map_nbd_error(&error), None)?,
+            Ok(Some(data)) => write_nbd_reply(stream, request.handle, 0, Some(&data))?,
+            Ok(None) => write_nbd_reply(stream, request.handle, 0, None)?,
+            Err(error) => write_nbd_reply(stream, request.handle, map_nbd_error(&error), None)?,
         }
     }
 }
@@ -319,7 +228,7 @@ impl<B: BlockBackend> TcpNbdServer<B> {
         backend: Arc<B>,
         export: NbdExport,
     ) -> Result<Self, BlockError> {
-        let listener = TcpListener::bind(addr).map_err(BlockError::from)?;
+        let listener = TcpListener::bind(addr).map_err(block_io_error)?;
         Ok(Self {
             listener,
             backend,
@@ -328,11 +237,11 @@ impl<B: BlockBackend> TcpNbdServer<B> {
     }
 
     pub fn local_addr(&self) -> Result<std::net::SocketAddr, BlockError> {
-        self.listener.local_addr().map_err(BlockError::from)
+        self.listener.local_addr().map_err(block_io_error)
     }
 
     pub fn accept_once(&self) -> Result<(), BlockError> {
-        let (mut stream, _) = self.listener.accept().map_err(BlockError::from)?;
+        let (mut stream, _) = self.listener.accept().map_err(block_io_error)?;
         serve_nbd_connection(&mut stream, self.backend.as_ref(), &self.export)
     }
 
@@ -355,16 +264,16 @@ impl MultiExportTcpNbdServer {
         addr: impl ToSocketAddrs,
         exports: Vec<NbdExportEntry>,
     ) -> Result<Self, BlockError> {
-        let listener = TcpListener::bind(addr).map_err(BlockError::from)?;
+        let listener = TcpListener::bind(addr).map_err(block_io_error)?;
         Ok(Self { listener, exports })
     }
 
     pub fn local_addr(&self) -> Result<std::net::SocketAddr, BlockError> {
-        self.listener.local_addr().map_err(BlockError::from)
+        self.listener.local_addr().map_err(block_io_error)
     }
 
     pub fn accept_once(&self) -> Result<(), BlockError> {
-        let (mut stream, _) = self.listener.accept().map_err(BlockError::from)?;
+        let (mut stream, _) = self.listener.accept().map_err(block_io_error)?;
         serve_nbd_connection_multi(&mut stream, &self.exports)
     }
 
@@ -403,8 +312,7 @@ pub fn negotiate_nbd_export<T: Read + Write>(
 
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub fn attach_nbd(spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
-    let mut stream =
-        TcpStream::connect((spec.host.as_str(), spec.port)).map_err(BlockError::from)?;
+    let mut stream = TcpStream::connect((spec.host.as_str(), spec.port)).map_err(block_io_error)?;
     let negotiated = negotiate_nbd_export(&mut stream, &spec.export_name)?;
     let block_size = spec.block_size.unwrap_or(512);
     if negotiated.size_bytes % u64::from(block_size) != 0 {
@@ -415,7 +323,7 @@ pub fn attach_nbd(spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
         .read(true)
         .write(true)
         .open(&spec.device)
-        .map_err(BlockError::from)?;
+        .map_err(block_io_error)?;
     let nbd_fd = device.as_raw_fd();
     let sock_fd = stream.as_raw_fd();
     let block_count = negotiated.size_bytes / u64::from(block_size);
@@ -429,8 +337,8 @@ pub fn attach_nbd(spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
     ioctl_with_value(nbd_fd, NBD_SET_FLAGS, u64::from(flags))?;
     ioctl_with_value(nbd_fd, NBD_SET_SOCK, sock_fd as u64)?;
 
-    let do_it_fd = device.try_clone().map_err(BlockError::from)?;
-    let cleanup_fd = device.try_clone().map_err(BlockError::from)?;
+    let do_it_fd = device.try_clone().map_err(block_io_error)?;
+    let cleanup_fd = device.try_clone().map_err(block_io_error)?;
     let worker = thread::spawn(move || {
         let result = ioctl_noarg(do_it_fd.as_raw_fd(), NBD_DO_IT);
         let _ = ioctl_noarg(cleanup_fd.as_raw_fd(), NBD_CLEAR_QUE);
@@ -452,7 +360,7 @@ pub fn detach_nbd(device: impl AsRef<Path>) -> Result<(), BlockError> {
         .read(true)
         .write(true)
         .open(device.as_ref())
-        .map_err(BlockError::from)?;
+        .map_err(block_io_error)?;
     let fd = device.as_raw_fd();
     ioctl_noarg(fd, NBD_DISCONNECT)?;
     let _ = ioctl_noarg(fd, NBD_CLEAR_QUE);
@@ -465,50 +373,20 @@ pub fn negotiate_nbd_export(
     stream: &mut TcpStream,
     export_name: &str,
 ) -> Result<LinuxNbdNegotiatedExport, BlockError> {
-    if read_u64(stream)? != NBD_MAGIC {
-        return Err(BlockError::ProtocolError("invalid NBD magic".into()));
-    }
-    if read_u64(stream)? != NBD_OPTS_MAGIC {
-        return Err(BlockError::ProtocolError(
-            "invalid NBD options magic".into(),
-        ));
-    }
-    let _handshake_flags = read_u16(stream)?;
+    let _handshake = decode_server_handshake(&read_exact_vec(stream, 18)?)?;
     stream
-        .write_all(&0_u32.to_be_bytes())
-        .map_err(BlockError::from)?;
+        .write_all(&encode_client_flags(0))
+        .map_err(block_io_error)?;
     let name = export_name.as_bytes();
     stream
-        .write_all(&NBD_OPTS_MAGIC.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&NBD_OPT_EXPORT_NAME.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&(name.len() as u32).to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream.write_all(name).map_err(BlockError::from)?;
-    stream.flush().map_err(BlockError::from)?;
+        .write_all(&encode_option_request(NBD_OPT_EXPORT_NAME, name))
+        .map_err(block_io_error)?;
+    stream.flush().map_err(block_io_error)?;
 
-    let size_bytes = read_u64(stream)?;
-    let transmission_flags = read_u16(stream)?;
-    let _zeros = read_exact_vec(stream, 124)?;
-    Ok(LinuxNbdNegotiatedExport {
-        size_bytes,
-        transmission_flags,
-    })
-}
-
-fn map_nbd_error(error: &BlockError) -> u32 {
-    match error {
-        BlockError::ReadOnly => 30,
-        BlockError::OutOfRange => 22,
-        BlockError::Misaligned => 22,
-        BlockError::Unsupported => 95,
-        BlockError::Timeout => 110,
-        BlockError::NotReady => 11,
-        BlockError::BackendFailure(_) | BlockError::ProtocolError(_) => 5,
-    }
+    decode_export_info(&read_exact_vec(
+        stream,
+        8 + 2 + NBD_EXPORT_INFO_PADDING_LEN,
+    )?)
 }
 
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
@@ -520,7 +398,7 @@ unsafe extern "C" {
 fn ioctl_noarg(fd: i32, request: u64) -> Result<(), BlockError> {
     let rc = unsafe { ioctl(fd, request) };
     if rc < 0 {
-        Err(BlockError::from(std::io::Error::last_os_error()))
+        Err(block_io_error(std::io::Error::last_os_error()))
     } else {
         Ok(())
     }
@@ -530,7 +408,7 @@ fn ioctl_noarg(fd: i32, request: u64) -> Result<(), BlockError> {
 fn ioctl_with_value(fd: i32, request: u64, value: u64) -> Result<(), BlockError> {
     let rc = unsafe { ioctl(fd, request, value) };
     if rc < 0 {
-        Err(BlockError::from(std::io::Error::last_os_error()))
+        Err(block_io_error(std::io::Error::last_os_error()))
     } else {
         Ok(())
     }
@@ -543,18 +421,9 @@ fn write_nbd_reply<T: Write>(
     payload: Option<&[u8]>,
 ) -> Result<(), BlockError> {
     stream
-        .write_all(&NBD_REPLY_MAGIC.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&error.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&handle.to_be_bytes())
-        .map_err(BlockError::from)?;
-    if let Some(payload) = payload {
-        stream.write_all(payload).map_err(BlockError::from)?;
-    }
-    stream.flush().map_err(BlockError::from)
+        .write_all(&encode_simple_reply(handle, error, payload))
+        .map_err(block_io_error)?;
+    stream.flush().map_err(block_io_error)
 }
 
 fn write_option_reply<T: Write>(
@@ -564,44 +433,32 @@ fn write_option_reply<T: Write>(
     payload: &[u8],
 ) -> Result<(), BlockError> {
     stream
-        .write_all(&NBD_REP_MAGIC.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&option.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&reply_type.to_be_bytes())
-        .map_err(BlockError::from)?;
-    stream
-        .write_all(&(payload.len() as u32).to_be_bytes())
-        .map_err(BlockError::from)?;
-    if !payload.is_empty() {
-        stream.write_all(payload).map_err(BlockError::from)?;
-    }
-    stream.flush().map_err(BlockError::from)
+        .write_all(&encode_option_reply(option, reply_type, payload))
+        .map_err(block_io_error)?;
+    stream.flush().map_err(block_io_error)
 }
 
 fn read_exact_vec<T: Read>(stream: &mut T, len: usize) -> Result<Vec<u8>, BlockError> {
     let mut bytes = vec![0_u8; len];
-    stream.read_exact(&mut bytes).map_err(BlockError::from)?;
+    stream.read_exact(&mut bytes).map_err(block_io_error)?;
     Ok(bytes)
 }
 
 fn read_u16<T: Read>(stream: &mut T) -> Result<u16, BlockError> {
     let mut bytes = [0_u8; 2];
-    stream.read_exact(&mut bytes).map_err(BlockError::from)?;
+    stream.read_exact(&mut bytes).map_err(block_io_error)?;
     Ok(read_u16_be(&bytes, 0))
 }
 
 fn read_u32<T: Read>(stream: &mut T) -> Result<u32, BlockError> {
     let mut bytes = [0_u8; 4];
-    stream.read_exact(&mut bytes).map_err(BlockError::from)?;
+    stream.read_exact(&mut bytes).map_err(block_io_error)?;
     Ok(read_u32_be(&bytes, 0))
 }
 
 fn read_u64<T: Read>(stream: &mut T) -> Result<u64, BlockError> {
     let mut bytes = [0_u8; 8];
-    stream.read_exact(&mut bytes).map_err(BlockError::from)?;
+    stream.read_exact(&mut bytes).map_err(block_io_error)?;
     Ok(read_u64_be(&bytes, 0))
 }
 
@@ -707,82 +564,67 @@ mod tests {
         let addr = server.local_addr().unwrap();
         let worker = thread::spawn(move || server.accept_once().unwrap());
         let mut stream = TcpStream::connect(addr).unwrap();
-        assert_eq!(read_u64(&mut stream).unwrap(), NBD_MAGIC);
-        assert_eq!(read_u64(&mut stream).unwrap(), NBD_OPTS_MAGIC);
-        assert_eq!(read_u16(&mut stream).unwrap(), NBD_FLAG_FIXED_NEWSTYLE);
-        stream.write_all(&0_u32.to_be_bytes()).unwrap();
-        stream.write_all(&NBD_OPTS_MAGIC.to_be_bytes()).unwrap();
-        stream.write_all(&NBD_OPT_LIST.to_be_bytes()).unwrap();
-        stream.write_all(&0_u32.to_be_bytes()).unwrap();
-        assert_eq!(read_u64(&mut stream).unwrap(), NBD_REP_MAGIC);
-        assert_eq!(read_u32(&mut stream).unwrap(), NBD_OPT_LIST);
-        assert_eq!(read_u32(&mut stream).unwrap(), NBD_REP_SERVER);
-        let len = read_u32(&mut stream).unwrap() as usize;
-        let first = read_exact_vec(&mut stream, len).unwrap();
+        let handshake = decode_server_handshake(&read_exact_vec(&mut stream, 18).unwrap()).unwrap();
+        assert_eq!(handshake.handshake_flags, NBD_FLAG_FIXED_NEWSTYLE);
+        stream.write_all(&encode_client_flags(0)).unwrap();
+        stream
+            .write_all(&encode_option_request(NBD_OPT_LIST, &[]))
+            .unwrap();
+        let reply =
+            decode_option_reply_header(&read_exact_vec(&mut stream, NBD_OPTION_REPLY_HEADER_LEN).unwrap())
+                .unwrap();
+        assert_eq!(reply.option, NBD_OPT_LIST);
+        assert_eq!(reply.reply_type, NBD_REP_SERVER);
+        let first = read_exact_vec(&mut stream, reply.length as usize).unwrap();
         assert_eq!(String::from_utf8(first).unwrap(), "alpha");
-        assert_eq!(read_u64(&mut stream).unwrap(), NBD_REP_MAGIC);
-        assert_eq!(read_u32(&mut stream).unwrap(), NBD_OPT_LIST);
-        assert_eq!(read_u32(&mut stream).unwrap(), NBD_REP_SERVER);
-        let len = read_u32(&mut stream).unwrap() as usize;
-        let second = read_exact_vec(&mut stream, len).unwrap();
+        let reply =
+            decode_option_reply_header(&read_exact_vec(&mut stream, NBD_OPTION_REPLY_HEADER_LEN).unwrap())
+                .unwrap();
+        assert_eq!(reply.option, NBD_OPT_LIST);
+        assert_eq!(reply.reply_type, NBD_REP_SERVER);
+        let second = read_exact_vec(&mut stream, reply.length as usize).unwrap();
         assert_eq!(String::from_utf8(second).unwrap(), "beta");
-        assert_eq!(read_u64(&mut stream).unwrap(), NBD_REP_MAGIC);
-        assert_eq!(read_u32(&mut stream).unwrap(), NBD_OPT_LIST);
-        assert_eq!(read_u32(&mut stream).unwrap(), NBD_REP_ACK);
-        assert_eq!(read_u32(&mut stream).unwrap(), 0);
-        stream.write_all(&NBD_OPTS_MAGIC.to_be_bytes()).unwrap();
-        stream.write_all(&NBD_OPT_ABORT.to_be_bytes()).unwrap();
-        stream.write_all(&0_u32.to_be_bytes()).unwrap();
+        let reply =
+            decode_option_reply_header(&read_exact_vec(&mut stream, NBD_OPTION_REPLY_HEADER_LEN).unwrap())
+                .unwrap();
+        assert_eq!(reply.option, NBD_OPT_LIST);
+        assert_eq!(reply.reply_type, NBD_REP_ACK);
+        assert_eq!(reply.length, 0);
+        stream
+            .write_all(&encode_option_request(NBD_OPT_ABORT, &[]))
+            .unwrap();
         worker.join().unwrap();
     }
 
     fn perform_nbd_handshake(stream: &mut TcpStream, export_name: &str) -> Result<(), BlockError> {
-        assert_eq!(read_u64(stream)?, NBD_MAGIC);
-        assert_eq!(read_u64(stream)?, NBD_OPTS_MAGIC);
-        assert_eq!(read_u16(stream)?, NBD_FLAG_FIXED_NEWSTYLE);
+        let handshake = decode_server_handshake(&read_exact_vec(stream, 18)?)?;
+        assert_eq!(handshake.handshake_flags, NBD_FLAG_FIXED_NEWSTYLE);
         stream
-            .write_all(&0_u32.to_be_bytes())
-            .map_err(BlockError::from)?;
+            .write_all(&encode_client_flags(0))
+            .map_err(block_io_error)?;
         let name = export_name.as_bytes();
         stream
-            .write_all(&NBD_OPTS_MAGIC.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&NBD_OPT_EXPORT_NAME.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&(name.len() as u32).to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream.write_all(name).map_err(BlockError::from)?;
+            .write_all(&encode_option_request(NBD_OPT_EXPORT_NAME, name))
+            .map_err(block_io_error)?;
         let _size = read_u64(stream)?;
         let _flags = read_u16(stream)?;
-        let _zeros = read_exact_vec(stream, 124)?;
+        let _zeros = read_exact_vec(stream, NBD_EXPORT_INFO_PADDING_LEN)?;
         Ok(())
     }
 
     fn issue_nbd_write(stream: &mut TcpStream, offset: u64, data: &[u8]) -> Result<(), BlockError> {
         stream
-            .write_all(&NBD_REQUEST_MAGIC.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&0_u16.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&NBD_CMD_WRITE.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&1_u64.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&offset.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&(data.len() as u32).to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream.write_all(data).map_err(BlockError::from)?;
-        assert_eq!(read_u32(stream)?, NBD_REPLY_MAGIC);
-        assert_eq!(read_u32(stream)?, 0);
-        assert_eq!(read_u64(stream)?, 1);
+            .write_all(&encode_request_header(
+                NBD_CMD_WRITE,
+                1,
+                offset,
+                data.len() as u32,
+            ))
+            .map_err(block_io_error)?;
+        stream.write_all(data).map_err(block_io_error)?;
+        let reply = decode_reply_header(&read_exact_vec(stream, NBD_REPLY_HEADER_LEN)?)?;
+        assert_eq!(reply.error, 0);
+        assert_eq!(reply.handle, 1);
         Ok(())
     }
 
@@ -792,47 +634,17 @@ mod tests {
         length: u32,
     ) -> Result<Vec<u8>, BlockError> {
         stream
-            .write_all(&NBD_REQUEST_MAGIC.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&0_u16.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&NBD_CMD_READ.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&2_u64.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&offset.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&length.to_be_bytes())
-            .map_err(BlockError::from)?;
-        assert_eq!(read_u32(stream)?, NBD_REPLY_MAGIC);
-        assert_eq!(read_u32(stream)?, 0);
-        assert_eq!(read_u64(stream)?, 2);
+            .write_all(&encode_request_header(NBD_CMD_READ, 2, offset, length))
+            .map_err(block_io_error)?;
+        let reply = decode_reply_header(&read_exact_vec(stream, NBD_REPLY_HEADER_LEN)?)?;
+        assert_eq!(reply.error, 0);
+        assert_eq!(reply.handle, 2);
         read_exact_vec(stream, length as usize)
     }
 
     fn issue_nbd_disconnect(stream: &mut TcpStream) -> Result<(), BlockError> {
         stream
-            .write_all(&NBD_REQUEST_MAGIC.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&0_u16.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&NBD_CMD_DISC.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&3_u64.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&0_u64.to_be_bytes())
-            .map_err(BlockError::from)?;
-        stream
-            .write_all(&0_u32.to_be_bytes())
-            .map_err(BlockError::from)
+            .write_all(&encode_request_header(NBD_CMD_DISC, 3, 0, 0))
+            .map_err(block_io_error)
     }
 }

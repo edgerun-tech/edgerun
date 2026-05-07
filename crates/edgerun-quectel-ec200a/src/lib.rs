@@ -18,10 +18,6 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(target_os = "none")]
-extern crate self as std;
-#[cfg(not(target_os = "none"))]
-extern crate std;
 
 pub mod prelude {
     pub mod v1 {
@@ -32,46 +28,6 @@ pub mod prelude {
         pub use alloc::vec;
         pub use alloc::vec::Vec;
         pub use core::prelude::rust_2021::*;
-    }
-}
-
-#[cfg(target_os = "none")]
-pub mod process {
-    pub struct Command;
-
-    impl Command {
-        pub fn new(_program: &str) -> Self {
-            Self
-        }
-
-        pub fn args<const N: usize>(&mut self, _args: [&str; N]) -> &mut Self {
-            self
-        }
-
-        pub fn output(&mut self) -> core::result::Result<Output, Error> {
-            Err(Error)
-        }
-    }
-
-    pub struct Output {
-        pub stdout: alloc::vec::Vec<u8>,
-        pub status: ExitStatus,
-    }
-
-    pub struct ExitStatus;
-
-    impl ExitStatus {
-        pub fn success(&self) -> bool {
-            false
-        }
-    }
-
-    pub struct Error;
-
-    impl core::fmt::Display for Error {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            f.write_str("process unavailable")
-        }
     }
 }
 

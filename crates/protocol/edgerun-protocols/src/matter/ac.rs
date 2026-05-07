@@ -1,5 +1,8 @@
-use crate::prelude::v1::*;
-use crate::tlv::TlvWriter;
+//! Matter air-conditioner cluster request helpers.
+
+use crate::prelude::*;
+
+use super::tlv::TlvWriter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AcMode {
@@ -151,7 +154,7 @@ impl AcMatterClient {
                 endpoint: 1,
                 cluster: CLUSTER_THERMOSTAT,
                 attribute: attr,
-                data: vec![],
+                data: Vec::new(),
             })
             .collect()
     }
@@ -187,17 +190,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_ac_client() {
+    fn builds_power_request() {
         let mut client = AcMatterClient::new();
         let req = client.set_power(true);
         assert_eq!(req.endpoint, 1);
         assert_eq!(req.cluster, CLUSTER_THERMOSTAT);
+        assert_eq!(req.attribute, ATTRIBUTE_ON_OFF);
+        assert!(!req.data.is_empty());
     }
 
     #[test]
-    fn test_set_temperature() {
+    fn builds_temperature_request() {
         let mut client = AcMatterClient::new();
         let req = client.set_temperature(24.0);
+        assert_eq!(req.cluster, CLUSTER_THERMOSTAT);
+        assert_eq!(req.attribute, ATTRIBUTE_TARGET_TEMP);
         assert!(!req.data.is_empty());
     }
 }

@@ -1,10 +1,18 @@
-//! DTA (Direct Terminal Access) network support for Quectel EC200A
+//! DTA (Direct Terminal Access) network support for Quectel EC200A.
+//!
+//! This crate no longer owns serial ports or command execution. Runtime code
+//! provides an AT transport; this module only sequences EC200A commands and
+//! parses EC200A responses.
 
 use crate::prelude::v1::*;
-use crate::{DtaNetwork, Model};
-use std::process::Command;
+use crate::DtaNetwork;
+use edgerun_protocols::quectel_ec200a::{
+    configure_dta_commands, parse_imsi, parse_modem_info, parse_network_operator,
+    parse_network_registered, parse_signal_quality, set_radio_function_command, CMD_IMSI,
+    CMD_MODEM_INFO, CMD_NETWORK_REGISTRATION, CMD_OPERATOR, CMD_SIGNAL_QUALITY,
+};
 
-/// DTA network configuration
+/// DTA network configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Config {
     pub enabled: DtaNetwork,
@@ -22,157 +30,169 @@ impl Default for Config {
     }
 }
 
-/// Configure DTA network on the modem
-pub fn configure_dta(
-    modem: &crate::Ec200a<impl crate::ModelVariant>,
+pub trait AtTransport {
+    fn send_at_command(&mut self, command: &str) -> Result<String, String>;
+}
+
+/// Configure DTA network on the modem through a runtime-provided transport.
+pub fn configure_dta_with_transport<T: AtTransport>(
+    transport: &mut T,
     config: Config,
 ) -> Result<String, String> {
-    // Validate configuration
     if let Some(pin) = config.pin {
         if pin.len() != 4 || !pin.chars().all(|c| c.is_ascii_digit()) {
             return Err("PIN must be exactly 4 digits".to_string());
         }
     }
 
-    // Set APN for DTA network
-    let apn_cmd = format!("AT+CGDCONT=1,\"IP\",\"{}\"", config.apn);
-    send_at_command(&apn_cmd)?;
-
-    // Set network mode to automatic (allows DTA network selection)
-    send_at_command("AT+CNMP=0")?; // Auto mode
-    send_at_command("AT+CNSMOD=0")?; // Auto network selection
-
-    // Enable DTA network registration
-    send_at_command("AT+CEREG=1")?; // Enable network registration unsolicited result code
+    for command in configure_dta_commands(config.apn) {
+        transport.send_at_command(&command)?;
+    }
 
     Ok(format!("DTA network configured with APN: {}", config.apn))
 }
 
-/// Check DTA network status
-pub fn check_dta_status(modem: &crate::Ec200a<impl crate::ModelVariant>) -> Result<bool, String> {
-    let response = send_at_command("AT+CREG?")?;
-
-    // Parse +CREG response: +CREG: <mode>,<status>
-    if let Some(creg_line) = response.lines().find(|line| line.contains("+CREG:")) {
-        let parts: Vec<&str> = creg_line.split(',').collect();
-        if parts.len() >= 2 {
-            let status = parts[1].trim();
-            // Status 1-5 indicates registration (1: not registered, 2: searching, 3: denied, 4: unknown, 5: registered)
-            return Ok(status == "5" || status == "1");
-        }
-    }
-
-    Err("Could not parse network registration status".to_string())
+pub fn check_dta_status_with_transport<T: AtTransport>(transport: &mut T) -> Result<bool, String> {
+    let response = transport.send_at_command(CMD_NETWORK_REGISTRATION)?;
+    parse_network_registered(&response)
+        .map_err(|_| "Could not parse network registration status".to_string())
 }
 
-/// Get signal quality from modem
+pub fn get_signal_quality_with_transport<T: AtTransport>(
+    transport: &mut T,
+) -> Result<(u8, u8), String> {
+    let response = transport.send_at_command(CMD_SIGNAL_QUALITY)?;
+    parse_signal_quality(&response).map_err(|_| "Could not parse signal quality".to_string())
+}
+
+pub fn get_network_operator_with_transport<T: AtTransport>(
+    transport: &mut T,
+) -> Result<String, String> {
+    let response = transport.send_at_command(CMD_OPERATOR)?;
+    parse_network_operator(&response).map_err(|_| "Could not parse network operator".to_string())
+}
+
+pub fn get_modem_info_with_transport<T: AtTransport>(transport: &mut T) -> Result<String, String> {
+    let response = transport.send_at_command(CMD_MODEM_INFO)?;
+    Ok(parse_modem_info(&response))
+}
+
+pub fn get_imsi_with_transport<T: AtTransport>(transport: &mut T) -> Result<String, String> {
+    let response = transport.send_at_command(CMD_IMSI)?;
+    parse_imsi(&response).map_err(|_| "Could not retrieve IMSI".to_string())
+}
+
+pub fn set_radio_function_with_transport<T: AtTransport>(
+    transport: &mut T,
+    mode: u8,
+) -> Result<String, String> {
+    let command = set_radio_function_command(mode);
+    transport.send_at_command(&command)
+}
+
+/// Configure DTA network on the modem.
+///
+/// Direct host serial access is runtime-owned. Use
+/// [`configure_dta_with_transport`] with a node-provided transport.
+pub fn configure_dta(
+    _modem: &crate::Ec200a<impl crate::ModelVariant>,
+    _config: Config,
+) -> Result<String, String> {
+    Err(runtime_transport_required())
+}
+
+pub fn check_dta_status(_modem: &crate::Ec200a<impl crate::ModelVariant>) -> Result<bool, String> {
+    Err(runtime_transport_required())
+}
+
 pub fn get_signal_quality() -> Result<(u8, u8), String> {
-    let response = send_at_command("AT+CSQ")?;
-
-    // Parse +CSQ response: +CSQ: <rssi>,<ber>
-    if let Some(csq_line) = response.lines().find(|line| line.contains("+CSQ:")) {
-        let parts: Vec<&str> = csq_line.split(',').collect();
-        if parts.len() >= 2 {
-            let rssi = parts[1].trim().parse().unwrap_or(99);
-            let ber = if parts.len() >= 3 {
-                parts[2].trim().parse().unwrap_or(99)
-            } else {
-                99
-            };
-            return Ok((rssi, ber));
-        }
-    }
-
-    Err("Could not parse signal quality".to_string())
+    Err(runtime_transport_required())
 }
 
-/// Get network operator information
 pub fn get_network_operator() -> Result<String, String> {
-    let response = send_at_command("AT+COPS?")?;
-
-    // Parse +COPS response: +COPS: <mode>,<format>,<operator>,<stat>
-    if let Some(cops_line) = response.lines().find(|line| line.contains("+COPS:")) {
-        let parts: Vec<&str> = cops_line.split(',').collect();
-        if parts.len() >= 3 {
-            let op_name = parts[2].trim_matches('"');
-            return Ok(op_name.to_string());
-        }
-    }
-
-    Err("Could not parse network operator".to_string())
+    Err(runtime_transport_required())
 }
 
-/// Get modem information
 pub fn get_modem_info() -> Result<String, String> {
-    let response = send_at_command("ATI")?;
-
-    // Remove OK and newlines, return the modem info
-    Ok(response
-        .lines()
-        .filter(|line| !line.contains("OK") && !line.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n"))
+    Err(runtime_transport_required())
 }
 
-/// Get IMSI (International Mobile Subscriber Identity)
 pub fn get_imsi() -> Result<String, String> {
-    let response = send_at_command("AT+CIMI")?;
+    Err(runtime_transport_required())
+}
 
-    // Extract IMSI from response (first non-empty, non-OK line)
-    for line in response.lines() {
-        let line = line.trim();
-        if !line.is_empty() && line != "OK" && line.chars().all(|c| c.is_ascii_digit()) {
-            return Ok(line.to_string());
+pub fn set_radio_function(_mode: u8) -> Result<String, String> {
+    Err(runtime_transport_required())
+}
+
+fn runtime_transport_required() -> String {
+    "EC200A AT execution is runtime-owned; use the *_with_transport APIs".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct FakeTransport {
+        commands: Vec<String>,
+    }
+
+    impl FakeTransport {
+        fn new() -> Self {
+            Self {
+                commands: Vec::new(),
+            }
         }
     }
 
-    Err("Could not retrieve IMSI".to_string())
-}
-
-/// Set radio function (0=off, 1=full, 4=airplane)
-pub fn set_radio_function(mode: u8) -> Result<String, String> {
-    let cmd = format!("AT+CFUN={}", mode);
-    send_at_command(&cmd)
-}
-
-/// Send AT command to modem via serial port
-fn send_at_command(cmd: &str) -> Result<String, String> {
-    let port = "/dev/ttyUSB1"; // Primary AT command port
-    let baud = 115200;
-
-    let python_script = format!(
-        r#"import serial, time
-try:
-    ser = serial.Serial('{}', {}, timeout=3.0, xonxoff=False, rtscts=False, dsrdtr=False)
-    ser.flushInput()
-    ser.flushOutput()
-    ser.write(b'{}\r\n')
-    time.sleep(1.0)
-    response = ""
-    timeout = time.time() + 5.0  # 5 second timeout
-    while time.time() < timeout:
-        line = ser.readline().decode('utf-8', errors='replace').strip()
-        if line:
-            response += line + "\n"
-            if line == "OK" or line == "ERROR":
-                break
-    ser.close()
-    print(response.strip())
-except Exception as e:
-    print(f"ERROR: {{e}}")"#,
-        port, baud, cmd
-    );
-
-    let output = Command::new("python3")
-        .args(["-c", &python_script])
-        .output()
-        .map_err(|e| format!("Failed to execute Python script: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-
-    if !output.status.success() || stdout.starts_with("ERROR:") {
-        return Err(stdout);
+    impl AtTransport for FakeTransport {
+        fn send_at_command(&mut self, command: &str) -> Result<String, String> {
+            self.commands.push(command.to_string());
+            match command {
+                CMD_NETWORK_REGISTRATION => Ok("\r\n+CREG: 0,5\r\nOK".to_string()),
+                CMD_SIGNAL_QUALITY => Ok("\r\n+CSQ: 18,99\r\nOK".to_string()),
+                CMD_OPERATOR => Ok("\r\n+COPS: 0,0,\"DTA_NET\",2\r\nOK".to_string()),
+                CMD_MODEM_INFO => Ok("\r\nQuectel EC200A-EU Rev1.0\r\nOK".to_string()),
+                CMD_IMSI => Ok("\r\n123456789012345\r\nOK".to_string()),
+                _ => Ok("OK".to_string()),
+            }
+        }
     }
 
-    Ok(stdout)
+    #[test]
+    fn configure_dta_uses_protocol_command_sequence() {
+        let mut transport = FakeTransport::new();
+        configure_dta_with_transport(&mut transport, Config::default()).unwrap();
+        assert_eq!(
+            transport.commands,
+            vec![
+                "AT+CGDCONT=1,\"IP\",\"internet\"".to_string(),
+                "AT+CNMP=0".to_string(),
+                "AT+CNSMOD=0".to_string(),
+                "AT+CEREG=1".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn query_helpers_parse_responses() {
+        let mut transport = FakeTransport::new();
+        assert_eq!(check_dta_status_with_transport(&mut transport), Ok(true));
+        assert_eq!(
+            get_signal_quality_with_transport(&mut transport),
+            Ok((18, 99))
+        );
+        assert_eq!(
+            get_network_operator_with_transport(&mut transport),
+            Ok("DTA_NET".to_string())
+        );
+        assert_eq!(
+            get_modem_info_with_transport(&mut transport),
+            Ok("Quectel EC200A-EU Rev1.0".to_string())
+        );
+        assert_eq!(
+            get_imsi_with_transport(&mut transport),
+            Ok("123456789012345".to_string())
+        );
+    }
 }

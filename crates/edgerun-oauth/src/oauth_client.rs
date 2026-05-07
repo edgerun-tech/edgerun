@@ -174,7 +174,7 @@ impl AutoRefreshMiddleware {
             });
         }
 
-        Ok(token_resp.into_credentials())
+        Ok(token_resp.into_credentials_at(crate::runtime_now_secs()))
     }
 
     async fn execute_without_auth(&self, req: ClientRequest) -> Result<Response> {
@@ -406,7 +406,7 @@ impl OAuthClient {
             });
         }
 
-        Ok(token_resp.into_credentials())
+        Ok(token_resp.into_credentials_at(crate::runtime_now_secs()))
     }
 
     async fn poll_for_token(
@@ -416,8 +416,7 @@ impl OAuthClient {
         timeout_secs: u64,
         initial_interval: u64,
     ) -> std::result::Result<Credentials, OAuthError> {
-        use edgerun_rt::sleep;
-        use std::time::{Duration, Instant};
+        use edgerun_rt::{sleep, Duration, Instant};
 
         let start = Instant::now();
         let mut interval = Duration::from_secs(initial_interval);
@@ -478,7 +477,7 @@ impl OAuthClient {
                 }
             }
 
-            return Ok(token_resp.into_credentials());
+            return Ok(token_resp.into_credentials_at(crate::runtime_now_secs()));
         }
     }
 

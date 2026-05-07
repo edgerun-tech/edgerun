@@ -177,7 +177,7 @@ fn compositor_self_test() -> Result<String, String> {
 
 #[cfg(feature = "all-hardware")]
 fn hardware_self_test() -> Result<String, String> {
-    let inventory = crate::hardware::HardwareInventory::discover();
+    let inventory = edgerun_node::hardware::HardwareInventory::discover();
     Ok(format!(
         concat!(
             "{{",
@@ -198,7 +198,9 @@ fn hardware_self_test() -> Result<String, String> {
             "\"npu\":{},",
             "\"power\":{},",
             "\"cec\":{},",
-            "\"keystore\":{}",
+            "\"keystore\":{},",
+            "\"capabilities\":{},",
+            "\"provider_apps\":{}",
             "}}"
         ),
         escape_json(inventory.platform),
@@ -217,7 +219,9 @@ fn hardware_self_test() -> Result<String, String> {
         inventory.npu_devices.len(),
         inventory.power_supplies.len(),
         inventory.cec_adapters.len(),
-        inventory.keystore.len()
+        inventory.keystore.len(),
+        inventory.capability_descriptors.len(),
+        inventory.capability_provider_apps([0; 32]).len()
     ))
 }
 
@@ -255,8 +259,11 @@ fn android_keystore_self_test() -> Result<String, String> {
 #[cfg(feature = "acme")]
 fn acme_self_test() -> Result<String, String> {
     let account = edgerun_acme::AccountKey::generate();
-    let challenge =
-        edgerun_acme::DnsChallenge::new("selftest.edgerun.local", "edgerund-acme-token", &account);
+    let challenge = edgerun_acme::Dns01Challenge::new(
+        "selftest.edgerun.local",
+        "edgerund-acme-token",
+        &account.thumbprint_b64(),
+    );
     if challenge.record_name() != "_acme-challenge.selftest.edgerun.local" {
         return Err(format!(
             "unexpected ACME DNS-01 record name: {}",
