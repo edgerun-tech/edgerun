@@ -211,13 +211,13 @@ impl NodeRuntime {
 
         #[cfg(feature = "dns")]
         let dns_server = if let Some(config) = self.dns {
-            let dns_config = dns_runtime::DnsRuntimeConfig {
+            let dns_config = crate::dns::DnsRuntimeConfig {
                 bind_addr: config.bind_addr,
                 default_ttl: config.default_ttl,
                 rate_limit_qps: config.rate_limit_qps,
                 bind_addr_ipv6: config.bind_addr_ipv6,
             };
-            let srv = dns_runtime::DnsRuntime::new(dns_config).map_err(other_io_error)?;
+            let srv = crate::dns::DnsRuntime::new(dns_config).map_err(other_io_error)?;
             Some(srv)
         } else {
             None

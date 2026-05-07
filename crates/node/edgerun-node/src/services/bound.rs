@@ -5,7 +5,7 @@ pub struct BoundNodeRuntime {
     #[cfg(feature = "http")]
     pub(super) http: Vec<HttpNodeBinding>,
     #[cfg(feature = "dns")]
-    pub(super) dns: Option<Arc<dns_runtime::DnsRuntime>>,
+    pub(super) dns: Option<Arc<crate::dns::DnsRuntime>>,
     #[cfg(feature = "dhcp")]
     pub(super) dhcp: Option<dhcp_runtime::DhcpServer>,
     #[cfg(feature = "tftp")]

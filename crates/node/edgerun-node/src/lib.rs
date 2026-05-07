@@ -20,6 +20,8 @@ pub mod bootstrap;
 pub mod command_dispatch;
 pub mod command_dispatch_event;
 pub mod command_dispatch_result;
+#[cfg(feature = "dns")]
+pub mod dns;
 pub mod error;
 #[cfg(feature = "std")]
 pub mod hardware;

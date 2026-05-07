@@ -53,8 +53,6 @@ pub mod acme_runtime;
 pub mod config;
 #[cfg(feature = "dhcp")]
 pub mod dhcp_runtime;
-#[cfg(feature = "dns")]
-pub mod dns_runtime;
 #[cfg(feature = "http")]
 pub mod http_runtime;
 #[cfg(any(feature = "imap", feature = "smtp", feature = "lmtp"))]

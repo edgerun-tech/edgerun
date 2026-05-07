@@ -11,5 +11,5 @@ pub use crate::std_compat::fs::{
 };
 pub use content_store::FsContentStore;
 pub use event_log::{
-    open_stream_file, read_event_at, scan_event_logs, write_event_to_file, FsEventLog,
+    append_event_to_file, open_stream_file, read_event_at, scan_event_logs, FsEventLog,
 };
