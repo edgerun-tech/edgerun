@@ -4,7 +4,7 @@
 use super::DispatchContext;
 use crate::compositor::surface::ShmBufferInfo;
 use crate::libc;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::fractional_scale;
 use edgerun_protocols::wayland::single_pixel_buffer;
 use edgerun_protocols::wayland::tearing_control;

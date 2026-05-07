@@ -1,4 +1,4 @@
-use edgerun_gpu::{GpuConnectorInfo, GpuDisplayMode, GpuInventory};
+use edgerun_devices::gpu::{GpuConnectorInfo, GpuDisplayMode, GpuInventory};
 use edgerun_linux_gpu::{discover_gpus, LinuxGpuBackend};
 use std::path::PathBuf;
 

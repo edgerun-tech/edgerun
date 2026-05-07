@@ -1,5 +1,5 @@
 use edgerun_amd_xdna::discover_amd_xdna_devices;
-use edgerun_npu::NpuDevice;
+use edgerun_devices::npu::NpuDevice;
 
 fn usage() {
     eprintln!("usage: amd-xdna-tool list");

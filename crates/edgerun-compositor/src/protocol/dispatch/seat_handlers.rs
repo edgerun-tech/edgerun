@@ -3,7 +3,7 @@
 use super::DispatchContext;
 use crate::input::keymap;
 use crate::libc;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::wl_seat;
 
 pub fn handle_seat(ctx: &mut DispatchContext) {

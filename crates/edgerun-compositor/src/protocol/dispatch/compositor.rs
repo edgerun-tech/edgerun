@@ -2,7 +2,7 @@
 
 use super::DispatchContext;
 use crate::compositor::surface::{DamageRect, SurfaceBuffer};
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::wl_compositor;
 use edgerun_protocols::wayland::wp_presentation_time;
 

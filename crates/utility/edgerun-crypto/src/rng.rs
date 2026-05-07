@@ -8,9 +8,9 @@
 use core::num::NonZeroU32;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use rand_core::{CryptoRng, Error as RandError, RngCore};
 use crate::error::{CryptoError, Result};
 use crate::sha::Digest;
+use rand_core::{CryptoRng, Error as RandError, RngCore};
 
 pub type RandomSource = fn(&mut [u8]) -> Result<()>;
 

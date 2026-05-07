@@ -1,5 +1,5 @@
+use edgerun_devices::power::PowerInventory;
 use edgerun_linux_power::{discover_power_supplies, discover_power_system, LinuxPowerBackend};
-use edgerun_power::PowerInventory;
 use std::path::PathBuf;
 
 fn usage() {

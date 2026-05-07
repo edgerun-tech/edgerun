@@ -213,7 +213,6 @@ crates/
   appliance/
     edgerun-tcl-ac
     edgerun-tcl-ac-cli
-    edgerun-matter
     edgerun-tuya
     edgerun-quectel-ec200a
   utility/

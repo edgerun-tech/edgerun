@@ -5,15 +5,18 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::time::Duration;
 
+use crate::network::{HostSocketTransport, TransportAddress, TransportError};
 use crate::rt::{
     AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWriteExt,
     CancellationToken, RwLock,
 };
-use crate::transport::{HostSocketTransport, TransportAddress, TransportError};
 use edgerun_protocols::dns::{
     dns_tcp_frame_len, encode_dns_tcp_frame, handle_query_without_forwarding, resolve,
     udp_response_wire, DnsMessage, DnsRecordData, DnsRecordType, DnsResponseCode, DnsZone,
 };
+
+const ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const TCP_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[cfg(not(target_os = "none"))]
 use std::io;
@@ -229,12 +232,20 @@ async fn tcp_accept_loop(
     shutdown: CancellationToken,
 ) -> io::Result<()> {
     while !shutdown.is_cancelled() {
-        match listener.accept().await {
-            Ok((stream, peer)) => {
-                handle_tcp_connection(stream, peer, Arc::clone(&state), rate_limiter.clone())
-                    .await?;
+        match crate::rt::timeout(ACCEPT_POLL_INTERVAL, listener.accept()).await {
+            Err(_) => continue,
+            Ok(Ok((stream, peer))) => {
+                let state = Arc::clone(&state);
+                let rate_limiter = rate_limiter.clone();
+                crate::rt::spawn(async move {
+                    if let Err(error) =
+                        handle_tcp_connection(stream, peer, state, rate_limiter).await
+                    {
+                        crate::node_warn!("dns tcp session failed: {}", error);
+                    }
+                });
             }
-            Err(error) => return Err(rt_io_error(error)),
+            Ok(Err(error)) => return Err(rt_io_error(error)),
         }
     }
     Ok(())
@@ -248,7 +259,12 @@ async fn handle_tcp_connection(
 ) -> io::Result<()> {
     loop {
         let mut len_buf = [0u8; 2];
-        if let Err(error) = stream.read_exact(&mut len_buf).await {
+        let len_read = crate::rt::timeout(TCP_IDLE_TIMEOUT, stream.read_exact(&mut len_buf)).await;
+        let len_read = match len_read {
+            Ok(result) => result,
+            Err(_) => return Ok(()),
+        };
+        if let Err(error) = len_read {
             return match error {
                 crate::rt::IoError::UnexpectedEof => Ok(()),
                 other => Err(rt_io_error(other)),
@@ -256,7 +272,10 @@ async fn handle_tcp_connection(
         }
         let msg_len = dns_tcp_frame_len(len_buf).map_err(dns_frame_error)?;
         let mut query = alloc::vec![0u8; msg_len];
-        stream.read_exact(&mut query).await.map_err(rt_io_error)?;
+        crate::rt::timeout(TCP_IDLE_TIMEOUT, stream.read_exact(&mut query))
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "dns tcp query timed out"))?
+            .map_err(rt_io_error)?;
 
         let response = if rate_limiter.allow(peer.ip()) {
             match handle_query(&query, &state).await {

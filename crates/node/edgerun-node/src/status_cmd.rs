@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
+use edgerun_devices::network_interface::NetworkLinkState;
 use edgerun_linux_netif::discover_network_interfaces;
-use edgerun_network_interface::NetworkLinkState;
 use edgerun_storage::fs::scan_event_logs;
 
 pub fn cmd_status(path: &PathBuf) {

@@ -18,7 +18,7 @@ path = "src/main.rs"
 required-features = ["std"]
 
 [dependencies]
-edgerun-biometrics = { version = "0.1", path = "../../device-types/edgerun-biometrics" }
+edgerun-devices.workspace = true
 edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage" }
 edgerun-protocols = { version = "0.1", path = "../../protocol/edgerun-protocols", default-features = false, features = ["core", "wire", "dbus"] }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false }

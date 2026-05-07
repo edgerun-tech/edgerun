@@ -2,7 +2,7 @@
 //! pointer_gestures, text_input_v1, idle_inhibit.
 
 use super::{ConstraintType, DispatchContext, PointerConstraint};
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::zwp_pointer_constraints;
 use edgerun_protocols::wayland::zwp_pointer_gestures;
 use edgerun_protocols::wayland::zwp_relative_pointer;

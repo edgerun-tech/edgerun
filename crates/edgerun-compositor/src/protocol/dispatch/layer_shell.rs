@@ -4,7 +4,7 @@
 //! exclusive zones, margins, layer changes, and popup attachment.
 
 use super::DispatchContext;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::layer_shell;
 
 /// Layer surface state for anchor/size/keyboard interactivity.

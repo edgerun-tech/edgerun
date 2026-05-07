@@ -47,7 +47,6 @@ pub mod certificate_gen {
 pub mod cipher {
     pub use edgerun_protocols::tls::cipher::*;
 }
-pub mod compat;
 pub mod handshake {
     pub use edgerun_protocols::tls::handshake::*;
 }
@@ -84,7 +83,7 @@ pub mod tls_alpn {
 }
 
 pub use async_tls::{AsyncTlsServerStream, AsyncTlsStream};
-pub use compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+pub use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub use name_match::{normalize_tls_dns_name, tls_dns_name_matches};
 pub use session_cache::{parse_new_session_ticket, SessionCache, SessionTicket};
 
@@ -111,7 +110,7 @@ pub enum TlsError {
     /// HelloRetryRequest received — retry with this group and optional cookie
     HelloRetryRequest(crate::key_exchange::KeyExchangeGroup, Vec<u8>),
     /// Underlying I/O error from the async transport.
-    Io(std::io::Error),
+    Io(edgerun_rt::IoError),
 }
 
 impl fmt::Display for TlsError {
@@ -151,16 +150,22 @@ impl From<edgerun_protocols::tls::TlsError> for TlsError {
             edgerun_protocols::tls::TlsError::HelloRetryRequest(group, cookie) => {
                 TlsError::HelloRetryRequest(group, cookie)
             }
-            edgerun_protocols::tls::TlsError::Io(message) => {
-                TlsError::Io(std::io::Error::other(message))
+            edgerun_protocols::tls::TlsError::Io(_) => {
+                TlsError::Io(edgerun_rt::IoError::Other("protocol TLS I/O error"))
             }
         }
     }
 }
 
 impl From<std::io::Error> for TlsError {
-    fn from(e: std::io::Error) -> Self {
-        TlsError::Io(e)
+    fn from(_: std::io::Error) -> Self {
+        TlsError::Io(edgerun_rt::IoError::Other("host TLS I/O error"))
+    }
+}
+
+impl From<edgerun_rt::IoError> for TlsError {
+    fn from(error: edgerun_rt::IoError) -> Self {
+        TlsError::Io(error)
     }
 }
 

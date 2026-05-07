@@ -282,7 +282,7 @@ pub mod vec {
 pub use core::{ptr, slice};
 
 use crate::prelude::v1::*;
-use edgerun_camera_biometrics::{
+use edgerun_devices::camera_biometrics::{
     default_camera_descriptor, default_face_biometric_state, validate_liveness_challenge,
     CameraBiometricError, CameraBiometricPurpose, CameraBiometricReader, CameraCapture,
     CameraCaptureQuality, CameraEnrollProgress, CameraEnrollmentSession, CameraFrame,
@@ -1211,9 +1211,9 @@ impl CameraBiometricReader for V4l2CameraBiometricReader {
 
     fn begin_enrollment(
         &mut self,
-        request: &edgerun_camera_biometrics::CameraEnrollRequest,
+        request: &edgerun_devices::camera_biometrics::CameraEnrollRequest,
     ) -> Result<CameraEnrollmentSession, CameraBiometricError> {
-        edgerun_camera_biometrics::validate_camera_enroll_request(request)?;
+        edgerun_devices::camera_biometrics::validate_camera_enroll_request(request)?;
         let session = CameraEnrollmentSession {
             session_id: request.label.clone(),
             label: request.label.clone(),
@@ -1567,7 +1567,7 @@ impl V4l2PairedCameraBiometricReader {
             .map_err(|e| CameraBiometricError::Provider(e.to_string()))
     }
 
-    fn default_liveness_state(passed: bool) -> edgerun_biometrics::BiometricState {
+    fn default_liveness_state(passed: bool) -> edgerun_devices::biometrics::BiometricState {
         default_face_biometric_state(passed, false, true)
     }
 }
@@ -1609,9 +1609,9 @@ impl CameraBiometricReader for V4l2PairedCameraBiometricReader {
 
     fn begin_enrollment(
         &mut self,
-        request: &edgerun_camera_biometrics::CameraEnrollRequest,
+        request: &edgerun_devices::camera_biometrics::CameraEnrollRequest,
     ) -> Result<CameraEnrollmentSession, CameraBiometricError> {
-        edgerun_camera_biometrics::validate_camera_enroll_request(request)?;
+        edgerun_devices::camera_biometrics::validate_camera_enroll_request(request)?;
         Ok(CameraEnrollmentSession {
             session_id: request.label.clone(),
             label: request.label.clone(),
@@ -1730,7 +1730,7 @@ impl PairedCameraBiometricReader for V4l2PairedCameraBiometricReader {
         let face_present_in_infrared = capture.infrared.is_some();
         let paired_capture = face_present_in_rgb && face_present_in_infrared;
         let passed = match challenge.kind {
-            edgerun_camera_biometrics::CameraLivenessChallengeKind::PassivePresence => {
+            edgerun_devices::camera_biometrics::CameraLivenessChallengeKind::PassivePresence => {
                 if challenge.require_rgb && !face_present_in_rgb {
                     false
                 } else {

@@ -43,14 +43,14 @@ pub use aes_gcm::Aes256Gcm as AesGcmCipher;
 #[cfg(feature = "aead")]
 pub use aes_gcm::Nonce;
 #[cfg(feature = "ed25519")]
+pub use ed25519_dalek::Signer as Ed25519Signer;
+#[cfg(feature = "ed25519")]
+pub use ed25519_dalek::Signer;
+#[cfg(feature = "ed25519")]
 pub use ed25519_dalek::SigningKey as Ed25519SigningKey;
 #[cfg(feature = "p256")]
 pub use p256::ecdsa::SigningKey;
 pub use rng::{fill_random, mix_entropy, random_bytes, random_u32, random_u64};
-#[cfg(feature = "ed25519")]
-pub use ed25519_dalek::Signer as Ed25519Signer;
-#[cfg(feature = "ed25519")]
-pub use ed25519_dalek::Signer;
 
 pub use crate::rng::OsRng;
 pub use rand_core::{CryptoRng, RngCore};

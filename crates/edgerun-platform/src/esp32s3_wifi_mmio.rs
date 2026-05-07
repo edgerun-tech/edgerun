@@ -6,7 +6,7 @@
 
 use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 
-use edgerun_wifi::ieee80211::OpenApConfig;
+use edgerun_protocols::ieee80211::OpenApConfig;
 
 use crate::esp32s3_wifi::Esp32s3WifiRadio;
 

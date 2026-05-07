@@ -51,13 +51,13 @@ pub mod vec {
 }
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use edgerun_devices::network_interface::{
+    default_network_interface_descriptor, NetworkAdminState, NetworkInterfaceController,
+    NetworkInterfaceInfo, NetworkInterfaceKind, NetworkLinkState,
+};
 use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{
     close_ioctl_fd, fill_ifr_name, ioctl_call, open_ioctl_socket, read_trimmed,
-};
-use edgerun_network_interface::{
-    default_network_interface_descriptor, NetworkAdminState, NetworkInterfaceController,
-    NetworkInterfaceInfo, NetworkInterfaceKind, NetworkLinkState,
 };
 #[cfg(not(target_os = "none"))]
 use std::fs;

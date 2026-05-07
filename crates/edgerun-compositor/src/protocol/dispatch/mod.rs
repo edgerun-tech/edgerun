@@ -20,7 +20,7 @@ use crate::render::cursor::Cursor;
 use crate::render::shm::ShmManager;
 use crate::resource::Registry;
 use crate::server::WaylandServer;
-use crate::wire;
+use edgerun_protocols::wayland as wire;
 
 mod compositor;
 mod core;
@@ -278,7 +278,7 @@ pub struct DispatchContext<'a> {
     pub client_tearing_control_ids: &'a mut HashMap<u32, u32>,
 }
 
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::input_method_v2;
 use edgerun_protocols::wayland::input_method_v2::IMEState;
 use edgerun_protocols::wayland::screencopy;

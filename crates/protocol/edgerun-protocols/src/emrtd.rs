@@ -203,7 +203,7 @@ mod tests {
         assert_eq!(parsed.ins, 0xB0);
         assert_eq!(parsed.p1, 0x00);
         assert_eq!(parsed.p2, 0x00);
-        assert_eq!(parsed.data, &[]);
+        assert!(parsed.data.is_empty());
         assert_eq!(parsed.le, Some(8));
 
         let command = mutual_authenticate(&[1, 2, 3, 4]);

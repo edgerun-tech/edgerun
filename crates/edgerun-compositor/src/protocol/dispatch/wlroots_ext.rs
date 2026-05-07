@@ -2,8 +2,8 @@
 
 use super::DispatchContext;
 use crate::libc;
-use crate::wire::decode::ArgCursor;
 use edgerun_protocols::wayland::data_control;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::primary_selection;
 use edgerun_protocols::wayland::screencopy;
 use edgerun_protocols::wayland::screencopy::ScreencopyFrame;

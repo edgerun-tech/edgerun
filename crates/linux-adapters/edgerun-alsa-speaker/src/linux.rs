@@ -187,7 +187,7 @@ pub mod vec {
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_speaker::{
+use edgerun_devices::speaker::{
     default_speaker_descriptor, validate_audio_playback_request, AudioPlaybackRequest,
     AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel, SpeakerSampleFormat,
 };

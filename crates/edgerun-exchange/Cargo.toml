@@ -20,6 +20,10 @@ edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
 [dev-dependencies]
 edgerun-http = { version = "0.1", path = "../edgerun-http" }
 
+[[test]]
+name = "integration"
+required-features = ["provider-http"]
+
 [features]
 provider-http = ["dep:edgerun-http", "dep:edgerun-rt"]
 ffio = ["provider-http"]

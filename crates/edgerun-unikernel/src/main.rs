@@ -6,7 +6,7 @@
 #![cfg_attr(not(target_os = "none"), allow(dead_code, unused_imports))]
 
 extern crate alloc;
-extern crate edgerun_http;
+extern crate edgerun_node;
 extern crate edgerun_oci;
 extern crate edgerun_platform;
 extern crate edgerun_protocols;
@@ -94,13 +94,6 @@ mod edgerun_layout {
         },
     }
 }
-#[cfg(all(
-    target_arch = "xtensa",
-    target_os = "none",
-    any(feature = "esp32s3-wifi-blob", feature = "esp32s3-wifi-mmio")
-))]
-extern crate edgerun_wifi;
-
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 const DISPLAY_CONSOLE_LINES: usize = 8;
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
@@ -539,20 +532,21 @@ impl Jc3248w535TouchCapability {
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 impl edgerun_capabilities::CapabilityProvider for Jc3248w535TouchCapability {
     fn descriptor(&self) -> edgerun_capabilities::CapabilityDescriptor {
-        edgerun_input::default_input_descriptor("jc3248w535", "touch")
+        edgerun_devices::input::default_input_descriptor("jc3248w535", "touch")
     }
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
-impl edgerun_input::InputDevice for Jc3248w535TouchCapability {
+impl edgerun_devices::input::InputDevice for Jc3248w535TouchCapability {
     fn input_info(
         &self,
-    ) -> Result<edgerun_input::InputDeviceInfo, edgerun_capabilities::CapabilityError> {
-        Ok(edgerun_input::InputDeviceInfo {
+    ) -> Result<edgerun_devices::input::InputDeviceInfo, edgerun_capabilities::CapabilityError>
+    {
+        Ok(edgerun_devices::input::InputDeviceInfo {
             provider: alloc::string::String::from("jc3248w535"),
             instance_id: alloc::string::String::from("touch"),
             display_name: alloc::string::String::from("JC3248W535 capacitive touch"),
-            kind: edgerun_input::InputDeviceKind::Touch,
+            kind: edgerun_devices::input::InputDeviceKind::Touch,
             event_node: alloc::string::String::from("i2c://axs15231b-touch"),
             physical_path: Some(alloc::string::String::from("esp32s3/i2c0")),
             unique_id: None,
@@ -563,10 +557,10 @@ impl edgerun_input::InputDevice for Jc3248w535TouchCapability {
         &mut self,
         max_events: usize,
     ) -> Result<
-        alloc::vec::Vec<edgerun_input::InputEventRecord>,
+        alloc::vec::Vec<edgerun_devices::input::InputEventRecord>,
         edgerun_capabilities::CapabilityError,
     > {
-        edgerun_input::validate_event_read_request(max_events)?;
+        edgerun_devices::input::validate_event_read_request(max_events)?;
         let now = edgerun_platform::timer::ticks_to_us(edgerun_platform::timer::timer_ticks());
         let timestamp_sec = (now / 1_000_000) as i64;
         let timestamp_usec = (now % 1_000_000) as i64;
@@ -577,7 +571,7 @@ impl edgerun_input::InputDevice for Jc3248w535TouchCapability {
                 events.push(input_event(
                     timestamp_sec,
                     timestamp_usec,
-                    edgerun_input::InputEventKind::Key,
+                    edgerun_devices::input::InputEventKind::Key,
                     330,
                     1,
                 ));
@@ -586,7 +580,7 @@ impl edgerun_input::InputDevice for Jc3248w535TouchCapability {
                 events.push(input_event(
                     timestamp_sec,
                     timestamp_usec,
-                    edgerun_input::InputEventKind::AbsoluteMotion,
+                    edgerun_devices::input::InputEventKind::AbsoluteMotion,
                     0,
                     point.x as i32,
                 ));
@@ -595,7 +589,7 @@ impl edgerun_input::InputDevice for Jc3248w535TouchCapability {
                 events.push(input_event(
                     timestamp_sec,
                     timestamp_usec,
-                    edgerun_input::InputEventKind::AbsoluteMotion,
+                    edgerun_devices::input::InputEventKind::AbsoluteMotion,
                     1,
                     point.y as i32,
                 ));
@@ -605,7 +599,7 @@ impl edgerun_input::InputDevice for Jc3248w535TouchCapability {
             events.push(input_event(
                 timestamp_sec,
                 timestamp_usec,
-                edgerun_input::InputEventKind::Key,
+                edgerun_devices::input::InputEventKind::Key,
                 330,
                 0,
             ));
@@ -619,11 +613,11 @@ impl edgerun_input::InputDevice for Jc3248w535TouchCapability {
 fn input_event(
     timestamp_sec: i64,
     timestamp_usec: i64,
-    kind: edgerun_input::InputEventKind,
+    kind: edgerun_devices::input::InputEventKind,
     code: u16,
     value: i32,
-) -> edgerun_input::InputEventRecord {
-    edgerun_input::InputEventRecord {
+) -> edgerun_devices::input::InputEventRecord {
+    edgerun_devices::input::InputEventRecord {
         timestamp_sec,
         timestamp_usec,
         kind,
@@ -638,21 +632,21 @@ struct Jc3248w535DisplayCapability;
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
 impl edgerun_capabilities::CapabilityProvider for Jc3248w535DisplayCapability {
     fn descriptor(&self) -> edgerun_capabilities::CapabilityDescriptor {
-        edgerun_display::default_display_descriptor("jc3248w535", "display")
+        edgerun_devices::display::default_display_descriptor("jc3248w535", "display")
     }
 }
 
 #[cfg(all(target_arch = "xtensa", target_os = "none"))]
-impl edgerun_display::DisplayDevice for Jc3248w535DisplayCapability {
+impl edgerun_devices::display::DisplayDevice for Jc3248w535DisplayCapability {
     fn display_info(
         &self,
-    ) -> Result<edgerun_display::DisplayInfo, edgerun_capabilities::CapabilityError> {
-        let mode = edgerun_display::DisplayMode {
+    ) -> Result<edgerun_devices::display::DisplayInfo, edgerun_capabilities::CapabilityError> {
+        let mode = edgerun_devices::display::DisplayMode {
             width: 320,
             height: 480,
             refresh_millihz: 60_000,
         };
-        Ok(edgerun_display::DisplayInfo {
+        Ok(edgerun_devices::display::DisplayInfo {
             provider: alloc::string::String::from("jc3248w535"),
             display_name: alloc::string::String::from("JC3248W535 LCD"),
             instance_id: alloc::string::String::from("display"),
@@ -667,9 +661,9 @@ impl edgerun_display::DisplayDevice for Jc3248w535DisplayCapability {
 
     fn present(
         &mut self,
-        request: &edgerun_display::DisplayUpdateRequest,
+        request: &edgerun_devices::display::DisplayUpdateRequest,
     ) -> Result<(), edgerun_capabilities::CapabilityError> {
-        edgerun_display::validate_display_update_request(request)?;
+        edgerun_devices::display::validate_display_update_request(request)?;
         render_initial_ui();
         Ok(())
     }
@@ -2644,7 +2638,7 @@ fn wifi_debug_status() -> i32 {
 #[inline(never)]
 fn try_start_esp32s3_wifi_ap() -> bool {
     use edgerun_platform::esp32s3_wifi_mmio::Esp32s3WifiMmio;
-    use edgerun_wifi::ieee80211::{MacAddr, OpenApConfig};
+    use edgerun_protocols::ieee80211::{MacAddr, OpenApConfig};
 
     #[cfg(not(feature = "esp32s3-headless"))]
     rt::log::log(1, "ESP32-S3 MMIO WiFi AP RX start begin");
@@ -4915,10 +4909,8 @@ struct NetPump<'net, 'stack> {
 
 #[cfg(target_arch = "x86_64")]
 async fn run_http_smoke(url: &str) {
-    let client = edgerun_http::HttpClient::new()
-        .version(edgerun_http::HttpVersion::Http1)
-        .with_connect_timeout(edgerun_http::runtime::time::Duration::from_secs(3))
-        .with_read_timeout(edgerun_http::runtime::time::Duration::from_secs(3));
+    let client = edgerun_node::http_client::HttpClient::new()
+        .version(edgerun_node::http_client::HttpVersion::Http1);
     match client.get(url).await {
         Ok(response) if response.status().as_u16() == 200 => {
             rt::log::log(1, "Bare HTTP smoke GET ok")

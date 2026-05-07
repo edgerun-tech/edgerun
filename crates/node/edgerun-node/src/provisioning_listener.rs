@@ -3,11 +3,12 @@ use std::sync::Arc;
 
 use edgerun_hardware_signing::NodeID;
 use edgerun_json::{escape_json_string, Value as JsonValue};
-use edgerun_node::rt::CancellationToken;
+use edgerun_node::network::{HostSocketTransport, TransportAddress};
+use edgerun_node::rt::{timeout, CancellationToken};
 use edgerun_node::rt::{AsyncReadExt, AsyncWriteExt};
-use edgerun_node::transport::{HostSocketTransport, TransportAddress};
 
 const PROVISION_PORT: u16 = 35630;
+const ACCEPT_POLL_INTERVAL: core::time::Duration = core::time::Duration::from_millis(100);
 
 pub(crate) async fn run_provisioning_listener(
     _node_id: NodeID,
@@ -46,8 +47,9 @@ pub(crate) async fn run_provisioning_listener(
             return;
         }
 
-        match listener.accept().await {
-            Ok((stream, peer_addr)) => {
+        match timeout(ACCEPT_POLL_INTERVAL, listener.accept()).await {
+            Err(_) => continue,
+            Ok(Ok((stream, peer_addr))) => {
                 crate::node_info!("Provisioning connection from {peer_addr}");
                 let pin = pairing_pin.clone();
                 let pubkey = public_key_hex.clone();
@@ -67,8 +69,9 @@ pub(crate) async fn run_provisioning_listener(
                     }
                 });
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 crate::node_warn!("Provisioning accept error: {e}");
+                edgerun_node::rt::sleep(ACCEPT_POLL_INTERVAL).await;
             }
         }
     }

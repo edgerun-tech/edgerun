@@ -278,16 +278,17 @@ fn crc16_update(mut crc: u16, byte: u8) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_encoding::byteorder::write_u16_le;
 
     fn encode_for_test(channel: u8, seq: u16, payload: &[u8], out: &mut [u8]) -> usize {
         let len = payload.len() as u16;
         let mut raw = [0u8; 64];
         raw[0] = channel;
-        raw[1..3].copy_from_slice(&len.to_le_bytes());
-        raw[3..5].copy_from_slice(&seq.to_le_bytes());
+        write_u16_le(&mut raw, 1, len);
+        write_u16_le(&mut raw, 3, seq);
         raw[5..5 + payload.len()].copy_from_slice(payload);
         let crc = crc16(&raw[..5 + payload.len()]);
-        raw[5 + payload.len()..7 + payload.len()].copy_from_slice(&crc.to_le_bytes());
+        write_u16_le(&mut raw, 5 + payload.len(), crc);
 
         let mut written = 0;
         out[written] = FLAG;

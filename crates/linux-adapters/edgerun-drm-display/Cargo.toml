@@ -9,8 +9,8 @@ homepage.workspace = true
 description = "Linux DRM display adapter for Edgerun"
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
-edgerun-display = { version = "0.1", path = "../../device-types/edgerun-display" }
 
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 

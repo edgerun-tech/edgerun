@@ -32,7 +32,9 @@ use core::debug_assert;
 use core::iter::Iterator;
 use core::option::Option::{self, None, Some};
 
-use edgerun_camera_biometrics::{CameraCaptureQuality, CameraFrame, CameraPixelFormat, FaceBounds};
+use edgerun_devices::camera_biometrics::{
+    CameraCaptureQuality, CameraFrame, CameraPixelFormat, FaceBounds,
+};
 
 pub type RawDetection = (i32, i32, i32, i32, f32);
 pub type NmsResult = (RawDetection, u32);

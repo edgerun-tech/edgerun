@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
+use edgerun_encoding::byteorder::{read_u16_be, read_u32_be, write_u16_be, write_u32_be};
 
 pub const ETH_TYPE_IPV4: u16 = 0x0800;
 pub const ETH_TYPE_ARP: u16 = 0x0806;
@@ -51,9 +51,9 @@ impl IcmpHeader {
     pub fn to_slice(&self, data: &mut [u8]) {
         data[0] = self.icmp_type;
         data[1] = self.code;
-        data[2..4].copy_from_slice(&self.checksum.to_be_bytes());
-        data[4..6].copy_from_slice(&self.identifier.to_be_bytes());
-        data[6..8].copy_from_slice(&self.sequence.to_be_bytes());
+        write_u16_be(data, 2, self.checksum);
+        write_u16_be(data, 4, self.identifier);
+        write_u16_be(data, 6, self.sequence);
     }
 }
 
@@ -63,8 +63,8 @@ pub fn _ping(_mac: [u8; 6], _ip: IpAddr, id: u16, seq: u16) -> [u8; 64] {
     packet[1] = 0;
     packet[2] = 0;
     packet[3] = 0;
-    packet[4..6].copy_from_slice(&id.to_be_bytes());
-    packet[6..8].copy_from_slice(&seq.to_be_bytes());
+    write_u16_be(&mut packet, 4, id);
+    write_u16_be(&mut packet, 6, seq);
     packet
 }
 
@@ -121,15 +121,15 @@ impl TcpHeader {
     }
 
     pub fn to_slice(&self, data: &mut [u8]) {
-        data[0..2].copy_from_slice(&self.src_port.to_be_bytes());
-        data[2..4].copy_from_slice(&self.dst_port.to_be_bytes());
-        data[4..8].copy_from_slice(&self.seq.to_be_bytes());
-        data[8..12].copy_from_slice(&self.ack.to_be_bytes());
+        write_u16_be(data, 0, self.src_port);
+        write_u16_be(data, 2, self.dst_port);
+        write_u32_be(data, 4, self.seq);
+        write_u32_be(data, 8, self.ack);
         data[12] = 5 << 4;
         data[13] = self.flags;
-        data[14..16].copy_from_slice(&self.window.to_be_bytes());
-        data[16..18].copy_from_slice(&self.checksum.to_be_bytes());
-        data[18..20].copy_from_slice(&self.urgent.to_be_bytes());
+        write_u16_be(data, 14, self.window);
+        write_u16_be(data, 16, self.checksum);
+        write_u16_be(data, 18, self.urgent);
     }
 }
 
@@ -162,7 +162,7 @@ impl EthHeader {
     pub fn to_slice(&self, data: &mut [u8]) {
         data[0..6].copy_from_slice(&self.dst);
         data[6..12].copy_from_slice(&self.src);
-        data[12..14].copy_from_slice(&self.ethertype.to_be_bytes());
+        write_u16_be(data, 12, self.ethertype);
     }
 }
 
@@ -200,14 +200,14 @@ impl IpHeader {
     pub fn to_slice(&self, data: &mut [u8]) {
         data[0] = self.ver_ihl;
         data[1] = self.tos;
-        data[2..4].copy_from_slice(&self.len.to_be_bytes());
+        write_u16_be(data, 2, self.len);
         data[4] = 0;
         data[5] = 0;
         data[6] = 0;
         data[7] = 0;
         data[8] = self.ttl;
         data[9] = self.proto;
-        data[10..12].copy_from_slice(&self.checksum.to_be_bytes());
+        write_u16_be(data, 10, self.checksum);
         data[12..16].copy_from_slice(&self.src);
         data[16..20].copy_from_slice(&self.dst);
     }
@@ -259,10 +259,10 @@ impl ArpHeader {
 
     pub fn to_slice(&self, data: &mut [u8]) {
         data[0..2].copy_from_slice(&[0, 1]);
-        data[2..4].copy_from_slice(&ETH_TYPE_IPV4.to_be_bytes());
+        write_u16_be(data, 2, ETH_TYPE_IPV4);
         data[4] = 6;
         data[5] = 4;
-        data[6..8].copy_from_slice(&self.oper.to_be_bytes());
+        write_u16_be(data, 6, self.oper);
         data[8..14].copy_from_slice(&self.sha);
         data[14..18].copy_from_slice(&self.spa);
         data[18..24].copy_from_slice(&self.tha);
@@ -289,10 +289,10 @@ impl UdpHeader {
     }
 
     pub fn to_slice(&self, data: &mut [u8]) {
-        data[0..2].copy_from_slice(&self.src_port.to_be_bytes());
-        data[2..4].copy_from_slice(&self.dst_port.to_be_bytes());
-        data[4..6].copy_from_slice(&self.len.to_be_bytes());
-        data[6..8].copy_from_slice(&self.checksum.to_be_bytes());
+        write_u16_be(data, 0, self.src_port);
+        write_u16_be(data, 2, self.dst_port);
+        write_u16_be(data, 4, self.len);
+        write_u16_be(data, 6, self.checksum);
     }
 }
 
@@ -499,7 +499,7 @@ impl<'a> Network<'a> {
         self.packet[14 + 10] = 0;
         self.packet[14 + 11] = 0;
         ip.checksum = ip_checksum(&self.packet[14..34]);
-        self.packet[14 + 10..14 + 12].copy_from_slice(&ip.checksum.to_be_bytes());
+        write_u16_be(&mut self.packet, 14 + 10, ip.checksum);
 
         let udp = UdpHeader {
             src_port,
@@ -533,7 +533,7 @@ impl<'a> Network<'a> {
         self.packet[14 + 10] = 0;
         self.packet[14 + 11] = 0;
         ip.checksum = ip_checksum(&self.packet[14..34]);
-        self.packet[14 + 10..14 + 12].copy_from_slice(&ip.checksum.to_be_bytes());
+        write_u16_be(&mut self.packet, 14 + 10, ip.checksum);
         let payload_start = 34;
         self.packet_len = packet_len;
         self.packet[payload_start..payload_start + data.len()].copy_from_slice(data);
@@ -576,7 +576,7 @@ impl<'a> Network<'a> {
         self.packet[14 + 10] = 0;
         self.packet[14 + 11] = 0;
         ip.checksum = ip_checksum(&self.packet[14..34]);
-        self.packet[14 + 10..14 + 12].copy_from_slice(&ip.checksum.to_be_bytes());
+        write_u16_be(&mut self.packet, 14 + 10, ip.checksum);
 
         let reply = echo_reply(request, request.sequence);
         reply.to_slice(&mut self.packet[34..42]);
@@ -584,7 +584,7 @@ impl<'a> Network<'a> {
         self.packet[36] = 0;
         self.packet[37] = 0;
         let icmp_checksum = checksum(&self.packet[34..34 + icmp_len]);
-        self.packet[36..38].copy_from_slice(&icmp_checksum.to_be_bytes());
+        write_u16_be(&mut self.packet, 36, icmp_checksum);
         self.packet_len = packet_len;
         Some(&self.packet[..self.packet_len])
     }

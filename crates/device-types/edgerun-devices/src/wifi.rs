@@ -17,8 +17,6 @@ use edgerun_capabilities::{
 };
 use prelude::v1::*;
 
-pub mod ieee80211;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WifiPowerState {
     Unknown,

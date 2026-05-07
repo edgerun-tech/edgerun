@@ -24,8 +24,10 @@ pub struct HealthState {
 /// - GET  /protocol/approvals/<id>/reject
 /// - POST /protocol/tools/invoke
 pub async fn run_health_server(port: u16, state: HealthState) {
+    use edgerun_node::network::{HostSocketTransport, TransportAddress};
     use edgerun_node::rt::{AsyncReadExt, AsyncWriteExt};
-    use edgerun_node::transport::{HostSocketTransport, TransportAddress};
+
+    const ACCEPT_ERROR_BACKOFF: core::time::Duration = core::time::Duration::from_millis(100);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = match HostSocketTransport.bind_stream_now(&TransportAddress::host_stream(
@@ -64,7 +66,10 @@ pub async fn run_health_server(port: u16, state: HealthState) {
                     let _ = stream.flush().await;
                 });
             }
-            Err(e) => crate::node_warn!("local HTTP endpoint accept error: {}", e),
+            Err(e) => {
+                crate::node_warn!("local HTTP endpoint accept error: {}", e);
+                edgerun_node::rt::sleep(ACCEPT_ERROR_BACKOFF).await;
+            }
         }
     }
 }

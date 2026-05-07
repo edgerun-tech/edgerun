@@ -1,9 +1,9 @@
 //! Core protocol handlers: wl_display, wl_registry.
 
 use super::{DispatchContext, GLOBALS};
-use crate::wire;
-use crate::wire::decode::ArgCursor;
-use crate::wire::encode::*;
+use edgerun_protocols::wayland as wire;
+use edgerun_protocols::wayland::decode::ArgCursor;
+use edgerun_protocols::wayland::encode::*;
 use edgerun_protocols::wayland::linux_dmabuf;
 use edgerun_protocols::wayland::wl_core;
 use edgerun_protocols::wayland::wl_seat;

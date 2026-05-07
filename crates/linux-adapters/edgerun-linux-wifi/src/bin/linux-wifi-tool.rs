@@ -1,7 +1,7 @@
-use edgerun_linux_wifi::{discover_wifi_interfaces, LinuxWifiBackend};
-use edgerun_wifi::{
+use edgerun_devices::wifi::{
     WifiAccessPointConfig, WifiAccessPointController, WifiController, WifiPowerState, WifiScanner,
 };
+use edgerun_linux_wifi::{discover_wifi_interfaces, LinuxWifiBackend};
 
 fn usage() {
     eprintln!(

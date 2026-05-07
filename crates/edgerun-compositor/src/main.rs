@@ -32,7 +32,7 @@ use edgerun_compositor::render::shm::ShmManager;
 use edgerun_compositor::resource::Registry;
 use edgerun_compositor::server::WaylandServer;
 use edgerun_compositor::vt::{VtEvent, VtManager};
-use edgerun_compositor::wire;
+use edgerun_protocols::wayland as wire;
 use edgerun_protocols::wayland::{input_method_v2, text_input_v3, wl_core, wp_presentation_time};
 // wire imports used in dispatch
 // (wire types accessed through dispatch module)
@@ -850,7 +850,7 @@ fn send_globals_to_client(
     for g in globals {
         let mut args = Vec::new();
         args.extend_from_slice(&g.global_name.to_le_bytes());
-        crate::wire::encode::encode_string(&mut args, g.interface);
+        wire::encode::encode_string(&mut args, g.interface);
         args.extend_from_slice(&g.version.to_le_bytes());
 
         if let Some(client) = server.client_mut(client_id) {

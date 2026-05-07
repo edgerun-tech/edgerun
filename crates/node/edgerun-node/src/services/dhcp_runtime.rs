@@ -5,8 +5,8 @@ use alloc::vec::Vec;
 use core::net::Ipv4Addr;
 use core::time::Duration;
 
+use crate::network::{BareFrameTransport, HostSocketTransport, TransportAddress};
 use crate::rt::{sleep, AsyncUdpSocket, CancellationToken, Mutex, SocketAddr, UdpSocket};
-use crate::transport::{BareFrameTransport, HostSocketTransport, TransportAddress};
 use edgerun_protocols::dhcp::{message::io, DhcpServerConfig, DhcpServerCore, DHCP_SERVER_PORT};
 
 pub struct DhcpServer {
@@ -151,7 +151,7 @@ fn rt_addr_endpoint(addr: SocketAddr) -> Vec<u8> {
     format!("{}.{}.{}.{}:{}", ip[0], ip[1], ip[2], ip[3], addr.port()).into_bytes()
 }
 
-fn map_transport_error(error: crate::transport::TransportError) -> io::Error {
+fn map_transport_error(error: crate::network::TransportError) -> io::Error {
     io::Error::new(io::ErrorKind::Other, error.to_string())
 }
 

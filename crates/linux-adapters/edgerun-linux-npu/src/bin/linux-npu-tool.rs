@@ -1,5 +1,5 @@
+use edgerun_devices::npu::NpuDevice;
 use edgerun_linux_npu::discover_linux_npus;
-use edgerun_npu::NpuDevice;
 
 fn usage() {
     eprintln!("usage: linux-npu-tool list");

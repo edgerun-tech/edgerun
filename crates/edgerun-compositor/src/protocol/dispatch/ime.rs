@@ -3,7 +3,7 @@
 use super::DispatchContext;
 use crate::input::keymap;
 use crate::libc;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::input_method_v2;
 use edgerun_protocols::wayland::input_method_v2::IMEState;
 use edgerun_protocols::wayland::text_input_v3;

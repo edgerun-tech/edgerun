@@ -1,4 +1,4 @@
-use edgerun_fingerprint::{FingerprintCapturePurpose, FingerprintReader};
+use edgerun_devices::fingerprint::{FingerprintCapturePurpose, FingerprintReader};
 use edgerun_goodix_fingerprint::{
     build_goodix_package, discover_supported_devices, GoodixFingerprintReader,
 };
@@ -139,7 +139,7 @@ fn real_main() -> Result<(), String> {
             };
             let mut reader = open_reader()?;
             let session = reader
-                .begin_enrollment(&edgerun_fingerprint::FingerprintEnrollRequest {
+                .begin_enrollment(&edgerun_devices::fingerprint::FingerprintEnrollRequest {
                     label,
                     samples_required,
                     require_hardware_match: true,

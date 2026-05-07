@@ -1,5 +1,5 @@
+use edgerun_devices::input::InputDevice;
 use edgerun_evdev_input::{discover_evdev_devices, EvdevInputBackend};
-use edgerun_input::InputDevice;
 
 fn usage() {
     eprintln!("usage: evdev-input-tool list | read <eventN> [max_events]");

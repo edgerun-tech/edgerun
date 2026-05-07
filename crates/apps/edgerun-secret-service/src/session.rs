@@ -6,7 +6,7 @@
 
 use crate::prelude::v1::*;
 use alloc::collections::BTreeMap as HashMap;
-use edgerun_biometrics::{BiometricAssuranceStrength, BiometricState};
+use edgerun_devices::biometrics::{BiometricAssuranceStrength, BiometricState};
 
 // ===========================================================================
 // Session state

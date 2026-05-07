@@ -9,9 +9,9 @@ homepage.workspace = true
 description = "Linux evdev input adapter for Edgerun"
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
-edgerun-input = { version = "0.1", path = "../../device-types/edgerun-input" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 
 [features]

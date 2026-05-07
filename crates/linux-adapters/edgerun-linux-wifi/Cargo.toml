@@ -9,11 +9,10 @@ homepage.workspace = true
 description = "Linux Wi-Fi adapter for Edgerun network capabilities"
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-edgerun-network-interface = { version = "0.1", path = "../../device-types/edgerun-network-interface" }
-edgerun-wifi = { version = "0.1", path = "../../device-types/edgerun-wifi" }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "sha1"] }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }

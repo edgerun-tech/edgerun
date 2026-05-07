@@ -257,7 +257,7 @@ pub mod vec {
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_microphone::{
+use edgerun_devices::microphone::{
     default_microphone_descriptor, validate_audio_capture_request, AudioCapture,
     AudioCaptureRequest, MicrophoneDevice, MicrophoneInfo, MicrophoneSampleFormat,
 };

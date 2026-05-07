@@ -2,7 +2,7 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
-use edgerun_microphone::{
+use edgerun_devices::microphone::{
     AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
 };
 use edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation;

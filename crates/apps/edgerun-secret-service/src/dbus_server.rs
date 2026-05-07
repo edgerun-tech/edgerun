@@ -148,15 +148,23 @@ impl Server {
             let n = match stream.read(&mut msg_buf) {
                 Ok(0) => break, // connection closed
                 Ok(n) => n,
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    continue;
+                }
                 Err(_) => break,
             };
             buf.extend_from_slice(&msg_buf[..n]);
 
             // Try to decode one or more complete messages
-            while let Ok(msg) = decode_msg(&buf) {
-                let msg_len = estimate_encoded_len(&msg);
-                buf.drain(..msg_len.min(buf.len()));
+            while let Some(msg_len) = complete_encoded_msg_len(&buf) {
+                let msg = decode_msg(&buf[..msg_len]).map_err(|error| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("invalid D-Bus message: {error}"),
+                    )
+                })?;
+                buf.drain(..msg_len);
                 let reply = self.handle_message(&client_name, &msg);
                 let reply_data = encode_msg(&reply);
                 let _ = stream.write_all(&reply_data);
@@ -768,10 +776,17 @@ fn resolve_item_path(path: &str) -> Option<(String, String)> {
     }
 }
 
-/// Estimate the encoded length of a D-Bus message for buffer management.
-fn estimate_encoded_len(msg: &Msg) -> usize {
-    // Header is at least 16 bytes + header fields + body
-    16 + 256 + msg.body.len() * 32
+/// Return the exact encoded length of a complete D-Bus message in `data`.
+fn complete_encoded_msg_len(data: &[u8]) -> Option<usize> {
+    if data.len() < 16 {
+        return None;
+    }
+    let body_len = u32::from_le_bytes(data[4..8].try_into().ok()?) as usize;
+    let header_fields_len = u32::from_le_bytes(data[12..16].try_into().ok()?) as usize;
+    let header_end = 16usize.checked_add(header_fields_len)?;
+    let aligned_header_end = header_end.checked_add(7)? & !7;
+    let message_len = aligned_header_end.checked_add(body_len)?;
+    (message_len <= data.len()).then_some(message_len)
 }
 
 /// Build D-Bus introspection XML.
@@ -866,6 +881,30 @@ mod tests {
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
+    }
+
+    #[test]
+    fn complete_encoded_msg_len_waits_for_full_frame() {
+        let msg = Msg::call(
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "OpenSession",
+            ":1.1",
+        )
+        .body(
+            vec![
+                Val::S("plain".into()),
+                Val::Var(Box::new(Val::S("".into()))),
+            ],
+            "sv",
+        );
+        let encoded = encode_msg(&msg);
+
+        assert_eq!(complete_encoded_msg_len(&encoded), Some(encoded.len()));
+        assert_eq!(
+            complete_encoded_msg_len(&encoded[..encoded.len() - 1]),
+            None
+        );
     }
 
     #[test]
@@ -1201,7 +1240,7 @@ mod tests {
     #[test]
     fn unlock_and_get_secrets_with_mock_biometrics() {
         use crate::session::BiometricVerifier;
-        use edgerun_biometrics::BiometricState;
+        use edgerun_devices::biometrics::BiometricState;
 
         struct MockVerifier {
             available: bool,
@@ -1549,7 +1588,7 @@ mod tests {
     #[test]
     fn full_flow_put_unlock_get_lock_get_fails() {
         use crate::session::BiometricVerifier;
-        use edgerun_biometrics::BiometricState;
+        use edgerun_devices::biometrics::BiometricState;
 
         struct MockVerifier;
         impl BiometricVerifier for MockVerifier {

@@ -1,5 +1,5 @@
 use edgerun_alsa_speaker::discover_speakers;
-use edgerun_speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
+use edgerun_devices::speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
 
 fn usage() {
     eprintln!(

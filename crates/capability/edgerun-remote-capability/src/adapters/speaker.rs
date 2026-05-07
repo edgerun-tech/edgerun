@@ -4,6 +4,10 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
+use edgerun_devices::speaker::{
+    AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerOutputLevel,
+    SpeakerSampleFormat,
+};
 use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityInvocation, CapabilityResult,
 };
@@ -11,10 +15,6 @@ use edgerun_protocols::wire::{
     RemoteAudioPlaybackRequest as AudioPlaybackRequestWire,
     RemoteAudioPlaybackResult as AudioPlaybackResultWire,
     RemoteSpeakerOutputLevel as SpeakerOutputLevelWire,
-};
-use edgerun_speaker::{
-    AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerOutputLevel,
-    SpeakerSampleFormat,
 };
 
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};

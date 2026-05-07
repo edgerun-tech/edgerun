@@ -1,5 +1,5 @@
 use edgerun_alsa_microphone::{discover_alsa_pcms, AlsaMicrophoneBackend};
-use edgerun_microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
+use edgerun_devices::microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
 
 fn usage() {
     eprintln!(

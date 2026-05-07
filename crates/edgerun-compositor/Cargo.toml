@@ -12,9 +12,9 @@ name = "edgerun-compositor"
 path = "src/main.rs"
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-protocols = { workspace = true, default-features = false, features = ["wayland"] }
 edgerun-evdev-input = { workspace = true }
-edgerun-input = { workspace = true }
 
 [lints]
 workspace = true

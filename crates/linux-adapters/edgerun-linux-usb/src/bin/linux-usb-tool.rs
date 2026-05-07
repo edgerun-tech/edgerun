@@ -1,5 +1,5 @@
+use edgerun_devices::usb::UsbInventory;
 use edgerun_linux_usb::{discover_usb_devices, LinuxUsbBackend};
-use edgerun_usb::UsbInventory;
 use std::path::PathBuf;
 
 fn main() {

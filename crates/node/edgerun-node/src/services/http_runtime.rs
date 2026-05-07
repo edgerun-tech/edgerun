@@ -1,10 +1,10 @@
 use alloc::string::ToString;
 use alloc::sync::Arc;
 
+use crate::network::{HostSocketTransport, TransportAddress};
 use crate::rt::{
     self, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt, CancellationToken,
 };
-use crate::transport::{HostSocketTransport, TransportAddress};
 
 #[cfg(target_os = "none")]
 use crate::rt::io;

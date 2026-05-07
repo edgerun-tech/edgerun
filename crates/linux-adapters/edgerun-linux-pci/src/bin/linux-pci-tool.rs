@@ -1,5 +1,5 @@
+use edgerun_devices::pci::PciInventory;
 use edgerun_linux_pci::{discover_pci_devices, LinuxPciBackend};
-use edgerun_pci::PciInventory;
 use std::path::PathBuf;
 
 fn main() {

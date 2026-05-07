@@ -12,11 +12,11 @@ use edgerun_protocols::core_protocol::crypto::{
 use edgerun_protocols::core_protocol::protocol::{
     EventEnvelope, EventType, ProtocolRecord, Signature,
 };
-use edgerun_protocols::keygen::{MemoryKeyStore, NodeSigningKey, node_signing_key_from_bytes};
-use edgerun_protocols::node_bootstrap::{BootstrapConfig, bootstrap_new_node};
+use edgerun_protocols::keygen::{node_signing_key_from_bytes, MemoryKeyStore, NodeSigningKey};
+use edgerun_protocols::node_bootstrap::{bootstrap_new_node, BootstrapConfig};
 use edgerun_protocols::sign_p256::P256ProtocolSigner;
-use edgerun_protocols::verify::{ProtocolFamily, ProtocolSignerRef, verify_event_envelope};
-use edgerun_stream::{EventDraft, build_signed_event, validate_stream};
+use edgerun_protocols::verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
+use edgerun_stream::{build_signed_event, validate_stream, EventDraft};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum E2eError {

@@ -1,7 +1,7 @@
 //! xdg_wm_base, xdg_surface, xdg_toplevel, xdg_positioner, xdg_popup handlers.
 
 use super::DispatchContext;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::wl_seat;
 use edgerun_protocols::wayland::xdg_shell;
 

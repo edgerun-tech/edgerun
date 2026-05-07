@@ -15,7 +15,7 @@ use edgerun_crypto::des::{
 use edgerun_crypto::fill_random;
 use edgerun_crypto::sha1::{Digest, Sha1};
 use edgerun_crypto::{sha256, sha384, sha512};
-use edgerun_nfc::NfcReader;
+use edgerun_devices::nfc::NfcReader;
 use edgerun_protocols::emrtd::{self, EmrtdError};
 pub use edgerun_protocols::emrtd::{
     get_challenge, mutual_authenticate, read_binary, select_by_name, select_file, DataGroup,
@@ -2799,7 +2799,7 @@ mod tests {
             &self,
             _target_id: &str,
         ) -> core::result::Result<
-            Option<edgerun_nfc::NdefMessage>,
+            Option<edgerun_devices::nfc::NdefMessage>,
             edgerun_capabilities::CapabilityError,
         > {
             Ok(None)
@@ -2808,7 +2808,7 @@ mod tests {
         fn write_ndef(
             &self,
             _target_id: &str,
-            _message: &edgerun_nfc::NdefMessage,
+            _message: &edgerun_devices::nfc::NdefMessage,
         ) -> core::result::Result<(), edgerun_capabilities::CapabilityError> {
             Ok(())
         }

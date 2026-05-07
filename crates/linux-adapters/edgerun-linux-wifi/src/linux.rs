@@ -172,19 +172,19 @@ use alloc::vec;
 use edgerun_linux_sysfs::prelude::v1::*;
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use edgerun_devices::network_interface::{
+    NetworkAdminState, NetworkInterfaceController, NetworkInterfaceKind,
+};
+use edgerun_devices::wifi::{
+    default_wifi_descriptor, validate_access_point_config, WifiAccessPointConfig,
+    WifiAccessPointController, WifiAccessPointState, WifiController, WifiInterfaceInfo,
+    WifiInterfaceMode, WifiNetworkObservation, WifiPowerState, WifiScanResult, WifiScanner,
+};
 use edgerun_linux_netif::{
     discover_network_interfaces, discover_network_interfaces_in, LinuxNetifBackend,
 };
 use edgerun_linux_sysfs::{
     close_ioctl_fd, fill_ifr_name, ioctl_call, open_ioctl_socket, read_trimmed,
-};
-use edgerun_network_interface::{
-    NetworkAdminState, NetworkInterfaceController, NetworkInterfaceKind,
-};
-use edgerun_wifi::{
-    default_wifi_descriptor, validate_access_point_config, WifiAccessPointConfig,
-    WifiAccessPointController, WifiAccessPointState, WifiController, WifiInterfaceInfo,
-    WifiInterfaceMode, WifiNetworkObservation, WifiPowerState, WifiScanResult, WifiScanner,
 };
 #[cfg(unix)]
 use std::fs;

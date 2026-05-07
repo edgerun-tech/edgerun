@@ -9,9 +9,9 @@ homepage.workspace = true
 description = "Linux network interface adapter for Edgerun"
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-edgerun-network-interface = { version = "0.1", path = "../../device-types/edgerun-network-interface" }
 
 [[bin]]
 name = "linux-netif-tool"

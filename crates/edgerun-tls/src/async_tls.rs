@@ -1,8 +1,8 @@
 //! Async TLS 1.3 streams — client and server — wrapping any
-//! `edgerun_tls::AsyncRead + edgerun_tls::AsyncWrite + Unpin` transport.
+//! `edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin` transport.
 //!
 //! Mirrors the sync `TlsStream` / `TlsServerStream` API but uses
-//! async `poll_read` / `poll_write` instead of `std::io::Read` / `Write`.
+//! async `poll_read` / `poll_write` instead of blocking read/write traits.
 //!
 //! # Example (client)
 //! ```rust
@@ -17,13 +17,12 @@
 //! }
 //! ```
 
-use crate::std;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use core::pin::Pin;
+use core::task::{Context, Poll};
 
 use crate::alert::{Alert, AlertLevel};
 use crate::certificate::Certificate;
@@ -47,7 +46,7 @@ use crate::{Result, TlsError};
 use edgerun_crypto::CipherSuite;
 use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 
-use crate::compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, IoError};
 
 const TLS_MAX_PLAINTEXT_FRAGMENT: usize = 16 * 1024;
 
@@ -709,12 +708,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         &mut self,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
         if !self.handshake_done {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::NotConnected,
-                "TLS handshake not complete",
-            )));
+            return Poll::Ready(Err(IoError::Other("TLS handshake not complete")));
         }
 
         // Return pending data first
@@ -745,22 +741,22 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             Poll::Ready(Err(TlsError::Alert(AlertLevel::Warning, Alert::CloseNotify))) => {
                 Poll::Ready(Ok(0))
             }
-            Poll::Ready(Err(TlsError::Alert(_, _))) => Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset,
-                "TLS alert",
-            ))),
-            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
+            Poll::Ready(Err(TlsError::Alert(_, _))) => {
+                Poll::Ready(Err(IoError::Other("TLS alert")))
+            }
+            Poll::Ready(Err(_)) => Poll::Ready(Err(IoError::Other("TLS read error"))),
             Poll::Pending => Poll::Pending,
         }
     }
 
     /// Async write — encrypts and sends application data.
-    pub fn poll_write(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<std::io::Result<usize>> {
+    pub fn poll_write(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
         if !self.handshake_done {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::NotConnected,
-                "TLS handshake not complete",
-            )));
+            return Poll::Ready(Err(IoError::Other("TLS handshake not complete")));
         }
         if buf.is_empty() {
             return Poll::Ready(Ok(0));
@@ -785,10 +781,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             {
                 Poll::Ready(Ok(n)) => {
                     if n == 0 {
-                        return Poll::Ready(Err(std::io::Error::new(
-                            std::io::ErrorKind::WriteZero,
-                            "failed to write whole buffer",
-                        )));
+                        return Poll::Ready(Err(IoError::WriteZero));
                     }
                     self.write_record_pos += n;
                 }
@@ -815,12 +808,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
     }
 
     /// Flush the underlying transport.
-    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
         Pin::new(&mut self.stream).poll_flush(cx)
     }
 
     /// Shut down the underlying transport.
-    pub fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    pub fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
         Pin::new(&mut self.stream).poll_shutdown(cx)
     }
 
@@ -834,10 +827,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 {
                     Poll::Ready(Ok(n)) => {
                         if n == 0 {
-                            return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
-                                std::io::ErrorKind::UnexpectedEof,
-                                "failed to read record header",
-                            ))));
+                            return Poll::Ready(Err(TlsError::Io(IoError::UnexpectedEof)));
                         }
                         self.read_header_pos += n;
                     }
@@ -860,10 +850,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 {
                     Poll::Ready(Ok(n)) => {
                         if n == 0 {
-                            return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
-                                std::io::ErrorKind::UnexpectedEof,
-                                "failed to read record fragment",
-                            ))));
+                            return Poll::Ready(Err(TlsError::Io(IoError::UnexpectedEof)));
                         }
                         self.read_fragment_pos += n;
                     }
@@ -906,6 +893,37 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             }
             // content_type 22 (handshake post-handshake) or unknown — skip
         }
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for AsyncTlsStream<S> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
+        self.get_mut().poll_read(cx, buf)
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for AsyncTlsStream<S> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
+        self.get_mut().poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
+        self.get_mut().poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<edgerun_rt::io::Result<()>> {
+        self.get_mut().poll_shutdown(cx)
     }
 }
 
@@ -1049,12 +1067,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
         &mut self,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
         if !self.handshake_done {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::NotConnected,
-                "TLS handshake not complete",
-            )));
+            return Poll::Ready(Err(IoError::Other("TLS handshake not complete")));
         }
 
         if self.pending_offset < self.pending_data.len() {
@@ -1077,22 +1092,22 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                 Poll::Ready(Ok(n))
             }
             Poll::Ready(Err(TlsError::Io(e))) => Poll::Ready(Err(e)),
-            Poll::Ready(Err(TlsError::Alert(_, _))) => Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset,
-                "TLS alert",
-            ))),
-            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
+            Poll::Ready(Err(TlsError::Alert(_, _))) => {
+                Poll::Ready(Err(IoError::Other("TLS alert")))
+            }
+            Poll::Ready(Err(_)) => Poll::Ready(Err(IoError::Other("TLS read error"))),
             Poll::Pending => Poll::Pending,
         }
     }
 
     /// Write encrypted application data.
-    pub fn poll_write(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<std::io::Result<usize>> {
+    pub fn poll_write(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
         if !self.handshake_done {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::NotConnected,
-                "TLS handshake not complete",
-            )));
+            return Poll::Ready(Err(IoError::Other("TLS handshake not complete")));
         }
         if buf.is_empty() {
             return Poll::Ready(Ok(0));
@@ -1117,10 +1132,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             {
                 Poll::Ready(Ok(n)) => {
                     if n == 0 {
-                        return Poll::Ready(Err(std::io::Error::new(
-                            std::io::ErrorKind::WriteZero,
-                            "failed to write whole buffer",
-                        )));
+                        return Poll::Ready(Err(IoError::WriteZero));
                     }
                     self.write_record_pos += n;
                 }
@@ -1147,12 +1159,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     }
 
     /// Flush the underlying transport.
-    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
         Pin::new(&mut self.stream).poll_flush(cx)
     }
 
     /// Shut down the underlying transport.
-    pub fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    pub fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
         Pin::new(&mut self.stream).poll_shutdown(cx)
     }
 
@@ -1165,10 +1177,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                 match Pin::new(&mut self.stream).poll_read(cx, &mut hdr[pos..5]) {
                     Poll::Ready(Ok(n)) => {
                         if n == 0 {
-                            return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
-                                std::io::ErrorKind::UnexpectedEof,
-                                "failed to read record header",
-                            ))));
+                            return Poll::Ready(Err(TlsError::Io(IoError::UnexpectedEof)));
                         }
                         pos += n;
                         if pos == 5 {
@@ -1190,10 +1199,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                 match Pin::new(&mut self.stream).poll_read(cx, &mut fragment[pos..length]) {
                     Poll::Ready(Ok(n)) => {
                         if n == 0 {
-                            return Poll::Ready(Err(TlsError::Io(std::io::Error::new(
-                                std::io::ErrorKind::UnexpectedEof,
-                                "failed to read record fragment",
-                            ))));
+                            return Poll::Ready(Err(TlsError::Io(IoError::UnexpectedEof)));
                         }
                         pos += n;
                         if pos == length {
@@ -1228,6 +1234,37 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             }
             // content_type 22 (handshake) or unknown — skip
         }
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for AsyncTlsServerStream<S> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
+        self.get_mut().poll_read(cx, buf)
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for AsyncTlsServerStream<S> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<edgerun_rt::io::Result<usize>> {
+        self.get_mut().poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
+        self.get_mut().poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<edgerun_rt::io::Result<()>> {
+        self.get_mut().poll_shutdown(cx)
     }
 }
 

@@ -4,6 +4,10 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
+use edgerun_devices::wifi::{
+    WifiController, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState,
+    WifiScanResult, WifiScanner,
+};
 use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityInvocation, CapabilityResult,
 };
@@ -12,10 +16,6 @@ use edgerun_protocols::wire::{
     RemoteWifiInterfaceInfo as WifiInterfaceInfoWire,
     RemoteWifiNetworkObservation as WifiNetworkObservationWire,
     RemoteWifiScanResult as WifiScanResultWire,
-};
-use edgerun_wifi::{
-    WifiController, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState,
-    WifiScanResult, WifiScanner,
 };
 
 use crate::adapters::common::stream_oriented_error;

@@ -1,5 +1,3 @@
-//! Wayland transport helpers and protocol-core re-exports.
+//! Wayland file descriptor transport helpers.
 
 pub mod fd;
-
-pub use edgerun_protocols::wayland::*;

@@ -784,6 +784,7 @@ pub fn temp_root(prefix: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     // ----- read_trimmed -----
 

@@ -9,9 +9,9 @@ homepage.workspace = true
 description = "AMD XDNA Linux NPU adapter for Edgerun"
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-linux-npu = { version = "0.1", path = "../edgerun-linux-npu" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-edgerun-npu = { version = "0.1", path = "../../device-types/edgerun-npu" }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 
 [[bin]]

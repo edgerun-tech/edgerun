@@ -1,5 +1,5 @@
+use edgerun_devices::network_interface::{NetworkAdminState, NetworkInterfaceController};
 use edgerun_linux_netif::{discover_network_interfaces, LinuxNetifBackend};
-use edgerun_network_interface::{NetworkAdminState, NetworkInterfaceController};
 
 fn usage() {
     eprintln!("usage: linux-netif-tool list | state <ifname> | up <ifname> | down <ifname>");

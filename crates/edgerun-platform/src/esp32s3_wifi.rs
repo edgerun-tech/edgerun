@@ -4,7 +4,7 @@
 //! That lets the first implementation use Espressif symbols as an oracle while
 //! the AP/MAC and Ethernet bridge logic remains Edgerun-owned and testable.
 
-use edgerun_wifi::ieee80211::{ApEvent, MacAddr, OpenAp, OpenApConfig, OpenApError};
+use edgerun_protocols::ieee80211::{ApEvent, MacAddr, OpenAp, OpenApConfig, OpenApError};
 
 const RAW_80211_MAX: usize = 2352;
 const ETHERNET_MAX: usize = 1514;

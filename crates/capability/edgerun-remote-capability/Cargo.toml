@@ -9,19 +9,10 @@ homepage.workspace = true
 description = "Remote capability request and response protocol for Edgerun"
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-capability-policy = { version = "0.1", path = "../edgerun-capability-policy" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
-edgerun-camera-biometrics = { version = "0.1", path = "../../device-types/edgerun-camera-biometrics" }
-edgerun-biometrics = { version = "0.1", path = "../../device-types/edgerun-biometrics" }
-edgerun-bluetooth = { version = "0.1", path = "../../device-types/edgerun-bluetooth" }
-edgerun-display = { version = "0.1", path = "../../device-types/edgerun-display" }
-edgerun-input = { version = "0.1", path = "../../device-types/edgerun-input" }
-edgerun-microphone = { version = "0.1", path = "../../device-types/edgerun-microphone" }
-edgerun-speaker = { version = "0.1", path = "../../device-types/edgerun-speaker" }
-edgerun-wifi = { version = "0.1", path = "../../device-types/edgerun-wifi" }
 
-edgerun-npu = { version = "0.1", path = "../../device-types/edgerun-npu" }
-edgerun-fingerprint = { version = "0.1", path = "../../device-types/edgerun-fingerprint" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }

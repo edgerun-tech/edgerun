@@ -14,7 +14,7 @@ pub use edgerun_linux_sysfs::prelude;
 pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result, string, vec};
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_gpu::{
+use edgerun_devices::gpu::{
     default_gpu_descriptor, infer_gpu_vendor, GpuConnectorInfo, GpuDisplayMode, GpuInfo,
     GpuInventory, GpuVendor,
 };

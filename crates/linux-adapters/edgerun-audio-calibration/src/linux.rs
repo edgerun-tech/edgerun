@@ -12,8 +12,8 @@ use edgerun_alsa_microphone::{discover_alsa_pcms, AlsaMicrophoneBackend};
 #[cfg(unix)]
 use edgerun_alsa_speaker::discover_speakers;
 use edgerun_capabilities::CapabilityError;
-use edgerun_microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
-use edgerun_speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
+use edgerun_devices::microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
+use edgerun_devices::speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
 #[cfg(unix)]
 use std::thread;
 #[cfg(unix)]

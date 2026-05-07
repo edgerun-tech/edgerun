@@ -1,7 +1,7 @@
 //! xdg decoration, activation, output handlers.
 
 use super::DispatchContext;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
 use edgerun_protocols::wayland::wl_seat;
 use edgerun_protocols::wayland::xdg_activation;
 use edgerun_protocols::wayland::xdg_decoration;

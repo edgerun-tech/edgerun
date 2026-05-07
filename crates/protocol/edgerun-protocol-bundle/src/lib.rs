@@ -9,10 +9,10 @@ use core::hint::black_box;
 
 use edgerun_mesh::{LocalNode, MeshFrame, MeshRoute, MeshRouter, MeshRoutingTable, NodeID};
 use edgerun_protocols::core_protocol::protocol::{
-    Digest, EventType, ProtocolRecord, Signature, capability_runtime::CapabilityRemoteEnvelope,
+    capability_runtime::CapabilityRemoteEnvelope, Digest, EventType, ProtocolRecord, Signature,
 };
 use edgerun_protocols::http::http1::{
-    Http1Version, determine_connection, extract_boundary, parse_multipart, parse_range_header,
+    determine_connection, extract_boundary, parse_multipart, parse_range_header, Http1Version,
 };
 use edgerun_protocols::http::{HeaderMap, HttpRequest, HttpResponse, Method, StatusCode, Uri};
 use edgerun_protocols::imap::session_core::{
@@ -26,8 +26,8 @@ use edgerun_protocols::smtp::session_core::{
 };
 use edgerun_protocols::tftp::message::TftpMessage;
 use edgerun_remote_capability::MemoryRemoteTransport;
-use edgerun_storage::MemEventLog;
 use edgerun_storage::core::EventLog;
+use edgerun_storage::MemEventLog;
 
 fn len_u32(len: usize) -> u32 {
     len.min(u32::MAX as usize) as u32
@@ -68,8 +68,11 @@ fn stream_storage_probe() -> u32 {
 }
 
 fn node_probe() -> u32 {
-    match edgerun_node::NodeConfig::from_yaml(
-        "stream_id: bundle\nname: Protocol Bundle\ncontrollers: []\ntrust_nodes: []\n",
+    match edgerun_node::NodeConfig::new(
+        "bundle",
+        Some("Protocol Bundle".to_string()),
+        Vec::new(),
+        Vec::new(),
     ) {
         Ok(config) => len_u32(config.stream_id.len()) + len_u32(config.controllers.len()),
         Err(_) => 0,

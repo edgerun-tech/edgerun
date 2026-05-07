@@ -40,7 +40,7 @@ pub fn process_input_for_device(
 ) {
     for event in input_mgr.read_events(dev_id, 64) {
         match event.kind {
-            edgerun_input::InputEventKind::Key => {
+            edgerun_devices::input::InputEventKind::Key => {
                 let scancode = event.code as u16;
                 let pressed = event.value == 1;
 
@@ -151,7 +151,7 @@ pub fn process_input_for_device(
                     std::process::exit(0);
                 }
             }
-            edgerun_input::InputEventKind::RelativeMotion => {
+            edgerun_devices::input::InputEventKind::RelativeMotion => {
                 const REL_X: u16 = 0;
                 const REL_Y: u16 = 1;
                 let dx = event.value as f64;
@@ -230,7 +230,7 @@ pub fn process_input_for_device(
                     }
                 }
             }
-            edgerun_input::InputEventKind::AbsoluteMotion => {
+            edgerun_devices::input::InputEventKind::AbsoluteMotion => {
                 const ABS_MT_SLOT: u16 = 0x3f;
                 const ABS_MT_TRACKING_ID: u16 = 0x39;
                 const ABS_MT_POSITION_X: u16 = 0x35;

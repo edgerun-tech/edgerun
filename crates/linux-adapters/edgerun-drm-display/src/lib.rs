@@ -39,7 +39,7 @@ pub mod vec {
 }
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_display::{
+use edgerun_devices::display::{
     default_display_descriptor, DisplayDevice, DisplayInfo, DisplayMode, DisplayUpdateRequest,
 };
 use edgerun_linux_sysfs::prelude::v1::*;
@@ -407,7 +407,7 @@ mod tests {
             },
         };
         let request = DisplayUpdateRequest {
-            content_kind: edgerun_display::DisplayContentKind::Image,
+            content_kind: edgerun_devices::display::DisplayContentKind::Image,
             width: Some(1920),
             height: Some(1080),
             refresh_millihz: Some(60_000),
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn display_update_request_clone_debug() {
         let request = DisplayUpdateRequest {
-            content_kind: edgerun_display::DisplayContentKind::Video,
+            content_kind: edgerun_devices::display::DisplayContentKind::Video,
             width: Some(2560),
             height: Some(1440),
             refresh_millihz: Some(144_000),

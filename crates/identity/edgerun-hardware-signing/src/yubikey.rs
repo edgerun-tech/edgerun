@@ -5,8 +5,8 @@
 use alloc::{vec, vec::Vec};
 
 use edgerun_yubikey::{
-    YubiKeyAssuranceLevel, YubiKeySignatureAlgorithm, YubiKeySigningKey,
-    sign_record_with_yubikey_checked,
+    sign_record_with_yubikey_checked, YubiKeyAssuranceLevel, YubiKeySignatureAlgorithm,
+    YubiKeySigningKey,
 };
 
 use crate::{

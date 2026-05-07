@@ -236,12 +236,12 @@ pub mod vec {
 pub use core::{mem, str};
 
 use crate::prelude::v1::*;
-use edgerun_bluetooth::{
+use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use edgerun_devices::bluetooth::{
     default_bluetooth_descriptor, BluetoothAddressKind, BluetoothBeaconObservation,
     BluetoothConnectionInfo, BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile,
     BluetoothScanResult, BluetoothScanner, BluetoothTransportKind,
 };
-use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_encoding::byteorder::{read_u16_le, read_u32_le};
 use edgerun_protocols::bluetooth_mgmt::{self, BluetoothMgmtError, MgmtEvent};
 pub use edgerun_protocols::bluetooth_mgmt::{

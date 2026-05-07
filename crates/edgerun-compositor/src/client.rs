@@ -4,10 +4,10 @@ use crate::libc;
 use std::io;
 use std::os::fd::RawFd;
 
-use crate::wire;
-use crate::wire::decode::parse_message;
-use crate::wire::encode::encode;
 use crate::wire::fd::{recv_with_fds, send_with_fds};
+use edgerun_protocols::wayland as wire;
+use edgerun_protocols::wayland::decode::parse_message;
+use edgerun_protocols::wayland::encode::encode;
 
 /// A connected Wayland client.
 ///

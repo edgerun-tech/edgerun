@@ -9,9 +9,9 @@ homepage.workspace = true
 description = "ALSA speaker adapter for Edgerun audio output capabilities"
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
-edgerun-speaker = { version = "0.1", path = "../../device-types/edgerun-speaker" }
 
 [dev-dependencies]
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }

@@ -183,8 +183,8 @@ dependencies = [
 name = "edgerun-compositor"
 version = "0.1.1"
 dependencies = [
+ "edgerun-devices",
  "edgerun-evdev-input",
- "edgerun-input",
  "edgerun-protocols",
 ]
 
@@ -213,6 +213,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-devices"
+version = "0.1.1"
+dependencies = [
+ "edgerun-capabilities",
+ "edgerun-protocols",
+ "edgerun-quectel-ec200a",
+]
+
+[[package]]
 name = "edgerun-emoji"
 version = "0.1.1"
 
@@ -229,16 +238,9 @@ name = "edgerun-evdev-input"
 version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
+ "edgerun-devices",
  "edgerun-encoding",
- "edgerun-input",
  "edgerun-linux-sysfs",
-]
-
-[[package]]
-name = "edgerun-input"
-version = "0.1.1"
-dependencies = [
- "edgerun-capabilities",
 ]
 
 [[package]]
@@ -267,6 +269,13 @@ dependencies = [
 [[package]]
 name = "edgerun-pty"
 version = "0.1.1"
+
+[[package]]
+name = "edgerun-quectel-ec200a"
+version = "0.1.1"
+dependencies = [
+ "edgerun-protocols",
+]
 
 [[package]]
 name = "edgerun-sixel"

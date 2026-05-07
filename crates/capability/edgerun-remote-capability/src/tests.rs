@@ -12,24 +12,32 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use crate::prelude::v1::*;
-use edgerun_bluetooth::{
-    BluetoothAddressKind, BluetoothBeaconObservation, BluetoothConnectionInfo,
-    BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile, BluetoothScanResult,
-    BluetoothScanner, BluetoothTransportKind,
-};
-use edgerun_camera_biometrics::{
-    CameraBiometricError, CameraBiometricPurpose, CameraCapture, CameraCaptureQuality, CameraFrame,
-    CameraPixelFormat, CameraReaderInfo, CameraStreamRole, FaceBounds, PairedCameraBiometricReader,
-    PairedCameraFrame,
-};
 use edgerun_capabilities::{
     capability_descriptor, CapabilityAccessClass, CapabilityDescriptor, CapabilityError,
     CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityRequest,
     CapabilityRole, CapabilitySelector,
 };
-use edgerun_input::{InputDeviceInfo, InputDeviceKind, InputEventKind, InputEventRecord};
-use edgerun_microphone::{
+use edgerun_devices::bluetooth::{
+    BluetoothAddressKind, BluetoothBeaconObservation, BluetoothConnectionInfo,
+    BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile, BluetoothScanResult,
+    BluetoothScanner, BluetoothTransportKind,
+};
+use edgerun_devices::camera_biometrics::{
+    CameraBiometricError, CameraBiometricPurpose, CameraCapture, CameraCaptureQuality, CameraFrame,
+    CameraPixelFormat, CameraReaderInfo, CameraStreamRole, FaceBounds, PairedCameraBiometricReader,
+    PairedCameraFrame,
+};
+use edgerun_devices::input::{InputDeviceInfo, InputDeviceKind, InputEventKind, InputEventRecord};
+use edgerun_devices::microphone::{
     AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneInfo, MicrophoneSampleFormat,
+};
+use edgerun_devices::speaker::{
+    AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel,
+    SpeakerSampleFormat,
+};
+use edgerun_devices::wifi::{
+    default_wifi_descriptor, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation,
+    WifiPowerState, WifiScanResult,
 };
 use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityGrant, CapabilityInvocation, CapabilityRequest as ProtoRequest, CapabilityResult,
@@ -38,14 +46,6 @@ use edgerun_protocols::core_protocol::protocol::capability::{
 use edgerun_protocols::core_protocol::protocol::capability_runtime::{
     capability_remote_envelope, CapabilityInvocationFrame, CapabilityRemoteEnvelope,
     CapabilitySessionClose, CapabilitySessionMode, CapabilitySessionOpen,
-};
-use edgerun_speaker::{
-    AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel,
-    SpeakerSampleFormat,
-};
-use edgerun_wifi::{
-    default_wifi_descriptor, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation,
-    WifiPowerState, WifiScanResult,
 };
 
 use crate::adapters::{
@@ -68,8 +68,8 @@ use crate::protocol::{
 use crate::pump_one_event;
 use crate::serve_one;
 use crate::transport::MemoryRemoteTransport;
-use edgerun_biometrics::{BiometricModality, BiometricState};
 use edgerun_capability_policy::PolicyEngine;
+use edgerun_devices::biometrics::{BiometricModality, BiometricState};
 
 // ============================================================================
 // Dummy device implementations
@@ -179,7 +179,7 @@ impl edgerun_capabilities::CapabilityProvider for DummyInputDevice {
     }
 }
 
-impl edgerun_input::InputDevice for DummyInputDevice {
+impl edgerun_devices::input::InputDevice for DummyInputDevice {
     fn input_info(&self) -> Result<InputDeviceInfo, CapabilityError> {
         Ok(InputDeviceInfo {
             provider: "dummy-input".into(),
@@ -317,7 +317,7 @@ struct DummyBluetoothScannerDevice {
 
 impl edgerun_capabilities::CapabilityProvider for DummyBluetoothScannerDevice {
     fn descriptor(&self) -> CapabilityDescriptor {
-        edgerun_bluetooth::default_bluetooth_descriptor("dummy-bt", "hci0")
+        edgerun_devices::bluetooth::default_bluetooth_descriptor("dummy-bt", "hci0")
     }
 }
 
@@ -337,7 +337,7 @@ struct DummyBluetoothConnectionDevice {
 
 impl edgerun_capabilities::CapabilityProvider for DummyBluetoothConnectionDevice {
     fn descriptor(&self) -> CapabilityDescriptor {
-        edgerun_bluetooth::default_bluetooth_descriptor("dummy-bt", "hci0")
+        edgerun_devices::bluetooth::default_bluetooth_descriptor("dummy-bt", "hci0")
     }
 }
 
@@ -358,7 +358,7 @@ impl edgerun_capabilities::CapabilityProvider for DummyWifiScannerDevice {
     }
 }
 
-impl edgerun_wifi::WifiScanner for DummyWifiScannerDevice {
+impl edgerun_devices::wifi::WifiScanner for DummyWifiScannerDevice {
     fn scan_nearby(&self) -> Result<WifiScanResult, CapabilityError> {
         self.scans
             .borrow_mut()
@@ -379,7 +379,7 @@ impl edgerun_capabilities::CapabilityProvider for DummyWifiControllerDevice {
     }
 }
 
-impl edgerun_wifi::WifiController for DummyWifiControllerDevice {
+impl edgerun_devices::wifi::WifiController for DummyWifiControllerDevice {
     fn interface_info(&self) -> Result<WifiInterfaceInfo, CapabilityError> {
         self.info
             .borrow()
@@ -422,7 +422,7 @@ impl edgerun_capabilities::CapabilityProvider for DummyCameraDevice {
     }
 }
 
-impl edgerun_camera_biometrics::CameraBiometricReader for DummyCameraDevice {
+impl edgerun_devices::camera_biometrics::CameraBiometricReader for DummyCameraDevice {
     fn reader_info(&self) -> Result<CameraReaderInfo, CameraBiometricError> {
         Ok(CameraReaderInfo {
             provider: "dummy-camera".into(),
@@ -446,33 +446,37 @@ impl edgerun_camera_biometrics::CameraBiometricReader for DummyCameraDevice {
 
     fn begin_enrollment(
         &mut self,
-        _request: &edgerun_camera_biometrics::CameraEnrollRequest,
-    ) -> Result<edgerun_camera_biometrics::CameraEnrollmentSession, CameraBiometricError> {
+        _request: &edgerun_devices::camera_biometrics::CameraEnrollRequest,
+    ) -> Result<edgerun_devices::camera_biometrics::CameraEnrollmentSession, CameraBiometricError>
+    {
         Err(CameraBiometricError::UnsupportedOperation("dummy"))
     }
     fn enroll_step(
         &mut self,
         _session_id: &str,
         _capture: &CameraCapture,
-    ) -> Result<edgerun_camera_biometrics::CameraEnrollProgress, CameraBiometricError> {
+    ) -> Result<edgerun_devices::camera_biometrics::CameraEnrollProgress, CameraBiometricError>
+    {
         Err(CameraBiometricError::UnsupportedOperation("dummy"))
     }
     fn finish_enrollment(
         &mut self,
         _session_id: &str,
-    ) -> Result<edgerun_camera_biometrics::CameraTemplateRecord, CameraBiometricError> {
+    ) -> Result<edgerun_devices::camera_biometrics::CameraTemplateRecord, CameraBiometricError>
+    {
         Err(CameraBiometricError::UnsupportedOperation("dummy"))
     }
     fn verify_capture(
         &mut self,
-        _request: &edgerun_camera_biometrics::CameraVerifyRequest,
+        _request: &edgerun_devices::camera_biometrics::CameraVerifyRequest,
         _capture: &CameraCapture,
-    ) -> Result<edgerun_camera_biometrics::CameraVerification, CameraBiometricError> {
+    ) -> Result<edgerun_devices::camera_biometrics::CameraVerification, CameraBiometricError> {
         Err(CameraBiometricError::UnsupportedOperation("dummy"))
     }
     fn list_templates(
         &self,
-    ) -> Result<Vec<edgerun_camera_biometrics::CameraTemplateRecord>, CameraBiometricError> {
+    ) -> Result<Vec<edgerun_devices::camera_biometrics::CameraTemplateRecord>, CameraBiometricError>
+    {
         Ok(Vec::new())
     }
     fn delete_template(&mut self, _template_id: &str) -> Result<(), CameraBiometricError> {
@@ -515,14 +519,15 @@ impl PairedCameraBiometricReader for DummyPairedCameraDevice {
 
     fn evaluate_liveness(
         &mut self,
-        _challenge: &edgerun_camera_biometrics::CameraLivenessChallenge,
+        _challenge: &edgerun_devices::camera_biometrics::CameraLivenessChallenge,
         _capture: &PairedCameraFrame,
-    ) -> Result<edgerun_camera_biometrics::CameraLivenessResult, CameraBiometricError> {
+    ) -> Result<edgerun_devices::camera_biometrics::CameraLivenessResult, CameraBiometricError>
+    {
         Err(CameraBiometricError::UnsupportedOperation("dummy"))
     }
 }
 
-impl edgerun_camera_biometrics::CameraBiometricReader for DummyPairedCameraDevice {
+impl edgerun_devices::camera_biometrics::CameraBiometricReader for DummyPairedCameraDevice {
     fn reader_info(&self) -> Result<CameraReaderInfo, CameraBiometricError> {
         Ok(CameraReaderInfo {
             provider: "dummy-paired-camera".into(),
@@ -546,33 +551,37 @@ impl edgerun_camera_biometrics::CameraBiometricReader for DummyPairedCameraDevic
 
     fn begin_enrollment(
         &mut self,
-        _request: &edgerun_camera_biometrics::CameraEnrollRequest,
-    ) -> Result<edgerun_camera_biometrics::CameraEnrollmentSession, CameraBiometricError> {
+        _request: &edgerun_devices::camera_biometrics::CameraEnrollRequest,
+    ) -> Result<edgerun_devices::camera_biometrics::CameraEnrollmentSession, CameraBiometricError>
+    {
         Err(CameraBiometricError::UnsupportedOperation("dummy"))
     }
     fn enroll_step(
         &mut self,
         _session_id: &str,
         _capture: &CameraCapture,
-    ) -> Result<edgerun_camera_biometrics::CameraEnrollProgress, CameraBiometricError> {
+    ) -> Result<edgerun_devices::camera_biometrics::CameraEnrollProgress, CameraBiometricError>
+    {
         Err(CameraBiometricError::UnsupportedOperation("dummy"))
     }
     fn finish_enrollment(
         &mut self,
         _session_id: &str,
-    ) -> Result<edgerun_camera_biometrics::CameraTemplateRecord, CameraBiometricError> {
+    ) -> Result<edgerun_devices::camera_biometrics::CameraTemplateRecord, CameraBiometricError>
+    {
         Err(CameraBiometricError::UnsupportedOperation("dummy"))
     }
     fn verify_capture(
         &mut self,
-        _request: &edgerun_camera_biometrics::CameraVerifyRequest,
+        _request: &edgerun_devices::camera_biometrics::CameraVerifyRequest,
         _capture: &CameraCapture,
-    ) -> Result<edgerun_camera_biometrics::CameraVerification, CameraBiometricError> {
+    ) -> Result<edgerun_devices::camera_biometrics::CameraVerification, CameraBiometricError> {
         Err(CameraBiometricError::UnsupportedOperation("dummy"))
     }
     fn list_templates(
         &self,
-    ) -> Result<Vec<edgerun_camera_biometrics::CameraTemplateRecord>, CameraBiometricError> {
+    ) -> Result<Vec<edgerun_devices::camera_biometrics::CameraTemplateRecord>, CameraBiometricError>
+    {
         Ok(Vec::new())
     }
     fn delete_template(&mut self, _template_id: &str) -> Result<(), CameraBiometricError> {
@@ -997,7 +1006,7 @@ fn bluetooth_remote_adapter_streams_scan() {
     });
     let mut adapter = BluetoothRemoteAdapter::new(
         device,
-        edgerun_bluetooth::default_bluetooth_descriptor("dummy-bt", "hci0"),
+        edgerun_devices::bluetooth::default_bluetooth_descriptor("dummy-bt", "hci0"),
     );
     let open = CapabilitySessionOpen {
         version: 1,
@@ -1035,7 +1044,7 @@ fn bluetooth_connection_remote_adapter_returns_connections() {
         });
     let mut adapter = BluetoothConnectionRemoteAdapter::new(
         device,
-        edgerun_bluetooth::default_bluetooth_descriptor("dummy-bt", "hci0"),
+        edgerun_devices::bluetooth::default_bluetooth_descriptor("dummy-bt", "hci0"),
     );
     let open = CapabilitySessionOpen {
         version: 1,

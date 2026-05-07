@@ -12,7 +12,7 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
-use edgerun_biometrics::{BiometricAssuranceStrength, BiometricState};
+use edgerun_devices::biometrics::{BiometricAssuranceStrength, BiometricState};
 use edgerun_protocols::core_protocol::crypto::signature_input;
 use edgerun_protocols::core_protocol::prelude::v1::*;
 use edgerun_protocols::sign::{ProtocolSignError, ProtocolSigner, SignableProtocolFamily};
@@ -31,15 +31,15 @@ pub mod android_keystore;
 pub mod yubikey;
 
 #[cfg(feature = "tpm")]
-pub use tpm::{TpmHardwareKeyAdapter, sign_record_with_tpm_provider};
+pub use tpm::{sign_record_with_tpm_provider, TpmHardwareKeyAdapter};
 
 #[cfg(feature = "android-keystore")]
 pub use android_keystore::{
-    AndroidKeystoreHardwareKeyAdapter, sign_record_with_android_keystore_provider,
+    sign_record_with_android_keystore_provider, AndroidKeystoreHardwareKeyAdapter,
 };
 
 #[cfg(all(feature = "yubikey", target_os = "linux"))]
-pub use yubikey::{YubiKeyHardwareKeyAdapter, sign_record_with_yubikey_provider};
+pub use yubikey::{sign_record_with_yubikey_provider, YubiKeyHardwareKeyAdapter};
 
 // ---------------------------------------------------------------------------
 // Mesh identity constants — ECDSA P256 is the universal algorithm

@@ -17,17 +17,17 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(not(target_os = "none"))]
 use std::path::PathBuf;
 
+use edgerun_devices::network_interface::{NetworkInterfaceController, NetworkInterfaceInfo};
+use edgerun_devices::pci::{PciDeviceInfo, PciInventory};
+use edgerun_devices::usb::{UsbDeviceInfo, UsbInventory};
+use edgerun_devices::wifi::{
+    WifiAccessPointController, WifiAccessPointState, WifiController, WifiInterfaceInfo,
+    WifiNetworkObservation, WifiScanner,
+};
 use edgerun_linux_netif::{discover_network_interfaces, LinuxNetifBackend};
 use edgerun_linux_pci::LinuxPciBackend;
 use edgerun_linux_usb::LinuxUsbBackend;
 use edgerun_linux_wifi::{discover_wifi_interfaces, LinuxWifiBackend};
-use edgerun_network_interface::{NetworkInterfaceController, NetworkInterfaceInfo};
-use edgerun_pci::{PciDeviceInfo, PciInventory};
-use edgerun_usb::{UsbDeviceInfo, UsbInventory};
-use edgerun_wifi::{
-    WifiAccessPointController, WifiAccessPointState, WifiController, WifiInterfaceInfo,
-    WifiNetworkObservation, WifiScanner,
-};
 
 use crate::{ContainerRuntime, DeploymentMachineInventory, ServiceManager};
 

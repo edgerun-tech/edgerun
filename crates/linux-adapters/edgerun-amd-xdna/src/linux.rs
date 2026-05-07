@@ -158,12 +158,12 @@ use core::ops::Drop;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
 
-use edgerun_linux_npu::{discover_linux_npus_in, read_trimmed, LinuxNpuInfo};
-use edgerun_npu::{
+use edgerun_devices::npu::{
     default_npu_descriptor, validate_npu_workload_request, CapabilityDescriptor, CapabilityError,
     CapabilityProvider, NpuDevice, NpuExecutionMode, NpuInfo, NpuWorkloadRequest,
     NpuWorkloadResult,
 };
+use edgerun_linux_npu::{discover_linux_npus_in, read_trimmed, LinuxNpuInfo};
 use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::os::fd::{AsRawFd, RawFd};
