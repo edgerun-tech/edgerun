@@ -17,7 +17,7 @@ edgerun-stream = { version = "0.1", path = "../../authority/edgerun-stream", def
 edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage", default-features = false }
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false }
 edgerun-protocols = { workspace = true, default-features = false, features = ["core", "dhcp", "dhcpv6", "dns", "http", "imap", "lmtp", "smtp", "tftp"] }
-edgerun-secret-service = { version = "0.1", path = "../../edgerun-secret-service", default-features = false }
+edgerun-secret-service = { version = "0.1", path = "../../apps/edgerun-secret-service", default-features = false }
 edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh", default-features = false }
 edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link", default-features = false }
 edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session", default-features = false }

@@ -1,8 +1,7 @@
-//! Protocol interface definitions.
+//! Wayland protocol dispatch runtime.
 //!
-//! Each Wayland interface is defined by:
-//! - A set of **requests** (client → server) with opcode + argument signature
-//! - A set of **events** (server → client) with opcode + argument signature
+//! Interface bytes, opcodes, signatures, and event builders live in
+//! `edgerun_protocols::wayland`.
 
 pub mod dispatch;
 mod dispatch_legacy;

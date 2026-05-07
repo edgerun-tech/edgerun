@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -173,89 +172,11 @@ fn persist_provisioning_response(config_path: Option<&Path>, public_key_hex: &st
 }
 
 fn persist_provisioned_signer_state(
-    config_path: &Path,
+    _config_path: &Path,
     public_key_hex: &str,
 ) -> Result<(), String> {
-    let raw = fs::read_to_string(config_path).map_err(|error| error.to_string())?;
-    let lines = raw.split_inclusive('\n').collect::<Vec<_>>();
-    let mut signer_start = None;
-    let mut signer_end = None;
-    let mut cursor = 0;
-    while cursor < lines.len() {
-        let line = lines[cursor];
-        if line.trim_end_matches('\n') != "signer:" || line.starts_with(' ') {
-            cursor += 1;
-            continue;
-        }
-
-        let mut end = cursor + 1;
-        while end < lines.len() && lines[end].starts_with("  ") {
-            end += 1;
-        }
-
-        let block = &lines[cursor + 1..end];
-        let mut signer_type: Option<String> = None;
-        let mut is_target_signer = false;
-        for entry in block {
-            if let Some((key, value)) = crate::config::parse_kv(entry.trim_start()) {
-                let value = crate::config::unquote(&value.trim_end_matches('\n'));
-                if key == "type" {
-                    signer_type = Some(value.to_string());
-                } else if key == "public_key_hex" && value == public_key_hex {
-                    is_target_signer = true;
-                }
-            }
-        }
-
-        if signer_type.as_deref() == Some("provisioned") && is_target_signer {
-            signer_start = Some(cursor);
-            signer_end = Some(end);
-            break;
-        }
-        cursor = end;
-    }
-
-    let (start, end) = match (signer_start, signer_end) {
-        (Some(start), Some(end)) => (start, end),
-        _ => return Err("target provisioned signer not found".into()),
-    };
-
-    let block = &lines[start + 1..end];
-    let mut has_state = false;
-
-    let mut output = String::new();
-    for line in lines[..start + 1].iter() {
-        output.push_str(line);
-    }
-
-    for line in block {
-        let raw_line = line.trim_end_matches('\n');
-        if let Some((key, value)) = crate::config::parse_kv(raw_line.trim_start()) {
-            if key == "state" {
-                output.push_str(&format!("  state: \"active\"\n"));
-                has_state = true;
-                continue;
-            }
-            if key == "pairing_pin" {
-                continue;
-            }
-            output.push_str(line);
-            continue;
-        }
-        output.push_str(line);
-    }
-
-    if !has_state {
-        output.push_str("  state: \"active\"\n");
-    }
-
-    for line in lines[end..].iter() {
-        output.push_str(line);
-    }
-
-    fs::write(config_path, output).map_err(|error| error.to_string())?;
     crate::node_info!(
-        "provisioning state persisted for node {}",
+        "provisioning accepted for node {}; authoritative changes must be committed to the event log",
         &public_key_hex[..16]
     );
     Ok(())

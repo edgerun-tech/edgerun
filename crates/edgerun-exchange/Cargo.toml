@@ -11,17 +11,18 @@ description = "EdgeRun Exchange — provider adapters and routing"
 [dependencies]
 edgerun-protocols = { version = "0.1", path = "../protocol/edgerun-protocols", default-features = false, features = ["core", "wire"] }
 edgerun-wallet = { version = "0.1", path = "../edgerun-wallet" }
-edgerun-http = { version = "0.1", path = "../edgerun-http", features = ["client"] }
+edgerun-http = { version = "0.1", path = "../edgerun-http", features = ["client"], optional = true }
 edgerun-json = { version = "0.1", path = "../utility/edgerun-json" }
 edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
-edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
+edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
 
 [dev-dependencies]
 edgerun-http = { version = "0.1", path = "../edgerun-http" }
 
 [features]
-ffio = []
+provider-http = ["dep:edgerun-http", "dep:edgerun-rt"]
+ffio = ["provider-http"]
 
 [lints]
 workspace = true

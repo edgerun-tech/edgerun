@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Display device capability abstractions for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { workspace = true }
+edgerun-devices = { version = "0.1", path = "../edgerun-devices" }
 
 [lints]
 workspace = true

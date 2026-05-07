@@ -1,5 +1,10 @@
 #![no_std]
 
+extern crate alloc;
+
+#[cfg(feature = "runtime-api")]
+pub mod runtime_api;
+
 pub const SDK_ABI_NAME: &str = "standard-module-v1";
 pub const SDK_ABI_VERSION: u32 = 2;
 

@@ -1,8 +1,8 @@
 //! Command validation and decision-event recording.
 
 use crate::bootstrap::{archive_node_genesis_payload, node_genesis_payload};
-use crate::config::NodeConfig;
 use edgerun_hardware_signing::MeshSigner;
+use edgerun_node::NodeConfig;
 use edgerun_protocols::core_protocol::collections::{HashMap, HashSet};
 use edgerun_protocols::core_protocol::command::{
     command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
@@ -401,9 +401,9 @@ pub fn project_controller_set(
 pub fn project_config(
     _store: &NodeStore,
     _stream_id: &[u8],
-    base_yaml: &str,
+    _base_text: &str,
 ) -> Result<NodeConfig, String> {
-    crate::config::parse_config(base_yaml)
+    Err("text node config was removed; project typed state from the event stream".into())
 }
 
 pub fn project_config_from_base(

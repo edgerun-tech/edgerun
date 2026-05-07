@@ -10,7 +10,6 @@
 pub mod time;
 pub use time::{Duration, Instant};
 
-pub mod executor;
 pub use runtime::{pending, run_queue, runs};
 
 pub mod timer;
@@ -73,8 +72,6 @@ pub use select::{
 pub mod channel;
 pub use channel::{channel, Receiver, RecvError, SendError, Sender};
 
-pub mod oneshot;
-
 pub mod mpsc;
 pub use mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
 
@@ -135,24 +132,11 @@ pub use host_async_net::{
     TcpBindSpec, UdpBindSpec,
 };
 
-pub mod ipv4;
-pub use ipv4::{Ipv4Addr, Ipv4Header, IP_DEFAULT_TTL, IP_VERSION};
-
 pub mod rng;
 pub use rng::Rng;
 
-pub mod crc32;
-pub use crc32::{crc32, Crc32};
-
 pub mod ring;
 pub use ring::RingBuffer;
-
-pub mod ip;
-pub use ip::{
-    checksum, echo_reply, ip_checksum, parse_packet, ArpCache, ArpHeader, EthHeader, IcmpHeader,
-    IpAddr, IpHeader, IpStack, Network, TcpHeader, UdpHeader, ETH_TYPE_ARP, ETH_TYPE_IPV4,
-    ICMP_ECHO_REPLY, ICMP_ECHO_REQUEST, IP_PROTO_ICMP, IP_PROTO_TCP, IP_PROTO_UDP,
-};
 
 pub mod log;
 pub use log::Level;

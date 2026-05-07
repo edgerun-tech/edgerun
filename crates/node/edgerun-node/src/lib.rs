@@ -5,13 +5,8 @@
 //! host resources. Apps can declare routes and ask for capabilities, but they
 //! do not bind ports, share memory, open files, or own sockets directly.
 //!
-//! A node is initialized from a YAML configuration that defines:
-//! - Its identity (public key)
-//! - Trusted controller identities
-//! - Initial trust relationships
-//!
-//! The config is embedded in the genesis event (seq=0) as the authoritative
-//! record of the node's initial state.
+//! A node is initialized from native rkyv bootstrap records and signed stream
+//! events. Text configuration is not an authority boundary.
 
 #![no_std]
 
@@ -131,12 +126,11 @@ use edgerun_storage::core::EventLog;
 use edgerun_storage::{DurableStreamWriter, MemEventLog};
 pub use error::{NodeError, NodeResult};
 use protocol_signer::MeshProtocolSigner;
-// Simple YAML config parser (no serde dependency)
 
 type HashMap<K, V> = BTreeMap<K, V>;
 type HashSet<T> = BTreeSet<T>;
 
-/// Node configuration — loaded from YAML and embedded in the genesis event.
+/// Minimal node construction input.
 #[derive(Clone, Debug, Default)]
 pub struct NodeConfig {
     /// The node's stream identifier.
@@ -150,71 +144,22 @@ pub struct NodeConfig {
 }
 
 impl NodeConfig {
-    /// Loads a node configuration from a YAML string.
-    pub fn from_yaml(yaml: &str) -> Result<Self, NodeError> {
-        let mut config = NodeConfig {
-            stream_id: String::new(),
-            name: None,
-            controllers: Vec::new(),
-            trust_nodes: Vec::new(),
-        };
-        let mut current_list: Option<&mut Vec<String>> = None;
-        for line in yaml.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-            if let Some(stripped) = trimmed.strip_prefix("- ") {
-                // List item continuation
-                if let Some(ref mut list) = current_list {
-                    list.push(unquote(stripped.trim()));
-                }
-                continue;
-            }
-            if let Some(colon) = trimmed.find(':') {
-                let key = trimmed[..colon].trim();
-                let val = trimmed[colon + 1..].trim();
-                current_list = None; // reset list context
-                match key {
-                    "stream_id" => config.stream_id = unquote(val),
-                    "name" => config.name = Some(unquote(val)),
-                    "controllers" => {
-                        let parsed = parse_list(val);
-                        if parsed.is_empty() && val.is_empty() {
-                            // multi-line list follows
-                            current_list = Some(&mut config.controllers);
-                        } else {
-                            config.controllers = parsed;
-                        }
-                    }
-                    "trust_nodes" => {
-                        let parsed = parse_list(val);
-                        if parsed.is_empty() && val.is_empty() {
-                            current_list = Some(&mut config.trust_nodes);
-                        } else {
-                            config.trust_nodes = parsed;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-        if config.stream_id.is_empty() {
+    pub fn new(
+        stream_id: impl Into<String>,
+        name: Option<String>,
+        controllers: Vec<String>,
+        trust_nodes: Vec<String>,
+    ) -> Result<Self, NodeError> {
+        let stream_id = stream_id.into();
+        if stream_id.is_empty() {
             return Err(NodeError::MissingField("stream_id".into()));
         }
-        Ok(config)
-    }
-
-    /// Serializes the config to a YAML string.
-    pub fn to_yaml(&self) -> String {
-        let mut out = String::new();
-        out.push_str(&format!("stream_id: \"{}\"\n", self.stream_id));
-        if let Some(ref name) = self.name {
-            out.push_str(&format!("name: \"{}\"\n", name));
-        }
-        out.push_str(&format!("controllers: {:?}\n", self.controllers));
-        out.push_str(&format!("trust_nodes: {:?}\n", self.trust_nodes));
-        out
+        Ok(Self {
+            stream_id,
+            name,
+            controllers,
+            trust_nodes,
+        })
     }
 }
 
@@ -240,7 +185,7 @@ pub struct Node<L = MemEventLog, S = MeshProtocolSigner> {
 }
 
 impl Node<MemEventLog, MeshProtocolSigner> {
-    /// Creates a new node from a YAML configuration.
+    /// Creates a new node from native construction input.
     ///
     /// This creates a genesis event containing the configuration,
     /// then returns the initialized node.
@@ -436,18 +381,6 @@ impl<L: EventLog, S: ProtocolSigner> Node<L, S> {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-fn unquote(s: &str) -> String {
-    edgerun_encoding::kv::unquote(s)
-}
-
-fn parse_list(val: &str) -> Vec<String> {
-    edgerun_encoding::kv::parse_bracket_list(val)
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -519,175 +452,14 @@ mod tests {
         command
     }
 
-    const TEST_CONFIG: &str = r#"
-stream_id: "node-test-stream"
-name: "Test Node"
-controllers:
-  - "ctrl-alice"
-  - "ctrl-bob"
-trust_nodes:
-  - "node-alpha"
-  - "node-beta"
-initial_grants: []
-metadata:
-  environment: "test"
-"#;
-
-    // -----------------------------------------------------------------------
-    // NodeConfig YAML parsing
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn config_parses_full_yaml() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        assert_eq!(config.stream_id, "node-test-stream");
-        assert_eq!(config.name.as_deref(), Some("Test Node"));
-        assert_eq!(config.controllers, vec!["ctrl-alice", "ctrl-bob"]);
-        assert_eq!(config.trust_nodes, vec!["node-alpha", "node-beta"]);
-    }
-
-    #[test]
-    fn config_parses_inline_lists() {
-        let yaml = r#"
-stream_id: "s1"
-name: "Inline"
-controllers: ["c1", "c2"]
-trust_nodes: ["t1"]
-"#;
-        let config = NodeConfig::from_yaml(yaml).unwrap();
-        assert_eq!(config.stream_id, "s1");
-        assert_eq!(config.name.as_deref(), Some("Inline"));
-        assert_eq!(config.controllers, vec!["c1", "c2"]);
-        assert_eq!(config.trust_nodes, vec!["t1"]);
-    }
-
-    #[test]
-    fn config_parses_empty_lists() {
-        let yaml = r#"
-stream_id: "minimal"
-controllers: []
-trust_nodes: []
-"#;
-        let config = NodeConfig::from_yaml(yaml).unwrap();
-        assert_eq!(config.stream_id, "minimal");
-        assert!(config.name.is_none());
-        assert!(config.controllers.is_empty());
-        assert!(config.trust_nodes.is_empty());
-    }
-
-    #[test]
-    fn config_parses_multiline_list_with_no_inline_val() {
-        let yaml = r#"
-stream_id: "ml"
-controllers:
-  - "a"
-  - "b"
-  - "c"
-trust_nodes: []
-"#;
-        let config = NodeConfig::from_yaml(yaml).unwrap();
-        assert_eq!(config.controllers, vec!["a", "b", "c"]);
-        assert!(config.trust_nodes.is_empty());
-    }
-
-    #[test]
-    fn config_missing_stream_id() {
-        let yaml = r#"
-name: "no-stream"
-controllers: []
-"#;
-        let result = NodeConfig::from_yaml(yaml);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("stream_id"));
-    }
-
-    #[test]
-    fn config_ignores_comments_and_blank_lines() {
-        let yaml = r#"
-# This is a comment
-stream_id: "with-comments"
-
-# Another comment
-name: "Commented"
-controllers: []
-
-trust_nodes: []
-"#;
-        let config = NodeConfig::from_yaml(yaml).unwrap();
-        assert_eq!(config.stream_id, "with-comments");
-        assert_eq!(config.name.as_deref(), Some("Commented"));
-    }
-
-    #[test]
-    fn config_parses_unquoted_values() {
-        let yaml = r#"
-stream_id: unquoted-id
-name: "Quoted Name"
-controllers: []
-trust_nodes: []
-"#;
-        let config = NodeConfig::from_yaml(yaml).unwrap();
-        // unquoted stream_id passes through parse_list which returns empty,
-        // but the key:value path uses unquote which strips quotes if present
-        assert_eq!(config.stream_id, "unquoted-id");
-    }
-
-    #[test]
-    fn config_unquote_strips_double_quotes() {
-        assert_eq!(super::unquote("\"hello\""), "hello");
-    }
-
-    #[test]
-    fn config_unquote_returns_raw_when_no_quotes() {
-        assert_eq!(super::unquote("hello"), "hello");
-        assert_eq!(super::unquote("  spaced  "), "spaced");
-    }
-
-    #[test]
-    fn config_unquote_single_char() {
-        assert_eq!(super::unquote("\"x\""), "x");
-    }
-
-    #[test]
-    fn parse_list_empty() {
-        assert!(super::parse_list("").is_empty());
-        assert!(super::parse_list("[]").is_empty());
-        assert!(super::parse_list("[  ]").is_empty());
-    }
-
-    #[test]
-    fn parse_list_inline_items() {
-        let items = super::parse_list("[\"a\", \"b\", \"c\"]");
-        assert_eq!(items, vec!["a", "b", "c"]);
-    }
-
-    #[test]
-    fn parse_list_unknown_format() {
-        // Non-bracket, non-empty strings return empty vec
-        assert!(super::parse_list("just-a-string").is_empty());
-    }
-
-    #[test]
-    fn config_to_yaml_roundtrip() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let yaml_out = config.to_yaml();
-        let config2 = NodeConfig::from_yaml(&yaml_out).unwrap();
-        assert_eq!(config.stream_id, config2.stream_id);
-        assert_eq!(config.name, config2.name);
-        assert_eq!(config.controllers, config2.controllers);
-        assert_eq!(config.trust_nodes, config2.trust_nodes);
-    }
-
-    #[test]
-    fn config_skips_unknown_keys() {
-        let yaml = r#"
-stream_id: "skip-test"
-unknown_key: "ignored"
-controllers: []
-trust_nodes: []
-"#;
-        let config = NodeConfig::from_yaml(yaml).unwrap();
-        assert_eq!(config.stream_id, "skip-test");
+    fn test_config() -> NodeConfig {
+        NodeConfig::new(
+            "node-test-stream",
+            Some("Test Node".into()),
+            vec!["ctrl-alice".into(), "ctrl-bob".into()],
+            vec!["node-alpha".into(), "node-beta".into()],
+        )
+        .unwrap()
     }
 
     // -----------------------------------------------------------------------
@@ -696,7 +468,7 @@ trust_nodes: []
 
     #[test]
     fn node_creates_from_config() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let expected_id = signer.node_id();
         let node = Node::from_config(config, signer).unwrap();
@@ -706,7 +478,7 @@ trust_nodes: []
 
     #[test]
     fn node_genesis_event_present() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let node = Node::from_config(config, signer).unwrap();
 
@@ -717,7 +489,7 @@ trust_nodes: []
 
     #[test]
     fn node_can_use_caller_provided_event_log() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let node = Node::from_config_with_event_log(config, signer, MemEventLog::new()).unwrap();
 
@@ -729,7 +501,7 @@ trust_nodes: []
 
     #[test]
     fn node_config_accessor() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let node = Node::from_config(config.clone(), signer).unwrap();
 
@@ -739,7 +511,7 @@ trust_nodes: []
 
     #[test]
     fn node_head_returns_genesis() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let node = Node::from_config(config, signer).unwrap();
 
@@ -754,7 +526,7 @@ trust_nodes: []
 
     #[test]
     fn node_rejects_command_with_empty_command_id() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
@@ -793,7 +565,7 @@ trust_nodes: []
 
     #[test]
     fn node_rejects_command_targeting_wrong_node() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
@@ -828,7 +600,7 @@ trust_nodes: []
 
     #[test]
     fn node_rejects_command_without_target() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
@@ -861,7 +633,7 @@ trust_nodes: []
 
     #[test]
     fn node_records_rejection_event_for_bad_command() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
@@ -900,7 +672,7 @@ trust_nodes: []
 
     #[test]
     fn node_commits_valid_signed_command_to_hash_linked_stream() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
         let command = signed_query_command_for_node(node.identity());
@@ -928,7 +700,7 @@ trust_nodes: []
 
     #[test]
     fn node_persists_committed_command_to_backing_event_log() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let mut node =
             Node::from_config_with_event_log(config, signer, MemEventLog::new()).unwrap();
@@ -948,7 +720,7 @@ trust_nodes: []
 
     #[test]
     fn node_treats_replayed_command_hash_as_duplicate_without_appending() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
         let command = signed_query_command_for_node(node.identity());
@@ -964,7 +736,7 @@ trust_nodes: []
 
     #[test]
     fn node_install_grant() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 
@@ -1003,7 +775,7 @@ trust_nodes: []
 
     #[test]
     fn replay_cache_populated_on_accept() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Arc::new(test_signer());
         let mut node = Node::from_config(config, signer).unwrap();
 

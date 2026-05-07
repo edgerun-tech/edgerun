@@ -18,10 +18,7 @@ mod init;
 mod protocol_signer;
 mod stream_append;
 
-// Extracted modules
 mod cli;
-mod config;
-mod features_cmd;
 mod health;
 mod init_cmd;
 mod signer;

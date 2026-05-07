@@ -1,0 +1,40 @@
+[package]
+name = "edgerun-email"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Complete email server: SMTP (RFC 5321), IMAP (RFC 3501), LMTP (RFC 2033)"
+
+[[bin]]
+name = "edgerun-mailq"
+path = "src/bin/edgerun-mailq.rs"
+required-features = ["std"]
+
+[[bin]]
+name = "edgerun-smtp-probe"
+path = "src/bin/edgerun-smtp-probe.rs"
+required-features = ["std", "tls"]
+
+[[bin]]
+name = "edgerun-smtp-bench"
+path = "src/bin/edgerun-smtp-bench.rs"
+required-features = ["std"]
+
+[features]
+default = ["dkim"]
+tls = ["dep:edgerun-tls"]
+dkim = ["edgerun-protocols/email-auth"]
+std = []
+
+[lints]
+workspace = true
+
+[dependencies]
+edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
+edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
+edgerun-protocols = { workspace = true, default-features = false, features = ["imap", "lmtp", "smtp"] }
+edgerun-tls = { version = "0.1", path = "../../edgerun-tls", optional = true }
+edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }

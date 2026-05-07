@@ -4,7 +4,7 @@
 //! `bind` or `listen` as authority to own host ports; app-facing resource
 //! access is mediated by `edgerun-node`.
 
-use super::ip::{
+use edgerun_protocols::ethernet_ipv4::{
     IpAddr, IpStack, TcpHeader, ETH_TYPE_IPV4, IP_PROTO_TCP, TCP_FLAG_ACK, TCP_FLAG_PSH,
 };
 use super::udp::SocketAddr;

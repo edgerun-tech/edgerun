@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "NPU capability abstractions for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
+edgerun-devices = { version = "0.1", path = "../edgerun-devices" }
 
 [lints]
 workspace = true

@@ -109,15 +109,9 @@ mod tests {
         TestSigner::new(key)
     }
 
-    const TEST_CONFIG: &str = r#"
-stream_id: "test-node"
-name: "Test Node"
-controllers: []
-trust_nodes: []
-initial_grants: []
-metadata:
-  environment: "test"
-"#;
+    fn test_config() -> NodeConfig {
+        NodeConfig::new("test-node", Some("Test Node".into()), Vec::new(), Vec::new()).unwrap()
+    }
 
     #[test]
     fn mesh_network_connects_two_nodes() {
@@ -127,7 +121,7 @@ metadata:
         let signer_b = Box::new(test_signer());
         let node_b_id = signer_b.node_id();
 
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let node_a = MeshNode::from_config(config.clone(), signer_a).unwrap();
         let node_b = MeshNode::from_config(config, signer_b).unwrap();
 

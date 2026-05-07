@@ -344,12 +344,15 @@ dependencies = [
 [[package]]
 name = "edgerun-biometrics"
 version = "0.1.1"
+dependencies = [
+ "edgerun-devices",
+]
 
 [[package]]
 name = "edgerun-bluetooth"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -370,8 +373,7 @@ version = "0.1.1"
 name = "edgerun-camera-biometrics"
 version = "0.1.1"
 dependencies = [
- "edgerun-biometrics",
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -394,8 +396,7 @@ dependencies = [
 name = "edgerun-cec"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
- "edgerun-protocols",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -471,10 +472,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-display"
+name = "edgerun-devices"
 version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
+ "edgerun-protocols",
+ "edgerun-quectel-ec200a",
+]
+
+[[package]]
+name = "edgerun-display"
+version = "0.1.1"
+dependencies = [
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -574,7 +584,7 @@ dependencies = [
  "edgerun-json",
  "edgerun-log",
  "edgerun-protocols",
- "edgerun-rt",
+ "edgerun-sdk",
  "edgerun-url",
  "edgerun-wallet",
 ]
@@ -592,8 +602,7 @@ dependencies = [
 name = "edgerun-fingerprint"
 version = "0.1.1"
 dependencies = [
- "edgerun-biometrics",
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -615,7 +624,7 @@ dependencies = [
 name = "edgerun-gpu"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -661,7 +670,7 @@ dependencies = [
 name = "edgerun-input"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -848,23 +857,21 @@ dependencies = [
 name = "edgerun-microphone"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
 name = "edgerun-network-interface"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
- "edgerun-quectel-ec200a",
+ "edgerun-devices",
 ]
 
 [[package]]
 name = "edgerun-nfc"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
- "edgerun-protocols",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -937,7 +944,7 @@ dependencies = [
 name = "edgerun-npu"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -985,7 +992,7 @@ dependencies = [
 name = "edgerun-pci"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -999,7 +1006,7 @@ dependencies = [
 name = "edgerun-power"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -1129,7 +1136,7 @@ version = "0.1.1"
 name = "edgerun-speaker"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -1270,7 +1277,7 @@ dependencies = [
 name = "edgerun-usb"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
+ "edgerun-devices",
 ]
 
 [[package]]
@@ -1326,8 +1333,7 @@ dependencies = [
 name = "edgerun-wifi"
 version = "0.1.1"
 dependencies = [
- "edgerun-capabilities",
- "edgerun-protocols",
+ "edgerun-devices",
 ]
 
 [[package]]

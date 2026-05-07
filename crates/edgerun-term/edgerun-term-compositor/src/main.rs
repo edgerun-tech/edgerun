@@ -2,24 +2,24 @@ use std::io::{self, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use edgerun_compositor::input::keymap::{Keymap, Keysym, Modifiers, SpecialKey, process_key_event};
+use edgerun_compositor::input::keymap::{process_key_event, Keymap, Keysym, Modifiers, SpecialKey};
 use edgerun_compositor::render::shm::SharedMemFrame;
 use edgerun_compositor::wire;
-use edgerun_compositor::wire::decode::{ArgCursor, DecodeError, parse_message};
+use edgerun_compositor::wire::decode::{parse_message, ArgCursor, DecodeError};
 use edgerun_compositor::wire::encode::{encode, encode_string, message_empty, message_uint};
 use edgerun_compositor::wire::fd::{recv_with_fds, send_with_fds};
 use edgerun_protocols::wayland::{wl_compositor, wl_core, wl_seat, wl_shm, xdg_shell};
 use edgerun_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
-use edgerun_term_core::render::layout::{LayoutMetrics, compute_layout};
+use edgerun_term_core::render::layout::{compute_layout, LayoutMetrics};
 use edgerun_term_core::render::{
-    FONT_DATA, FONT_SIZE, GlyphCache, TabVisual, draw_background, draw_border_cpu,
-    draw_cursor_overlay, draw_grid, draw_help_bar_cpu, draw_tab_bar_cpu, draw_text_line_clipped,
-    fill_rect,
+    draw_background, draw_border_cpu, draw_cursor_overlay, draw_grid, draw_help_bar_cpu,
+    draw_tab_bar_cpu, draw_text_line_clipped, fill_rect, GlyphCache, TabVisual, FONT_DATA,
+    FONT_SIZE,
 };
-use edgerun_term_core::terminal::{GridPerformer, Terminal, write_bytes};
+use edgerun_term_core::terminal::{write_bytes, GridPerformer, Terminal};
 use edgerun_terminal_parser::Parser as VteParser;
 
 const DEFAULT_SOCKET: &str = "/tmp/edgerun-wayland-0";

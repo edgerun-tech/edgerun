@@ -25,6 +25,7 @@ members = [
   "crates/edgerun-analytics",
   "crates/linux-adapters/edgerun-audio-calibration",
   "crates/linux-adapters/edgerun-audio-liveliness",
+  "crates/device-types/edgerun-devices",
   "crates/device-types/edgerun-biometrics",
   "crates/edgerun-bench",
   "crates/device-types/edgerun-bluetooth",
@@ -44,7 +45,7 @@ members = [
   "crates/protocol/edgerun-sign-verify-e2e",
   "crates/linux-adapters/edgerun-drm-display",
   "crates/device-types/edgerun-display",
-  "crates/edgerun-edit",
+  "crates/apps/edgerun-edit",
   "crates/authority/edgerun-edgefs",
   "crates/utility/edgerun-encoding",
   "crates/utility/edgerun-emoji",
@@ -87,22 +88,22 @@ members = [
   "crates/linux-adapters/edgerun-passport-nfc",
   "crates/node/edgerun-node",
   "crates/device-types/edgerun-npu",
-  "crates/edgerun-oauth",
+  "crates/apps/edgerun-oauth",
   "crates/edgerun-oci",
   "crates/device-types/edgerun-pci",
   "crates/device-types/edgerun-power",
   "crates/edgerun-quectel-ec200a",
   "crates/utility/edgerun-qpack",
   "crates/capability/edgerun-remote-capability",
-  "crates/edgerun-secret-service",
-  "crates/edgerun-email",
+  "crates/apps/edgerun-secret-service",
+  "crates/apps/edgerun-email",
   "crates/device-types/edgerun-speaker",
   "crates/authority/edgerun-derived-db",
   "crates/authority/edgerun-storage",
   "crates/authority/edgerun-stream",
   "crates/edgerun-virtio",
   "crates/edgerun-tls",
-  "crates/edgerun-tuya",
+  "crates/apps/edgerun-tuya",
   "crates/identity/edgerun-tpm",
   "crates/device-types/edgerun-usb",
   "crates/linux-adapters/edgerun-v4l2-camera",
@@ -117,9 +118,9 @@ members = [
   "crates/edgerun-event",
   "crates/edgerun-wallet",
   "crates/edgerun-exchange",
-  "crates/edgerun-exchange-api",
+  "crates/apps/edgerun-exchange-api",
   "crates/edgerun-marketplace",
-  "crates/zen-client",
+  "crates/apps/zen-client",
 ]
 
 [workspace.package]
@@ -172,8 +173,9 @@ edgerun-mesh = { version = "0.1", path = "crates/mesh/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "crates/mesh/edgerun-mesh-link" }
 edgerun-mesh-session = { version = "0.1", path = "crates/mesh/edgerun-mesh-session" }
 edgerun-mesh-capability = { version = "0.1", path = "crates/capability/edgerun-mesh-capability" }
-edgerun-secret-service = { version = "0.1", path = "crates/edgerun-secret-service" }
+edgerun-secret-service = { version = "0.1", path = "crates/apps/edgerun-secret-service" }
 edgerun-biometrics = { version = "0.1", path = "crates/device-types/edgerun-biometrics" }
+edgerun-devices = { version = "0.1", path = "crates/device-types/edgerun-devices" }
 edgerun-mgmt-bluetooth = { version = "0.1", path = "crates/linux-adapters/edgerun-mgmt-bluetooth" }
 edgerun-bluetooth-gatt = { version = "0.1", path = "crates/linux-adapters/edgerun-bluetooth-gatt" }
 edgerun-tcl-ac = { version = "0.1", path = "crates/edgerun-tcl-ac" }
@@ -190,7 +192,7 @@ edgerun-tls = { version = "0.1", path = "crates/edgerun-tls" }
 edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
 edgerun-glob = { version = "0.1", path = "crates/utility/edgerun-glob" }
 edgerun-regex = { version = "0.1", path = "crates/utility/edgerun-regex" }
-edgerun-email = { version = "0.1", path = "crates/edgerun-email" }
+edgerun-email = { version = "0.1", path = "crates/apps/edgerun-email" }
 edgerun-log = { version = "0.1", path = "crates/utility/edgerun-log" }
 edgerun-rt = { version = "0.1", path = "crates/edgerun-rt" }
 edgerun-deploy = { version = "0.1", path = "crates/edgerun-deploy", default-features = false }
@@ -200,7 +202,7 @@ edgerun-crypto = { version = "0.1", path = "crates/utility/edgerun-crypto", defa
 edgerun-sign-verify-e2e = { version = "0.1", path = "crates/protocol/edgerun-sign-verify-e2e", default-features = false }
 edgerun-json = { version = "0.1", path = "crates/utility/edgerun-json", default-features = false }
 edgerun-error = { version = "0.1", path = "crates/utility/edgerun-error" }
-edgerun-edit = { version = "0.1", path = "crates/edgerun-edit" }
+edgerun-edit = { version = "0.1", path = "crates/apps/edgerun-edit" }
 edgerun-display = { version = "0.1", path = "crates/device-types/edgerun-display" }
 edgerun-gpu = { version = "0.1", path = "crates/device-types/edgerun-gpu" }
 edgerun-clap = { version = "0.1", path = "crates/utility/edgerun-clap" }
@@ -208,7 +210,7 @@ edgerun-virtio = { version = "0.1", path = "crates/edgerun-virtio" }
 edgerun-event = { version = "0.1", path = "crates/edgerun-event" }
 edgerun-wallet = { version = "0.1", path = "crates/edgerun-wallet" }
 edgerun-exchange = { version = "0.1", path = "crates/edgerun-exchange" }
-edgerun-exchange-api = { version = "0.1", path = "crates/edgerun-exchange-api" }
+edgerun-exchange-api = { version = "0.1", path = "crates/apps/edgerun-exchange-api" }
 edgerun-marketplace = { version = "0.1", path = "crates/edgerun-marketplace" }
 
 libc = "0.2"

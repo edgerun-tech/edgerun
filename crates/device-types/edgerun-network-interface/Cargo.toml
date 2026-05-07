@@ -9,8 +9,7 @@ homepage.workspace = true
 description = "Network interface capability abstractions for Edgerun"
 
 [dependencies]
-edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
-edgerun-quectel-ec200a = { version = "0.1", path = "../../edgerun-quectel-ec200a" }
+edgerun-devices = { version = "0.1", path = "../edgerun-devices" }
 
 [lints]
 workspace = true

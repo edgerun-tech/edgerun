@@ -1,0 +1,37 @@
+[package]
+name = "edgerun-tuya"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Tuya device discovery and control support for Edgerun"
+
+[dependencies]
+edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
+edgerun-crypto = { version = "0.1", path = "../../utility/edgerun-crypto", default-features = false, features = ["aead", "hmac"] }
+edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
+edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false }
+edgerun-protocols = { workspace = true, default-features = false, features = ["tuya"] }
+
+[[bin]]
+name = "tuya-discover"
+path = "src/bin/tuya-discover.rs"
+required-features = ["std"]
+
+[[bin]]
+name = "tuya-control"
+path = "src/bin/tuya-control.rs"
+required-features = ["std"]
+
+[[bin]]
+name = "tuya-power-meter"
+path = "src/bin/tuya-power-meter.rs"
+required-features = ["std"]
+
+[features]
+std = []
+
+[lints]
+workspace = true

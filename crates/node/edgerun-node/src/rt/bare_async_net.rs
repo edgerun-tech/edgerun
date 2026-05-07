@@ -9,7 +9,7 @@ use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::{Context, Poll};
 
 use crate::rt::io::{AsyncRead, AsyncWrite, IoError, Result as IoResult};
-use crate::rt::ip::{
+use edgerun_protocols::ethernet_ipv4::{
     checksum, ip_checksum, EthHeader, IpHeader, TcpHeader, ETH_TYPE_ARP, ETH_TYPE_IPV4,
     IP_PROTO_TCP, IP_PROTO_UDP, TCP_FLAG_ACK, TCP_FLAG_FIN, TCP_FLAG_PSH, TCP_FLAG_RST,
     TCP_FLAG_SYN,
@@ -660,7 +660,7 @@ fn handle_udp_frame(ip: &IpHeader, frame: &[u8], ip_header_len: usize, ip_total_
         return;
     }
     let udp_start = ETH_HEADER_LEN + ip_header_len;
-    let udp = crate::rt::ip::UdpHeader::from_slice(&frame[udp_start..]);
+    let udp = edgerun_protocols::ethernet_ipv4::UdpHeader::from_slice(&frame[udp_start..]);
     let udp_len = usize::from(udp.len);
     if udp_len < UDP_HEADER_LEN || ip_total_len < ip_header_len + udp_len {
         return;
@@ -786,7 +786,7 @@ fn send_udp_datagram(
     packet[ETH_HEADER_LEN + 10..ETH_HEADER_LEN + 12].copy_from_slice(&ip.checksum.to_be_bytes());
 
     let udp_start = ETH_HEADER_LEN + IP_HEADER_LEN;
-    crate::rt::ip::UdpHeader {
+    edgerun_protocols::ethernet_ipv4::UdpHeader {
         src_port: local_port,
         dst_port: remote_port,
         len: udp_len as u16,

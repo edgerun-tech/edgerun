@@ -8,5 +8,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Biometric identity and verification abstractions for Edgerun"
 
+[dependencies]
+edgerun-devices = { version = "0.1", path = "../edgerun-devices" }
+
 [lints]
 workspace = true

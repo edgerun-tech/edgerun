@@ -123,7 +123,7 @@ edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
 edgerun-url = { workspace = true }
-edgerun-protocols = { workspace = true, features = ["sign-p256", "keygen", "seal", "core", "wire"] }
+edgerun-protocols = { workspace = true, features = ["sign-p256", "keygen", "seal", "core", "wire", "ethernet-ipv4", "serial-mux"] }
 edgerun-derived-db = { workspace = true, features = ["std"], optional = true }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", features = ["std"], optional = true }
 

@@ -1,0 +1,33 @@
+[package]
+name = "edgerun-secret-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Secret storage and retrieval service for Edgerun"
+
+[lib]
+name = "edgerun_secret_service"
+path = "src/lib.rs"
+
+[[bin]]
+name = "edgerun-secret-service"
+path = "src/main.rs"
+required-features = ["std"]
+
+[dependencies]
+edgerun-biometrics = { version = "0.1", path = "../../device-types/edgerun-biometrics" }
+edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage" }
+edgerun-protocols = { version = "0.1", path = "../../protocol/edgerun-protocols", default-features = false, features = ["core", "wire", "dbus"] }
+edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false }
+edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false }
+edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
+edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
+
+[features]
+std = []
+
+[lints]
+workspace = true

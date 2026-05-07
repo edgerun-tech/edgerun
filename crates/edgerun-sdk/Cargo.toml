@@ -15,7 +15,8 @@ required-features = ["std"]
 
 [features]
 default = ["std"]
-std = ["dep:edgerun-crypto", "dep:edgerun-deploy", "dep:edgerun-machine-report", "dep:edgerun-protocols", "dep:edgerun-ssh"]
+runtime-api = ["dep:edgerun-protocols"]
+std = ["dep:edgerun-crypto", "dep:edgerun-deploy", "dep:edgerun-machine-report", "runtime-api", "dep:edgerun-ssh"]
 
 [dependencies]
 edgerun-crypto = { workspace = true, features = ["ed25519"], optional = true }

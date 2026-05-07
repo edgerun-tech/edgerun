@@ -65,7 +65,7 @@ pub struct MeshNode {
 }
 
 impl MeshNode {
-    /// Creates a new mesh-connected node from a YAML configuration.
+    /// Creates a new mesh-connected node from native construction input.
     ///
     /// Initializes:
     /// - The node's event log with the genesis event
@@ -234,19 +234,19 @@ mod tests {
         TestSigner::generate()
     }
 
-    const TEST_CONFIG: &str = r#"
-stream_id: "test-node"
-name: "Test Node"
-controllers: []
-trust_nodes: []
-initial_grants: []
-metadata:
-  environment: "test"
-"#;
+    fn test_config() -> NodeConfig {
+        NodeConfig::new(
+            "test-node",
+            Some("Test Node".into()),
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap()
+    }
 
     #[test]
     fn mesh_node_creates_with_genesis() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, Box::new(test_signer())).unwrap();
 
@@ -257,7 +257,7 @@ metadata:
 
     #[test]
     fn mesh_node_has_identity() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = test_signer();
         let expected_id = signer.node_id();
         let node = MeshNode::from_config(config, Box::new(signer)).unwrap();
@@ -267,7 +267,7 @@ metadata:
 
     #[test]
     fn mesh_node_tick_processes_nothing_when_idle() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
@@ -278,7 +278,7 @@ metadata:
 
     #[test]
     fn mesh_node_records_commands_in_stream() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
@@ -323,12 +323,12 @@ metadata:
 
     #[test]
     fn two_nodes_exchange_signed_commands() {
-        let config_a = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config_a = test_config();
         let signer_a = Box::new(test_signer());
         let node_a_id = signer_a.node_id();
         let _alice = MeshNode::from_config(config_a, signer_a).unwrap();
 
-        let config_b = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config_b = test_config();
         let signer_b = Box::new(test_signer());
         let mut bob = MeshNode::from_config(config_b, signer_b).unwrap();
 
@@ -383,7 +383,7 @@ metadata:
 
     #[test]
     fn mesh_node_router_is_accessible() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
@@ -395,7 +395,7 @@ metadata:
 
     #[test]
     fn mesh_node_send_command_queues_frame() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
@@ -436,7 +436,7 @@ metadata:
 
     #[test]
     fn mesh_node_identity_is_consistent() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let expected = signer.node_id();
         let node = MeshNode::from_config(config, signer).unwrap();
@@ -448,7 +448,7 @@ metadata:
 
     #[test]
     fn mesh_node_events_accessor() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, signer).unwrap();
 
@@ -459,7 +459,7 @@ metadata:
 
     #[test]
     fn mesh_node_install_grant() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
@@ -494,7 +494,7 @@ metadata:
 
     #[test]
     fn mesh_node_multiple_ticks_are_idempotent() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
@@ -507,7 +507,7 @@ metadata:
 
     #[test]
     fn mesh_node_decode_command_returns_none_for_garbage() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, signer).unwrap();
 
@@ -518,7 +518,7 @@ metadata:
 
     #[test]
     fn mesh_node_decode_command_parses_valid_envelope() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, signer).unwrap();
 
@@ -552,7 +552,7 @@ metadata:
 
     #[test]
     fn mesh_node_frame_with_dest_preserves_payload() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let node = MeshNode::from_config(config, signer).unwrap();
 
@@ -569,7 +569,7 @@ metadata:
     fn mesh_node_from_config_fails_with_bad_signer() {
         // This tests that the error path works when node creation fails
         // We use a valid config so this should succeed
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
+        let config = test_config();
         let signer = Box::new(test_signer());
         let result = MeshNode::from_config(config, signer);
         assert!(result.is_ok());

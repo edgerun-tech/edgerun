@@ -135,6 +135,7 @@ pub trait ExchangeProvider {
 /// Context passed to provider calls (HTTP client, timeout, etc.).
 #[derive(Clone)]
 pub struct ProviderContext {
+    #[cfg(feature = "provider-http")]
     pub http_client: alloc::rc::Rc<core::cell::RefCell<edgerun_http::Client>>,
     pub timeout_ms: u64,
 }

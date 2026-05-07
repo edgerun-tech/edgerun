@@ -176,7 +176,7 @@ dependencies = [
 name = "edgerun-capabilities"
 version = "0.1.1"
 dependencies = [
- "edgerun-core",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -185,6 +185,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-evdev-input",
  "edgerun-input",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -205,11 +206,9 @@ dependencies = [
  "ecdsa",
  "edgerun-encoding",
  "elliptic-curve",
- "hmac",
  "p256",
  "rand_core",
  "sha1",
- "sha2",
  "signature",
 ]
 
@@ -258,6 +257,14 @@ name = "edgerun-log"
 version = "0.1.1"
 
 [[package]]
+name = "edgerun-protocols"
+version = "0.1.1"
+dependencies = [
+ "edgerun-core",
+ "edgerun-encoding",
+]
+
+[[package]]
 name = "edgerun-pty"
 version = "0.1.1"
 
@@ -270,6 +277,7 @@ name = "edgerun-term-compositor"
 version = "0.1.0"
 dependencies = [
  "edgerun-compositor",
+ "edgerun-protocols",
  "edgerun-pty",
  "edgerun-term-core",
  "edgerun-terminal-parser",

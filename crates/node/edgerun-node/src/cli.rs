@@ -5,12 +5,12 @@
 //!
 //! ## Usage
 //! ```text
-//! edgerund init --config node.yaml --software          # Dev-only: in-memory key
-//! edgerund status --config node.yaml                   # Show node identity
+//! edgerund init --config node-data --software          # Dev-only: in-memory key
+//! edgerund status --config node-data                   # Show node event-log status
 //! ```
 //!
 //! ## Security
-//! The node's private key NEVER leaves secure hardware. The config only stores
+//! The node's private key NEVER leaves secure hardware. The data root only stores
 //! the public key (NodeID) and a reference to the hardware key handle.
 //! No `.key` file is ever written.
 
@@ -18,7 +18,6 @@ use std::env;
 use std::path::PathBuf;
 
 use crate::bind_check::cmd_bind_check;
-use crate::features_cmd::{cmd_features, cmd_self_test, cmd_self_test_child};
 use crate::init_cmd::{cmd_init, cmd_init_encrypted, cmd_init_provisioned, cmd_provision};
 use crate::status_cmd::cmd_status;
 
@@ -47,12 +46,9 @@ pub enum Command {
     Status {
         config: PathBuf,
     },
-    Features,
     BindCheck {
         standard_ports: bool,
     },
-    SelfTest,
-    SelfTestChild,
 }
 
 pub fn parse_args() -> Result<Command, String> {
@@ -63,7 +59,7 @@ pub fn parse_args() -> Result<Command, String> {
     let cmd = args[0].as_str();
     match cmd {
         "init" => {
-            let mut config = PathBuf::from("node.yaml");
+            let mut config = PathBuf::from("node-data");
             let mut name = None;
             let mut software = false;
             let mut i = 1;
@@ -82,7 +78,7 @@ pub fn parse_args() -> Result<Command, String> {
                     }
                     "--help" | "-h" => {
                         return Err(
-                            "Usage: edgerund init [--config path] [--name name] [--software]"
+                            "Usage: edgerund init [--config data-root] [--name name] [--software]"
                                 .into(),
                         );
                     }
@@ -97,7 +93,7 @@ pub fn parse_args() -> Result<Command, String> {
             })
         }
         "init-encrypted" => {
-            let mut config = PathBuf::from("node.yaml");
+            let mut config = PathBuf::from("node-data");
             let mut key_file = PathBuf::from("node.key.enc");
             let mut name = None;
             let mut i = 1;
@@ -116,7 +112,7 @@ pub fn parse_args() -> Result<Command, String> {
                         name = Some(args[i].clone());
                     }
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund init-encrypted [--config path] [--key-file path] [--name name]".into());
+                        return Err("Usage: edgerund init-encrypted [--config data-root] [--key-file path] [--name name]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }
@@ -129,7 +125,7 @@ pub fn parse_args() -> Result<Command, String> {
             })
         }
         "init-provisioned" => {
-            let mut config = PathBuf::from("node.yaml");
+            let mut config = PathBuf::from("node-data");
             let mut name = None;
             let mut controller = None;
             let mut i = 1;
@@ -148,7 +144,7 @@ pub fn parse_args() -> Result<Command, String> {
                         controller = Some(args[i].clone());
                     }
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund init-provisioned [--config path] [--name name] [--controller node-id]".into());
+                        return Err("Usage: edgerund init-provisioned [--config data-root] [--name name] [--controller node-id]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }
@@ -161,7 +157,7 @@ pub fn parse_args() -> Result<Command, String> {
             })
         }
         "provision" => {
-            let mut config = PathBuf::from("node.yaml");
+            let mut config = PathBuf::from("node-data");
             let mut pin = String::new();
             let mut target_addr = None;
             let mut i = 1;
@@ -181,7 +177,7 @@ pub fn parse_args() -> Result<Command, String> {
                     }
                     "--help" | "-h" => {
                         return Err(
-                            "Usage: edgerund provision --config path --pin PIN [--target addr]"
+                            "Usage: edgerund provision --config data-root --pin PIN [--target addr]"
                                 .into(),
                         );
                     }
@@ -199,7 +195,7 @@ pub fn parse_args() -> Result<Command, String> {
             })
         }
         "status" => {
-            let mut config = PathBuf::from("node.yaml");
+            let mut config = PathBuf::from("node-data");
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -208,7 +204,7 @@ pub fn parse_args() -> Result<Command, String> {
                         config = PathBuf::from(&args[i]);
                     }
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund status [--config path]".into());
+                        return Err("Usage: edgerund status [--config data-root]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }
@@ -216,7 +212,6 @@ pub fn parse_args() -> Result<Command, String> {
             }
             Ok(Command::Status { config })
         }
-        "features" | "capabilities" => Ok(Command::Features),
         "bind-check" => {
             let mut standard_ports = false;
             let mut i = 1;
@@ -232,8 +227,6 @@ pub fn parse_args() -> Result<Command, String> {
             }
             Ok(Command::BindCheck { standard_ports })
         }
-        "self-test" => Ok(Command::SelfTest),
-        "self-test-child" => Ok(Command::SelfTestChild),
         "help" | "--help" | "-h" => Err(help_text()),
         other => Err(format!("unknown command: {}", other)),
     }
@@ -279,21 +272,12 @@ pub fn main() {
         Command::Status { config } => {
             cmd_status(&config);
         }
-        Command::Features => {
-            cmd_features();
-        }
         Command::BindCheck { standard_ports } => {
             cmd_bind_check(standard_ports);
-        }
-        Command::SelfTest => {
-            cmd_self_test();
-        }
-        Command::SelfTestChild => {
-            cmd_self_test_child();
         }
     }
 }
 
 fn help_text() -> String {
-    "edgerun Node Daemon\n\nCommands:\n  init              Generate node identity\n  init-encrypted    Generate encrypted software identity\n  init-provisioned  Generate provisioned node identity\n  provision         Provision a node with a controller\n  status            Show node identity\n  features          Show compiled-in features/capabilities\n  bind-check        Bind enabled service listeners and report them\n  self-test         Copy this executable and test the copy\n  help              Show this help".into()
+    "edgerun Node Daemon\n\nCommands:\n  init              Generate node identity and genesis event\n  init-encrypted    Generate encrypted software identity\n  init-provisioned  Generate provisioned node identity\n  provision         Provision a node with a controller\n  status            Show node event-log status\n  bind-check        Bind enabled service listeners and report them\n  help              Show this help".into()
 }
