@@ -297,7 +297,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         }
         let ch = match ch_builder.build() {
             Ok(c) => c,
-            Err(e) => return Err((e, stream)),
+            Err(e) => return Err((e.into(), stream)),
         };
 
         let mut transcript = ch.clone();
@@ -362,7 +362,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             {
                 let selected_group = match parse_hrr_selected_group(&fragment) {
                     Ok(g) => g,
-                    Err(e) => return Err((e, stream)),
+                    Err(e) => return Err((e.into(), stream)),
                 };
                 let cookie = parse_hrr_cookie(&fragment).unwrap_or_default();
                 return Err((TlsError::HelloRetryRequest(selected_group, cookie), stream));
@@ -371,7 +371,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
 
         let sh = match ServerHello::parse(&fragment) {
             Ok(s) => s,
-            Err(e) => return Err((e, stream)),
+            Err(e) => return Err((e.into(), stream)),
         };
 
         if sh.supported_version != Some(0x0304) {
@@ -419,12 +419,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let mut write_cipher =
             match RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv) {
                 Ok(c) => c,
-                Err(e) => return Err((e, stream)),
+                Err(e) => return Err((e.into(), stream)),
             };
         let mut read_cipher =
             match RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv) {
                 Ok(c) => c,
-                Err(e) => return Err((e, stream)),
+                Err(e) => return Err((e.into(), stream)),
             };
 
         let alpn_protocol = match async_read_encrypted_handshake_messages(
@@ -469,12 +469,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let write_cipher =
             match RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv) {
                 Ok(c) => ClientRecordCipher::Tls13(c),
-                Err(e) => return Err((e, stream)),
+                Err(e) => return Err((e.into(), stream)),
             };
         let read_cipher =
             match RecordCipher::new(&server_app_keys.write_key, &server_app_keys.write_iv) {
                 Ok(c) => ClientRecordCipher::Tls13(c),
-                Err(e) => return Err((e, stream)),
+                Err(e) => return Err((e.into(), stream)),
             };
 
         Ok(AsyncTlsStream {

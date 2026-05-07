@@ -9,6 +9,10 @@ use edgerun_display::{
     validate_display_update_request, DisplayContentKind, DisplayDevice, DisplayInfo, DisplayMode,
     DisplayUpdateRequest,
 };
+use edgerun_wire::{
+    RemoteDisplayInfo as DisplayInfoWire, RemoteDisplayMode as DisplayModeWire,
+    RemoteDisplayUpdateRequest as DisplayUpdateRequestWire,
+};
 
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
 
@@ -31,62 +35,6 @@ fn content_kind_from_u32(raw: u32) -> DisplayContentKind {
         other if other & 0x8000_0000 != 0 => DisplayContentKind::Other(other & 0x7fff_ffff),
         other => DisplayContentKind::Other(other),
     }
-}
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct DisplayModeWire {
-    width: u32,
-    height: u32,
-    refresh_millihz: u32,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct DisplayInfoWire {
-    provider: String,
-    display_name: String,
-    instance_id: String,
-    built_in: bool,
-    primary: bool,
-    current_mode: DisplayModeWire,
-    modes: Vec<DisplayModeWire>,
-    hdr_capable: bool,
-    touch_capable: bool,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct DisplayUpdateRequestWire {
-    content_kind: u32,
-    width: Option<u32>,
-    height: Option<u32>,
-    refresh_millihz: Option<u32>,
 }
 
 fn display_mode_to_wire(mode: DisplayMode) -> DisplayModeWire {

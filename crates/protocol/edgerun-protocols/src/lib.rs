@@ -23,6 +23,8 @@ pub mod dhcp;
 pub mod dhcpv6;
 #[cfg(feature = "dns")]
 pub mod dns;
+#[cfg(feature = "email-auth")]
+pub mod email_auth;
 #[cfg(feature = "http")]
 pub mod http;
 #[cfg(feature = "imap")]
@@ -31,7 +33,11 @@ pub mod imap;
 pub mod lmtp;
 #[cfg(feature = "proxy")]
 pub mod proxy;
+#[cfg(feature = "quic")]
+pub mod quic;
 #[cfg(feature = "smtp")]
 pub mod smtp;
 #[cfg(feature = "tftp")]
 pub mod tftp;
+#[cfg(feature = "tls")]
+pub mod tls;

@@ -15,18 +15,18 @@
 //! [1-RTT packets with HTTP/3 data]          <->     [1-RTT packets]
 //! ```
 
-use alloc::{string::String, vec, vec::Vec};
-use edgerun_crypto::CipherSuite;
-use edgerun_tls::cipher::NamedGroup;
-use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
-use edgerun_tls::prf::{
+use crate::tls::cipher::NamedGroup;
+use crate::tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
+use crate::tls::prf::{
     quic_hp_key, quic_initial_client_keys, quic_initial_server_keys, quic_traffic_keys, Hasher,
     Tls13KeySchedule, TrafficKeys, INITIAL_SALT_V1,
 };
+use alloc::{string::String, vec, vec::Vec};
+use edgerun_crypto::CipherSuite;
 
 use super::crypto::ProtectionKeys;
+use super::ConnectionId;
 use super::QuicFrame;
-use crate::ConnectionId;
 
 pub use super::handshake::HandshakeResult;
 pub use super::handshake::QuicTlsHandshaker;
@@ -36,9 +36,9 @@ pub use super::server_handshake::ServerHandshakeResult;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tls::handshake::ClientHelloBuilder;
+    use crate::tls::prf::Hasher;
     use edgerun_crypto::fill_random;
-    use edgerun_tls::handshake::ClientHelloBuilder;
-    use edgerun_tls::prf::Hasher;
 
     const TEST_DCID: [u8; 8] = [0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
 
@@ -93,7 +93,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let cert = edgerun_tls::generate_self_signed(&["localhost"]).unwrap();
+        let cert = crate::tls::generate_self_signed(&["localhost"]).unwrap();
         let mut server = QuicTlsServerHandshaker::new(cert);
 
         let sh_bytes = server.process_client_hello(&ch_bytes).unwrap();
@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn test_hs_initial_keys_match() {
         let client_hs = QuicTlsHandshaker::new("localhost");
-        let cert = edgerun_tls::generate_self_signed(&["localhost"]).unwrap();
+        let cert = crate::tls::generate_self_signed(&["localhost"]).unwrap();
         let server_hs = QuicTlsServerHandshaker::new(cert);
 
         let client_keys = client_hs.initial_keys(&TEST_DCID);
@@ -238,7 +238,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let cert = edgerun_tls::generate_self_signed(&["localhost"]).unwrap();
+        let cert = crate::tls::generate_self_signed(&["localhost"]).unwrap();
         let mut server = QuicTlsServerHandshaker::new(cert);
 
         let sh_bytes = server.process_client_hello(&ch_bytes).unwrap();

@@ -104,6 +104,24 @@ impl From<String> for TlsError {
     }
 }
 
+impl From<edgerun_protocols::tls::TlsError> for TlsError {
+    fn from(error: edgerun_protocols::tls::TlsError) -> Self {
+        match error {
+            edgerun_protocols::tls::TlsError::Protocol(message) => TlsError::Protocol(message),
+            edgerun_protocols::tls::TlsError::HandshakeFailure(message) => {
+                TlsError::HandshakeFailure(message)
+            }
+            edgerun_protocols::tls::TlsError::Certificate(message) => TlsError::Certificate(message),
+            edgerun_protocols::tls::TlsError::Cipher(message) => TlsError::Cipher(message),
+            edgerun_protocols::tls::TlsError::Alert(level, alert) => TlsError::Alert(level, alert),
+            edgerun_protocols::tls::TlsError::HelloRetryRequest(group, cookie) => {
+                TlsError::HelloRetryRequest(group, cookie)
+            }
+            edgerun_protocols::tls::TlsError::Io(message) => TlsError::Io(std::io::Error::other(message)),
+        }
+    }
+}
+
 impl From<std::io::Error> for TlsError {
     fn from(e: std::io::Error) -> Self {
         TlsError::Io(e)

@@ -70,7 +70,7 @@ fn test_initial_packet_handshake_timeout() {
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
-            cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+            cipher_suite_hash: edgerun_protocols::tls::prf::Hasher::Sha256,
             stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
             pending_path_challenges: alloc::collections::BTreeMap::new(),
@@ -399,7 +399,7 @@ fn test_server_accept_and_decode_request() {
 fn test_full_quic_tls_handshake() {
     use super::handshake::QuicTlsHandshaker;
     use super::server_handshake::QuicTlsServerHandshaker;
-    use edgerun_tls::certificate_gen::generate_self_signed;
+    use edgerun_protocols::tls::certificate_gen::generate_self_signed;
 
     // ── Setup ──────────────────────────────────────────────────────
     let cert = generate_self_signed(&["localhost"]).expect("generate cert");
@@ -856,7 +856,7 @@ fn test_integration_push_flow() {
 /// Test key update flow (no UDP needed).
 #[test]
 fn test_integration_key_update_flow() {
-    let hasher = edgerun_tls::prf::Hasher::Sha256;
+    let hasher = edgerun_protocols::tls::prf::Hasher::Sha256;
     let key_len = 16;
     let iv_len = 12;
     let client_secret = vec![0xAB; hasher.len()];
@@ -941,7 +941,7 @@ fn test_integration_key_update_flow() {
 
 #[test]
 fn test_peer_key_update_advances_read_side_only() {
-    let hasher = edgerun_tls::prf::Hasher::Sha256;
+    let hasher = edgerun_protocols::tls::prf::Hasher::Sha256;
     let key_len = 16;
     let iv_len = 12;
     let client_secret = vec![0x33; hasher.len()];

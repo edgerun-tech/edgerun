@@ -46,6 +46,7 @@ struct ClientInner {
     auto_decompress: bool,
     tls12_first: bool,
     http3_accept_invalid_certs: bool,
+    http3_trust_roots_der: Vec<Vec<u8>>,
     pool: Arc<Mutex<ConnectionPool>>,
     #[cfg(feature = "tls")]
     h2_pool: Arc<Mutex<Http2Pool>>,
@@ -73,6 +74,7 @@ impl HttpClient {
                 auto_decompress: true,
                 tls12_first: false,
                 http3_accept_invalid_certs: false,
+                http3_trust_roots_der: Vec::new(),
                 pool: Arc::new(Mutex::new(ConnectionPool::new())),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::new(Mutex::new(Http2Pool::new())),
@@ -99,6 +101,7 @@ impl HttpClient {
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
                 http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                http3_trust_roots_der: self.inner.http3_trust_roots_der.clone(),
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -120,6 +123,7 @@ impl HttpClient {
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
                 http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                http3_trust_roots_der: self.inner.http3_trust_roots_der.clone(),
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -141,6 +145,7 @@ impl HttpClient {
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
                 http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                http3_trust_roots_der: self.inner.http3_trust_roots_der.clone(),
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -162,6 +167,7 @@ impl HttpClient {
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
                 http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                http3_trust_roots_der: self.inner.http3_trust_roots_der.clone(),
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -183,6 +189,7 @@ impl HttpClient {
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
                 http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                http3_trust_roots_der: self.inner.http3_trust_roots_der.clone(),
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -204,6 +211,7 @@ impl HttpClient {
                 auto_decompress: false,
                 tls12_first: self.inner.tls12_first,
                 http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                http3_trust_roots_der: self.inner.http3_trust_roots_der.clone(),
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -231,6 +239,7 @@ impl HttpClient {
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: enabled,
                 http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                http3_trust_roots_der: self.inner.http3_trust_roots_der.clone(),
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -259,6 +268,31 @@ impl HttpClient {
                 auto_decompress: self.inner.auto_decompress,
                 tls12_first: self.inner.tls12_first,
                 http3_accept_invalid_certs: enabled,
+                http3_trust_roots_der: self.inner.http3_trust_roots_der.clone(),
+                pool: Arc::clone(&self.inner.pool),
+                #[cfg(feature = "tls")]
+                h2_pool: Arc::clone(&self.inner.h2_pool),
+                #[cfg(feature = "tls")]
+                h2_fallback_disabled_hosts: Arc::clone(&self.inner.h2_fallback_disabled_hosts),
+                #[cfg(feature = "http3")]
+                h3_fallback_disabled_hosts: Arc::clone(&self.inner.h3_fallback_disabled_hosts),
+            }),
+        }
+    }
+
+    /// Configure HTTP/3 QUIC trust roots from authoritative runtime state.
+    pub fn with_http3_trust_roots_der(self, roots: Vec<Vec<u8>>) -> Self {
+        Self {
+            inner: Arc::new(ClientInner {
+                version: self.inner.version,
+                connect_timeout: self.inner.connect_timeout,
+                read_timeout: self.inner.read_timeout,
+                max_redirects: self.inner.max_redirects,
+                follow_redirects: self.inner.follow_redirects,
+                auto_decompress: self.inner.auto_decompress,
+                tls12_first: self.inner.tls12_first,
+                http3_accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                http3_trust_roots_der: roots,
                 pool: Arc::clone(&self.inner.pool),
                 #[cfg(feature = "tls")]
                 h2_pool: Arc::clone(&self.inner.h2_pool),
@@ -656,6 +690,7 @@ impl HttpClient {
                 &server_addr,
                 QuicConnectOptions {
                     accept_invalid_certs: self.inner.http3_accept_invalid_certs,
+                    trust_roots_der: self.inner.http3_trust_roots_der.clone(),
                 },
             )
             .await

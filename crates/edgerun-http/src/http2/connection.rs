@@ -564,7 +564,9 @@ impl<S: Read + Write> Read for Connection<S> {
             match frame {
                 Some(frame) => {
                     if frame.frame_type == FrameType::Data {
-                        let data_frame = DataFrame::from_frame(&frame).map_err(io::Error::from)?;
+                        let data_frame = DataFrame::from_frame(&frame)
+                            .map_err(Http2Error::from)
+                            .map_err(io::Error::from)?;
                         let len = data_frame.data.len().min(buf.len());
                         buf[..len].copy_from_slice(&data_frame.data[..len]);
                         return Ok(len);
@@ -594,7 +596,41 @@ impl<S: Read + Write> Write for Connection<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
+    use alloc::vec;
+
+    struct Cursor {
+        data: Vec<u8>,
+        pos: usize,
+    }
+
+    impl Cursor {
+        fn new(data: Vec<u8>) -> Self {
+            Self { data, pos: 0 }
+        }
+    }
+
+    impl Read for Cursor {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.pos >= self.data.len() {
+                return Ok(0);
+            }
+            let len = (self.data.len() - self.pos).min(buf.len());
+            buf[..len].copy_from_slice(&self.data[self.pos..self.pos + len]);
+            self.pos += len;
+            Ok(len)
+        }
+    }
+
+    impl Write for Cursor {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.data.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_connection_client_new() {

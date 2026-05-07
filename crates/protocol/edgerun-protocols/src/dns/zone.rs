@@ -17,7 +17,7 @@ use super::record::{DnsRecordData, DnsRecordType};
 ///
 /// # Example
 /// ```
-/// use edgerun_dns::zone::DnsZone;
+/// use edgerun_protocols::dns::DnsZone;
 /// use std::net::Ipv4Addr;
 ///
 /// let mut zone = DnsZone::new("example.com");

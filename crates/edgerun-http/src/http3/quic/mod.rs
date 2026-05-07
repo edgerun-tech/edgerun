@@ -1,39 +1,39 @@
 //! QUIC transport protocol (RFC 9000)
 
 pub mod crypto {
-    pub use edgerun_quic::crypto::*;
+    pub use edgerun_protocols::quic::crypto::*;
 }
 
 pub mod frame {
-    pub use edgerun_quic::frame::*;
+    pub use edgerun_protocols::quic::frame::*;
 }
 
 pub mod handshake {
-    pub use edgerun_quic::handshake::*;
+    pub use edgerun_protocols::quic::handshake::*;
 }
 
 pub mod handshake_unified {
-    pub use edgerun_quic::handshake_unified::*;
+    pub use edgerun_protocols::quic::handshake_unified::*;
 }
 
 pub mod packet {
-    pub use edgerun_quic::packet::*;
+    pub use edgerun_protocols::quic::packet::*;
 }
 
 pub mod server_handshake {
-    pub use edgerun_quic::server_handshake::*;
+    pub use edgerun_protocols::quic::server_handshake::*;
 }
 
 pub mod transport {
-    pub use edgerun_quic::transport::*;
+    pub use edgerun_protocols::quic::transport::*;
 }
 
 pub mod types {
-    pub use edgerun_quic::types::*;
+    pub use edgerun_protocols::quic::types::*;
 }
 
-pub use edgerun_quic::types::INITIAL_SALT_V1;
-pub use edgerun_quic::{
+pub use edgerun_protocols::quic::types::INITIAL_SALT_V1;
+pub use edgerun_protocols::quic::{
     get_long_header_payload_offset, ConnectionId, HandshakeResult, PacketNumberSpace,
     PacketProtection, PacketType, ProtectionKeys, QuicCrypto, QuicFrame, QuicPacket,
     QuicTlsHandshaker, QuicTlsServerHandshaker, QuicTransport, ServerHandshakeResult,
@@ -50,16 +50,22 @@ use crypto::{CryptoPhase, ProtectionKeys as ProtKeys};
 use crate::runtime::net::{IpAddr, SocketAddr, ToSocketAddrs, UdpSocket};
 use crate::runtime::sync::Arc;
 use crate::runtime::AsyncUdpSocket;
+use edgerun_protocols::tls::prf::Hasher as TlsHasher;
 use edgerun_crypto::CipherSuite;
 
 /// Client-side QUIC connection options.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct QuicConnectOptions {
     /// Permit the current incomplete QUIC certificate verifier.
     ///
     /// This is only appropriate for same-stack tests or local development with
     /// explicitly trusted endpoints.
     pub accept_invalid_certs: bool,
+    /// DER-encoded X.509 trust roots supplied by the runtime.
+    ///
+    /// In Edgerun nodes this should be derived from authoritative bootstrap /
+    /// genesis state replayed from the signed event stream.
+    pub trust_roots_der: Vec<Vec<u8>>,
 }
 
 /// QUIC connection
@@ -101,7 +107,7 @@ pub struct QuicConnection {
     /// Server application traffic secret (for key updates — RFC 9001 §6)
     server_app_traffic_secret: Vec<u8>,
     /// Hash algorithm matching the cipher suite (for HKDF-Expand-Label)
-    cipher_suite_hash: edgerun_tls::prf::Hasher,
+    cipher_suite_hash: TlsHasher,
     /// Next send offset per stream (for STREAM frame fragmentation)
     stream_send_offset: alloc::collections::BTreeMap<u64, u64>,
     /// Active path for connection migration (local_addr, remote_addr)
@@ -112,6 +118,8 @@ pub struct QuicConnection {
     )>,
     /// Pending migration path challenges (data → deadline)
     pending_path_challenges: alloc::collections::BTreeMap<[u8; 8], crate::runtime::time::Instant>,
+    /// Runtime clock used by this UDP wrapper for idle timeout bookkeeping.
+    runtime_last_activity: crate::runtime::time::Instant,
     /// Captured sent packets (for integration testing)
     sent_packets_buffer: Vec<Vec<u8>>,
 }
@@ -186,10 +194,11 @@ impl QuicConnection {
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
-            cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+            cipher_suite_hash: TlsHasher::Sha256,
             stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
             pending_path_challenges: alloc::collections::BTreeMap::new(),
+            runtime_last_activity: crate::runtime::time::Instant::now(),
             sent_packets_buffer: Vec::new(),
         };
 
@@ -233,10 +242,7 @@ impl QuicConnection {
             .unwrap_or(&self.server_addr);
         let mut handshaker = handshake::QuicTlsHandshaker::new(server_name);
         handshaker.allow_unverified_certificates(options.accept_invalid_certs);
-        #[cfg(feature = "std")]
-        if !options.accept_invalid_certs {
-            handshaker.load_linux_trust_roots()?;
-        }
+        handshaker.set_trusted_roots_der(options.trust_roots_der);
 
         // ── Step 1: Derive Initial keys ──────────────────────────────
         let dcid = self.server_dcid.as_bytes().to_vec();
@@ -398,7 +404,7 @@ impl QuicConnection {
             Some(full_packet.clone()),
         );
         self.sent_packets_buffer.push(full_packet);
-        self.transport.update_activity();
+        self.update_activity();
         Ok(())
     }
 
@@ -459,7 +465,7 @@ impl QuicConnection {
             Some(full_packet.clone()),
         );
         self.sent_packets_buffer.push(full_packet);
-        self.transport.update_activity();
+        self.update_activity();
         Ok(())
     }
 
@@ -534,12 +540,18 @@ impl QuicConnection {
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
-            cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+            cipher_suite_hash: TlsHasher::Sha256,
             stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
             pending_path_challenges: alloc::collections::BTreeMap::new(),
+            runtime_last_activity: crate::runtime::time::Instant::now(),
             sent_packets_buffer: Vec::new(),
         }
+    }
+
+    fn update_activity(&mut self) {
+        self.runtime_last_activity = crate::runtime::time::Instant::now();
+        self.transport.update_activity();
     }
 
     /// Check if connection is established
@@ -580,10 +592,11 @@ impl QuicConnection {
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
-            cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+            cipher_suite_hash: TlsHasher::Sha256,
             stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
             pending_path_challenges: alloc::collections::BTreeMap::new(),
+            runtime_last_activity: crate::runtime::time::Instant::now(),
             sent_packets_buffer: Vec::new(),
         }
     }
@@ -641,10 +654,11 @@ impl QuicConnection {
             prev_protection: None,
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
-            cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+            cipher_suite_hash: TlsHasher::Sha256,
             stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
             pending_path_challenges: alloc::collections::BTreeMap::new(),
+            runtime_last_activity: crate::runtime::time::Instant::now(),
             sent_packets_buffer: Vec::new(),
         };
 
@@ -801,7 +815,7 @@ impl QuicConnection {
             false,
             Some(send_bytes.clone()),
         );
-        self.transport.update_activity();
+        self.update_activity();
         Ok(())
     }
 
@@ -820,7 +834,7 @@ impl QuicConnection {
                     .map_err(|e| format!("UDP recv failed: {}", e))?;
                 self.recv_buffer = buf[..n].to_vec();
                 self.recv_offset = 0;
-                self.transport.update_activity();
+                self.update_activity();
             }
 
             if let Some(stream_data) = self.recv_from_buffer()? {
@@ -953,7 +967,7 @@ impl QuicConnection {
                         }
                     };
 
-                    self.transport.update_activity();
+                    self.update_activity();
                     self.transport
                         .record_received_packet(PacketNumberSpace::ApplicationData, packet_number);
 
@@ -1096,7 +1110,7 @@ impl QuicConnection {
         }
 
         self.early_data_sent = true;
-        self.transport.update_activity();
+        self.update_activity();
         Ok(())
     }
 
@@ -1361,7 +1375,7 @@ impl QuicConnection {
         let timeout = crate::runtime::time::Duration::from_millis(
             self.transport.params.max_idle_timeout.max(30000),
         );
-        self.transport.last_activity().elapsed() > timeout
+        self.runtime_last_activity.elapsed() > timeout
     }
 
     /// Get time until idle timeout fires.
@@ -1369,7 +1383,7 @@ impl QuicConnection {
         let timeout = crate::runtime::time::Duration::from_millis(
             self.transport.params.max_idle_timeout.max(30000),
         );
-        let elapsed = self.transport.last_activity().elapsed();
+        let elapsed = self.runtime_last_activity.elapsed();
         if elapsed >= timeout {
             crate::runtime::time::Duration::ZERO
         } else {

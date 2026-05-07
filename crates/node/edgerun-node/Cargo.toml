@@ -30,7 +30,7 @@ default = [
 ]
 protocols = ["tls", "quic", "tftp", "acme"]
 tls = ["dep:edgerun-tls"]
-quic = ["dep:edgerun-quic", "tls"]
+quic = ["dep:edgerun-protocols", "edgerun-protocols/quic", "tls"]
 tftp = ["dep:edgerun-protocols", "edgerun-protocols/tftp"]
 acme = ["dep:edgerun-acme"]
 service-suite = [
@@ -57,7 +57,7 @@ http = [
     "edgerun-http/connection-middleware",
 ]
 https = ["http", "tls", "edgerun-http/tls"]
-dns = ["http", "dep:edgerun-dns", "edgerun-dns/dnssec"]
+dns = ["http", "dep:edgerun-protocols", "edgerun-protocols/dns"]
 dhcp = ["http", "dep:edgerun-protocols", "edgerun-protocols/dhcp"]
 smtp = ["http", "dep:edgerun-email", "edgerun-email/tls", "edgerun-email/dkim"]
 imap = ["http", "dep:edgerun-email", "edgerun-email/tls"]
@@ -137,10 +137,8 @@ edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
 edgerun-analytics = { version = "0.1", path = "../../edgerun-analytics" }
 edgerun-email = { workspace = true, optional = true }
 edgerun-email-auth = { version = "0.1", path = "../../edgerun-email-auth" }
-edgerun-dns = { version = "0.1", path = "../../edgerun-dns", default-features = false, optional = true }
 edgerun-url = { workspace = true }
 edgerun-tls = { workspace = true, optional = true }
-edgerun-quic = { workspace = true, features = ["std"], optional = true }
 edgerun-acme = { workspace = true, features = ["dns_challenge"], optional = true }
 edgerun-http = { workspace = true, optional = true }
 edgerun-protocols = { workspace = true, optional = true }

@@ -516,6 +516,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-storage",
+ "edgerun-wire",
 ]
 
 [[package]]
@@ -549,10 +550,9 @@ dependencies = [
 name = "edgerun-email-auth"
 version = "0.1.1"
 dependencies = [
- "edgerun-crypto",
  "edgerun-dns",
- "edgerun-encoding",
  "edgerun-log",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -681,7 +681,6 @@ dependencies = [
  "edgerun-log",
  "edgerun-protocols",
  "edgerun-qpack",
- "edgerun-quic",
  "edgerun-rt",
  "edgerun-tls",
 ]
@@ -939,7 +938,6 @@ dependencies = [
  "edgerun-core",
  "edgerun-crypto",
  "edgerun-derived-db",
- "edgerun-dns",
  "edgerun-drm-display",
  "edgerun-email",
  "edgerun-email-auth",
@@ -977,7 +975,6 @@ dependencies = [
  "edgerun-pci",
  "edgerun-power",
  "edgerun-protocols",
- "edgerun-quic",
  "edgerun-remote-capability",
  "edgerun-rt",
  "edgerun-seal",
@@ -1098,7 +1095,9 @@ dependencies = [
 name = "edgerun-protocols"
 version = "0.1.1"
 dependencies = [
+ "edgerun-crypto",
  "edgerun-encoding",
+ "edgerun-rt",
  "miniz_oxide",
 ]
 
@@ -1116,16 +1115,6 @@ dependencies = [
 [[package]]
 name = "edgerun-quectel-ec200a"
 version = "0.1.1"
-
-[[package]]
-name = "edgerun-quic"
-version = "0.1.1"
-dependencies = [
- "edgerun-crypto",
- "edgerun-encoding",
- "edgerun-rt",
- "edgerun-tls",
-]
 
 [[package]]
 name = "edgerun-regex"
@@ -1319,6 +1308,7 @@ dependencies = [
  "edgerun-acme",
  "edgerun-crypto",
  "edgerun-encoding",
+ "edgerun-protocols",
  "edgerun-rt",
 ]
 

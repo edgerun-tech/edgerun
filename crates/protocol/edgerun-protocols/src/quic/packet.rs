@@ -1,6 +1,5 @@
 //! QUIC packet format (RFC 9000 Section 17)
 
-use crate::std;
 use alloc::{
     format,
     string::{String, ToString},
@@ -637,7 +636,7 @@ pub fn get_long_header_payload_offset(data: &[u8]) -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto::{PacketProtection, ProtectionKeys};
+    use super::super::crypto::{PacketProtection, ProtectionKeys};
 
     use super::*;
 

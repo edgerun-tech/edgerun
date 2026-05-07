@@ -9,6 +9,12 @@ use edgerun_bluetooth::{
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_core::protocol::capability::{CapabilityInvocation, CapabilityResult};
 use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
+use edgerun_wire::{
+    RemoteBluetoothBeaconObservation as BluetoothBeaconObservationWire,
+    RemoteBluetoothConnectionInfo as BluetoothConnectionInfoWire,
+    RemoteBluetoothConnections as BluetoothConnectionsWire,
+    RemoteBluetoothScanResult as BluetoothScanResultWire,
+};
 
 use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
@@ -124,82 +130,6 @@ fn bluetooth_link_kind_from_u8(v: u8) -> Result<BluetoothLinkKind, CapabilityErr
 }
 
 // --- Encode/decode ---
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct BluetoothScanResultWire {
-    observations: Vec<BluetoothBeaconObservationWire>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct BluetoothBeaconObservationWire {
-    device_id: String,
-    transport_kind: u8,
-    address_kind: u8,
-    rssi_dbm: i16,
-    tx_power_dbm: Option<i16>,
-    local_name: Option<String>,
-    service_uuids: Vec<String>,
-    profiles: Vec<u8>,
-    classic_device_class: Option<u32>,
-    advertisement_data: Vec<u8>,
-    captured_at_unix_ms: i64,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct BluetoothConnectionsWire {
-    connections: Vec<BluetoothConnectionInfoWire>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct BluetoothConnectionInfoWire {
-    device_id: String,
-    transport_kind: u8,
-    address_kind: u8,
-    link_kind: u8,
-    outbound: bool,
-    state: u16,
-    local_name: Option<String>,
-    service_uuids: Vec<String>,
-    profiles: Vec<u8>,
-    trusted: Option<bool>,
-    paired: Option<bool>,
-}
 
 pub fn encode_bluetooth_scan_result(scan: &BluetoothScanResult) -> Vec<u8> {
     let wire = BluetoothScanResultWire {

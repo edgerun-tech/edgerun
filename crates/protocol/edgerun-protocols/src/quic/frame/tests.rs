@@ -1,4 +1,5 @@
 use super::QuicFrame;
+use alloc::vec;
 
 #[test]
 fn test_ping_frame() {

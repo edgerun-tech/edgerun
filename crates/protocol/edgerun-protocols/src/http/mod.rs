@@ -7,6 +7,9 @@
 pub mod chunked;
 pub mod header;
 pub mod http1;
+pub mod http2;
+#[cfg(feature = "http3")]
+pub mod http3;
 pub mod message;
 pub mod method;
 pub mod status;

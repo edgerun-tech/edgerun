@@ -55,6 +55,7 @@ use super::quic::ConnectionId;
 use super::quic::QuicConnection;
 use super::quic::QuicTlsServerHandshaker;
 use super::quic::QUIC_VERSION_V1;
+use super::quic::server_handshake::CertificateAndKey as QuicCertificateAndKey;
 use super::Http3Error;
 use crate::http3::settings::Http3Settings;
 use crate::runtime::sync::Mutex;
@@ -75,6 +76,13 @@ struct AddressValidationState {
     address_validated: bool,
     /// Timestamp of last activity (for cleanup)
     last_activity: crate::runtime::time::Instant,
+}
+
+fn quic_cert_from_tls(cert: &CertificateAndKey) -> QuicCertificateAndKey {
+    QuicCertificateAndKey {
+        cert_der: cert.cert_der.clone(),
+        signing_key: Arc::clone(&cert.signing_key),
+    }
 }
 
 impl AddressValidationState {
@@ -239,7 +247,7 @@ impl Http3Server {
             return Err("Packet too short".to_string());
         }
 
-        let mut handshaker = QuicTlsServerHandshaker::new(self.cert_and_key.clone());
+        let mut handshaker = QuicTlsServerHandshaker::new(quic_cert_from_tls(&self.cert_and_key));
         let dst_cid = parse_long_header_dcid(data)?;
         let initial_keys = handshaker.initial_keys(&dst_cid);
         let mut initial_protection = PacketProtection::new(&initial_keys);
@@ -693,7 +701,7 @@ mod tests {
     fn initial_response_uses_parseable_protected_long_header() {
         let cert = generate_self_signed(&["localhost"]).expect("generate cert");
         let server = test_server(cert.clone());
-        let mut server_hs = QuicTlsServerHandshaker::new(cert);
+        let mut server_hs = QuicTlsServerHandshaker::new(quic_cert_from_tls(&cert));
         let client_hs = QuicTlsHandshaker::new("localhost");
 
         let client_dcid = vec![1, 2, 3, 4, 5, 6, 7, 8];
@@ -738,7 +746,7 @@ mod tests {
     fn server_initial_decrypt_uses_parsed_packet_number() {
         let cert = generate_self_signed(&["localhost"]).expect("generate cert");
         let client_hs = QuicTlsHandshaker::new("localhost");
-        let server_hs = QuicTlsServerHandshaker::new(cert);
+        let server_hs = QuicTlsServerHandshaker::new(quic_cert_from_tls(&cert));
         let client_dcid = vec![1, 2, 3, 4, 5, 6, 7, 8];
         let client_scid = vec![9, 10, 11, 12];
         let frame = QuicFrame::Crypto {
@@ -793,7 +801,7 @@ mod tests {
         let cert = generate_self_signed(&["localhost"]).expect("generate cert");
         let server = test_server(cert.clone());
         let mut client_hs = QuicTlsHandshaker::new("localhost");
-        let mut server_hs = QuicTlsServerHandshaker::new(cert);
+        let mut server_hs = QuicTlsServerHandshaker::new(quic_cert_from_tls(&cert));
 
         let client_dcid = vec![1, 2, 3, 4, 5, 6, 7, 8];
         let client_scid = vec![9, 10, 11, 12];

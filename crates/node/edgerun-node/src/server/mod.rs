@@ -60,6 +60,8 @@ use edgerun_http::server::{BoundHttpServer, HttpServer};
 pub mod connection_interceptor_adapter;
 #[cfg(feature = "dhcp")]
 pub mod dhcp_runtime;
+#[cfg(feature = "dns")]
+pub mod dns_runtime;
 pub mod middleware;
 #[cfg(feature = "proxy")]
 mod proxy_runtime;
@@ -514,13 +516,13 @@ impl Server {
 
         #[cfg(feature = "dns")]
         let dns_server = if let Some(config) = self.dns {
-            let dns_config = edgerun_dns::DnsServerConfig {
+            let dns_config = dns_runtime::DnsRuntimeConfig {
                 bind_addr: config.bind_addr,
                 default_ttl: config.default_ttl,
                 rate_limit_qps: config.rate_limit_qps,
                 bind_addr_ipv6: config.bind_addr_ipv6,
             };
-            let srv = edgerun_dns::DnsServer::new(dns_config).map_err(other_io_error)?;
+            let srv = dns_runtime::DnsRuntime::new(dns_config).map_err(other_io_error)?;
             Some(srv)
         } else {
             None
@@ -719,7 +721,7 @@ impl Default for Server {
 pub struct BoundServer {
     http: Option<Arc<BoundHttpServer>>,
     #[cfg(feature = "dns")]
-    dns: Option<Arc<edgerun_dns::DnsServer>>,
+    dns: Option<Arc<dns_runtime::DnsRuntime>>,
     #[cfg(feature = "dhcp")]
     dhcp: Option<dhcp_runtime::DhcpServer>,
     #[cfg(feature = "tftp")]
@@ -765,17 +767,9 @@ impl BoundServer {
         #[cfg(feature = "dns")]
         if let Some(ref dns) = self.dns {
             let dns_run = Arc::clone(dns);
-            tasks.push(edgerun_rt::spawn(async move {
-                let _ = dns_run.run().await;
-                Ok(())
-            }));
-            let dns_shutdown = Arc::clone(dns);
             let token = shutdown.clone();
             tasks.push(edgerun_rt::spawn(async move {
-                while !token.is_cancelled() {
-                    edgerun_rt::sleep(Duration::from_millis(100)).await;
-                }
-                dns_shutdown.shutdown().await;
+                dns_run.run(token).await.map_err(other_io_error)?;
                 Ok(())
             }));
         }

@@ -119,6 +119,22 @@ impl From<String> for Http2Error {
     }
 }
 
+impl From<edgerun_protocols::http::http2::Http2Error> for Http2Error {
+    fn from(err: edgerun_protocols::http::http2::Http2Error) -> Self {
+        match err {
+            edgerun_protocols::http::http2::Http2Error::FrameParse(message) => {
+                Http2Error::FrameParse(message)
+            }
+            edgerun_protocols::http::http2::Http2Error::ProtocolViolation(message) => {
+                Http2Error::ProtocolViolation(message)
+            }
+            edgerun_protocols::http::http2::Http2Error::FlowControl(message) => {
+                Http2Error::FlowControl(message)
+            }
+        }
+    }
+}
+
 impl From<edgerun_hpack::DecoderError> for Http2Error {
     fn from(err: edgerun_hpack::DecoderError) -> Self {
         Http2Error::HpackDecode(format!("{:?}", err))

@@ -102,7 +102,6 @@ members = [
   "crates/device-types/edgerun-power",
   "crates/edgerun-quectel-ec200a",
   "crates/utility/edgerun-qpack",
-  "crates/edgerun-quic",
   "crates/capability/edgerun-remote-capability",
   "crates/edgerun-secret-service",
   "crates/edgerun-email",
@@ -200,7 +199,6 @@ edgerun-encoding = { version = "0.1", path = "crates/utility/edgerun-encoding" }
 edgerun-acme = { version = "0.1", path = "crates/edgerun-acme" }
 edgerun-dns = { version = "0.1", path = "crates/edgerun-dns" }
 edgerun-tls = { version = "0.1", path = "crates/edgerun-tls" }
-edgerun-quic = { version = "0.1", path = "crates/edgerun-quic", default-features = false }
 edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
 edgerun-glob = { version = "0.1", path = "crates/utility/edgerun-glob" }
 edgerun-regex = { version = "0.1", path = "crates/utility/edgerun-regex" }

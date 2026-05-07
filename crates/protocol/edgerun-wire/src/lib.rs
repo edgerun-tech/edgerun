@@ -8,6 +8,7 @@
 
 extern crate alloc;
 
+use alloc::string::String;
 use alloc::vec::Vec;
 
 pub const WIRE_PROTOCOL: &str = "rkyv";
@@ -761,6 +762,385 @@ pub struct PaymentRecord {
     pub payer_signature: Vec<u8>,
     pub store_id: Vec<u8>,
     pub store_signature: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct DerivedDbMetaRecord {
+    pub key: Vec<u8>,
+    pub value: Vec<u8>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct DerivedDbKeyRecord {
+    pub key: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct DerivedDbObjectIndexRecord {
+    pub object_id: Vec<u8>,
+    pub stream_id: Vec<u8>,
+    pub seq: u64,
+    pub representation_id: Vec<u8>,
+    pub content_type: Option<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct DerivedDbAdminAuditRecord {
+    pub id: u64,
+    pub event_time: i64,
+    pub subject: String,
+    pub action: String,
+    pub outcome: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteInputEvents {
+    pub events: Vec<RemoteInputEventRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteInputEventRecord {
+    pub timestamp_sec: i64,
+    pub timestamp_usec: i64,
+    pub kind: u16,
+    pub code: u16,
+    pub value: i32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteAudioCapture {
+    pub sample_rate_hz: u32,
+    pub channels: u16,
+    pub format: u32,
+    pub started_at_unix_ms: i64,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteAudioPlaybackRequest {
+    pub duration_ms: u32,
+    pub sample_rate_hz: u32,
+    pub channels: u16,
+    pub format: u32,
+    pub audio_bytes: Vec<u8>,
+    pub software_gain_percent: Option<u16>,
+    pub target_output_level_percent: Option<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteSpeakerOutputLevel {
+    pub current_percent: u8,
+    pub min_raw_value: i64,
+    pub max_raw_value: i64,
+    pub muted: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteAudioPlaybackResult {
+    pub bytes_written: u64,
+    pub sample_rate_hz: u32,
+    pub channels: u16,
+    pub finished: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteDisplayMode {
+    pub width: u32,
+    pub height: u32,
+    pub refresh_millihz: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteDisplayInfo {
+    pub provider: String,
+    pub display_name: String,
+    pub instance_id: String,
+    pub built_in: bool,
+    pub primary: bool,
+    pub current_mode: RemoteDisplayMode,
+    pub modes: Vec<RemoteDisplayMode>,
+    pub hdr_capable: bool,
+    pub touch_capable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteDisplayUpdateRequest {
+    pub content_kind: u32,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub refresh_millihz: Option<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteCameraFrame {
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32,
+    pub format: u32,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteFaceBounds {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteBiometricState {
+    pub modality: u8,
+    pub verified: bool,
+    pub hardware_protected: bool,
+    pub user_present: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteCameraCapture {
+    pub frame: RemoteCameraFrame,
+    pub quality: u8,
+    pub face_bounds: Option<RemoteFaceBounds>,
+    pub state: RemoteBiometricState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemotePairedCameraFrame {
+    pub rgb: Option<RemoteCameraFrame>,
+    pub infrared: Option<RemoteCameraFrame>,
+    pub depth: Option<RemoteCameraFrame>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteWifiScanResult {
+    pub observations: Vec<RemoteWifiNetworkObservation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteWifiNetworkObservation {
+    pub interface_name: String,
+    pub ssid: Option<String>,
+    pub bssid: Option<String>,
+    pub signal_dbm: Option<i16>,
+    pub frequency_mhz: Option<u32>,
+    pub secure: Option<bool>,
+    pub observed_at_unix_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteWifiInterfaceInfo {
+    pub provider: String,
+    pub interface_name: String,
+    pub mac_address: Option<String>,
+    pub phy_name: Option<String>,
+    pub operstate: Option<String>,
+    pub power_state: u8,
+    pub mode: u8,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteBluetoothScanResult {
+    pub observations: Vec<RemoteBluetoothBeaconObservation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteBluetoothBeaconObservation {
+    pub device_id: String,
+    pub transport_kind: u8,
+    pub address_kind: u8,
+    pub rssi_dbm: i16,
+    pub tx_power_dbm: Option<i16>,
+    pub local_name: Option<String>,
+    pub service_uuids: Vec<String>,
+    pub profiles: Vec<u8>,
+    pub classic_device_class: Option<u32>,
+    pub advertisement_data: Vec<u8>,
+    pub captured_at_unix_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteBluetoothConnections {
+    pub connections: Vec<RemoteBluetoothConnectionInfo>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteBluetoothConnectionInfo {
+    pub device_id: String,
+    pub transport_kind: u8,
+    pub address_kind: u8,
+    pub link_kind: u8,
+    pub outbound: bool,
+    pub state: u16,
+    pub local_name: Option<String>,
+    pub service_uuids: Vec<String>,
+    pub profiles: Vec<u8>,
+    pub trusted: Option<bool>,
+    pub paired: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct CapabilityGrantIdSeed {
+    pub request_id: Vec<u8>,
+    pub provider_name: Vec<u8>,
+    pub provider_instance_id: Vec<u8>,
+    pub nonce: u64,
+    pub unix_secs: u64,
+    pub unix_nanos: u32,
+}
+
+pub type RemoteBlockRequestId = u64;
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RemoteBlockDeviceInfo {
+    pub block_size: u32,
+    pub block_count: u64,
+    pub readonly: bool,
+    pub supports_flush: bool,
+    pub supports_discard: bool,
+    pub supports_write_zeroes: bool,
+    pub model: String,
+    pub serial: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub enum RemoteBlockError {
+    OutOfRange,
+    ReadOnly,
+    Misaligned,
+    Unsupported,
+    BackendFailure(String),
+    ProtocolError(String),
+    NotReady,
+    Timeout,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub enum RemoteBlockRequest {
+    Handshake {
+        protocol_version: u16,
+    },
+    GetInfo,
+    Read {
+        request_id: RemoteBlockRequestId,
+        lba: u64,
+        blocks: u32,
+    },
+    Write {
+        request_id: RemoteBlockRequestId,
+        lba: u64,
+        blocks: u32,
+        data: Vec<u8>,
+    },
+    Flush {
+        request_id: RemoteBlockRequestId,
+    },
+    Discard {
+        request_id: RemoteBlockRequestId,
+        lba: u64,
+        blocks: u32,
+    },
+    WriteZeroes {
+        request_id: RemoteBlockRequestId,
+        lba: u64,
+        blocks: u32,
+    },
+    Ping,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub enum RemoteBlockResponse {
+    HandshakeAck {
+        protocol_version: u16,
+    },
+    Info(RemoteBlockDeviceInfo),
+    ReadResult {
+        request_id: RemoteBlockRequestId,
+        data: Vec<u8>,
+    },
+    WriteAck {
+        request_id: RemoteBlockRequestId,
+    },
+    FlushAck {
+        request_id: RemoteBlockRequestId,
+    },
+    DiscardAck {
+        request_id: RemoteBlockRequestId,
+    },
+    WriteZeroesAck {
+        request_id: RemoteBlockRequestId,
+    },
+    Pong,
+    Error {
+        request_id: Option<RemoteBlockRequestId>,
+        error: RemoteBlockError,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct EdgeFsFileMeta {
+    pub mode: u32,
+    pub uid: u32,
+    pub gid: u32,
+    pub mtime: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct EdgeFsDeviceId {
+    pub major: u32,
+    pub minor: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub enum EdgeFsRecordPayload {
+    Put {
+        path: String,
+        kind: u8,
+        meta: EdgeFsFileMeta,
+        data: Vec<u8>,
+        link_target: Option<String>,
+        device: Option<EdgeFsDeviceId>,
+    },
+    Delete {
+        path: String,
+    },
+    DeleteChildren {
+        path: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]

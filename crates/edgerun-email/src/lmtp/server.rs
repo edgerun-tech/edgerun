@@ -208,7 +208,8 @@ async fn evaluate_and_notify_auth(
         }
     };
 
-    let mut evaluator = EmailAuthEvaluator::new(&mut dns_client);
+    let mut dns_query = edgerun_email_auth::DnsClientQuery(&mut dns_client);
+    let mut evaluator = EmailAuthEvaluator::new(&mut dns_query);
     match evaluator
         .evaluate(
             peer_ip,

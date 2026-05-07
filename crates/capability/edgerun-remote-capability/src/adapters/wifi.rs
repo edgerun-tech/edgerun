@@ -10,6 +10,11 @@ use edgerun_wifi::{
     WifiController, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState,
     WifiScanResult, WifiScanner,
 };
+use edgerun_wire::{
+    RemoteWifiInterfaceInfo as WifiInterfaceInfoWire,
+    RemoteWifiNetworkObservation as WifiNetworkObservationWire,
+    RemoteWifiScanResult as WifiScanResultWire,
+};
 
 use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
@@ -65,60 +70,6 @@ fn wifi_interface_mode_from_u8(v: u8) -> Result<WifiInterfaceMode, CapabilityErr
 }
 
 // --- Encode/decode ---
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct WifiScanResultWire {
-    observations: Vec<WifiNetworkObservationWire>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct WifiNetworkObservationWire {
-    interface_name: String,
-    ssid: Option<String>,
-    bssid: Option<String>,
-    signal_dbm: Option<i16>,
-    frequency_mhz: Option<u32>,
-    secure: Option<bool>,
-    observed_at_unix_ms: i64,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct WifiInterfaceInfoWire {
-    provider: String,
-    interface_name: String,
-    mac_address: Option<String>,
-    phy_name: Option<String>,
-    operstate: Option<String>,
-    power_state: u8,
-    mode: u8,
-}
 
 pub fn encode_wifi_scan_result(scan: &WifiScanResult) -> Vec<u8> {
     let wire = WifiScanResultWire {

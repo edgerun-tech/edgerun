@@ -1,10 +1,32 @@
 //! QUIC transport layer (loss recovery, congestion control, flow control)
 
+use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
 use super::frame::QuicFrame;
-use crate::std;
-use crate::{ConnectionId, PacketNumberSpace, TransportParameters};
+use super::{ConnectionId, PacketNumberSpace, TransportParameters};
+
+/// Monotonic protocol timestamp in microseconds.
+///
+/// The node/runtime owns the actual clock. QUIC transport logic only compares
+/// caller-supplied timestamps so it can run over UDP, WebSocket, WebRTC, or an
+/// in-memory test harness without importing a runtime.
+pub type QuicInstant = u64;
+
+/// Protocol duration in microseconds.
+pub type QuicDuration = u64;
+
+const DEFAULT_RTT: QuicDuration = 100_000;
+const DEFAULT_RTTVAR: QuicDuration = 50_000;
+const MICROS_PER_MILLI: QuicDuration = 1_000;
+
+fn duration_from_millis(ms: u64) -> QuicDuration {
+    ms.saturating_mul(MICROS_PER_MILLI)
+}
+
+fn duration_mul_f64(duration: QuicDuration, factor: f64) -> QuicDuration {
+    ((duration as f64) * factor) as QuicDuration
+}
 
 /// Packet number state for a single packet number space (RFC 9000 §12.3).
 #[derive(Debug, Clone)]
@@ -16,7 +38,7 @@ pub struct PacketNumberState {
     /// Count of packets sent in this space (for loss tracking)
     packets_sent: u64,
     /// Received packet numbers for ACK generation
-    received_packets: Vec<(u64, std::time::Instant)>,
+    received_packets: Vec<(u64, QuicInstant)>,
 }
 
 impl PacketNumberState {
@@ -29,7 +51,7 @@ impl PacketNumberState {
         }
     }
 
-    fn record_received(&mut self, pn: u64) {
+    fn record_received(&mut self, pn: u64, now: QuicInstant) {
         if self
             .received_packets
             .iter()
@@ -37,7 +59,7 @@ impl PacketNumberState {
         {
             return;
         }
-        self.received_packets.push((pn, std::time::Instant::now()));
+        self.received_packets.push((pn, now));
         if self.received_packets.len() > 256 {
             self.received_packets.drain(..128);
         }
@@ -53,7 +75,7 @@ impl PacketNumberState {
 pub struct SentPacket {
     pub space: PacketNumberSpace,
     pub packet_number: u64,
-    pub time_sent: std::time::Instant,
+    pub time_sent: QuicInstant,
     pub size: usize,
     pub packet_bytes: Option<Vec<u8>>,
     pub has_crypto: bool,
@@ -67,7 +89,7 @@ pub struct CongestionControl {
     pub congestion_window: u64,
     pub ssthresh: u64,
     pub bytes_in_flight: u64,
-    pub recovery_start_time: Option<std::time::Instant>,
+    pub recovery_start_time: Option<QuicInstant>,
 }
 
 impl CongestionControl {
@@ -140,15 +162,15 @@ pub struct QuicTransport {
     pub max_data: u64,
     /// Stream-level flow control
     pub max_stream_data: u64,
-    last_activity: std::time::Instant,
+    last_activity: QuicInstant,
     /// Path MTU
     pub mtu: usize,
     /// RTT estimate (RFC 9002 §9)
-    rtt_estimate: std::time::Duration,
-    smoothed_rtt: Option<std::time::Duration>,
-    rttvar: std::time::Duration,
-    min_rtt: Option<std::time::Duration>,
-    latest_rtt: Option<std::time::Duration>,
+    rtt_estimate: QuicDuration,
+    smoothed_rtt: Option<QuicDuration>,
+    rttvar: QuicDuration,
+    min_rtt: Option<QuicDuration>,
+    latest_rtt: Option<QuicDuration>,
     // --- Loss detection + congestion control ---
     sent_packets: Vec<SentPacket>,
     congestion: CongestionControl,
@@ -163,6 +185,10 @@ pub struct QuicTransport {
 impl QuicTransport {
     /// Create new transport with independent packet number spaces (RFC 9000 §12.3).
     pub fn new(local_cid: ConnectionId, remote_cid: ConnectionId) -> Self {
+        Self::new_at(local_cid, remote_cid, 0)
+    }
+
+    pub fn new_at(local_cid: ConnectionId, remote_cid: ConnectionId, now: QuicInstant) -> Self {
         let max_data = 65535u64;
         QuicTransport {
             local_cid,
@@ -175,11 +201,11 @@ impl QuicTransport {
             ],
             max_data,
             max_stream_data: 65535,
-            last_activity: std::time::Instant::now(),
+            last_activity: now,
             mtu: 1200,
-            rtt_estimate: std::time::Duration::from_millis(100),
+            rtt_estimate: DEFAULT_RTT,
             smoothed_rtt: None,
-            rttvar: std::time::Duration::from_millis(50),
+            rttvar: DEFAULT_RTTVAR,
             min_rtt: None,
             latest_rtt: None,
             sent_packets: Vec::new(),
@@ -208,6 +234,15 @@ impl QuicTransport {
 
     /// Record that we received a packet in the given space.
     pub fn record_received_packet(&mut self, space: PacketNumberSpace, packet_number: u64) -> bool {
+        self.record_received_packet_at(space, packet_number, self.last_activity)
+    }
+
+    pub fn record_received_packet_at(
+        &mut self,
+        space: PacketNumberSpace,
+        packet_number: u64,
+        now: QuicInstant,
+    ) -> bool {
         let idx = space as usize;
         if self.pn_state[idx]
             .received_packets
@@ -222,7 +257,7 @@ impl QuicTransport {
         {
             self.pn_state[idx].largest_received = Some(packet_number);
         }
-        self.pn_state[idx].record_received(packet_number);
+        self.pn_state[idx].record_received(packet_number, now);
         true
     }
 
@@ -260,13 +295,21 @@ impl QuicTransport {
     // -----------------------------------------------------------------------
 
     pub fn generate_ack_frame(&mut self, space: PacketNumberSpace) -> Option<QuicFrame> {
+        self.generate_ack_frame_at(space, self.last_activity)
+    }
+
+    pub fn generate_ack_frame_at(
+        &mut self,
+        space: PacketNumberSpace,
+        now: QuicInstant,
+    ) -> Option<QuicFrame> {
         let idx = space as usize;
         let received = &self.pn_state[idx].received_packets;
         if received.is_empty() {
             return None;
         }
 
-        let mut sorted: Vec<(u64, std::time::Instant)> = received.clone();
+        let mut sorted: Vec<(u64, QuicInstant)> = received.clone();
         sorted.sort_by_key(|&(pn, _)| pn);
         sorted.dedup_by_key(|tuple| tuple.0);
 
@@ -289,16 +332,14 @@ impl QuicTransport {
         ranges.push((range_start, range_end));
 
         let largest_acknowledged = ranges[0].1;
-        let now = std::time::Instant::now();
 
         let ack_delay = sorted
             .iter()
             .find(|&&(pn, _)| pn == largest_acknowledged)
-            .map(|&(_, t)| now - t)
-            .unwrap_or(std::time::Duration::ZERO);
+            .map(|&(_, t)| now.saturating_sub(t))
+            .unwrap_or(0);
 
-        let ack_delay_us = ack_delay.as_micros() as u64;
-        let ack_delay_encoded = ack_delay_us >> self.params.ack_delay_exponent;
+        let ack_delay_encoded = ack_delay >> self.params.ack_delay_exponent;
 
         let first_ack_range = ranges[0].1 - ranges[0].0;
         let mut ack_ranges = Vec::new();
@@ -326,7 +367,7 @@ impl QuicTransport {
     // RTT estimation (RFC 9002 §9)
     // -----------------------------------------------------------------------
 
-    pub fn update_rtt(&mut self, latest_rtt: std::time::Duration, ack_delay: std::time::Duration) {
+    pub fn update_rtt(&mut self, latest_rtt: QuicDuration, ack_delay: QuicDuration) {
         self.latest_rtt = Some(latest_rtt);
 
         self.min_rtt = Some(match self.min_rtt {
@@ -342,33 +383,33 @@ impl QuicTransport {
 
         if let Some(smoothed) = self.smoothed_rtt {
             let rttvar_sample = smoothed.abs_diff(adjusted_rtt);
-            self.rttvar = self.rttvar.mul_f64(0.75) + rttvar_sample.mul_f64(0.25);
-            self.smoothed_rtt = Some(smoothed.mul_f64(0.875) + adjusted_rtt.mul_f64(0.125));
+            self.rttvar =
+                duration_mul_f64(self.rttvar, 0.75) + duration_mul_f64(rttvar_sample, 0.25);
+            self.smoothed_rtt =
+                Some(duration_mul_f64(smoothed, 0.875) + duration_mul_f64(adjusted_rtt, 0.125));
         } else {
             self.smoothed_rtt = Some(latest_rtt);
             self.rttvar = latest_rtt / 2;
         }
 
-        self.rtt_estimate = self
-            .smoothed_rtt
-            .unwrap_or(std::time::Duration::from_millis(100));
+        self.rtt_estimate = self.smoothed_rtt.unwrap_or(DEFAULT_RTT);
     }
 
-    pub fn smoothed_rtt(&self) -> Option<std::time::Duration> {
+    pub fn smoothed_rtt(&self) -> Option<QuicDuration> {
         self.smoothed_rtt
     }
 
-    pub fn min_rtt(&self) -> Option<std::time::Duration> {
+    pub fn min_rtt(&self) -> Option<QuicDuration> {
         self.min_rtt
     }
 
-    pub fn latest_rtt(&self) -> Option<std::time::Duration> {
+    pub fn latest_rtt(&self) -> Option<QuicDuration> {
         self.latest_rtt
     }
 
-    pub fn pto_duration(&self) -> std::time::Duration {
+    pub fn pto_duration(&self) -> QuicDuration {
         let smoothed = self.smoothed_rtt.unwrap_or(self.rtt_estimate);
-        let max_ack_delay = std::time::Duration::from_millis(self.params.max_ack_delay);
+        let max_ack_delay = duration_from_millis(self.params.max_ack_delay);
         smoothed + self.rttvar * 4 + max_ack_delay
     }
 
@@ -383,7 +424,14 @@ impl QuicTransport {
         size: usize,
         has_crypto: bool,
     ) {
-        self.record_packet_sent_with_data(space, packet_number, size, has_crypto, None);
+        self.record_packet_sent_with_data_at(
+            space,
+            packet_number,
+            size,
+            has_crypto,
+            None,
+            self.last_activity,
+        );
     }
 
     pub fn record_packet_sent_with_data(
@@ -394,10 +442,29 @@ impl QuicTransport {
         has_crypto: bool,
         packet_bytes: Option<Vec<u8>>,
     ) {
+        self.record_packet_sent_with_data_at(
+            space,
+            packet_number,
+            size,
+            has_crypto,
+            packet_bytes,
+            self.last_activity,
+        );
+    }
+
+    pub fn record_packet_sent_with_data_at(
+        &mut self,
+        space: PacketNumberSpace,
+        packet_number: u64,
+        size: usize,
+        has_crypto: bool,
+        packet_bytes: Option<Vec<u8>>,
+        now: QuicInstant,
+    ) {
         let packet = SentPacket {
             space,
             packet_number,
-            time_sent: std::time::Instant::now(),
+            time_sent: now,
             size,
             packet_bytes,
             has_crypto,
@@ -416,14 +483,33 @@ impl QuicTransport {
         largest_acknowledged: u64,
         first_ack_range: u64,
         ack_ranges: &[(u64, u64)],
-        ack_delay: std::time::Duration,
+        ack_delay: QuicDuration,
+    ) {
+        self.on_ack_received_at(
+            space,
+            largest_acknowledged,
+            first_ack_range,
+            ack_ranges,
+            ack_delay,
+            self.last_activity,
+        );
+    }
+
+    pub fn on_ack_received_at(
+        &mut self,
+        space: PacketNumberSpace,
+        largest_acknowledged: u64,
+        first_ack_range: u64,
+        ack_ranges: &[(u64, u64)],
+        ack_delay: QuicDuration,
+        now: QuicInstant,
     ) {
         let idx = space as usize;
 
         // Build the set of acked packet numbers from the ACK frame ranges
         // Range 0: [largest_acknowledged - first_ack_range, largest_acknowledged]
         // Range N: [prev_end - gap - range, prev_end - gap - 1]
-        let mut acked_pns = std::collections::HashSet::new();
+        let mut acked_pns = BTreeSet::new();
 
         // First range
         let range_start = largest_acknowledged.saturating_sub(first_ack_range);
@@ -457,7 +543,7 @@ impl QuicTransport {
             }
         }
 
-        self.detect_lost_packets(space);
+        self.detect_lost_packets_at(space, now);
 
         // Update congestion window (RFC 9002 §7)
         if newly_acked_count > 0 {
@@ -492,7 +578,7 @@ impl QuicTransport {
             .iter()
             .find(|p| p.space == space && p.packet_number == largest_acknowledged && p.acked)
         {
-            let latest_rtt = acked_pkt.time_sent.elapsed();
+            let latest_rtt = now.saturating_sub(acked_pkt.time_sent);
             self.update_rtt(latest_rtt, ack_delay);
         }
 
@@ -501,13 +587,12 @@ impl QuicTransport {
         self.pn_state[idx].clear_up_to(largest_acknowledged);
     }
 
-    fn detect_lost_packets(&mut self, space: PacketNumberSpace) {
-        let now = std::time::Instant::now();
-
+    fn detect_lost_packets_at(&mut self, space: PacketNumberSpace, now: QuicInstant) {
         let time_threshold = self
             .smoothed_rtt
             .unwrap_or(self.rtt_estimate)
-            .mul_f64(1.125);
+            .saturating_mul(9)
+            / 8;
 
         let lost_pns: Vec<u64> = self
             .sent_packets
@@ -526,7 +611,7 @@ impl QuicTransport {
                         && other.packet_number >= pkt.packet_number.saturating_add(3)
                 });
 
-                let time_expired = now - pkt.time_sent > time_threshold;
+                let time_expired = now.saturating_sub(pkt.time_sent) > time_threshold;
 
                 if packet_threshold_expired || time_expired {
                     Some(pkt.packet_number)
@@ -614,15 +699,23 @@ impl QuicTransport {
     // -----------------------------------------------------------------------
 
     pub fn update_activity(&mut self) {
-        self.last_activity = std::time::Instant::now();
+        self.update_activity_at(self.last_activity);
     }
 
-    pub fn last_activity(&self) -> std::time::Instant {
+    pub fn update_activity_at(&mut self, now: QuicInstant) {
+        self.last_activity = now;
+    }
+
+    pub fn last_activity(&self) -> QuicInstant {
         self.last_activity
     }
 
-    pub fn is_idle(&self, timeout: std::time::Duration) -> bool {
-        self.last_activity.elapsed() > timeout
+    pub fn is_idle(&self, timeout: QuicDuration) -> bool {
+        self.is_idle_at(self.last_activity, timeout)
+    }
+
+    pub fn is_idle_at(&self, now: QuicInstant, timeout: QuicDuration) -> bool {
+        now.saturating_sub(self.last_activity) > timeout
     }
 
     pub fn create_stream_frame(&mut self, stream_id: u64, data: Vec<u8>, fin: bool) -> QuicFrame {
@@ -657,13 +750,12 @@ impl QuicTransport {
                 ack_ranges,
                 ..
             } => {
-                let delay = std::time::Duration::from_micros(*ack_delay);
                 self.on_ack_received(
                     PacketNumberSpace::ApplicationData,
                     *largest_acknowledged,
                     *first_ack_range,
                     ack_ranges,
-                    delay,
+                    *ack_delay,
                 );
             }
             _ => {}
@@ -672,7 +764,7 @@ impl QuicTransport {
     }
 
     /// Get RTT estimate
-    pub fn rtt(&self) -> std::time::Duration {
+    pub fn rtt(&self) -> QuicDuration {
         self.rtt_estimate
     }
 
@@ -732,6 +824,7 @@ impl QuicTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_transport_new() {
@@ -906,13 +999,7 @@ mod tests {
         transport.record_packet_sent(PacketNumberSpace::ApplicationData, 0, 300, false);
         assert_eq!(transport.bytes_in_flight(), 400);
 
-        transport.on_ack_received(
-            PacketNumberSpace::ApplicationData,
-            0,
-            0,
-            &[],
-            std::time::Duration::ZERO,
-        );
+        transport.on_ack_received(PacketNumberSpace::ApplicationData, 0, 0, &[], 0);
 
         assert_eq!(transport.bytes_in_flight(), 100);
         assert_eq!(transport.sent_packets.len(), 1);
@@ -932,13 +1019,7 @@ mod tests {
         transport.record_packet_sent(PacketNumberSpace::ApplicationData, 4, 100, false);
         assert_eq!(transport.bytes_in_flight(), 400);
 
-        transport.on_ack_received(
-            PacketNumberSpace::ApplicationData,
-            4,
-            0,
-            &[],
-            std::time::Duration::ZERO,
-        );
+        transport.on_ack_received(PacketNumberSpace::ApplicationData, 4, 0, &[], 0);
 
         assert_eq!(transport.bytes_in_flight(), 200);
         assert_eq!(transport.sent_packets.len(), 2);
@@ -970,13 +1051,7 @@ mod tests {
         transport.record_packet_sent(PacketNumberSpace::Initial, 3, 100, true);
         transport.record_packet_sent(PacketNumberSpace::Initial, 4, 100, true);
 
-        transport.on_ack_received(
-            PacketNumberSpace::Initial,
-            4,
-            0,
-            &[],
-            std::time::Duration::ZERO,
-        );
+        transport.on_ack_received(PacketNumberSpace::Initial, 4, 0, &[], 0);
 
         assert_eq!(transport.get_retransmit_queue(), &[packet_1]);
         assert!(transport
@@ -990,7 +1065,7 @@ mod tests {
         let local = ConnectionId::random();
         let remote = ConnectionId::random();
         let transport = QuicTransport::new(local, remote);
-        assert!(!transport.is_idle(std::time::Duration::from_secs(60)));
+        assert!(!transport.is_idle(60_000_000));
     }
 
     #[test]

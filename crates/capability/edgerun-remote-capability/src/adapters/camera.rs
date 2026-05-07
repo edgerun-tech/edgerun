@@ -10,6 +10,11 @@ use edgerun_camera_biometrics::{
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_core::protocol::capability::CapabilityInvocation;
 use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
+use edgerun_wire::{
+    RemoteBiometricState as BiometricStateWire, RemoteCameraCapture as CameraCaptureWire,
+    RemoteCameraFrame as CameraFrameWire, RemoteFaceBounds as FaceBoundsWire,
+    RemotePairedCameraFrame as PairedCameraFrameWire,
+};
 
 use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
@@ -74,91 +79,6 @@ fn camera_capture_quality_from_u8(v: u8) -> Result<CameraCaptureQuality, Capabil
 }
 
 // --- Public encode/decode ---
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct CameraFrameWire {
-    width: u32,
-    height: u32,
-    stride: u32,
-    format: u32,
-    bytes: Vec<u8>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct FaceBoundsWire {
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct BiometricStateWire {
-    modality: u8,
-    verified: bool,
-    hardware_protected: bool,
-    user_present: bool,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct CameraCaptureWire {
-    frame: CameraFrameWire,
-    quality: u8,
-    face_bounds: Option<FaceBoundsWire>,
-    state: BiometricStateWire,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct PairedCameraFrameWire {
-    rgb: Option<CameraFrameWire>,
-    infrared: Option<CameraFrameWire>,
-    depth: Option<CameraFrameWire>,
-}
 
 fn camera_frame_to_wire(frame: &CameraFrame) -> CameraFrameWire {
     CameraFrameWire {

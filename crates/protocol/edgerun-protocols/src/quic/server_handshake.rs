@@ -17,6 +17,17 @@
 //! [1-RTT packets with HTTP/3 data]      ↔     [1-RTT packets]
 //! ```
 
+use crate::tls::cipher::NamedGroup;
+use crate::tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
+use crate::tls::prf::{
+    quic_hp_key, quic_initial_server_keys, quic_traffic_keys, Hasher, Tls13KeySchedule,
+    TrafficKeys, INITIAL_SALT_V1,
+};
+use crate::tls::server::client_hello::ClientHello;
+use crate::tls::server::message_builder::{
+    build_certificate_message, build_certificate_verify, build_encrypted_extensions,
+    build_finished_message, build_server_hello, compute_server_finished_verify_data,
+};
 use alloc::{
     format,
     string::{String, ToString},
@@ -26,20 +37,9 @@ use alloc::{
 };
 use edgerun_crypto::fill_random;
 use edgerun_crypto::CipherSuite;
-use edgerun_tls::cipher::NamedGroup;
-use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
-use edgerun_tls::prf::{
-    quic_hp_key, quic_initial_server_keys, quic_traffic_keys, Hasher, Tls13KeySchedule,
-    TrafficKeys, INITIAL_SALT_V1,
-};
-use edgerun_tls::server::client_hello::ClientHello;
-use edgerun_tls::server::message_builder::{
-    build_certificate_message, build_certificate_verify, build_encrypted_extensions,
-    build_finished_message, build_server_hello, compute_server_finished_verify_data,
-};
 
 use super::crypto::ProtectionKeys;
-use crate::ConnectionId;
+use super::ConnectionId;
 
 #[derive(Clone)]
 pub struct CertificateAndKey {
@@ -59,8 +59,8 @@ impl CertificateAndKey {
     }
 }
 
-impl From<edgerun_tls::CertificateAndKey> for CertificateAndKey {
-    fn from(value: edgerun_tls::CertificateAndKey) -> Self {
+impl From<crate::tls::CertificateAndKey> for CertificateAndKey {
+    fn from(value: crate::tls::CertificateAndKey) -> Self {
         Self {
             cert_der: value.cert_der,
             signing_key: value.signing_key,
@@ -605,18 +605,18 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_tls::certificate_gen::generate_self_signed;
+    use crate::tls::certificate_gen::generate_self_signed;
 
     #[test]
     fn test_server_handshaker_new() {
-        let cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
+        let cert = crate::tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
         let hs = QuicTlsServerHandshaker::new(cert);
         assert!(!hs.complete);
     }
 
     #[test]
     fn test_server_initial_keys_derive() {
-        let cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
+        let cert = crate::tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
         let hs = QuicTlsServerHandshaker::new(cert);
         let client_dcid = vec![0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
         let keys = hs.initial_keys(&client_dcid);
@@ -626,11 +626,11 @@ mod tests {
 
     #[test]
     fn test_server_process_client_hello() {
-        use edgerun_tls::cipher::NamedGroup as TlsNamedGroup;
-        use edgerun_tls::handshake::ClientHelloBuilder;
-        use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
+        use crate::tls::cipher::NamedGroup as TlsNamedGroup;
+        use crate::tls::handshake::ClientHelloBuilder;
+        use crate::tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 
-        let cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
+        let cert = crate::tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
         let mut hs = QuicTlsServerHandshaker::new(cert);
 
         // Build a real ClientHello
@@ -653,11 +653,11 @@ mod tests {
 
     #[test]
     fn test_server_full_handshake_flow() {
-        use edgerun_tls::cipher::NamedGroup as TlsNamedGroup;
-        use edgerun_tls::handshake::ClientHelloBuilder;
-        use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
+        use crate::tls::cipher::NamedGroup as TlsNamedGroup;
+        use crate::tls::handshake::ClientHelloBuilder;
+        use crate::tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 
-        let cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
+        let cert = crate::tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
         let mut hs = QuicTlsServerHandshaker::new(cert);
 
         let mut client_random = [0u8; 32];

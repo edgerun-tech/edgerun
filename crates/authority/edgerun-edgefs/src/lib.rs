@@ -19,6 +19,7 @@ use core::fmt;
 
 use edgerun_crypto::{Aead, AesGcmCipher, KeyInit, Nonce};
 use edgerun_storage::BlockStorage;
+use edgerun_wire::{EdgeFsDeviceId, EdgeFsFileMeta, EdgeFsRecordPayload};
 
 const SUPER_MAGIC: &[u8; 8] = b"EDGEFS01";
 const RECORD_MAGIC: &[u8; 8] = b"EFRCD001";
@@ -1260,8 +1261,7 @@ fn decode_record_header(input: &[u8]) -> Result<RecordHeader> {
 }
 
 fn encode_payload(payload: &RecordPayload) -> Result<Vec<u8>> {
-    let mut out = Vec::new();
-    match payload {
+    let wire = match payload {
         RecordPayload::Put {
             path,
             kind,
@@ -1271,118 +1271,79 @@ fn encode_payload(payload: &RecordPayload) -> Result<Vec<u8>> {
             device,
         } => {
             validate_normalized_path(path)?;
-            let target = link_target.as_deref().unwrap_or("");
-            out.push(1);
-            out.push(kind.to_u8());
-            out.push(u8::from(device.is_some()));
-            put_u32_vec(&mut out, meta.mode);
-            put_u32_vec(&mut out, meta.uid);
-            put_u32_vec(&mut out, meta.gid);
-            put_u64_vec(&mut out, meta.mtime);
-            put_u32_vec(&mut out, device.map(|id| id.major).unwrap_or(0));
-            put_u32_vec(&mut out, device.map(|id| id.minor).unwrap_or(0));
-            put_u32_vec(&mut out, path.len() as u32);
-            put_u32_vec(&mut out, target.len() as u32);
-            put_u64_vec(&mut out, data.len() as u64);
-            out.extend_from_slice(path.as_bytes());
-            out.extend_from_slice(target.as_bytes());
-            out.extend_from_slice(data);
+            EdgeFsRecordPayload::Put {
+                path: path.clone(),
+                kind: kind.to_u8(),
+                meta: EdgeFsFileMeta {
+                    mode: meta.mode,
+                    uid: meta.uid,
+                    gid: meta.gid,
+                    mtime: meta.mtime,
+                },
+                data: data.clone(),
+                link_target: link_target.clone(),
+                device: device.map(|id| EdgeFsDeviceId {
+                    major: id.major,
+                    minor: id.minor,
+                }),
+            }
         }
         RecordPayload::Delete { path } => {
             validate_normalized_path(path)?;
-            out.push(2);
-            put_u32_vec(&mut out, path.len() as u32);
-            out.extend_from_slice(path.as_bytes());
+            EdgeFsRecordPayload::Delete { path: path.clone() }
         }
         RecordPayload::DeleteChildren { path } => {
-            out.push(3);
-            put_u32_vec(&mut out, path.len() as u32);
-            out.extend_from_slice(path.as_bytes());
+            validate_normalized_path(path)?;
+            EdgeFsRecordPayload::DeleteChildren { path: path.clone() }
         }
-    }
-    Ok(out)
+    };
+    edgerun_wire::to_bytes::<edgerun_wire::WireError>(&wire)
+        .map(|bytes| bytes.into_vec())
+        .map_err(|_| EdgeFsError::CorruptRecord("record payload rkyv encode failed".into()))
 }
 
 fn decode_payload(input: &[u8]) -> Result<RecordPayload> {
-    let Some((&tag, rest)) = input.split_first() else {
-        return Err(EdgeFsError::CorruptRecord("empty payload".into()));
-    };
-    match tag {
-        1 => decode_put_payload(rest),
-        2 => {
-            let (path_len, offset) = read_u32_at(rest, 0)?;
-            let path = read_string(rest, offset, path_len as usize)?;
+    let owned = input.to_vec();
+    let wire = edgerun_wire::from_bytes::<EdgeFsRecordPayload, edgerun_wire::WireError>(&owned)
+        .map_err(|_| EdgeFsError::CorruptRecord("record payload is not rkyv".into()))?;
+    match wire {
+        EdgeFsRecordPayload::Put {
+            path,
+            kind,
+            meta,
+            data,
+            link_target,
+            device,
+        } => {
+            validate_normalized_path(&path)?;
+            let kind = EntryKind::from_u8(kind)
+                .ok_or_else(|| EdgeFsError::CorruptRecord("unknown entry kind".into()))?;
+            Ok(RecordPayload::Put {
+                path,
+                kind,
+                meta: FileMeta {
+                    mode: meta.mode,
+                    uid: meta.uid,
+                    gid: meta.gid,
+                    mtime: meta.mtime,
+                },
+                data,
+                link_target,
+                device: device.map(|id| DeviceId {
+                    major: id.major,
+                    minor: id.minor,
+                }),
+            })
+        }
+        EdgeFsRecordPayload::Delete { path } => {
+            validate_normalized_path(&path)?;
             Ok(RecordPayload::Delete { path })
         }
-        3 => {
-            let (path_len, offset) = read_u32_at(rest, 0)?;
-            let path = read_string(rest, offset, path_len as usize)?;
+        EdgeFsRecordPayload::DeleteChildren { path } => {
+            validate_normalized_path(&path)?;
             Ok(RecordPayload::DeleteChildren { path })
         }
-        _ => Err(EdgeFsError::CorruptRecord("unknown payload tag".into())),
     }
-}
-
-fn decode_put_payload(input: &[u8]) -> Result<RecordPayload> {
-    if input.len() < 47 {
-        return Err(EdgeFsError::CorruptRecord("short put payload".into()));
-    }
-    let kind = EntryKind::from_u8(input[0])
-        .ok_or_else(|| EdgeFsError::CorruptRecord("unknown entry kind".into()))?;
-    let device_present = match input[1] {
-        0 => false,
-        1 => true,
-        _ => return Err(EdgeFsError::CorruptRecord("invalid device marker".into())),
-    };
-    let mut offset = 2usize;
-    let (mode, next) = read_u32_at(input, offset)?;
-    offset = next;
-    let (uid, next) = read_u32_at(input, offset)?;
-    offset = next;
-    let (gid, next) = read_u32_at(input, offset)?;
-    offset = next;
-    let (mtime, next) = read_u64_at(input, offset)?;
-    offset = next;
-    let (dev_major, next) = read_u32_at(input, offset)?;
-    offset = next;
-    let (dev_minor, next) = read_u32_at(input, offset)?;
-    offset = next;
-    let (path_len, next) = read_u32_at(input, offset)?;
-    offset = next;
-    let (target_len, next) = read_u32_at(input, offset)?;
-    offset = next;
-    let (data_len, next) = read_u64_at(input, offset)?;
-    offset = next;
-
-    let path = read_string(input, offset, path_len as usize)?;
-    offset += path_len as usize;
-    let target = read_string(input, offset, target_len as usize)?;
-    offset += target_len as usize;
-    let data_end = offset
-        .checked_add(data_len as usize)
-        .ok_or_else(|| EdgeFsError::CorruptRecord("data length overflow".into()))?;
-    if data_end > input.len() {
-        return Err(EdgeFsError::CorruptRecord(
-            "data extends past payload".into(),
-        ));
-    }
-
-    Ok(RecordPayload::Put {
-        path,
-        kind,
-        meta: FileMeta {
-            mode,
-            uid,
-            gid,
-            mtime,
-        },
-        data: input[offset..data_end].to_vec(),
-        link_target: (!target.is_empty()).then_some(target),
-        device: device_present.then_some(DeviceId {
-            major: dev_major,
-            minor: dev_minor,
-        }),
-    })
 }
 
 fn transfer_bytes<S: BlockStorage>(
@@ -1503,34 +1464,6 @@ fn get_u64(buf: &[u8], offset: usize) -> Result<u64> {
         .try_into()
         .map_err(|_| EdgeFsError::CorruptRecord("bad u64".into()))?;
     Ok(u64::from_le_bytes(bytes))
-}
-
-fn put_u32_vec(out: &mut Vec<u8>, value: u32) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn put_u64_vec(out: &mut Vec<u8>, value: u64) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn read_u32_at(input: &[u8], offset: usize) -> Result<(u32, usize)> {
-    Ok((get_u32(input, offset)?, offset + 4))
-}
-
-fn read_u64_at(input: &[u8], offset: usize) -> Result<(u64, usize)> {
-    Ok((get_u64(input, offset)?, offset + 8))
-}
-
-fn read_string(input: &[u8], offset: usize, len: usize) -> Result<String> {
-    let end = offset
-        .checked_add(len)
-        .ok_or_else(|| EdgeFsError::CorruptRecord("string length overflow".into()))?;
-    let bytes = input
-        .get(offset..end)
-        .ok_or_else(|| EdgeFsError::CorruptRecord("string extends past payload".into()))?;
-    core::str::from_utf8(bytes)
-        .map(str::to_string)
-        .map_err(|_| EdgeFsError::CorruptRecord("string is not UTF-8".into()))
 }
 
 #[cfg(test)]

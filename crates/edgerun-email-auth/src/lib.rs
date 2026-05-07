@@ -35,6 +35,7 @@ pub mod std;
 
 pub use dkim::{DkimResult, DkimSignature, DkimStatus};
 pub use dmarc::{DmarcPolicy, DmarcResult, DmarcStatus};
+pub use edgerun_protocols::email_auth::DnsQuery;
 pub use sign::DkimSigner;
 pub use spf::SpfResult;
 
@@ -100,6 +101,18 @@ impl AuthenticationResults {
             .map(|d| matches!(d.status, DmarcStatus::Pass))
             .unwrap_or(false);
         spf_pass || dmarc_pass
+    }
+}
+
+/// Runtime adapter for the DNS client used by the email server.
+pub struct DnsClientQuery<'a>(pub &'a mut edgerun_dns::client::DnsClient);
+
+impl DnsQuery for DnsClientQuery<'_> {
+    async fn query_txt(&mut self, name: &str) -> io::Result<Vec<String>> {
+        self.0
+            .query_txt(name)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
 }
 
@@ -216,21 +229,5 @@ impl<'a, D: DnsQuery> EmailAuthEvaluator<'a, D> {
             }
         }
         None
-    }
-}
-
-/// Trait for DNS queries needed by the evaluator.
-pub trait DnsQuery {
-    fn query_txt(
-        &mut self,
-        name: &str,
-    ) -> impl std::future::Future<Output = io::Result<Vec<String>>> + Send;
-}
-
-impl DnsQuery for edgerun_dns::client::DnsClient {
-    async fn query_txt(&mut self, name: &str) -> io::Result<Vec<String>> {
-        self.query_txt(name)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
 }

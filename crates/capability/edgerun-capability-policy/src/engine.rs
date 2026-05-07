@@ -13,25 +13,6 @@ use edgerun_capabilities::{
 use edgerun_core::protocol::{Duration as ProtocolDuration, Timestamp};
 use edgerun_core::protocol::{IdentityRef, NodeRef};
 
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct GrantIdSeedWire {
-    request_id: Vec<u8>,
-    provider_name: Vec<u8>,
-    provider_instance_id: Vec<u8>,
-    nonce: u64,
-    unix_secs: u64,
-    unix_nanos: u32,
-}
-
 #[derive(Debug, Clone)]
 pub struct SimplePolicyEngine {
     pub(crate) issuer: Option<IdentityRef>,
@@ -80,7 +61,7 @@ impl SimplePolicyEngine {
     ) -> Vec<u8> {
         self.nonce = self.nonce.wrapping_add(1);
         let now = now.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let seed = GrantIdSeedWire {
+        let seed = edgerun_wire::CapabilityGrantIdSeed {
             request_id: request.request_id.clone(),
             provider_name: descriptor.provider_name.as_bytes().to_vec(),
             provider_instance_id: descriptor.provider_instance_id.as_bytes().to_vec(),

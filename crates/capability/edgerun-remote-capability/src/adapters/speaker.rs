@@ -9,62 +9,13 @@ use edgerun_speaker::{
     AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerOutputLevel,
     SpeakerSampleFormat,
 };
+use edgerun_wire::{
+    RemoteAudioPlaybackRequest as AudioPlaybackRequestWire,
+    RemoteAudioPlaybackResult as AudioPlaybackResultWire,
+    RemoteSpeakerOutputLevel as SpeakerOutputLevelWire,
+};
 
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct AudioPlaybackRequestWire {
-    duration_ms: u32,
-    sample_rate_hz: u32,
-    channels: u16,
-    format: u32,
-    audio_bytes: Vec<u8>,
-    software_gain_percent: Option<u16>,
-    target_output_level_percent: Option<u8>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct SpeakerOutputLevelWire {
-    current_percent: u8,
-    min_raw_value: i64,
-    max_raw_value: i64,
-    muted: Option<bool>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct AudioPlaybackResultWire {
-    bytes_written: u64,
-    sample_rate_hz: u32,
-    channels: u16,
-    finished: bool,
-}
 
 fn speaker_format_to_wire(format: SpeakerSampleFormat) -> u32 {
     match format {

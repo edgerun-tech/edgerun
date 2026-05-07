@@ -385,9 +385,9 @@ fn tls_self_test() -> Result<String, String> {
 
 #[cfg(feature = "quic")]
 fn quic_self_test() -> Result<String, String> {
-    use edgerun_quic::crypto::PacketProtection;
-    use edgerun_quic::handshake::QuicTlsHandshaker;
-    use edgerun_quic::server_handshake::{CertificateAndKey, QuicTlsServerHandshaker};
+    use edgerun_protocols::quic::crypto::PacketProtection;
+    use edgerun_protocols::quic::handshake::QuicTlsHandshaker;
+    use edgerun_protocols::quic::server_handshake::{CertificateAndKey, QuicTlsServerHandshaker};
 
     let cert = edgerun_tls::certificate_gen::generate_self_signed(&["localhost"])
         .map_err(|e| format!("quic tls cert: {e}"))?;

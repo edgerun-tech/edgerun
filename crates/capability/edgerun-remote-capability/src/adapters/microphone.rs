@@ -7,27 +7,10 @@ use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_microphone::{
     AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
 };
+use edgerun_wire::RemoteAudioCapture as AudioCaptureWire;
 
 use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct AudioCaptureWire {
-    sample_rate_hz: u32,
-    channels: u16,
-    format: u32,
-    started_at_unix_ms: i64,
-    bytes: Vec<u8>,
-}
 
 fn microphone_format_to_wire(format: MicrophoneSampleFormat) -> u32 {
     match format {

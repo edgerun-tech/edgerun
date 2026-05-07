@@ -27,13 +27,15 @@ use std::time::Duration;
 use compiled_deployment::{CompiledDeployment, DEPLOYMENT};
 use edgerun_acme::DnsChallenge;
 use edgerun_acme::{AccountKey, AcmeClient, AcmeConfig};
-use edgerun_dns::server::{DnsServer, DnsServerConfig};
-use edgerun_dns::zone::DnsZone;
 use edgerun_email_auth::sign::DkimSigner;
 use edgerun_http::server::HttpServer;
 use edgerun_http::{into_handler_async, Handler, Request, Response, StatusCode};
 use edgerun_node::runtime::RuntimeServicePlan;
+use edgerun_node::server::dns_runtime::{
+    DnsRuntime as DnsServer, DnsRuntimeConfig as DnsServerConfig,
+};
 use edgerun_node::server::{ImapConfig, Server, SmtpConfig};
+use edgerun_protocols::dns::DnsZone;
 use edgerun_rt::{sleep, CancellationToken, Runtime};
 use edgerun_sign_p256::P256ProtocolSigner;
 use edgerun_tls::certificate::Certificate;
@@ -116,9 +118,9 @@ fn parse_args() -> (Mode, Option<String>) {
 // Compiled deployment helpers
 // ===========================================================================
 
-fn ip_addr(deployment: &CompiledDeployment) -> edgerun_dns::std::net::Ipv4Addr {
+fn ip_addr(deployment: &CompiledDeployment) -> std::net::Ipv4Addr {
     let ip = deployment.public_ipv4;
-    edgerun_dns::std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])
+    std::net::Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])
 }
 
 fn zone_name(origin: &str, fqdn: &str) -> String {
@@ -1040,8 +1042,9 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dns_server.add_zone(base_zone.clone()).await;
 
     let dns_server_for_run = dns_server.clone();
+    let dns_shutdown = shutdown.clone();
     let dns_task = edgerun_rt::spawn(async move {
-        let _ = dns_server_for_run.run().await;
+        let _ = dns_server_for_run.run(dns_shutdown).await;
     });
 
     let smtp_config = SmtpConfig {

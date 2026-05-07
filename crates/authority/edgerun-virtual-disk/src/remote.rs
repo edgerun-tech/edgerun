@@ -11,7 +11,9 @@ use edgerun_encoding::byteorder::read_u32_le;
 use edgerun_encoding::io::{self, Read, Write};
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_rt::Mutex;
-use edgerun_wire::{Archive, Deserialize, Serialize, WireError};
+use edgerun_wire::{
+    RemoteBlockDeviceInfo, RemoteBlockError, RemoteBlockRequest, RemoteBlockResponse, WireError,
+};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::io::{self, Read, Write};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
@@ -23,8 +25,7 @@ pub use host::{FileBlockBackend, TcpBlockServer, UnixBlockServer};
 pub const BLOCK_PROTOCOL_VERSION: u16 = 1;
 const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockDeviceInfo {
     pub block_size: u32,
     pub block_count: u64,
@@ -42,8 +43,7 @@ impl BlockDeviceInfo {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BlockError {
     OutOfRange,
     ReadOnly,
@@ -221,8 +221,7 @@ impl BlockBackend for MemoryBlockBackend {
 
 pub type RequestId = u64;
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BlockRequest {
     Handshake {
         protocol_version: u16,
@@ -255,8 +254,7 @@ pub enum BlockRequest {
     Ping,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BlockResponse {
     HandshakeAck {
         protocol_version: u16,
@@ -987,29 +985,240 @@ fn decode_frame(frame: &[u8]) -> Result<Vec<u8>, BlockError> {
 }
 
 fn encode_request(request: &BlockRequest) -> Result<Vec<u8>, BlockError> {
-    Ok(edgerun_wire::to_bytes::<WireError>(request)
+    let wire = block_request_to_wire(request);
+    Ok(edgerun_wire::to_bytes::<WireError>(&wire)
         .map_err(map_wire_error)?
         .into_vec())
 }
 
 fn decode_request(payload: &[u8]) -> Result<BlockRequest, BlockError> {
     let owned = payload.to_vec();
-    edgerun_wire::from_bytes::<BlockRequest, WireError>(&owned).map_err(map_wire_error)
+    edgerun_wire::from_bytes::<RemoteBlockRequest, WireError>(&owned)
+        .map(block_request_from_wire)
+        .map_err(map_wire_error)
 }
 
 fn encode_response(response: &BlockResponse) -> Result<Vec<u8>, BlockError> {
-    Ok(edgerun_wire::to_bytes::<WireError>(response)
+    let wire = block_response_to_wire(response);
+    Ok(edgerun_wire::to_bytes::<WireError>(&wire)
         .map_err(map_wire_error)?
         .into_vec())
 }
 
 fn decode_response(payload: &[u8]) -> Result<BlockResponse, BlockError> {
     let owned = payload.to_vec();
-    edgerun_wire::from_bytes::<BlockResponse, WireError>(&owned).map_err(map_wire_error)
+    edgerun_wire::from_bytes::<RemoteBlockResponse, WireError>(&owned)
+        .map(block_response_from_wire)
+        .map_err(map_wire_error)
 }
 
 fn map_wire_error(error: WireError) -> BlockError {
     BlockError::ProtocolError(format!("rkyv wire error: {error}"))
+}
+
+fn block_device_info_to_wire(info: &BlockDeviceInfo) -> RemoteBlockDeviceInfo {
+    RemoteBlockDeviceInfo {
+        block_size: info.block_size,
+        block_count: info.block_count,
+        readonly: info.readonly,
+        supports_flush: info.supports_flush,
+        supports_discard: info.supports_discard,
+        supports_write_zeroes: info.supports_write_zeroes,
+        model: info.model.clone(),
+        serial: info.serial.clone(),
+    }
+}
+
+fn block_device_info_from_wire(info: RemoteBlockDeviceInfo) -> BlockDeviceInfo {
+    BlockDeviceInfo {
+        block_size: info.block_size,
+        block_count: info.block_count,
+        readonly: info.readonly,
+        supports_flush: info.supports_flush,
+        supports_discard: info.supports_discard,
+        supports_write_zeroes: info.supports_write_zeroes,
+        model: info.model,
+        serial: info.serial,
+    }
+}
+
+fn block_error_to_wire(error: &BlockError) -> RemoteBlockError {
+    match error {
+        BlockError::OutOfRange => RemoteBlockError::OutOfRange,
+        BlockError::ReadOnly => RemoteBlockError::ReadOnly,
+        BlockError::Misaligned => RemoteBlockError::Misaligned,
+        BlockError::Unsupported => RemoteBlockError::Unsupported,
+        BlockError::BackendFailure(message) => RemoteBlockError::BackendFailure(message.clone()),
+        BlockError::ProtocolError(message) => RemoteBlockError::ProtocolError(message.clone()),
+        BlockError::NotReady => RemoteBlockError::NotReady,
+        BlockError::Timeout => RemoteBlockError::Timeout,
+    }
+}
+
+fn block_error_from_wire(error: RemoteBlockError) -> BlockError {
+    match error {
+        RemoteBlockError::OutOfRange => BlockError::OutOfRange,
+        RemoteBlockError::ReadOnly => BlockError::ReadOnly,
+        RemoteBlockError::Misaligned => BlockError::Misaligned,
+        RemoteBlockError::Unsupported => BlockError::Unsupported,
+        RemoteBlockError::BackendFailure(message) => BlockError::BackendFailure(message),
+        RemoteBlockError::ProtocolError(message) => BlockError::ProtocolError(message),
+        RemoteBlockError::NotReady => BlockError::NotReady,
+        RemoteBlockError::Timeout => BlockError::Timeout,
+    }
+}
+
+fn block_request_to_wire(request: &BlockRequest) -> RemoteBlockRequest {
+    match request {
+        BlockRequest::Handshake { protocol_version } => RemoteBlockRequest::Handshake {
+            protocol_version: *protocol_version,
+        },
+        BlockRequest::GetInfo => RemoteBlockRequest::GetInfo,
+        BlockRequest::Read {
+            request_id,
+            lba,
+            blocks,
+        } => RemoteBlockRequest::Read {
+            request_id: *request_id,
+            lba: *lba,
+            blocks: *blocks,
+        },
+        BlockRequest::Write {
+            request_id,
+            lba,
+            blocks,
+            data,
+        } => RemoteBlockRequest::Write {
+            request_id: *request_id,
+            lba: *lba,
+            blocks: *blocks,
+            data: data.clone(),
+        },
+        BlockRequest::Flush { request_id } => RemoteBlockRequest::Flush {
+            request_id: *request_id,
+        },
+        BlockRequest::Discard {
+            request_id,
+            lba,
+            blocks,
+        } => RemoteBlockRequest::Discard {
+            request_id: *request_id,
+            lba: *lba,
+            blocks: *blocks,
+        },
+        BlockRequest::WriteZeroes {
+            request_id,
+            lba,
+            blocks,
+        } => RemoteBlockRequest::WriteZeroes {
+            request_id: *request_id,
+            lba: *lba,
+            blocks: *blocks,
+        },
+        BlockRequest::Ping => RemoteBlockRequest::Ping,
+    }
+}
+
+fn block_request_from_wire(request: RemoteBlockRequest) -> BlockRequest {
+    match request {
+        RemoteBlockRequest::Handshake { protocol_version } => {
+            BlockRequest::Handshake { protocol_version }
+        }
+        RemoteBlockRequest::GetInfo => BlockRequest::GetInfo,
+        RemoteBlockRequest::Read {
+            request_id,
+            lba,
+            blocks,
+        } => BlockRequest::Read {
+            request_id,
+            lba,
+            blocks,
+        },
+        RemoteBlockRequest::Write {
+            request_id,
+            lba,
+            blocks,
+            data,
+        } => BlockRequest::Write {
+            request_id,
+            lba,
+            blocks,
+            data,
+        },
+        RemoteBlockRequest::Flush { request_id } => BlockRequest::Flush { request_id },
+        RemoteBlockRequest::Discard {
+            request_id,
+            lba,
+            blocks,
+        } => BlockRequest::Discard {
+            request_id,
+            lba,
+            blocks,
+        },
+        RemoteBlockRequest::WriteZeroes {
+            request_id,
+            lba,
+            blocks,
+        } => BlockRequest::WriteZeroes {
+            request_id,
+            lba,
+            blocks,
+        },
+        RemoteBlockRequest::Ping => BlockRequest::Ping,
+    }
+}
+
+fn block_response_to_wire(response: &BlockResponse) -> RemoteBlockResponse {
+    match response {
+        BlockResponse::HandshakeAck { protocol_version } => RemoteBlockResponse::HandshakeAck {
+            protocol_version: *protocol_version,
+        },
+        BlockResponse::Info(info) => RemoteBlockResponse::Info(block_device_info_to_wire(info)),
+        BlockResponse::ReadResult { request_id, data } => RemoteBlockResponse::ReadResult {
+            request_id: *request_id,
+            data: data.clone(),
+        },
+        BlockResponse::WriteAck { request_id } => RemoteBlockResponse::WriteAck {
+            request_id: *request_id,
+        },
+        BlockResponse::FlushAck { request_id } => RemoteBlockResponse::FlushAck {
+            request_id: *request_id,
+        },
+        BlockResponse::DiscardAck { request_id } => RemoteBlockResponse::DiscardAck {
+            request_id: *request_id,
+        },
+        BlockResponse::WriteZeroesAck { request_id } => RemoteBlockResponse::WriteZeroesAck {
+            request_id: *request_id,
+        },
+        BlockResponse::Pong => RemoteBlockResponse::Pong,
+        BlockResponse::Error { request_id, error } => RemoteBlockResponse::Error {
+            request_id: *request_id,
+            error: block_error_to_wire(error),
+        },
+    }
+}
+
+fn block_response_from_wire(response: RemoteBlockResponse) -> BlockResponse {
+    match response {
+        RemoteBlockResponse::HandshakeAck { protocol_version } => {
+            BlockResponse::HandshakeAck { protocol_version }
+        }
+        RemoteBlockResponse::Info(info) => BlockResponse::Info(block_device_info_from_wire(info)),
+        RemoteBlockResponse::ReadResult { request_id, data } => {
+            BlockResponse::ReadResult { request_id, data }
+        }
+        RemoteBlockResponse::WriteAck { request_id } => BlockResponse::WriteAck { request_id },
+        RemoteBlockResponse::FlushAck { request_id } => BlockResponse::FlushAck { request_id },
+        RemoteBlockResponse::DiscardAck { request_id } => BlockResponse::DiscardAck { request_id },
+        RemoteBlockResponse::WriteZeroesAck { request_id } => {
+            BlockResponse::WriteZeroesAck { request_id }
+        }
+        RemoteBlockResponse::Pong => BlockResponse::Pong,
+        RemoteBlockResponse::Error { request_id, error } => BlockResponse::Error {
+            request_id,
+            error: block_error_from_wire(error),
+        },
+    }
 }
 
 #[cfg(test)]

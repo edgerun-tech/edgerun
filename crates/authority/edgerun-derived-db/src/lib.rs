@@ -17,6 +17,11 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt;
 
+use edgerun_wire::{
+    DerivedDbAdminAuditRecord as AdminAuditRecordWire, DerivedDbKeyRecord as KeyRecordWire,
+    DerivedDbMetaRecord as MetaRecordWire, DerivedDbObjectIndexRecord as ObjectIndexRecordWire,
+};
+
 const MAGIC: &[u8; 8] = b"ERDB0001";
 const FORMAT_VERSION: u16 = 2;
 const SCHEMA_VERSION: u16 = 1;
@@ -346,73 +351,6 @@ enum PendingRecord {
     UpsertObjectIndex(ObjectIndexRowOwned),
     DeleteObjectIndex(Vec<u8>),
     AppendAdminAudit(AdminAuditDraftOwned),
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct MetaRecordWire {
-    key: Vec<u8>,
-    value: Vec<u8>,
-    updated_at: i64,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct KeyRecordWire {
-    key: Vec<u8>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct ObjectIndexRecordWire {
-    object_id: Vec<u8>,
-    stream_id: Vec<u8>,
-    seq: u64,
-    representation_id: Vec<u8>,
-    content_type: Option<String>,
-    updated_at: i64,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct AdminAuditRecordWire {
-    id: u64,
-    event_time: i64,
-    subject: String,
-    action: String,
-    outcome: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

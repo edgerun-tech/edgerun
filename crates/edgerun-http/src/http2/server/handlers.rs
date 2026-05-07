@@ -11,6 +11,7 @@ use crate::http2::frame::{
 };
 use crate::http2::settings::Settings;
 use crate::http2::ErrorCode;
+use edgerun_protocols::http::http2::Http2Error as ProtocolHttp2Error;
 
 impl Http2Server {
     /// Process an incoming SETTINGS frame (after preface).
@@ -38,7 +39,7 @@ impl Http2Server {
                 }
                 Err(e) => {
                     let error_code = match &e {
-                        crate::http2::Http2Error::FlowControl(_) => {
+                        ProtocolHttp2Error::FlowControl(_) => {
                             ErrorCode::FLOW_CONTROL_ERROR.to_u32()
                         }
                         _ => ErrorCode::PROTOCOL_ERROR.to_u32(),

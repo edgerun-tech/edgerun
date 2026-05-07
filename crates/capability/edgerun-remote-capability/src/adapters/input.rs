@@ -5,41 +5,12 @@ use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEven
 use edgerun_core::protocol::capability::CapabilityInvocation;
 use edgerun_core::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_input::{InputDevice, InputEventKind, InputEventRecord};
+use edgerun_wire::{
+    RemoteInputEventRecord as InputEventRecordWire, RemoteInputEvents as InputEventsWire,
+};
 
 use crate::adapters::common::stream_oriented_error;
 use crate::protocol::{RemoteCapabilityProvider, RemoteInvocationResult};
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct InputEventsWire {
-    events: Vec<InputEventRecordWire>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    edgerun_wire::Archive,
-    edgerun_wire::Serialize,
-    edgerun_wire::Deserialize,
-)]
-#[rkyv(crate = edgerun_wire)]
-struct InputEventRecordWire {
-    timestamp_sec: i64,
-    timestamp_usec: i64,
-    kind: u16,
-    code: u16,
-    value: i32,
-}
 
 fn input_event_kind_to_wire(kind: InputEventKind) -> u16 {
     match kind {

@@ -30,7 +30,7 @@ use crate::smtp::types::{
     MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
 };
 #[cfg(feature = "dkim")]
-use edgerun_email_auth::EmailAuthEvaluator;
+use edgerun_email_auth::{DnsClientQuery, EmailAuthEvaluator};
 
 #[cfg(feature = "tls")]
 use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
@@ -1644,7 +1644,8 @@ async fn evaluate_and_notify_auth(
         }
     };
 
-    let mut evaluator = EmailAuthEvaluator::new(&mut dns_client);
+    let mut dns_query = DnsClientQuery(&mut dns_client);
+    let mut evaluator = EmailAuthEvaluator::new(&mut dns_query);
     match evaluator
         .evaluate(
             peer_ip,
