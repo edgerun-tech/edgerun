@@ -1,6 +1,6 @@
 //! EdgeRun Exchange API — HTTP service.
 //!
-//! Uses edgerun-http for the HTTP server (no axum/tokio).
+//! Uses edgerun-node http for the HTTP server (no axum/tokio).
 //! Uses edgerun-json for JSON parsing (no serde_json).
 //! Public API never exposes provider names.
 //!
@@ -26,7 +26,7 @@ use std::sync::Mutex;
 
 use edgerun_exchange::policy::RoutingPolicy;
 use edgerun_exchange::provider::{ExchangeProvider, ProviderContext};
-use edgerun_http::{Handler, Request, Response};
+use edgerun_node::http::{Handler, Request, Response};
 use edgerun_sdk::runtime_api::{
     self, HttpRouteSpec, RuntimeAppInstall, RuntimeHttpRoute, ROUTE_SCHEME_HTTPS,
 };

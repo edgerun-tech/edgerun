@@ -55,7 +55,7 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         );
         eprintln!();
         eprintln!("For development only, you can generate a software key with --software:");
-        eprintln!("  edgerund init --config {} --software", path.display());
+        eprintln!("  edged init --config {} --software", path.display());
         std::process::exit(1);
     }
 
@@ -223,7 +223,7 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
     println!("  Event log:  {}", path.join("events").display());
     println!();
     println!("Inspect the node with:");
-    println!("  edgerund status --config {}", path.display());
+    println!("  edged status --config {}", path.display());
     println!();
 
     // Run benchmarks and cache performance certificate
@@ -298,7 +298,7 @@ pub fn cmd_init_encrypted(path: &PathBuf, key_path: &PathBuf, name: Option<Strin
     println!();
     println!("To inspect the node, set the generated seal key and run:");
     println!("  export EDGERUN_SEAL_KEY_HEX='{}'", seal_key_hex);
-    println!("  edgerund status --config {}", path.display());
+    println!("  edged status --config {}", path.display());
     println!();
     println!("IMPORTANT: Keep the seal key safe. Without it, the node key cannot be recovered.");
 }
@@ -356,7 +356,7 @@ pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Op
     eprintln!();
     eprintln!("FROM YOUR LAPTOP, run:");
     eprintln!(
-        "  edgerund provision --config {} --pin {}",
+        "  edged provision --config {} --pin {}",
         path.display(),
         pairing_pin
     );

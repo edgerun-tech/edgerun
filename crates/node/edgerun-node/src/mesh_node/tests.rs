@@ -3,7 +3,6 @@ use alloc::vec;
 use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_protocols::core_protocol::protocol::common as proto_common;
-use edgerun_protocols::core_protocol::protocol::EventType;
 
 use crate::test_support::TestSigner;
 
@@ -51,7 +50,7 @@ fn mesh_node_tick_processes_nothing_when_idle() {
 }
 
 #[test]
-fn mesh_node_records_commands_in_stream() {
+fn mesh_node_is_inert_for_commands_before_storage_is_attached() {
     let config = test_config();
     let signer = Box::new(test_signer());
     let mut node = MeshNode::from_config(config, signer).unwrap();
@@ -89,7 +88,8 @@ fn mesh_node_records_commands_in_stream() {
 
     let _ = node.deliver_inbound_frame(&wire);
 
-    assert_eq!(node.events().len(), 2);
+    assert_eq!(node.events().len(), 1);
+    assert!(!node.storage_ready());
 }
 
 #[test]
@@ -136,11 +136,8 @@ fn two_nodes_exchange_signed_commands() {
 
     let processed = bob.deliver_inbound_frame(&wire).unwrap();
     assert!(processed > 0);
-    assert_eq!(bob.events().len(), 2);
-    assert_eq!(
-        bob.events()[1].event_type,
-        EventType::CommandRejected as i32
-    );
+    assert_eq!(bob.events().len(), 1);
+    assert!(!bob.storage_ready());
 }
 
 #[test]

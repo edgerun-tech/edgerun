@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
+autobins = false
 
 [features]
 default = ["lang-rust"]
@@ -28,11 +29,8 @@ tree-sitter-go = { version = "0.23", optional = true }
 tree-sitter-java = { version = "0.23", optional = true }
 tree-sitter-javascript = { version = "0.23", optional = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
-edgerun-edit = { path = "../apps/edgerun-edit", features = ["std"] }
 edgerun-glob.workspace = true
-edgerun-json = { workspace = true, features = ["toml"] }
+edgerun-json = { workspace = true, features = ["std", "toml"] }
 edgerun-regex.workspace = true
 edgerun-vfs = { path = "../authority/edgerun-vfs", optional = true }
 rkyv.workspace = true
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"

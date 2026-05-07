@@ -21,7 +21,7 @@ use crate::smtp::types::{parse_response_line, parse_response_lines, SmtpResponse
 use edgerun_protocols::smtp::dot_stuffed_data;
 
 #[cfg(feature = "tls")]
-use edgerun_tls::AsyncTlsStream;
+use edgerun_node::tls::AsyncTlsStream;
 
 // ===========================================================================
 // ClientTransport

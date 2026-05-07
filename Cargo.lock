@@ -319,8 +319,8 @@ dependencies = [
 name = "edgerun-analytics"
 version = "0.1.1"
 dependencies = [
- "edgerun-http",
  "edgerun-log",
+ "edgerun-node",
 ]
 
 [[package]]
@@ -348,19 +348,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
  "edgerun-devices",
-]
-
-[[package]]
-name = "edgerun-bench"
-version = "0.1.1"
-dependencies = [
- "edgerun-crypto",
- "edgerun-encoding",
- "edgerun-hardware-signing",
- "edgerun-mesh",
- "edgerun-protocols",
- "edgerun-tpm",
- "edgerun-yubikey",
 ]
 
 [[package]]
@@ -419,14 +406,11 @@ name = "edgerun-codelyzer"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
- "edgerun-edit",
  "edgerun-glob",
  "edgerun-json",
  "edgerun-regex",
  "edgerun-vfs",
  "rkyv",
- "serde",
- "serde_json",
  "tree-sitter",
  "tree-sitter-c",
  "tree-sitter-go",
@@ -516,28 +500,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-edit"
-version = "0.1.1"
-dependencies = [
- "edgerun-clap",
- "edgerun-http",
- "edgerun-json",
- "edgerun-rt",
- "prettyplease",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "edgerun-email"
 version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
  "edgerun-log",
+ "edgerun-node",
  "edgerun-protocols",
- "edgerun-rt",
- "edgerun-tls",
 ]
 
 [[package]]
@@ -577,11 +546,10 @@ name = "edgerun-exchange"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
- "edgerun-http",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-node",
  "edgerun-protocols",
- "edgerun-rt",
  "edgerun-wallet",
 ]
 
@@ -590,9 +558,9 @@ name = "edgerun-exchange-api"
 version = "0.1.1"
 dependencies = [
  "edgerun-exchange",
- "edgerun-http",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-node",
  "edgerun-protocols",
  "edgerun-sdk",
  "edgerun-url",
@@ -638,20 +606,6 @@ name = "edgerun-hpack"
 version = "0.1.1"
 dependencies = [
  "edgerun-log",
-]
-
-[[package]]
-name = "edgerun-http"
-version = "0.1.1"
-dependencies = [
- "edgerun-crypto",
- "edgerun-encoding",
- "edgerun-hpack",
- "edgerun-log",
- "edgerun-protocols",
- "edgerun-qpack",
- "edgerun-rt",
- "edgerun-tls",
 ]
 
 [[package]]
@@ -848,9 +802,9 @@ dependencies = [
  "edgerun-drm-display",
  "edgerun-encoding",
  "edgerun-evdev-input",
- "edgerun-exchange",
  "edgerun-goodix-fingerprint",
  "edgerun-hardware-signing",
+ "edgerun-hpack",
  "edgerun-json",
  "edgerun-linux-cec",
  "edgerun-linux-gpu",
@@ -870,6 +824,7 @@ dependencies = [
  "edgerun-mgmt-bluetooth",
  "edgerun-platform",
  "edgerun-protocols",
+ "edgerun-qpack",
  "edgerun-remote-capability",
  "edgerun-storage",
  "edgerun-stream",
@@ -886,11 +841,10 @@ version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
- "edgerun-http",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-node",
  "edgerun-protocols",
- "edgerun-rt",
  "edgerun-secret-service",
 ]
 
@@ -905,7 +859,6 @@ dependencies = [
  "edgerun-json",
  "edgerun-node",
  "edgerun-protocols",
- "edgerun-rt",
  "edgerun-secret-service",
  "edgerun-storage",
  "miniz_oxide",
@@ -995,15 +948,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-rt"
-version = "0.1.0"
-dependencies = [
- "edgerun-encoding",
- "edgerun-log",
- "edgerun-platform",
-]
-
-[[package]]
 name = "edgerun-rtl8125"
 version = "0.1.0"
 
@@ -1026,8 +970,8 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-node",
  "edgerun-protocols",
- "edgerun-rt",
  "edgerun-storage",
 ]
 
@@ -1086,30 +1030,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-tcl-ac-cli"
-version = "0.1.1"
+name = "edgerun-term-core"
+version = "0.1.0"
 dependencies = [
- "edgerun-bluetooth-gatt",
- "edgerun-capabilities",
- "edgerun-clap",
- "edgerun-json",
- "edgerun-mgmt-bluetooth",
- "edgerun-tcl-ac",
+ "edgerun-emoji",
+ "edgerun-encoding",
+ "edgerun-error",
+ "edgerun-log",
+ "edgerun-sixel",
+ "edgerun-terminal-parser",
+ "edgerun-unicode",
 ]
 
 [[package]]
 name = "edgerun-terminal-parser"
 version = "0.1.1"
-
-[[package]]
-name = "edgerun-tls"
-version = "0.1.1"
-dependencies = [
- "edgerun-crypto",
- "edgerun-encoding",
- "edgerun-protocols",
- "edgerun-rt",
-]
 
 [[package]]
 name = "edgerun-tpm"
@@ -1126,33 +1061,13 @@ dependencies = [
  "edgerun-capabilities",
  "edgerun-crypto",
  "edgerun-json",
+ "edgerun-node",
  "edgerun-protocols",
- "edgerun-rt",
 ]
 
 [[package]]
 name = "edgerun-unicode"
 version = "0.1.1"
-
-[[package]]
-name = "edgerun-unikernel"
-version = "0.1.0"
-dependencies = [
- "edgerun-capabilities",
- "edgerun-crypto",
- "edgerun-devices",
- "edgerun-edgefs",
- "edgerun-event",
- "edgerun-node",
- "edgerun-oci",
- "edgerun-platform",
- "edgerun-protocols",
- "edgerun-rt",
- "edgerun-rtl8125",
- "edgerun-storage",
- "edgerun-tpm",
- "edgerun-virtio",
-]
 
 [[package]]
 name = "edgerun-unit"
@@ -1386,12 +1301,6 @@ checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
  "generic-array",
 ]
-
-[[package]]
-name = "itoa"
-version = "1.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jni"
@@ -1650,16 +1559,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prettyplease"
-version = "0.2.37"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
-dependencies = [
- "proc-macro2",
- "syn",
-]
-
-[[package]]
 name = "primeorder"
 version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1882,49 +1781,6 @@ name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
-
-[[package]]
-name = "serde"
-version = "1.0.228"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
-dependencies = [
- "serde_core",
- "serde_derive",
-]
-
-[[package]]
-name = "serde_core"
-version = "1.0.228"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41d385c7d4ca58e59fc732af25c3983b67ac852c1a25000afe1175de458b67ad"
-dependencies = [
- "serde_derive",
-]
-
-[[package]]
-name = "serde_derive"
-version = "1.0.228"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "serde_json"
-version = "1.0.149"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
-dependencies = [
- "itoa",
- "memchr",
- "serde",
- "serde_core",
- "zmij",
-]
 
 [[package]]
 name = "sha1"
@@ -2276,16 +2132,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zen-client"
-version = "0.1.0"
-dependencies = [
- "edgerun-edit",
- "edgerun-http",
- "edgerun-json",
- "edgerun-rt",
-]
-
-[[package]]
 name = "zerocopy"
 version = "0.8.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2310,9 +2156,3 @@ name = "zeroize"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
-
-[[package]]
-name = "zmij"
-version = "1.0.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"

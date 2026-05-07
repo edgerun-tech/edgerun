@@ -1,12 +1,12 @@
-//! edgerun Node Daemon (edgerund)
+//! edgerun Node Daemon (edged)
 //!
 //! Runs a single-writer stream node with mesh networking,
 //! command processing, and capability discovery.
 //!
 //! ## Usage
 //! ```text
-//! edgerund init --config node-data --software          # Dev-only: in-memory key
-//! edgerund status --config node-data                   # Show node event-log status
+//! edged init --config node-data --software          # Dev-only: in-memory key
+//! edged status --config node-data                   # Show node event-log status
 //! ```
 //!
 //! ## Security
@@ -78,7 +78,7 @@ pub fn parse_args() -> Result<Command, String> {
                     }
                     "--help" | "-h" => {
                         return Err(
-                            "Usage: edgerund init [--config data-root] [--name name] [--software]"
+                            "Usage: edged init [--config data-root] [--name name] [--software]"
                                 .into(),
                         );
                     }
@@ -112,7 +112,7 @@ pub fn parse_args() -> Result<Command, String> {
                         name = Some(args[i].clone());
                     }
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund init-encrypted [--config data-root] [--key-file path] [--name name]".into());
+                        return Err("Usage: edged init-encrypted [--config data-root] [--key-file path] [--name name]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }
@@ -144,7 +144,7 @@ pub fn parse_args() -> Result<Command, String> {
                         controller = Some(args[i].clone());
                     }
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund init-provisioned [--config data-root] [--name name] [--controller node-id]".into());
+                        return Err("Usage: edged init-provisioned [--config data-root] [--name name] [--controller node-id]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }
@@ -177,7 +177,7 @@ pub fn parse_args() -> Result<Command, String> {
                     }
                     "--help" | "-h" => {
                         return Err(
-                            "Usage: edgerund provision --config data-root --pin PIN [--target addr]"
+                            "Usage: edged provision --config data-root --pin PIN [--target addr]"
                                 .into(),
                         );
                     }
@@ -204,7 +204,7 @@ pub fn parse_args() -> Result<Command, String> {
                         config = PathBuf::from(&args[i]);
                     }
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund status [--config data-root]".into());
+                        return Err("Usage: edged status [--config data-root]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }
@@ -219,7 +219,7 @@ pub fn parse_args() -> Result<Command, String> {
                 match args[i].as_str() {
                     "--standard-ports" => standard_ports = true,
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund bind-check [--standard-ports]".into());
+                        return Err("Usage: edged bind-check [--standard-ports]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }

@@ -8,6 +8,6 @@ name = "edgerun-term-drm-probe"
 path = "src/main.rs"
 
 [dependencies]
-edgerun-compositor = { path = "../../edgerun-compositor" }
-edgerun-pty = { path = "../../utility/edgerun-pty" }
-edgerun-terminal-parser = { path = "../../utility/edgerun-terminal-parser" }
+edgerun-compositor.workspace = true
+edgerun-pty.workspace = true
+edgerun-terminal-parser.workspace = true

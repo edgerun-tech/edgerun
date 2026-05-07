@@ -280,7 +280,7 @@ fn derived_db_probe_path() -> PathBuf {
         .map(|d| d.as_millis())
         .unwrap_or(0);
     path.push(format!(
-        "edgerund-bind-check-{}-{now}.edb",
+        "edged-bind-check-{}-{now}.edb",
         std::process::id()
     ));
     path

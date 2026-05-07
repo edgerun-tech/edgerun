@@ -38,7 +38,7 @@
 //! 26 tests covering all frame types, stream states, settings validation,
 //! flow control, and error conditions. Run with:
 //! ```text
-//! cargo test -p edgerun-http --lib -- server::
+//! cargo test -p edgerun-node http --lib -- server::
 //! ```
 //!
 //! # See Also

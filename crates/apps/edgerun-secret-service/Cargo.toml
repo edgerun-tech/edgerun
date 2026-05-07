@@ -7,15 +7,11 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Secret storage and retrieval service for Edgerun"
+autobins = false
 
 [lib]
 name = "edgerun_secret_service"
 path = "src/lib.rs"
-
-[[bin]]
-name = "edgerun-secret-service"
-path = "src/main.rs"
-required-features = ["std"]
 
 [dependencies]
 edgerun-devices.workspace = true
@@ -24,7 +20,7 @@ edgerun-protocols = { version = "0.1", path = "../../protocol/edgerun-protocols"
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
-edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
+edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false }
 
 [features]
 std = []

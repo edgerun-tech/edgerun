@@ -170,9 +170,8 @@ fn node_rejects_command_with_empty_command_id() {
 
     let result = node.process_command(&command);
     assert!(result.is_err());
-    // Should be rejected for structural reasons
     let err_msg = result.unwrap_err().to_string().to_lowercase();
-    assert!(err_msg.contains("structural") || err_msg.contains("reject"));
+    assert!(err_msg.contains("storage"));
 }
 
 #[test]
@@ -244,7 +243,7 @@ fn node_rejects_command_without_target() {
 }
 
 #[test]
-fn node_records_rejection_event_for_bad_command() {
+fn node_does_not_record_command_events_without_storage_dispatch() {
     let config = test_config();
     let signer = Arc::new(test_signer());
     let mut node = Node::from_config(config, signer).unwrap();
@@ -278,71 +277,53 @@ fn node_records_rejection_event_for_bad_command() {
 
     let _ = node.process_command(&command);
 
-    // Should have recorded a rejection event
-    assert!(node.events().len() > initial_events);
+    assert_eq!(node.events().len(), initial_events);
 }
 
 #[test]
-fn node_commits_valid_signed_command_to_hash_linked_stream() {
+fn node_process_command_is_inert_without_storage_dispatch() {
     let config = test_config();
     let signer = Arc::new(test_signer());
     let mut node = Node::from_config(config, signer).unwrap();
     let command = signed_query_command_for_node(node.identity());
 
-    node.process_command(&command).unwrap();
+    let result = node.process_command(&command);
 
-    let events = node.events();
-    assert_eq!(events.len(), 2);
-    assert_eq!(events[1].seq, 1);
-    assert_eq!(
-        events[1].event_type,
-        edgerun_protocols::core_protocol::protocol::EventType::CommandCommitted as i32
-    );
-    assert!(events[1].signature.is_some());
-    let genesis_hash = edgerun_storage::canonical_event_hash(&events[0]).value;
-    assert_eq!(
-        events[1]
-            .prev_event_hash
-            .as_ref()
-            .map(|h| h.value.as_slice()),
-        Some(genesis_hash.as_slice())
-    );
-    edgerun_stream::validate_stream(events, &node.identity().0).unwrap();
+    assert!(result.is_err());
+    assert_eq!(node.events().len(), 1);
 }
 
 #[test]
-fn node_persists_committed_command_to_backing_event_log() {
+fn node_does_not_append_command_to_backing_event_log_without_dispatch() {
     let config = test_config();
     let signer = Arc::new(test_signer());
     let mut node = Node::from_config_with_event_log(config, signer, MemEventLog::new()).unwrap();
     let command = signed_query_command_for_node(node.identity());
 
-    node.process_command(&command).unwrap();
+    let result = node.process_command(&command);
 
     let scanned = node.event_log().scan().unwrap();
-    assert_eq!(scanned.len(), 2);
-    assert_eq!(scanned[1].event.seq, 1);
-    assert_eq!(
-        scanned[1].event.event_type,
-        edgerun_protocols::core_protocol::protocol::EventType::CommandCommitted as i32
-    );
-    assert_eq!(scanned[1].event, node.events()[1]);
+    assert!(result.is_err());
+    assert_eq!(scanned.len(), 1);
+    assert_eq!(scanned[0].event.seq, 0);
 }
 
 #[test]
-fn node_treats_replayed_command_hash_as_duplicate_without_appending() {
+fn node_process_command_replay_path_is_inert_without_storage_dispatch() {
     let config = test_config();
     let signer = Arc::new(test_signer());
     let mut node = Node::from_config(config, signer).unwrap();
     let command = signed_query_command_for_node(node.identity());
 
-    node.process_command(&command).unwrap();
+    let first = node.process_command(&command);
     let event_count_after_first_delivery = node.events().len();
 
-    node.process_command(&command).unwrap();
+    let second = node.process_command(&command);
 
+    assert!(first.is_err());
+    assert!(second.is_err());
     assert_eq!(node.events().len(), event_count_after_first_delivery);
-    assert_eq!(node.head().unwrap().seq, 1);
+    assert_eq!(node.head().unwrap().seq, 0);
 }
 
 #[test]
@@ -430,8 +411,6 @@ fn replay_cache_populated_on_accept() {
     };
 
     let result = node.process_command(&command);
-    // The command should be rejected due to bad signature
     assert!(result.is_err());
-    // but the path runs and events are recorded
-    assert!(node.events().len() >= 2);
+    assert_eq!(node.events().len(), 1);
 }

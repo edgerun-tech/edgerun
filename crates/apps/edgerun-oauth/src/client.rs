@@ -12,9 +12,9 @@ use crate::types::{
 };
 use edgerun_crypto::sha256;
 use edgerun_encoding::base64::base64url_nopad_encode;
-use edgerun_http::HttpClient;
-use edgerun_rt::sleep;
-use edgerun_rt::{Duration, Instant};
+use edgerun_node::http::HttpClient;
+use edgerun_node::rt::sleep;
+use edgerun_node::rt::{Duration, Instant};
 
 /// Callback trait for the device flow UI.
 pub trait DeviceFlowCallback: Send + Sync {

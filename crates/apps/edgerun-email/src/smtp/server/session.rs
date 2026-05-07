@@ -36,7 +36,7 @@ use crate::smtp::types::{
 use edgerun_protocols::email_auth::EmailAuthEvaluator;
 
 #[cfg(feature = "tls")]
-use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
+use edgerun_node::tls::{AsyncTlsServerStream, CertificateAndKey};
 
 // ===========================================================================
 // Server Configuration

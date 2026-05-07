@@ -9,7 +9,7 @@
 //! - OpenID Connect (OIDC) ID Token parsing and verification
 //! - OIDC Discovery (RFC 8414)
 //! - File-based token storage with atomic writes
-//! - Async-first API (edgerun-rt runtime)
+//! - Async-first API (edgerun-node runtime)
 //!
 //! ## Client Quick Start
 //! ```no_run
@@ -23,7 +23,7 @@
 //!     }
 //! }
 //!
-//! # edgerun_rt::block_on(async {
+//! # edgerun_node::rt::block_on(async {
 //! let config = ClientConfig::device_flow(
 //!     "https://provider.example.com",
 //!     "my-client-id",
@@ -98,7 +98,7 @@ pub mod env {
 
 #[cfg(target_os = "none")]
 pub mod sync {
-    pub use edgerun_rt::{RwLockReadGuard, RwLockWriteGuard};
+    pub use edgerun_node::rt::{RwLockReadGuard, RwLockWriteGuard};
     pub use edgerun_secret_service::sync::{Arc, Mutex, RwLock};
 }
 
@@ -109,7 +109,7 @@ pub mod error {
 
 #[cfg(target_os = "none")]
 pub mod time {
-    pub use edgerun_http::time::{Duration, Instant};
+    pub use edgerun_node::http::time::{Duration, Instant};
 }
 
 mod client;
@@ -122,7 +122,7 @@ mod token_store;
 mod types;
 
 pub fn runtime_now_secs() -> u64 {
-    edgerun_rt::timer::ticks_to_us(edgerun_rt::now()) / 1_000_000
+    edgerun_node::rt::timer::ticks_to_us(edgerun_node::rt::now()) / 1_000_000
 }
 
 pub use client::{DeviceFlowCallback, OAuthClient};
@@ -134,8 +134,8 @@ pub use oauth_client::{AutoRefreshMiddleware, BearerTokenMiddleware, OAuthClient
 pub use pkce::PkcePair;
 pub use token_store::{default_token_path, TokenStore};
 
-// Re-export edgerun-http middleware types for convenience
-pub use edgerun_http::client_middleware::{
+// Re-export edgerun-node http middleware types for convenience
+pub use edgerun_node::http::client_middleware::{
     client_middleware_fn, Chain as ClientChain, Client, ClientExtensions, ClientMiddleware,
     ClientNext, ClientRequest, ClientTransport,
 };

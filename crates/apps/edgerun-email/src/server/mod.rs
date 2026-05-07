@@ -23,7 +23,7 @@ use crate::rt::{
 };
 
 #[cfg(feature = "tls")]
-use edgerun_tls::{AsyncTlsStream, CertificateAndKey};
+use edgerun_node::tls::{AsyncTlsStream, CertificateAndKey};
 
 // ===========================================================================
 // Connection Interceptor — protocol-agnostic hook for connection middleware
@@ -75,7 +75,7 @@ impl Transport {
         }
     }
 
-    /// Upgrade this transport to TLS via the `edgerun-tls` client handshake.
+    /// Upgrade this transport to TLS via the `edgerun-node TLS` client handshake.
     #[cfg(feature = "tls")]
     pub async fn upgrade_tls(self, server_name: &str) -> io::Result<Self> {
         match self {

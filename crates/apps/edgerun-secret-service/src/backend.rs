@@ -113,7 +113,7 @@ pub struct Backend {
 #[cfg(not(target_os = "none"))]
 static NODE_ID: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
 #[cfg(target_os = "none")]
-static NODE_ID: edgerun_rt::Mutex<Option<Vec<u8>>> = edgerun_rt::Mutex::new(None);
+static NODE_ID: edgerun_node::rt::Mutex<Option<Vec<u8>>> = edgerun_node::rt::Mutex::new(None);
 
 /// Initialize the static node_id. Must be called exactly once before using Backend.
 /// The node_id is public information derived from the node's identity key.

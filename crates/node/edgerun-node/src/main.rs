@@ -1,4 +1,4 @@
-//! edgerun Node Daemon (edgerund)
+//! edgerun Node Daemon (edged)
 //!
 //! Runs a single-writer stream node with mesh networking, command processing,
 //! and capability discovery.
@@ -10,13 +10,9 @@ pub use edgerun_node::{node_debug, node_error, node_info, node_trace, node_warn}
 mod bind_check;
 mod bootstrap;
 mod capacity;
-mod command_dispatch;
-mod command_dispatch_event;
-mod command_dispatch_result;
 mod ingress;
 mod init;
 mod protocol_signer;
-mod stream_append;
 
 mod cli;
 mod health;

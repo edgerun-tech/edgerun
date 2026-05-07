@@ -15,7 +15,6 @@ edgerun-crypto = { workspace = true, default-features = false }
 edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["https"], optional = true }
 edgerun-edgefs = { workspace = true, optional = true }
 edgerun-storage = { workspace = true, optional = true }
-edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
 edgerun-secret-service = { version = "0.1", path = "../apps/edgerun-secret-service", optional = true }
 edgerun-protocols = { workspace = true, default-features = false, features = ["oci"] }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
@@ -28,7 +27,6 @@ edgefs = ["dep:edgerun-edgefs", "dep:edgerun-storage"]
 gzip = ["dep:miniz_oxide"]
 std = [
     "registry-client",
-    "dep:edgerun-rt",
     "dep:edgerun-secret-service",
 ]
 

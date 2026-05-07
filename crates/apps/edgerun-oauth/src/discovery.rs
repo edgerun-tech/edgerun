@@ -147,7 +147,7 @@ impl OidcDiscoveryDocument {
             "{}/.well-known/openid-configuration",
             base_url.trim_end_matches('/')
         );
-        let client = edgerun_http::HttpClient::new();
+        let client = edgerun_node::http::HttpClient::new();
         let resp = client
             .get(&url)
             .await
@@ -237,7 +237,7 @@ impl JwksDocument {
 
     /// Fetch JWKS from a URL.
     pub async fn fetch(url: &str) -> Result<Self, OAuthError> {
-        let client = edgerun_http::HttpClient::new();
+        let client = edgerun_node::http::HttpClient::new();
         let resp = client
             .get(url)
             .await

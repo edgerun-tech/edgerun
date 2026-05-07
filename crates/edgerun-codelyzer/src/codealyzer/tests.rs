@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use crate::codealyzer::crate_model::{ApiItem, ApiItemKind, FunctionalityCoverage, TestInfo};
-use serde_json::Value;
+use edgerun_json::Value;
 
 pub fn collect_test_info(crate_dir: &Path, public_api: &[ApiItem]) -> TestInfo {
     let mut info = TestInfo {
@@ -123,7 +123,7 @@ fn line_contains_warning(line: &str) -> bool {
     if normalized.contains(": warning:") {
         return true;
     }
-    if let Ok(value) = serde_json::from_str::<Value>(normalized) {
+    if let Ok(value) = edgerun_json::parse_json(normalized) {
         if value.get("reason").and_then(Value::as_str) == Some("compiler-message") {
             return value
                 .get("message")

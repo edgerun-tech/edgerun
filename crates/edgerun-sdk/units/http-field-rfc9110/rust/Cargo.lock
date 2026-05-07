@@ -3,14 +3,21 @@
 version = 4
 
 [[package]]
-name = "edgerun-http"
+name = "edgerun-encoding"
 version = "0.1.1"
+
+[[package]]
+name = "edgerun-protocols"
+version = "0.1.1"
+dependencies = [
+ "edgerun-encoding",
+]
 
 [[package]]
 name = "edgerun-sdk-unit-http-field-rfc9110"
 version = "0.1.1"
 dependencies = [
- "edgerun-http",
+ "edgerun-protocols",
  "edgerun-unit",
 ]
 

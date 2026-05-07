@@ -152,17 +152,9 @@ struct PackageInfo {
 #[derive(Clone)]
 struct DependencyRecord {
     name: String,
-    id: String,
-    version: String,
     source: String,
-    source_ref: Option<String>,
-    manifest_path: String,
     size_bytes: u64,
-    size_mb: f64,
     loc: u64,
-    is_direct: bool,
-    size_ratio_to_self_percent: f64,
-    loc_ratio_to_self_percent: f64,
 }
 
 #[derive(Clone)]
@@ -180,8 +172,6 @@ struct CrateDependencyProfile {
     self_size_bytes: u64,
     self_loc: u64,
     self_size_mb: f64,
-    all_dependencies: Vec<DependencyRecord>,
-    direct_dependencies: Vec<DependencyRecord>,
     all_totals: DependencyTotals,
     direct_totals: DependencyTotals,
 }
@@ -339,20 +329,9 @@ pub fn collect_dependency_footprints(
 
             let dependency = DependencyRecord {
                 name: dependency_package.name.clone(),
-                id: dependency_package.id.clone(),
-                version: dependency_package.version.clone(),
                 source,
-                source_ref,
-                manifest_path: dependency_package.manifest_path.clone(),
                 size_bytes: dependency_fp.size_bytes,
-                size_mb: bytes_to_megabytes(dependency_fp.size_bytes),
                 loc: dependency_fp.loc,
-                is_direct,
-                size_ratio_to_self_percent: ratio_percent(
-                    dependency_fp.size_bytes,
-                    self_fp.size_bytes,
-                ),
-                loc_ratio_to_self_percent: ratio_percent(dependency_fp.loc, self_fp.loc),
             };
 
             if is_direct {
@@ -399,8 +378,6 @@ pub fn collect_dependency_footprints(
             self_size_bytes: self_fp.size_bytes,
             self_loc: self_fp.loc,
             self_size_mb: bytes_to_megabytes(self_fp.size_bytes),
-            all_dependencies,
-            direct_dependencies,
             all_totals,
             direct_totals,
         });

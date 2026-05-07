@@ -1,8 +1,13 @@
 //! Command validation and decision-event recording.
 
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::bootstrap::{archive_node_genesis_payload, node_genesis_payload};
+use crate::NodeConfig;
 use edgerun_hardware_signing::MeshSigner;
-use edgerun_node::NodeConfig;
 use edgerun_protocols::core_protocol::collections::{HashMap, HashSet};
 use edgerun_protocols::core_protocol::command::{
     command_hash, validate_command, CommandExecutionContext, CommandValidationContext,

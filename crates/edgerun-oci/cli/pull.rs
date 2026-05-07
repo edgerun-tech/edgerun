@@ -31,7 +31,7 @@ pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     println!("  images: {}", images_dir.display());
     println!("  store:  {}", store_path.display());
 
-    let rt = edgerun_rt::Runtime::new_multi_thread()
+    let rt = edgerun_node::rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| std::io::Error::other(e.to_string()))?;

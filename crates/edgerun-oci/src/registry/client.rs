@@ -137,7 +137,7 @@ impl RegistryClient {
             self.token.as_deref(),
         )?;
 
-        let client = registry_http_client().no_redirects();
+        let client = registry_http_client();
         let resp = client
             .execute(&request)
             .await
@@ -278,7 +278,7 @@ impl RegistryClient {
             extra_headers,
             self.token.as_deref(),
         )?;
-        let client = registry_http_client().no_redirects();
+        let client = registry_http_client();
         client
             .execute(&request)
             .await
@@ -342,7 +342,7 @@ impl RegistryClient {
             extra_headers,
             self.token.as_deref(),
         )?;
-        let client = registry_http_client().no_redirects();
+        let client = registry_http_client();
         client
             .execute(&request)
             .await
@@ -449,7 +449,7 @@ impl RegistryClient {
     async fn do_get_raw(&mut self, registry: &str, path: &str) -> Result<Response, RegistryError> {
         let url = self.registry_url(registry, path);
         let request = build_request(Method::GET, &url, None, &[], self.token.as_deref())?;
-        let client = registry_http_client().no_redirects();
+        let client = registry_http_client();
         client
             .execute(&request)
             .await

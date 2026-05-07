@@ -7,6 +7,7 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "ALSA speaker adapter for Edgerun audio output capabilities"
+autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true
@@ -15,11 +16,6 @@ edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 
 [dev-dependencies]
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-
-[[bin]]
-name = "alsa_speaker_tool"
-path = "src/bin/alsa-speaker-tool.rs"
-required-features = ["std"]
 
 [features]
 std = []

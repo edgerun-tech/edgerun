@@ -33,7 +33,7 @@ pub fn discover_gpus() -> Vec<edgerun_linux_gpu::LinuxGpuDevice> {
     match edgerun_linux_gpu::discover_gpus() {
         Ok(backends) => backends,
         Err(e) => {
-            crate::node_warn!("edgerund: warning: GPU discovery failed: {}", e);
+            crate::node_warn!("edged: warning: GPU discovery failed: {}", e);
             Vec::new()
         }
     }
@@ -44,7 +44,7 @@ pub fn discover_displays() -> Vec<edgerun_drm_display::DrmConnectorInfo> {
     match edgerun_drm_display::discover_drm_connectors() {
         Ok(connectors) => connectors,
         Err(e) => {
-            crate::node_warn!("edgerund: warning: display discovery failed: {}", e);
+            crate::node_warn!("edged: warning: display discovery failed: {}", e);
             Vec::new()
         }
     }
@@ -69,7 +69,7 @@ pub fn discover_fingerprint_readers() -> Vec<String> {
             }
         }
         Err(e) => crate::node_warn!(
-            "edgerund: warning: Goodix fingerprint discovery failed: {}",
+            "edged: warning: Goodix fingerprint discovery failed: {}",
             e
         ),
     }
@@ -95,7 +95,7 @@ pub fn discover_bluetooth_controllers() -> Vec<String> {
                 ));
             }
         }
-        Err(e) => crate::node_warn!("edgerund: warning: BT controller discovery failed: {}", e),
+        Err(e) => crate::node_warn!("edged: warning: BT controller discovery failed: {}", e),
     }
 
     controllers
@@ -110,7 +110,7 @@ pub fn discover_wifi_interfaces() -> Vec<edgerun_linux_wifi::LinuxWifiInterface>
     match edgerun_linux_wifi::discover_wifi_interfaces() {
         Ok(interfaces) => interfaces,
         Err(e) => {
-            crate::node_warn!("edgerund: warning: WiFi interface discovery failed: {}", e);
+            crate::node_warn!("edged: warning: WiFi interface discovery failed: {}", e);
             Vec::new()
         }
     }
@@ -125,7 +125,7 @@ pub fn discover_usb_devices() -> Vec<edgerun_linux_usb::LinuxUsbDevice> {
     match edgerun_linux_usb::discover_usb_devices() {
         Ok(devices) => devices,
         Err(e) => {
-            crate::node_warn!("edgerund: warning: USB device discovery failed: {}", e);
+            crate::node_warn!("edged: warning: USB device discovery failed: {}", e);
             Vec::new()
         }
     }
@@ -140,7 +140,7 @@ pub fn discover_pci_devices() -> Vec<edgerun_linux_pci::LinuxPciDevice> {
     match edgerun_linux_pci::discover_pci_devices() {
         Ok(devices) => devices,
         Err(e) => {
-            crate::node_warn!("edgerund: warning: PCI device discovery failed: {}", e);
+            crate::node_warn!("edged: warning: PCI device discovery failed: {}", e);
             Vec::new()
         }
     }
@@ -160,7 +160,7 @@ pub fn discover_nfc_adapters() -> Vec<String> {
                 adapters.push(format!("NFC adapter: {}", adapter.name));
             }
         }
-        Err(e) => crate::node_warn!("edgerund: warning: NFC adapter discovery failed: {}", e),
+        Err(e) => crate::node_warn!("edged: warning: NFC adapter discovery failed: {}", e),
     }
 
     adapters
@@ -181,7 +181,7 @@ pub fn discover_npu_devices() -> Vec<String> {
                 devices.push(format!("Linux NPU: {:?}", npu));
             }
         }
-        Err(e) => crate::node_warn!("edgerund: warning: Linux NPU discovery failed: {}", e),
+        Err(e) => crate::node_warn!("edged: warning: Linux NPU discovery failed: {}", e),
     }
 
     // AMD xDNA NPU
@@ -191,7 +191,7 @@ pub fn discover_npu_devices() -> Vec<String> {
                 devices.push(format!("AMD xDNA NPU: {:?}", xdna));
             }
         }
-        Err(e) => crate::node_warn!("edgerund: warning: AMD xDNA discovery failed: {}", e),
+        Err(e) => crate::node_warn!("edged: warning: AMD xDNA discovery failed: {}", e),
     }
 
     devices
@@ -214,7 +214,7 @@ pub fn discover_power_supplies() -> Vec<String> {
                 ));
             }
         }
-        Err(e) => crate::node_warn!("edgerund: warning: power supply discovery failed: {}", e),
+        Err(e) => crate::node_warn!("edged: warning: power supply discovery failed: {}", e),
     }
 
     // System-level power info (battery, AC, etc.)
@@ -234,7 +234,7 @@ pub fn discover_power_supplies() -> Vec<String> {
                 supplies.push(format!("Source: {}", source.instance_id));
             }
         }
-        Err(e) => crate::node_warn!("edgerund: warning: power system discovery failed: {}", e),
+        Err(e) => crate::node_warn!("edged: warning: power system discovery failed: {}", e),
     }
 
     supplies
@@ -254,7 +254,7 @@ pub fn discover_cec_adapters() -> Vec<String> {
                 adapters.push(format!("CEC adapter: {}", adapter.adapter_name));
             }
         }
-        Err(e) => crate::node_warn!("edgerund: warning: CEC adapter discovery failed: {}", e),
+        Err(e) => crate::node_warn!("edged: warning: CEC adapter discovery failed: {}", e),
     }
 
     adapters
@@ -275,7 +275,7 @@ pub fn discover_input_devices() -> Vec<String> {
             })
             .collect(),
         Err(e) => {
-            crate::node_warn!("edgerund: warning: evdev input discovery failed: {}", e);
+            crate::node_warn!("edged: warning: evdev input discovery failed: {}", e);
             Vec::new()
         }
     }
@@ -294,7 +294,7 @@ pub fn discover_audio_input() -> Vec<String> {
             .map(|p| format!("ALSA PCM {}:{} ({})", p.card_index, p.device_index, p.name))
             .collect(),
         Err(e) => {
-            crate::node_warn!("edgerund: warning: ALSA microphone discovery failed: {}", e);
+            crate::node_warn!("edged: warning: ALSA microphone discovery failed: {}", e);
             Vec::new()
         }
     }
@@ -317,7 +317,7 @@ pub fn discover_audio_output() -> Vec<String> {
             })
             .collect(),
         Err(e) => {
-            crate::node_warn!("edgerund: warning: ALSA speaker discovery failed: {}", e);
+            crate::node_warn!("edged: warning: ALSA speaker discovery failed: {}", e);
             Vec::new()
         }
     }
@@ -353,7 +353,7 @@ pub fn discover_cameras() -> Vec<String> {
             })
             .collect(),
         Err(e) => {
-            crate::node_warn!("edgerund: warning: V4L2 camera discovery failed: {}", e);
+            crate::node_warn!("edged: warning: V4L2 camera discovery failed: {}", e);
             Vec::new()
         }
     }
@@ -446,7 +446,7 @@ impl HardwareInventory {
             Ok(devices) => devices,
             Err(e) => {
                 crate::node_warn!(
-                    "edgerund: warning: Goodix fingerprint discovery failed: {}",
+                    "edged: warning: Goodix fingerprint discovery failed: {}",
                     e
                 );
                 Vec::new()
@@ -470,7 +470,7 @@ impl HardwareInventory {
         let bluetooth_raw = match edgerun_mgmt_bluetooth::discover_controllers() {
             Ok(ctrls) => ctrls,
             Err(e) => {
-                crate::node_warn!("edgerund: warning: BT controller discovery failed: {}", e);
+                crate::node_warn!("edged: warning: BT controller discovery failed: {}", e);
                 Vec::new()
             }
         };
@@ -566,7 +566,7 @@ impl HardwareInventory {
                 })
                 .collect(),
             Err(e) => {
-                crate::node_warn!("edgerund: warning: NFC adapter discovery failed: {}", e);
+                crate::node_warn!("edged: warning: NFC adapter discovery failed: {}", e);
                 Vec::new()
             }
         };
@@ -581,7 +581,7 @@ impl HardwareInventory {
                     npu_devices.push(format!("Linux NPU: {:?}", npu));
                 }
             }
-            Err(e) => crate::node_warn!("edgerund: warning: Linux NPU discovery failed: {}", e),
+            Err(e) => crate::node_warn!("edged: warning: Linux NPU discovery failed: {}", e),
         }
         match edgerun_amd_xdna::discover_amd_xdna_devices() {
             Ok(xdnas) => {
@@ -591,7 +591,7 @@ impl HardwareInventory {
                     npu_devices.push(format!("AMD xDNA NPU: {:?}", xdna));
                 }
             }
-            Err(e) => crate::node_warn!("edgerund: warning: AMD xDNA discovery failed: {}", e),
+            Err(e) => crate::node_warn!("edged: warning: AMD xDNA discovery failed: {}", e),
         }
 
         capability_descriptors.push(
@@ -611,7 +611,7 @@ impl HardwareInventory {
                     ));
                 }
             }
-            Err(e) => crate::node_warn!("edgerund: warning: power supply discovery failed: {}", e),
+            Err(e) => crate::node_warn!("edged: warning: power supply discovery failed: {}", e),
         }
         match edgerun_linux_power::discover_power_system() {
             Ok(sys) => {
@@ -629,7 +629,7 @@ impl HardwareInventory {
                     power_supplies.push(format!("Source: {}", source.instance_id));
                 }
             }
-            Err(e) => crate::node_warn!("edgerund: warning: power system discovery failed: {}", e),
+            Err(e) => crate::node_warn!("edged: warning: power system discovery failed: {}", e),
         }
 
         let cec_adapters: Vec<String> = match edgerun_linux_cec::discover_cec_adapters() {
@@ -644,7 +644,7 @@ impl HardwareInventory {
                 })
                 .collect(),
             Err(e) => {
-                crate::node_warn!("edgerund: warning: CEC adapter discovery failed: {}", e);
+                crate::node_warn!("edged: warning: CEC adapter discovery failed: {}", e);
                 Vec::new()
             }
         };
@@ -662,7 +662,7 @@ impl HardwareInventory {
                 })
                 .collect(),
             Err(e) => {
-                crate::node_warn!("edgerund: warning: evdev input discovery failed: {}", e);
+                crate::node_warn!("edged: warning: evdev input discovery failed: {}", e);
                 Vec::new()
             }
         };
@@ -686,7 +686,7 @@ impl HardwareInventory {
                 })
                 .collect(),
             Err(e) => {
-                crate::node_warn!("edgerund: warning: ALSA microphone discovery failed: {}", e);
+                crate::node_warn!("edged: warning: ALSA microphone discovery failed: {}", e);
                 Vec::new()
             }
         };
@@ -706,7 +706,7 @@ impl HardwareInventory {
                 })
                 .collect(),
             Err(e) => {
-                crate::node_warn!("edgerund: warning: ALSA speaker discovery failed: {}", e);
+                crate::node_warn!("edged: warning: ALSA speaker discovery failed: {}", e);
                 Vec::new()
             }
         };
@@ -737,7 +737,7 @@ impl HardwareInventory {
                 })
                 .collect(),
             Err(e) => {
-                crate::node_warn!("edgerund: warning: V4L2 camera discovery failed: {}", e);
+                crate::node_warn!("edged: warning: V4L2 camera discovery failed: {}", e);
                 Vec::new()
             }
         };

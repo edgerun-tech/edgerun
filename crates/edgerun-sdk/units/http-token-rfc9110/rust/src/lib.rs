@@ -1,6 +1,6 @@
 #![no_std]
 
-use edgerun_http::is_tchar;
+use edgerun_protocols::http::is_tchar;
 
 edgerun_unit::no_alloc!();
 edgerun_unit::metadata!(9110);

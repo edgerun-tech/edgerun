@@ -38,16 +38,20 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::module_path;
 
+use crate::command_dispatch::{dispatch_command, ControllerSet};
 use crate::{Node, NodeConfig};
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::MeshRouter;
 use edgerun_mesh::{LocalNode, MeshFrame};
 use edgerun_mesh_link::MeshLink;
+use edgerun_protocols::core_protocol::collections::{HashMap, HashSet};
+use edgerun_protocols::core_protocol::command::CommandExecutionContext;
 use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, EventEnvelope};
 use edgerun_protocols::core_protocol::wire_stream::{
     command_full_wire_bytes, decode_command_full_wire_bytes,
 };
+use edgerun_storage::NodeStore;
 
 /// A mesh-connected edgerun node.
 ///
@@ -56,6 +60,14 @@ use edgerun_protocols::core_protocol::wire_stream::{
 pub struct MeshNode {
     /// The node's event log and command processor.
     node: Node,
+    /// Durable storage required before commands may affect node state.
+    store: Option<NodeStore>,
+    /// Controller projection used by storage-backed command dispatch.
+    controllers: ControllerSet,
+    /// In-memory replay hint backed by the durable replay index.
+    replay_cache: HashMap<Vec<u8>, (Vec<u8>, i64)>,
+    /// Delegation revocations projected from durable events.
+    revoked_delegations: HashSet<Vec<u8>>,
     /// The mesh network transport.
     mesh_link: MeshLink,
     /// The mesh router for discovery and routing.
@@ -74,6 +86,7 @@ impl MeshNode {
     pub fn from_config(config: NodeConfig, signer: Box<dyn MeshSigner>) -> Result<Self, String> {
         let identity = signer.node_id();
         let signer_arc: Arc<dyn MeshSigner> = Arc::from(signer);
+        let initial_controllers = config_controllers_to_ids(&config);
         let node = Node::from_config(config, Arc::clone(&signer_arc))
             .map_err(|e| format!("failed to create node: {}", e))?;
         let mut mesh_link = MeshLink::new();
@@ -82,10 +95,33 @@ impl MeshNode {
 
         Ok(Self {
             node,
+            store: None,
+            controllers: ControllerSet::new(initial_controllers),
+            replay_cache: HashMap::new(),
+            revoked_delegations: HashSet::new(),
             mesh_link,
             router,
             signer: signer_arc,
         })
+    }
+
+    /// Creates a mesh node with durable storage enabled.
+    ///
+    /// Command ingress is inert until a `NodeStore` is attached through this
+    /// constructor or `attach_store`.
+    pub fn from_config_with_store(
+        config: NodeConfig,
+        signer: Box<dyn MeshSigner>,
+        store: NodeStore,
+    ) -> Result<Self, String> {
+        let mut node = Self::from_config(config, signer)?;
+        node.attach_store(store);
+        Ok(node)
+    }
+
+    /// Attaches durable storage and enables command dispatch.
+    pub fn attach_store(&mut self, store: NodeStore) {
+        self.store = Some(store);
     }
 
     /// Runs one tick of the event loop.
@@ -106,7 +142,7 @@ impl MeshNode {
             if frame.header.dest == our_id {
                 // Decode and process
                 if let Some(command) = Self::decode_command(&frame) {
-                    let _ = self.node.process_command(&command);
+                    self.dispatch_stored_command(&command);
                     processed += 1;
                 }
             } else {
@@ -190,6 +226,11 @@ impl MeshNode {
         self.node.events()
     }
 
+    /// Returns whether durable storage is attached.
+    pub fn storage_ready(&self) -> bool {
+        self.store.is_some()
+    }
+
     /// Installs a capability grant.
     /// **WARNING**: This bypasses the event stream. Use
     /// `capabilities::record_capability_grant_event()` in production.
@@ -203,6 +244,28 @@ impl MeshNode {
         decode_command_full_wire_bytes(&frame.payload[..]).ok()
     }
 
+    fn dispatch_stored_command(&mut self, command: &CommandEnvelope) {
+        let Some(store) = self.store.as_mut() else {
+            crate::node_warn!("dropping inbound command before node storage is attached");
+            return;
+        };
+
+        let trusted_roots = config_controllers_to_ids(self.node.config());
+        let exec_ctx = CommandExecutionContext::test_default();
+        let _ = dispatch_command(
+            command,
+            store,
+            &self.node.identity().0,
+            self.signer.as_ref(),
+            &mut self.controllers,
+            &mut self.replay_cache,
+            &self.revoked_delegations,
+            &trusted_roots,
+            0,
+            &exec_ctx,
+        );
+    }
+
     /// Creates a new frame with the given destination, preserving the payload.
     fn frame_with_dest(mut frame: MeshFrame, dest: NodeID) -> MeshFrame {
         frame.header.dest = dest;
@@ -213,6 +276,16 @@ impl MeshNode {
     pub fn router_mut(&mut self) -> &mut MeshRouter {
         &mut self.router
     }
+}
+
+fn config_controllers_to_ids(config: &NodeConfig) -> Vec<Vec<u8>> {
+    config
+        .controllers
+        .iter()
+        .filter_map(|controller| {
+            edgerun_protocols::core_protocol::util::hex_to_bytes(controller).ok()
+        })
+        .collect()
 }
 
 #[cfg(test)]

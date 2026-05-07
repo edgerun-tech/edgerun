@@ -1,15 +1,15 @@
 //! Async TLS 1.3 streams — client and server — wrapping any
-//! `edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin` transport.
+//! `edgerun_node::rt::AsyncRead + edgerun_node::rt::AsyncWrite + Unpin` transport.
 //!
 //! Mirrors the sync `TlsStream` / `TlsServerStream` API but uses
 //! async `poll_read` / `poll_write` instead of blocking read/write traits.
 //!
 //! # Example (client)
 //! ```rust
-//! use edgerun_tls::{AsyncRead, AsyncTlsStream, AsyncWrite};
+//! use edgerun_node::tls::{AsyncRead, AsyncTlsStream, AsyncWrite};
 //!
 //! // AsyncTlsStream works with any async read/write stream
-//! async fn tls_client_example<S>(stream: S) -> edgerun_tls::Result<AsyncTlsStream<S>>
+//! async fn tls_client_example<S>(stream: S) -> edgerun_node::tls::Result<AsyncTlsStream<S>>
 //! where
 //!     S: AsyncRead + AsyncWrite + Unpin,
 //! {
@@ -1031,10 +1031,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     ///
     /// # Example
     /// ```rust
-    /// use edgerun_tls::{AsyncRead, AsyncTlsServerStream, AsyncWrite};
-    /// use edgerun_tls::certificate_gen::CertificateAndKey;
+    /// use edgerun_node::tls::{AsyncRead, AsyncTlsServerStream, AsyncWrite};
+    /// use edgerun_node::tls::certificate_gen::CertificateAndKey;
     ///
-    /// async fn starttls<S>(tcp_stream: S, cert: CertificateAndKey) -> edgerun_tls::Result<()>
+    /// async fn starttls<S>(tcp_stream: S, cert: CertificateAndKey) -> edgerun_node::tls::Result<()>
     /// where
     ///     S: AsyncRead + AsyncWrite + Unpin,
     /// {

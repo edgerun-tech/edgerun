@@ -7,14 +7,10 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Quectel EC200A modem support for Edgerun"
+autobins = false
 
 [dependencies]
 edgerun-protocols = { workspace = true, default-features = false, features = ["quectel-ec200a"] }
-
-[[bin]]
-name = "ec200a-tool"
-path = "src/bin/ec200a-tool.rs"
-required-features = ["std"]
 
 [features]
 std = []

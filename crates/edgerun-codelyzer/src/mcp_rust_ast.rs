@@ -3,10 +3,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use edgerun_edit::edit_ops;
-use serde_json::{json, Value};
+use edgerun_json::{json, Value};
 
-use crate::filesystem;
+use crate::{filesystem, rust_edit};
 
 pub fn call(root: &Path, args: Value) -> Result<Value, String> {
     let op = args.get("op").and_then(Value::as_str).ok_or("missing op")?;
@@ -28,14 +27,13 @@ pub fn call(root: &Path, args: Value) -> Result<Value, String> {
 
 fn list_file(root: &Path, args: Value) -> Result<Value, String> {
     let path = rust_path(root, &args)?;
-    Ok(json!({ "items": edit_ops::list_file(&path)? }))
+    Ok(json!({ "items": rust_edit::list_file(&path)? }))
 }
 
 fn find_fn(root: &Path, args: Value) -> Result<Value, String> {
     let path = rust_path(root, &args)?;
     let name = str_arg(&args, "name")?;
-    let file = edit_ops::parse_file(&path)?;
-    let source = edit_ops::find_fn(&file, name);
+    let source = rust_edit::find_fn(&path, name)?;
     Ok(json!({ "name": name, "found": source.is_some(), "source": source }))
 }
 
@@ -44,12 +42,10 @@ fn replace_fn_body(root: &Path, args: Value) -> Result<Value, String> {
     let name = str_arg(&args, "name")?;
     let body = str_arg(&args, "body")?;
     backup(&path)?;
-    let mut file = edit_ops::parse_file(&path)?;
-    let changed = edit_ops::replace_fn_body(&mut file, name, body)?;
+    let changed = rust_edit::replace_fn_body(&path, name, body)?;
     if !changed {
         return Err(format!("function not found: {name}"));
     }
-    edit_ops::write_file(&path, &file)?;
     Ok(json!({ "changed": true, "op": "replace_fn_body", "name": name }))
 }
 
@@ -60,9 +56,7 @@ fn add_fn(root: &Path, args: Value) -> Result<Value, String> {
     let ret = args.get("ret").and_then(Value::as_str).unwrap_or("");
     let body = str_arg(&args, "body")?;
     backup(&path)?;
-    let mut file = edit_ops::parse_file(&path)?;
-    edit_ops::add_fn(&mut file, name, fn_args, ret, body)?;
-    edit_ops::write_file(&path, &file)?;
+    rust_edit::add_fn(&path, name, fn_args, ret, body)?;
     Ok(json!({ "changed": true, "op": "add_fn", "name": name }))
 }
 
@@ -70,12 +64,10 @@ fn remove_fn(root: &Path, args: Value) -> Result<Value, String> {
     let path = rust_path(root, &args)?;
     let name = str_arg(&args, "name")?;
     backup(&path)?;
-    let mut file = edit_ops::parse_file(&path)?;
-    let changed = edit_ops::remove_fn(&mut file, name);
+    let changed = rust_edit::remove_fn(&path, name)?;
     if !changed {
         return Err(format!("function not found: {name}"));
     }
-    edit_ops::write_file(&path, &file)?;
     Ok(json!({ "changed": true, "op": "remove_fn", "name": name }))
 }
 
@@ -83,9 +75,7 @@ fn add_use(root: &Path, args: Value) -> Result<Value, String> {
     let path = rust_path(root, &args)?;
     let use_path = str_arg(&args, "use_path")?;
     backup(&path)?;
-    let mut file = edit_ops::parse_file(&path)?;
-    edit_ops::add_use(&mut file, use_path)?;
-    edit_ops::write_file(&path, &file)?;
+    rust_edit::add_use(&path, use_path)?;
     Ok(json!({ "changed": true, "op": "add_use", "use_path": use_path }))
 }
 
@@ -94,12 +84,10 @@ fn add_derive(root: &Path, args: Value) -> Result<Value, String> {
     let name = str_arg(&args, "name")?;
     let derive = str_arg(&args, "derive")?;
     backup(&path)?;
-    let mut file = edit_ops::parse_file(&path)?;
-    let changed = edit_ops::add_derive(&mut file, name, derive)?;
+    let changed = rust_edit::add_derive(&path, name, derive)?;
     if !changed {
         return Err(format!("struct or enum not found: {name}"));
     }
-    edit_ops::write_file(&path, &file)?;
     Ok(json!({ "changed": true, "op": "add_derive", "name": name, "derive": derive }))
 }
 
@@ -109,20 +97,11 @@ fn rename_type(root: &Path, args: Value) -> Result<Value, String> {
     let mut changed = Vec::new();
     for rel in rust_files(root) {
         let path = root.join(&rel);
-        let before = fs::read_to_string(&path).map_err(|err| format!("read failed: {err}"))?;
-        let mut file = match edit_ops::parse_file(&path) {
-            Ok(file) => file,
-            Err(_) => continue,
-        };
-        edit_ops::rename_type_in_file(&mut file, old, new);
-        let temp = std::env::temp_dir().join("edgerun_codelyzer_rename_probe.rs");
-        edit_ops::write_file(&temp, &file)?;
-        let rendered =
-            fs::read_to_string(&temp).map_err(|err| format!("read temp failed: {err}"))?;
-        let _ = fs::remove_file(&temp);
-        if rendered != before {
-            backup(&path)?;
-            fs::write(&path, rendered).map_err(|err| format!("write failed: {err}"))?;
+        if !rust_edit::file_contains_identifier(&path, old)? {
+            continue;
+        }
+        backup(&path)?;
+        if rust_edit::rename_identifier_in_file(&path, old, new)? {
             changed.push(rel.to_string_lossy().to_string());
         }
     }
@@ -136,14 +115,14 @@ fn new_file(root: &Path, args: Value) -> Result<Value, String> {
     }
     let path = safe_join_for_create(root, rel)?;
     let content = args.get("content").and_then(Value::as_str).unwrap_or("");
-    edit_ops::new_file(&path, content)?;
+    rust_edit::new_file(&path, content)?;
     Ok(json!({ "changed": true, "op": "new_file", "path": rel }))
 }
 
 fn remove_file(root: &Path, args: Value) -> Result<Value, String> {
     let path = rust_path(root, &args)?;
     backup(&path)?;
-    edit_ops::remove_file(&path)?;
+    rust_edit::remove_file(&path)?;
     Ok(json!({ "changed": true, "op": "remove_file" }))
 }
 
@@ -153,7 +132,7 @@ fn incoming_refs(root: &Path, args: Value) -> Result<Value, String> {
         .into_iter()
         .map(|rel| root.join(rel))
         .collect();
-    Ok(json!({ "incoming_refs": edit_ops::incoming_refs(&files, &path) }))
+    Ok(json!({ "incoming_refs": rust_edit::incoming_refs(&files, &path) }))
 }
 
 fn rust_files(root: &Path) -> Vec<PathBuf> {

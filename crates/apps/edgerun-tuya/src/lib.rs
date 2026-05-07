@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 use core::str;
 use core::time::Duration;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_rt::{timeout, AsyncUdpSocket, Elapsed};
+use edgerun_node::rt::{timeout, AsyncUdpSocket, Elapsed};
 
 pub use edgerun_protocols::tuya::{
     control_request_bytes, decode_json_payload, decrypt_6699_payload, derive_v35_session_key,
@@ -33,7 +33,7 @@ pub use edgerun_protocols::tuya::{
 #[cfg(target_os = "none")]
 use core::net::SocketAddr;
 #[cfg(target_os = "none")]
-use edgerun_rt::io::IoError;
+use edgerun_node::rt::io::IoError;
 
 #[cfg(not(target_os = "none"))]
 type IoError = std::io::Error;
@@ -195,13 +195,13 @@ fn json_error(error: edgerun_json::JsonError) -> IoError {
 }
 
 #[cfg(not(target_os = "none"))]
-fn rt_error(error: edgerun_rt::IoError) -> IoError {
+fn rt_error(error: edgerun_node::rt::IoError) -> IoError {
     match error {
-        edgerun_rt::IoError::UnexpectedEof => {
+        edgerun_node::rt::IoError::UnexpectedEof => {
             std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
         }
-        edgerun_rt::IoError::WriteZero => std::io::Error::new(std::io::ErrorKind::WriteZero, error),
-        edgerun_rt::IoError::Other(_) => std::io::Error::new(std::io::ErrorKind::Other, error),
+        edgerun_node::rt::IoError::WriteZero => std::io::Error::new(std::io::ErrorKind::WriteZero, error),
+        edgerun_node::rt::IoError::Other(_) => std::io::Error::new(std::io::ErrorKind::Other, error),
     }
 }
 
@@ -211,7 +211,7 @@ fn json_error(_error: edgerun_json::JsonError) -> IoError {
 }
 
 #[cfg(target_os = "none")]
-fn rt_error(error: edgerun_rt::IoError) -> IoError {
+fn rt_error(error: edgerun_node::rt::IoError) -> IoError {
     error
 }
 

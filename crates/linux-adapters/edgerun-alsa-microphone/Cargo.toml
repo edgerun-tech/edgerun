@@ -7,15 +7,11 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "ALSA microphone adapter for Edgerun audio capture capabilities"
+autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
-
-[[bin]]
-name = "alsa_mic_tool"
-path = "src/bin/alsa-mic-tool.rs"
-required-features = ["std"]
 
 [features]
 std = []

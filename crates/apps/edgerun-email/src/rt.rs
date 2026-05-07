@@ -5,16 +5,16 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use std::io;
 
-pub use edgerun_rt::{
+pub use edgerun_node::rt::{
     sleep, spawn, spawn_blocking, timeout, AsyncTcpListener, AsyncTcpStream, CancellationToken,
     ConnectFuture, Duration, Instant, JoinError, JoinHandle,
 };
 
-pub(crate) fn bare_io(error: edgerun_rt::IoError) -> io::Error {
+pub(crate) fn bare_io(error: edgerun_node::rt::IoError) -> io::Error {
     match error {
-        edgerun_rt::IoError::UnexpectedEof => io::Error::new(io::ErrorKind::UnexpectedEof, error),
-        edgerun_rt::IoError::WriteZero => io::Error::new(io::ErrorKind::WriteZero, error),
-        edgerun_rt::IoError::Other(_) => io::Error::other(error),
+        edgerun_node::rt::IoError::UnexpectedEof => io::Error::new(io::ErrorKind::UnexpectedEof, error),
+        edgerun_node::rt::IoError::WriteZero => io::Error::new(io::ErrorKind::WriteZero, error),
+        edgerun_node::rt::IoError::Other(_) => io::Error::other(error),
     }
 }
 
@@ -38,31 +38,31 @@ pub trait AsyncWrite {
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>>;
 }
 
-impl<T: edgerun_rt::AsyncRead + Unpin> AsyncRead for T {
+impl<T: edgerun_node::rt::AsyncRead + Unpin> AsyncRead for T {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        edgerun_rt::AsyncRead::poll_read(self, cx, buf).map_err(bare_io)
+        edgerun_node::rt::AsyncRead::poll_read(self, cx, buf).map_err(bare_io)
     }
 }
 
-impl<T: edgerun_rt::AsyncWrite + Unpin> AsyncWrite for T {
+impl<T: edgerun_node::rt::AsyncWrite + Unpin> AsyncWrite for T {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        edgerun_rt::AsyncWrite::poll_write(self, cx, buf).map_err(bare_io)
+        edgerun_node::rt::AsyncWrite::poll_write(self, cx, buf).map_err(bare_io)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        edgerun_rt::AsyncWrite::poll_flush(self, cx).map_err(bare_io)
+        edgerun_node::rt::AsyncWrite::poll_flush(self, cx).map_err(bare_io)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        edgerun_rt::AsyncWrite::poll_shutdown(self, cx).map_err(bare_io)
+        edgerun_node::rt::AsyncWrite::poll_shutdown(self, cx).map_err(bare_io)
     }
 }
 
@@ -220,11 +220,11 @@ impl<W: AsyncWrite + Unpin + ?Sized> Future for ShutdownFut<'_, W> {
     }
 }
 
-pub struct Mutex<T>(edgerun_rt::Mutex<T>);
+pub struct Mutex<T>(edgerun_node::rt::Mutex<T>);
 
 impl<T> Mutex<T> {
     pub fn new(value: T) -> Self {
-        Self(edgerun_rt::Mutex::new(value))
+        Self(edgerun_node::rt::Mutex::new(value))
     }
 
     pub fn lock(&self) -> LockFuture<'_, T> {
@@ -233,22 +233,22 @@ impl<T> Mutex<T> {
 }
 
 pub struct LockFuture<'a, T> {
-    mutex: &'a edgerun_rt::Mutex<T>,
+    mutex: &'a edgerun_node::rt::Mutex<T>,
 }
 
 impl<'a, T> Future for LockFuture<'a, T> {
-    type Output = edgerun_rt::MutexGuard<'a, T>;
+    type Output = edgerun_node::rt::MutexGuard<'a, T>;
 
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Ready(self.mutex.lock())
     }
 }
 
-pub struct RwLock<T>(edgerun_rt::RwLock<T>);
+pub struct RwLock<T>(edgerun_node::rt::RwLock<T>);
 
 impl<T> RwLock<T> {
     pub fn new(value: T) -> Self {
-        Self(edgerun_rt::RwLock::new(value))
+        Self(edgerun_node::rt::RwLock::new(value))
     }
 
     pub fn read(&self) -> ReadLockFuture<'_, T> {
@@ -261,11 +261,11 @@ impl<T> RwLock<T> {
 }
 
 pub struct ReadLockFuture<'a, T> {
-    lock: &'a edgerun_rt::RwLock<T>,
+    lock: &'a edgerun_node::rt::RwLock<T>,
 }
 
 impl<'a, T> Future for ReadLockFuture<'a, T> {
-    type Output = edgerun_rt::RwLockReadGuard<'a, T>;
+    type Output = edgerun_node::rt::RwLockReadGuard<'a, T>;
 
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Ready(self.lock.read())
@@ -273,11 +273,11 @@ impl<'a, T> Future for ReadLockFuture<'a, T> {
 }
 
 pub struct WriteLockFuture<'a, T> {
-    lock: &'a edgerun_rt::RwLock<T>,
+    lock: &'a edgerun_node::rt::RwLock<T>,
 }
 
 impl<'a, T> Future for WriteLockFuture<'a, T> {
-    type Output = edgerun_rt::RwLockWriteGuard<'a, T>;
+    type Output = edgerun_node::rt::RwLockWriteGuard<'a, T>;
 
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Ready(self.lock.write())

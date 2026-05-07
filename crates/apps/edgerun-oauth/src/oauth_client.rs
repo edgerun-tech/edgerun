@@ -1,6 +1,6 @@
-//! OAuth-aware HTTP client using edgerun-http's client middleware system.
+//! OAuth-aware HTTP client using edgerun-node http's client middleware system.
 //!
-//! Wraps [`edgerun_http::HttpClient`] with two middleware layers:
+//! Wraps [`edgerun_node::http::HttpClient`] with two middleware layers:
 //! 1. **BearerTokenMiddleware** — injects `Authorization: Bearer <token>` from the token store
 //! 2. **AutoRefreshMiddleware** — on 401, refreshes the token and retries (once)
 //!
@@ -8,7 +8,7 @@
 //! ```no_run
 //! use edgerun_oauth::{OAuthClientBuilder, ClientConfig, TokenStore};
 //!
-//! # edgerun_rt::block_on(async {
+//! # edgerun_node::rt::block_on(async {
 //! let config = ClientConfig::device_flow("https://provider.example.com", "my-client-id");
 //! let store = TokenStore::new().unwrap();
 //!
@@ -31,10 +31,10 @@ use crate::token_store::TokenStore;
 use crate::types::{ClientConfig, Credentials};
 use edgerun_crypto::sha256;
 use edgerun_encoding::base64::base64url_nopad_encode;
-use edgerun_http::client_middleware::{
+use edgerun_node::http::client_middleware::{
     Chain, Client, ClientExtensions, ClientMiddleware, ClientNext, ClientRequest,
 };
-use edgerun_http::{HttpClient, Request, Response, Result};
+use edgerun_node::http::{HttpClient, Request, Response, Result};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -102,7 +102,7 @@ impl AutoRefreshMiddleware {
     async fn refresh_and_retry(&self, original_req: ClientRequest) -> Result<Response> {
         // Load credentials to get the refresh token
         let Some(creds) = self.store.load().map_err(|e| {
-            edgerun_http::Error::ProtocolError(format!("failed to load tokens: {e}"))
+            edgerun_node::http::Error::ProtocolError(format!("failed to load tokens: {e}"))
         })?
         else {
             // No tokens — return original request (will get 401)
@@ -263,7 +263,7 @@ impl OAuthClientBuilder {
 /// - Device flow authentication
 /// - Automatic token injection via middleware
 /// - Auto-refresh on 401
-/// - All HTTP methods from `edgerun_http::Client`
+/// - All HTTP methods from `edgerun_node::http::Client`
 pub struct OAuthClient {
     config: ClientConfig,
     client: Client,
@@ -416,7 +416,7 @@ impl OAuthClient {
         timeout_secs: u64,
         initial_interval: u64,
     ) -> std::result::Result<Credentials, OAuthError> {
-        use edgerun_rt::{sleep, Duration, Instant};
+        use edgerun_node::rt::{sleep, Duration, Instant};
 
         let start = Instant::now();
         let mut interval = Duration::from_secs(initial_interval);

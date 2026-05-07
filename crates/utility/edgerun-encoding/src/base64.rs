@@ -8,7 +8,7 @@
 //! - `edgerun-email/src/smtp/server/session.rs` (Standard Base64, SASL)
 //! - `edgerun-email/src/imap/server.rs` (Standard Base64, SASL)
 //! - `edgerun-email/src/smtp/client/builder.rs` (Standard Base64 with line wrapping)
-//! - `edgerun-http/src/http1/upgrade.rs` (Custom u64 base64)
+//! - `edgerun-node http/src/http1/upgrade.rs` (Custom u64 base64)
 
 use alloc::format;
 use alloc::string::String;
@@ -404,7 +404,7 @@ pub fn base64url_to_standard_decode(input: &str) -> Result<Vec<u8>, &'static str
 
 /// Encode a u64 to a fixed 12-character Base64 string.
 ///
-/// Used for WebSocket accept keys (`edgerun-http/src/http1/upgrade.rs`).
+/// Used for WebSocket accept keys (`edgerun-node http/src/http1/upgrade.rs`).
 /// Output is always exactly 12 characters, no padding.
 ///
 /// # Examples

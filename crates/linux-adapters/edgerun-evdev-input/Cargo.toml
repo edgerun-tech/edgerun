@@ -7,6 +7,7 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Linux evdev input adapter for Edgerun"
+autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true
@@ -16,11 +17,6 @@ edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 
 [features]
 std = []
-
-[[bin]]
-name = "evdev_input_tool"
-path = "src/bin/evdev-input-tool.rs"
-required-features = ["std"]
 
 [lints]
 workspace = true

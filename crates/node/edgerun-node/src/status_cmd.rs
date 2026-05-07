@@ -7,7 +7,7 @@ use edgerun_storage::fs::scan_event_logs;
 pub fn cmd_status(path: &PathBuf) {
     let scanned = scan_event_logs(&path.join("events")).unwrap_or_else(|e| {
         eprintln!(
-            "error: event log not found or invalid at {}: {}. Run `edgerund init` first.",
+            "error: event log not found or invalid at {}: {}. Run `edged init` first.",
             path.display(),
             e
         );

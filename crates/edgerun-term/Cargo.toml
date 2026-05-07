@@ -1,8 +1,0 @@
-[workspace]
-members = [
-    "edgerun-term-core",
-    "edgerun-term-compositor",
-    "edgerun-term-server",
-    "edgerun-term-drm-probe",
-]
-resolver = "2"

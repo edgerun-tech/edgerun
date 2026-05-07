@@ -7,6 +7,7 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Linux V4L2 camera adapter for Edgerun"
+autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true
@@ -16,11 +17,6 @@ edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 
 [dev-dependencies]
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-
-[[bin]]
-name = "v4l2_camera_tool"
-path = "src/bin/v4l2-camera-tool.rs"
-required-features = ["std"]
 
 [features]
 std = []

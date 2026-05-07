@@ -5,11 +5,7 @@ edition.workspace = true
 license.workspace = true
 publish = false
 description = "Wayland compositor — zero external C dependencies, direct Linux kernel only"
-
-
-[[bin]]
-name = "edgerun-compositor"
-path = "src/main.rs"
+autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true

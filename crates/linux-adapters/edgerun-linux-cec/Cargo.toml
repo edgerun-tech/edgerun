@@ -7,6 +7,7 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Linux HDMI-CEC adapter for Edgerun"
+autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true
@@ -17,11 +18,6 @@ edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 
 [features]
 std = []
-
-[[bin]]
-name = "linux_cec_tool"
-path = "src/bin/linux-cec-tool.rs"
-required-features = ["std"]
 
 [lints]
 workspace = true

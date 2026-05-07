@@ -7,16 +7,12 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Linux NFC adapter for Edgerun"
+autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-
-[[bin]]
-name = "linux-nfc-tool"
-path = "src/bin/linux-nfc-tool.rs"
-required-features = ["std"]
 
 [lints]
 workspace = true

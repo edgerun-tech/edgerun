@@ -3,6 +3,11 @@
 //! This module owns the generic command-result event path that used to be
 //! duplicated inside command handlers.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::command_dispatch_result::command_ref_from;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_protocols::core_protocol::command::command_hash;

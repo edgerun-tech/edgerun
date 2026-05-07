@@ -391,7 +391,7 @@ fn pull_image(
     eprintln!("Pulling {image_ref}...");
     eprintln!("  bundle: {}", bundle_path.display());
     eprintln!("  store:  {}", store_path.display());
-    let rt = edgerun_rt::Runtime::new_multi_thread()
+    let rt = edgerun_node::rt::Runtime::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| io::Error::other(e.to_string()))?;

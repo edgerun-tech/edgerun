@@ -7,9 +7,10 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Focused EdgeRun protocol keygen/bootstrap/stream/signer/verifier E2E tests, WASM build target, and microbenchmarks"
+autobins = false
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [dependencies]
 edgerun-protocols = { workspace = true, default-features = false, features = ["node-bootstrap", "sign-p256", "keygen", "verify", "core"] }
@@ -20,11 +21,6 @@ default = ["std"]
 std = [
   "edgerun-stream/std",
 ]
-
-[[bin]]
-name = "edgerun-sign-verify-bench"
-path = "src/bin/bench.rs"
-required-features = ["std"]
 
 [lints]
 workspace = true

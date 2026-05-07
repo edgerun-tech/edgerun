@@ -7,6 +7,7 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Goodix fingerprint sensor adapter for Edgerun"
+autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true
@@ -16,11 +17,6 @@ edgerun-protocols = { workspace = true, default-features = false, features = ["g
 
 [dev-dependencies]
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-
-[[bin]]
-name = "goodix_tool"
-path = "src/bin/goodix-tool.rs"
-required-features = ["std"]
 
 [features]
 std = []

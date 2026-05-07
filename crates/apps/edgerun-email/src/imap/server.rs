@@ -21,7 +21,7 @@ use crate::rt::{
 };
 
 #[cfg(feature = "tls")]
-use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};
+use edgerun_node::tls::{AsyncTlsServerStream, CertificateAndKey};
 
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,

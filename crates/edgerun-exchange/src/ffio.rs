@@ -1,6 +1,6 @@
 //! FF.io adapter — implements ExchangeProvider trait.
 //!
-//! Uses edgerun-http for HTTP calls.
+//! Uses edgerun-node http for HTTP calls.
 //! Normalizes FF.io API into canonical types.
 //! Behind `ffio` feature flag.
 
@@ -9,11 +9,11 @@ extern crate alloc;
 use crate::provider::*;
 use alloc::string::String;
 use core::result::Result;
-use edgerun_http::client_middleware::Chain;
-use edgerun_http::{HttpClient, Method};
+use edgerun_node::http::client_middleware::Chain;
+use edgerun_node::http::{HttpClient, Method};
 use edgerun_json::{from_str, to_string, JsonValue, Map, ToJson};
 use edgerun_proto::edgerun::v0::wallet::v0::{AssetRef, Quote, QuoteRequest};
-use edgerun_rt::block_on;
+use edgerun_node::rt::block_on;
 use edgerun_wallet::{DecimalAmount, WalletError};
 
 const FFIO_BASE_URL: &str = "https://api.ff.io/api/v1";
@@ -23,7 +23,7 @@ pub struct FFioAdapter {
     pub api_secret: String,
     pub refcode: String,
     pub afftax_bps: u32,
-    client: edgerun_http::Client,
+    client: edgerun_node::http::Client,
 }
 
 impl core::fmt::Debug for FFioAdapter {

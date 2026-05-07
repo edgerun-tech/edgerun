@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use edgerun_http::{Method, Request, Response, StatusCode};
+use edgerun_node::http::{Method, Request, Response, StatusCode};
 
 use super::handlers;
 

@@ -17,11 +17,14 @@ extern crate std;
 
 pub mod app_model;
 pub mod bootstrap;
+pub mod command_dispatch;
+pub mod command_dispatch_event;
+pub mod command_dispatch_result;
 pub mod error;
-#[cfg(feature = "exchange-events")]
-pub mod exchange_events;
 #[cfg(feature = "std")]
 pub mod hardware;
+#[cfg(feature = "http")]
+pub mod http;
 #[cfg(feature = "http")]
 pub mod http_client;
 pub mod logging;
@@ -44,8 +47,7 @@ pub mod runtime;
 ))]
 pub mod services;
 pub mod storage;
-#[cfg(feature = "exchange-events")]
-mod stream_append;
+pub mod stream_append;
 #[cfg(feature = "tls")]
 pub mod tls;
 
@@ -243,13 +245,23 @@ impl<L: EventLog, S: ProtocolSigner> Node<L, S> {
 
     /// Processes an incoming command through the full pipeline:
     ///
-    /// 1. Validate command (signature, replay, timing, delegation)
-    /// 2. Check authorization via capability grants
-    /// 3. Record `CommandCommitted` or `CommandRejected` event in stream
+    /// Command dispatch is storage-backed. Callers must append/dispatch through
+    /// `command_dispatch::dispatch_command` with a configured `NodeStore` so
+    /// every decision starts from durable event-log state.
     ///
-    /// Returns `Ok(())` if the command is valid and authorized,
-    /// or `Err(reason)` if validation or authorization fails.
-    pub fn process_command(&mut self, command: &CommandEnvelope) -> Result<(), NodeError> {
+    /// This in-memory `Node` API is intentionally inert: accepting commands here
+    /// would let callers mutate authoritative state before storage is ready.
+    pub fn process_command(&mut self, _command: &CommandEnvelope) -> Result<(), NodeError> {
+        Err(NodeError::Storage(
+            "command dispatch requires configured NodeStore".into(),
+        ))
+    }
+
+    #[cfg(test)]
+    fn process_command_in_memory_for_tests(
+        &mut self,
+        command: &CommandEnvelope,
+    ) -> Result<(), NodeError> {
         // Controllers must be hex-encoded 64-byte identity IDs (P-256 public keys).
         // Strings that are not valid 128-char hex are silently skipped — they can
         // never match a real delegation root issuer.

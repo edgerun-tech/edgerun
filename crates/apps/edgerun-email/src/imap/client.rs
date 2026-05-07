@@ -14,7 +14,7 @@ use crate::rt::{
 };
 
 #[cfg(all(feature = "tls", not(target_arch = "wasm32")))]
-use edgerun_tls::AsyncTlsStream;
+use edgerun_node::tls::AsyncTlsStream;
 
 use crate::imap::message::{ImapCommand, ImapResponse, ImapResult};
 use crate::imap::parser::{parse_fetch_response, parse_list_response};

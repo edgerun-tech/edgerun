@@ -19,7 +19,7 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
-use edgerun_http::{Handler, Request, Response};
+use edgerun_node::http::{Handler, Request, Response};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -228,7 +228,7 @@ fn sanitize_field(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_http::{Method, Request, Response, StatusCode};
+    use edgerun_node::http::{Method, Request, Response, StatusCode};
     use std::time::SystemTime;
 
     #[test]

@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun node orchestration, command dispatch, query, and daemon runtime"
 
 [[bin]]
-name = "edgerund"
+name = "edged"
 path = "src/main.rs"
 required-features = ["std"]
 
@@ -24,7 +24,22 @@ default = [
     "service-suite",
 ]
 protocols = ["tls", "quic", "tftp"]
-exchange-events = ["dep:edgerun-exchange"]
+client = ["http1", "http2", "runtime"]
+connection-middleware = []
+http-compression = ["edgerun-protocols/http-compression"]
+http1 = ["http", "runtime"]
+http2 = ["http", "runtime", "edgerun-protocols/http2-server", "dep:edgerun-hpack"]
+http3 = [
+    "client",
+    "server",
+    "tls",
+    "edgerun-protocols/http3",
+    "edgerun-protocols/quic",
+    "dep:edgerun-qpack",
+]
+runtime = []
+server = ["http1", "http2", "runtime"]
+static-files = ["std", "server"]
 tls = [
     "edgerun-protocols/tls",
     "edgerun-crypto/aead",
@@ -105,7 +120,6 @@ edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link" }
 edgerun-mesh-capability = { version = "0.1", path = "../../capability/edgerun-mesh-capability" }
 edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session" }
-edgerun-exchange = { version = "0.1", path = "../../edgerun-exchange", optional = true }
 edgerun-crypto = { workspace = true, default-features = false }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
@@ -113,6 +127,8 @@ edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-har
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
 edgerun-url = { workspace = true }
 edgerun-protocols = { workspace = true, features = ["sign-p256", "keygen", "seal", "core", "wire", "ethernet-ipv4", "serial-mux"] }
+edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
+edgerun-qpack = { version = "0.1", path = "../../utility/edgerun-qpack", optional = true }
 edgerun-derived-db = { workspace = true, features = ["std"], optional = true }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", features = ["std"], optional = true }
 
