@@ -1,4 +1,11 @@
-//! edgerun-rt: Bare-metal async runtime
+//! edgerun-rt: bare-metal async primitives.
+//!
+//! This crate provides executor, time, sync, and low-level transport
+//! primitives. It does not grant application authority over host resources.
+//! Native socket bind/listen APIs are node/runtime implementation primitives:
+//! apps request capabilities from `edgerun-node`, and the node decides whether
+//! a requested protocol binding is realized as a socket, browser message route,
+//! mesh route, or no resource on the current host.
 
 #![no_std]
 

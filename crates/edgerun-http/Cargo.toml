@@ -11,11 +11,11 @@ description = "HTTP/1.1, HTTP/2, and HTTP/3 with HPACK/QPACK compression"
 [features]
 default = []
 std = ["edgerun-tls?/std"]
-client = ["http1", "http2", "runtime", "dep:edgerun-dns", "dep:edgerun-log"]
+client = ["http1", "http2", "runtime", "dep:edgerun-log"]
 connection-middleware = []
 http-compression = ["edgerun-protocols/http-compression"]
 http1 = ["runtime", "dep:edgerun-encoding"]
-http2 = ["runtime", "dep:edgerun-dns", "dep:edgerun-hpack", "dep:edgerun-log"]
+http2 = ["runtime", "edgerun-protocols/http2-server", "dep:edgerun-hpack", "dep:edgerun-log"]
 http3 = ["client", "server", "tls", "edgerun-protocols/http3", "edgerun-protocols/quic", "dep:edgerun-crypto", "dep:edgerun-qpack", "dep:edgerun-encoding", "dep:edgerun-log"]
 runtime = ["dep:edgerun-rt"]
 server = ["http1", "http2", "runtime", "dep:edgerun-log"]
@@ -27,7 +27,6 @@ edgerun-tls = { version = "0.1", path = "../edgerun-tls", optional = true }
 edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false, optional = true }
 edgerun-rt = { version = "0.1", path = "../edgerun-rt", optional = true }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log", optional = true }
-edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false, optional = true }
 edgerun-protocols = { workspace = true, default-features = false, features = ["http"] }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false, optional = true }
 edgerun-hpack = { version = "0.1", path = "../utility/edgerun-hpack", optional = true }

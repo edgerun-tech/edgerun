@@ -550,7 +550,6 @@ dependencies = [
 name = "edgerun-email-auth"
 version = "0.1.1"
 dependencies = [
- "edgerun-dns",
  "edgerun-log",
  "edgerun-protocols",
 ]
@@ -675,7 +674,6 @@ name = "edgerun-http"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
- "edgerun-dns",
  "edgerun-encoding",
  "edgerun-hpack",
  "edgerun-log",
@@ -924,7 +922,6 @@ dependencies = [
  "edgerun-alsa-microphone",
  "edgerun-alsa-speaker",
  "edgerun-amd-xdna",
- "edgerun-analytics",
  "edgerun-android-keystore",
  "edgerun-audio-calibration",
  "edgerun-audio-liveliness",
@@ -1097,7 +1094,7 @@ version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
- "edgerun-rt",
+ "edgerun-hpack",
  "miniz_oxide",
 ]
 

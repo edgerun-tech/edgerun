@@ -1,4 +1,4 @@
-//! Connection-level middleware for `BoundServer`.
+//! Connection-level middleware for `BoundNodeRuntime`.
 //!
 //! Middleware runs on every TCP connection **before** protocol parsing,
 //! regardless of which protocol (HTTP, SMTP, IMAP, LMTP, DNS, etc.)
@@ -14,7 +14,7 @@
 //!
 //! # Example
 //! ```text
-//! use edgerun_node::server::middleware::{ConnectionMiddleware, NextConnection};
+//! use edgerun_node::services::middleware::{ConnectionMiddleware, NextConnection};
 //!
 //! struct IpFilter { allowed: Vec<IpNet> }
 //!
@@ -32,7 +32,7 @@
 //!     }
 //! }
 //!
-//! let server = Server::new()
+//! let server = NodeRuntime::new()
 //!     .with_connection_middleware(IpFilter { allowed: vec!["10.0.0.0/8".parse().unwrap()] })
 //!     .with_http(handler, "0.0.0.0:8080")
 //!     .build()
@@ -49,7 +49,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use edgerun_rt::AsyncTcpStream;
+use crate::rt::AsyncTcpStream;
 
 // ===========================================================================
 // ConnectionMiddleware Trait
@@ -393,7 +393,7 @@ impl ConnectionMiddleware for ConnectionLogger {
 
 /// Per-IP connection rate limiter.
 pub struct ConnectionRateLimit {
-    state: Arc<edgerun_rt::Mutex<HashMap<IpAddr, RateLimitEntry>>>,
+    state: Arc<crate::rt::Mutex<HashMap<IpAddr, RateLimitEntry>>>,
     max_connections: usize,
     window_secs: u64,
 }
@@ -406,7 +406,7 @@ struct RateLimitEntry {
 impl ConnectionRateLimit {
     pub fn new(max_connections: usize, window_secs: u64) -> Self {
         Self {
-            state: Arc::new(edgerun_rt::Mutex::new(HashMap::new())),
+            state: Arc::new(crate::rt::Mutex::new(HashMap::new())),
             max_connections,
             window_secs,
         }

@@ -12,7 +12,7 @@ use edgerun_protocols::proxy::{
     split_host_port, HttpProxyRequest, Socks5Request, SOCKS5_REP_ADDR_NOT_SUPPORTED,
     SOCKS5_REP_GENERAL_FAILURE, SOCKS5_REP_SUCCESS,
 };
-use edgerun_rt::{
+use crate::rt::{
     copy_bidirectional, spawn, timeout, AsyncReadExt, AsyncTcpListener, AsyncTcpStream,
     AsyncWriteExt, CancellationToken, ConnectFuture,
 };
@@ -44,7 +44,7 @@ impl ProxyRuntime {
         }
     }
 
-    pub async fn run(&self, shutdown: CancellationToken) -> edgerun_rt::io::Result<()> {
+    pub async fn run(&self, shutdown: CancellationToken) -> crate::rt::io::Result<()> {
         let http_listener = AsyncTcpListener::bind(&self.config.bind_addr)?;
         let socks5_listener = if let Some(ref addr) = self.config.socks5_bind_addr {
             Some(AsyncTcpListener::bind(addr)?)
@@ -56,31 +56,27 @@ impl ProxyRuntime {
             let config = self.config.clone();
             let active = Arc::clone(&self.active_connections);
             let graceful = Arc::clone(&self.graceful_shutdown);
-            async move {
-                accept_loop(http_listener, config, active, graceful, handle_http_proxy).await;
-                Ok::<(), edgerun_rt::io::IoError>(())
-            }
+            async move { accept_loop(http_listener, config, active, graceful, handle_http_proxy).await }
         });
 
         let socks5_handle = socks5_listener.map(|listener| {
             let config = self.config.clone();
             let active = Arc::clone(&self.active_connections);
             let graceful = Arc::clone(&self.graceful_shutdown);
-            spawn(async move {
-                accept_loop(listener, config, active, graceful, handle_socks5).await;
-                Ok::<(), edgerun_rt::io::IoError>(())
-            })
+            spawn(
+                async move { accept_loop(listener, config, active, graceful, handle_socks5).await },
+            )
         });
 
         shutdown.cancelled().await;
         self.graceful_shutdown.store(true, Ordering::Relaxed);
         while self.active_connections.load(Ordering::Relaxed) > 0 {
-            edgerun_rt::sleep(Duration::from_millis(100)).await;
+            crate::rt::sleep(Duration::from_millis(100)).await;
         }
 
-        let _ = http_handle.await;
+        join_proxy_task(http_handle.await)?;
         if let Some(handle) = socks5_handle {
-            let _ = handle.await;
+            join_proxy_task(handle.await)?;
         }
         Ok(())
     }
@@ -92,31 +88,43 @@ async fn accept_loop<F, Fut>(
     active: Arc<AtomicUsize>,
     graceful: Arc<AtomicBool>,
     handler: F,
-) where
+) -> crate::rt::io::Result<()>
+where
     F: Fn(Arc<AsyncTcpStream>, ProxyRuntimeConfig) -> Fut + Copy + Send + 'static,
-    Fut: core::future::Future<Output = edgerun_rt::io::Result<()>> + Send + 'static,
+    Fut: core::future::Future<Output = crate::rt::io::Result<()>> + Send + 'static,
 {
     loop {
         if graceful.load(Ordering::Relaxed) {
             break;
         }
-        match listener.accept().await {
-            Ok((socket, _addr)) => {
+        match timeout(Duration::from_millis(100), listener.accept()).await {
+            Err(_) => continue,
+            Ok(Err(error)) => return Err(error),
+            Ok(Ok((socket, _addr))) => {
                 if let Some(limit) = config.max_connections {
                     if active.load(Ordering::Relaxed) >= limit {
                         continue;
                     }
                 }
                 active.fetch_add(1, Ordering::Relaxed);
-                let config = config.clone();
-                let active = Arc::clone(&active);
-                spawn(async move {
-                    let _ = handler(socket, config).await;
-                    active.fetch_sub(1, Ordering::Relaxed);
-                    Ok::<(), edgerun_rt::io::IoError>(())
-                });
+                let result = handler(socket, config.clone()).await;
+                active.fetch_sub(1, Ordering::Relaxed);
+                result?;
             }
-            Err(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn join_proxy_task(
+    result: Result<crate::rt::io::Result<()>, crate::rt::JoinError>,
+) -> crate::rt::io::Result<()> {
+    match result {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(error)) => Err(error),
+        Err(error) => {
+            let _ = error;
+            Err(crate::rt::io::IoError::Other("proxy runtime task failed"))
         }
     }
 }
@@ -124,7 +132,7 @@ async fn accept_loop<F, Fut>(
 async fn handle_http_proxy(
     mut socket: Arc<AsyncTcpStream>,
     config: ProxyRuntimeConfig,
-) -> edgerun_rt::io::Result<()> {
+) -> crate::rt::io::Result<()> {
     let mut buffer = vec![0; config.tunnel_buffer_size];
     let n = socket.read(&mut buffer).await?;
     if n == 0 {
@@ -153,7 +161,7 @@ async fn handle_http_proxy(
 async fn handle_socks5(
     mut socket: Arc<AsyncTcpStream>,
     config: ProxyRuntimeConfig,
-) -> edgerun_rt::io::Result<()> {
+) -> crate::rt::io::Result<()> {
     let mut buffer = vec![0; 1024];
     let n = socket.read(&mut buffer).await?;
     let selection = match socks5_select_no_auth(&buffer[..n]) {
@@ -196,20 +204,20 @@ async fn connect_numeric(
     host: &str,
     port: u16,
     timeout_after: Duration,
-) -> edgerun_rt::io::Result<Arc<AsyncTcpStream>> {
+) -> crate::rt::io::Result<Arc<AsyncTcpStream>> {
     let addr: SocketAddr = format!("{host}:{port}")
         .parse()
-        .map_err(|_| edgerun_rt::io::IoError::Other("proxy target must be numeric socket addr"))?;
+        .map_err(|_| crate::rt::io::IoError::Other("proxy target must be numeric socket addr"))?;
     match timeout(timeout_after, ConnectFuture::new(addr)).await {
         Ok(result) => result,
-        Err(_) => Err(edgerun_rt::io::IoError::Other("proxy connect timeout")),
+        Err(_) => Err(crate::rt::io::IoError::Other("proxy connect timeout")),
     }
 }
 
-async fn tunnel(a: Arc<AsyncTcpStream>, b: Arc<AsyncTcpStream>) -> edgerun_rt::io::Result<()> {
+async fn tunnel(a: Arc<AsyncTcpStream>, b: Arc<AsyncTcpStream>) -> crate::rt::io::Result<()> {
     let mut a = a;
     let mut b = b;
-    let _ = copy_bidirectional(&mut a, &mut b).await?;
+    copy_bidirectional(&mut a, &mut b).await?;
     Ok(())
 }
 
@@ -217,7 +225,7 @@ async fn write_response(
     socket: &mut Arc<AsyncTcpStream>,
     status: u16,
     message: &str,
-) -> edgerun_rt::io::Result<()> {
+) -> crate::rt::io::Result<()> {
     let status_text = match status {
         400 => "Bad Request",
         501 => "Not Implemented",

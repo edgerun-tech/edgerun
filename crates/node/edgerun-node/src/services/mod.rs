@@ -1,14 +1,16 @@
-//! Unified multi-protocol server.
+//! Node-owned runtime services.
 //!
-//! Supports HTTP/1.1, HTTP/2, HTTP/3, DNS, DHCP, SMTP, IMAP, LMTP, TFTP, and Proxy
-//! all with shared graceful shutdown via [`CancellationToken`].
+//! Protocol modules and apps can request HTTP, DNS, DHCP, SMTP, IMAP, LMTP,
+//! TFTP, and proxy service bindings. The node owns the actual resources and
+//! decides whether those requests become native sockets, browser message
+//! routes, mesh routes, or no binding on the current host.
 //!
 //! For HTTP types ([`Handler`], [`Request`], [`Response`], etc.), import from
 //! [`edgerun_http`] directly.
 //!
 //! # Example
 //! ```no_run
-//! use edgerun_node::server::Server;
+//! use edgerun_node::services::NodeRuntime;
 //! use edgerun_http::{Response, StatusCode, into_handler};
 //! use edgerun_tls::certificate_gen::generate_self_signed;
 //!
@@ -18,14 +20,14 @@
 //! });
 //!
 //! let cert = generate_self_signed(&["localhost"]).unwrap();
-//! let mut server = Server::new()
+//! let mut runtime = NodeRuntime::new()
 //!     .with_http(handler, "127.0.0.1:8443")
 //!     .with_tls(cert)
 //!     .build()
 //!     .await?;
 //!
-//! let shutdown = edgerun_rt::CancellationToken::new();
-//! server.run(shutdown).await
+//! let shutdown = crate::rt::CancellationToken::new();
+//! runtime.run(shutdown).await
 //! # }
 //! ```
 //!
@@ -38,22 +40,26 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::module_path;
 use core::time::Duration;
-use edgerun_rt::CancellationToken;
+use crate::rt::CancellationToken;
 
-#[cfg(target_os = "none")]
+#[cfg(all(feature = "http", target_os = "none"))]
 use edgerun_http::io;
 #[cfg(not(target_os = "none"))]
 use std::io;
 
+#[cfg(feature = "http")]
 use edgerun_http::connection_middleware::{
     ConnectionChain, ConnectionHandler, ConnectionMiddleware, MiddlewareAdapter, PassThroughHandler,
 };
+#[cfg(feature = "http")]
 use edgerun_http::handler::Handler;
-#[cfg(feature = "tls")]
+#[cfg(all(feature = "http", feature = "tls"))]
 use edgerun_http::server::TlsCertificate;
+#[cfg(feature = "http")]
 use edgerun_http::server::{BoundHttpServer, HttpServer};
 
 #[cfg(all(
+    feature = "http",
     any(feature = "imap", feature = "smtp", feature = "lmtp"),
     all(not(target_os = "none"), not(target_arch = "wasm32"))
 ))]
@@ -62,28 +68,34 @@ pub mod connection_interceptor_adapter;
 pub mod dhcp_runtime;
 #[cfg(feature = "dns")]
 pub mod dns_runtime;
+#[cfg(feature = "http")]
 pub mod middleware;
 #[cfg(feature = "proxy")]
 mod proxy_runtime;
 #[cfg(feature = "tftp")]
 pub mod tftp_runtime;
 #[cfg(all(
+    feature = "http",
     any(feature = "imap", feature = "smtp", feature = "lmtp"),
     all(not(target_os = "none"), not(target_arch = "wasm32"))
 ))]
 use self::connection_interceptor_adapter::ConnectionInterceptorAdapter;
+pub use crate::resource::{
+    binding_intents, decide_binding, decide_bindings, NodeTransportSurface, ServiceBindingDecision,
+    ServiceBindingIntent,
+};
 
 #[cfg(any(feature = "dns", feature = "dhcp", feature = "tftp", feature = "proxy"))]
 fn other_io_error(error: impl fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::Other, format!("{error}"))
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(all(feature = "http", not(target_os = "none")))]
 fn http_io_error(error: edgerun_http::io::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, format!("{error}"))
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(feature = "http", target_os = "none"))]
 fn http_io_error(error: edgerun_http::io::Error) -> io::Error {
     error
 }
@@ -339,11 +351,17 @@ mod proxy_config {
 pub use proxy_config::ProxyConfig;
 
 // ---------------------------------------------------------------------------
-// Server
+// NodeRuntime
 // ---------------------------------------------------------------------------
 
-/// Unified server builder.
-pub struct Server {
+/// Node runtime service builder.
+///
+/// The builder records service requests. Calling [`build`](Self::build) is the
+/// point where this native host runtime tries to realize those requests as
+/// local resources. Browser, mesh, and embedded hosts can use the same service
+/// plan as routing metadata without binding native ports.
+pub struct NodeRuntime {
+    #[cfg(feature = "http")]
     http: Option<HttpBuilder>,
     #[cfg(feature = "dns")]
     dns: Option<DnsConfig>,
@@ -359,9 +377,11 @@ pub struct Server {
     lmtp: Option<LmtpConfig>,
     #[cfg(feature = "proxy")]
     proxy: Option<ProxyConfig>,
+    #[cfg(feature = "http")]
     connection_middleware: Vec<Arc<dyn ConnectionMiddleware>>,
 }
 
+#[cfg(feature = "http")]
 struct HttpBuilder {
     handler: Arc<dyn Handler>,
     bind_addr: String,
@@ -373,9 +393,10 @@ struct HttpBuilder {
     max_request_size: usize,
 }
 
-impl Server {
+impl NodeRuntime {
     pub fn new() -> Self {
         Self {
+            #[cfg(feature = "http")]
             http: None,
             #[cfg(feature = "dns")]
             dns: None,
@@ -391,6 +412,7 @@ impl Server {
             lmtp: None,
             #[cfg(feature = "proxy")]
             proxy: None,
+            #[cfg(feature = "http")]
             connection_middleware: Vec::new(),
         }
     }
@@ -400,12 +422,17 @@ impl Server {
     ///
     /// Middleware is applied in order: first `.with_connection_middleware()`
     /// = outermost (runs first on connect).
+    #[cfg(feature = "http")]
     pub fn with_connection_middleware<M: ConnectionMiddleware>(mut self, mw: M) -> Self {
         self.connection_middleware.push(Arc::new(mw));
         self
     }
 
-    /// Enable HTTP with the given handler and bind address.
+    /// Request HTTP service for the given handler and address.
+    ///
+    /// On native hosts this may become a socket bind. On non-native hosts the
+    /// address remains routing metadata owned by the node.
+    #[cfg(feature = "http")]
     pub fn with_http<H: Handler>(mut self, handler: H, addr: impl fmt::Display) -> Self {
         self.http = Some(HttpBuilder {
             handler: Arc::new(handler),
@@ -421,7 +448,7 @@ impl Server {
     }
 
     /// Enable TLS for HTTP (required for HTTP/3).
-    #[cfg(feature = "tls")]
+    #[cfg(all(feature = "http", feature = "tls"))]
     pub fn with_tls(mut self, cert: TlsCertificate) -> Self {
         if let Some(ref mut h) = self.http {
             h.tls = Some(cert);
@@ -430,7 +457,7 @@ impl Server {
     }
 
     /// Enable HTTP/3 on the same port as the TCP listener.
-    #[cfg(feature = "http3")]
+    #[cfg(all(feature = "http", feature = "http3"))]
     pub fn with_http3(mut self) -> Self {
         if let Some(ref mut h) = self.http {
             h.http3 = true;
@@ -438,42 +465,42 @@ impl Server {
         self
     }
 
-    /// Enable the DNS server.
+    /// Request DNS service.
     #[cfg(feature = "dns")]
     pub fn with_dns(mut self, config: DnsConfig) -> Self {
         self.dns = Some(config);
         self
     }
 
-    /// Enable the DHCP server.
+    /// Request DHCP service.
     #[cfg(feature = "dhcp")]
     pub fn with_dhcp(mut self, config: DhcpConfig) -> Self {
         self.dhcp = Some(config);
         self
     }
 
-    /// Enable the TFTP server.
+    /// Request TFTP service.
     #[cfg(feature = "tftp")]
     pub fn with_tftp(mut self, config: TftpConfig) -> Self {
         self.tftp = Some(config);
         self
     }
 
-    /// Enable the IMAP server.
+    /// Request IMAP service.
     #[cfg(feature = "imap")]
     pub fn with_imap(mut self, config: ImapConfig) -> Self {
         self.imap = Some(config);
         self
     }
 
-    /// Enable the SMTP server.
+    /// Request SMTP service.
     #[cfg(feature = "smtp")]
     pub fn with_smtp(mut self, config: SmtpConfig) -> Self {
         self.smtp = Some(config);
         self
     }
 
-    /// Enable the LMTP server.
+    /// Request LMTP service.
     #[cfg(feature = "lmtp")]
     pub fn with_lmtp(mut self, config: LmtpConfig) -> Self {
         self.lmtp = Some(config);
@@ -486,8 +513,9 @@ impl Server {
         self
     }
 
-    /// Build and bind all protocol listeners.
-    pub async fn build(self) -> io::Result<BoundServer> {
+    /// Realize requested services for the current native host.
+    pub async fn build(self) -> io::Result<BoundNodeRuntime> {
+        #[cfg(feature = "http")]
         let http_bound = if let Some(h) = self.http {
             let mut server = HttpServer::new(h.handler);
             if let Some(ka) = h.keep_alive {
@@ -580,6 +608,7 @@ impl Server {
         };
 
         // Build connection middleware chain
+        #[cfg(feature = "http")]
         let connection_middleware: Arc<dyn ConnectionHandler> =
             if self.connection_middleware.is_empty() {
                 Arc::new(PassThroughHandler)
@@ -593,6 +622,7 @@ impl Server {
                 chain.build()
             };
         #[cfg(all(
+            feature = "http",
             any(feature = "imap", feature = "smtp", feature = "lmtp"),
             all(not(target_os = "none"), not(target_arch = "wasm32"))
         ))]
@@ -620,7 +650,10 @@ impl Server {
             } else {
                 edgerun_email::imap::ImapServer::new(imap_config)?
             };
-            srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
+            #[cfg(feature = "http")]
+            {
+                srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
+            }
             Some(srv)
         } else {
             None
@@ -655,7 +688,10 @@ impl Server {
             } else {
                 edgerun_email::smtp::SmtpServer::with_memory_store(smtp_config)?
             };
-            srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
+            #[cfg(feature = "http")]
+            {
+                srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
+            }
             Some(srv)
         } else {
             None
@@ -675,13 +711,17 @@ impl Server {
                 },
             };
             let mut srv = edgerun_email::lmtp::LmtpServer::with_memory_store(lmtp_config)?;
-            srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
+            #[cfg(feature = "http")]
+            {
+                srv = srv.with_connection_interceptor(Arc::clone(&connection_interceptor));
+            }
             Some(srv)
         } else {
             None
         };
 
-        Ok(BoundServer {
+        Ok(BoundNodeRuntime {
+            #[cfg(feature = "http")]
             http: http_bound.map(Arc::new),
             #[cfg(feature = "dns")]
             dns: dns_server.map(Arc::new),
@@ -706,19 +746,21 @@ impl Server {
             lmtp: lmtp_server,
             #[cfg(feature = "proxy")]
             proxy: proxy_server,
+            #[cfg(feature = "http")]
             connection_middleware,
         })
     }
 }
 
-impl Default for Server {
+impl Default for NodeRuntime {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// A fully bound server with all protocol listeners ready.
-pub struct BoundServer {
+/// A native realization of requested node services.
+pub struct BoundNodeRuntime {
+    #[cfg(feature = "http")]
     http: Option<Arc<BoundHttpServer>>,
     #[cfg(feature = "dns")]
     dns: Option<Arc<dns_runtime::DnsRuntime>>,
@@ -745,20 +787,22 @@ pub struct BoundServer {
     proxy: Option<proxy_runtime::ProxyRuntime>,
     /// Compiled connection middleware chain.
     /// If empty, connections go directly to protocol handlers.
+    #[cfg(feature = "http")]
     #[allow(dead_code)]
     connection_middleware: Arc<dyn ConnectionHandler>,
 }
 
-impl BoundServer {
-    /// Run all protocol listeners until `shutdown` is cancelled.
+impl BoundNodeRuntime {
+    /// Run all realized native services until `shutdown` is cancelled.
     pub async fn run(&mut self, shutdown: CancellationToken) -> io::Result<()> {
-        let mut tasks: Vec<edgerun_rt::JoinHandle<io::Result<()>>> = Vec::new();
+        let mut tasks: Vec<crate::rt::JoinHandle<io::Result<()>>> = Vec::new();
 
         // HTTP (TCP + optional HTTP/3 UDP)
+        #[cfg(feature = "http")]
         if let Some(ref http) = self.http {
             let token = shutdown.clone();
             let http = Arc::clone(http);
-            tasks.push(edgerun_rt::spawn(async move {
+            tasks.push(crate::rt::spawn(async move {
                 http.serve_with_shutdown(token).await.map_err(http_io_error)
             }));
         }
@@ -768,7 +812,7 @@ impl BoundServer {
         if let Some(ref dns) = self.dns {
             let dns_run = Arc::clone(dns);
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move {
+            tasks.push(crate::rt::spawn(async move {
                 dns_run.run(token).await.map_err(other_io_error)?;
                 Ok(())
             }));
@@ -778,11 +822,8 @@ impl BoundServer {
         #[cfg(feature = "dhcp")]
         if let Some(dhcp) = self.dhcp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move {
-                let _dhcp = dhcp;
-                while !token.is_cancelled() {
-                    edgerun_rt::sleep(Duration::from_millis(100)).await;
-                }
+            tasks.push(crate::rt::spawn(async move {
+                dhcp.run(token).await.map_err(other_io_error)?;
                 Ok(())
             }));
         }
@@ -791,17 +832,21 @@ impl BoundServer {
         #[cfg(feature = "tftp")]
         if let Some(tftp) = self.tftp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move {
-                let tftp_token = edgerun_rt::CancellationToken::new();
+            tasks.push(crate::rt::spawn(async move {
+                let tftp_token = crate::rt::CancellationToken::new();
                 let cancel_tftp = tftp_token.clone();
-                let bridge = edgerun_rt::spawn(async move {
+                let bridge = crate::rt::spawn(async move {
                     token.cancelled().await;
                     cancel_tftp.cancel();
                     Ok::<(), io::Error>(())
                 });
 
-                tftp.run(tftp_token).await;
-                let _ = bridge.await;
+                tftp.run(tftp_token).await.map_err(other_io_error)?;
+                match bridge.await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => return Err(error),
+                    Err(error) => return Err(join_error(error)),
+                }
                 Ok(())
             }));
         }
@@ -813,7 +858,7 @@ impl BoundServer {
         ))]
         if let Some(imap) = self.imap.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move { imap.run(token).await }));
+            tasks.push(crate::rt::spawn(async move { imap.run(token).await }));
         }
 
         // SMTP
@@ -823,7 +868,7 @@ impl BoundServer {
         ))]
         if let Some(smtp) = self.smtp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move { smtp.run(token).await }));
+            tasks.push(crate::rt::spawn(async move { smtp.run(token).await }));
         }
 
         // LMTP
@@ -833,24 +878,33 @@ impl BoundServer {
         ))]
         if let Some(lmtp) = self.lmtp.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move { lmtp.run(token).await }));
+            tasks.push(crate::rt::spawn(async move { lmtp.run(token).await }));
         }
 
         // Proxy
         #[cfg(feature = "proxy")]
         if let Some(proxy) = self.proxy.take() {
             let token = shutdown.clone();
-            tasks.push(edgerun_rt::spawn(async move {
+            tasks.push(crate::rt::spawn(async move {
                 proxy.run(token).await.map_err(other_io_error)
             }));
         }
 
         // Wait for all tasks
         for task in tasks {
-            let _ = task.await;
+            match task.await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => return Err(error),
+                Err(error) => return Err(join_error(error)),
+            }
         }
 
-        edgerun_log::info!("All server protocols shut down");
+        edgerun_log::info!("all node runtime services shut down");
         Ok(())
     }
+}
+
+fn join_error(error: crate::rt::JoinError) -> io::Error {
+    let _ = error;
+    io::Error::new(io::ErrorKind::Other, "node service task failed")
 }

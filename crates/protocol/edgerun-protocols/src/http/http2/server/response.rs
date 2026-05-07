@@ -1,11 +1,11 @@
 //! Response helper methods for the HTTP/2 server.
 
 use super::FrameAction;
-use crate::http2::frame::{
+use crate::http::http2::frame::{
     Frame, GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
-use crate::http2::hpack::Encoder;
-use crate::http2::stream::StreamManager;
+use crate::http::http2::hpack::Encoder;
+use crate::http::http2::stream::StreamManager;
 use alloc::vec;
 
 pub fn write_frame(frame: Frame) -> FrameAction {

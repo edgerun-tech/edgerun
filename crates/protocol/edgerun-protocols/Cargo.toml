@@ -11,7 +11,7 @@ description = "Transport-independent protocol parsers, encoders, and state machi
 [dependencies]
 edgerun-crypto = { version = "0.1", path = "../../utility/edgerun-crypto", default-features = false, features = ["aead", "ed25519", "hmac", "p256", "rsa", "x25519"], optional = true }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false, optional = true }
-edgerun-rt = { version = "0.1", path = "../../edgerun-rt", optional = true }
+edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
 miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"], optional = true }
 
 [features]
@@ -20,16 +20,18 @@ proxy = []
 dhcp = ["dep:edgerun-encoding"]
 dhcpv6 = ["dep:edgerun-encoding"]
 dns = ["dep:edgerun-encoding"]
+dnssec = ["dns", "dep:edgerun-crypto", "edgerun-crypto/ed25519", "edgerun-crypto/p256", "edgerun-crypto/sha1"]
 email-auth = ["dep:edgerun-crypto", "dep:edgerun-encoding"]
 http = []
+http2-server = ["http", "dep:edgerun-hpack"]
 http-compression = ["http", "dep:edgerun-encoding", "dep:miniz_oxide"]
 http3 = ["http", "dep:edgerun-encoding"]
 imap = ["dep:edgerun-encoding"]
 lmtp = ["smtp"]
 quic = ["tls"]
 smtp = ["dep:edgerun-encoding"]
-tls = ["dep:edgerun-crypto", "dep:edgerun-encoding", "dep:edgerun-rt"]
-tsig = ["dns"]
+tls = ["dep:edgerun-crypto", "dep:edgerun-encoding"]
+tsig = ["dns", "dep:edgerun-crypto", "dep:edgerun-encoding", "edgerun-crypto/hmac"]
 tftp = ["dep:edgerun-encoding"]
 
 [lints]

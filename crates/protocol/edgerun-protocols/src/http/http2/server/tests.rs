@@ -1,8 +1,8 @@
 use super::*;
-use crate::http2::frame::{
+use crate::http::http2::frame::{
     DataFrame, Frame, HeadersFrame, PingFrame, PriorityFrame, RstStreamFrame, WindowUpdateFrame,
 };
-use crate::http2::{Decoder, Encoder, FrameType};
+use crate::http::http2::{Decoder, Encoder, FrameType};
 
 fn h(name: &str, value: &str) -> (Vec<u8>, Vec<u8>) {
     (name.as_bytes().to_vec(), value.as_bytes().to_vec())
@@ -69,7 +69,7 @@ fn test_apply_invalid_enable_push() {
     let sf = SettingsFrame::new(vec![(0x2, 5)]);
     match server.apply_client_settings(&sf) {
         FrameAction::Goaway { error_code, .. } => {
-            assert_eq!(error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            assert_eq!(error_code, ErrorCode::ProtocolError.to_u32());
         }
         _ => panic!("expected Goaway for invalid settings"),
     }
@@ -150,7 +150,7 @@ fn test_handle_window_update_zero_increment() {
     let frame = Frame::new(FrameType::WindowUpdate, 0, 0, vec![0, 0, 0, 0]);
     match server.handle_window_update(&frame) {
         FrameAction::Goaway { error_code, .. } => {
-            assert_eq!(error_code, ErrorCode::FLOW_CONTROL_ERROR.to_u32());
+            assert_eq!(error_code, ErrorCode::FlowControlError.to_u32());
         }
         _ => panic!("expected Goaway for zero increment"),
     }
@@ -250,7 +250,7 @@ fn test_handle_priority_self_referential_dependency() {
             assert!(!frames.is_empty());
             let rst = RstStreamFrame::from_frame(&frames[0]).unwrap();
             assert_eq!(rst.stream_id, 1);
-            assert_eq!(rst.error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            assert_eq!(rst.error_code, ErrorCode::ProtocolError.to_u32());
         }
         other => panic!("expected RST_STREAM for self-referential PRIORITY, got {other:?}"),
     }
@@ -262,7 +262,7 @@ fn test_handle_priority_stream_zero() {
     let pf = PriorityFrame::new(0, false, 0, 16);
     match server.handle_priority(&pf) {
         FrameAction::Goaway { error_code, .. } => {
-            assert_eq!(error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            assert_eq!(error_code, ErrorCode::ProtocolError.to_u32());
         }
         other => panic!("expected Goaway for PRIORITY on stream 0, got {other:?}"),
     }
@@ -307,7 +307,7 @@ fn test_handle_headers_missing_method() {
             assert!(!frames.is_empty());
             let rst = RstStreamFrame::from_frame(&frames[0]).unwrap();
             assert_eq!(rst.stream_id, 1);
-            assert_eq!(rst.error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            assert_eq!(rst.error_code, ErrorCode::ProtocolError.to_u32());
         }
         FrameAction::Goaway { .. } => {}
         _ => panic!("expected error response for missing :method"),
@@ -370,7 +370,7 @@ fn test_handle_headers_self_referential_dependency() {
             assert!(!frames.is_empty());
             let rst = RstStreamFrame::from_frame(&frames[0]).unwrap();
             assert_eq!(rst.stream_id, 1);
-            assert_eq!(rst.error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            assert_eq!(rst.error_code, ErrorCode::ProtocolError.to_u32());
         }
         other => panic!("expected RST_STREAM for self-referential HEADERS, got {other:?}"),
     }
@@ -386,7 +386,7 @@ fn test_handle_data_on_idle_stream() {
 
     match action {
         FrameAction::Goaway { error_code, .. } => {
-            assert_eq!(error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            assert_eq!(error_code, ErrorCode::ProtocolError.to_u32());
         }
         _ => panic!("expected Goaway for DATA on idle stream"),
     }
@@ -428,7 +428,7 @@ fn test_continuation_not_expected() {
 
     match action {
         FrameAction::Goaway { error_code, .. } => {
-            assert_eq!(error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            assert_eq!(error_code, ErrorCode::ProtocolError.to_u32());
         }
         _ => panic!("expected Goaway for unexpected CONTINUATION"),
     }
@@ -497,14 +497,14 @@ fn test_trailers_path_reachable() {
 
     assert_eq!(
         server.stream_manager.get_stream(1).unwrap().state,
-        crate::http2::stream::StreamState::HalfClosedRemote
+        crate::http::http2::stream::StreamState::HalfClosedRemote
     );
 
     // Now send trailers (HEADERS with END_STREAM on HalfClosedRemote stream)
     let trailers_frame = Frame {
         frame_type: FrameType::Headers,
-        flags: crate::http2::frame::flags::HEADERS_END_STREAM
-            | crate::http2::frame::flags::HEADERS_END_HEADERS,
+        flags: crate::http::http2::frame::flags::HEADERS_END_STREAM
+            | crate::http::http2::frame::flags::HEADERS_END_HEADERS,
         stream_id: 1,
         payload: vec![],
     };
@@ -515,7 +515,7 @@ fn test_trailers_path_reachable() {
 
     // Stream should now be Closed
     let stream = server.stream_manager.get_stream(1).unwrap();
-    assert_eq!(stream.state, crate::http2::stream::StreamState::Closed);
+    assert_eq!(stream.state, crate::http::http2::stream::StreamState::Closed);
     assert!(server.is_closed_stream(1));
 }
 
@@ -537,7 +537,7 @@ fn test_trailers_without_end_stream_rejected() {
     // Send trailers WITHOUT END_STREAM flag
     let trailers_frame = Frame {
         frame_type: FrameType::Headers,
-        flags: crate::http2::frame::flags::HEADERS_END_HEADERS, // No END_STREAM
+        flags: crate::http::http2::frame::flags::HEADERS_END_HEADERS, // No END_STREAM
         stream_id: 1,
         payload: vec![],
     };
@@ -548,7 +548,7 @@ fn test_trailers_without_end_stream_rejected() {
         FrameAction::WriteFrames(frames) => {
             let rst = RstStreamFrame::from_frame(&frames[0]).unwrap();
             assert_eq!(rst.stream_id, 1);
-            assert_eq!(rst.error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            assert_eq!(rst.error_code, ErrorCode::ProtocolError.to_u32());
         }
         other => panic!("expected RST_STREAM for trailers without END_STREAM, got {other:?}"),
     }

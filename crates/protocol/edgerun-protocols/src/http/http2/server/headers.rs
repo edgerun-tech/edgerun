@@ -4,11 +4,11 @@ use super::continuation::ContinuationState;
 use super::response;
 use super::FrameAction;
 use super::Http2Server;
-use crate::http2::frame::{Frame, HeadersFrame};
-use crate::http2::headers::{validate_header_name_case, validate_request_headers};
-use crate::http2::hpack::{Decoder, Encoder};
-use crate::http2::stream::StreamState;
-use crate::http2::ErrorCode;
+use crate::http::http2::frame::{Frame, HeadersFrame};
+use crate::http::http2::headers::{validate_header_name_case, validate_request_headers};
+use crate::http::http2::hpack::{Decoder, Encoder};
+use crate::http::http2::stream::StreamState;
+use crate::http::http2::ErrorCode;
 
 impl Http2Server {
     /// Process an incoming HEADERS frame.
@@ -26,7 +26,7 @@ impl Http2Server {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
-                    ErrorCode::PROTOCOL_ERROR.to_u32(),
+                    ErrorCode::ProtocolError.to_u32(),
                     b"Invalid HEADERS payload",
                 );
             }
@@ -38,7 +38,7 @@ impl Http2Server {
             self.goaway_sent = true;
             return response::send_goaway(
                 self.last_processed_stream_id,
-                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                ErrorCode::ProtocolError.to_u32(),
                 b"HEADERS on stream 0",
             );
         }
@@ -46,7 +46,7 @@ impl Http2Server {
             self.goaway_sent = true;
             return response::send_goaway(
                 self.last_processed_stream_id,
-                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                ErrorCode::ProtocolError.to_u32(),
                 b"Client sent even stream ID",
             );
         }
@@ -56,7 +56,7 @@ impl Http2Server {
             self.goaway_sent = true;
             return response::send_goaway(
                 self.last_processed_stream_id,
-                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                ErrorCode::ProtocolError.to_u32(),
                 b"Decreasing stream ID",
             );
         }
@@ -73,14 +73,14 @@ impl Http2Server {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
-                    ErrorCode::STREAM_CLOSED.to_u32(),
+                    ErrorCode::StreamClosed.to_u32(),
                     b"HEADERS on closed stream",
                 );
             }
             StreamState::HalfClosedLocal => {
                 return response::rst_stream(
                     stream_id,
-                    ErrorCode::STREAM_CLOSED.to_u32(),
+                    ErrorCode::StreamClosed.to_u32(),
                     &mut self.stream_manager,
                 );
             }
@@ -93,7 +93,7 @@ impl Http2Server {
             self.goaway_sent = true;
             return response::send_goaway(
                 self.last_processed_stream_id,
-                ErrorCode::STREAM_CLOSED.to_u32(),
+                ErrorCode::StreamClosed.to_u32(),
                 b"Cannot create stream",
             );
         }
@@ -104,12 +104,12 @@ impl Http2Server {
             }
         }
 
-        let end_headers = frame.flags & crate::http2::frame::flags::HEADERS_END_HEADERS != 0;
+        let end_headers = frame.flags & crate::http::http2::frame::flags::HEADERS_END_HEADERS != 0;
 
         if hf.exclusive && hf.stream_dependency == stream_id {
             return response::rst_stream(
                 stream_id,
-                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                ErrorCode::ProtocolError.to_u32(),
                 &mut self.stream_manager,
             );
         }
@@ -120,7 +120,7 @@ impl Http2Server {
                 // Trailers must have END_STREAM flag
                 return response::rst_stream(
                     stream_id,
-                    ErrorCode::PROTOCOL_ERROR.to_u32(),
+                    ErrorCode::ProtocolError.to_u32(),
                     &mut self.stream_manager,
                 );
             }
@@ -131,7 +131,7 @@ impl Http2Server {
                     self.goaway_sent = true;
                     return response::send_goaway(
                         self.last_processed_stream_id,
-                        ErrorCode::COMPRESSION_ERROR.to_u32(),
+                        ErrorCode::CompressionError.to_u32(),
                         b"HPACK decode error in trailers",
                     );
                 }
@@ -141,7 +141,7 @@ impl Http2Server {
                 if name.starts_with(b":") {
                     return response::rst_stream(
                         stream_id,
-                        ErrorCode::PROTOCOL_ERROR.to_u32(),
+                        ErrorCode::ProtocolError.to_u32(),
                         &mut self.stream_manager,
                     );
                 }
@@ -163,7 +163,7 @@ impl Http2Server {
                     self.goaway_sent = true;
                     return response::send_goaway(
                         self.last_processed_stream_id,
-                        ErrorCode::COMPRESSION_ERROR.to_u32(),
+                        ErrorCode::CompressionError.to_u32(),
                         b"HPACK decode error",
                     );
                 }
@@ -209,7 +209,7 @@ impl Http2Server {
             self.goaway_sent = true;
             return response::send_goaway(
                 self.last_processed_stream_id,
-                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                ErrorCode::ProtocolError.to_u32(),
                 b"CONTINUATION not expected",
             );
         }
@@ -218,14 +218,14 @@ impl Http2Server {
             self.goaway_sent = true;
             return response::send_goaway(
                 self.last_processed_stream_id,
-                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                ErrorCode::ProtocolError.to_u32(),
                 b"CONTINUATION on wrong stream",
             );
         }
 
         cont.header_block_buf.extend_from_slice(&frame.payload);
 
-        let end_headers = frame.flags & crate::http2::frame::flags::HEADERS_END_HEADERS != 0;
+        let end_headers = frame.flags & crate::http::http2::frame::flags::HEADERS_END_HEADERS != 0;
 
         if end_headers {
             let sid = cont.stream_id;
@@ -236,7 +236,7 @@ impl Http2Server {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
-                    ErrorCode::STREAM_CLOSED.to_u32(),
+                    ErrorCode::StreamClosed.to_u32(),
                     b"Cannot create stream for CONTINUATION",
                 );
             }
@@ -248,7 +248,7 @@ impl Http2Server {
                     self.goaway_sent = true;
                     return response::send_goaway(
                         self.last_processed_stream_id,
-                        ErrorCode::COMPRESSION_ERROR.to_u32(),
+                        ErrorCode::CompressionError.to_u32(),
                         b"HPACK decode error in CONTINUATION",
                     );
                 }
@@ -285,7 +285,7 @@ impl Http2Server {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
-                    ErrorCode::COMPRESSION_ERROR.to_u32(),
+                    ErrorCode::CompressionError.to_u32(),
                     b"HPACK decode error",
                 );
             }
@@ -319,7 +319,7 @@ impl Http2Server {
         action
     }
 
-    pub(crate) fn half_close_remote(&mut self, stream_id: u32) {
+    pub fn half_close_remote(&mut self, stream_id: u32) {
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             let _ = s.half_close_remote();
             // If this closes the stream, record it

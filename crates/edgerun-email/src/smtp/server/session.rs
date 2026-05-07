@@ -14,6 +14,8 @@ use crate::rt::{
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
+#[cfg(feature = "dkim")]
+use crate::dns_query::DnsClientQuery;
 use crate::server::ConnectionInterceptor;
 use crate::smtp::relay::bounce::BounceConfig;
 #[cfg(feature = "dkim")]
@@ -30,7 +32,7 @@ use crate::smtp::types::{
     MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
 };
 #[cfg(feature = "dkim")]
-use edgerun_email_auth::{DnsClientQuery, EmailAuthEvaluator};
+use edgerun_email_auth::EmailAuthEvaluator;
 
 #[cfg(feature = "tls")]
 use edgerun_tls::{AsyncTlsServerStream, CertificateAndKey};

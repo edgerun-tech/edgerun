@@ -14,7 +14,6 @@ pub mod headers;
 pub mod hpack;
 #[cfg(feature = "tls")]
 pub mod pool;
-pub mod server;
 pub mod settings;
 pub mod stream;
 
@@ -29,9 +28,9 @@ pub use flow_control::FlowController;
 pub use frame::{Frame, FrameType};
 pub use headers::{validate_header_name_case, validate_request_headers};
 pub use hpack::{Decoder, Encoder};
-pub use server::{FrameAction, Http2Server};
 pub use settings::Settings;
 pub use stream::Stream;
+pub use edgerun_protocols::http::http2::server::{FrameAction, Http2Server};
 
 /// HTTP/2 error types
 #[derive(Debug)]

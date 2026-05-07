@@ -1,4 +1,8 @@
-//! TCP socket for bare-metal networking
+//! TCP socket for bare-metal networking.
+//!
+//! These are low-level node/runtime primitives. Application code must not treat
+//! `bind` or `listen` as authority to own host ports; app-facing resource
+//! access is mediated by `edgerun-node`.
 
 extern crate alloc;
 

@@ -162,7 +162,7 @@ mod tests {
 
         let parsed = crate::certificate::Certificate::from_der(&cert.cert_der)
             .expect("failed to parse generated cert");
-        assert!(parsed.is_valid_now());
+        assert!(parsed.is_valid_at_unix_secs(edgerun_rt::now() / 10_000_000));
     }
 
     #[test]

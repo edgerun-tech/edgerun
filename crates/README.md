@@ -16,6 +16,19 @@ but those are not Edgerun internal wire protocols.
 - `edgerun-stream`: single-writer signed event streams.
 - `edgerun-storage`: event log, encrypted blobs, file/block/memory stores,
   indexes, snapshots, replay cache, rebuild/integrity logic.
-- `edgerun-node`: node initialization, provisioning, status inspection,
-  command validation/dispatch components, hardware discovery, and stream append
-  integration.
+- `edgerun-node`: the runtime/node boundary and resource authority. Apps and
+  deployment specs can request protocol bindings, routes, storage, signing, and
+  hardware capabilities, but only the node decides whether a request becomes a
+  native socket, browser message route, mesh route, filesystem path, hardware
+  handle, or no resource on the current host.
+- `edgerun-rt`: low-level no_std executor, sync, time, and transport
+  primitives used by the node. Its socket bind/listen APIs are implementation
+  primitives, not app-facing authority.
+- `edgerun-protocols`: transport-independent external protocol bytes and state
+  machines. Protocols do not own ports, sockets, filesystems, trust roots, or
+  host policy.
+
+The remaining protocol-named crates such as `edgerun-http`, `edgerun-dns`,
+`edgerun-email`, and `edgerun-tls` are transitional runtime adapters around
+`edgerun-protocols` and node-owned resources. New protocol logic should go into
+`edgerun-protocols`; new resource realization should go into `edgerun-node`.

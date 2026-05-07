@@ -5,6 +5,8 @@
 //! resolver transports, timers, filesystems, or host policy.
 
 pub mod axfr;
+#[cfg(feature = "dnssec")]
+pub mod dnssec;
 pub mod io;
 pub mod limits;
 pub mod message;
@@ -16,6 +18,13 @@ pub mod zone;
 pub mod zone_file;
 
 pub use axfr::{handle_axfr, handle_notify, handle_update};
+#[cfg(feature = "dnssec")]
+pub use dnssec::{
+    compute_key_tag, find_nsec3_covering, generate_dnskey_ecdsap256, generate_dnskey_ed25519,
+    nsec3_base32hex, nsec3_hash_owner, nsec3_type_bitmap, sign_rrset_ecdsap256,
+    sign_rrsig_ed25519, sign_zone_ecdsap256, sign_zone_ed25519, synthesize_nsec3_chain,
+    validate_response, verify_chain_of_trust, verify_rrsig, DnssecResult,
+};
 pub use limits::{
     dns_section_counts, parse_dns_message_bounded, validate_dns_wire_bounds, DnsSectionCounts,
     MAX_DNS_MESSAGE_LEN, MAX_DNS_QUESTIONS, MAX_DNS_SECTION_RECORDS,

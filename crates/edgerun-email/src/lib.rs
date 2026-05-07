@@ -37,6 +37,8 @@ pub(crate) mod prelude {
 
 #[cfg(not(target_os = "none"))]
 pub mod command_middleware;
+#[cfg(feature = "dkim")]
+pub(crate) mod dns_query;
 pub mod imap;
 pub mod lmtp;
 #[cfg(not(target_os = "none"))]

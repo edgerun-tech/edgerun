@@ -29,6 +29,7 @@ default = [
     "service-suite",
 ]
 protocols = ["tls", "quic", "tftp", "acme"]
+exchange-events = ["dep:edgerun-exchange"]
 tls = ["dep:edgerun-tls"]
 quic = ["dep:edgerun-protocols", "edgerun-protocols/quic", "tls"]
 tftp = ["dep:edgerun-protocols", "edgerun-protocols/tftp"]
@@ -57,12 +58,12 @@ http = [
     "edgerun-http/connection-middleware",
 ]
 https = ["http", "tls", "edgerun-http/tls"]
-dns = ["http", "dep:edgerun-protocols", "edgerun-protocols/dns"]
-dhcp = ["http", "dep:edgerun-protocols", "edgerun-protocols/dhcp"]
+dns = ["dep:edgerun-protocols", "edgerun-protocols/dns"]
+dhcp = ["dep:edgerun-protocols", "edgerun-protocols/dhcp"]
 smtp = ["http", "dep:edgerun-email", "edgerun-email/tls", "edgerun-email/dkim"]
 imap = ["http", "dep:edgerun-email", "edgerun-email/tls"]
 lmtp = ["dep:edgerun-email"]
-proxy = ["http", "dep:edgerun-protocols", "edgerun-protocols/proxy"]
+proxy = ["dep:edgerun-protocols", "edgerun-protocols/proxy"]
 derived-db = ["http", "dep:edgerun-derived-db"]
 android-keystore = ["dep:edgerun-android-keystore"]
 oci = [
@@ -128,13 +129,12 @@ edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link" }
 edgerun-mesh-capability = { version = "0.1", path = "../../capability/edgerun-mesh-capability" }
 edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session" }
-edgerun-exchange = { version = "0.1", path = "../../edgerun-exchange" }
+edgerun-exchange = { version = "0.1", path = "../../edgerun-exchange", optional = true }
 edgerun-crypto = { workspace = true, default-features = false }
 edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
-edgerun-analytics = { version = "0.1", path = "../../edgerun-analytics" }
 edgerun-email = { workspace = true, optional = true }
 edgerun-email-auth = { version = "0.1", path = "../../edgerun-email-auth" }
 edgerun-url = { workspace = true }

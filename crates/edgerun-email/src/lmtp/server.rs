@@ -18,6 +18,8 @@ use crate::rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, CancellationToken};
 use crate::command_middleware::{
     CommandMiddleware, ControlFlow as MwControlFlow, NextCommand, SessionExtensions,
 };
+#[cfg(feature = "dkim")]
+use crate::dns_query::DnsClientQuery;
 use crate::lmtp::session_core::{
     LmtpCommand, LmtpSessionAction, LmtpSessionConfig, LmtpSessionCore, LmtpSessionPolicy,
 };
@@ -208,7 +210,7 @@ async fn evaluate_and_notify_auth(
         }
     };
 
-    let mut dns_query = edgerun_email_auth::DnsClientQuery(&mut dns_client);
+    let mut dns_query = DnsClientQuery(&mut dns_client);
     let mut evaluator = EmailAuthEvaluator::new(&mut dns_query);
     match evaluator
         .evaluate(

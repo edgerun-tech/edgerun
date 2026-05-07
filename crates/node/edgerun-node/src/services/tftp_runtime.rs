@@ -7,13 +7,13 @@ use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use core::time::Duration;
 
 use edgerun_protocols::tftp::{TftpPeerId, TftpReadCore, TftpReadProvider};
-use edgerun_rt::UdpSocket;
+use crate::rt::UdpSocket;
 
 /// Trait for a TFTP file backend.
 pub trait FileProvider: Send + Sync {
-    fn read_file(&self, path: &str) -> edgerun_rt::io::Result<Vec<u8>> {
+    fn read_file(&self, path: &str) -> crate::rt::io::Result<Vec<u8>> {
         let _ = path;
-        Err(edgerun_rt::io::IoError::Other("read_file not implemented"))
+        Err(crate::rt::io::IoError::Other("read_file not implemented"))
     }
 
     fn file_size(&self, filename: &str) -> Option<u64> {
@@ -58,7 +58,7 @@ impl Default for TftpServerConfig {
 
 pub struct TftpServer {
     socket: Arc<UdpSocket>,
-    core: edgerun_rt::Mutex<TftpReadCore<Box<dyn FileProvider>>>,
+    core: crate::rt::Mutex<TftpReadCore<Box<dyn FileProvider>>>,
     _timeout: Duration,
 }
 
@@ -66,33 +66,38 @@ impl TftpServer {
     pub fn new(
         config: TftpServerConfig,
         provider: impl FileProvider + 'static,
-    ) -> edgerun_rt::io::Result<Self> {
+    ) -> crate::rt::io::Result<Self> {
         let addr = parse_socket_addr(&config.bind_addr)?;
         let mut socket = UdpSocket::new();
         socket
             .bind(to_rt_addr(addr))
-            .map_err(|_| edgerun_rt::io::IoError::Other("TFTP bind failed"))?;
+            .map_err(|_| crate::rt::io::IoError::Other("TFTP bind failed"))?;
         Ok(Self {
             socket: Arc::new(socket),
-            core: edgerun_rt::Mutex::new(TftpReadCore::new(Box::new(provider))),
+            core: crate::rt::Mutex::new(TftpReadCore::new(Box::new(provider))),
             _timeout: Duration::from_secs(config.timeout_secs as u64),
         })
     }
 
-    pub async fn run(&self, shutdown: edgerun_rt::CancellationToken) {
+    pub async fn run(&self, shutdown: crate::rt::CancellationToken) -> crate::rt::io::Result<()> {
         while !shutdown.is_cancelled() {
-            if self.tick().await.is_err() {
-                edgerun_rt::sleep(Duration::from_millis(100)).await;
+            match self.tick().await {
+                Ok(()) => {}
+                Err(crate::rt::io::IoError::Other("TFTP receive failed")) => {
+                    crate::rt::sleep(Duration::from_millis(100)).await;
+                }
+                Err(error) => return Err(error),
             }
         }
+        Ok(())
     }
 
-    pub async fn tick(&self) -> edgerun_rt::io::Result<()> {
+    pub async fn tick(&self) -> crate::rt::io::Result<()> {
         let mut buf = [0u8; 65536];
         let (n, src) = self
             .socket
             .recv_from(&mut buf)
-            .map_err(|_| edgerun_rt::io::IoError::Other("TFTP receive failed"))?;
+            .map_err(|_| crate::rt::io::IoError::Other("TFTP receive failed"))?;
         let peer = peer_id(src);
         let replies = match self.core.lock().handle_wire(peer, &buf[..n]) {
             Ok(replies) => replies,
@@ -100,7 +105,9 @@ impl TftpServer {
         };
 
         for reply in replies {
-            let _ = self.socket.send_to(&reply.wire, src);
+            self.socket
+                .send_to(&reply.wire, src)
+                .map_err(|_| crate::rt::io::IoError::Other("TFTP send failed"))?;
         }
         Ok(())
     }
@@ -110,12 +117,12 @@ impl TftpServer {
     }
 }
 
-fn peer_id(addr: edgerun_rt::SocketAddr) -> TftpPeerId {
+fn peer_id(addr: crate::rt::SocketAddr) -> TftpPeerId {
     TftpPeerId(format!("{}:{}", format_ip(addr.ip_bytes()), addr.port()).into_bytes())
 }
 
 impl FileProvider for Arc<dyn FileProvider> {
-    fn read_file(&self, path: &str) -> edgerun_rt::io::Result<Vec<u8>> {
+    fn read_file(&self, path: &str) -> crate::rt::io::Result<Vec<u8>> {
         (**self).read_file(path)
     }
 
@@ -129,7 +136,7 @@ impl FileProvider for Arc<dyn FileProvider> {
 }
 
 impl FileProvider for Box<dyn FileProvider> {
-    fn read_file(&self, path: &str) -> edgerun_rt::io::Result<Vec<u8>> {
+    fn read_file(&self, path: &str) -> crate::rt::io::Result<Vec<u8>> {
         (**self).read_file(path)
     }
 
@@ -142,17 +149,17 @@ impl FileProvider for Box<dyn FileProvider> {
     }
 }
 
-fn parse_socket_addr(addr: &str) -> edgerun_rt::io::Result<SocketAddr> {
+fn parse_socket_addr(addr: &str) -> crate::rt::io::Result<SocketAddr> {
     addr.parse()
-        .map_err(|_| edgerun_rt::io::IoError::Other("invalid TFTP bind address"))
+        .map_err(|_| crate::rt::io::IoError::Other("invalid TFTP bind address"))
 }
 
-fn to_rt_addr(addr: SocketAddr) -> edgerun_rt::SocketAddr {
+fn to_rt_addr(addr: SocketAddr) -> crate::rt::SocketAddr {
     match addr {
         SocketAddr::V4(addr) => {
-            edgerun_rt::SocketAddr::from_bytes4(addr.ip().octets(), addr.port())
+            crate::rt::SocketAddr::from_bytes4(addr.ip().octets(), addr.port())
         }
-        SocketAddr::V6(addr) => edgerun_rt::SocketAddr::new(0, addr.port()),
+        SocketAddr::V6(addr) => crate::rt::SocketAddr::new(0, addr.port()),
     }
 }
 

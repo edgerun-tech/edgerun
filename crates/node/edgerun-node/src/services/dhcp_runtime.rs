@@ -8,7 +8,7 @@ use core::time::Duration;
 use std::net::{Ipv4Addr as HostIpv4Addr, SocketAddrV4, UdpSocket as HostUdpSocket};
 
 use edgerun_protocols::dhcp::{message::io, DhcpServerConfig, DhcpServerCore, DHCP_SERVER_PORT};
-use edgerun_rt::{sleep, CancellationToken, Mutex, SocketAddr, UdpSocket};
+use crate::rt::{sleep, CancellationToken, Mutex, SocketAddr, UdpSocket};
 
 pub struct DhcpServer {
     socket: Arc<UdpSocket>,
@@ -70,12 +70,15 @@ impl DhcpServer {
         self.interface = Some(iface);
     }
 
-    pub async fn run(&self, shutdown: CancellationToken) {
+    pub async fn run(&self, shutdown: CancellationToken) -> Result<(), io::Error> {
         while !shutdown.is_cancelled() {
-            if self.tick().await.is_err() {
-                sleep(Duration::from_millis(100)).await;
+            match self.tick().await {
+                Ok(()) => {}
+                Err(error) if is_not_ready(&error) => sleep(Duration::from_millis(100)).await,
+                Err(error) => return Err(error),
             }
         }
+        Ok(())
     }
 
     pub async fn tick(&self) -> Result<(), io::Error> {
@@ -140,8 +143,15 @@ impl DhcpServer {
     }
 }
 
-fn map_udp_error(_: edgerun_rt::UdpError) -> io::Error {
+fn map_udp_error(_: crate::rt::UdpError) -> io::Error {
     io::Error::new(io::ErrorKind::WouldBlock, "UDP operation not ready")
+}
+
+fn is_not_ready(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+    )
 }
 
 #[cfg(not(target_os = "none"))]

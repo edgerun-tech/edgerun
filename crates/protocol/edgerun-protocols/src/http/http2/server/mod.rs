@@ -65,8 +65,8 @@ use alloc::vec::Vec;
 use super::flow_control::FlowController;
 use super::settings::Settings;
 use super::ErrorCode;
-use crate::http2::frame::{Frame, SettingsFrame};
-use crate::http2::stream::StreamManager;
+use crate::http::http2::frame::{Frame, SettingsFrame};
+use crate::http::http2::stream::StreamManager;
 
 /// A sync callback invoked when complete request headers arrive on a stream.
 /// Takes the decoded request headers and returns frames to write back.
@@ -158,7 +158,7 @@ impl Http2Server {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     0,
-                    ErrorCode::PROTOCOL_ERROR.to_u32(),
+                    ErrorCode::ProtocolError.to_u32(),
                     b"Invalid settings values",
                 );
             }
@@ -183,7 +183,7 @@ impl Http2Server {
 
     // ── Internal helpers ──
 
-    pub(crate) fn update_last_stream(&mut self, stream_id: u32) {
+    pub fn update_last_stream(&mut self, stream_id: u32) {
         if stream_id > self.last_processed_stream_id {
             self.last_processed_stream_id = stream_id;
         }

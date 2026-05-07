@@ -22,6 +22,8 @@ use edgerun_wire::{
     RUNTIME_PROTOCOL_SUBMISSION, RUNTIME_PROTOCOL_TFTP, SDK_WIRE_ABI_VERSION,
 };
 
+use crate::resource::{binding_intents, NodeTransportSurface, ServiceBindingIntent};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeError {
     InvalidWireRecord,
@@ -132,6 +134,10 @@ pub struct RuntimeServicePlan {
     pub public_ipv4: [u8; 4],
     pub hostname: Vec<u8>,
     pub origin: Vec<u8>,
+    /// Requested protocol bindings.
+    ///
+    /// These are not necessarily native listeners. The node uses them as
+    /// routing/resource intent and chooses the host-specific realization.
     pub listeners: Vec<RuntimeProtocolBinding>,
     pub domains: Vec<RuntimeDomainConfig>,
 }
@@ -354,6 +360,10 @@ impl RuntimeServicePlan {
         domains.sort();
         domains.dedup();
         domains
+    }
+
+    pub fn requested_bindings(&self, surface: NodeTransportSurface) -> Vec<ServiceBindingIntent> {
+        binding_intents(&self.listeners, surface)
     }
 }
 

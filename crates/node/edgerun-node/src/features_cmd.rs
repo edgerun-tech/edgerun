@@ -5,7 +5,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub fn cmd_features() {
     println!("{}", feature_report_json());
@@ -368,7 +368,7 @@ fn tls_self_test() -> Result<String, String> {
     if cert.cert_der.len() < 100 {
         return Err("generated TLS certificate was unexpectedly small".into());
     }
-    if !parsed.is_valid_now() {
+    if !parsed.is_valid_at_unix_secs(unix_now_secs()) {
         return Err("generated TLS certificate is not currently valid".into());
     }
     Ok(format!(
@@ -376,6 +376,13 @@ fn tls_self_test() -> Result<String, String> {
         cert.cert_der.len(),
         cert.cert_chain_der.len()
     ))
+}
+
+fn unix_now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
 #[cfg(not(feature = "tls"))]

@@ -12,9 +12,8 @@
 //! # Usage
 //! ```text
 //! use edgerun_email_auth::EmailAuthEvaluator;
-//! use edgerun_dns::client::DnsClient;
 //!
-//! let mut dns = DnsClient::new("8.8.8.8:53")?;
+//! let mut dns = runtime_supplied_dns_query_adapter;
 //! let mut evaluator = EmailAuthEvaluator::new(&mut dns);
 //! let results = evaluator
 //!     .evaluate("192.168.1.1", &envelope_from, &headers, &body)
@@ -101,18 +100,6 @@ impl AuthenticationResults {
             .map(|d| matches!(d.status, DmarcStatus::Pass))
             .unwrap_or(false);
         spf_pass || dmarc_pass
-    }
-}
-
-/// Runtime adapter for the DNS client used by the email server.
-pub struct DnsClientQuery<'a>(pub &'a mut edgerun_dns::client::DnsClient);
-
-impl DnsQuery for DnsClientQuery<'_> {
-    async fn query_txt(&mut self, name: &str) -> io::Result<Vec<String>> {
-        self.0
-            .query_txt(name)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
 }
 

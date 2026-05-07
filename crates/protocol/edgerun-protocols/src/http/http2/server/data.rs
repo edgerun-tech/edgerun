@@ -3,9 +3,9 @@
 use super::response;
 use super::FrameAction;
 use super::Http2Server;
-use crate::http2::frame::{DataFrame, Frame};
-use crate::http2::hpack::Encoder;
-use crate::http2::ErrorCode;
+use crate::http::http2::frame::{DataFrame, Frame};
+use crate::http::http2::hpack::Encoder;
+use crate::http::http2::ErrorCode;
 use alloc::vec;
 
 impl Http2Server {
@@ -17,7 +17,7 @@ impl Http2Server {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
-                    ErrorCode::PROTOCOL_ERROR.to_u32(),
+                    ErrorCode::ProtocolError.to_u32(),
                     b"Invalid DATA payload",
                 );
             }
@@ -27,25 +27,25 @@ impl Http2Server {
         self.update_last_stream(sid);
 
         let state_before = self.stream_manager.get_stream(sid).map(|s| s.state);
-        match state_before.unwrap_or(crate::http2::stream::StreamState::Idle) {
-            crate::http2::stream::StreamState::Idle
-            | crate::http2::stream::StreamState::ReservedRemote => {
+        match state_before.unwrap_or(crate::http::http2::stream::StreamState::Idle) {
+            crate::http::http2::stream::StreamState::Idle
+            | crate::http::http2::stream::StreamState::ReservedRemote => {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
-                    ErrorCode::PROTOCOL_ERROR.to_u32(),
+                    ErrorCode::ProtocolError.to_u32(),
                     b"DATA on idle stream",
                 );
             }
-            crate::http2::stream::StreamState::HalfClosedRemote
-            | crate::http2::stream::StreamState::Closed => {
+            crate::http::http2::stream::StreamState::HalfClosedRemote
+            | crate::http::http2::stream::StreamState::Closed => {
                 return response::rst_stream(
                     sid,
-                    ErrorCode::STREAM_CLOSED.to_u32(),
+                    ErrorCode::StreamClosed.to_u32(),
                     &mut self.stream_manager,
                 );
             }
-            crate::http2::stream::StreamState::HalfClosedLocal => {}
+            crate::http::http2::stream::StreamState::HalfClosedLocal => {}
             _ => {}
         }
 
@@ -53,13 +53,13 @@ impl Http2Server {
             self.goaway_sent = true;
             return response::send_goaway(
                 self.last_processed_stream_id,
-                ErrorCode::STREAM_CLOSED.to_u32(),
+                ErrorCode::StreamClosed.to_u32(),
                 b"Cannot create stream for DATA",
             );
         }
 
         if let Some(s) = self.stream_manager.get_stream_mut(sid) {
-            if s.state == crate::http2::stream::StreamState::Idle {
+            if s.state == crate::http::http2::stream::StreamState::Idle {
                 let _ = s.open();
             }
         }
@@ -69,7 +69,7 @@ impl Http2Server {
             self.goaway_sent = true;
             return response::send_goaway(
                 self.last_processed_stream_id,
-                ErrorCode::FLOW_CONTROL_ERROR.to_u32(),
+                ErrorCode::FlowControlError.to_u32(),
                 b"Flow control window exceeded",
             );
         }
@@ -80,14 +80,14 @@ impl Http2Server {
                 if df.end_stream && bytes_so_far != expected_cl {
                     return response::rst_stream(
                         sid,
-                        ErrorCode::PROTOCOL_ERROR.to_u32(),
+                        ErrorCode::ProtocolError.to_u32(),
                         &mut self.stream_manager,
                     );
                 }
                 if bytes_so_far > expected_cl {
                     return response::rst_stream(
                         sid,
-                        ErrorCode::PROTOCOL_ERROR.to_u32(),
+                        ErrorCode::ProtocolError.to_u32(),
                         &mut self.stream_manager,
                     );
                 }
@@ -108,7 +108,7 @@ impl Http2Server {
                     self.goaway_sent = true;
                     return response::send_goaway(
                         self.last_processed_stream_id,
-                        ErrorCode::INTERNAL_ERROR.to_u32(),
+                        ErrorCode::InternalError.to_u32(),
                         b"Response generation failed",
                     );
                 }
@@ -125,7 +125,7 @@ impl Http2Server {
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             let _ = s.half_close_remote();
             // If this closes the stream, record it
-            if s.state == crate::http2::stream::StreamState::Closed {
+            if s.state == crate::http::http2::stream::StreamState::Closed {
                 self.record_closed_stream(stream_id);
             }
         }

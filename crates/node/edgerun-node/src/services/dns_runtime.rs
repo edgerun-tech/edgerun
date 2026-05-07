@@ -9,7 +9,7 @@ use edgerun_protocols::dns::{
     dns_tcp_frame_len, encode_dns_tcp_frame, parse_dns_message_bounded, validate_name, DnsMessage,
     DnsRecord, DnsRecordType, DnsResponseCode, DnsZone,
 };
-use edgerun_rt::{
+use crate::rt::{
     AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWriteExt,
     CancellationToken, RwLock,
 };
@@ -20,7 +20,7 @@ use std::io;
 use std::net::{IpAddr, SocketAddr};
 
 #[cfg(target_os = "none")]
-use edgerun_rt::io;
+use crate::rt::io;
 #[cfg(target_os = "none")]
 type IpAddr = core::net::IpAddr;
 
@@ -66,7 +66,10 @@ impl DnsRuntime {
         let tcp_listener = Arc::new(bind_tcp(&config.bind_addr)?);
 
         let (udp_socket_ipv6, tcp_listener_ipv6) = if let Some(ref addr) = config.bind_addr_ipv6 {
-            (Some(Arc::new(bind_udp(addr)?)), Some(Arc::new(bind_tcp(addr)?)))
+            (
+                Some(Arc::new(bind_udp(addr)?)),
+                Some(Arc::new(bind_tcp(addr)?)),
+            )
         } else {
             (None, None)
         };
@@ -105,14 +108,15 @@ impl DnsRuntime {
     pub async fn shutdown(&self) {}
 
     pub async fn run(&self, shutdown: CancellationToken) -> io::Result<()> {
+        let mut tasks: Vec<crate::rt::JoinHandle<io::Result<()>>> = Vec::new();
+
         let tcp_shutdown = shutdown.clone();
         let tcp_listener = Arc::clone(&self.tcp_listener);
         let tcp_state = Arc::clone(&self.state);
         let tcp_limiter = self.rate_limiter.clone();
-        let tcp_task = edgerun_rt::spawn(async move {
-            tcp_accept_loop(tcp_listener, tcp_state, tcp_limiter, tcp_shutdown).await;
-            Ok::<(), io::Error>(())
-        });
+        tasks.push(crate::rt::spawn(async move {
+            tcp_accept_loop(tcp_listener, tcp_state, tcp_limiter, tcp_shutdown).await
+        }));
 
         if let (Some(udp6), Some(tcp6)) = (&self.udp_socket_ipv6, &self.tcp_listener_ipv6) {
             let udp6 = Arc::clone(udp6);
@@ -120,29 +124,39 @@ impl DnsRuntime {
             let state = Arc::clone(&self.state);
             let limiter = self.rate_limiter.clone();
             let udp_shutdown = shutdown.clone();
-            edgerun_rt::spawn(async move {
-                udp_loop(udp6, state, limiter, udp_shutdown).await;
-                Ok::<(), io::Error>(())
-            });
+            tasks.push(crate::rt::spawn(async move {
+                udp_loop(udp6, state, limiter, udp_shutdown).await
+            }));
 
             let state = Arc::clone(&self.state);
             let limiter = self.rate_limiter.clone();
             let tcp_shutdown = shutdown.clone();
-            edgerun_rt::spawn(async move {
-                tcp_accept_loop(tcp6, state, limiter, tcp_shutdown).await;
-                Ok::<(), io::Error>(())
-            });
+            tasks.push(crate::rt::spawn(async move {
+                tcp_accept_loop(tcp6, state, limiter, tcp_shutdown).await
+            }));
         }
 
-        udp_loop(
+        let main_result = udp_loop(
             Arc::clone(&self.udp_socket),
             Arc::clone(&self.state),
             self.rate_limiter.clone(),
-            shutdown,
+            shutdown.clone(),
         )
         .await;
-        let _ = tcp_task.await;
-        Ok(())
+
+        if main_result.is_err() {
+            shutdown.cancel();
+        }
+
+        for task in tasks {
+            match task.await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => return Err(error),
+                Err(error) => return Err(join_error(error)),
+            }
+        }
+
+        main_result
     }
 }
 
@@ -151,37 +165,38 @@ async fn udp_loop(
     state: Arc<DnsState>,
     rate_limiter: RateLimiter,
     shutdown: CancellationToken,
-) {
+) -> io::Result<()> {
     while !shutdown.is_cancelled() {
         let mut buf = [0u8; 4096];
         let (n, src) = match socket.recv_from(&mut buf).await {
             Ok(received) => received,
             Err(_) => {
-                edgerun_rt::sleep(Duration::from_millis(10)).await;
-                continue;
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "DNS UDP receive failed",
+                ));
             }
         };
 
         if !rate_limiter.allow(src.ip()) {
             let response = DnsMessage::response(0, DnsResponseCode::Refused, Vec::new());
-            let _ = socket.send_to(&response.to_wire(), src).await;
+            socket
+                .send_to(&response.to_wire(), src)
+                .await
+                .map_err(rt_io_error)?;
             continue;
         }
 
         let query_wire = buf[..n].to_vec();
-        let socket = Arc::clone(&socket);
-        let state = Arc::clone(&state);
-        edgerun_rt::spawn(async move {
-            let response = match handle_query(&query_wire, &state).await {
-                Ok((response_wire, needs_tcp)) => {
-                    udp_response_wire(&query_wire, response_wire, needs_tcp)
-                }
-                Err(()) => DnsMessage::response(0, DnsResponseCode::FormErr, Vec::new()).to_wire(),
-            };
-            let _ = socket.send_to(&response, src).await;
-            Ok::<(), io::Error>(())
-        });
+        let response = match handle_query(&query_wire, &state).await {
+            Ok((response_wire, needs_tcp)) => {
+                udp_response_wire(&query_wire, response_wire, needs_tcp)
+            }
+            Err(()) => DnsMessage::response(0, DnsResponseCode::FormErr, Vec::new()).to_wire(),
+        };
+        socket.send_to(&response, src).await.map_err(rt_io_error)?;
     }
+    Ok(())
 }
 
 async fn tcp_accept_loop(
@@ -189,20 +204,17 @@ async fn tcp_accept_loop(
     state: Arc<DnsState>,
     rate_limiter: RateLimiter,
     shutdown: CancellationToken,
-) {
+) -> io::Result<()> {
     while !shutdown.is_cancelled() {
         match listener.accept().await {
             Ok((stream, peer)) => {
-                let state = Arc::clone(&state);
-                let rate_limiter = rate_limiter.clone();
-                edgerun_rt::spawn(async move {
-                    let _ = handle_tcp_connection(stream, peer, state, rate_limiter).await;
-                    Ok::<(), io::Error>(())
-                });
+                handle_tcp_connection(stream, peer, Arc::clone(&state), rate_limiter.clone())
+                    .await?;
             }
-            Err(_) => edgerun_rt::sleep(Duration::from_millis(10)).await,
+            Err(error) => return Err(rt_io_error(error)),
         }
     }
+    Ok(())
 }
 
 async fn handle_tcp_connection(
@@ -215,7 +227,7 @@ async fn handle_tcp_connection(
         let mut len_buf = [0u8; 2];
         if let Err(error) = stream.read_exact(&mut len_buf).await {
             return match error {
-                edgerun_rt::IoError::UnexpectedEof => Ok(()),
+                crate::rt::IoError::UnexpectedEof => Ok(()),
                 other => Err(rt_io_error(other)),
             };
         }
@@ -288,11 +300,7 @@ async fn handle_query(wire: &[u8], state: &DnsState) -> Result<(Vec<u8>, bool), 
     Ok((wire, needs_tcp))
 }
 
-fn resolve(
-    qname: &str,
-    qtype: DnsRecordType,
-    zones: &BTreeMap<String, DnsZone>,
-) -> Vec<DnsRecord> {
+fn resolve(qname: &str, qtype: DnsRecordType, zones: &BTreeMap<String, DnsZone>) -> Vec<DnsRecord> {
     best_matching_zone(qname, zones)
         .and_then(|zone| zone.resolve(qname, qtype))
         .unwrap_or_default()
@@ -331,14 +339,14 @@ fn udp_response_wire(query_wire: &[u8], response_wire: Vec<u8>, needs_tcp: bool)
 #[derive(Clone)]
 struct RateLimiter {
     max_qps: u32,
-    state: Arc<edgerun_rt::Mutex<BTreeMap<IpAddr, (u32, edgerun_rt::Instant)>>>,
+    state: Arc<crate::rt::Mutex<BTreeMap<IpAddr, (u32, crate::rt::Instant)>>>,
 }
 
 impl RateLimiter {
     fn new(max_qps: u32) -> Self {
         Self {
             max_qps,
-            state: Arc::new(edgerun_rt::Mutex::new(BTreeMap::new())),
+            state: Arc::new(crate::rt::Mutex::new(BTreeMap::new())),
         }
     }
 
@@ -347,7 +355,7 @@ impl RateLimiter {
             return true;
         }
         let mut state = self.state.lock();
-        let now = edgerun_rt::Instant::now();
+        let now = crate::rt::Instant::now();
         let (tokens, last) = state.entry(addr).or_insert((self.max_qps, now));
         let elapsed = (now - *last).as_secs_f64();
         *tokens = (*tokens as f64 + elapsed * self.max_qps as f64).min(self.max_qps as f64) as u32;
@@ -368,20 +376,25 @@ fn bind_tcp(addr: &str) -> io::Result<AsyncTcpListener> {
     AsyncTcpListener::bind(addr).map_err(runtime_io_error)
 }
 
-fn runtime_io_error(error: edgerun_rt::IoError) -> io::Error {
+fn runtime_io_error(error: crate::rt::IoError) -> io::Error {
     io::Error::new(io::ErrorKind::Other, format!("{error}"))
 }
 
-fn rt_io_error(error: edgerun_rt::IoError) -> io::Error {
+fn rt_io_error(error: crate::rt::IoError) -> io::Error {
     match error {
-        edgerun_rt::IoError::UnexpectedEof => {
+        crate::rt::IoError::UnexpectedEof => {
             io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected end of file")
         }
-        edgerun_rt::IoError::WriteZero => io::Error::new(io::ErrorKind::WriteZero, "write zero"),
-        edgerun_rt::IoError::Other(message) => io::Error::new(io::ErrorKind::Other, message),
+        crate::rt::IoError::WriteZero => io::Error::new(io::ErrorKind::WriteZero, "write zero"),
+        crate::rt::IoError::Other(message) => io::Error::new(io::ErrorKind::Other, message),
     }
 }
 
 fn dns_frame_error(error: edgerun_protocols::dns::DnsTcpFrameError) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, format!("{error:?}"))
+}
+
+fn join_error(error: crate::rt::JoinError) -> io::Error {
+    let _ = error;
+    io::Error::new(io::ErrorKind::Other, "DNS runtime task failed")
 }

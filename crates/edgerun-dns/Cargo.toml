@@ -13,10 +13,7 @@ default = []
 dhcp = ["edgerun-protocols/dhcp"]
 dhcp-client = ["dhcp", "dep:edgerun-crypto"]
 dnssec = [
-    "dep:edgerun-crypto",
-    "edgerun-crypto/ed25519",
-    "edgerun-crypto/p256",
-    "edgerun-crypto/sha1",
+    "edgerun-protocols/dnssec",
 ]
 tsig = ["dep:edgerun-crypto", "edgerun-crypto/hmac", "edgerun-protocols/tsig"]
 

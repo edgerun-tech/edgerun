@@ -76,6 +76,8 @@ pub struct CertificateValidator {
     skip_hostname_check: bool,
     /// Whether to skip chain validation (testing only)
     skip_chain_check: bool,
+    /// Runtime-supplied certificate validation time.
+    validation_time_unix_secs: Option<u64>,
 }
 
 impl CertificateValidator {
@@ -85,6 +87,7 @@ impl CertificateValidator {
             trusted_roots: Vec::new(),
             skip_hostname_check: false,
             skip_chain_check: false,
+            validation_time_unix_secs: None,
         }
     }
 
@@ -99,7 +102,13 @@ impl CertificateValidator {
             trusted_roots,
             skip_hostname_check: false,
             skip_chain_check: false,
+            validation_time_unix_secs: None,
         })
+    }
+
+    /// Set the caller-owned certificate validation time.
+    pub fn set_validation_time_unix_secs(&mut self, now: u64) {
+        self.validation_time_unix_secs = Some(now);
     }
 
     /// Skip hostname verification (testing only — DANGEROUS in production).
@@ -143,12 +152,14 @@ impl CertificateValidator {
 
         let leaf = &certs[0];
         let hostname_valid = self.check_hostname(leaf);
-        if !leaf.is_valid_now() {
-            return CertValidationResult {
-                chain_valid: false,
-                hostname_valid,
-                error: Some("Leaf certificate is expired or not yet valid".to_string()),
-            };
+        if let Some(now) = self.validation_time_unix_secs {
+            if !leaf.is_valid_at_unix_secs(now) {
+                return CertValidationResult {
+                    chain_valid: false,
+                    hostname_valid,
+                    error: Some("Leaf certificate is expired or not yet valid".to_string()),
+                };
+            }
         }
 
         if certs.len() == 1 && self.trusted_roots.is_empty() {
@@ -162,12 +173,14 @@ impl CertificateValidator {
         for pair in certs.windows(2) {
             let cert = &pair[0];
             let issuer = &pair[1];
-            if !issuer.is_valid_now() {
-                return CertValidationResult {
-                    chain_valid: false,
-                    hostname_valid,
-                    error: Some("Issuer certificate is expired or not yet valid".to_string()),
-                };
+            if let Some(now) = self.validation_time_unix_secs {
+                if !issuer.is_valid_at_unix_secs(now) {
+                    return CertValidationResult {
+                        chain_valid: false,
+                        hostname_valid,
+                        error: Some("Issuer certificate is expired or not yet valid".to_string()),
+                    };
+                }
             }
             if let Err(err) = cert.verify_signature(issuer) {
                 return CertValidationResult {
@@ -180,8 +193,10 @@ impl CertificateValidator {
 
         let chain_anchor = certs.last().expect("nonempty certificate chain");
         for trusted_root in &self.trusted_roots {
-            if !trusted_root.is_valid_now() {
-                continue;
+            if let Some(now) = self.validation_time_unix_secs {
+                if !trusted_root.is_valid_at_unix_secs(now) {
+                    continue;
+                }
             }
             if chain_anchor.verify_signature(trusted_root).is_ok() {
                 return CertValidationResult {
@@ -466,6 +481,8 @@ pub struct QuicTlsHandshaker {
     cert_validation: Option<CertValidationResult>,
     /// Configured trusted root certificates, DER-encoded.
     trusted_roots_der: Vec<Vec<u8>>,
+    /// Runtime-supplied certificate validation time.
+    cert_validation_time_unix_secs: Option<u64>,
     /// Explicit local-test mode for same-stack QUIC without X.509 trust.
     allow_unverified_certificates: bool,
 }
@@ -508,6 +525,7 @@ impl QuicTlsHandshaker {
             cert_verify_signature: None,
             cert_validation: None,
             trusted_roots_der: Vec::new(),
+            cert_validation_time_unix_secs: None,
             allow_unverified_certificates: false,
         }
     }
@@ -527,6 +545,11 @@ impl QuicTlsHandshaker {
     /// from the signed event stream.
     pub fn set_trusted_roots_der(&mut self, roots: Vec<Vec<u8>>) {
         self.trusted_roots_der = roots;
+    }
+
+    /// Configure the runtime-owned time used for certificate validity checks.
+    pub fn set_certificate_validation_time_unix_secs(&mut self, now: u64) {
+        self.cert_validation_time_unix_secs = Some(now);
     }
 
     /// Build the Initial packet payload: CRYPTO frame containing ClientHello.
@@ -756,10 +779,13 @@ impl QuicTlsHandshaker {
                             }
 
                             // Validate certificate chain
-                            let validator = CertificateValidator::with_trusted_roots_der(
+                            let mut validator = CertificateValidator::with_trusted_roots_der(
                                 Some(self.server_name()),
                                 &self.trusted_roots_der,
                             )?;
+                            if let Some(now) = self.cert_validation_time_unix_secs {
+                                validator.set_validation_time_unix_secs(now);
+                            }
                             self.cert_validation =
                                 Some(validator.validate_chain(&self.server_cert_chain));
                             if !self.allow_unverified_certificates {
@@ -799,10 +825,13 @@ impl QuicTlsHandshaker {
                         let leaf_cert = self.server_cert_chain.first().ok_or_else(|| {
                             "CertificateVerify received before Certificate".to_string()
                         })?;
-                        let validator = CertificateValidator::with_trusted_roots_der(
+                        let mut validator = CertificateValidator::with_trusted_roots_der(
                             Some(self.server_name()),
                             &self.trusted_roots_der,
                         )?;
+                        if let Some(now) = self.cert_validation_time_unix_secs {
+                            validator.set_validation_time_unix_secs(now);
+                        }
                         if !validator.verify_certificate_signature(
                             leaf_cert,
                             sig_alg,

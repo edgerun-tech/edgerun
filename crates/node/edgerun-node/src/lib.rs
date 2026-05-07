@@ -1,4 +1,9 @@
-//! edgerun Node — connects streams, commands, and capabilities.
+//! edgerun Node — IPC router and resource authority.
+//!
+//! A node moves data between apps, protocol state machines, sockets,
+//! capabilities, storage, and mesh links. It is the authority boundary for all
+//! host resources. Apps can declare routes and ask for capabilities, but they
+//! do not bind ports, share memory, open files, or own sockets directly.
 //!
 //! A node is initialized from a YAML configuration that defines:
 //! - Its identity (public key)
@@ -15,10 +20,26 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
+#[cfg(feature = "exchange-events")]
+pub mod exchange_events;
 pub mod mesh_node;
+pub mod resource;
+pub mod router;
+pub mod rt;
 pub mod runtime;
-#[cfg(feature = "http")]
-pub mod server;
+#[cfg(any(
+    feature = "http",
+    feature = "dns",
+    feature = "dhcp",
+    feature = "tftp",
+    feature = "proxy",
+    feature = "smtp",
+    feature = "imap",
+    feature = "lmtp",
+))]
+pub mod services;
+#[cfg(feature = "exchange-events")]
+mod stream_append;
 
 mod protocol_signer;
 

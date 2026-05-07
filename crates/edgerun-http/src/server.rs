@@ -14,7 +14,7 @@ use crate::header::HeaderMap;
 use crate::http2::frame::{flags, Frame, FrameType};
 use crate::http2::headers::{validate_header_name_case, validate_request_headers};
 use crate::http2::hpack::{Decoder, Encoder};
-use crate::http2::server::{FrameAction, Http2Server};
+use crate::http2::{FrameAction, Http2Server};
 use crate::http2::ErrorCode;
 use crate::method::Method;
 use crate::runtime::net::SocketAddr;

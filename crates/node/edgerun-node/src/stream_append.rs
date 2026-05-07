@@ -3,6 +3,10 @@
 //! These helpers load the prior durable head, ask `edgerun-stream` to build the
 //! next signed event, then append that exact envelope to storage.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_sign::ProtocolSigner;
 use edgerun_storage::NodeStore;

@@ -5,13 +5,13 @@
 use super::response;
 use super::FrameAction;
 use super::Http2Server;
-use crate::http2::flow_control::FlowController;
-use crate::http2::frame::{
+use crate::http::http2::flow_control::FlowController;
+use crate::http::http2::frame::{
     Frame, PingFrame, PriorityFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
-use crate::http2::settings::Settings;
-use crate::http2::ErrorCode;
-use edgerun_protocols::http::http2::Http2Error as ProtocolHttp2Error;
+use crate::http::http2::settings::Settings;
+use crate::http::http2::ErrorCode;
+use crate::http::http2::Http2Error as ProtocolHttp2Error;
 
 impl Http2Server {
     /// Process an incoming SETTINGS frame (after preface).
@@ -22,7 +22,7 @@ impl Http2Server {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
-                    ErrorCode::FRAME_SIZE_ERROR.to_u32(),
+                    ErrorCode::FrameSizeError.to_u32(),
                     b"Invalid SETTINGS payload",
                 );
             }
@@ -40,9 +40,9 @@ impl Http2Server {
                 Err(e) => {
                     let error_code = match &e {
                         ProtocolHttp2Error::FlowControl(_) => {
-                            ErrorCode::FLOW_CONTROL_ERROR.to_u32()
+                            ErrorCode::FlowControlError.to_u32()
                         }
-                        _ => ErrorCode::PROTOCOL_ERROR.to_u32(),
+                        _ => ErrorCode::ProtocolError.to_u32(),
                     };
                     return response::send_goaway(
                         self.last_processed_stream_id,
@@ -76,7 +76,7 @@ impl Http2Server {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
-                    ErrorCode::FLOW_CONTROL_ERROR.to_u32(),
+                    ErrorCode::FlowControlError.to_u32(),
                     b"Invalid WINDOW_UPDATE",
                 );
             }
@@ -87,7 +87,7 @@ impl Http2Server {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
-                    ErrorCode::FLOW_CONTROL_ERROR.to_u32(),
+                    ErrorCode::FlowControlError.to_u32(),
                     b"Window overflow",
                 );
             }
@@ -101,7 +101,7 @@ impl Http2Server {
                 if wu.window_increment as i64 > FlowController::MAX_WINDOW_SIZE - s.remote_window {
                     return response::rst_stream(
                         wu.stream_id,
-                        ErrorCode::FLOW_CONTROL_ERROR.to_u32(),
+                        ErrorCode::FlowControlError.to_u32(),
                         &mut self.stream_manager,
                     );
                 }
@@ -136,7 +136,7 @@ impl Http2Server {
             self.goaway_sent = true;
             return response::send_goaway(
                 self.last_processed_stream_id,
-                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                ErrorCode::ProtocolError.to_u32(),
                 b"PRIORITY on stream 0",
             );
         }
@@ -144,7 +144,7 @@ impl Http2Server {
         if frame.stream_dependency == frame.stream_id {
             return response::rst_stream(
                 frame.stream_id,
-                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                ErrorCode::ProtocolError.to_u32(),
                 &mut self.stream_manager,
             );
         }

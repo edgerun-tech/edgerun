@@ -97,7 +97,7 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
     let tls_cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"])
         .map_err(|e| format!("tls certificate: {e}"))?;
 
-    let dns_config = crate::server::DnsConfig {
+    let dns_config = crate::services::DnsConfig {
         bind_addr: ports.dns.to_string(),
         bind_addr_ipv6: None,
         default_ttl: 60,
@@ -113,7 +113,7 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
         default_bootfile: None,
         bootfile_by_arch: std::collections::BTreeMap::new(),
     };
-    let dhcp_server = crate::server::dhcp_runtime::DhcpServer::new_bound(
+    let dhcp_server = crate::services::dhcp_runtime::DhcpServer::new_bound(
         dhcp_config,
         Ipv4Addr::new(10, 77, 0, 10),
         Ipv4Addr::new(10, 77, 0, 20),
@@ -121,27 +121,27 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
     )
     .map_err(|e| format!("dhcp bind: {e:?}"))?;
 
-    let _server_dhcp_config = crate::server::DhcpConfig::new(
+    let _server_dhcp_config = crate::services::DhcpConfig::new(
         Ipv4Addr::new(10, 77, 0, 1),
         Ipv4Addr::new(255, 255, 255, 0),
         Ipv4Addr::new(10, 77, 0, 1),
         Ipv4Addr::new(10, 77, 0, 10),
         Ipv4Addr::new(10, 77, 0, 20),
     );
-    let mut smtp_config = crate::server::SmtpConfig::default();
+    let mut smtp_config = crate::services::SmtpConfig::default();
     smtp_config.bind_addr = ports.smtp.to_string();
     smtp_config.domain_name = "bind-check.edgerun.local".to_string();
     smtp_config.starttls = true;
     smtp_config.tls_cert = Some(tls_cert.clone());
     smtp_config.local_domains = vec!["bind-check.edgerun.local".to_string()];
-    let mut imap_config = crate::server::ImapConfig::default();
+    let mut imap_config = crate::services::ImapConfig::default();
     imap_config.bind_addr = ports.imap.to_string();
     imap_config.domain_name = "bind-check.edgerun.local".to_string();
     imap_config.tls_cert = Some(tls_cert.clone());
-    let mut proxy_config = crate::server::ProxyConfig::default();
+    let mut proxy_config = crate::services::ProxyConfig::default();
     proxy_config.bind_addr = ports.proxy.to_string();
 
-    let mut bound = crate::server::Server::new()
+    let mut bound = crate::services::NodeRuntime::new()
         .with_dns(dns_config)
         .with_smtp(smtp_config)
         .with_imap(imap_config)

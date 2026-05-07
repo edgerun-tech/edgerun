@@ -100,11 +100,8 @@ impl Certificate {
         Ok(certs)
     }
 
-    /// Check if the certificate is currently valid
-    pub fn is_valid_now(&self) -> bool {
-        let Some(now) = unix_now_secs() else {
-            return true;
-        };
+    /// Check if the certificate is valid at the supplied Unix timestamp.
+    pub fn is_valid_at_unix_secs(&self, now: u64) -> bool {
         now >= self.not_before && now <= self.not_after
     }
 
@@ -737,9 +734,4 @@ fn parse_san_dns_names(extn_value: &[u8]) -> Vec<String> {
         }
     }
     out
-}
-
-fn unix_now_secs() -> Option<u64> {
-    let now = edgerun_rt::now() / 10_000_000;
-    (now != 0).then_some(now)
 }

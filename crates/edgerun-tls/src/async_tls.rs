@@ -1303,7 +1303,7 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                                 ));
                             }
                             let leaf = &certs[0];
-                            if !leaf.is_valid_now() {
+                            if !leaf.is_valid_at_unix_secs(current_unix_secs()) {
                                 return Err(TlsError::Certificate(
                                     "Server certificate is expired".into(),
                                 ));
@@ -2071,6 +2071,10 @@ fn to_bare_io_error(error: std::io::Error) -> edgerun_rt::IoError {
         std::io::ErrorKind::WriteZero => edgerun_rt::IoError::WriteZero,
         _ => edgerun_rt::IoError::Other("tls io error"),
     }
+}
+
+fn current_unix_secs() -> u64 {
+    edgerun_rt::now() / 10_000_000
 }
 
 impl<S> edgerun_rt::AsyncRead for AsyncTlsStream<S>

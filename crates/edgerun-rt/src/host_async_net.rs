@@ -1,7 +1,7 @@
 //! Host-backed async network provider for Linux/user-space targets.
 //!
 //! The public boundary remains Edgerun runtime socket types. This module is an
-//! internal provider that maps those capabilities to host sockets.
+//! internal provider that maps node-authorized capabilities to host sockets.
 
 extern crate alloc;
 extern crate std;

@@ -6,8 +6,16 @@ use core::fmt;
 pub mod flow_control;
 pub mod frame;
 pub mod headers;
+#[cfg(feature = "http2-server")]
+pub mod hpack;
+#[cfg(feature = "http2-server")]
+pub mod server;
 pub mod settings;
 pub mod stream;
+
+pub use frame::{Frame, FrameType};
+#[cfg(feature = "http2-server")]
+pub use hpack::{Decoder, Encoder};
 
 /// HTTP/2 protocol-layer errors.
 #[derive(Debug, Clone, PartialEq, Eq)]

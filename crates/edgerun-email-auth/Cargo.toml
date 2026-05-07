@@ -9,7 +9,6 @@ homepage.workspace = true
 description = "Email authentication: SPF, DKIM, DMARC evaluation"
 
 [dependencies]
-edgerun-dns = { version = "0.1", path = "../edgerun-dns", default-features = false }
 edgerun-protocols = { workspace = true, default-features = false, features = ["email-auth"] }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 

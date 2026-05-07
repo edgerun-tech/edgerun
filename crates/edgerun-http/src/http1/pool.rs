@@ -918,32 +918,6 @@ impl ConnectionPool {
             }
         }
 
-        if let Some(mut client) = edgerun_dns::DnsClient::system() {
-            client.set_timeout(dns_timeout);
-            if let Ok(ips) = rt_timeout(dns_timeout, client.query_a(host)).await {
-                if let Ok(ips) = ips {
-                    if let Some(ip) = ips.first() {
-                        return Self::connect_sock_static(
-                            connect_timeout,
-                            &SocketAddr::new(IpAddr::V4(*ip), port),
-                        )
-                        .await;
-                    }
-                }
-            }
-            if let Ok(ips) = rt_timeout(dns_timeout, client.query_aaaa(host)).await {
-                if let Ok(ips) = ips {
-                    if let Some(ip) = ips.first() {
-                        return Self::connect_sock_static(
-                            connect_timeout,
-                            &SocketAddr::new(IpAddr::V6(*ip), port),
-                        )
-                        .await;
-                    }
-                }
-            }
-        }
-
         Err(Error::InvalidUri(format!(
             "DNS resolution failed for {host}"
         )))

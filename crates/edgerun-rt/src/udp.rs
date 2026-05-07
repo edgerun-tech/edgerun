@@ -1,4 +1,8 @@
-//! UDP socket for bare-metal networking
+//! UDP socket for bare-metal networking.
+//!
+//! These are low-level node/runtime primitives. Application code requests
+//! protocol/resource access through `edgerun-node`; the node decides whether a
+//! UDP binding becomes a native socket, mesh/browser route, or no resource.
 
 extern crate alloc;
 

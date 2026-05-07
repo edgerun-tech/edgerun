@@ -31,10 +31,10 @@ use edgerun_email_auth::sign::DkimSigner;
 use edgerun_http::server::HttpServer;
 use edgerun_http::{into_handler_async, Handler, Request, Response, StatusCode};
 use edgerun_node::runtime::RuntimeServicePlan;
-use edgerun_node::server::dns_runtime::{
+use edgerun_node::services::dns_runtime::{
     DnsRuntime as DnsServer, DnsRuntimeConfig as DnsServerConfig,
 };
-use edgerun_node::server::{ImapConfig, Server, SmtpConfig};
+use edgerun_node::services::{ImapConfig, NodeRuntime, SmtpConfig};
 use edgerun_protocols::dns::DnsZone;
 use edgerun_rt::{sleep, CancellationToken, Runtime};
 use edgerun_sign_p256::P256ProtocolSigner;
@@ -567,6 +567,13 @@ fn unix_now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
 // ===========================================================================
 // ACME provisioning loop — DNS-01 challenge
 // ===========================================================================
@@ -812,7 +819,7 @@ fn run_health_check() -> ExitCode {
         match fs::read_to_string(DEPLOYMENT.tls_cert_path) {
             Ok(pem) => match Certificate::from_pem(&pem) {
                 Ok(cert) => {
-                    if cert.is_valid_now() {
+                    if cert.is_valid_at_unix_secs(unix_now_secs()) {
                         println!("  [OK] TLS certificate is valid");
                     } else {
                         println!("  [FAIL] TLS certificate is not currently valid");
@@ -851,7 +858,7 @@ fn run_send_system_report() -> ExitCode {
          Subject: Edgerun Server Report\r\n\
          Date: {}\r\n\
          \r\n\
-         Edgerun Server System Report\r\n\
+         Edgerun NodeRuntime System Report\r\n\
          ===========================\r\n\
          \r\n\
          Node label: {}\r\n\
@@ -1106,7 +1113,9 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         edgerun_rt::runs()
     );
 
-    let mut server = Server::new().with_smtp(smtp_config).with_imap(imap_config);
+    let mut server = NodeRuntime::new()
+        .with_smtp(smtp_config)
+        .with_imap(imap_config);
     let mut bound = server.build().await?;
 
     let server_shutdown = shutdown.clone();

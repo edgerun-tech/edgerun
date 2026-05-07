@@ -16,6 +16,10 @@ use edgerun_tls::server::message_builder::{
     build_finished_message, build_server_hello,
 };
 
+fn current_unix_secs() -> u64 {
+    edgerun_rt::now() / 10_000_000
+}
+
 // ========================================================================
 // Certificate Generation Edge Cases
 // ========================================================================
@@ -36,7 +40,7 @@ fn test_cert_generation_multiple_hostnames() {
 
     // Parse and verify
     let parsed = Certificate::from_der(&cert.cert_der).unwrap();
-    assert!(parsed.is_valid_now());
+    assert!(parsed.is_valid_at_unix_secs(current_unix_secs()));
     assert_eq!(parsed.subject_cn.as_deref(), Some("localhost"));
     parsed.verify_signature(&parsed).unwrap();
 
@@ -51,7 +55,7 @@ fn test_cert_generation_single_hostname() {
     let cert = generate_self_signed(&["myserver.local"]).unwrap();
     let parsed = Certificate::from_der(&cert.cert_der).unwrap();
 
-    assert!(parsed.is_valid_now());
+    assert!(parsed.is_valid_at_unix_secs(current_unix_secs()));
     assert!(parsed.subject_cn.is_some() || !parsed.subject_alt_names.is_empty());
 }
 
@@ -70,7 +74,7 @@ fn test_cert_pem_roundtrip() {
     assert!(!cert_der.is_empty());
 
     let parsed = Certificate::from_der(&cert_der).unwrap();
-    assert!(parsed.is_valid_now());
+    assert!(parsed.is_valid_at_unix_secs(current_unix_secs()));
 }
 
 /// Test signing key PEM roundtrip
@@ -131,7 +135,7 @@ fn test_hostname_match_wildcard() {
 
     // Wildcard matching depends on implementation
     // Just verify the cert was generated and parsed successfully
-    assert!(parsed.is_valid_now());
+    assert!(parsed.is_valid_at_unix_secs(current_unix_secs()));
     assert!(!parsed.subject_alt_names.is_empty() || parsed.subject_cn.is_some());
 }
 
@@ -142,7 +146,7 @@ fn test_cert_validity_period() {
     let parsed = Certificate::from_der(&cert.cert_der).unwrap();
 
     // Certificate should be valid now
-    assert!(parsed.is_valid_now());
+    assert!(parsed.is_valid_at_unix_secs(current_unix_secs()));
 
     // not_before should be in the past (or very close to now)
     let now = std::time::SystemTime::now()
