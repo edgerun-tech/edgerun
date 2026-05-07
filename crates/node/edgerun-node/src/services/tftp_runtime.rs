@@ -6,8 +6,8 @@ use alloc::vec::Vec;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use core::time::Duration;
 
-use edgerun_protocols::tftp::{TftpPeerId, TftpReadCore, TftpReadProvider};
 use crate::rt::UdpSocket;
+use edgerun_protocols::tftp::{TftpPeerId, TftpReadCore, TftpReadProvider};
 
 /// Trait for a TFTP file backend.
 pub trait FileProvider: Send + Sync {
@@ -156,9 +156,7 @@ fn parse_socket_addr(addr: &str) -> crate::rt::io::Result<SocketAddr> {
 
 fn to_rt_addr(addr: SocketAddr) -> crate::rt::SocketAddr {
     match addr {
-        SocketAddr::V4(addr) => {
-            crate::rt::SocketAddr::from_bytes4(addr.ip().octets(), addr.port())
-        }
+        SocketAddr::V4(addr) => crate::rt::SocketAddr::from_bytes4(addr.ip().octets(), addr.port()),
         SocketAddr::V6(addr) => crate::rt::SocketAddr::new(0, addr.port()),
     }
 }

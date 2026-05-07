@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use edgerun_hardware_signing::NodeID;
-use edgerun_json::{escape_json_string, Value as JsonValue};
+use edgerun_json::{Value as JsonValue, escape_json_string};
 use edgerun_node::rt::CancellationToken;
 use edgerun_node::rt::{AsyncReadExt, AsyncWriteExt};
 

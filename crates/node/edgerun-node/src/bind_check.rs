@@ -15,7 +15,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
     feature = "quic",
     feature = "acme",
 ))]
-use edgerun_http::{into_handler, Response, StatusCode};
+use edgerun_http::{Response, StatusCode, into_handler};
 #[cfg(all(
     feature = "http",
     feature = "https",
@@ -172,7 +172,9 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
         edgerun_node::rt::spawn(async move { http_bound.serve_with_shutdown(http_shutdown).await });
     let https_shutdown = shutdown.clone();
     let https_task =
-        edgerun_node::rt::spawn(async move { https_bound.serve_with_shutdown(https_shutdown).await });
+        edgerun_node::rt::spawn(
+            async move { https_bound.serve_with_shutdown(https_shutdown).await },
+        );
     let dhcp_shutdown = shutdown.clone();
     let dhcp_task = edgerun_node::rt::spawn(async move {
         dhcp_server.run(dhcp_shutdown).await;

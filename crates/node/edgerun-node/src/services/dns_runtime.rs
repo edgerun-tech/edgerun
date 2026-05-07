@@ -5,13 +5,13 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use edgerun_protocols::dns::{
-    dns_tcp_frame_len, encode_dns_tcp_frame, parse_dns_message_bounded, validate_name, DnsMessage,
-    DnsRecord, DnsRecordType, DnsResponseCode, DnsZone,
-};
 use crate::rt::{
     AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWriteExt,
     CancellationToken, RwLock,
+};
+use edgerun_protocols::dns::{
+    DnsMessage, DnsRecord, DnsRecordType, DnsResponseCode, DnsZone, dns_tcp_frame_len,
+    encode_dns_tcp_frame, parse_dns_message_bounded, validate_name,
 };
 
 #[cfg(not(target_os = "none"))]
@@ -265,7 +265,7 @@ async fn handle_query(wire: &[u8], state: &DnsState) -> Result<(Vec<u8>, bool), 
                 DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new())
                     .to_wire(),
                 false,
-            ))
+            ));
         }
     };
 

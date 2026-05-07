@@ -13,8 +13,8 @@ use alloc::vec::Vec;
 use edgerun_core::protocol::ObjectKind;
 use edgerun_core::util::now_protocol_timestamp;
 use edgerun_exchange::{
-    decode_exchange_event, encode_exchange_event, exchange_event_type, project_order,
-    ExchangeEvent, ExchangeOrderProjection,
+    ExchangeEvent, ExchangeOrderProjection, decode_exchange_event, encode_exchange_event,
+    exchange_event_type, project_order,
 };
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_sign::ProtocolSigner;

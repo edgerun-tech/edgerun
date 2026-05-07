@@ -49,7 +49,7 @@ pub(crate) mod test_support {
     use std::sync::Mutex;
 
     use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
-    use edgerun_keygen::{generate_node_signing_key, node_id_from_signing_key, NodeSigningKey};
+    use edgerun_keygen::{NodeSigningKey, generate_node_signing_key, node_id_from_signing_key};
     use edgerun_sign::{ProtocolSigner, SignableProtocolFamily};
     use edgerun_sign_p256::P256ProtocolSigner;
 
@@ -110,7 +110,7 @@ use core::fmt;
 
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_capability_policy::SimplePolicyEngine;
-use edgerun_core::command::{validate_command, CommandValidationContext};
+use edgerun_core::command::{CommandValidationContext, validate_command};
 use edgerun_core::protocol::{CommandEnvelope, EventEnvelope, EventType};
 use edgerun_core::result::Verdict;
 use edgerun_core::util::now_unix_millis_i64 as now_ms;

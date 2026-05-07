@@ -33,6 +33,7 @@
 //!
 //! [`edgerun_http`]: https://docs.rs/edgerun-http
 
+use crate::rt::CancellationToken;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -40,7 +41,6 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::module_path;
 use core::time::Duration;
-use crate::rt::CancellationToken;
 
 #[cfg(all(feature = "http", target_os = "none"))]
 use edgerun_http::io;
@@ -81,8 +81,8 @@ pub mod tftp_runtime;
 ))]
 use self::connection_interceptor_adapter::ConnectionInterceptorAdapter;
 pub use crate::resource::{
-    binding_intents, decide_binding, decide_bindings, NodeTransportSurface, ServiceBindingDecision,
-    ServiceBindingIntent,
+    NodeTransportSurface, ServiceBindingDecision, ServiceBindingIntent, binding_intents,
+    decide_binding, decide_bindings,
 };
 
 #[cfg(any(feature = "dns", feature = "dhcp", feature = "tftp", feature = "proxy"))]

@@ -4,25 +4,25 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use edgerun_wire::{
-    sdk_wire_bytes, CapabilityRequest, CapabilityResponse, CapabilityResponseProofRecord,
-    RuntimeAppInstall, RuntimeAppMessage, RuntimeDeploymentConfig, RuntimeDomainConfig,
-    RuntimeEvent, RuntimeHttpDispatch, RuntimeHttpRequest, RuntimeHttpRoute, RuntimeIdentityRoute,
-    RuntimeProtocolBinding, RuntimeRoutedAppMessage, SdkWireRecord, SigningCapabilityInputRecord,
-    SigningResponsePayloadRecord, StorageWriteReceiptRecord, APP_MESSAGE_STATUS_ACCEPTED,
-    APP_MESSAGE_STATUS_DENIED, APP_MESSAGE_STATUS_FORWARDED, CAPABILITY_KIND_SIGNING,
-    CAPABILITY_KIND_STORAGE, CAPABILITY_OPERATION_READ, CAPABILITY_OPERATION_SIGN,
-    CAPABILITY_OPERATION_WRITE, CAPABILITY_STATUS_INVALID_REQUEST, CAPABILITY_STATUS_OK,
-    CAPABILITY_STATUS_POLICY_DENIED, ROUTE_SCHEME_HTTPS, RUNTIME_EVENT_APP_INSTALLED,
+    APP_MESSAGE_STATUS_ACCEPTED, APP_MESSAGE_STATUS_DENIED, APP_MESSAGE_STATUS_FORWARDED,
+    CAPABILITY_KIND_SIGNING, CAPABILITY_KIND_STORAGE, CAPABILITY_OPERATION_READ,
+    CAPABILITY_OPERATION_SIGN, CAPABILITY_OPERATION_WRITE, CAPABILITY_STATUS_INVALID_REQUEST,
+    CAPABILITY_STATUS_OK, CAPABILITY_STATUS_POLICY_DENIED, CapabilityRequest, CapabilityResponse,
+    CapabilityResponseProofRecord, ROUTE_SCHEME_HTTPS, RUNTIME_EVENT_APP_INSTALLED,
     RUNTIME_EVENT_APP_MESSAGE_DISPATCHED, RUNTIME_EVENT_APP_MESSAGE_FORWARDED,
     RUNTIME_EVENT_CAPABILITY_DENIED, RUNTIME_EVENT_CAPABILITY_EXECUTED,
     RUNTIME_EVENT_HTTP_DISPATCHED, RUNTIME_EVENT_IDENTITY_ROUTE_GRANTED,
     RUNTIME_EVENT_ROUTE_GRANTED, RUNTIME_PROTOCOL_ACME, RUNTIME_PROTOCOL_DNS_TCP,
     RUNTIME_PROTOCOL_DNS_UDP, RUNTIME_PROTOCOL_HTTP, RUNTIME_PROTOCOL_HTTPS, RUNTIME_PROTOCOL_IMAP,
     RUNTIME_PROTOCOL_IMAPS, RUNTIME_PROTOCOL_LMTP, RUNTIME_PROTOCOL_PROXY, RUNTIME_PROTOCOL_SMTP,
-    RUNTIME_PROTOCOL_SUBMISSION, RUNTIME_PROTOCOL_TFTP, SDK_WIRE_ABI_VERSION,
+    RUNTIME_PROTOCOL_SUBMISSION, RUNTIME_PROTOCOL_TFTP, RuntimeAppInstall, RuntimeAppMessage,
+    RuntimeDeploymentConfig, RuntimeDomainConfig, RuntimeEvent, RuntimeHttpDispatch,
+    RuntimeHttpRequest, RuntimeHttpRoute, RuntimeIdentityRoute, RuntimeProtocolBinding,
+    RuntimeRoutedAppMessage, SDK_WIRE_ABI_VERSION, SdkWireRecord, SigningCapabilityInputRecord,
+    SigningResponsePayloadRecord, StorageWriteReceiptRecord, sdk_wire_bytes,
 };
 
-use crate::resource::{binding_intents, NodeTransportSurface, ServiceBindingIntent};
+use crate::resource::{NodeTransportSurface, ServiceBindingIntent, binding_intents};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeError {
@@ -1172,7 +1172,7 @@ pub fn capability_denial_proof(
 mod tests {
     use super::*;
     use edgerun_wire::{
-        from_bytes, RuntimeDomainConfig, RuntimeMailbox, HTTP_METHOD_GET, ROUTE_SCHEME_HTTPS,
+        HTTP_METHOD_GET, ROUTE_SCHEME_HTTPS, RuntimeDomainConfig, RuntimeMailbox, from_bytes,
     };
 
     #[derive(Default)]
@@ -1684,14 +1684,16 @@ mod tests {
         let plan = RuntimeServicePlan::from_deployment(&config);
         assert!(plan.requires_dns());
         assert!(plan.requires_acme());
-        assert!(plan
-            .listeners
-            .iter()
-            .any(|binding| binding.protocol == RUNTIME_PROTOCOL_HTTPS && binding.port == 443));
-        assert!(plan
-            .listeners
-            .iter()
-            .any(|binding| binding.protocol == RUNTIME_PROTOCOL_SMTP && binding.port == 25));
+        assert!(
+            plan.listeners
+                .iter()
+                .any(|binding| binding.protocol == RUNTIME_PROTOCOL_HTTPS && binding.port == 443)
+        );
+        assert!(
+            plan.listeners
+                .iter()
+                .any(|binding| binding.protocol == RUNTIME_PROTOCOL_SMTP && binding.port == 25)
+        );
         assert_eq!(plan.mail_domains(), vec![b"example.com".to_vec()]);
     }
 }

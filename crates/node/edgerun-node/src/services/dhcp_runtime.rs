@@ -7,8 +7,8 @@ use core::time::Duration;
 #[cfg(not(target_os = "none"))]
 use std::net::{Ipv4Addr as HostIpv4Addr, SocketAddrV4, UdpSocket as HostUdpSocket};
 
-use edgerun_protocols::dhcp::{message::io, DhcpServerConfig, DhcpServerCore, DHCP_SERVER_PORT};
-use crate::rt::{sleep, CancellationToken, Mutex, SocketAddr, UdpSocket};
+use crate::rt::{CancellationToken, Mutex, SocketAddr, UdpSocket, sleep};
+use edgerun_protocols::dhcp::{DHCP_SERVER_PORT, DhcpServerConfig, DhcpServerCore, message::io};
 
 pub struct DhcpServer {
     socket: Arc<UdpSocket>,
