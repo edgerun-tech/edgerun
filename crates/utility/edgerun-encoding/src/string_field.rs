@@ -11,12 +11,13 @@
 //! Provides helpers for encoding/decoding string fields in binary protocols
 //! using cursor-based serialization (length-prefixed UTF-8 strings).
 
+use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::str;
 
-use crate::byteorder::read_u64_le;
+use crate::byteorder::{push_u32_be, read_u32_be, read_u64_le};
 
 /// Error type for string field operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -326,6 +327,63 @@ pub fn decode_bytes_u32(bytes: &[u8], cursor: &mut usize) -> Result<Vec<u8>, Str
     let result = bytes[*cursor..*cursor + len].to_vec();
     *cursor += len;
     Ok(result)
+}
+
+// ─── u32-BE prefixed variants (network protocol string fields) ──────────────
+
+/// Encode bytes with a 4-byte big-endian length prefix.
+pub fn encode_bytes_u32_be(value: &[u8], out: &mut Vec<u8>) -> Result<(), StringFieldError> {
+    if value.len() > u32::MAX as usize {
+        return Err(StringFieldError::LengthExceedsInput);
+    }
+    push_u32_be(out, value.len() as u32);
+    out.extend_from_slice(value);
+    Ok(())
+}
+
+/// Decode a borrowed byte slice with a 4-byte big-endian length prefix.
+pub fn decode_bytes_u32_be_borrowed<'a>(
+    bytes: &'a [u8],
+    cursor: &mut usize,
+) -> Result<&'a [u8], StringFieldError> {
+    if bytes.len().saturating_sub(*cursor) < 4 {
+        return Err(StringFieldError::TruncatedInput);
+    }
+    let len = read_u32_be(bytes, *cursor) as usize;
+    *cursor += 4;
+    if bytes.len().saturating_sub(*cursor) < len {
+        return Err(StringFieldError::TruncatedInput);
+    }
+    let result = &bytes[*cursor..*cursor + len];
+    *cursor += len;
+    Ok(result)
+}
+
+/// Decode owned bytes with a 4-byte big-endian length prefix.
+pub fn decode_bytes_u32_be(bytes: &[u8], cursor: &mut usize) -> Result<Vec<u8>, StringFieldError> {
+    decode_bytes_u32_be_borrowed(bytes, cursor).map(ToOwned::to_owned)
+}
+
+/// Encode a UTF-8 string with a 4-byte big-endian length prefix.
+pub fn encode_string_field_u32_be(value: &str, out: &mut Vec<u8>) -> Result<(), StringFieldError> {
+    encode_bytes_u32_be(value.as_bytes(), out)
+}
+
+/// Decode a borrowed UTF-8 string with a 4-byte big-endian length prefix.
+pub fn decode_string_field_u32_be_borrowed<'a>(
+    bytes: &'a [u8],
+    cursor: &mut usize,
+) -> Result<&'a str, StringFieldError> {
+    let field = decode_bytes_u32_be_borrowed(bytes, cursor)?;
+    str::from_utf8(field).map_err(|_| StringFieldError::InvalidUtf8)
+}
+
+/// Decode an owned UTF-8 string with a 4-byte big-endian length prefix.
+pub fn decode_string_field_u32_be(
+    bytes: &[u8],
+    cursor: &mut usize,
+) -> Result<String, StringFieldError> {
+    decode_string_field_u32_be_borrowed(bytes, cursor).map(ToString::to_string)
 }
 
 /// Encode a string field with a 4-byte little-endian length prefix.

@@ -243,6 +243,10 @@ use edgerun_bluetooth::{
 };
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_encoding::byteorder::{read_u16_le, read_u32_le};
+use edgerun_protocols::bluetooth_mgmt::{self, BluetoothMgmtError, MgmtEvent};
+pub use edgerun_protocols::bluetooth_mgmt::{
+    MgmtControllerInfo, MgmtControllerSettings, MgmtVersionInfo,
+};
 #[cfg(unix)]
 use std::fs;
 #[cfg(unix)]
@@ -333,41 +337,6 @@ impl MgmtDiscoveryTransport {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MgmtVersionInfo {
-    pub version: u8,
-    pub revision: u16,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MgmtControllerSettings {
-    pub powered: bool,
-    pub connectable: bool,
-    pub fast_connectable: bool,
-    pub discoverable: bool,
-    pub pairable: bool,
-    pub link_security: bool,
-    pub secure_simple_pairing: bool,
-    pub bredr: bool,
-    pub high_speed: bool,
-    pub low_energy: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MgmtControllerInfo {
-    pub index: u16,
-    pub address: String,
-    pub bluetooth_version: u8,
-    pub manufacturer: u16,
-    pub supported_settings_raw: u32,
-    pub current_settings_raw: u32,
-    pub supported_settings: MgmtControllerSettings,
-    pub current_settings: MgmtControllerSettings,
-    pub class_of_device: u32,
-    pub name: String,
-    pub short_name: String,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MgmtBluetoothBackend {
     pub controller: MgmtControllerInfo,
@@ -431,13 +400,6 @@ pub enum MgmtControllerEvent {
         address_mask: u8,
         discovering: bool,
     },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct MgmtEvent {
-    opcode: u16,
-    index: u16,
-    payload: Vec<u8>,
 }
 
 struct MgmtSocket(RawFd);
@@ -531,56 +493,15 @@ fn system_time_unix_ms() -> Result<i64, CapabilityError> {
 }
 
 fn build_mgmt_packet(opcode: u16, index: u16, payload: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(6 + payload.len());
-    out.extend_from_slice(&opcode.to_le_bytes());
-    out.extend_from_slice(&index.to_le_bytes());
-    out.extend_from_slice(&(payload.len() as u16).to_le_bytes());
-    out.extend_from_slice(payload);
-    out
+    bluetooth_mgmt::build_mgmt_packet(opcode, index, payload)
 }
 
 fn parse_mgmt_event(packet: &[u8]) -> Result<MgmtEvent, CapabilityError> {
-    if packet.len() < 6 {
-        return Err(CapabilityError::Provider("short management event".into()));
-    }
-    let opcode = read_u16_le(packet, 0);
-    let index = read_u16_le(packet, 2);
-    let len = read_u16_le(packet, 4) as usize;
-    if packet.len() < 6 + len {
-        return Err(CapabilityError::Provider(
-            "truncated management event".into(),
-        ));
-    }
-    Ok(MgmtEvent {
-        opcode,
-        index,
-        payload: packet[6..6 + len].to_vec(),
-    })
+    bluetooth_mgmt::parse_mgmt_event(packet).map_err(mgmt_protocol_error)
 }
 
 fn mgmt_status_name(status: u8) -> &'static str {
-    match status {
-        0x00 => "success",
-        0x01 => "unknown-command",
-        0x02 => "not-connected",
-        0x03 => "failed",
-        0x04 => "connect-failed",
-        0x05 => "authentication-failed",
-        0x06 => "not-paired",
-        0x07 => "no-resources",
-        0x08 => "timeout",
-        0x09 => "already-connected",
-        0x0a => "busy",
-        0x0b => "rejected",
-        0x0c => "not-supported",
-        0x0d => "invalid-parameters",
-        0x0e => "disconnected",
-        0x0f => "not-powered",
-        0x10 => "cancelled",
-        0x11 => "invalid-index",
-        0x12 => "rfkilled",
-        _ => "unknown-status",
-    }
+    bluetooth_mgmt::mgmt_status_name(status)
 }
 
 fn wait_for_command_result(
@@ -629,65 +550,37 @@ fn wait_for_command_result(
 }
 
 fn format_bdaddr_le(bytes: &[u8]) -> String {
-    edgerun_encoding::hex::format_bdaddr_le(bytes)
-        .map(|addr| addr.to_ascii_uppercase())
-        .unwrap_or_default()
+    bluetooth_mgmt::format_bdaddr_le(bytes)
 }
 
 /// Parse a BDADDR string (e.g. "AA:BB:CC:DD:EE:FF") into little-endian bytes
 /// as used by the kernel mgmt protocol.
 fn parse_bdaddr(addr: &str) -> Result<[u8; 6], CapabilityError> {
-    edgerun_encoding::hex::parse_bdaddr(addr)
+    bluetooth_mgmt::parse_bdaddr(addr)
         .ok_or_else(|| CapabilityError::Provider(format!("invalid BDADDR format: {}", addr)))
 }
 
 fn parse_settings(bits: u32) -> MgmtControllerSettings {
-    MgmtControllerSettings {
-        powered: bits & (1 << 0) != 0,
-        connectable: bits & (1 << 1) != 0,
-        fast_connectable: bits & (1 << 2) != 0,
-        discoverable: bits & (1 << 3) != 0,
-        pairable: bits & (1 << 4) != 0,
-        link_security: bits & (1 << 5) != 0,
-        secure_simple_pairing: bits & (1 << 6) != 0,
-        bredr: bits & (1 << 7) != 0,
-        high_speed: bits & (1 << 8) != 0,
-        low_energy: bits & (1 << 9) != 0,
-    }
+    bluetooth_mgmt::parse_settings(bits)
 }
 
 fn parse_controller_info(
     index: u16,
     payload: &[u8],
 ) -> Result<MgmtControllerInfo, CapabilityError> {
-    if payload.len() < 6 + 1 + 2 + 4 + 4 + 3 + 249 + 11 {
-        return Err(CapabilityError::Provider(
-            "short mgmt controller info payload".into(),
-        ));
-    }
-    let address = format_bdaddr_le(&payload[0..6]);
-    let bluetooth_version = payload[6];
-    let manufacturer = read_u16_le(payload, 7);
-    let supported_settings_raw = read_u32_le(payload, 9);
-    let current_settings_raw = read_u32_le(payload, 13);
-    let class_of_device =
-        u32::from(payload[17]) | (u32::from(payload[18]) << 8) | (u32::from(payload[19]) << 16);
-    let name = edgerun_encoding::cstring::decode_c_string(&payload[20..269]).unwrap_or_default();
-    let short_name =
-        edgerun_encoding::cstring::decode_c_string(&payload[269..280]).unwrap_or_default();
-    Ok(MgmtControllerInfo {
-        index,
-        address,
-        bluetooth_version,
-        manufacturer,
-        supported_settings_raw,
-        current_settings_raw,
-        supported_settings: parse_settings(supported_settings_raw),
-        current_settings: parse_settings(current_settings_raw),
-        class_of_device,
-        name,
-        short_name,
-    })
+    bluetooth_mgmt::parse_controller_info(index, payload).map_err(mgmt_protocol_error)
+}
+
+fn mgmt_protocol_error(error: BluetoothMgmtError) -> CapabilityError {
+    let message = match error {
+        BluetoothMgmtError::ShortEvent => "short management event",
+        BluetoothMgmtError::TruncatedEvent => "truncated management event",
+        BluetoothMgmtError::ShortVersionPayload => "short mgmt version payload",
+        BluetoothMgmtError::ShortIndexListPayload => "short mgmt index list payload",
+        BluetoothMgmtError::ShortControllerInfoPayload => "short mgmt controller info payload",
+        BluetoothMgmtError::InvalidBdaddr => "invalid BDADDR format",
+    };
+    CapabilityError::Provider(message.into())
 }
 
 fn bool_from_ini(value: &str) -> Option<bool> {
@@ -1209,31 +1102,13 @@ fn parse_mgmt_controller_event(event: &MgmtEvent) -> Option<MgmtControllerEvent>
 pub fn read_management_version() -> Result<MgmtVersionInfo, CapabilityError> {
     let socket = MgmtSocket::open()?;
     let payload = socket.command(MGMT_OP_READ_VERSION, HCI_DEV_NONE, &[])?;
-    if payload.len() < 3 {
-        return Err(CapabilityError::Provider(
-            "short mgmt version payload".into(),
-        ));
-    }
-    Ok(MgmtVersionInfo {
-        version: payload[0],
-        revision: read_u16_le(&payload, 1),
-    })
+    bluetooth_mgmt::parse_version_payload(&payload).map_err(mgmt_protocol_error)
 }
 
 pub fn read_controller_indices() -> Result<Vec<u16>, CapabilityError> {
     let socket = MgmtSocket::open()?;
     let payload = socket.command(MGMT_OP_READ_INDEX_LIST, HCI_DEV_NONE, &[])?;
-    if payload.len() < 2 {
-        return Err(CapabilityError::Provider(
-            "short mgmt index list payload".into(),
-        ));
-    }
-    let count = read_u16_le(&payload, 0) as usize;
-    let mut out = Vec::new();
-    for chunk in payload[2..].chunks_exact(2).take(count) {
-        out.push(read_u16_le(chunk, 0));
-    }
-    Ok(out)
+    bluetooth_mgmt::parse_index_list_payload(&payload).map_err(mgmt_protocol_error)
 }
 
 pub fn read_controller_info(index: u16) -> Result<MgmtControllerInfo, CapabilityError> {

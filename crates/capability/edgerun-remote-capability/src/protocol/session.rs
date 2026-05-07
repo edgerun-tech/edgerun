@@ -88,8 +88,8 @@ pub fn default_remote_requester() -> edgerun_protocols::core_protocol::protocol:
     }
 }
 
-pub fn default_remote_requester_opt()
--> Option<edgerun_protocols::core_protocol::protocol::IdentityRef> {
+pub fn default_remote_requester_opt(
+) -> Option<edgerun_protocols::core_protocol::protocol::IdentityRef> {
     Some(default_remote_requester())
 }
 

@@ -24,6 +24,7 @@ pub mod ip;
 pub mod kv;
 pub mod net;
 pub mod percent;
+pub mod prefix_varint;
 pub mod quic_varint;
 pub mod quoted_printable;
 pub mod rfc2822;

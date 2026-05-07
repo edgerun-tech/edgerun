@@ -23,9 +23,9 @@ use edgerun_camera_biometrics::{
     PairedCameraFrame,
 };
 use edgerun_capabilities::{
-    CapabilityAccessClass, CapabilityDescriptor, CapabilityError, CapabilityEventKind,
-    CapabilityModality, CapabilityOperation, CapabilityRequest, CapabilityRole, CapabilitySelector,
-    capability_descriptor,
+    capability_descriptor, CapabilityAccessClass, CapabilityDescriptor, CapabilityError,
+    CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityRequest,
+    CapabilityRole, CapabilitySelector,
 };
 use edgerun_input::{InputDeviceInfo, InputDeviceKind, InputEventKind, InputEventRecord};
 use edgerun_microphone::{
@@ -36,35 +36,34 @@ use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityRevocation,
 };
 use edgerun_protocols::core_protocol::protocol::capability_runtime::{
-    CapabilityInvocationFrame, CapabilityRemoteEnvelope, CapabilitySessionClose,
-    CapabilitySessionMode, CapabilitySessionOpen, capability_remote_envelope,
+    capability_remote_envelope, CapabilityInvocationFrame, CapabilityRemoteEnvelope,
+    CapabilitySessionClose, CapabilitySessionMode, CapabilitySessionOpen,
 };
 use edgerun_speaker::{
     AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel,
     SpeakerSampleFormat,
 };
 use edgerun_wifi::{
-    WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState, WifiScanResult,
-    default_wifi_descriptor,
+    default_wifi_descriptor, WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation,
+    WifiPowerState, WifiScanResult,
 };
 
 use crate::adapters::{
-    BluetoothConnectionRemoteAdapter, BluetoothRemoteAdapter, CameraRemoteAdapter,
-    InputRemoteAdapter, MicrophoneRemoteAdapter, PairedCameraRemoteAdapter, SpeakerRemoteAdapter,
-    WifiControlRemoteAdapter, WifiRemoteAdapter, decode_bluetooth_connections,
-    decode_bluetooth_scan_result, decode_camera_capture, decode_input_events,
-    decode_microphone_capture, decode_paired_camera_frame, decode_speaker_playback_request,
-    decode_speaker_playback_result, decode_wifi_interface_info, decode_wifi_scan_result,
-    encode_bluetooth_connections, encode_bluetooth_scan_result, encode_camera_capture,
-    encode_input_events, encode_microphone_capture, encode_paired_camera_frame,
-    encode_speaker_playback_request, encode_speaker_playback_result, encode_wifi_interface_info,
-    encode_wifi_scan_result,
+    decode_bluetooth_connections, decode_bluetooth_scan_result, decode_camera_capture,
+    decode_input_events, decode_microphone_capture, decode_paired_camera_frame,
+    decode_speaker_playback_request, decode_speaker_playback_result, decode_wifi_interface_info,
+    decode_wifi_scan_result, encode_bluetooth_connections, encode_bluetooth_scan_result,
+    encode_camera_capture, encode_input_events, encode_microphone_capture,
+    encode_paired_camera_frame, encode_speaker_playback_request, encode_speaker_playback_result,
+    encode_wifi_interface_info, encode_wifi_scan_result, BluetoothConnectionRemoteAdapter,
+    BluetoothRemoteAdapter, CameraRemoteAdapter, InputRemoteAdapter, MicrophoneRemoteAdapter,
+    PairedCameraRemoteAdapter, SpeakerRemoteAdapter, WifiControlRemoteAdapter, WifiRemoteAdapter,
 };
 use crate::capability_error_result;
 use crate::policy::{IntoPolicyWrappedProvider, PolicyWrappedProvider};
 use crate::protocol::{
-    RemoteCapabilityProvider, RemoteCapabilityTransport, RemoteInvocationResult,
-    accept_session_open_unchecked, default_remote_requester,
+    accept_session_open_unchecked, default_remote_requester, RemoteCapabilityProvider,
+    RemoteCapabilityTransport, RemoteInvocationResult,
 };
 use crate::pump_one_event;
 use crate::serve_one;
@@ -810,13 +809,11 @@ fn inbound_grant_and_revocation_are_applied() {
         signature: None,
     };
     provider.handle_revocation(&revocation).unwrap();
-    assert!(
-        provider
-            .policy()
-            .grant_record(&grant.grant_id)
-            .unwrap()
-            .is_revoked()
-    );
+    assert!(provider
+        .policy()
+        .grant_record(&grant.grant_id)
+        .unwrap()
+        .is_revoked());
 }
 
 #[test]
@@ -1528,12 +1525,10 @@ fn decode_input_events_length_mismatch() {
     encoded.truncate(encoded.len().saturating_sub(1));
     let result = decode_input_events(&encoded);
     assert!(result.is_err());
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("remote input payload is not rkyv")
-    );
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("remote input payload is not rkyv"));
 }
 
 #[test]

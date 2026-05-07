@@ -292,6 +292,38 @@ use edgerun_fingerprint::{
     FingerprintEnrollmentSession, FingerprintError, FingerprintReader, FingerprintReaderInfo,
     FingerprintTemplateRecord, FingerprintVerification, FingerprintVerifyRequest,
 };
+use edgerun_protocols::goodix_fingerprint::{
+    build_goodix_finger_id as build_protocol_goodix_finger_id,
+    build_goodix_package as build_protocol_goodix_package, goodix_crc32,
+    parse_goodix_ack as parse_protocol_goodix_ack,
+    parse_goodix_capture_response as parse_protocol_goodix_capture_response,
+    parse_goodix_duplicate_check as parse_protocol_goodix_duplicate_check,
+    parse_goodix_enroll_init as parse_protocol_goodix_enroll_init,
+    parse_goodix_enroll_update as parse_protocol_goodix_enroll_update,
+    parse_goodix_finger_config as parse_protocol_goodix_finger_config,
+    parse_goodix_finger_list as parse_protocol_goodix_finger_list,
+    parse_goodix_finger_mode_status as parse_protocol_goodix_finger_mode_status,
+    parse_goodix_identify_result as parse_protocol_goodix_identify_result,
+    parse_goodix_packet as parse_protocol_goodix_packet,
+    parse_goodix_simple_result as parse_protocol_goodix_simple_result,
+    parse_goodix_template as parse_protocol_goodix_template,
+    parse_goodix_version_info as parse_protocol_goodix_version_info, GoodixPacketError,
+    GoodixPayloadError, GOODIX_PACKAGE_CRC_SIZE, GOODIX_PACKAGE_HEADER_SIZE,
+    GOODIX_RESPONSE_ACK_CMD,
+};
+pub use edgerun_protocols::goodix_fingerprint::{
+    GoodixAck, GoodixCaptureResponse, GoodixDuplicateCheckResult, GoodixEnrollInitResult,
+    GoodixEnrollUpdateResult, GoodixFingerConfig, GoodixFingerModeStatus, GoodixIdentifyResult,
+    GoodixPacket, GoodixPacketHeader, GoodixSimpleResult, GoodixTemplate, GoodixVersionInfo,
+};
+use edgerun_protocols::usb::{
+    parse_usb_configuration_descriptor as parse_protocol_usb_configuration_descriptor,
+    parse_usb_device_descriptor as parse_protocol_usb_device_descriptor,
+    parse_usb_language_ids as parse_protocol_usb_language_ids,
+    parse_usb_utf16le_string_descriptor as parse_protocol_usb_utf16le_string_descriptor,
+    UsbDescriptorError, USB_DT_CONFIG, USB_DT_DEVICE, USB_DT_STRING,
+};
+pub use edgerun_protocols::usb::{UsbConfigurationDescriptor, UsbDeviceDescriptor};
 #[cfg(unix)]
 use std::fs;
 use std::fs::File;
@@ -309,12 +341,6 @@ const USB_TYPE_STANDARD: u8 = 0x00 << 5;
 const USB_RECIP_DEVICE: u8 = 0x00;
 const USB_REQ_GET_DESCRIPTOR: u8 = 0x06;
 const USB_REQ_GET_CONFIGURATION: u8 = 0x08;
-const USB_DT_DEVICE: u8 = 0x01;
-const USB_DT_CONFIG: u8 = 0x02;
-const USB_DT_STRING: u8 = 0x03;
-const GOODIX_PACKAGE_CRC_SIZE: usize = 4;
-const GOODIX_PACKAGE_HEADER_SIZE: usize = 8;
-const GOODIX_RESPONSE_ACK_CMD: u8 = 0xaa;
 pub(crate) const GOODIX_CMD_GET_VERSION: u8 = 0xd0;
 pub(crate) const GOODIX_CMD_UPDATE_CONFIG: u8 = 0xc0;
 pub(crate) const GOODIX_CMD_CAPTURE_DATA: u8 = 0xa2;
@@ -354,152 +380,10 @@ const GOODIX_DEFAULT_SENSOR_CONFIG_BODY: [u8; GOODIX_SENSOR_CONFIG_BODY_SIZE] = 
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixVersionInfo {
-    pub format: [u8; 2],
-    pub fwtype: [u8; 8],
-    pub fwversion: [u8; 8],
-    pub customer: [u8; 8],
-    pub mcu: [u8; 8],
-    pub sensor: [u8; 8],
-    pub algversion: [u8; 8],
-    pub interface: [u8; 8],
-    pub protocol: [u8; 8],
-    pub flash_version: [u8; 8],
-    pub reserved: [u8; 38],
-}
-
-impl GoodixVersionInfo {
-    pub fn firmware_type_string(&self) -> String {
-        fixed_c_string(&self.fwtype)
-    }
-    pub fn firmware_version_string(&self) -> String {
-        fixed_c_string(&self.fwversion)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixPacketHeader {
-    pub cmd0: u8,
-    pub cmd1: u8,
-    pub package_num: u8,
-    pub reserved: u8,
-    pub payload_len: u16,
-    pub crc8: u8,
-    pub rev_crc8: u8,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixPacket {
-    pub header: GoodixPacketHeader,
-    pub payload: Vec<u8>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixAck {
-    pub result: u8,
-    pub ack_cmd: u8,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixTemplate {
-    pub template_type: u8,
-    pub finger_index: u8,
-    pub account_id: [u8; 32],
-    pub template_id: [u8; 32],
-    pub payload: Vec<u8>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixCaptureResponse {
-    pub result: u8,
-    pub image_quality: Option<u8>,
-    pub image_coverage: Option<u8>,
-}
-
-impl GoodixCaptureResponse {
-    pub fn is_success(&self) -> bool {
-        self.result < GOODIX_FAILED
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixIdentifyResult {
-    pub matched: bool,
-    pub result: u8,
-    pub reject_detail: Option<u16>,
-    pub score: Option<u32>,
-    pub study: Option<u8>,
-    pub template: Option<GoodixTemplate>,
-}
-
-impl GoodixIdentifyResult {
-    pub fn is_success(&self) -> bool {
-        self.result < GOODIX_FAILED || self.matched
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixEnrollInitResult {
-    pub result: u8,
-    pub template_id: Option<[u8; 32]>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixEnrollUpdateResult {
-    pub rollback: bool,
-    pub overlay: u8,
-    pub preoverlay: u8,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixDuplicateCheckResult {
-    pub duplicate: bool,
-    pub template: Option<GoodixTemplate>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GoodixEnrollmentProgress {
     pub capture: GoodixCaptureResponse,
     pub update: GoodixEnrollUpdateResult,
     pub duplicate: GoodixDuplicateCheckResult,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixSimpleResult {
-    pub result: u8,
-}
-
-impl GoodixSimpleResult {
-    pub fn is_success(&self) -> bool {
-        self.result < GOODIX_FAILED
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixFingerModeStatus {
-    pub status: u8,
-}
-
-impl GoodixFingerModeStatus {
-    pub fn is_success(&self) -> bool {
-        self.status == GOODIX_SUCCESS
-    }
-
-    pub fn is_wait_finger_up_timeout(&self) -> bool {
-        self.status == GOODIX_ERROR_WAIT_FINGER_UP_TIMEOUT
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GoodixFingerConfig {
-    pub status: u8,
-    pub max_stored_prints: u8,
-}
-
-impl GoodixFingerConfig {
-    pub fn is_success(&self) -> bool {
-        self.status < GOODIX_FAILED
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -520,33 +404,6 @@ impl GoodixSensorConfig {
             .copy_from_slice(&self.crc32);
         out
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UsbDeviceDescriptor {
-    pub usb_version_bcd: u16,
-    pub device_class: u8,
-    pub device_subclass: u8,
-    pub device_protocol: u8,
-    pub max_packet_size0: u8,
-    pub vendor_id: u16,
-    pub product_id: u16,
-    pub device_version_bcd: u16,
-    pub manufacturer_index: u8,
-    pub product_index: u8,
-    pub serial_number_index: u8,
-    pub num_configurations: u8,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UsbConfigurationDescriptor {
-    pub total_length: u16,
-    pub num_interfaces: u8,
-    pub configuration_value: u8,
-    pub configuration_index: u8,
-    pub attributes: u8,
-    pub max_power_2ma: u8,
-    pub extra_descriptors: Vec<u8>,
 }
 
 const IOC_NRBITS: u32 = 8;
@@ -687,104 +544,25 @@ fn le_u16(bytes: &[u8]) -> Result<u16, GoodixFingerprintError> {
 pub fn parse_usb_device_descriptor(
     bytes: &[u8],
 ) -> Result<UsbDeviceDescriptor, GoodixFingerprintError> {
-    if bytes.len() < 18 {
-        return Err(GoodixFingerprintError::Parse(
-            "short USB device descriptor".into(),
-        ));
-    }
-    if bytes[0] != 18 || bytes[1] != USB_DT_DEVICE {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid USB device descriptor header".into(),
-        ));
-    }
-    Ok(UsbDeviceDescriptor {
-        usb_version_bcd: le_u16(&bytes[2..4])?,
-        device_class: bytes[4],
-        device_subclass: bytes[5],
-        device_protocol: bytes[6],
-        max_packet_size0: bytes[7],
-        vendor_id: le_u16(&bytes[8..10])?,
-        product_id: le_u16(&bytes[10..12])?,
-        device_version_bcd: le_u16(&bytes[12..14])?,
-        manufacturer_index: bytes[14],
-        product_index: bytes[15],
-        serial_number_index: bytes[16],
-        num_configurations: bytes[17],
-    })
+    parse_protocol_usb_device_descriptor(bytes).map_err(usb_descriptor_error)
 }
 
 pub fn parse_usb_configuration_descriptor(
     bytes: &[u8],
 ) -> Result<UsbConfigurationDescriptor, GoodixFingerprintError> {
-    if bytes.len() < 9 {
-        return Err(GoodixFingerprintError::Parse(
-            "short USB configuration descriptor".into(),
-        ));
-    }
-    if bytes[1] != USB_DT_CONFIG {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid USB configuration descriptor header".into(),
-        ));
-    }
-    let total_length = le_u16(&bytes[2..4])?;
-    if total_length < 9 {
-        return Err(GoodixFingerprintError::Parse(
-            "USB configuration total length too small".into(),
-        ));
-    }
-    if bytes.len() < total_length as usize {
-        return Err(GoodixFingerprintError::Parse(
-            "short USB configuration descriptor payload".into(),
-        ));
-    }
-    Ok(UsbConfigurationDescriptor {
-        total_length,
-        num_interfaces: bytes[4],
-        configuration_value: bytes[5],
-        configuration_index: bytes[6],
-        attributes: bytes[7],
-        max_power_2ma: bytes[8],
-        extra_descriptors: bytes[9..total_length as usize].to_vec(),
-    })
+    parse_protocol_usb_configuration_descriptor(bytes).map_err(usb_descriptor_error)
 }
 
 fn parse_usb_utf16le_string_descriptor(bytes: &[u8]) -> Result<String, GoodixFingerprintError> {
-    if bytes.len() < 2 || bytes[1] != USB_DT_STRING || bytes[0] as usize > bytes.len() {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid USB string descriptor header".into(),
-        ));
-    }
-    let declared_len = bytes[0] as usize;
-    if declared_len < 2 || !(declared_len - 2).is_multiple_of(2) {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid USB string descriptor length".into(),
-        ));
-    }
-    let mut units = Vec::new();
-    for chunk in bytes[2..declared_len].chunks_exact(2) {
-        units.push(u16::from_le_bytes([chunk[0], chunk[1]]));
-    }
-    String::from_utf16(&units)
-        .map_err(|_| GoodixFingerprintError::Parse("invalid UTF-16LE USB string descriptor".into()))
+    parse_protocol_usb_utf16le_string_descriptor(bytes).map_err(usb_descriptor_error)
 }
 
 fn parse_usb_language_ids(bytes: &[u8]) -> Result<Vec<u16>, GoodixFingerprintError> {
-    if bytes.len() < 2 || bytes[1] != USB_DT_STRING || bytes[0] as usize > bytes.len() {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid USB language descriptor header".into(),
-        ));
-    }
-    let declared_len = bytes[0] as usize;
-    if declared_len < 4 || !(declared_len - 2).is_multiple_of(2) {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid USB language descriptor length".into(),
-        ));
-    }
-    let mut out = Vec::new();
-    for chunk in bytes[2..declared_len].chunks_exact(2) {
-        out.push(u16::from_le_bytes([chunk[0], chunk[1]]));
-    }
-    Ok(out)
+    parse_protocol_usb_language_ids(bytes).map_err(usb_descriptor_error)
+}
+
+fn usb_descriptor_error(error: UsbDescriptorError) -> GoodixFingerprintError {
+    GoodixFingerprintError::Parse(error.to_string())
 }
 
 fn fixed_c_string(bytes: &[u8]) -> String {
@@ -834,226 +612,57 @@ fn ensure_goodix_ok(result: u8, context: &'static str) -> Result<(), GoodixFinge
     Ok(())
 }
 
-fn goodix_crc8(bytes: &[u8]) -> u8 {
-    let mut crc: u32 = 0;
-    for &b in bytes {
-        crc ^= u32::from(b) << 8;
-        for _ in 0..8 {
-            if crc & 0x8000 != 0 {
-                crc ^= 0x1070 << 3;
-            }
-            crc <<= 1;
-        }
-    }
-    !((crc >> 8) as u8)
-}
-
-fn reflect(mut data: u32, n_bits: u8) -> u32 {
-    let mut reflection = 0u32;
-    for bit in 0..n_bits {
-        if data & 0x01 != 0 {
-            reflection |= 1 << ((n_bits - 1) - bit);
-        }
-        data >>= 1;
-    }
-    reflection
-}
-
-fn goodix_crc32(bytes: &[u8]) -> [u8; 4] {
-    const POLY: u32 = 0x04C11DB7;
-    let mut crc = 0xFFFF_FFFFu32;
-    for &message_byte in bytes {
-        let data = reflect(u32::from(message_byte), 8) ^ (crc >> 24);
-        crc ^= data << 24;
-        for _ in 0..8 {
-            if crc & 0x8000_0000 != 0 {
-                crc = (crc << 1) ^ POLY;
-            } else {
-                crc <<= 1;
-            }
-        }
-    }
-    let final_crc = reflect(crc, 32) ^ 0xFFFF_FFFF;
-    final_crc.to_le_bytes()
-}
-
 pub fn build_goodix_package(cmd0: u8, cmd1: u8, payload: &[u8]) -> Vec<u8> {
-    let mut out =
-        Vec::with_capacity(GOODIX_PACKAGE_HEADER_SIZE + payload.len() + GOODIX_PACKAGE_CRC_SIZE);
-    let payload_plus_crc = (payload.len() + GOODIX_PACKAGE_CRC_SIZE) as u16;
-    let mut header = [0u8; GOODIX_PACKAGE_HEADER_SIZE];
-    header[0] = cmd0;
-    header[1] = cmd1;
-    header[2] = 0;
-    header[3] = 0;
-    header[4..6].copy_from_slice(&payload_plus_crc.to_le_bytes());
-    header[6] = goodix_crc8(&header[..6]);
-    header[7] = !header[6];
-    out.extend_from_slice(&header);
-    out.extend_from_slice(payload);
-    out.extend_from_slice(&goodix_crc32(&out));
-    out
+    build_protocol_goodix_package(cmd0, cmd1, payload)
 }
 
 pub fn parse_goodix_packet(bytes: &[u8]) -> Result<GoodixPacket, GoodixFingerprintError> {
-    if bytes.len() < GOODIX_PACKAGE_HEADER_SIZE + GOODIX_PACKAGE_CRC_SIZE {
-        return Err(GoodixFingerprintError::Parse("short Goodix packet".into()));
-    }
-    let crc8 = goodix_crc8(&bytes[..6]);
-    if bytes[6] != crc8 || bytes[7] != !crc8 {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid Goodix header CRC8".into(),
-        ));
-    }
-    let len_with_crc = le_u16(&bytes[4..6])? as usize;
-    if bytes.len() < GOODIX_PACKAGE_HEADER_SIZE + len_with_crc {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix packet payload".into(),
-        ));
-    }
-    let payload_len = len_with_crc
-        .checked_sub(GOODIX_PACKAGE_CRC_SIZE)
-        .ok_or_else(|| GoodixFingerprintError::Parse("invalid Goodix payload length".into()))?;
-    let end = GOODIX_PACKAGE_HEADER_SIZE + payload_len;
-    let expected_crc = goodix_crc32(&bytes[..end]);
-    let actual_crc: [u8; 4] = bytes[end..end + 4].try_into().unwrap();
-    if expected_crc != actual_crc {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid Goodix packet CRC32".into(),
-        ));
-    }
-    Ok(GoodixPacket {
-        header: GoodixPacketHeader {
-            cmd0: bytes[0],
-            cmd1: bytes[1],
-            package_num: bytes[2],
-            reserved: bytes[3],
-            payload_len: payload_len as u16,
-            crc8: bytes[6],
-            rev_crc8: bytes[7],
-        },
-        payload: bytes[GOODIX_PACKAGE_HEADER_SIZE..end].to_vec(),
-    })
+    parse_protocol_goodix_packet(bytes).map_err(goodix_packet_error)
 }
 
 pub fn parse_goodix_ack(packet: &GoodixPacket) -> Result<GoodixAck, GoodixFingerprintError> {
-    if packet.header.cmd0 != GOODIX_RESPONSE_ACK_CMD || packet.payload.len() < 2 {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid Goodix ack packet".into(),
-        ));
-    }
-    Ok(GoodixAck {
-        result: packet.payload[0],
-        ack_cmd: packet.payload[1],
-    })
+    parse_protocol_goodix_ack(packet).map_err(goodix_packet_error)
+}
+
+fn goodix_packet_error(error: GoodixPacketError) -> GoodixFingerprintError {
+    GoodixFingerprintError::Parse(error.to_string())
 }
 
 fn parse_goodix_version_info(payload: &[u8]) -> Result<GoodixVersionInfo, GoodixFingerprintError> {
-    if payload.len() < 1 + 112 {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix version payload".into(),
-        ));
-    }
-    let body = &payload[1..113];
-    Ok(GoodixVersionInfo {
-        format: body[0..2].try_into().unwrap(),
-        fwtype: body[2..10].try_into().unwrap(),
-        fwversion: body[10..18].try_into().unwrap(),
-        customer: body[18..26].try_into().unwrap(),
-        mcu: body[26..34].try_into().unwrap(),
-        sensor: body[34..42].try_into().unwrap(),
-        algversion: body[42..50].try_into().unwrap(),
-        interface: body[50..58].try_into().unwrap(),
-        protocol: body[58..66].try_into().unwrap(),
-        flash_version: body[66..74].try_into().unwrap(),
-        reserved: body[74..112].try_into().unwrap(),
-    })
+    parse_protocol_goodix_version_info(payload).map_err(goodix_payload_error)
 }
 
 fn parse_goodix_template(bytes: &[u8]) -> Result<GoodixTemplate, GoodixFingerprintError> {
-    if bytes.len() < 68 + 1 + 2 {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix template payload".into(),
-        ));
-    }
-    if bytes[0] != 67 {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid Goodix template marker".into(),
-        ));
-    }
-    let payload_size = bytes[68] as usize;
-    if payload_size > 56 || bytes.len() < 69 + payload_size {
-        return Err(GoodixFingerprintError::Parse(
-            "invalid Goodix template data size".into(),
-        ));
-    }
-    Ok(GoodixTemplate {
-        template_type: bytes[1],
-        finger_index: bytes[2],
-        account_id: bytes[4..36].try_into().unwrap(),
-        template_id: bytes[36..68].try_into().unwrap(),
-        payload: bytes[69..69 + payload_size].to_vec(),
-    })
+    parse_protocol_goodix_template(bytes).map_err(goodix_payload_error)
 }
 
 fn build_goodix_finger_id(
     template_id: &[u8; 32],
     user_id: &[u8],
 ) -> Result<Vec<u8>, GoodixFingerprintError> {
-    if user_id.len() > 100 || user_id.len() > 56 {
-        return Err(GoodixFingerprintError::Parse(
-            "Goodix user id too long".into(),
-        ));
-    }
-    let total_len = 70 + user_id.len();
-    let mut out = vec![0u8; total_len + 2];
-    let len_le = (total_len as u16).to_le_bytes();
-    out[0..2].copy_from_slice(&len_le);
-    out[2] = 67;
-    out[3] = 1;
-    out[4] = 1;
-    out[5] = 0;
-    out[38..70].copy_from_slice(template_id);
-    out[70] = user_id.len() as u8;
-    out[71..71 + user_id.len()].copy_from_slice(user_id);
-    out[71 + user_id.len()] = 0;
-    Ok(out)
+    build_protocol_goodix_finger_id(template_id, user_id).map_err(goodix_payload_error)
 }
 
 fn parse_goodix_simple_result(
     payload: &[u8],
 ) -> Result<GoodixSimpleResult, GoodixFingerprintError> {
-    if payload.is_empty() {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix result payload".into(),
-        ));
-    }
-    Ok(GoodixSimpleResult { result: payload[0] })
+    parse_protocol_goodix_simple_result(payload).map_err(goodix_payload_error)
 }
 
 fn parse_goodix_finger_mode_status(
     payload: &[u8],
 ) -> Result<GoodixFingerModeStatus, GoodixFingerprintError> {
-    if payload.is_empty() {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix finger-mode payload".into(),
-        ));
-    }
-    Ok(GoodixFingerModeStatus { status: payload[0] })
+    parse_protocol_goodix_finger_mode_status(payload).map_err(goodix_payload_error)
 }
 
 fn parse_goodix_finger_config(
     payload: &[u8],
 ) -> Result<GoodixFingerConfig, GoodixFingerprintError> {
-    if payload.is_empty() {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix finger-config payload".into(),
-        ));
-    }
-    Ok(GoodixFingerConfig {
-        status: payload[0],
-        max_stored_prints: payload.get(2).copied().unwrap_or(GOODIX_MAX_STORED_PRINTS),
-    })
+    parse_protocol_goodix_finger_config(payload).map_err(goodix_payload_error)
+}
+
+fn goodix_payload_error(error: GoodixPayloadError) -> GoodixFingerprintError {
+    GoodixFingerprintError::Parse(error.to_string())
 }
 
 pub fn build_default_goodix_sensor_config() -> GoodixSensorConfig {
@@ -1073,186 +682,35 @@ pub fn build_default_goodix_sensor_config() -> GoodixSensorConfig {
 fn parse_goodix_enroll_init(
     payload: &[u8],
 ) -> Result<GoodixEnrollInitResult, GoodixFingerprintError> {
-    if payload.is_empty() {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix enroll-init payload".into(),
-        ));
-    }
-    let result = payload[0];
-    let template_id = if result == 0 {
-        if payload.len() < 33 {
-            return Err(GoodixFingerprintError::Parse(
-                "short Goodix enroll-init template id".into(),
-            ));
-        }
-        Some(payload[1..33].try_into().unwrap())
-    } else {
-        None
-    };
-    Ok(GoodixEnrollInitResult {
-        result,
-        template_id,
-    })
+    parse_protocol_goodix_enroll_init(payload).map_err(goodix_payload_error)
 }
 
 fn parse_goodix_enroll_update(
     payload: &[u8],
 ) -> Result<GoodixEnrollUpdateResult, GoodixFingerprintError> {
-    if payload.len() < 3 {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix enroll-update payload".into(),
-        ));
-    }
-    Ok(GoodixEnrollUpdateResult {
-        rollback: payload[0] >= 0x80,
-        overlay: payload[1],
-        preoverlay: payload[2],
-    })
+    parse_protocol_goodix_enroll_update(payload).map_err(goodix_payload_error)
 }
 
 fn parse_goodix_duplicate_check(
     payload: &[u8],
 ) -> Result<GoodixDuplicateCheckResult, GoodixFingerprintError> {
-    if payload.is_empty() {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix duplicate-check payload".into(),
-        ));
-    }
-    let duplicate = payload[0] != 0;
-    if !duplicate {
-        return Ok(GoodixDuplicateCheckResult {
-            duplicate: false,
-            template: None,
-        });
-    }
-    if payload.len() < 3 {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix duplicate-check template length".into(),
-        ));
-    }
-    let template_len = le_u16(&payload[1..3])? as usize;
-    if payload.len() < 3 + template_len {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix duplicate-check template".into(),
-        ));
-    }
-    let template = parse_goodix_template(&payload[3..3 + template_len])?;
-    Ok(GoodixDuplicateCheckResult {
-        duplicate: true,
-        template: Some(template),
-    })
+    parse_protocol_goodix_duplicate_check(payload).map_err(goodix_payload_error)
 }
 
 fn parse_goodix_capture_response(
     payload: &[u8],
 ) -> Result<GoodixCaptureResponse, GoodixFingerprintError> {
-    if payload.is_empty() {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix capture payload".into(),
-        ));
-    }
-    let result = payload[0];
-    if payload.len() >= 3 {
-        Ok(GoodixCaptureResponse {
-            result,
-            image_quality: Some(payload[1]),
-            image_coverage: Some(payload[2]),
-        })
-    } else {
-        Ok(GoodixCaptureResponse {
-            result,
-            image_quality: None,
-            image_coverage: None,
-        })
-    }
+    parse_protocol_goodix_capture_response(payload).map_err(goodix_payload_error)
 }
 
 fn parse_goodix_identify_result(
     payload: &[u8],
 ) -> Result<GoodixIdentifyResult, GoodixFingerprintError> {
-    if payload.is_empty() {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix identify payload".into(),
-        ));
-    }
-    let matched = payload[0] == 0;
-    if !matched {
-        return Ok(GoodixIdentifyResult {
-            matched: false,
-            result: payload[0],
-            reject_detail: None,
-            score: None,
-            study: None,
-            template: None,
-        });
-    }
-    if payload.len() < 10 {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix identify match payload".into(),
-        ));
-    }
-    let reject_detail = le_u16(&payload[1..3])?;
-    let score = u32::from_le_bytes(payload[3..7].try_into().unwrap());
-    let study = payload[7];
-    let template_len = le_u16(&payload[8..10])? as usize;
-    if payload.len() < 10 + template_len {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix identify template payload".into(),
-        ));
-    }
-    let template = parse_goodix_template(&payload[10..10 + template_len])?;
-    Ok(GoodixIdentifyResult {
-        matched: true,
-        result: payload[0],
-        reject_detail: Some(reject_detail),
-        score: Some(score),
-        study: Some(study),
-        template: Some(template),
-    })
+    parse_protocol_goodix_identify_result(payload).map_err(goodix_payload_error)
 }
 
 fn parse_goodix_finger_list(payload: &[u8]) -> Result<Vec<GoodixTemplate>, GoodixFingerprintError> {
-    if payload.is_empty() {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix finger-list payload".into(),
-        ));
-    }
-    if payload[0] >= 0x80 {
-        return Err(GoodixFingerprintError::Parse(format!(
-            "Goodix finger-list failed: 0x{:02x}",
-            payload[0]
-        )));
-    }
-    if payload.len() < 2 {
-        return Err(GoodixFingerprintError::Parse(
-            "short Goodix finger-list count".into(),
-        ));
-    }
-    let count = payload[1] as usize;
-    if count > GOODIX_MAX_STORED_PRINTS as usize {
-        return Err(GoodixFingerprintError::Parse(
-            "Goodix finger-list count exceeds supported maximum".into(),
-        ));
-    }
-    let mut offset = 2usize;
-    let mut out = Vec::with_capacity(count);
-    for _ in 0..count {
-        if payload.len() < offset + 2 {
-            return Err(GoodixFingerprintError::Parse(
-                "short Goodix finger-list entry length".into(),
-            ));
-        }
-        let entry_len = le_u16(&payload[offset..offset + 2])? as usize;
-        offset += 2;
-        if payload.len() < offset + entry_len {
-            return Err(GoodixFingerprintError::Parse(
-                "short Goodix finger-list entry".into(),
-            ));
-        }
-        out.push(parse_goodix_template(&payload[offset..offset + entry_len])?);
-        offset += entry_len;
-    }
-    Ok(out)
+    parse_protocol_goodix_finger_list(payload).map_err(goodix_payload_error)
 }
 
 pub struct GoodixUsbTransport {

@@ -385,20 +385,39 @@ pub mod sync {
     use super::io;
 
     pub use alloc::sync::Arc;
+    use core::cell::UnsafeCell;
+    use core::ops::{Deref, DerefMut};
+    use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
     pub mod atomic {
         pub use core::sync::atomic::*;
     }
 
-    pub struct Mutex<T>(edgerun_rt::Mutex<T>);
-    pub struct RwLock<T>(edgerun_rt::RwLock<T>);
+    pub struct Mutex<T> {
+        locked: AtomicBool,
+        data: UnsafeCell<T>,
+    }
+
+    unsafe impl<T: Send> Send for Mutex<T> {}
+    unsafe impl<T: Send> Sync for Mutex<T> {}
 
     impl<T> Mutex<T> {
         pub fn new(value: T) -> Self {
-            Self(edgerun_rt::Mutex::new(value))
+            Self {
+                locked: AtomicBool::new(false),
+                data: UnsafeCell::new(value),
+            }
         }
 
-        pub fn lock(&self) -> Result<edgerun_rt::MutexGuard<'_, T>, io::Error> {
-            Ok(self.0.lock())
+        pub fn lock(&self) -> Result<MutexGuard<'_, T>, io::Error> {
+            while self
+                .locked
+                .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+                .is_err()
+            {
+                core::hint::spin_loop();
+            }
+            Ok(MutexGuard { mutex: self })
         }
     }
 
@@ -408,32 +427,114 @@ pub mod sync {
         }
     }
 
+    pub struct MutexGuard<'a, T> {
+        mutex: &'a Mutex<T>,
+    }
+
+    impl<T> Deref for MutexGuard<'_, T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.mutex.data.get() }
+        }
+    }
+
+    impl<T> DerefMut for MutexGuard<'_, T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            unsafe { &mut *self.mutex.data.get() }
+        }
+    }
+
+    impl<T> Drop for MutexGuard<'_, T> {
+        fn drop(&mut self) {
+            self.mutex.locked.store(false, Ordering::Release);
+        }
+    }
+
+    pub struct RwLock<T> {
+        data: UnsafeCell<T>,
+        state: AtomicUsize,
+    }
+
+    unsafe impl<T: Send> Send for RwLock<T> {}
+    unsafe impl<T: Send> Sync for RwLock<T> {}
+
     impl<T> RwLock<T> {
         pub fn new(value: T) -> Self {
-            Self(edgerun_rt::RwLock::new(value))
+            Self {
+                data: UnsafeCell::new(value),
+                state: AtomicUsize::new(0),
+            }
         }
 
-        pub fn read(&self) -> RwLockReadResult<'_, T> {
-            RwLockReadResult(Some(self.0.read()))
+        pub fn read(&self) -> RwLockReadGuard<'_, T> {
+            loop {
+                let state = self.state.load(Ordering::Acquire);
+                if state & 1 != 0 {
+                    core::hint::spin_loop();
+                    continue;
+                }
+                if self
+                    .state
+                    .compare_exchange_weak(state, state + 2, Ordering::Acquire, Ordering::Relaxed)
+                    .is_ok()
+                {
+                    return RwLockReadGuard { lock: self };
+                }
+            }
         }
 
-        pub fn write(&self) -> RwLockWriteResult<'_, T> {
-            RwLockWriteResult(Some(self.0.write()))
+        pub fn write(&self) -> RwLockWriteGuard<'_, T> {
+            while self
+                .state
+                .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+                .is_err()
+            {
+                core::hint::spin_loop();
+            }
+            RwLockWriteGuard { lock: self }
         }
     }
 
-    pub struct RwLockReadResult<'a, T>(Option<edgerun_rt::RwLockReadGuard<'a, T>>);
-    pub struct RwLockWriteResult<'a, T>(Option<edgerun_rt::RwLockWriteGuard<'a, T>>);
+    pub struct RwLockReadGuard<'a, T> {
+        lock: &'a RwLock<T>,
+    }
 
-    impl<'a, T> RwLockReadResult<'a, T> {
-        pub fn unwrap(mut self) -> edgerun_rt::RwLockReadGuard<'a, T> {
-            self.0.take().expect("rwlock read result consumed")
+    impl<T> Deref for RwLockReadGuard<'_, T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.lock.data.get() }
         }
     }
 
-    impl<'a, T> RwLockWriteResult<'a, T> {
-        pub fn unwrap(mut self) -> edgerun_rt::RwLockWriteGuard<'a, T> {
-            self.0.take().expect("rwlock write result consumed")
+    impl<T> Drop for RwLockReadGuard<'_, T> {
+        fn drop(&mut self) {
+            self.lock.state.fetch_sub(2, Ordering::Release);
+        }
+    }
+
+    pub struct RwLockWriteGuard<'a, T> {
+        lock: &'a RwLock<T>,
+    }
+
+    impl<T> Deref for RwLockWriteGuard<'_, T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.lock.data.get() }
+        }
+    }
+
+    impl<T> DerefMut for RwLockWriteGuard<'_, T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            unsafe { &mut *self.lock.data.get() }
+        }
+    }
+
+    impl<T> Drop for RwLockWriteGuard<'_, T> {
+        fn drop(&mut self) {
+            self.lock.state.fetch_and(!1, Ordering::Release);
         }
     }
 

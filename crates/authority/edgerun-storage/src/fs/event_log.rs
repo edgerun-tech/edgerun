@@ -7,8 +7,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use crate::core::{
-    AppendReceipt, EventLocation, EventLog, ScannedEvent, canonical_event_hash, encode_event_frame,
-    validate_event_location,
+    canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
+    EventLocation, EventLog, ScannedEvent,
 };
 use crate::error::StorageError;
 

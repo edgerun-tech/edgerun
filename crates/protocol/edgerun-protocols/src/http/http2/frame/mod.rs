@@ -14,6 +14,7 @@ mod window_update;
 use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
+use edgerun_encoding::byteorder::read_u32_be;
 
 pub use super::{Http2Error, Result};
 pub use continuation::ContinuationFrame;
@@ -313,12 +314,7 @@ impl Frame {
                     return Err(ErrorCode::ProtocolError.to_u32());
                 }
                 if self.payload.len() >= 4 {
-                    let promised = u32::from_be_bytes([
-                        self.payload[0],
-                        self.payload[1],
-                        self.payload[2],
-                        self.payload[3],
-                    ]) & 0x7FFFFFFF;
+                    let promised = read_u32_be(&self.payload, 0) & 0x7FFFFFFF;
                     if promised == 0 || promised.is_multiple_of(2) {
                         return Err(ErrorCode::ProtocolError.to_u32());
                     }
@@ -349,12 +345,7 @@ impl Frame {
                     return Err(ErrorCode::FrameSizeError.to_u32());
                 }
                 // Window size increment MUST NOT be 0
-                let inc = u32::from_be_bytes([
-                    self.payload[0],
-                    self.payload[1],
-                    self.payload[2],
-                    self.payload[3],
-                ]) & 0x7FFFFFFF;
+                let inc = read_u32_be(&self.payload, 0) & 0x7FFFFFFF;
                 if inc == 0 {
                     return Err(ErrorCode::ProtocolError.to_u32());
                 }

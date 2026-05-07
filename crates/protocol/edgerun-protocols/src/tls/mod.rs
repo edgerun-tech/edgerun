@@ -14,6 +14,7 @@ pub mod name_match;
 pub mod prf;
 pub mod record;
 pub mod server;
+pub mod session_ticket;
 pub mod tls_alpn;
 
 pub use alert::{Alert, AlertLevel};

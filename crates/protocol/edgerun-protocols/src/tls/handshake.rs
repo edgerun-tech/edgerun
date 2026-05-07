@@ -17,7 +17,9 @@ use alloc::{
     vec::Vec,
 };
 use edgerun_crypto::CipherSuite;
-use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
+use edgerun_encoding::byteorder::{
+    push_u16_be, push_u32_be, read_u16_be, read_u24_be, write_u16_be, write_u24_be,
+};
 
 /// ClientHello message builder
 pub struct ClientHelloBuilder {
@@ -74,10 +76,8 @@ impl ClientHelloBuilder {
         // KeyShareEntry encoding:
         //   group (2 bytes) + key_exchange length (2 bytes) + key_exchange (variable)
         self.key_share.clear();
-        self.key_share
-            .extend_from_slice(&group.to_wire().to_be_bytes());
-        self.key_share
-            .extend_from_slice(&(public_key.len() as u16).to_be_bytes());
+        push_u16_be(&mut self.key_share, group.to_wire());
+        push_u16_be(&mut self.key_share, public_key.len() as u16);
         self.key_share.extend_from_slice(public_key);
         self
     }
@@ -106,7 +106,7 @@ impl ClientHelloBuilder {
         msg.extend_from_slice(&[0u8; 3]);
 
         // Legacy version (TLS 1.2 = 0x0303 for TLS 1.3 compatibility)
-        msg.extend_from_slice(&0x0303u16.to_be_bytes());
+        push_u16_be(&mut msg, 0x0303);
 
         // Random (32 bytes)
         msg.extend_from_slice(&self.random);
@@ -117,9 +117,9 @@ impl ClientHelloBuilder {
 
         // Cipher suites
         let cs_len = self.cipher_suites.len() * 2;
-        msg.extend_from_slice(&(cs_len as u16).to_be_bytes());
+        push_u16_be(&mut msg, cs_len as u16);
         for cs in &self.cipher_suites {
-            msg.extend_from_slice(&cs.to_wire().to_be_bytes());
+            push_u16_be(&mut msg, cs.to_wire());
         }
 
         // Legacy compression methods (always just null)
@@ -133,20 +133,20 @@ impl ClientHelloBuilder {
         // 1. supported_versions (ext 43)
         {
             let data = vec![0x02, 0x03, 0x04]; // TLS 1.3 only
-            msg.extend_from_slice(&43u16.to_be_bytes());
-            msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
+            push_u16_be(&mut msg, 43);
+            push_u16_be(&mut msg, data.len() as u16);
             msg.extend_from_slice(&data);
         }
 
         // 2. supported_groups (ext 10)
         {
             let mut data = Vec::new();
-            data.extend_from_slice(&((self.supported_groups.len() * 2) as u16).to_be_bytes());
+            push_u16_be(&mut data, (self.supported_groups.len() * 2) as u16);
             for g in &self.supported_groups {
-                data.extend_from_slice(&g.to_wire().to_be_bytes());
+                push_u16_be(&mut data, g.to_wire());
             }
-            msg.extend_from_slice(&10u16.to_be_bytes());
-            msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
+            push_u16_be(&mut msg, 10);
+            push_u16_be(&mut msg, data.len() as u16);
             msg.extend_from_slice(&data);
         }
 
@@ -163,37 +163,37 @@ impl ClientHelloBuilder {
                 0x080b,    // rsa_pss_pss_sha512
             ];
             let mut data = Vec::new();
-            data.extend_from_slice(&((schemes.len() * 2) as u16).to_be_bytes());
+            push_u16_be(&mut data, (schemes.len() * 2) as u16);
             for scheme in schemes {
-                data.extend_from_slice(&scheme.to_be_bytes());
+                push_u16_be(&mut data, scheme);
             }
-            msg.extend_from_slice(&13u16.to_be_bytes());
-            msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
+            push_u16_be(&mut msg, 13);
+            push_u16_be(&mut msg, data.len() as u16);
             msg.extend_from_slice(&data);
         }
 
         // 4. cookie (ext 44) — from HelloRetryRequest (RFC 8446 §4.2.2)
         if let Some(ref cookie) = self.hrr_cookie {
-            msg.extend_from_slice(&44u16.to_be_bytes());
-            msg.extend_from_slice(&(cookie.len() as u16).to_be_bytes());
+            push_u16_be(&mut msg, 44);
+            push_u16_be(&mut msg, cookie.len() as u16);
             msg.extend_from_slice(cookie);
         }
 
         // 5. key_share (ext 51)
         {
             let mut data = Vec::new();
-            data.extend_from_slice(&(self.key_share.len() as u16).to_be_bytes());
+            push_u16_be(&mut data, self.key_share.len() as u16);
             data.extend_from_slice(&self.key_share);
-            msg.extend_from_slice(&51u16.to_be_bytes());
-            msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
+            push_u16_be(&mut msg, 51);
+            push_u16_be(&mut msg, data.len() as u16);
             msg.extend_from_slice(&data);
         }
 
         // 6. psk_key_exchange_modes (ext 45) — required for TLS 1.3
         {
             let data = vec![0x01, 0x01]; // psk_dhe_ke
-            msg.extend_from_slice(&45u16.to_be_bytes());
-            msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
+            push_u16_be(&mut msg, 45);
+            push_u16_be(&mut msg, data.len() as u16);
             msg.extend_from_slice(&data);
         }
 
@@ -201,12 +201,12 @@ impl ClientHelloBuilder {
         {
             let mut data = Vec::new();
             let name_entry_len = 1 + 2 + self.server_name.len(); // type(1) + len(2) + name
-            data.extend_from_slice(&(name_entry_len as u16).to_be_bytes());
+            push_u16_be(&mut data, name_entry_len as u16);
             data.push(0); // host_name type
-            data.extend_from_slice(&(self.server_name.len() as u16).to_be_bytes());
+            push_u16_be(&mut data, self.server_name.len() as u16);
             data.extend_from_slice(self.server_name.as_bytes());
-            msg.extend_from_slice(&0u16.to_be_bytes());
-            msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
+            push_u16_be(&mut msg, 0);
+            push_u16_be(&mut msg, data.len() as u16);
             msg.extend_from_slice(&data);
         }
 
@@ -221,11 +221,10 @@ impl ClientHelloBuilder {
             }
             // Fill in total length
             let total_len = (proto_list.len() - 2) as u16;
-            proto_list[0] = (total_len >> 8) as u8;
-            proto_list[1] = total_len as u8;
+            write_u16_be(&mut proto_list, 0, total_len);
 
-            msg.extend_from_slice(&16u16.to_be_bytes()); // ALPN extension type
-            msg.extend_from_slice(&(proto_list.len() as u16).to_be_bytes());
+            push_u16_be(&mut msg, 16); // ALPN extension type
+            push_u16_be(&mut msg, proto_list.len() as u16);
             msg.extend_from_slice(&proto_list);
         }
 
@@ -239,13 +238,12 @@ impl ClientHelloBuilder {
             let identities_start = psk_ext.len();
             psk_ext.extend_from_slice(&[0u8; 2]); // identities length placeholder
                                                   // Identity entry
-            psk_ext.extend_from_slice(&(ticket.len() as u16).to_be_bytes());
+            push_u16_be(&mut psk_ext, ticket.len() as u16);
             psk_ext.extend_from_slice(ticket);
-            psk_ext.extend_from_slice(&obfuscated_age.to_be_bytes());
+            push_u32_be(&mut psk_ext, obfuscated_age);
             // Fill in identities length
             let id_len = (psk_ext.len() - identities_start - 2) as u16;
-            psk_ext[identities_start] = (id_len >> 8) as u8;
-            psk_ext[identities_start + 1] = id_len as u8;
+            write_u16_be(&mut psk_ext, identities_start, id_len);
 
             // PSK binders list
             let binders_start = psk_ext.len();
@@ -256,26 +254,25 @@ impl ClientHelloBuilder {
             psk_ext.extend_from_slice(&vec![0u8; binder_len]);
             // Fill in binders length
             let b_len = (psk_ext.len() - binders_start - 2) as u16;
-            psk_ext[binders_start] = (b_len >> 8) as u8;
-            psk_ext[binders_start + 1] = b_len as u8;
+            write_u16_be(&mut psk_ext, binders_start, b_len);
 
             // We need to move the cipher suite to the front of the list when using PSK
             // so the server sees it first (per RFC 8446 §4.2.11)
             // For now, we just add the extension — server will ignore binder if it
             // can't verify, and fall back to full handshake.
 
-            msg.extend_from_slice(&41u16.to_be_bytes());
-            msg.extend_from_slice(&(psk_ext.len() as u16).to_be_bytes());
+            push_u16_be(&mut msg, 41);
+            push_u16_be(&mut msg, psk_ext.len() as u16);
             msg.extend_from_slice(&psk_ext);
         }
 
         // Fill extension length
         let ext_len = (msg.len() - ext_start - 2) as u16;
-        msg[ext_start..ext_start + 2].copy_from_slice(&ext_len.to_be_bytes());
+        write_u16_be(&mut msg, ext_start, ext_len);
 
         // Fill handshake message length
         let msg_len = (msg.len() - 4) as u32;
-        msg[1..4].copy_from_slice(&msg_len.to_be_bytes()[1..]);
+        write_u24_be(&mut msg, 1, msg_len);
 
         Ok(msg)
     }

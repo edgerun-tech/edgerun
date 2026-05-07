@@ -41,6 +41,7 @@ pub mod runtime;
     feature = "smtp",
     feature = "imap",
     feature = "lmtp",
+    feature = "virtual-disk",
 ))]
 pub mod services;
 #[cfg(feature = "exchange-events")]

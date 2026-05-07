@@ -5,7 +5,7 @@
 //!
 //! # Usage
 //! ```rust
-//! use edgerun_http::http1::multipart::parse_multipart;
+//! use edgerun_protocols::http::http1::multipart::parse_multipart;
 //!
 //! let boundary = "boundary";
 //! let body = b"--boundary\r\nContent-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n--boundary--\r\n";

@@ -5,6 +5,8 @@
 //! out, while the rest of Edgerun continues to see Ethernet frames through the
 //! runtime network boundary.
 
+use edgerun_encoding::byteorder::{read_u16_le, write_u16_le};
+
 pub const MAX_SSID_LEN: usize = 32;
 pub const MAC_LEN: usize = 6;
 pub const MANAGEMENT_HEADER_LEN: usize = 24;
@@ -290,9 +292,9 @@ impl<const MAX_STATIONS: usize> OpenAp<MAX_STATIONS> {
         let mut offset = MANAGEMENT_HEADER_LEN;
         out[offset..offset + 8].fill(0);
         offset += 8;
-        write_le_u16(out, offset, self.config.beacon_interval_tu);
+        write_u16_le(out, offset, self.config.beacon_interval_tu);
         offset += 2;
-        write_le_u16(
+        write_u16_le(
             out,
             offset,
             CAP_ESS | CAP_SHORT_PREAMBLE | CAP_SHORT_SLOT_TIME,
@@ -322,9 +324,9 @@ impl<const MAX_STATIONS: usize> OpenAp<MAX_STATIONS> {
             self.config.bssid,
             self.next_seq(),
         );
-        write_le_u16(out, MANAGEMENT_HEADER_LEN, AUTH_ALGO_OPEN_SYSTEM);
-        write_le_u16(out, MANAGEMENT_HEADER_LEN + 2, AUTH_SEQUENCE_RESPONSE);
-        write_le_u16(out, MANAGEMENT_HEADER_LEN + 4, STATUS_SUCCESS);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN, AUTH_ALGO_OPEN_SYSTEM);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN + 2, AUTH_SEQUENCE_RESPONSE);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN + 4, STATUS_SUCCESS);
         Ok(len)
     }
 
@@ -347,13 +349,13 @@ impl<const MAX_STATIONS: usize> OpenAp<MAX_STATIONS> {
             self.config.bssid,
             self.next_seq(),
         );
-        write_le_u16(
+        write_u16_le(
             out,
             MANAGEMENT_HEADER_LEN,
             CAP_ESS | CAP_SHORT_PREAMBLE | CAP_SHORT_SLOT_TIME,
         );
-        write_le_u16(out, MANAGEMENT_HEADER_LEN + 2, STATUS_SUCCESS);
-        write_le_u16(out, MANAGEMENT_HEADER_LEN + 4, aid | 0xc000);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN + 2, STATUS_SUCCESS);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN + 4, aid | 0xc000);
         write_ie(out, MANAGEMENT_HEADER_LEN + 6, 1, &rates)
     }
 
@@ -389,7 +391,7 @@ impl FrameControl {
         if frame.len() < 2 {
             return Err(OpenApError::MalformedFrame);
         }
-        let raw = u16::from_le_bytes([frame[0], frame[1]]);
+        let raw = read_u16_le(frame, 0);
         Ok(Self {
             frame_type: (raw >> 2) & 0x3,
             subtype: (raw >> 4) & 0xf,
@@ -496,22 +498,22 @@ fn write_mgmt_header(
     seq: u16,
 ) {
     let fc = ((subtype & 0xf) << 4) | (FRAME_TYPE_MANAGEMENT << 2);
-    write_le_u16(out, 0, fc);
-    write_le_u16(out, 2, 0);
+    write_u16_le(out, 0, fc);
+    write_u16_le(out, 2, 0);
     out[4..10].copy_from_slice(&dst.0);
     out[10..16].copy_from_slice(&src.0);
     out[16..22].copy_from_slice(&bssid.0);
-    write_le_u16(out, 22, seq << 4);
+    write_u16_le(out, 22, seq << 4);
 }
 
 fn write_data_header_from_ds(out: &mut [u8], dst: MacAddr, bssid: MacAddr, src: MacAddr, seq: u16) {
     let fc = (SUBTYPE_DATA << 4) | (FRAME_TYPE_DATA << 2) | (1 << 9);
-    write_le_u16(out, 0, fc);
-    write_le_u16(out, 2, 0);
+    write_u16_le(out, 0, fc);
+    write_u16_le(out, 2, 0);
     out[4..10].copy_from_slice(&dst.0);
     out[10..16].copy_from_slice(&bssid.0);
     out[16..22].copy_from_slice(&src.0);
-    write_le_u16(out, 22, seq << 4);
+    write_u16_le(out, 22, seq << 4);
 }
 
 fn write_ie(out: &mut [u8], offset: usize, id: u8, payload: &[u8]) -> Result<usize, OpenApError> {
@@ -528,10 +530,6 @@ fn read_mac(data: &[u8], offset: usize) -> MacAddr {
     let mut mac = [0; MAC_LEN];
     mac.copy_from_slice(&data[offset..offset + MAC_LEN]);
     MacAddr(mac)
-}
-
-fn write_le_u16(out: &mut [u8], offset: usize, value: u16) {
-    out[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
 }
 
 #[cfg(test)]
@@ -560,16 +558,16 @@ mod tests {
 
     fn write_auth_req(out: &mut [u8]) -> usize {
         write_mgmt_header(out, SUBTYPE_AUTH, BSSID, STA, BSSID, 0);
-        write_le_u16(out, MANAGEMENT_HEADER_LEN, AUTH_ALGO_OPEN_SYSTEM);
-        write_le_u16(out, MANAGEMENT_HEADER_LEN + 2, 1);
-        write_le_u16(out, MANAGEMENT_HEADER_LEN + 4, STATUS_SUCCESS);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN, AUTH_ALGO_OPEN_SYSTEM);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN + 2, 1);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN + 4, STATUS_SUCCESS);
         MANAGEMENT_HEADER_LEN + 6
     }
 
     fn write_assoc_req(out: &mut [u8]) -> usize {
         write_mgmt_header(out, SUBTYPE_ASSOC_REQ, BSSID, STA, BSSID, 0);
-        write_le_u16(out, MANAGEMENT_HEADER_LEN, CAP_ESS);
-        write_le_u16(out, MANAGEMENT_HEADER_LEN + 2, 10);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN, CAP_ESS);
+        write_u16_le(out, MANAGEMENT_HEADER_LEN + 2, 10);
         write_ie(out, MANAGEMENT_HEADER_LEN + 4, 0, b"edgerun-ac").unwrap()
     }
 
@@ -579,10 +577,7 @@ mod tests {
         let mut out = [0; 256];
         let len = ap.build_beacon(&mut out).unwrap();
 
-        assert_eq!(
-            (u16::from_le_bytes([out[0], out[1]]) >> 4) & 0xf,
-            SUBTYPE_BEACON
-        );
+        assert_eq!((read_u16_le(&out, 0) >> 4) & 0xf, SUBTYPE_BEACON);
         assert!(out[..len]
             .windows(b"edgerun-ac".len())
             .any(|w| w == b"edgerun-ac"));
@@ -603,10 +598,7 @@ mod tests {
 
         assert!(action.raw_tx_len > MANAGEMENT_HEADER_LEN);
         assert_eq!(action.event, Some(ApEvent::ProbeRequest { station: STA }));
-        assert_eq!(
-            (u16::from_le_bytes([raw_tx[0], raw_tx[1]]) >> 4) & 0xf,
-            SUBTYPE_PROBE_RESP
-        );
+        assert_eq!((read_u16_le(&raw_tx, 0) >> 4) & 0xf, SUBTYPE_PROBE_RESP);
     }
 
     #[test]
@@ -661,7 +653,7 @@ mod tests {
         uplink[14..18].copy_from_slice(&[1, 2, 3, 4]);
 
         let to_ds_fc = (SUBTYPE_DATA << 4) | (FRAME_TYPE_DATA << 2) | (1 << 8);
-        write_le_u16(&mut wifi, 0, to_ds_fc);
+        write_u16_le(&mut wifi, 0, to_ds_fc);
         wifi[4..10].copy_from_slice(&BSSID.0);
         wifi[10..16].copy_from_slice(&STA.0);
         wifi[16..22].copy_from_slice(&DST.0);

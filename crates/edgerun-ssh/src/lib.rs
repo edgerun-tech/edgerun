@@ -490,40 +490,6 @@ pub mod host {
         sha256(&bytes)
     }
 
-    fn verify_ssh_ed25519_signature(
-        public_key: &[u8; 32],
-        signature_blob: &[u8],
-        message: &[u8],
-    ) -> Result<(), SshError> {
-        let mut cursor = 0;
-        let algorithm = read_string(signature_blob, &mut cursor)?;
-        let signature = read_string(signature_blob, &mut cursor)?;
-        if algorithm != b"ssh-ed25519" || signature.len() != 64 || cursor != signature_blob.len() {
-            return Err(SshError::BadSignature);
-        }
-        edgerun_protocols::verify::verify_ed25519_message(public_key, message, signature)
-            .map_err(|_| SshError::BadSignature)
-    }
-
-    fn parse_ssh_ed25519_public_key_blob(blob: &[u8]) -> Result<[u8; 32], SshError> {
-        let mut cursor = 0;
-        let algorithm = read_string(blob, &mut cursor)?;
-        let public_key = read_string(blob, &mut cursor)?;
-        if algorithm != b"ssh-ed25519" || public_key.len() != 32 || cursor != blob.len() {
-            return Err(SshError::BadKey);
-        }
-        let mut out = [0u8; 32];
-        out.copy_from_slice(public_key);
-        Ok(out)
-    }
-
-    fn ssh_ed25519_public_key_blob(public_key: &[u8; 32]) -> Vec<u8> {
-        let mut out = Vec::new();
-        write_string(&mut out, b"ssh-ed25519");
-        write_string(&mut out, public_key);
-        out
-    }
-
     fn load_openssh_ed25519_key(path: &Path) -> Result<Ed25519MessageSigner, SshError> {
         let pem = std::fs::read_to_string(path).map_err(|err| SshError::Io(err.to_string()))?;
         let mut body = String::new();
@@ -535,42 +501,6 @@ pub mod host {
         }
         let bytes = standard_decode(&body).map_err(|_| SshError::BadKey)?;
         parse_openssh_ed25519_private_key(&bytes)
-    }
-
-    fn parse_openssh_ed25519_private_key(bytes: &[u8]) -> Result<Ed25519MessageSigner, SshError> {
-        const MAGIC: &[u8] = b"openssh-key-v1\0";
-        if !bytes.starts_with(MAGIC) {
-            return Err(SshError::BadKey);
-        }
-        let mut cursor = MAGIC.len();
-        let cipher = read_string(bytes, &mut cursor)?;
-        let kdf = read_string(bytes, &mut cursor)?;
-        let _kdf_options = read_string(bytes, &mut cursor)?;
-        let key_count = read_u32(bytes, &mut cursor)?;
-        if cipher != b"none" || kdf != b"none" || key_count != 1 {
-            return Err(SshError::BadKey);
-        }
-        let _public_key = read_string(bytes, &mut cursor)?;
-        let private = read_string(bytes, &mut cursor)?;
-        let mut private_cursor = 0;
-        let check1 = read_u32(private, &mut private_cursor)?;
-        let check2 = read_u32(private, &mut private_cursor)?;
-        if check1 != check2 {
-            return Err(SshError::BadKey);
-        }
-        let algorithm = read_string(private, &mut private_cursor)?;
-        let public_key = read_string(private, &mut private_cursor)?;
-        let private_key = read_string(private, &mut private_cursor)?;
-        if algorithm != b"ssh-ed25519" || public_key.len() != 32 || private_key.len() != 64 {
-            return Err(SshError::BadKey);
-        }
-        let mut seed = [0u8; 32];
-        seed.copy_from_slice(&private_key[..32]);
-        let signing_key = Ed25519MessageSigner::from_seed(seed);
-        if signing_key.public_key_bytes().as_slice() != public_key {
-            return Err(SshError::BadKey);
-        }
-        Ok(signing_key)
     }
 
     struct TransportKeys {

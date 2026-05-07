@@ -2,7 +2,7 @@
 
 use crate::prelude::v1::*;
 
-use edgerun_virtual_disk::{BlockBackend, BlockDeviceInfo, BlockError};
+use edgerun_protocols::block::{BlockBackend, BlockDeviceInfo, BlockError};
 
 use crate::block::BlockStorage;
 use crate::error::StorageError;
@@ -131,8 +131,9 @@ mod tests {
     use super::*;
     use crate::block::BlockEventLog;
     use crate::core::EventLog;
+    use edgerun_protocols::block::BlockDeviceInfo;
     use edgerun_protocols::core_protocol::protocol::EventEnvelope;
-    use edgerun_virtual_disk::{BlockDeviceInfo, MemoryBlockBackend};
+    use edgerun_virtual_disk::MemoryBlockBackend;
 
     fn info() -> BlockDeviceInfo {
         BlockDeviceInfo {

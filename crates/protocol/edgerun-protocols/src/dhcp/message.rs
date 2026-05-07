@@ -3,6 +3,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+use edgerun_encoding::byteorder::{push_u16_be, push_u32_be, read_u16_be, read_u32_be};
 
 pub use core::net::Ipv4Addr;
 
@@ -313,10 +314,10 @@ impl DhcpMessage {
         buf.push(self.htype);
         buf.push(self.hlen);
         buf.push(self.hops);
-        buf.extend_from_slice(&self.xid.to_be_bytes());
-        buf.extend_from_slice(&self.secs.to_be_bytes());
+        push_u32_be(&mut buf, self.xid);
+        push_u16_be(&mut buf, self.secs);
         let flags: u16 = if self.broadcast { 0x8000 } else { 0 };
-        buf.extend_from_slice(&flags.to_be_bytes());
+        push_u16_be(&mut buf, flags);
         buf.extend_from_slice(&self.ciaddr.octets());
         buf.extend_from_slice(&self.yiaddr.octets());
         buf.extend_from_slice(&self.siaddr.octets());
@@ -357,9 +358,9 @@ impl DhcpMessage {
         let htype = data[1];
         let hlen = data[2];
         let hops = data[3];
-        let xid = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
-        let secs = u16::from_be_bytes([data[8], data[9]]);
-        let flags = u16::from_be_bytes([data[10], data[11]]);
+        let xid = read_u32_be(data, 4);
+        let secs = read_u16_be(data, 8);
+        let flags = read_u16_be(data, 10);
         let broadcast = (flags & 0x8000) != 0;
 
         let ciaddr = Ipv4Addr::new(data[12], data[13], data[14], data[15]);
@@ -677,8 +678,7 @@ impl DhcpOptions {
                 }
                 OPT_LEASE_TIME => {
                     if value.len() == 4 {
-                        opts.lease_time =
-                            Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
+                        opts.lease_time = Some(read_u32_be(value, 0));
                     }
                 }
                 OPT_SERVER_ID => {
@@ -689,14 +689,12 @@ impl DhcpOptions {
                 }
                 OPT_RENEWAL_TIME => {
                     if value.len() == 4 {
-                        opts.renewal_time =
-                            Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
+                        opts.renewal_time = Some(read_u32_be(value, 0));
                     }
                 }
                 OPT_REBIND_TIME => {
                     if value.len() == 4 {
-                        opts.rebind_time =
-                            Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
+                        opts.rebind_time = Some(read_u32_be(value, 0));
                     }
                 }
                 OPT_CLIENT_ID => {
@@ -713,7 +711,7 @@ impl DhcpOptions {
                 }
                 OPT_CLIENT_ARCH => {
                     if value.len() >= 2 {
-                        let arch = u16::from_be_bytes([value[0], value[1]]);
+                        let arch = read_u16_be(value, 0);
                         opts.client_arch = PxeClientArch::from_u16(arch);
                     }
                 }
@@ -789,7 +787,7 @@ impl DhcpOptions {
         if let Some(t) = self.lease_time {
             buf.push(OPT_LEASE_TIME);
             buf.push(4);
-            buf.extend_from_slice(&t.to_be_bytes());
+            push_u32_be(buf, t);
         }
 
         if let Some(ip) = self.server_id {
@@ -801,13 +799,13 @@ impl DhcpOptions {
         if let Some(t) = self.renewal_time {
             buf.push(OPT_RENEWAL_TIME);
             buf.push(4);
-            buf.extend_from_slice(&t.to_be_bytes());
+            push_u32_be(buf, t);
         }
 
         if let Some(t) = self.rebind_time {
             buf.push(OPT_REBIND_TIME);
             buf.push(4);
-            buf.extend_from_slice(&t.to_be_bytes());
+            push_u32_be(buf, t);
         }
 
         if let Some(cid) = &self.client_id {
@@ -840,7 +838,7 @@ impl DhcpOptions {
         if let Some(arch) = self.client_arch {
             buf.push(OPT_CLIENT_ARCH);
             buf.push(2);
-            buf.extend_from_slice(&arch.as_u16().to_be_bytes());
+            push_u16_be(buf, arch.as_u16());
         }
 
         if let Some((typ, major, minor)) = self.client_undi {

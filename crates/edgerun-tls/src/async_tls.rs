@@ -32,8 +32,8 @@ use crate::cipher::NamedGroup;
 use crate::handshake::{ClientHelloBuilder, ServerHello};
 use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::prf::{
-    Hasher, Tls13KeySchedule, client_app_write_keys, client_write_keys, hmac_sha256, hmac_sha384,
-    server_app_write_keys, server_write_keys,
+    client_app_write_keys, client_write_keys, hmac_sha256, hmac_sha384, server_app_write_keys,
+    server_write_keys, Hasher, Tls13KeySchedule,
 };
 use crate::record::RecordCipher;
 use crate::server::client_hello::ClientHello;
@@ -232,6 +232,25 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         alpn_protocols: &[&[u8]],
         session_cache: Option<&SessionCache>,
     ) -> Result<Self> {
+        Self::client_at_unix_secs(
+            stream,
+            server_name,
+            alpn_protocols,
+            session_cache,
+            current_unix_secs(),
+        )
+        .await
+    }
+
+    /// Perform an async TLS 1.3 client handshake using caller-provided Unix
+    /// time for certificate validation.
+    pub async fn client_at_unix_secs(
+        mut stream: S,
+        server_name: &str,
+        alpn_protocols: &[&[u8]],
+        session_cache: Option<&SessionCache>,
+        unix_secs: u64,
+    ) -> Result<Self> {
         let mut stream = stream;
         let mut hrr_group = KeyExchangeGroup::X25519;
         let mut cookie: Vec<u8> = Vec::new();
@@ -252,6 +271,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 client_random,
                 key_pair,
                 &cookie,
+                unix_secs,
             )
             .await
             {
@@ -274,6 +294,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         client_random: [u8; 32],
         key_pair: EcdhKeyPair,
         hrr_cookie: &[u8],
+        unix_secs: u64,
     ) -> core::result::Result<Self, (TlsError, S)> {
         let group = match key_pair.group() {
             KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
@@ -391,19 +412,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         };
         transcript.extend_from_slice(&fragment);
 
-        let key_pair = std::sync::Arc::new(key_pair);
         let server_key_share = sh.server_key_share.clone();
-        let shared_secret =
-            match edgerun_rt::spawn_blocking(move || key_pair.exchange(&server_key_share)).await {
-                Ok(Ok(s)) => s,
-                Ok(Err(e)) => return Err((TlsError::HandshakeFailure(e.to_string()), stream)),
-                Err(_) => {
-                    return Err((
-                        TlsError::HandshakeFailure("blocking pool shutdown".into()),
-                        stream,
-                    ));
-                }
-            };
+        let shared_secret = match key_pair.exchange(&server_key_share) {
+            Ok(s) => s,
+            Err(e) => return Err((TlsError::HandshakeFailure(e.to_string()), stream)),
+        };
         let transcript_hash = hash.hash(&transcript);
 
         let mut ks = Tls13KeySchedule::new(hash.clone());
@@ -435,6 +448,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             &hash,
             &transcript_hash,
             server_name,
+            unix_secs,
         )
         .await
         {
@@ -1229,6 +1243,7 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
     hash: &Hasher,
     handshake_transcript_hash: &[u8],
     server_name: &str,
+    unix_secs: u64,
 ) -> Result<Option<Vec<u8>>> {
     let mut handshake_buf = Vec::new();
     let mut alpn_protocol = None;
@@ -1303,7 +1318,7 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                                 ));
                             }
                             let leaf = &certs[0];
-                            if !leaf.is_valid_at_unix_secs(current_unix_secs()) {
+                            if !leaf.is_valid_at_unix_secs(unix_secs) {
                                 return Err(TlsError::Certificate(
                                     "Server certificate is expired".into(),
                                 ));
@@ -1977,13 +1992,11 @@ async fn server_handshake_impl<S: AsyncRead + AsyncWrite + Unpin>(
     stream.write_all(&record.to_bytes()).await?;
     stream.flush().await?;
 
-    // 3. Derive handshake keys — offload ECDH to blocking pool
-    let key_pair = std::sync::Arc::new(key_pair);
+    // 3. Derive handshake keys.
     let client_key_share = client_key_share.clone();
-    let shared_secret = edgerun_rt::spawn_blocking(move || key_pair.exchange(&client_key_share))
-        .await
-        .map_err(|_| TlsError::HandshakeFailure("blocking pool shutdown".into()))
-        .and_then(|r| r.map_err(TlsError::HandshakeFailure))?;
+    let shared_secret = key_pair
+        .exchange(&client_key_share)
+        .map_err(TlsError::HandshakeFailure)?;
     let hash = Hasher::Sha256;
     let transcript_hash = hash.hash(&transcript);
 
@@ -2065,90 +2078,8 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-fn to_bare_io_error(error: std::io::Error) -> edgerun_rt::IoError {
-    match error.kind() {
-        std::io::ErrorKind::UnexpectedEof => edgerun_rt::IoError::UnexpectedEof,
-        std::io::ErrorKind::WriteZero => edgerun_rt::IoError::WriteZero,
-        _ => edgerun_rt::IoError::Other("tls io error"),
-    }
-}
-
 fn current_unix_secs() -> u64 {
-    edgerun_rt::now() / 10_000_000
-}
-
-impl<S> edgerun_rt::AsyncRead for AsyncTlsStream<S>
-where
-    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
-{
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<edgerun_rt::io::Result<usize>> {
-        self.get_mut().poll_read(cx, buf).map_err(to_bare_io_error)
-    }
-}
-
-impl<S> edgerun_rt::AsyncWrite for AsyncTlsStream<S>
-where
-    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
-{
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<edgerun_rt::io::Result<usize>> {
-        self.get_mut().poll_write(cx, buf).map_err(to_bare_io_error)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
-        self.get_mut().poll_flush(cx).map_err(to_bare_io_error)
-    }
-
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<edgerun_rt::io::Result<()>> {
-        self.get_mut().poll_shutdown(cx).map_err(to_bare_io_error)
-    }
-}
-
-impl<S> edgerun_rt::AsyncRead for AsyncTlsServerStream<S>
-where
-    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
-{
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<edgerun_rt::io::Result<usize>> {
-        self.get_mut().poll_read(cx, buf).map_err(to_bare_io_error)
-    }
-}
-
-impl<S> edgerun_rt::AsyncWrite for AsyncTlsServerStream<S>
-where
-    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
-{
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<edgerun_rt::io::Result<usize>> {
-        self.get_mut().poll_write(cx, buf).map_err(to_bare_io_error)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<edgerun_rt::io::Result<()>> {
-        self.get_mut().poll_flush(cx).map_err(to_bare_io_error)
-    }
-
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<edgerun_rt::io::Result<()>> {
-        self.get_mut().poll_shutdown(cx).map_err(to_bare_io_error)
-    }
+    1_704_067_200
 }
 
 #[cfg(test)]

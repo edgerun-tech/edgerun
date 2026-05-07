@@ -8,22 +8,85 @@ use core::result::Result::{self, Err, Ok};
 use core::{debug_assert_eq, fmt, write};
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_encoding::io::{self, Read, Write};
-#[cfg(any(target_os = "none", target_arch = "wasm32"))]
-use edgerun_rt::Mutex;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::io::{self, Read, Write};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::sync::Mutex;
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
+use sync::Mutex;
 
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-pub use host::{FileBlockBackend, TcpBlockServer, UnixBlockServer};
+pub use host::FileBlockBackend;
 
-pub use edgerun_protocols::block::{
-    byte_offset, byte_range, checked_len_bytes, decode_request_frame, decode_request_payload,
-    decode_response_frame, decode_response_payload, encode_request_frame, encode_request_payload,
-    encode_response_frame, encode_response_payload, frame_payload, handle_request, total_size_len,
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
+mod sync {
+    use core::cell::UnsafeCell;
+    use core::ops::{Deref, DerefMut};
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    pub struct Mutex<T> {
+        locked: AtomicBool,
+        data: UnsafeCell<T>,
+    }
+
+    unsafe impl<T: Send> Send for Mutex<T> {}
+    unsafe impl<T: Send> Sync for Mutex<T> {}
+
+    impl<T> Mutex<T> {
+        pub const fn new(data: T) -> Self {
+            Self {
+                locked: AtomicBool::new(false),
+                data: UnsafeCell::new(data),
+            }
+        }
+
+        pub fn lock(&self) -> MutexGuard<'_, T> {
+            while self
+                .locked
+                .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+                .is_err()
+            {
+                core::hint::spin_loop();
+            }
+            MutexGuard { mutex: self }
+        }
+    }
+
+    pub struct MutexGuard<'a, T> {
+        mutex: &'a Mutex<T>,
+    }
+
+    impl<T> Deref for MutexGuard<'_, T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.mutex.data.get() }
+        }
+    }
+
+    impl<T> DerefMut for MutexGuard<'_, T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            unsafe { &mut *self.mutex.data.get() }
+        }
+    }
+
+    impl<T> Drop for MutexGuard<'_, T> {
+        fn drop(&mut self) {
+            self.mutex.locked.store(false, Ordering::Release);
+        }
+    }
+}
+
+use edgerun_protocols::block::{
+    byte_offset, byte_range, checked_len_bytes, decode_frame_len, decode_request_frame,
+    decode_request_payload, decode_response_frame, decode_response_payload, encode_request_frame,
+    encode_request_payload, encode_response_frame, encode_response_payload,
+    expect_discard_response, expect_flush_response, expect_handshake_response,
+    expect_info_response, expect_pong_response, expect_read_response, expect_write_response,
+    expect_write_zeroes_response, frame_payload, handle_request, total_size_len,
     validate_device_info, validate_range, validate_transfer, BlockBackend, BlockDeviceInfo,
-    BlockError, BlockRequest, BlockResponse, RequestId, BLOCK_PROTOCOL_VERSION,
+    BlockError, BlockRequest, BlockResponse, RequestId, BLOCK_FRAME_HEADER_LEN,
+    BLOCK_PROTOCOL_VERSION,
 };
 
 pub struct MemoryBlockBackend {
@@ -140,134 +203,64 @@ impl<T: Read + Write> BlockClient<T> {
     }
 
     pub fn handshake(&mut self) -> Result<(), BlockError> {
-        match self.call(BlockRequest::Handshake {
+        expect_handshake_response(self.call(BlockRequest::Handshake {
             protocol_version: BLOCK_PROTOCOL_VERSION,
-        })? {
-            BlockResponse::HandshakeAck { protocol_version }
-                if protocol_version == BLOCK_PROTOCOL_VERSION =>
-            {
-                Ok(())
-            }
-            response => Err(BlockError::ProtocolError(format!(
-                "unexpected handshake response: {response:?}"
-            ))),
-        }
+        })?)
     }
 
     pub fn info(&mut self) -> Result<BlockDeviceInfo, BlockError> {
-        match self.call(BlockRequest::GetInfo)? {
-            BlockResponse::Info(info) => Ok(info),
-            response => Err(BlockError::ProtocolError(format!(
-                "unexpected info response: {response:?}"
-            ))),
-        }
+        expect_info_response(self.call(BlockRequest::GetInfo)?)
     }
 
     pub fn ping(&mut self) -> Result<(), BlockError> {
-        match self.call(BlockRequest::Ping)? {
-            BlockResponse::Pong => Ok(()),
-            response => Err(BlockError::ProtocolError(format!(
-                "unexpected ping response: {response:?}"
-            ))),
-        }
+        expect_pong_response(self.call(BlockRequest::Ping)?)
     }
 
     pub fn read_blocks(&mut self, lba: u64, blocks: u32) -> Result<Vec<u8>, BlockError> {
         let request_id = self.allocate_request_id();
-        match self.call(BlockRequest::Read {
+        let response = self.call(BlockRequest::Read {
             request_id,
             lba,
             blocks,
-        })? {
-            BlockResponse::ReadResult {
-                request_id: response_id,
-                data,
-            } if response_id == request_id => Ok(data),
-            BlockResponse::Error {
-                request_id: Some(response_id),
-                error,
-            } if response_id == request_id => Err(error),
-            response => Err(BlockError::ProtocolError(format!(
-                "unexpected read response: {response:?}"
-            ))),
-        }
+        })?;
+        expect_read_response(response, request_id)
     }
 
     pub fn write_blocks(&mut self, lba: u64, blocks: u32, data: Vec<u8>) -> Result<(), BlockError> {
         let request_id = self.allocate_request_id();
-        match self.call(BlockRequest::Write {
+        let response = self.call(BlockRequest::Write {
             request_id,
             lba,
             blocks,
             data,
-        })? {
-            BlockResponse::WriteAck {
-                request_id: response_id,
-            } if response_id == request_id => Ok(()),
-            BlockResponse::Error {
-                request_id: Some(response_id),
-                error,
-            } if response_id == request_id => Err(error),
-            response => Err(BlockError::ProtocolError(format!(
-                "unexpected write response: {response:?}"
-            ))),
-        }
+        })?;
+        expect_write_response(response, request_id)
     }
 
     pub fn flush(&mut self) -> Result<(), BlockError> {
         let request_id = self.allocate_request_id();
-        match self.call(BlockRequest::Flush { request_id })? {
-            BlockResponse::FlushAck {
-                request_id: response_id,
-            } if response_id == request_id => Ok(()),
-            BlockResponse::Error {
-                request_id: Some(response_id),
-                error,
-            } if response_id == request_id => Err(error),
-            response => Err(BlockError::ProtocolError(format!(
-                "unexpected flush response: {response:?}"
-            ))),
-        }
+        let response = self.call(BlockRequest::Flush { request_id })?;
+        expect_flush_response(response, request_id)
     }
 
     pub fn discard_blocks(&mut self, lba: u64, blocks: u32) -> Result<(), BlockError> {
         let request_id = self.allocate_request_id();
-        match self.call(BlockRequest::Discard {
+        let response = self.call(BlockRequest::Discard {
             request_id,
             lba,
             blocks,
-        })? {
-            BlockResponse::DiscardAck {
-                request_id: response_id,
-            } if response_id == request_id => Ok(()),
-            BlockResponse::Error {
-                request_id: Some(response_id),
-                error,
-            } if response_id == request_id => Err(error),
-            response => Err(BlockError::ProtocolError(format!(
-                "unexpected discard response: {response:?}"
-            ))),
-        }
+        })?;
+        expect_discard_response(response, request_id)
     }
 
     pub fn write_zeroes(&mut self, lba: u64, blocks: u32) -> Result<(), BlockError> {
         let request_id = self.allocate_request_id();
-        match self.call(BlockRequest::WriteZeroes {
+        let response = self.call(BlockRequest::WriteZeroes {
             request_id,
             lba,
             blocks,
-        })? {
-            BlockResponse::WriteZeroesAck {
-                request_id: response_id,
-            } if response_id == request_id => Ok(()),
-            BlockResponse::Error {
-                request_id: Some(response_id),
-                error,
-            } if response_id == request_id => Err(error),
-            response => Err(BlockError::ProtocolError(format!(
-                "unexpected write_zeroes response: {response:?}"
-            ))),
-        }
+        })?;
+        expect_write_zeroes_response(response, request_id)
     }
 
     pub fn into_inner(self) -> T {
@@ -329,43 +322,11 @@ impl FileBlockBackend {
     }
 }
 
-#[cfg(any(target_os = "none", target_arch = "wasm32"))]
-pub struct UnixBlockServer<B> {
-    _backend: core::marker::PhantomData<B>,
-}
-
-#[cfg(any(target_os = "none", target_arch = "wasm32"))]
-pub struct TcpBlockServer<B> {
-    _backend: core::marker::PhantomData<B>,
-}
-
-pub mod protocol {
-    pub use super::{
-        checked_len_bytes, handle_request, validate_range, BlockBackend, BlockDeviceInfo,
-        BlockError, BlockRequest, BlockResponse, MemoryBlockBackend, RequestId,
-        BLOCK_PROTOCOL_VERSION,
-    };
-}
-
-pub mod transport {
-    pub use super::{
-        receive_request, receive_response, send_request, send_response, BlockClient, BlockServer,
-    };
-}
-
-pub mod wire {
-    pub use super::{
-        decode_request_frame, decode_response_frame, encode_request_frame, encode_response_frame,
-    };
-}
-
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub mod host {
     use super::*;
     use std::fs::{self, File, OpenOptions};
     use std::io::{Read, Seek, SeekFrom, Write};
-    use std::net::{TcpListener, TcpStream, ToSocketAddrs};
-    use std::os::unix::net::{UnixListener, UnixStream};
     use std::path::Path;
 
     #[derive(Debug)]
@@ -476,98 +437,6 @@ pub mod host {
             Ok(())
         }
     }
-
-    impl BlockClient<UnixStream> {
-        pub fn connect_unix(path: impl AsRef<Path>) -> Result<Self, BlockError> {
-            let stream = UnixStream::connect(path).map_err(block_io_error)?;
-            Ok(Self::new(stream))
-        }
-    }
-
-    impl BlockClient<TcpStream> {
-        pub fn connect_tcp(addr: impl ToSocketAddrs) -> Result<Self, BlockError> {
-            let stream = TcpStream::connect(addr).map_err(block_io_error)?;
-            Ok(Self::new(stream))
-        }
-    }
-
-    pub struct UnixBlockServer<B> {
-        listener: UnixListener,
-        backend: Arc<B>,
-    }
-
-    impl<B: BlockBackend + Send + Sync + 'static> UnixBlockServer<B> {
-        pub fn bind(path: impl AsRef<Path>, backend: B) -> Result<Self, BlockError> {
-            Self::bind_shared(path, Arc::new(backend))
-        }
-
-        pub fn bind_shared(path: impl AsRef<Path>, backend: Arc<B>) -> Result<Self, BlockError> {
-            let path = path.as_ref();
-            if path.exists() {
-                fs::remove_file(path).map_err(block_io_error)?;
-            }
-            let listener = UnixListener::bind(path).map_err(block_io_error)?;
-            Ok(Self { listener, backend })
-        }
-
-        pub fn local_addr(&self) -> Result<std::os::unix::net::SocketAddr, BlockError> {
-            self.listener.local_addr().map_err(block_io_error)
-        }
-
-        pub fn accept_once(&self) -> Result<(), BlockError> {
-            let (stream, _) = self.listener.accept().map_err(block_io_error)?;
-            let mut server = BlockServer::new(stream, Arc::clone(&self.backend));
-            server.serve_until_eof()
-        }
-
-        pub fn serve_forever(&self) -> Result<(), BlockError> {
-            loop {
-                self.accept_once()?;
-            }
-        }
-    }
-
-    impl<B> Drop for UnixBlockServer<B> {
-        fn drop(&mut self) {
-            if let Ok(addr) = self.listener.local_addr() {
-                if let Some(path) = addr.as_pathname() {
-                    let _ = fs::remove_file(path);
-                }
-            }
-        }
-    }
-
-    pub struct TcpBlockServer<B> {
-        listener: TcpListener,
-        backend: Arc<B>,
-    }
-
-    impl<B: BlockBackend + Send + Sync + 'static> TcpBlockServer<B> {
-        pub fn bind(addr: impl ToSocketAddrs, backend: B) -> Result<Self, BlockError> {
-            Self::bind_shared(addr, Arc::new(backend))
-        }
-
-        pub fn bind_shared(addr: impl ToSocketAddrs, backend: Arc<B>) -> Result<Self, BlockError> {
-            let listener = TcpListener::bind(addr).map_err(block_io_error)?;
-            Ok(Self { listener, backend })
-        }
-
-        pub fn local_addr(&self) -> Result<std::net::SocketAddr, BlockError> {
-            self.listener.local_addr().map_err(block_io_error)
-        }
-
-        pub fn accept_once(&self) -> Result<(), BlockError> {
-            let (stream, _) = self.listener.accept().map_err(block_io_error)?;
-            let mut server = BlockServer::new(stream, Arc::clone(&self.backend));
-            server.serve_until_eof()
-        }
-
-        pub fn serve_forever(&self) -> Result<(), BlockError> {
-            loop {
-                self.accept_once()?;
-            }
-        }
-    }
 }
 
 pub fn send_request<W: Write>(writer: &mut W, request: &BlockRequest) -> Result<(), BlockError> {
@@ -597,7 +466,7 @@ fn write_frame<W: Write>(writer: &mut W, payload: &[u8]) -> Result<(), BlockErro
 }
 
 fn read_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, BlockError> {
-    let mut len_bytes = [0_u8; 4];
+    let mut len_bytes = [0_u8; BLOCK_FRAME_HEADER_LEN];
     match reader.read_exact(&mut len_bytes) {
         Ok(()) => {}
         Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
@@ -605,12 +474,7 @@ fn read_frame<R: Read>(reader: &mut R) -> Result<Vec<u8>, BlockError> {
         }
         Err(err) => return Err(block_io_error(err)),
     }
-    let len = edgerun_encoding::byteorder::read_u32_le(&len_bytes, 0) as usize;
-    if len > edgerun_protocols::block::MAX_FRAME_SIZE {
-        return Err(BlockError::ProtocolError(
-            "frame exceeds maximum size".into(),
-        ));
-    }
+    let len = decode_frame_len(&len_bytes)?;
     let mut payload = vec![0_u8; len];
     reader.read_exact(&mut payload).map_err(|err| {
         if err.kind() == io::ErrorKind::UnexpectedEof {
@@ -797,30 +661,4 @@ mod tests {
         fs::remove_dir(root).unwrap();
     }
 
-    #[test]
-    #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-    fn unix_listener_server_accepts_client_connection() {
-        let root = temp_dir();
-        fs::create_dir_all(&root).unwrap();
-        let socket_path = root.join("block.sock");
-        let backend = Arc::new(MemoryBlockBackend::new(test_info()).unwrap());
-        let server_backend = Arc::clone(&backend);
-        let server = UnixBlockServer::bind_shared(&socket_path, server_backend).unwrap();
-
-        let worker = thread::spawn(move || {
-            server.accept_once().unwrap();
-        });
-
-        let mut client = BlockClient::connect_unix(&socket_path).unwrap();
-        client.handshake().unwrap();
-        client.write_blocks(0, 1, vec![0x2a; 512]).unwrap();
-        assert_eq!(client.read_blocks(0, 1).unwrap(), vec![0x2a; 512]);
-        drop(client);
-        worker.join().unwrap();
-
-        let mut out = vec![0_u8; 512];
-        backend.read_blocks(0, 1, &mut out).unwrap();
-        assert_eq!(out, vec![0x2a; 512]);
-        fs::remove_dir(root).unwrap();
-    }
 }

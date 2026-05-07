@@ -18,13 +18,12 @@
 //!   4. After handshake: parse `NewSessionTicket` and cache new ticket
 //! ```
 
+use crate::std::sync::Mutex;
 use crate::std::time::{Duration, Instant};
 use alloc::collections::BTreeMap as HashMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
-use edgerun_rt::Mutex;
 
 /// A cached session ticket from a NewSessionTicket message.
 #[derive(Clone)]
@@ -154,33 +153,13 @@ impl Default for SessionCache {
 ///   ticket (2 bytes len + data)
 ///   extensions (2 bytes len + data)
 pub fn parse_new_session_ticket(data: &[u8]) -> Option<SessionTicket> {
-    if data.len() < 10 {
-        return None;
-    }
-
-    let lifetime = read_u32_be(data, 0);
-    let age_add = read_u32_be(data, 4);
-
-    // Skip ticket_nonce
-    let nonce_len = data[8] as usize;
-    let pos = 9 + nonce_len;
-    if pos + 2 > data.len() {
-        return None;
-    }
-
-    let ticket_len = read_u16_be(data, pos) as usize;
-    let ticket_start = pos + 2;
-    if ticket_start + ticket_len > data.len() {
-        return None;
-    }
-
-    let ticket = data[ticket_start..ticket_start + ticket_len].to_vec();
+    let ticket = edgerun_protocols::tls::session_ticket::parse_new_session_ticket(data)?;
 
     Some(SessionTicket {
-        ticket,
+        ticket: ticket.ticket,
         cipher_suite: 0x1301, // TLS_AES_128_GCM_SHA256 (default for our client)
-        lifetime,
-        age_add,
+        lifetime: ticket.lifetime,
+        age_add: ticket.age_add,
         received_at: Instant::now(),
     })
 }

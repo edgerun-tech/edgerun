@@ -16,87 +16,11 @@ use edgerun_crypto::fill_random;
 use edgerun_crypto::sha1::{Digest, Sha1};
 use edgerun_crypto::{sha256, sha384, sha512};
 use edgerun_nfc::NfcReader;
-
-pub const EMRTD_AID: &[u8] = &[0xA0, 0x00, 0x00, 0x02, 0x47, 0x10, 0x01];
-pub const EF_COM: u16 = 0x011E;
-pub const EF_SOD: u16 = 0x011D;
-pub const EF_CARD_ACCESS: u16 = 0x011C;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DataGroup {
-    Dg1,
-    Dg2,
-    Dg3,
-    Dg4,
-    Dg5,
-    Dg6,
-    Dg7,
-    Dg8,
-    Dg9,
-    Dg10,
-    Dg11,
-    Dg12,
-    Dg13,
-    Dg14,
-    Dg15,
-    Dg16,
-}
-
-impl DataGroup {
-    pub fn file_id(self) -> u16 {
-        match self {
-            DataGroup::Dg1 => 0x0101,
-            DataGroup::Dg2 => 0x0102,
-            DataGroup::Dg3 => 0x0103,
-            DataGroup::Dg4 => 0x0104,
-            DataGroup::Dg5 => 0x0105,
-            DataGroup::Dg6 => 0x0106,
-            DataGroup::Dg7 => 0x0107,
-            DataGroup::Dg8 => 0x0108,
-            DataGroup::Dg9 => 0x0109,
-            DataGroup::Dg10 => 0x010A,
-            DataGroup::Dg11 => 0x010B,
-            DataGroup::Dg12 => 0x010C,
-            DataGroup::Dg13 => 0x010D,
-            DataGroup::Dg14 => 0x010E,
-            DataGroup::Dg15 => 0x010F,
-            DataGroup::Dg16 => 0x0110,
-        }
-    }
-
-    pub fn from_tag(tag: u8) -> Option<Self> {
-        match tag {
-            0x61 => Some(DataGroup::Dg1),
-            0x75 => Some(DataGroup::Dg2),
-            0x63 => Some(DataGroup::Dg3),
-            0x76 => Some(DataGroup::Dg4),
-            0x65 => Some(DataGroup::Dg5),
-            0x66 => Some(DataGroup::Dg6),
-            0x67 => Some(DataGroup::Dg7),
-            0x68 => Some(DataGroup::Dg8),
-            0x69 => Some(DataGroup::Dg9),
-            0x6A => Some(DataGroup::Dg10),
-            0x6B => Some(DataGroup::Dg11),
-            0x6C => Some(DataGroup::Dg12),
-            0x6D => Some(DataGroup::Dg13),
-            0x6E => Some(DataGroup::Dg14),
-            0x6F => Some(DataGroup::Dg15),
-            0x70 => Some(DataGroup::Dg16),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct StatusWord(pub u8, pub u8);
-
-impl StatusWord {
-    pub const OK: Self = Self(0x90, 0x00);
-
-    pub fn is_ok(self) -> bool {
-        self == Self::OK
-    }
-}
+use edgerun_protocols::emrtd::{self, EmrtdError};
+pub use edgerun_protocols::emrtd::{
+    get_challenge, mutual_authenticate, read_binary, select_by_name, select_file, DataGroup,
+    ParsedApdu, StatusWord, EF_CARD_ACCESS, EF_COM, EF_SOD, EMRTD_AID,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PassportError {
@@ -120,6 +44,15 @@ impl From<edgerun_capabilities::CapabilityError> for PassportError {
 }
 
 pub type Result<T> = core::result::Result<T, PassportError>;
+
+fn passport_protocol_error(error: EmrtdError) -> PassportError {
+    match error {
+        EmrtdError::MalformedApdu | EmrtdError::MalformedResponse => {
+            PassportError::MalformedResponse
+        }
+        EmrtdError::Status(status) => PassportError::Status(status),
+    }
+}
 
 impl X509CertificateInfo {
     pub fn is_issued_by(&self, issuer: &X509CertificateInfo) -> bool {
@@ -624,7 +557,7 @@ impl BacSecureMessaging {
 
 impl SecureMessaging for BacSecureMessaging {
     fn wrap_command(&mut self, command: &[u8]) -> Result<Vec<u8>> {
-        let parsed = ParsedApdu::parse(command)?;
+        let parsed = ParsedApdu::parse(command).map_err(passport_protocol_error)?;
         increment_ssc(&mut self.ssc);
 
         let protected_header = [parsed.cla | 0x0C, parsed.ins, parsed.p1, parsed.p2];
@@ -862,87 +795,8 @@ where
     }
 }
 
-pub fn select_by_name(aid: &[u8]) -> Vec<u8> {
-    let mut out = vec![0x00, 0xA4, 0x04, 0x0C, aid.len() as u8];
-    out.extend_from_slice(aid);
-    out
-}
-
-pub fn select_file(fid: u16) -> Vec<u8> {
-    vec![0x00, 0xA4, 0x02, 0x0C, 0x02, (fid >> 8) as u8, fid as u8]
-}
-
-pub fn read_binary(offset: u16, le: u8) -> Vec<u8> {
-    vec![0x00, 0xB0, (offset >> 8) as u8, offset as u8, le]
-}
-
-pub fn get_challenge() -> Vec<u8> {
-    vec![0x00, 0x84, 0x00, 0x00, 0x08]
-}
-
-pub fn mutual_authenticate(data: &[u8]) -> Vec<u8> {
-    let mut out = vec![0x00, 0x82, 0x00, 0x00, data.len() as u8];
-    out.extend_from_slice(data);
-    out.push(0x28);
-    out
-}
-
 pub fn split_response(response: &[u8]) -> Result<Vec<u8>> {
-    if response.len() < 2 {
-        return Err(PassportError::MalformedResponse);
-    }
-    let data_len = response.len() - 2;
-    let status = StatusWord(response[data_len], response[data_len + 1]);
-    if !status.is_ok() {
-        return Err(PassportError::Status(status));
-    }
-    Ok(response[..data_len].to_vec())
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct ParsedApdu<'a> {
-    cla: u8,
-    ins: u8,
-    p1: u8,
-    p2: u8,
-    data: &'a [u8],
-    le: Option<u8>,
-}
-
-impl<'a> ParsedApdu<'a> {
-    fn parse(command: &'a [u8]) -> Result<Self> {
-        if command.len() < 4 {
-            return Err(PassportError::MalformedResponse);
-        }
-        let mut out = ParsedApdu {
-            cla: command[0],
-            ins: command[1],
-            p1: command[2],
-            p2: command[3],
-            data: &[],
-            le: None,
-        };
-        match command.len() {
-            4 => Ok(out),
-            5 => {
-                out.le = Some(command[4]);
-                Ok(out)
-            }
-            _ => {
-                let lc = command[4] as usize;
-                if command.len() == 5 + lc {
-                    out.data = &command[5..5 + lc];
-                    Ok(out)
-                } else if command.len() == 6 + lc {
-                    out.data = &command[5..5 + lc];
-                    out.le = Some(command[5 + lc]);
-                    Ok(out)
-                } else {
-                    Err(PassportError::MalformedResponse)
-                }
-            }
-        }
-    }
+    emrtd::split_response(response).map_err(passport_protocol_error)
 }
 
 fn increment_ssc(ssc: &mut [u8; 8]) {
@@ -2392,10 +2246,9 @@ mod tests {
             der_set(&[der_octet_string(&[0x11; 32])]),
         ]);
         let signed_input = encode_tlv(0x31, &signed_attributes).unwrap();
-        let signing_key =
-            edgerun_crypto::rsa::pkcs1v15::SigningKey::<edgerun_crypto::rsa::sha2::Sha256>::new(
-                private_key,
-            );
+        let signing_key = edgerun_crypto::rsa::pkcs1v15::SigningKey::<
+            edgerun_crypto::rsa::sha2::Sha256,
+        >::new(private_key);
         let signature = signing_key.sign(&signed_input).to_vec();
         let cms = CmsSignedDataInfo {
             lds_security_object: LdsSecurityObject::default(),
@@ -2448,7 +2301,9 @@ mod tests {
         ]);
         let signed_input = encode_tlv(0x31, &signed_attributes).unwrap();
         let signing_key =
-            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::rsa::sha2::Sha256>::new(private_key);
+            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::rsa::sha2::Sha256>::new(
+                private_key,
+            );
         let signature = signing_key.sign_with_rng(&mut rng, &signed_input).to_vec();
         let cms = CmsSignedDataInfo {
             lds_security_object: LdsSecurityObject::default(),
@@ -2554,10 +2409,9 @@ mod tests {
             der_sha256_algorithm_identifier(),
             der_sequence(&[]),
         ]);
-        let signing_key =
-            edgerun_crypto::rsa::pkcs1v15::SigningKey::<edgerun_crypto::rsa::sha2::Sha256>::new(
-                anchor_private_key,
-            );
+        let signing_key = edgerun_crypto::rsa::pkcs1v15::SigningKey::<
+            edgerun_crypto::rsa::sha2::Sha256,
+        >::new(anchor_private_key);
         let signature = signing_key.sign(&tbs).to_vec();
         let anchor_subject = der_sequence(&[]);
         let signer_cert = X509CertificateInfo {

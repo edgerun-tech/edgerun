@@ -81,7 +81,7 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
     let derived_db_path = derived_db_probe_path();
     open_derived_db_probe(&derived_db_path)?;
 
-    let tls_cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"])
+    let tls_cert = edgerun_protocols::tls::generate_self_signed(&["localhost", "127.0.0.1"])
         .map_err(|e| format!("tls certificate: {e}"))?;
 
     let dns_config = crate::services::DnsConfig {

@@ -1,4 +1,5 @@
 use crate::prelude::v1::*;
+use edgerun_protocols::bluetooth_gatt::{format_bdaddr_hex, parse_bdaddr_string, reverse_bdaddr};
 
 pub(crate) const AF_BLUETOOTH: i32 = 31;
 pub(crate) const SOCK_SEQPACKET: i32 = 5;
@@ -71,21 +72,6 @@ pub enum L2capChannelState {
     ConfigResponse,
     Connected,
     Disconnecting,
-}
-
-pub(crate) fn parse_bdaddr_string(addr: &str) -> Option<[u8; 6]> {
-    edgerun_encoding::hex::parse_mac(addr)
-}
-
-pub(crate) fn format_bdaddr_hex(bytes: &[u8]) -> String {
-    edgerun_encoding::hex::format_mac_bytes(bytes).unwrap_or_default()
-}
-
-pub(crate) fn reverse_bdaddr(addr: &str) -> Option<[u8; 6]> {
-    parse_bdaddr_string(addr).map(|mut a| {
-        a.reverse();
-        a
-    })
 }
 
 #[repr(C)]

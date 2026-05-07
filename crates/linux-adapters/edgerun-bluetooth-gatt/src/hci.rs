@@ -1,6 +1,8 @@
 use crate::prelude::v1::*;
 use crate::{GattError, GattResult};
-use edgerun_encoding::byteorder::read_u16_le;
+use edgerun_protocols::bluetooth_gatt::{
+    parse_bdaddr_string, parse_connection_complete, reverse_bdaddr,
+};
 use std::collections::HashMap;
 use std::io;
 use std::mem::size_of;
@@ -102,17 +104,6 @@ unsafe extern "C" {
     fn recv(fd: i32, buf: *mut core::ffi::c_void, len: usize, flags: i32) -> isize;
     fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
     fn close(fd: i32) -> i32;
-}
-
-fn parse_bdaddr_string(addr: &str) -> Option<[u8; 6]> {
-    edgerun_encoding::hex::parse_mac(addr)
-}
-
-fn reverse_bdaddr(addr: &str) -> Option<[u8; 6]> {
-    parse_bdaddr_string(addr).map(|mut a| {
-        a.reverse();
-        a
-    })
 }
 
 pub struct HciConnection {
@@ -254,19 +245,7 @@ impl HciConnection {
     }
 
     fn parse_conn_complete(&self, data: &[u8]) -> Option<(u8, u16)> {
-        for i in 0..data.len() {
-            if data[i] == HCI_EV_LE_CONN_COMPLETE && i + 18 <= data.len() {
-                let status = data[i + 1];
-                let handle = read_u16_le(data, i + 2);
-                return Some((status, handle));
-            }
-            if data[i] == HCI_EV_CONN_COMPLETE && i + 11 <= data.len() {
-                let status = data[i + 1];
-                let handle = read_u16_le(data, i + 2);
-                return Some((status, handle));
-            }
-        }
-        None
+        parse_connection_complete(data)
     }
 
     pub fn disconnect(&mut self) -> GattResult<()> {

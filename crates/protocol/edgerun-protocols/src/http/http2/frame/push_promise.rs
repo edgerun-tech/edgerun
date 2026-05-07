@@ -4,6 +4,7 @@ use super::FrameType;
 use super::{Http2Error, Result};
 use alloc::string::ToString;
 use alloc::vec::Vec;
+use edgerun_encoding::byteorder::{push_u32_be, read_u32_be};
 
 /// PUSH_PROMISE frame (RFC 7540 Sec6.6)
 #[derive(Debug, Clone)]
@@ -54,7 +55,7 @@ impl PushPromiseFrame {
         }
 
         // Promised stream ID (4 bytes)
-        payload.extend_from_slice(&self.promised_stream_id.to_be_bytes());
+        push_u32_be(&mut payload, self.promised_stream_id);
 
         // Padding length byte (if padded)
         if let Some(ref pad) = self.padding {
@@ -84,12 +85,7 @@ impl PushPromiseFrame {
             ));
         }
 
-        let promised_stream_id = u32::from_be_bytes([
-            frame.payload[0],
-            frame.payload[1],
-            frame.payload[2],
-            frame.payload[3],
-        ]) & 0x7FFFFFFF;
+        let promised_stream_id = read_u32_be(&frame.payload, 0) & 0x7FFFFFFF;
 
         let mut offset = 4;
         let mut padding = None;

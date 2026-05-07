@@ -14,7 +14,7 @@ use alloc::{
 };
 use edgerun_crypto::aes_gcm::aead::generic_array::GenericArray;
 use edgerun_crypto::{AeadInPlace, Aes256GcmCipher as AeadCipher};
-use edgerun_encoding::byteorder::read_u16_be;
+use edgerun_encoding::byteorder::{push_u16_be, read_u16_be};
 
 /// TLS record layer for encryption/decryption
 pub struct RecordCipher {
@@ -171,8 +171,8 @@ impl TlsRecord {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(5 + self.fragment.len());
         out.push(self.content_type);
-        out.extend_from_slice(&self.version.to_be_bytes());
-        out.extend_from_slice(&(self.fragment.len() as u16).to_be_bytes());
+        push_u16_be(&mut out, self.version);
+        push_u16_be(&mut out, self.fragment.len() as u16);
         out.extend_from_slice(&self.fragment);
         out
     }

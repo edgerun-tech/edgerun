@@ -8,6 +8,7 @@ use alloc::format;
 use core::str;
 use edgerun_crypto::aes_gcm::aead::generic_array::GenericArray;
 use edgerun_crypto::Aes256GcmCipher;
+use edgerun_encoding::byteorder::{push_u16_be, push_u32_be, read_u32_be};
 use edgerun_encoding::crc32;
 use edgerun_json::{FromJson, JsonValue, JsonValueError, Map, ToJson};
 
@@ -30,6 +31,14 @@ pub enum TuyaProtocolError {
     InvalidFrame,
     InvalidPayload,
     AuthenticationFailed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TuyaWireMessage {
+    pub prefix: u32,
+    pub cmd: u32,
+    pub payload: Vec<u8>,
+    pub raw_header: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -246,14 +255,14 @@ pub fn parse_response_bytes(bytes: &[u8]) -> Result<TuyaResponse, JsonValueError
 pub fn pack_55aa(seq: u32, cmd: u32, payload: &[u8]) -> Vec<u8> {
     let len = payload.len() as u32 + 8;
     let mut frame = Vec::with_capacity(16 + payload.len() + 8);
-    frame.extend_from_slice(&PREFIX_55AA.to_be_bytes());
-    frame.extend_from_slice(&seq.to_be_bytes());
-    frame.extend_from_slice(&cmd.to_be_bytes());
-    frame.extend_from_slice(&len.to_be_bytes());
+    push_u32_be(&mut frame, PREFIX_55AA);
+    push_u32_be(&mut frame, seq);
+    push_u32_be(&mut frame, cmd);
+    push_u32_be(&mut frame, len);
     frame.extend_from_slice(payload);
     let checksum = crc32(&frame);
-    frame.extend_from_slice(&checksum.to_be_bytes());
-    frame.extend_from_slice(&SUFFIX_55AA.to_be_bytes());
+    push_u32_be(&mut frame, checksum);
+    push_u32_be(&mut frame, SUFFIX_55AA);
     frame
 }
 
@@ -268,11 +277,11 @@ pub fn pack_6699_with_iv(
     let len = (iv.len() + encrypted.len() + 16) as u32;
 
     let mut frame = Vec::with_capacity(18 + len as usize + 4);
-    frame.extend_from_slice(&PREFIX_6699.to_be_bytes());
-    frame.extend_from_slice(&0u16.to_be_bytes());
-    frame.extend_from_slice(&seq.to_be_bytes());
-    frame.extend_from_slice(&cmd.to_be_bytes());
-    frame.extend_from_slice(&len.to_be_bytes());
+    push_u32_be(&mut frame, PREFIX_6699);
+    push_u16_be(&mut frame, 0);
+    push_u32_be(&mut frame, seq);
+    push_u32_be(&mut frame, cmd);
+    push_u32_be(&mut frame, len);
 
     let cipher = Aes256GcmCipher::new(key).map_err(|_| TuyaProtocolError::InvalidKey)?;
     let tag = cipher
@@ -282,7 +291,7 @@ pub fn pack_6699_with_iv(
     frame.extend_from_slice(iv);
     frame.extend_from_slice(&encrypted);
     frame.extend_from_slice(tag.as_slice());
-    frame.extend_from_slice(&SUFFIX_6699.to_be_bytes());
+    push_u32_be(&mut frame, SUFFIX_6699);
     Ok(frame)
 }
 
@@ -307,6 +316,84 @@ pub fn decrypt_6699_payload(
         )
         .map_err(|_| TuyaProtocolError::AuthenticationFailed)?;
     Ok(ciphertext)
+}
+
+pub fn parse_55aa_body_len(header_rest: &[u8]) -> Result<usize, TuyaProtocolError> {
+    if header_rest.len() != 12 {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    let len = read_u32_be(header_rest, 8) as usize;
+    if !(8..=4096).contains(&len) {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    Ok(len)
+}
+
+pub fn parse_6699_body_len(header_rest: &[u8]) -> Result<usize, TuyaProtocolError> {
+    if header_rest.len() != 14 {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    let len = read_u32_be(header_rest, 10) as usize;
+    if !(28..=4096).contains(&len) {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    Ok(len)
+}
+
+pub fn parse_55aa_wire_message(
+    prefix: [u8; 4],
+    header_rest: &[u8],
+    body: &[u8],
+) -> Result<TuyaWireMessage, TuyaProtocolError> {
+    if read_u32_be(&prefix, 0) != PREFIX_55AA {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    let len = parse_55aa_body_len(header_rest)?;
+    if body.len() != len || len < 8 {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    let suffix = read_u32_be(body, len - 4);
+    if suffix != SUFFIX_55AA {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    let cmd = read_u32_be(header_rest, 4);
+    let mut raw_header = Vec::with_capacity(16);
+    raw_header.extend_from_slice(&prefix);
+    raw_header.extend_from_slice(header_rest);
+    Ok(TuyaWireMessage {
+        prefix: PREFIX_55AA,
+        cmd,
+        payload: body[..len - 8].to_vec(),
+        raw_header,
+    })
+}
+
+pub fn parse_6699_wire_message(
+    prefix: [u8; 4],
+    header_rest: &[u8],
+    body: &[u8],
+) -> Result<TuyaWireMessage, TuyaProtocolError> {
+    if read_u32_be(&prefix, 0) != PREFIX_6699 {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    let len = parse_6699_body_len(header_rest)?;
+    if body.len() != len + 4 {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    let suffix = read_u32_be(body, len);
+    if suffix != SUFFIX_6699 {
+        return Err(TuyaProtocolError::InvalidFrame);
+    }
+    let cmd = read_u32_be(header_rest, 6);
+    let mut raw_header = Vec::with_capacity(18);
+    raw_header.extend_from_slice(&prefix);
+    raw_header.extend_from_slice(header_rest);
+    Ok(TuyaWireMessage {
+        prefix: PREFIX_6699,
+        cmd,
+        payload: body[..len].to_vec(),
+        raw_header,
+    })
 }
 
 pub fn derive_v35_session_key(
@@ -381,5 +468,27 @@ mod tests {
         let frame = pack_55aa(1, DP_QUERY_NEW, b"{}");
         assert_eq!(&frame[..4], &PREFIX_55AA.to_be_bytes());
         assert_eq!(&frame[frame.len() - 4..], &SUFFIX_55AA.to_be_bytes());
+    }
+
+    #[test]
+    fn parses_55aa_wire_message() {
+        let frame = pack_55aa(1, DP_QUERY_NEW, b"{}");
+        let message =
+            parse_55aa_wire_message(PREFIX_55AA.to_be_bytes(), &frame[4..16], &frame[16..])
+                .unwrap();
+        assert_eq!(message.prefix, PREFIX_55AA);
+        assert_eq!(message.cmd, DP_QUERY_NEW);
+        assert_eq!(message.payload, b"{}");
+    }
+
+    #[test]
+    fn rejects_bad_55aa_suffix() {
+        let mut frame = pack_55aa(1, DP_QUERY_NEW, b"{}");
+        let last = frame.len() - 1;
+        frame[last] ^= 1;
+        assert_eq!(
+            parse_55aa_wire_message(PREFIX_55AA.to_be_bytes(), &frame[4..16], &frame[16..]),
+            Err(TuyaProtocolError::InvalidFrame)
+        );
     }
 }

@@ -4,6 +4,7 @@
 
 use alloc::{format, vec, vec::Vec};
 use edgerun_crypto::sha::{Digest, Sha256, Sha384};
+use edgerun_encoding::byteorder::push_u16_be;
 
 /// Hash abstraction for TLS 1.3 key derivation.
 #[derive(Clone)]
@@ -228,7 +229,7 @@ pub fn server_app_write_keys(
 fn build_hkdf_label(label: &str, context: &[u8], length: usize) -> Vec<u8> {
     let full_label = format!("tls13 {}", label);
     let mut out = Vec::with_capacity(2 + 1 + full_label.len() + 1 + context.len());
-    out.extend_from_slice(&(length as u16).to_be_bytes());
+    push_u16_be(&mut out, length as u16);
     out.push(full_label.len() as u8);
     out.extend_from_slice(full_label.as_bytes());
     out.push(context.len() as u8);
@@ -248,7 +249,7 @@ fn build_hkdf_label(label: &str, context: &[u8], length: usize) -> Vec<u8> {
 fn build_quic_hkdf_label(label: &str, context: &[u8], length: usize) -> Vec<u8> {
     let full_label = format!("quic {}", label);
     let mut out = Vec::with_capacity(2 + 1 + full_label.len() + 1 + context.len());
-    out.extend_from_slice(&(length as u16).to_be_bytes());
+    push_u16_be(&mut out, length as u16);
     out.push(full_label.len() as u8);
     out.extend_from_slice(full_label.as_bytes());
     out.push(context.len() as u8);

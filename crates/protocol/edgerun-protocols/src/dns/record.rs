@@ -10,7 +10,7 @@ use alloc::{
 use core::fmt;
 use core::net::Ipv4Addr;
 use core::net::Ipv6Addr;
-use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
+use edgerun_encoding::byteorder::{push_u16_be, push_u32_be, read_u16_be, read_u32_be};
 
 // ---------------------------------------------------------------------------
 // Record type constants (RFC 1035 + extensions)
@@ -412,7 +412,7 @@ impl DnsRecordData {
             (DnsRecordType::PTR, DnsRecordData::PTR(name)) => encode_domain_name(name),
             (DnsRecordType::MX, DnsRecordData::MX { priority, exchange }) => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&priority.to_be_bytes());
+                push_u16_be(&mut buf, *priority);
                 buf.extend_from_slice(&encode_domain_name(exchange));
                 buf
             }
@@ -440,11 +440,11 @@ impl DnsRecordData {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&encode_domain_name(mname));
                 buf.extend_from_slice(&encode_domain_name(rname));
-                buf.extend_from_slice(&serial.to_be_bytes());
-                buf.extend_from_slice(&refresh.to_be_bytes());
-                buf.extend_from_slice(&retry.to_be_bytes());
-                buf.extend_from_slice(&expire.to_be_bytes());
-                buf.extend_from_slice(&minimum.to_be_bytes());
+                push_u32_be(&mut buf, *serial);
+                push_u32_be(&mut buf, *refresh);
+                push_u32_be(&mut buf, *retry);
+                push_u32_be(&mut buf, *expire);
+                push_u32_be(&mut buf, *minimum);
                 buf
             }
             (
@@ -457,9 +457,9 @@ impl DnsRecordData {
                 },
             ) => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&priority.to_be_bytes());
-                buf.extend_from_slice(&weight.to_be_bytes());
-                buf.extend_from_slice(&port.to_be_bytes());
+                push_u16_be(&mut buf, *priority);
+                push_u16_be(&mut buf, *weight);
+                push_u16_be(&mut buf, *port);
                 buf.extend_from_slice(&encode_domain_name(target));
                 buf
             }
@@ -475,8 +475,8 @@ impl DnsRecordData {
                 },
             ) => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&order.to_be_bytes());
-                buf.extend_from_slice(&preference.to_be_bytes());
+                push_u16_be(&mut buf, *order);
+                push_u16_be(&mut buf, *preference);
                 // Character strings: length byte + data
                 buf.push(flags.len() as u8);
                 buf.extend_from_slice(flags.as_bytes());
@@ -535,7 +535,7 @@ impl DnsRecordData {
                 },
             ) => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&priority.to_be_bytes());
+                push_u16_be(&mut buf, *priority);
                 buf.extend_from_slice(&encode_domain_name(target));
                 buf.extend_from_slice(params);
                 buf
@@ -550,7 +550,7 @@ impl DnsRecordData {
                 },
             ) => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&key_tag.to_be_bytes());
+                push_u16_be(&mut buf, *key_tag);
                 buf.push(*algorithm);
                 buf.push(*digest_type);
                 buf.extend_from_slice(digest);
@@ -566,7 +566,7 @@ impl DnsRecordData {
                 },
             ) => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&flags.to_be_bytes());
+                push_u16_be(&mut buf, *flags);
                 buf.push(*protocol);
                 buf.push(*algorithm);
                 buf.extend_from_slice(public_key);
@@ -587,13 +587,13 @@ impl DnsRecordData {
                 },
             ) => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&type_covered.to_be_bytes());
+                push_u16_be(&mut buf, *type_covered);
                 buf.push(*algorithm);
                 buf.push(*labels);
-                buf.extend_from_slice(&original_ttl.to_be_bytes());
-                buf.extend_from_slice(&expiration.to_be_bytes());
-                buf.extend_from_slice(&inception.to_be_bytes());
-                buf.extend_from_slice(&key_tag.to_be_bytes());
+                push_u32_be(&mut buf, *original_ttl);
+                push_u32_be(&mut buf, *expiration);
+                push_u32_be(&mut buf, *inception);
+                push_u16_be(&mut buf, *key_tag);
                 buf.extend_from_slice(&encode_domain_name(signer_name));
                 buf.extend_from_slice(signature);
                 buf
@@ -623,7 +623,7 @@ impl DnsRecordData {
                 let mut buf = Vec::new();
                 buf.push(*hash_algorithm);
                 buf.push(*flags);
-                buf.extend_from_slice(&iterations.to_be_bytes());
+                push_u16_be(&mut buf, *iterations);
                 buf.push(salt.len() as u8);
                 buf.extend_from_slice(salt);
                 let hash_len = next_hashed_owner.len();
@@ -645,7 +645,7 @@ impl DnsRecordData {
                 let mut buf = Vec::with_capacity(4 + options.len());
                 buf.push(*ext_rcode);
                 buf.push(*version);
-                buf.extend_from_slice(&flags.to_be_bytes());
+                push_u16_be(&mut buf, *flags);
                 buf.extend_from_slice(options);
                 buf
             }
@@ -681,13 +681,14 @@ impl DnsRecordData {
                 buf.push(*size as u8);
                 buf.push(*horiz_pre as u8);
                 buf.push(*vert_pre as u8);
-                buf.extend_from_slice(&latitude.to_be_bytes());
-                buf.extend_from_slice(&longitude.to_be_bytes());
-                buf.extend_from_slice(&altitude.to_be_bytes());
+                push_u32_be(&mut buf, *latitude);
+                push_u32_be(&mut buf, *longitude);
+                push_u32_be(&mut buf, *altitude);
                 buf
             }
             (DnsRecordType::AFSDB, DnsRecordData::AFSDB { subtype, hostname }) => {
-                let mut buf = subtype.to_be_bytes().to_vec();
+                let mut buf = Vec::new();
+                push_u16_be(&mut buf, *subtype);
                 buf.extend(encode_domain_name(hostname));
                 buf
             }
@@ -699,8 +700,9 @@ impl DnsRecordData {
                     target,
                 },
             ) => {
-                let mut buf = priority.to_be_bytes().to_vec();
-                buf.extend_from_slice(&weight.to_be_bytes());
+                let mut buf = Vec::new();
+                push_u16_be(&mut buf, *priority);
+                push_u16_be(&mut buf, *weight);
                 buf.extend_from_slice(target.as_bytes());
                 buf
             }
@@ -1181,7 +1183,7 @@ pub fn encode_domain_name_compressed(name: &str, msg: &[u8]) -> Vec<u8> {
 
     if let Some(pos) = ptr_offset {
         let pointer = 0xC000 | (pos as u16);
-        buf.extend_from_slice(&pointer.to_be_bytes());
+        push_u16_be(&mut buf, pointer);
     } else {
         for &label in &labels[first_label..] {
             buf.push(label.len() as u8);

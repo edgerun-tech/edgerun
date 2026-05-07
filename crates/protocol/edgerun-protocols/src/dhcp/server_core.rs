@@ -4,6 +4,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::net::Ipv4Addr;
+use edgerun_encoding::ip::broadcast_address;
 
 use super::lease::LeasePool;
 use super::message::{DhcpMessage, DhcpMessageType, NetworkConfig, DHCP_CLIENT_PORT};
@@ -36,7 +37,7 @@ impl DhcpServerCore {
         let mut pool = LeasePool::new(pool_start, pool_end);
         pool.reserve(config.server_ip);
         pool.reserve(config.router);
-        pool.reserve(network_broadcast(config.server_ip, config.subnet_mask));
+        pool.reserve(broadcast_address(&config.server_ip, &config.subnet_mask));
         for dns in &config.dns_servers {
             pool.reserve(*dns);
         }
@@ -213,12 +214,6 @@ impl DhcpServerCore {
         };
         (tftp, bootfile)
     }
-}
-
-fn network_broadcast(ip: Ipv4Addr, mask: Ipv4Addr) -> Ipv4Addr {
-    let i = ip.octets();
-    let m = mask.octets();
-    Ipv4Addr::new(i[0] | !m[0], i[1] | !m[1], i[2] | !m[2], i[3] | !m[3])
 }
 
 #[cfg(test)]

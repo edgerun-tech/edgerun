@@ -17,16 +17,10 @@ use edgerun_capabilities::{
     CapabilityError, CapabilityEventKind, CapabilityModality, CapabilityOperation,
     CapabilityProvider, CapabilityRole,
 };
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CecLogicalAddress {
-    Tv = 0,
-    Playback1 = 4,
-    AudioSystem = 5,
-    Playback2 = 8,
-    Playback3 = 11,
-    Unregistered = 15,
-}
+pub use edgerun_protocols::cec::{
+    active_source, cec_header, image_view_on, set_stream_path, standby, text_view_on,
+    wake_sequence, CecLogicalAddress, CecMessage,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CecDrmConnectorInfo {
@@ -62,11 +56,6 @@ pub struct CecAdapterInfo {
     pub drm_connector: Option<CecDrmConnectorInfo>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CecMessage {
-    pub bytes: Vec<u8>,
-}
-
 pub trait CecAdapterDevice: CapabilityProvider {
     fn adapter_info(&self) -> Result<CecAdapterInfo, CapabilityError>;
     fn transmit(&mut self, message: &CecMessage) -> Result<(), CapabilityError>;
@@ -86,62 +75,6 @@ pub fn default_cec_descriptor(provider: &str, instance_id: &str) -> CapabilityDe
         ],
         vec![constraint(CapabilityConstraintKind::RequireLocalOnly)],
     )
-}
-
-pub fn cec_header(initiator: CecLogicalAddress, destination: CecLogicalAddress) -> u8 {
-    ((initiator as u8) << 4) | destination as u8
-}
-
-pub fn image_view_on(initiator: CecLogicalAddress, destination: CecLogicalAddress) -> CecMessage {
-    CecMessage {
-        bytes: vec![cec_header(initiator, destination), 0x04],
-    }
-}
-
-pub fn text_view_on(initiator: CecLogicalAddress, destination: CecLogicalAddress) -> CecMessage {
-    CecMessage {
-        bytes: vec![cec_header(initiator, destination), 0x0d],
-    }
-}
-
-pub fn standby(initiator: CecLogicalAddress, destination: CecLogicalAddress) -> CecMessage {
-    CecMessage {
-        bytes: vec![cec_header(initiator, destination), 0x36],
-    }
-}
-
-pub fn active_source(initiator: CecLogicalAddress, physical_address: u16) -> CecMessage {
-    CecMessage {
-        bytes: vec![
-            cec_header(initiator, CecLogicalAddress::Unregistered),
-            0x82,
-            (physical_address >> 8) as u8,
-            physical_address as u8,
-        ],
-    }
-}
-
-pub fn set_stream_path(initiator: CecLogicalAddress, physical_address: u16) -> CecMessage {
-    CecMessage {
-        bytes: vec![
-            cec_header(initiator, CecLogicalAddress::Unregistered),
-            0x86,
-            (physical_address >> 8) as u8,
-            physical_address as u8,
-        ],
-    }
-}
-
-pub fn wake_sequence(
-    initiator: CecLogicalAddress,
-    physical_address: Option<u16>,
-) -> Vec<CecMessage> {
-    let mut messages = vec![image_view_on(initiator, CecLogicalAddress::Tv)];
-    if let Some(physical_address) = physical_address {
-        messages.push(active_source(initiator, physical_address));
-        messages.push(set_stream_path(initiator, physical_address));
-    }
-    messages
 }
 
 #[cfg(test)]

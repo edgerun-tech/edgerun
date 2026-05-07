@@ -2,6 +2,7 @@
 
 use crate::prelude::*;
 use alloc::vec;
+use edgerun_encoding::byteorder::{push_u32_be, read_u32_be};
 
 /// An NDEF record within an NDEF message.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -149,8 +150,7 @@ impl NdefMessage {
             if is_short {
                 out.push(record.payload.len() as u8);
             } else {
-                let len = record.payload.len() as u32;
-                out.extend_from_slice(&len.to_be_bytes());
+                push_u32_be(&mut out, record.payload.len() as u32);
             }
 
             if has_id {
@@ -196,9 +196,7 @@ impl NdefMessage {
                 if pos + 4 > data.len() {
                     return None;
                 }
-                let len =
-                    u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]])
-                        as usize;
+                let len = read_u32_be(data, pos) as usize;
                 pos += 4;
                 len
             };

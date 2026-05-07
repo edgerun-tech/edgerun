@@ -3,6 +3,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::str;
+use edgerun_encoding::byteorder::read_u16_be;
 
 pub const SOCKS5_VERSION: u8 = 0x05;
 pub const SOCKS5_CMD_CONNECT: u8 = 0x01;
@@ -94,7 +95,7 @@ pub fn parse_socks5_request(bytes: &[u8]) -> Result<Socks5Request, ProxyError> {
     match bytes[3] {
         SOCKS5_ATYP_IPV4 if bytes.len() >= 10 => {
             let host = alloc::format!("{}.{}.{}.{}", bytes[4], bytes[5], bytes[6], bytes[7]);
-            let port = u16::from_be_bytes([bytes[8], bytes[9]]);
+            let port = read_u16_be(bytes, 8);
             Ok(Socks5Request::Connect { host, port })
         }
         SOCKS5_ATYP_DOMAIN => {
@@ -105,7 +106,7 @@ pub fn parse_socks5_request(bytes: &[u8]) -> Result<Socks5Request, ProxyError> {
             let host = str::from_utf8(&bytes[5..5 + len])
                 .map_err(|_| ProxyError::InvalidUtf8)?
                 .to_string();
-            let port = u16::from_be_bytes([bytes[5 + len], bytes[6 + len]]);
+            let port = read_u16_be(bytes, 5 + len);
             Ok(Socks5Request::Connect { host, port })
         }
         _ => Err(ProxyError::UnsupportedAddressType),

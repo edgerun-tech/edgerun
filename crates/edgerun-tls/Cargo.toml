@@ -14,17 +14,12 @@ categories = ["cryptography", "network-programming"]
 
 [features]
 default = []
-# Compatibility only: TLS is no_std and uses edgerun-rt unconditionally.
 std = ["edgerun-crypto/std"]
 
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "ed25519", "hmac", "p256", "rsa", "x25519"] }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false }
-edgerun-rt.workspace = true
 edgerun-protocols = { workspace = true, default-features = false, features = ["tls"] }
-
-[dev-dependencies]
-edgerun-acme = { version = "0.1", path = "../edgerun-acme" }
 
 [lints]
 workspace = true

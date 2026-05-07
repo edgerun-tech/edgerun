@@ -1,6 +1,7 @@
 use super::header::{header_value_has_token, HeaderMap};
 use alloc::vec::Vec;
 use core::fmt;
+use edgerun_encoding::chunked::{decode_chunked, ChunkedError as EncodingChunkedError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChunkedError {
@@ -34,33 +35,18 @@ pub fn has_chunked_transfer_coding(headers: &HeaderMap) -> bool {
         .any(|value| header_value_has_token(value.as_str(), "chunked"))
 }
 
-pub fn parse_body_with_trailers(mut data: &[u8]) -> Result<(Vec<u8>, HeaderMap), ChunkedError> {
-    let mut body = Vec::new();
+pub fn parse_body_with_trailers(data: &[u8]) -> Result<(Vec<u8>, HeaderMap), ChunkedError> {
+    let (body, trailers) = decode_chunked(data).map_err(map_chunked_error)?;
+    Ok((body, parse_trailers(&trailers)?))
+}
 
-    loop {
-        let crlf = find_crlf(data, 0).ok_or(ChunkedError::IncompleteBody)?;
-        let size_line =
-            core::str::from_utf8(&data[..crlf]).map_err(|_| ChunkedError::InvalidSize)?;
-        let size_text = size_line.split(';').next().unwrap_or("").trim();
-        let size = usize::from_str_radix(size_text, 16).map_err(|_| ChunkedError::InvalidSize)?;
-
-        data = &data[crlf + 2..];
-
-        if size == 0 {
-            return Ok((body, parse_trailers(data)?));
+fn map_chunked_error(error: EncodingChunkedError) -> ChunkedError {
+    match error {
+        EncodingChunkedError::Incomplete => ChunkedError::IncompleteBody,
+        EncodingChunkedError::InvalidChunkSize | EncodingChunkedError::InvalidUtf8 => {
+            ChunkedError::InvalidSize
         }
-
-        if data.len() < size {
-            return Err(ChunkedError::TruncatedChunk);
-        }
-
-        body.extend_from_slice(&data[..size]);
-        data = &data[size..];
-
-        if data.get(..2) != Some(b"\r\n") {
-            return Err(ChunkedError::MissingChunkTerminator);
-        }
-        data = &data[2..];
+        EncodingChunkedError::MissingCrlf => ChunkedError::MissingChunkTerminator,
     }
 }
 
@@ -76,9 +62,7 @@ fn parse_trailers(data: &[u8]) -> Result<HeaderMap, ChunkedError> {
     let mut pos = 0;
 
     while pos < data.len() {
-        let Some(line_end) = find_crlf(data, pos) else {
-            break;
-        };
+        let line_end = find_crlf(data, pos).unwrap_or(data.len());
         if line_end == pos {
             break;
         }
@@ -91,6 +75,9 @@ fn parse_trailers(data: &[u8]) -> Result<HeaderMap, ChunkedError> {
             if !name.is_empty() {
                 let _ = trailers.insert(name, value);
             }
+        }
+        if line_end == data.len() {
+            break;
         }
         pos = line_end + 2;
     }

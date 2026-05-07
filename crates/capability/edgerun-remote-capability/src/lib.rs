@@ -75,9 +75,9 @@ pub use protocol::{
     CapabilitySessionMode, CapabilitySessionOpen, RemoteCapabilityProvider,
     RemoteCapabilityTransport, RemoteInvocationResult,
 };
-pub use transport::MemoryRemoteTransport;
 #[cfg(unix)]
-pub use transport::{accept_tcp, accept_unix, FramedRemoteTransport};
+pub use transport::FramedRemoteTransport;
+pub use transport::MemoryRemoteTransport;
 
 #[cfg(test)]
 mod tests;

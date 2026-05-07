@@ -13,14 +13,14 @@ use crate::prelude::v1::*;
 use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use crate::error::StorageError;
 use crate::file_index::FileIndex;
 use crate::fs::{open_stream_file, write_event_to_file};
-use crate::materializer::{OpEventType, materialize_event_to_index};
+use crate::materializer::{materialize_event_to_index, OpEventType};
 
 // ---------------------------------------------------------------------------
 // Event submission
@@ -60,16 +60,12 @@ impl DurableEventAppender {
             })?;
         }
 
-        edgerun_rt::spawn_blocking(move || {
-            result_rx.recv().map_err(|e| {
-                StorageError::Io(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
-                    format!("event writer result channel closed: {e}"),
-                ))
-            })?
-        })
-        .await
-        .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?
+        result_rx.recv().map_err(|e| {
+            StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                format!("event writer result channel closed: {e}"),
+            ))
+        })?
     }
 
     /// Synchronous version — blocks the current thread until the write completes.

@@ -1,6 +1,9 @@
 //! Matter TLV codec.
 
 use crate::prelude::*;
+use edgerun_encoding::byteorder::{
+    push_u16_be, push_u32_be, push_u64_be, read_i32_be, read_i64_be, read_u32_be, read_u64_be,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AnonymousTag;
@@ -44,19 +47,19 @@ impl TlvWriter {
     pub fn write_i16(&mut self, value: i16) {
         self.buf.push(TAG_ANONYMOUS);
         self.buf.push(0x05);
-        self.buf.extend_from_slice(&value.to_be_bytes());
+        push_u16_be(&mut self.buf, value as u16);
     }
 
     pub fn write_i32(&mut self, value: i32) {
         self.buf.push(TAG_ANONYMOUS);
         self.buf.push(0x06);
-        self.buf.extend_from_slice(&value.to_be_bytes());
+        push_u32_be(&mut self.buf, value as u32);
     }
 
     pub fn write_i64(&mut self, value: i64) {
         self.buf.push(TAG_ANONYMOUS);
         self.buf.push(0x07);
-        self.buf.extend_from_slice(&value.to_be_bytes());
+        push_u64_be(&mut self.buf, value as u64);
     }
 
     pub fn write_u8(&mut self, value: u8) {
@@ -68,39 +71,38 @@ impl TlvWriter {
     pub fn write_u16(&mut self, value: u16) {
         self.buf.push(TAG_ANONYMOUS);
         self.buf.push(0x09);
-        self.buf.extend_from_slice(&value.to_be_bytes());
+        push_u16_be(&mut self.buf, value);
     }
 
     pub fn write_u32(&mut self, value: u32) {
         self.buf.push(TAG_ANONYMOUS);
         self.buf.push(0x0A);
-        self.buf.extend_from_slice(&value.to_be_bytes());
+        push_u32_be(&mut self.buf, value);
     }
 
     pub fn write_u64(&mut self, value: u64) {
         self.buf.push(TAG_ANONYMOUS);
         self.buf.push(0x0B);
-        self.buf.extend_from_slice(&value.to_be_bytes());
+        push_u64_be(&mut self.buf, value);
     }
 
     pub fn write_f32(&mut self, value: f32) {
         self.buf.push(TAG_ANONYMOUS);
         self.buf.push(0x0C);
-        self.buf.extend_from_slice(&value.to_be_bytes());
+        push_u32_be(&mut self.buf, value.to_bits());
     }
 
     pub fn write_f64(&mut self, value: f64) {
         self.buf.push(TAG_ANONYMOUS);
         self.buf.push(0x0D);
-        self.buf.extend_from_slice(&value.to_be_bytes());
+        push_u64_be(&mut self.buf, value.to_bits());
     }
 
     pub fn write_str(&mut self, value: &str) {
         self.buf.push(TAG_ANONYMOUS);
         let bytes = value.as_bytes();
-        let len = bytes.len() as u32;
         self.buf.push(0x10);
-        self.buf.extend_from_slice(&len.to_be_bytes());
+        push_u32_be(&mut self.buf, bytes.len() as u32);
         self.buf.extend_from_slice(bytes);
     }
 
@@ -169,7 +171,7 @@ impl TlvReader {
     pub fn read_i32(&mut self) -> i32 {
         if let (Some(TAG_ANONYMOUS), Some(0x06)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(4) {
-                return i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                return read_i32_be(bytes, 0);
             }
         }
         0
@@ -178,7 +180,7 @@ impl TlvReader {
     pub fn read_u32(&mut self) -> u32 {
         if let (Some(TAG_ANONYMOUS), Some(0x0A)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(4) {
-                return u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                return read_u32_be(bytes, 0);
             }
         }
         0
@@ -187,9 +189,7 @@ impl TlvReader {
     pub fn read_i64(&mut self) -> i64 {
         if let (Some(TAG_ANONYMOUS), Some(0x07)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(8) {
-                return i64::from_be_bytes([
-                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-                ]);
+                return read_i64_be(bytes, 0);
             }
         }
         0
@@ -198,9 +198,7 @@ impl TlvReader {
     pub fn read_u64(&mut self) -> u64 {
         if let (Some(TAG_ANONYMOUS), Some(0x0B)) = (self.read_byte(), self.read_byte()) {
             if let Some(bytes) = self.read_bytes(8) {
-                return u64::from_be_bytes([
-                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-                ]);
+                return read_u64_be(bytes, 0);
             }
         }
         0

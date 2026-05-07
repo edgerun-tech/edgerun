@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 use core::fmt;
-use edgerun_encoding::byteorder::read_u16_be;
+use edgerun_encoding::byteorder::{push_u16_be, push_u32_be, read_u16_be};
 
 /// DHCPv6 Unique Identifier.
 ///
@@ -38,8 +38,8 @@ impl Duid {
     /// This is the default DUID type for most clients.
     pub fn llt(hw_type: u16, time: u32, link_addr: &[u8]) -> Self {
         let mut data = Vec::with_capacity(6 + link_addr.len());
-        data.extend_from_slice(&hw_type.to_be_bytes()); // hardware type (1 = Ethernet)
-        data.extend_from_slice(&time.to_be_bytes()); // time
+        push_u16_be(&mut data, hw_type); // hardware type (1 = Ethernet)
+        push_u32_be(&mut data, time); // time
         data.extend_from_slice(link_addr); // MAC address
         Self {
             duid_type: DuidType::Llt,
@@ -50,7 +50,7 @@ impl Duid {
     /// Create a DUID-LL (type 3) — hardware type + link-layer address only.
     pub fn ll(hw_type: u16, link_addr: &[u8]) -> Self {
         let mut data = Vec::with_capacity(2 + link_addr.len());
-        data.extend_from_slice(&hw_type.to_be_bytes());
+        push_u16_be(&mut data, hw_type);
         data.extend_from_slice(link_addr);
         Self {
             duid_type: DuidType::Ll,
@@ -61,7 +61,7 @@ impl Duid {
     /// Create a DUID-EN (type 2) — enterprise number + identifier.
     pub fn en(enterprise_number: u32, identifier: &[u8]) -> Self {
         let mut data = Vec::with_capacity(4 + identifier.len());
-        data.extend_from_slice(&enterprise_number.to_be_bytes());
+        push_u32_be(&mut data, enterprise_number);
         data.extend_from_slice(identifier);
         Self {
             duid_type: DuidType::En,
@@ -109,7 +109,7 @@ impl Duid {
     /// Serialize to wire format (includes 2-byte type prefix).
     pub fn to_wire(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(2 + self.data.len());
-        out.extend_from_slice(&(self.duid_type as u16).to_be_bytes());
+        push_u16_be(&mut out, self.duid_type as u16);
         out.extend_from_slice(&self.data);
         out
     }

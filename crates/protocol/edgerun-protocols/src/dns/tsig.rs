@@ -24,6 +24,7 @@
 //! ```
 
 use alloc::{string::String, vec::Vec};
+use edgerun_encoding::byteorder::{push_u16_be, push_u32_be};
 
 #[cfg(feature = "tsig")]
 use crate::dns::message::{DnsMessage, DnsRecord};
@@ -60,24 +61,24 @@ impl TsigRdata {
     pub fn to_wire_without_mac(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend(super::record::encode_domain_name(&self.algorithm));
-        buf.extend_from_slice(&((self.time_signed >> 16) as u32).to_be_bytes());
-        buf.extend_from_slice(&((self.time_signed & 0xFFFF) as u16).to_be_bytes());
-        buf.extend_from_slice(&self.fudge.to_be_bytes());
-        buf.extend_from_slice(&self.mac_size.to_be_bytes());
-        buf.extend_from_slice(&self.orig_id.to_be_bytes());
-        buf.extend_from_slice(&self.error.to_be_bytes());
-        buf.extend_from_slice(&self.other_len.to_be_bytes());
+        push_u32_be(&mut buf, (self.time_signed >> 16) as u32);
+        push_u16_be(&mut buf, (self.time_signed & 0xFFFF) as u16);
+        push_u16_be(&mut buf, self.fudge);
+        push_u16_be(&mut buf, self.mac_size);
+        push_u16_be(&mut buf, self.orig_id);
+        push_u16_be(&mut buf, self.error);
+        push_u16_be(&mut buf, self.other_len);
         buf
     }
 
     /// Full wire format including MAC.
     pub fn to_wire(&self) -> Vec<u8> {
         let mut buf = self.to_wire_without_mac();
-        buf.extend_from_slice(&(self.mac.len() as u16).to_be_bytes());
+        push_u16_be(&mut buf, self.mac.len() as u16);
         buf.extend_from_slice(&self.mac);
-        buf.extend_from_slice(&self.orig_id.to_be_bytes());
-        buf.extend_from_slice(&self.error.to_be_bytes());
-        buf.extend_from_slice(&self.other_len.to_be_bytes());
+        push_u16_be(&mut buf, self.orig_id);
+        push_u16_be(&mut buf, self.error);
+        push_u16_be(&mut buf, self.other_len);
         buf.extend_from_slice(&self.other_data);
         buf
     }
@@ -297,7 +298,7 @@ impl TsigSigner {
         mac_input.extend_from_slice(&msg_wire);
 
         // Error (2 bytes)
-        mac_input.extend_from_slice(&tsig.error.to_be_bytes());
+        push_u16_be(&mut mac_input, tsig.error);
 
         // Other data
         mac_input.extend_from_slice(&tsig.other_data);
@@ -394,7 +395,7 @@ impl TsigVerifier {
 
         let msg_wire = msg_copy.to_wire();
         mac_input.extend_from_slice(&msg_wire);
-        mac_input.extend_from_slice(&tsig.error.to_be_bytes());
+        push_u16_be(&mut mac_input, tsig.error);
         mac_input.extend_from_slice(&tsig.other_data);
         mac_input.extend_from_slice(request_mac);
 

@@ -7,7 +7,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::block::{BlockDeviceInfo, BlockError};
-use edgerun_encoding::byteorder::{read_u16_be, read_u32_be, read_u64_be};
+use edgerun_encoding::byteorder::{
+    push_u16_be, push_u32_be, push_u64_be, read_u16_be, read_u32_be, read_u64_be,
+};
 
 pub const NBD_MAGIC: u64 = 0x4e42444d41474943;
 pub const NBD_OPTS_MAGIC: u64 = 0x49484156454f5054;
@@ -40,7 +42,9 @@ pub const NBD_OPTION_HEADER_LEN: usize = 16;
 pub const NBD_REQUEST_HEADER_LEN: usize = 28;
 pub const NBD_OPTION_REPLY_HEADER_LEN: usize = 20;
 pub const NBD_REPLY_HEADER_LEN: usize = 16;
+pub const NBD_CLIENT_FLAGS_LEN: usize = 4;
 pub const NBD_EXPORT_INFO_PADDING_LEN: usize = 124;
+pub const NBD_EXPORT_INFO_LEN: usize = 8 + 2 + NBD_EXPORT_INFO_PADDING_LEN;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NbdExport {
@@ -100,6 +104,50 @@ pub struct NbdReplyHeader {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NbdBlockCommand {
+    Read {
+        handle: u64,
+        lba: u64,
+        blocks: u32,
+    },
+    Write {
+        handle: u64,
+        lba: u64,
+        blocks: u32,
+        length: u32,
+    },
+    Disconnect {
+        handle: u64,
+    },
+    Flush {
+        handle: u64,
+    },
+    Trim {
+        handle: u64,
+        lba: u64,
+        blocks: u32,
+    },
+    WriteZeroes {
+        handle: u64,
+        lba: u64,
+        blocks: u32,
+    },
+}
+
+impl NbdBlockCommand {
+    pub fn handle(&self) -> u64 {
+        match self {
+            Self::Read { handle, .. }
+            | Self::Write { handle, .. }
+            | Self::Disconnect { handle }
+            | Self::Flush { handle }
+            | Self::Trim { handle, .. }
+            | Self::WriteZeroes { handle, .. } => *handle,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NbdServerHandshake {
     pub handshake_flags: u16,
 }
@@ -132,29 +180,31 @@ pub fn map_nbd_error(error: &BlockError) -> u32 {
 
 pub fn encode_server_handshake() -> Vec<u8> {
     let mut out = Vec::with_capacity(18);
-    out.extend_from_slice(&NBD_MAGIC.to_be_bytes());
-    out.extend_from_slice(&NBD_OPTS_MAGIC.to_be_bytes());
-    out.extend_from_slice(&NBD_FLAG_FIXED_NEWSTYLE.to_be_bytes());
+    push_u64_be(&mut out, NBD_MAGIC);
+    push_u64_be(&mut out, NBD_OPTS_MAGIC);
+    push_u16_be(&mut out, NBD_FLAG_FIXED_NEWSTYLE);
     out
 }
 
 pub fn encode_client_flags(flags: u32) -> Vec<u8> {
-    flags.to_be_bytes().to_vec()
+    let mut out = Vec::with_capacity(NBD_CLIENT_FLAGS_LEN);
+    push_u32_be(&mut out, flags);
+    out
 }
 
 pub fn encode_option_request(option: u32, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(16 + payload.len());
-    out.extend_from_slice(&NBD_OPTS_MAGIC.to_be_bytes());
-    out.extend_from_slice(&option.to_be_bytes());
-    out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    push_u64_be(&mut out, NBD_OPTS_MAGIC);
+    push_u32_be(&mut out, option);
+    push_u32_be(&mut out, payload.len() as u32);
     out.extend_from_slice(payload);
     out
 }
 
 pub fn encode_export_info(info: &BlockDeviceInfo) -> Vec<u8> {
     let mut out = Vec::with_capacity(8 + 2 + NBD_EXPORT_INFO_PADDING_LEN);
-    out.extend_from_slice(&info.total_size_bytes().to_be_bytes());
-    out.extend_from_slice(&transmission_flags(info).to_be_bytes());
+    push_u64_be(&mut out, info.total_size_bytes());
+    push_u16_be(&mut out, transmission_flags(info));
     out.extend_from_slice(&[0_u8; NBD_EXPORT_INFO_PADDING_LEN]);
     out
 }
@@ -179,8 +229,7 @@ pub fn decode_server_handshake(bytes: &[u8]) -> Result<NbdServerHandshake, Block
 }
 
 pub fn decode_export_info(bytes: &[u8]) -> Result<NbdNegotiatedExport, BlockError> {
-    let expected_len = 8 + 2 + NBD_EXPORT_INFO_PADDING_LEN;
-    if bytes.len() < expected_len {
+    if bytes.len() < NBD_EXPORT_INFO_LEN {
         return Err(BlockError::ProtocolError("short NBD export info".into()));
     }
     Ok(NbdNegotiatedExport {
@@ -189,33 +238,40 @@ pub fn decode_export_info(bytes: &[u8]) -> Result<NbdNegotiatedExport, BlockErro
     })
 }
 
+pub fn decode_client_flags(bytes: &[u8]) -> Result<u32, BlockError> {
+    if bytes.len() < NBD_CLIENT_FLAGS_LEN {
+        return Err(BlockError::ProtocolError("short NBD client flags".into()));
+    }
+    Ok(read_u32_be(bytes, 0))
+}
+
 pub fn encode_option_reply(option: u32, reply_type: u32, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(20 + payload.len());
-    out.extend_from_slice(&NBD_REP_MAGIC.to_be_bytes());
-    out.extend_from_slice(&option.to_be_bytes());
-    out.extend_from_slice(&reply_type.to_be_bytes());
-    out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    push_u64_be(&mut out, NBD_REP_MAGIC);
+    push_u32_be(&mut out, option);
+    push_u32_be(&mut out, reply_type);
+    push_u32_be(&mut out, payload.len() as u32);
     out.extend_from_slice(payload);
     out
 }
 
 pub fn encode_request_header(command: u16, handle: u64, offset: u64, length: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(28);
-    out.extend_from_slice(&NBD_REQUEST_MAGIC.to_be_bytes());
-    out.extend_from_slice(&0_u16.to_be_bytes());
-    out.extend_from_slice(&command.to_be_bytes());
-    out.extend_from_slice(&handle.to_be_bytes());
-    out.extend_from_slice(&offset.to_be_bytes());
-    out.extend_from_slice(&length.to_be_bytes());
+    push_u32_be(&mut out, NBD_REQUEST_MAGIC);
+    push_u16_be(&mut out, 0);
+    push_u16_be(&mut out, command);
+    push_u64_be(&mut out, handle);
+    push_u64_be(&mut out, offset);
+    push_u32_be(&mut out, length);
     out
 }
 
 pub fn encode_simple_reply(handle: u64, error: u32, payload: Option<&[u8]>) -> Vec<u8> {
     let payload_len = payload.map_or(0, <[u8]>::len);
     let mut out = Vec::with_capacity(16 + payload_len);
-    out.extend_from_slice(&NBD_REPLY_MAGIC.to_be_bytes());
-    out.extend_from_slice(&error.to_be_bytes());
-    out.extend_from_slice(&handle.to_be_bytes());
+    push_u32_be(&mut out, NBD_REPLY_MAGIC);
+    push_u32_be(&mut out, error);
+    push_u64_be(&mut out, handle);
     if let Some(payload) = payload {
         out.extend_from_slice(payload);
     }
@@ -293,6 +349,52 @@ pub fn decode_reply_header(bytes: &[u8]) -> Result<NbdReplyHeader, BlockError> {
     })
 }
 
+pub fn request_to_block_command(
+    info: &BlockDeviceInfo,
+    request: &NbdRequestHeader,
+) -> Result<NbdBlockCommand, BlockError> {
+    let block_size = u64::from(info.block_size);
+    if block_size == 0 {
+        return Err(BlockError::ProtocolError("NBD block size is zero".into()));
+    }
+    if request.offset % block_size != 0 || u64::from(request.length) % block_size != 0 {
+        return Err(BlockError::Misaligned);
+    }
+
+    let lba = request.offset / block_size;
+    let blocks = request.length / info.block_size;
+    match request.command {
+        NBD_CMD_READ => Ok(NbdBlockCommand::Read {
+            handle: request.handle,
+            lba,
+            blocks,
+        }),
+        NBD_CMD_WRITE => Ok(NbdBlockCommand::Write {
+            handle: request.handle,
+            lba,
+            blocks,
+            length: request.length,
+        }),
+        NBD_CMD_DISC => Ok(NbdBlockCommand::Disconnect {
+            handle: request.handle,
+        }),
+        NBD_CMD_FLUSH => Ok(NbdBlockCommand::Flush {
+            handle: request.handle,
+        }),
+        NBD_CMD_TRIM => Ok(NbdBlockCommand::Trim {
+            handle: request.handle,
+            lba,
+            blocks,
+        }),
+        NBD_CMD_WRITE_ZEROES => Ok(NbdBlockCommand::WriteZeroes {
+            handle: request.handle,
+            lba,
+            blocks,
+        }),
+        _ => Err(BlockError::Unsupported),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,6 +450,12 @@ mod tests {
     }
 
     #[test]
+    fn client_flags_roundtrip() {
+        let flags = decode_client_flags(&encode_client_flags(7)).unwrap();
+        assert_eq!(flags, 7);
+    }
+
+    #[test]
     fn option_reply_header_roundtrips() {
         let bytes = encode_option_reply(NBD_OPT_LIST, NBD_REP_SERVER, b"alpha");
         let header = decode_option_reply_header(&bytes).unwrap();
@@ -374,5 +482,32 @@ mod tests {
         assert_eq!(header.error, 5);
         assert_eq!(header.handle, 99);
         assert_eq!(&bytes[NBD_REPLY_HEADER_LEN..], b"payload");
+    }
+
+    #[test]
+    fn request_maps_to_block_command() {
+        let info = test_info();
+        let request =
+            decode_request_header(&encode_request_header(NBD_CMD_READ, 4, 1024, 512)).unwrap();
+        let command = request_to_block_command(&info, &request).unwrap();
+        assert_eq!(
+            command,
+            NbdBlockCommand::Read {
+                handle: 4,
+                lba: 2,
+                blocks: 1
+            }
+        );
+    }
+
+    #[test]
+    fn misaligned_request_rejected() {
+        let info = test_info();
+        let request =
+            decode_request_header(&encode_request_header(NBD_CMD_READ, 4, 1, 512)).unwrap();
+        assert_eq!(
+            request_to_block_command(&info, &request),
+            Err(BlockError::Misaligned)
+        );
     }
 }

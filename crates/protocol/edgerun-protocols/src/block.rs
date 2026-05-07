@@ -16,10 +16,12 @@ use crate::wire as edgerun_wire;
 use crate::wire::{
     RemoteBlockDeviceInfo, RemoteBlockError, RemoteBlockRequest, RemoteBlockResponse, WireError,
 };
-use edgerun_encoding::byteorder::read_u32_le;
+use edgerun_encoding::byteorder::{push_u32_le, read_u32_le};
 
 pub const BLOCK_PROTOCOL_VERSION: u16 = 1;
 pub const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
+pub const BLOCK_FRAME_HEADER_LEN: usize = 4;
+pub const MAX_ENCODED_FRAME_SIZE: usize = BLOCK_FRAME_HEADER_LEN + MAX_FRAME_SIZE;
 
 pub type RequestId = u64;
 
@@ -173,7 +175,10 @@ pub enum BlockResponse {
     },
 }
 
-pub fn handle_request<B: BlockBackend>(backend: &B, request: BlockRequest) -> BlockResponse {
+pub fn handle_request<B: BlockBackend + ?Sized>(
+    backend: &B,
+    request: BlockRequest,
+) -> BlockResponse {
     match request {
         BlockRequest::Handshake { protocol_version } => {
             if protocol_version == BLOCK_PROTOCOL_VERSION {
@@ -258,6 +263,112 @@ pub fn handle_request<B: BlockBackend>(backend: &B, request: BlockRequest) -> Bl
     }
 }
 
+pub fn expect_handshake_response(response: BlockResponse) -> Result<(), BlockError> {
+    match response {
+        BlockResponse::HandshakeAck { protocol_version }
+            if protocol_version == BLOCK_PROTOCOL_VERSION =>
+        {
+            Ok(())
+        }
+        response => Err(unexpected_response("handshake", response)),
+    }
+}
+
+pub fn expect_info_response(response: BlockResponse) -> Result<BlockDeviceInfo, BlockError> {
+    match response {
+        BlockResponse::Info(info) => Ok(info),
+        response => Err(unexpected_response("info", response)),
+    }
+}
+
+pub fn expect_pong_response(response: BlockResponse) -> Result<(), BlockError> {
+    match response {
+        BlockResponse::Pong => Ok(()),
+        response => Err(unexpected_response("ping", response)),
+    }
+}
+
+pub fn expect_read_response(
+    response: BlockResponse,
+    request_id: RequestId,
+) -> Result<Vec<u8>, BlockError> {
+    match response {
+        BlockResponse::ReadResult {
+            request_id: response_id,
+            data,
+        } if response_id == request_id => Ok(data),
+        BlockResponse::Error {
+            request_id: Some(response_id),
+            error,
+        } if response_id == request_id => Err(error),
+        response => Err(unexpected_response("read", response)),
+    }
+}
+
+pub fn expect_write_response(
+    response: BlockResponse,
+    request_id: RequestId,
+) -> Result<(), BlockError> {
+    match response {
+        BlockResponse::WriteAck {
+            request_id: response_id,
+        } if response_id == request_id => Ok(()),
+        BlockResponse::Error {
+            request_id: Some(response_id),
+            error,
+        } if response_id == request_id => Err(error),
+        response => Err(unexpected_response("write", response)),
+    }
+}
+
+pub fn expect_flush_response(
+    response: BlockResponse,
+    request_id: RequestId,
+) -> Result<(), BlockError> {
+    match response {
+        BlockResponse::FlushAck {
+            request_id: response_id,
+        } if response_id == request_id => Ok(()),
+        BlockResponse::Error {
+            request_id: Some(response_id),
+            error,
+        } if response_id == request_id => Err(error),
+        response => Err(unexpected_response("flush", response)),
+    }
+}
+
+pub fn expect_discard_response(
+    response: BlockResponse,
+    request_id: RequestId,
+) -> Result<(), BlockError> {
+    match response {
+        BlockResponse::DiscardAck {
+            request_id: response_id,
+        } if response_id == request_id => Ok(()),
+        BlockResponse::Error {
+            request_id: Some(response_id),
+            error,
+        } if response_id == request_id => Err(error),
+        response => Err(unexpected_response("discard", response)),
+    }
+}
+
+pub fn expect_write_zeroes_response(
+    response: BlockResponse,
+    request_id: RequestId,
+) -> Result<(), BlockError> {
+    match response {
+        BlockResponse::WriteZeroesAck {
+            request_id: response_id,
+        } if response_id == request_id => Ok(()),
+        BlockResponse::Error {
+            request_id: Some(response_id),
+            error,
+        } if response_id == request_id => Err(error),
+        response => Err(unexpected_response("write_zeroes", response)),
+    }
+}
+
 pub fn encode_request_payload(request: &BlockRequest) -> Result<Vec<u8>, BlockError> {
     let wire = block_request_to_wire(request);
     Ok(edgerun_wire::to_bytes::<WireError>(&wire)
@@ -305,29 +416,34 @@ pub fn decode_response_frame(frame: &[u8]) -> Result<BlockResponse, BlockError> 
 pub fn frame_payload(payload: &[u8]) -> Result<Vec<u8>, BlockError> {
     let len = u32::try_from(payload.len())
         .map_err(|_| BlockError::ProtocolError("frame too large to encode".into()))?;
-    let mut frame = Vec::with_capacity(4 + payload.len());
-    frame.extend_from_slice(&len.to_le_bytes());
+    let mut frame = Vec::with_capacity(BLOCK_FRAME_HEADER_LEN + payload.len());
+    push_u32_le(&mut frame, len);
     frame.extend_from_slice(payload);
     Ok(frame)
 }
 
 pub fn decode_frame(frame: &[u8]) -> Result<Vec<u8>, BlockError> {
-    if frame.len() < 4 {
-        return Err(BlockError::ProtocolError("truncated frame header".into()));
-    }
-    let len = read_u32_le(frame, 0) as usize;
-    if len > MAX_FRAME_SIZE {
-        return Err(BlockError::ProtocolError(
-            "frame exceeds maximum size".into(),
-        ));
-    }
-    let end = 4_usize
+    let len = decode_frame_len(frame)?;
+    let end = BLOCK_FRAME_HEADER_LEN
         .checked_add(len)
         .ok_or_else(|| BlockError::ProtocolError("frame length overflow".into()))?;
     if frame.len() != end {
         return Err(BlockError::ProtocolError("frame length mismatch".into()));
     }
-    Ok(frame[4..].to_vec())
+    Ok(frame[BLOCK_FRAME_HEADER_LEN..].to_vec())
+}
+
+pub fn decode_frame_len(header: &[u8]) -> Result<usize, BlockError> {
+    if header.len() < BLOCK_FRAME_HEADER_LEN {
+        return Err(BlockError::ProtocolError("truncated frame header".into()));
+    }
+    let len = read_u32_le(header, 0) as usize;
+    if len > MAX_FRAME_SIZE {
+        return Err(BlockError::ProtocolError(
+            "frame exceeds maximum size".into(),
+        ));
+    }
+    Ok(len)
 }
 
 pub fn checked_len_bytes(info: &BlockDeviceInfo, blocks: u32) -> Result<usize, BlockError> {
@@ -405,6 +521,10 @@ pub fn byte_range(
 
 fn map_wire_error(error: WireError) -> BlockError {
     BlockError::ProtocolError(format!("rkyv wire error: {error}"))
+}
+
+fn unexpected_response(operation: &str, response: BlockResponse) -> BlockError {
+    BlockError::ProtocolError(format!("unexpected {operation} response: {response:?}"))
 }
 
 fn block_device_info_to_wire(info: &BlockDeviceInfo) -> RemoteBlockDeviceInfo {
@@ -665,6 +785,23 @@ mod tests {
     }
 
     #[test]
+    fn frame_len_decodes_header() {
+        let frame = frame_payload(&[1, 2, 3]).unwrap();
+        assert_eq!(
+            decode_frame_len(&frame[..BLOCK_FRAME_HEADER_LEN]).unwrap(),
+            3
+        );
+    }
+
+    #[test]
+    fn encoded_frame_max_includes_header() {
+        assert_eq!(
+            MAX_ENCODED_FRAME_SIZE,
+            MAX_FRAME_SIZE + BLOCK_FRAME_HEADER_LEN
+        );
+    }
+
+    #[test]
     fn handle_request_reads_from_backend() {
         let response = handle_request(
             &TestBackend,
@@ -682,5 +819,46 @@ mod tests {
             }
             other => panic!("unexpected response: {other:?}"),
         }
+    }
+
+    #[test]
+    fn expect_read_response_accepts_matching_id() {
+        let data = expect_read_response(
+            BlockResponse::ReadResult {
+                request_id: 9,
+                data: vec![1, 2, 3],
+            },
+            9,
+        )
+        .unwrap();
+        assert_eq!(data, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn expect_read_response_rejects_wrong_id() {
+        assert!(matches!(
+            expect_read_response(
+                BlockResponse::ReadResult {
+                    request_id: 10,
+                    data: vec![]
+                },
+                9
+            ),
+            Err(BlockError::ProtocolError(_))
+        ));
+    }
+
+    #[test]
+    fn expect_write_response_propagates_matching_error() {
+        assert_eq!(
+            expect_write_response(
+                BlockResponse::Error {
+                    request_id: Some(4),
+                    error: BlockError::ReadOnly,
+                },
+                4,
+            ),
+            Err(BlockError::ReadOnly)
+        );
     }
 }

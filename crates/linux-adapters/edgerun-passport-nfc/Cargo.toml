@@ -16,6 +16,7 @@ std = []
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["des", "p256", "rsa", "sha1"] }
 edgerun-nfc = { version = "0.1", path = "../../device-types/edgerun-nfc" }
+edgerun-protocols = { workspace = true, default-features = false, features = ["emrtd"] }
 
 [lints]
 workspace = true

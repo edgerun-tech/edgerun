@@ -9,8 +9,7 @@ homepage.workspace = true
 description = "Durable event, object, index, and blob storage for Edgerun nodes"
 
 [dependencies]
-edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
-edgerun-protocols = { workspace = true, default-features = false, features = ["sign-p256", "keygen", "core"] }
+edgerun-protocols = { workspace = true, default-features = false, features = ["sign-p256", "keygen", "core", "block"] }
 edgerun-stream = { version = "0.1", path = "../edgerun-stream" }
 edgerun-virtual-disk = { version = "0.1", path = "../edgerun-virtual-disk", default-features = false }
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead"] }

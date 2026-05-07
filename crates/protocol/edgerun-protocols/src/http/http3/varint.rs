@@ -9,6 +9,7 @@
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use edgerun_encoding::prefix_varint::{decode_prefix_varint, encode_prefix_varint};
 
 // ─── QUIC varint (RFC 9000 §16) ─────────────────────────────────────────────
 
@@ -47,18 +48,7 @@ pub fn quic_decode_varint_at(data: &[u8], pos: usize) -> Result<(u64, usize), St
 /// Otherwise the prefix is set to all-1s and the remainder is encoded in
 /// continuation bytes (MSB = more bytes follow, lower 7 bits = data).
 pub fn qpack_encode_varint(value: u64, prefix_bits: u8, output: &mut Vec<u8>) {
-    let max_prefix = (1u64 << prefix_bits) - 1;
-    if value < max_prefix {
-        output.push(value as u8);
-    } else {
-        output.push(max_prefix as u8);
-        let mut remaining = value - max_prefix;
-        while remaining >= 128 {
-            output.push((remaining % 128 + 128) as u8);
-            remaining /= 128;
-        }
-        output.push(remaining as u8);
-    }
+    encode_prefix_varint(value, prefix_bits, output)
 }
 
 /// Decode an integer using the QPACK/HPACK generic varint scheme.
@@ -69,26 +59,7 @@ pub fn qpack_decode_varint(
     start: usize,
     prefix_bits: u8,
 ) -> Result<(u64, usize), String> {
-    if start >= data.len() {
-        return Err("Not enough data".to_string());
-    }
-    let max_prefix = (1u64 << prefix_bits) - 1;
-    let mut value = (data[start] & ((1u8 << prefix_bits) - 1)) as u64;
-    if value < max_prefix {
-        return Ok((value, 1));
-    }
-    let mut pos = start + 1;
-    let mut m = 0u32;
-    while pos < data.len() {
-        let byte = data[pos] as u64;
-        value += (byte & 127) << m;
-        m += 7;
-        if byte & 128 == 0 {
-            return Ok((value, pos - start + 1));
-        }
-        pos += 1;
-    }
-    Err("Incomplete varint".to_string())
+    decode_prefix_varint(data, start, prefix_bits).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

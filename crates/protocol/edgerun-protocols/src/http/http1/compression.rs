@@ -14,6 +14,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 #[cfg(feature = "http-compression")]
+use edgerun_encoding::byteorder::{push_u32_le, read_u16_le, read_u32_le};
+#[cfg(feature = "http-compression")]
 use edgerun_encoding::crc32::crc32;
 
 /// Supported content encodings
@@ -152,8 +154,8 @@ fn compress_gzip(data: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len() + 18);
     out.extend_from_slice(&[0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0x00, 0xff]);
     out.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(data, 6));
-    out.extend_from_slice(&crc32(data).to_le_bytes());
-    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    push_u32_le(&mut out, crc32(data));
+    push_u32_le(&mut out, data.len() as u32);
     out
 }
 
@@ -174,7 +176,7 @@ fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
         if pos + 2 > data.len() {
             return None;
         }
-        let xlen = u16::from_le_bytes([data[pos], data[pos + 1]]) as usize;
+        let xlen = read_u16_le(data, pos) as usize;
         pos = pos.checked_add(2 + xlen)?;
     }
     if flags & 0x08 != 0 {
@@ -192,8 +194,8 @@ fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
 
     let footer = data.len() - 8;
     let result = miniz_oxide::inflate::decompress_to_vec(&data[pos..footer]).ok()?;
-    let expected_crc = u32::from_le_bytes(data[footer..footer + 4].try_into().ok()?);
-    let expected_len = u32::from_le_bytes(data[footer + 4..].try_into().ok()?);
+    let expected_crc = read_u32_le(data, footer);
+    let expected_len = read_u32_le(data, footer + 4);
     if expected_crc != crc32(&result) || expected_len != result.len() as u32 {
         return None;
     }

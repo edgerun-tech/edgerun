@@ -43,11 +43,13 @@ use self::middleware::{
     ConnectionChain, ConnectionHandler, ConnectionMiddleware, MiddlewareAdapter, PassThroughHandler,
 };
 #[cfg(all(feature = "http", feature = "tls"))]
-use edgerun_tls::CertificateAndKey as TlsCertificate;
+use edgerun_protocols::tls::CertificateAndKey as TlsCertificate;
 
 #[cfg(any(feature = "http", feature = "imap", feature = "smtp", feature = "lmtp"))]
 use crate::transport::{HostSocketTransport, TransportAddress};
 
+#[cfg(feature = "acme")]
+pub mod acme_runtime;
 #[cfg(feature = "dhcp")]
 pub mod dhcp_runtime;
 #[cfg(feature = "dns")]
@@ -62,6 +64,8 @@ pub mod middleware;
 mod proxy_runtime;
 #[cfg(feature = "tftp")]
 pub mod tftp_runtime;
+#[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
+pub mod virtual_disk_runtime;
 pub use crate::resource::{
     binding_intents, decide_binding, decide_bindings, NodeTransportSurface, ServiceBindingDecision,
     ServiceBindingIntent,
@@ -196,7 +200,7 @@ mod imap_config {
         pub maildir_root: Option<PathBuf>,
         /// TLS certificate and key for IMAPS/STARTTLS.
         #[cfg(feature = "tls")]
-        pub tls_cert: Option<edgerun_tls::CertificateAndKey>,
+        pub tls_cert: Option<edgerun_protocols::tls::CertificateAndKey>,
     }
 
     impl Default for ImapConfig {
@@ -248,7 +252,7 @@ mod smtp_config {
         pub dkim_key_path: Option<PathBuf>,
         /// TLS certificate and key for SMTPS/STARTTLS.
         #[cfg(feature = "tls")]
-        pub tls_cert: Option<edgerun_tls::CertificateAndKey>,
+        pub tls_cert: Option<edgerun_protocols::tls::CertificateAndKey>,
     }
 
     impl Default for SmtpConfig {
@@ -361,6 +365,8 @@ pub struct NodeRuntime {
     lmtp: Option<LmtpConfig>,
     #[cfg(feature = "proxy")]
     proxy: Option<ProxyConfig>,
+    #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
+    virtual_disks: Vec<virtual_disk_runtime::VirtualDiskBinding>,
     #[cfg(feature = "http")]
     connection_middleware: Vec<Arc<dyn ConnectionMiddleware>>,
 }
@@ -394,6 +400,8 @@ impl NodeRuntime {
             lmtp: None,
             #[cfg(feature = "proxy")]
             proxy: None,
+            #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
+            virtual_disks: Vec::new(),
             #[cfg(feature = "http")]
             connection_middleware: Vec::new(),
         }
@@ -490,6 +498,39 @@ impl NodeRuntime {
     #[cfg(feature = "proxy")]
     pub fn with_proxy(mut self, config: ProxyConfig) -> Self {
         self.proxy = Some(config);
+        self
+    }
+
+    /// Request a node-owned virtual block listener.
+    ///
+    /// The node owns the native listener and passes accepted streams into the
+    /// deterministic virtual disk block session handler. Apps never receive
+    /// the socket directly.
+    #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
+    pub fn with_virtual_block_tcp<B>(mut self, addr: impl fmt::Display, backend: Arc<B>) -> Self
+    where
+        B: edgerun_protocols::block::BlockBackend + Send + Sync + 'static,
+    {
+        self.virtual_disks
+            .push(virtual_disk_runtime::VirtualDiskBinding::block_tcp(
+                addr.to_string(),
+                backend,
+            ));
+        self
+    }
+
+    /// Request a node-owned NBD listener backed by virtual disk exports.
+    #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
+    pub fn with_virtual_nbd_tcp(
+        mut self,
+        addr: impl fmt::Display,
+        exports: Vec<edgerun_virtual_disk::NbdExportEntry>,
+    ) -> Self {
+        self.virtual_disks
+            .push(virtual_disk_runtime::VirtualDiskBinding::nbd_tcp(
+                addr.to_string(),
+                exports,
+            ));
         self
     }
 
@@ -639,6 +680,13 @@ impl NodeRuntime {
             None
         };
 
+        #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
+        let virtual_disks = self
+            .virtual_disks
+            .into_iter()
+            .map(virtual_disk_runtime::VirtualDiskRuntime::bind)
+            .collect::<io::Result<Vec<_>>>()?;
+
         Ok(BoundNodeRuntime {
             #[cfg(feature = "http")]
             http: http_bound,
@@ -656,6 +704,8 @@ impl NodeRuntime {
             lmtp: lmtp_server,
             #[cfg(feature = "proxy")]
             proxy: proxy_server,
+            #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
+            virtual_disks,
             #[cfg(feature = "http")]
             connection_middleware,
         })
@@ -686,6 +736,8 @@ pub struct BoundNodeRuntime {
     lmtp: Option<mail_runtime::LmtpNodeService>,
     #[cfg(feature = "proxy")]
     proxy: Option<proxy_runtime::ProxyRuntime>,
+    #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
+    virtual_disks: Vec<virtual_disk_runtime::VirtualDiskRuntime>,
     /// Compiled connection middleware chain.
     /// If empty, connections go directly to protocol handlers.
     #[cfg(feature = "http")]
@@ -777,6 +829,14 @@ impl BoundNodeRuntime {
             tasks.push(crate::rt::spawn(async move {
                 proxy.run(token).await.map_err(other_io_error)
             }));
+        }
+
+        #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
+        for virtual_disk in self.virtual_disks.drain(..) {
+            let token = shutdown.clone();
+            tasks.push(crate::rt::spawn(
+                async move { virtual_disk.run(token).await },
+            ));
         }
 
         // Wait for all tasks

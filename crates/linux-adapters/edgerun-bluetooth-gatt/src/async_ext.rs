@@ -2,6 +2,7 @@ use crate::error::{GattError, GattResult};
 use crate::l2cap::*;
 use crate::prelude::v1::*;
 use edgerun_encoding::byteorder::read_u16_le;
+use edgerun_protocols::bluetooth_gatt::{format_bdaddr_hex, parse_bdaddr_string, reverse_bdaddr};
 use std::io;
 use std::mem::size_of;
 use std::os::fd::RawFd;
@@ -337,35 +338,35 @@ impl AsyncAttProtocol {
     }
 
     pub fn handle_notification(&self, data: &[u8]) -> Option<(u16, Vec<u8>)> {
-        crate::att::handle_notification(data)
+        edgerun_protocols::bluetooth_gatt::handle_notification(data)
     }
 
     pub fn handle_indication(&self, data: &[u8]) -> Option<(u16, Vec<u8>)> {
-        crate::att::handle_indication(data)
+        edgerun_protocols::bluetooth_gatt::handle_indication(data)
     }
 
     pub fn handle_execute_write_response(&self, data: &[u8]) -> bool {
-        crate::att::handle_execute_write_response(data)
+        edgerun_protocols::bluetooth_gatt::handle_execute_write_response(data)
     }
 
     pub fn parse_read_by_group_response(&self, data: &[u8]) -> Vec<(u16, u16, Vec<u8>)> {
-        crate::att::parse_read_by_group_response(data)
+        edgerun_protocols::bluetooth_gatt::parse_read_by_group_response(data)
     }
 
     pub fn parse_read_by_type_response(&self, data: &[u8]) -> Vec<(u16, Vec<u8>)> {
-        crate::att::parse_read_by_type_response(data)
+        edgerun_protocols::bluetooth_gatt::parse_read_by_type_response(data)
     }
 
     pub fn parse_find_information_response(&self, data: &[u8]) -> Vec<(u16, Vec<u8>)> {
-        crate::att::parse_find_information_response(data)
+        edgerun_protocols::bluetooth_gatt::parse_find_information_response(data)
     }
 
     pub fn parse_error_response(&self, data: &[u8]) -> Option<(u16, u8)> {
-        crate::att::parse_error_response(data)
+        edgerun_protocols::bluetooth_gatt::parse_error_response(data)
     }
 
     pub fn parse_mtu_response(&self, data: &[u8]) -> Option<u16> {
-        crate::att::parse_mtu_response(data)
+        edgerun_protocols::bluetooth_gatt::parse_mtu_response(data)
     }
 }
 

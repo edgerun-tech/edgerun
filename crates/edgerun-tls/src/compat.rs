@@ -1,4 +1,4 @@
-//! Async I/O compatibility for TLS over edgerun-rt transports.
+//! Async I/O traits for TLS transports.
 
 use crate::std::io;
 use core::future::Future;
@@ -24,30 +24,6 @@ pub trait AsyncWrite {
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
-    }
-}
-
-impl<T: edgerun_rt::AsyncRead + Unpin> AsyncRead for T {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        edgerun_rt::AsyncRead::poll_read(self, cx, buf).map_err(io::Error::from)
-    }
-}
-
-impl<T: edgerun_rt::AsyncWrite + Unpin> AsyncWrite for T {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        edgerun_rt::AsyncWrite::poll_write(self, cx, buf).map_err(io::Error::from)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        edgerun_rt::AsyncWrite::poll_flush(self, cx).map_err(io::Error::from)
     }
 }
 

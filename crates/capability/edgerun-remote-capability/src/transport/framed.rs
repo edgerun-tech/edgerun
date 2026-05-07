@@ -2,9 +2,6 @@
 
 use crate::prelude::v1::*;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::Path;
 
 use edgerun_capabilities::CapabilityError;
 use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilityRemoteEnvelope;
@@ -23,22 +20,6 @@ impl<S> FramedRemoteTransport<S> {
 
     pub fn into_inner(self) -> S {
         self.stream
-    }
-}
-
-impl FramedRemoteTransport<UnixStream> {
-    pub fn connect_unix(path: impl AsRef<Path>) -> Result<Self, CapabilityError> {
-        UnixStream::connect(path)
-            .map(Self::new)
-            .map_err(|err| CapabilityError::Provider(err.to_string()))
-    }
-}
-
-impl FramedRemoteTransport<TcpStream> {
-    pub fn connect_tcp(addr: impl ToSocketAddrs) -> Result<Self, CapabilityError> {
-        TcpStream::connect(addr)
-            .map(Self::new)
-            .map_err(|err| CapabilityError::Provider(err.to_string()))
     }
 }
 
@@ -80,24 +61,6 @@ where
             .map(Some)
             .map_err(|err| CapabilityError::Provider(err.to_string()))
     }
-}
-
-pub fn accept_unix(
-    listener: &UnixListener,
-) -> Result<FramedRemoteTransport<UnixStream>, CapabilityError> {
-    listener
-        .accept()
-        .map(|(stream, _)| FramedRemoteTransport::new(stream))
-        .map_err(|err| CapabilityError::Provider(err.to_string()))
-}
-
-pub fn accept_tcp(
-    listener: &TcpListener,
-) -> Result<FramedRemoteTransport<TcpStream>, CapabilityError> {
-    listener
-        .accept()
-        .map(|(stream, _)| FramedRemoteTransport::new(stream))
-        .map_err(|err| CapabilityError::Provider(err.to_string()))
 }
 
 fn encode_capability_remote_envelope(envelope: &CapabilityRemoteEnvelope) -> Vec<u8> {

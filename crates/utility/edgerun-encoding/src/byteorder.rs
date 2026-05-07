@@ -211,9 +211,98 @@ pub fn try_read_i64_be(input: &[u8], offset: usize) -> Option<i64> {
     Some(read_i64_be(input, offset))
 }
 
+/// Append a big-endian `u16` to an output buffer.
+#[inline]
+pub fn push_u16_be(out: &mut alloc::vec::Vec<u8>, value: u16) {
+    out.extend_from_slice(&value.to_be_bytes());
+}
+
+/// Append a 24-bit big-endian unsigned integer to an output buffer.
+///
+/// Panics if `value` does not fit in 24 bits.
+#[inline]
+pub fn push_u24_be(out: &mut alloc::vec::Vec<u8>, value: u32) {
+    assert!(value <= 0x00ff_ffff, "value too large for u24: {value}");
+    out.push((value >> 16) as u8);
+    out.push((value >> 8) as u8);
+    out.push(value as u8);
+}
+
+/// Append a big-endian `u32` to an output buffer.
+#[inline]
+pub fn push_u32_be(out: &mut alloc::vec::Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_be_bytes());
+}
+
+/// Append a big-endian `u64` to an output buffer.
+#[inline]
+pub fn push_u64_be(out: &mut alloc::vec::Vec<u8>, value: u64) {
+    out.extend_from_slice(&value.to_be_bytes());
+}
+
+/// Append a little-endian `u16` to an output buffer.
+#[inline]
+pub fn push_u16_le(out: &mut alloc::vec::Vec<u8>, value: u16) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Append a little-endian `u32` to an output buffer.
+#[inline]
+pub fn push_u32_le(out: &mut alloc::vec::Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Append a little-endian `u64` to an output buffer.
+#[inline]
+pub fn push_u64_le(out: &mut alloc::vec::Vec<u8>, value: u64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Append a little-endian `i32` to an output buffer.
+#[inline]
+pub fn push_i32_le(out: &mut alloc::vec::Vec<u8>, value: i32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Write a big-endian `u16` into `out[offset..]`.
+#[inline]
+pub fn write_u16_be(out: &mut [u8], offset: usize, value: u16) {
+    out[offset..offset + 2].copy_from_slice(&value.to_be_bytes());
+}
+
+/// Write a 24-bit big-endian unsigned integer into `out[offset..]`.
+///
+/// Panics if `value` does not fit in 24 bits.
+#[inline]
+pub fn write_u24_be(out: &mut [u8], offset: usize, value: u32) {
+    assert!(value <= 0x00ff_ffff, "value too large for u24: {value}");
+    out[offset] = (value >> 16) as u8;
+    out[offset + 1] = (value >> 8) as u8;
+    out[offset + 2] = value as u8;
+}
+
+/// Write a big-endian `u32` into `out[offset..]`.
+#[inline]
+pub fn write_u32_be(out: &mut [u8], offset: usize, value: u32) {
+    out[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+}
+
+/// Write a little-endian `u16` into `out[offset..]`.
+#[inline]
+pub fn write_u16_le(out: &mut [u8], offset: usize, value: u16) {
+    out[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+}
+
+/// Write a little-endian `u32` into `out[offset..]`.
+#[inline]
+pub fn write_u32_le(out: &mut [u8], offset: usize, value: u32) {
+    out[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec::Vec;
 
     #[test]
     fn reads_little_endian_values() {
@@ -272,5 +361,26 @@ mod tests {
             try_read_i64_be(&data, 0),
             Some(0x7856_3412_efcd_ab90_u64 as i64)
         );
+    }
+
+    #[test]
+    fn writes_little_endian_values() {
+        let mut out = Vec::new();
+        push_u16_le(&mut out, 0xabcd);
+        push_u32_le(&mut out, 0x1234_5678);
+        push_u64_le(&mut out, 0x0123_4567_89ab_cdef);
+        push_i32_le(&mut out, -2);
+        assert_eq!(
+            out,
+            [
+                0xcd, 0xab, 0x78, 0x56, 0x34, 0x12, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
+                0xfe, 0xff, 0xff, 0xff
+            ]
+        );
+
+        let mut data = [0; 6];
+        write_u16_le(&mut data, 1, 0xabcd);
+        write_u32_le(&mut data, 2, 0x1234_5678);
+        assert_eq!(data, [0x00, 0xcd, 0x78, 0x56, 0x34, 0x12]);
     }
 }

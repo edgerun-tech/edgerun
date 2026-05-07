@@ -7,6 +7,7 @@ use super::super::cipher::NamedGroup;
 use super::super::prf::{hmac_sha256, hmac_sha384, Hasher};
 use super::super::Result;
 use edgerun_crypto::CipherSuite;
+use edgerun_encoding::byteorder::{push_u16_be, push_u24_be, write_u16_be, write_u24_be};
 
 /// Build a ServerHello handshake message (RFC 8446 §4.1.3).
 pub fn build_server_hello(
@@ -19,11 +20,11 @@ pub fn build_server_hello(
     let mut msg = Vec::new();
     msg.push(2);
     msg.extend_from_slice(&[0u8; 3]);
-    msg.extend_from_slice(&0x0303u16.to_be_bytes());
+    push_u16_be(&mut msg, 0x0303);
     msg.extend_from_slice(&random);
     msg.push(session_id.len() as u8);
     msg.extend_from_slice(session_id);
-    msg.extend_from_slice(&cipher_suite.to_wire().to_be_bytes());
+    push_u16_be(&mut msg, cipher_suite.to_wire());
     msg.push(0);
 
     let ext_start = msg.len();
@@ -31,26 +32,26 @@ pub fn build_server_hello(
 
     {
         let data = vec![0x03, 0x04];
-        msg.extend_from_slice(&43u16.to_be_bytes());
-        msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
+        push_u16_be(&mut msg, 43);
+        push_u16_be(&mut msg, data.len() as u16);
         msg.extend_from_slice(&data);
     }
 
     {
         let mut data = Vec::new();
-        data.extend_from_slice(&group.to_wire().to_be_bytes());
-        data.extend_from_slice(&(server_key_share.len() as u16).to_be_bytes());
+        push_u16_be(&mut data, group.to_wire());
+        push_u16_be(&mut data, server_key_share.len() as u16);
         data.extend_from_slice(server_key_share);
-        msg.extend_from_slice(&51u16.to_be_bytes());
-        msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
+        push_u16_be(&mut msg, 51);
+        push_u16_be(&mut msg, data.len() as u16);
         msg.extend_from_slice(&data);
     }
 
     let ext_len = (msg.len() - ext_start - 2) as u16;
-    msg[ext_start..ext_start + 2].copy_from_slice(&ext_len.to_be_bytes());
+    write_u16_be(&mut msg, ext_start, ext_len);
 
     let msg_len = (msg.len() - 4) as u32;
-    msg[1..4].copy_from_slice(&msg_len.to_be_bytes()[1..]);
+    write_u24_be(&mut msg, 1, msg_len);
 
     msg
 }
@@ -71,7 +72,7 @@ pub fn build_encrypted_extensions(alpn_protocol: Option<&[u8]>) -> Vec<u8> {
 
     // ALPN extension (ext 16) — if a protocol was selected
     if let Some(proto) = alpn_protocol {
-        msg.extend_from_slice(&16u16.to_be_bytes()); // ALPN extension type
+        push_u16_be(&mut msg, 16); // ALPN extension type
 
         // Build the ALPN extension data: protocol_name_list
         let mut proto_list = Vec::new();
@@ -80,21 +81,21 @@ pub fn build_encrypted_extensions(alpn_protocol: Option<&[u8]>) -> Vec<u8> {
 
         // extension_data_length = 2 (list length field) + proto_list
         let ext_data_len = 2 + proto_list.len();
-        msg.extend_from_slice(&(ext_data_len as u16).to_be_bytes());
+        push_u16_be(&mut msg, ext_data_len as u16);
 
         // protocol_name_list_length
-        msg.extend_from_slice(&(proto_list.len() as u16).to_be_bytes());
+        push_u16_be(&mut msg, proto_list.len() as u16);
 
         // protocol_name_list
         msg.extend_from_slice(&proto_list);
     }
 
     let ext_len = (msg.len() - ext_start - 2) as u16;
-    msg[ext_start..ext_start + 2].copy_from_slice(&ext_len.to_be_bytes());
+    write_u16_be(&mut msg, ext_start, ext_len);
 
     // Fill message length
     let msg_len = (msg.len() - 4) as u32;
-    msg[1..4].copy_from_slice(&msg_len.to_be_bytes()[1..]);
+    write_u24_be(&mut msg, 1, msg_len);
 
     msg
 }
@@ -127,12 +128,12 @@ pub fn build_certificate_chain_message(cert_chain_der: &[&[u8]]) -> Vec<u8> {
     // Full message after type+length: context_len(1) + cert_list_len(3) + cert_entry
     let msg_body_len = 1 + 3 + cert_list_len;
 
-    msg.extend_from_slice(&(msg_body_len as u32).to_be_bytes()[1..]); // 3-byte message length
+    push_u24_be(&mut msg, msg_body_len as u32); // 3-byte message length
     msg.push(0); // certificate_request_context length = 0
-    msg.extend_from_slice(&(cert_list_len as u32).to_be_bytes()[1..]); // 3-byte certificate_list length
+    push_u24_be(&mut msg, cert_list_len as u32); // 3-byte certificate_list length
 
     for cert_der in cert_chain_der {
-        msg.extend_from_slice(&(cert_der.len() as u32).to_be_bytes()[1..]); // 3-byte cert_data length
+        push_u24_be(&mut msg, cert_der.len() as u32); // 3-byte cert_data length
         msg.extend_from_slice(cert_der);
         msg.extend_from_slice(&[0u8; 2]); // extensions length = 0
     }
@@ -174,10 +175,10 @@ pub fn build_certificate_verify(
 
     // Handshake message length is body size only (RFC 8446 §4)
     let inner_len = 2 + 2 + sig_der_bytes.len(); // algorithm(2) + sig_len(2) + signature
-    msg.extend_from_slice(&(inner_len as u32).to_be_bytes()[1..]); // 3-byte body length
+    push_u24_be(&mut msg, inner_len as u32); // 3-byte body length
 
-    msg.extend_from_slice(&0x0403u16.to_be_bytes());
-    msg.extend_from_slice(&(sig_der_bytes.len() as u16).to_be_bytes());
+    push_u16_be(&mut msg, 0x0403);
+    push_u16_be(&mut msg, sig_der_bytes.len() as u16);
     msg.extend_from_slice(&sig_der_bytes);
 
     Ok(msg)
@@ -187,7 +188,7 @@ pub fn build_certificate_verify(
 pub fn build_finished_message(verify_data: &[u8]) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.push(20);
-    msg.extend_from_slice(&((verify_data.len()) as u32).to_be_bytes()[1..]);
+    push_u24_be(&mut msg, verify_data.len() as u32);
     msg.extend_from_slice(verify_data);
     msg
 }

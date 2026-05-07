@@ -1,8 +1,14 @@
 //! SSH protocol framing and negotiation helpers.
 
+#[cfg(all(feature = "sign", feature = "ed25519"))]
+use crate::sign::{Ed25519MessageSigner, MessageSigner};
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+use edgerun_encoding::byteorder::{push_u32_be, read_u32_be};
+use edgerun_encoding::string_field::{
+    decode_bytes_u32_be_borrowed, encode_bytes_u32_be, StringFieldError,
+};
 
 pub const CLIENT_IDENTIFICATION: &str = "SSH-2.0-edgerun-ssh_0.1";
 pub const SSH_MSG_IGNORE: u8 = 2;
@@ -167,7 +173,7 @@ pub fn encode_kexinit(kex: &SshKexInit) -> Vec<u8> {
     write_name_list(&mut payload, &kex.languages_client_to_server);
     write_name_list(&mut payload, &kex.languages_server_to_client);
     payload.push(u8::from(kex.first_kex_packet_follows));
-    payload.extend_from_slice(&0u32.to_be_bytes());
+    push_u32_be(&mut payload, 0);
     payload
 }
 
@@ -220,7 +226,7 @@ pub fn encode_binary_packet(payload: &[u8]) -> Vec<u8> {
     }
     let packet_len = payload.len() + padding_len + 1;
     let mut packet = Vec::with_capacity(packet_len + 4);
-    packet.extend_from_slice(&(packet_len as u32).to_be_bytes());
+    push_u32_be(&mut packet, packet_len as u32);
     packet.push(padding_len as u8);
     packet.extend_from_slice(payload);
     packet.resize(packet.len() + padding_len, 0);
@@ -231,7 +237,7 @@ pub fn parse_binary_packet(packet: &[u8]) -> Result<Vec<u8>, SshError> {
     if packet.len() < 6 {
         return Err(SshError::BadPacket);
     }
-    let packet_len = u32::from_be_bytes([packet[0], packet[1], packet[2], packet[3]]) as usize;
+    let packet_len = read_u32_be(packet, 0) as usize;
     if packet_len + 4 != packet.len() {
         return Err(SshError::BadPacket);
     }
@@ -318,13 +324,11 @@ pub fn write_name_list(out: &mut Vec<u8>, names: &[String]) {
         }
         bytes.extend_from_slice(name.as_bytes());
     }
-    out.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
-    out.extend_from_slice(&bytes);
+    encode_bytes_u32_be(&bytes, out).expect("SSH name-list length exceeds u32");
 }
 
 pub fn write_string(out: &mut Vec<u8>, bytes: &[u8]) {
-    out.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
-    out.extend_from_slice(bytes);
+    encode_bytes_u32_be(bytes, out).expect("SSH string length exceeds u32");
 }
 
 pub fn write_bool(out: &mut Vec<u8>, value: bool) {
@@ -332,19 +336,14 @@ pub fn write_bool(out: &mut Vec<u8>, value: bool) {
 }
 
 pub fn write_u32(out: &mut Vec<u8>, value: u32) {
-    out.extend_from_slice(&value.to_be_bytes());
+    push_u32_be(out, value);
 }
 
 pub fn read_u32(input: &[u8], cursor: &mut usize) -> Result<u32, SshError> {
     if *cursor + 4 > input.len() {
         return Err(SshError::BadPacket);
     }
-    let value = u32::from_be_bytes([
-        input[*cursor],
-        input[*cursor + 1],
-        input[*cursor + 2],
-        input[*cursor + 3],
-    ]);
+    let value = read_u32_be(input, *cursor);
     *cursor += 4;
     Ok(value)
 }
@@ -359,13 +358,7 @@ pub fn read_bool(input: &[u8], cursor: &mut usize) -> Result<bool, SshError> {
 }
 
 pub fn read_string<'a>(input: &'a [u8], cursor: &mut usize) -> Result<&'a [u8], SshError> {
-    let len = read_u32(input, cursor)? as usize;
-    if *cursor + len > input.len() {
-        return Err(SshError::BadPacket);
-    }
-    let value = &input[*cursor..*cursor + len];
-    *cursor += len;
-    Ok(value)
+    decode_bytes_u32_be_borrowed(input, cursor).map_err(ssh_string_field_error)
 }
 
 pub fn mpint_bytes(bytes: &[u8]) -> Vec<u8> {
@@ -379,7 +372,7 @@ pub fn mpint_bytes(bytes: &[u8]) -> Vec<u8> {
     }
     let mut out = Vec::new();
     let needs_zero = value[0] & 0x80 != 0;
-    out.extend_from_slice(&((value.len() + usize::from(needs_zero)) as u32).to_be_bytes());
+    push_u32_be(&mut out, (value.len() + usize::from(needs_zero)) as u32);
     if needs_zero {
         out.push(0);
     }
@@ -387,27 +380,89 @@ pub fn mpint_bytes(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+pub fn parse_ssh_ed25519_public_key_blob(blob: &[u8]) -> Result<[u8; 32], SshError> {
+    let mut cursor = 0;
+    let algorithm = read_string(blob, &mut cursor)?;
+    let public_key = read_string(blob, &mut cursor)?;
+    if algorithm != b"ssh-ed25519" || public_key.len() != 32 || cursor != blob.len() {
+        return Err(SshError::BadKey);
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(public_key);
+    Ok(out)
+}
+
+pub fn ssh_ed25519_public_key_blob(public_key: &[u8; 32]) -> Vec<u8> {
+    let mut out = Vec::new();
+    write_string(&mut out, b"ssh-ed25519");
+    write_string(&mut out, public_key);
+    out
+}
+
+#[cfg(all(feature = "verify", feature = "ed25519"))]
+pub fn verify_ssh_ed25519_signature(
+    public_key: &[u8; 32],
+    signature_blob: &[u8],
+    message: &[u8],
+) -> Result<(), SshError> {
+    let mut cursor = 0;
+    let algorithm = read_string(signature_blob, &mut cursor)?;
+    let signature = read_string(signature_blob, &mut cursor)?;
+    if algorithm != b"ssh-ed25519" || signature.len() != 64 || cursor != signature_blob.len() {
+        return Err(SshError::BadSignature);
+    }
+    crate::verify::verify_ed25519_message(public_key, message, signature)
+        .map_err(|_| SshError::BadSignature)
+}
+
+#[cfg(all(feature = "sign", feature = "ed25519"))]
+pub fn parse_openssh_ed25519_private_key(bytes: &[u8]) -> Result<Ed25519MessageSigner, SshError> {
+    const MAGIC: &[u8] = b"openssh-key-v1\0";
+    if !bytes.starts_with(MAGIC) {
+        return Err(SshError::BadKey);
+    }
+    let mut cursor = MAGIC.len();
+    let cipher = read_string(bytes, &mut cursor)?;
+    let kdf = read_string(bytes, &mut cursor)?;
+    let _kdf_options = read_string(bytes, &mut cursor)?;
+    let key_count = read_u32(bytes, &mut cursor)?;
+    if cipher != b"none" || kdf != b"none" || key_count != 1 {
+        return Err(SshError::BadKey);
+    }
+    let _public_key = read_string(bytes, &mut cursor)?;
+    let private = read_string(bytes, &mut cursor)?;
+    let mut private_cursor = 0;
+    let check1 = read_u32(private, &mut private_cursor)?;
+    let check2 = read_u32(private, &mut private_cursor)?;
+    if check1 != check2 {
+        return Err(SshError::BadKey);
+    }
+    let algorithm = read_string(private, &mut private_cursor)?;
+    let public_key = read_string(private, &mut private_cursor)?;
+    let private_key = read_string(private, &mut private_cursor)?;
+    if algorithm != b"ssh-ed25519" || public_key.len() != 32 || private_key.len() != 64 {
+        return Err(SshError::BadKey);
+    }
+    let mut seed = [0u8; 32];
+    seed.copy_from_slice(&private_key[..32]);
+    let signing_key = Ed25519MessageSigner::from_seed(seed);
+    if signing_key.public_key_bytes().as_slice() != public_key {
+        return Err(SshError::BadKey);
+    }
+    Ok(signing_key)
+}
+
 pub fn read_name_list(input: &[u8], cursor: &mut usize) -> Result<Vec<String>, SshError> {
-    if *cursor + 4 > input.len() {
-        return Err(SshError::BadPacket);
-    }
-    let len = u32::from_be_bytes([
-        input[*cursor],
-        input[*cursor + 1],
-        input[*cursor + 2],
-        input[*cursor + 3],
-    ]) as usize;
-    *cursor += 4;
-    if *cursor + len > input.len() {
-        return Err(SshError::BadPacket);
-    }
-    let bytes = &input[*cursor..*cursor + len];
-    *cursor += len;
+    let bytes = decode_bytes_u32_be_borrowed(input, cursor).map_err(ssh_string_field_error)?;
     if bytes.is_empty() {
         return Ok(Vec::new());
     }
     let text = core::str::from_utf8(bytes).map_err(|_| SshError::BadPacket)?;
     Ok(text.split(',').map(str::to_string).collect())
+}
+
+fn ssh_string_field_error(_: StringFieldError) -> SshError {
+    SshError::BadPacket
 }
 
 #[cfg(test)]
@@ -435,5 +490,15 @@ mod tests {
         assert_eq!(parsed_payload, payload);
         let parsed = parse_kexinit(&parsed_payload).unwrap();
         assert_eq!(parsed, kex);
+    }
+
+    #[test]
+    fn ssh_ed25519_public_key_blob_roundtrips() {
+        let public_key = [7u8; 32];
+        let blob = ssh_ed25519_public_key_blob(&public_key);
+        assert_eq!(
+            parse_ssh_ed25519_public_key_blob(&blob).unwrap(),
+            public_key
+        );
     }
 }

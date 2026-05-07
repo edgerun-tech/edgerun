@@ -33,7 +33,6 @@ extern crate std as host_std;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
-pub use edgerun_rt as rt;
 
 pub mod alert {
     pub use edgerun_protocols::tls::alert::*;
@@ -87,12 +86,12 @@ pub mod tls_alpn {
 pub use async_tls::{AsyncTlsServerStream, AsyncTlsStream};
 pub use compat::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub use name_match::{normalize_tls_dns_name, tls_dns_name_matches};
-pub use session_cache::{SessionCache, SessionTicket, parse_new_session_ticket};
+pub use session_cache::{parse_new_session_ticket, SessionCache, SessionTicket};
 
 pub use alert::{Alert, AlertLevel};
 pub use certificate_gen::{
-    CertificateAndKey, cert_from_pem, generate_csr, generate_self_signed, generate_self_signed_pem,
-    signing_key_from_pem, signing_key_to_pem,
+    cert_from_pem, generate_csr, generate_self_signed, generate_self_signed_pem,
+    signing_key_from_pem, signing_key_to_pem, CertificateAndKey,
 };
 pub use tls_alpn::ACME_TLS_ALPN_PROTOCOL;
 
@@ -199,7 +198,12 @@ mod tests {
 
         let parsed = crate::certificate::Certificate::from_der(&cert.cert_der)
             .expect("failed to parse generated cert");
-        assert!(parsed.is_valid_at_unix_secs(edgerun_rt::now() / 10_000_000));
+        assert!(parsed.not_before < parsed.not_after);
+        assert!(parsed.is_valid_at_unix_secs(parsed.not_before));
+        assert!(parsed.is_valid_at_unix_secs(parsed.not_after));
+        if parsed.not_before > 0 {
+            assert!(!parsed.is_valid_at_unix_secs(parsed.not_before - 1));
+        }
     }
 
     #[test]

@@ -5,6 +5,7 @@
 
 use alloc::vec;
 use alloc::vec::Vec;
+use edgerun_encoding::frame::{decode_frame_len_u16_be, encode_frame_u16_be};
 
 use super::io;
 use super::limits::{validate_dns_wire_bounds, MAX_DNS_MESSAGE_LEN};
@@ -30,7 +31,7 @@ impl From<DnsTcpFrameError> for io::Error {
 }
 
 pub fn dns_tcp_frame_len(prefix: [u8; DNS_TCP_LENGTH_LEN]) -> Result<usize, DnsTcpFrameError> {
-    let len = u16::from_be_bytes(prefix) as usize;
+    let len = decode_frame_len_u16_be(&prefix);
     if len == 0 {
         return Err(DnsTcpFrameError::ZeroLength);
     }
@@ -48,10 +49,7 @@ pub fn encode_dns_tcp_frame(message: &[u8]) -> Result<Vec<u8>, DnsTcpFrameError>
         return Err(DnsTcpFrameError::MessageTooLarge);
     }
 
-    let mut frame = Vec::with_capacity(DNS_TCP_LENGTH_LEN + message.len());
-    frame.extend_from_slice(&(message.len() as u16).to_be_bytes());
-    frame.extend_from_slice(message);
-    Ok(frame)
+    Ok(encode_frame_u16_be(message))
 }
 
 #[derive(Debug, Default, Clone)]

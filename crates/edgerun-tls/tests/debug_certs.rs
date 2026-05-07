@@ -4,10 +4,6 @@ use edgerun_tls::certificate_gen::{
 };
 use edgerun_tls::prf::Hasher;
 
-fn current_unix_secs() -> u64 {
-    edgerun_rt::now() / 10_000_000
-}
-
 #[test]
 fn debug_cert_validity() {
     let cert = generate_self_signed(&["localhost"]).unwrap();
@@ -21,7 +17,9 @@ fn debug_cert_validity() {
         (parsed.not_after - parsed.not_before) / 86400
     );
 
-    assert!(parsed.is_valid_at_unix_secs(current_unix_secs()));
+    assert!(parsed.not_before < parsed.not_after);
+    assert!(parsed.is_valid_at_unix_secs(parsed.not_before));
+    assert!(parsed.is_valid_at_unix_secs(parsed.not_after));
 }
 
 #[test]

@@ -5,8 +5,8 @@ use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
 use edgerun_display::{
-    DisplayContentKind, DisplayDevice, DisplayInfo, DisplayMode, DisplayUpdateRequest,
-    validate_display_update_request,
+    validate_display_update_request, DisplayContentKind, DisplayDevice, DisplayInfo, DisplayMode,
+    DisplayUpdateRequest,
 };
 use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityInvocation, CapabilityResult,

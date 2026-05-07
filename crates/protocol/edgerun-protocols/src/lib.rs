@@ -13,6 +13,12 @@ extern crate alloc;
 pub mod acme;
 #[cfg(feature = "block")]
 pub mod block;
+#[cfg(feature = "bluetooth-gatt")]
+pub mod bluetooth_gatt;
+#[cfg(feature = "bluetooth-mgmt")]
+pub mod bluetooth_mgmt;
+#[cfg(feature = "cec")]
+pub mod cec;
 
 pub mod prelude {
     pub use alloc::string::{String, ToString};
@@ -37,6 +43,10 @@ pub mod dhcpv6;
 pub mod dns;
 #[cfg(feature = "email-auth")]
 pub mod email_auth;
+#[cfg(feature = "emrtd")]
+pub mod emrtd;
+#[cfg(feature = "goodix-fingerprint")]
+pub mod goodix_fingerprint;
 #[cfg(feature = "http")]
 pub mod http;
 #[cfg(feature = "wifi")]
@@ -85,8 +95,12 @@ pub mod tftp;
 pub mod tls;
 #[cfg(feature = "tuya")]
 pub mod tuya;
+#[cfg(feature = "usb")]
+pub mod usb;
 #[cfg(feature = "verify")]
 pub mod verify;
+#[cfg(feature = "websocket")]
+pub mod websocket;
 #[cfg(feature = "wire")]
 pub mod wire {
     pub use edgerun_wire::*;

@@ -1,4 +1,3 @@
-use crate::remote::{checked_len_bytes, BlockBackend, BlockDeviceInfo, BlockError};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -6,26 +5,25 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
-use edgerun_encoding::byteorder::{read_u16_be, read_u32_be, read_u64_be};
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
 use edgerun_encoding::io::{Read, Write};
-pub use edgerun_protocols::nbd::NbdExport;
+use edgerun_protocols::block::{checked_len_bytes, BlockBackend, BlockDeviceInfo, BlockError};
 use edgerun_protocols::nbd::{
-    decode_export_info, decode_option_header, decode_option_reply_header, decode_option_request,
-    decode_reply_header, decode_request_header, decode_server_handshake, encode_client_flags,
-    encode_export_info, encode_option_reply, encode_option_request, encode_request_header,
-    encode_server_handshake, encode_simple_reply, map_nbd_error, NbdNegotiatedExport,
-    NbdOptionRequest, NBD_CMD_DISC, NBD_CMD_FLUSH, NBD_CMD_READ, NBD_CMD_TRIM, NBD_CMD_WRITE,
-    NBD_CMD_WRITE_ZEROES, NBD_EXPORT_INFO_PADDING_LEN, NBD_FLAG_FIXED_NEWSTYLE, NBD_FLAG_READ_ONLY,
-    NBD_OPTION_HEADER_LEN, NBD_OPTION_REPLY_HEADER_LEN, NBD_OPT_ABORT, NBD_OPT_EXPORT_NAME,
-    NBD_OPT_LIST, NBD_REPLY_HEADER_LEN, NBD_REP_ACK, NBD_REP_SERVER, NBD_REQUEST_HEADER_LEN,
+    decode_client_flags, decode_export_info, decode_option_header, decode_option_reply_header,
+    decode_option_request, decode_reply_header, decode_request_header, decode_server_handshake,
+    encode_client_flags, encode_export_info, encode_option_reply, encode_option_request,
+    encode_request_header, encode_server_handshake, encode_simple_reply, map_nbd_error,
+    request_to_block_command, NbdBlockCommand, NbdOptionRequest, NBD_CLIENT_FLAGS_LEN,
+    NBD_CMD_DISC, NBD_CMD_READ, NBD_CMD_WRITE, NBD_EXPORT_INFO_LEN, NBD_FLAG_FIXED_NEWSTYLE,
+    NBD_FLAG_READ_ONLY, NBD_OPTION_HEADER_LEN, NBD_OPTION_REPLY_HEADER_LEN, NBD_OPT_ABORT,
+    NBD_OPT_EXPORT_NAME, NBD_OPT_LIST, NBD_REPLY_HEADER_LEN, NBD_REP_ACK, NBD_REP_SERVER,
+    NBD_REQUEST_HEADER_LEN,
 };
+pub use edgerun_protocols::nbd::{NbdExport, NbdNegotiatedExport};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::fs::File;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::io::{Read, Write};
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::os::fd::AsRawFd;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
@@ -63,14 +61,10 @@ impl core::fmt::Debug for NbdExportEntry {
 #[derive(Clone, Debug)]
 pub struct LinuxNbdAttachSpec {
     pub device: String,
-    pub host: String,
-    pub port: u16,
     pub export_name: String,
     pub block_size: Option<u32>,
     pub read_only: bool,
 }
-
-pub type LinuxNbdNegotiatedExport = NbdNegotiatedExport;
 
 pub fn serve_nbd_connection<T: Read + Write, B: BlockBackend>(
     stream: &mut T,
@@ -82,7 +76,7 @@ pub fn serve_nbd_connection<T: Read + Write, B: BlockBackend>(
         .map_err(block_io_error)?;
     stream.flush().map_err(block_io_error)?;
 
-    let _client_flags = read_u32(stream)?;
+    let _client_flags = decode_client_flags(&read_exact_vec(stream, NBD_CLIENT_FLAGS_LEN)?)?;
     let option = decode_option_header(&read_exact_vec(stream, NBD_OPTION_HEADER_LEN)?)?;
     let data = read_exact_vec(stream, option.length as usize)?;
     match decode_option_request(option.option, data) {
@@ -123,7 +117,7 @@ pub fn serve_nbd_connection_multi<T: Read + Write>(
         .map_err(block_io_error)?;
     stream.flush().map_err(block_io_error)?;
 
-    let _client_flags = read_u32(stream)?;
+    let _client_flags = decode_client_flags(&read_exact_vec(stream, NBD_CLIENT_FLAGS_LEN)?)?;
 
     let selected = loop {
         let option = decode_option_header(&read_exact_vec(stream, NBD_OPTION_HEADER_LEN)?)?;
@@ -171,130 +165,55 @@ fn serve_selected_export<T: Read + Write>(
 ) -> Result<(), BlockError> {
     loop {
         let request = decode_request_header(&read_exact_vec(stream, NBD_REQUEST_HEADER_LEN)?)?;
+        let command = match request_to_block_command(info, &request) {
+            Ok(command) => command,
+            Err(error) => {
+                write_nbd_reply(stream, request.handle, map_nbd_error(&error), None)?;
+                continue;
+            }
+        };
+        let handle = command.handle();
 
-        let block_size = u64::from(info.block_size);
-        if request.offset % block_size != 0 || u64::from(request.length) % block_size != 0 {
-            write_nbd_reply(stream, request.handle, 22, None)?;
-            continue;
-        }
-
-        let lba = request.offset / block_size;
-        let blocks = request.length / info.block_size;
-        let result = match request.command {
-            NBD_CMD_READ => {
+        let result = match command {
+            NbdBlockCommand::Read {
+                handle: _,
+                lba,
+                blocks,
+            } => {
                 let mut data = vec![0_u8; checked_len_bytes(info, blocks)?];
                 backend
                     .read_blocks(lba, blocks, &mut data)
                     .map(|_| Some(data))
             }
-            NBD_CMD_WRITE => {
-                let data = read_exact_vec(stream, request.length as usize)?;
+            NbdBlockCommand::Write {
+                handle: _,
+                lba,
+                blocks,
+                length,
+            } => {
+                let data = read_exact_vec(stream, length as usize)?;
                 backend.write_blocks(lba, blocks, &data).map(|_| None)
             }
-            NBD_CMD_FLUSH => backend.flush().map(|_| None),
-            NBD_CMD_TRIM => backend.discard_blocks(lba, blocks).map(|_| None),
-            NBD_CMD_WRITE_ZEROES => backend.write_zeroes(lba, blocks).map(|_| None),
-            NBD_CMD_DISC => return Ok(()),
-            _ => Err(BlockError::Unsupported),
+            NbdBlockCommand::Flush { .. } => backend.flush().map(|_| None),
+            NbdBlockCommand::Trim {
+                handle: _,
+                lba,
+                blocks,
+            } => backend.discard_blocks(lba, blocks).map(|_| None),
+            NbdBlockCommand::WriteZeroes {
+                handle: _,
+                lba,
+                blocks,
+            } => backend.write_zeroes(lba, blocks).map(|_| None),
+            NbdBlockCommand::Disconnect { .. } => return Ok(()),
         };
 
         match result {
-            Ok(Some(data)) => write_nbd_reply(stream, request.handle, 0, Some(&data))?,
-            Ok(None) => write_nbd_reply(stream, request.handle, 0, None)?,
-            Err(error) => write_nbd_reply(stream, request.handle, map_nbd_error(&error), None)?,
+            Ok(Some(data)) => write_nbd_reply(stream, handle, 0, Some(&data))?,
+            Ok(None) => write_nbd_reply(stream, handle, 0, None)?,
+            Err(error) => write_nbd_reply(stream, handle, map_nbd_error(&error), None)?,
         }
     }
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-pub struct TcpNbdServer<B> {
-    listener: TcpListener,
-    backend: Arc<B>,
-    export: NbdExport,
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl<B: BlockBackend> TcpNbdServer<B> {
-    pub fn bind(
-        addr: impl ToSocketAddrs,
-        backend: B,
-        export: NbdExport,
-    ) -> Result<Self, BlockError> {
-        Self::bind_shared(addr, Arc::new(backend), export)
-    }
-
-    pub fn bind_shared(
-        addr: impl ToSocketAddrs,
-        backend: Arc<B>,
-        export: NbdExport,
-    ) -> Result<Self, BlockError> {
-        let listener = TcpListener::bind(addr).map_err(block_io_error)?;
-        Ok(Self {
-            listener,
-            backend,
-            export,
-        })
-    }
-
-    pub fn local_addr(&self) -> Result<std::net::SocketAddr, BlockError> {
-        self.listener.local_addr().map_err(block_io_error)
-    }
-
-    pub fn accept_once(&self) -> Result<(), BlockError> {
-        let (mut stream, _) = self.listener.accept().map_err(block_io_error)?;
-        serve_nbd_connection(&mut stream, self.backend.as_ref(), &self.export)
-    }
-
-    pub fn serve_forever(&self) -> Result<(), BlockError> {
-        loop {
-            self.accept_once()?;
-        }
-    }
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-pub struct MultiExportTcpNbdServer {
-    listener: TcpListener,
-    exports: Vec<NbdExportEntry>,
-}
-
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl MultiExportTcpNbdServer {
-    pub fn bind(
-        addr: impl ToSocketAddrs,
-        exports: Vec<NbdExportEntry>,
-    ) -> Result<Self, BlockError> {
-        let listener = TcpListener::bind(addr).map_err(block_io_error)?;
-        Ok(Self { listener, exports })
-    }
-
-    pub fn local_addr(&self) -> Result<std::net::SocketAddr, BlockError> {
-        self.listener.local_addr().map_err(block_io_error)
-    }
-
-    pub fn accept_once(&self) -> Result<(), BlockError> {
-        let (mut stream, _) = self.listener.accept().map_err(block_io_error)?;
-        serve_nbd_connection_multi(&mut stream, &self.exports)
-    }
-
-    pub fn serve_forever(&self) -> Result<(), BlockError> {
-        loop {
-            self.accept_once()?;
-        }
-    }
-}
-
-#[cfg(any(target_os = "none", target_arch = "wasm32"))]
-pub struct TcpNbdServer<B> {
-    _backend: core::marker::PhantomData<B>,
-}
-
-#[cfg(any(target_os = "none", target_arch = "wasm32"))]
-pub struct MultiExportTcpNbdServer;
-
-#[cfg(any(target_os = "none", target_arch = "wasm32"))]
-pub fn attach_nbd(_spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
-    Err(BlockError::Unsupported)
 }
 
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
@@ -303,16 +222,18 @@ pub fn detach_nbd<P>(_device: P) -> Result<(), BlockError> {
 }
 
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
-pub fn negotiate_nbd_export<T: Read + Write>(
-    _stream: &mut T,
-    _export_name: &str,
-) -> Result<LinuxNbdNegotiatedExport, BlockError> {
+pub fn attach_nbd<T: Read + Write>(
+    _spec: &LinuxNbdAttachSpec,
+    _stream: T,
+) -> Result<(), BlockError> {
     Err(BlockError::Unsupported)
 }
 
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-pub fn attach_nbd(spec: &LinuxNbdAttachSpec) -> Result<(), BlockError> {
-    let mut stream = TcpStream::connect((spec.host.as_str(), spec.port)).map_err(block_io_error)?;
+pub fn attach_nbd<T>(spec: &LinuxNbdAttachSpec, mut stream: T) -> Result<(), BlockError>
+where
+    T: Read + Write + AsRawFd,
+{
     let negotiated = negotiate_nbd_export(&mut stream, &spec.export_name)?;
     let block_size = spec.block_size.unwrap_or(512);
     if negotiated.size_bytes % u64::from(block_size) != 0 {
@@ -368,11 +289,10 @@ pub fn detach_nbd(device: impl AsRef<Path>) -> Result<(), BlockError> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-pub fn negotiate_nbd_export(
-    stream: &mut TcpStream,
+pub fn negotiate_nbd_export<T: Read + Write>(
+    stream: &mut T,
     export_name: &str,
-) -> Result<LinuxNbdNegotiatedExport, BlockError> {
+) -> Result<NbdNegotiatedExport, BlockError> {
     let _handshake = decode_server_handshake(&read_exact_vec(stream, 18)?)?;
     stream
         .write_all(&encode_client_flags(0))
@@ -383,10 +303,7 @@ pub fn negotiate_nbd_export(
         .map_err(block_io_error)?;
     stream.flush().map_err(block_io_error)?;
 
-    decode_export_info(&read_exact_vec(
-        stream,
-        8 + 2 + NBD_EXPORT_INFO_PADDING_LEN,
-    )?)
+    decode_export_info(&read_exact_vec(stream, NBD_EXPORT_INFO_LEN)?)
 }
 
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
@@ -444,29 +361,12 @@ fn read_exact_vec<T: Read>(stream: &mut T, len: usize) -> Result<Vec<u8>, BlockE
     Ok(bytes)
 }
 
-fn read_u16<T: Read>(stream: &mut T) -> Result<u16, BlockError> {
-    let mut bytes = [0_u8; 2];
-    stream.read_exact(&mut bytes).map_err(block_io_error)?;
-    Ok(read_u16_be(&bytes, 0))
-}
-
-fn read_u32<T: Read>(stream: &mut T) -> Result<u32, BlockError> {
-    let mut bytes = [0_u8; 4];
-    stream.read_exact(&mut bytes).map_err(block_io_error)?;
-    Ok(read_u32_be(&bytes, 0))
-}
-
-fn read_u64<T: Read>(stream: &mut T) -> Result<u64, BlockError> {
-    let mut bytes = [0_u8; 8];
-    stream.read_exact(&mut bytes).map_err(block_io_error)?;
-    Ok(read_u64_be(&bytes, 0))
-}
-
 #[cfg(all(test, not(any(target_os = "none", target_arch = "wasm32"))))]
 mod tests {
     use super::*;
-    use crate::remote::{BlockDeviceInfo, MemoryBlockBackend};
-    use std::net::TcpStream;
+    use crate::remote::MemoryBlockBackend;
+    use edgerun_protocols::block::BlockDeviceInfo;
+    use std::net::{SocketAddr, TcpListener, TcpStream};
     use std::thread;
 
     fn test_info(name: &str) -> BlockDeviceInfo {
@@ -485,11 +385,7 @@ mod tests {
     #[test]
     fn tcp_nbd_server_handles_basic_read_write() {
         let backend = Arc::new(MemoryBlockBackend::new(test_info("single")).unwrap());
-        let server =
-            TcpNbdServer::bind_shared("127.0.0.1:0", Arc::clone(&backend), NbdExport::default())
-                .unwrap();
-        let addr = server.local_addr().unwrap();
-        let worker = thread::spawn(move || server.accept_once().unwrap());
+        let (addr, worker) = spawn_nbd_once(Arc::clone(&backend), NbdExport::default()).unwrap();
 
         let mut stream = TcpStream::connect(addr).unwrap();
         perform_nbd_handshake(&mut stream, "edgerun").unwrap();
@@ -497,7 +393,7 @@ mod tests {
         let bytes = issue_nbd_read(&mut stream, 0, 512).unwrap();
         assert_eq!(bytes, vec![0x33; 512]);
         issue_nbd_disconnect(&mut stream).unwrap();
-        worker.join().unwrap();
+        worker.join().unwrap().unwrap();
 
         let mut verify = vec![0_u8; 512];
         backend.read_blocks(0, 1, &mut verify).unwrap();
@@ -509,60 +405,50 @@ mod tests {
         let first = Arc::new(MemoryBlockBackend::new(test_info("first")).unwrap());
         let second = Arc::new(MemoryBlockBackend::new(test_info("second")).unwrap());
         second.write_blocks(0, 1, &[0x77; 512]).unwrap();
-        let server = MultiExportTcpNbdServer::bind(
-            "127.0.0.1:0",
-            vec![
-                NbdExportEntry {
-                    export: NbdExport {
-                        name: "first".into(),
-                        description: "first export".into(),
-                    },
-                    backend: first,
+        let (addr, worker) = spawn_multi_nbd_once(vec![
+            NbdExportEntry {
+                export: NbdExport {
+                    name: "first".into(),
+                    description: "first export".into(),
                 },
-                NbdExportEntry {
-                    export: NbdExport {
-                        name: "second".into(),
-                        description: "second export".into(),
-                    },
-                    backend: second,
+                backend: first,
+            },
+            NbdExportEntry {
+                export: NbdExport {
+                    name: "second".into(),
+                    description: "second export".into(),
                 },
-            ],
-        )
+                backend: second,
+            },
+        ])
         .unwrap();
-        let addr = server.local_addr().unwrap();
-        let worker = thread::spawn(move || server.accept_once().unwrap());
         let mut stream = TcpStream::connect(addr).unwrap();
         perform_nbd_handshake(&mut stream, "second").unwrap();
         let bytes = issue_nbd_read(&mut stream, 0, 512).unwrap();
         assert_eq!(bytes, vec![0x77; 512]);
         issue_nbd_disconnect(&mut stream).unwrap();
-        worker.join().unwrap();
+        worker.join().unwrap().unwrap();
     }
 
     #[test]
     fn multi_export_server_lists_exports() {
-        let server = MultiExportTcpNbdServer::bind(
-            "127.0.0.1:0",
-            vec![
-                NbdExportEntry {
-                    export: NbdExport {
-                        name: "alpha".into(),
-                        description: "alpha export".into(),
-                    },
-                    backend: Arc::new(MemoryBlockBackend::new(test_info("alpha")).unwrap()),
+        let (addr, worker) = spawn_multi_nbd_once(vec![
+            NbdExportEntry {
+                export: NbdExport {
+                    name: "alpha".into(),
+                    description: "alpha export".into(),
                 },
-                NbdExportEntry {
-                    export: NbdExport {
-                        name: "beta".into(),
-                        description: "beta export".into(),
-                    },
-                    backend: Arc::new(MemoryBlockBackend::new(test_info("beta")).unwrap()),
+                backend: Arc::new(MemoryBlockBackend::new(test_info("alpha")).unwrap()),
+            },
+            NbdExportEntry {
+                export: NbdExport {
+                    name: "beta".into(),
+                    description: "beta export".into(),
                 },
-            ],
-        )
+                backend: Arc::new(MemoryBlockBackend::new(test_info("beta")).unwrap()),
+            },
+        ])
         .unwrap();
-        let addr = server.local_addr().unwrap();
-        let worker = thread::spawn(move || server.accept_once().unwrap());
         let mut stream = TcpStream::connect(addr).unwrap();
         let handshake = decode_server_handshake(&read_exact_vec(&mut stream, 18).unwrap()).unwrap();
         assert_eq!(handshake.handshake_flags, NBD_FLAG_FIXED_NEWSTYLE);
@@ -570,30 +456,58 @@ mod tests {
         stream
             .write_all(&encode_option_request(NBD_OPT_LIST, &[]))
             .unwrap();
-        let reply =
-            decode_option_reply_header(&read_exact_vec(&mut stream, NBD_OPTION_REPLY_HEADER_LEN).unwrap())
-                .unwrap();
+        let reply = decode_option_reply_header(
+            &read_exact_vec(&mut stream, NBD_OPTION_REPLY_HEADER_LEN).unwrap(),
+        )
+        .unwrap();
         assert_eq!(reply.option, NBD_OPT_LIST);
         assert_eq!(reply.reply_type, NBD_REP_SERVER);
         let first = read_exact_vec(&mut stream, reply.length as usize).unwrap();
         assert_eq!(String::from_utf8(first).unwrap(), "alpha");
-        let reply =
-            decode_option_reply_header(&read_exact_vec(&mut stream, NBD_OPTION_REPLY_HEADER_LEN).unwrap())
-                .unwrap();
+        let reply = decode_option_reply_header(
+            &read_exact_vec(&mut stream, NBD_OPTION_REPLY_HEADER_LEN).unwrap(),
+        )
+        .unwrap();
         assert_eq!(reply.option, NBD_OPT_LIST);
         assert_eq!(reply.reply_type, NBD_REP_SERVER);
         let second = read_exact_vec(&mut stream, reply.length as usize).unwrap();
         assert_eq!(String::from_utf8(second).unwrap(), "beta");
-        let reply =
-            decode_option_reply_header(&read_exact_vec(&mut stream, NBD_OPTION_REPLY_HEADER_LEN).unwrap())
-                .unwrap();
+        let reply = decode_option_reply_header(
+            &read_exact_vec(&mut stream, NBD_OPTION_REPLY_HEADER_LEN).unwrap(),
+        )
+        .unwrap();
         assert_eq!(reply.option, NBD_OPT_LIST);
         assert_eq!(reply.reply_type, NBD_REP_ACK);
         assert_eq!(reply.length, 0);
         stream
             .write_all(&encode_option_request(NBD_OPT_ABORT, &[]))
             .unwrap();
-        worker.join().unwrap();
+        worker.join().unwrap().unwrap();
+    }
+
+    fn spawn_nbd_once<B: BlockBackend + Send + Sync + 'static>(
+        backend: Arc<B>,
+        export: NbdExport,
+    ) -> Result<(SocketAddr, thread::JoinHandle<Result<(), BlockError>>), BlockError> {
+        let listener = TcpListener::bind("127.0.0.1:0").map_err(block_io_error)?;
+        let addr = listener.local_addr().map_err(block_io_error)?;
+        let worker = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().map_err(block_io_error)?;
+            serve_nbd_connection(&mut stream, backend.as_ref(), &export)
+        });
+        Ok((addr, worker))
+    }
+
+    fn spawn_multi_nbd_once(
+        exports: Vec<NbdExportEntry>,
+    ) -> Result<(SocketAddr, thread::JoinHandle<Result<(), BlockError>>), BlockError> {
+        let listener = TcpListener::bind("127.0.0.1:0").map_err(block_io_error)?;
+        let addr = listener.local_addr().map_err(block_io_error)?;
+        let worker = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().map_err(block_io_error)?;
+            serve_nbd_connection_multi(&mut stream, &exports)
+        });
+        Ok((addr, worker))
     }
 
     fn perform_nbd_handshake(stream: &mut TcpStream, export_name: &str) -> Result<(), BlockError> {
@@ -606,9 +520,7 @@ mod tests {
         stream
             .write_all(&encode_option_request(NBD_OPT_EXPORT_NAME, name))
             .map_err(block_io_error)?;
-        let _size = read_u64(stream)?;
-        let _flags = read_u16(stream)?;
-        let _zeros = read_exact_vec(stream, NBD_EXPORT_INFO_PADDING_LEN)?;
+        let _export = decode_export_info(&read_exact_vec(stream, NBD_EXPORT_INFO_LEN)?)?;
         Ok(())
     }
 

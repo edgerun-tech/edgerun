@@ -9,35 +9,9 @@ homepage.workspace = true
 description = "Virtual block device and network block protocol support for Edgerun"
 
 [dependencies]
-edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
-edgerun-protocols = { workspace = true, default-features = false, features = ["nbd"] }
-
-[[bin]]
-name = "nbd-attach"
-path = "src/bin/nbd-attach.rs"
-required-features = ["std"]
-
-[[bin]]
-name = "nbd-server"
-path = "src/bin/nbd-server.rs"
-required-features = ["std"]
-
-[[bin]]
-name = "block_client"
-path = "src/bin/block-client.rs"
-required-features = ["std"]
-
-[[bin]]
-name = "block_server"
-path = "src/bin/block-server.rs"
-required-features = ["std"]
-
-[[bin]]
-name = "nbd_quick_attach"
-path = "src/bin/nbd-quick-attach.rs"
-required-features = ["std"]
+edgerun-protocols = { workspace = true, default-features = false, features = ["nbd", "websocket"] }
 
 [lints]
 workspace = true

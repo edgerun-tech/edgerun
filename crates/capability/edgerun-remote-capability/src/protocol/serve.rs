@@ -6,7 +6,7 @@ use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityInvocation, CapabilityResult,
 };
 use edgerun_protocols::core_protocol::protocol::capability_runtime::{
-    CapabilityRemoteEnvelope, CapabilityResultFrame, capability_remote_envelope,
+    capability_remote_envelope, CapabilityRemoteEnvelope, CapabilityResultFrame,
 };
 
 use super::{RemoteCapabilityProvider, RemoteCapabilityTransport, RemoteInvocationResult};

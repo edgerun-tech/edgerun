@@ -7,7 +7,7 @@
 
 use super::io;
 use super::message::DnsMessage;
-use edgerun_encoding::byteorder::read_u16_be;
+use edgerun_encoding::byteorder::{read_u16_be, write_u16_be};
 
 /// DNS messages are length-prefixed over TCP with a 16-bit length and are
 /// smaller over UDP. Anything larger cannot be a valid DNS wire message.
@@ -107,10 +107,10 @@ mod tests {
 
     fn header_with_counts(qd: u16, an: u16, ns: u16, ar: u16) -> [u8; DNS_HEADER_SIZE] {
         let mut header = [0u8; DNS_HEADER_SIZE];
-        header[4..6].copy_from_slice(&qd.to_be_bytes());
-        header[6..8].copy_from_slice(&an.to_be_bytes());
-        header[8..10].copy_from_slice(&ns.to_be_bytes());
-        header[10..12].copy_from_slice(&ar.to_be_bytes());
+        write_u16_be(&mut header, 4, qd);
+        write_u16_be(&mut header, 6, an);
+        write_u16_be(&mut header, 8, ns);
+        write_u16_be(&mut header, 10, ar);
         header
     }
 

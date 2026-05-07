@@ -3,6 +3,7 @@ use super::FrameType;
 use super::{Http2Error, Result};
 use alloc::string::ToString;
 use alloc::vec::Vec;
+use edgerun_encoding::byteorder::{push_u32_be, read_u32_be};
 
 /// PRIORITY frame (RFC 7540 Sec6.3)
 #[derive(Debug, Clone)]
@@ -37,10 +38,7 @@ impl PriorityFrame {
         } else {
             self.stream_dependency & 0x7FFFFFFF
         };
-        payload.push((dep >> 24) as u8);
-        payload.push((dep >> 16) as u8);
-        payload.push((dep >> 8) as u8);
-        payload.push(dep as u8);
+        push_u32_be(&mut payload, dep);
         payload.push(self.weight - 1); // Wire format is weight - 1
 
         Frame::new(FrameType::Priority, 0, self.stream_id, payload)
@@ -59,12 +57,7 @@ impl PriorityFrame {
             ));
         }
 
-        let dep_raw = u32::from_be_bytes([
-            frame.payload[0],
-            frame.payload[1],
-            frame.payload[2],
-            frame.payload[3],
-        ]);
+        let dep_raw = read_u32_be(&frame.payload, 0);
         let exclusive = (dep_raw >> 31) != 0;
         let stream_dependency = dep_raw & 0x7FFFFFFF;
         let weight = frame.payload[4].wrapping_add(1); // Wire format is weight - 1 (0->1, 255->256)

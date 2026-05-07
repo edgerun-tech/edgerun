@@ -56,8 +56,8 @@ use crate::event_loop::{
     DurableEventAppender, EventLoopBuilder, FetchHandler, PeerDiscoveryHandler,
 };
 use crate::file_index::FileIndex;
-use crate::fs::{FsContentStore, read_event_at, scan_event_logs};
-use crate::materializer::{OpEventType, materialize_event_to_index};
+use crate::fs::{read_event_at, scan_event_logs, FsContentStore};
+use crate::materializer::{materialize_event_to_index, OpEventType};
 use std::collections::HashSet;
 
 enum EventBackend {
@@ -104,7 +104,7 @@ impl ControllerSet {
     }
 }
 use edgerun_protocols::sign::ProtocolSigner;
-use edgerun_protocols::verify::{ProtocolFamily, ProtocolSignerRef, verify_protocol_record};
+use edgerun_protocols::verify::{verify_protocol_record, ProtocolFamily, ProtocolSignerRef};
 
 /// Configuration for the unified node storage.
 #[derive(Clone, Debug)]

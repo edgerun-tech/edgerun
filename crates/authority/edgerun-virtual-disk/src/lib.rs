@@ -137,14 +137,11 @@ pub use image::{
 };
 pub use nbd::{
     attach_nbd, detach_nbd, negotiate_nbd_export, serve_nbd_connection, serve_nbd_connection_multi,
-    LinuxNbdAttachSpec, LinuxNbdNegotiatedExport, MultiExportTcpNbdServer, NbdExport,
-    NbdExportEntry, TcpNbdServer,
+    LinuxNbdAttachSpec, NbdExport, NbdExportEntry, NbdNegotiatedExport,
 };
 pub use remote::{
-    decode_request_frame, decode_response_frame, encode_request_frame, encode_response_frame,
-    handle_request, send_request, send_response, validate_range, BlockBackend, BlockClient,
-    BlockDeviceInfo, BlockError, BlockRequest, BlockResponse, BlockServer, FileBlockBackend,
-    MemoryBlockBackend, RequestId, TcpBlockServer, UnixBlockServer, BLOCK_PROTOCOL_VERSION,
+    receive_request, receive_response, send_request, send_response, BlockClient, BlockServer,
+    FileBlockBackend, MemoryBlockBackend,
 };
 
 #[cfg(test)]
@@ -155,6 +152,10 @@ mod tests {
     use alloc::string::ToString;
     use alloc::sync::Arc;
     use alloc::vec;
+    use edgerun_protocols::block::{
+        handle_request, validate_range, BlockBackend, BlockDeviceInfo, BlockError, BlockRequest,
+        BlockResponse, RequestId, BLOCK_PROTOCOL_VERSION,
+    };
 
     // Tests for re-exported types from the image module
 
@@ -229,23 +230,20 @@ mod tests {
     fn linux_nbd_attach_spec_clone_debug() {
         let spec = LinuxNbdAttachSpec {
             device: "/dev/nbd0".into(),
-            host: "127.0.0.1".into(),
-            port: 10809,
             export_name: "test".into(),
             block_size: Some(512),
             read_only: false,
         };
         let cloned = spec.clone();
         assert_eq!(spec.device, cloned.device);
-        assert_eq!(spec.host, cloned.host);
-        assert_eq!(spec.port, cloned.port);
+        assert_eq!(spec.export_name, cloned.export_name);
         let debug_str = format!("{spec:?}");
         assert!(debug_str.contains("LinuxNbdAttachSpec"));
     }
 
     #[test]
-    fn linux_nbd_negotiated_export_clone_debug() {
-        let export = LinuxNbdNegotiatedExport {
+    fn nbd_negotiated_export_clone_debug() {
+        let export = NbdNegotiatedExport {
             size_bytes: 1024 * 1024,
             transmission_flags: 0,
         };

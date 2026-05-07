@@ -20,8 +20,8 @@
 
 use crate::prelude::v1::*;
 
+use crate::sync::RwLock;
 use edgerun_encoding::byteorder::read_u64_le;
-use edgerun_rt::RwLock;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};

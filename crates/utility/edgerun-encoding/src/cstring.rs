@@ -146,6 +146,50 @@ pub fn decode_c_multi_string_lossy_until_empty(bytes: &[u8]) -> Vec<String> {
     out
 }
 
+/// Read a NUL-terminated string from `bytes[*cursor..]`, replacing invalid UTF-8.
+///
+/// Returns `None` when there is no terminator. On success, advances `cursor`
+/// past the terminator and returns the decoded string.
+pub fn read_c_string_lossy(bytes: &[u8], cursor: &mut usize) -> Option<String> {
+    let end = bytes.get(*cursor..)?.iter().position(|&b| b == 0)?;
+    let start = *cursor;
+    *cursor += end + 1;
+    Some(String::from_utf8_lossy(&bytes[start..start + end]).into_owned())
+}
+
+/// Read a NUL-terminated string from a fixed offset, replacing invalid UTF-8.
+///
+/// Returns `(string, next_offset)` where `next_offset` is after the terminator.
+pub fn read_c_string_lossy_at(bytes: &[u8], offset: usize) -> Option<(String, usize)> {
+    let mut cursor = offset;
+    let value = read_c_string_lossy(bytes, &mut cursor)?;
+    Some((value, cursor))
+}
+
+/// Parse consecutive NUL-terminated key/value string pairs.
+///
+/// Stops at a trailing NUL, end of input, or an incomplete pair.
+pub fn decode_c_string_pairs_lossy(bytes: &[u8], offset: usize) -> Vec<(String, String)> {
+    let mut pairs = Vec::new();
+    let mut cursor = offset;
+    while cursor < bytes.len() {
+        if bytes[cursor] == 0 {
+            break;
+        }
+        let Some(name) = read_c_string_lossy(bytes, &mut cursor) else {
+            break;
+        };
+        if cursor >= bytes.len() {
+            break;
+        }
+        let Some(value) = read_c_string_lossy(bytes, &mut cursor) else {
+            break;
+        };
+        pairs.push((name, value));
+    }
+    pairs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,6 +298,36 @@ mod tests {
         assert_eq!(
             decode_c_multi_string_lossy_until_empty(b"Reader1\0Reader2"),
             vec!["Reader1".to_string(), "Reader2".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_read_c_string_lossy_at() {
+        let data = b"xxhello\0world";
+        let (value, next) = read_c_string_lossy_at(data, 2).unwrap();
+        assert_eq!(value, "hello");
+        assert_eq!(next, 8);
+        assert_eq!(read_c_string_lossy_at(b"unterminated", 0), None);
+    }
+
+    #[test]
+    fn test_decode_c_string_pairs_lossy() {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"blksize");
+        data.push(0);
+        data.extend_from_slice(b"1456");
+        data.push(0);
+        data.extend_from_slice(b"tsize");
+        data.push(0);
+        data.extend_from_slice(b"0");
+        data.push(0);
+        let pairs = decode_c_string_pairs_lossy(&data, 0);
+        assert_eq!(
+            pairs,
+            vec![
+                ("blksize".to_string(), "1456".to_string()),
+                ("tsize".to_string(), "0".to_string()),
+            ]
         );
     }
 }

@@ -15,7 +15,6 @@ categories = ["filesystem", "caching", "development-tools"]
 edgerun-glob.workspace = true
 edgerun-regex.workspace = true
 edgerun-crypto = { version = "0.1", path = "../../utility/edgerun-crypto", default-features = false, features = ["sha1"] }
-edgerun-rt = { version = "0.1", path = "../../edgerun-rt" }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]

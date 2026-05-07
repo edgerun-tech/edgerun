@@ -14,7 +14,9 @@ use super::record::{
     decode_domain_name, encode_domain_name, encode_domain_name_compressed, DnsRecordData,
     DnsRecordType,
 };
-use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
+use edgerun_encoding::byteorder::{
+    push_u16_be, push_u32_be, read_u16_be, read_u32_be, write_u16_be,
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -98,7 +100,7 @@ impl DnsHeader {
 
     fn to_wire(&self) -> [u8; DNS_HEADER_SIZE] {
         let mut buf = [0u8; DNS_HEADER_SIZE];
-        buf[0..2].copy_from_slice(&self.id.to_be_bytes());
+        write_u16_be(&mut buf, 0, self.id);
 
         let mut flags: u16 = 0;
         if self.is_response {
@@ -119,11 +121,11 @@ impl DnsHeader {
         }
         flags |= (self.response_code as u16) & 0x000F;
 
-        buf[2..4].copy_from_slice(&flags.to_be_bytes());
-        buf[4..6].copy_from_slice(&self.question_count.to_be_bytes());
-        buf[6..8].copy_from_slice(&self.answer_count.to_be_bytes());
-        buf[8..10].copy_from_slice(&self.authority_count.to_be_bytes());
-        buf[10..12].copy_from_slice(&self.additional_count.to_be_bytes());
+        write_u16_be(&mut buf, 2, flags);
+        write_u16_be(&mut buf, 4, self.question_count);
+        write_u16_be(&mut buf, 6, self.answer_count);
+        write_u16_be(&mut buf, 8, self.authority_count);
+        write_u16_be(&mut buf, 10, self.additional_count);
         buf
     }
 
@@ -302,8 +304,8 @@ impl DnsQuestion {
 
     fn to_wire_compressed(&self, msg: &[u8]) -> Vec<u8> {
         let mut buf = encode_domain_name_compressed(&self.name, msg);
-        buf.extend_from_slice(&self.qtype.as_u16().to_be_bytes());
-        buf.extend_from_slice(&self.qclass.to_be_bytes());
+        push_u16_be(&mut buf, self.qtype.as_u16());
+        push_u16_be(&mut buf, self.qclass);
         buf
     }
 
@@ -775,12 +777,12 @@ impl DnsRecord {
 
     fn to_wire_compressed(&self, msg: &[u8]) -> Vec<u8> {
         let mut buf = encode_domain_name_compressed(&self.name, msg);
-        buf.extend_from_slice(&self.rtype.as_u16().to_be_bytes());
-        buf.extend_from_slice(&self.rclass.to_be_bytes());
-        buf.extend_from_slice(&self.ttl.to_be_bytes());
+        push_u16_be(&mut buf, self.rtype.as_u16());
+        push_u16_be(&mut buf, self.rclass);
+        push_u32_be(&mut buf, self.ttl);
 
         let rdata = self.data.to_wire(self.rtype);
-        buf.extend_from_slice(&(rdata.len() as u16).to_be_bytes());
+        push_u16_be(&mut buf, rdata.len() as u16);
         buf.extend_from_slice(&rdata);
         buf
     }

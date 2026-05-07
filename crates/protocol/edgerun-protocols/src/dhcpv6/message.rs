@@ -5,7 +5,7 @@ use alloc::format;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
-use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
+use edgerun_encoding::byteorder::{push_u16_be, push_u32_be, read_u16_be, read_u32_be};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -151,13 +151,9 @@ impl Dhcpv6Message {
         let mut options = Vec::new();
 
         // IA_NA option
-        let mut ia_na_data = Vec::new();
-        ia_na_data.extend_from_slice(&iaid.to_be_bytes());
-        ia_na_data.extend_from_slice(&0u32.to_be_bytes()); // T1 (server fills in)
-        ia_na_data.extend_from_slice(&0u32.to_be_bytes()); // T2 (server fills in)
         options.push(super::options::Dhcpv6Option::from_raw(
             super::options::OPT_IA_NA,
-            ia_na_data,
+            ia_na_data(iaid),
         ));
 
         // Client Identifier option
@@ -167,21 +163,20 @@ impl Dhcpv6Message {
         ));
 
         // Elapsed Time option
+        let mut elapsed_data = Vec::with_capacity(2);
+        push_u16_be(&mut elapsed_data, elapsed_ms);
         options.push(super::options::Dhcpv6Option::from_raw(
             super::options::OPT_ELAPSED_TIME,
-            elapsed_ms.to_be_bytes().to_vec(),
+            elapsed_data,
         ));
 
         // Option Request List — what we want (each option code is 2 bytes, big-endian)
-        let mut oro_data = Vec::new();
-        for &code in &[
+        let oro_data = option_request_data(&[
             super::options::OPT_DNS_SERVERS,
             super::options::OPT_DOMAIN_LIST,
             super::options::OPT_SNTP_SERVERS,
             super::options::OPT_NTP_SERVER,
-        ] {
-            oro_data.extend_from_slice(&code.to_be_bytes());
-        }
+        ]);
         options.push(super::options::Dhcpv6Option::from_raw(
             super::options::OPT_ORO,
             oro_data,
@@ -199,13 +194,9 @@ impl Dhcpv6Message {
         let mut options = Vec::new();
 
         // IA_NA option
-        let mut ia_na_data = Vec::new();
-        ia_na_data.extend_from_slice(&iaid.to_be_bytes());
-        ia_na_data.extend_from_slice(&0u32.to_be_bytes());
-        ia_na_data.extend_from_slice(&0u32.to_be_bytes());
         options.push(super::options::Dhcpv6Option::from_raw(
             super::options::OPT_IA_NA,
-            ia_na_data,
+            ia_na_data(iaid),
         ));
 
         // Client Identifier
@@ -231,13 +222,9 @@ impl Dhcpv6Message {
     pub fn renew(iaid: u32, client_duid: &[u8], server_duid: &[u8]) -> Self {
         let mut options = Vec::new();
 
-        let mut ia_na_data = Vec::new();
-        ia_na_data.extend_from_slice(&iaid.to_be_bytes());
-        ia_na_data.extend_from_slice(&0u32.to_be_bytes());
-        ia_na_data.extend_from_slice(&0u32.to_be_bytes());
         options.push(super::options::Dhcpv6Option::from_raw(
             super::options::OPT_IA_NA,
-            ia_na_data,
+            ia_na_data(iaid),
         ));
 
         options.push(super::options::Dhcpv6Option::from_raw(
@@ -263,14 +250,11 @@ impl Dhcpv6Message {
             super::options::OPT_CLIENTID,
             client_duid.to_vec(),
         ));
-        let mut oro_data = Vec::new();
-        for &code in &[
+        let oro_data = option_request_data(&[
             super::options::OPT_DNS_SERVERS,
             super::options::OPT_DOMAIN_LIST,
             super::options::OPT_SNTP_SERVERS,
-        ] {
-            oro_data.extend_from_slice(&code.to_be_bytes());
-        }
+        ]);
         options.push(super::options::Dhcpv6Option::from_raw(
             super::options::OPT_ORO,
             oro_data,
@@ -287,13 +271,9 @@ impl Dhcpv6Message {
     pub fn release(iaid: u32, client_duid: &[u8], server_duid: &[u8]) -> Self {
         let mut options = Vec::new();
 
-        let mut ia_na_data = Vec::new();
-        ia_na_data.extend_from_slice(&iaid.to_be_bytes());
-        ia_na_data.extend_from_slice(&0u32.to_be_bytes());
-        ia_na_data.extend_from_slice(&0u32.to_be_bytes());
         options.push(super::options::Dhcpv6Option::from_raw(
             super::options::OPT_IA_NA,
-            ia_na_data,
+            ia_na_data(iaid),
         ));
 
         options.push(super::options::Dhcpv6Option::from_raw(
@@ -411,6 +391,22 @@ impl Dhcpv6Message {
             })
             .unwrap_or_default()
     }
+}
+
+fn ia_na_data(iaid: u32) -> Vec<u8> {
+    let mut data = Vec::with_capacity(12);
+    push_u32_be(&mut data, iaid);
+    push_u32_be(&mut data, 0); // T1 (server fills in)
+    push_u32_be(&mut data, 0); // T2 (server fills in)
+    data
+}
+
+fn option_request_data(codes: &[u16]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(codes.len() * 2);
+    for &code in codes {
+        push_u16_be(&mut data, code);
+    }
+    data
 }
 
 #[cfg(test)]

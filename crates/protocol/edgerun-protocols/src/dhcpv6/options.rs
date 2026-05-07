@@ -5,7 +5,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::net::Ipv6Addr;
-use edgerun_encoding::byteorder::{read_u16_be, read_u32_be};
+use edgerun_encoding::byteorder::{push_u16_be, push_u32_be, read_u16_be, read_u32_be};
 
 // ---------------------------------------------------------------------------
 // Option codes
@@ -61,9 +61,9 @@ impl Dhcpv6Option {
     /// IAID(4) + T1(4) + T2(4) + [sub-options]
     pub fn ia_na(iaid: u32, t1: u32, t2: u32, sub_options: Vec<Dhcpv6Option>) -> Self {
         let mut data = Vec::new();
-        data.extend_from_slice(&iaid.to_be_bytes());
-        data.extend_from_slice(&t1.to_be_bytes());
-        data.extend_from_slice(&t2.to_be_bytes());
+        push_u32_be(&mut data, iaid);
+        push_u32_be(&mut data, t1);
+        push_u32_be(&mut data, t2);
         for sub in sub_options {
             sub.to_wire(&mut data);
         }
@@ -83,8 +83,8 @@ impl Dhcpv6Option {
     ) -> Self {
         let mut data = Vec::new();
         data.extend_from_slice(&addr.octets());
-        data.extend_from_slice(&preferred_lifetime.to_be_bytes());
-        data.extend_from_slice(&valid_lifetime.to_be_bytes());
+        push_u32_be(&mut data, preferred_lifetime);
+        push_u32_be(&mut data, valid_lifetime);
         for sub in sub_options {
             sub.to_wire(&mut data);
         }
@@ -98,9 +98,9 @@ impl Dhcpv6Option {
     /// IAID(4) + T1(4) + T2(4) + [IAPREFIX sub-options]
     pub fn ia_pd(iaid: u32, t1: u32, t2: u32, sub_options: Vec<Dhcpv6Option>) -> Self {
         let mut data = Vec::new();
-        data.extend_from_slice(&iaid.to_be_bytes());
-        data.extend_from_slice(&t1.to_be_bytes());
-        data.extend_from_slice(&t2.to_be_bytes());
+        push_u32_be(&mut data, iaid);
+        push_u32_be(&mut data, t1);
+        push_u32_be(&mut data, t2);
         for sub in sub_options {
             sub.to_wire(&mut data);
         }
@@ -120,8 +120,8 @@ impl Dhcpv6Option {
         sub_options: Vec<Dhcpv6Option>,
     ) -> Self {
         let mut data = Vec::new();
-        data.extend_from_slice(&preferred_lifetime.to_be_bytes());
-        data.extend_from_slice(&valid_lifetime.to_be_bytes());
+        push_u32_be(&mut data, preferred_lifetime);
+        push_u32_be(&mut data, valid_lifetime);
         data.push(prefix_len);
         data.extend_from_slice(&prefix.octets());
         for sub in sub_options {
@@ -136,7 +136,7 @@ impl Dhcpv6Option {
     /// Create a Status Code option.
     pub fn status_code(status: StatusCode, message: &str) -> Self {
         let mut data = Vec::new();
-        data.extend_from_slice(&(status as u16).to_be_bytes());
+        push_u16_be(&mut data, status as u16);
         data.extend_from_slice(message.as_bytes());
         Self {
             code: OPT_STATUS_CODE,
@@ -177,9 +177,11 @@ impl Dhcpv6Option {
     /// Create an Elapsed Time option (in centiseconds, per RFC 8415).
     /// Note: DHCPv6 uses centiseconds (1/100s), not milliseconds.
     pub fn elapsed_time(cs: u16) -> Self {
+        let mut data = Vec::with_capacity(2);
+        push_u16_be(&mut data, cs);
         Self {
             code: OPT_ELAPSED_TIME,
-            data: cs.to_be_bytes().to_vec(),
+            data,
         }
     }
 
@@ -212,8 +214,8 @@ impl Dhcpv6Option {
 
     /// Serialize this option to wire format.
     pub fn to_wire(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.code.to_be_bytes());
-        buf.extend_from_slice(&(self.data.len() as u16).to_be_bytes());
+        push_u16_be(buf, self.code);
+        push_u16_be(buf, self.data.len() as u16);
         buf.extend_from_slice(&self.data);
     }
 

@@ -16,9 +16,9 @@ use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityGrant, CapabilityInvocation, CapabilityRequest, CapabilityRevocation,
 };
 pub use edgerun_protocols::core_protocol::protocol::capability_runtime::{
-    CapabilityInvocationFrame, CapabilityRemoteEnvelope, CapabilityResultFrame,
-    CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent, CapabilitySessionMode,
-    CapabilitySessionOpen, capability_remote_envelope,
+    capability_remote_envelope, CapabilityInvocationFrame, CapabilityRemoteEnvelope,
+    CapabilityResultFrame, CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,
+    CapabilitySessionMode, CapabilitySessionOpen,
 };
 
 /// Result of a remote capability invocation.

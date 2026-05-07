@@ -938,13 +938,13 @@ fn decode_capability_request_wire(request_bytes: &[u8]) -> Result<CapabilityRequ
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", test))]
 #[derive(Default)]
 pub struct MemoryRuntimeStorage {
     objects: BTreeMap<(Vec<u8>, [u8; 32]), Vec<u8>>,
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", test))]
 impl RuntimeStorage for MemoryRuntimeStorage {
     fn read(&mut self, namespace: &[u8], key: &[u8]) -> Result<Option<Vec<u8>>, RuntimeError> {
         let key: [u8; 32] = key.try_into().map_err(|_| RuntimeError::StorageDenied)?;

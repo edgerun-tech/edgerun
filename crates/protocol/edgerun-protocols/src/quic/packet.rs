@@ -6,7 +6,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use edgerun_encoding::byteorder::{read_u32_be, read_u64_be};
+use edgerun_encoding::byteorder::{push_u32_be, read_u32_be, read_u64_be};
 use edgerun_encoding::quic_varint::{
     decode_varint as quic_decode_varint, encode_varint as quic_encode_varint,
 };
@@ -127,7 +127,7 @@ impl QuicPacket {
         // First byte: 0xF0 | fixed bit (1)
         output.push(0xF1);
         // Version
-        output.extend_from_slice(&version.to_be_bytes());
+        push_u32_be(&mut output, version);
         // DCID length + data
         output.push(dst_cid.len() as u8);
         output.extend_from_slice(&dst_cid);
@@ -209,7 +209,7 @@ impl QuicPacket {
                 let pn_length = self.long_header_packet_number_length();
                 let first_byte = self.header.packet_type.to_byte() | 0x0C | (pn_length as u8 - 1);
                 output.push(first_byte);
-                output.extend_from_slice(&self.header.version.to_be_bytes());
+                push_u32_be(&mut output, self.header.version);
                 output.push(self.header.dst_cid.len() as u8);
                 output.extend_from_slice(&self.header.dst_cid);
                 output.push(self.header.src_cid.len() as u8);
@@ -237,7 +237,7 @@ impl QuicPacket {
             }
             PacketType::Retry => {
                 output.push(0xF1);
-                output.extend_from_slice(&self.header.version.to_be_bytes());
+                push_u32_be(&mut output, self.header.version);
                 output.push(self.header.dst_cid.len() as u8);
                 output.extend_from_slice(&self.header.dst_cid);
                 output.push(self.header.src_cid.len() as u8);

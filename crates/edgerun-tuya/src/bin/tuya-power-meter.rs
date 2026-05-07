@@ -1,7 +1,8 @@
 use edgerun_tuya::{
     decode_json_payload, decrypt_6699_payload, derive_v35_session_key, pack_6699_with_iv,
-    strip_retcode, TuyaProtocolError, DP_QUERY_NEW, PREFIX_55AA, PREFIX_6699, SESS_KEY_NEG_FINISH,
-    SESS_KEY_NEG_RESP, SESS_KEY_NEG_START, SUFFIX_55AA, SUFFIX_6699,
+    parse_55aa_body_len, parse_55aa_wire_message, parse_6699_body_len, parse_6699_wire_message,
+    strip_retcode, TuyaProtocolError, TuyaWireMessage, DP_QUERY_NEW, PREFIX_55AA, PREFIX_6699,
+    SESS_KEY_NEG_FINISH, SESS_KEY_NEG_RESP, SESS_KEY_NEG_START,
 };
 use std::env;
 use std::io::{self, Read, Write};
@@ -123,13 +124,6 @@ fn query_v35_status(ip: &str, local_key: &[u8], verbose: bool) -> io::Result<Str
     decode_json_payload(&payload).map_err(protocol_error)
 }
 
-struct TuyaWireMessage {
-    prefix: u32,
-    cmd: u32,
-    payload: Vec<u8>,
-    raw_header: Vec<u8>,
-}
-
 fn read_tuya_message(stream: &mut TcpStream) -> io::Result<TuyaWireMessage> {
     let mut prefix_bytes = [0u8; 4];
     stream.read_exact(&mut prefix_bytes)?;
@@ -144,53 +138,19 @@ fn read_tuya_message(stream: &mut TcpStream) -> io::Result<TuyaWireMessage> {
 fn read_55aa(stream: &mut TcpStream, prefix: [u8; 4]) -> io::Result<TuyaWireMessage> {
     let mut header_rest = [0u8; 12];
     stream.read_exact(&mut header_rest)?;
-    let seq = u32::from_be_bytes(header_rest[0..4].try_into().unwrap());
-    let cmd = u32::from_be_bytes(header_rest[4..8].try_into().unwrap());
-    let len = u32::from_be_bytes(header_rest[8..12].try_into().unwrap()) as usize;
-    if len < 8 || len > 4096 {
-        return Err(invalid_data("invalid 55aa length"));
-    }
+    let len = parse_55aa_body_len(&header_rest).map_err(protocol_error)?;
     let mut body = vec![0u8; len];
     stream.read_exact(&mut body)?;
-    let suffix = u32::from_be_bytes(body[len - 4..len].try_into().unwrap());
-    if suffix != SUFFIX_55AA {
-        return Err(invalid_data("invalid 55aa suffix"));
-    }
-    let mut raw_header = Vec::with_capacity(16);
-    raw_header.extend_from_slice(&prefix);
-    raw_header.extend_from_slice(&header_rest);
-    let _ = seq;
-    Ok(TuyaWireMessage {
-        prefix: PREFIX_55AA,
-        cmd,
-        payload: body[..len - 8].to_vec(),
-        raw_header,
-    })
+    parse_55aa_wire_message(prefix, &header_rest, &body).map_err(protocol_error)
 }
 
 fn read_6699(stream: &mut TcpStream, prefix: [u8; 4]) -> io::Result<TuyaWireMessage> {
     let mut header_rest = [0u8; 14];
     stream.read_exact(&mut header_rest)?;
-    let cmd = u32::from_be_bytes(header_rest[6..10].try_into().unwrap());
-    let len = u32::from_be_bytes(header_rest[10..14].try_into().unwrap()) as usize;
-    if len < 28 || len > 4096 {
-        return Err(invalid_data("invalid 6699 length"));
-    }
+    let len = parse_6699_body_len(&header_rest).map_err(protocol_error)?;
     let mut body = vec![0u8; len + 4];
     stream.read_exact(&mut body)?;
-    let suffix = u32::from_be_bytes(body[len..len + 4].try_into().unwrap());
-    if suffix != SUFFIX_6699 {
-        return Err(invalid_data("invalid 6699 suffix"));
-    }
-    let mut raw_header = Vec::with_capacity(18);
-    raw_header.extend_from_slice(&prefix);
-    raw_header.extend_from_slice(&header_rest);
-    Ok(TuyaWireMessage {
-        prefix: PREFIX_6699,
-        cmd,
-        payload: body[..len].to_vec(),
-        raw_header,
-    })
+    parse_6699_wire_message(prefix, &header_rest, &body).map_err(protocol_error)
 }
 
 fn pack_6699(seq: u32, cmd: u32, payload: &[u8], key: &[u8]) -> io::Result<Vec<u8>> {

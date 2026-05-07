@@ -8,7 +8,10 @@ use alloc::format;
 use alloc::string::FromUtf8Error;
 use alloc::vec;
 use core::fmt;
-use edgerun_encoding::byteorder::{read_i32_le, read_u16_le, read_u32_le, read_u64_le};
+use edgerun_encoding::byteorder::{
+    push_i32_le, push_u16_le, push_u32_le, push_u64_le, read_i32_le, read_u16_le, read_u32_le,
+    read_u64_le,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DbusWireError {
@@ -332,16 +335,16 @@ impl Wtr {
         self.d.push(v);
     }
     fn u16(&mut self, v: u16) {
-        self.d.extend_from_slice(&v.to_le_bytes());
+        push_u16_le(&mut self.d, v);
     }
     fn i32(&mut self, v: i32) {
-        self.d.extend_from_slice(&v.to_le_bytes());
+        push_i32_le(&mut self.d, v);
     }
     fn u32(&mut self, v: u32) {
-        self.d.extend_from_slice(&v.to_le_bytes());
+        push_u32_le(&mut self.d, v);
     }
     fn u64(&mut self, v: u64) {
-        self.d.extend_from_slice(&v.to_le_bytes());
+        push_u64_le(&mut self.d, v);
     }
     fn ss(&mut self, s: &str) {
         let b = s.as_bytes();
@@ -534,9 +537,9 @@ pub fn encode_msg(msg: &Msg) -> Vec<u8> {
     out.push(msg.mt as u8);
     out.push(msg.fl);
     out.push(1);
-    out.extend_from_slice(&(bdata.len() as u32).to_le_bytes());
-    out.extend_from_slice(&msg.ser.to_le_bytes());
-    out.extend_from_slice(&(hfd.len() as u32).to_le_bytes());
+    push_u32_le(&mut out, bdata.len() as u32);
+    push_u32_le(&mut out, msg.ser);
+    push_u32_le(&mut out, hfd.len() as u32);
     out.extend_from_slice(&hfd);
     out.extend(core::iter::repeat_n(0, pad));
     out.extend_from_slice(&bdata);

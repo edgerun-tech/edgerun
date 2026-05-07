@@ -5,7 +5,7 @@ use edgerun_protocols::core_protocol::protocol::ObjectRef;
 use std::sync::Arc;
 
 use crate::blobs::BlobStore;
-use crate::core::{ContentStore, ObjectBytes, cas::raw_object_ids};
+use crate::core::{cas::raw_object_ids, ContentStore, ObjectBytes};
 use crate::error::StorageError;
 use crate::file_index::FileIndex;
 

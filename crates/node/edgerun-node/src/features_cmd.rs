@@ -258,11 +258,11 @@ fn android_keystore_self_test() -> Result<String, String> {
 
 #[cfg(feature = "acme")]
 fn acme_self_test() -> Result<String, String> {
-    let account = edgerun_acme::AccountKey::generate();
-    let challenge = edgerun_acme::Dns01Challenge::new(
+    let orchestrator = crate::services::acme_runtime::NodeAcmeOrchestrator::default();
+    let challenge = orchestrator.dns01_plan(
         "selftest.edgerun.local",
         "edgerund-acme-token",
-        &account.thumbprint_b64(),
+        "edgerund-acme-account-thumbprint",
     );
     if challenge.record_name() != "_acme-challenge.selftest.edgerun.local" {
         return Err(format!(
@@ -368,9 +368,9 @@ fn tftp_loopback_self_test() -> Result<String, String> {
 
 #[cfg(feature = "tls")]
 fn tls_self_test() -> Result<String, String> {
-    let cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"])
+    let cert = edgerun_protocols::tls::generate_self_signed(&["localhost", "127.0.0.1"])
         .map_err(|e| format!("tls self-signed cert: {e}"))?;
-    let parsed = edgerun_tls::certificate::Certificate::from_der(&cert.cert_der)
+    let parsed = edgerun_protocols::tls::certificate::Certificate::from_der(&cert.cert_der)
         .map_err(|e| format!("tls parse generated cert: {e}"))?;
     if cert.cert_der.len() < 100 {
         return Err("generated TLS certificate was unexpectedly small".into());
@@ -403,7 +403,7 @@ fn quic_self_test() -> Result<String, String> {
     use edgerun_protocols::quic::handshake::QuicTlsHandshaker;
     use edgerun_protocols::quic::server_handshake::{CertificateAndKey, QuicTlsServerHandshaker};
 
-    let cert = edgerun_tls::certificate_gen::generate_self_signed(&["localhost"])
+    let cert = edgerun_protocols::tls::certificate_gen::generate_self_signed(&["localhost"])
         .map_err(|e| format!("quic tls cert: {e}"))?;
     let cert_and_key = CertificateAndKey::from(cert);
     let mut server = QuicTlsServerHandshaker::new(cert_and_key);

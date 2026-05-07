@@ -39,7 +39,8 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::str::FromStr;
-use edgerun_encoding::byteorder::read_u16_be;
+use edgerun_encoding::byteorder::{push_u16_be, read_u16_be, write_u16_be};
+use edgerun_encoding::cstring::{decode_c_string_pairs_lossy, read_c_string_lossy_at};
 
 pub mod io {
     use alloc::string::{String, ToString};
@@ -309,7 +310,7 @@ impl TftpMessage {
                 raw_options,
             } => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&1u16.to_be_bytes()); // RRQ opcode
+                push_u16_be(&mut buf, 1); // RRQ opcode
                 buf.extend_from_slice(filename.as_bytes());
                 buf.push(0);
                 buf.extend_from_slice(mode.as_bytes());
@@ -345,7 +346,7 @@ impl TftpMessage {
 
             Self::WRQ { filename, mode } => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&2u16.to_be_bytes()); // WRQ opcode
+                push_u16_be(&mut buf, 2); // WRQ opcode
                 buf.extend_from_slice(filename.as_bytes());
                 buf.push(0);
                 buf.extend_from_slice(mode.as_bytes());
@@ -355,23 +356,23 @@ impl TftpMessage {
 
             Self::DATA { block, data } => {
                 let mut buf = Vec::with_capacity(4 + data.len());
-                buf.extend_from_slice(&3u16.to_be_bytes()); // DATA opcode
-                buf.extend_from_slice(&block.to_be_bytes());
+                push_u16_be(&mut buf, 3); // DATA opcode
+                push_u16_be(&mut buf, *block);
                 buf.extend_from_slice(data);
                 buf
             }
 
             Self::ACK { block } => {
                 let mut buf = vec![0u8; 4];
-                buf[0..2].copy_from_slice(&4u16.to_be_bytes()); // ACK opcode
-                buf[2..4].copy_from_slice(&block.to_be_bytes());
+                write_u16_be(&mut buf, 0, 4); // ACK opcode
+                write_u16_be(&mut buf, 2, *block);
                 buf
             }
 
             Self::ERROR { code, message } => {
                 let mut buf = Vec::with_capacity(4 + message.len() + 1);
-                buf.extend_from_slice(&5u16.to_be_bytes()); // ERROR opcode
-                buf.extend_from_slice(&(*code as u16).to_be_bytes());
+                push_u16_be(&mut buf, 5); // ERROR opcode
+                push_u16_be(&mut buf, *code as u16);
                 buf.extend_from_slice(message.as_bytes());
                 buf.push(0);
                 buf
@@ -379,7 +380,7 @@ impl TftpMessage {
 
             Self::OACK { options } => {
                 let mut buf = Vec::new();
-                buf.extend_from_slice(&6u16.to_be_bytes()); // OACK opcode
+                push_u16_be(&mut buf, 6); // OACK opcode
                 buf.extend_from_slice(&options.to_wire());
                 buf
             }
@@ -510,41 +511,12 @@ impl TftpError {
 // ---------------------------------------------------------------------------
 
 fn read_string(data: &[u8], offset: usize) -> Result<(String, usize), io::Error> {
-    let end = data[offset..]
-        .iter()
-        .position(|&b| b == 0)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Unterminated string"))?;
-    let s = String::from_utf8_lossy(&data[offset..offset + end]).to_string();
-    Ok((s, offset + end + 1))
+    read_c_string_lossy_at(data, offset)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Unterminated string"))
 }
 
 fn parse_string_pairs(data: &[u8], offset: usize) -> Vec<(String, String)> {
-    let mut pairs = Vec::new();
-    let mut pos = offset;
-    while pos < data.len() {
-        if data[pos] == 0 {
-            break; // trailing null
-        }
-        let name_end = match data[pos..].iter().position(|&b| b == 0) {
-            Some(e) => pos + e,
-            None => break,
-        };
-        let name = String::from_utf8_lossy(&data[pos..name_end]).to_string();
-        pos = name_end + 1;
-
-        if pos >= data.len() {
-            break;
-        }
-        let val_end = match data[pos..].iter().position(|&b| b == 0) {
-            Some(e) => pos + e,
-            None => break,
-        };
-        let value = String::from_utf8_lossy(&data[pos..val_end]).to_string();
-        pos = val_end + 1;
-
-        pairs.push((name, value));
-    }
-    pairs
+    decode_c_string_pairs_lossy(data, offset)
 }
 
 // ---------------------------------------------------------------------------

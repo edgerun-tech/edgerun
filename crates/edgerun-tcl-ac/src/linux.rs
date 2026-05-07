@@ -9,13 +9,13 @@ use core::result::Result::{Err, Ok};
 use edgerun_bluetooth_gatt::sync::RwLock;
 use edgerun_bluetooth_gatt::{format_gatt_uuid, AttProtocol, GattError, L2capSocket};
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
-use edgerun_crypto::aes::{Aes128, AES_BLOCK_SIZE};
-use edgerun_crypto::{hmac_sha256, OsRng, RngCore};
+use edgerun_crypto::{OsRng, RngCore};
 use edgerun_protocols::tcl_ac::{
-    build_protocol_packet, calculate_crc8, expected_protocol_packet_len, full_control_payload,
-    parse_protocol_packet, parse_state_response, CMD_GET_DEVICE_INFO, CMD_GET_DEVICE_INFO_RESPONSE,
-    CMD_SEND_APP_RANDOM, CMD_SEND_DEVICE_RANDOM, CMD_SEND_WIFI_INFO, CMD_STATUS_REPORT_RESPONSE,
-    PROTOCOL_HEAD,
+    build_protocol_packet, calculate_crc8, decrypt_payload as decrypt_protocol_payload,
+    derive_session_key, encrypt_payload as encrypt_protocol_payload, expected_protocol_packet_len,
+    full_control_payload, legacy_provision_payload_with_hosts, parse_protocol_packet,
+    parse_state_response, CMD_GET_DEVICE_INFO, CMD_GET_DEVICE_INFO_RESPONSE, CMD_SEND_APP_RANDOM,
+    CMD_SEND_DEVICE_RANDOM, CMD_SEND_WIFI_INFO, CMD_STATUS_REPORT_RESPONSE, PROTOCOL_HEAD,
 };
 pub use edgerun_protocols::tcl_ac::{AcMode, AcState, FanSpeed, WindDirection};
 #[cfg(not(target_os = "none"))]
@@ -28,8 +28,6 @@ pub const TCL_LEGACY_SERVICE_UUID: &str = "0000f100-0000-1000-8000-00805f9b34fb"
 pub const TCL_LEGACY_WRITE_CHAR_UUID: &str = "0000f101-0000-1000-8000-00805f9b34fb";
 pub const TCL_LEGACY_INDICATE_CHAR_UUID: &str = "0000f102-0000-1000-8000-00805f9b34fb";
 
-const BASE_KEY: &[u8; 16] = b"p7#z9@L2!c5%v1&k";
-const PRESET_IV: &[u8; 16] = b"GjVEI7lQ382O7Ua0";
 #[cfg(not(target_os = "none"))]
 fn sleep_ms(ms: u64) {
     std::thread::sleep(std::time::Duration::from_millis(ms));
@@ -226,17 +224,7 @@ impl TclAcClient {
     }
 
     fn derive_session_key(&self, local_random: &[u8; 32], remote_random: &[u8; 32]) -> [u8; 16] {
-        let mut combined = [0u8; 64];
-        combined[..32].copy_from_slice(local_random);
-        combined[32..].copy_from_slice(remote_random);
-
-        let prk = hmac_sha256(&combined, BASE_KEY);
-        let mut info = Vec::new();
-        info.push(1);
-        let okm = hmac_sha256(&prk, &info);
-        let mut key = [0u8; 16];
-        key.copy_from_slice(&okm[..16]);
-        key
+        derive_session_key(local_random, remote_random)
     }
 
     fn perform_key_exchange(&self) -> Result<(), CapabilityError> {
@@ -289,16 +277,16 @@ impl TclAcClient {
 
     fn encrypt_payload(&self, payload: &[u8]) -> Vec<u8> {
         let session = self.session.read().unwrap();
-        let key = session.as_ref().map(|s| &s.session_key).unwrap_or(BASE_KEY);
+        let key = session.as_ref().map(|s| &s.session_key);
 
-        aes128_cbc_encrypt_pkcs7(key, PRESET_IV, payload)
+        encrypt_protocol_payload(key, payload)
     }
 
     fn decrypt_payload(&self, payload: &[u8]) -> Option<Vec<u8>> {
         let session = self.session.read().unwrap();
-        let key = session.as_ref().map(|s| &s.session_key).unwrap_or(BASE_KEY);
+        let key = session.as_ref().map(|s| &s.session_key);
 
-        aes128_cbc_decrypt_pkcs7(key, PRESET_IV, payload)
+        decrypt_protocol_payload(key, payload)
     }
 
     fn wait_for_protocol_packet(&self, timeout_ms: i32) -> Result<Vec<u8>, CapabilityError> {
@@ -623,39 +611,18 @@ impl TclAcClient {
         tenant_id: Option<&str>,
         new_product_key: Option<&str>,
     ) -> String {
-        let msg_id = ((now_ms() / 1000) % 900 + 100).to_string();
-        let mut params = Vec::new();
-        push_json_field(&mut params, "bindCode", bind_code);
-        push_json_field(&mut params, "ssid", ssid);
-        push_json_field(&mut params, "token", token);
-        params.push(format!("\"timestamp\":{}", now_ms() / 1000));
-        params.push("\"timezone\":7".to_string());
-        push_json_field(&mut params, "timearea", "Asia/Bangkok");
-        params.push("\"serverPort\":443".to_string());
-        push_json_field(&mut params, "cloudType", "AWS");
-        push_json_field(&mut params, "caType", "release");
-        if let Some(value) = server_host.filter(|s| !s.is_empty()) {
-            push_json_field(&mut params, "serverHost", normalize_commission_host(value));
-        }
-        if let Some(value) = server_host_v2.filter(|s| !s.is_empty()) {
-            push_json_field(
-                &mut params,
-                "serverHostV2",
-                normalize_commission_host(value),
-            );
-        }
-        if let Some(value) = tenant_id.filter(|s| !s.is_empty()) {
-            push_json_field(&mut params, "tenantId", value);
-            push_json_field(&mut params, "stationId", value);
-        }
-        if let Some(value) = new_product_key.filter(|s| !s.is_empty()) {
-            push_json_field(&mut params, "newProductKey", value);
-        }
-
-        format!(
-            "{{\"msgId\":\"{}\",\"method\":\"setReq\",\"version\":\"1\",\"params\":{{{}}}}}",
-            msg_id,
-            params.join(",")
+        let unix_seconds = now_ms() / 1000;
+        let msg_id = (unix_seconds % 900 + 100).to_string();
+        legacy_provision_payload_with_hosts(
+            &msg_id,
+            unix_seconds,
+            ssid,
+            token,
+            bind_code,
+            server_host,
+            server_host_v2,
+            tenant_id,
+            new_product_key,
         )
     }
 
@@ -766,33 +733,6 @@ fn uuid_matches(raw: &[u8], expected: &str) -> bool {
     actual == expected || (actual.len() == 4 && expected.starts_with(&format!("0000{}", actual)))
 }
 
-fn push_json_field(fields: &mut Vec<String>, key: &str, value: &str) {
-    fields.push(format!("\"{}\":\"{}\"", key, json_escape(value)));
-}
-
-fn normalize_commission_host(value: &str) -> &str {
-    let value = value
-        .strip_prefix("https://")
-        .or_else(|| value.strip_prefix("http://"))
-        .unwrap_or(value);
-    value.strip_suffix(":443").unwrap_or(value)
-}
-
-fn json_escape(value: &str) -> String {
-    let mut escaped = String::new();
-    for ch in value.chars() {
-        match ch {
-            '"' => escaped.push_str("\\\""),
-            '\\' => escaped.push_str("\\\\"),
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            '\t' => escaped.push_str("\\t"),
-            c => escaped.push(c),
-        }
-    }
-    escaped
-}
-
 #[cfg(not(target_os = "none"))]
 fn now_ms() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -805,63 +745,6 @@ fn now_ms() -> u64 {
 #[cfg(target_os = "none")]
 fn now_ms() -> u64 {
     0
-}
-
-fn aes128_cbc_encrypt_pkcs7(key: &[u8; 16], iv: &[u8; 16], payload: &[u8]) -> Vec<u8> {
-    let cipher = Aes128::new(key);
-    let pad_len = AES_BLOCK_SIZE - (payload.len() % AES_BLOCK_SIZE);
-    let mut out = Vec::with_capacity(payload.len() + pad_len);
-    out.extend_from_slice(payload);
-    out.extend(core::iter::repeat(pad_len as u8).take(pad_len));
-
-    let mut previous = *iv;
-    for block in out.chunks_exact_mut(AES_BLOCK_SIZE) {
-        for i in 0..AES_BLOCK_SIZE {
-            block[i] ^= previous[i];
-        }
-        let mut plaintext = [0u8; AES_BLOCK_SIZE];
-        plaintext.copy_from_slice(block);
-        let encrypted = cipher.encrypt_block(&plaintext);
-        block.copy_from_slice(&encrypted);
-        previous = encrypted;
-    }
-
-    out
-}
-
-fn aes128_cbc_decrypt_pkcs7(key: &[u8; 16], iv: &[u8; 16], payload: &[u8]) -> Option<Vec<u8>> {
-    if payload.is_empty() || payload.len() % AES_BLOCK_SIZE != 0 {
-        return None;
-    }
-
-    let cipher = Aes128::new(key);
-    let mut out = Vec::with_capacity(payload.len());
-    let mut previous = *iv;
-
-    for block in payload.chunks_exact(AES_BLOCK_SIZE) {
-        let mut encrypted = [0u8; AES_BLOCK_SIZE];
-        encrypted.copy_from_slice(block);
-        let mut decrypted = cipher.decrypt_block(&encrypted);
-        for i in 0..AES_BLOCK_SIZE {
-            decrypted[i] ^= previous[i];
-        }
-        out.extend_from_slice(&decrypted);
-        previous = encrypted;
-    }
-
-    let pad_len = *out.last()? as usize;
-    if pad_len == 0 || pad_len > AES_BLOCK_SIZE || pad_len > out.len() {
-        return None;
-    }
-    if !out[out.len() - pad_len..]
-        .iter()
-        .all(|byte| *byte as usize == pad_len)
-    {
-        return None;
-    }
-
-    out.truncate(out.len() - pad_len);
-    Some(out)
 }
 
 impl Default for TclAcClient {
@@ -945,15 +828,18 @@ mod tests {
 
     #[test]
     fn aes_cbc_roundtrips_payloads() {
+        use edgerun_protocols::tcl_ac::{
+            decrypt_payload_with_key, encrypt_payload_with_key, BASE_KEY,
+        };
         for payload in [
             b"".as_slice(),
             b"short".as_slice(),
             b"sixteen byte msg".as_slice(),
         ] {
-            let encrypted = aes128_cbc_encrypt_pkcs7(BASE_KEY, PRESET_IV, payload);
+            let encrypted = encrypt_payload_with_key(BASE_KEY, payload);
             assert_eq!(encrypted.len() % 16, 0);
             assert_eq!(
-                aes128_cbc_decrypt_pkcs7(BASE_KEY, PRESET_IV, &encrypted).as_deref(),
+                decrypt_payload_with_key(BASE_KEY, &encrypted).as_deref(),
                 Some(payload)
             );
         }
@@ -961,12 +847,12 @@ mod tests {
 
     #[test]
     fn aes_cbc_rejects_bad_padding() {
-        let mut encrypted = aes128_cbc_encrypt_pkcs7(BASE_KEY, PRESET_IV, b"payload");
+        use edgerun_protocols::tcl_ac::{
+            decrypt_payload_with_key, encrypt_payload_with_key, BASE_KEY,
+        };
+        let mut encrypted = encrypt_payload_with_key(BASE_KEY, b"payload");
         let last = encrypted.len() - 1;
         encrypted[last] ^= 0xff;
-        assert_eq!(
-            aes128_cbc_decrypt_pkcs7(BASE_KEY, PRESET_IV, &encrypted),
-            None
-        );
+        assert_eq!(decrypt_payload_with_key(BASE_KEY, &encrypted), None);
     }
 }

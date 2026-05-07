@@ -16,7 +16,7 @@ use alloc::{
 };
 use edgerun_crypto::sha::{Digest, Sha256, Sha384};
 use edgerun_crypto::sha1::Digest as Sha1Digest;
-use edgerun_encoding::byteorder::read_u16_be;
+use edgerun_encoding::byteorder::{push_u16_be, push_u32_be, read_u16_be};
 
 use crate::dns::message::DnsRecord;
 use crate::dns::record::{DnsRecordData, DnsRecordType};
@@ -157,13 +157,13 @@ fn build_signed_data(rrset: &[DnsRecord], rrsig: &DnsRecord) -> Vec<u8> {
         let mut data = Vec::new();
 
         // RRSIG RDATA without the signature itself
-        data.extend_from_slice(&type_covered.to_be_bytes());
+        push_u16_be(&mut data, *type_covered);
         data.push(*algorithm);
         data.push(*labels);
-        data.extend_from_slice(&original_ttl.to_be_bytes());
-        data.extend_from_slice(&expiration.to_be_bytes());
-        data.extend_from_slice(&inception.to_be_bytes());
-        data.extend_from_slice(&key_tag.to_be_bytes());
+        push_u32_be(&mut data, *original_ttl);
+        push_u32_be(&mut data, *expiration);
+        push_u32_be(&mut data, *inception);
+        push_u16_be(&mut data, *key_tag);
         data.extend_from_slice(&crate::dns::record::encode_domain_name(signer_name));
 
         let mut sorted: Vec<_> = rrset.to_vec();
@@ -176,12 +176,12 @@ fn build_signed_data(rrset: &[DnsRecord], rrsig: &DnsRecord) -> Vec<u8> {
             // Owner name in canonical form (lowercase)
             data.extend_from_slice(&canonical_name_bytes(&rr.name));
             // Type, class, original TTL, RDLENGTH
-            data.extend_from_slice(&rr.rtype.as_u16().to_be_bytes());
-            data.extend_from_slice(&rr.rclass.to_be_bytes());
-            data.extend_from_slice(&original_ttl.to_be_bytes());
+            push_u16_be(&mut data, rr.rtype.as_u16());
+            push_u16_be(&mut data, rr.rclass);
+            push_u32_be(&mut data, *original_ttl);
             // RDATA in canonical form
             let rdata = rr.data.to_wire(rr.rtype);
-            data.extend_from_slice(&(rdata.len() as u16).to_be_bytes());
+            push_u16_be(&mut data, rdata.len() as u16);
             data.extend_from_slice(&rdata);
         }
 

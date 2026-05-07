@@ -375,6 +375,7 @@ dependencies = [
  "edgerun-capabilities",
  "edgerun-encoding",
  "edgerun-linux-sysfs",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -410,6 +411,7 @@ name = "edgerun-cec"
 version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -621,6 +623,7 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-fingerprint",
  "edgerun-linux-sysfs",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -853,6 +856,7 @@ dependencies = [
  "edgerun-bluetooth",
  "edgerun-capabilities",
  "edgerun-encoding",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -882,7 +886,6 @@ dependencies = [
 name = "edgerun-node"
 version = "0.1.1"
 dependencies = [
- "edgerun-acme",
  "edgerun-alsa-microphone",
  "edgerun-alsa-speaker",
  "edgerun-amd-xdna",
@@ -936,7 +939,6 @@ dependencies = [
  "edgerun-speaker",
  "edgerun-storage",
  "edgerun-stream",
- "edgerun-tls",
  "edgerun-tpm",
  "edgerun-url",
  "edgerun-usb",
@@ -991,6 +993,7 @@ dependencies = [
  "edgerun-capabilities",
  "edgerun-crypto",
  "edgerun-nfc",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -1165,7 +1168,6 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-log",
  "edgerun-protocols",
- "edgerun-rt",
  "edgerun-stream",
  "edgerun-virtual-disk",
 ]
@@ -1207,11 +1209,9 @@ version = "0.1.1"
 name = "edgerun-tls"
 version = "0.1.1"
 dependencies = [
- "edgerun-acme",
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-protocols",
- "edgerun-rt",
 ]
 
 [[package]]
@@ -1309,7 +1309,6 @@ dependencies = [
  "edgerun-inotify",
  "edgerun-log",
  "edgerun-regex",
- "edgerun-rt",
 ]
 
 [[package]]
@@ -1326,7 +1325,6 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-protocols",
- "edgerun-rt",
 ]
 
 [[package]]

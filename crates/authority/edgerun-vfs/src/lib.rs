@@ -89,7 +89,101 @@ pub use vfs::{Changeset, FileContent, FileMeta, PersistResult, VirtualFileSystem
 pub type SharedVFS = std::sync::Arc<std::sync::RwLock<VirtualFileSystem>>;
 
 #[cfg(target_os = "none")]
-pub type SharedVFS = alloc::sync::Arc<edgerun_rt::RwLock<VirtualFileSystem>>;
+pub type SharedVFS = alloc::sync::Arc<sync::RwLock<VirtualFileSystem>>;
+
+#[cfg(target_os = "none")]
+mod sync {
+    use core::cell::UnsafeCell;
+    use core::ops::{Deref, DerefMut};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    pub struct RwLock<T> {
+        data: UnsafeCell<T>,
+        state: AtomicUsize,
+    }
+
+    unsafe impl<T: Send> Send for RwLock<T> {}
+    unsafe impl<T: Send> Sync for RwLock<T> {}
+
+    impl<T> RwLock<T> {
+        pub fn new(data: T) -> Self {
+            Self {
+                data: UnsafeCell::new(data),
+                state: AtomicUsize::new(0),
+            }
+        }
+
+        pub fn read(&self) -> RwLockReadGuard<'_, T> {
+            loop {
+                let state = self.state.load(Ordering::Acquire);
+                if state & 1 != 0 {
+                    core::hint::spin_loop();
+                    continue;
+                }
+                if self
+                    .state
+                    .compare_exchange_weak(state, state + 2, Ordering::Acquire, Ordering::Relaxed)
+                    .is_ok()
+                {
+                    return RwLockReadGuard { lock: self };
+                }
+            }
+        }
+
+        pub fn write(&self) -> RwLockWriteGuard<'_, T> {
+            while self
+                .state
+                .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+                .is_err()
+            {
+                core::hint::spin_loop();
+            }
+            RwLockWriteGuard { lock: self }
+        }
+    }
+
+    pub struct RwLockReadGuard<'a, T> {
+        lock: &'a RwLock<T>,
+    }
+
+    impl<T> Deref for RwLockReadGuard<'_, T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.lock.data.get() }
+        }
+    }
+
+    impl<T> Drop for RwLockReadGuard<'_, T> {
+        fn drop(&mut self) {
+            self.lock.state.fetch_sub(2, Ordering::Release);
+        }
+    }
+
+    pub struct RwLockWriteGuard<'a, T> {
+        lock: &'a RwLock<T>,
+    }
+
+    impl<T> Deref for RwLockWriteGuard<'_, T> {
+        type Target = T;
+
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.lock.data.get() }
+        }
+    }
+
+    impl<T> DerefMut for RwLockWriteGuard<'_, T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            unsafe { &mut *self.lock.data.get() }
+        }
+    }
+
+    impl<T> Drop for RwLockWriteGuard<'_, T> {
+        fn drop(&mut self) {
+            self.lock.state.fetch_and(!1, Ordering::Release);
+        }
+    }
+}
 
 #[cfg(target_os = "none")]
 pub type Path = str;
