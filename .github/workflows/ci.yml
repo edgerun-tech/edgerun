@@ -18,7 +18,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
           targets: x86_64-unknown-linux-musl
 
       - uses: Swatinem/rust-cache@v2
@@ -28,6 +28,9 @@ jobs:
 
       - name: Format check
         run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --workspace
 
       - name: Workspace metadata
         run: cargo metadata --no-deps --format-version 1 >/tmp/edgerun_metadata.json
@@ -64,8 +67,53 @@ jobs:
       - name: Package previews
         run: |
           cargo package -p edgerun-log --list --allow-dirty
-          cargo package -p edgerun-proto --list --allow-dirty
+          cargo package -p edgerun-wire --list --allow-dirty
           cargo package -p edgerun-core --list --allow-dirty
 
       - name: Release binary check
         run: cargo check -p edgerun-node
+
+      - name: Docker build check
+        run: docker build --target builder --file Dockerfile .
+
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Integration targets
+        run: ./scripts/integration-tests.py --list
+
+      - name: Integration tests
+        run: ./scripts/integration-tests.py
+
+      - name: Benchmark entry points
+        run: ./scripts/benchmark-report.py --list
+
+      - name: Benchmark smoke
+        run: ./scripts/benchmark-report.py
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Rust coverage report
+        env:
+          RUST_COVERAGE_PACKAGES: edgerun-core edgerun-stream edgerun-storage edgerun-node
+        run: ./scripts/coverage-report.sh --rust-only --require-rust-tool
+
+      - name: Upload Rust coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-coverage
+          path: target/coverage/rust
+
+      - name: Upload benchmark reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-reports
+          path: target/benchmarks

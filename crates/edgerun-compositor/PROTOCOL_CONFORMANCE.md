@@ -1,6 +1,6 @@
 # edgerun-compositor — Wayland Protocol Conformance
 
-A hand-coded Wayland compositor with zero external C dependencies. All protocol handling is written in Rust against a custom wire encoding/decoding layer (`src/wire/`). No `wayland-scanner` or code generation is used.
+A hand-coded Wayland compositor with zero external C dependencies. Wayland protocol bytes, opcode constants, argument signatures, and event builders live in `edgerun-protocols::wayland`; compositor-local code owns dispatch, fd passing, DRM, input, and runtime state. No `wayland-scanner` or code generation is used.
 
 ## Protocol Architecture
 
@@ -21,8 +21,8 @@ A hand-coded Wayland compositor with zero external C dependencies. All protocol 
   - `wlroots_ext.rs` — screencopy, primary_selection, data_control
   - `ime.rs` — text_input_v3, input_method_v2
 - **Input processing**: `dispatch_legacy.rs` handles evdev input event dispatch.
-- **Protocol definitions**: Each interface defined as Rust modules in `src/protocol/` with opcode constants, argument signatures, and event builders.
-- **Wire encoding**: Custom little-endian binary protocol in `src/wire/` (decode.rs, encode.rs, fd.rs).
+- **Protocol definitions**: `edgerun-protocols::wayland` owns opcode constants, argument signatures, message parsing, and event builders. `src/protocol/` keeps compatibility re-exports plus runtime-only state helpers.
+- **Wire encoding**: Custom little-endian Wayland message parsing/encoding is in `edgerun-protocols::wayland`; Unix fd passing over SCM_RIGHTS remains in `src/wire/fd.rs`.
 - **No codegen**: Protocol XML specs in `docs/protocol-specs/` are reference documents only — not consumed at build time.
 
 ## Advertised Globals

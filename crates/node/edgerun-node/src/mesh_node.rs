@@ -38,16 +38,20 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::module_path;
 
+use crate::command_dispatch::{dispatch_command, ControllerSet};
 use crate::{Node, NodeConfig};
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::MeshRouter;
 use edgerun_mesh::{LocalNode, MeshFrame};
 use edgerun_mesh_link::MeshLink;
+use edgerun_protocols::core_protocol::collections::{HashMap, HashSet};
+use edgerun_protocols::core_protocol::command::CommandExecutionContext;
 use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, EventEnvelope};
 use edgerun_protocols::core_protocol::wire_stream::{
     command_full_wire_bytes, decode_command_full_wire_bytes,
 };
+use edgerun_storage::NodeStore;
 
 /// A mesh-connected edgerun node.
 ///
@@ -56,6 +60,14 @@ use edgerun_protocols::core_protocol::wire_stream::{
 pub struct MeshNode {
     /// The node's event log and command processor.
     node: Node,
+    /// Durable storage required before commands may affect node state.
+    store: Option<NodeStore>,
+    /// Controller projection used by storage-backed command dispatch.
+    controllers: ControllerSet,
+    /// In-memory replay hint backed by the durable replay index.
+    replay_cache: HashMap<Vec<u8>, (Vec<u8>, i64)>,
+    /// Delegation revocations projected from durable events.
+    revoked_delegations: HashSet<Vec<u8>>,
     /// The mesh network transport.
     mesh_link: MeshLink,
     /// The mesh router for discovery and routing.
@@ -65,7 +77,7 @@ pub struct MeshNode {
 }
 
 impl MeshNode {
-    /// Creates a new mesh-connected node from a YAML configuration.
+    /// Creates a new mesh-connected node from native construction input.
     ///
     /// Initializes:
     /// - The node's event log with the genesis event
@@ -74,6 +86,7 @@ impl MeshNode {
     pub fn from_config(config: NodeConfig, signer: Box<dyn MeshSigner>) -> Result<Self, String> {
         let identity = signer.node_id();
         let signer_arc: Arc<dyn MeshSigner> = Arc::from(signer);
+        let initial_controllers = config_controllers_to_ids(&config);
         let node = Node::from_config(config, Arc::clone(&signer_arc))
             .map_err(|e| format!("failed to create node: {}", e))?;
         let mut mesh_link = MeshLink::new();
@@ -82,10 +95,33 @@ impl MeshNode {
 
         Ok(Self {
             node,
+            store: None,
+            controllers: ControllerSet::new(initial_controllers),
+            replay_cache: HashMap::new(),
+            revoked_delegations: HashSet::new(),
             mesh_link,
             router,
             signer: signer_arc,
         })
+    }
+
+    /// Creates a mesh node with durable storage enabled.
+    ///
+    /// Command ingress is inert until a `NodeStore` is attached through this
+    /// constructor or `attach_store`.
+    pub fn from_config_with_store(
+        config: NodeConfig,
+        signer: Box<dyn MeshSigner>,
+        store: NodeStore,
+    ) -> Result<Self, String> {
+        let mut node = Self::from_config(config, signer)?;
+        node.attach_store(store);
+        Ok(node)
+    }
+
+    /// Attaches durable storage and enables command dispatch.
+    pub fn attach_store(&mut self, store: NodeStore) {
+        self.store = Some(store);
     }
 
     /// Runs one tick of the event loop.
@@ -106,7 +142,7 @@ impl MeshNode {
             if frame.header.dest == our_id {
                 // Decode and process
                 if let Some(command) = Self::decode_command(&frame) {
-                    let _ = self.node.process_command(&command);
+                    self.dispatch_stored_command(&command);
                     processed += 1;
                 }
             } else {
@@ -190,6 +226,11 @@ impl MeshNode {
         self.node.events()
     }
 
+    /// Returns whether durable storage is attached.
+    pub fn storage_ready(&self) -> bool {
+        self.store.is_some()
+    }
+
     /// Installs a capability grant.
     /// **WARNING**: This bypasses the event stream. Use
     /// `capabilities::record_capability_grant_event()` in production.
@@ -201,6 +242,28 @@ impl MeshNode {
     /// Decodes a mesh frame as a command envelope.
     fn decode_command(frame: &MeshFrame) -> Option<CommandEnvelope> {
         decode_command_full_wire_bytes(&frame.payload[..]).ok()
+    }
+
+    fn dispatch_stored_command(&mut self, command: &CommandEnvelope) {
+        let Some(store) = self.store.as_mut() else {
+            crate::node_warn!("dropping inbound command before node storage is attached");
+            return;
+        };
+
+        let trusted_roots = config_controllers_to_ids(self.node.config());
+        let exec_ctx = CommandExecutionContext::test_default();
+        let _ = dispatch_command(
+            command,
+            store,
+            &self.node.identity().0,
+            self.signer.as_ref(),
+            &mut self.controllers,
+            &mut self.replay_cache,
+            &self.revoked_delegations,
+            &trusted_roots,
+            0,
+            &exec_ctx,
+        );
     }
 
     /// Creates a new frame with the given destination, preserving the payload.
@@ -215,363 +278,15 @@ impl MeshNode {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+fn config_controllers_to_ids(config: &NodeConfig) -> Vec<Vec<u8>> {
+    config
+        .controllers
+        .iter()
+        .filter_map(|controller| {
+            edgerun_protocols::core_protocol::util::hex_to_bytes(controller).ok()
+        })
+        .collect()
+}
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use alloc::vec;
-    use edgerun_crypto::rand_core::RngCore;
-    use edgerun_hardware_signing::MeshSigner;
-    use edgerun_protocols::core_protocol::protocol::common as proto_common;
-    use edgerun_protocols::core_protocol::protocol::EventType;
-
-    use crate::test_support::TestSigner;
-
-    fn test_signer() -> TestSigner {
-        TestSigner::generate()
-    }
-
-    const TEST_CONFIG: &str = r#"
-stream_id: "test-node"
-name: "Test Node"
-controllers: []
-trust_nodes: []
-initial_grants: []
-metadata:
-  environment: "test"
-"#;
-
-    #[test]
-    fn mesh_node_creates_with_genesis() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let node = MeshNode::from_config(config, Box::new(test_signer())).unwrap();
-
-        // Should have genesis event
-        assert_eq!(node.events().len(), 1);
-        assert_eq!(node.events()[0].seq, 0);
-    }
-
-    #[test]
-    fn mesh_node_has_identity() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = test_signer();
-        let expected_id = signer.node_id();
-        let node = MeshNode::from_config(config, Box::new(signer)).unwrap();
-
-        assert_eq!(node.identity(), expected_id);
-    }
-
-    #[test]
-    fn mesh_node_tick_processes_nothing_when_idle() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let mut node = MeshNode::from_config(config, signer).unwrap();
-
-        // Tick with no inbound frames — should process 0
-        let processed = node.tick().unwrap();
-        assert_eq!(processed, 0);
-    }
-
-    #[test]
-    fn mesh_node_records_commands_in_stream() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let mut node = MeshNode::from_config(config, signer).unwrap();
-
-        // Build a command using the proto type directly
-        let command = edgerun_protocols::core_protocol::protocol::stream::CommandEnvelope {
-            envelope_version: 1,
-            command_id: vec![1, 2, 3],
-            target_node: Some(proto_common::NodeRef {
-                node_id: node.identity().0.to_vec(),
-            }),
-            issuer: Some(proto_common::IdentityRef {
-                identity_id: vec![7, 8, 9],
-                identity_kind: Some(0),
-                key_hint: None,
-            }),
-            command_type: 7, // QUERY
-            command_version: 1,
-            issued_at: None,
-            not_before: None,
-            expires_at: None,
-            idempotency_key: vec![],
-            payload: None,
-            delegation_chain: vec![],
-            requested_assurance: None,
-            command_metadata: None,
-            signatures: Vec::new(),
-            app_intent: Vec::new(),
-        };
-
-        // Encode and deliver as a frame
-        let buf = command_full_wire_bytes(&command);
-        let mut frame = MeshFrame::from_payload(node.identity(), buf);
-        frame.header.src = node.identity();
-        frame.signature = [0u8; 64];
-        let wire = frame.to_wire();
-
-        let _ = node.deliver_inbound_frame(&wire);
-
-        // Should have genesis + rejected event (no signature)
-        assert_eq!(node.events().len(), 2);
-    }
-
-    #[test]
-    fn two_nodes_exchange_signed_commands() {
-        let config_a = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer_a = Box::new(test_signer());
-        let node_a_id = signer_a.node_id();
-        let _alice = MeshNode::from_config(config_a, signer_a).unwrap();
-
-        let config_b = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer_b = Box::new(test_signer());
-        let mut bob = MeshNode::from_config(config_b, signer_b).unwrap();
-
-        // Build a command using the proto type directly
-        let command = edgerun_protocols::core_protocol::protocol::stream::CommandEnvelope {
-            envelope_version: 1,
-            command_id: vec![1, 2, 3],
-            target_node: Some(proto_common::NodeRef {
-                node_id: bob.identity().0.to_vec(),
-            }),
-            issuer: Some(proto_common::IdentityRef {
-                identity_id: node_a_id.0.to_vec(),
-                identity_kind: Some(2), // NODE
-                key_hint: Some(node_a_id.0.to_vec()),
-            }),
-            command_type: 7, // QUERY
-            command_version: 1,
-            issued_at: None,
-            not_before: None,
-            expires_at: None,
-            idempotency_key: vec![],
-            payload: None,
-            delegation_chain: vec![],
-            requested_assurance: None,
-            command_metadata: None,
-            signatures: Vec::new(),
-            app_intent: Vec::new(),
-        };
-
-        // Encode and deliver as a frame (fake signature)
-        let buf = command_full_wire_bytes(&command);
-        let mut frame = MeshFrame::from_payload(bob.identity(), buf);
-        frame.header.src = node_a_id;
-        frame.signature = [0u8; 64];
-        let wire = frame.to_wire();
-
-        let processed = bob.deliver_inbound_frame(&wire).unwrap();
-        assert!(processed > 0);
-
-        // Bob should have recorded the command in his stream
-        // genesis (seq 0) + rejected (seq 1, because signature is fake)
-        assert_eq!(bob.events().len(), 2);
-        assert_eq!(
-            bob.events()[1].event_type,
-            EventType::CommandRejected as i32
-        );
-    }
-
-    // -----------------------------------------------------------------------
-    // Routing and mesh integration
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn mesh_node_router_is_accessible() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let mut node = MeshNode::from_config(config, signer).unwrap();
-
-        // Should be able to get mutable access to the router
-        let router = node.router_mut();
-        // Router should exist and be usable
-        let _ = router;
-    }
-
-    #[test]
-    fn mesh_node_send_command_queues_frame() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let mut node = MeshNode::from_config(config, signer).unwrap();
-
-        let dest = NodeID([0xAAu8; 64]);
-        let command = edgerun_protocols::core_protocol::protocol::stream::CommandEnvelope {
-            envelope_version: 1,
-            command_id: vec![1, 2, 3],
-            target_node: Some(proto_common::NodeRef {
-                node_id: dest.0.to_vec(),
-            }),
-            issuer: Some(proto_common::IdentityRef {
-                identity_id: node.identity().0.to_vec(),
-                identity_kind: Some(2),
-                key_hint: Some(node.identity().0.to_vec()),
-            }),
-            command_type: 7,
-            command_version: 1,
-            issued_at: None,
-            not_before: None,
-            expires_at: None,
-            idempotency_key: vec![],
-            payload: None,
-            delegation_chain: vec![],
-            requested_assurance: None,
-            command_metadata: None,
-            signatures: Vec::new(),
-            app_intent: Vec::new(),
-        };
-
-        node.send_command(dest, &command);
-        let frames = node.drain_outbound_frames().unwrap();
-        assert_eq!(frames.len(), 1);
-        let frame = MeshFrame::from_wire(&frames[0]).unwrap();
-        assert_eq!(frame.header.src, node.identity());
-        assert_eq!(frame.header.dest, dest);
-        assert!(frame.verify_signature());
-    }
-
-    #[test]
-    fn mesh_node_identity_is_consistent() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let expected = signer.node_id();
-        let node = MeshNode::from_config(config, signer).unwrap();
-
-        assert_eq!(node.identity(), expected);
-        // Multiple calls should return same identity
-        assert_eq!(node.identity(), node.identity());
-    }
-
-    #[test]
-    fn mesh_node_events_accessor() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let node = MeshNode::from_config(config, signer).unwrap();
-
-        let events = node.events();
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].seq, 0);
-    }
-
-    #[test]
-    fn mesh_node_install_grant() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let mut node = MeshNode::from_config(config, signer).unwrap();
-
-        let grant = edgerun_capabilities::CapabilityGrant {
-            grant_version: 1,
-            grant_id: vec![1, 2, 3],
-            issuer: Some(proto_common::IdentityRef {
-                identity_id: vec![4, 5, 6],
-                identity_kind: Some(2),
-                key_hint: None,
-            }),
-            grantee: Some(proto_common::IdentityRef {
-                identity_id: vec![1, 2, 3],
-                identity_kind: Some(0),
-                key_hint: None,
-            }),
-            grantee_node: None,
-            selector: None,
-            granted_operations: vec![],
-            enforced_constraints: vec![],
-            access_class: 0,
-            issued_at: None,
-            expires_at: None,
-            correlation_id: vec![],
-            supersedes_revocation: None,
-            signature: None,
-        };
-
-        node.install_grant(grant);
-        // Verify no panic — grant installed
-    }
-
-    #[test]
-    fn mesh_node_multiple_ticks_are_idempotent() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let mut node = MeshNode::from_config(config, signer).unwrap();
-
-        // Multiple idle ticks should all return 0 processed
-        for _ in 0..5 {
-            let processed = node.tick().unwrap();
-            assert_eq!(processed, 0);
-        }
-    }
-
-    #[test]
-    fn mesh_node_decode_command_returns_none_for_garbage() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let node = MeshNode::from_config(config, signer).unwrap();
-
-        let frame = MeshFrame::from_payload(node.identity(), vec![0xFF, 0xFE, 0xFD]);
-        let result = MeshNode::decode_command(&frame);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn mesh_node_decode_command_parses_valid_envelope() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let node = MeshNode::from_config(config, signer).unwrap();
-
-        let command = edgerun_protocols::core_protocol::protocol::stream::CommandEnvelope {
-            envelope_version: 1,
-            command_id: vec![1, 2, 3],
-            target_node: Some(proto_common::NodeRef {
-                node_id: node.identity().0.to_vec(),
-            }),
-            issuer: None,
-            command_type: 7,
-            command_version: 1,
-            issued_at: None,
-            not_before: None,
-            expires_at: None,
-            idempotency_key: vec![],
-            payload: None,
-            delegation_chain: vec![],
-            requested_assurance: None,
-            command_metadata: None,
-            signatures: Vec::new(),
-            app_intent: Vec::new(),
-        };
-
-        let buf = command_full_wire_bytes(&command);
-        let frame = MeshFrame::from_payload(node.identity(), buf);
-        let decoded = MeshNode::decode_command(&frame);
-        assert!(decoded.is_some());
-        assert_eq!(decoded.unwrap().command_id, vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn mesh_node_frame_with_dest_preserves_payload() {
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let node = MeshNode::from_config(config, signer).unwrap();
-
-        let original_frame = MeshFrame::from_payload(node.identity(), vec![1, 2, 3, 4]);
-        let payload_before = original_frame.payload.clone();
-        let new_dest = NodeID([0xBBu8; 64]);
-        let routed = MeshNode::frame_with_dest(original_frame, new_dest);
-
-        assert_eq!(routed.header.dest, new_dest);
-        assert_eq!(routed.payload, payload_before);
-    }
-
-    #[test]
-    fn mesh_node_from_config_fails_with_bad_signer() {
-        // This tests that the error path works when node creation fails
-        // We use a valid config so this should succeed
-        let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(test_signer());
-        let result = MeshNode::from_config(config, signer);
-        assert!(result.is_ok());
-    }
-}
+mod tests;

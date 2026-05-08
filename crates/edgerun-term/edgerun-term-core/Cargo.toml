@@ -8,10 +8,10 @@ default = []
 embedded-emoji = ["dep:edgerun-emoji"]
 
 [dependencies]
-edgerun-encoding = { path = "../../utility/edgerun-encoding", features = ["std"] }
-edgerun-emoji = { path = "../../utility/edgerun-emoji", optional = true }
-edgerun-error = { path = "../../utility/edgerun-error" }
-edgerun-log = { path = "../../utility/edgerun-log" }
-edgerun-sixel = { path = "../../utility/edgerun-sixel" }
-edgerun-terminal-parser = { path = "../../utility/edgerun-terminal-parser" }
-edgerun-unicode = { path = "../../utility/edgerun-unicode" }
+edgerun-encoding = { workspace = true, features = ["std"] }
+edgerun-emoji = { workspace = true, optional = true }
+edgerun-error.workspace = true
+edgerun-log.workspace = true
+edgerun-sixel.workspace = true
+edgerun-terminal-parser.workspace = true
+edgerun-unicode.workspace = true

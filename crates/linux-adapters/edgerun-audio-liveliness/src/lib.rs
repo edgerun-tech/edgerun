@@ -123,13 +123,13 @@ use core::iter::{FromIterator, IntoIterator, Iterator};
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Ok};
 
-use edgerun_biometrics::{BiometricModality, BiometricState};
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityModality,
     CapabilityOperation,
 };
-use edgerun_microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
-use edgerun_speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
+use edgerun_devices::biometrics::{BiometricModality, BiometricState};
+use edgerun_devices::microphone::{AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat};
+use edgerun_devices::speaker::{AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 trait FloatApprox {
@@ -718,7 +718,7 @@ impl AudioChallengeExecutor {
     fn analyze_number_response(
         &self,
         challenge: &AudioChallenge,
-        capture: &edgerun_microphone::AudioCapture,
+        capture: &edgerun_devices::microphone::AudioCapture,
         capture_latency_ms: u32,
     ) -> Result<AudioChallengeResult, CapabilityError> {
         let (speech_detected, vad_confidence, speech_offset_ms) =
@@ -789,7 +789,7 @@ impl AudioChallengeExecutor {
     fn analyze_clap_response(
         &self,
         _challenge: &AudioChallenge,
-        capture: &edgerun_microphone::AudioCapture,
+        capture: &edgerun_devices::microphone::AudioCapture,
         capture_latency_ms: u32,
     ) -> Result<AudioChallengeResult, CapabilityError> {
         let (clap_detected, clap_confidence, clap_offset_ms) =
@@ -837,7 +837,7 @@ impl AudioChallengeExecutor {
     fn analyze_voice_activity(
         &self,
         _challenge: &AudioChallenge,
-        capture: &edgerun_microphone::AudioCapture,
+        capture: &edgerun_devices::microphone::AudioCapture,
         capture_latency_ms: u32,
     ) -> Result<AudioChallengeResult, CapabilityError> {
         let (speech_detected, vad_confidence, speech_offset_ms) =

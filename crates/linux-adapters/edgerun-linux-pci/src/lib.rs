@@ -49,11 +49,11 @@ pub mod vec {
 }
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use edgerun_devices::pci::{default_pci_descriptor, PciDeviceInfo, PciInventory};
 use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{
     is_pci_address, parse_hex_u16, parse_hex_u32, parse_hex_u8, parse_i32, parse_u32, read_trimmed,
 };
-use edgerun_pci::{default_pci_descriptor, PciDeviceInfo, PciInventory};
 use std::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 #[cfg(not(target_os = "none"))]
 use std::fs;

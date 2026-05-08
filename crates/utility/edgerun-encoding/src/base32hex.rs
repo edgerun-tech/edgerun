@@ -29,7 +29,7 @@ pub fn encode_base32hex(data: &[u8]) -> String {
 
 /// Encoded length for unpadded base32hex.
 pub const fn base32hex_encoded_len(input_len: usize) -> usize {
-    (input_len * 8 + 4) / 5
+    (input_len * 8).div_ceil(5)
 }
 
 /// Upper bound for decoded unpadded base32hex bytes.

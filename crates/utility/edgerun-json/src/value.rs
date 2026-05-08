@@ -877,6 +877,27 @@ impl From<&String> for JsonValue {
     }
 }
 
+#[cfg(all(feature = "std", not(target_os = "none")))]
+impl From<std::path::PathBuf> for JsonValue {
+    fn from(value: std::path::PathBuf) -> Self {
+        Self::String(value.to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+impl From<&std::path::PathBuf> for JsonValue {
+    fn from(value: &std::path::PathBuf) -> Self {
+        Self::String(value.to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(all(feature = "std", not(target_os = "none")))]
+impl From<&std::path::Path> for JsonValue {
+    fn from(value: &std::path::Path) -> Self {
+        Self::String(value.to_string_lossy().into_owned())
+    }
+}
+
 impl From<i8> for JsonValue {
     fn from(value: i8) -> Self {
         Self::Number(JsonNumber::from(i64::from(value)))

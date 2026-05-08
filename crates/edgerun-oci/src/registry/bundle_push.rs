@@ -13,7 +13,7 @@ use crate::layer_pipeline::sha256_digest_reference;
 use edgerun_encoding::percent::{
     percent_encode, percent_encode_colon_pair, percent_encode_path_segments,
 };
-use edgerun_http::Response;
+use edgerun_node::http_client::Response;
 
 const OCI_MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
 
@@ -210,7 +210,7 @@ async fn push_manifest_by_digest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_http::{HeaderMap, Response, StatusCode};
+    use edgerun_node::http_client::{HeaderMap, Response, StatusCode};
 
     fn upload_response(location: &str) -> Response {
         let mut headers = HeaderMap::new();

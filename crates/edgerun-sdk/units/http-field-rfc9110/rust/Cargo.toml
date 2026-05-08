@@ -14,7 +14,7 @@ standard = "RFC9110"
 crate-type = ["cdylib"]
 
 [dependencies]
-edgerun-http = { path = "../../../../edgerun-http", default-features = false }
+edgerun-protocols = { path = "../../../../protocol/edgerun-protocols", default-features = false, features = ["http"] }
 edgerun-unit = { path = "../../../../edgerun-unit" }
 
 [profile.release]

@@ -4,7 +4,7 @@ use crate::prelude::v1::*;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityOperation,
 };
-use edgerun_display::{
+use edgerun_devices::display::{
     validate_display_update_request, DisplayContentKind, DisplayDevice, DisplayInfo, DisplayMode,
     DisplayUpdateRequest,
 };

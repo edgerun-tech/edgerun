@@ -1,6 +1,6 @@
 //! SideShift adapter — implements ExchangeProvider trait.
 //!
-//! Uses edgerun-http for HTTP calls.
+//! Uses edgerun-node http for HTTP calls.
 //! Normalizes SideShift API into canonical types.
 
 extern crate alloc;
@@ -9,13 +9,13 @@ use crate::provider::*;
 use crate::provider_mapping::map_provider_status;
 use alloc::string::String;
 use core::result::Result;
-use edgerun_http::client_middleware::Chain;
-use edgerun_http::{HttpClient, Method};
 use edgerun_json::{from_str, to_string, JsonValue, Map, ToJson};
+use edgerun_node::http::client_middleware::Chain;
+use edgerun_node::http::{HttpClient, Method};
+use edgerun_node::rt::block_on;
 use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
     AssetRef, Quote, QuoteRequest,
 };
-use edgerun_rt::block_on;
 use edgerun_wallet::{DecimalAmount, WalletError};
 
 const SIDESHIFT_BASE_URL: &str = "https://sideshift.ai/api/v2";
@@ -24,7 +24,7 @@ pub struct SideShiftAdapter {
     pub api_key: String,
     pub affiliate_id: String,
     pub default_commission_bps: u32,
-    client: edgerun_http::Client,
+    client: edgerun_node::http::Client,
 }
 
 impl core::fmt::Debug for SideShiftAdapter {
@@ -73,8 +73,8 @@ impl SideShiftAdapter {
         };
 
         let response = match method {
-            Method::GET => edgerun_rt::block_on(async { self.client.get(&url).await }),
-            Method::POST => edgerun_rt::block_on(async {
+            Method::GET => edgerun_node::rt::block_on(async { self.client.get(&url).await }),
+            Method::POST => edgerun_node::rt::block_on(async {
                 self.client
                     .post(
                         &url,

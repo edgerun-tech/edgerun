@@ -45,7 +45,6 @@ pub use edgerun_crypto::hmac;
 pub use edgerun_crypto::p256;
 pub use edgerun_crypto::p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 pub use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, VerifyingKey};
-pub use edgerun_crypto::rand_core;
 pub use edgerun_crypto::sha::Digest as ShaDigest;
 pub use edgerun_crypto::sha::{Sha256, Sha384, Sha512};
 pub use edgerun_crypto::{hkdf_sha256, hmac_sha256, hmac_sha384, random_p256_signing_key};

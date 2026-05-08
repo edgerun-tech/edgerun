@@ -1,4 +1,4 @@
-//! OCI Registry V2 client — async, using `edgerun_http::HttpClient`.
+//! OCI Registry V2 client — async, using the node-owned HTTP client.
 
 use crate::prelude::*;
 use crate::BareImagePlan;
@@ -7,7 +7,9 @@ use std::io;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 use std::path::Path;
 
-use edgerun_http::{HttpClient, Request, Response};
+use edgerun_node::http_client::{
+    HeaderMap, HttpClient, HttpVersion, Method, Request, Response, Uri,
+};
 
 use super::auth::RegistryAuth;
 use super::config::{parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest};
@@ -127,18 +129,15 @@ impl RegistryClient {
         extra_headers: &[(&str, &str)],
     ) -> Result<Vec<u8>, RegistryError> {
         let url = self.registry_url(registry, path);
-        let mut builder = Request::builder()
-            .method(edgerun_http::Method::GET)
-            .uri(&url);
-        for &(k, v) in extra_headers {
-            builder = builder.header(k, v);
-        }
-        if let Some(ref token) = self.token {
-            builder = builder.header("Authorization", &format!("Bearer {}", token));
-        }
-        let request = builder.build()?;
+        let request = build_request(
+            Method::GET,
+            &url,
+            None,
+            extra_headers,
+            self.token.as_deref(),
+        )?;
 
-        let client = registry_http_client().no_redirects();
+        let client = registry_http_client();
         let resp = client
             .execute(&request)
             .await
@@ -153,16 +152,13 @@ impl RegistryClient {
                 .ok_or_else(|| RegistryError::AuthError("No WWW-Authenticate header".into()))?;
             self.handle_auth_challenge(registry, www_auth).await?;
             // Retry
-            let mut builder2 = Request::builder()
-                .method(edgerun_http::Method::GET)
-                .uri(&url);
-            for &(k, v) in extra_headers {
-                builder2 = builder2.header(k, v);
-            }
-            if let Some(ref token) = self.token {
-                builder2 = builder2.header("Authorization", &format!("Bearer {}", token));
-            }
-            let request2 = builder2.build()?;
+            let request2 = build_request(
+                Method::GET,
+                &url,
+                None,
+                extra_headers,
+                self.token.as_deref(),
+            )?;
             let resp2 = client
                 .execute(&request2)
                 .await
@@ -203,10 +199,7 @@ impl RegistryClient {
                     RegistryError::HttpError("registry redirect without Location".into())
                 })?;
             let redirect_url = resolve_redirect_location(&current_url, &location)?;
-            let request = Request::builder()
-                .method(edgerun_http::Method::GET)
-                .uri(&redirect_url)
-                .build()?;
+            let request = build_request(Method::GET, &redirect_url, None, &[], None)?;
             resp = client
                 .execute(&request)
                 .await
@@ -278,18 +271,14 @@ impl RegistryClient {
         body: &[u8],
         extra_headers: &[(&str, &str)],
     ) -> Result<Response, RegistryError> {
-        let mut builder = Request::builder()
-            .method(edgerun_http::Method::PUT)
-            .uri(url)
-            .body(body.to_vec());
-        for &(k, v) in extra_headers {
-            builder = builder.header(k, v);
-        }
-        if let Some(ref token) = self.token {
-            builder = builder.header("Authorization", &format!("Bearer {}", token));
-        }
-        let request = builder.build()?;
-        let client = registry_http_client().no_redirects();
+        let request = build_request(
+            Method::PUT,
+            url,
+            Some(body.to_vec()),
+            extra_headers,
+            self.token.as_deref(),
+        )?;
+        let client = registry_http_client();
         client
             .execute(&request)
             .await
@@ -346,18 +335,14 @@ impl RegistryClient {
         body: &[u8],
         extra_headers: &[(&str, &str)],
     ) -> Result<Response, RegistryError> {
-        let mut builder = Request::builder()
-            .method(edgerun_http::Method::POST)
-            .uri(url)
-            .body(body.to_vec());
-        for &(k, v) in extra_headers {
-            builder = builder.header(k, v);
-        }
-        if let Some(ref token) = self.token {
-            builder = builder.header("Authorization", &format!("Bearer {}", token));
-        }
-        let request = builder.build()?;
-        let client = registry_http_client().no_redirects();
+        let request = build_request(
+            Method::POST,
+            url,
+            Some(body.to_vec()),
+            extra_headers,
+            self.token.as_deref(),
+        )?;
+        let client = registry_http_client();
         client
             .execute(&request)
             .await
@@ -378,9 +363,7 @@ impl RegistryClient {
             url.push_str(&format!("&scope={}", percent_encode(&sc)));
         }
 
-        let mut builder = Request::builder()
-            .method(edgerun_http::Method::GET)
-            .uri(&url);
+        let mut auth_headers = Vec::new();
 
         let token = match &self.auth {
             RegistryAuth::Bearer { token } => Some(token.clone()),
@@ -401,10 +384,9 @@ impl RegistryClient {
         };
 
         if let Some(token) = token {
-            builder = builder.header("Authorization", &format!("Bearer {}", token));
+            auth_headers.push(("Authorization", format!("Bearer {}", token)));
         }
-
-        let request = builder.build()?;
+        let request = build_owned_header_request(Method::GET, &url, None, &auth_headers)?;
         let client = registry_http_client();
         let resp = client
             .execute(&request)
@@ -466,14 +448,8 @@ impl RegistryClient {
 
     async fn do_get_raw(&mut self, registry: &str, path: &str) -> Result<Response, RegistryError> {
         let url = self.registry_url(registry, path);
-        let mut builder = Request::builder()
-            .method(edgerun_http::Method::GET)
-            .uri(&url);
-        if let Some(ref token) = self.token {
-            builder = builder.header("Authorization", &format!("Bearer {}", token));
-        }
-        let request = builder.build()?;
-        let client = registry_http_client().no_redirects();
+        let request = build_request(Method::GET, &url, None, &[], self.token.as_deref())?;
+        let client = registry_http_client();
         client
             .execute(&request)
             .await
@@ -665,7 +641,55 @@ impl RegistryClient {
 }
 
 fn registry_http_client() -> HttpClient {
-    HttpClient::new().version(edgerun_http::HttpVersion::Http1)
+    HttpClient::new().version(HttpVersion::Http1)
+}
+
+fn build_request(
+    method: Method,
+    url: &str,
+    body: Option<Vec<u8>>,
+    extra_headers: &[(&str, &str)],
+    bearer_token: Option<&str>,
+) -> Result<Request, RegistryError> {
+    let mut owned_headers = Vec::new();
+    for &(name, value) in extra_headers {
+        owned_headers.push((name, value.to_string()));
+    }
+    if let Some(token) = bearer_token {
+        owned_headers.push(("Authorization", format!("Bearer {token}")));
+    }
+    build_owned_header_request(method, url, body, &owned_headers)
+}
+
+fn build_owned_header_request(
+    method: Method,
+    url: &str,
+    body: Option<Vec<u8>>,
+    headers: &[(&str, String)],
+) -> Result<Request, RegistryError> {
+    let uri = Uri::parse(url).map_err(RegistryError::HttpError)?;
+    let mut header_map = HeaderMap::new();
+    if let Some(host) = uri.host() {
+        let _ = header_map.insert("Host", &host_header_value(&uri, host));
+    }
+    let _ = header_map.insert("Connection", "close");
+    let _ = header_map.insert("User-Agent", "edgerun-oci/0.1");
+    for &(name, ref value) in headers {
+        let _ = header_map.insert(name, value);
+    }
+    if let Some(body) = body.as_ref() {
+        let _ = header_map.insert("Content-Length", &body.len().to_string());
+    }
+    Ok(Request::new(method, uri, header_map, body))
+}
+
+fn host_header_value(uri: &Uri, host: &str) -> String {
+    match uri.port() {
+        Some(80) if !uri.is_https() => host.to_string(),
+        Some(443) if uri.is_https() => host.to_string(),
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_string(),
+    }
 }
 
 fn registry_api_host(registry: &str) -> &str {

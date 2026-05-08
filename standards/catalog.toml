@@ -120,7 +120,6 @@ runs_over = []
 implementation_crates = [
   "crates/device-types/edgerun-nfc",
   "crates/linux-adapters/edgerun-linux-nfc",
-  "crates/linux-adapters/edgerun-passport-nfc",
 ]
 
 [[protocol]]

@@ -1,13 +1,13 @@
 //! Camera biometric reader remote adapters (single-stream and paired RGB+IR+Depth).
 
 use crate::prelude::v1::*;
-use edgerun_biometrics::BiometricModality;
-use edgerun_camera_biometrics::{
+use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_devices::biometrics::BiometricModality;
+use edgerun_devices::camera_biometrics::{
     CameraBiometricError, CameraBiometricPurpose, CameraBiometricReader, CameraCapture,
     CameraCaptureQuality, CameraFrame, CameraPixelFormat, FaceBounds, PairedCameraBiometricReader,
     PairedCameraFrame,
 };
-use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation;
 use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_protocols::wire::{
@@ -170,7 +170,7 @@ pub fn decode_camera_capture(bytes: &[u8]) -> Result<CameraCapture, CapabilityEr
         frame: camera_frame_from_wire(wire.frame)?,
         quality: camera_capture_quality_from_u8(wire.quality)?,
         face_bounds: wire.face_bounds.map(face_bounds_from_wire),
-        state: edgerun_biometrics::BiometricState {
+        state: edgerun_devices::biometrics::BiometricState {
             modality: biometric_modality_from_wire(wire.state.modality),
             verified: wire.state.verified,
             hardware_protected: wire.state.hardware_protected,

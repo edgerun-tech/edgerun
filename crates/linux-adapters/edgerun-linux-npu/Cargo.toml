@@ -7,18 +7,14 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Linux NPU discovery adapter for Edgerun"
+autobins = false
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-edgerun-npu = { version = "0.1", path = "../../device-types/edgerun-npu" }
 
 [features]
 std = []
-
-[[bin]]
-name = "linux_npu_tool"
-path = "src/bin/linux-npu-tool.rs"
-required-features = ["std"]
 
 [lints]
 workspace = true

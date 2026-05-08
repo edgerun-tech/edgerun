@@ -49,10 +49,35 @@ impl EventLog for MemEventLog {
         let frame_size = frame_prefix.len() + frame_body.len();
 
         let stream_buffer = streams.entry(event.stream_id.clone()).or_default();
+        let event_hash = canonical_event_hash(event).value;
+
+        if let Some(existing) = stream_buffer
+            .events
+            .iter()
+            .find(|stored| stored.event.seq == event.seq)
+        {
+            if existing.hash == event_hash {
+                return Ok(AppendReceipt {
+                    stream_id: event.stream_id.clone(),
+                    seq: event.seq,
+                    event_hash,
+                    file_offset: existing.offset,
+                    envelope_version: existing.event.envelope_version,
+                });
+            }
+
+            return Err(StorageError::Stream(format!(
+                "refusing to append stream {} seq {}: seq already exists with a different hash",
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
+                event.seq
+            )));
+        }
+
+        validate_event_follows_head(event, stream_buffer.events.back())?;
+
         let offset = stream_buffer.next_offset;
         stream_buffer.next_offset = stream_buffer.next_offset.saturating_add(frame_size as u64);
 
-        let event_hash = canonical_event_hash(event).value;
         stream_buffer.events.push_back(StoredEvent {
             event: event.clone(),
             offset,
@@ -128,6 +153,53 @@ impl EventLog for MemEventLog {
     }
 }
 
+fn validate_event_follows_head(
+    event: &EventEnvelope,
+    head: Option<&StoredEvent>,
+) -> Result<(), StorageError> {
+    let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id);
+
+    match head {
+        None => {
+            if event.seq != 0 {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: first event must have seq 0",
+                    event.seq
+                )));
+            }
+            if event.prev_event_hash.is_some() {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq 0: genesis event must not have prev_event_hash"
+                )));
+            }
+            Ok(())
+        }
+        Some(head) => {
+            let expected_seq = head.event.seq.saturating_add(1);
+            if event.seq != expected_seq {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: expected next seq {expected_seq}",
+                    event.seq
+                )));
+            }
+
+            let Some(prev_event_hash) = &event.prev_event_hash else {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: missing prev_event_hash",
+                    event.seq
+                )));
+            };
+            if prev_event_hash.algorithm != 1 || prev_event_hash.value != head.hash {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: prev_event_hash does not match seq {}",
+                    event.seq, head.event.seq
+                )));
+            }
+            Ok(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,6 +226,14 @@ mod tests {
         }
     }
 
+    fn with_prev_hash(mut event: EventEnvelope, prev: &[u8]) -> EventEnvelope {
+        event.prev_event_hash = Some(edgerun_protocols::core_protocol::protocol::Digest {
+            algorithm: 1,
+            value: prev.to_vec(),
+        });
+        event
+    }
+
     #[test]
     fn append_read_and_scan_are_consistent() {
         let mut log = MemEventLog::new();
@@ -161,7 +241,8 @@ mod tests {
         let s2 = b"stream-beta";
 
         let e1 = event(s1, 0);
-        let e2 = event(s1, 1);
+        let e1_hash = canonical_event_hash(&e1).value;
+        let e2 = with_prev_hash(event(s1, 1), &e1_hash);
         let e3 = event(s2, 0);
 
         let r1 = log.append_event(&e1).unwrap();
@@ -195,17 +276,39 @@ mod tests {
     }
 
     #[test]
-    fn append_does_not_author_stream_state() {
+    fn append_rejects_non_genesis_gap() {
         let mut log = MemEventLog::new();
         let event = event(b"stream", 42);
 
-        let receipt = log.append_event(&event).unwrap();
-        let scanned = log.scan().unwrap();
+        let result = log.append_event(&event);
+        assert!(matches!(result, Err(StorageError::Stream(_))));
+        assert!(log.scan().unwrap().is_empty());
+    }
 
-        assert_eq!(receipt.seq, 42);
-        assert_eq!(scanned[0].event.seq, 42);
-        assert!(scanned[0].event.prev_event_hash.is_none());
-        assert!(scanned[0].event.signature.is_none());
+    #[test]
+    fn append_rejects_wrong_prev_hash() {
+        let mut log = MemEventLog::new();
+        let genesis = event(b"stream", 0);
+        let next = with_prev_hash(event(b"stream", 1), &[0xAA; 32]);
+
+        log.append_event(&genesis).unwrap();
+        assert!(matches!(
+            log.append_event(&next),
+            Err(StorageError::Stream(_))
+        ));
+        assert_eq!(log.scan().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn append_is_idempotent_for_same_seq_same_hash() {
+        let mut log = MemEventLog::new();
+        let event = event(b"stream", 0);
+
+        let first = log.append_event(&event).unwrap();
+        let second = log.append_event(&event).unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(log.scan().unwrap().len(), 1);
     }
 
     #[test]

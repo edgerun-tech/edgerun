@@ -7,12 +7,11 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use edgerun_capabilities::{
-    CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor,
-    CapabilityError, CapabilityEventKind, CapabilityGrant, CapabilityModality, CapabilityOperation,
+    capability_descriptor, constraint, constraint_with_scope, CapabilityAccessClass,
+    CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor, CapabilityError,
+    CapabilityEventKind, CapabilityGrant, CapabilityModality, CapabilityOperation,
     CapabilityRequest, CapabilityRevocation, CapabilityRole, CapabilitySelector,
-    capability_descriptor, constraint, constraint_with_scope,
 };
-use edgerun_crypto::rand_core::RngCore;
 use edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation;
 use edgerun_protocols::core_protocol::protocol::{Duration as ProtocolDuration, Timestamp};
 use edgerun_protocols::core_protocol::protocol::{IdentityRef, RateLimit};
@@ -1205,11 +1204,9 @@ fn request_operations_filtered_to_descriptor() {
         PolicyDecision::Allow { grant } => *grant,
         other => panic!("unexpected: {other:?}"),
     };
-    assert!(
-        grant
-            .granted_operations
-            .contains(&(CapabilityOperation::Query as i32))
-    );
+    assert!(grant
+        .granted_operations
+        .contains(&(CapabilityOperation::Query as i32)));
     assert!(!grant.granted_operations.contains(&999));
 }
 

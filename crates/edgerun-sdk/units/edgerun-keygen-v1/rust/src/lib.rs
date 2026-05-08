@@ -1,6 +1,6 @@
 #![no_std]
 
-use p256::ecdsa::SigningKey;
+use edgerun_crypto::p256::ecdsa::SigningKey;
 
 edgerun_unit::no_alloc!();
 edgerun_unit::metadata!(1);

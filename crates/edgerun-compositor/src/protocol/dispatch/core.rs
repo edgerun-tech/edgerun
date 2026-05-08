@@ -1,13 +1,13 @@
 //! Core protocol handlers: wl_display, wl_registry.
 
 use super::{DispatchContext, GLOBALS};
-use crate::protocol::linux_dmabuf;
-use crate::protocol::wl_core;
-use crate::protocol::wl_seat;
-use crate::protocol::wl_shm;
-use crate::wire;
-use crate::wire::decode::ArgCursor;
-use crate::wire::encode::*;
+use edgerun_protocols::wayland as wire;
+use edgerun_protocols::wayland::decode::ArgCursor;
+use edgerun_protocols::wayland::encode::*;
+use edgerun_protocols::wayland::linux_dmabuf;
+use edgerun_protocols::wayland::wl_core;
+use edgerun_protocols::wayland::wl_seat;
+use edgerun_protocols::wayland::wl_shm;
 
 pub fn handle_display(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {
@@ -198,9 +198,7 @@ pub fn handle_registry(ctx: &mut DispatchContext) {
                 "zxdg_decoration_manager_v1" => {
                     ctx.client_decoration_manager_ids.insert(ctx.client_id, id);
                 }
-                "wp_viewporter" => {
-                    ctx.client_viewporter_ids.insert(ctx.client_id, id);
-                }
+                "wp_viewporter" => {}
                 "wp_cursor_shape_manager_v1" => {
                     ctx.client_cursor_shape_manager_ids
                         .insert(ctx.client_id, id);

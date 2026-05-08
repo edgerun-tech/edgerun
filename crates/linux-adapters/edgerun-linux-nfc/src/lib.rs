@@ -14,12 +14,12 @@ pub use edgerun_linux_sysfs::prelude;
 pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result, string, vec};
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_linux_sysfs::prelude::v1::*;
-use edgerun_linux_sysfs::read_trimmed;
-use edgerun_nfc::{
+use edgerun_devices::nfc::{
     default_nfc_descriptor, NdefMessage, NfcDevice, NfcDeviceInfo, NfcPowerState, NfcReader,
     NfcScanner, NfcTarget, NfcTechnology,
 };
+use edgerun_linux_sysfs::prelude::v1::*;
+use edgerun_linux_sysfs::read_trimmed;
 #[cfg(not(target_os = "none"))]
 use std::fs;
 use std::path::{Path, PathBuf};

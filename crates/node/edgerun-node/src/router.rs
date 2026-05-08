@@ -12,7 +12,7 @@ use edgerun_protocols::wire::{
     RuntimeHttpRequest, RuntimeProtocolBinding, RuntimeRoutedAppMessage,
 };
 
-use crate::resource::ServiceBindingDecision;
+use crate::network::ServiceBindingDecision;
 use crate::runtime::{RuntimeError, RuntimeMessageDelivery};
 
 /// Transport-independent input presented to the node router.

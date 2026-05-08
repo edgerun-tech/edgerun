@@ -1,13 +1,40 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use edgerun_crypto::rand_core::RngCore;
-use edgerun_hardware_signing::NodeID;
+use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_protocols::keygen::{generate_node_signing_key, node_id_from_signing_key};
 use edgerun_protocols::seal::{generate_seal_key, seal_node_signing_key};
+use edgerun_protocols::sign::ProtocolSigner;
+use edgerun_protocols::sign_p256::P256ProtocolSigner;
+use edgerun_storage::fs::FsEventLog;
+use edgerun_storage::DurableStreamWriter;
 use edgerun_yubikey::YubiKeySigningKey;
 
-use crate::config::{parse_config, NodeConfig};
+use crate::protocol_signer::MeshProtocolSigner;
+use crate::signer::{parse_signing_key_hex, SyncSoftwareSigner};
+
+fn create_stream_or_exit<S>(root: &PathBuf, node_id: NodeID, signer: S)
+where
+    S: ProtocolSigner,
+{
+    let events_dir = root.join("events");
+    let log = FsEventLog::new(events_dir);
+    DurableStreamWriter::new(
+        node_id.0,
+        signer,
+        edgerun_protocols::core_protocol::util::now_unix_millis_i64(),
+        log,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!(
+            "error: failed to create signed event log at {}: {}",
+            root.display(),
+            e
+        );
+        std::process::exit(1);
+    });
+}
 
 pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
     let has_tpm = PathBuf::from("/dev/tpmrm0").exists();
@@ -27,26 +54,36 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         );
         eprintln!();
         eprintln!("For development only, you can generate a software key with --software:");
-        eprintln!("  edgerund init --config {} --software", path.display());
+        eprintln!("  edged init --config {} --software", path.display());
         std::process::exit(1);
     }
 
-    let (node_id, signer_block) = if software {
-        eprintln!("WARNING: --software generates an INSECURE key stored in the config file.");
+    let (node_id, signer_kind) = if software {
+        eprintln!("WARNING: --software generates an INSECURE local key file.");
         eprintln!("This is for development/testing only. NEVER use in production.");
         eprintln!();
         let (signing_key, identity) = generate_node_signing_key();
         let node_id = NodeID(identity.node_id);
         let key_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&signing_key.to_bytes());
-        let signer_block = format!(
-            r#"signer:
-  type: "software"
-  public_key_hex: "{node_id_hex}"
-  private_key_hex: "{key_hex}"
-"#,
-            node_id_hex = node_id.to_hex(),
-        );
-        (node_id, signer_block)
+        fs::create_dir_all(path).unwrap_or_else(|e| {
+            eprintln!(
+                "error: failed to create data root {}: {}",
+                path.display(),
+                e
+            );
+            std::process::exit(1);
+        });
+        let key_path = path.join("identity.key");
+        fs::write(&key_path, key_hex.as_bytes()).unwrap_or_else(|e| {
+            eprintln!(
+                "error: failed to write local key {}: {}",
+                key_path.display(),
+                e
+            );
+            std::process::exit(1);
+        });
+        create_stream_or_exit(path, node_id, P256ProtocolSigner::new(signing_key));
+        (node_id, "software")
     } else if has_tpm {
         eprintln!("Provisioning ECDSA P-256 signing key in TPM 2.0...");
         eprintln!("  TPM device: /dev/tpmrm0");
@@ -83,14 +120,22 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         );
         eprintln!("  Public key: {}", node_id.to_hex());
 
-        let signer_block = format!(
-            r#"signer:
-  type: "tpm"
-  handle: "0x{handle:08X}"
-"#,
-            handle = provisioned_key.persistent_handle,
+        let tpm_key = edgerun_tpm::LinuxTpmSigningKey::new(
+            "/dev/tpmrm0",
+            edgerun_tpm::TpmHandle(provisioned_key.persistent_handle),
         );
-        (node_id, signer_block)
+        let adapter = edgerun_hardware_signing::TpmHardwareKeyAdapter::new(tpm_key);
+        let mesh_signer = edgerun_hardware_signing::HardwareMeshSigner::new(adapter)
+            .unwrap_or_else(|e| {
+                eprintln!("error: failed to initialize TPM signer: {}", e);
+                std::process::exit(1);
+            });
+        create_stream_or_exit(
+            path,
+            node_id,
+            MeshProtocolSigner::new(Arc::new(mesh_signer)),
+        );
+        (node_id, "tpm")
     } else {
         // YubiKey: scan for an existing ECDSA P-256 key in slot 9a (authentication)
         eprintln!("Scanning YubiKey for ECDSA P-256 key in slot 9a...");
@@ -138,33 +183,22 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!("  Slot: 9a");
         eprintln!("  Public key: {}", node_id.to_hex());
 
-        let signer_block = r#"signer:
-  type: "yubikey"
-  handle: "9a"
-"#
-        .to_string();
-        (node_id, signer_block)
+        let adapter = edgerun_hardware_signing::YubiKeyHardwareKeyAdapter::new(yubikey);
+        let mesh_signer = edgerun_hardware_signing::HardwareMeshSigner::new(adapter)
+            .unwrap_or_else(|e| {
+                eprintln!("error: failed to initialize YubiKey signer: {}", e);
+                std::process::exit(1);
+            });
+        create_stream_or_exit(
+            path,
+            node_id,
+            MeshProtocolSigner::new(Arc::new(mesh_signer)),
+        );
+        (node_id, "yubikey")
     };
 
     let node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
     let stream_id = format!("stream-{}", node_id.short());
-
-    let config_yaml = format!(
-        r#"# edgerun Node Configuration
-stream_id: "{stream_id}"
-name: "{node_name}"
-controllers: []
-trust_nodes: []
-initial_grants: []
-{signer_block}metadata:
-  environment: "production"
-"#
-    );
-
-    fs::write(path, &config_yaml).unwrap_or_else(|e| {
-        eprintln!("error: failed to write config to {}: {}", path.display(), e);
-        std::process::exit(1);
-    });
 
     println!();
     println!("Node identity generated:");
@@ -175,17 +209,20 @@ initial_grants: []
     if software {
         println!("  Signer:     software (INSECURE — development only)");
         println!();
-        println!("WARNING: This is a SOFTWARE KEY. The private key is stored in the config file.");
+        println!(
+            "WARNING: This is a SOFTWARE KEY. The private key is stored as local key material."
+        );
         println!("Do NOT use this key in production.");
     } else if has_tpm {
         println!("  Signer:     TPM 2.0 (ECDSA P-256)");
     } else {
         println!("  Signer:     YubiKey PIV (ECDSA P-256, slot 9a)");
     }
-    println!("  Config:     {}", path.display());
+    println!("  Signer:     {}", signer_kind);
+    println!("  Event log:  {}", path.join("events").display());
     println!();
     println!("Inspect the node with:");
-    println!("  edgerund status --config {}", path.display());
+    println!("  edged status --config {}", path.display());
     println!();
 
     // Run benchmarks and cache performance certificate
@@ -244,36 +281,9 @@ pub fn cmd_init_encrypted(path: &PathBuf, key_path: &PathBuf, name: Option<Strin
         std::process::exit(1);
     });
 
-    let signer_block = format!(
-        r#"signer:
-  type: "encrypted"
-  public_key_hex: "{node_id_hex}"
-  encrypted_key_path: "{key_path_str}"
-  seal_key_env: "EDGERUN_SEAL_KEY_HEX"
-"#,
-        node_id_hex = node_id.to_hex(),
-        key_path_str = key_path.display(),
-    );
-
     let node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
     let stream_id = format!("stream-{}", node_id.short());
-
-    let config_yaml = format!(
-        r#"# edgerun Node Configuration
-stream_id: "{stream_id}"
-name: "{node_name}"
-controllers: []
-trust_nodes: []
-initial_grants: []
-{signer_block}metadata:
-  environment: "production"
-"#
-    );
-
-    fs::write(path, &config_yaml).unwrap_or_else(|e| {
-        eprintln!("error: failed to write config to {}: {}", path.display(), e);
-        std::process::exit(1);
-    });
+    create_stream_or_exit(path, node_id, P256ProtocolSigner::new(signing_key));
 
     println!();
     println!("Node identity generated:");
@@ -283,11 +293,11 @@ initial_grants: []
     println!("  Name:       {}", node_name);
     println!("  Signer:     encrypted (AES-256-GCM with generated seal key)");
     println!("  Key file:   {}", key_path.display());
-    println!("  Config:     {}", path.display());
+    println!("  Event log:  {}", path.join("events").display());
     println!();
     println!("To inspect the node, set the generated seal key and run:");
     println!("  export EDGERUN_SEAL_KEY_HEX='{}'", seal_key_hex);
-    println!("  edgerund status --config {}", path.display());
+    println!("  edged status --config {}", path.display());
     println!();
     println!("IMPORTANT: Keep the seal key safe. Without it, the node key cannot be recovered.");
 }
@@ -311,59 +321,28 @@ pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Op
     let key_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&signing_key.to_bytes());
 
     let pairing_pin = generate_pairing_pin();
-    let stream_id = format!("stream-{}", node_id.short());
-    let node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
-    let controller_list = controller.map(|c| vec![c]).unwrap_or_default();
-    let controller_str = if controller_list.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "controllers: [{}]",
-            controller_list
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    };
-
-    let signer_block = format!(
-        r#"signer:
-  type: "provisioned"
-  public_key_hex: "{node_id_hex}"
-  private_key_hex: "{key_hex}"
-  state: "provisioning"
-  pairing_pin: "{pin}"
-"#,
-        node_id_hex = node_id.to_hex(),
-        key_hex = key_hex,
-        pin = pairing_pin,
-    );
-
-    let config_yaml = format!(
-        r#"# edgerun Node Configuration (provisioning mode)
-# Use `edgerund status --config <config>` to inspect the generated identity
-stream_id: "{stream_id}"
-name: "{node_name}"
-{controller_config}
-# TODO: add more configuration here
-# trust_nodes: []
-# allowed_peers: []
-# bootstrap_peers: []
-{signer_block}
-metadata:
-  environment: "production"
-"#,
-        stream_id = stream_id,
-        node_name = node_name,
-        controller_config = controller_str,
-        signer_block = signer_block,
-    );
-
-    fs::write(path, &config_yaml).unwrap_or_else(|e| {
-        eprintln!("error: failed to write config to {}: {}", path.display(), e);
+    let _node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
+    if let Some(controller) = controller {
+        eprintln!("Controller bootstrap input must be recorded by a signed bootstrap contract: {controller}");
+    }
+    fs::create_dir_all(path).unwrap_or_else(|e| {
+        eprintln!(
+            "error: failed to create data root {}: {}",
+            path.display(),
+            e
+        );
         std::process::exit(1);
     });
+    let key_path = path.join("identity.key");
+    fs::write(&key_path, key_hex.as_bytes()).unwrap_or_else(|e| {
+        eprintln!(
+            "error: failed to write local key {}: {}",
+            key_path.display(),
+            e
+        );
+        std::process::exit(1);
+    });
+    create_stream_or_exit(path, node_id, P256ProtocolSigner::new(signing_key));
 
     eprintln!();
     eprintln!("Node PUBLIC KEY:");
@@ -371,54 +350,34 @@ metadata:
     eprintln!();
     eprintln!("PAIRING PIN: {}", pairing_pin);
     eprintln!();
-    eprintln!("Configuration saved to: {}", path.display());
+    eprintln!("Event log created at: {}", path.join("events").display());
     eprintln!();
-    eprintln!("FROM YOUR LAPTOP, run:");
+    eprintln!("FROM THIS HOST, while a provisioning listener is running, run:");
     eprintln!(
-        "  edgerund provision --config {} --pin {}",
+        "  edged provision --config {} --pin {}",
         path.display(),
         pairing_pin
     );
     eprintln!();
-    eprintln!("The node is now advertising in provisioning mode.");
-    eprintln!("Control is bound to the generated node private key in this config.");
-    eprintln!("Protect and back up this config; there is no account recovery path.");
+    eprintln!("The node identity and genesis stream are initialized.");
+    eprintln!("Provisioning listeners bind to loopback by default; use an explicit tunnel for remote setup.");
+    eprintln!("Control is bound to the generated node private key.");
+    eprintln!("Protect and back up local key material; there is no account recovery path.");
 }
 
 pub fn cmd_provision(config_path: &PathBuf, pin: &str, target_addr: Option<String>) {
-    let yaml = fs::read_to_string(config_path).unwrap_or_else(|e| {
-        eprintln!("error: failed to read config: {}", e);
+    let key_hex = fs::read_to_string(config_path.join("identity.key")).unwrap_or_else(|e| {
+        eprintln!("error: failed to read local identity key: {}", e);
         std::process::exit(1);
     });
-    let config = parse_config(&yaml).unwrap_or_else(|e| {
-        eprintln!("error: invalid config: {}", e);
-        std::process::exit(1);
-    });
-
-    let Some(signer_config) = &config.signer else {
-        eprintln!("error: no signer in config");
-        std::process::exit(1);
-    };
-
-    if signer_config.signer_type != "provisioned" {
-        eprintln!("error: signer type must be 'provisioned'");
-        std::process::exit(1);
-    }
-
-    let Some(config_pin) = &signer_config.pairing_pin else {
-        eprintln!("error: no pairing pin in config");
-        std::process::exit(1);
-    };
-
-    if pin != config_pin {
-        eprintln!("error: PIN mismatch");
-        std::process::exit(1);
-    }
+    let signing_key = parse_signing_key_hex(&key_hex);
+    let signer = SyncSoftwareSigner::new(signing_key);
+    let node_id_hex = signer.node_id().to_hex();
 
     let target = target_addr.unwrap_or_else(|| "127.0.0.1:35630".to_string());
     eprintln!("Connecting to {}...", target);
 
-    if let Err(e) = provision_sync(&target, pin, &signer_config.public_key_hex) {
+    if let Err(e) = provision_sync(&target, pin, &node_id_hex) {
         eprintln!("error: provisioning failed: {}", e);
         std::process::exit(1);
     }

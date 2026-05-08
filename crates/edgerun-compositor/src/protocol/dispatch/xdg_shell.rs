@@ -1,9 +1,9 @@
 //! xdg_wm_base, xdg_surface, xdg_toplevel, xdg_positioner, xdg_popup handlers.
 
 use super::DispatchContext;
-use crate::protocol::wl_seat;
-use crate::protocol::xdg_shell;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
+use edgerun_protocols::wayland::wl_seat;
+use edgerun_protocols::wayland::xdg_shell;
 
 pub fn handle_wm_base(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

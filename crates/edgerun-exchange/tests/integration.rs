@@ -384,8 +384,8 @@ mod routing_tests {
         ProviderOrderRequest, ProviderQuote, ProviderStatus,
     };
     use edgerun_exchange::router::{route_quote, QuoteRoutingResult};
-    use edgerun_http::client_middleware::Chain;
-    use edgerun_http::HttpClient;
+    use edgerun_node::http::client_middleware::Chain;
+    use edgerun_node::http::HttpClient;
     use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
         AssetRef, Quote, QuoteRequest,
     };

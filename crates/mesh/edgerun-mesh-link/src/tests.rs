@@ -6,7 +6,6 @@ use crate::multicast::SockaddrIn;
 use alloc::vec;
 use alloc::vec::Vec;
 use edgerun_crypto::p256::ecdsa::SigningKey;
-use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::{NodeID, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
 use edgerun_mesh::{discovery::DiscoveryPacket, router::MeshRouter};
 use edgerun_mesh::{sign_frame, FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRoute};

@@ -1,10 +1,10 @@
 //! wl_compositor, wl_surface, wl_region handlers.
 
 use super::DispatchContext;
-use crate::compositor::surface::{DamageRect, SurfaceBuffer};
-use crate::protocol::wl_compositor;
-use crate::protocol::wp_presentation_time;
-use crate::wire::decode::ArgCursor;
+use crate::compositor::surface::{subtract_rect_from_region, DamageRect, SurfaceBuffer};
+use edgerun_protocols::wayland::decode::ArgCursor;
+use edgerun_protocols::wayland::wl_compositor;
+use edgerun_protocols::wayland::wp_presentation_time;
 
 /// Per-client region state — maps region object id to its rectangles.
 /// Stored in main.rs and passed through DispatchContext.
@@ -21,6 +21,19 @@ impl RegionRegistry {
 
     pub fn set_rects(&mut self, region_id: u32, rects: Vec<DamageRect>) {
         self.regions.insert(region_id, rects);
+    }
+
+    pub fn add_rect(&mut self, region_id: u32, rect: DamageRect) {
+        if rect.width <= 0 || rect.height <= 0 {
+            return;
+        }
+        self.regions.entry(region_id).or_default().push(rect);
+    }
+
+    pub fn subtract_rect(&mut self, region_id: u32, rect: DamageRect) {
+        if let Some(rects) = self.regions.get_mut(&region_id) {
+            subtract_rect_from_region(rects, rect);
+        }
     }
 
     pub fn get_rects(&self, region_id: u32) -> Option<&Vec<DamageRect>> {
@@ -107,6 +120,7 @@ pub fn handle_surface(ctx: &mut DispatchContext) {
                 }
             }
             ctx.surfaces.commit(ctx.msg.sender_id);
+            ctx.shell.subsurfaces.commit_parent(ctx.msg.sender_id);
 
             if let Some(surface) = ctx.surfaces.get(ctx.msg.sender_id) {
                 if surface.buffer.is_some() {
@@ -142,36 +156,30 @@ pub fn handle_surface(ctx: &mut DispatchContext) {
         }
         wl_compositor::surface_request::SET_OPAQUE_REGION => {
             let region_id = ArgCursor::from_message(&ctx.msg).object().unwrap_or(0);
-            if let Some(surface) = ctx.surfaces.get_mut(ctx.msg.sender_id) {
-                if region_id != 0 {
-                    // Copy rects from the region object via region registry
-                    let rects = ctx
-                        .region_registry
-                        .get_rects(region_id)
-                        .cloned()
-                        .unwrap_or_default();
-                    surface.opaque = true;
-                    surface.opaque_region = rects;
-                } else {
-                    surface.opaque = false;
-                    surface.opaque_region.clear();
-                }
+            if region_id != 0 {
+                let rects = ctx
+                    .region_registry
+                    .get_rects(region_id)
+                    .cloned()
+                    .unwrap_or_default();
+                ctx.surfaces.set_opaque_region(ctx.msg.sender_id, rects);
+            } else {
+                ctx.surfaces
+                    .set_opaque_region(ctx.msg.sender_id, Vec::new());
             }
         }
         wl_compositor::surface_request::SET_INPUT_REGION => {
             let region_id = ArgCursor::from_message(&ctx.msg).object().unwrap_or(0);
-            if let Some(surface) = ctx.surfaces.get_mut(ctx.msg.sender_id) {
-                if region_id != 0 {
-                    // Copy rects from the region object via region registry
-                    let rects = ctx
-                        .region_registry
-                        .get_rects(region_id)
-                        .cloned()
-                        .unwrap_or_default();
-                    surface.input_region = Some(rects);
-                } else {
-                    surface.input_region = None;
-                }
+            if region_id != 0 {
+                let rects = ctx
+                    .region_registry
+                    .get_rects(region_id)
+                    .cloned()
+                    .unwrap_or_default();
+                ctx.surfaces
+                    .set_input_region(ctx.msg.sender_id, Some(rects));
+            } else {
+                ctx.surfaces.set_input_region(ctx.msg.sender_id, None);
             }
         }
         wl_compositor::surface_request::DAMAGE_BUFFER => {
@@ -197,10 +205,7 @@ pub fn handle_surface(ctx: &mut DispatchContext) {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
             let x = cursor_obj.int().unwrap_or(0);
             let y = cursor_obj.int().unwrap_or(0);
-            if let Some(s) = ctx.surfaces.get_mut(ctx.msg.sender_id) {
-                s.x = x;
-                s.y = y;
-            }
+            ctx.surfaces.offset(ctx.msg.sender_id, x, y);
         }
         wl_compositor::surface_request::DESTROY => {
             if let Some(surface) = ctx.surfaces.get(ctx.msg.sender_id) {
@@ -246,14 +251,7 @@ pub fn handle_region(ctx: &mut DispatchContext) {
                 width: w,
                 height: h,
             };
-            // Get current rects for this region, or start empty
-            let mut rects = ctx
-                .region_registry
-                .get_rects(region_id)
-                .cloned()
-                .unwrap_or_default();
-            rects.push(rect);
-            ctx.region_registry.set_rects(region_id, rects);
+            ctx.region_registry.add_rect(region_id, rect);
         }
         wl_compositor::region_request::SUBTRACT => {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
@@ -267,20 +265,7 @@ pub fn handle_region(ctx: &mut DispatchContext) {
                 width: w,
                 height: h,
             };
-            // Get current rects and subtract
-            let mut rects = ctx
-                .region_registry
-                .get_rects(region_id)
-                .cloned()
-                .unwrap_or_default();
-            rects.retain(|r| {
-                // Simple rect removal — remove any rect that overlaps with subtract_rect
-                !(r.x < subtract_rect.x + subtract_rect.width
-                    && r.x + r.width > subtract_rect.x
-                    && r.y < subtract_rect.y + subtract_rect.height
-                    && r.y + r.height > subtract_rect.y)
-            });
-            ctx.region_registry.set_rects(region_id, rects);
+            ctx.region_registry.subtract_rect(region_id, subtract_rect);
         }
         _ => {}
     }
@@ -365,24 +350,36 @@ mod tests {
             ],
         );
 
-        // Subtract a rect that overlaps the first one
-        let subtract = DamageRect {
-            x: 0,
+        reg.subtract_rect(
+            region_id,
+            DamageRect {
+                x: 0,
+                y: 0,
+                width: 50,
+                height: 50,
+            },
+        );
+
+        let rects = reg.get_rects(region_id).unwrap();
+        assert_eq!(rects.len(), 3);
+        assert!(rects.contains(&DamageRect {
+            x: 50,
             y: 0,
             width: 50,
             height: 50,
-        };
-        let mut rects = reg.get_rects(region_id).unwrap().clone();
-        rects.retain(|r| {
-            !(r.x < subtract.x + subtract.width
-                && r.x + r.width > subtract.x
-                && r.y < subtract.y + subtract.height
-                && r.y + r.height > subtract.y)
-        });
-        reg.set_rects(region_id, rects);
-
-        // First rect was overlapping and removed, second remains
-        assert_eq!(reg.get_rects(region_id).unwrap().len(), 1);
+        }));
+        assert!(rects.contains(&DamageRect {
+            x: 0,
+            y: 50,
+            width: 100,
+            height: 50,
+        }));
+        assert!(rects.contains(&DamageRect {
+            x: 200,
+            y: 200,
+            width: 50,
+            height: 50,
+        }));
     }
 
     #[test]

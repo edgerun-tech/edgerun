@@ -7,19 +7,15 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Linux GPU discovery adapter for Edgerun"
+autobins = false
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
-edgerun-gpu.workspace = true
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 
 [features]
 std = []
-
-[[bin]]
-name = "linux_gpu_tool"
-path = "src/bin/linux-gpu-tool.rs"
-required-features = ["std"]
 
 [lints]
 workspace = true

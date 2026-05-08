@@ -12,7 +12,8 @@ use super::{BlockEventLog, BlockStorage};
 ///
 /// The block log stores already-signed events; this struct keeps in-memory
 /// indexes for fast lookup of latest heads and seq→offset locations after
-/// recovery. It does not assign sequence numbers or validate hash chains.
+/// recovery. The block log enforces contiguous per-stream append and hash
+/// linkage before this index is updated.
 pub struct BlockStreamStore<S: BlockStorage> {
     event_log: BlockEventLog<S>,
     heads: BTreeMap<Vec<u8>, (u64, Vec<u8>)>,
@@ -146,14 +147,17 @@ mod tests {
     }
 
     #[test]
-    fn block_stream_store_stores_non_contiguous_seq_without_authoring_state() {
+    fn block_stream_store_rejects_non_contiguous_seq() {
         let device = InMemoryBlockDevice::new(32, 64);
         let mut store = BlockStreamStore::open(device).unwrap();
         let e0 = event(b"stream", 0, None);
         let e2 = event(b"stream", 2, None);
         store.append_event(e0).unwrap();
-        store.append_event(e2).unwrap();
-        assert_eq!(store.get_head(b"stream").unwrap().0, 2);
+        assert!(matches!(
+            store.append_event(e2),
+            Err(StorageError::Stream(_))
+        ));
+        assert_eq!(store.get_head(b"stream").unwrap().0, 0);
     }
 
     #[test]
@@ -173,14 +177,17 @@ mod tests {
     }
 
     #[test]
-    fn block_stream_store_does_not_validate_prev_hash() {
+    fn block_stream_store_rejects_wrong_prev_hash() {
         let device = InMemoryBlockDevice::new(32, 64);
         let mut store = BlockStreamStore::open(device).unwrap();
 
         let e0 = event(b"stream", 0, None);
         let e1 = event(b"stream", 1, Some(vec![0xAA; 32]));
         store.append_event(e0).unwrap();
-        store.append_event(e1).unwrap();
-        assert_eq!(store.get_head(b"stream").unwrap().0, 1);
+        assert!(matches!(
+            store.append_event(e1),
+            Err(StorageError::Stream(_))
+        ));
+        assert_eq!(store.get_head(b"stream").unwrap().0, 0);
     }
 }

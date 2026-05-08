@@ -3,11 +3,11 @@
 use super::DispatchContext;
 use crate::input::keymap;
 use crate::libc;
-use crate::protocol::input_method_v2;
-use crate::protocol::input_method_v2::IMEState;
-use crate::protocol::text_input_v3;
-use crate::protocol::text_input_v3::TextInputState;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
+use edgerun_protocols::wayland::input_method_v2;
+use edgerun_protocols::wayland::input_method_v2::IMEState;
+use edgerun_protocols::wayland::text_input_v3;
+use edgerun_protocols::wayland::text_input_v3::TextInputState;
 
 pub fn handle_text_input_manager(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

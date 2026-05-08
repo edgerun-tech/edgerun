@@ -9,7 +9,7 @@ use core::result::Result::{Err, Ok};
 use edgerun_bluetooth_gatt::sync::RwLock;
 use edgerun_bluetooth_gatt::{format_gatt_uuid, AttProtocol, GattError, L2capSocket};
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
-use edgerun_crypto::{OsRng, RngCore};
+use edgerun_crypto::OsRng;
 use edgerun_protocols::tcl_ac::{
     build_protocol_packet, calculate_crc8, decrypt_payload as decrypt_protocol_payload,
     derive_session_key, encrypt_payload as encrypt_protocol_payload, expected_protocol_packet_len,

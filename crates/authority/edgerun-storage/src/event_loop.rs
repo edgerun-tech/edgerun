@@ -19,7 +19,7 @@ use std::thread::JoinHandle;
 
 use crate::error::StorageError;
 use crate::file_index::FileIndex;
-use crate::fs::{open_stream_file, write_event_to_file};
+use crate::fs::{append_event_to_file, open_stream_file};
 use crate::materializer::{materialize_event_to_index, OpEventType};
 
 // ---------------------------------------------------------------------------
@@ -212,14 +212,15 @@ fn run_event_loop(
             continue;
         };
 
-        // Write event to disk
-        let offset = match write_event_to_file(file, event) {
-            Ok(off) => off,
+        // Validate the stream linkage and write the event to disk.
+        let receipt = match append_event_to_file(&events_dir, file, event) {
+            Ok(receipt) => receipt,
             Err(e) => {
                 let _ = request.result_tx.send(Err(e));
                 continue;
             }
         };
+        let offset = receipt.file_offset;
         drop(sf);
 
         // Materialize: update FileIndex from the event

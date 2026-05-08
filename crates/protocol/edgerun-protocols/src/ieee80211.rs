@@ -5,7 +5,7 @@
 //! out, while the rest of Edgerun continues to see Ethernet frames through the
 //! runtime network boundary.
 
-use edgerun_encoding::byteorder::{read_u16_le, write_u16_le};
+use edgerun_encoding::byteorder::{read_u16_le, write_u16_be, write_u16_le};
 
 pub const MAX_SSID_LEN: usize = 32;
 pub const MAC_LEN: usize = 6;
@@ -634,7 +634,7 @@ mod tests {
         let mut downlink = [0; 64];
         downlink[..6].copy_from_slice(&STA.0);
         downlink[6..12].copy_from_slice(&DST.0);
-        downlink[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
+        write_u16_be(&mut downlink, 12, 0x0800);
         downlink[14..18].copy_from_slice(&[1, 2, 3, 4]);
 
         let mut wifi = [0; 256];
@@ -649,7 +649,7 @@ mod tests {
         let mut uplink = [0; 64];
         uplink[..6].copy_from_slice(&DST.0);
         uplink[6..12].copy_from_slice(&STA.0);
-        uplink[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
+        write_u16_be(&mut uplink, 12, 0x0800);
         uplink[14..18].copy_from_slice(&[1, 2, 3, 4]);
 
         let to_ds_fc = (SUBTYPE_DATA << 4) | (FRAME_TYPE_DATA << 2) | (1 << 8);

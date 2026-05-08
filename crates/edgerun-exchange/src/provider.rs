@@ -1,7 +1,7 @@
 //! Exchange provider abstraction.
 //!
 //! Defines the `ExchangeProvider` trait and canonical types.
-//! Uses edgerun-http for HTTP calls, edgerun-json for JSON parsing.
+//! Uses edgerun-node http for HTTP calls, edgerun-json for JSON parsing.
 //! No external dependencies.
 
 extern crate alloc;
@@ -135,7 +135,8 @@ pub trait ExchangeProvider {
 /// Context passed to provider calls (HTTP client, timeout, etc.).
 #[derive(Clone)]
 pub struct ProviderContext {
-    pub http_client: alloc::rc::Rc<core::cell::RefCell<edgerun_http::Client>>,
+    #[cfg(feature = "provider-http")]
+    pub http_client: alloc::rc::Rc<core::cell::RefCell<edgerun_node::http::Client>>,
     pub timeout_ms: u64,
 }
 

@@ -267,7 +267,10 @@ mod tests {
     #[test]
     fn test_real_workspace_gitignore() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let Some(workspace) = manifest_dir.parent().and_then(Path::parent) else {
+        let Some(workspace) = manifest_dir
+            .ancestors()
+            .find(|path| path.join(".gitignore").exists() && path.join("Cargo.toml").exists())
+        else {
             return;
         };
         if !workspace.exists() {

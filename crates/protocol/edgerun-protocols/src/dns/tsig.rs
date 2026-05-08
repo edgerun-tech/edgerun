@@ -139,7 +139,6 @@ pub struct TsigKey {
 impl TsigKey {
     /// Generate a random TSIG key using OS entropy.
     pub fn generate() -> Self {
-        use edgerun_crypto::RngCore;
         let mut secret = vec![0u8; 64];
         edgerun_crypto::OsRng.fill_bytes(&mut secret);
         Self {

@@ -1,0 +1,31 @@
+[package]
+name = "edgerun-codelyzer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+autobins = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = ["lang-rust"]
+lang-rust = []
+lang-typescript = []
+lang-c = []
+lang-python = []
+lang-go = []
+lang-java = []
+lang-javascript = []
+vfs = ["dep:edgerun-vfs"]
+
+[dependencies]
+edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
+edgerun-glob.workspace = true
+edgerun-json = { workspace = true, features = ["std", "toml"] }
+edgerun-regex.workspace = true
+edgerun-vfs = { path = "../authority/edgerun-vfs", optional = true }
+rkyv.workspace = true

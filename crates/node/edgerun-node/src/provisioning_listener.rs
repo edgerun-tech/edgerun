@@ -1,14 +1,14 @@
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
 use edgerun_hardware_signing::NodeID;
 use edgerun_json::{escape_json_string, Value as JsonValue};
-use edgerun_node::rt::CancellationToken;
+use edgerun_node::network::{HostSocketTransport, TransportAddress};
+use edgerun_node::rt::{timeout, CancellationToken};
 use edgerun_node::rt::{AsyncReadExt, AsyncWriteExt};
-use edgerun_node::transport::{HostSocketTransport, TransportAddress};
 
 const PROVISION_PORT: u16 = 35630;
+const ACCEPT_POLL_INTERVAL: core::time::Duration = core::time::Duration::from_millis(100);
 
 pub(crate) async fn run_provisioning_listener(
     _node_id: NodeID,
@@ -17,7 +17,7 @@ pub(crate) async fn run_provisioning_listener(
     config_path: Option<std::path::PathBuf>,
     cancel: CancellationToken,
 ) {
-    let addr = format!("0.0.0.0:{PROVISION_PORT}");
+    let addr = format!("127.0.0.1:{PROVISION_PORT}");
     let listen_addr: std::net::SocketAddr = match addr.parse() {
         Ok(a) => a,
         Err(e) => {
@@ -36,7 +36,7 @@ pub(crate) async fn run_provisioning_listener(
         }
     };
 
-    crate::node_info!("Provisioning listener ready on :{PROVISION_PORT}");
+    crate::node_info!("Provisioning listener ready on 127.0.0.1:{PROVISION_PORT}");
     if let Some(path) = &config_path {
         crate::node_info!("Provisioning persistence enabled via {}", path.display());
     }
@@ -47,20 +47,19 @@ pub(crate) async fn run_provisioning_listener(
             return;
         }
 
-        match listener.accept().await {
-            Ok((stream, peer_addr)) => {
+        match timeout(ACCEPT_POLL_INTERVAL, listener.accept()).await {
+            Err(_) => continue,
+            Ok(Ok((stream, peer_addr))) => {
                 crate::node_info!("Provisioning connection from {peer_addr}");
                 let pin = pairing_pin.clone();
                 let pubkey = public_key_hex.clone();
                 let target_config_path = config_path.clone();
-                let peer_loopback = peer_addr.ip().is_loopback();
                 edgerun_node::rt::spawn(async move {
                     if let Err(e) = handle_provisioning_connection(
                         stream,
                         &pin,
                         &pubkey,
                         target_config_path.as_deref(),
-                        peer_loopback,
                     )
                     .await
                     {
@@ -68,8 +67,9 @@ pub(crate) async fn run_provisioning_listener(
                     }
                 });
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 crate::node_warn!("Provisioning accept error: {e}");
+                edgerun_node::rt::sleep(ACCEPT_POLL_INTERVAL).await;
             }
         }
     }
@@ -99,7 +99,6 @@ pub(crate) async fn handle_provisioning_connection(
     expected_pin: &Option<String>,
     public_key_hex: &str,
     config_path: Option<&Path>,
-    peer_loopback: bool,
 ) -> Result<(), String> {
     let mut buf = [0u8; 512];
     let n = stream
@@ -111,7 +110,7 @@ pub(crate) async fn handle_provisioning_connection(
     }
 
     let request = String::from_utf8_lossy(&buf[..n]).to_string();
-    crate::node_debug!("Provisioning request: {request}");
+    crate::node_debug!("Provisioning request received: {} bytes", n);
 
     let payload: JsonValue = match edgerun_json::from_json_slice(request.as_bytes()) {
         Ok(payload) => payload,
@@ -128,16 +127,11 @@ pub(crate) async fn handle_provisioning_connection(
     let msg_type = json_text(payload.get("type"), "type").unwrap_or_default();
     let pin = json_text(payload.get("pin"), "pin").unwrap_or_default();
     let node_id = json_text(payload.get("node_id"), "node_id").unwrap_or_default();
-    let skip_local_checks = payload
-        .get("skip_checks")
-        .and_then(JsonValue::as_bool)
-        .unwrap_or(false);
-    let bypass_security = skip_local_checks && peer_loopback;
 
     let response = if msg_type == "provision" {
         if node_id != public_key_hex {
             response_err("node_id mismatch")
-        } else if !bypass_security {
+        } else {
             if let Some(expected) = expected_pin {
                 if pin != *expected {
                     response_err("PIN mismatch")
@@ -147,8 +141,6 @@ pub(crate) async fn handle_provisioning_connection(
             } else {
                 persist_provisioning_response(config_path, public_key_hex)
             }
-        } else {
-            persist_provisioning_response(config_path, public_key_hex)
         }
     } else if msg_type == "complete" {
         response_ok("genesis_completed")
@@ -173,89 +165,11 @@ fn persist_provisioning_response(config_path: Option<&Path>, public_key_hex: &st
 }
 
 fn persist_provisioned_signer_state(
-    config_path: &Path,
+    _config_path: &Path,
     public_key_hex: &str,
 ) -> Result<(), String> {
-    let raw = fs::read_to_string(config_path).map_err(|error| error.to_string())?;
-    let lines = raw.split_inclusive('\n').collect::<Vec<_>>();
-    let mut signer_start = None;
-    let mut signer_end = None;
-    let mut cursor = 0;
-    while cursor < lines.len() {
-        let line = lines[cursor];
-        if line.trim_end_matches('\n') != "signer:" || line.starts_with(' ') {
-            cursor += 1;
-            continue;
-        }
-
-        let mut end = cursor + 1;
-        while end < lines.len() && lines[end].starts_with("  ") {
-            end += 1;
-        }
-
-        let block = &lines[cursor + 1..end];
-        let mut signer_type: Option<String> = None;
-        let mut is_target_signer = false;
-        for entry in block {
-            if let Some((key, value)) = crate::config::parse_kv(entry.trim_start()) {
-                let value = crate::config::unquote(&value.trim_end_matches('\n'));
-                if key == "type" {
-                    signer_type = Some(value.to_string());
-                } else if key == "public_key_hex" && value == public_key_hex {
-                    is_target_signer = true;
-                }
-            }
-        }
-
-        if signer_type.as_deref() == Some("provisioned") && is_target_signer {
-            signer_start = Some(cursor);
-            signer_end = Some(end);
-            break;
-        }
-        cursor = end;
-    }
-
-    let (start, end) = match (signer_start, signer_end) {
-        (Some(start), Some(end)) => (start, end),
-        _ => return Err("target provisioned signer not found".into()),
-    };
-
-    let block = &lines[start + 1..end];
-    let mut has_state = false;
-
-    let mut output = String::new();
-    for line in lines[..start + 1].iter() {
-        output.push_str(line);
-    }
-
-    for line in block {
-        let raw_line = line.trim_end_matches('\n');
-        if let Some((key, value)) = crate::config::parse_kv(raw_line.trim_start()) {
-            if key == "state" {
-                output.push_str(&format!("  state: \"active\"\n"));
-                has_state = true;
-                continue;
-            }
-            if key == "pairing_pin" {
-                continue;
-            }
-            output.push_str(line);
-            continue;
-        }
-        output.push_str(line);
-    }
-
-    if !has_state {
-        output.push_str("  state: \"active\"\n");
-    }
-
-    for line in lines[end..].iter() {
-        output.push_str(line);
-    }
-
-    fs::write(config_path, output).map_err(|error| error.to_string())?;
     crate::node_info!(
-        "provisioning state persisted for node {}",
+        "provisioning accepted for node {}; authoritative changes must be committed to the event log",
         &public_key_hex[..16]
     );
     Ok(())

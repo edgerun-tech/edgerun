@@ -14,12 +14,12 @@ pub use edgerun_linux_sysfs::prelude;
 pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result, string, vec};
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_linux_sysfs::prelude::v1::*;
-use edgerun_linux_sysfs::{parse_bool_flag, parse_u64, parse_u8, read_trimmed};
-use edgerun_power::{
+use edgerun_devices::power::{
     default_power_descriptor, BatteryStatus, LidState, PowerInventory, PowerSourceInfo,
     PowerSupplyKind, PowerSystemInfo,
 };
+use edgerun_linux_sysfs::prelude::v1::*;
+use edgerun_linux_sysfs::{parse_bool_flag, parse_u64, parse_u8, read_trimmed};
 #[cfg(not(target_os = "none"))]
 use std::fs;
 use std::path::{Path, PathBuf};

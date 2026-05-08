@@ -3,8 +3,6 @@ pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_crypto::p256::PublicKey;
 use edgerun_hardware_signing::NodeID;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 
 use super::*;
 
@@ -22,6 +20,8 @@ pub enum SessionError {
     CiphertextTooShort,
     /// Replay attack detected: nonce counter went backwards or repeated.
     ReplayDetected,
+    /// Replay-only inputs were supplied to a host-clock session manager.
+    ReplayOnlyInput,
 }
 
 impl core::fmt::Display for SessionError {
@@ -33,6 +33,9 @@ impl core::fmt::Display for SessionError {
             Self::DecryptionFailed => write!(f, "AES-GCM decryption failed"),
             Self::CiphertextTooShort => write!(f, "ciphertext too short"),
             Self::ReplayDetected => write!(f, "replay attack detected"),
+            Self::ReplayOnlyInput => {
+                write!(f, "replay-only input requires replayable session manager")
+            }
         }
     }
 }

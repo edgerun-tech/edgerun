@@ -3,8 +3,6 @@ pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_crypto::p256::PublicKey;
 use edgerun_hardware_signing::NodeID;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 
 use super::*;
 

@@ -233,8 +233,10 @@ fn delegation_hash(delegation: &DelegationRecord) -> Digest {
     }
 }
 
-fn timestamp_millis(ts: &crate::protocol::Timestamp) -> i64 {
-    ts.seconds * 1000 + (ts.nanos as i64) / 1_000_000
+fn timestamp_millis(ts: &crate::protocol::Timestamp) -> Option<i64> {
+    ts.seconds
+        .checked_mul(1_000)?
+        .checked_add((ts.nanos as i64) / 1_000_000)
 }
 
 fn validate_timestamp_shape(
@@ -248,7 +250,22 @@ fn validate_timestamp_shape(
             empty_map(),
         ));
     }
+    if timestamp_millis(timestamp).is_none() {
+        return Some(reject(
+            ReasonCode::TimeInvalid,
+            Value::String(format!("{label} seconds out of epoch-millis range")),
+            empty_map(),
+        ));
+    }
     None
+}
+
+fn timestamp_range_reject(label: &str) -> ValidationResult {
+    reject(
+        ReasonCode::TimeInvalid,
+        Value::String(format!("{label} seconds out of epoch-millis range")),
+        empty_map(),
+    )
 }
 
 fn validate_supported_version(value: u32, label: &str, field: &str) -> Option<ValidationResult> {
@@ -368,12 +385,16 @@ fn validate_constraint_set(
     }
     if let (Some(not_before), Some(expires_at)) = (&constraints.not_before, &constraints.expires_at)
     {
-        if timestamp_millis(not_before) > timestamp_millis(expires_at) {
-            return Some(reject(
-                ReasonCode::TimeInvalid,
-                Value::String(format!("{label} time window is inverted")),
-                empty_map(),
-            ));
+        if let (Some(not_before_ms), Some(expires_at_ms)) =
+            (timestamp_millis(not_before), timestamp_millis(expires_at))
+        {
+            if not_before_ms > expires_at_ms {
+                return Some(reject(
+                    ReasonCode::TimeInvalid,
+                    Value::String(format!("{label} time window is inverted")),
+                    empty_map(),
+                ));
+            }
         }
     }
     if constraints.max_uses == Some(0) {
@@ -555,12 +576,16 @@ fn validate_scope_descriptor(
         if let (Some(not_before), Some(expires_at)) =
             (&time_bounds.not_before, &time_bounds.expires_at)
         {
-            if timestamp_millis(not_before) > timestamp_millis(expires_at) {
-                return Some(reject(
-                    ReasonCode::TimeInvalid,
-                    Value::String(format!("{label} time_bounds are inverted")),
-                    empty_map(),
-                ));
+            if let (Some(not_before_ms), Some(expires_at_ms)) =
+                (timestamp_millis(not_before), timestamp_millis(expires_at))
+            {
+                if not_before_ms > expires_at_ms {
+                    return Some(reject(
+                        ReasonCode::TimeInvalid,
+                        Value::String(format!("{label} time_bounds are inverted")),
+                        empty_map(),
+                    ));
+                }
             }
         }
     }
@@ -732,12 +757,16 @@ fn validate_delegation_record_structure(
         }
     }
     if let (Some(not_before), Some(expires_at)) = (&delegation.not_before, &delegation.expires_at) {
-        if timestamp_millis(not_before) > timestamp_millis(expires_at) {
-            return Some(reject(
-                ReasonCode::TimeInvalid,
-                Value::String(format!("{label} not_before is after expires_at")),
-                empty_map(),
-            ));
+        if let (Some(not_before_ms), Some(expires_at_ms)) =
+            (timestamp_millis(not_before), timestamp_millis(expires_at))
+        {
+            if not_before_ms > expires_at_ms {
+                return Some(reject(
+                    ReasonCode::TimeInvalid,
+                    Value::String(format!("{label} not_before is after expires_at")),
+                    empty_map(),
+                ));
+            }
         }
     }
     let Some(capability) = &delegation.capability else {
@@ -1078,7 +1107,11 @@ fn validate_effective_capability_for_command(
     }
     if let Some(time_bounds) = &scope.time_bounds {
         if let Some(not_before) = &time_bounds.not_before {
-            let not_before_ms = timestamp_millis(not_before);
+            let Some(not_before_ms) = timestamp_millis(not_before) else {
+                return Err(timestamp_range_reject(
+                    "delegation scope time_bounds not_before",
+                ));
+            };
             if ctx.now_ms < not_before_ms {
                 return Err(defer(
                     ReasonCode::TimeInvalid,
@@ -1087,7 +1120,11 @@ fn validate_effective_capability_for_command(
             }
         }
         if let Some(expires_at) = &time_bounds.expires_at {
-            let expires_ms = timestamp_millis(expires_at);
+            let Some(expires_ms) = timestamp_millis(expires_at) else {
+                return Err(timestamp_range_reject(
+                    "delegation scope time_bounds expires_at",
+                ));
+            };
             if ctx.now_ms > expires_ms {
                 return Err(reject(
                     ReasonCode::TimeInvalid,
@@ -1099,7 +1136,9 @@ fn validate_effective_capability_for_command(
     }
     if let Some(constraints) = &capability.constraints {
         if let Some(not_before) = &constraints.not_before {
-            let not_before_ms = timestamp_millis(not_before);
+            let Some(not_before_ms) = timestamp_millis(not_before) else {
+                return Err(timestamp_range_reject("delegation constraints not_before"));
+            };
             if ctx.now_ms < not_before_ms {
                 return Err(defer(
                     ReasonCode::TimeInvalid,
@@ -1108,7 +1147,9 @@ fn validate_effective_capability_for_command(
             }
         }
         if let Some(expires_at) = &constraints.expires_at {
-            let expires_ms = timestamp_millis(expires_at);
+            let Some(expires_ms) = timestamp_millis(expires_at) else {
+                return Err(timestamp_range_reject("delegation constraints expires_at"));
+            };
             if ctx.now_ms > expires_ms {
                 return Err(reject(
                     ReasonCode::TimeInvalid,
@@ -1270,12 +1311,8 @@ fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationRes
             empty_map(),
         ));
     };
-    if issued_at.nanos < 0 || issued_at.nanos >= 1_000_000_000 {
-        return Some(reject(
-            ReasonCode::StructuralInvalid,
-            Value::String("issued_at nanos out of range".into()),
-            empty_map(),
-        ));
+    if let Some(result) = validate_timestamp_shape(issued_at, "issued_at") {
+        return Some(result);
     }
 
     let Some(target) = &command.target_node else {
@@ -1305,30 +1342,26 @@ fn validate_command_structure(command: &CommandEnvelope) -> Option<ValidationRes
     }
 
     if let Some(not_before) = &command.not_before {
-        if not_before.nanos < 0 || not_before.nanos >= 1_000_000_000 {
-            return Some(reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("not_before nanos out of range".into()),
-                empty_map(),
-            ));
+        if let Some(result) = validate_timestamp_shape(not_before, "not_before") {
+            return Some(result);
         }
     }
     if let Some(expires_at) = &command.expires_at {
-        if expires_at.nanos < 0 || expires_at.nanos >= 1_000_000_000 {
-            return Some(reject(
-                ReasonCode::StructuralInvalid,
-                Value::String("expires_at nanos out of range".into()),
-                empty_map(),
-            ));
+        if let Some(result) = validate_timestamp_shape(expires_at, "expires_at") {
+            return Some(result);
         }
     }
     if let (Some(not_before), Some(expires_at)) = (&command.not_before, &command.expires_at) {
-        if timestamp_millis(not_before) > timestamp_millis(expires_at) {
-            return Some(reject(
-                ReasonCode::TimeInvalid,
-                Value::String("command not_before is after expires_at".into()),
-                empty_map(),
-            ));
+        if let (Some(not_before_ms), Some(expires_at_ms)) =
+            (timestamp_millis(not_before), timestamp_millis(expires_at))
+        {
+            if not_before_ms > expires_at_ms {
+                return Some(reject(
+                    ReasonCode::TimeInvalid,
+                    Value::String("command not_before is after expires_at".into()),
+                    empty_map(),
+                ));
+            }
         }
     }
 
@@ -1407,7 +1440,9 @@ pub fn validate_command(
         return result;
     }
 
-    let issued_at_ms = timestamp_millis(command.issued_at.as_ref().unwrap());
+    let Some(issued_at_ms) = timestamp_millis(command.issued_at.as_ref().unwrap()) else {
+        return timestamp_range_reject("issued_at");
+    };
     if ctx.now_ms < issued_at_ms {
         let mut derived = BTreeMap::new();
         derived.insert("issued_at_ms".into(), Value::Int(issued_at_ms));
@@ -1488,7 +1523,9 @@ pub fn validate_command(
     // --- Step 3: Timing validation ---
     // Per spec §18.6: TIME_CHECK comes before REPLAY_CHECK
     if let Some(ref not_before) = command.not_before {
-        let not_before_ms = timestamp_millis(not_before);
+        let Some(not_before_ms) = timestamp_millis(not_before) else {
+            return timestamp_range_reject("not_before");
+        };
         if ctx.now_ms < not_before_ms {
             let mut derived = BTreeMap::new();
             derived.insert("not_before_ms".into(), Value::Int(not_before_ms));
@@ -1498,7 +1535,9 @@ pub fn validate_command(
     }
 
     if let Some(ref expires_at) = command.expires_at {
-        let expires_ms = timestamp_millis(expires_at);
+        let Some(expires_ms) = timestamp_millis(expires_at) else {
+            return timestamp_range_reject("expires_at");
+        };
         if ctx.now_ms > expires_ms {
             return reject(
                 ReasonCode::TimeInvalid,
@@ -1766,7 +1805,9 @@ fn validate_delegation_chain(
 
         // Check timing: expires_at
         if let Some(ref expires_at) = delegation.expires_at {
-            let expires_ms = expires_at.seconds * 1000 + (expires_at.nanos as i64) / 1_000_000;
+            let Some(expires_ms) = timestamp_millis(expires_at) else {
+                return Err(timestamp_range_reject("delegation expires_at"));
+            };
             if ctx.now_ms > expires_ms {
                 return Err(reject(
                     ReasonCode::TimeInvalid,
@@ -1778,7 +1819,9 @@ fn validate_delegation_chain(
 
         // Check timing: not_before
         if let Some(ref not_before) = delegation.not_before {
-            let not_before_ms = not_before.seconds * 1000 + (not_before.nanos as i64) / 1_000_000;
+            let Some(not_before_ms) = timestamp_millis(not_before) else {
+                return Err(timestamp_range_reject("delegation not_before"));
+            };
             if ctx.now_ms < not_before_ms {
                 return Err(defer(
                     ReasonCode::TimeInvalid,
@@ -1787,7 +1830,9 @@ fn validate_delegation_chain(
             }
         }
 
-        let issued_at_ms = timestamp_millis(delegation.issued_at.as_ref().unwrap());
+        let Some(issued_at_ms) = timestamp_millis(delegation.issued_at.as_ref().unwrap()) else {
+            return Err(timestamp_range_reject("delegation issued_at"));
+        };
         if ctx.now_ms < issued_at_ms {
             return Err(defer(
                 ReasonCode::TimeInvalid,
@@ -2208,7 +2253,13 @@ fn time_window_allows(
         let Some(child_not_before) = &child.not_before else {
             return false;
         };
-        if timestamp_millis(child_not_before) < timestamp_millis(parent_not_before) {
+        let (Some(child_not_before_ms), Some(parent_not_before_ms)) = (
+            timestamp_millis(child_not_before),
+            timestamp_millis(parent_not_before),
+        ) else {
+            return false;
+        };
+        if child_not_before_ms < parent_not_before_ms {
             return false;
         }
     }
@@ -2216,7 +2267,13 @@ fn time_window_allows(
         let Some(child_expires_at) = &child.expires_at else {
             return false;
         };
-        if timestamp_millis(child_expires_at) > timestamp_millis(parent_expires_at) {
+        let (Some(child_expires_at_ms), Some(parent_expires_at_ms)) = (
+            timestamp_millis(child_expires_at),
+            timestamp_millis(parent_expires_at),
+        ) else {
+            return false;
+        };
+        if child_expires_at_ms > parent_expires_at_ms {
             return false;
         }
     }
@@ -2241,7 +2298,13 @@ fn attenuate_timing(
                 empty_map(),
             ));
         };
-        if timestamp_millis(child_not_before) < timestamp_millis(parent_not_before) {
+        let (Some(child_not_before_ms), Some(parent_not_before_ms)) = (
+            timestamp_millis(child_not_before),
+            timestamp_millis(parent_not_before),
+        ) else {
+            return Err(timestamp_range_reject("delegation timing not_before"));
+        };
+        if child_not_before_ms < parent_not_before_ms {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
                 Value::String(format!(
@@ -2265,7 +2328,13 @@ fn attenuate_timing(
                 empty_map(),
             ));
         };
-        if timestamp_millis(child_expires) > timestamp_millis(parent_expires) {
+        let (Some(child_expires_ms), Some(parent_expires_ms)) = (
+            timestamp_millis(child_expires),
+            timestamp_millis(parent_expires),
+        ) else {
+            return Err(timestamp_range_reject("delegation timing expires_at"));
+        };
+        if child_expires_ms > parent_expires_ms {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
                 Value::String(format!(
@@ -2331,7 +2400,13 @@ fn attenuate_constraints(
                 empty_map(),
             ));
         };
-        if timestamp_millis(child_not_before) < timestamp_millis(parent_not_before) {
+        let (Some(child_not_before_ms), Some(parent_not_before_ms)) = (
+            timestamp_millis(child_not_before),
+            timestamp_millis(parent_not_before),
+        ) else {
+            return Err(timestamp_range_reject("constraint attenuation not_before"));
+        };
+        if child_not_before_ms < parent_not_before_ms {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
                 Value::String(format!(
@@ -2351,7 +2426,13 @@ fn attenuate_constraints(
                 empty_map(),
             ));
         };
-        if timestamp_millis(child_expires_at) > timestamp_millis(parent_expires_at) {
+        let (Some(child_expires_at_ms), Some(parent_expires_at_ms)) = (
+            timestamp_millis(child_expires_at),
+            timestamp_millis(parent_expires_at),
+        ) else {
+            return Err(timestamp_range_reject("constraint attenuation expires_at"));
+        };
+        if child_expires_at_ms > parent_expires_at_ms {
             return Err(reject(
                 ReasonCode::AuthorityDenied,
                 Value::String(format!(
@@ -3225,6 +3306,43 @@ mod tests {
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
+    #[test]
+    fn command_with_epoch_millis_overflow_timestamp_is_rejected() {
+        let key = test_signing_key();
+        let hint = key_hint_for(&key);
+        let mut cmd = make_signed_command(&key, Some(hint));
+        cmd.issued_at = Some(crate::protocol::Timestamp {
+            seconds: i64::MAX,
+            nanos: 0,
+        });
+        sign_command(&key, &mut cmd);
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::TimeInvalid));
+    }
+
+    #[test]
+    fn timestamp_millis_returns_none_on_epoch_millis_overflow() {
+        assert_eq!(
+            timestamp_millis(&crate::protocol::Timestamp {
+                seconds: i64::MAX,
+                nanos: 0,
+            }),
+            None
+        );
+        assert_eq!(
+            timestamp_millis(&crate::protocol::Timestamp {
+                seconds: 1,
+                nanos: 500_000_000,
+            }),
+            Some(1_500)
+        );
     }
 
     #[test]

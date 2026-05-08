@@ -1,0 +1,15 @@
+{
+  "format": "edgerun-app-catalog-source-v1",
+  "apps": [
+    {
+      "slug": "segmented-verifiable-app",
+      "requiredCapabilityIds": [
+        "identity",
+        "node_connection"
+      ],
+      "optionalCapabilityIds": [
+        "browser.storage.local"
+      ]
+    }
+  ]
+}

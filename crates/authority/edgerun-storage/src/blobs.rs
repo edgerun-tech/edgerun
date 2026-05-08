@@ -220,7 +220,7 @@ impl BlobStore {
         let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key)
             .map_err(|e| StorageError::Encryption(format!("invalid AES-256 key: {e}")))?;
         let ciphertext = cipher
-            .encrypt(nonce.into(), plaintext)
+            .encrypt(nonce, plaintext)
             .map_err(|e| StorageError::Encryption(format!("AES-GCM encryption failed: {}", e)))?;
 
         if let Some(parent) = blob_path.parent() {
@@ -301,7 +301,7 @@ impl BlobStore {
         let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key)
             .map_err(|e| StorageError::Decryption(format!("invalid AES-256 key: {e}")))?;
         cipher
-            .decrypt((&nonce_bytes).into(), ciphertext.as_ref())
+            .decrypt(&nonce_bytes, ciphertext.as_ref())
             .map_err(|e| StorageError::Decryption(format!("AES-GCM decryption failed: {}", e)))
     }
 }

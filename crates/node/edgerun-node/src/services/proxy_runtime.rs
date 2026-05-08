@@ -7,11 +7,11 @@ use core::net::SocketAddr;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use core::time::Duration;
 
+use crate::network::{HostSocketTransport, RuntimeTransport, TransportAddress};
 use crate::rt::{
     copy_bidirectional, spawn, timeout, AsyncReadExt, AsyncTcpListener, AsyncTcpStream,
     AsyncWriteExt, CancellationToken,
 };
-use crate::transport::{HostSocketTransport, RuntimeTransport, TransportAddress};
 use edgerun_protocols::proxy::{
     parse_http_proxy_request, parse_socks5_request, socks5_reply, socks5_select_no_auth,
     split_host_port, HttpProxyRequest, Socks5Request, SOCKS5_REP_ADDR_NOT_SUPPORTED,
@@ -109,9 +109,15 @@ where
                     }
                 }
                 active.fetch_add(1, Ordering::Relaxed);
-                let result = handler(socket, config.clone()).await;
-                active.fetch_sub(1, Ordering::Relaxed);
-                result?;
+                let active = Arc::clone(&active);
+                let session_config = config.clone();
+                spawn(async move {
+                    let result = handler(socket, session_config).await;
+                    active.fetch_sub(1, Ordering::Relaxed);
+                    if let Err(error) = result {
+                        crate::node_warn!("proxy session failed: {}", error);
+                    }
+                });
             }
         }
     }
@@ -228,15 +234,15 @@ async fn bind_proxy_listener(
         .map_err(transport_io_error)
 }
 
-fn transport_io_error(error: crate::transport::TransportError) -> crate::rt::io::IoError {
+fn transport_io_error(error: crate::network::TransportError) -> crate::rt::io::IoError {
     match error {
-        crate::transport::TransportError::UnsupportedCarrier => {
+        crate::network::TransportError::UnsupportedCarrier => {
             crate::rt::io::IoError::Other("proxy transport carrier unsupported")
         }
-        crate::transport::TransportError::AddressUnavailable => {
+        crate::network::TransportError::AddressUnavailable => {
             crate::rt::io::IoError::Other("proxy transport address unavailable")
         }
-        crate::transport::TransportError::Io(_) => {
+        crate::network::TransportError::Io(_) => {
             crate::rt::io::IoError::Other("proxy transport I/O failed")
         }
     }

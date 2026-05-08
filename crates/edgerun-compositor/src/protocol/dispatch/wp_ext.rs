@@ -4,25 +4,25 @@
 use super::DispatchContext;
 use crate::compositor::surface::ShmBufferInfo;
 use crate::libc;
-use crate::protocol::fractional_scale;
-use crate::protocol::single_pixel_buffer;
-use crate::protocol::tearing_control;
-use crate::protocol::wl_shm;
-use crate::protocol::wp_cursor_shape;
-use crate::protocol::wp_presentation_time;
-use crate::protocol::wp_viewporter;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
+use edgerun_protocols::wayland::fractional_scale;
+use edgerun_protocols::wayland::single_pixel_buffer;
+use edgerun_protocols::wayland::tearing_control;
+use edgerun_protocols::wayland::wl_shm;
+use edgerun_protocols::wayland::wp_cursor_shape;
+use edgerun_protocols::wayland::wp_presentation_time;
+use edgerun_protocols::wayland::wp_viewporter;
 
 pub fn handle_viewporter(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {
         wp_viewporter::viewporter_request::GET_VIEWPORT => {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
             let viewport_id = cursor_obj.new_id().unwrap_or(0);
-            let _surface_id = cursor_obj.object().unwrap_or(0);
+            let surface_id = cursor_obj.object().unwrap_or(0);
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.register(viewport_id, "wp_viewport", 1, ctx.client_id);
             }
-            ctx.client_viewporter_ids.insert(ctx.client_id, viewport_id);
+            ctx.client_viewporter_ids.insert(viewport_id, surface_id);
         }
         wp_viewporter::viewporter_request::DESTROY => {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
@@ -36,31 +36,37 @@ pub fn handle_viewporter(ctx: &mut DispatchContext) {
 pub fn handle_viewport(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {
         wp_viewporter::viewport_request::SET_SOURCE => {
+            let Some(surface_id) = ctx.client_viewporter_ids.get(&ctx.msg.sender_id).copied()
+            else {
+                return;
+            };
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
             let x = wp_viewporter::fixed_to_f64(cursor_obj.fixed().unwrap_or(0));
             let y = wp_viewporter::fixed_to_f64(cursor_obj.fixed().unwrap_or(0));
             let w = wp_viewporter::fixed_to_f64(cursor_obj.fixed().unwrap_or(0));
             let h = wp_viewporter::fixed_to_f64(cursor_obj.fixed().unwrap_or(0));
-            if w > 0.0 && h > 0.0 {
-                ctx.surfaces
-                    .set_viewport_source(ctx.msg.sender_id, x, y, w, h);
-            } else {
-                ctx.surfaces
-                    .set_viewport_source(ctx.msg.sender_id, 0.0, 0.0, 0.0, 0.0);
-            }
+            ctx.surfaces.set_viewport_source(surface_id, x, y, w, h);
         }
         wp_viewporter::viewport_request::SET_DESTINATION => {
+            let Some(surface_id) = ctx.client_viewporter_ids.get(&ctx.msg.sender_id).copied()
+            else {
+                return;
+            };
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
             let width = cursor_obj.int().unwrap_or(-1);
             let height = cursor_obj.int().unwrap_or(-1);
             ctx.surfaces
-                .set_viewport_destination(ctx.msg.sender_id, width, height);
+                .set_viewport_destination(surface_id, width, height);
         }
         wp_viewporter::viewport_request::DESTROY => {
+            if let Some(surface_id) = ctx.client_viewporter_ids.remove(&ctx.msg.sender_id) {
+                ctx.surfaces
+                    .set_viewport_source(surface_id, 0.0, 0.0, 0.0, 0.0);
+                ctx.surfaces.set_viewport_destination(surface_id, -1, -1);
+            }
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.destroy(ctx.msg.sender_id);
             }
-            ctx.client_viewporter_ids.remove(&ctx.client_id);
         }
         _ => {}
     }

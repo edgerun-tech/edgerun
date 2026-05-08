@@ -20,8 +20,8 @@
 | Name | Description |
 |------|-------------|
 | `/etc/edgerun/server/dkim-mail.private.pem` | DKIM RSA private key (PEM format) |
-| `/etc/edgerun/server/tls/fullchain.pem` | TLS certificate chain (PEM format), generated or renewed by `edgerun-acme` |
-| `/etc/edgerun/server/tls/privkey.pem` | TLS private key (PEM format), generated or renewed by `edgerun-acme` |
+| `/etc/edgerun/server/tls/fullchain.pem` | TLS certificate chain (PEM format), generated or renewed by `edgerun-node` ACME orchestration |
+| `/etc/edgerun/server/tls/privkey.pem` | TLS private key (PEM format), generated or renewed by `edgerun-node` ACME orchestration |
 | `/etc/edgerun/server/dnssec-edgerun-tech-ksk.pem` | DNSSEC ECDSAP256SHA256 private key for the `edgerun.tech` zone |
 
 `edgerun-server` consumes these paths through `edgerun-config` YAML fields

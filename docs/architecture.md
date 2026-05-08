@@ -32,7 +32,7 @@ materialized views are derived and must be rebuildable or rejectable.
 | Capabilities and policy | `edgerun-capabilities`, `edgerun-capability-policy`, `edgerun-remote-capability`, `edgerun-mesh-capability` | Capability descriptors, grants, policy decisions, remote invocation envelopes, and mesh-carried capability messages. |
 | Mesh and sessions | `edgerun-mesh`, `edgerun-mesh-link`, `edgerun-mesh-session` | Identity-addressed routing, signed mesh frames, peer/session state, and ECDH session setup. |
 | Hardware identity | `edgerun-hardware-signing`, `edgerun-tpm`, `edgerun-yubikey`, `edgerun-android-keystore` | Hardware-backed P-256 `NodeID` signing adapters. |
-| Services | `edgerun-node`, `edgerun-http`, `edgerun-tls`, `edgerun-quic`, `edgerun-email`, `edgerun-oci`, `edgerun-acme`, `edgerun-oauth` | External service runtimes built on top of the runtime and protocol fabric; transport-independent protocol pieces live in `edgerun-protocols`. |
+| Services | `edgerun-node`, protocol modules in `edgerun-protocols`, and node-owned service adapters | The node owns service orchestration, resource binding, ACME challenge handling, routing, and transport decisions. Transport-independent protocol pieces live in `edgerun-protocols`. |
 | Device abstractions | `edgerun-*-capability`, `edgerun-linux-*`, `edgerun-alsa-*`, `edgerun-drm-display`, `edgerun-evdev-input`, `edgerun-v4l2-camera`, `edgerun-goodix-fingerprint` | Small platform-neutral type crates plus Linux or device-specific adapters. |
 | Bare target | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-virtio`, `edgerun-rtl8125` | no_std-first runtime and hardware boot/device path; boot protocol codecs and PXE/iPXE ABI data live in `edgerun-protocols`. |
 | Local utilities | `edgerun-json`, `edgerun-encoding`, `edgerun-hpack`, `edgerun-qpack`, `edgerun-crypto`, `edgerun-log`, `edgerun-clap`, `edgerun-url`, `edgerun-glob`, `edgerun-regex` | Utility crates may parse external formats but must not define Edgerun protocol authority. |
@@ -114,7 +114,6 @@ crates/
     edgerun-sign-p256
     edgerun-keygen
     edgerun-node-bootstrap
-    edgerun-sign-verify-e2e
   authority/
     edgerun-stream
     edgerun-storage
@@ -152,11 +151,10 @@ crates/
     edgerun-protocols::imap
     edgerun-email
     edgerun-email-auth
-    edgerun-acme
+    edgerun-node::services::acme_runtime
     edgerun-oauth
     edgerun-protocols::proxy
     edgerun-oci
-    edgerun-analytics
     edgerun-edit
     edgerun-exchange
     edgerun-exchange-api
@@ -186,7 +184,6 @@ crates/
     edgerun-bluetooth-gatt
     edgerun-drm-display
     edgerun-evdev-input
-    edgerun-face-detection
     edgerun-goodix-fingerprint
     edgerun-linux-cec
     edgerun-linux-gpu
@@ -199,7 +196,6 @@ crates/
     edgerun-linux-usb
     edgerun-linux-wifi
     edgerun-mgmt-bluetooth
-    edgerun-passport-nfc
     edgerun-v4l2-camera
   bare-target/
     edgerun-rt
@@ -213,7 +209,6 @@ crates/
   appliance/
     edgerun-tcl-ac
     edgerun-tcl-ac-cli
-    edgerun-matter
     edgerun-tuya
     edgerun-quectel-ec200a
   utility/

@@ -20,14 +20,16 @@ pub struct HealthState {
 /// - GET  /protocol/apps
 /// - GET  /protocol/capabilities
 /// - GET  /protocol/approvals
-/// - GET  /protocol/approvals/<id>/approve
-/// - GET  /protocol/approvals/<id>/reject
+/// - POST /protocol/approvals/<id>/approve
+/// - POST /protocol/approvals/<id>/reject
 /// - POST /protocol/tools/invoke
 pub async fn run_health_server(port: u16, state: HealthState) {
+    use edgerun_node::network::{HostSocketTransport, TransportAddress};
     use edgerun_node::rt::{AsyncReadExt, AsyncWriteExt};
-    use edgerun_node::transport::{HostSocketTransport, TransportAddress};
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    const ACCEPT_ERROR_BACKOFF: core::time::Duration = core::time::Duration::from_millis(100);
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = match HostSocketTransport.bind_stream_now(&TransportAddress::host_stream(
         addr.to_string().into_bytes(),
     )) {
@@ -55,7 +57,7 @@ pub async fn run_health_server(port: u16, state: HealthState) {
 
                     let (status, body) = route_local_http(method, path, body, &state);
                     let response = format!(
-                        "HTTP/1.1 {}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: content-type\r\nAccess-Control-Allow-Methods: GET,POST,OPTIONS\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        "HTTP/1.1 {}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: http://127.0.0.1\r\nAccess-Control-Allow-Headers: content-type\r\nAccess-Control-Allow-Methods: GET,POST,OPTIONS\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                         status,
                         body.len(),
                         body
@@ -64,7 +66,10 @@ pub async fn run_health_server(port: u16, state: HealthState) {
                     let _ = stream.flush().await;
                 });
             }
-            Err(e) => crate::node_warn!("local HTTP endpoint accept error: {}", e),
+            Err(e) => {
+                crate::node_warn!("local HTTP endpoint accept error: {}", e);
+                edgerun_node::rt::sleep(ACCEPT_ERROR_BACKOFF).await;
+            }
         }
     }
 }
@@ -81,7 +86,14 @@ fn route_local_http(
 
     let clean_path = path.split('?').next().unwrap_or(path);
     if let Some((approval_id, decision)) = parse_approval_decision_path(clean_path) {
-        return decide_approval(approval_id, decision);
+        return if method == "POST" {
+            decide_approval(approval_id, decision)
+        } else {
+            (
+                "405 Method Not Allowed",
+                r#"{"error":"method_not_allowed"}"#.to_string(),
+            )
+        };
     }
 
     match (method, clean_path) {
@@ -391,4 +403,30 @@ fn escape_json(value: &str) -> String {
 
 fn now_iso_stub() -> &'static str {
     "local"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state() -> HealthState {
+        HealthState {
+            node_id: "node".into(),
+            stream_id: "stream".into(),
+            started_at: std::time::Instant::now(),
+        }
+    }
+
+    #[test]
+    fn approval_decisions_reject_get() {
+        let (status, body) = route_local_http(
+            "GET",
+            "/protocol/approvals/approval-1/approve",
+            "",
+            &state(),
+        );
+
+        assert_eq!(status, "405 Method Not Allowed");
+        assert_eq!(body, r#"{"error":"method_not_allowed"}"#);
+    }
 }

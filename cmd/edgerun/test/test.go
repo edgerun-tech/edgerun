@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -13,24 +12,30 @@ import (
 func Cmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "test",
-		Short: "Run test suites (conformance, e2e, mesh, h2spec, miri, fuzz, podman, docker)",
+		Short: "Run test suites (workspace, frontend, conformance, mesh, h2spec, miri, fuzz, podman, docker)",
 	}
 
 	cmd.AddCommand(&cobra.Command{
+		Use:   "workspace",
+		Short: "Run all Rust workspace tests",
+		RunE:  testWorkspace,
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "frontend",
+		Short: "Run frontend tests",
+		RunE:  testFrontend,
+	})
+
+	cmd.AddCommand(&cobra.Command{
 		Use:   "conformance",
-		Short: "Run v0 conformance corpus tests",
+		Short: "Run current conformance-filtered Rust tests",
 		RunE:  testConformance,
 	})
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "e2e [--all] [--hardware] [--mesh]",
-		Short: "Run end-to-end tests",
-		RunE:  testE2E,
-	})
-
-	cmd.AddCommand(&cobra.Command{
 		Use:   "mesh",
-		Short: "Run mesh integration test with network namespaces",
+		Short: "Run mesh-filtered Rust tests",
 		RunE:  testMesh,
 	})
 
@@ -78,9 +83,6 @@ func Cmd() *cobra.Command {
 		RunE:  testFuzz,
 	})
 
-	cmd.Flags().Bool("all", false, "Run all e2e tests including hardware and mesh")
-	cmd.Flags().Bool("hardware", false, "Include hardware capability tests")
-	cmd.Flags().Bool("mesh", false, "Include mesh integration tests")
 	return cmd
 }
 
@@ -104,42 +106,27 @@ func testConformance(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runCmd(root, "cargo", "test", "-p", "edgerun-core", "--", "conformance", "--ignored", "--nocapture")
+	return runCmd(root, "cargo", "test", "-p", "edgerun-core", "conformance", "--", "--nocapture")
 }
 
-func testE2E(cmd *cobra.Command, args []string) error {
+func testWorkspace(cmd *cobra.Command, args []string) error {
 	root, err := findRepoRoot()
 	if err != nil {
 		return err
 	}
 
-	all, _ := cmd.Flags().GetBool("all")
-	hardware, _ := cmd.Flags().GetBool("hardware")
-	mesh, _ := cmd.Flags().GetBool("mesh")
+	fmt.Println("Running Rust workspace tests...")
+	return runCmd(root, "cargo", "test", "--workspace")
+}
 
-	fmt.Println("Building edgerun-node...")
-	if err := runCmd(root, "cargo", "build", "-p", "edgerun-node", "--release"); err != nil {
+func testFrontend(cmd *cobra.Command, args []string) error {
+	root, err := findRepoRoot()
+	if err != nil {
 		return err
 	}
 
-	fmt.Println("Running edgerun-e2e tests...")
-	if err := runCmd(root, "cargo", "test", "-p", "edgerun-e2e", "--", "--ignored"); err != nil {
-		return err
-	}
-
-	if all || hardware {
-		fmt.Println("Running hardware tests...")
-		if err := runCmd(root, "cargo", "test", "-p", "edgerun-e2e", "--features", "hardware", "--", "hardware", "--ignored"); err != nil {
-			return err
-		}
-	}
-
-	if all || mesh {
-		fmt.Println("Running mesh integration test...")
-		return testMesh(cmd, args)
-	}
-
-	return nil
+	fmt.Println("Running frontend tests...")
+	return runCmd(filepath.Join(root, "frontend"), "bun", "run", "test:run")
 }
 
 func testMesh(cmd *cobra.Command, args []string) error {
@@ -147,14 +134,8 @@ func testMesh(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	script := root + "/scripts/mesh-integration-test.sh"
-	if _, err := os.Stat(script); err == nil {
-		fmt.Println("Running mesh integration test...")
-		return runCmd(root, "bash", script)
-	}
-	// If script doesn't exist, run the mesh test directly
-	fmt.Println("Running mesh namespace tests...")
-	return runCmd(root, "cargo", "test", "-p", "edgerun-mesh", "--", "mesh", "--ignored", "--nocapture")
+	fmt.Println("Running mesh-filtered Rust tests...")
+	return runCmd(root, "cargo", "test", "-p", "edgerun-mesh", "mesh", "--", "--nocapture")
 }
 
 func testH2Spec(cmd *cobra.Command, args []string) error {
@@ -197,9 +178,9 @@ func testOCIRuntime(cmd *cobra.Command, args []string) error {
 
 func testOCIRunc(cmd *cobra.Command, args []string) error {
 	runtimeBin := args[0]
-	patternFile := args[1]
-	if len(args) < 2 {
-		patternFile = "tests/runc/runc_test_pattern"
+	patternFile := "tests/runc/runc_test_pattern"
+	if len(args) >= 2 {
+		patternFile = args[1]
 	}
 	root, err := findRepoRoot()
 	if err != nil {

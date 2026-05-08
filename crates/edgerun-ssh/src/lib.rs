@@ -8,9 +8,7 @@ pub use edgerun_protocols::ssh::*;
 pub mod host {
     use super::*;
     use edgerun_crypto::aes::Aes256;
-    use edgerun_crypto::x25519_dalek::{
-        PublicKey as X25519PublicKey, StaticSecret as X25519Secret,
-    };
+    use edgerun_crypto::x25519::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
     use edgerun_crypto::{fill_random, sha256};
     use edgerun_encoding::base64::standard_decode;
     use edgerun_protocols::sign::{Ed25519MessageSigner, MessageSigner};

@@ -11,9 +11,5 @@ description = "proc macros for Edgerun wasm unit exports"
 [lib]
 proc-macro = true
 
-[dependencies]
-quote = "1"
-syn = { version = "2", features = ["full", "parsing", "printing"] }
-
 [lints]
 workspace = true

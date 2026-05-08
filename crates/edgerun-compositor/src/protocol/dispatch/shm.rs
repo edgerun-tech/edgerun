@@ -3,8 +3,8 @@
 use super::DispatchContext;
 use crate::compositor::surface::ShmBufferInfo;
 use crate::libc;
-use crate::protocol::wl_shm;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
+use edgerun_protocols::wayland::wl_shm;
 
 pub fn handle_shm(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

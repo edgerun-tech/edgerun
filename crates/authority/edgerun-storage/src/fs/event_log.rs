@@ -39,15 +39,7 @@ impl FsEventLog {
 impl EventLog for FsEventLog {
     fn append_event(&mut self, event: &EventEnvelope) -> Result<AppendReceipt, StorageError> {
         let mut file = open_stream_file(&self.events_dir, &event.stream_id)?;
-        let offset = write_event_to_file(&mut file, event)?;
-        let event_hash = canonical_event_hash(event).value;
-        Ok(AppendReceipt {
-            stream_id: event.stream_id.clone(),
-            seq: event.seq,
-            event_hash,
-            file_offset: offset,
-            envelope_version: event.envelope_version,
-        })
+        append_event_to_file(&self.events_dir, &mut file, event)
     }
 
     fn read_event(
@@ -76,8 +68,7 @@ impl EventLog for FsEventLog {
 }
 
 pub fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> Result<File, StorageError> {
-    let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
-    let log_path = events_dir.join(format!("{stream_id_hex}.log"));
+    let log_path = stream_log_path(events_dir, stream_id);
     if let Some(parent) = log_path.parent() {
         fs::create_dir_all(parent).map_err(StorageError::Io)?;
     }
@@ -88,7 +79,53 @@ pub fn open_stream_file(events_dir: &Path, stream_id: &[u8]) -> Result<File, Sto
         .map_err(StorageError::Io)?)
 }
 
-pub fn write_event_to_file(file: &mut File, event: &EventEnvelope) -> Result<u64, StorageError> {
+fn stream_log_path(events_dir: &Path, stream_id: &[u8]) -> PathBuf {
+    let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
+    events_dir.join(format!("{stream_id_hex}.log"))
+}
+
+pub fn append_event_to_file(
+    events_dir: &Path,
+    file: &mut File,
+    event: &EventEnvelope,
+) -> Result<AppendReceipt, StorageError> {
+    let event_hash = canonical_event_hash(event).value;
+    let scanned = scan_one_stream_log(events_dir, &event.stream_id)?;
+
+    if let Some(existing) = scanned
+        .iter()
+        .find(|scanned| scanned.location.seq == event.seq)
+    {
+        if existing.location.event_hash == event_hash {
+            return Ok(AppendReceipt {
+                stream_id: existing.location.stream_id.clone(),
+                seq: existing.location.seq,
+                event_hash: existing.location.event_hash.clone(),
+                file_offset: existing.location.file_offset,
+                envelope_version: existing.location.envelope_version,
+            });
+        }
+
+        return Err(StorageError::Stream(format!(
+            "refusing to append stream {} seq {}: seq already exists with a different hash",
+            edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
+            event.seq
+        )));
+    }
+
+    validate_event_follows_head(event, scanned.last())?;
+
+    let offset = write_event_to_file(file, event)?;
+    Ok(AppendReceipt {
+        stream_id: event.stream_id.clone(),
+        seq: event.seq,
+        event_hash,
+        file_offset: offset,
+        envelope_version: event.envelope_version,
+    })
+}
+
+fn write_event_to_file(file: &mut File, event: &EventEnvelope) -> Result<u64, StorageError> {
     let (len_prefix, event_bytes) = encode_event_frame(event)?;
 
     let offset = file.metadata().map_err(StorageError::Io)?.len();
@@ -98,6 +135,53 @@ pub fn write_event_to_file(file: &mut File, event: &EventEnvelope) -> Result<u64
     file.sync_all().map_err(StorageError::Io)?;
 
     Ok(offset)
+}
+
+fn validate_event_follows_head(
+    event: &EventEnvelope,
+    head: Option<&ScannedEvent>,
+) -> Result<(), StorageError> {
+    let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id);
+
+    match head {
+        None => {
+            if event.seq != 0 {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: first event must have seq 0",
+                    event.seq
+                )));
+            }
+            if event.prev_event_hash.is_some() {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq 0: genesis event must not have prev_event_hash"
+                )));
+            }
+            Ok(())
+        }
+        Some(head) => {
+            let expected_seq = head.location.seq.saturating_add(1);
+            if event.seq != expected_seq {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: expected next seq {expected_seq}",
+                    event.seq
+                )));
+            }
+
+            let Some(prev_event_hash) = &event.prev_event_hash else {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: missing prev_event_hash",
+                    event.seq
+                )));
+            };
+            if prev_event_hash.algorithm != 1 || prev_event_hash.value != head.location.event_hash {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: prev_event_hash does not match seq {}",
+                    event.seq, head.location.seq
+                )));
+            }
+            Ok(())
+        }
+    }
 }
 
 pub fn read_event_at(
@@ -197,6 +281,57 @@ pub fn scan_event_logs(events_dir: &Path) -> Result<Vec<ScannedEvent>, StorageEr
     Ok(scanned)
 }
 
+fn scan_one_stream_log(
+    events_dir: &Path,
+    stream_id: &[u8],
+) -> Result<Vec<ScannedEvent>, StorageError> {
+    let log_path = stream_log_path(events_dir, stream_id);
+    if !log_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut scanned = Vec::new();
+    let mut file = File::open(&log_path)?;
+    let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(stream_id);
+
+    loop {
+        let record_start = file.stream_position()?;
+        let len = match decode_varint_from_read(&mut file) {
+            Ok(Some(v)) => v,
+            Ok(None) => break,
+            Err(e) if varint_is_unexpected_eof(&e) => break,
+            Err(e) => return Err(varint_io_to_storage_io(e)),
+        };
+
+        let mut event_bytes = vec![0u8; len as usize];
+        file.read_exact(&mut event_bytes)?;
+
+        let event = decode_event_envelope_wire(&event_bytes[..])?;
+        if event.stream_id != stream_id {
+            return Err(StorageError::Decode(format!(
+                "event stream mismatch at offset {record_start}: expected {}, got {}",
+                stream_id_hex,
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
+            )));
+        }
+        validate_event_follows_head(&event, scanned.last())?;
+
+        let event_hash = canonical_event_hash(&event).value;
+        scanned.push(ScannedEvent {
+            location: EventLocation {
+                stream_id: stream_id.to_vec(),
+                seq: event.seq,
+                event_hash,
+                file_offset: record_start,
+                envelope_version: event.envelope_version,
+            },
+            event,
+        });
+    }
+
+    Ok(scanned)
+}
+
 #[cfg(target_os = "none")]
 fn path_part_to_string(part: crate::std_compat::path::PathPart) -> Option<String> {
     Some(part.into_string())
@@ -247,6 +382,7 @@ fn decode_varint_from_read<R: Read>(r: &mut R) -> std::io::Result<Option<u64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_protocols::core_protocol::protocol::Digest;
 
     fn tmp_events_dir() -> PathBuf {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -278,6 +414,14 @@ mod tests {
             signature: None,
             ..Default::default()
         }
+    }
+
+    fn with_prev_hash(mut event: EventEnvelope, prev: &[u8]) -> EventEnvelope {
+        event.prev_event_hash = Some(Digest {
+            algorithm: 1,
+            value: prev.to_vec(),
+        });
+        event
     }
 
     #[test]
@@ -324,6 +468,94 @@ mod tests {
         };
         let result = log.read_event(&event.stream_id, event.seq, &bad_location);
         assert!(matches!(result, Err(StorageError::Decode(_))));
+
+        let _ = std::fs::remove_dir_all(events_dir);
+    }
+
+    #[test]
+    fn append_rejects_non_genesis_gap() {
+        let events_dir = tmp_events_dir();
+        let mut log = FsEventLog::new(events_dir.clone());
+        let result = log.append_event(&event(b"stream", 1));
+
+        assert!(matches!(result, Err(StorageError::Stream(_))));
+
+        let _ = std::fs::remove_dir_all(events_dir);
+    }
+
+    #[test]
+    fn append_rejects_missing_prev_hash() {
+        let events_dir = tmp_events_dir();
+        let mut log = FsEventLog::new(events_dir.clone());
+        let genesis = event(b"stream", 0);
+        log.append_event(&genesis).unwrap();
+
+        let result = log.append_event(&event(b"stream", 1));
+
+        assert!(matches!(result, Err(StorageError::Stream(_))));
+
+        let _ = std::fs::remove_dir_all(events_dir);
+    }
+
+    #[test]
+    fn append_rejects_wrong_prev_hash() {
+        let events_dir = tmp_events_dir();
+        let mut log = FsEventLog::new(events_dir.clone());
+        let genesis = event(b"stream", 0);
+        log.append_event(&genesis).unwrap();
+
+        let next = with_prev_hash(event(b"stream", 1), &[0xff; 32]);
+        let result = log.append_event(&next);
+
+        assert!(matches!(result, Err(StorageError::Stream(_))));
+
+        let _ = std::fs::remove_dir_all(events_dir);
+    }
+
+    #[test]
+    fn append_accepts_hash_linked_next_event() {
+        let events_dir = tmp_events_dir();
+        let mut log = FsEventLog::new(events_dir.clone());
+        let genesis = event(b"stream", 0);
+        let genesis_hash = log.append_event(&genesis).unwrap().event_hash;
+
+        let next = with_prev_hash(event(b"stream", 1), &genesis_hash);
+        let receipt = log.append_event(&next).unwrap();
+
+        assert_eq!(receipt.seq, 1);
+        assert_eq!(log.scan().unwrap().len(), 2);
+
+        let _ = std::fs::remove_dir_all(events_dir);
+    }
+
+    #[test]
+    fn append_is_idempotent_for_same_seq_same_hash() {
+        let events_dir = tmp_events_dir();
+        let mut log = FsEventLog::new(events_dir.clone());
+        let genesis = event(b"stream", 0);
+
+        let first = log.append_event(&genesis).unwrap();
+        let second = log.append_event(&genesis).unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(log.scan().unwrap().len(), 1);
+
+        let _ = std::fs::remove_dir_all(events_dir);
+    }
+
+    #[test]
+    fn append_rejects_same_seq_different_hash() {
+        let events_dir = tmp_events_dir();
+        let mut log = FsEventLog::new(events_dir.clone());
+        let genesis = event(b"stream", 0);
+        log.append_event(&genesis).unwrap();
+
+        let mut conflicting = event(b"stream", 0);
+        conflicting.event_type = 2;
+        let result = log.append_event(&conflicting);
+
+        assert!(matches!(result, Err(StorageError::Stream(_))));
+        assert_eq!(log.scan().unwrap().len(), 1);
 
         let _ = std::fs::remove_dir_all(events_dir);
     }

@@ -25,7 +25,7 @@
 //! unknown/response pseudo-headers, ordering, connection-specific headers,
 //! and case validation. Run with:
 //! ```text
-//! cargo test -p edgerun-http --lib -- headers::
+//! cargo test -p edgerun-node http --lib -- headers::
 //! ```
 //!
 //! # See Also

@@ -6,8 +6,8 @@ use alloc::vec::Vec;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use core::time::Duration;
 
+use crate::network::{BareFrameTransport, TransportAddress};
 use crate::rt::UdpSocket;
-use crate::transport::{BareFrameTransport, TransportAddress};
 use edgerun_protocols::tftp::{TftpPeerId, TftpReadCore, TftpReadProvider};
 
 /// Trait for a TFTP file backend.

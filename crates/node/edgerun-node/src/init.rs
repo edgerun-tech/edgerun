@@ -1,6 +1,6 @@
-//! PID 1 init support for edgerund.
+//! PID 1 init support for edged.
 //!
-//! When run as PID 1, edgerund takes on init responsibilities:
+//! When run as PID 1, edged takes on init responsibilities:
 //! - Signal handling (SIGTERM, SIGINT, SIGHUP)
 //! - Zombie reaping (SIGCHLD)
 //! - Graceful shutdown coordination via CancellationToken

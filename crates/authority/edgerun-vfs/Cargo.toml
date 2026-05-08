@@ -10,6 +10,7 @@ homepage.workspace = true
 readme = "README.md"
 keywords = ["vfs", "filesystem", "in-memory", "copy-on-write", "ram"]
 categories = ["filesystem", "caching", "development-tools"]
+autobins = false
 
 [dependencies]
 edgerun-glob.workspace = true
@@ -19,16 +20,6 @@ edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 edgerun-inotify = { version = "0.1", path = "../../linux-adapters/edgerun-inotify", optional = true }
-
-[[bin]]
-name = "mount_ramfs"
-path = "src/bin/mount_ramfs.rs"
-required-features = ["mount"]
-
-[[bin]]
-name = "vfs-benchmark"
-path = "src/bin/benchmark.rs"
-required-features = ["std"]
 
 [lints]
 workspace = true

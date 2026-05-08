@@ -1,19 +1,13 @@
 [package]
 name = "edgerun-compositor"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
+version = "0.1.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
 publish = false
 description = "Wayland compositor — zero external C dependencies, direct Linux kernel only"
-
-
-[[bin]]
-name = "edgerun-compositor"
-path = "src/main.rs"
+autobins = false
 
 [dependencies]
-edgerun-evdev-input = { workspace = true }
-edgerun-input = { workspace = true }
-
-[lints]
-workspace = true
+edgerun-devices = { version = "0.1", path = "../device-types/edgerun-devices" }
+edgerun-protocols = { version = "0.1", path = "../protocol/edgerun-protocols", default-features = false, features = ["wayland"] }
+edgerun-evdev-input = { version = "0.1", path = "../linux-adapters/edgerun-evdev-input" }

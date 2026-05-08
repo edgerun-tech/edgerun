@@ -6,7 +6,9 @@
 
 use crate::prelude::*;
 use alloc::vec;
-use edgerun_encoding::byteorder::{read_u16_le, read_u32_le, try_read_u16_le, write_u16_le};
+use edgerun_encoding::byteorder::{
+    push_u16_le, read_u16_le, read_u32_le, try_read_u16_le, write_u16_le,
+};
 
 pub const GOODIX_PACKAGE_CRC_SIZE: usize = 4;
 pub const GOODIX_PACKAGE_HEADER_SIZE: usize = 8;
@@ -679,7 +681,7 @@ mod tests {
         template[69..73].copy_from_slice(b"user");
 
         let mut payload = vec![0, 0x34, 0x12, 88, 0, 0, 0, 1];
-        payload.extend_from_slice(&(template.len() as u16).to_le_bytes());
+        push_u16_le(&mut payload, template.len() as u16);
         payload.extend_from_slice(&template);
 
         let result = parse_goodix_identify_result(&payload).unwrap();
@@ -698,7 +700,7 @@ mod tests {
         template[69..73].copy_from_slice(b"ken1");
 
         let mut payload = vec![0, 1];
-        payload.extend_from_slice(&(template.len() as u16).to_le_bytes());
+        push_u16_le(&mut payload, template.len() as u16);
         payload.extend_from_slice(&template);
 
         let templates = parse_goodix_finger_list(&payload).unwrap();
@@ -711,7 +713,7 @@ mod tests {
     fn builds_finger_id_payload() {
         let tid = [0x42; 32];
         let payload = build_goodix_finger_id(&tid, b"ken").unwrap();
-        assert_eq!(u16::from_le_bytes([payload[0], payload[1]]) as usize, 73);
+        assert_eq!(read_u16_le(&payload, 0) as usize, 73);
         assert_eq!(payload[2], 67);
         assert_eq!(&payload[38..70], &tid);
         assert_eq!(payload[70], 3);

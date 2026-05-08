@@ -1,8 +1,8 @@
 //! wl_data_device_manager, wl_data_device, wl_data_source, wl_data_offer handlers.
 
 use super::{DataSource, DispatchContext};
-use crate::protocol::wl_data_device;
-use crate::wire::decode::ArgCursor;
+use edgerun_protocols::wayland::decode::ArgCursor;
+use edgerun_protocols::wayland::wl_data_device;
 
 pub fn handle_manager(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {

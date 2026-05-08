@@ -17,8 +17,7 @@ pub fn glob_match_with_separator(pattern: &str, path: &str, sep: char) -> bool {
     if pattern == "**" {
         return true;
     }
-    if pattern.starts_with("**") {
-        let rest = &pattern[2..];
+    if let Some(rest) = pattern.strip_prefix("**") {
         // ** matches zero or more path segments
         if rest.is_empty() {
             return true;

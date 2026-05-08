@@ -67,14 +67,20 @@ fn buffer_cache_key(surface_id: u32, buf: &SurfaceBuffer) -> u64 {
     let mut key = surface_id as u64;
     match buf {
         SurfaceBuffer::Shm {
+            pool_fd,
             offset,
             width,
             height,
+            stride,
+            format,
             ..
         } => {
+            key ^= (*pool_fd as u64).wrapping_mul(0x9E3779B185EBCA87);
             key ^= (*offset as u64) << 16;
             key ^= (*width as u64) << 32;
             key ^= (*height as u64) << 48;
+            key ^= (*stride as u64).rotate_left(11);
+            key ^= (*format as u64).rotate_left(29);
         }
         SurfaceBuffer::Dumb {
             handle,
@@ -549,6 +555,27 @@ impl GlCompositor {
         let cache_key = buffer_cache_key(surface_id, buf);
 
         if let Some(tex) = self.texture_cache.get(&cache_key) {
+            if let SurfaceBuffer::Shm {
+                pool_fd,
+                offset,
+                stride,
+                width,
+                height,
+                ..
+            } = buf
+            {
+                Self::upload_shm_texture(
+                    &self.gl_ctx,
+                    shm,
+                    tex.id,
+                    *pool_fd,
+                    *offset,
+                    *stride,
+                    *width,
+                    *height,
+                    true,
+                )?;
+            }
             return Some((tex.id, tex.width, tex.height));
         }
 
@@ -573,13 +600,6 @@ impl GlCompositor {
                 width: w,
                 height: h,
             } => {
-                let len = (*stride as usize) * (*h as usize);
-                let Some(result) =
-                    read_shm_buffer_with_fallback(shm, *pool_fd, *offset as usize, len)
-                else {
-                    return None;
-                };
-
                 unsafe {
                     (self.gl_ctx.glBindTexture)(gl::GL_TEXTURE_2D, tex_id);
                     (self.gl_ctx.glTexParameteri)(
@@ -602,19 +622,18 @@ impl GlCompositor {
                         gl::GL_TEXTURE_WRAP_T,
                         gl::GL_CLAMP_TO_EDGE as i32,
                     );
-                    // XRGB8888/ARGB8888 in little-endian = BGRA
-                    (self.gl_ctx.glTexImage2D)(
-                        gl::GL_TEXTURE_2D,
-                        0,
-                        gl::GL_RGBA as i32,
-                        *w as i32,
-                        *h as i32,
-                        0,
-                        gl::GL_BGRA,
-                        gl::GL_UNSIGNED_BYTE,
-                        result.as_bytes().as_ptr() as *const _,
-                    );
                 }
+                Self::upload_shm_texture(
+                    &self.gl_ctx,
+                    shm,
+                    tex_id,
+                    *pool_fd,
+                    *offset,
+                    *stride,
+                    *w,
+                    *h,
+                    false,
+                )?;
 
                 let tex = GlTexture {
                     id: tex_id,
@@ -719,6 +738,66 @@ impl GlCompositor {
         Some((tex_id, width, height))
     }
 
+    fn upload_shm_texture(
+        gl_ctx: &gl::Gl,
+        shm: &ShmManager,
+        tex_id: u32,
+        pool_fd: i32,
+        offset: i32,
+        stride: i32,
+        width: i32,
+        height: i32,
+        replace_existing: bool,
+    ) -> Option<()> {
+        if width <= 0 || height <= 0 || stride <= 0 || offset < 0 {
+            return None;
+        }
+
+        let len = (stride as usize).checked_mul(height as usize)?;
+        let result = read_shm_buffer_with_fallback(shm, pool_fd, offset as usize, len)?;
+        let row_bytes = (width as usize).checked_mul(4)?;
+        let stride = stride as usize;
+        let upload_storage;
+        let upload_bytes = if stride == row_bytes {
+            result.as_bytes()
+        } else {
+            upload_storage = pack_shm_rows(result.as_bytes(), row_bytes, stride, height as usize)?;
+            upload_storage.as_slice()
+        };
+
+        unsafe {
+            (gl_ctx.glBindTexture)(gl::GL_TEXTURE_2D, tex_id);
+            if replace_existing {
+                (gl_ctx.glTexSubImage2D)(
+                    gl::GL_TEXTURE_2D,
+                    0,
+                    0,
+                    0,
+                    width,
+                    height,
+                    gl::GL_BGRA,
+                    gl::GL_UNSIGNED_BYTE,
+                    upload_bytes.as_ptr() as *const _,
+                );
+            } else {
+                // XRGB8888/ARGB8888 in little-endian = BGRA.
+                (gl_ctx.glTexImage2D)(
+                    gl::GL_TEXTURE_2D,
+                    0,
+                    gl::GL_RGBA as i32,
+                    width,
+                    height,
+                    0,
+                    gl::GL_BGRA,
+                    gl::GL_UNSIGNED_BYTE,
+                    upload_bytes.as_ptr() as *const _,
+                );
+            }
+        }
+
+        Some(())
+    }
+
     /// Render all surfaces to the FBO, then read back to the dumb buffer.
     pub fn composite(
         &mut self,
@@ -752,35 +831,52 @@ impl GlCompositor {
             (self.gl_ctx.glBlendFunc)(gl::GL_ONE, gl::GL_ONE_MINUS_SRC_ALPHA);
         }
 
+        self.render_layer_surfaces(shm, surfaces, shell, 0..=1, width, height);
+
         // Render surfaces back-to-front
-        for toplevel in shell.toplevels_z_order() {
+        for toplevel in shell.toplevels_render_order() {
             let surface_id = toplevel.surface_id;
             if let Some(surface) = surfaces.get(surface_id) {
                 if let Some(ref buf) = surface.buffer {
                     let transform = surface.buffer_transform;
+                    let (logical_w, logical_h) = surface.logical_size();
+                    let sample = surface.sample_rect();
                     self.render_surface(
-                        shm, surface_id, buf, surface.x, surface.y, width, height, transform,
+                        shm, surface_id, buf, surface.x, surface.y, logical_w, logical_h, width,
+                        height, transform, sample,
                     );
                 }
             }
-            for sub in shell.subsurfaces.for_parent(surface_id) {
+            let parent_pos = surfaces
+                .get(surface_id)
+                .map(|surface| (surface.x, surface.y))
+                .unwrap_or((0, 0));
+            for sub in shell.subsurfaces.for_parent_render_order(surface_id) {
                 if let Some(sub_surface) = surfaces.get(sub.surface_id) {
                     if let Some(ref buf) = sub_surface.buffer {
                         let transform = sub_surface.buffer_transform;
+                        let (sub_x, sub_y) = sub.output_position(parent_pos.0, parent_pos.1);
+                        let (logical_w, logical_h) = sub_surface.logical_size();
+                        let sample = sub_surface.sample_rect();
                         self.render_surface(
                             shm,
                             sub.surface_id,
                             buf,
-                            sub.x,
-                            sub.y,
+                            sub_x,
+                            sub_y,
+                            logical_w,
+                            logical_h,
                             width,
                             height,
                             transform,
+                            sample,
                         );
                     }
                 }
             }
         }
+
+        self.render_layer_surfaces(shm, surfaces, shell, 2..=3, width, height);
 
         // Render cursor
         self.render_cursor(cursor, width, height);
@@ -790,12 +886,13 @@ impl GlCompositor {
             (self.gl_ctx.glUseProgram)(0);
             (self.gl_ctx.glFinish)();
 
-            // Read back to dumb buffer
+            // Read back to tightly packed GL rows, then copy into DRM pitch rows.
             let fb_slice = match dumb.map() {
                 Ok(p) => p,
                 Err(_) => return,
             };
             let pixels = std::slice::from_raw_parts_mut(fb_slice.as_mut_ptr(), fb_slice.len());
+            let mut readback = vec![0u8; (width as usize) * (height as usize) * 4];
 
             (self.gl_ctx.glReadPixels)(
                 0,
@@ -804,10 +901,46 @@ impl GlCompositor {
                 height as i32,
                 gl::GL_BGRA,
                 gl::GL_UNSIGNED_BYTE,
-                pixels.as_mut_ptr() as *mut _,
+                readback.as_mut_ptr() as *mut _,
             );
+            copy_gl_readback_to_drm_rows(&readback, pixels, width, height, dumb.pitch);
 
             (self.gl_ctx.glBindFramebuffer)(gl::GL_FRAMEBUFFER, 0);
+        }
+    }
+
+    fn render_layer_surfaces(
+        &mut self,
+        shm: &ShmManager,
+        surfaces: &SurfaceTree,
+        shell: &Shell,
+        layers: std::ops::RangeInclusive<u32>,
+        output_width: u32,
+        output_height: u32,
+    ) {
+        for layer_surface in shell.layer_surfaces_render_order() {
+            if !layers.contains(&layer_surface.layer) {
+                continue;
+            }
+            let Some(surface) = surfaces.get(layer_surface.surface_id) else {
+                continue;
+            };
+            let Some(ref buf) = surface.buffer else {
+                continue;
+            };
+            self.render_surface(
+                shm,
+                layer_surface.surface_id,
+                buf,
+                layer_surface.x,
+                layer_surface.y,
+                surface.logical_width(),
+                surface.logical_height(),
+                output_width,
+                output_height,
+                surface.buffer_transform,
+                surface.sample_rect(),
+            );
         }
     }
 
@@ -818,58 +951,51 @@ impl GlCompositor {
         buf: &SurfaceBuffer,
         x: i32,
         y: i32,
+        logical_w: u32,
+        logical_h: u32,
         output_width: u32,
         output_height: u32,
         transform: i32,
+        sample: crate::compositor::surface::SurfaceSampleRect,
     ) {
-        let (tex, surf_w, surf_h) = match self.get_or_create_texture(shm, surface_id, buf) {
+        let (tex, tex_w, tex_h) = match self.get_or_create_texture(shm, surface_id, buf) {
             Some(t) => t,
             None => return,
         };
 
-        // For rotated surfaces, swap the drawn dimensions
-        let rotated = transform == 1 || transform == 3 || transform == 5 || transform == 7;
-        let draw_w = if rotated { surf_h } else { surf_w };
-        let draw_h = if rotated { surf_w } else { surf_h };
-
-        let x0 = (x as f32) / (output_width as f32) * 2.0 - 1.0;
-        let y0 = -((y as f32) / (output_height as f32) * 2.0 - 1.0);
-        let w = (draw_w as f32) / (output_width as f32) * 2.0;
-        let h = (draw_h as f32) / (output_height as f32) * 2.0;
+        if logical_w == 0 || logical_h == 0 || sample.width == 0 || sample.height == 0 {
+            return;
+        }
+        let u0 = sample.x as f32 / tex_w as f32;
+        let v0 = sample.y as f32 / tex_h as f32;
+        let u1 = (sample.x + sample.width) as f32 / tex_w as f32;
+        let v1 = (sample.y + sample.height) as f32 / tex_h as f32;
+        let crop = |(u, v): (f32, f32)| (u0 + (u1 - u0) * u, v0 + (v1 - v0) * v);
 
         // Texture coordinates with rotation applied
-        // Standard quad texcoords: (0,1) (1,1) (1,0) (0,0) = bottom-left origin
-        // For transform 1 (90 CW): rotate texcoords 90 CW
+        // Standard quad texcoords are top-left, top-right, bottom-right, bottom-left.
         let (t0, t1, t2, t3) = match transform {
-            0 => ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)),
-            1 => ((1.0, 1.0), (1.0, 0.0), (0.0, 0.0), (0.0, 1.0)), // 90 CW
-            2 => ((1.0, 0.0), (0.0, 0.0), (0.0, 1.0), (1.0, 1.0)), // 180
-            3 => ((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)), // 270 CW
-            4 => ((1.0, 1.0), (0.0, 1.0), (0.0, 0.0), (1.0, 0.0)), // flipped H
-            5 => ((1.0, 0.0), (0.0, 0.0), (0.0, 1.0), (1.0, 1.0)), // flipped+90 (same as 180 texcoords — handled by rotated dims)
-            6 => ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)), // flipped+180 (same as normal — handled by rotated dims)
-            7 => ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)), // flipped+270
-            _ => ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)),
+            0 => ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
+            1 => ((1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)),
+            2 => ((1.0, 1.0), (0.0, 1.0), (0.0, 0.0), (1.0, 0.0)),
+            3 => ((0.0, 1.0), (0.0, 0.0), (1.0, 0.0), (1.0, 1.0)),
+            4 => ((1.0, 0.0), (0.0, 0.0), (0.0, 1.0), (1.0, 1.0)),
+            5 => ((1.0, 1.0), (0.0, 1.0), (0.0, 0.0), (1.0, 0.0)),
+            6 => ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
+            7 => ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
+            _ => ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
         };
+        let (t0, t1, t2, t3) = (crop(t0), crop(t1), crop(t2), crop(t3));
 
-        let vertices: [f32; 16] = [
-            x0,
-            y0,
-            t0.0,
-            t0.1,
-            x0 + w,
-            y0,
-            t1.0,
-            t1.1,
-            x0 + w,
-            y0 + h,
-            t2.0,
-            t2.1,
-            x0,
-            y0 + h,
-            t3.0,
-            t3.1,
-        ];
+        let vertices = quad_vertices(
+            x,
+            y,
+            logical_w,
+            logical_h,
+            output_width,
+            output_height,
+            [t0, t1, t2, t3],
+        );
 
         unsafe {
             (self.gl_ctx.glActiveTexture)(gl::GL_TEXTURE0);
@@ -913,33 +1039,16 @@ impl GlCompositor {
             return;
         }
 
-        let cursor_w = cursor::CURSOR_SIZE as f32;
-        let cursor_h = cursor::CURSOR_SIZE as f32;
         let (hx, hy) = cursor::CURSOR_HOTSPOTS[cursor.shape_index];
-
-        let x0 = (cursor.x as f32 - hx as f32) / (output_width as f32) * 2.0 - 1.0;
-        let y0 = -((cursor.y as f32 - hy as f32) / (output_height as f32) * 2.0 - 1.0);
-        let w = cursor_w / (output_width as f32) * 2.0;
-        let h = cursor_h / (output_height as f32) * 2.0;
-
-        let vertices: [f32; 16] = [
-            x0,
-            y0,
-            0.0,
-            1.0,
-            x0 + w,
-            y0,
-            1.0,
-            1.0,
-            x0 + w,
-            y0 + h,
-            1.0,
-            0.0,
-            x0,
-            y0 + h,
-            0.0,
-            0.0,
-        ];
+        let vertices = quad_vertices(
+            cursor.x - hx,
+            cursor.y - hy,
+            cursor::CURSOR_SIZE as u32,
+            cursor::CURSOR_SIZE as u32,
+            output_width,
+            output_height,
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        );
 
         unsafe {
             (self.gl_ctx.glActiveTexture)(gl::GL_TEXTURE0);
@@ -1034,5 +1143,152 @@ impl Drop for GlCompositor {
             unsafe { (self.gbm.gbm_device_destroy)(self.gbm_device) };
             self.gbm_device = std::ptr::null_mut();
         }
+    }
+}
+
+fn pack_shm_rows(src: &[u8], row_bytes: usize, stride: usize, height: usize) -> Option<Vec<u8>> {
+    if row_bytes > stride {
+        return None;
+    }
+
+    let mut packed = Vec::with_capacity(row_bytes.checked_mul(height)?);
+    for row in 0..height {
+        let start = row.checked_mul(stride)?;
+        let end = start.checked_add(row_bytes)?;
+        packed.extend_from_slice(src.get(start..end)?);
+    }
+    Some(packed)
+}
+
+fn quad_vertices(
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    output_width: u32,
+    output_height: u32,
+    texcoords: [(f32, f32); 4],
+) -> [f32; 16] {
+    let x0 = (x as f32) / (output_width as f32) * 2.0 - 1.0;
+    let y0 = 1.0 - (y as f32) / (output_height as f32) * 2.0;
+    let x1 = x0 + (width as f32) / (output_width as f32) * 2.0;
+    let y1 = y0 - (height as f32) / (output_height as f32) * 2.0;
+    let [t0, t1, t2, t3] = texcoords;
+
+    [
+        x0, y0, t0.0, t0.1, x1, y0, t1.0, t1.1, x1, y1, t2.0, t2.1, x0, y1, t3.0, t3.1,
+    ]
+}
+
+fn copy_gl_readback_to_drm_rows(
+    readback: &[u8],
+    dst: &mut [u8],
+    width: u32,
+    height: u32,
+    dst_pitch: u32,
+) -> Option<()> {
+    let row_bytes = (width as usize).checked_mul(4)?;
+    let dst_pitch = dst_pitch as usize;
+    if dst_pitch < row_bytes {
+        return None;
+    }
+
+    for dst_y in 0..height as usize {
+        let src_y = height as usize - 1 - dst_y;
+        let src_start = src_y.checked_mul(row_bytes)?;
+        let src_end = src_start.checked_add(row_bytes)?;
+        let dst_start = dst_y.checked_mul(dst_pitch)?;
+        let dst_end = dst_start.checked_add(row_bytes)?;
+        dst.get_mut(dst_start..dst_end)?
+            .copy_from_slice(readback.get(src_start..src_end)?);
+    }
+
+    Some(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shm_cache_key_tracks_reused_buffer_metadata() {
+        let base = SurfaceBuffer::Shm {
+            pool_fd: 3,
+            offset: 0,
+            width: 64,
+            height: 64,
+            stride: 256,
+            format: 0x34325258,
+        };
+        let moved = SurfaceBuffer::Shm {
+            pool_fd: 4,
+            offset: 0,
+            width: 64,
+            height: 64,
+            stride: 256,
+            format: 0x34325258,
+        };
+        let restrided = SurfaceBuffer::Shm {
+            pool_fd: 3,
+            offset: 0,
+            width: 64,
+            height: 64,
+            stride: 512,
+            format: 0x34325258,
+        };
+
+        assert_ne!(buffer_cache_key(7, &base), buffer_cache_key(7, &moved));
+        assert_ne!(buffer_cache_key(7, &base), buffer_cache_key(7, &restrided));
+    }
+
+    #[test]
+    fn pack_shm_rows_removes_stride_padding() {
+        let src = [
+            1, 2, 3, 4, 9, 9, 9, 9, //
+            5, 6, 7, 8, 8, 8, 8, 8,
+        ];
+        let packed = pack_shm_rows(&src, 4, 8, 2).unwrap();
+        assert_eq!(packed, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn quad_vertices_use_top_left_coordinates() {
+        fn close(left: f32, right: f32) {
+            assert!((left - right).abs() < 0.0001, "{left} != {right}");
+        }
+
+        let vertices = quad_vertices(
+            10,
+            20,
+            30,
+            40,
+            100,
+            200,
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        );
+
+        close(vertices[0], -0.8);
+        close(vertices[1], 0.8);
+        close(vertices[4], -0.2);
+        close(vertices[5], 0.8);
+        close(vertices[8], -0.2);
+        close(vertices[9], 0.4);
+        close(vertices[12], -0.8);
+        close(vertices[13], 0.4);
+    }
+
+    #[test]
+    fn gl_readback_copy_flips_rows_and_respects_pitch() {
+        let readback = vec![
+            1, 1, 1, 1, 2, 2, 2, 2, //
+            3, 3, 3, 3, 4, 4, 4, 4,
+        ];
+        let mut dst = vec![0u8; 24];
+        copy_gl_readback_to_drm_rows(&readback, &mut dst, 2, 2, 12).unwrap();
+
+        assert_eq!(&dst[0..8], &[3, 3, 3, 3, 4, 4, 4, 4]);
+        assert_eq!(&dst[8..12], &[0, 0, 0, 0]);
+        assert_eq!(&dst[12..20], &[1, 1, 1, 1, 2, 2, 2, 2]);
+        assert_eq!(&dst[20..24], &[0, 0, 0, 0]);
     }
 }

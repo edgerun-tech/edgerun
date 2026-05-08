@@ -74,5 +74,4 @@ pub mod result;
 pub mod util;
 pub mod validators;
 pub mod value;
-pub mod varint;
 pub mod wire_stream;

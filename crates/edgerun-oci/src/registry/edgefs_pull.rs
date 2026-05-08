@@ -18,7 +18,7 @@ pub struct EdgeFsImagePullReport {
 }
 
 impl RegistryClient {
-    /// Pull an image through `edgerun-http` and apply its rootfs layers into EdgeFS.
+    /// Pull an image through the node HTTP client and apply its rootfs layers into EdgeFS.
     ///
     /// The registry manifest/config and all layer blobs are fetched with the
     /// same authenticated registry path used by [`Self::fetch_bare_image_plan`].

@@ -1,49 +1,33 @@
-use std::fs;
 use std::path::PathBuf;
 
-use crate::config::{parse_config, NodeConfig};
-use crate::signer::load_signer_from_config;
+use edgerun_devices::network_interface::NetworkLinkState;
 use edgerun_linux_netif::discover_network_interfaces;
-use edgerun_network_interface::NetworkLinkState;
+use edgerun_storage::fs::scan_event_logs;
 
 pub fn cmd_status(path: &PathBuf) {
-    let yaml = match fs::read_to_string(path) {
-        Ok(content) => content,
-        Err(e) => {
-            eprintln!(
-                "error: config not found at {}: {}. Run `edgerund init` first.",
-                path.display(),
-                e
-            );
-            std::process::exit(1);
-        }
-    };
-    let config: NodeConfig = parse_config(&yaml).unwrap_or_else(|e| {
-        eprintln!("error: invalid config: {}", e);
+    let scanned = scan_event_logs(&path.join("events")).unwrap_or_else(|e| {
+        eprintln!(
+            "error: event log not found or invalid at {}: {}. Run `edged init` first.",
+            path.display(),
+            e
+        );
         std::process::exit(1);
     });
-
-    let signer = load_signer_from_config(&config);
-    let node_id = signer.node_id();
+    let Some(genesis) = scanned.iter().find(|event| event.event.seq == 0) else {
+        eprintln!("error: event log has no genesis event");
+        std::process::exit(1);
+    };
+    let node_id_hex =
+        edgerun_protocols::core_protocol::util::bytes_to_hex(&genesis.event.stream_id);
 
     println!("edgerun Node Status");
+    println!("  Data root:  {}", path.display());
+    println!("  NodeID:     {}", node_id_hex);
+    println!("  Events:     {}", scanned.len());
     println!(
-        "  Name:       {}",
-        config.name.as_deref().unwrap_or("(unnamed)")
+        "  Head seq:   {}",
+        scanned.iter().map(|e| e.event.seq).max().unwrap_or(0)
     );
-    println!("  Stream ID:  {}", config.stream_id);
-    println!("  NodeID:     {}", node_id.to_hex());
-    println!("  Short ID:   {}", node_id.short());
-    println!(
-        "  Signer:     {}",
-        config
-            .signer
-            .as_ref()
-            .map(|s| &s.signer_type)
-            .unwrap_or(&"unconfigured".to_string())
-    );
-    println!("  Controllers: {:?}", config.controllers);
-    println!("  Trust nodes: {:?}", config.trust_nodes);
 
     let interfaces = discover_network_interfaces().unwrap_or_default();
     let up_interfaces: Vec<_> = interfaces
@@ -58,6 +42,7 @@ pub fn cmd_status(path: &PathBuf) {
     println!("Hardware Inventory:");
     let hw = edgerun_node::hardware::HardwareInventory::discover();
     println!("{}", hw.summary());
-    let provider_apps = hw.capability_provider_apps(edgerun_node::runtime::sha256(&node_id.0));
+    let runtime_id = edgerun_node::runtime::sha256(&genesis.event.stream_id);
+    let provider_apps = hw.capability_provider_apps(runtime_id);
     println!("  Provider apps:   {}", provider_apps.len());
 }

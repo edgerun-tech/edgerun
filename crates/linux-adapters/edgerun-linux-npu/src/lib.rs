@@ -46,11 +46,11 @@ pub mod vec {
 use edgerun_linux_sysfs::parse_hex_u32_from_str;
 use edgerun_linux_sysfs::prelude::v1::*;
 // Re-export sysfs helpers that downstream NPU backends need.
-pub use edgerun_linux_sysfs::{read_trimmed, temp_root};
-use edgerun_npu::{
+use edgerun_devices::npu::{
     default_npu_descriptor, validate_npu_workload_request, CapabilityDescriptor, CapabilityError,
     CapabilityProvider, NpuDevice, NpuInfo, NpuWorkloadRequest, NpuWorkloadResult,
 };
+pub use edgerun_linux_sysfs::{read_trimmed, temp_root};
 use std::collections::BTreeSet;
 #[cfg(not(target_os = "none"))]
 use std::fs;
@@ -440,8 +440,8 @@ mod tests {
         };
         let backend = LinuxNpuBackend { info };
         let err = backend
-            .execute_workload(&edgerun_npu::NpuWorkloadRequest {
-                mode: edgerun_npu::NpuExecutionMode::Inference,
+            .execute_workload(&edgerun_devices::npu::NpuWorkloadRequest {
+                mode: edgerun_devices::npu::NpuExecutionMode::Inference,
                 input_bytes: Vec::new(),
                 target_latency_ms: None,
             })
@@ -465,8 +465,8 @@ mod tests {
         };
         let backend = LinuxNpuBackend { info };
         let err = backend
-            .execute_workload(&edgerun_npu::NpuWorkloadRequest {
-                mode: edgerun_npu::NpuExecutionMode::Inference,
+            .execute_workload(&edgerun_devices::npu::NpuWorkloadRequest {
+                mode: edgerun_devices::npu::NpuExecutionMode::Inference,
                 input_bytes: vec![1, 2, 3],
                 target_latency_ms: None,
             })

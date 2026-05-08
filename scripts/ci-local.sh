@@ -2,27 +2,50 @@
 # Local CI runner - runs CI checks locally without docker
 # Usage: ./scripts/ci-local.sh [check|version|release]
 
-set -e
+set -euo pipefail
 
 CMD="${1:-check}"
 
 echo "=== Local CI: $CMD ==="
 
+require_bun() {
+  if ! command -v bun >/dev/null 2>&1; then
+    echo "bun is required for frontend checks" >&2
+    exit 1
+  fi
+}
+
 case $CMD in
   check)
     echo "Running check jobs..."
     
-    echo "[1/4] Format check"
+    echo "[1/9] Format check"
     cargo fmt --check
     
-    echo "[2/4] Clippy lint"
-    cargo clippy --workspace -- -A warnings || true
+    echo "[2/9] Clippy lint"
+    cargo clippy --workspace
     
-    echo "[3/4] Workspace check"
+    echo "[3/9] Workspace check"
     cargo check --workspace
     
-    echo "[4/4] Release build"
+    echo "[4/9] Release build"
     cargo build --release -p edgerun-node
+
+    echo "[5/9] Frontend dependency lock check"
+    require_bun
+    (cd frontend && bun install --frozen-lockfile)
+
+    echo "[6/9] Frontend lint"
+    (cd frontend && bun run lint)
+
+    echo "[7/9] Frontend typecheck"
+    (cd frontend && bun run typecheck)
+
+    echo "[8/9] Frontend tests"
+    (cd frontend && bun run test:run)
+
+    echo "[9/9] Frontend build"
+    (cd frontend && bun run build)
     
     echo "✓ Check passed"
     ;;

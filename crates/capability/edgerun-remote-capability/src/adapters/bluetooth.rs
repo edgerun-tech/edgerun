@@ -1,12 +1,12 @@
 //! Bluetooth scanner and connection lister remote adapters.
 
 use crate::prelude::v1::*;
-use edgerun_bluetooth::{
+use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
+use edgerun_devices::bluetooth::{
     BluetoothAddressKind, BluetoothBeaconObservation, BluetoothConnectionInfo,
     BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile, BluetoothScanResult,
     BluetoothScanner, BluetoothTransportKind,
 };
-use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
 use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityInvocation, CapabilityResult,
 };

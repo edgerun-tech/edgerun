@@ -2,7 +2,7 @@
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityEventKind};
-use edgerun_input::{InputDevice, InputEventKind, InputEventRecord};
+use edgerun_devices::input::{InputDevice, InputEventKind, InputEventRecord};
 use edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation;
 use edgerun_protocols::core_protocol::protocol::capability_runtime::CapabilitySessionEvent;
 use edgerun_protocols::wire::{

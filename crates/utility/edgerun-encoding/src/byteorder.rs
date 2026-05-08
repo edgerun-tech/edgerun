@@ -264,6 +264,12 @@ pub fn push_i32_le(out: &mut alloc::vec::Vec<u8>, value: i32) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
+/// Append a little-endian `i64` to an output buffer.
+#[inline]
+pub fn push_i64_le(out: &mut alloc::vec::Vec<u8>, value: i64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
 /// Write a big-endian `u16` into `out[offset..]`.
 #[inline]
 pub fn write_u16_be(out: &mut [u8], offset: usize, value: u16) {
@@ -370,11 +376,12 @@ mod tests {
         push_u32_le(&mut out, 0x1234_5678);
         push_u64_le(&mut out, 0x0123_4567_89ab_cdef);
         push_i32_le(&mut out, -2);
+        push_i64_le(&mut out, -3);
         assert_eq!(
             out,
             [
                 0xcd, 0xab, 0x78, 0x56, 0x34, 0x12, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
-                0xfe, 0xff, 0xff, 0xff
+                0xfe, 0xff, 0xff, 0xff, 0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
             ]
         );
 

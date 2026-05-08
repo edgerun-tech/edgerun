@@ -7,7 +7,6 @@ depends_on = []
 implementation_crates = [
   "crates/device-types/edgerun-nfc",
   "crates/linux-adapters/edgerun-linux-nfc",
-  "crates/linux-adapters/edgerun-passport-nfc",
 ]
 profiles = ["reader", "tag", "passport"]
 standards_bodies = ["ISO", "IEC", "NFC Forum", "ICAO"]
@@ -50,4 +49,3 @@ implementation = [
   "crates/linux-adapters/edgerun-linux-nfc",
 ]
 status = "unknown"
-

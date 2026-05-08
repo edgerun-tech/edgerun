@@ -1,6 +1,12 @@
 //! Command validation and decision-event recording.
 
-use crate::config::NodeConfig;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+
+use crate::bootstrap::{archive_node_genesis_payload, node_genesis_payload};
+use crate::NodeConfig;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_protocols::core_protocol::collections::{HashMap, HashSet};
 use edgerun_protocols::core_protocol::command::{
@@ -400,9 +406,9 @@ pub fn project_controller_set(
 pub fn project_config(
     _store: &NodeStore,
     _stream_id: &[u8],
-    base_yaml: &str,
+    _base_text: &str,
 ) -> Result<NodeConfig, String> {
-    crate::config::parse_config(base_yaml)
+    Err("text node config was removed; project typed state from the event stream".into())
 }
 
 pub fn project_config_from_base(
@@ -419,13 +425,8 @@ pub fn create_node_genesis_payload(
     node_id: &edgerun_hardware_signing::NodeID,
     initial_controllers: &[Vec<u8>],
 ) -> ObjectRef {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"node-genesis-v1");
-    bytes.extend_from_slice(stream_id);
-    bytes.extend_from_slice(&node_id.0);
-    for controller in initial_controllers {
-        bytes.extend_from_slice(controller);
-    }
+    let payload = node_genesis_payload(node_id.0.to_vec(), initial_controllers.to_vec());
+    let bytes = archive_node_genesis_payload(&payload);
     store
         .put_object(&bytes, ObjectKind::Payload as i32, &[stream_id.to_vec()])
         .unwrap_or_else(|_| ObjectRef {

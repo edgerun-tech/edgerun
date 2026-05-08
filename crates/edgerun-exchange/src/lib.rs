@@ -7,7 +7,6 @@
 extern crate alloc;
 
 pub mod audit;
-pub mod changenow;
 pub mod events;
 pub mod policy;
 pub mod projection;
@@ -15,9 +14,13 @@ pub mod provider;
 pub mod provider_mapping;
 pub mod router;
 pub mod settlement_intent;
-pub mod sideshift;
 pub mod status_machine;
 pub mod stream_codec;
+
+#[cfg(feature = "provider-http")]
+pub mod changenow;
+#[cfg(feature = "provider-http")]
+pub mod sideshift;
 
 // FF.io adapter behind feature flag
 #[cfg(feature = "ffio")]

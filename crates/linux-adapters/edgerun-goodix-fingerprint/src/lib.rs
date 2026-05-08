@@ -286,7 +286,7 @@ pub mod vec {
 
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
-use edgerun_fingerprint::{
+use edgerun_devices::fingerprint::{
     default_fingerprint_descriptor, validate_enroll_request, FingerprintCapture,
     FingerprintCapturePurpose, FingerprintEnrollProgress, FingerprintEnrollRequest,
     FingerprintEnrollmentSession, FingerprintError, FingerprintReader, FingerprintReaderInfo,
@@ -583,12 +583,12 @@ fn decode_template_id_hex(s: &str) -> Result<[u8; 32], FingerprintError> {
     ))
 }
 
-fn capture_quality_from_raw(value: u8) -> edgerun_fingerprint::FingerprintCaptureQuality {
+fn capture_quality_from_raw(value: u8) -> edgerun_devices::fingerprint::FingerprintCaptureQuality {
     match value {
-        0..=24 => edgerun_fingerprint::FingerprintCaptureQuality::Poor,
-        25..=49 => edgerun_fingerprint::FingerprintCaptureQuality::Fair,
-        50..=79 => edgerun_fingerprint::FingerprintCaptureQuality::Good,
-        _ => edgerun_fingerprint::FingerprintCaptureQuality::Excellent,
+        0..=24 => edgerun_devices::fingerprint::FingerprintCaptureQuality::Poor,
+        25..=49 => edgerun_devices::fingerprint::FingerprintCaptureQuality::Fair,
+        50..=79 => edgerun_devices::fingerprint::FingerprintCaptureQuality::Good,
+        _ => edgerun_devices::fingerprint::FingerprintCaptureQuality::Excellent,
     }
 }
 
@@ -1659,7 +1659,9 @@ impl FingerprintReader for GoodixFingerprintReader {
         Ok(FingerprintCapture {
             bytes: Vec::new(),
             quality,
-            state: edgerun_fingerprint::default_fingerprint_biometric_state(false, true, true),
+            state: edgerun_devices::fingerprint::default_fingerprint_biometric_state(
+                false, true, true,
+            ),
         })
     }
 
@@ -1746,7 +1748,7 @@ impl FingerprintReader for GoodixFingerprintReader {
         Ok(FingerprintVerification {
             matched: result.matched,
             template_id: result.template.as_ref().map(|t| hex_string(&t.template_id)),
-            state: edgerun_fingerprint::default_fingerprint_biometric_state(
+            state: edgerun_devices::fingerprint::default_fingerprint_biometric_state(
                 result.matched,
                 true,
                 true,
@@ -2127,19 +2129,19 @@ mod tests {
     fn capture_quality_from_raw_maps_expected_ranges() {
         assert_eq!(
             capture_quality_from_raw(0),
-            edgerun_fingerprint::FingerprintCaptureQuality::Poor
+            edgerun_devices::fingerprint::FingerprintCaptureQuality::Poor
         );
         assert_eq!(
             capture_quality_from_raw(25),
-            edgerun_fingerprint::FingerprintCaptureQuality::Fair
+            edgerun_devices::fingerprint::FingerprintCaptureQuality::Fair
         );
         assert_eq!(
             capture_quality_from_raw(50),
-            edgerun_fingerprint::FingerprintCaptureQuality::Good
+            edgerun_devices::fingerprint::FingerprintCaptureQuality::Good
         );
         assert_eq!(
             capture_quality_from_raw(80),
-            edgerun_fingerprint::FingerprintCaptureQuality::Excellent
+            edgerun_devices::fingerprint::FingerprintCaptureQuality::Excellent
         );
     }
 

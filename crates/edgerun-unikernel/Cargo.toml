@@ -16,24 +16,23 @@ esp32s3-ble = ["edgerun-platform/esp32s3-ble"]
 esp32s3-ble-blob = ["edgerun-platform/esp32s3-ble-blob", "esp32s3-ble"]
 esp32s3-ble-stub = ["edgerun-platform/esp32s3-ble-stub", "esp32s3-ble"]
 esp32s3-headless = []
-esp32s3-wifi-mmio = ["edgerun-platform/esp32s3-wifi-mmio", "dep:edgerun-wifi"]
-esp32s3-wifi-blob = ["edgerun-platform/esp32s3-wifi-blob", "dep:edgerun-wifi"]
+esp32s3-wifi-mmio = ["edgerun-platform/esp32s3-wifi-mmio"]
+esp32s3-wifi-blob = ["edgerun-platform/esp32s3-wifi-blob"]
 esp32s3-wifi-phy-probe = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wifi-phy-probe"]
 esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wifi-ram-phy-patch"]
 
 [dependencies]
+edgerun-devices.workspace = true
 edgerun-platform = { version = "0.1", path = "../edgerun-platform" }
-edgerun-rt = { version = "0.1", path = "../edgerun-rt" }
-edgerun-http = { version = "0.1", path = "../edgerun-http", default-features = false, features = ["client"] }
-edgerun-protocols = { workspace = true, default-features = false, features = ["dhcp", "tftp"] }
+edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["http"] }
+edgerun-protocols = { workspace = true, default-features = false, features = ["dhcp", "ethernet-ipv4", "tftp", "wifi"] }
+edgerun-encoding = { workspace = true, default-features = false }
 edgerun-tpm = { version = "0.1", path = "../identity/edgerun-tpm", default-features = false }
 edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false }
 edgerun-oci = { version = "0.1", path = "../edgerun-oci", default-features = false, features = ["registry-client", "edgefs"] }
 edgerun-edgefs = { version = "0.1", path = "../authority/edgerun-edgefs" }
 edgerun-storage = { version = "0.1", path = "../authority/edgerun-storage" }
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities" }
-edgerun-display = { version = "0.1", path = "../device-types/edgerun-display" }
-edgerun-input = { version = "0.1", path = "../device-types/edgerun-input" }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 edgerun-virtio = { version = "0.1", path = "../edgerun-virtio" }
@@ -41,7 +40,6 @@ edgerun-rtl8125 = { version = "0.1", path = "../edgerun-rtl8125" }
 edgerun-event = { version = "0.1", path = "../edgerun-event", features = ["virtio"] }
 
 [target.'cfg(target_arch = "xtensa")'.dependencies]
-edgerun-wifi = { version = "0.1", path = "../device-types/edgerun-wifi", optional = true }
 
 [lints]
 workspace = true

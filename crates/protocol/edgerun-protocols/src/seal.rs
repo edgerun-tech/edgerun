@@ -3,8 +3,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use crate::keygen::{node_signing_key_from_bytes, NodeSigningKey};
-use edgerun_crypto::aes_gcm::aead::generic_array::GenericArray;
-use edgerun_crypto::Aes256GcmCipher;
+use edgerun_crypto::{AeadInPlace, Aes256GcmCipher, Nonce, Tag};
 
 const MAGIC: &[u8] = b"EDGERUN-SEAL-KEY1";
 const NONCE_LEN: usize = 12;
@@ -56,15 +55,16 @@ pub fn seal_with_key(plaintext: &[u8], key: &SealKey) -> Result<Vec<u8>, SealErr
 
     let cipher = Aes256GcmCipher::new(key.expose_secret()).map_err(|_| SealError::InvalidKey)?;
     let mut ciphertext = plaintext.to_vec();
+    let nonce_value = Nonce::from(nonce);
     let tag = cipher
-        .encrypt_in_place_detached(GenericArray::from_slice(&nonce), MAGIC, &mut ciphertext)
+        .encrypt_in_place_detached(&nonce_value, MAGIC, &mut ciphertext)
         .map_err(|_| SealError::SealFailed)?;
 
     let mut out = Vec::with_capacity(MAGIC.len() + NONCE_LEN + ciphertext.len() + TAG_LEN);
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&nonce);
     out.extend_from_slice(&ciphertext);
-    out.extend_from_slice(&tag);
+    out.extend_from_slice(tag.as_slice());
     Ok(out)
 }
 
@@ -72,15 +72,11 @@ pub fn unseal_with_key(envelope: &[u8], key: &SealKey) -> Result<Vec<u8>, SealEr
     let parsed = parse_envelope(envelope)?;
     let tag_start = parsed.ciphertext_with_tag.len() - TAG_LEN;
     let mut plaintext = parsed.ciphertext_with_tag[..tag_start].to_vec();
-    let tag = GenericArray::from_slice(&parsed.ciphertext_with_tag[tag_start..]);
+    let tag = Tag::from_slice(&parsed.ciphertext_with_tag[tag_start..]);
+    let nonce = Nonce::from_slice(parsed.nonce);
     let cipher = Aes256GcmCipher::new(key.expose_secret()).map_err(|_| SealError::InvalidKey)?;
     cipher
-        .decrypt_in_place_detached(
-            GenericArray::from_slice(parsed.nonce),
-            MAGIC,
-            &mut plaintext,
-            tag,
-        )
+        .decrypt_in_place_detached(&nonce, MAGIC, &mut plaintext, &tag)
         .map_err(|_| SealError::UnsealFailed)?;
     Ok(plaintext)
 }

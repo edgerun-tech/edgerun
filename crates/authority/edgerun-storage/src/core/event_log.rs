@@ -112,8 +112,7 @@ pub fn validate_event_location(
 pub fn encode_event_frame(event: &EventEnvelope) -> Result<(Vec<u8>, Vec<u8>), StorageError> {
     let event_bytes = edgerun_protocols::core_protocol::wire_stream::event_full_wire_bytes(event);
 
-    let len_prefix =
-        edgerun_protocols::core_protocol::varint::encode_varint(event_bytes.len() as u64);
+    let len_prefix = edgerun_encoding::varint::encode_varint(event_bytes.len() as u64);
     Ok((len_prefix, event_bytes))
 }
 

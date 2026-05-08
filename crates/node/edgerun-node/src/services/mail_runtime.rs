@@ -3,10 +3,10 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::net::SocketAddr;
 
+use crate::network::{HostSocketTransport, TransportAddress};
 use crate::rt::{
     self, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt, CancellationToken,
 };
-use crate::transport::{HostSocketTransport, TransportAddress};
 #[cfg(feature = "imap")]
 use edgerun_protocols::imap::{
     ImapPeerContext, ImapResponse, ImapSessionAction, ImapSessionConfig, ImapSessionCore,

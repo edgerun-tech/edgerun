@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::io;
 
+use edgerun_devices::input::{InputDevice, InputDeviceKind};
 use edgerun_evdev_input::{discover_evdev_devices, EvdevInputBackend};
-use edgerun_input::{InputDevice, InputDeviceKind};
 
 /// Manager for evdev input devices.
 pub struct EvdevManager {
@@ -100,7 +100,11 @@ impl EvdevManager {
     }
 
     /// Read events from a specific device.
-    pub fn read_events(&mut self, id: u32, max: usize) -> Vec<edgerun_input::InputEventRecord> {
+    pub fn read_events(
+        &mut self,
+        id: u32,
+        max: usize,
+    ) -> Vec<edgerun_devices::input::InputEventRecord> {
         if let Some(dev) = self.devices.get_mut(&id) {
             match dev.read_events(max) {
                 Ok(events) => events,

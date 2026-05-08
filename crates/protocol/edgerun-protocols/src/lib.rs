@@ -45,6 +45,8 @@ pub mod dns;
 pub mod email_auth;
 #[cfg(feature = "emrtd")]
 pub mod emrtd;
+#[cfg(feature = "ethernet-ipv4")]
+pub mod ethernet_ipv4;
 #[cfg(feature = "goodix-fingerprint")]
 pub mod goodix_fingerprint;
 #[cfg(feature = "http")]
@@ -79,6 +81,8 @@ pub mod quectel_ec200a;
 pub mod quic;
 #[cfg(feature = "seal")]
 pub mod seal;
+#[cfg(feature = "serial-mux")]
+pub mod serial_mux;
 #[cfg(feature = "sign")]
 pub mod sign;
 #[cfg(feature = "sign-p256")]
@@ -99,6 +103,8 @@ pub mod tuya;
 pub mod usb;
 #[cfg(feature = "verify")]
 pub mod verify;
+#[cfg(feature = "wayland")]
+pub mod wayland;
 #[cfg(feature = "websocket")]
 pub mod websocket;
 #[cfg(feature = "wire")]

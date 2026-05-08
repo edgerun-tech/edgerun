@@ -14,11 +14,11 @@ pub use edgerun_linux_sysfs::prelude;
 pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result, string, vec};
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_linux_sysfs::prelude::v1::*;
-use edgerun_linux_sysfs::{parse_hex_u16, parse_hex_u8, parse_u32, parse_u8, read_trimmed};
-use edgerun_usb::{
+use edgerun_devices::usb::{
     default_usb_descriptor, UsbDeviceInfo, UsbInterfaceInfo, UsbInventory, UsbSpeed,
 };
+use edgerun_linux_sysfs::prelude::v1::*;
+use edgerun_linux_sysfs::{parse_hex_u16, parse_hex_u8, parse_u32, parse_u8, read_trimmed};
 use std::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 #[cfg(not(target_os = "none"))]
 use std::fs;

@@ -177,7 +177,12 @@ mod tests {
         let mut log = BlockEventLog::open(storage).unwrap();
 
         let first = event(b"vdisk-stream", 0);
-        let second = event(b"vdisk-stream", 1);
+        let first_hash = crate::core::canonical_event_hash(&first).value;
+        let mut second = event(b"vdisk-stream", 1);
+        second.prev_event_hash = Some(edgerun_protocols::core_protocol::protocol::Digest {
+            algorithm: 1,
+            value: first_hash,
+        });
         log.append_event(&first).unwrap();
         log.append_event(&second).unwrap();
 

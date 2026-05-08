@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-edgerun-crypto = { path = "../../utility/edgerun-crypto", default-features = false, features = ["sha1"] }
-edgerun-encoding = { path = "../../utility/edgerun-encoding", default-features = false }
-edgerun-pty = { path = "../../utility/edgerun-pty" }
+edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
+edgerun-encoding = { workspace = true, default-features = false }
+edgerun-pty.workspace = true

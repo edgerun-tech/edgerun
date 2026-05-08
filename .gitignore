@@ -93,6 +93,8 @@ specs/http2-frame-test-case/
 
 # Frontend generated output
 frontend/.next/
+frontend/.open-next/
+frontend/.wrangler/
 frontend/out/
 frontend/coverage/
 frontend/.turbo/

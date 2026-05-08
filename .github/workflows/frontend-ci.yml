@@ -42,11 +42,20 @@ jobs:
 
       - name: Test (if configured)
         run: |
-          if node -e "const s=require('./package.json').scripts||{}; process.exit(s.test && s.test !== 'echo \"No frontend tests configured\"' ? 0 : 1)"; then
-            bun run test
+          if node -e "const s=require('./package.json').scripts||{}; process.exit(s['test:run'] ? 0 : 1)"; then
+            bun run test:run
           else
             echo "No tests configured for frontend."
           fi
+
+      - name: Coverage
+        run: bun run test:coverage
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
 
       - name: Lighthouse CI
         # Targets are intentionally strict at 1.0 for frontend launch criteria.

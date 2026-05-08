@@ -16,22 +16,21 @@ invocation, and manifest verification. Units own their memory; composers copy
 values between unit APIs instead of sharing memory.
 
 See `docs/standard-module-v1.md` for the first ABI model.
-See `docs/edum-v1.md` for the binary unit manifest format.
-See `docs/eapi-v1.md` for the binary function API manifest format.
-See `docs/ecmp-v1.md` for the binary composition manifest format.
-See `docs/edrr-v1.md` for the binary execution report format.
-See `docs/eseg-v1.md` for the binary distributed segment manifest format.
-See `docs/esrr-v1.md` for the binary distributed segment report format.
-See `docs/esig-v1.md` for the binary segment report signature sidecar format.
-See `docs/espk-v1.md` for the binary segment signer policy format.
-See `docs/echn-v1.md` for the binary distributed chain manifest format.
+See `docs/edum-v1.md` for the unit manifest record.
+See `docs/eapi-v1.md` for the function API manifest record.
+See `docs/ecmp-v1.md` for the composition manifest record.
+See `docs/edrr-v1.md` for the execution report record.
+See `docs/eseg-v1.md` for the distributed segment manifest record.
+See `docs/esrr-v1.md` for the distributed segment report record.
+See `docs/esig-v1.md` for the segment report signature sidecar record.
+See `docs/espk-v1.md` for the segment signer policy record.
+See `docs/echn-v1.md` for the distributed chain manifest record.
 See `docs/capability-units-v1.md` for the capability invocation units mapped
 from the existing Edgerun capability crates.
 
 The `.edm`, `.edr`, `.eseg`, `.esrr`, `.esig`, `.espk`, and `.echn` files in
-this crate are SDK artifact formats. They are not Edgerun internal wire,
-storage, cache, or local bridge protocols; those internal boundaries remain
-rkyv-only.
+this crate are rkyv archives of concrete `SdkWireRecord` variants. Do not add
+magic-header encoders or compatibility readers for the removed SDK byte formats.
 
 ## Current Units
 
@@ -143,15 +142,15 @@ edgerun-sdk verify-chain-reports http-auth-decision-chain-v1 \
   segments/auth-decision-private-node-v1/report.esrr
 ```
 
-`verify` checks unit wasm hashes, EDUM manifests, EAPI manifests, exact wasm
-import/export signatures, no shared-memory imports, and ECMP composition
+`verify` checks unit wasm hashes, rkyv unit manifests, rkyv API manifests, exact wasm
+import/export signatures, no shared-memory imports, and rkyv composition
 manifests.
 
 `build-artifacts` discovers Rust unit crates at `units/<id>/rust/Cargo.toml`,
-builds them for `wasm32-unknown-unknown`, derives EDUM/EAPI from the resulting
+builds them for `wasm32-unknown-unknown`, derives rkyv unit/API records from the resulting
 wasm exports, then reads each composition's `compose.edsl`, each segment's
 `segment.edsl`, and each chain's `chain.edsl` to write deterministic
-ECMP/ESEG/ECHN artifacts. WAT units and generated Rust registries are not part of
+rkyv composition/segment/chain artifacts. WAT units and generated Rust registries are not part of
 the unit creation path.
 
 `generate-unit-metadata` builds the Rust source for one unit, then derives

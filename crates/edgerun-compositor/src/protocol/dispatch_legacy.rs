@@ -9,12 +9,29 @@ use crate::compositor::surface::SurfaceTree;
 use crate::input::evdev::EvdevManager;
 use crate::input::keymap::{self, Keymap, Modifiers};
 pub use crate::protocol::dispatch::{ConstraintType, PointerConstraint, TouchSlot, TouchState};
-use crate::protocol::wl_seat;
-use crate::protocol::zwp_pointer_constraints;
-use crate::protocol::zwp_pointer_gestures;
-use crate::protocol::zwp_relative_pointer;
 use crate::render::cursor::Cursor;
 use crate::server::WaylandServer;
+use edgerun_protocols::wayland::wl_seat;
+use edgerun_protocols::wayland::zwp_pointer_constraints;
+use edgerun_protocols::wayland::zwp_pointer_gestures;
+use edgerun_protocols::wayland::zwp_relative_pointer;
+
+const REL_X: u16 = 0;
+const REL_Y: u16 = 1;
+const ABS_AXIS_MAX: f64 = 32767.0;
+
+fn relative_motion_delta(code: u16, value: i32) -> (f64, f64) {
+    match code {
+        REL_X => (value as f64, 0.0),
+        REL_Y => (0.0, value as f64),
+        _ => (0.0, 0.0),
+    }
+}
+
+fn absolute_axis_to_output(value: i32, extent: i32) -> f64 {
+    let normalized = (value as f64 / ABS_AXIS_MAX).clamp(0.0, 1.0);
+    normalized * extent.max(0) as f64
+}
 
 /// Process input events for a single device (called from epoll event handler).
 pub fn process_input_for_device(
@@ -24,7 +41,7 @@ pub fn process_input_for_device(
     keymap: &mut Keymap,
     modifiers: &mut Modifiers,
     server: &mut WaylandServer,
-    _surfaces: &SurfaceTree,
+    surfaces: &SurfaceTree,
     shell: &mut Shell,
     client_keyboard_ids: &HashMap<u32, u32>,
     client_pointer_ids: &HashMap<u32, u32>,
@@ -40,7 +57,7 @@ pub fn process_input_for_device(
 ) {
     for event in input_mgr.read_events(dev_id, 64) {
         match event.kind {
-            edgerun_input::InputEventKind::Key => {
+            edgerun_devices::input::InputEventKind::Key => {
                 let scancode = event.code as u16;
                 let pressed = event.value == 1;
 
@@ -88,11 +105,11 @@ pub fn process_input_for_device(
                                     if let Some(client) = server.client_mut(cid) {
                                         let state = shell.toplevel_state_bytes(tl_id);
                                         client.send_message(
-                                            crate::protocol::xdg_shell::xdg_surface_configure_event(
+                                            edgerun_protocols::wayland::xdg_shell::xdg_surface_configure_event(
                                                 sid, cfg_serial,
                                             ),
                                         );
-                                        client.send_message(crate::protocol::xdg_shell::xdg_toplevel_configure_event(tl_id, output_w, output_h, &state));
+                                        client.send_message(edgerun_protocols::wayland::xdg_shell::xdg_toplevel_configure_event(tl_id, output_w, output_h, &state));
                                     }
                                 }
                             }
@@ -151,15 +168,10 @@ pub fn process_input_for_device(
                     std::process::exit(0);
                 }
             }
-            edgerun_input::InputEventKind::RelativeMotion => {
-                const REL_X: u16 = 0;
-                const REL_Y: u16 = 1;
-                let dx = event.value as f64;
-                if event.code == REL_X {
-                    seat.pointer_x += dx;
-                } else if event.code == REL_Y {
-                    seat.pointer_y += dx;
-                }
+            edgerun_devices::input::InputEventKind::RelativeMotion => {
+                let (dx, dy) = relative_motion_delta(event.code, event.value);
+                seat.pointer_x += dx;
+                seat.pointer_y += dy;
 
                 let mut is_locked = false;
                 let mut locked_constraint_id = None;
@@ -188,7 +200,39 @@ pub fn process_input_for_device(
                     cursor.x = seat.pointer_x as i32;
                     cursor.y = seat.pointer_y as i32;
                 }
-                let _serial = seat.next_serial();
+                let pointer_hit = if is_locked {
+                    None
+                } else {
+                    shell.surface_at(surfaces, seat.pointer_x as i32, seat.pointer_y as i32)
+                };
+                let pointer_focus = pointer_hit.map(|hit| hit.surface_id);
+                let old_pointer_focus = seat.pointer_focus();
+                let serial = seat.next_serial();
+                if !is_locked && seat.set_pointer_focus(pointer_focus) {
+                    for (&client_id, &ptr_id) in client_pointer_ids {
+                        if let Some(client) = server.client_mut(client_id) {
+                            if let Some(old_surface_id) = old_pointer_focus {
+                                client.send_message(wl_seat::pointer_leave_event(
+                                    ptr_id,
+                                    serial,
+                                    old_surface_id,
+                                ));
+                            }
+                            if let Some(hit) = pointer_hit {
+                                let (surface_x, surface_y) =
+                                    hit.local_position(seat.pointer_x, seat.pointer_y);
+                                client.send_message(wl_seat::pointer_enter_event(
+                                    ptr_id,
+                                    serial,
+                                    hit.surface_id,
+                                    surface_x,
+                                    surface_y,
+                                ));
+                            }
+                            client.send_message(wl_seat::pointer_frame_event(ptr_id));
+                        }
+                    }
+                }
                 for (&client_id, &ptr_id) in client_pointer_ids {
                     if let Some(client) = server.client_mut(client_id) {
                         if is_locked {
@@ -198,23 +242,25 @@ pub fn process_input_for_device(
                                         cid,
                                         event.timestamp_sec as u32,
                                         (dx * 65536.0) as i32 as u32,
-                                        0,
+                                        (dy * 65536.0) as i32 as u32,
                                     ),
                                 );
                             }
-                        } else {
+                        } else if let Some(hit) = pointer_hit {
+                            let (surface_x, surface_y) =
+                                hit.local_position(seat.pointer_x, seat.pointer_y);
                             client.send_message(wl_seat::pointer_motion_event(
                                 ptr_id,
                                 event.timestamp_sec as u32,
-                                seat.pointer_x,
-                                seat.pointer_y,
+                                surface_x,
+                                surface_y,
                             ));
                         }
                         client.send_message(wl_seat::pointer_frame_event(ptr_id));
                     }
                 }
                 let dx_fixed = (dx * 65536.0) as i32 as u32;
-                let dy_fixed = 0u32;
+                let dy_fixed = (dy * 65536.0) as i32 as u32;
                 let utime = event.timestamp_sec as u64;
                 for (&client_id, &rel_ptr_id) in client_relative_pointer_ids {
                     if let Some(client) = server.client_mut(client_id) {
@@ -230,7 +276,7 @@ pub fn process_input_for_device(
                     }
                 }
             }
-            edgerun_input::InputEventKind::AbsoluteMotion => {
+            edgerun_devices::input::InputEventKind::AbsoluteMotion => {
                 const ABS_MT_SLOT: u16 = 0x3f;
                 const ABS_MT_TRACKING_ID: u16 = 0x39;
                 const ABS_MT_POSITION_X: u16 = 0x35;
@@ -248,16 +294,24 @@ pub fn process_input_for_device(
                                 touch_id: touch_state.next_touch_id,
                                 surface_id: None,
                                 client_id: None,
+                                origin_x: 0,
+                                origin_y: 0,
                                 x: 0.0,
                                 y: 0.0,
                                 active: false,
+                                has_x: false,
+                                has_y: false,
+                                down_sent: false,
                             });
                     }
                     ABS_MT_TRACKING_ID => {
                         let slot = touch_state.current_slot;
                         if event.value < 0 {
                             if let Some(touch_slot) = touch_state.slots.get_mut(&slot) {
-                                if touch_slot.active {
+                                if touch_slot.active
+                                    && touch_slot.down_sent
+                                    && touch_slot.surface_id.is_some()
+                                {
                                     let serial = seat.next_serial();
                                     for (&cid, &touch_obj_id) in client_touch_ids.iter() {
                                         if let Some(client) = server.client_mut(cid) {
@@ -272,62 +326,57 @@ pub fn process_input_for_device(
                                             ));
                                         }
                                     }
-                                    touch_slot.active = false;
+                                    if seat.touch_focus() == touch_slot.surface_id {
+                                        seat.set_touch_focus(None);
+                                    }
                                 }
+                                touch_slot.active = false;
+                                touch_slot.surface_id = None;
+                                touch_slot.down_sent = false;
+                                touch_slot.has_x = false;
+                                touch_slot.has_y = false;
                             }
                         } else {
                             let slot_entry =
                                 touch_state.slots.entry(slot).or_insert_with(|| TouchSlot {
                                     touch_id: touch_state.next_touch_id,
-                                    surface_id: seat.touch_focus(),
+                                    surface_id: None,
                                     client_id: None,
+                                    origin_x: 0,
+                                    origin_y: 0,
                                     x: 0.0,
                                     y: 0.0,
                                     active: false,
+                                    has_x: false,
+                                    has_y: false,
+                                    down_sent: false,
                                 });
                             slot_entry.touch_id = event.value as u32;
                             slot_entry.active = true;
-                            slot_entry.surface_id = seat.touch_focus();
-                            let serial = seat.next_serial();
-                            let surface_id = slot_entry.surface_id.unwrap_or(0);
-                            for (&cid, &touch_obj_id) in client_touch_ids.iter() {
-                                if let Some(client) = server.client_mut(cid) {
-                                    client.send_message(wl_seat::touch_down_event(
-                                        touch_obj_id,
-                                        serial,
-                                        event.timestamp_sec as u32,
-                                        surface_id,
-                                        slot,
-                                        slot_entry.x,
-                                        slot_entry.y,
-                                    ));
-                                    client.send_message(wl_seat::touch_frame_event(touch_obj_id));
-                                }
-                            }
+                            slot_entry.surface_id = None;
+                            slot_entry.down_sent = false;
+                            slot_entry.has_x = false;
+                            slot_entry.has_y = false;
                             touch_state.next_touch_id += 1;
                         }
                     }
                     ABS_MT_POSITION_X => {
                         let slot = touch_state.current_slot;
                         if let Some(touch_slot) = touch_state.slots.get_mut(&slot) {
-                            touch_slot.x = event.value as f64 / 32767.0;
-                            if touch_slot.active {
-                                let _serial = seat.next_serial();
-                                for (&cid, &touch_obj_id) in client_touch_ids.iter() {
-                                    if let Some(client) = server.client_mut(cid) {
-                                        client.send_message(wl_seat::touch_motion_event(
-                                            touch_obj_id,
-                                            event.timestamp_sec as u32,
-                                            slot,
-                                            touch_slot.x,
-                                            touch_slot.y,
-                                        ));
-                                        client
-                                            .send_message(wl_seat::touch_frame_event(touch_obj_id));
-                                    }
-                                }
-                            }
+                            touch_slot.x = absolute_axis_to_output(event.value, shell.output_width);
+                            touch_slot.has_x = true;
+                            send_touch_slot_update(
+                                touch_slot,
+                                slot,
+                                event.timestamp_sec as u32,
+                                seat,
+                                server,
+                                surfaces,
+                                shell,
+                                client_touch_ids,
+                            );
                         }
+
                         detect_and_send_gestures(
                             touch_state,
                             seat,
@@ -340,23 +389,19 @@ pub fn process_input_for_device(
                     ABS_MT_POSITION_Y => {
                         let slot = touch_state.current_slot;
                         if let Some(touch_slot) = touch_state.slots.get_mut(&slot) {
-                            touch_slot.y = event.value as f64 / 32767.0;
-                            if touch_slot.active {
-                                let _serial = seat.next_serial();
-                                for (&cid, &touch_obj_id) in client_touch_ids.iter() {
-                                    if let Some(client) = server.client_mut(cid) {
-                                        client.send_message(wl_seat::touch_motion_event(
-                                            touch_obj_id,
-                                            event.timestamp_sec as u32,
-                                            slot,
-                                            touch_slot.x,
-                                            touch_slot.y,
-                                        ));
-                                        client
-                                            .send_message(wl_seat::touch_frame_event(touch_obj_id));
-                                    }
-                                }
-                            }
+                            touch_slot.y =
+                                absolute_axis_to_output(event.value, shell.output_height);
+                            touch_slot.has_y = true;
+                            send_touch_slot_update(
+                                touch_slot,
+                                slot,
+                                event.timestamp_sec as u32,
+                                seat,
+                                server,
+                                surfaces,
+                                shell,
+                                client_touch_ids,
+                            );
                         }
                         detect_and_send_gestures(
                             touch_state,
@@ -373,35 +418,102 @@ pub fn process_input_for_device(
                         let touch_slot =
                             touch_state.slots.entry(slot).or_insert_with(|| TouchSlot {
                                 touch_id: 0,
-                                surface_id: seat.touch_focus(),
+                                surface_id: None,
                                 client_id: None,
+                                origin_x: 0,
+                                origin_y: 0,
                                 x: 0.0,
                                 y: 0.0,
                                 active: true,
+                                has_x: false,
+                                has_y: false,
+                                down_sent: false,
                             });
                         if event.code == ABS_X {
-                            touch_slot.x = event.value as f64 / 32767.0;
+                            touch_slot.x = absolute_axis_to_output(event.value, shell.output_width);
+                            touch_slot.has_x = true;
                         } else {
-                            touch_slot.y = event.value as f64 / 32767.0;
+                            touch_slot.y =
+                                absolute_axis_to_output(event.value, shell.output_height);
+                            touch_slot.has_y = true;
                         }
-                        let _serial = seat.next_serial();
-                        for (&cid, &touch_obj_id) in client_touch_ids.iter() {
-                            if let Some(client) = server.client_mut(cid) {
-                                client.send_message(wl_seat::touch_motion_event(
-                                    touch_obj_id,
-                                    event.timestamp_sec as u32,
-                                    slot,
-                                    touch_slot.x,
-                                    touch_slot.y,
-                                ));
-                                client.send_message(wl_seat::touch_frame_event(touch_obj_id));
-                            }
-                        }
+                        send_touch_slot_update(
+                            touch_slot,
+                            slot,
+                            event.timestamp_sec as u32,
+                            seat,
+                            server,
+                            surfaces,
+                            shell,
+                            client_touch_ids,
+                        );
                     }
                     _ => {}
                 }
             }
             _ => {}
+        }
+    }
+}
+
+fn send_touch_slot_update(
+    touch_slot: &mut TouchSlot,
+    slot: i32,
+    time: u32,
+    seat: &mut Seat,
+    server: &mut WaylandServer,
+    surfaces: &SurfaceTree,
+    shell: &Shell,
+    client_touch_ids: &HashMap<u32, u32>,
+) {
+    if !touch_slot.active || !touch_slot.has_x || !touch_slot.has_y {
+        return;
+    }
+
+    if !touch_slot.down_sent {
+        let Some(hit) = shell.surface_at(surfaces, touch_slot.x as i32, touch_slot.y as i32) else {
+            return;
+        };
+        let (surface_x, surface_y) = hit.local_position(touch_slot.x, touch_slot.y);
+        touch_slot.surface_id = Some(hit.surface_id);
+        touch_slot.origin_x = hit.x;
+        touch_slot.origin_y = hit.y;
+        touch_slot.down_sent = true;
+        seat.set_touch_focus(Some(hit.surface_id));
+
+        let serial = seat.next_serial();
+        for (&cid, &touch_obj_id) in client_touch_ids.iter() {
+            if let Some(client) = server.client_mut(cid) {
+                client.send_message(wl_seat::touch_down_event(
+                    touch_obj_id,
+                    serial,
+                    time,
+                    hit.surface_id,
+                    slot,
+                    surface_x,
+                    surface_y,
+                ));
+                client.send_message(wl_seat::touch_frame_event(touch_obj_id));
+            }
+        }
+        return;
+    }
+
+    let Some(_) = touch_slot.surface_id else {
+        return;
+    };
+    let surface_x = touch_slot.x - touch_slot.origin_x as f64;
+    let surface_y = touch_slot.y - touch_slot.origin_y as f64;
+    for (&cid, &touch_obj_id) in client_touch_ids.iter() {
+        if let Some(client) = server.client_mut(cid) {
+            client.send_message(wl_seat::touch_motion_event(
+                touch_obj_id,
+                time,
+                slot,
+                surface_x,
+                surface_y,
+            ));
+            client.send_message(wl_seat::touch_frame_event(touch_obj_id));
         }
     }
 }
@@ -548,4 +660,24 @@ fn detect_and_send_gestures(
     touch_state.prev_centroid_x = centroid_x;
     touch_state.prev_centroid_y = centroid_y;
     touch_state.active_fingers = finger_count;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_motion_delta_preserves_axis() {
+        assert_eq!(relative_motion_delta(REL_X, 7), (7.0, 0.0));
+        assert_eq!(relative_motion_delta(REL_Y, -3), (0.0, -3.0));
+        assert_eq!(relative_motion_delta(99, 4), (0.0, 0.0));
+    }
+
+    #[test]
+    fn absolute_axis_to_output_clamps_to_extent() {
+        assert_eq!(absolute_axis_to_output(0, 200), 0.0);
+        assert_eq!(absolute_axis_to_output(32767, 200), 200.0);
+        assert_eq!(absolute_axis_to_output(-10, 200), 0.0);
+        assert_eq!(absolute_axis_to_output(40000, 200), 200.0);
+    }
 }

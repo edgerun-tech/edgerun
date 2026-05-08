@@ -12,8 +12,12 @@ use core::net::SocketAddr;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use std::io::{Read, Write};
+use std::time::Duration;
 
 use crate::rt::io::{AsyncRead, AsyncWrite, IoError, Result as IoResult};
+
+const HOST_STREAM_BACKOFF: Duration = Duration::from_millis(1);
+const HOST_LISTENER_BACKOFF: Duration = Duration::from_millis(50);
 
 fn io_error(error: std::io::Error) -> IoError {
     match error.kind() {
@@ -21,6 +25,14 @@ fn io_error(error: std::io::Error) -> IoError {
         std::io::ErrorKind::WriteZero => IoError::WriteZero,
         _ => IoError::Other("host network operation failed"),
     }
+}
+
+fn yield_host_stream() {
+    std::thread::sleep(HOST_STREAM_BACKOFF);
+}
+
+fn yield_host_listener() {
+    std::thread::sleep(HOST_LISTENER_BACKOFF);
 }
 
 #[derive(Clone)]
@@ -58,6 +70,7 @@ fn poll_host_read(
     match stream.read(buf) {
         Ok(value) => Poll::Ready(Ok(value)),
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+            yield_host_stream();
             cx.waker().wake_by_ref();
             Poll::Pending
         }
@@ -74,6 +87,7 @@ fn poll_host_write(
     match stream.write(buf) {
         Ok(value) => Poll::Ready(Ok(value)),
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+            yield_host_stream();
             cx.waker().wake_by_ref();
             Poll::Pending
         }
@@ -196,6 +210,7 @@ impl Future for AcceptFuture<'_> {
                 Err(error) => Poll::Ready(Err(error)),
             },
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                yield_host_listener();
                 cx.waker().wake_by_ref();
                 Poll::Pending
             }

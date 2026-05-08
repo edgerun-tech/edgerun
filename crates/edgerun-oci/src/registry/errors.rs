@@ -72,8 +72,8 @@ impl From<std::io::Error> for RegistryError {
     feature = "registry-client",
     all(feature = "std", not(target_os = "none"))
 ))]
-impl From<edgerun_http::Error> for RegistryError {
-    fn from(e: edgerun_http::Error) -> Self {
+impl From<edgerun_node::http_client::HttpClientError> for RegistryError {
+    fn from(e: edgerun_node::http_client::HttpClientError) -> Self {
         RegistryError::HttpError(e.to_string())
     }
 }

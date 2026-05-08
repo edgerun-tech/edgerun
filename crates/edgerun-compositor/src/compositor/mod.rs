@@ -2,6 +2,7 @@
 
 pub mod dmabuf;
 pub mod output;
+pub mod presentation;
 pub mod seat;
 pub mod shell;
 pub mod surface;

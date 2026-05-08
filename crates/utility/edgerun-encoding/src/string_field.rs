@@ -17,7 +17,9 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::str;
 
-use crate::byteorder::{push_u32_be, read_u32_be, read_u64_le};
+use crate::byteorder::{
+    push_u32_be, push_u32_le, push_u64_le, read_u32_be, read_u32_le, read_u64_le,
+};
 
 /// Error type for string field operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -266,7 +268,7 @@ pub fn encode_bytes_u64(value: &[u8], out: &mut Vec<u8>) -> Result<(), StringFie
     if value.len() > u64::MAX as usize {
         return Err(StringFieldError::LengthExceedsInput);
     }
-    out.extend_from_slice(&(value.len() as u64).to_le_bytes());
+    push_u64_le(out, value.len() as u64);
     out.extend_from_slice(value);
     Ok(())
 }
@@ -309,7 +311,7 @@ pub fn encode_bytes_u32(value: &[u8], out: &mut Vec<u8>) -> Result<(), StringFie
     if value.len() > u32::MAX as usize {
         return Err(StringFieldError::LengthExceedsInput);
     }
-    out.extend_from_slice(&(value.len() as u32).to_le_bytes());
+    push_u32_le(out, value.len() as u32);
     out.extend_from_slice(value);
     Ok(())
 }
@@ -406,8 +408,7 @@ pub fn encode_string_field_u32(value: &str, out: &mut Vec<u8>) -> Result<(), Str
         return Err(StringFieldError::LengthExceedsInput);
     }
 
-    let len = bytes.len() as u32;
-    out.extend_from_slice(&len.to_le_bytes());
+    push_u32_le(out, bytes.len() as u32);
     out.extend_from_slice(bytes);
     Ok(())
 }
@@ -433,11 +434,7 @@ pub fn decode_string_field_u32(
         return Err(StringFieldError::TruncatedInput);
     }
 
-    let len = u32::from_le_bytes(
-        bytes[*cursor..*cursor + 4]
-            .try_into()
-            .map_err(|_| StringFieldError::TruncatedInput)?,
-    ) as usize;
+    let len = read_u32_le(bytes, *cursor) as usize;
     *cursor += 4;
 
     if *cursor + len > bytes.len() {
@@ -513,7 +510,7 @@ pub fn encode_string_vec_u32(values: &[String], out: &mut Vec<u8>) -> Result<(),
     if values.len() > u32::MAX as usize {
         return Err(StringFieldError::LengthExceedsInput);
     }
-    out.extend_from_slice(&(values.len() as u32).to_le_bytes());
+    push_u32_le(out, values.len() as u32);
     for value in values {
         encode_string_field_u32(value, out)?;
     }
@@ -528,11 +525,7 @@ pub fn decode_string_vec_u32(
     if *cursor + 4 > bytes.len() {
         return Err(StringFieldError::TruncatedInput);
     }
-    let count = u32::from_le_bytes(
-        bytes[*cursor..*cursor + 4]
-            .try_into()
-            .map_err(|_| StringFieldError::TruncatedInput)?,
-    ) as usize;
+    let count = read_u32_le(bytes, *cursor) as usize;
     *cursor += 4;
 
     let mut values = Vec::with_capacity(count);
@@ -693,7 +686,7 @@ mod tests {
         ));
 
         let mut data = Vec::new();
-        data.extend_from_slice(&5u64.to_le_bytes());
+        push_u64_le(&mut data, 5);
         data.extend_from_slice(b"he");
         let mut cursor = 0;
         assert!(matches!(
@@ -720,7 +713,7 @@ mod tests {
         ));
 
         let mut data = Vec::new();
-        data.extend_from_slice(&5u32.to_le_bytes());
+        push_u32_le(&mut data, 5);
         data.extend_from_slice(b"he");
         let mut cursor = 0;
         assert!(matches!(

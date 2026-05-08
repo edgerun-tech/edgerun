@@ -7,20 +7,16 @@ publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Bluetooth management adapter for Edgerun"
+autobins = false
 
 [dependencies]
-edgerun-bluetooth = { version = "0.1", path = "../../device-types/edgerun-bluetooth" }
+edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 edgerun-protocols = { workspace = true, default-features = false, features = ["bluetooth-mgmt"] }
 
 [features]
 std = []
-
-[[bin]]
-name = "mgmt_bluetooth_tool"
-path = "src/bin/mgmt-bluetooth-tool.rs"
-required-features = ["std"]
 
 [lints]
 workspace = true
