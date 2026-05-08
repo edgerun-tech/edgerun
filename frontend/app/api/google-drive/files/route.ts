@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
+import { mediatedProviderToken } from "../../provider-auth"
 
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get("google_drive_access_token")?.value
+  const token = mediatedProviderToken(req, "google_drive_access_token")
   if (!token) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
   const downloadFileId = req.nextUrl.searchParams.get("downloadFileId")
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const token = req.cookies.get("google_drive_access_token")?.value
+  const token = mediatedProviderToken(req, "google_drive_access_token")
   if (!token) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
   const form = await req.formData().catch(() => null)

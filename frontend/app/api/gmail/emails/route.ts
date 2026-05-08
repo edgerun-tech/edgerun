@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { mediatedProviderToken } from "../../provider-auth"
 
 interface GmailMessage {
   id: string
@@ -16,7 +17,7 @@ interface GmailListResponse {
 }
 
 async function getAccessToken(req: NextRequest): Promise<string | null> {
-  let token = req.cookies.get("gmail_access_token")?.value
+  let token = mediatedProviderToken(req, "gmail_access_token")
 
   if (!token) return null
 

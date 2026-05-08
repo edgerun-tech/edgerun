@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertCircle, CheckCircle2, Cloud, Edit3, LogOut, Plus, RefreshCw, Save, ShieldCheck, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth, type CloudflareProfileSecret } from "@/hooks/use-auth"
+import { deleteAppSession, storeAppSession } from "@/platform/runtime/app-session-broker"
 
 type PendingCloudflareSecret = Omit<CloudflareProfileSecret, "appId" | "kind" | "updatedAtIso">
 
@@ -50,14 +51,22 @@ function writeCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=31536000; path=/; SameSite=Lax`
 }
 
-async function restoreCloudflareSession(secret: PendingCloudflareSecret): Promise<CloudflareSessionResult> {
+async function restoreCloudflareSession(secret: PendingCloudflareSecret, profileId?: string): Promise<CloudflareSessionResult> {
   const res = await fetch("/api/cloudflare/session", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Edgerun-App-Session-Mode": "broker" },
     body: JSON.stringify(secret),
   })
   const data = await res.json().catch(() => null)
   if (!res.ok) throw new Error(data?.error || "Cloudflare session setup failed")
+  const brokerOk = await storeAppSession({
+    appId: "cloudflare",
+    accessToken: secret.accessToken,
+    expiresAtIso: secret.expiresAtIso,
+    profileId,
+    grantId: "cloudflare.dns.manage",
+  })
+  if (!brokerOk) throw new Error("Cloudflare broker session setup failed")
   return data
 }
 
@@ -74,6 +83,7 @@ function currentZoneId(zones: CloudflareZone[], currentZoneId: string, savedZone
 export function CloudflareApp({ className }: { className?: string }) {
   const auth = useAuth()
   const savedSecret = auth.unlockedProfile?.appSecrets.find((secret) => secret.appId === "cloudflare") as CloudflareProfileSecret | undefined
+  const profileId = auth.unlockedProfile?.ownerEncryption.identityIdHex
   const [sessionState, setSessionState] = useState<CloudflareSessionState>("checking")
   const [label, setLabel] = useState("")
   const [apiToken, setApiToken] = useState("")
@@ -190,7 +200,7 @@ export function CloudflareApp({ className }: { className?: string }) {
         accountId: accountId.trim() || undefined,
         zoneId: defaultZoneId.trim() || undefined,
       }
-      const session = await restoreCloudflareSession(secret)
+      const session = await restoreCloudflareSession(secret, profileId)
       setAccountId(session.accountId || accountId.trim())
       setTokenId(session.tokenId || "")
       setSessionState("ready")
@@ -201,7 +211,7 @@ export function CloudflareApp({ className }: { className?: string }) {
     } finally {
       setLoading(false)
     }
-  }, [accountId, apiToken, defaultZoneId, fetchZones, label])
+  }, [accountId, apiToken, defaultZoneId, fetchZones, label, profileId])
 
   const saveSecret = useCallback(async () => {
     if (!apiToken.trim() || !profilePassword) return
@@ -224,7 +234,7 @@ export function CloudflareApp({ className }: { className?: string }) {
     setLoading(true)
     setError(null)
     try {
-      const session = await restoreCloudflareSession(secret)
+      const session = await restoreCloudflareSession(secret, profileId)
       const ok = await auth.saveOAuthSecret({
         appId: "cloudflare",
         password: profilePassword,
@@ -249,7 +259,7 @@ export function CloudflareApp({ className }: { className?: string }) {
     } finally {
       setLoading(false)
     }
-  }, [accountId, apiToken, auth, defaultZoneId, fetchZones, label, profilePassword])
+  }, [accountId, apiToken, auth, defaultZoneId, fetchZones, label, profileId, profilePassword])
 
   const saveSelectedZone = useCallback(async () => {
     if (!savedSecret || !selectedZone?.id || !profilePassword) return
@@ -266,20 +276,20 @@ export function CloudflareApp({ className }: { className?: string }) {
     }
     const ok = await auth.saveOAuthSecret({ appId: "cloudflare", password: profilePassword, secret })
     if (ok) {
-      const session = await restoreCloudflareSession(secret)
+      const session = await restoreCloudflareSession(secret, profileId)
       setAccountId(session.accountId || savedSecret.accountId || accountId)
       setTokenId(savedSecret.tokenId || tokenId)
       setDefaultZoneId(selectedZone.id)
       setProfilePassword("")
     }
-  }, [accountId, auth, profilePassword, savedSecret, selectedZone, tokenId])
+  }, [accountId, auth, profileId, profilePassword, savedSecret, selectedZone, tokenId])
 
   const reconnectSavedSecret = useCallback(async () => {
     if (!savedSecret) return
     setLoading(true)
     setError(null)
     try {
-      const session = await restoreCloudflareSession(savedSecret)
+      const session = await restoreCloudflareSession(savedSecret, profileId)
       setLabel(savedSecret.email)
       setAccountId(session.accountId || savedSecret.accountId || "")
       setTokenId(session.tokenId || savedSecret.tokenId || "")
@@ -292,7 +302,7 @@ export function CloudflareApp({ className }: { className?: string }) {
     } finally {
       setLoading(false)
     }
-  }, [fetchZones, savedSecret])
+  }, [fetchZones, profileId, savedSecret])
 
   const removeSavedSecret = useCallback(async () => {
     if (!profilePassword) return
@@ -301,6 +311,7 @@ export function CloudflareApp({ className }: { className?: string }) {
   }, [auth, profilePassword])
 
   const disconnect = useCallback(() => {
+    void deleteAppSession("cloudflare")
     void fetch("/api/cloudflare/session", { method: "DELETE" })
     deleteCookie("cloudflare_label")
     deleteCookie("cloudflare_account_id")

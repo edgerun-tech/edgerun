@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { runtimeEnv, runtimeEnvAny } from "@/lib/server-runtime-env"
+import { APP_SESSION_MAX_AGE_SECONDS } from "../../app-session"
 import { githubHeaders, GITHUB_USER_AGENT } from "../github-headers"
 
 type GitHubTokenResponse = {
@@ -10,8 +11,10 @@ type GitHubTokenResponse = {
   error_description?: string
 }
 
-function base64UrlJson(value: unknown): string {
-  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url")
+function oauthHandoffResponse(storageKey: string, connectedParam: string, secret: unknown) {
+  const target = `/?${connectedParam}=true`
+  const html = `<!doctype html><meta charset="utf-8"><script>sessionStorage.setItem(${JSON.stringify(storageKey)},${JSON.stringify(JSON.stringify(secret)).replace(/</g, "\\u003c")});location.replace(${JSON.stringify(target)});</script>`
+  return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } })
 }
 
 export async function GET(req: NextRequest) {
@@ -64,32 +67,17 @@ export async function GET(req: NextRequest) {
     const login = typeof user?.login === "string" && user.login ? user.login : primaryEmail || "GitHub"
     const email = typeof user?.email === "string" && user.email ? user.email : primaryEmail || login
     const secure = process.env.NODE_ENV === "production"
-    const res = NextResponse.redirect(new URL("/?github_connected=true", req.nextUrl.origin))
-
-    res.cookies.set("github_access_token", tokens.access_token, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
+    const res = oauthHandoffResponse("edgerun:oauth-pending:github", "github_connected", {
+      email,
+      accessToken: tokens.access_token,
+      expiresAtIso: new Date(Date.now() + 60 * 60 * 24 * 365 * 1000).toISOString(),
+      scopes: tokens.scope?.split(",").filter(Boolean) ?? [],
     })
     res.cookies.set("github_login", login, {
       httpOnly: false,
       secure,
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-    })
-    res.cookies.set("github_profile_pending", base64UrlJson({
-      email,
-      accessToken: tokens.access_token,
-      expiresAtIso: new Date(Date.now() + 60 * 60 * 24 * 365 * 1000).toISOString(),
-      scopes: tokens.scope?.split(",").filter(Boolean) ?? [],
-    }), {
-      httpOnly: false,
-      secure,
-      sameSite: "lax",
-      maxAge: 600,
+      maxAge: APP_SESSION_MAX_AGE_SECONDS,
       path: "/",
     })
     res.cookies.delete("github_oauth_state")

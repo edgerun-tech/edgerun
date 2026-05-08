@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react"
 import { AlertCircle, CheckCircle2, ExternalLink, FileText, Folder, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth, type OAuthProfileSecret } from "@/hooks/use-auth"
+import { deleteAppSession, storeAppSession } from "@/platform/runtime/app-session-broker"
 
 type PendingDriveSecret = Omit<OAuthProfileSecret, "appId" | "kind" | "updatedAtIso">
+const PENDING_DRIVE_STORAGE_KEY = "edgerun:oauth-pending:google-drive"
 
 type DriveFile = {
   id: string
@@ -23,9 +25,19 @@ function readCookie(name: string): string | null {
 
 function deleteCookie(name: string) {
   document.cookie = `${name}=; Max-Age=0; path=/`
+  if (name === "google_drive_profile_pending") sessionStorage.removeItem(PENDING_DRIVE_STORAGE_KEY)
 }
 
 function readPendingDriveSecret(): PendingDriveSecret | null {
+  const stored = sessionStorage.getItem(PENDING_DRIVE_STORAGE_KEY)
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as PendingDriveSecret
+      return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
+    } catch {
+      sessionStorage.removeItem(PENDING_DRIVE_STORAGE_KEY)
+    }
+  }
   const raw = readCookie("google_drive_profile_pending")
   if (!raw) return null
   try {
@@ -37,13 +49,14 @@ function readPendingDriveSecret(): PendingDriveSecret | null {
   }
 }
 
-async function restoreDriveSession(secret: PendingDriveSecret): Promise<boolean> {
-  const res = await fetch("/api/google-drive/session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(secret),
+async function restoreDriveSession(secret: PendingDriveSecret, profileId?: string): Promise<boolean> {
+  return storeAppSession({
+    appId: "google-drive",
+    accessToken: secret.accessToken,
+    expiresAtIso: secret.expiresAtIso,
+    profileId,
+    grantId: "google.drive.photos.contacts",
   })
-  return res.ok
 }
 
 function GoogleMark({ className }: { className?: string }) {
@@ -67,6 +80,7 @@ function formatBytes(value?: string): string {
 export function GoogleDriveApp({ className }: { className?: string }) {
   const auth = useAuth()
   const savedSecret = auth.unlockedProfile?.appSecrets.find((secret) => secret.appId === "google-drive")
+  const profileId = auth.unlockedProfile?.ownerEncryption.identityIdHex
   const [connected, setConnected] = useState<boolean | null>(null)
   const [email, setEmail] = useState("")
   const [files, setFiles] = useState<DriveFile[]>([])
@@ -113,12 +127,14 @@ export function GoogleDriveApp({ className }: { className?: string }) {
     if (connectedParam.get("google_drive_connected") === "true") {
       setConnected(true)
       window.history.replaceState({}, "", "/")
-      void fetchFiles()
+      const pendingAfterRedirect = pending ?? readPendingDriveSecret()
+      if (pendingAfterRedirect) void restoreDriveSession(pendingAfterRedirect, profileId).then(() => fetchFiles())
+      else void fetchFiles()
     } else if (connectedParam.get("google_drive_error")) {
       setError(`OAuth error: ${connectedParam.get("google_drive_error")}`)
       window.history.replaceState({}, "", "/")
     }
-  }, [fetchFiles])
+  }, [fetchFiles, profileId])
 
   useEffect(() => {
     if (connected !== false || !savedSecret) return
@@ -128,7 +144,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
       setLoading(true)
       setError(null)
       try {
-        const ok = await restoreDriveSession(savedSecret)
+        const ok = await restoreDriveSession(savedSecret, profileId)
         if (cancelled) return
         if (ok) {
           setEmail(savedSecret.email)
@@ -145,7 +161,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
     return () => {
       cancelled = true
     }
-  }, [connected, fetchFiles, savedSecret])
+  }, [connected, fetchFiles, profileId, savedSecret])
 
   useEffect(() => {
     if (connected !== null) return
@@ -173,7 +189,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
     if (!pendingSecret || !profilePassword) return
     const ok = await auth.saveOAuthSecret({ appId: "google-drive", password: profilePassword, secret: pendingSecret })
     if (ok) {
-      await restoreDriveSession(pendingSecret)
+      await restoreDriveSession(pendingSecret, profileId)
       deleteCookie("google_drive_profile_pending")
       setPendingSecret(null)
       setProfilePassword("")
@@ -181,7 +197,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
       setEmail(pendingSecret.email)
       await fetchFiles()
     }
-  }, [auth, fetchFiles, pendingSecret, profilePassword])
+  }, [auth, fetchFiles, pendingSecret, profileId, profilePassword])
 
   const removeSavedSecret = useCallback(async () => {
     if (!profilePassword) return
@@ -190,6 +206,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
   }, [auth, profilePassword])
 
   const disconnect = useCallback(() => {
+    void deleteAppSession("google-drive")
     void fetch("/api/google-drive/session", { method: "DELETE" })
     deleteCookie("google_drive_profile_pending")
     setConnected(false)

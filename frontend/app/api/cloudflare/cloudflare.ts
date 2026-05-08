@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import { mediatedProviderToken } from "../provider-auth"
 
 export const CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4"
 
 export function cloudflareToken(req: NextRequest): string | null {
-  return req.cookies.get("cloudflare_api_token")?.value ?? null
+  return mediatedProviderToken(req, "cloudflare_api_token")
 }
 
 export function cloudflareHeaders(token: string): HeadersInit {

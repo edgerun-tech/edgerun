@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { runtimeEnv, runtimeEnvAny } from "@/lib/server-runtime-env"
+import { APP_SESSION_MAX_AGE_SECONDS } from "../../app-session"
 
 interface TokenResponse {
   access_token: string
@@ -9,8 +10,10 @@ interface TokenResponse {
   scope?: string
 }
 
-function base64UrlJson(value: unknown): string {
-  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url")
+function oauthHandoffResponse(storageKey: string, connectedParam: string, secret: unknown) {
+  const target = `/?${connectedParam}=true`
+  const html = `<!doctype html><meta charset="utf-8"><script>sessionStorage.setItem(${JSON.stringify(storageKey)},${JSON.stringify(JSON.stringify(secret)).replace(/</g, "\\u003c")});location.replace(${JSON.stringify(target)});</script>`
+  return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } })
 }
 
 export async function GET(req: NextRequest) {
@@ -52,47 +55,24 @@ export async function GET(req: NextRequest) {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     })
     const userInfo = userRes.ok ? await userRes.json() : null
-    const res = NextResponse.redirect(new URL("/?google_drive_connected=true", req.nextUrl.origin))
-    const secure = process.env.NODE_ENV === "production"
-
-    res.cookies.set("google_drive_access_token", tokens.access_token, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      maxAge: tokens.expires_in,
-      path: "/",
-    })
-    if (tokens.refresh_token) {
-      res.cookies.set("google_drive_refresh_token", tokens.refresh_token, {
-        httpOnly: true,
-        secure,
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 365,
-        path: "/",
-      })
-    }
-    if (userInfo?.email) {
-      res.cookies.set("google_drive_email", userInfo.email, {
-        httpOnly: false,
-        secure,
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 365,
-        path: "/",
-      })
-    }
-    res.cookies.set("google_drive_profile_pending", base64UrlJson({
+    const res = oauthHandoffResponse("edgerun:oauth-pending:google-drive", "google_drive_connected", {
       email: userInfo?.email || "",
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
       expiresAtIso: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
       scopes: tokens.scope?.split(/\s+/).filter(Boolean) ?? [],
-    }), {
-      httpOnly: false,
-      secure,
-      sameSite: "lax",
-      maxAge: 600,
-      path: "/",
     })
+    const secure = process.env.NODE_ENV === "production"
+
+    if (userInfo?.email) {
+      res.cookies.set("google_drive_email", userInfo.email, {
+        httpOnly: false,
+        secure,
+        sameSite: "lax",
+        maxAge: APP_SESSION_MAX_AGE_SECONDS,
+        path: "/",
+      })
+    }
     res.cookies.delete("google_drive_oauth_state")
     return res
   } catch (err) {

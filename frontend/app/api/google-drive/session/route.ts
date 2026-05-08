@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import { APP_SESSION_MAX_AGE_SECONDS } from "../../app-session"
 
 type GoogleDriveSessionRequest = {
   email?: string
   accessToken?: string
   refreshToken?: string
   expiresAtIso?: string
-}
-
-function maxAgeFromIso(iso?: string): number {
-  if (!iso) return 3600
-  const milliseconds = new Date(iso).getTime() - Date.now()
-  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return 60
-  return Math.max(60, Math.floor(milliseconds / 1000))
 }
 
 export async function POST(req: NextRequest) {
@@ -21,29 +15,13 @@ export async function POST(req: NextRequest) {
   }
 
   const secure = process.env.NODE_ENV === "production"
-  const res = NextResponse.json({ ok: true })
-  res.cookies.set("google_drive_access_token", body.accessToken, {
-    httpOnly: true,
-    secure,
-    sameSite: "lax",
-    maxAge: maxAgeFromIso(body.expiresAtIso),
-    path: "/",
-  })
-  if (body.refreshToken) {
-    res.cookies.set("google_drive_refresh_token", body.refreshToken, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-    })
-  }
+  const res = NextResponse.json({ ok: true, brokerRequired: true })
   if (body.email) {
     res.cookies.set("google_drive_email", body.email, {
       httpOnly: false,
       secure,
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365,
+      maxAge: APP_SESSION_MAX_AGE_SECONDS,
       path: "/",
     })
   }

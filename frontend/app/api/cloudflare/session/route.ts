@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { APP_SESSION_MAX_AGE_SECONDS } from "../../app-session"
 import { CLOUDFLARE_API_BASE, cloudflareError, cloudflareHeaders } from "../cloudflare"
 
 type CloudflareSessionRequest = {
@@ -10,13 +11,6 @@ type CloudflareSessionRequest = {
   zoneName?: string
 }
 
-function maxAgeFromIso(iso?: string): number {
-  if (!iso) return 60 * 60 * 24 * 365
-  const milliseconds = new Date(iso).getTime() - Date.now()
-  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return 60
-  return Math.max(60, Math.floor(milliseconds / 1000))
-}
-
 function validZoneId(zoneId?: string): zoneId is string {
   return Boolean(zoneId && /^[a-f0-9]{32}$/i.test(zoneId))
 }
@@ -26,6 +20,7 @@ function validCloudflareId(id?: string): id is string {
 }
 
 export async function POST(req: NextRequest) {
+  const brokerMode = req.headers.get("x-edgerun-app-session-mode") === "broker"
   const body = await req.json().catch(() => null) as CloudflareSessionRequest | null
   if (!body?.accessToken) return NextResponse.json({ error: "Missing Cloudflare API token" }, { status: 400 })
   if (body.accountId && !validCloudflareId(body.accountId)) return NextResponse.json({ error: "Invalid Cloudflare account ID" }, { status: 400 })
@@ -56,18 +51,12 @@ export async function POST(req: NextRequest) {
   const tokenId = typeof verifyData?.result?.id === "string" ? verifyData.result.id : null
   const label = body.email || "Cloudflare API token"
   const res = NextResponse.json({ ok: true, label, accountId: body.accountId ?? null, tokenId, zoneId: body.zoneId ?? null, zoneName: verifiedZoneName ?? null, tokenStatus: verifyData?.result?.status ?? "active" })
-  res.cookies.set("cloudflare_api_token", body.accessToken, {
-    httpOnly: true,
-    secure,
-    sameSite: "lax",
-    maxAge: maxAgeFromIso(body.expiresAtIso),
-    path: "/",
-  })
+  if (brokerMode) return res
   res.cookies.set("cloudflare_label", label, {
     httpOnly: false,
     secure,
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
+    maxAge: APP_SESSION_MAX_AGE_SECONDS,
     path: "/",
   })
   if (tokenId) {
@@ -75,7 +64,7 @@ export async function POST(req: NextRequest) {
       httpOnly: false,
       secure,
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365,
+      maxAge: APP_SESSION_MAX_AGE_SECONDS,
       path: "/",
     })
   }
@@ -84,7 +73,7 @@ export async function POST(req: NextRequest) {
       httpOnly: false,
       secure,
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365,
+      maxAge: APP_SESSION_MAX_AGE_SECONDS,
       path: "/",
     })
   }
@@ -93,7 +82,7 @@ export async function POST(req: NextRequest) {
       httpOnly: false,
       secure,
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365,
+      maxAge: APP_SESSION_MAX_AGE_SECONDS,
       path: "/",
     })
     if (verifiedZoneName) {
@@ -101,7 +90,7 @@ export async function POST(req: NextRequest) {
         httpOnly: false,
         secure,
         sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 365,
+        maxAge: APP_SESSION_MAX_AGE_SECONDS,
         path: "/",
       })
     }

@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth, type GmailProfileSecret } from "@/hooks/use-auth"
+import { deleteAppSession, storeAppSession } from "@/platform/runtime/app-session-broker"
 
 interface Email {
   id: string
@@ -31,6 +32,7 @@ interface GmailAppProps {
 }
 
 type PendingGmailSecret = Omit<GmailProfileSecret, "appId" | "kind" | "updatedAtIso">
+const PENDING_GMAIL_STORAGE_KEY = "edgerun:oauth-pending:gmail"
 
 function readCookie(name: string): string | null {
   const prefix = `${name}=`
@@ -39,9 +41,19 @@ function readCookie(name: string): string | null {
 
 function deleteCookie(name: string) {
   document.cookie = `${name}=; Max-Age=0; path=/`
+  if (name === "gmail_profile_pending") sessionStorage.removeItem(PENDING_GMAIL_STORAGE_KEY)
 }
 
 function readPendingGmailSecret(): PendingGmailSecret | null {
+  const stored = sessionStorage.getItem(PENDING_GMAIL_STORAGE_KEY)
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as PendingGmailSecret
+      return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
+    } catch {
+      sessionStorage.removeItem(PENDING_GMAIL_STORAGE_KEY)
+    }
+  }
   const raw = readCookie("gmail_profile_pending")
   if (!raw) return null
   try {
@@ -53,13 +65,14 @@ function readPendingGmailSecret(): PendingGmailSecret | null {
   }
 }
 
-async function restoreGmailSession(secret: PendingGmailSecret): Promise<boolean> {
-  const res = await fetch("/api/gmail/session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(secret),
+async function restoreGmailSession(secret: PendingGmailSecret, profileId?: string): Promise<boolean> {
+  return storeAppSession({
+    appId: "gmail",
+    accessToken: secret.accessToken,
+    expiresAtIso: secret.expiresAtIso,
+    profileId,
+    grantId: "gmail.readonly",
   })
-  return res.ok
 }
 
 function GoogleMark({ className }: { className?: string }) {
@@ -107,6 +120,7 @@ function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "md" }) {
 export function GmailApp({ className }: GmailAppProps) {
   const auth = useAuth()
   const savedSecret = auth.unlockedProfile?.appSecrets.find((secret) => secret.appId === "gmail")
+  const profileId = auth.unlockedProfile?.ownerEncryption.identityIdHex
   const [connected, setConnected] = useState<boolean | null>(null)
   const [email, setEmail] = useState<string>("")
   const [emails, setEmails] = useState<Email[]>([])
@@ -197,7 +211,7 @@ export function GmailApp({ className }: GmailAppProps) {
       setError(null)
       try {
         const secret = savedSecret
-        const ok = await restoreGmailSession(secret)
+        const ok = await restoreGmailSession(secret, profileId)
         if (cancelled) return
         if (ok) {
           setEmail(secret.email)
@@ -214,20 +228,20 @@ export function GmailApp({ className }: GmailAppProps) {
     return () => {
       cancelled = true
     }
-  }, [connected, fetchEmails, savedSecret])
+  }, [connected, fetchEmails, profileId, savedSecret])
 
   const savePendingSecret = useCallback(async () => {
     if (!pendingSecret || !profilePassword) return
     const ok = await auth.saveGmailSecret({ password: profilePassword, secret: pendingSecret })
     if (ok) {
-      await restoreGmailSession(pendingSecret)
+      await restoreGmailSession(pendingSecret, profileId)
       deleteCookie("gmail_profile_pending")
       setPendingSecret(null)
       setProfilePassword("")
       setConnected(true)
       setEmail(pendingSecret.email)
     }
-  }, [auth, pendingSecret, profilePassword])
+  }, [auth, pendingSecret, profileId, profilePassword])
 
   const removeSavedSecret = useCallback(async () => {
     if (!profilePassword) return
@@ -240,6 +254,7 @@ export function GmailApp({ className }: GmailAppProps) {
     document.cookie = "gmail_refresh_token=; Max-Age=0; path=/"
     document.cookie = "gmail_email=; Max-Age=0; path=/"
     deleteCookie("gmail_profile_pending")
+    void deleteAppSession("gmail")
     void fetch("/api/gmail/session", { method: "DELETE" })
     setConnected(false)
     setEmail("")
@@ -256,17 +271,19 @@ export function GmailApp({ className }: GmailAppProps) {
       if (pending) {
         setPendingSecret(pending)
         setEmail(pending.email)
+        void restoreGmailSession(pending, profileId).then(() => fetchEmails())
+      } else {
+        fetchEmails()
       }
       const emailCookie = document.cookie.split("; ").find((c) => c.startsWith("gmail_email="))
       if (emailCookie) setEmail(decodeURIComponent(emailCookie.split("=")[1]))
       window.history.replaceState({}, "", "/")
-      fetchEmails()
     }
     if (params.get("gmail_error")) {
       setError(`OAuth error: ${params.get("gmail_error")}`)
       window.history.replaceState({}, "", "/")
     }
-  }, [fetchEmails])
+  }, [fetchEmails, profileId])
 
   if (connected === null) {
     return <div className="flex h-full items-center justify-center"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>

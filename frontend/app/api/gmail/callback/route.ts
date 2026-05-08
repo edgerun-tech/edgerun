@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { runtimeEnv } from "@/lib/server-runtime-env"
+import { APP_SESSION_MAX_AGE_SECONDS } from "../../app-session"
 
 interface TokenResponse {
   access_token: string
@@ -9,8 +10,10 @@ interface TokenResponse {
   scope?: string
 }
 
-function base64UrlJson(value: unknown): string {
-  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url")
+function oauthHandoffResponse(storageKey: string, connectedParam: string, secret: unknown) {
+  const target = `/?${connectedParam}=true`
+  const html = `<!doctype html><meta charset="utf-8"><script>sessionStorage.setItem(${JSON.stringify(storageKey)},${JSON.stringify(JSON.stringify(secret)).replace(/</g, "\\u003c")});location.replace(${JSON.stringify(target)});</script>`
+  return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } })
 }
 
 export async function GET(req: NextRequest) {
@@ -74,49 +77,22 @@ export async function GET(req: NextRequest) {
     )
     const userInfo = userRes.ok ? await userRes.json() : null
 
-    const res = NextResponse.redirect(
-      new URL("/?gmail_connected=true", req.nextUrl.origin)
-    )
-
-    // Store tokens in httpOnly cookies (in production, use secure session store)
-    res.cookies.set("gmail_access_token", tokens.access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: tokens.expires_in,
+    const res = oauthHandoffResponse("edgerun:oauth-pending:gmail", "gmail_connected", {
+      email: userInfo?.email || "",
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAtIso: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      scopes: tokens.scope?.split(/\s+/).filter(Boolean) ?? [],
     })
-
-    if (tokens.refresh_token) {
-      res.cookies.set("gmail_refresh_token", tokens.refresh_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 365, // 1 year
-      })
-    }
 
     if (userInfo?.email) {
       res.cookies.set("gmail_email", userInfo.email, {
         httpOnly: false, // Allow client to read email for display
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 365,
+        maxAge: APP_SESSION_MAX_AGE_SECONDS,
       })
     }
-
-    res.cookies.set("gmail_profile_pending", base64UrlJson({
-      email: userInfo?.email || "",
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAtIso: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-      scopes: tokens.scope?.split(/\s+/).filter(Boolean) ?? [],
-    }), {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 600,
-      path: "/",
-    })
 
     res.cookies.delete("gmail_oauth_state")
 

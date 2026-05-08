@@ -267,6 +267,52 @@ const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 let sessionResumeTimer: ReturnType<typeof setInterval> | null = null
 
+const APP_SESSION_COOKIE_NAMES = [
+  "gmail_access_token",
+  "gmail_refresh_token",
+  "gmail_email",
+  "gmail_profile_pending",
+  "gmail_oauth_state",
+  "google_drive_access_token",
+  "google_drive_refresh_token",
+  "google_drive_email",
+  "google_drive_profile_pending",
+  "google_drive_oauth_state",
+  "github_access_token",
+  "github_login",
+  "github_profile_pending",
+  "github_oauth_state",
+  "cloudflare_api_token",
+  "cloudflare_label",
+  "cloudflare_account_id",
+  "cloudflare_token_id",
+  "cloudflare_zone_id",
+  "cloudflare_zone_name",
+] as const
+
+const APP_SESSION_STORAGE_KEYS = [
+  "edgerun:oauth-pending:gmail",
+  "edgerun:oauth-pending:google-drive",
+  "edgerun:oauth-pending:github",
+] as const
+
+function clearTransientAppSessions() {
+  if (typeof document !== "undefined") {
+    for (const name of APP_SESSION_COOKIE_NAMES) {
+      document.cookie = `${name}=; Max-Age=0; path=/`
+    }
+  }
+  if (typeof sessionStorage !== "undefined") {
+    for (const key of APP_SESSION_STORAGE_KEYS) sessionStorage.removeItem(key)
+  }
+  if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+    navigator.serviceWorker.controller?.postMessage({ type: "CLEAR_APP_SESSIONS" })
+  }
+  if (typeof fetch !== "undefined") {
+    void fetch("/api/session/clear", { method: "POST", keepalive: true }).catch(() => undefined)
+  }
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = ""
   for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -1083,6 +1129,12 @@ export const authStore = atom<AuthStore>({
   localMessages: [],
 })
 
+if (typeof window !== "undefined" && initialSealedProfile) {
+  queueMicrotask(() => {
+    if (authStore.get().authState !== "authenticated") clearTransientAppSessions()
+  })
+}
+
 export const isAuthenticatedStore = computed(authStore, (s) => s.authState === "authenticated")
 export const isGuestStore = computed(authStore, () => false)
 
@@ -1252,6 +1304,7 @@ export function continueAsGuest() {
 
 export function lockAuth() {
   clearSessionResumeTicket()
+  clearTransientAppSessions()
   const current = authStore.get()
   authStore.set({
     ...current,
@@ -1285,6 +1338,7 @@ export async function importProfileContainer(serialized: string): Promise<boolea
     }
     persistSealedProfile(parsed)
     clearSessionResumeTicket()
+    clearTransientAppSessions()
     const sealed = readSealedProfile() ?? parsed
     authStore.set({
       ...authStore.get(),
@@ -1313,6 +1367,7 @@ export function switchProfile(profileId: string) {
     return
   }
   clearSessionResumeTicket()
+  clearTransientAppSessions()
   localStorage.setItem(ACTIVE_PROFILE_KEY, profileId)
   authStore.set({
     ...authStore.get(),

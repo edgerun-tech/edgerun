@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { githubHeaders } from "../github-headers"
+import { mediatedProviderToken } from "../../provider-auth"
 
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get("github_access_token")?.value
+  const token = mediatedProviderToken(req, "github_access_token")
   if (!token) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
   const page = req.nextUrl.searchParams.get("page") || "1"
